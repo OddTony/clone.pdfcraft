@@ -990,7 +990,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     ui.label(egui::RichText::new(tl!("Recover unsaved documents?")).font(theme::semibold(18.0)));
                 });
                 ui.add_space(6.0);
-                ui.label(tl!("PdfCraft didn't shut down normally. These documents had changes that were autosaved:"));
+                ui.label(tl!("aRTI-PDF didn't shut down normally. These documents had changes that were autosaved:"));
                 ui.add_space(8.0);
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
                 egui::Grid::new("recoverable").num_columns(2).spacing([18.0, 6.0]).show(ui, |ui| {
@@ -1067,7 +1067,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         ui.horizontal(|ui| {
                             widgets::artcraft_mark(ui, 40.0);
                             ui.vertical(|ui| {
-                                ui.label(egui::RichText::new("PdfCraft").font(theme::semibold(20.0)));
+                                ui.label(egui::RichText::new("aRTI-PDF").font(theme::semibold(20.0)));
                                 ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", env!("CARGO_PKG_VERSION"))]));
                             });
                         });

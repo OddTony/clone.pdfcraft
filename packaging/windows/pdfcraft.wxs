@@ -11,18 +11,18 @@
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
-      Name="PdfCraft"
+      Name="aRTI-PDF"
       Manufacturer="Learning Machines LLC"
       Version="$(var.Version)"
       UpgradeCode="EA00C367-7270-4C50-9D8B-A7A5C88AD27F"
       Scope="perMachine"
       Compressed="yes"
       Language="1033">
-    <SummaryInformation Description="PdfCraft PDF workbench" Manufacturer="Learning Machines LLC" />
+    <SummaryInformation Description="aRTI-PDF PDF workbench" Manufacturer="Learning Machines LLC" />
     <!-- Same-version upgrades let successive pre-releases of one X.Y.Z replace each other
          (MSI versions are numeric, so 1.2.3-rc.1 and 1.2.3-rc.2 are both 1.2.3). -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
-        DowngradeErrorMessage="A newer version of PdfCraft is already installed." />
+        DowngradeErrorMessage="A newer version of aRTI-PDF is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <!-- Windows Installer requires an Icon id ending in .ico or .exe, or advertised shortcuts and
@@ -31,7 +31,6 @@
     <Property Id="ARPPRODUCTICON" Value="PdfcraftIcon.ico" />
     <Property Id="ARPURLINFOABOUT" Value="https://getartcraft.com/apps/pdfcraft" />
     <Property Id="ARPURLUPDATEINFO" Value="https://getartcraft.com/apps/pdfcraft" />
-    <Property Id="ARPHELPLINK" Value="https://discord.gg/artcraft" />
     <!-- Desktop shortcut (#143): on by default, a checkbox in the full-UI welcome dialog, and
          INSTALLDESKTOPSHORTCUT=0 on the msiexec command line for unattended installs. Secure, so the
          choice made in the (unelevated) UI reaches the elevated install. -->
@@ -39,12 +38,12 @@
     <UIRef Id="PdfcraftInstallerUI" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="INSTALLFOLDER" Name="PdfCraft" />
+      <Directory Id="INSTALLFOLDER" Name="aRTI-PDF" />
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
     <StandardDirectory Id="DesktopFolder" />
 
-    <Feature Id="Main" Title="PdfCraft" Level="1">
+    <Feature Id="Main" Title="aRTI-PDF" Level="1">
       <ComponentGroupRef Id="PdfcraftFiles" />
     </Feature>
   </Package>
@@ -66,44 +65,44 @@
         <RegistryValue Root="HKLM" Key="Software\Classes\PdfCraft.Document\DefaultIcon" Value="[#PdfcraftExe],0" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\PdfCraft.Document\shell\open\command" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\.pdf\OpenWithProgids" Name="PdfCraft.Document" Value="" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\pdfcraft.exe" Name="FriendlyAppName" Value="PdfCraft" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\pdfcraft.exe" Name="FriendlyAppName" Value="aRTI-PDF" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\Applications\pdfcraft.exe\SupportedTypes" Name=".pdf" Value="" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\Applications\pdfcraft.exe\shell\open\command" Value="&quot;[#PdfcraftExe]&quot; &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\PdfCraft\Capabilities" Name="ApplicationName" Value="PdfCraft" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\PdfCraft\Capabilities" Name="ApplicationName" Value="aRTI-PDF" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\PdfCraft\Capabilities" Name="ApplicationDescription" Value="Open-source PDF workbench" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\PdfCraft\Capabilities" Name="ApplicationIcon" Value="[#PdfcraftExe],0" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\PdfCraft\Capabilities\FileAssociations" Name=".pdf" Value="PdfCraft.Document" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\RegisteredApplications" Name="PdfCraft" Value="Software\PdfCraft\Capabilities" Type="string" />
 
         <!-- Image context menu (#190): convert without changing image file defaults. -->
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.CreatePdf" Value="Create PDF with aRTI-PDF…" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.CreatePdf" Name="MultiSelectModel" Value="Single" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.CreatePdf\command" Value="&quot;[#PdfcraftExe]&quot; --create-images &quot;%1&quot;" Type="string" />
       </Component>
@@ -114,14 +113,14 @@
            (#143). Each has its own component with an HKLM key path, so Windows Installer removes it
            on uninstall; in this per-machine package both folders are the all-users ones. -->
       <Component Id="PdfcraftStartMenuShortcut" Directory="ProgramMenuFolder" Guid="DC028192-C233-4F99-9A77-ED458C60DF26">
-        <Shortcut Id="StartMenuShortcut" Name="PdfCraft" Description="PdfCraft PDF workbench"
+        <Shortcut Id="StartMenuShortcut" Name="aRTI-PDF" Description="aRTI-PDF PDF workbench"
             Target="[#PdfcraftExe]" WorkingDirectory="INSTALLFOLDER" Icon="PdfcraftIcon.ico" IconIndex="0" />
         <RegistryValue Root="HKLM" Key="Software\PdfCraft\Shortcuts" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
       </Component>
 
       <Component Id="PdfcraftDesktopShortcut" Directory="DesktopFolder" Guid="F6948627-32AB-4D78-8865-0FDF417CE442"
           Condition="INSTALLDESKTOPSHORTCUT = 1">
-        <Shortcut Id="DesktopShortcut" Name="PdfCraft" Description="PdfCraft PDF workbench"
+        <Shortcut Id="DesktopShortcut" Name="aRTI-PDF" Description="aRTI-PDF PDF workbench"
             Target="[#PdfcraftExe]" WorkingDirectory="INSTALLFOLDER" Icon="PdfcraftIcon.ico" IconIndex="0" />
         <RegistryValue Root="HKLM" Key="Software\PdfCraft\Shortcuts" Name="Desktop" Type="integer" Value="1" KeyPath="yes" />
       </Component>
