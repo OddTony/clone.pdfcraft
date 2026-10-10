@@ -1,4 +1,4 @@
-//! Community links: Help menu, About dialog and home screen open the ArtCraft and PdfCraft pages.
+//! Community links: the Help menu and About dialog open the GitHub page and support contact.
 
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
@@ -23,10 +23,10 @@ fn about_dialog_shows_the_brand_and_links() {
         app.open_bytes("one.pdf", None, pdf.to_vec()).unwrap();
         app.dialog = Some(Dialog::About);
     });
-    assert!(h.query_all_by_label("ArtCraft").count() >= 2, "the mark and the wordmark (alt text)");
-    h.get_by_label("aRTI-PDF web page").click();
+    assert!(h.query_all_by_label("Developed by Refined Technologies, Inc.").count() >= 1);
+    h.get_by_label("aRTI-PDF on GitHub").click();
     h.run_steps(2);
-    assert_eq!(h.state().last_opened_url.as_deref(), Some(links::APP_PAGE));
+    assert_eq!(h.state().last_opened_url.as_deref(), Some(links::GITHUB));
 }
 
 #[test]

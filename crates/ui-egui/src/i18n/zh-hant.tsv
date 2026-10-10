@@ -363,9 +363,9 @@
 	Check for updates	檢驗更新
 	No check has run yet.	尚未執行檢驗。
 	Checking for a newer version…	正在檢驗新版本…
-	PdfCraft {v} is available.	PdfCraft {v} 可用。
+	aRTI-PDF {v} is available.	aRTI-PDF {v} 可用。
 	You have version {c}. Download the new version from its release page.	當前版本為 {c}。請從其釋出頁面下載新版本。
-	PdfCraft {c} is up to date.	PdfCraft {c} 已是最新。
+	aRTI-PDF {c} is up to date.	aRTI-PDF {c} 已是最新。
 	Couldn't check for updates: {e}	無法檢驗更新：{e}
 	You have version {c}. All releases are listed at {page}.	當前版本為 {c}。所有版本列在 {page}。
 	Asks GitHub for the latest release. Nothing is downloaded or installed automatically.	向 GitHub 搜尋最新版本。不會自動下載或安裝任何內容。
@@ -1213,7 +1213,7 @@
 	Anyone opening the document will need this password. It's applied when you save.	開啟文件的任何人都需要此密碼。儲存時應用。
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	開啟文件無需密碼；更改限制需要此密碼。儲存時應用。
 	Recover unsaved documents?	要恢復未儲存的文件嗎？
-	PdfCraft didn't shut down normally. These documents had changes that were autosaved:	PdfCraft 未正常關閉。以下文件的更改已自動儲存：
+	aRTI-PDF didn't shut down normally. These documents had changes that were autosaved:	aRTI-PDF 未正常關閉。以下文件的更改已自動儲存：
 	just now	剛剛
 	{n} min ago	{n} 分鐘前
 	{n} h ago	{n} 小時前
@@ -1579,7 +1579,7 @@
 	Read	閱讀
 	Convert	轉換
 	E-Sign	電子簽署
-	Welcome to PdfCraft	歡迎使用 PdfCraft
+	Welcome to aRTI-PDF	歡迎使用 aRTI-PDF
 	An open-source PDF workbench — local, private, and scriptable.	開源 PDF 工作台，在本機處理、保護隱私，並支援指令碼。
 	Recommended tools	推薦工具
 	Use now	立即使用
@@ -1612,11 +1612,10 @@
 	Split document…	分割文件…
 	Number pages…	編訂頁碼…
 	Keyboard shortcuts	鍵盤快速鍵
-	PdfCraft web page	PdfCraft 網頁
-	PdfCraft on GitHub	GitHub 上的 PdfCraft
-	ArtCraft website	ArtCraft 網站
+	aRTI-PDF on GitHub	GitHub 上的 aRTI-PDF
+	Contact support	聯絡支援
 	Check for updates…	尋找更新…
-	About PdfCraft	關於 PdfCraft
+	About aRTI-PDF	關於 aRTI-PDF
 	JavaScript console…	JavaScript 主控台…
 	Document JavaScripts…	文件 JavaScript…
 	Recognize text…	辨識文字…
@@ -1626,8 +1625,8 @@
 	Add background…	新增背景…
 	Prepare a form	準備表單
 	Digitally sign	數位簽署
-	Files you open in PdfCraft appear here. Drop a PDF anywhere to open it.	在 PdfCraft 開啟過的檔案會顯示在這裡。將 PDF 拖曳至視窗即可開啟。
-	PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider.	PdfCraft 可離線使用，不收集遙測資料，也不需要帳號。只有在您新增服務供應商後，才會使用雲端處理。
+	Files you open in aRTI-PDF appear here. Drop a PDF anywhere to open it.	在 aRTI-PDF 開啟過的檔案會顯示在這裡。將 PDF 拖曳至視窗即可開啟。
+	aRTI-PDF works offline. No telemetry, no account, and no cloud processing unless you add a provider.	aRTI-PDF 可離線使用，不收集遙測資料，也不需要帳號。只有在您新增服務供應商後，才會使用雲端處理。
 	Double-click	滑鼠按兩下
 	PDF/A…	PDF/A…
 	Microsoft Word (.docx)	Microsoft Word（.docx）
@@ -1860,3 +1859,4 @@
 	Page display: {layout}	頁面顯示：{layout}
 	Fit to width scrolling	符合寬度連續捲動
 	Fit one full page	單頁完整顯示
+	Developed by Refined Technologies, Inc.	由 Refined Technologies, Inc. 開發

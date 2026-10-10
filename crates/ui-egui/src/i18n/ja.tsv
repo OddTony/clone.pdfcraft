@@ -123,15 +123,15 @@
 	Next page	次のページ
 	Previous page	前のページ
 	Current page — type a page number or label (such as iv) and press Enter	現在のページ：ページ番号またはラベル（例：iv）を入力して Enter
-	Welcome to PdfCraft	PdfCraft へようこそ
+	Welcome to aRTI-PDF	aRTI-PDF へようこそ
 	An open-source PDF workbench — local, private, and scriptable.	ローカルで処理し、プライバシーを守る、スクリプト対応のオープンソース PDF ツール。
 	Recommended tools	おすすめのツール
 	Use now	使用する
 	Open file	ファイルを開く
 	Recent	最近使ったファイル
-	Files you open in PdfCraft appear here. Drop a PDF anywhere to open it.	PdfCraft で開いたファイルがここに表示されます。PDF をウィンドウにドロップして開くこともできます。
+	Files you open in aRTI-PDF appear here. Drop a PDF anywhere to open it.	aRTI-PDF で開いたファイルがここに表示されます。PDF をウィンドウにドロップして開くこともできます。
 	Privacy	プライバシー
-	PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider.	PdfCraft はオフラインで動作します。使用状況の送信やアカウント登録はありません。サービス提供元を追加しない限り、クラウド処理も行いません。
+	aRTI-PDF works offline. No telemetry, no account, and no cloud processing unless you add a provider.	aRTI-PDF はオフラインで動作します。使用状況の送信やアカウント登録はありません。サービス提供元を追加しない限り、クラウド処理も行いません。
 	Scripts run in a sandbox without file or network access. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	スクリプトはファイルやネットワークにアクセスできないサンドボックスで実行されます。JavaScript を無効にしても、Acrobat の標準の書式設定・検証・計算関数は使用できます。
 	Back to all tools	すべてのツールに戻る
 	Close panel	パネルを閉じる
@@ -264,11 +264,10 @@
 	Split document…	文書を分割…
 	Number pages…	ページ番号を設定…
 	Keyboard shortcuts	キーボードショートカット
-	PdfCraft web page	PdfCraft の Web 版
-	PdfCraft on GitHub	GitHub の PdfCraft
-	ArtCraft website	ArtCraft のウェブサイト
+	aRTI-PDF on GitHub	GitHub の aRTI-PDF
+	Contact support	サポートに問い合わせる
 	Check for updates…	更新を確認…
-	About PdfCraft	PdfCraft について
+	About aRTI-PDF	aRTI-PDF について
 	Export a PDF	PDF を書き出す
 	Export to	書き出し形式
 	Microsoft Word (.docx)	Microsoft Word（.docx）
@@ -710,9 +709,9 @@
 	Check for updates	アップデートを確認
 	No check has run yet.	まだ確認していません。
 	Checking for a newer version…	新しいバージョンを確認中…
-	PdfCraft {v} is available.	PdfCraft {v} が利用できます。
+	aRTI-PDF {v} is available.	aRTI-PDF {v} が利用できます。
 	You have version {c}. Download the new version from its release page.	現在のバージョンは {c} です。リリースページから新しいバージョンをダウンロードしてください。
-	PdfCraft {c} is up to date.	PdfCraft {c} は最新です。
+	aRTI-PDF {c} is up to date.	aRTI-PDF {c} は最新です。
 	Couldn't check for updates: {e}	アップデートを確認できませんでした: {e}
 	You have version {c}. All releases are listed at {page}.	現在のバージョンは {c} です。すべてのリリースは {page} に掲載されています。
 	Asks GitHub for the latest release. Nothing is downloaded or installed automatically.	GitHub で最新リリースを確認します。自動でダウンロードやインストールは行いません。
@@ -1310,7 +1309,7 @@
 	Anyone opening the document will need this password. It's applied when you save.	文書を開く際にこのパスワードが必要になります。保存時に適用されます。
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	文書はパスワードなしで開けます。制限を変更する際にこのパスワードが必要になります。保存時に適用されます。
 	Recover unsaved documents?	未保存の文書を復元しますか？
-	PdfCraft didn't shut down normally. These documents had changes that were autosaved:	PdfCraft が正常に終了しませんでした。次の文書の変更内容が自動保存されています:
+	aRTI-PDF didn't shut down normally. These documents had changes that were autosaved:	aRTI-PDF が正常に終了しませんでした。次の文書の変更内容が自動保存されています:
 	just now	たった今
 	{n} min ago	{n} 分前
 	{n} h ago	{n} 時間前
@@ -1867,3 +1866,4 @@
 	Page display: {layout}	ページ表示：{layout}
 	Fit to width scrolling	幅に合わせてスクロール
 	Fit one full page	1ページずつ全体を表示
+	Developed by Refined Technologies, Inc.	Refined Technologies, Inc. が開発

@@ -117,15 +117,15 @@
 	Next page	Página siguiente
 	Previous page	Página anterior
 	Current page — type a page number or label (such as iv) and press Enter	Página actual: escribe un número o una etiqueta de página (por ejemplo, iv) y pulsa Intro
-	Welcome to PdfCraft	Te damos la bienvenida a PdfCraft
+	Welcome to aRTI-PDF	Te damos la bienvenida a aRTI-PDF
 	An open-source PDF workbench — local, private, and scriptable.	Un banco de trabajo PDF de código abierto: local, privado y automatizable.
 	Recommended tools	Herramientas recomendadas
 	Use now	Usar ahora
 	Open file	Abrir archivo
 	Recent	Recientes
-	Files you open in PdfCraft appear here. Drop a PDF anywhere to open it.	Los archivos que abras en PdfCraft aparecerán aquí. Suelta un PDF en cualquier parte para abrirlo.
+	Files you open in aRTI-PDF appear here. Drop a PDF anywhere to open it.	Los archivos que abras en aRTI-PDF aparecerán aquí. Suelta un PDF en cualquier parte para abrirlo.
 	Privacy	Privacidad
-	PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider.	PdfCraft funciona sin conexión. Sin telemetría, sin cuenta y sin procesamiento en la nube, salvo que añadas un proveedor.
+	aRTI-PDF works offline. No telemetry, no account, and no cloud processing unless you add a provider.	aRTI-PDF funciona sin conexión. Sin telemetría, sin cuenta y sin procesamiento en la nube, salvo que añadas un proveedor.
 	Scripts run in a sandbox without file or network access. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	Los scripts se ejecutan en un entorno aislado, sin acceso a archivos ni a la red. Con JavaScript desactivado, las funciones estándar de formato, validación y cálculo de Acrobat siguen funcionando.
 	Back to all tools	Volver a todas las herramientas
 	Close panel	Cerrar panel
@@ -258,11 +258,10 @@
 	Split document…	Dividir documento…
 	Number pages…	Numerar páginas…
 	Keyboard shortcuts	Atajos de teclado
-	PdfCraft web page	Página web de PdfCraft
-	PdfCraft on GitHub	PdfCraft en GitHub
-	ArtCraft website	Sitio web de ArtCraft
+	aRTI-PDF on GitHub	aRTI-PDF en GitHub
+	Contact support	Contactar con soporte
 	Check for updates…	Buscar actualizaciones…
-	About PdfCraft	Acerca de PdfCraft
+	About aRTI-PDF	Acerca de aRTI-PDF
 	Export a PDF	Exportar un PDF
 	Export to	Exportar a
 	Microsoft Word (.docx)	Microsoft Word (.docx)
@@ -704,9 +703,9 @@
 	Check for updates	Buscar actualizaciones
 	No check has run yet.	Aún no se ha hecho ninguna comprobación.
 	Checking for a newer version…	Buscando una versión más reciente…
-	PdfCraft {v} is available.	PdfCraft {v} está disponible.
+	aRTI-PDF {v} is available.	aRTI-PDF {v} está disponible.
 	You have version {c}. Download the new version from its release page.	Tienes la versión {c}. Descarga la nueva versión desde su página de publicación.
-	PdfCraft {c} is up to date.	PdfCraft {c} está actualizado.
+	aRTI-PDF {c} is up to date.	aRTI-PDF {c} está actualizado.
 	Couldn't check for updates: {e}	No se pudieron buscar actualizaciones: {e}
 	You have version {c}. All releases are listed at {page}.	Tienes la versión {c}. Todas las versiones aparecen en {page}.
 	Asks GitHub for the latest release. Nothing is downloaded or installed automatically.	Consulta a GitHub cuál es la última versión. No se descarga ni se instala nada automáticamente.
@@ -1304,7 +1303,7 @@
 	Anyone opening the document will need this password. It's applied when you save.	Cualquiera que abra el documento necesitará esta contraseña. Se aplica al guardar.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	El documento se abre sin contraseña; esta contraseña hace falta para cambiar las restricciones. Se aplica al guardar.
 	Recover unsaved documents?	¿Recuperar documentos sin guardar?
-	PdfCraft didn't shut down normally. These documents had changes that were autosaved:	PdfCraft no se cerró correctamente. Estos documentos tenían cambios que se guardaron automáticamente:
+	aRTI-PDF didn't shut down normally. These documents had changes that were autosaved:	aRTI-PDF no se cerró correctamente. Estos documentos tenían cambios que se guardaron automáticamente:
 	just now	ahora mismo
 	{n} min ago	hace {n} min
 	{n} h ago	hace {n} h
@@ -1889,3 +1888,4 @@
 	Default page display	Presentación de página predeterminada
 	Default zoom	Zoom predeterminado
 	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	Se usa cuando un PDF no pide una presentación ni un zoom. El desplazamiento continuo nunca salta de página en página.
+	Developed by Refined Technologies, Inc.	Desarrollado por Refined Technologies, Inc.

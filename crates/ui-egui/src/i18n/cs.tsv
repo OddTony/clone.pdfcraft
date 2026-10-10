@@ -85,11 +85,10 @@
 	Split document…	Rozdělit dokument…
 	Number pages…	Očíslovat stránky…
 	Keyboard shortcuts	Klávesové zkratky
-	PdfCraft web page	Webová stránka PdfCraft
-	PdfCraft on GitHub	PdfCraft na GitHubu
-	ArtCraft website	Web ArtCraft
+	aRTI-PDF on GitHub	aRTI-PDF na GitHubu
+	Contact support	Kontaktovat podporu
 	Check for updates…	Zkontrolovat aktualizace…
-	About PdfCraft	O aplikaci PdfCraft
+	About aRTI-PDF	O aplikaci aRTI-PDF
 	Auto	Automaticky
 	Continuous scrolling	Plynulé posouvání
 	Single page	Jednostránkové zobrazení
@@ -103,3 +102,4 @@
 	Fit to width scrolling	Plynulé posouvání s přizpůsobením šířce
 	Fit one full page	Celá jedna stránka
 	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	Používá se, když PDF nepožaduje rozložení ani zvětšení. Plynulé posouvání mezi stránkami neskáče.
+	Developed by Refined Technologies, Inc.	Vyvíjí Refined Technologies, Inc.

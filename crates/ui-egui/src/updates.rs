@@ -2,7 +2,7 @@
 //!
 //! The desktop app supplies how to ask ([`PdfCraftApp::update_source`]), so this crate has no
 //! network code; without a source (the web build, tests) the command opens the releases page.
-//! PdfCraft never downloads or installs anything itself: the user downloads the new version.
+//! aRTI-PDF never downloads or installs anything itself: the user downloads the new version.
 //! It asks only when the user does: there is no check at start (the owner's decision).
 
 use std::sync::Arc;
@@ -11,8 +11,8 @@ use egui::{Align, Layout};
 
 use crate::{PdfCraftApp, theme, widgets};
 
-/// Where every PdfCraft release is listed.
-pub const RELEASES_PAGE: &str = "https://github.com/storytold/pdfcraft/releases";
+/// Where every aRTI-PDF release is listed.
+pub const RELEASES_PAGE: &str = "https://github.com/refinedtechnologiesinc/arti-pdf/releases";
 
 /// The latest published release.
 #[derive(Clone, Debug, PartialEq, Eq)]

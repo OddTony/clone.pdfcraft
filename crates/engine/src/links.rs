@@ -1,12 +1,11 @@
-//! Where PdfCraft and the ArtCraft community live on the web. One table, so the Help menu, the
+//! Where aRTI-PDF lives on the web and how to reach support. One table, so the Help menu, the
 //! About dialog, the CLI and the README agree.
 
-/// The app's name in ArtCraft URLs (`getartcraft.com/apps/{APP}`, `github.com/storytold/{APP}`).
+/// The app's name, used to build its GitHub URL.
 pub const APP: &str = "pdfcraft";
 
-pub const WEBSITE: &str = "https://getartcraft.com";
-pub const APP_PAGE: &str = "https://getartcraft.com/apps/pdfcraft";
-pub const GITHUB: &str = "https://github.com/storytold/pdfcraft";
+pub const GITHUB: &str = "https://github.com/refinedtechnologiesinc/arti-pdf";
+pub const SUPPORT_EMAIL: &str = "mailto:artiassist@r-t-i.com";
 
 /// A link and the registry command that opens it.
 #[derive(Clone, Copy, Debug)]
@@ -20,9 +19,8 @@ pub struct Link {
 
 /// In the order they are shown.
 pub const LINKS: &[Link] = &[
-    Link { command: "help.app_page", label: "aRTI-PDF web page", url: APP_PAGE, icon: "globe" },
     Link { command: "help.github", label: "aRTI-PDF on GitHub", url: GITHUB, icon: "code-xml" },
-    Link { command: "help.website", label: "ArtCraft website", url: WEBSITE, icon: "external-link" },
+    Link { command: "help.support", label: "Contact support", url: SUPPORT_EMAIL, icon: "mail" },
 ];
 
 pub fn for_command(id: &str) -> Option<&'static Link> {
@@ -139,11 +137,10 @@ pub fn host(url: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn urls_follow_the_artcraft_scheme() {
-        assert_eq!(super::APP_PAGE, format!("{}/apps/{}", super::WEBSITE, super::APP));
-        assert_eq!(super::GITHUB, format!("https://github.com/storytold/{}", super::APP));
+    fn urls_follow_the_github_scheme() {
+        assert_eq!(super::GITHUB, format!("https://github.com/refinedtechnologiesinc/{}", "arti-pdf"));
         for l in super::LINKS {
-            assert!(l.url.starts_with("https://"), "{}", l.url);
+            assert!(l.url.starts_with("https://") || l.url.starts_with("mailto:"), "{}", l.url);
             assert!(crate::commands::command(l.command).is_some(), "{} is a registered command", l.command);
         }
     }
