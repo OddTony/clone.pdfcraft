@@ -2838,3 +2838,24 @@ animation effects	Off	Vypnuto
 	Make properties default	Nastavit vlastnosti jako výchozí
 	Pages selected	Vybrané stránky
 	Page properties	Vlastnosti stránky>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))>>>>>>> bf291a86 (M6: submit current PDF from form actions)>>>>>>> ddde26a6 (M6: submit selected FDF and XFDF form data)
+# HTML form submission
+	Form values to send: {count}	Hodnoty formuláře k odeslání: {count}
+	Submit a form with GET	Odeslat formulář (GET)
+	Only send if you trust this document and destination. The form values leave this computer.	Odesílejte pouze tehdy, pokud tomuto dokumentu a cíli důvěřujete. Hodnoty formuláře opustí tento počítač.
+	Only send if you trust this document and destination. GET puts form values in the URL.	Odesílejte pouze tehdy, pokud tomuto dokumentu a cíli důvěřujete. GET vloží hodnoty formuláře do adresy URL.
+	Form submission is not available in the browser.	Odesílání formulářů není v prohlížeči dostupné.
+	Couldn't send the form: {error}	Formulář se nepodařilo odeslat: {error}
+	Form sent to {url} (HTTP {status}).	Formulář byl odeslán na {url} (HTTP {status}).
+	This form's submission format or field selection is not supported yet.	Formát odeslání nebo výběr polí tohoto formuláře zatím není podporován.
+	Scripted submission to {u} is not supported yet.	Skriptové odeslání na {u} zatím není podporováno.
+
+# Full-document PDF submission
+	Submit PDF document	Odeslat dokument PDF
+	Entire PDF document to send: {bytes} bytes	Celý dokument PDF k odeslání: {bytes} bajtů
+	Only send if you trust this document and destination. The entire PDF leaves this computer.	Odesílejte jen tehdy, pokud tomuto dokumentu a cíli důvěřujete. Celý PDF opustí tento počítač.
+
+# FDF and XFDF submission actions
+	Submit FDF data	Odeslat data FDF
+	Submit XFDF data	Odeslat data XFDF
+	Comments to send	Komentáře k odeslání
+>>>>>>> 6422f4f7 (M6: support reviewed HTML GET form submission)

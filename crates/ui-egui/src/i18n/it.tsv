@@ -688,6 +688,7 @@
 	Show a field	Mostra un campo
 	Hide a field	Nascondi un campo
 	Submit a form	Invia un modulo
+	Submit a form with GET	Invia un modulo (GET)
 	Fields to reset (comma-separated; empty: all)	Campi da reimpostare (separati da virgola; vuoto: tutti)
 	Print, NextPage, PrevPage, FirstPage or LastPage	Print, NextPage, PrevPage, FirstPage o LastPage
 	Field names (comma-separated)	Nomi dei campi (separati da virgola)
@@ -2437,7 +2438,16 @@ animation effects	Off	Disattivati
 	Make properties default	Imposta proprietà come predefinite
 	Pages selected	Pagine selezionate
 	Page properties	Proprietà pagina
-
+# HTML form submission
+	Form values to send: {count}	Valori del modulo da inviare: {count}
+	Only send if you trust this document and destination. The form values leave this computer.	Invia i dati solo se ti fidi del documento e della destinazione. I valori del modulo lasceranno questo computer.
+	Only send if you trust this document and destination. GET puts form values in the URL.	Invia solo se ritieni attendibili il documento e la destinazione. GET inserisce i valori del modulo nell’URL.
+	Form submission is not available in the browser.	L’invio dei moduli non è disponibile nel browser.
+	Couldn't send the form: {error}	Impossibile inviare il modulo: {error}
+	Form sent to {url} (HTTP {status}).	Modulo inviato a {url} (HTTP {status}).
+	This form's submission format or field selection is not supported yet.	Il formato di invio o la selezione dei campi di questo modulo non è ancora supportata.
+	Scripted submission to {u} is not supported yet.	L’invio tramite script a {u} non è ancora supportato.
+>>>>>>> 6422f4f7 (M6: support reviewed HTML GET form submission)
 # Entries the other catalogs had and Italian lacked (2026-10-14)
 	Tools	Strumenti
 	Inspector	Ispettore
