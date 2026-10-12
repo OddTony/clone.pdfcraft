@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~26% (ready for real work 49% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (M14 Indonesian and Vietnamese catalogs: localization re-measures at ≈ 76%; the weighted sum is not re-measured here) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M1 #1339: an unchanged incremental save of a classic cross-reference table writes a zero-length subsection; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M14 Windows low-DPI font-hinting candidate measured on macOS; no Windows runtime claim; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M3: Windows' Animation effects setting is followed, and Preferences has Animation effects: system, on or off); earlier: exclusive image-crop resize follow-up; M2 short same-line redraws split before placement; estimates unchanged · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -71,7 +72,7 @@ Hours are calibrated as in [Effort and calibration](docs/target-app-parity.md#ef
 | File formats and conversion | ≈ 40% | 12% | 120–220 (within features) | [file-format-parity.md](docs/file-format-parity.md) |
 | PDF specification and standards | ≈ 60% | 8% | 150–260 (within features) | [pdf-spec-parity.md](docs/pdf-spec-parity.md) |
 | Hardware | ≈ 35% | 4% | 25–50 | [hardware-parity.md](docs/hardware-parity.md) |
-| Localization | ≈ 59% | 5% | 35–60 | [localization-parity.md](docs/localization-parity.md) |
+| Localization | ≈ 76% | 5% | 25–50 | [localization-parity.md](docs/localization-parity.md) |
 | Performance | ≈ 40% | 6% | 25–45 | [gaps.md](docs/gaps.md) gap 13 |
 | Stability | ≈ 50% | 8% | 45–80 | [gaps.md](docs/gaps.md) gap 6 |
 | Platforms | ≈ 70% | 5% | 15–30 | [hardware-parity.md](docs/hardware-parity.md#platforms) |
@@ -102,7 +103,7 @@ What's strong and missing in each: [target-app-parity.md](docs/target-app-parity
 
 ## Languages
 
-Measured from `crates/ui-egui/src/i18n/*.tsv` (2,143 keys). Detail and script notes:
+Measured from `crates/ui-egui/src/i18n/*.tsv` (2,578 keys). Detail and script notes:
 [localization-parity.md](docs/localization-parity.md).
 
 | Language | Code | Strings | Status |
@@ -114,11 +115,11 @@ Measured from `crates/ui-egui/src/i18n/*.tsv` (2,143 keys). Detail and script no
 | Arabic | `ar` | 100% | partial (layout not mirrored) |
 | French | `fr` | 99.3% | partial |
 | Portuguese (Brazil) | `pt-br` | 99.4% | partial |
-| Indonesian | `id` | 0% | none |
+| Indonesian | `id` | 100% | partial |
 | Japanese | `ja` | 99.1% | partial |
 | German | `de` | 99.3% | partial |
 | Korean | `ko` | 0% | none |
-| Vietnamese | `vi` | 0% | none |
+| Vietnamese | `vi` | 100% | partial |
 
 Also shipped: Traditional Chinese, Russian, Bulgarian, Telugu, Hungarian, Ukrainian, Italian
 (94–100%) and Czech (menus only): **8 more languages**.
@@ -141,6 +142,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-13 (M14, Indonesian and Vietnamese):** Two more interface languages, each a full 2,578-key catalog — every `(context, English)` key the bundled catalogs' union holds, covering every registered command, All tools label and `tl!` literal (tests fail if either lags). Neither language inflects nouns for number (CLDR `id` and `vi` have one plural form), so `@plural` entries list one form; month and weekday names for stamps come with them. The bundled Latin faces cover both catalogs, stacked Vietnamese diacritics included (checked in `crates/ui-egui/tests/fonts.rs`, which found and fixed one `▸` Inter cannot draw). Localization re-measures at ≈ 76% (from ≈ 59%: the key union moved to 2,578 with Lithuanian, and Indonesian and Vietnamese now ship); remaining are Hindi and Korean, which need a Devanagari and a Hangul face in craft-fonts. The overall weighted sum still reads ≈ 49% and is not re-measured here.
 - **2026-10-12 (M1, #1339):** An incremental save of an unchanged classic-table file used to append `xref` and then `trailer` with no subsection, which qpdf reports as a damaged file. The section now has a zero-length subsection, so no object entry changes and a trailer-only edit is still written. Estimates unchanged.
 - **2026-10-12 (M12, auto-tag preview):** The engine and `accessibility_autotag_preview` propose paragraph and large-heading roles for bounded text blocks on one page, with locations and reasons. Every proposal needs review; images remain unclassified. No PDF tags are written yet. Synthetic tool tests cover normal text, a larger heading, bounds and unchanged source bytes. Estimates unchanged.
 - **2026-10-12 (M10, editing OCR text on scans):** Editing a recognised word on a scanned page now changes what the page shows. Before, the rewrite stayed invisible OCR text, so the scan still showed the old word; on a form, the whole OCR layer also grouped into one paragraph that rewrapped when one word changed. OCR words now group into phrases (a table cell or a tab stop splits them, and lines stay apart); an edit draws the phrase visibly in the scan's sampled ink colour over a cover in the sampled paper colour, keeping each word's width and growing rightwards. The editor covers the scanned word while typing. OCR words are now sized from their letters (a capitals-only word's box spans the cap height, not the full ascender-descender span), so recognised and rewritten text is as tall as the scanned word and sits on its baseline. Five engine tests on synthetic scans and a kittest UI test; `ocr.editable-text-output` is partial.
