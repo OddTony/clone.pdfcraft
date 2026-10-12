@@ -218,6 +218,20 @@ fn subtype_name(d: &Dict) -> String {
     String::from_utf8_lossy(d.name(b"Subtype").unwrap_or(b"Unknown")).into_owned()
 }
 
+/// An annotation's rectangle is already in page user space. Ignore missing, malformed and
+/// degenerate rectangles rather than sending the checker to an arbitrary place on the page.
+fn annotation_rect(doc: &Document, annot: &Dict) -> Option<[f64; 4]> {
+    let rect = annot.get(b"Rect").map(|r| doc.resolve(r))?;
+    let values = rect.as_array()?;
+    let [x0, y0, x1, y1] = values.as_slice() else { return None };
+    let [x0, y0, x1, y1] = [x0, y0, x1, y1].map(|v| doc.resolve(v).as_f64());
+    let (x0, y0, x1, y1) = (x0?, y0?, x1?, y1?);
+    if ![x0, y0, x1, y1].iter().all(|v| v.is_finite()) || x0 == x1 || y0 == y1 {
+        return None;
+    }
+    Some([x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)])
+}
+
 pub(crate) fn page_rule(doc: &Document, rule: Rule, pages: &[Page], list: &[usize], scan: &Scan, tagged: bool) -> Vec<Finding> {
     let mut out = Vec::new();
     let annots = |p: &Page| -> Vec<(ObjRef, Dict)> {
@@ -260,7 +274,9 @@ pub(crate) fn page_rule(doc: &Document, rule: Rule, pages: &[Page], list: &[usiz
                             values.push(("{}", subtype_name(&a)));
                             "{} annotation on page {p} isn't tagged"
                         };
-                        out.push(Finding::worded(Some(p), pattern, values));
+                        let mut finding = Finding::worded(Some(p), pattern, values);
+                        finding.bbox = annotation_rect(doc, &a);
+                        out.push(finding);
                     }
                 }
             }
@@ -313,11 +329,13 @@ pub(crate) fn page_rule(doc: &Document, rule: Rule, pages: &[Page], list: &[usiz
                     }
                     let fd = doc.get(field).as_dict().cloned().unwrap_or_default();
                     if text_of(doc, &fd, b"TU").is_none() {
-                        out.push(Finding::worded(
+                        let mut finding = Finding::worded(
                             Some(p),
                             "Field \"{}\" on page {p} has no description (tooltip)",
                             vec![("{}", full_name(doc, field)), ("{p}", (p + 1).to_string())],
-                        ));
+                        );
+                        finding.bbox = annotation_rect(doc, &a);
+                        out.push(finding);
                     }
                 }
             }

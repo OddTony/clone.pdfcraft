@@ -188,17 +188,58 @@ pub(crate) fn copy_object(dst: &mut Document, src: &Document, o: &Object, map: H
     c.copy_value(dst, o, None)
 }
 
+/// How colliding fully-qualified field names are resolved when pages are imported.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum FieldConflicts {
+    /// The incoming field's own `/T` is renamed to the first free `Name-1`, `Name-2`… variant,
+    /// so it stays its own field (the default; Combine and Insert from File use it).
+    #[default]
+    Rename,
+    /// The older behaviour: a field that arrives with a taken name becomes one field with the
+    /// one already there. Duplicate, Replace, Extract and Split always use it.
+    Merge,
+}
+
+/// What [`import_pages_with`] did beyond placing the pages.
+pub struct ImportOutcome {
+    /// The new pages, in order.
+    pub pages: Vec<ObjRef>,
+    /// Every field renamed to keep its name separate: old fully-qualified name → new one.
+    pub renamed_fields: Vec<(String, String)>,
+}
+
+/// Copy pages `src_pages` (0-based, in the given order) of `src` into `dst`, inserting them at
+/// position `at`, resolving field-name collisions per `conflicts`. Returns the new page
+/// references in order and what the conflict resolution renamed.
+///
+/// Resources identical to ones already in `dst` (the same fonts, images, colour profiles) are
+/// shared rather than stored twice (see `dedupe`).
+pub fn import_pages_with(
+    dst: &mut Document,
+    src: &Document,
+    src_pages: &[usize],
+    at: usize,
+    conflicts: FieldConflicts,
+) -> Result<ImportOutcome, OrganizeError> {
+    let first_new = dst.object_numbers().last().map_or(1, |n| n + 1);
+    let imported = import_pages_mapped(dst, src, src_pages, at, conflicts)?;
+    let created: Vec<ObjRef> = dst.object_numbers().into_iter().filter(|n| *n >= first_new).map(|n| ObjRef::new(n, dst.generation(n))).collect();
+    crate::dedupe::dedupe_resources(dst, &created, true);
+    Ok(ImportOutcome { pages: imported.pages, renamed_fields: imported.renamed_fields })
+}
+
 /// Copy pages `src_pages` (0-based, in the given order) of `src` into `dst`, inserting them at
 /// position `at`. Returns the new page references in order.
+///
+/// Fields keep their names ([`FieldConflicts::Merge`]): this is what Duplicate and Replace
+/// Pages use, where the incoming fields are copies of the document's own and renaming them
+/// would silently change what the form exports. Combine and Insert from File, which bring in
+/// another document's fields, use [`import_pages_with`] and [`FieldConflicts::Rename`].
 ///
 /// Resources identical to ones already in `dst` (the same fonts, images, colour profiles) are
 /// shared rather than stored twice (see `dedupe`).
 pub fn import_pages(dst: &mut Document, src: &Document, src_pages: &[usize], at: usize) -> Result<Vec<ObjRef>, OrganizeError> {
-    let first_new = dst.object_numbers().last().map_or(1, |n| n + 1);
-    let pages = import_pages_mapped(dst, src, src_pages, at)?.pages;
-    let created: Vec<ObjRef> = dst.object_numbers().into_iter().filter(|n| *n >= first_new).map(|n| ObjRef::new(n, dst.generation(n))).collect();
-    crate::dedupe::dedupe_resources(dst, &created, true);
-    Ok(pages)
+    import_pages_with(dst, src, src_pages, at, FieldConflicts::Merge).map(|o| o.pages)
 }
 
 /// What `import_pages_mapped` copied.
@@ -209,10 +250,18 @@ struct Imported {
     page_map: HashMap<ObjRef, ObjRef>,
     /// Every source object copied → its copy.
     objects: HashMap<ObjRef, ObjRef>,
+    /// Fields renamed to keep their names separate (old → new fully-qualified name).
+    renamed_fields: Vec<(String, String)>,
 }
 
 /// `import_pages`, also returning what was copied from where.
-fn import_pages_mapped(dst: &mut Document, src: &Document, src_pages: &[usize], at: usize) -> Result<Imported, OrganizeError> {
+fn import_pages_mapped(
+    dst: &mut Document,
+    src: &Document,
+    src_pages: &[usize],
+    at: usize,
+    conflicts: FieldConflicts,
+) -> Result<Imported, OrganizeError> {
     let source = walk(src)?;
     if let Some(bad) = src_pages.iter().find(|i| **i >= source.len()) {
         return Err(OrganizeError::NoSuchPage(*bad));
@@ -336,13 +385,17 @@ fn import_pages_mapped(dst: &mut Document, src: &Document, src_pages: &[usize], 
         new_pages.push(new);
     }
     copier.fix_annotations(dst, &annot_pages)?;
+    let renamed_fields = match conflicts {
+        FieldConflicts::Rename => resolve_field_conflicts(dst, &copier.fields)?,
+        FieldConflicts::Merge => Vec::new(),
+    };
     register_fields(dst, &copier.fields)?;
     register_layers(dst, src, &copier.ocgs)?;
     let at = at.min(existing.len());
     let inserted: Vec<(ObjRef, Dict)> = new_pages.iter().map(|r| (*r, Dict::new())).collect();
     existing.splice(at..at, inserted);
     rebuild(dst, &existing)?;
-    Ok(Imported { pages: new_pages, page_map: copier.pages, objects: copier.map })
+    Ok(Imported { pages: new_pages, page_map: copier.pages, objects: copier.map, renamed_fields })
 }
 
 /// Look up a named destination in the source (`/Dests` dictionary or `/Names /Dests` tree).
@@ -444,6 +497,189 @@ fn register_layers(dst: &mut Document, src: &Document, ocgs: &[(ObjRef, ObjRef)]
     Ok(())
 }
 
+/// Rename the top-level fields about to be registered in `dst` whose fully-qualified names
+/// (`parent.T.child`) are already taken, so each imported field stays its own field instead of
+/// blurring into the destination's field of the same name (fields of one fully-qualified name
+/// are one field). A colliding node's own `/T` becomes the first free `Name-1`, `Name-2`…
+/// variant, so everything below it keeps its place in the tree. Returns what was renamed
+/// (old fully-qualified name → new one), in order.
+fn resolve_field_conflicts(dst: &mut Document, fields: &[ObjRef]) -> Result<Vec<(String, String)>, OrganizeError> {
+    let mut taken = taken_field_names(dst)?;
+    let planned = plan_renames(dst, fields, &mut taken);
+    let mut renamed = Vec::new();
+    for (node, new_t, old, new) in planned {
+        dst.update_dict(node, |d| d.set(b"T".to_vec(), Object::String(pdfcraft_cos::PdfString::text(&new_t))))?;
+        renamed.push((old, new));
+    }
+    Ok(renamed)
+}
+
+/// What importing `src` into `dst` would rename, computed without changing either document:
+/// each fully-qualified name of `src`'s fields that `dst` already uses (or that an earlier
+/// field of `src` itself uses) is renamed to the first free variant, exactly as the import
+/// would. Unreadable structure previews as nothing: the import itself will say why it failed.
+pub fn field_name_conflicts(dst: &Document, src: &Document) -> Vec<(String, String)> {
+    let Ok(mut taken) = taken_field_names(dst) else { return Vec::new() };
+    let Ok(roots) = field_roots(src) else { return Vec::new() };
+    plan_renames(src, &roots, &mut taken).into_iter().map(|(_, _, old, new)| (old, new)).collect()
+}
+
+/// What combining `sources`, in order, would rename in each one: the whole list is simulated
+/// with the same first-free-variant rule the combine uses, so a later file's preview sees the
+/// earlier files' renames. Unreadable structure previews as nothing (the combine itself will
+/// say why it fails); non-colliding names still count as taken for the files after them.
+pub fn combine_field_conflicts(sources: &[&Document]) -> Vec<Vec<(String, String)>> {
+    let mut taken = std::collections::HashSet::new();
+    sources
+        .iter()
+        .map(|src| match field_roots(src) {
+            Ok(roots) => plan_renames(src, &roots, &mut taken).into_iter().map(|(_, _, old, new)| (old, new)).collect(),
+            Err(_) => Vec::new(),
+        })
+        .collect()
+}
+
+/// Walk field trees `roots` in `doc` and plan the renames that would keep every name separate
+/// from `taken`: each node's fully-qualified name joins `taken` (so a later field of the same
+/// import collides with an earlier one), and a node already taken is renamed to the first free
+/// variant of its own `/T`. Names are compared and renamed as decoded text, not as stored
+/// bytes, so one name written in two encodings (PDFDocEncoding, UTF-16BE) is one name.
+/// Read-only: returns (node, new `/T`, old name, new name). Cycle- and depth-safe.
+fn plan_renames(doc: &Document, roots: &[ObjRef], taken: &mut std::collections::HashSet<String>) -> Vec<(ObjRef, String, String, String)> {
+    let mut planned = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for &root in roots {
+        plan_renames_under(doc, root, "", taken, &mut seen, 0, &mut planned);
+    }
+    planned
+}
+
+/// One node of [`plan_renames`].
+fn plan_renames_under(
+    doc: &Document,
+    node: ObjRef,
+    prefix: &str,
+    taken: &mut std::collections::HashSet<String>,
+    seen: &mut std::collections::HashSet<ObjRef>,
+    depth: u8,
+    planned: &mut Vec<(ObjRef, String, String, String)>,
+) {
+    if depth > 32 || !seen.insert(node) {
+        return;
+    }
+    let Some(d) = doc.get(node).as_dict().cloned() else { return };
+    let mut name = d.get(b"T").and_then(|t| doc.resolve(t).as_string().map(|s| s.to_text())).unwrap_or_default();
+    if !name.is_empty() {
+        let fqn = qualified(prefix, &name);
+        if taken.contains(&fqn) {
+            let mut n = 1u32;
+            let mut variant;
+            while {
+                variant = format!("{name}-{n}");
+                taken.contains(&qualified(prefix, &variant))
+            } {
+                n += 1;
+            }
+            let new_fqn = qualified(prefix, &variant);
+            planned.push((node, variant.clone(), fqn, new_fqn.clone()));
+            taken.insert(new_fqn);
+            name = variant;
+        } else {
+            taken.insert(fqn);
+        }
+    }
+    let prefix = qualified_optional(prefix, &name);
+    let kids = d.get(b"Kids").map(|k| doc.resolve(k)).and_then(|k| k.as_array().cloned()).unwrap_or_default();
+    for kid in kids.iter().filter_map(|k| k.as_ref()) {
+        plan_renames_under(doc, kid, &prefix, taken, seen, depth + 1, planned);
+    }
+}
+
+/// The field names in use in `dst`: every name in its form, and every name hanging only off a
+/// page's widgets — a field the form never lists still owns its name.
+fn taken_field_names(dst: &Document) -> Result<std::collections::HashSet<String>, OrganizeError> {
+    let mut taken = std::collections::HashSet::new();
+    let mut seen = std::collections::HashSet::new();
+    for root in field_roots(dst)? {
+        collect_names(dst, root, "", &mut seen, 0, &mut taken);
+    }
+    Ok(taken)
+}
+
+/// A document's field trees, wherever they are rooted: the `/AcroForm /Fields` entries, and
+/// the fields behind widgets on pages (climbed to their root, for forms that never registered
+/// them).
+fn field_roots(doc: &Document) -> Result<Vec<ObjRef>, OrganizeError> {
+    let mut roots: Vec<ObjRef> = doc
+        .root()
+        .and_then(|r| doc.get(r).as_dict().cloned())
+        .and_then(|c| c.get(b"AcroForm").map(|f| doc.resolve(f)))
+        .and_then(|f| f.as_dict().cloned())
+        .and_then(|f| f.get(b"Fields").map(|l| doc.resolve(l)))
+        .and_then(|l| l.as_array().cloned())
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|f| f.as_ref())
+        .collect();
+    for (page, _) in walk(doc)? {
+        let Some(d) = doc.get(page).as_dict().cloned() else { continue };
+        let annots = d.get(b"Annots").map(|a| doc.resolve(a)).and_then(|a| a.as_array().cloned()).unwrap_or_default();
+        for a in annots.iter() {
+            let Some(w) = doc.resolve(a).as_dict().cloned() else { continue };
+            if w.name(b"Subtype") != Some(b"Widget") {
+                continue;
+            }
+            // Walk up to the field the widget belongs to, however deep it sits; a widget that
+            // is its own field is its own root.
+            let Some(mut root) = a.as_ref() else { continue };
+            let mut up = 0;
+            while let Some(parent) = doc.get(root).as_dict().and_then(|p| p.reference(b"Parent")) {
+                if up >= 32 || root == parent {
+                    break;
+                }
+                root = parent;
+                up += 1;
+            }
+            roots.push(root);
+        }
+    }
+    Ok(roots)
+}
+
+/// Record the fully-qualified names of one field tree. Cycle- and depth-safe.
+fn collect_names(
+    dst: &Document,
+    node: ObjRef,
+    prefix: &str,
+    seen: &mut std::collections::HashSet<ObjRef>,
+    depth: u8,
+    out: &mut std::collections::HashSet<String>,
+) {
+    if depth > 32 || !seen.insert(node) {
+        return;
+    }
+    let Some(d) = dst.get(node).as_dict().cloned() else { return };
+    let name = d.get(b"T").and_then(|t| dst.resolve(t).as_string().map(|s| s.to_text())).unwrap_or_default();
+    let prefix = qualified_optional(prefix, &name);
+    if !name.is_empty() {
+        out.insert(prefix.clone());
+    }
+    let kids = d.get(b"Kids").map(|k| dst.resolve(k)).and_then(|k| k.as_array().cloned()).unwrap_or_default();
+    for kid in kids.iter().filter_map(|k| k.as_ref()) {
+        collect_names(dst, kid, &prefix, seen, depth + 1, out);
+    }
+}
+
+/// `prefix.name`, or `name` at the top level.
+fn qualified(prefix: &str, name: &str) -> String {
+    if prefix.is_empty() { name.to_string() } else { format!("{prefix}.{name}") }
+}
+
+/// The prefix a node's children hang under: its own name, when it has one.
+fn qualified_optional(prefix: &str, name: &str) -> String {
+    if name.is_empty() { prefix.to_string() } else { qualified(prefix, name) }
+}
+
 /// Add top-level fields to the destination's `/AcroForm /Fields` (creating the form if needed).
 fn register_fields(dst: &mut Document, fields: &[ObjRef]) -> Result<(), OrganizeError> {
     if fields.is_empty() {
@@ -478,8 +714,9 @@ fn register_fields(dst: &mut Document, fields: &[ObjRef]) -> Result<(), Organize
 /// source declares (PDF/X: its output intents and identification, #263).
 pub fn extract_pages(src: &Document, pages: &[usize]) -> Result<Document, OrganizeError> {
     let mut out = Document::new_empty();
-    // One source: nothing to deduplicate.
-    let imported = import_pages_mapped(&mut out, src, pages, 0)?;
+    // One source: nothing to deduplicate. Its fields keep their names (a source with two
+    // same-named field roots stays one field, as it was), so Extract and Split never rename.
+    let imported = import_pages_mapped(&mut out, src, pages, 0, FieldConflicts::Merge)?;
     for key in crate::INFO_KEYS {
         if let Some(v) = crate::info(src, key) {
             crate::set_info(&mut out, key, &v)?;
@@ -527,24 +764,43 @@ pub fn split(src: &Document, by: &SplitBy) -> Result<Vec<Document>, OrganizeErro
     split_ranges(n, by).into_iter().map(|r| extract_pages(src, &r.collect::<Vec<_>>())).collect()
 }
 
+/// What combining produced, beyond the document: the fields renamed to keep colliding names
+/// separate (old fully-qualified name → new one), in order across all sources.
+pub struct CombineOutcome {
+    /// The combined document.
+    pub doc: Document,
+    /// Every field renamed while combining.
+    pub renamed_fields: Vec<(String, String)>,
+}
+
 /// Combine whole documents, in order, into a new document. Each source gets a top-level
 /// bookmark (its `title`) pointing to its first page, like Acrobat's Combine Files.
 /// The source's own bookmarks are nested (collapsed) under its entry, and its document-level
 /// attachments are carried over. When every source declares the same print standard (PDF/X
 /// with the same output intent), so does the result.
 pub fn combine(sources: &[(&str, &Document)]) -> Result<Document, OrganizeError> {
+    combine_with(sources, FieldConflicts::Rename).map(|o| o.doc)
+}
+
+/// [`combine`] reporting what the conflict resolution renamed.
+pub fn combine_with(sources: &[(&str, &Document)], conflicts: FieldConflicts) -> Result<CombineOutcome, OrganizeError> {
     let all: Vec<(&str, &Document, Option<&[usize]>)> = sources.iter().map(|(t, d)| (*t, *d, None)).collect();
-    combine_selected(&all)
+    combine_selected_with(&all, conflicts)
 }
 
 /// Combine Files with chosen pages: each source contributes `pages` (0-based, in that order;
 /// `None` for all of them). Bookmarks that point at pages left out lose their destination.
 pub fn combine_selected(sources: &[(&str, &Document, Option<&[usize]>)]) -> Result<Document, OrganizeError> {
-    let mut combiner = Combiner::new();
+    combine_selected_with(sources, FieldConflicts::Rename).map(|o| o.doc)
+}
+
+/// [`combine_selected`] reporting what the conflict resolution renamed.
+pub fn combine_selected_with(sources: &[(&str, &Document, Option<&[usize]>)], conflicts: FieldConflicts) -> Result<CombineOutcome, OrganizeError> {
+    let mut combiner = Combiner::with_field_conflicts(conflicts);
     for (title, src, chosen) in sources {
         combiner.add(title, src, *chosen)?;
     }
-    combiner.finish()
+    combiner.finish_with_renames()
 }
 
 /// Combine Files one source at a time, with the same result as [`combine_selected`]. [`Combiner::add`]
@@ -560,6 +816,10 @@ pub struct Combiner {
     standard: Option<Standard>,
     /// Whether every source so far declares the first source's print standard.
     agreed: bool,
+    /// How colliding field names are resolved as each source is added.
+    field_conflicts: FieldConflicts,
+    /// What adding sources renamed (old → new fully-qualified field name), in order.
+    renamed_fields: Vec<(String, String)>,
 }
 
 /// The first source's print standard (see [`Combiner`]).
@@ -578,9 +838,27 @@ impl Default for Combiner {
 }
 
 impl Combiner {
-    /// A combine with no sources yet.
+    /// A combine with no sources yet, renaming colliding field names as sources are added.
     pub fn new() -> Self {
-        Self { out: Document::new_empty(), marks: Vec::new(), attachments: Vec::new(), standard: None, agreed: true }
+        Self::with_field_conflicts(FieldConflicts::Rename)
+    }
+
+    /// [`Combiner::new`] resolving colliding field names as `conflicts` says.
+    pub fn with_field_conflicts(field_conflicts: FieldConflicts) -> Self {
+        Self {
+            out: Document::new_empty(),
+            marks: Vec::new(),
+            attachments: Vec::new(),
+            standard: None,
+            agreed: true,
+            field_conflicts,
+            renamed_fields: Vec::new(),
+        }
+    }
+
+    /// What adding sources has renamed so far (old → new fully-qualified field name).
+    pub fn renamed_fields(&self) -> &[(String, String)] {
+        &self.renamed_fields
     }
 
     /// Add `src`'s `pages` (0-based, in that order; `None` for all of them) after the pages added so far,
@@ -597,7 +875,8 @@ impl Combiner {
             None => (0..n).collect(),
         };
         let at = crate::page_count(&self.out)?;
-        let imported = import_pages_mapped(&mut self.out, src, &pages, at)?;
+        let imported = import_pages_mapped(&mut self.out, src, &pages, at, self.field_conflicts)?;
+        self.renamed_fields.extend(imported.renamed_fields);
         if let Some(first) = imported.pages.first() {
             let outline = source_outline(src, imported.page_map);
             self.marks.push(Mark { title: title.to_string(), page: *first, outline });
@@ -617,7 +896,12 @@ impl Combiner {
     /// The combined document: the pages as added, the print standard of the first source when every
     /// source declares the same one, shared resources stored once, then the bookmarks and attachments.
     pub fn finish(self) -> Result<Document, OrganizeError> {
-        let Combiner { mut out, marks, attachments, standard, agreed } = self;
+        self.finish_with_renames().map(|o| o.doc)
+    }
+
+    /// [`Combiner::finish`] reporting what the combine renamed.
+    pub fn finish_with_renames(self) -> Result<CombineOutcome, OrganizeError> {
+        let Combiner { mut out, marks, attachments, standard, agreed, renamed_fields, .. } = self;
         if let Some(first) = standard.filter(|_| agreed) {
             crate::pdfx::carry(&mut out, first.source.as_ref(), &first.declared, first.objects)?;
         }
@@ -626,7 +910,7 @@ impl Combiner {
         crate::dedupe::dedupe_resources(&mut out, &all, false);
         add_outline(&mut out, &marks)?;
         set_attachments(&mut out, attachments)?;
-        Ok(out)
+        Ok(CombineOutcome { doc: out, renamed_fields })
     }
 }
 
@@ -641,6 +925,11 @@ pub type Run<'a> = (usize, &'a str, &'a Document, Option<&'a [usize]>);
 /// whole, and it gets one top-level bookmark (the title of its first run) at its first page, its
 /// own bookmarks nested. Otherwise as [`combine_selected`] (print standard, shared resources).
 pub fn combine_grouped(runs: &[Run<'_>]) -> Result<Document, OrganizeError> {
+    combine_grouped_with(runs, FieldConflicts::Rename).map(|o| o.doc)
+}
+
+/// [`combine_grouped`] reporting what the conflict resolution renamed.
+pub fn combine_grouped_with(runs: &[Run<'_>], conflicts: FieldConflicts) -> Result<CombineOutcome, OrganizeError> {
     // Each file's pages, in the order its runs list them, and each run's place in that list.
     struct File<'a> {
         title: &'a str,
@@ -675,12 +964,14 @@ pub fn combine_grouped(runs: &[Run<'_>]) -> Result<Document, OrganizeError> {
     let mut marks = Vec::new();
     let mut attachments = Vec::new();
     let mut copies: Vec<Vec<ObjRef>> = Vec::with_capacity(files.len());
+    let mut renamed_fields = Vec::new();
     let mut standard: Option<(crate::pdfx::PrintStandard, &Document, HashMap<ObjRef, ObjRef>)> = None;
     let mut agreed = true;
     for (_, file) in &files {
         let at = crate::page_count(&out)?;
-        let imported = import_pages_mapped(&mut out, file.src, &file.pages, at)?;
+        let imported = import_pages_mapped(&mut out, file.src, &file.pages, at, conflicts)?;
         copies.push(imported.pages.clone());
+        renamed_fields.extend(imported.renamed_fields);
         if let Some(first) = imported.pages.first() {
             marks.push(Mark { title: file.title.to_string(), page: *first, outline: source_outline(file.src, imported.page_map) });
         }
@@ -706,7 +997,7 @@ pub fn combine_grouped(runs: &[Run<'_>]) -> Result<Document, OrganizeError> {
     crate::dedupe::dedupe_resources(&mut out, &all, false);
     add_outline(&mut out, &marks)?;
     set_attachments(&mut out, attachments)?;
-    Ok(out)
+    Ok(CombineOutcome { doc: out, renamed_fields })
 }
 
 /// Copy a source's document-level attachments (`/Names /EmbeddedFiles`) into `dst`.

@@ -59,6 +59,7 @@
 	Create PDF from file…	Crea PDF da file…
 	Create PDF from images…	Crea PDF da immagini…
 	Create PDF from multiple files…	Crea PDF da più file…
+	Create separate PDFs…	Crea PDF separati…
 	Create PDF from clipboard	Crea PDF dagli appunti
 	Combine files…	Combina file…
 	Save	Salva
@@ -226,6 +227,9 @@
 	Add or edit links	Aggiungi o modifica collegamenti
 	Create links from URLs	Crea collegamenti dagli URL
 	Remove all links	Rimuovi tutti i collegamenti
+	No links to remove	Nessun collegamento da rimuovere
+	Removed 1 link	1 collegamento rimosso
+	Removed {n} links	{n} collegamenti rimossi
 	Add Bates numbering…	Aggiungi numerazione Bates…
 	Add image…	Aggiungi immagine…
 	Redact text and images	Oscura testo e immagini
@@ -264,6 +268,7 @@
 	Optimize PDF…	Ottimizza PDF…
 	Export to text…	Esporta come testo…
 	Export to Word…	Esporta in Word…
+	Export to PowerPoint…	Esporta in PowerPoint…
 	Export to HTML…	Esporta in HTML…
 	Export to RTF…	Esporta in RTF…
 	JavaScript console…	Console JavaScript…
@@ -348,6 +353,7 @@
 	Create from	Crea da
 	Single file	File singolo
 	Multiple files	Più file
+	Separate PDFs	PDF separati
 	Images	Immagini
 	Clipboard	Appunti
 	Blank page	Pagina vuota
@@ -699,6 +705,14 @@
 	of the following fields:	dei seguenti campi:
 	Simplified field notation:	Notazione semplificata dei campi:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	Nomi dei campi con + - * / e parentesi; anteponi \\ agli spazi nei nomi.
+
+# Document font selection
+	Finding document fonts…	Ricerca dei caratteri per il documento…
+	Installed fonts…	Caratteri installati…
+	Keep source fonts	Mantieni i caratteri originali
+	Load font…	Carica carattere…
+	No openly licensed document fonts found. Load a font file.	Nessun carattere con licenza aperta trovato. Carica un file di carattere.
+
 	Format text	Formatta testo
 	Bold	Grassetto
 	Italic	Corsivo
@@ -706,7 +720,7 @@
 	Centre	Centra
 	Align right	Allinea a destra
 	Justify	Giustifica
-	Standard fonts; text outside Windows-1252 isn't supported yet.	Caratteri standard; il testo al di fuori di Windows-1252 non è ancora supportato.
+	Thai and Arabic use regular fallback fonts when available.	Il thailandese e l’arabo usano caratteri sostitutivi in stile normale, quando disponibili.
 	Edit image	Modifica immagine
 	Rotate counterclockwise	Ruota in senso antiorario
 	Rotate clockwise	Ruota in senso orario
@@ -748,6 +762,12 @@
 	Flip Vertical	Capovolgi verticalmente
 	Replace Image…	Sostituisci immagine…
 	Save Image As…	Salva immagine con nome…
+	Copy Image	Copia immagine
+	The image has been copied ({w} × {h} pixels)	L'immagine è stata copiata ({w} × {h} pixel)
+	Couldn't copy the image: {e}	Impossibile copiare l'immagine: {e}
+	Copy Image in Original Format	Copia immagine nel formato originale
+	The image has been copied as a {ext} file	L'immagine è stata copiata come file {ext}
+	The page has changed; select the image again	La pagina è cambiata; seleziona di nuovo l'immagine
 	Check for updates	Verifica aggiornamenti
 	No check has run yet.	Nessuna verifica eseguita finora.
 	Checking for a newer version…	Ricerca di una versione più recente…
@@ -855,6 +875,7 @@
 	{verb} as "{name}"	{verb} come “{name}”
 	Certify	Certifica
 	The signature will be invisible.	La firma sarà invisibile.
+	The existing action will be preserved.	L’azione esistente verrà mantenuta.
 	Distinguished name	Nome distinto
 	Labels	Etichette
 	Graphic	Grafica
@@ -1223,6 +1244,8 @@
 	Searchable Image (Exact)	Immagine ricercabile (esatta)
 	Adds invisible text over each word; the page image is not changed	Aggiunge testo invisibile sopra ogni parola; l'immagine della pagina non viene modificata
 	Downsample to	Sottocampiona a
+	Also recognize pages that already have text	Riconosci anche le pagine che contengono già testo
+	Pictures on those pages are recognized too; words already in the page's text are not added again	Vengono riconosciute anche le immagini di queste pagine; le parole già presenti nel testo della pagina non vengono aggiunte di nuovo
 	Settings	Impostazioni
 	Optional	Facoltativo
 	Planned · {m}	Pianificato · {m}
@@ -1525,7 +1548,7 @@
 	Couldn't optimize the file: {e}	Impossibile ottimizzare il file: {e}
 	Couldn't write {path}: {e}	Impossibile scrivere {path}: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	Il modulo chiede di essere inviato a {u}; PdfCraft non invia dati dei moduli. Salva il documento per conservare i dati inseriti.
-	{s} actions run in the JavaScript engine (M6)	Le azioni {s} vengono eseguite nel motore JavaScript (M6)
+	This PDF uses the unsupported {s} action.	Questo PDF usa l'azione {s} non supportata.
 	{name}: the {other} action isn't supported yet	{name}: l'azione {other} non è ancora supportata
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} invia il modulo a {url}; PdfCraft non invia dati dei moduli. Salva il documento per conservare i dati inseriti.
 	Export stopped: {e}	Esportazione interrotta: {e}
@@ -1869,6 +1892,8 @@
 	{month} {y}	{month} {y}
 	Change {key}	Modifica {key}
 	Insert pages from {name}	Inserisci pagine da {name}
+	Insert pages from {name} — 1 field renamed	Inserisci pagine da {name} — 1 campo rinominato
+	Insert pages from {name} — fields renamed	Inserisci pagine da {name} — campi rinominati
 	Fill in {name}	Compila {name}
 	Set the image of {name}	Imposta l'immagine di {name}
 	Edit script of {name}	Modifica script di {name}
@@ -1899,6 +1924,7 @@
 	Delete document JavaScript	Elimina JavaScript del documento
 	Edit document JavaScript	Modifica JavaScript del documento
 	Edit text	Modifica testo
+	Load document font	Carica il font del documento
 	Move image	Sposta immagine
 	Rotate image	Ruota immagine
 	Flip image	Capovolgi immagine
@@ -2040,6 +2066,7 @@
 	DPI sets the printed page size without resampling the image.	I DPI determinano la dimensione della pagina stampata senza ricampionare l'immagine.
 	Create	Crea
 	Dynamic XFA form laid out from its template: {pages}, {fields}.	Modulo XFA dinamico impaginato dal suo modello: {pages}, {fields}.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Gli script di questo modulo sono disattivati perché uno è rimasto in esecuzione troppo a lungo. Riapri il documento per eseguirli di nuovo.
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	Modulo XFA: i suoi campi e i dati XFA restano allineati, così gli altri visualizzatori mostrano ciò che compili.
 	Default page display	Visualizzazione pagina predefinita
 	Default zoom	Ingrandimento predefinito
@@ -2080,6 +2107,7 @@
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}: {prs} PR, {commits} commit, +{added} / −{deleted} righe (Δ {delta}), +{bin_added} / −{bin_deleted} risorse binarie, {first} – {last}
 @plural	{n} page|{n} pages	{n} pagina|{n} pagine
 @plural	{n} field|{n} fields	{n} campo|{n} campi
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} nome di campo è in conflitto con i file precedenti e verrà rinominato: {list}|{n} nomi di campo sono in conflitto con i file precedenti e verranno rinominati: {list}
 
 # Labels added on main after this catalog was written (merged 2026-10-09)
 	A button	Un pulsante
@@ -2149,6 +2177,9 @@
 	The document was closed before it could be saved.	Il documento è stato chiuso prima che potesse essere salvato.
 	The pages were extracted but not deleted, because the document changed while you were choosing a folder.	Le pagine sono state estratte ma non eliminate, perché il documento è cambiato mentre sceglievi una cartella.
 	The printer driver's own settings for this print: paper tray, paper type, finishing and more.	Le impostazioni proprie del driver della stampante per questa stampa: vassoio, tipo di carta, finitura e altro.
+	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	I caratteri del testo PDF non possono visualizzare «{c}» ({code}). Scegliere un testo supportato.
+	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Il font di questo campo non può disegnare «{c}» ({code}), quindi PdfCraft mostra ? al suo posto. Il valore è salvato e gli altri visualizzatori PDF ridisegnano il campo a partire da esso.
+	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	I font con cui PdfCraft scrive non possono disegnare «{c}» ({code}), quindi appare come ? in ogni visualizzatore PDF. Il testo è salvato.
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	I caratteri standard non possono disegnare “{c}” ({code}). Per ora si possono aggiungere come testo solo caratteri dell'Europa occidentale.
 	This printer offers no settings of its own.	Questa stampante non offre impostazioni proprie.
 	Today: {date}	Oggi: {date}
@@ -2251,6 +2282,9 @@ key	Space	Spazio
 scroll speed	Slow	Lenta
 scroll speed	Normal	Normale
 scroll speed	Fast	Veloce
+	Animation effects	Effetti di animazione
+animation effects	On	Attivati
+animation effects	Off	Disattivati
 	Enhance camera image	Migliora foto della fotocamera
 	Drag the corners onto the document's edges, then choose Enhance page.	Trascina gli angoli sui bordi del documento, poi scegli Migliora la pagina.
 	Enhance page	Migliora la pagina
@@ -2260,3 +2294,61 @@ scroll speed	Fast	Veloce
 	Original	Originale
 	Greyscale	Scala di grigi
 	Black and white	Bianco e nero
+	Reading colours	Colori di lettura
+	Replace document colours	Sostituisci i colori del documento
+	Black on white	Nero su bianco
+	White on black	Bianco su nero
+	Yellow on black	Giallo su nero
+	Green on black	Verde su nero
+	Page background	Sfondo della pagina
+	Only change the colour of black text or line art	Modifica solo il colore del testo nero e dei tratti
+	Change the colour of line art as well as text	Modifica il colore anche dei tratti, oltre al testo
+	Colours are remapped while rendering; the document itself never changes.	I colori vengono riassociati durante il rendering; il documento in sé non cambia mai.
+	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Il driver di questa stampante non accetta le impostazioni fronte-retro da altri programmi, quindi vale la sua impostazione. Modificala in Proprietà…
+	Browser's print dialog	Finestra di stampa del browser
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Copie, stampa fronte/retro e colore si scelgono nella finestra di stampa del browser.
+	Preparing {n} sheets for printing…	Preparazione di {n} fogli per la stampa…
+	Preparing sheet {done} of {total} for printing…	Preparazione del foglio {done} di {total} per la stampa…
+	Opening the browser's print dialog…	Apertura della finestra di stampa del browser…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	Impossibile stampare dal browser ({e}); è stato scaricato {name} da stampare
+	Tools panel side	Lato del pannello Strumenti
+	Add comment	Aggiungi commento
+	Change tag properties	Modifica proprietà del tag
+# Accessibility structure tags.
+	Tags panel	Pannello tag
+	Tags	Tag
+	Tag type	Tipo di tag
+	Actual text	Testo effettivo
+	Find a tag	Trova un tag
+	Collapse tag	Comprimi tag
+	Expand tag	Espandi tag
+	Revert changes	Annulla modifiche
+	Save tag properties	Salva proprietà del tag
+	This document has no editable structure tags.	Questo documento non contiene tag strutturali modificabili.
+	{n} tags	{n} tag
+	Save or revert changes before selecting another tag.	Salva o annulla le modifiche prima di selezionare un altro tag.
+	Left out: {names}	Esclusi: {names}
+	already a PDF	è già un PDF
+	no unused output name	nessun nome di output libero
+	no output folder was chosen	nessuna cartella di output scelta
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	Scaricato {n} PDF|Scaricati {n} PDF
+	Scan	Scansiona
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Firma un foglio di carta bianca e fotografalo con una luce intensa e uniforme (usa il flash). Scegli la foto o trascinala qui: PdfCraft trova la firma e rimuove la carta.
+	Choose photo…	Scegli foto…
+	No photo chosen	Nessuna foto scelta
+	Photo	Foto
+	Ink sensitivity	Sensibilità all’inchiostro
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	Nessuna firma trovata nella cornice. Sposta la cornice sulla firma o aumenta la sensibilità all’inchiostro.
+	Couldn't use the photo: {e}	Impossibile usare la foto: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	Chiudi scheda
+	Reopen Closed Tab	Riapri scheda chiusa
+	Reveal in Finder	Mostra nel Finder
+	Reveal in File Explorer	Mostra in Esplora file
+	Other colour…	Altro colore…
+	Recent colours	Colori recenti
+	Couldn't follow linked PDF: {reason}	Impossibile aprire il PDF collegato: {reason}
+	The linked PDF opened, but its named destination was not applied.	Il PDF collegato è stato aperto, ma la sua destinazione con nome non è stata applicata.
+	The linked PDF opened, but its page destination was out of range.	Il PDF collegato è stato aperto, ma la pagina di destinazione è fuori intervallo.
+	Local cross-PDF links require the desktop app	I collegamenti locali tra PDF richiedono l'app desktop

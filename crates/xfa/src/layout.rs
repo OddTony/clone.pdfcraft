@@ -60,6 +60,8 @@ pub enum WidgetKind {
     },
     /// A signature field, to be signed in the app.
     Signature,
+    /// An image field: a push button that picks a picture (the picture itself is page content).
+    Image,
     /// A date field with its Acrobat format pattern (`yyyy-mm-dd`).
     Date(String),
     CheckBox {
@@ -726,6 +728,7 @@ impl Layouter<'_> {
         }
         // Data adds instances of a repeating subform (rows added in another viewer).
         let instances = self.instances(node, &ctx.som);
+        self.warn_truncated(node, &ctx.som, instances);
         let ctx_parent = ctx;
         for i in 0..instances {
             let ctx = ctx_parent.with_som(&sf.common, sib + i);
@@ -791,6 +794,7 @@ impl Layouter<'_> {
             {
                 // Rows added as data (in another viewer) repeat the row.
                 let instances = self.instances(child, &ctx.som);
+                self.warn_truncated(child, &ctx.som, instances);
                 for inst in 0..instances {
                     let h = self.row_height(row, &cols, inner_w, ctx, depth + 1);
                     if self.make_room(h)?
@@ -835,6 +839,22 @@ impl Layouter<'_> {
             _ => 0,
         };
         instance_count(&sf.occur, from_data)
+    }
+
+    /// The data holds more instances of `node` than `laid_out`: say so, since calculations
+    /// then see only those.
+    fn warn_truncated(&mut self, node: &Node, parent_som: &str, laid_out: usize) {
+        let Node::Subform(sf) = node else { return };
+        let from_data = match (&sf.common.name, self.data) {
+            (Some(name), Some(d)) if sf.occur.max != Some(1) => d.count(&data_path(self.tpl, parent_som), name),
+            _ => 0,
+        };
+        if from_data > laid_out {
+            self.warn_once(format!(
+                "{}: the data holds {from_data} rows; only the first {laid_out} are laid out (calculations see those)",
+                sf.common.name.as_deref().unwrap_or("a subform")
+            ));
+        }
     }
 
     fn size_of(&self, node: &Node, avail_w: f64, ctx: &Ctx, depth: usize) -> (f64, f64) {
@@ -1499,8 +1519,7 @@ impl Layouter<'_> {
                     (None, Value::Image { content_type, data }) => self.draw_image(data, content_type, box_)?,
                     _ => {}
                 }
-                self.warn_once("image fields show their picture; a new picture can't be chosen yet");
-                return Ok(());
+                // Then the field itself, which clicking gives a new picture.
             }
             Ui::Barcode => {
                 // The value as text, where the bars would be.
@@ -1616,6 +1635,10 @@ impl Layouter<'_> {
                 (kind, ui, widget_border(f.ui_border.as_ref(), false), value, f.tooltip.clone())
             }
             Ui::Signature => (WidgetKind::Signature, ui, widget_border(f.ui_border.as_ref(), false), None, f.tooltip.clone()),
+            Ui::ImageEdit => {
+                let none = WidgetBorder { color: None, fill: None, shape: BorderShape::None, width: 0.0 };
+                (WidgetKind::Image, ui, none, None, f.tooltip.clone())
+            }
             Ui::PasswordEdit => (WidgetKind::Password, ui, widget_border(f.ui_border.as_ref(), false), plain_value, f.tooltip.clone()),
             _ => (WidgetKind::Text, ui, widget_border(f.ui_border.as_ref(), false), plain_value, f.tooltip.clone()),
         };

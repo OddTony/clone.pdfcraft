@@ -58,6 +58,7 @@
 	Create PDF from file…	從檔案建立 PDF…
 	Create PDF from images…	從圖片建立 PDF…
 	Create PDF from multiple files…	從多個檔案建立 PDF…
+	Create separate PDFs…	建立個別 PDF…
 	Create PDF from clipboard	從剪貼簿建立 PDF
 	Combine files…	合併檔案…
 	Save	儲存
@@ -345,6 +346,11 @@
 	of the following fields:	以下欄位的：
 	Simplified field notation:	簡化欄位表示法：
 	Field names with + - * / and parentheses; put \\ before spaces in names.	欄位名支援 + - * / 和括號；名稱中的空格前加 \\。
+	Finding document fonts…	正在尋找文件字型…
+	Installed fonts…	已安裝的字型…
+	Keep source fonts	保留原始字型
+	Load font…	載入字型…
+	No openly licensed document fonts found. Load a font file.	找不到開放授權的文件字型。請載入字型檔。
 	Format text	設定文字格式
 	Bold	粗體
 	Italic	斜體
@@ -352,7 +358,7 @@
 	Centre	居中
 	Align right	右對齊
 	Justify	兩端對齊
-	Standard fonts; text outside Windows-1252 isn't supported yet.	標準字型；尚不支援 Windows-1252 之外的文字。
+	Thai and Arabic use regular fallback fonts when available.	泰語和阿拉伯語使用可用的一般樣式備用字型。
 	Edit image	編輯圖片
 	Rotate counterclockwise	逆時針旋轉
 	Rotate clockwise	順時針旋轉
@@ -394,6 +400,12 @@
 	Flip Vertical	垂直翻轉
 	Replace Image…	替換圖片…
 	Save Image As…	圖片另存為…
+	Copy Image	複製圖片
+	The image has been copied ({w} × {h} pixels)	圖片已複製（{w} × {h} 畫素）
+	Couldn't copy the image: {e}	無法複製圖片：{e}
+	Copy Image in Original Format	以原始格式複製圖片
+	The image has been copied as a {ext} file	圖片已複製為 {ext} 檔案
+	The page has changed; select the image again	頁面已變更；請重新選取圖片
 	Check for updates	檢驗更新
 	No check has run yet.	尚未執行檢驗。
 	Checking for a newer version…	正在檢驗新版本…
@@ -881,6 +893,8 @@
 	Searchable Image (Exact)	可搜尋圖片（精確）
 	Adds invisible text over each word; the page image is not changed	在每個詞上新增不可見文字；頁面圖片保持不變
 	Downsample to	降取樣至
+	Also recognize pages that already have text	同時辨識已有文字的頁面
+	Pictures on those pages are recognized too; words already in the page's text are not added again	這些頁面上的圖片也會被辨識；頁面文字中已有的字詞不會重複加入
 	Text recognition isn't installed: its model files are missing. Reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them.	未安裝文字辨識：缺少模型檔案。請重新安裝 PdfCraft，或將 PDFCRAFT_MODELS 設定為包含這些檔案的資料夾。
 	Settings	設定
 	Protect	保護
@@ -901,6 +915,7 @@
 	Bring your own model (off by default)	使用自己的模型（預設關閉）
 	Single file	單一檔案
 	Multiple files	多個檔案
+	Separate PDFs	個別 PDF
 	Images	圖片
 	Clipboard	剪貼簿
 	Blank page	空白頁面
@@ -1119,6 +1134,9 @@
 	Redact pages…	遮蔽頁面…
 	Redaction properties…	遮蔽內容設定…
 	Remove all links	移除所有連結
+	No links to remove	沒有可移除的連結
+	Removed 1 link	已移除 1 個連結
+	Removed {n} links	已移除 {n} 個連結
 	Remove background	移除背景
 	Remove header & footer	移除頁首與頁尾
 	Remove hidden information…	移除隱藏資訊…
@@ -1437,7 +1455,7 @@
 	Couldn't optimize the file: {e}	無法最佳化檔案：{e}
 	Couldn't write {path}: {e}	無法寫入{path}：{e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	該表單請求提交到{u}；PdfCraft 不傳送表單資料。請儲存文件以保留填寫內容。
-	{s} actions run in the JavaScript engine (M6)	{s} 動作在 JavaScript 引擎中執行 (M6)
+	This PDF uses the unsupported {s} action.	此 PDF 使用了不支援的 {s} 動作。
 	{name}: the {other} action isn't supported yet	{name}：{other} 動作暫不受支援
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} 將表單提交到{url}；PdfCraft 不傳送表單資料。請儲存文件以保留填寫內容。
 	Export stopped: {e}	匯出中止：{e}
@@ -1675,6 +1693,7 @@
 	At least one signature has problems.	至少一個簽名存在問題。
 	This document is secured. Some changes are restricted by its security settings.	本文件已加密。其安全設定限制了部分更改。
 	This is a dynamic XFA form, which PdfCraft can't display yet. What you see is the file's placeholder page.	這是動態 XFA 表單，PdfCraft 暫無法顯示。您看到的是檔案的佔位頁面。
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	此表單的指令碼已關閉，因為其中一個指令碼執行時間過長。重新開啟文件即可再次執行。
 	This form also contains XFA data, which PdfCraft doesn't read yet. You can fill its fields, but Acrobat may show the XFA values instead.	此表單還包含 XFA 資料，PdfCraft 暫不讀取。您可以填寫欄位，但 Acrobat 可能顯示 XFA 值。
 	This document contains {n} interactive form fields.	本文件包含 {n} 個互動式表單欄位。
 	This file was damaged and has been repaired. Saving keeps the repaired version.	此檔案已損壞並已修復。儲存將保留修復後的版本。
@@ -1725,6 +1744,7 @@
 	Optimize PDF…	最佳化 PDF…
 	Export to text…	匯出為文字…
 	Export to Word…	匯出為 Word…
+	Export to PowerPoint…	匯出為 PowerPoint…
 	Export to HTML…	匯出為 HTML…
 	Export to RTF…	匯出為 RTF…
 	Export all images…	匯出所有圖片…
@@ -1866,6 +1886,8 @@
 	{month} {y}	{y} 年 {month}
 	Change {key}	變更{key}
 	Insert pages from {name}	從 {name} 插入頁面
+	Insert pages from {name} — 1 field renamed	從 {name} 插入頁面 — 已重新命名 1 個欄位
+	Insert pages from {name} — fields renamed	從 {name} 插入頁面 — 已重新命名欄位
 	Fill in {name}	填寫 {name}
 	Set the image of {name}	設定 {name} 的圖片
 	Edit script of {name}	編輯 {name} 的指令碼
@@ -1896,6 +1918,7 @@
 	Delete document JavaScript	刪除文件 JavaScript
 	Edit document JavaScript	編輯文件 JavaScript
 	Edit text	編輯文字
+	Load document font	載入文件字型
 	Move image	移動圖片
 	Rotate image	旋轉圖片
 	Flip image	翻轉圖片
@@ -2015,7 +2038,10 @@
 	Go to page…	轉到頁面…
 	For page sizes and margins.	用於頁面尺寸和邊距。
 	Reopen the files that were open when PdfCraft last closed	重新開啟上次關閉 PdfCraft 時開啟的檔案
+	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	PDF 文字字型無法顯示「{c}」（{code}）。請選擇支援的文字。
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	標準字型無法顯示「{c}」（{code}）。目前只能新增西歐字元作為文字。
+	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	此欄位的字型無法顯示「{c}」（{code}），PdfCraft 會在該處顯示 ?。值已儲存，其他 PDF 閱讀器會依據該值重新繪製此欄位。
+	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	PdfCraft 寫入時使用的字型無法顯示「{c}」（{code}），因此它在所有 PDF 閱讀器中都會顯示為 ?。文字已儲存。
 	Open arrow	開口箭頭
 	Closed arrow	閉合箭頭
 	Butt	平頭
@@ -2065,6 +2091,7 @@
 
 # Multi-object selection and movement (#844)
 @plural	{n} object selected|{n} objects selected	已選取 {n} 個物件
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} 個欄位名稱與先前的檔案衝突，將被重新命名: {list}
 	Drag the selection to move it. Esc clears the selection.	拖曳選取範圍即可移動。按 Esc 清除選取。
 	Shift-click to select several objects. Drag empty space to select an area.	按住 Shift 點選可選取多個物件。拖曳空白區域可框選。
 	Select at most 1000 objects at a time.	一次最多選取 1000 個物件。
@@ -2120,6 +2147,9 @@ key	Space	空格
 scroll speed	Slow	慢
 scroll speed	Normal	正常
 scroll speed	Fast	快
+	Animation effects	動畫效果
+animation effects	On	開
+animation effects	Off	關
 	Table rows belong directly in a table or its head, body or foot. Fix the table's tags.	表格列應直接位於表格或其表頭、主體、表尾內。請修正表格標記。
 	Enhance camera image	增強相機影像
 	Drag the corners onto the document's edges, then choose Enhance page.	將四個角拖曳到文件邊緣，然後選擇「增強頁面」。
@@ -2128,3 +2158,62 @@ scroll speed	Fast	快
 	Original	原始
 	Greyscale	灰階
 	Black and white	黑白
+	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	此印表機的驅動程式不接受其他程式的雙面列印設定，因此使用其自身設定。變更位置：屬性…
+	Browser's print dialog	瀏覽器的列印對話框
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	份數、雙面列印和色彩在瀏覽器的列印對話框中選擇。
+	Preparing {n} sheets for printing…	正在準備 {n} 張紙以供列印…
+	Preparing sheet {done} of {total} for printing…	正在準備列印第 {done} 張，共 {total} 張…
+	Opening the browser's print dialog…	正在開啟瀏覽器的列印對話框…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	無法從瀏覽器列印（{e}）；已改為下載 {name} 以供列印
+	Tools panel side	工具面板位置
+	Add comment	新增註解
+	Change tag properties	變更標籤屬性
+# Accessibility structure tags.
+	Tags panel	標籤面板
+	Tags	標籤
+	Tag type	標籤類型
+	Actual text	實際文字
+	Find a tag	尋找標籤
+	Collapse tag	收合標籤
+	Expand tag	展開標籤
+	Revert changes	還原變更
+	Save tag properties	儲存標籤屬性
+	This document has no editable structure tags.	此文件沒有可編輯的結構標籤。
+	{n} tags	{n} 個標籤
+	Save or revert changes before selecting another tag.	選取其他標籤前，請儲存或還原變更。
+	Left out: {names}	已略過：{names}
+	already a PDF	已經是 PDF
+	no unused output name	沒有可用的輸出檔名
+	no output folder was chosen	未選擇輸出資料夾
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	已下載 {n} 個 PDF
+	Scan	掃描
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	在白紙上簽名，並在明亮、均勻的光線下拍照（使用閃光燈）。選擇相片或將其拖放到此處：PdfCraft 會找到簽名並去除紙張背景。
+	Choose photo…	選擇相片…
+	No photo chosen	未選擇相片
+	Photo	相片
+	Ink sensitivity	墨跡靈敏度
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	框內找不到簽名。請將框移到簽名上，或提高墨跡靈敏度。
+	Couldn't use the photo: {e}	無法使用此相片：{e}
+
+# PDF tab context menu (#1233)
+	Close Tab	關閉分頁
+	Reopen Closed Tab	重新開啟已關閉的分頁
+	Reveal in Finder	在 Finder 中顯示
+	Reveal in File Explorer	在檔案總管中顯示
+	Other colour…	其他顏色…
+	Recent colours	最近使用的顏色
+	Reading colours	閱讀色彩
+	Replace document colours	取代文件色彩
+	Page background	頁面背景
+	Only change the colour of black text or line art	僅變更黑色文字或線條圖的色彩
+	Change the colour of line art as well as text	除文字外，也變更線條圖的色彩
+	Colours are remapped while rendering; the document itself never changes.	色彩僅在顯示時重新對應；文件本身不會變更。
+	Black on white	白底黑字
+	White on black	黑底白字
+	Yellow on black	黑底黃字
+	Green on black	黑底綠字
+	Couldn't follow linked PDF: {reason}	無法開啟連結的 PDF：{reason}
+	The linked PDF opened, but its named destination was not applied.	已開啟連結的 PDF，但未套用其命名目的地。
+	The linked PDF opened, but its page destination was out of range.	已開啟連結的 PDF，但其頁面目的地超出範圍。
+	Local cross-PDF links require the desktop app	PDF 之間的本機連結需要桌面應用程式
+	The existing action will be preserved.	將保留現有動作。

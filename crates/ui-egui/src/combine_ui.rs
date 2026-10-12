@@ -180,6 +180,8 @@ pub struct CombineTab {
     unlock: Option<UnlockPrompt>,
     /// Bumped on every change to the list, so a grid drag that began before one is dropped.
     pub(crate) revision: u64,
+    /// Exact-content duplicate warnings, shared by both views until the list changes.
+    duplicates: Option<(u64, Arc<[bool]>)>,
     /// The file the keyboard moved to, for the grid to scroll into view.
     pub(crate) reveal: Option<u64>,
     /// Files per grid row as last drawn (Up/Down move a row in the grid).
@@ -249,6 +251,43 @@ pub enum Lock {
     Open,
     /// It opens, but only its permissions (owner) password allows copying its pages.
     Permissions,
+}
+
+/// The combine list's field-name conflicts, computed once per list (it opens the files):
+/// for each file, the renames combining would make of its form fields. Keyed by the file ids
+/// and their lock state, so unlocking a file refreshes it.
+#[derive(Default, Debug)]
+pub struct ConflictPreview {
+    key: (Vec<u64>, Vec<bool>),
+    per_file: Vec<Vec<(String, String)>>,
+}
+
+impl ConflictPreview {
+    /// Bring the preview in step with `files`, opening them through the engine when the list
+    /// changed. A file split into parts is combined as one file, once — each group's first
+    /// entry stands for it, as the combine does — and every part shows the file's preview.
+    /// A file that cannot be opened previews as nothing (its row says why).
+    fn refresh(&mut self, session: &pdfcraft_engine::Session, files: &[CombineFile]) {
+        let key = (files.iter().map(|f| f.id).collect(), files.iter().map(|f| f.password.is_some()).collect());
+        if self.key == key && self.per_file.len() == files.len() {
+            return;
+        }
+        let mut groups: Vec<u64> = Vec::new();
+        let mut sources: Vec<pdfcraft_engine::CombineSource> = Vec::new();
+        let mut passwords: Vec<Option<&str>> = Vec::new();
+        for f in files {
+            if groups.contains(&f.group) {
+                continue;
+            }
+            groups.push(f.group);
+            sources.push((f.name.clone(), f.bytes.clone(), None));
+            passwords.push(f.password.as_ref().map(|p| p.0.as_str()));
+        }
+        let per_group = session.combine_field_conflicts(&sources, &passwords);
+        self.per_file =
+            files.iter().map(|f| groups.iter().position(|g| *g == f.group).and_then(|at| per_group.get(at)).cloned().unwrap_or_default()).collect();
+        self.key = key;
+    }
 }
 
 /// Unlock…'s password box: the rows it unlocks and what has been typed.
@@ -384,6 +423,49 @@ pub struct CombineFile {
     /// The range last checked and the result: the number of pages it takes and the first of
     /// them (0-based), or why it is wrong.
     checked: Option<(String, RangeCheck)>,
+}
+
+impl CombineTab {
+    fn duplicate_warnings(&mut self, files: &[CombineFile]) -> Arc<[bool]> {
+        if let Some((revision, flags)) = &self.duplicates
+            && *revision == self.revision
+        {
+            return flags.clone();
+        }
+        // Only same-named, same-sized files can be repeats. Avoid reading the bytes of
+        // unrelated files, and never count a source split into parts as several additions.
+        let mut candidates: HashMap<(&str, usize), Vec<usize>> = HashMap::new();
+        for (i, f) in files.iter().enumerate() {
+            candidates.entry((&f.name, f.bytes.len())).or_default().push(i);
+        }
+        let mut twice = vec![false; files.len()];
+        for indices in candidates.values() {
+            let Some(first) = indices.first().and_then(|i| files.get(*i)) else { continue };
+            if indices.iter().all(|i| files.get(*i).is_some_and(|f| f.group == first.group)) {
+                continue;
+            }
+            // Slice keys check exact bytes even when their hashes collide.
+            let mut contents: HashMap<&[u8], Vec<usize>> = HashMap::new();
+            for &i in indices {
+                if let Some(f) = files.get(i) {
+                    contents.entry(f.bytes.as_slice()).or_default().push(i);
+                }
+            }
+            for copies in contents.values() {
+                let Some(first) = copies.first().and_then(|i| files.get(*i)) else { continue };
+                if copies.iter().any(|i| files.get(*i).is_some_and(|f| f.group != first.group)) {
+                    for &i in copies {
+                        if let Some(flag) = twice.get_mut(i) {
+                            *flag = true;
+                        }
+                    }
+                }
+            }
+        }
+        let flags: Arc<[bool]> = twice.into();
+        self.duplicates = Some((self.revision, flags.clone()));
+        flags
+    }
 }
 
 impl CombineFile {
@@ -550,6 +632,11 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let files_hovering = ui.ctx().input(|i| !i.raw.hovered_files.is_empty());
     // Ranges are checked before anything below reads them.
     let checks: Vec<Result<usize, String>> = app.combine_draft.iter_mut().map(CombineFile::selection).collect();
+    // Same-named form fields across the files are renamed when combining: preview it once per
+    // list, so the Warnings column can say so before anything is combined.
+    app.combine_conflicts.refresh(&app.session, &app.combine_draft);
+    let conflicts = app.combine_conflicts.per_file.clone();
+    let twice = app.combine_tab.duplicate_warnings(&app.combine_draft);
     let n = app.combine_draft.len();
     let ids: Vec<u64> = app.combine_draft.iter().map(|f| f.id).collect();
     app.combine_tab.selected.retain(|id| ids.contains(id));
@@ -737,11 +824,11 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 // The view as the toolbar left it: a click on List view this frame starts no
                 // thumbnail renders.
                 } else if app.combine_view == CombineView::Grid {
-                    if let Some(action) = crate::combine_grid::grid(app, ui, &t, &checks, &selected) {
+                    if let Some(action) = crate::combine_grid::grid(app, ui, &t, &checks, &selected, &twice) {
                         events.action = Some(action);
                     }
                 } else {
-                    let table_events = table(app, ui, &t, &checks, &selected);
+                    let table_events = table(app, ui, &t, &checks, &selected, &conflicts, &twice);
                     events.range_focused |= table_events.range_focused;
                     events.range_changed |= table_events.range_changed;
                     if table_events.action.is_some() {
@@ -1178,15 +1265,16 @@ fn add_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
 }
 
 /// The file table.
-fn table(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, checks: &[Result<usize, String>], selected: &[bool]) -> TableEvents {
+fn table(
+    app: &mut PdfCraftApp,
+    ui: &mut egui::Ui,
+    t: &Tokens,
+    checks: &[Result<usize, String>],
+    selected: &[bool],
+    conflicts: &[Vec<(String, String)>],
+    twice: &[bool],
+) -> TableEvents {
     let mut events = TableEvents::default();
-    // The same file twice is allowed (e.g. a cover sheet), but probably a mistake.
-    // (A file's parts are the one file, not copies.)
-    let twice: Vec<bool> = app
-        .combine_draft
-        .iter()
-        .map(|f| app.combine_draft.iter().filter(|g| g.group != f.group && g.name == f.name && g.bytes.len() == f.bytes.len()).count() > 0)
-        .collect();
     let dragging = egui::DragAndDrop::has_payload_of_type::<usize>(ui.ctx());
     // Until the user resizes a column, the widths follow the window.
     let gap = ui.spacing().item_spacing.x;
@@ -1196,7 +1284,7 @@ fn table(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, checks: &[Result<
         app.combine_tab.layout = app.combine_tab.layout.wrapping_add(1);
     }
     let widths = app.combine_columns.resolved(available);
-    let rows = Rows { checks, selected, twice: &twice, dragging, sort: app.combine_tab.sort };
+    let rows = Rows { checks, selected, twice, conflicts, dragging, sort: app.combine_tab.sort };
     let mut heading_event = None;
     let mut shown = None;
     egui::ScrollArea::horizontal()
@@ -1233,6 +1321,8 @@ struct Rows<'a> {
     checks: &'a [Result<usize, String>],
     selected: &'a [bool],
     twice: &'a [bool],
+    /// What combining would rename of this file's form fields (the field-name conflict preview).
+    conflicts: &'a [Vec<(String, String)>],
     dragging: bool,
     sort: Option<(SortKey, bool)>,
 }
@@ -1422,6 +1512,19 @@ fn table_body(
                                 let mut warnings = f.notes.clone();
                                 if rows.twice.get(i).copied().unwrap_or(false) {
                                     warnings.push(tl!("Added more than once").to_string());
+                                }
+                                if let Some(renames) = rows.conflicts.get(i).filter(|r| !r.is_empty()) {
+                                    let shown: Vec<String> = renames.iter().take(3).map(|(old, new)| format!("{old} → {new}")).collect();
+                                    let list = shown.join(", ");
+                                    warnings.push(crate::i18n::fmt(
+                                        &crate::i18n::trn(
+                                            crate::i18n::current(),
+                                            renames.len() as u64,
+                                            "{n} field name collides with earlier files and will be renamed: {list}",
+                                            "{n} field names collide with earlier files and will be renamed: {list}",
+                                        ),
+                                        &[("list", &list)],
+                                    ));
                                 }
                                 let (icon, colour, first) = match (errors.first(), warnings.first()) {
                                     (Some(e), _) => ("circle-x", ERROR, e.clone()),
@@ -2508,6 +2611,29 @@ mod tests {
         })
         .unwrap();
         pdfcraft_cos::write_full(&doc, &Default::default()).unwrap()
+    }
+
+    #[test]
+    fn duplicate_warnings_reuse_results_and_track_removal_and_parts() {
+        let bytes = locked();
+        let mut app = PdfCraftApp::new();
+        app.stage_combine(vec![("same.pdf".into(), bytes.clone())]);
+        let mut part = app.combine_draft[0].clone();
+        part.id = 99;
+        app.combine_draft.push(part);
+        let first = app.combine_tab.duplicate_warnings(&app.combine_draft);
+        assert_eq!(&*first, &[false, false], "parts of one source are not duplicate additions");
+        let again = app.combine_tab.duplicate_warnings(&app.combine_draft);
+        assert!(Arc::ptr_eq(&first, &again), "unchanged frames reuse the result without scanning files");
+        app.stage_combine(vec![("same.pdf".into(), bytes)]);
+        assert_eq!(&*app.combine_tab.duplicate_warnings(&app.combine_draft), &[true, true, true]);
+        let duplicate = app.combine_draft.last().unwrap().id;
+        app.combine_apply(RowAction::RemoveFile(duplicate));
+        assert_eq!(&*app.combine_tab.duplicate_warnings(&app.combine_draft), &[false, false]);
+        app.combine_history_step(true);
+        assert_eq!(&*app.combine_tab.duplicate_warnings(&app.combine_draft), &[true, true, true]);
+        app.close_combine_tab();
+        assert!(app.combine_tab.duplicate_warnings(&app.combine_draft).is_empty());
     }
 
     #[test]

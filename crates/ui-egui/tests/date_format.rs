@@ -19,6 +19,9 @@ fn shows(h: &Harness<'static, PdfCraftApp>, text: &str) -> bool {
 }
 
 fn retype(h: &mut Harness<'static, PdfCraftApp>, text: &str) {
+    // The preferences scroll; bring the field into view before clicking it.
+    h.get_by_role_and_label(Role::TextInput, "Pattern").scroll_to_me();
+    h.run_steps(4);
     h.get_by_role_and_label(Role::TextInput, "Pattern").click();
     h.run_steps(1);
     h.key_press_modifiers(Modifiers::COMMAND, Key::A);

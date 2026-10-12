@@ -260,7 +260,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
         }
     }
     ui.add_space(12.0);
-    ui.checkbox(&mut d.edited.locked, tl!("Locked"));
+    ui.add(widgets::checkbox(&mut d.edited.locked, tl!("Locked")));
     let (mut apply, mut cancel) = (false, false);
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
         if widgets::pill_button(ui, tl!("OK"), true).clicked() {

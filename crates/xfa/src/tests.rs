@@ -191,6 +191,25 @@ fn rendering_into_the_pdf_replaces_the_placeholder_page_and_adds_fields() {
     assert!(!is_dynamic(&doc));
 }
 
+/// A dynamic form's own text that the standard fonts can't draw is laid out anyway and reported
+/// once, never written as `?` silently.
+#[test]
+fn form_text_the_standard_fonts_cannot_draw_is_reported() {
+    let xdp = r##"<?xml version="1.0" encoding="UTF-8"?>
+<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"><template xmlns="http://www.xfa.org/schema/xfa-template/3.3/"><subform name="form" layout="tb">
+<draw w="3in" h="0.3in"><value><text>申请表</text></value></draw><draw w="3in" h="0.3in"><value><text>签名</text></value></draw><draw w="3in" h="0.3in"><value><text>Name</text></value></draw>
+</subform></template></xdp:xdp>"##;
+    let mut doc = Document::open(Arc::new(shell(xdp))).unwrap();
+    let report = render_into(&mut doc).unwrap();
+    let hits: Vec<&String> = report.warnings.iter().filter(|w| w.contains("standard fonts can't draw")).collect();
+    assert_eq!(hits.len(), 1, "reported once: {:?}", report.warnings);
+    assert!(hits[0].contains("\"申\" (U+7533)"), "{hits:?}");
+    // Latin text alone reports nothing.
+    let latin = xdp.replace("申请表", "Application").replace("签名", "Signature");
+    let mut doc = Document::open(Arc::new(shell(&latin))).unwrap();
+    assert!(!render_into(&mut doc).unwrap().warnings.iter().any(|w| w.contains("standard fonts")));
+}
+
 #[test]
 fn documents_without_xfa_are_not_touched() {
     let mut doc = Document::new_empty();
@@ -811,7 +830,8 @@ fn choice_lists_signatures_passwords_and_pictures_become_fields_and_images() {
     assert!(matches!(&other.kind, WidgetKind::Choice { list_box: false, multi: false, editable: true, .. }));
     assert_eq!(w.iter().find(|w| w.name == "pin").unwrap().kind, WidgetKind::Password);
     assert_eq!(w.iter().find(|w| w.name == "sign").unwrap().kind, WidgetKind::Signature);
-    assert!(w.iter().all(|w| w.name != "photo" && w.name != "code"), "image and barcode fields make no widget");
+    assert_eq!(w.iter().find(|w| w.name == "photo").unwrap().kind, WidgetKind::Image, "an image field is a button that picks a picture");
+    assert!(w.iter().all(|w| w.name != "code"), "barcode fields make no widget");
     // The PNG in the image field and the GIF in the draw are pictures, fitted to their boxes.
     let images: Vec<(&Rect, usize)> =
         p1.items.iter().filter_map(|i| if let Item::Image { rect, data, .. } = i { Some((rect, data.len())) } else { None }).collect();
@@ -820,13 +840,14 @@ fn choice_lists_signatures_passwords_and_pictures_become_fields_and_images() {
     assert_eq!(images[1].1, TINY_GIF.len());
     let t = texts(p1);
     assert!(t.iter().any(|s| s == "12345"), "the barcode's value as text: {t:?}");
-    assert!(form.warnings.iter().any(|w| w.contains("barcode")) && form.warnings.iter().any(|w| w.contains("image fields")), "{:?}", form.warnings);
+    assert!(form.warnings.iter().any(|w| w.contains("barcode")), "{:?}", form.warnings);
+    assert!(!form.warnings.iter().any(|w| w.contains("can't be chosen")), "pictures can be chosen now: {:?}", form.warnings);
 
     // Written into the PDF: /Ch fields with their options and flags, a /Sig field, a password
     // field, and Flate images (the PNG with a soft mask).
     let mut doc = Document::open(Arc::new(shell(&fields_template("")))).unwrap();
     let report = render_into(&mut doc).unwrap();
-    assert_eq!(report.fields, 6, "country, langs, other, pin, sign, summary");
+    assert_eq!(report.fields, 7, "country, langs, other, pin, sign, photo, summary");
     let bytes = write_incremental(&doc, &SaveOptions::default()).unwrap();
     let doc = Document::open(Arc::new(bytes)).unwrap();
     let fields = pdfcraft_forms_free_fields(&doc);
@@ -937,7 +958,7 @@ fn pictures_are_sized_from_their_headers_and_hostile_ones_are_refused_unallocate
         .replace("<image contentType=\"image/png\">", "<image contentType=\"image/png\">AAAA");
     let mut doc = Document::open(Arc::new(shell(&xml))).unwrap();
     let report = render_into(&mut doc).unwrap();
-    assert_eq!(report.fields, 6);
+    assert_eq!(report.fields, 7);
     assert!(report.warnings.iter().any(|w| w.contains("image")), "{:?}", report.warnings);
 }
 
@@ -1550,4 +1571,220 @@ fn a_carriage_return_and_line_feed_are_one_line_break() {
     let form = layout_xml(&wrapped_form("<form><body><notes>one&#xA;two&#xA;three</notes></body></form>")).unwrap();
     let lf = form.pages.iter().flat_map(widgets).find(|w| w.name == "notes").unwrap().rect.h;
     assert!((crlf - lf).abs() < 0.01);
+}
+
+#[test]
+fn data_exports_as_datasets_xml_or_an_xdp_and_imports_from_any_of_them() {
+    use crate::data::{export_data, import_data};
+    let data = "<form><page1><country>JP</country><langs>English\nSpanish</langs></page1></form>";
+    let mut doc = Document::open(Arc::new(shell(&fields_template(data)))).unwrap();
+    render_into(&mut doc).unwrap();
+    // XML: the data alone, rooted at the form's root data node, as Acrobat's XML export is.
+    let xml = export_data(&doc, false, "fields.pdf").unwrap();
+    assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<form"), "{xml}");
+    assert!(xml.contains("<country>JP</country>") && xml.contains("<langs>English\nSpanish</langs>"), "{xml}");
+    assert!(xml.trim_end().ends_with("</form>"), "{xml}");
+    assert_eq!(crate::parse_data_file(&xml, Some("form")).unwrap().len(), 1, "the export is importable");
+    // XDP: the datasets inside an xdp envelope with a reference to the PDF.
+    let xdp = export_data(&doc, true, "my \"form\".pdf").unwrap();
+    assert!(xdp.contains("<xdp:xdp xmlns:xdp=\"http://ns.adobe.com/xdp/\">") && xdp.contains("</xdp:xdp>"), "{xdp}");
+    assert!(xdp.contains("<pdf href=\"my &quot;form&quot;.pdf\" xmlns=\"http://ns.adobe.com/xdp/pdf/\"/>"), "{xdp}");
+    assert_eq!(parse_datasets(&xdp).unwrap().text_at(&som_to_path("form[0].page1[0].country[0]")), Some("JP"));
+    // A form without a datasets packet exports empty data.
+    let bare = Document::open(Arc::new(shell(&fields_template("")))).unwrap();
+    let xml = export_data(&bare, false, "x.pdf").unwrap();
+    assert!(xml.contains("<xfa:data></xfa:data>") || xml.contains("<xfa:data/>"), "{xml}");
+    // A datasets packet alone (no template) still exports its data; no XFA at all is an error.
+    let static_doc = Document::open(Arc::new(static_shell("<form1><page1><name>Ada</name></page1></form1>"))).unwrap();
+    assert!(export_data(&static_doc, false, "s.pdf").unwrap().contains("<name>Ada</name>"));
+    assert!(export_data(&static_doc, true, "s.pdf").unwrap().contains("<xfa:datasets"));
+    // An XFA entry without a template or datasets exports empty data rather than failing.
+    let plain = Document::open(Arc::new(shell("<xdp:xdp xmlns:xdp=\"http://ns.adobe.com/xdp/\"></xdp:xdp>"))).unwrap();
+    assert!(export_data(&plain, false, "p.pdf").unwrap().contains("<xfa:data"));
+    // Import: each shape of file replaces the data; what no field binds to in the datasets
+    // (a data description) stays.
+    let with_desc = fields_template(data).replace(
+        "<xfa:data>",
+        "<dd:dataDescription xmlns:dd=\"http://ns.adobe.com/data-description/\" dd:name=\"form\"><form/></dd:dataDescription><xfa:data>",
+    );
+    let shapes = [
+        format!(
+            "<?xml version=\"1.0\"?>\n<xdp:xdp xmlns:xdp=\"http://ns.adobe.com/xdp/\"><xfa:datasets xmlns:xfa=\"{XFA_NS}\"><xfa:data><form><page1><country>CA</country></page1></form></xfa:data></xfa:datasets></xdp:xdp>"
+        ),
+        format!("<xfa:datasets xmlns:xfa=\"{XFA_NS}\"><xfa:data><form><page1><country>CA</country></page1></form></xfa:data></xfa:datasets>"),
+        format!("\u{feff}<xfa:data xmlns:xfa=\"{XFA_NS}\"><form><page1><country>CA</country></page1></form></xfa:data>"),
+        "<form><page1><country>CA</country></page1></form>".to_string(),
+    ];
+    for file in &shapes {
+        let mut doc = Document::open(Arc::new(shell(&with_desc))).unwrap();
+        render_into(&mut doc).unwrap();
+        let r = import_data(&mut doc, file, Some("form"), None).unwrap();
+        assert_eq!(r.nodes, 3, "{file}");
+        let d = crate::data_of(&doc).unwrap();
+        assert_eq!(d.text_at(&som_to_path("form[0].page1[0].country[0]")), Some("CA"), "{file}");
+        assert_eq!(d.text_at(&som_to_path("form[0].page1[0].langs[0]")), None, "the old data is gone: {file}");
+        let xdp = export_data(&doc, true, "x.pdf").unwrap();
+        assert!(xdp.contains("dataDescription"), "kept: {xdp}");
+        assert!(!export_data(&doc, false, "x.pdf").unwrap().contains("dataDescription"), "the XML export is the data alone");
+        // Laid out again, the form shows the imported value.
+        let (t, _) = parse(&with_desc).unwrap();
+        rerender(&mut doc, &t).unwrap();
+        let fields = pdfcraft_forms_free_fields(&doc);
+        let c = &fields.iter().find(|(n, _)| n == "country").unwrap().1;
+        assert_eq!(c.get(b"V").and_then(|v| v.as_string()).map(|s| s.to_text()).as_deref(), Some("CA"), "{file}");
+    }
+    // Not XFA data: refused, the document untouched.
+    let mut doc = Document::open(Arc::new(shell(&fields_template(data)))).unwrap();
+    render_into(&mut doc).unwrap();
+    for bad in [
+        "<xfdf xmlns=\"http://ns.adobe.com/xfdf/\"><fields/></xfdf>",
+        "<fields><field name=\"a\"><value>1</value></field></fields>",
+        "not xml at all",
+        "<a><b></a>",
+    ] {
+        assert!(import_data(&mut doc, bad, Some("form"), None).is_err(), "{bad}");
+    }
+    assert_eq!(crate::data_of(&doc).unwrap().text_at(&som_to_path("form[0].page1[0].country[0]")), Some("JP"));
+    // Empty data: the data element is emptied, not removed.
+    let r = import_data(&mut doc, &format!("<xfa:data xmlns:xfa=\"{XFA_NS}\"/>"), Some("form"), None).unwrap();
+    assert_eq!(r.nodes, 0);
+    assert!(crate::data_of(&doc).is_some());
+    assert_eq!(crate::data_of(&doc).unwrap().children.len(), 0);
+    // Hostile: a file over the size cap, and one with more nodes than the parser allows.
+    assert!(import_data(&mut doc, &"x".repeat(17 << 20), None, None).is_err());
+    let many = format!("<form>{}</form>", "<a/>".repeat(1_100_000));
+    assert!(import_data(&mut doc, &many, None, None).is_err());
+    // A self-closing data element opens up for an import.
+    let empty = fields_template("")
+        .replace("</template>", "</template><xfa:datasets xmlns:xfa=\"http://www.xfa.org/schema/xfa-data/1.0/\"><xfa:data/></xfa:datasets>");
+    let mut doc = Document::open(Arc::new(shell(&empty))).unwrap();
+    render_into(&mut doc).unwrap();
+    import_data(&mut doc, "<form><page1><country>FR</country></page1></form>", Some("form"), None).unwrap();
+    assert_eq!(crate::data_of(&doc).unwrap().text_at(&som_to_path("form[0].page1[0].country[0]")), Some("FR"));
+}
+
+const XFA_NS: &str = "http://www.xfa.org/schema/xfa-data/1.0/";
+
+#[test]
+fn a_picture_chosen_for_an_image_field_is_kept_in_the_data_with_its_content_type() {
+    use crate::data::write_data_image;
+    let mut doc = Document::open(Arc::new(shell(&fields_template("")))).unwrap();
+    render_into(&mut doc).unwrap();
+    let path = som_to_path("form[0].page1[0].photo[0]");
+    // No data node yet: it is made.
+    let r = write_data_image(&mut doc, &path, "image/gif", TINY_GIF, None).unwrap();
+    assert!(r.written, "{:?}", r.warnings);
+    let xdp = crate::read_packets(&doc).unwrap().unwrap().xdp;
+    assert!(xdp.contains("<photo xfa:contentType=\"image/gif\">R0lGODlh"), "{xdp}");
+    // Written again: replaced, not duplicated; a hostile content type is cleaned.
+    let r = write_data_image(&mut doc, &path, "image/png\"><evil/><x a=\"", &tiny_png(), None).unwrap();
+    assert!(r.written);
+    let xdp = crate::read_packets(&doc).unwrap().unwrap().xdp;
+    assert_eq!(xdp.matches("<photo ").count(), 1, "{xdp}");
+    assert!(xdp.contains("<photo xfa:contentType=\"image/pngevil/xa\">iVBORw0KGgo"), "{xdp}");
+    assert!(!xdp.contains("<evil/>"));
+    // The form shows it: laid out again, the page's picture is the PNG from the data.
+    let (t, _) = parse(&fields_template("")).unwrap();
+    rerender(&mut doc, &t).unwrap();
+    let d = crate::data_of(&doc).unwrap();
+    assert!(d.text_at(&path).unwrap().starts_with("iVBORw0KGgo"));
+    // Too big is refused before anything is written.
+    assert!(write_data_image(&mut doc, &path, "image/png", &vec![0u8; (8 << 20) + 1], None).is_err());
+    assert!(write_data_image(&mut doc, &Vec::new(), "image/png", TINY_GIF, None).is_err());
+    // The image field is a push button marked as one, with no action and nothing drawn.
+    let bytes = write_incremental(&doc, &SaveOptions::default()).unwrap();
+    let doc = Document::open(Arc::new(bytes)).unwrap();
+    let fields = pdfcraft_forms_free_fields(&doc);
+    let photo = &fields.iter().find(|(n, _)| n == "photo").unwrap().1;
+    assert_eq!(photo.name(b"FT"), Some(b"Btn".as_slice()));
+    assert_eq!(photo.int(b"Ff"), Some(1 << 16));
+    assert_eq!(photo.get(b"PCXfaImage"), Some(&Object::Bool(true)));
+    assert!(!photo.contains(b"A") && !photo.contains(b"MK"));
+}
+
+#[test]
+fn imported_data_is_written_with_the_packets_own_prefix_and_never_leaves_it_unreadable() {
+    use crate::data::{export_data, import_data, write_data_image};
+    // A file binding the data namespace to another prefix, with an attribute in it.
+    let file = format!(
+        "<x:datasets xmlns:x=\"{XFA_NS}\"><x:data><form x:dataNode=\"dataGroup\"><page1><country>CA</country></page1></form></x:data></x:datasets>"
+    );
+    let mut doc = Document::open(Arc::new(shell(&fields_template("<form><page1><country>JP</country></page1></form>")))).unwrap();
+    render_into(&mut doc).unwrap();
+    import_data(&mut doc, &file, Some("form"), None).unwrap();
+    let xdp = crate::read_packets(&doc).unwrap().unwrap().xdp;
+    assert!(xdp.contains("<form xfa:dataNode=\"dataGroup\">"), "{xdp}");
+    assert_eq!(crate::data_of(&doc).unwrap().text_at(&som_to_path("form[0].page1[0].country[0]")), Some("CA"));
+    // An xsi:nil declared on an envelope the file's data element doesn't carry.
+    let file = "<xdp:xdp xmlns:xdp=\"http://ns.adobe.com/xdp/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"><xfa:datasets xmlns:xfa=\"http://www.xfa.org/schema/xfa-data/1.0/\"><xfa:data><form><page1><country xsi:nil=\"true\"/><pin>1</pin></page1></form></xfa:data></xfa:datasets></xdp:xdp>";
+    import_data(&mut doc, file, Some("form"), None).unwrap();
+    let xdp = crate::read_packets(&doc).unwrap().unwrap().xdp;
+    assert!(xdp.contains("xmlns:n0=\"http://www.w3.org/2001/XMLSchema-instance\" n0:nil=\"true\""), "{xdp}");
+    assert!(crate::data_of(&doc).is_some(), "the packet still parses");
+    // Our own export, from a packet using another prefix, imports back.
+    let other = fields_template("<form><page1><pin>7</pin></page1></form>")
+        .replace("xfa:datasets", "xd:datasets")
+        .replace("xfa:data>", "xd:data>")
+        .replace("xmlns:xfa=", "xmlns:xd=");
+    let mut doc2 = Document::open(Arc::new(shell(&other))).unwrap();
+    render_into(&mut doc2).unwrap();
+    let exported = export_data(&doc2, true, "o.pdf").unwrap();
+    import_data(&mut doc, &exported, Some("form"), None).unwrap();
+    assert_eq!(crate::data_of(&doc).unwrap().text_at(&som_to_path("form[0].page1[0].pin[0]")), Some("7"));
+    // A picture into that other-prefix packet uses its prefix.
+    let path = som_to_path("form[0].page1[0].photo[0]");
+    write_data_image(&mut doc2, &path, "image/gif", TINY_GIF, None).unwrap();
+    let xdp = crate::read_packets(&doc2).unwrap().unwrap().xdp;
+    assert!(xdp.contains("<photo xd:contentType=\"image/gif\">"), "{xdp}");
+    assert!(crate::data_of(&doc2).is_some());
+    // A picture where the data node is a group is refused, the group kept.
+    let grouped = fields_template("<form><page1><photo><note>keep me</note></photo></page1></form>");
+    let mut doc3 = Document::open(Arc::new(shell(&grouped))).unwrap();
+    render_into(&mut doc3).unwrap();
+    let r = write_data_image(&mut doc3, &path, "image/gif", TINY_GIF, None).unwrap();
+    assert!(!r.written && r.warnings.iter().any(|w| w.contains("structured")), "{r:?}");
+    assert!(crate::read_packets(&doc3).unwrap().unwrap().xdp.contains("<note>keep me</note>"));
+    // A field name XML can't hold is written under the same cleaned name the values use.
+    let odd = fields_template("").replace("name=\"photo\"", "name=\"Foto_Straße\"");
+    let mut doc4 = Document::open(Arc::new(shell(&odd))).unwrap();
+    render_into(&mut doc4).unwrap();
+    let r = write_data_image(&mut doc4, &som_to_path("form[0].page1[0].Foto_Straße[0]"), "image/gif", TINY_GIF, None).unwrap();
+    assert!(r.written, "{r:?}");
+    let xdp = crate::read_packets(&doc4).unwrap().unwrap().xdp;
+    assert_eq!(xdp.matches("<Foto_Stra_e").count(), 1, "{xdp}");
+    assert!(xdp.contains("<Foto_Stra_e xfa:contentType=\"image/gif\">R0lG"), "{xdp}");
+    // What is not this form's data is refused: an SVG, an XDP without datasets, an XDP whose
+    // config has a <data> element before the datasets, a data document with another root.
+    let mut doc = Document::open(Arc::new(shell(&fields_template("<form><page1><country>JP</country></page1></form>")))).unwrap();
+    render_into(&mut doc).unwrap();
+    for bad in [
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>".to_string(),
+        "<xdp:xdp xmlns:xdp=\"http://ns.adobe.com/xdp/\"><template/></xdp:xdp>".to_string(),
+        "<other><page1><country>CA</country></page1></other>".to_string(),
+        format!("<x:datasets xmlns:x=\"{XFA_NS}\"><x:data><form><page1><country>CA</country></page1></form></x:data></x:datasets>")
+            .replace("x:data", "x:nodata"),
+    ] {
+        assert!(import_data(&mut doc, &bad, Some("form"), None).is_err(), "{bad}");
+    }
+    let config_first = format!(
+        "<xdp:xdp xmlns:xdp=\"http://ns.adobe.com/xdp/\"><config xmlns=\"http://www.xfa.org/schema/xci/3.0/\"><present><data>junk</data></present></config><xfa:datasets xmlns:xfa=\"{XFA_NS}\"><xfa:data><form><page1><country>CA</country></page1></form></xfa:data></xfa:datasets></xdp:xdp>"
+    );
+    import_data(&mut doc, &config_first, Some("form"), None).unwrap();
+    assert_eq!(crate::data_of(&doc).unwrap().text_at(&som_to_path("form[0].page1[0].country[0]")), Some("CA"));
+    // Deep nesting is refused before it is parsed; a data path deeper than the data limit too.
+    let deep = format!("{}x{}", "<a>".repeat(20_000), "</a>".repeat(20_000));
+    assert!(import_data(&mut doc, &deep, None, None).is_err());
+    let deepish = format!("<form>{}x{}</form>", "<a>".repeat(100), "</a>".repeat(100));
+    assert!(import_data(&mut doc, &deepish, Some("form"), None).is_err());
+    assert_eq!(crate::data_of(&doc).unwrap().text_at(&som_to_path("form[0].page1[0].country[0]")), Some("CA"), "untouched");
+    // The data holds more rows than are laid out: said, not hidden.
+    let rows: String = (0..60).map(|i| format!("<row><item>r{i}</item><amount>1</amount></row>")).collect();
+    let many = scripted_template().replace(
+        "</template>",
+        &format!(
+            "</template><xfa:datasets xmlns:xfa=\"{XFA_NS}\"><xfa:data><form><page1><table>{rows}</table></page1></form></xfa:data></xfa:datasets>"
+        ),
+    );
+    let form = layout_xml(&many).unwrap();
+    assert!(form.warnings.iter().any(|w| w.contains("60 rows") && w.contains("first 50")), "{:?}", form.warnings);
 }

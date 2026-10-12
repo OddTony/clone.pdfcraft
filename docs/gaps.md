@@ -1,7 +1,9 @@
 # Where PdfCraft falls short of Acrobat Pro
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** patch (gap 2: hayro patch counts after the native-gradient backport) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** gap 4 closed: the web build prints through the browser's print dialog; exclusive image-crop resize follow-up; minor (Word invoice regression coverage, #773; Office fidelity still partial; gap 2: hayro patch counts after the native-gradient backport) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (gap 13: large-file memory measured, edits keep two copies instead of three, file-backed input blocked on gap 2) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (gap 1 closed by #836; fixed issues removed from gaps 3, 6 and 16) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (document-font subset completion and curved/shared image clips in the contributor fork; gap 2: hayro patch counts after the native-gradient backport) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Every known shortfall, one entry each, ranked by what it costs users. This is the work list: agents
 choose from the top unless the owner says otherwise, and prefer these over new P2/P3 checklist
@@ -11,7 +13,8 @@ feature lacks).
 
 No gap blocks the [alpha gate](roadmap.md#alpha-gate); gap 8 holds the convert-and-share
 workflow's partial sub-cases and is the first beta item. Gap numbers are kept when a gap closes, so
-references elsewhere stay valid (gap 1, encrypted output Acrobat rejected, closed with #836).
+references elsewhere stay valid (gap 1, encrypted output Acrobat rejected, closed with #836; gap 4,
+no printing on the web, closed by printing through the browser's print dialog).
 
 Hours are Opus 5.5 agent wall-clock hours. "Doc" names the parity document the gap belongs to.
 When a gap closes, delete its entry, note it in the [ROADMAP.md](../ROADMAP.md) progress log and
@@ -23,7 +26,6 @@ update the numbers.
 |---|---|---|---|---|
 | 2 | Rendering is borrowed and its fidelity unmeasured | feature, spec | 110–190 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 3 | Editing existing text is fragile on real files | feature | 100–180 | [target-app-parity.md](target-app-parity.md) |
-| 4 | No printing on the web | feature, platform | 15–30 | [hardware-parity.md](hardware-parity.md) |
 | 5 | Chinese UI shows missing-glyph boxes in releases | localization | 6–12 | [localization-parity.md](localization-parity.md) |
 | 6 | Open-issue backlog of wrong results in shipped features | stability | 45–80 | this file |
 | 7 | OCR reads only unaccented Latin | feature | 40–75 | [file-format-parity.md](file-format-parity.md) |
@@ -51,8 +53,8 @@ update the numbers.
 
 - **Missing:** our own renderer (M2: `model` crate, font engine, DisplayList devices, ADR-0004), or
   an owner decision to adopt another engine; and any measurement of rendering against Acrobat.
-- **Evidence:** pages are drawn by vendored `hayro` 0.7 with 23 local patches to `hayro-interpret`,
-  10 to `hayro`, 3 to `hayro-jbig2` and 13 to `hayro-syntax` (`vendor/README.md`); `lopdf` still
+- **Evidence:** pages are drawn by vendored `hayro` 0.7 with 26 local patches to `hayro-interpret`,
+  15 to `hayro`, 3 to `hayro-jbig2` and 17 to `hayro-syntax` (`vendor/README.md`); `lopdf` still
   backs document inspection. All 7 rendering P0 features are `partial`. User reports: TikZ pattern
   fills drawn wrong ([#794](https://github.com/storytold/pdfcraft/issues/794)), blurry text at
   1080p/1440p ([#730](https://github.com/storytold/pdfcraft/issues/730)), fixed zoom sizes differ
@@ -68,6 +70,25 @@ update the numbers.
 
 ### 3. Editing existing text is fragile on real files
 
+- **Fork progress (2026-10-11):** compatible words and subset-font spaces form lines;
+  source fonts lacking a space glyph remain reusable; inline editing previews remove source
+  glyphs on a clone. Aligned visual rows now form mixed-style regions (including matrix-scaled headings),
+  with source-run styles preserved during editing and delete/save/reopen regressions. A private
+  real-file acceptance check and opt-in UI regression supplement synthetic coverage.
+  Embedded sfnt faces now render in the editor, including Mac format-6 subsets adapted in memory
+  through the PDF Unicode map. Source baselines remain stable; draft frames expand/shrink with
+  visible text, and `text_edit_layout` measures saved draft bounds without applying them.
+  Page/path-clipped artwork bounds and text-first hit testing prevent large cropped images from
+  blocking text. A separate private four-page regression opens all 73 detected text regions;
+  curve/hole hit testing now evaluates clipping paths and fill rules. A clip the image owns
+  moves with it across nested states and content streams; shared path clips stay where they are.
+  Full matching document fonts complete absent subset glyphs; explicit installed/file font
+  selection, TrueType/OpenType-CFF embedding, disjoint style ranges, marked paragraph boundaries
+  and single-face OpenType shaping/bidi have regression coverage. Actual Chinese keyboard
+  insertion/deletion and save/reopen renders are checked on all four private pages.
+  Legacy non-SFNT previews, mixed-font/style contextual runs, structure-tree fidelity and reliable
+  semantic grouping on every untagged PDF remain open. Estimates are unchanged.
+
 - **Missing:** robust in-place editing of text PdfCraft didn't write: subset fonts without the
   needed glyphs, CJK and right-to-left text, rotated text, lists, superscript/subscript, keeping
   structure tags, find and replace in edit mode; vector and object editing; arrange and align.
@@ -82,16 +103,6 @@ update the numbers.
 - **Impact:** "Edit PDF" is one of Acrobat Pro's top reasons to buy. Substituting Helvetica changes
   how a document looks.
 - **Estimate:** 100–180 h (the longest feature pole, M7). **Doc:** [target-app-parity.md](target-app-parity.md).
-
-### 4. No printing on the web
-
-- **Missing:** browser printing.
-- **Evidence:** the web build has no spooler: off Windows and unix, `spool::submit` reports that
-  printing to a printer isn't available and only the print-ready PDF can be saved.
-  `crates/print/README.md`: "Not yet: the web spooler".
-- **Impact:** the web build cannot send a job to a printer; printing is a P0 workflow. Printing on
-  Windows shipped with [#756](https://github.com/storytold/pdfcraft/issues/756).
-- **Estimate:** 15–30 h. **Doc:** [hardware-parity.md](hardware-parity.md).
 
 ### 5. Chinese UI shows missing-glyph boxes in releases
 
@@ -134,8 +145,10 @@ update the numbers.
 
 - **Missing:** Word export that keeps layout; Excel and PowerPoint export; creating PDFs from Office,
   HTML, web pages and PostScript; SVG/XML/EPS/PS/JPEG 2000 export.
-- **Evidence:** `create.export-docx` partial; [#773](https://github.com/storytold/pdfcraft/issues/773)
-  (an invoice converted to Word loses its layout, gains table borders and duplicates pages);
+- **Evidence:** `create.export-docx` partial; the synthetic invoice regression for
+  [#773](https://github.com/storytold/pdfcraft/issues/773) now covers absent inferred borders,
+  floating watermark text and per-page section sizes. Exact font matching, vector rules and
+  broader layout fidelity remain incomplete;
   `create.export-xlsx`, `create.export-pptx`, `create.from-office`, `create.from-html` planned.
 - **Impact:** "Export PDF" and "Create PDF" are two of Acrobat's most used tools.
 - **Gate:** lossy or missing sub-cases of the convert-and-share workflow (partial, not blocking).
@@ -169,14 +182,16 @@ update the numbers.
 - **Impact:** government and legal users sign with tokens and need B-LT/B-LTA.
 - **Estimate:** 40–70 h; tokens need hardware to test. **Doc:** [pdf-spec-parity.md](pdf-spec-parity.md).
 
-### 11. Accessibility: checker only, no tagging tools
+### 11. Accessibility: no automatic structure creation
 
-- **Missing:** autotag (document and fields), Tags, Order and Content panels, tag properties,
-  Reading Order tool, artifact marking, table editor, role map, Make Accessible action, Read Out
-  Loud; full keyboard operation of PdfCraft itself and a screen-reader audit.
-- **Evidence:** all 32 checker rules shipped, but 21 tagging and reading features planned;
+- **Missing:** apply auto-tag proposals to marked content and a valid parent tree, autotag fields,
+  visual Tags, Order and Content panels, Reading Order tool, table editor, Make Accessible action,
+  Read Out Loud; full keyboard operation of PdfCraft itself and a screen-reader audit.
+- **Evidence:** all 32 checker rules, figure alt text, tag property and sibling order edits, and
+  a bounded text-only auto-tag preview exist. The preview does not write PDF structure;
   `a11y.keyboard-only` (P0) planned, `a11y.app-screen-reader` partial.
-- **Impact:** remediation work is impossible; PdfCraft itself is not yet usable without a mouse.
+- **Impact:** untagged files still need another editor to build their structure; PdfCraft itself is
+  not yet usable without a mouse.
 - **Estimate:** 40–70 h. **Doc:** [target-app-parity.md](target-app-parity.md).
 
 ### 12. No measured fidelity harness against Acrobat
@@ -196,7 +211,17 @@ update the numbers.
   memory budget, with budgets checked on Tier-1 platforms.
 - **Evidence:** #307 brought a 9,156-page file from > 10 GiB to ≈ 500 MiB inspection, but
   file-backed input and global memory budgets remain open; blurry fonts at common resolutions
-  (#730).
+  (#730). Measured 2026-10-12 on synthetic files (release build, Linux): a 1 GiB file opens at
+  1.0 GiB peak in 0.7 s, so viewing holds the whole file once; after edits it held two copies and
+  peaked at three (3.1 GiB after five edits), because the previous working file stayed alive while
+  the next was written. Edits now let go of it first: five edits peak at 2.1 GiB (8.5 s, was 16 s).
+  Saving still peaks at three copies (the saved file is assembled in memory beside the working
+  one), and display appearances for comments without one add a copy. A 100,000-page file (28 MB)
+  opens at 403 MiB in 5.5 s and each edit re-inspects it for ≈ 5 s.
+- **Blocked part:** reading a GB file from disk on demand (`ByteSource`) needs every reader to
+  take ranges, but the `hayro` renderer parses one contiguous buffer (`Pdf::new(PdfData)`), so it
+  waits on gap 2's renderer decision. Until then the budget is one copy of the file to view and two
+  to edit.
 - **Estimate:** 25–45 h. **Doc:** this file.
 
 ### 14. Arabic not mirrored; no Hindi, Indonesian, Korean, Vietnamese
@@ -287,6 +312,11 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Exclusive image crops resize with their pixels across nested states, intervening operators and content streams; shared clips remain fixed. Synthetic engine/tool regressions and private image save/reopen checks; estimates unchanged. |
+| 2026-10-12 | minor | Gap 13: measured large-file memory; edits no longer keep the previous working file while writing the next (peak 3 → 2 copies); file-backed input recorded as blocked on gap 2 |
+| 2026-10-11 | minor | Closed gap 4: the web build prints through the browser's print dialog (sheets drawn by PdfCraft at 150–300 dpi, one per printed page); number kept |
+| 2026-10-11 | minor | Word invoice failure #773 has synthetic regression coverage; broader Office conversion remains gap 8. |
+| 2026-10-11 | minor | Contributor fork: mixed-style visual regions, source-font space reuse and a read-only textless background. Embedded sfnt source faces and Mac subset Unicode mappings keep edit baselines stable; live frames follow Apply/Save geometry as text grows or shrinks. Engine/tool/UI regressions and private all-page checks cover the changes; full matching font import, CFF, range styles, shaping and private Chinese typing checks added; legacy programs and general fidelity remain open; estimates unchanged |
 | 2026-10-11 | patch | Gap 2: 23 hayro-interpret and 10 hayro patches after axial and radial shadings became native gradients (backport of hayro 0.8) |
 | 2026-10-11 | minor | Closed gap 1 (#774, fixed by #836; numbers kept, its interop suite moved to gap 12); gap 6 lists the fixed #799–#821 batch; gap 3 and 16 updated for #844 (same-page move), #740 (column select) and #759 (1:1 touchpad scrolling) |
 | 2026-10-10 | minor | Removed the alpha markers: with the cross-app gate rule, gaps 1 and 8 are partial sub-cases, not blockers; stage alpha |

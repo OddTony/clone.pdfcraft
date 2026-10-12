@@ -1,6 +1,6 @@
 # File format parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (encrypted output opens in Acrobat, #774; XFDF fixes #807, #809, #819) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (Word invoice export, #773; encrypted output opens in Acrobat, #774; XFDF fixes #807, #809, #819) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Every format Acrobat Pro reads or writes, and PdfCraft's support for it. Acrobat's list comes from
 its bundle's `Info.plist` `CFBundleDocumentTypes` (what it opens) and its public documentation
@@ -73,16 +73,16 @@ features total).
 | PostScript / EPS (Distiller) | yes | no | none | `create.distiller` planned (P3) |
 | Markdown | no | no | none | `create.from-markdown` planned (P2; not an Acrobat feature) |
 | Scanner | yes | no | none | `ocr.scanner-acquire` planned |
-| Several files at once | yes | yes (PDFs, images and text) | good | `create.create-multiple` |
+| Several files at once | yes | yes: combine PDFs, images and text into one document, or create a separate PDF for each non-PDF source (GUI and `doc_create_multiple mode=separate`); existing outputs get numbered names | good for supported source types | `create.create-multiple`, `separate_batch_creates_one_pdf_per_source_without_replacing_existing_files` |
 
 ## Export PDF to
 
 | Target | Acrobat | PdfCraft | Fidelity | Tests and evidence |
 |---|---|---|---|---|
-| Word (`.docx`) | yes, layout-preserving | flowing document: paragraphs, headings, bold/italic, colour, images, tables | **basic** (#773: layout lost, fake borders, duplicated pages) | `create.export-docx` partial |
+| Word (`.docx`) | yes, layout-preserving | flowing paragraphs and borderless inferred tables; positioned text/artwork only for pages with rotated text or text overlapping an image/watermark, with per-page sizes | **basic** (#773 synthetic invoice regression covered; exact fonts, vector rules and general layout fidelity remain incomplete) | `create.export-docx` partial |
 | Word 97–2003 (`.doc`) | yes | no | none | |
 | Excel (`.xlsx`), XML Spreadsheet 2003 | yes | no | none | `create.export-xlsx` planned |
-| PowerPoint (`.pptx`) | yes | no | none | `create.export-pptx` planned |
+| PowerPoint (`.pptx`) | yes | slides per page: title from largest text, body text, images, tables (no slide overflow reflow / normAutofit; first page sets presentation dimensions) | basic | `create.export-pptx` partial |
 | RTF | yes | yes | basic | `create.export-rtf` |
 | HTML (single page, multiple pages) | yes | single file with headings, paragraphs, images, tables | basic | `create.export-html` partial |
 | Plain text | yes | yes (reading order) | good (word-F1 0.98 vs `pdftotext`) | `create.export-text`, `xtask text-oracle` |
@@ -109,5 +109,6 @@ features total).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-11 | minor | #773: inferred tables have no invented borders; rotated or overlapping invoice pages use floating shapes and page sections. Full Office layout fidelity remains partial. |
 | 2026-10-11 | minor | Encrypted PDF row: written files open in Acrobat DC (#774, fixed by #836). FDF row: #807, #809 and #819 fixed |
 | 2026-10-10 | major | Created from Acrobat 26.002.21931's `CFBundleDocumentTypes`, Acrobat's public Create/Export documentation, and PdfCraft's code and checklist |
