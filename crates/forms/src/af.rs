@@ -629,6 +629,7 @@ pub fn parse_date(text: &str, fmt: &str) -> Option<DateTime> {
             '#' if it.peek() == Some(&literal) => {
                 it.next();
             }
+            '#' => {}
             'm' => {
                 dt.m = match month_name {
                     Some(m) => m,
