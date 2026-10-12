@@ -387,12 +387,14 @@ mod native {
     }
 
     fn child(path: &std::path::Path, mode: &str, index: usize) -> std::process::Child {
+        let output = std::fs::File::create(path.parent().unwrap().join(format!("child-{index}.log"))).unwrap();
         std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "single_instance::tests::native::process_child", "--ignored", "--nocapture"])
             .env("PDFCRAFT_IPC_TEST_PATH", path)
             .env("PDFCRAFT_IPC_TEST_MODE", mode)
             .env("PDFCRAFT_IPC_TEST_INDEX", index.to_string())
-            .stdout(std::process::Stdio::null())
+            .stdout(output.try_clone().unwrap())
+            .stderr(output)
             .spawn()
             .unwrap()
     }
@@ -457,8 +459,13 @@ mod native {
             })
             .collect();
         std::fs::write(dir.join("release"), b"release").unwrap();
-        for child in &mut children {
-            assert!(child.wait().unwrap().success());
+        for (index, child) in children.iter_mut().enumerate() {
+            let status = child.wait().unwrap();
+            assert!(
+                status.success(),
+                "child {index} exited with {status}; roles: {roles:?}\n{}",
+                std::fs::read_to_string(dir.join(format!("child-{index}.log"))).unwrap()
+            );
         }
         assert_eq!(roles.iter().filter(|r| *r == "primary").count(), 1);
         assert_eq!(roles.iter().filter(|r| *r == "forwarded").count(), 7);

@@ -141,6 +141,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-12 (fork, M14 IPC CI investigation):** Capture native child-process output and exit status to diagnose the Windows startup-race regression without changing protocol guarantees or deadlines. FreeBSD viewer code is unchanged from the upstream base; an identical-commit rerun is checking the asynchronous selection failure. Candidate validation remains incomplete.
+
 - **2026-10-12 (fork, M14 Windows IPC hardening):** Follow-up to #715 and echelon’s invitation in #616: preserve AF_UNIX and lenient new-window fallback, add user-protected nonce-bound frames, bounded inbox/connections and deadlines, OS profile/session routing, and crash/hostile-client regressions. No new dependency packages. Candidate only; native validation tracked in the follow-up draft. Effort estimates unchanged.
 
 - **2026-10-12 (M1, #1339):** An incremental save of an unchanged classic-table file used to append `xref` and then `trailer` with no subsection, which qpdf reports as a damaged file. The section now has a zero-length subsection, so no object entry changes and a trailer-only edit is still written. Estimates unchanged.
