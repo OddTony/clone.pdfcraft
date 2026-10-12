@@ -310,7 +310,6 @@ pub fn claim(files: &[String], may_hand_off: bool) -> Claim {
 
 #[cfg(windows)]
 fn socket_path() -> io::Result<std::path::PathBuf> {
-    use winsafe::prelude::*;
     let token = winsafe::HPROCESS::GetCurrentProcess()
         .OpenProcessToken(winsafe::co::TOKEN::QUERY | winsafe::co::TOKEN::IMPERSONATE)
         .map_err(io::Error::other)?;
