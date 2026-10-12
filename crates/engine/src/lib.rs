@@ -380,8 +380,7 @@ pub struct Document {
     pub form: Arc<Vec<pdfcraft_forms::Field>>,
     marker_scan: OnceLock<pdfcraft_edit::MarkerScan>,
     links: OnceLock<Vec<pdfcraft_annot::links::LinkItem>>,
-    /// Signature fields, validated against the session's trust store (Signatures panel).
-    pub signatures: Arc<Vec<SignatureInfo>>,
+    validated_signatures: OnceLock<Vec<SignatureInfo>>,
     signature_presence: OnceLock<bool>,
     trust: Arc<TrustStore>,
     sig_cache: Arc<pdfcraft_sign::DigestCache>,
@@ -634,10 +633,19 @@ impl Document {
 
     /// Signed: at least one signature field holds a signature.
     pub fn is_signed(&self) -> bool {
-        *self.signature_presence.get_or_init(|| {
-            let Some(editor) = self.editor.as_ref() else { return false };
-            has_signed_signature_field(&editor.cos) || pdfcraft_sign::pdf::has_document_timestamp(&editor.cos, &self.sig_cache)
+        *self.signature_presence.get_or_init(|| self.editor.as_ref().is_some_and(|editor| signed_state(&editor.cos, &self.sig_cache)))
+    }
+
+    /// Signature fields, validated against the current session trust store on first use.
+    pub fn signatures(&self) -> &[SignatureInfo] {
+        self.validated_signatures.get_or_init(|| {
+            self.editor.as_ref().map(|editor| signatures_of(&editor.cos, &self.bytes, &self.trust, &self.sig_cache)).unwrap_or_default()
         })
+    }
+
+    /// Signature details if a caller has already requested validation.
+    pub fn validated_signatures(&self) -> Option<&[SignatureInfo]> {
+        self.validated_signatures.get().map(Vec::as_slice)
     }
 
     /// Whether comments are hidden (Comments ▸ Hide all comments).
@@ -3238,8 +3246,13 @@ fn has_signed_signature_field(cos: &pdfcraft_cos::Document) -> bool {
     })
 }
 
-fn invalidate_signature_presence(doc: &mut Document) {
+fn signed_state(cos: &pdfcraft_cos::Document, cache: &pdfcraft_sign::DigestCache) -> bool {
+    has_signed_signature_field(cos) || pdfcraft_sign::pdf::has_document_timestamp(cos, cache)
+}
+
+fn invalidate_signature_state(doc: &mut Document) {
     doc.signature_presence.take();
+    doc.validated_signatures.take();
 }
 
 impl Session {
@@ -3565,7 +3578,6 @@ impl Session {
             Err(_) => (None, Some("the document structure could not be read for editing".into())),
         };
         let sig_cache = Arc::new(pdfcraft_sign::DigestCache::default());
-        let signatures = editor.as_ref().map(|e| signatures_of(&e.cos, &bytes, trust, &sig_cache)).unwrap_or_default();
         let display = display_bytes(editor.as_mut(), &bytes);
         let renderer = RenderPool::new(display.clone(), render_threads(), config.clone());
         let (form, adopted) = editor
@@ -3603,7 +3615,7 @@ impl Session {
             form: Arc::new(form),
             marker_scan: OnceLock::new(),
             links: OnceLock::new(),
-            signatures: Arc::new(signatures),
+            validated_signatures: OnceLock::new(),
             signature_presence: OnceLock::new(),
             trust: trust.clone(),
             sig_cache,
@@ -3639,7 +3651,8 @@ impl Session {
         cx.pages = doc.info.pages.len();
         cx.today = today;
         let reason = doc.read_only_reason.clone().unwrap_or_default();
-        let signed = doc.is_signed();
+        let signature_presence = &doc.signature_presence;
+        let sig_cache = doc.sig_cache.clone();
         let editor = doc.editor.as_mut().ok_or(EditError::ReadOnly(reason))?;
         if let Some(p) = editor.cos.permissions() {
             check_permission(&edit, &p)?;
@@ -3756,7 +3769,9 @@ impl Session {
         // (applying redactions, changing security, sanitizing) would invalidate the signatures.
         // So does any edit to a file rebuilt from object headers: it has no chain to append to.
         let rewrites = |c: &pdfcraft_cos::Document| c.full_save_required() || c.encryption_changed();
-        if signed && ((rewrites(&next) && !rewrites(&editor.cos)) || (next.is_modified() && next.revisions().is_empty())) {
+        if ((rewrites(&next) && !rewrites(&editor.cos)) || (next.is_modified() && next.revisions().is_empty()))
+            && *signature_presence.get_or_init(|| signed_state(&editor.cos, &sig_cache))
+        {
             return Err(EditError::SignedRewrite(edit.label().to_string()));
         }
         // What this edit drew with `?` (a value or comment text its font can't draw, stored as
@@ -3866,7 +3881,7 @@ impl Session {
     /// Comment and form edits skip the full re-inspection (seconds on very large files): the
     /// comment list and field values are re-read from the object graph instead.
     fn refresh_scoped(doc: &mut Document, scope: Scope) -> Result<(), EditError> {
-        invalidate_signature_presence(doc);
+        invalidate_signature_state(doc);
         if scope == Scope::Full || doc.info.encrypted != doc.editor.as_ref().is_some_and(|e| e.cos.output_handler().is_some()) {
             return Self::refresh(doc);
         }
@@ -3902,10 +3917,6 @@ impl Session {
             doc.info.creator = info("Creator");
             doc.info.producer = info("Producer");
             doc.info.file_size = bytes.len();
-            if !doc.signatures.is_empty() {
-                let signatures = signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache);
-                doc.signatures = Arc::new(signatures);
-            }
             doc.bytes = bytes;
             return Ok(());
         }
@@ -3947,9 +3958,7 @@ impl Session {
         }
         doc.info.file_size = bytes.len();
         doc.form = form;
-        let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache) };
         doc.display = display_bytes(Some(editor), &bytes);
-        doc.signatures = Arc::new(signatures);
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
         doc.bytes = bytes;
         Ok(())
@@ -3977,7 +3986,7 @@ impl Session {
     /// from undo/redo, re-reads both: always correct, rarely paid). The cached display
     /// appearances are kept: content edits leave every annotation dictionary alone.
     fn refresh_content(doc: &mut Document, edit: Option<&Edit>) -> Result<(), EditError> {
-        invalidate_signature_presence(doc);
+        invalidate_signature_state(doc);
         Self::release_working(doc);
         sync_xfa_state(doc);
         let Some(editor) = doc.editor.as_mut() else { return Ok(()) };
@@ -3993,9 +4002,7 @@ impl Session {
             doc.marker_scan = OnceLock::new();
         }
         doc.info.file_size = bytes.len();
-        let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache) };
         doc.display = display_bytes(Some(editor), &bytes);
-        doc.signatures = Arc::new(signatures);
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
         doc.bytes = bytes;
         doc.fonts_stale = true;
@@ -4035,7 +4042,7 @@ impl Session {
     }
 
     fn refresh_with_indexes(doc: &mut Document, invalidate_markers: bool, invalidate_links: bool) -> Result<(), EditError> {
-        invalidate_signature_presence(doc);
+        invalidate_signature_state(doc);
         // A full refresh may follow structural or annotation changes: cached appearances
         // may be stale, so they are rebuilt below.
         if let Some(editor) = doc.editor.as_mut() {
@@ -4069,9 +4076,7 @@ impl Session {
         if invalidate_links {
             doc.links = OnceLock::new();
         }
-        let signatures = signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache);
         doc.display = display_bytes(Some(editor), &bytes);
-        doc.signatures = Arc::new(signatures);
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
         doc.bytes = bytes;
         Ok(())
@@ -4803,19 +4808,15 @@ impl Session {
         &self.trust.certs
     }
 
-    /// Replace the trusted certificates, revalidate every open document's signatures,
-    /// and rebuild its display copy and renderer to match (working file untouched,
-    /// generation/dirty unchanged: trust alone is not an edit).
+    /// Replace trusted certificates; loaded signature details are revalidated on the next read.
     pub fn set_trusted_certificates(&mut self, certs: Vec<pdfcraft_sign::Certificate>) {
         self.trust = Arc::new(TrustStore { certs });
         for doc in &mut self.docs {
             doc.trust = self.trust.clone();
+            doc.validated_signatures.take();
             let Some(editor) = doc.editor.as_mut() else { continue };
-            // Keep verdict refresh and renderer refresh together. Viewer caches are
-            // invalidated by the UI trust path; trust alone changes no document artwork.
-            let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(&editor.cos, &doc.bytes, &doc.trust, &doc.sig_cache) };
+            // Keep the viewer's display and renderer in sync after trust changes.
             doc.display = display_bytes(Some(editor), &doc.bytes);
-            doc.signatures = Arc::new(signatures);
             doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
         }
     }
