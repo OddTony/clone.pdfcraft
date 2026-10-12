@@ -471,6 +471,11 @@ pub struct PdfCraftApp {
     /// Resolved colours, including the current OS theme when following the system.
     pub theme: ThemeKind,
     pub theme_preference: ThemePreference,
+    /// Preferences ▸ Appearance: each system's own tabs (Finder's and Safari's on macOS, File
+    /// Explorer's on Windows), and the Tools panel without its tab.
+    pub native_tabs: bool,
+    /// Preferences ▸ Appearance: Home with the tools and recent files only.
+    pub compact_home: bool,
     /// The reading-colours preference (Preferences ▸ Reading colours): applied to every open
     /// document, and documents open with it (Acrobat's Replace Document Colors).
     pub reading_colors: pdfcraft_render::ReadingColors,
@@ -815,6 +820,8 @@ impl PdfCraftApp {
             comment_prefs: Default::default(),
             theme: ThemeKind::Light,
             theme_preference: ThemePreference::Light,
+            native_tabs: false,
+            compact_home: false,
             reading_colors: Default::default(),
             #[cfg(target_os = "linux")]
             desktop_theme: None,
@@ -1756,6 +1763,8 @@ impl PdfCraftApp {
             "reload_changed_files": self.reload_changed_files,
             "pinned_folders": self.pinned.folders,
             "theme": self.theme_preference,
+            "native_tabs": self.native_tabs,
+            "compact_home": self.compact_home,
             "scroll_speed": self.scroll_speed,
             "animation_effects": self.animation_effects,
             "default_mode": self.default_mode,
@@ -1839,6 +1848,8 @@ impl PdfCraftApp {
             self.reload_changed_files = on;
         }
         self.pinned.restore(&v["pinned_folders"]);
+        self.native_tabs = v["native_tabs"].as_bool().unwrap_or(false);
+        self.compact_home = v["compact_home"].as_bool().unwrap_or(false);
         if let Ok(preference) = serde_json::from_value::<ThemePreference>(v["theme"].clone()) {
             self.set_theme_preference(preference);
         }

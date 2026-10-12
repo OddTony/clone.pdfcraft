@@ -123,6 +123,8 @@ pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
             }
         });
     });
+    ui.add(widgets::checkbox(&mut app.native_tabs, tl!("Native tabs (as in Finder on macOS and File Explorer on Windows)")));
+    ui.add(widgets::checkbox(&mut app.compact_home, tl!("Compact Home (tools and recent files only)")));
     ui.add_space(4.0);
     let light_active = app.theme == ThemeKind::Light;
     ui.columns(2, |cols| {

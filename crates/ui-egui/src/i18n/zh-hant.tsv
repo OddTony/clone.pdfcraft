@@ -2212,3 +2212,5 @@ animation effects	Off	關
 	The linked PDF opened, but its page destination was out of range.	已開啟連結的 PDF，但其頁面目的地超出範圍。
 	Local cross-PDF links require the desktop app	PDF 之間的本機連結需要桌面應用程式
 	The existing action will be preserved.	將保留現有動作。
+	Native tabs (as in Finder on macOS and File Explorer on Windows)	原生分頁（如 macOS 的 Finder 和 Windows 的檔案總管）
+	Compact Home (tools and recent files only)	精簡首頁（僅工具和最近的檔案）

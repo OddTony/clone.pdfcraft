@@ -1108,3 +1108,34 @@ fn combine_tab_uses_tab_interaction_without_changing_close_or_document_state() {
     assert!(h.query_by_role_and_label(Role::Tab, "Combine files").is_none());
     assert_eq!(h.state().views.iter().map(|v| v.id).collect::<Vec<_>>(), document_ids);
 }
+
+/// Native tabs on macOS (Preferences ▸ Appearance): the title bar keeps the traffic lights and the
+/// window controls, and Home, the document tabs and "+" sit in the tab bar under it, as in Finder.
+#[cfg(target_os = "macos")]
+#[test]
+fn native_tabs_on_macos_sit_in_a_tab_bar_under_the_title_bar() {
+    let h = harness(|app| {
+        app.integrated_titlebar = true;
+        app.native_tabs = true;
+        app.open_bytes("band.pdf", None, FIXTURE.to_vec()).unwrap();
+    });
+    let band = 28.0;
+    let r = h.get_by_label("Keyboard shortcuts").rect();
+    assert!(r.top() >= 0.0 && r.bottom() <= band, "Keyboard shortcuts: {r:?} inside the title bar");
+    for label in ["Home", "band.pdf", "Open"] {
+        let r = h.get_by_label(label).rect();
+        assert!(r.top() >= band - 0.5 && r.bottom() <= 2.0 * band + 0.5, "{label}: {r:?} in the tab bar under the title bar");
+    }
+}
+
+/// Native tabs elsewhere keep the strip, with Home as a tab and "+" (Open) after the last tab.
+#[test]
+fn native_tabs_put_open_right_after_the_last_tab() {
+    let h = harness(|app| {
+        app.native_tabs = true;
+        app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
+    });
+    let tab = h.get_by_label("first.pdf").rect();
+    let open = h.get_by_label("Open").rect();
+    assert!(open.left() >= tab.right() - 0.5 && open.left() - tab.right() < 16.0, "Open {open:?} right after {tab:?}");
+}
