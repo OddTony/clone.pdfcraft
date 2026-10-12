@@ -2369,5 +2369,5 @@ animation effects	Off	Вимкнено
 	Stop	Зупинити
 	Paused	Призупинено
 	Preparing read-aloud text…	Підготовка тексту для читання…
-	Read out loud currently requires Windows.	Читання вголос наразі потребує Windows.
+	Read out loud requires Windows, macOS or Linux.	Читання вголос наразі потребує Windows / macOS / Linux.
 	Scanned pages need OCR. Reading order follows extracted page text.	Скановані сторінки потребують OCR. Порядок читання відповідає витягнутому тексту сторінки.

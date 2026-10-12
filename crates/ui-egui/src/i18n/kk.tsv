@@ -2345,5 +2345,5 @@ animation effects	Off	Өшірулі
 	Stop	Тоқтату
 	Paused	Кідіртілді
 	Preparing read-aloud text…	Оқылатын мәтін дайындалуда…
-	Read out loud currently requires Windows.	Дауыстап оқу үшін әзірге Windows қажет.
+	Read out loud requires Windows, macOS or Linux.	Дауыстап оқу үшін әзірге Windows / macOS / Linux қажет.
 	Scanned pages need OCR. Reading order follows extracted page text.	Сканерленген беттерге OCR қажет. Оқу реті беттен алынған мәтінге сәйкес келеді.

@@ -2421,5 +2421,5 @@ animation effects	Off	Vypnuto
 	Stop	Zastavit
 	Paused	Pozastaveno
 	Preparing read-aloud text…	Příprava textu ke čtení…
-	Read out loud currently requires Windows.	Čtení nahlas nyní vyžaduje Windows.
+	Read out loud requires Windows, macOS or Linux.	Čtení nahlas nyní vyžaduje Windows / macOS / Linux.
 	Scanned pages need OCR. Reading order follows extracted page text.	Naskenované stránky vyžadují OCR. Pořadí čtení odpovídá textu získanému ze stránky.

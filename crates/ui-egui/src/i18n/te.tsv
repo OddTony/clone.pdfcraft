@@ -2260,5 +2260,5 @@ animation effects	Off	ఆఫ్
 	Stop	ఆపు
 	Paused	పాజ్ చేయబడింది
 	Preparing read-aloud text…	చదవడానికి వచనాన్ని సిద్ధం చేస్తోంది…
-	Read out loud currently requires Windows.	బిగ్గరగా చదవడానికి ప్రస్తుతం Windows అవసరం.
+	Read out loud requires Windows, macOS or Linux.	బిగ్గరగా చదవడానికి ప్రస్తుతం Windows / macOS / Linux అవసరం.
 	Scanned pages need OCR. Reading order follows extracted page text.	స్కాన్ చేసిన పేజీలకు OCR అవసరం. చదివే క్రమం పేజీ నుండి సంగ్రహించిన వచనాన్ని అనుసరిస్తుంది.

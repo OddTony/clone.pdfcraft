@@ -2348,5 +2348,5 @@ animation effects	Off	Aus
 	Stop	Stoppen
 	Paused	Pausiert
 	Preparing read-aloud text…	Vorlesetext wird vorbereitet…
-	Read out loud currently requires Windows.	Lautes Vorlesen erfordert derzeit Windows.
+	Read out loud requires Windows, macOS or Linux.	Lautes Vorlesen erfordert derzeit Windows / macOS / Linux.
 	Scanned pages need OCR. Reading order follows extracted page text.	Gescannte Seiten benötigen OCR. Die Lesereihenfolge folgt dem extrahierten Seitentext.

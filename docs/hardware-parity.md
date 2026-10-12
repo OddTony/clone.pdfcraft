@@ -1,6 +1,6 @@
 # Hardware and platform parity
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M12: Windows local Read out loud with bounded read-only preparation, voice/speed controls and pause/resume; other platforms remain open; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M12: local Read out loud adds macOS say and Linux espeak-ng, with English/Italian voices and silent control tests; physical macOS/Linux audio validation remains open; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Each hardware feature Acrobat Pro uses, per platform, ours against Acrobat's. Acrobat runs on macOS
 and Windows (plus a limited web viewer/editor in Document Cloud); PdfCraft runs on macOS, Windows,
@@ -23,7 +23,7 @@ printing are counted in their feature areas). **Platforms ≈ 70% ready, 15–30
 | Pen and touch | Touch mode, pen ink, Windows Ink | trackpad pinch zoom; ink from pointer, no pressure | ink from pointer, no pressure or touch mode | as macOS | pointer | touchpad scrolling 1:1 (#759, PR #868) |
 | Keyboard input methods (IME) | yes | yes; Japanese and Korean IME fixes patched into winit | yes (Microsoft Korean cursor fix) | X11 and Wayland IME fixes | browser | `vendor/README.md` winit patches 2–10 |
 | Screen readers | VoiceOver, NVDA, JAWS | AccessKit labels (partial) | AccessKit (partial) | AccessKit (partial) | partial | `a11y.app-screen-reader` partial |
-| Text to speech (Read Out Loud) | yes | none | local installed WinRT voices, same-position pause/resume, Stop, page/range and speed controls | none | none | `a11y.read-aloud` partial; [Read out loud](read-aloud.md); explicit muted native audio check |
+| Text to speech (Read Out Loud) | yes | system say voices + WAV playback candidate; physical audio validation open | local installed WinRT voices, same-position pause/resume, Stop, page/range and speed controls | Linux espeak-ng + WAV playback candidate; physical audio validation open / FreeBSD none | none | `a11y.read-aloud` partial; [Read out loud](read-aloud.md); explicit muted native audio check |
 | Apple Silicon / ARM64 | native | native | ARM64 build (#61) | ARM64 builds | n/a | `release.yml` |
 
 ## Platforms
@@ -40,7 +40,7 @@ printing are counted in their feature areas). **Platforms ≈ 70% ready, 15–30
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-12 | minor | Windows local Read out loud is partial: installed voices, page/range and speed, same-position pause/resume, Stop and CLI/MCP tools; other platforms and semantic tag-tree ordering remain open. Estimates unchanged. |
+| 2026-10-12 | minor | Read out loud remains partial: Windows native playback plus macOS say and Linux espeak-ng candidates, with English/Italian voices and same-position pause/resume. Native physical macOS/Linux audio validation, FreeBSD/web and semantic tag-tree ordering remain open. Estimates unchanged. |
 | 2026-10-11 | minor | Web printers row: printing through the browser's print dialog (gap 4 closed); Web platform row no longer lists printing |
 | 2026-10-10 | major | Created from the code, `vendor/README.md`, `.github/workflows/release.yml`, the print crate's README and user issues |
 | 2026-10-10 | minor | Windows printing shipped (#756): the Windows row's gap is closed; the web row keeps "printing" |

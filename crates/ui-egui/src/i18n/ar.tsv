@@ -2368,5 +2368,5 @@ animation effects	Off	معطّلة
 	Stop	إيقاف
 	Paused	متوقف مؤقتًا
 	Preparing read-aloud text…	جارٍ إعداد النص للقراءة…
-	Read out loud currently requires Windows.	تتطلب القراءة بصوت عالٍ حاليًا Windows.
+	Read out loud requires Windows, macOS or Linux.	تتطلب القراءة بصوت عالٍ حاليًا Windows / macOS / Linux.
 	Scanned pages need OCR. Reading order follows extracted page text.	تحتاج الصفحات الممسوحة إلى OCR. يتبع ترتيب القراءة النص المستخرج من الصفحة.

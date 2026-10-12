@@ -176,6 +176,32 @@ mod tests {
     use std::time::{Duration, Instant};
 
     #[test]
+    #[ignore = "explicit native English synthesis check; requires an installed English Windows voice, no audio device"]
+    fn windows_speech_synthesizes_english_to_audio() {
+        let synthesizer = SpeechSynthesizer::new().unwrap();
+        let voices = SpeechSynthesizer::AllVoices().unwrap();
+        let voice = (0..voices.Size().unwrap().min(256))
+            .map(|i| voices.GetAt(i).unwrap())
+            .find(|v| v.Language().unwrap().to_string_lossy().to_ascii_lowercase().starts_with("en-"))
+            .expect("install an English Windows speech voice before running this explicit test");
+        synthesizer.SetVoice(&voice).unwrap();
+        for rate in [0.5, 1.0, 2.0] {
+            synthesizer.Options().unwrap().SetSpeakingRate(rate).unwrap();
+            let op = synthesizer.SynthesizeTextToStreamAsync(&HSTRING::from("This is an English PdfCraft speech test.")).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(15);
+            while op.Status().unwrap() == AsyncStatus::Started {
+                assert!(Instant::now() < deadline, "English synthesis timed out");
+                std::thread::sleep(Duration::from_millis(30));
+            }
+            assert_eq!(op.Status().unwrap(), AsyncStatus::Completed);
+            let stream = op.GetResults().unwrap();
+            assert!(stream.Size().unwrap() > 44, "English synthesis must return audio data");
+            stream.Close().unwrap();
+        }
+        synthesizer.Close().unwrap();
+    }
+
+    #[test]
     #[ignore = "explicit native Windows audio check; requires installed voices and MediaPlayer"]
     fn windows_speech_pause_preserves_position_and_stop_releases_stream() {
         let mut b = WindowsSpeech::new().unwrap();

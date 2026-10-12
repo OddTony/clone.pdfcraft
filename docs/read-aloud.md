@@ -1,9 +1,15 @@
 # Read out loud
 
-Read out loud plays extracted PDF text through installed Windows speech voices. It uses safe
-WinRT SpeechSynthesizer and MediaPlayer calls, with synthesis and audio kept in memory. It does
-not upload a document, download a voice, run a shell, or change the PDF. Opening a document or
-constructing a player never starts speech.
+Read out loud plays extracted PDF text through local speech voices on Windows, macOS and Linux.
+Windows uses safe WinRT SpeechSynthesizer and MediaPlayer calls, keeping text/audio in memory.
+macOS invokes `/usr/bin/say`; Linux invokes an installed `espeak-ng` executable. Both synthesize
+WAV audio in an owner-private temporary directory, then play it through Rodio/CPAL. No speech
+library with a copyleft licence is linked, and no voice/model is bundled. Text is supplied through
+stdin, never shell or command-line text. Embedded `[[speech commands]]` are escaped. Temporary
+text/audio is removed before playback, or on cancellation/error. As with other temporary files,
+a forcibly terminated process can leave data for the OS to clean up; deletion is not secure erasure.
+It does not upload a document, download a voice, run a shell, or change the PDF. Opening a document
+or constructing a player never starts speech or opens an audio device.
 
 Open **View → Read out loud**, or **Prepare for accessibility → Read out loud**. Choose the
 current page or a page range, an installed voice (or the system default), and a speed from 0.5×
@@ -17,6 +23,32 @@ listed as skipped. An entirely textless range returns an error directing the use
 Preparation checks cancellation between pages; extraction already running on one page must
 return before that worker exits. Playback commands have a bounded queue; Stop invalidates queued
 starts even when the queue is full.
+
+## Platforms and languages
+
+- **Windows:** install the desired local text-to-speech voices in Windows settings. English and
+  Italian use the same implementation; select an installed voice with `en-*` or `it-*` language.
+- **macOS:** uses the system `say` tool and its listed voices. Install the desired English/Italian
+  voice in system accessibility settings if absent. Multiword names, including enhanced voices,
+  remain intact. An unspecified voice uses the system default.
+- **Linux:** install `espeak-ng` through the distribution's package manager (e.g. `sudo apt install
+  espeak-ng` on Debian/Ubuntu). The engine must be on an absolute directory in PATH. Its normal
+  voice set includes English regional voices and Italian; the voice menu exposes those actually
+  reported by the installation. An unspecified voice uses eSpeak NG's default English voice.
+  The build needs ALSA development files (`libasound2-dev` on Debian/Ubuntu); runtime playback
+  needs a working default audio output. Missing engine or device produces an actionable error.
+
+**Interface language and speech voice are independent.** An Italian interface can read English
+with an English voice and vice versa. PdfCraft does not automatically detect a document's language:
+choose a matching voice, especially when the system default differs from the text. This also
+applies to every other installed language; English and Italian have explicit regression tests.
+The Unix rate multiplier uses 175 words/minute as the 1× base; Windows uses the voice's normal
+rate. All support 0.5×–2× without changing audio pitch.
+
+Unix synthesis is polled and cancellable, limited to 60 seconds and 32 MiB per chunk. WAV audio
+must be mono/stereo, 8–96 kHz and at most 10 minutes. Unix voice discovery is capped at 1,024 voices,
+64 KiB and 5 seconds (a pending discovery can delay Stop by up to that timeout). Pause/resume
+controls the audio sink, rather than suspending a synthesis process or restarting the sentence.
 
 ## CLI and MCP
 
@@ -50,8 +82,8 @@ server or adds a network transport.
 
 ## Current limits and verification
 
-Playback currently requires Windows with local voices and the Windows media components.
-macOS, Linux, FreeBSD and browser playback remain unsupported. Voice and speed choices last
+Playback requires local voices and working audio output on Windows, macOS or Linux.
+FreeBSD and browser playback remain unsupported. Voice and speed choices last
 for the current app session; pitch and persisted preferences are not implemented.
 Reading order uses PdfCraft's extracted page text, rather than the PDF structure tree: columns,
 tables, mathematical text and malformed text maps can read imperfectly. Scans require OCR first.
@@ -65,5 +97,27 @@ resume advances it and stop releases the synthesis/stream:
 cargo test -p pdfcraft-platform windows_speech_pause_preserves_position_and_stop_releases_stream -- --ignored
 ```
 
-`cargo run -p pdfcraft-platform --example speech_probe` lists local voices. Adding `--speak`
-explicitly runs an audible synthetic smoke check; ordinary builds/tests never run that check.
+`cargo run -p pdfcraft-platform --example speech_probe` lists local voices without initializing
+audio output. Adding `-- --speak --language en` or `-- --speak --language it` explicitly runs an
+audible synthetic smoke check with a matching installed voice, and fails if that language is
+absent; it never substitutes an Italian voice for an English smoke check.
+
+Unix synthesis can be checked without an audio device:
+
+```text
+cargo test -p pdfcraft-platform native_synthesizes_english_to_valid_audio -- --ignored
+cargo test -p pdfcraft-platform native_synthesizes_italian_to_valid_audio -- --ignored
+```
+
+Each check generates and decodes non-silent native WAV audio at 0.5×, 1× and 2×. The explicit
+`native_audio_pause_resume_and_stop_preserve_position` check requires an audio device and mutes
+its sink before playback. Ordinary tests consume the real sink in memory, checking audio position
+through pause/resume/Stop, and exercise English/Italian voice parsing, UTF-8 stdin, timeouts,
+process failures and private-file cleanup without any voice engine or audio device.
+
+`.github/workflows/speech-native.yml` runs platform Clippy/tests and native English synthesis
+on Windows/macOS/Linux, plus native Italian synthesis on Linux and on macOS when that runner
+has an Italian voice. It runs on contributor-fork pushes or explicit dispatch; upstream's macOS
+release slots are not consumed on ordinary PRs. Runner synthesis and silent sink tests do not
+prove audible output or desktop integration on physical macOS/Linux machines. Record those
+remaining checks explicitly in the pull request; do not label them as tested.

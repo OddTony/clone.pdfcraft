@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
+mod unix;
 #[cfg(windows)]
 mod windows;
 
@@ -115,7 +117,7 @@ impl Player {
             sender: None,
             status: Arc::new(Mutex::new(Status::default())),
             backend: None,
-            available: cfg!(windows),
+            available: Self::supported(),
             generation: Arc::new(AtomicU64::new(0)),
         }
     }
@@ -126,7 +128,7 @@ impl Player {
     }
 
     pub fn supported() -> bool {
-        cfg!(windows)
+        cfg!(any(windows, target_os = "macos", target_os = "linux"))
     }
 
     pub fn available(&self) -> bool {
@@ -142,7 +144,7 @@ impl Player {
 
     fn send(&mut self, request: Request) -> Result<(), String> {
         if !self.available {
-            return Err("Read out loud currently requires Windows with installed speech voices".into());
+            return Err("Read out loud requires Windows, macOS or Linux with local speech voices".into());
         }
         if self.sender.is_none() {
             let (tx, rx) = mpsc::sync_channel(4);
@@ -492,7 +494,12 @@ mod tests {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn native_backend() -> Result<Box<dyn Backend>, String> {
-    Err("Read out loud currently requires Windows with installed speech voices; macOS, Linux and web playback are not supported yet".into())
+    Ok(Box::new(unix::UnixSpeech::new()?))
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn native_backend() -> Result<Box<dyn Backend>, String> {
+    Err("Read out loud requires Windows, macOS or Linux with local speech voices; FreeBSD and web playback are not supported yet".into())
 }

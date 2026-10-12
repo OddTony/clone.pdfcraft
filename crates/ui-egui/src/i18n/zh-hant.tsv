@@ -2221,5 +2221,5 @@ animation effects	Off	關
 	Stop	停止
 	Paused	已暫停
 	Preparing read-aloud text…	正在準備朗讀文字…
-	Read out loud currently requires Windows.	朗讀功能目前需要Windows。
+	Read out loud requires Windows, macOS or Linux.	朗讀功能目前需要Windows / macOS / Linux。
 	Scanned pages need OCR. Reading order follows extracted page text.	掃描頁面需要OCR。朗讀順序依循從頁面擷取的文字。

@@ -1,6 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M12: Windows local Read out loud with bounded read-only preparation, voice/speed controls and pause/resume; other platforms remain open; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M12: local Read out loud adds macOS say and Linux espeak-ng, with English/Italian voices and silent control tests; physical macOS/Linux audio validation remains open; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (gap 13: large-file memory measured, edits keep two copies instead of three, file-backed input blocked on gap 2) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (gap 1 closed by #836; fixed issues removed from gaps 3, 6 and 16) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (document-font subset completion and curved/shared image clips in the contributor fork; gap 2: hayro patch counts after the native-gradient backport) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -186,7 +186,7 @@ update the numbers.
 
 - **Missing:** apply auto-tag proposals to marked content and a valid parent tree, autotag fields,
   visual Tags, Order and Content panels, Reading Order tool, table editor, Make Accessible action,
-  Read Out Loud on macOS/Linux/FreeBSD/web (Windows local playback is partial); full keyboard operation of PdfCraft itself and a screen-reader audit.
+  Read Out Loud on FreeBSD/web and physical macOS/Linux audio validation (Windows playback and macOS/Linux candidates are partial); full keyboard operation of PdfCraft itself and a screen-reader audit.
 - **Evidence:** all 32 checker rules, figure alt text, tag property and sibling order edits, and
   a bounded text-only auto-tag preview exist. The preview does not write PDF structure;
   `a11y.keyboard-only` (P0) planned, `a11y.app-screen-reader` partial.
@@ -277,7 +277,7 @@ update the numbers.
 ### 20. Scanners, GPU page rendering, pen pressure, Read Out Loud
 
 - **Missing:** TWAIN/WIA/ICA/SANE scanning; GPU-accelerated page rendering (pages are rasterized on
-  the CPU and uploaded); pressure-sensitive ink; text-to-speech outside Windows. Windows Read out loud uses local voices with pause/resume and bounded page/range reading; semantic tag-tree ordering and richer reading controls remain open.
+  the CPU and uploaded); pressure-sensitive ink; text-to-speech on FreeBSD/web and physical macOS/Linux audio validation. Windows voices, macOS say and Linux espeak-ng support pause/resume and bounded page/range reading; semantic tag-tree ordering and richer reading controls remain open.
 - **Estimate:** 25–50 h; scanners need hardware. **Doc:** [hardware-parity.md](hardware-parity.md).
 
 ### 21. Compare: no side-by-side view or filters
@@ -312,7 +312,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-12 | minor | Windows local Read out loud is partial: installed voices, page/range and speed, same-position pause/resume, Stop and CLI/MCP tools; other platforms and semantic tag-tree ordering remain open. Estimates unchanged. |
+| 2026-10-12 | minor | Read out loud remains partial: Windows native playback plus macOS say and Linux espeak-ng candidates, with English/Italian voices and same-position pause/resume. Native physical macOS/Linux audio validation, FreeBSD/web and semantic tag-tree ordering remain open. Estimates unchanged. |
 | 2026-10-12 | minor | Exclusive image crops resize with their pixels across nested states, intervening operators and content streams; shared clips remain fixed. Synthetic engine/tool regressions and private image save/reopen checks; estimates unchanged. |
 | 2026-10-12 | minor | Gap 13: measured large-file memory; edits no longer keep the previous working file while writing the next (peak 3 → 2 copies); file-backed input recorded as blocked on gap 2 |
 | 2026-10-11 | minor | Closed gap 4: the web build prints through the browser's print dialog (sheets drawn by PdfCraft at 150–300 dpi, one per printed page); number kept |

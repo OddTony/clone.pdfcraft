@@ -61,10 +61,14 @@ fn read_aloud_playback_tools_stop_on_edits_and_document_close() {
     struct Fake(Arc<Mutex<Vec<String>>>);
     impl Backend for Fake {
         fn voices(&mut self) -> std::result::Result<Vec<Voice>, String> {
-            Ok(vec![Voice { id: "fake".into(), name: "Test".into(), language: "en".into() }])
+            Ok(vec![
+                Voice { id: "fake".into(), name: "Test English".into(), language: "en-US".into() },
+                Voice { id: "fake-it".into(), name: "Test Italian".into(), language: "it-IT".into() },
+            ])
         }
-        fn start(&mut self, text: &str, _: &Options) -> std::result::Result<(), String> {
+        fn start(&mut self, text: &str, options: &Options) -> std::result::Result<(), String> {
             self.0.lock().unwrap().push(text.into());
+            self.0.lock().unwrap().push(format!("voice={:?}, rate={}", options.voice, options.rate));
             Ok(())
         }
         fn pause(&mut self) -> std::result::Result<(), String> {
@@ -98,6 +102,16 @@ fn read_aloud_playback_tools_stop_on_edits_and_document_close() {
     let log = Arc::new(Mutex::new(Vec::new()));
     let mut a = auto(&dir).with_speech_player(Player::with_backend(Box::new(Fake(log.clone()))));
     let doc = ok(&mut a, "doc_open", json!({"path":"a.pdf"}))["doc"].as_u64().unwrap();
+    for (voice, rate) in [("fake", 0.5), ("fake-it", 2.0)] {
+        ok(&mut a, "read_aloud_start", json!({"doc":doc,"pages":[1],"voice":voice,"rate":rate}));
+        wait(&mut a, "speaking");
+        assert!(log.lock().unwrap().contains(&format!("voice={:?}, rate={rate}", Some(voice))));
+        let status = ok(&mut a, "read_aloud_status", json!({}));
+        assert_eq!(status["playback"]["voices"][0]["language"], "en-US");
+        assert_eq!(status["playback"]["voices"][1]["language"], "it-IT");
+        ok(&mut a, "read_aloud_control", json!({"action":"stop"}));
+        wait(&mut a, "idle");
+    }
     ok(&mut a, "read_aloud_start", json!({"doc":doc,"pages":[2,3],"voice":"fake","rate":1.2}));
     wait(&mut a, "speaking");
     assert!(log.lock().unwrap().contains(&"Page 2".into()));

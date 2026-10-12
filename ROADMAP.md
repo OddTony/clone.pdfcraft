@@ -141,6 +141,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-12 (M12, macOS/Linux Read out loud):** Added local macOS say and Linux espeak-ng synthesis with safe WAV playback, private temporary data, bounded cancellable subprocesses and same-position pause/resume. English and Italian voice selection is independent of UI language; regressions cover UTF-8 input, multiword voice names, controls and cleanup. Native synthesis checks run separately from physical audio checks; macOS/Linux audible desktop validation remains open. FreeBSD/web, semantic ordering and richer reading controls remain open. Estimates unchanged.
+
 - **2026-10-12 (M12, Windows Read out loud):** Explicit local playback through installed Windows voices, with page/range, voice and speed controls, pause/resume at the same audio position, Stop and CLI/MCP tools. Read-only preparation is bounded and runs off the UI thread; closing, switching or changing the source document stops speech. Synthetic injected-backend tests never speak; an explicit muted native check covers audio position and stream release. Other platforms, semantic tag-tree reading, pitch, persisted options and highlighting remain open. Estimates unchanged.
 
 - **2026-10-12 (M1, #1339):** An incremental save of an unchanged classic-table file used to append `xref` and then `trailer` with no subsection, which qpdf reports as a damaged file. The section now has a zero-length subsection, so no object entry changes and a trailer-only edit is still written. Estimates unchanged.

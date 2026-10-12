@@ -10,10 +10,16 @@ const PDF:&[u8]=b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 
 struct Fake(Arc<Mutex<Vec<String>>>);
 impl Backend for Fake {
     fn voices(&mut self) -> Result<Vec<Voice>, String> {
-        Ok(vec![Voice { id: "fake".into(), name: "Test voice".into(), language: "en".into() }])
+        Ok(vec![
+            Voice { id: "fake".into(), name: "Test voice".into(), language: "en-US".into() },
+            Voice { id: "fake-it".into(), name: "Test Italian voice".into(), language: "it-IT".into() },
+        ])
     }
-    fn start(&mut self, text: &str, _: &Options) -> Result<(), String> {
+    fn start(&mut self, text: &str, options: &Options) -> Result<(), String> {
         self.0.lock().unwrap().push(text.into());
+        if let Some(voice) = &options.voice {
+            self.0.lock().unwrap().push(format!("voice={voice}"));
+        }
         Ok(())
     }
     fn pause(&mut self) -> Result<(), String> {
@@ -30,6 +36,31 @@ impl Backend for Fake {
     }
     fn finished(&mut self) -> Result<bool, String> {
         Ok(false)
+    }
+}
+
+#[test]
+fn voice_language_is_independent_of_english_or_italian_interface() {
+    for (language, voice, button) in [("it", "fake", "Leggi ad alta voce"), ("en", "fake-it", "Read out loud")] {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let backend = log.clone();
+        let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", language).unwrap();
+            app.open_bytes("voice.pdf", None, PDF.to_vec()).unwrap();
+            app.read_aloud.player = Player::with_backend(Box::new(Fake(backend.clone())));
+            app.read_aloud.options.voice = Some(voice.into());
+            app
+        });
+        assert!(h.state_mut().execute("a11y.read_aloud"));
+        h.run_steps(4);
+        h.get_by_role_and_label(egui::accesskit::Role::Button, button).click();
+        wait(&mut h, State::Speaking);
+        assert!(log.lock().unwrap().contains(&format!("voice={voice}")));
+        assert!(log.lock().unwrap().contains(&"Hello".into()));
+        h.state_mut().stop_read_aloud();
+        wait(&mut h, State::Idle);
+        assert!(!h.state().session.get(h.state().active_ids().unwrap().1).unwrap().dirty);
     }
 }
 

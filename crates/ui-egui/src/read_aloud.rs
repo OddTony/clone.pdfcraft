@@ -97,7 +97,7 @@ impl PdfCraftApp {
 
     #[cfg(target_arch = "wasm32")]
     pub fn start_read_aloud(&mut self, _first: usize, _last: usize) -> Result<(), String> {
-        Err("Read out loud currently requires the Windows desktop app".into())
+        Err("Read out loud requires the desktop app on Windows, macOS or Linux".into())
     }
 
     pub fn stop_read_aloud(&mut self) {
@@ -153,7 +153,7 @@ pub(crate) fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut open = true;
     egui::Window::new(tl!("Read out loud")).id(egui::Id::new("read_aloud")).open(&mut open).default_width(440.0).resizable(false).show(ctx, |ui| {
         if !app.read_aloud.player.available() {
-            ui.label(tl!("Read out loud currently requires Windows."));
+            ui.label(tl!("Read out loud requires Windows, macOS or Linux."));
             return;
         }
         let status = app.read_aloud.player.status();

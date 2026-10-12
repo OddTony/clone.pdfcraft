@@ -2346,5 +2346,5 @@ animation effects	Off	Ki
 	Stop	Leállítás
 	Paused	Szüneteltetve
 	Preparing read-aloud text…	A felolvasandó szöveg előkészítése…
-	Read out loud currently requires Windows.	A felolvasáshoz jelenleg Windows szükséges.
+	Read out loud requires Windows, macOS or Linux.	A felolvasáshoz jelenleg Windows / macOS / Linux szükséges.
 	Scanned pages need OCR. Reading order follows extracted page text.	A szkennelt oldalakhoz OCR szükséges. Az olvasási sorrend az oldal kinyert szövegét követi.
