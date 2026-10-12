@@ -3855,6 +3855,7 @@ version = "0.6.0"
 dependencies = [
  "hayro",
  "kurbo 0.13.1",
+ "pdfcraft-filters",
 ]
 
 [[package]]
