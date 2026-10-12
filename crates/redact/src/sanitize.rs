@@ -95,6 +95,12 @@ fn sub(doc: &Document, d: &Dict, key: &[u8]) -> Option<Dict> {
 }
 
 fn outline_len(doc: &Document, first: Option<&Object>, depth: usize) -> usize {
+    outline_len_seen(doc, first, depth, &mut HashSet::new())
+}
+
+/// An item two others name (as `/First` or `/Next`) is counted once, so a hostile outline of a few
+/// dozen items cannot cost 2^n steps.
+fn outline_len_seen(doc: &Document, first: Option<&Object>, depth: usize, seen: &mut HashSet<ObjRef>) -> usize {
     let mut n = 0;
     let mut cur = first.cloned();
     let mut guard = 0;
@@ -103,8 +109,13 @@ fn outline_len(doc: &Document, first: Option<&Object>, depth: usize) -> usize {
         if guard > 100_000 || depth > 64 {
             break;
         }
+        if let Object::Ref(r) = &o
+            && !seen.insert(*r)
+        {
+            break;
+        }
         let Some(d) = doc.resolve(&o).as_dict().cloned() else { break };
-        n += 1 + outline_len(doc, d.get(b"First"), depth + 1);
+        n += 1 + outline_len_seen(doc, d.get(b"First"), depth + 1, seen);
         cur = d.get(b"Next").cloned();
     }
     n
@@ -212,7 +223,7 @@ fn content_pass(doc: &mut Document, text: bool, layers: bool, write: bool) -> Re
             gone.extend(out.inherited_gone.iter().cloned());
             gone.sort_unstable();
             gone.dedup();
-            crate::tags::retire_forms(doc, page.obj, pi, &gone, &mut drawn)?;
+            crate::tags::retire_forms(doc, page.obj, pi, &gone, &mut drawn, None)?;
         }
     }
     // What a page no longer draws must not stay reachable through an inherited or shared

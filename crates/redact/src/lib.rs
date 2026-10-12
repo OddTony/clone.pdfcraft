@@ -907,6 +907,8 @@ fn redact_content(
         }
         res.set(b"Properties".to_vec(), Object::Dict(props));
     }
+    // The page's /Resources as it was: an indirect object other pages may share.
+    let shared_res = doc.get(page.obj).as_dict().and_then(|d| d.get(b"Resources")).and_then(Object::as_ref);
     doc.update_dict(page.obj, |d| {
         d.set(b"Contents".to_vec(), Object::Array(new_list));
         d.set(b"Resources".to_vec(), Object::Dict(res));
@@ -923,7 +925,7 @@ fn redact_content(
     gone.extend(out.inherited_gone.iter().cloned());
     gone.sort_unstable();
     gone.dedup();
-    let rewritten = tags::retire_forms(doc, page.obj, pi, &gone, drawn)?;
+    let rewritten = tags::retire_forms(doc, page.obj, pi, &gone, drawn, shared_res)?;
     report.tags += tags::clean(doc, page.obj, &changed_ids, &empty_ids, &rewritten, &out.copies)?;
     Ok(())
 }
@@ -1240,7 +1242,7 @@ fn apply_appearances(
     retarget_appearances(doc, annots, &map)?;
     gone.sort_unstable();
     gone.dedup();
-    tags::retire_forms(doc, page.obj, pi, &gone, drawn)?;
+    tags::retire_forms(doc, page.obj, pi, &gone, drawn, None)?;
     if !props.is_empty() {
         let page_dict = doc.get(page.obj).as_dict().cloned().unwrap_or_default();
         let mut res = page_dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();

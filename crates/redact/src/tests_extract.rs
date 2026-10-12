@@ -291,3 +291,28 @@ fn an_image_shared_by_two_pages_stays_on_the_unredacted_page_only() {
         }
     }
 }
+
+#[test]
+fn an_image_a_sibling_page_maps_but_never_draws_is_not_left_in_the_file() {
+    // Both pages point at one indirect /Resources that maps the scan; only page 1 draws it, and
+    // page 1 is redacted. Page 2 never showed the scan, so nothing may keep it alive: an export
+    // of the images a page's resources list would otherwise hand back the unredacted original.
+    for scan in [Scan::Jpeg, Scan::Flate] {
+        let mut objs = vec![
+            b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+            b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 300 300] >>".to_vec(),
+            b"<< /Type /Page /Parent 2 0 R /Contents 5 0 R /Resources 7 0 R >>".to_vec(),
+            b"<< /Type /Page /Parent 2 0 R /Contents 6 0 R /Resources 7 0 R >>".to_vec(),
+            stream("", DRAW),
+            stream("", b"q Q"),
+            b"<< /XObject << /Im0 8 0 R >> >>".to_vec(),
+        ];
+        objs.push(scan.object());
+        let mut doc = pdf(objs);
+        mark(&mut doc, 0, &[MARK], "");
+        let (_, doc, saved) = apply_save_reopen(doc);
+        assert!(drawn(&doc, 1).is_empty(), "page 2 draws nothing");
+        assert!(!reachable_images(&doc, 1).iter().any(|s| scan.is_original(s)), "page 2's resources still list the original scan");
+        assert_gone(&scan, &doc, &saved, 0);
+    }
+}

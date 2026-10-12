@@ -241,10 +241,18 @@ fn tree_fix(
     doc: &mut Document,
     node: &Object,
     depth: usize,
+    seen: &mut HashSet<ObjRef>,
     f: &mut dyn FnMut(&Document, i64, &Object) -> Fix,
 ) -> Result<Option<Object>, RedactError> {
     if depth > MAX_DEPTH {
         return Err(RedactError::StructureTooLarge);
+    }
+    // A node reached twice (a /Kids entry two parents share, or a cycle) is walked once: without
+    // this a few dozen nodes that each name the next twice take 2^n visits.
+    if let Object::Ref(r) = node
+        && !seen.insert(*r)
+    {
+        return Ok(None);
     }
     let (r, mut d) = match node {
         Object::Ref(r) => match doc.get(*r).as_dict() {
@@ -286,7 +294,7 @@ fn tree_fix(
         let mut out = Vec::with_capacity(kids.len());
         let mut kids_changed = false;
         for k in kids {
-            match tree_fix(doc, &k, depth + 1, f)? {
+            match tree_fix(doc, &k, depth + 1, seen, f)? {
                 Some(new) => {
                     kids_changed = true;
                     out.push(new);
@@ -345,7 +353,7 @@ fn fix_parent_tree(doc: &mut Document, spec: &Spec<'_>) -> Result<(), RedactErro
         }
         Fix::Keep
     };
-    if let Some(new) = tree_fix(doc, &tree, 0, &mut f)? {
+    if let Some(new) = tree_fix(doc, &tree, 0, &mut HashSet::new(), &mut f)? {
         match root_ref {
             Some(r) => doc.update_dict(r, |d| d.set(b"ParentTree".to_vec(), new))?,
             None => {
@@ -672,11 +680,21 @@ fn names_below(doc: &Document, s: &Stream, parent: &Dict, out: &mut HashSet<Vec<
 /// goes when its owner's render no longer draws the name — for a node, no page; for the page's
 /// own resources, the page itself — so a sibling that still draws the name keeps the entry, and
 /// the original with it. The retired XObjects are returned.
-pub(crate) fn retire_forms(doc: &mut Document, page: ObjRef, pi: usize, gone: &[Vec<u8>], cache: &mut Drawn) -> Result<Vec<ObjRef>, RedactError> {
+pub(crate) fn retire_forms(
+    doc: &mut Document,
+    page: ObjRef,
+    pi: usize,
+    gone: &[Vec<u8>],
+    cache: &mut Drawn,
+    shared: Option<ObjRef>,
+) -> Result<Vec<ObjRef>, RedactError> {
     let mut forms = Vec::new();
     if gone.is_empty() {
         return Ok(forms);
     }
+    // An indirect /Resources other pages may share: the page is about to get its own copy, so
+    // the shared object keeps every name unless it is stripped too (see `retire_shared`).
+    let shared = shared.or_else(|| doc.get(page).as_dict().and_then(|d| d.get(b"Resources")).and_then(Object::as_ref));
     // The page's own resources first. An entry only goes when this page's render — its own
     // content, and the forms it still draws, each followed with the resources it draws with —
     // no longer draws the name: a rewritten form may retire a name the page still draws by
@@ -706,9 +724,35 @@ pub(crate) fn retire_forms(doc: &mut Document, page: ObjRef, pi: usize, gone: &[
             doc.update_dict(page, |d| d.set(b"Resources".to_vec(), Object::Dict(res)))?;
         }
     }
+    if let Some(shared) = shared {
+        retire_shared(doc, shared, gone, cache);
+    }
     // Then the nodes the page inherited entries from.
     retire_inherited(doc, page, gone, cache)?;
     Ok(forms)
+}
+
+/// The /Resources the page pointed at as an indirect object, which siblings may share: strip the
+/// `gone` names from its /XObject so far as no page still draws them. Without this a sibling
+/// that maps the scan but never draws it keeps the original reachable through the shared
+/// dictionary, and a full save keeps it.
+fn retire_shared(doc: &mut Document, shared: ObjRef, gone: &[Vec<u8>], cache: &mut Drawn) {
+    let Some(mut res) = doc.dict(&Object::Ref(shared)) else { return };
+    let Some(mut xo) = res.get(b"XObject").and_then(|x| doc.dict(x)) else { return };
+    if !gone.iter().any(|n| xo.contains(n)) {
+        return;
+    }
+    let Some(drawn) = names_still_drawn(doc, cache) else { return };
+    let mut removed = false;
+    for n in gone {
+        if !drawn.contains(n) {
+            removed |= xo.remove(n).is_some();
+        }
+    }
+    if removed {
+        res.set(b"XObject".to_vec(), Object::Dict(xo));
+        doc.set(shared, Object::Dict(res));
+    }
 }
 
 /// Strip the `gone` names from the /XObject of every page-tree node above `page` that owns one,

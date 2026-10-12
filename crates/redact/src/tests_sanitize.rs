@@ -642,3 +642,46 @@ fn a_parent_tree_nested_too_deeply_fails_instead_of_being_half_cleaned() {
     assert_eq!(err, RedactError::StructureTooLarge);
     assert!(!err.to_string().contains("SECRET"));
 }
+
+/// Run `f` on another thread and give it ten seconds: a walker that spins on a hostile file fails
+/// the test instead of hanging the run.
+fn within_ten_seconds<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    rx.recv_timeout(std::time::Duration::from_secs(10)).expect("the walk did not finish: it is spinning on shared nodes")
+}
+
+#[test]
+fn an_outline_whose_items_share_children_is_counted_without_spinning() {
+    // 60 levels where both items of a level name the next level as their /First: counting the
+    // items by walking every path takes 2^60 steps, all of them under the depth and sibling caps.
+    let levels: u32 = 60;
+    // Object 7 is the outline root; level k has items 8 + 2k and 9 + 2k.
+    let mut objs = vec![b"<< /Type /Outlines /First 8 0 R >>".to_vec()];
+    for k in 0..levels {
+        let (a, b) = (8 + 2 * k, 9 + 2 * k);
+        let first = if k + 1 < levels { format!("/First {} 0 R", 8 + 2 * (k + 1)) } else { String::new() };
+        objs.push(format!("<< /Title (a) /Next {b} 0 R {first} >>").into_bytes());
+        objs.push(format!("<< /Title (b) {first} /Parent {a} 0 R >>").into_bytes());
+    }
+    let mut doc = build("/Outlines 7 0 R", "", "", b"BT ET", objs);
+    let result = within_ten_seconds(move || sanitize::sanitize(&mut doc));
+    assert!(matches!(result, Ok(_) | Err(RedactError::StructureTooLarge)), "{result:?}");
+}
+
+#[test]
+fn a_parent_tree_whose_kids_are_shared_is_walked_without_spinning() {
+    // 60 number-tree nodes, each /Kids naming the next node twice, under the parent tree of a
+    // tagged page that a redaction touches: every path would be walked, 2^60 of them.
+    let n: u32 = 60;
+    let nodes: Vec<Vec<u8>> = (0..n)
+        .map(|i| if i + 1 < n { format!("<< /Kids [{} 0 R {} 0 R] >>", 7 + i + 1, 7 + i + 1).into_bytes() } else { b"<< /Nums [0 []] >>".to_vec() })
+        .collect();
+    let content = b"/P <</MCID 0>> BDC BT /F1 10 Tf 10 200 Td (SECRET) Tj ET EMC";
+    let mut doc = build("/StructTreeRoot << /Type /StructTreeRoot /ParentTree 7 0 R >>", "/StructParents 0", "", content, nodes);
+    mark(&mut doc, OVER_SECRET);
+    let result = within_ten_seconds(move || apply(&mut doc, None).map(|_| ()));
+    assert!(matches!(result, Ok(()) | Err(RedactError::StructureTooLarge)), "{result:?}");
+}
