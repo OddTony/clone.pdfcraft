@@ -142,10 +142,13 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
             if let Some(prev) = block.lines.last().filter(|i| row.contains(i)).and_then(|i| lines.get(*i))
                 && !row_text.ends_with(char::is_whitespace)
                 && !line.text.starts_with(char::is_whitespace)
-                && line.frame_rect()[0] - prev.frame_rect()[2] > line.size * 0.12
+                && line.frame_rect()[0] - prev.frame_rect()[2] > line.size * 0.08
             {
                 row_text.push(' ');
                 block.editor_text.push(' ');
+                if let Some((range, _)) = block.spans.last_mut() {
+                    range.end = block.editor_text.len();
+                }
             }
             let start = block.editor_text.len();
             block.editor_text.push_str(&line.text);
@@ -346,7 +349,7 @@ pub(super) fn rewrite_styled_block(
     }
     let lines = styled_lines.as_slice();
     let p = page_dict(doc, page)?;
-    let mut res = p.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
+    let mut res = inherited_page_resources(doc, p.obj);
     let mut fonts = res.get(b"Font").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
     for line in lines.iter().filter(|line| line.font.starts_with("PCRange")) {
         let mut f = Dict::new();
@@ -370,7 +373,7 @@ pub(super) fn rewrite_styled_block(
             metrics.insert(line.font.clone(), Metrics::from_dict(doc, &font));
         }
     }
-    if [style.size, style.line_spacing, style.char_spacing, style.scale, style.width].iter().flatten().any(|v| !v.is_finite())
+    if [style.size, style.line_spacing, style.paragraph_spacing, style.char_spacing, style.scale, style.width].iter().flatten().any(|v| !v.is_finite())
         || style.color.is_some_and(|c| c.iter().any(|v| !v.is_finite()))
     {
         return Err(EditError::Invalid("the paragraph's formatting must use finite numbers".into()));
@@ -565,12 +568,15 @@ pub(super) fn rewrite_styled_block(
     let mut row_start = 0;
     let mut row = Vec::new();
     let mut row_width = 0.0;
+    let mut para_breaks = std::collections::HashSet::new();
     // Wrap at word boundaries, retaining explicit source row breaks and whitespace.
     let mut at = 0;
     while at < chars.len() {
         let Some(item) = chars.get(at) else { break };
         if item.0 == '\n' {
             row_ranges.push(row_start..row_start + row.len());
+            let row_idx = rows.len();
+            para_breaks.insert(row_idx);
             rows.push(std::mem::take(&mut row));
             row_width = 0.0;
             at += 1;
@@ -691,13 +697,14 @@ pub(super) fn rewrite_styled_block(
         .rfind(|v| *v > 0.0)
         .unwrap_or(first.size * 1.5);
     let mut baseline = first.origin.baseline;
+    let mut accumulated_gap = 0.0;
     for (row_index, row) in rows.iter().enumerate() {
         let anchor = block.rows.get(row_index).and_then(|r| r.first()).and_then(|i| lines.get(*i));
         if style.line_spacing.is_none()
             && style.size.is_none()
             && let Some(anchor) = anchor
         {
-            baseline = anchor.origin.baseline;
+            baseline = anchor.origin.baseline - accumulated_gap;
         }
         let anchor = anchor.unwrap_or(first);
         if kept.get(row_index).copied().unwrap_or(false) {
@@ -709,7 +716,7 @@ pub(super) fn rewrite_styled_block(
         let align = style.align.unwrap_or(if centered { crate::added::Align::Center } else { crate::added::Align::Left });
         let original_rect = block.rows.get(row_index).and_then(|row| row_rect(row, lines)).unwrap_or(block.rect);
         let left = if style.width.is_none() && style.align.is_none() { original_rect[0] } else { block.rect[0] };
-        let available = if style.width.is_none() && style.align.is_none() { original_rect[2] - original_rect[0] } else { width };
+        let available = if style.width.is_none() && style.align.is_none() { (original_rect[2] - original_rect[0]).max(w) } else { width };
         let mut x = left
             + match align {
                 crate::added::Align::Center => (available - w) / 2.0,
@@ -766,6 +773,9 @@ pub(super) fn rewrite_styled_block(
                     let code = u16::try_from(i + 1).map_err(|_| EditError::Invalid("shaped glyph limit".into()))?;
                     block_ops.push(Op::new("BT", vec![]));
                     block_ops.extend(state.ops());
+                    if block.invisible || state.render_mode == 3 {
+                        block_ops.push(Op::new("Tr", vec![Object::Int(0)]));
+                    }
                     block_ops.push(Op::new("Tm", matrix.map(n).to_vec()));
                     block_ops.push(Op::new("Tj", vec![Object::String(PdfString::literal(code.to_be_bytes().to_vec()))]));
                     block_ops.push(Op::new("ET", vec![]));
@@ -776,6 +786,9 @@ pub(super) fn rewrite_styled_block(
             } else {
                 block_ops.push(Op::new("BT", vec![]));
                 block_ops.extend(state.ops());
+                if block.invisible || state.render_mode == 3 {
+                    block_ops.push(Op::new("Tr", vec![Object::Int(0)]));
+                }
                 block_ops.push(Op::new("Tm", tm.iter().map(|v| n(*v)).collect()));
                 block_ops.extend(source_show(
                     m,
@@ -801,11 +814,18 @@ pub(super) fn rewrite_styled_block(
             x += segment_width;
             pos = end;
         }
-        baseline -= if style.line_spacing.is_none() && style.size.is_none() {
+        let base = if style.line_spacing.is_none() && style.size.is_none() {
             source_leading
         } else {
             style.line_spacing.unwrap_or(1.5).clamp(0.5, 5.0) * style.size.unwrap_or(anchor.size)
         };
+        let extra_p = if para_breaks.contains(&row_index) {
+            style.paragraph_spacing.unwrap_or(0.0).max(0.0)
+        } else {
+            0.0
+        };
+        baseline -= base + extra_p;
+        accumulated_gap += extra_p;
     }
     block_ops.push(Op::new("Q", vec![]));
     let mut drop = coincident_ops(lines, &members);

@@ -495,7 +495,7 @@ pub struct DocView {
     pub line_editor: Option<crate::edit_text_ui::LineEditor>,
     /// The box a click switched to while another paragraph was being edited: it opens once the
     /// queued edit has applied, so its index and geometry come from the document it now is (#2022).
-    pub(crate) pending_text_open: Option<(usize, usize)>,
+    pub pending_text_open: Option<(usize, usize)>,
     pub(crate) text_background: crate::edit_text_ui::TextBackground,
     pub(crate) move_background: crate::content_ui::MoveBackground,
     /// Edit text & images: the images per page (by document generation), and the selected one.
@@ -2704,6 +2704,19 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     } else {
         view.prepare.selected = None;
     }
+    if tool != QuickTool::EditText
+        && let Some(ed) = view.line_editor.take()
+        && let Some(edit) = crate::edit_text_ui::finished_edit(ed)
+    {
+        view.pending_edit = Some(edit);
+    }
+    if view.line_editor.is_some()
+        && (tool == QuickTool::EditText || tool == QuickTool::AddText)
+        && (!app.left_open || app.left != crate::LeftPanel::Tool("edit"))
+    {
+        app.left = crate::LeftPanel::Tool("edit");
+        app.left_open = true;
+    }
     view.objects.prepare(doc, tool == QuickTool::EditText && can_modify, ui.ctx());
     view.text_background.prepare(ui.ctx(), doc, view.line_editor.as_ref(), view.content.draft.as_ref(), scale);
     let added = if editing_content { doc.added().to_vec() } else { Vec::new() };
@@ -4558,6 +4571,8 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                                 app.put_down_edit_text();
                             } else {
                                 app.quick_tool = QuickTool::EditText;
+                                app.left = crate::LeftPanel::Tool("edit");
+                                app.left_open = true;
                             }
                         }
                     }
