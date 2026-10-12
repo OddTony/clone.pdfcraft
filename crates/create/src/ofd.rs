@@ -10,7 +10,10 @@
 //!   or a non-embedded Adobe-GB1 font (`STSong-Light`) for Chinese, which readers substitute.
 //!   No font file is added: only fonts the OFD file itself carries are embedded.
 //!
-//! Template pages are written once each, as form XObjects that every page using them draws.
+//! Template pages and composite graphic units are written once each, as form XObjects that
+//! every page or object using them draws. A unit is a transparency group, so its object's
+//! `Alpha` fades it as a whole; a unit that contains itself, or units nested more than
+//! [`MAX_UNIT_DEPTH`] deep, are not drawn again (reported).
 //!
 //! Paths, text and images are clipped to their `Clips`: each clip is a PDF clipping path (`W n`,
 //! or `W* n` for an even-odd path) in page space, so several clips intersect. A clip made of one
@@ -36,13 +39,16 @@ use skrifa::{FontRef, GlyphId, MetadataProvider, instance::LocationRef, instance
 
 use crate::{CreateError, MAX_SIDE, add_page, set_title};
 
+/// How deep composite graphic units may nest in one another.
+const MAX_UNIT_DEPTH: usize = 16;
+
 /// What the conversion could not do, for the user.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct OfdReport {
     pub pages: usize,
     /// Objects (or parts of objects) that were not drawn.
     pub skipped: usize,
-    /// [`OfdReport::skipped`] by kind ("composite graphic units", "text used as a clipping
+    /// [`OfdReport::skipped`] by kind ("pattern and shading colours", "text used as a clipping
     /// region", …).
     pub skipped_by_kind: BTreeMap<String, usize>,
     /// The OFD file is signed: its signatures and seals are not in the PDF and were not checked.
@@ -68,6 +74,8 @@ pub fn from_ofd(bytes: &[u8]) -> Result<(Document, OfdReport), CreateError> {
         images: HashMap::new(),
         states: HashMap::new(),
         forms: HashMap::new(),
+        units: HashMap::new(),
+        unit_stack: Vec::new(),
         report: OfdReport { signed: model.signatures.is_some(), notes: model.warnings.clone(), ..OfdReport::default() },
     };
     let mut templates: HashMap<u32, &TemplatePage> = HashMap::new();
@@ -159,6 +167,10 @@ struct Writer<'a, 'b> {
     states: HashMap<(u8, u8), ObjRef>,
     /// Template pages, each written once as a form XObject that every page using it draws.
     forms: HashMap<u32, ObjRef>,
+    /// Composite graphic units as form XObjects, or why one can't be drawn.
+    units: HashMap<u32, Result<ObjRef, &'static str>>,
+    /// The units being written, innermost last (a unit may not contain itself).
+    unit_stack: Vec<u32>,
     report: OfdReport,
 }
 
@@ -229,6 +241,44 @@ impl Writer<'_, '_> {
         let _ = writeln!(out.ops, "/{name} Do");
     }
 
+    /// A composite graphic unit as a form XObject (a transparency group), written the first
+    /// time it is used; or why it can't be drawn.
+    fn unit_form(&mut self, id: u32) -> Result<ObjRef, &'static str> {
+        if let Some(r) = self.units.get(&id) {
+            return *r;
+        }
+        if self.unit_stack.contains(&id) {
+            return Err("composite graphic units that contain themselves");
+        }
+        if self.unit_stack.len() >= MAX_UNIT_DEPTH {
+            return Err("composite graphic units nested too deep");
+        }
+        let res = self.res;
+        let Some(unit) = res.composites.get(&id) else {
+            self.units.insert(id, Err("composite graphic units that aren't defined"));
+            return Err("composite graphic units that aren't defined");
+        };
+        self.unit_stack.push(id);
+        let mut form = PageOut::default();
+        self.objects(&unit.objects, None, &mut form);
+        self.unit_stack.pop();
+        let mut group = Dict::new();
+        group.set(b"S".to_vec(), Object::name("Transparency"));
+        let mut d = Dict::new();
+        d.set(b"Type".to_vec(), Object::name("XObject"));
+        d.set(b"Subtype".to_vec(), Object::name("Form"));
+        // The unit's own space; what the placing object's boundary leaves out isn't cut off.
+        d.set(
+            b"BBox".to_vec(),
+            Object::Array(vec![Object::Real(-MAX_SIDE), Object::Real(-MAX_SIDE), Object::Real(MAX_SIDE), Object::Real(MAX_SIDE)]),
+        );
+        d.set(b"Group".to_vec(), Object::Dict(group));
+        d.set(b"Resources".to_vec(), Object::Dict(form.resources()));
+        let r = self.doc.add(Object::Stream(Stream::flate(d, form.ops.as_bytes())));
+        self.units.insert(id, Ok(r));
+        Ok(r)
+    }
+
     fn content(&mut self, content: &PageContent, out: &mut PageOut) {
         let rank = |k: LayerKind| match k {
             LayerKind::Background => 0,
@@ -288,7 +338,23 @@ impl Writer<'_, '_> {
                     let _ = writeln!(s, "1 0 0 -1 0 1 cm\n/{name} Do\nQ");
                     out.ops.push_str(&s);
                 }
-                Item::Composite(_) => self.skip("composite graphic units"),
+                Item::Composite(c) if c.graphic.visible => {
+                    let r = match self.unit_form(c.resource_id) {
+                        Ok(r) => r,
+                        Err(why) => {
+                            self.skip(why);
+                            continue;
+                        }
+                    };
+                    let name = format!("Cu{}", c.resource_id);
+                    out.xobjects.insert(name.clone(), r);
+                    let mut s = String::from("q\n");
+                    self.clip(&c.graphic, &mut s);
+                    s.push_str(&cm(&c.graphic.to_page()));
+                    self.alpha(&c.graphic, None, None, out, &mut s);
+                    let _ = writeln!(s, "/{name} Do\nQ");
+                    out.ops.push_str(&s);
+                }
                 Item::Block(b) => self.objects(&b.objects, layer_param, out),
                 _ => {}
             }

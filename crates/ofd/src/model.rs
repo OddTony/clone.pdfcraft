@@ -119,8 +119,8 @@ pub enum Object {
     Path(PathObject),
     Text(TextObject),
     Image(ImageObject),
-    /// A composite graphic unit placed on the page (`CompositeObject`); the unit itself is a
-    /// resource and is not read yet.
+    /// A composite graphic unit placed on the page (`CompositeObject`); the unit is in
+    /// [`Resources::composites`].
     Composite(CompositeObject),
     /// `PageBlock`: a group of objects.
     Block(PageBlock),
@@ -305,10 +305,21 @@ pub struct ImageObject {
     pub image_mask: Option<u32>,
 }
 
+/// Places a composite graphic unit: the unit's own space is mapped to the page like any
+/// object's ([`Graphic::to_page`]).
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompositeObject {
     pub graphic: Graphic,
     pub resource_id: u32,
+}
+
+/// `CompositeGraphicUnit`: a drawing defined once as a resource and placed on pages by
+/// [`CompositeObject`]s. Its objects are in its own space, `width` × `height`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompositeUnit {
+    pub width: f64,
+    pub height: f64,
+    pub objects: Vec<Object>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -324,6 +335,7 @@ pub struct Resources {
     pub draw_params: BTreeMap<u32, DrawParam>,
     pub fonts: BTreeMap<u32, Font>,
     pub media: BTreeMap<u32, MultiMedia>,
+    pub composites: BTreeMap<u32, CompositeUnit>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

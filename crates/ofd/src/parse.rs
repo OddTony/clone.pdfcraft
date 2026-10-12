@@ -374,9 +374,15 @@ impl Reader<'_, '_> {
                     }
                 }
                 "CompositeGraphicUnits" => {
-                    let n = children(&list, "CompositeGraphicUnit").count();
-                    if n > 0 {
-                        self.warnings.push(format!("{path}: {n} composite graphic units are not read yet"));
+                    for u in children(&list, "CompositeGraphicUnit") {
+                        let id = part.required_id(&u, "ID")?;
+                        let objects = match child(&u, "Content") {
+                            Some(content) => self.objects(&part, &content, 0)?,
+                            None => Vec::new(),
+                        };
+                        let value =
+                            CompositeUnit { width: part.num(&u, "Width")?.unwrap_or(0.0), height: part.num(&u, "Height")?.unwrap_or(0.0), objects };
+                        self.add(id, path, |r| &mut r.composites, value);
                     }
                 }
                 _ => {}
@@ -443,7 +449,13 @@ impl Reader<'_, '_> {
         }
         let mut out = Vec::new();
         for n in parent.children().filter(Node::is_element) {
-            let obj = match n.tag_name().name() {
+            let name = n.tag_name().name();
+            if matches!(name, "ImageObject" | "CompositeObject") && n.attribute("ResourceID").is_none() {
+                // Nothing to draw (some writers leave such placeholders in composite units).
+                self.warn(format!("{}: an <{name}> without ResourceID is left out", part.name));
+                continue;
+            }
+            let obj = match name {
                 "PathObject" => Object::Path(self.path_object(part, &n, true)?),
                 "TextObject" => Object::Text(self.text_object(part, &n)?),
                 "ImageObject" => Object::Image(ImageObject {
@@ -637,6 +649,9 @@ impl Reader<'_, '_> {
                 match o {
                     Object::Text(t) if !res.fonts.contains_key(&t.font) => missing.push(format!("font {}", t.font)),
                     Object::Image(i) if !res.media.contains_key(&i.resource_id) => missing.push(format!("image {}", i.resource_id)),
+                    Object::Composite(c) if !res.composites.contains_key(&c.resource_id) => {
+                        missing.push(format!("composite graphic unit {}", c.resource_id))
+                    }
                     Object::Block(b) => walk(&b.objects, res, missing),
                     _ => {}
                 }
@@ -654,6 +669,9 @@ impl Reader<'_, '_> {
             for l in &content.layers {
                 walk(&l.objects, &self.resources, &mut missing);
             }
+        }
+        for unit in self.resources.composites.values() {
+            walk(&unit.objects, &self.resources, &mut missing);
         }
         missing.sort();
         missing.dedup();

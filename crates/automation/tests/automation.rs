@@ -5634,7 +5634,7 @@ fn ofd_files_convert_to_a_new_pdf_with_a_report() {
     assert_eq!((made["name"].as_str(), made["pages"].as_u64(), made["dirty"].as_bool()), (Some("invoice.pdf"), Some(1), Some(true)), "{made}");
     let report = &made["ofd"];
     assert_eq!((report["pages"].as_u64(), report["skipped"].as_u64(), report["signed"].as_bool()), (Some(1), Some(1), Some(false)), "{made}");
-    assert_eq!(report["skipped_by_kind"]["composite graphic units"], 1, "{made}");
+    assert_eq!(report["skipped_by_kind"]["composite graphic units that aren't defined"], 1, "{made}");
     assert!(report["notes"].as_array().unwrap().iter().any(|n| n.as_str().is_some_and(|n| n.contains("font 4"))), "{made}");
     // Real text, at the OFD size (100 × 50 mm).
     let doc = made["doc"].as_u64().unwrap();

@@ -29,7 +29,8 @@ if pdfcraft_ofd::is_ofd(&bytes) {                 // a ZIP with OFD.xml at its r
   (`Template`, `PageRes`, `Area`, `Content/Layer`).
 - **Objects**: `PathObject` (`AbbreviatedData`: `S`/`M`, `L`, `Q`, `B`, `A`, `C`), `TextObject`
   (`TextCode` with `X`/`Y` and `DeltaX`/`DeltaY` where `g N v` repeats `v` N times;
-  `CGTransform` glyph indices), `ImageObject`, `CompositeObject` (reference only), nested
+  `CGTransform` glyph indices), `ImageObject`, `CompositeObject` (its unit, a resource, in
+  `Resources::composites`), nested
   `PageBlock`, with the common `Boundary`, `CTM`, `DrawParam`, `LineWidth`, `Alpha`, `Visible`,
   fill/stroke colours and `Clips` (`Clip` regions intersect, the `Area`s of one region form a
   union; an area is a `Path`, read, or a `Text`, recorded but not read yet; `TransFlag` says
@@ -41,13 +42,14 @@ Numbers stay in OFD's units (millimetres, y down). `geom` converts: `mm_to_pt`,
 
 Elements are matched by local name, so files with and without the `ofd:` prefix read alike.
 Required things that are missing or malformed are errors naming the part; unknown elements are
-ignored; what is tolerated or not read yet (patterns and shadings, composite graphic units,
-extra `DocBody` elements, references to undefined fonts, images or templates) is listed in
+ignored; what is tolerated or not read yet (patterns and shadings, extra `DocBody` elements,
+references to undefined fonts, images, templates or composite graphic units) is listed in
 `OfdDocument::warnings`, each message once. Tolerated because real writers produce them (all
 seen in the ofdrw test files): a listed resource file missing from the package (its resources
 are then undefined), an `Area` without `PhysicalBox` (its `ApplicationBox` stands in, else the
 document's size), an object without `Boundary` (its coordinates are page coordinates) and a
-`Boundary` with a negative size (the corner is kept, the size made positive).
+`Boundary` with a negative size (the corner is kept, the size made positive); an image or
+composite object without `ResourceID` is left out.
 
 ## Robustness
 

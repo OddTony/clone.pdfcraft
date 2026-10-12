@@ -80,11 +80,11 @@ fn package(pages: &[&str], signed: bool) -> Vec<u8> {
 
 /// `font` is the file behind font 5 (an embedded OFD font).
 fn package_with_font(pages: &[&str], signed: bool, font: &[u8]) -> Vec<u8> {
-    package_full(pages, signed, font, &[])
+    package_full(pages, signed, font, &[], "")
 }
 
-/// `templates` are (ID, z-order, body) template pages.
-fn package_full(pages: &[&str], signed: bool, font: &[u8], templates: &[(u32, &str, &str)]) -> Vec<u8> {
+/// `templates` are (ID, z-order, body) template pages; `res` goes into the resource file.
+fn package_full(pages: &[&str], signed: bool, font: &[u8], templates: &[(u32, &str, &str)], res: &str) -> Vec<u8> {
     let signatures = if signed { "<ofd:Signatures>Doc_0/Signs/Signatures.xml</ofd:Signatures>" } else { "" };
     let ofd = format!(
         r#"<ofd:OFD {NS} Version="1.0" DocType="OFD"><ofd:DocBody><ofd:DocInfo><ofd:Title>Test</ofd:Title></ofd:DocInfo><ofd:DocRoot>Doc_0/Document.xml</ofd:DocRoot>{signatures}</ofd:DocBody></ofd:OFD>"#
@@ -99,7 +99,7 @@ fn package_full(pages: &[&str], signed: bool, font: &[u8], templates: &[(u32, &s
     let res = format!(
         r#"<ofd:Res {NS} BaseLoc="Res"><ofd:Fonts><ofd:Font ID="4" FontName="宋体" FamilyName="宋体"/><ofd:Font ID="5" FontName="Fake"><ofd:FontFile>fake.ttf</ofd:FontFile></ofd:Font></ofd:Fonts>
 <ofd:MultiMedias><ofd:MultiMedia ID="6" Type="Image" Format="PNG"><ofd:MediaFile>image_6.png</ofd:MediaFile></ofd:MultiMedia>
-<ofd:MultiMedia ID="7" Type="Image" Format="JBIG2"><ofd:MediaFile>image_7.jb2</ofd:MediaFile></ofd:MultiMedia></ofd:MultiMedias></ofd:Res>"#
+<ofd:MultiMedia ID="7" Type="Image" Format="JBIG2"><ofd:MediaFile>image_7.jb2</ofd:MediaFile></ofd:MultiMedia></ofd:MultiMedias>{res}</ofd:Res>"#
     );
     let mut files: Vec<(String, Vec<u8>)> = vec![
         ("OFD.xml".into(), ofd.into_bytes()),
@@ -282,7 +282,7 @@ fn a_template_is_written_once_for_all_its_pages() {
         r#"<ofd:Page {NS}><ofd:Template TemplateID="60"/><ofd:Template TemplateID="62"/><ofd:Content><ofd:Layer ID="10">{PATH}</ofd:Layer></ofd:Content></ofd:Page>"#
     );
     let pages: Vec<&str> = vec![body.as_str(); 30];
-    let bytes = package_full(&pages, false, b"not a font", &[(60, "Background", background), (62, "Foreground", foreground)]);
+    let bytes = package_full(&pages, false, b"not a font", &[(60, "Background", background), (62, "Foreground", foreground)], "");
     let (pages, report, doc) = convert(&bytes);
     assert_eq!(report.pages, 30);
     let mut forms = Vec::new();
@@ -370,4 +370,49 @@ fn clips_that_cannot_be_drawn_are_skipped_and_reported() {
     assert_eq!(by_kind, [("clipping regions made of several areas", 1), ("empty clipping regions", 2), ("text used as a clipping region", 1)]);
     assert_eq!(report.skipped, 4);
     assert!(report.notes.iter().any(|n| n.contains("text used as a clipping region")), "{:?}", report.notes);
+}
+
+#[test]
+fn composite_units_are_drawn_once_as_forms() {
+    // Unit 40 draws a path and places unit 43; unit 43 places itself.
+    let units = r#"<ofd:CompositeGraphicUnits><ofd:CompositeGraphicUnit ID="40" Width="20" Height="10"><ofd:Content>
+<ofd:PathObject ID="41" Boundary="0 0 20 10" Fill="true"><ofd:FillColor Value="0 0 255"/><ofd:AbbreviatedData>M 0 0 L 66 0 L 66 10 C</ofd:AbbreviatedData></ofd:PathObject>
+<ofd:CompositeObject ID="42" Boundary="0 0 1 1" ResourceID="43"/></ofd:Content></ofd:CompositeGraphicUnit>
+<ofd:CompositeGraphicUnit ID="43" Width="1" Height="1"><ofd:Content><ofd:CompositeObject ID="44" Boundary="0 0 1 1" ResourceID="43"/></ofd:Content></ofd:CompositeGraphicUnit></ofd:CompositeGraphicUnits>"#;
+    let body = r#"<ofd:CompositeObject ID="50" Boundary="10 20 20 10" CTM="0.5 0 0 0.5 0 0" ResourceID="40"/>
+<ofd:CompositeObject ID="51" Boundary="100 20 20 10" Alpha="102" ResourceID="40"/><ofd:CompositeObject ID="52" Boundary="0 0 1 1" ResourceID="99"/>"#;
+    let (pages, report, doc) = convert(&package_full(&[&page(body)], false, b"not a font", &[], units));
+    let (dict, ops) = &pages[0];
+    assert!(ops.contains("q\n0.5 0 0 0.5 10 20 cm\n/Cu40 Do\nQ"), "placed by its CTM and boundary: {ops}");
+    assert!(ops.contains("q\n1 0 0 1 100 20 cm\n/GS102_102 gs\n/Cu40 Do\nQ"), "faded as a whole: {ops}");
+    assert!(!ops.contains("66 0 l"), "the unit is drawn in its form, not copied: {ops}");
+    let res = doc.resolve(dict.get(b"Resources").unwrap()).as_dict().cloned().unwrap();
+    let xobjects = doc.resolve(res.get(b"XObject").unwrap()).as_dict().cloned().unwrap();
+    let form = doc.resolve(xobjects.get(b"Cu40").unwrap());
+    let Object::Stream(form) = &*form else { panic!("the unit is not a stream") };
+    let group = form.dict.get(b"Group").and_then(Object::as_dict).unwrap();
+    assert_eq!(group.get(b"S").and_then(Object::as_name), Some(&b"Transparency"[..]));
+    let unit_ops = String::from_utf8_lossy(&form.decoded().unwrap()).into_owned();
+    assert!(unit_ops.contains("66 0 l") && unit_ops.contains("0 0 1 rg") && unit_ops.contains("/Cu43 Do"), "{unit_ops}");
+    // A unit placing itself and an undefined unit: reported, never followed round.
+    let by_kind: Vec<(&str, usize)> = report.skipped_by_kind.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    assert_eq!(by_kind, [("composite graphic units that aren't defined", 1), ("composite graphic units that contain themselves", 1)]);
+}
+
+#[test]
+fn deeply_nested_composite_units_stop() {
+    // A chain of 40 units, each placing the next: drawn to MAX_UNIT_DEPTH, the rest reported.
+    let units: String = (0..40)
+        .map(|i| {
+            format!(
+                r#"<ofd:CompositeGraphicUnit ID="{}" Width="1" Height="1"><ofd:Content><ofd:CompositeObject Boundary="0 0 1 1" ResourceID="{}"/></ofd:Content></ofd:CompositeGraphicUnit>"#,
+                1000 + i,
+                1001 + i
+            )
+        })
+        .collect();
+    let units = format!("<ofd:CompositeGraphicUnits>{units}</ofd:CompositeGraphicUnits>");
+    let body = r#"<ofd:CompositeObject ID="50" Boundary="0 0 1 1" ResourceID="1000"/>"#;
+    let (_, report, _) = convert(&package_full(&[&page(body)], false, b"not a font", &[], &units));
+    assert_eq!(report.skipped_by_kind.get("composite graphic units nested too deep"), Some(&1), "{:?}", report.skipped_by_kind);
 }

@@ -636,6 +636,15 @@ fn common_writer_mistakes_are_tolerated_and_recorded() {
     let count = |needle: &str| doc.warnings.iter().filter(|w| w.contains(needle)).count();
     assert_eq!((count("negative size"), count("no Boundary")), (1, 1), "{:?}", doc.warnings);
 
+    // An image or composite object with no resource: nothing to draw, left out.
+    let empty = r#"<ImageObject Boundary="0 0 1 1"/><CompositeObject Boundary="0 0 1 1"/><PathObject Boundary="0 0 1 1"/>"#;
+    let doc = parse(&with(page0, &page(empty))).unwrap();
+    assert_eq!(doc.pages[0].content.layers[0].objects.len(), 1);
+    assert!(doc.warnings.iter().any(|w| w.contains("an <ImageObject> without ResourceID is left out")), "{:?}", doc.warnings);
+    assert!(doc.warnings.iter().any(|w| w.contains("an <CompositeObject> without ResourceID is left out")), "{:?}", doc.warnings);
+    // A malformed ResourceID is still an error.
+    assert!(invalid(&with(page0, &page(r#"<ImageObject Boundary="0 0 1 1" ResourceID="x"/>"#))).contains("ResourceID"));
+
     // A resource file the document lists but the package lacks: its fonts are undefined.
     let mut files = sample_files();
     files.retain(|(n, _)| n != "Doc_0/PublicRes.xml");
@@ -655,4 +664,27 @@ fn common_writer_mistakes_are_tolerated_and_recorded() {
     let doc = parse(&with("Doc_0/Pages/Page_1/Content.xml", none)).unwrap();
     assert_eq!(doc.pages[1].area.physical, OfdBox { x: 0.0, y: 0.0, w: 210.0, h: 297.0 });
     assert!(doc.warnings.iter().any(|w| w.contains("has no <PhysicalBox> and is not used")), "{:?}", doc.warnings);
+}
+
+#[test]
+fn reads_composite_units() {
+    let res = r#"<Res><CompositeGraphicUnits><CompositeGraphicUnit ID="40" Width="20" Height="10"><Thumbnail>1</Thumbnail><Content>
+<PathObject Boundary="0 0 20 10"><AbbreviatedData>M 0 0 L 20 10</AbbreviatedData></PathObject>
+<TextObject Boundary="0 0 5 5" Font="99" Size="3"><TextCode>x</TextCode></TextObject></Content></CompositeGraphicUnit></CompositeGraphicUnits></Res>"#;
+    let body = r#"<CompositeObject Boundary="1 2 3 4" ResourceID="40"/><CompositeObject Boundary="1 2 3 4" ResourceID="41"/>"#;
+    let files: Vec<(String, String)> = sample_files()
+        .into_iter()
+        .map(|(n, d)| match n.as_str() {
+            "Doc_0/DocumentRes.xml" => (n, res.to_string()),
+            "Doc_0/Pages/Page_0/Content.xml" => (n, page(body)),
+            _ => (n, d),
+        })
+        .collect();
+    let doc = parse(&build(&files)).unwrap();
+    let unit = &doc.resources.composites[&40];
+    assert_eq!((unit.width, unit.height, unit.objects.len()), (20.0, 10.0, 2));
+    // References inside units are checked too, and so are the units objects place.
+    assert!(doc.warnings.iter().any(|w| w.contains("font 99 is used but not defined")), "{:?}", doc.warnings);
+    assert!(doc.warnings.iter().any(|w| w.contains("composite graphic unit 41 is used but not defined")), "{:?}", doc.warnings);
+    assert!(!doc.warnings.iter().any(|w| w.contains("not read yet")), "{:?}", doc.warnings);
 }
