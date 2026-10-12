@@ -49,7 +49,11 @@ Every input is untrusted (`AGENTS.md` §4): no `unwrap`/`expect`/`panic` outside
 offsets in the ZIP reader, numbers must be finite and within ±10⁹, arrays and `g` expansions are
 capped (`Limits::max_numbers`; a `DeltaX` keeps only the steps its text needs), XML parts are
 size- and node-bounded with DTDs refused, page blocks nest at most `Limits::max_depth`, and
-`..` can't leave the package. `parse_with_limits` is the fuzzing entry point; the tests include
+`..` can't leave the package. Document-wide budgets bound what a small file can make the reader
+hold: XML read in total (`max_xml_total`, counting a content file shared by many pages once per
+page), objects (`max_objects`), the model's memory (`max_model_bytes`) and text characters
+(`max_text_chars`). `parse_package` reads from a package the caller opened, so the images and
+fonts it reads afterwards share one unpacking budget. `parse_with_limits` is the fuzzing entry point; the tests include
 property tests that damage packages, XML and path data at random.
 
 ## Not yet (phase 2 and later)

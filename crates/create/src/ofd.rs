@@ -10,6 +10,8 @@
 //!   or a non-embedded Adobe-GB1 font (`STSong-Light`) for Chinese, which readers substitute.
 //!   No font file is added: only fonts the OFD file itself carries are embedded.
 //!
+//! Template pages are written once each, as form XObjects that every page using them draws.
+//!
 //! What isn't drawn (composite units, shadings, JBIG2 and other undecodable images, clipping) is
 //! counted in [`OfdReport::skipped`]. Signatures and seals are not carried over or checked.
 
@@ -19,7 +21,8 @@ use std::fmt::Write as _;
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
 use pdfcraft_fonts::{helvetica_width, win_ansi, win_ansi_encodable};
 use pdfcraft_ofd::{
-    Color, ColorSpaceKind, FillRule, Graphic, LayerKind, Matrix, Object as Item, PageContent, PathCmd, Resources, TextObject, ZOrder, zip::Package,
+    Color, ColorSpaceKind, FillRule, Graphic, LayerKind, Matrix, Object as Item, PageContent, PathCmd, Resources, TemplatePage, TextObject, ZOrder,
+    zip::Package,
 };
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider, instance::LocationRef, instance::Size};
@@ -41,8 +44,10 @@ pub struct OfdReport {
 /// Convert an OFD file to a new PDF document. Errors when the file can't be read at all.
 pub fn from_ofd(bytes: &[u8]) -> Result<(Document, OfdReport), CreateError> {
     let bad = |e: pdfcraft_ofd::OfdError| CreateError::Invalid(e.to_string());
-    let model = pdfcraft_ofd::parse(bytes).map_err(bad)?;
-    let pkg = Package::open(bytes, &pdfcraft_ofd::Limits::default()).map_err(bad)?;
+    // One package for the model, the images and the fonts: one unpacking budget.
+    let limits = pdfcraft_ofd::Limits::default();
+    let pkg = Package::open(bytes, &limits).map_err(bad)?;
+    let model = pdfcraft_ofd::parse_package(&pkg, &limits).map_err(bad)?;
     let mut w = Writer {
         doc: Document::new_empty(),
         pkg: &pkg,
@@ -52,8 +57,13 @@ pub fn from_ofd(bytes: &[u8]) -> Result<(Document, OfdReport), CreateError> {
         standard: HashMap::new(),
         images: HashMap::new(),
         states: HashMap::new(),
+        forms: HashMap::new(),
         report: OfdReport { signed: model.signatures.is_some(), notes: model.warnings.clone(), ..OfdReport::default() },
     };
+    let mut templates: HashMap<u32, &TemplatePage> = HashMap::new();
+    for tp in &model.templates {
+        templates.entry(tp.id).or_insert(tp);
+    }
     for page in &model.pages {
         let (pw, ph) = page.area.physical.size_pt();
         if !(1.0..=MAX_SIDE).contains(&pw) || !(1.0..=MAX_SIDE).contains(&ph) {
@@ -61,22 +71,21 @@ pub fn from_ofd(bytes: &[u8]) -> Result<(Document, OfdReport), CreateError> {
         }
         let mut out = PageOut::default();
         out.ops.push_str(&cm(&page.area.physical.page_to_pdf()));
-        let templates = &model.templates;
-        let template = |z: ZOrder| -> Vec<&PageContent> {
+        let template = |z: ZOrder| -> Vec<&TemplatePage> {
             page.templates
                 .iter()
                 .filter_map(|t| {
-                    let tp = templates.iter().find(|tp| tp.id == t.template_id)?;
-                    (t.z_order.unwrap_or(tp.z_order) == z).then_some(&tp.content)
+                    let tp = *templates.get(&t.template_id)?;
+                    (t.z_order.unwrap_or(tp.z_order) == z).then_some(tp)
                 })
                 .collect()
         };
-        for content in template(ZOrder::Background) {
-            w.content(content, &mut out);
+        for tp in template(ZOrder::Background) {
+            w.template(tp, &mut out);
         }
         w.content(&page.content, &mut out);
-        for content in template(ZOrder::Foreground) {
-            w.content(content, &mut out);
+        for tp in template(ZOrder::Foreground) {
+            w.template(tp, &mut out);
         }
         let resources = out.resources();
         add_page(&mut w.doc, pw, ph, resources, Some(out.ops.into_bytes()))?;
@@ -138,6 +147,8 @@ struct Writer<'a, 'b> {
     standard: HashMap<&'static str, ObjRef>,
     images: HashMap<u32, Option<ObjRef>>,
     states: HashMap<(u8, u8), ObjRef>,
+    /// Template pages, each written once as a form XObject that every page using it draws.
+    forms: HashMap<u32, ObjRef>,
     report: OfdReport,
 }
 
@@ -178,6 +189,33 @@ impl Writer<'_, '_> {
         if !self.report.notes.contains(&note) {
             self.report.notes.push(note);
         }
+    }
+
+    /// Draw a template page: a form XObject written the first time it is used, so a template on
+    /// many pages costs its content once (and a small file can't multiply it by its page count).
+    fn template(&mut self, tp: &TemplatePage, out: &mut PageOut) {
+        let r = match self.forms.get(&tp.id) {
+            Some(r) => *r,
+            None => {
+                let mut form = PageOut::default();
+                self.content(&tp.content, &mut form);
+                let mut d = Dict::new();
+                d.set(b"Type".to_vec(), Object::name("XObject"));
+                d.set(b"Subtype".to_vec(), Object::name("Form"));
+                // Template content is in the page's OFD space (mm); the page clips it.
+                d.set(
+                    b"BBox".to_vec(),
+                    Object::Array(vec![Object::Real(-MAX_SIDE), Object::Real(-MAX_SIDE), Object::Real(MAX_SIDE), Object::Real(MAX_SIDE)]),
+                );
+                d.set(b"Resources".to_vec(), Object::Dict(form.resources()));
+                let r = self.doc.add(Object::Stream(Stream::flate(d, form.ops.as_bytes())));
+                self.forms.insert(tp.id, r);
+                r
+            }
+        };
+        let name = format!("Tpl{}", tp.id);
+        out.xobjects.insert(name.clone(), r);
+        let _ = writeln!(out.ops, "/{name} Do");
     }
 
     fn content(&mut self, content: &PageContent, out: &mut PageOut) {

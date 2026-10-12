@@ -522,3 +522,60 @@ proptest! {
         let _ = values::deltas(&s, 50, &l);
     }
 }
+
+/// `pages` pages that all point at one content file holding `body`.
+fn shared_pages(pages: usize, body: &str) -> Vec<u8> {
+    let mut files = sample_files();
+    files.retain(|(n, _)| !n.contains("Pages/") && n != "Doc_0/Document.xml");
+    let doc = (0..pages).fold(document_xml(pages), |d, i| d.replace(&format!("Pages/Page_{i}/Content.xml"), "Pages/Shared/Content.xml"));
+    files.push(("Doc_0/Document.xml".into(), doc));
+    files.push(("Doc_0/Pages/Shared/Content.xml".into(), page(body)));
+    build(&files)
+}
+
+#[test]
+fn a_content_file_shared_by_many_pages_counts_once_per_page() {
+    // A few kilobytes of packed XML read for every page: each read counts, so a small file
+    // can't make the reader hold the same content thousands of times over.
+    let body = r#"<PathObject Boundary="0 0 1 1"><AbbreviatedData>M 0 0 L 1 1 L 2 2 C</AbbreviatedData></PathObject>"#.repeat(40);
+    let bytes = shared_pages(60, &body);
+    assert_eq!(parse(&bytes).unwrap().pages.len(), 60);
+    let xml = Limits { max_xml_total: 100_000, ..Limits::default() };
+    assert!(matches!(parse_with_limits(&bytes, &xml), Err(OfdError::Limit(m)) if m.contains("bytes of XML")));
+    let objects = Limits { max_objects: 1_000, ..Limits::default() };
+    assert!(matches!(parse_with_limits(&bytes, &objects), Err(OfdError::Limit(m)) if m.contains("1000 objects")));
+    let memory = Limits { max_model_bytes: 200_000, ..Limits::default() };
+    assert!(matches!(parse_with_limits(&bytes, &memory), Err(OfdError::Limit(m)) if m.contains("to hold")));
+}
+
+#[test]
+fn text_and_path_data_count_against_the_document() {
+    // One path of many commands: small in XML, large in the model.
+    let path = format!(r#"<PathObject Boundary="0 0 1 1"><AbbreviatedData>M 0 0{}</AbbreviatedData></PathObject>"#, " C".repeat(5_000));
+    let bytes = with("Doc_0/Pages/Page_0/Content.xml", &page(&path));
+    assert!(parse(&bytes).is_ok());
+    let memory = Limits { max_model_bytes: 100_000, ..Limits::default() };
+    assert!(matches!(parse_with_limits(&bytes, &memory), Err(OfdError::Limit(m)) if m.contains("to hold")));
+    // Text becomes one positioned glyph per character.
+    let text = format!(r#"<TextObject Boundary="0 0 1 1" Font="4" Size="3"><TextCode X="0" Y="0">{}</TextCode></TextObject>"#, "a".repeat(500));
+    let bytes = with("Doc_0/Pages/Page_0/Content.xml", &page(&text));
+    assert!(parse(&bytes).is_ok());
+    let chars = Limits { max_text_chars: 400, ..Limits::default() };
+    assert!(matches!(parse_with_limits(&bytes, &chars), Err(OfdError::Limit(m)) if m.contains("characters")));
+}
+
+#[test]
+fn parse_package_shares_the_unpacking_budget() {
+    let bytes = sample();
+    let limits = Limits::default();
+    let pkg = zip::Package::open(&bytes, &limits).unwrap();
+    assert_eq!(parse_package(&pkg, &limits).unwrap(), parse(&bytes).unwrap());
+    // Exactly the package's size: the reader unpacks every XML part once, and what it unpacked
+    // stays counted for the caller's own reads.
+    let total = sample_files().iter().map(|(_, d)| d.len() as u64).sum::<u64>() + b"not really a font".len() as u64 + 8;
+    let tight = Limits { max_total_size: total, ..Limits::default() };
+    let pkg = zip::Package::open(&bytes, &tight).unwrap();
+    parse_package(&pkg, &tight).unwrap();
+    assert!(matches!(pkg.read("Doc_0/Document.xml"), Err(OfdError::Limit(_))));
+    assert!(zip::Package::open(&bytes, &tight).unwrap().read("Doc_0/Document.xml").is_ok());
+}

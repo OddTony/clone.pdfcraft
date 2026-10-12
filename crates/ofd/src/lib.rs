@@ -55,8 +55,10 @@ pub enum OfdError {
     Invalid { part: String, msg: String },
 }
 
-/// Bounds on what a file may make the reader do. The defaults are far above real documents
-/// (an e-invoice is a few dozen entries and kilobytes).
+/// Bounds on what a file may make the reader do. The defaults are far above real documents (an
+/// e-invoice is a few dozen entries and kilobytes; the largest file in the ofdrw test set has
+/// 2 MB of XML, 25,000 nodes in one part and 1,815 objects) while keeping the model of a small
+/// but hostile file to a few hundred megabytes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Limits {
     /// ZIP entries in the package.
@@ -69,6 +71,9 @@ pub struct Limits {
     pub max_ratio: u64,
     /// Size of one XML part, in bytes.
     pub max_xml_size: u64,
+    /// XML read for the whole document, in bytes. A part read again (pages may share one
+    /// content file) counts again.
+    pub max_xml_total: u64,
     /// Elements, attributes and text nodes in one XML part.
     pub max_xml_nodes: u32,
     pub max_pages: usize,
@@ -76,6 +81,14 @@ pub struct Limits {
     pub max_depth: usize,
     /// Numbers in one attribute (an array, a path, a `DeltaX` after `g` expansion).
     pub max_numbers: usize,
+    /// Page objects in the whole document (pages and templates, page blocks included).
+    pub max_objects: usize,
+    /// Memory the whole document's page content takes in the model, in bytes (objects, path
+    /// commands, colours, glyph positions, text).
+    pub max_model_bytes: usize,
+    /// Characters in all the document's `TextCode`s. Each becomes a positioned glyph when
+    /// converted, so this bounds the converter's output too.
+    pub max_text_chars: usize,
 }
 
 impl Default for Limits {
@@ -86,10 +99,14 @@ impl Default for Limits {
             max_total_size: 1 << 30,
             max_ratio: 200,
             max_xml_size: 64 << 20,
-            max_xml_nodes: 8_000_000,
+            max_xml_total: 256 << 20,
+            max_xml_nodes: 2_000_000,
             max_pages: 20_000,
             max_depth: 64,
             max_numbers: 1_000_000,
+            max_objects: 1_000_000,
+            max_model_bytes: 256 << 20,
+            max_text_chars: 4_000_000,
         }
     }
 }
@@ -110,4 +127,11 @@ pub fn parse(bytes: &[u8]) -> Result<OfdDocument, OfdError> {
 pub fn parse_with_limits(bytes: &[u8], limits: &Limits) -> Result<OfdDocument, OfdError> {
     let pkg = zip::Package::open(bytes, limits)?;
     parse::document(&pkg, limits)
+}
+
+/// Read the OFD document in a package opened with [`zip::Package::open`]. A caller that goes on
+/// to read images and fonts from the same package shares one unpacking budget
+/// ([`Limits::max_total_size`]) with the reader.
+pub fn parse_package(pkg: &zip::Package, limits: &Limits) -> Result<OfdDocument, OfdError> {
+    parse::document(pkg, limits)
 }

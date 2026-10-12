@@ -140,6 +140,11 @@ struct Reader<'p, 'b> {
     /// Resource files already read (pages often share one).
     res_read: std::collections::HashSet<String>,
     warnings: Vec<String>,
+    /// What the document has used so far of the document-wide limits.
+    xml_read: u64,
+    objects: usize,
+    model_bytes: usize,
+    text_chars: usize,
 }
 
 pub(crate) fn document(pkg: &Package, limits: &Limits) -> Result<OfdDocument, OfdError> {
@@ -147,14 +152,24 @@ pub(crate) fn document(pkg: &Package, limits: &Limits) -> Result<OfdDocument, Of
     if !pkg.contains(entry) {
         return Err(OfdError::NotOfd("the ZIP package has no OFD.xml at its root".into()));
     }
-    let src = xml_text(pkg, entry, limits)?;
+    let mut r = Reader {
+        pkg,
+        limits: limits.clone(),
+        resources: Resources::default(),
+        res_read: Default::default(),
+        warnings: Vec::new(),
+        xml_read: 0,
+        objects: 0,
+        model_bytes: 0,
+        text_chars: 0,
+    };
+    let src = r.read_xml(entry)?;
     let doc = xml(entry, &src, limits)?;
     let part = Part { name: entry.into(), limits };
     let root = doc.root_element();
     if !is(&root, "OFD") {
         return Err(part.err(format!("the root element is <{}>, not <OFD>", root.tag_name().name())));
     }
-    let mut r = Reader { pkg, limits: limits.clone(), resources: Resources::default(), res_read: Default::default(), warnings: Vec::new() };
     let bodies: Vec<Node> = children(&root, "DocBody").collect();
     let body = bodies.first().ok_or_else(|| part.err("there is no <DocBody>"))?;
     if bodies.len() > 1 {
@@ -194,8 +209,36 @@ pub(crate) fn document(pkg: &Package, limits: &Limits) -> Result<OfdDocument, Of
 type DocParts = (Option<PageArea>, Vec<TemplatePage>, Vec<Page>);
 
 impl Reader<'_, '_> {
+    /// The text of an XML part, counted against [`Limits::max_xml_total`].
+    fn read_xml(&mut self, name: &str) -> Result<String, OfdError> {
+        let src = xml_text(self.pkg, name, &self.limits)?;
+        self.xml_read = self.xml_read.saturating_add(src.len() as u64);
+        if self.xml_read > self.limits.max_xml_total {
+            return Err(OfdError::Limit(format!("the document has more than {} bytes of XML to read", self.limits.max_xml_total)));
+        }
+        Ok(src)
+    }
+
+    /// Count what the model keeps against the document-wide limits.
+    fn charge(&mut self, part: &Part, objects: usize, bytes: usize, chars: usize) -> Result<(), OfdError> {
+        self.objects = self.objects.saturating_add(objects);
+        self.model_bytes = self.model_bytes.saturating_add(bytes);
+        self.text_chars = self.text_chars.saturating_add(chars);
+        let l = &self.limits;
+        if self.objects > l.max_objects {
+            return Err(OfdError::Limit(format!("{}: the document has more than {} objects", part.name, l.max_objects)));
+        }
+        if self.model_bytes > l.max_model_bytes {
+            return Err(OfdError::Limit(format!("{}: the document's content takes more than {} bytes to hold", part.name, l.max_model_bytes)));
+        }
+        if self.text_chars > l.max_text_chars {
+            return Err(OfdError::Limit(format!("{}: the document has more than {} characters of text", part.name, l.max_text_chars)));
+        }
+        Ok(())
+    }
+
     fn doc_xml(&mut self, path: &str) -> Result<DocParts, OfdError> {
-        let src = xml_text(self.pkg, path, &self.limits)?;
+        let src = self.read_xml(path)?;
         let doc = xml(path, &src, &self.limits)?;
         let limits = self.limits.clone();
         let part = Part { name: path.into(), limits: &limits };
@@ -246,7 +289,7 @@ impl Reader<'_, '_> {
         if !self.res_read.insert(path.to_string()) {
             return Ok(());
         }
-        let src = xml_text(self.pkg, path, &self.limits)?;
+        let src = self.read_xml(path)?;
         let doc = xml(path, &src, &self.limits)?;
         let limits = self.limits.clone();
         let part = Part { name: path.into(), limits: &limits };
@@ -341,7 +384,7 @@ impl Reader<'_, '_> {
     }
 
     fn page_with_templates(&mut self, path: &str) -> Result<(PageContent, Vec<TemplateRef>), OfdError> {
-        let src = xml_text(self.pkg, path, &self.limits)?;
+        let src = self.read_xml(path)?;
         let doc = xml(path, &src, &self.limits)?;
         let limits = self.limits.clone();
         let part = Part { name: path.into(), limits: &limits };
@@ -401,6 +444,7 @@ impl Reader<'_, '_> {
                 "PageBlock" => Object::Block(PageBlock { id: part.id(&n, "ID")?, objects: self.objects(part, &n, depth + 1)? }),
                 _ => continue,
             };
+            self.charge(part, 1, size_of::<Object>(), 0)?;
             out.push(obj);
         }
         Ok(out)
@@ -409,6 +453,7 @@ impl Reader<'_, '_> {
     fn color(&mut self, part: &Part, node: &Node, name: &str) -> Result<Option<Color>, OfdError> {
         let Some(c) = child(node, name) else { return Ok(None) };
         let value = c.attribute("Value").map(|v| values::color_value(v, part.limits).map_err(|e| part.at(&c, e))).transpose()?;
+        self.charge(part, 0, size_of::<Color>().saturating_add(value.as_ref().map_or(0, Vec::len).saturating_mul(size_of::<f64>())), 0)?;
         let shading = c.children().any(|k| k.is_element());
         if shading {
             self.warnings.push(format!("{}: a pattern or shading colour is not read yet", part.name));
@@ -424,6 +469,8 @@ impl Reader<'_, '_> {
 
     fn path_object(&mut self, part: &Part, n: &Node) -> Result<PathObject, OfdError> {
         let data = child(n, "AbbreviatedData").map(|d| text(&d)).unwrap_or_default();
+        let path = values::path(&data, part.limits).map_err(|e| part.at(n, e))?;
+        self.charge(part, 0, path.len().saturating_mul(size_of::<PathCmd>()), 0)?;
         Ok(PathObject {
             graphic: graphic(part, n)?,
             stroke: part.flag(n, "Stroke", true)?,
@@ -435,7 +482,7 @@ impl Reader<'_, '_> {
             },
             fill_color: self.color(part, n, "FillColor")?,
             stroke_color: self.color(part, n, "StrokeColor")?,
-            path: values::path(&data, part.limits).map_err(|e| part.at(n, e))?,
+            path,
         })
     }
 
@@ -451,6 +498,7 @@ impl Reader<'_, '_> {
                 }
                 list.push(g.parse::<u32>().map_err(|_| part.at(&t, format!("glyph {g:?} is not a glyph index")))?);
             }
+            self.charge(part, 0, size_of::<CgTransform>().saturating_add(list.len().saturating_mul(size_of::<u32>())), 0)?;
             cg_transforms.push(CgTransform {
                 code_position: part.int(&t, "CodePosition", 0u32)?,
                 code_count: part.int(&t, "CodeCount", 1u32)?,
@@ -469,7 +517,11 @@ impl Reader<'_, '_> {
                     .transpose()
                     .map(Option::unwrap_or_default)
             };
-            codes.push(TextCode { x: part.num(&c, "X")?, y: part.num(&c, "Y")?, delta_x: delta("DeltaX")?, delta_y: delta("DeltaY")?, text });
+            let (delta_x, delta_y) = (delta("DeltaX")?, delta("DeltaY")?);
+            let bytes =
+                size_of::<TextCode>().saturating_add(text.len()).saturating_add((delta_x.len() + delta_y.len()).saturating_mul(size_of::<f64>()));
+            self.charge(part, 0, bytes, needed.saturating_add(1))?;
+            codes.push(TextCode { x: part.num(&c, "X")?, y: part.num(&c, "Y")?, delta_x, delta_y, text });
         }
         Ok(TextObject {
             graphic: graphic(part, n)?,

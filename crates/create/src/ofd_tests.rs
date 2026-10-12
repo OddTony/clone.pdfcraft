@@ -80,14 +80,21 @@ fn package(pages: &[&str], signed: bool) -> Vec<u8> {
 
 /// `font` is the file behind font 5 (an embedded OFD font).
 fn package_with_font(pages: &[&str], signed: bool, font: &[u8]) -> Vec<u8> {
+    package_full(pages, signed, font, &[])
+}
+
+/// `templates` are (ID, z-order, body) template pages.
+fn package_full(pages: &[&str], signed: bool, font: &[u8], templates: &[(u32, &str, &str)]) -> Vec<u8> {
     let signatures = if signed { "<ofd:Signatures>Doc_0/Signs/Signatures.xml</ofd:Signatures>" } else { "" };
     let ofd = format!(
         r#"<ofd:OFD {NS} Version="1.0" DocType="OFD"><ofd:DocBody><ofd:DocInfo><ofd:Title>Test</ofd:Title></ofd:DocInfo><ofd:DocRoot>Doc_0/Document.xml</ofd:DocRoot>{signatures}</ofd:DocBody></ofd:OFD>"#
     );
     let list: String = (0..pages.len()).map(|i| format!(r#"<ofd:Page ID="{}" BaseLoc="Pages/Page_{i}/Content.xml"/>"#, 100 + i)).collect();
+    let tpls: String =
+        templates.iter().map(|(id, z, _)| format!(r#"<ofd:TemplatePage ID="{id}" ZOrder="{z}" BaseLoc="Tpls/Tpl_{id}/Content.xml"/>"#)).collect();
     let document = format!(
         r#"<ofd:Document {NS}><ofd:CommonData><ofd:MaxUnitID>50</ofd:MaxUnitID><ofd:PageArea><ofd:PhysicalBox>0 0 210 297</ofd:PhysicalBox></ofd:PageArea>
-<ofd:PublicRes>PublicRes.xml</ofd:PublicRes></ofd:CommonData><ofd:Pages>{list}</ofd:Pages></ofd:Document>"#
+<ofd:PublicRes>PublicRes.xml</ofd:PublicRes>{tpls}</ofd:CommonData><ofd:Pages>{list}</ofd:Pages></ofd:Document>"#
     );
     let res = format!(
         r#"<ofd:Res {NS} BaseLoc="Res"><ofd:Fonts><ofd:Font ID="4" FontName="宋体" FamilyName="宋体"/><ofd:Font ID="5" FontName="Fake"><ofd:FontFile>fake.ttf</ofd:FontFile></ofd:Font></ofd:Fonts>
@@ -104,6 +111,9 @@ fn package_with_font(pages: &[&str], signed: bool, font: &[u8]) -> Vec<u8> {
     ];
     for (i, body) in pages.iter().enumerate() {
         files.push((format!("Doc_0/Pages/Page_{i}/Content.xml"), body.as_bytes().to_vec()));
+    }
+    for (id, _, body) in templates {
+        files.push((format!("Doc_0/Tpls/Tpl_{id}/Content.xml"), page(body).into_bytes()));
     }
     let refs: Vec<(&str, Vec<u8>)> = files.iter().map(|(n, d)| (n.as_str(), d.clone())).collect();
     zip(&refs)
@@ -260,4 +270,33 @@ fn files_that_are_not_ofd_are_errors_not_panics() {
 #[test]
 fn source_kind_recognises_ofd() {
     assert_eq!(crate::source_kind("a.ofd", &package(&[&page("")], false)), Some(crate::SourceKind::Ofd));
+}
+
+#[test]
+fn a_template_is_written_once_for_all_its_pages() {
+    // A template used by every page is one form XObject, not a copy per page: a small file with
+    // a large template and many pages must not multiply the template by its page count.
+    let background = r#"<ofd:PathObject ID="61" Boundary="0 0 10 10"><ofd:AbbreviatedData>M 0 0 L 77 0</ofd:AbbreviatedData></ofd:PathObject>"#;
+    let foreground = r#"<ofd:PathObject ID="63" Boundary="0 0 10 10"><ofd:AbbreviatedData>M 0 0 L 88 0</ofd:AbbreviatedData></ofd:PathObject>"#;
+    let body = format!(
+        r#"<ofd:Page {NS}><ofd:Template TemplateID="60"/><ofd:Template TemplateID="62"/><ofd:Content><ofd:Layer ID="10">{PATH}</ofd:Layer></ofd:Content></ofd:Page>"#
+    );
+    let pages: Vec<&str> = vec![body.as_str(); 30];
+    let bytes = package_full(&pages, false, b"not a font", &[(60, "Background", background), (62, "Foreground", foreground)]);
+    let (pages, report, doc) = convert(&bytes);
+    assert_eq!(report.pages, 30);
+    let mut forms = Vec::new();
+    for (dict, ops) in &pages {
+        assert!(!ops.contains("77 0 l") && !ops.contains("88 0 l"), "the template is not copied into the page: {ops}");
+        let (bg, own, fg) = (ops.find("/Tpl60 Do").unwrap(), ops.find("50 0 l").unwrap(), ops.find("/Tpl62 Do").unwrap());
+        assert!(bg < own && own < fg, "background, page, foreground: {ops}");
+        let res = doc.resolve(dict.get(b"Resources").unwrap()).as_dict().cloned().unwrap();
+        let xobjects = doc.resolve(res.get(b"XObject").unwrap()).as_dict().cloned().unwrap();
+        forms.push((xobjects.get(b"Tpl60").unwrap().clone(), xobjects.get(b"Tpl62").unwrap().clone()));
+    }
+    assert!(forms.windows(2).all(|w| w[0] == w[1]), "every page draws the same two forms");
+    let form = doc.resolve(&forms[0].0);
+    let Object::Stream(form) = &*form else { panic!("the template is not a stream") };
+    assert_eq!(form.dict.get(b"Subtype").and_then(Object::as_name), Some(&b"Form"[..]));
+    assert!(String::from_utf8_lossy(&form.decoded().unwrap()).contains("77 0 l"));
 }
