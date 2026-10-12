@@ -3631,6 +3631,7 @@ dependencies = [
  "png 0.18.1",
  "serde_json",
  "sha2",
+ "tempfile",
 ]
 
 [[package]]
