@@ -38,6 +38,15 @@ pub(crate) fn ofd_box(s: &str, limits: &Limits) -> Result<OfdBox, String> {
     }
 }
 
+/// An object's `Boundary`: like [`ofd_box`], but a negative width or height is made positive
+/// (the corner stays), and says so.
+pub(crate) fn boundary(s: &str, limits: &Limits) -> Result<(OfdBox, bool), String> {
+    match *numbers(s, limits)?.as_slice() {
+        [x, y, w, h] => Ok((OfdBox { x, y, w: w.abs(), h: h.abs() }, w < 0.0 || h < 0.0)),
+        _ => Err(format!("box {s:?} needs four numbers (x y width height)")),
+    }
+}
+
 /// A CTM: six numbers.
 pub(crate) fn matrix(s: &str, limits: &Limits) -> Result<Matrix, String> {
     match *numbers(s, limits)?.as_slice() {

@@ -43,7 +43,11 @@ Elements are matched by local name, so files with and without the `ofd:` prefix 
 Required things that are missing or malformed are errors naming the part; unknown elements are
 ignored; what is tolerated or not read yet (patterns and shadings, composite graphic units,
 extra `DocBody` elements, references to undefined fonts, images or templates) is listed in
-`OfdDocument::warnings`.
+`OfdDocument::warnings`, each message once. Tolerated because real writers produce them (all
+seen in the ofdrw test files): a listed resource file missing from the package (its resources
+are then undefined), an `Area` without `PhysicalBox` (its `ApplicationBox` stands in, else the
+document's size), an object without `Boundary` (its coordinates are page coordinates) and a
+`Boundary` with a negative size (the corner is kept, the size made positive).
 
 ## Robustness
 

@@ -248,7 +248,10 @@ impl Reader<'_, '_> {
         }
         let dir = dir_of(path);
         let common = child(&root, "CommonData").ok_or_else(|| part.err("there is no <CommonData>"))?;
-        let page_area = child(&common, "PageArea").map(|a| page_area(&part, &a)).transpose()?;
+        let page_area = match child(&common, "PageArea") {
+            Some(a) => self.page_area(&part, &a)?,
+            None => None,
+        };
         for kind in ["PublicRes", "DocumentRes"] {
             for res in children(&common, kind) {
                 let loc = resolve(dir, &text(&res))?;
@@ -289,7 +292,15 @@ impl Reader<'_, '_> {
         if !self.res_read.insert(path.to_string()) {
             return Ok(());
         }
-        let src = self.read_xml(path)?;
+        // Some writers list a resource file they never wrote: what it would define is then
+        // undefined (fonts fall back), as a reader would treat it.
+        let src = match self.read_xml(path) {
+            Err(OfdError::Missing(_)) => {
+                self.warn(format!("{path} is listed but missing from the package; its resources are not available"));
+                return Ok(());
+            }
+            other => other?,
+        };
         let doc = xml(path, &src, &self.limits)?;
         let limits = self.limits.clone();
         let part = Part { name: path.into(), limits: &limits };
@@ -401,7 +412,10 @@ impl Reader<'_, '_> {
             let loc = resolve(dir, &text(&res))?;
             self.res_file(&loc)?;
         }
-        let area = child(&root, "Area").map(|a| page_area(&part, &a)).transpose()?;
+        let area = match child(&root, "Area") {
+            Some(a) => self.page_area(&part, &a)?,
+            None => None,
+        };
         let mut layers = Vec::new();
         if let Some(content) = child(&root, "Content") {
             for l in children(&content, "Layer") {
@@ -456,7 +470,7 @@ impl Reader<'_, '_> {
         self.charge(part, 0, size_of::<Color>().saturating_add(value.as_ref().map_or(0, Vec::len).saturating_mul(size_of::<f64>())), 0)?;
         let shading = c.children().any(|k| k.is_element());
         if shading {
-            self.warnings.push(format!("{}: a pattern or shading colour is not read yet", part.name));
+            self.warn(format!("{}: a pattern or shading colour is not read yet", part.name));
         }
         Ok(Some(Color {
             value: value.unwrap_or_default(),
@@ -472,7 +486,7 @@ impl Reader<'_, '_> {
         let data = child(n, "AbbreviatedData").map(|d| text(&d)).unwrap_or_default();
         let path = values::path(&data, part.limits).map_err(|e| part.at(n, e))?;
         self.charge(part, 0, path.len().saturating_mul(size_of::<PathCmd>()), 0)?;
-        let graphic = if clips { self.graphic(part, n)? } else { graphic(part, n)? };
+        let graphic = if clips { self.graphic(part, n)? } else { self.plain_graphic(part, n)? };
         Ok(PathObject {
             graphic,
             stroke: part.flag(n, "Stroke", true)?,
@@ -543,9 +557,60 @@ impl Reader<'_, '_> {
         })
     }
 
+    /// Record a warning once (writers repeat the same mistake on every object).
+    fn warn(&mut self, msg: String) {
+        if !self.warnings.contains(&msg) {
+            self.warnings.push(msg);
+        }
+    }
+
+    /// A page area. Without a `PhysicalBox` (some writers give only an `ApplicationBox`), the
+    /// application box stands in; with neither, the area is left out, so the page falls back to
+    /// the document's size.
+    fn page_area(&mut self, part: &Part, node: &Node) -> Result<Option<PageArea>, OfdError> {
+        let get = |name: &str| child(node, name).map(|b| part.boxed(&b, &text(&b))).transpose();
+        let application = get("ApplicationBox")?;
+        let physical = match (get("PhysicalBox")?, application) {
+            (Some(p), _) => p,
+            (None, Some(a)) => {
+                self.warn(format!("{}: <{}> has no <PhysicalBox>; its <ApplicationBox> is used", part.name, node.tag_name().name()));
+                a
+            }
+            (None, None) => {
+                self.warn(format!("{}: <{}> has no <PhysicalBox> and is not used", part.name, node.tag_name().name()));
+                return Ok(None);
+            }
+        };
+        if physical.w <= 0.0 || physical.h <= 0.0 {
+            return Err(part.at(node, "the page has no area (zero width or height)".into()));
+        }
+        Ok(Some(PageArea { physical, application, content: get("ContentBox")?, bleed: get("BleedBox")? }))
+    }
+
+    /// An object's common attributes. A `Boundary` that is missing (its object's coordinates
+    /// are then page coordinates) or has a negative size (its corner is kept and the size taken
+    /// as positive: text written leftwards from it, as some writers do) is tolerated and
+    /// recorded.
+    fn plain_graphic(&mut self, part: &Part, n: &Node) -> Result<Graphic, OfdError> {
+        let boundary = match n.attribute("Boundary") {
+            None => {
+                self.warn(format!("{}: <{}> has no Boundary; its position is taken from the page's corner", part.name, n.tag_name().name()));
+                OfdBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 }
+            }
+            Some(s) => {
+                let (b, negative) = values::boundary(s, part.limits).map_err(|e| part.at(n, e))?;
+                if negative {
+                    self.warn(format!("{}: a Boundary with a negative size is read with its size made positive", part.name));
+                }
+                b
+            }
+        };
+        graphic(part, n, boundary)
+    }
+
     /// An object's common attributes and its `Clips`.
     fn graphic(&mut self, part: &Part, n: &Node) -> Result<Graphic, OfdError> {
-        let mut g = graphic(part, n)?;
+        let mut g = self.plain_graphic(part, n)?;
         let Some(clips) = child(n, "Clips") else { return Ok(g) };
         g.clips_follow_ctm = part.flag(&clips, "TransFlag", false)?;
         for c in children(&clips, "Clip") {
@@ -607,17 +672,7 @@ fn z_order(part: &Part, node: &Node) -> Result<Option<ZOrder>, OfdError> {
     }
 }
 
-fn page_area(part: &Part, node: &Node) -> Result<PageArea, OfdError> {
-    let get = |name: &str| child(node, name).map(|b| part.boxed(&b, &text(&b))).transpose();
-    let physical = get("PhysicalBox")?.ok_or_else(|| part.at(node, "there is no <PhysicalBox>".into()))?;
-    if physical.w <= 0.0 || physical.h <= 0.0 {
-        return Err(part.at(node, "the page has no area (zero width or height)".into()));
-    }
-    Ok(PageArea { physical, application: get("ApplicationBox")?, content: get("ContentBox")?, bleed: get("BleedBox")? })
-}
-
-fn graphic(part: &Part, n: &Node) -> Result<Graphic, OfdError> {
-    let boundary = part.boxed(n, part.required(n, "Boundary")?)?;
+fn graphic(part: &Part, n: &Node, boundary: OfdBox) -> Result<Graphic, OfdError> {
     Ok(Graphic {
         id: part.id(n, "ID")?,
         boundary,

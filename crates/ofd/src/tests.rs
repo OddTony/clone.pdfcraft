@@ -350,10 +350,11 @@ fn path_data_errors() {
 fn malformed_parts_are_errors_naming_the_part() {
     let page0 = "Doc_0/Pages/Page_0/Content.xml";
     assert!(invalid(&with(page0, "<Page><Content>")).contains(page0));
-    assert!(invalid(&with(page0, &page(r#"<PathObject ID="1"/>"#))).contains("Boundary"));
     assert!(invalid(&with(page0, &page(r#"<TextObject Boundary="0 0 1 1" Size="3"/>"#))).contains("Font"));
     assert!(invalid(&with(page0, &page(r#"<PathObject Boundary="0 0 1 NaN"/>"#))).contains("NaN"));
-    assert!(invalid(&with(page0, &page(r#"<PathObject Boundary="0 0 -1 1"/>"#))).contains("negative"));
+    // A missing or negative Boundary is tolerated (common_writer_mistakes_are_tolerated_and_recorded),
+    // a malformed one is not.
+    assert!(invalid(&with(page0, &page(r#"<PathObject Boundary="0 0 1"/>"#))).contains("four numbers"));
     assert!(invalid(&with(page0, &page(r#"<PathObject Boundary="0 0 1e20 1"/>"#))).contains("range"));
     assert!(invalid(&with(page0, &page(r#"<PathObject Boundary="0 0 1 1" Stroke="maybe"/>"#))).contains("Stroke"));
     assert!(invalid(&with(page0, &page(r#"<ImageObject Boundary="0 0 1 1" ResourceID="x"/>"#))).contains("ResourceID"));
@@ -612,4 +613,46 @@ fn reads_clips() {
     // Malformed clips are errors naming the part, like other objects.
     let bad = body.replace(r#"CTM="1 0 0 1 5 5""#, r#"CTM="1 0 0""#);
     assert!(invalid(&with("Doc_0/Pages/Page_0/Content.xml", &page(&bad))).contains("CTM"));
+}
+
+#[test]
+fn common_writer_mistakes_are_tolerated_and_recorded() {
+    let page0 = "Doc_0/Pages/Page_0/Content.xml";
+    // A Boundary with a negative width: text written leftwards from the corner. The corner stays.
+    let body = r#"<TextObject Boundary="90 58 -3 5" Font="4" Size="3"><TextCode X="-3" Y="3">批</TextCode></TextObject>
+<PathObject CTM="2 0 0 2 0 0"><AbbreviatedData>M 0 0 L 1 1</AbbreviatedData></PathObject>
+<PathObject Boundary="1 2 3 4"><AbbreviatedData>M 0 0 L 1 1</AbbreviatedData></PathObject>"#;
+    let doc = parse(&with(page0, &page(body))).unwrap();
+    let objs = &doc.pages[0].content.layers[0].objects;
+    let Object::Text(t) = &objs[0] else { panic!("{:?}", objs[0]) };
+    assert_eq!(t.graphic.boundary, OfdBox { x: 90.0, y: 58.0, w: 3.0, h: 5.0 });
+    // No Boundary: the object's own coordinates are page coordinates (through its CTM).
+    let Object::Path(p) = &objs[1] else { panic!("{:?}", objs[1]) };
+    assert_eq!(p.graphic.boundary, OfdBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 });
+    assert_eq!(p.graphic.to_page().apply(1.0, 1.0), (2.0, 2.0));
+    // Each mistake is recorded once, however often it is made.
+    let three = format!("{body}{body}{body}");
+    let doc = parse(&with(page0, &page(&three))).unwrap();
+    let count = |needle: &str| doc.warnings.iter().filter(|w| w.contains(needle)).count();
+    assert_eq!((count("negative size"), count("no Boundary")), (1, 1), "{:?}", doc.warnings);
+
+    // A resource file the document lists but the package lacks: its fonts are undefined.
+    let mut files = sample_files();
+    files.retain(|(n, _)| n != "Doc_0/PublicRes.xml");
+    let doc = parse(&build(&files)).unwrap();
+    assert!(doc.warnings.iter().any(|w| w.contains("Doc_0/PublicRes.xml is listed but missing")), "{:?}", doc.warnings);
+    assert!(doc.warnings.iter().any(|w| w.contains("font 4 is used but not defined")), "{:?}", doc.warnings);
+    // Other damage to a resource file is still an error.
+    assert!(invalid(&with("Doc_0/PublicRes.xml", "<Res>")).contains("PublicRes.xml"));
+
+    // An area with an ApplicationBox but no PhysicalBox uses the application box; with neither,
+    // the page takes the document's size.
+    let app = r#"<Page><Area><ApplicationBox>0 0 100 50</ApplicationBox></Area><Content/></Page>"#;
+    let none = r#"<Page><Area><BleedBox>0 0 100 50</BleedBox></Area><Content/></Page>"#;
+    let doc = parse(&with("Doc_0/Pages/Page_1/Content.xml", app)).unwrap();
+    assert_eq!(doc.pages[1].area.physical, OfdBox { x: 0.0, y: 0.0, w: 100.0, h: 50.0 });
+    assert!(doc.warnings.iter().any(|w| w.contains("its <ApplicationBox> is used")), "{:?}", doc.warnings);
+    let doc = parse(&with("Doc_0/Pages/Page_1/Content.xml", none)).unwrap();
+    assert_eq!(doc.pages[1].area.physical, OfdBox { x: 0.0, y: 0.0, w: 210.0, h: 297.0 });
+    assert!(doc.warnings.iter().any(|w| w.contains("has no <PhysicalBox> and is not used")), "{:?}", doc.warnings);
 }
