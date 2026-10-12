@@ -113,3 +113,21 @@ and primaries, missing ACKs/fallback, idle-client expiry and shutdown. Review
 identified environment-derived profile routing; it was replaced with the OS
 known-folder/token query, and reparse checks now precede directory creation.
 Full results and native Windows limitations are recorded in the follow-up PR draft.
+
+### Cold-process activation regression
+
+Diagnostic run [38295853595](https://github.com/mjshfrvstj-sys/printcraft/actions/runs/38295853595)
+reproduced an access violation without any sockets: the first user-protection
+round trip succeeded, its temporary COM guard was dropped, and the second provider
+activation crashed after successful COM initialization. A separate cold-process
+control using automatic Windows-binding activation completed all three cycles.
+The crash artifact contained only an empty event file, no minidump or native stack.
+
+The temporary guard is removed. The pinned `windows-core` activation machinery
+establishes a process-lived MTA usage when needed, matching its cached agile
+factory lifetimes. Per-call `CoUninitialize` can invalidate cached factory pointers,
+as [Microsoft documents](https://devblogs.microsoft.com/oldnewthing/20211105-00/?p=105878/).
+Providers and async operations remain local to the calling thread; protection,
+nonce validation, bounds, deadlines and fallback are unchanged. Cold-process
+crypto cycles and real-process startup races remain required native regressions.
+Fresh native validation is pending; no faulting instruction or module is claimed.

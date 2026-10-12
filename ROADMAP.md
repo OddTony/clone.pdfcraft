@@ -141,6 +141,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-12 (fork, M14 crypto lifetime repair):** Cold-process crypto reproduces the access violation after temporary COM teardown; automatic activation control passes. Remove the per-call COM guard to match the Windows bindings’ process-lived factory cache. Security/protocol/election unchanged; fresh native validation pending. Estimates unchanged.
+
 - **2026-10-12 (fork, M14 native IPC crash isolation):** Add cold-process crypto activation/teardown and automatic-MTA control experiments, COM result markers, and temporary Windows minidump collection. Investigating the access violation before changing production behavior; FreeBSD rerun passed and remains unchanged. Estimates unchanged.
 
 - **2026-10-12 (fork, M14 IPC CI investigation):** Capture native child-process output and exit status to diagnose the Windows startup-race regression without changing protocol guarantees or deadlines. FreeBSD viewer code is unchanged from the upstream base; an identical-commit rerun is checking the asynchronous selection failure. Candidate validation remains incomplete.

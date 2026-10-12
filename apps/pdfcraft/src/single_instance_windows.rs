@@ -9,21 +9,18 @@ use windows::Storage::Streams::IBuffer;
 pub(super) struct Protection {
     encrypt: DataProtectionProvider,
     decrypt: DataProtectionProvider,
-    // Keep the COM apartment alive through the provider calls; workers use their own guards.
-    _apartment: winsafe::guard::CoUninitializeGuard,
 }
 
 impl Protection {
     pub(super) fn new() -> io::Result<Self> {
-        #[cfg(test)]
-        eprintln!("protection: before COM initialization on {:?}", std::thread::current().id());
-        let apartment = winsafe::CoInitializeEx(winsafe::co::COINIT::MULTITHREADED).map_err(io::Error::other)?;
-        #[cfg(test)]
-        eprintln!("protection: COM result {:?}; before provider activation", apartment.hr());
+        // The windows bindings cache agile activation factories for process lifetime.
+        // Their automatic activation keeps the MTA alive with CoIncrementMTAUsage.
+        // A temporary CoInitializeEx/CoUninitialize guard can tear down the last
+        // apartment and invalidate those factories between the readiness probe
+        // and a worker's activation, even though the cached COM references remain.
         Ok(Self {
             encrypt: DataProtectionProvider::CreateOverloadExplicit(&"LOCAL=user".into()).map_err(io::Error::other)?,
             decrypt: DataProtectionProvider::new().map_err(io::Error::other)?,
-            _apartment: apartment,
         })
     }
 

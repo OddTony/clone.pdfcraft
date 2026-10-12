@@ -67,9 +67,6 @@ jobs:
         shell: pwsh
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          # Avoid rebuilding all dependencies for each native crash investigation.
-          cache-on-failure: ${{ runner.os == 'Windows' }}
 
       - name: Format
         if: runner.os == 'Linux'
@@ -78,49 +75,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      # Temporary native-crash diagnostics for the IPC cold-process regression.
-      # Minidumps are confined to the ephemeral runner and uploaded only on failure.
-      - name: Collect Windows native crashes
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'ipc-crash-dumps'
-          New-Item -ItemType Directory -Force -Path $folder | Out-Null
-          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
-          New-Item -Force -Path $key | Out-Null
-          New-ItemProperty -Force -Path $key -Name DumpFolder -PropertyType ExpandString -Value $folder | Out-Null
-          New-ItemProperty -Force -Path $key -Name DumpType -PropertyType DWord -Value 1 | Out-Null
-          New-ItemProperty -Force -Path $key -Name DumpCount -PropertyType DWord -Value 8 | Out-Null
-
       - name: Test
         if: runner.os != 'Linux'
         run: cargo test --workspace
-
-      - name: Windows crash evidence
-        if: failure() && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $folder = Join-Path $env:RUNNER_TEMP 'ipc-crash-dumps'
-          Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-60)} -ErrorAction SilentlyContinue |
-            Where-Object { $_.ProviderName -in @('Application Error', 'Windows Error Reporting') } |
-            Format-List TimeCreated, Id, Message | Out-File (Join-Path $folder 'events.txt')
-          Get-Content (Join-Path $folder 'events.txt')
-          $debugger = 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe'
-          if (Test-Path $debugger) {
-            Get-ChildItem $folder -Filter '*.dmp' | ForEach-Object {
-              & $debugger -z $_.FullName -y 'srv*https://msdl.microsoft.com/download/symbols;target\debug\deps' -c '.ecxr; k; lm; q' |
-                Out-File ($_.FullName + '.txt')
-            }
-          }
-
-      - name: Upload Windows crash evidence
-        if: failure() && runner.os == 'Windows'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: windows-ipc-crash-evidence
-          path: ${{ runner.temp }}/ipc-crash-dumps
-          if-no-files-found: warn
-          retention-days: 3
 
       - name: Test (with craft-fonts)
         if: runner.os == 'Linux'
