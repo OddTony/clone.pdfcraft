@@ -57,6 +57,10 @@ pub struct NewIdDraft {
     /// Use a Digital ID from a file: its path and password.
     pub file: String,
     pub file_password: String,
+    /// Use a cloud certificate (ICP-Brasil): the provider's API address and the credentials it
+    /// issued for PdfCraft.
+    pub cloud: bool,
+    pub provider: sign::psc::Provider,
 }
 
 impl Default for NewIdDraft {
@@ -73,6 +77,8 @@ impl Default for NewIdDraft {
             confirm: String::new(),
             file: String::new(),
             file_password: String::new(),
+            cloud: false,
+            provider: Default::default(),
         }
     }
 }
@@ -222,6 +228,32 @@ fn save_new_id_file(dir: &std::path::Path, stem: &str, p12: &[u8]) -> std::io::R
     Err(std::io::Error::new(ErrorKind::AlreadyExists, "no free file name for the digital ID"))
 }
 
+/// A cloud certificate's identity by its `psc:<provider>#<alias>` reference, from this run's
+/// session with the provider.
+#[cfg(not(target_arch = "wasm32"))]
+fn cloud_id(app: &PdfCraftApp, reference: &str) -> Result<DigitalId, String> {
+    let (provider, alias) = reference.strip_prefix("psc:").and_then(|r| r.split_once('#')).ok_or("not a cloud certificate")?;
+    let transport = app.psc_transport.clone().ok_or("cloud certificates are unavailable here")?;
+    let (session, certificates) = app.psc_sessions.iter().find(|(s, _)| s.provider.name == provider).ok_or_else(|| ended(provider))?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    if session.expires_at <= now {
+        return Err(ended(provider));
+    }
+    let (_, certificate) = certificates.iter().find(|(a, _)| a == alias).ok_or_else(|| ended(provider))?;
+    Ok(sign::psc::digital_id(session, alias, certificate.clone(), transport))
+}
+
+/// Cloud certificates sign over the network from the desktop app only.
+#[cfg(target_arch = "wasm32")]
+fn cloud_id(_app: &PdfCraftApp, reference: &str) -> Result<DigitalId, String> {
+    Err(format!("{reference}: cloud certificates are only available in the desktop app"))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn ended(provider: &str) -> String {
+    crate::i18n::fmt(tl!("The session with {provider} has ended. Sign in again from Configure a Digital ID."), &[("provider", provider)])
+}
+
 /// A Keychain identity by its `keychain:` reference.
 fn keychain_id(reference: &str) -> Result<DigitalId, String> {
     #[cfg(target_os = "macos")]
@@ -280,7 +312,17 @@ impl PdfCraftApp {
 
     /// List OS key store signing identities (after the file-based IDs).
     fn refresh_os_key_store_ids(&mut self) {
-        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:"));
+        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("psc:"));
+        // Cloud certificates of this run's sessions that haven't ended.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            for (session, certificates) in self.psc_sessions.iter().filter(|(s, _)| s.expires_at > now) {
+                for (alias, certificate) in certificates {
+                    self.digital_ids.push(entry_for(&format!("psc:{}#{alias}", session.provider.name), certificate));
+                }
+            }
+        }
         #[cfg(target_os = "macos")]
         if self.os_key_store_ids {
             match sign::keychain::identities(None) {
@@ -362,6 +404,56 @@ impl PdfCraftApp {
         Ok(self.add_digital_id(&path.to_string_lossy(), &cert))
     }
 
+    /// Configure New Digital ID ▸ Use a cloud certificate: keep the provider, open its page, and
+    /// wait (off the UI thread) for the holder's approval.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn start_cloud_sign_in(&mut self) -> Result<(), String> {
+        let provider = self.sign_draft.as_ref().map(|d| d.new_id.provider.clone()).unwrap_or_default();
+        if provider.name.trim().is_empty() || provider.base.trim().is_empty() || provider.client_id.trim().is_empty() {
+            return Err(tl!("Fill in the provider, its API address and the client ID.").to_string());
+        }
+        let transport = self.psc_transport.clone().ok_or("cloud certificates are unavailable here")?;
+        let ctx = self.egui_ctx();
+        let (url, pending) = crate::cloud_sign::start(provider.clone(), transport, move || {
+            if let Some(ctx) = &ctx {
+                ctx.request_repaint();
+            }
+        })?;
+        self.psc_providers.retain(|p| p.name != provider.name);
+        self.psc_providers.insert(0, provider);
+        self.psc_pending = Some(pending);
+        self.open_url(&url);
+        Ok(())
+    }
+
+    /// A finished cloud sign-in: keep the session and select its first certificate.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn poll_cloud_sign_in(&mut self) {
+        let Some(pending) = &self.psc_pending else { return };
+        let Ok(result) = pending.result.try_recv() else { return };
+        self.psc_pending = None;
+        match result {
+            Ok((session, certificates)) => {
+                let reference = certificates.first().map(|(alias, _)| format!("psc:{}#{alias}", session.provider.name));
+                self.psc_sessions.retain(|(s, _)| s.provider.name != session.provider.name);
+                self.psc_sessions.push((session, certificates));
+                self.refresh_os_key_store_ids();
+                let index = reference.and_then(|r| self.digital_ids.iter().position(|e| e.path == r));
+                if let Some(d) = self.sign_draft.as_mut() {
+                    d.selected = index;
+                    d.step = SignStep::Choose;
+                    d.error = None;
+                    d.new_id = NewIdDraft::default();
+                }
+            }
+            Err(e) => {
+                if let Some(d) = self.sign_draft.as_mut() {
+                    d.error = Some(e);
+                }
+            }
+        }
+    }
+
     /// Configure New Digital ID ▸ Use a Digital ID from a file.
     fn import_digital_id(&mut self) -> Result<usize, String> {
         let Some(d) = self.sign_draft.as_ref().map(|d| d.new_id.clone()) else { return Err("nothing to import".into()) };
@@ -383,7 +475,9 @@ impl PdfCraftApp {
         let Some((_, doc_id)) = self.active_ids() else { return Err("no document".into()) };
         let d = self.sign_draft.clone().ok_or("nothing to sign")?;
         let entry = d.selected.and_then(|i| self.digital_ids.get(i)).filter(|e| e.unusable.is_none()).cloned().ok_or("Choose a digital ID.")?;
-        let id = if entry.path.starts_with("keychain:") {
+        let id = if entry.path.starts_with("psc:") {
+            cloud_id(self, &entry.path)?
+        } else if entry.path.starts_with("keychain:") {
             keychain_id(&entry.path)?
         } else if entry.path.starts_with("windows:") {
             windows_id(&entry.path)?
@@ -592,7 +686,9 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 ui.painter().layout_job(job)
             };
             let name = line(&e.name, theme::semibold(13.0), name_color);
-            let store = if e.path.starts_with("keychain:") {
+            let store = if let Some(provider) = e.path.strip_prefix("psc:").and_then(|r| r.split_once('#')).map(|(p, _)| p) {
+                format!("{provider}  ·  ")
+            } else if e.path.starts_with("keychain:") {
                 tl!("Keychain  ·  ").to_string()
             } else if e.path.starts_with("windows:") {
                 tl!("Windows store  ·  ").to_string()
@@ -650,17 +746,60 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
 
 fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     title(ui, "Configure a Digital ID for Signing");
+    // A cloud sign-in that finished since the last frame.
+    #[cfg(not(target_arch = "wasm32"))]
+    app.poll_cloud_sign_in();
+    let cloud_available = app.psc_transport.is_some();
+    let first_provider = app.psc_providers.first().cloned();
+    #[cfg(not(target_arch = "wasm32"))]
+    let waiting = app.psc_pending.as_ref().map(|p| p.provider.clone());
+    #[cfg(target_arch = "wasm32")]
+    let waiting: Option<String> = None;
     let Some(d) = app.sign_draft.as_mut() else { return true };
     let mut close = false;
     let mut go = false;
     // Browse… is desktop-only.
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut browse = false;
-    widgets::radio_value(ui, &mut d.new_id.create, false, tl!("Use a Digital ID from a file"));
-    widgets::radio_value(ui, &mut d.new_id.create, true, tl!("Create a new Digital ID (self-signed, saved to a password-protected file)"));
-    ui.add_space(8.0);
     let n = &mut d.new_id;
-    if n.create {
+    if ui.add(widgets::radio(!n.create && !n.cloud, tl!("Use a Digital ID from a file"))).clicked() {
+        (n.create, n.cloud) = (false, false);
+    }
+    // Cloud certificates sign over the network from the desktop app.
+    #[cfg(not(target_arch = "wasm32"))]
+    if cloud_available && ui.add(widgets::radio(n.cloud, tl!("Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)"))).clicked() {
+        (n.create, n.cloud) = (false, true);
+        if n.provider == sign::psc::Provider::default() {
+            n.provider = first_provider
+                .clone()
+                .unwrap_or_else(|| sign::psc::Provider { redirect_uri: "http://127.0.0.1:43821/callback".into(), ..Default::default() });
+        }
+    }
+    if ui.add(widgets::radio(n.create && !n.cloud, tl!("Create a new Digital ID (self-signed, saved to a password-protected file)"))).clicked() {
+        (n.create, n.cloud) = (true, false);
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = (cloud_available, &first_provider);
+    ui.add_space(8.0);
+    if n.cloud {
+        egui::Grid::new("id-cloud").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+            for (label, value, hint, secret) in [
+                (tl!("Provider"), &mut n.provider.name, "BirdID", false),
+                (tl!("API address"), &mut n.provider.base, "https://…/v0/", false),
+                (tl!("Client ID"), &mut n.provider.client_id, "", false),
+                (tl!("Client secret"), &mut n.provider.client_secret, "", true),
+                (tl!("Redirect URI"), &mut n.provider.redirect_uri, "http://127.0.0.1:43821/callback", false),
+            ] {
+                let l = ui.label(label);
+                ui.add(crate::widgets::line(value).hint_text(hint).password(secret).desired_width(260.0)).labelled_by(l.id);
+                ui.end_row();
+            }
+        });
+        ui.label(egui::RichText::new(tl!("Your provider gives these when you register PdfCraft with it.")).small().color(t.text_muted));
+        if waiting.is_some() {
+            ui.label(egui::RichText::new(tl!("Waiting for your approval in the browser…")).color(t.accent_text));
+        }
+    } else if n.create {
         egui::Grid::new("new-id").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
             for (label, value) in [
                 (tl!("Name"), &mut n.name),
@@ -718,7 +857,7 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             d.error = None;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, if d.new_id.create { tl!("Save") } else { tl!("Continue") }, true).clicked() {
+            if widgets::pill_button(ui, if d.new_id.create && !d.new_id.cloud { tl!("Save") } else { tl!("Continue") }, true).clicked() {
                 go = true;
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
@@ -727,7 +866,16 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         });
     });
     if go {
-        let create = app.sign_draft.as_ref().is_some_and(|d| d.new_id.create);
+        let (create, cloud) = app.sign_draft.as_ref().map_or((false, false), |d| (d.new_id.create, d.new_id.cloud));
+        #[cfg(not(target_arch = "wasm32"))]
+        if cloud {
+            let started = app.start_cloud_sign_in();
+            if let Some(d) = app.sign_draft.as_mut() {
+                d.error = started.err();
+            }
+            return close;
+        }
+        let _ = cloud;
         let result = if create { app.create_digital_id() } else { app.import_digital_id() };
         let Some(d) = app.sign_draft.as_mut() else { return true };
         match result {

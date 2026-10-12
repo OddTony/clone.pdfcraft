@@ -2336,3 +2336,16 @@ animation effects	Off	Өшірулі
 	The linked PDF opened, but its named destination was not applied.	Байланысты PDF ашылды, бірақ оның аталған мақсаты қолданылмады.
 	The linked PDF opened, but its page destination was out of range.	Байланысты PDF ашылды, бірақ оның мақсатты беті ауқымнан тыс.
 	Local cross-PDF links require the desktop app	PDF файлдары арасындағы жергілікті сілтемелер үшін жұмыс үстелі қолданбасы қажет
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Бұлттық сертификатты пайдалану (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
+	Provider	Провайдер
+	API address	API мекенжайы
+	Client ID	Клиент ID-і
+	Client secret	Клиент құпиясы
+	Redirect URI	Қайта бағыттау URI-і
+	Your provider gives these when you register PdfCraft with it.	Провайдер оларды PdfCraft-ты онда тіркегенде береді.
+	Waiting for your approval in the browser…	Браузердегі мақұлдауыңыз күтілуде…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	{provider} сеансы аяқталды. «Цифрлық ID-ді баптау» арқылы қайта кіріңіз.
+	Fill in the provider, its API address and the client ID.	Провайдерді, оның API мекенжайын және клиент ID-ін толтырыңыз.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	Қайта бағыттау URI-і порты бар http://127.0.0.1 немесе http://localhost болуы керек.
+	No certificate was found with this provider.	Бұл провайдерде сертификат табылмады.
+	The provider's page didn't come back in time. Try again.	Провайдер беті уақытында оралмады. Қайталап көріңіз.

@@ -2338,3 +2338,16 @@ animation effects	Off	オフ
 	The linked PDF opened, but its named destination was not applied.	リンク先の PDF を開きましたが、名前付き移動先は適用されませんでした。
 	The linked PDF opened, but its page destination was out of range.	リンク先の PDF を開きましたが、移動先のページが範囲外です。
 	Local cross-PDF links require the desktop app	PDF 間のローカルリンクにはデスクトップアプリが必要です
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	クラウド証明書を使用 (ICP-Brasil: BirdID、VIDaaS、NeoID、SafeID…)
+	Provider	プロバイダー
+	API address	API のアドレス
+	Client ID	クライアント ID
+	Client secret	クライアントシークレット
+	Redirect URI	リダイレクト URI
+	Your provider gives these when you register PdfCraft with it.	PdfCraft をプロバイダーに登録すると提供されます。
+	Waiting for your approval in the browser…	ブラウザーでの承認を待っています…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	{provider} とのセッションが終了しました。「デジタル ID の設定」から再度サインインしてください。
+	Fill in the provider, its API address and the client ID.	プロバイダー、API のアドレス、クライアント ID を入力してください。
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	リダイレクト URI は、ポート付きの http://127.0.0.1 または http://localhost である必要があります。
+	No certificate was found with this provider.	このプロバイダーに証明書が見つかりませんでした。
+	The provider's page didn't come back in time. Try again.	プロバイダーのページが時間内に戻りませんでした。もう一度お試しください。

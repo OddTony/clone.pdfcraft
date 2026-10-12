@@ -2468,3 +2468,16 @@ animation effects	Off	Desactivados
 	The linked PDF opened, but its page destination was out of range.	El PDF vinculado se abrió, pero su página de destino está fuera de rango.
 	Local cross-PDF links require the desktop app	Los enlaces locales entre PDF requieren la aplicación de escritorio
 	The existing action will be preserved.	Se conservará la acción existente.
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Usar un certificado en la nube (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
+	Provider	Proveedor
+	API address	Dirección de la API
+	Client ID	ID de cliente
+	Client secret	Secreto de cliente
+	Redirect URI	URI de redirección
+	Your provider gives these when you register PdfCraft with it.	Su proveedor se los da cuando registra PdfCraft con él.
+	Waiting for your approval in the browser…	Esperando su aprobación en el navegador…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	La sesión con {provider} terminó. Vuelva a iniciar sesión desde Configurar un ID digital.
+	Fill in the provider, its API address and the client ID.	Complete el proveedor, la dirección de su API y el ID de cliente.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	La URI de redirección debe ser http://127.0.0.1 o http://localhost con un puerto.
+	No certificate was found with this provider.	No se encontró ningún certificado con este proveedor.
+	The provider's page didn't come back in time. Try again.	La página del proveedor no volvió a tiempo. Inténtelo de nuevo.

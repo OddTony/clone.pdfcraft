@@ -27,6 +27,8 @@ mod actions_ui;
 mod appearance;
 pub mod canvas;
 mod chrome;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod cloud_sign;
 mod combine_grid;
 mod image_pick;
 mod tags_ui;
@@ -606,6 +608,15 @@ pub struct PdfCraftApp {
     pub alt_draft: a11y_ui::AltDraft,
     /// List the OS key store's signing identities among the digital IDs (the desktop app).
     pub os_key_store_ids: bool,
+    /// ICP-Brasil cloud certificates: the HTTPS transport (the desktop app sets it), the providers
+    /// configured (kept in the settings), this run's sessions with their certificates, and a
+    /// sign-in waiting for the browser.
+    pub psc_transport: Option<std::sync::Arc<dyn pdfcraft_engine::sign::psc::Transport>>,
+    pub psc_providers: Vec<pdfcraft_engine::sign::psc::Provider>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub psc_sessions: Vec<cloud_sign::SignedIn>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub psc_pending: Option<cloud_sign::Pending>,
     pub cert_viewer: Option<sign_ui::CertViewer>,
     /// The last space audit.
     pub space_audit: Vec<pdfcraft_engine::optimize::SpaceUse>,
@@ -894,6 +905,12 @@ impl PdfCraftApp {
             a11y_skipped: Default::default(),
             alt_draft: Default::default(),
             os_key_store_ids: false,
+            psc_transport: None,
+            psc_providers: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            psc_sessions: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            psc_pending: None,
             cert_viewer: None,
             space_audit: Vec::new(),
             combine_draft: Vec::new(),
@@ -1542,6 +1559,11 @@ impl PdfCraftApp {
     }
 
     /// Notify with a `{name}`-style template in the UI language (placeholders filled once).
+    /// The egui context, once the app has drawn a frame (for repaints from other threads).
+    pub(crate) fn egui_ctx(&self) -> Option<egui::Context> {
+        self.ctx.clone()
+    }
+
     pub fn notify_fmt(&mut self, template: &str, args: &[(&str, &str)]) {
         self.notify(i18n::fmt(tl!(template), args));
     }
@@ -1792,8 +1814,13 @@ impl PdfCraftApp {
             "signature_image": match &self.signature { Some(s @ fill_sign::SavedSig::Image(_)) => Some(s), _ => None },
             "initials": self.initials,
             "sign_graphic": self.sign_graphic,
-            // macOS Keychain and Windows store identities are read from their OS key stores each time.
-            "digital_ids": self.digital_ids.iter().filter(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:")).collect::<Vec<_>>(),
+            // macOS Keychain, Windows store and cloud identities are read from their stores each time.
+            "digital_ids": self
+                .digital_ids
+                .iter()
+                .filter(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("psc:"))
+                .collect::<Vec<_>>(),
+            "psc_providers": self.psc_providers,
             "trusted": trusted,
             "custom_stamps": stamps_ui::encode(&self.custom_stamps),
             "javascript": self.session.javascript(),
@@ -1940,6 +1967,9 @@ impl PdfCraftApp {
         self.sign_graphic = serde_json::from_value(v["sign_graphic"].clone()).unwrap_or_default();
         if let Ok(ids) = serde_json::from_value::<Vec<DigitalIdEntry>>(v["digital_ids"].clone()) {
             self.digital_ids = ids;
+        }
+        if let Ok(providers) = serde_json::from_value(v["psc_providers"].clone()) {
+            self.psc_providers = providers;
         }
         self.custom_stamps = stamps_ui::decode(&v["custom_stamps"]);
         self.custom_actions = actions_ui::decode(&v["actions"]);

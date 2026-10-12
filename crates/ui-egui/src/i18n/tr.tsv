@@ -2334,3 +2334,16 @@ animation effects	Off	Kapalı
 	The linked PDF opened, but its named destination was not applied.	Bağlantılı PDF açıldı, ancak adlandırılmış hedefi uygulanmadı.
 	The linked PDF opened, but its page destination was out of range.	Bağlantılı PDF açıldı, ancak sayfa hedefi aralık dışında.
 	Local cross-PDF links require the desktop app	PDF'ler arası yerel bağlantılar masaüstü uygulamasını gerektirir
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Bulut sertifikası kullan (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
+	Provider	Sağlayıcı
+	API address	API adresi
+	Client ID	İstemci kimliği
+	Client secret	İstemci gizli anahtarı
+	Redirect URI	Yönlendirme URI'si
+	Your provider gives these when you register PdfCraft with it.	Sağlayıcınız, PdfCraft'ı kaydettiğinizde bunları verir.
+	Waiting for your approval in the browser…	Tarayıcıda onayınız bekleniyor…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	{provider} ile oturum sona erdi. Dijital Kimlik Yapılandır bölümünden yeniden oturum açın.
+	Fill in the provider, its API address and the client ID.	Sağlayıcıyı, API adresini ve istemci kimliğini doldurun.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	Yönlendirme URI'si bağlantı noktalı http://127.0.0.1 veya http://localhost olmalıdır.
+	No certificate was found with this provider.	Bu sağlayıcıda sertifika bulunamadı.
+	The provider's page didn't come back in time. Try again.	Sağlayıcının sayfası zamanında dönmedi. Yeniden deneyin.

@@ -2301,3 +2301,16 @@ animation effects	Off	Изключени
 	The linked PDF opened, but its named destination was not applied.	Свързаният PDF се отвори, но именуваната му цел не беше приложена.
 	The linked PDF opened, but its page destination was out of range.	Свързаният PDF се отвори, но целевата му страница е извън обхвата.
 	Local cross-PDF links require the desktop app	Локалните връзки между PDF файлове изискват настолното приложение
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Използвай облачен сертификат (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
+	Provider	Доставчик
+	API address	Адрес на API
+	Client ID	ИД на клиента
+	Client secret	Тайна на клиента
+	Redirect URI	URI за пренасочване
+	Your provider gives these when you register PdfCraft with it.	Доставчикът ви ги предоставя, когато регистрирате PdfCraft при него.
+	Waiting for your approval in the browser…	Изчакване на одобрението ви в браузъра…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Сесията с {provider} приключи. Влезте отново от „Конфигуриране на цифров идентификатор“.
+	Fill in the provider, its API address and the client ID.	Попълнете доставчика, адреса на API и ИД на клиента.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	URI за пренасочване трябва да е http://127.0.0.1 или http://localhost с порт.
+	No certificate was found with this provider.	При този доставчик не е намерен сертификат.
+	The provider's page didn't come back in time. Try again.	Страницата на доставчика не се върна навреме. Опитайте отново.
