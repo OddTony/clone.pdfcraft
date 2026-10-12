@@ -72,6 +72,17 @@ pub fn find(explicit: Option<&Path>) -> Result<PathBuf> {
 ///
 /// Some Chrome builds finish writing the PDF but linger afterwards, so rather
 /// than only waiting for exit we poll for a complete file and then stop Chrome.
+
+
+/// Convierte un Path a una URL file:// válida para Chromium en Windows.
+fn clean_file_url(path: &Path) -> Result<String> {
+    let absolute = path.canonicalize()?;
+    let path_str = absolute.to_str().context("Ruta no válida")?;
+    // Remover prefijo extendido de Windows (\\?\) y normalizar separadores
+    let clean_path = path_str.trim_start_matches(r"\\?\").replace('\\', "/");
+    Ok(format!("file:///{clean_path}"))
+}
+
 pub fn print_to_pdf(chrome: &Path, html: &Path, pdf: &Path, log: &Path) -> Result<()> {
     if pdf.exists() {
         fs::remove_file(pdf).with_context(|| format!("removing stale {}", pdf.display()))?;
@@ -80,13 +91,19 @@ pub fn print_to_pdf(chrome: &Path, html: &Path, pdf: &Path, log: &Path) -> Resul
     print_arg.push(pdf);
     let log_file = fs::File::create(log).with_context(|| format!("creating {}", log.display()))?;
 
+    // Generar la URL file:// limpia para Windows
+    let target_url = clean_file_url(html)?;
+
     let mut child = Command::new(chrome)
         .arg("--headless=new")
         .arg("--disable-gpu")
+        .arg("--no-sandbox")
+        .arg("--allow-file-access-from-files")
+        .arg("--enable-local-file-accesses")
         .arg("--no-pdf-header-footer")
         .arg("--generate-pdf-document-outline")
         .arg(print_arg)
-        .arg(super::file_url(html))
+        .arg(&target_url) // <--- Pasamos la URL saneada
         .stdout(Stdio::null())
         .stderr(log_file)
         .spawn()
@@ -115,6 +132,7 @@ pub fn print_to_pdf(chrome: &Path, html: &Path, pdf: &Path, log: &Path) -> Resul
         thread::sleep(Duration::from_millis(500));
     }
 }
+
 
 /// A PDF is complete once its trailer's `%%EOF` marker has been written.
 fn is_complete(pdf: &Path) -> bool {

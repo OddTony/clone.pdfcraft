@@ -163,6 +163,7 @@ impl PdfCraftApp {
     pub fn open_print(&mut self) {
         let Some((i, _)) = self.active_ids() else { return };
         let printers = spool::printers();
+		println!("Impresoras detectadas por el spooler: {:?}", printers);
         let default = printers.iter().find(|p| p.default).or(printers.first()).map(|p| p.name.clone());
         let current = self.views[i].current;
         let selected: Vec<usize> = self.views[i].selected.iter().copied().collect();
@@ -175,6 +176,12 @@ impl PdfCraftApp {
             (true, other) => other,
         };
         self.print_draft = PrintDraft { printers, printer: default, current_page: current, sheet: 0, selected, which, ..keep };
+        // Start on the paper the printer is set to use (A4 or Letter, say), not on a fixed one.
+        if let Some(name) = self.print_draft.printer.clone()
+            && let Some(paper) = print::printer_paper(&name)
+        {
+            self.print_draft.paper = paper;
+        }
         self.dialog = Some(crate::Dialog::Print);
     }
 
@@ -388,6 +395,12 @@ pub(crate) fn body(
                 if d.printer != before {
                     d.show_driver_options = false;
                     d.driver_error = None;
+                    // The new printer's own paper, when the system says which it is.
+                    if let Some(name) = d.printer.as_deref()
+                        && let Some(paper) = print::printer_paper(name)
+                    {
+                        d.paper = paper;
+                    }
                 }
                 ui.end_row();
                 ui.label(tl!("Copies:"));

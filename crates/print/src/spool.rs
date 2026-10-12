@@ -269,31 +269,91 @@ pub fn lpstat_command() -> std::process::Command {
     c
 }
 
+#[cfg(windows)]
+mod win {
+    use super::{Duplex, Job, Printer};
+    use crate::PrintError;
+    use pdfcraft_print_win as native;
+
+    pub fn printers() -> Vec<Printer> {
+        native::printers().into_iter().map(|p| Printer { name: p.name, default: p.default }).collect()
+    }
+
+    pub fn default_paper_mm(printer: &str) -> Option<(f32, f32)> {
+        native::default_paper(printer).map(|p| (p.width_mm, p.height_mm))
+    }
+    
+    pub fn submit(pdf: &[u8], job: &Job) -> Result<String, PrintError> {
+        let job = native::Job {
+            printer: job.printer.clone(),
+            copies: job.copies,
+            collate: job.collate,
+            duplex: match job.duplex {
+                Duplex::Off => native::Duplex::Off,
+                Duplex::LongEdge => native::Duplex::LongEdge,
+                Duplex::ShortEdge => native::Duplex::ShortEdge,
+            },
+            grayscale: job.grayscale,
+            title: job.title.clone(),
+        };
+        native::submit(pdf, &job).map_err(|native::Error::Spool(m)| PrintError::Spool(m))
+    }
+}
+
 /// The printers the system knows (empty when there are none or no spooler).
+/// Las impresoras que conoce el sistema (vacío si no hay ninguna o no hay spooler).
 pub fn printers() -> Vec<Printer> {
     #[cfg(all(unix, not(target_arch = "wasm32")))]
     {
         match lpstat_command().output() {
             Ok(o) => parse_lpstat(&String::from_utf8_lossy(&o.stdout)),
-            Err(_) => Vec::new(),
+            Err(e) => {
+                eprintln!("Error al consultar el spooler del SO: {:?}", e);
+                Vec::new()
+            }
         }
     }
-    #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
+    #[cfg(windows)]
+    {
+        win::printers()
+    }
+    #[cfg(not(any(all(unix, not(target_arch = "wasm32")), windows)))]
     {
         Vec::new()
     }
 }
 
+/// El papel predeterminado de la impresora, en milímetros (ancho, alto) con la hoja en vertical;
+/// `None` si no se puede saber, y entonces el diálogo usa su propio valor.
+pub fn default_paper_mm(printer: &str) -> Option<(f32, f32)> {
+    #[cfg(windows)]
+    {
+        win::default_paper_mm(printer)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = printer;
+        None
+    }
+}
+
 /// Send a print-ready PDF to the spooler. Returns the spooler's message (the job id).
+/// Enviar un PDF listo para imprimir al spooler. Devuelve el mensaje del spooler.
 pub fn submit(pdf: &[u8], job: &Job) -> Result<String, PrintError> {
     #[cfg(all(unix, not(target_arch = "wasm32")))]
     {
         submit_via(std::process::Command::new("lp"), pdf, job)
     }
-    #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
+
+    #[cfg(windows)]
+    {
+        win::submit(pdf, job)
+    }
+
+    #[cfg(not(any(all(unix, not(target_arch = "wasm32")), windows)))]
     {
         let _ = (pdf, job);
-        Err(PrintError::Spool("printing to a printer isn't available on this platform yet; save the print-ready PDF instead".into()))
+        Err(PrintError::Spool("la impresión directa no está disponible en esta plataforma todavía; guarde el PDF en su lugar".into()))
     }
 }
 
