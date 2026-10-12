@@ -228,7 +228,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Lithuanian UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "925d406d424e9c9f0946e5cef5b330a6dd445ba0eb0fc5afb1deee0d45d1e6c3"
+sha256 = "1a6169d753a52152cb9c5870576597083f960ed77d10441b702ce4f34d0ef7c5"
 
 [[asset]]
 path = "assets/icons/accessibility.svg"
