@@ -1,133 +1,135 @@
 # Windows single-instance security
 
-Status: implemented; platform validation in progress, based on upstream `87b448b6` (2026-10-12).
+Status: implemented fork candidate; automated regressions validated on the repaired
+implementation, with final cleanup validation recorded in the contribution draft.
+Manual Windows security-boundary and shell verification remains outstanding.
+Based on upstream `87b448b6`; compatible by inspection and merge simulation with
+`0a098648` (2026-10-12). This feature is not merged or released.
 
 ## Scope and threat model
 
-This follows maintainer echelon's [invitation in #616](https://github.com/storytold/pdfcraft/pull/616)
-to harden the socket merged in [#715](https://github.com/storytold/pdfcraft/pull/715),
-based on [#602](https://github.com/storytold/pdfcraft/pull/602). The transport remains
-Windows AF_UNIX through the existing `uds_windows` dependency. Ordinary file-only
-launches forward paths; options including `--control`, `--new-window`, image imports,
-and empty launches retain their existing independent-window behavior. A failed
-handoff opens an independent window and does not produce a fatal error dialog.
+This follows [echelon's invitation in #616](https://github.com/storytold/pdfcraft/pull/616#issuecomment-6096621666)
+to harden the AF_UNIX socket merged in [#715](https://github.com/storytold/pdfcraft/pull/715),
+based on [#602](https://github.com/storytold/pdfcraft/pull/602).
 
-Protect document-path confidentiality and integrity, primary availability and UI
-state against another unprivileged Windows account and malformed local clients.
-Treat all socket bytes, endpoint files and environment values as untrusted.
-Privileged administrators, SYSTEM, and malicious processes running as the same
-user are outside the authentication boundary. They may access that user's files
-and Windows data-protection credentials. A same-user process in another session
-is not treated as a different security principal.
+Protect document paths and queue admission against another unprivileged Windows
+account and malformed local clients. Treat all socket bytes, endpoint files and
+environment values as untrusted. Administrators, SYSTEM and malicious processes
+under the same Windows user are outside the authentication boundary: they can
+access that user's files and data-protection credentials. Another session of the
+same user is not a separate security principal.
 
-## Existing safeguards and missing protections
+## Transport, election and routing
 
-- AF_UNIX is a local transport. Windows enforces socket-path/parent-directory
-  access permissions, but `uds_windows` exposes no peer-token or credential API.
-  `%LOCALAPPDATA%` placement normally inherits profile permissions; the old code
-  does not verify ownership or ACLs. Predictable names alone are not authentication.
-- The startup file lock serializes connect, stale-socket removal and bind. Windows
-  releases it when its holder exits. It is never deleted. The old code continues
-  election when locking fails, weakening startup synchronization.
-- `SESSIONNAME` is a routing hint supplied through the environment, not an OS
-  identity. Sanitization/truncation can collide and missing names share an endpoint.
-- A one-line JSON request is read through a 1 MiB cap, with five-second socket
-  timeouts. Missing delimiters/truncation are not explicitly rejected; there is no
-  protocol version, strict key set, path count/length bound or outbound limit.
-- One background thread receives serially. A stalled client blocks the next launch;
-  trickled bytes can renew per-read timeouts. The pending UI path vector is unbounded.
-- Accepted requests use the existing `OsEvent::Open` route. The response acknowledges
-  memory admission, not durable delivery. A lost response can cause duplicate opens
-  when the launching process falls back. That preferred fallback is retained.
+The existing `uds_windows` AF_UNIX transport stays in place. No network listener,
+named-pipe replacement, document loader or new dependency package is introduced.
+Windows enforces socket-path and parent-directory permissions. The wrapper has no
+peer-token API and does not independently verify an owner-only DACL.
 
-## Mitigations (documented before implementation; now implemented)
+The Windows known-folder API, using the process token, supplies LocalAppData; the
+process token supplies the session ID. `LOCALAPPDATA` and `SESSIONNAME` cannot
+redirect routing. Installed and portable launches have distinct endpoint names;
+portable copies in the same user/session retain upstream's shared portable group,
+not isolation by portable folder.
 
-1. Keep the same socket and election architecture. Derive LocalAppData from the
-   Windows known-folder API with the process token, ignoring spoofed environment
-   values. Use the Windows process token's
-   session ID for collision-free routing; retain installed/portable endpoint separation.
-   Reject reparse-point parent directories and lock files, and fall back if the
-   election lock cannot be obtained. Only remove a stale endpoint on a specific
-   missing/refused connection result, never on an arbitrary connection error.
-   Leave unrelated regular files at the endpoint untouched.
-2. Frame every message with an explicit bounded length. Require a protocol version,
-   an exact path-opening schema, bounded absolute paths and complete frames.
-3. Use the existing `windows` package's safe Windows data-protection APIs with
-   `LOCAL=user`. The primary issues an encrypted fresh challenge. A sender must
-   decrypt it, return it inside an encrypted path request, and verify an encrypted
-   acknowledgement tied to its own fresh nonce. No reusable secrets are sent or
-   stored in endpoint files. A wrong-user or replaced listener cannot read paths
-   or forge a confirmed handoff. A relay can forward sealed bytes to the genuine
-   primary, but cannot read/change the paths. The protocol must not accept an arbitrary decryptable
-   blob as authentication: Windows can decrypt machine-scoped blobs too, so proof
-   of the primary's secret user-scoped challenge is essential.
-4. Use a fixed, bounded receiver pool, a bounded connection queue, atomic bounded
-   inbox admission and total exchange deadlines, including slow/trickling clients.
-   Reject the whole batch before acknowledgment when capacity is exhausted.
-5. Keep listener ownership at launch scope through renderer fallback. Shut down
-   workers when the launch-owned server is dropped. No new document loader,
-   command/control channel, listener transport or cross-platform forwarding.
+The existing startup file lock serializes connection, stale-endpoint cleanup,
+binding and listener startup. It is never deleted and Windows releases it on
+process termination. Lock failure falls back to a separate window. Local-drive
+parent and lock checks reject reparse points; these checks are best effort, not
+race-free directory handles. Stale cleanup only follows a missing/refused
+connection, never a timeout or arbitrary connection failure. Regular files at the
+endpoint are left untouched. Listener ownership remains outside renderer retries.
 
-## Guarantees and limitations to verify
+## Authentication and protocol
 
-Inherited ACLs remain the OS connection boundary; the wrapper does not provide
-an independently verified owner-only socket ACL or an OS-authenticated peer token.
-Windows profile administrators can alter inherited ACLs; parent checks are best-effort
-reparse checks, not race-free directory handles. Use of the OS profile API prevents
-environment-only redirection, but does not prove its DACL is private.
-The challenge protocol protects document operations even when an outsider
-can reach or replace the endpoint, but cannot prevent filesystem denial of service or another reachable client
-occupying the bounded connection slots.
-Session-specific names route legitimate launches; they do not authenticate the
-peer's logon session. AF_UNIX provides no remotely reachable TCP listener; Windows
-path access via network shares must not be claimed equivalent to named-pipe remote
-client rejection.
+The primary sends a fresh random 32-byte nonce protected with Windows
+`DataProtectionProvider("LOCAL=user")`. The client decrypts that challenge and
+returns it in a user-protected request containing document paths and its own fresh
+nonce. The primary verifies its nonce before admitting the entire batch, then
+returns a protected acknowledgment binding both nonces. The client verifies both
+before reporting a completed handoff.
 
-A completed ACK means queued in the surviving primary's memory. Primary termination
-can lose pending paths. ACK loss retains the upstream fallback and its possible
-duplicate opening. A protocol mismatch also falls back rather than discarding
-files or startup options. Manual testing remains necessary for separate accounts,
-console/RDP sessions, mixed elevation, modified ACLs/reparse points, Explorer/Open
-With, minimized focus, and portable/network-drive launches. The wrapper lacks cancellable connect: a single connect thread per launch may
-outlive the caller's five-second timeout until Winsock returns; late streams are
-dropped and no socket is deleted on that timeout. Worker IO and asynchronous
-protection waits observe stop/deadline, but synchronous OS provider activation
-itself cannot be forcibly interrupted. Native tests exercise normal shutdown;
-no guarantee is made for a stuck OS API. macOS/Linux/FreeBSD
-launch behavior and web behavior are outside this Windows-only change.
+This proves possession of the Windows user's cryptographic context, not process
+identity or logon-session membership. No reusable key file is needed. Unprotecting
+a blob alone is not authentication: Windows can also decrypt machine-scoped blobs.
+The secret primary challenge and sealed client nonce prevent such a fake challenge
+from producing an authenticated request or forged acknowledgment. A ciphertext
+relay can deliver the intended request, but cannot read or modify its paths.
+
+Frames have an explicit big-endian length checked before allocation. Messages
+require version 1 and exact request kinds/keys; only document paths are forwarded.
+Paths must be absolute, nonempty and NUL-free. Requests with malformed JSON,
+truncated frames, unknown versions or unexpected fields are refused.
+
+| Resource | Bound |
+|---|---|
+| Plaintext request | 1 MiB |
+| Protected frame | 1 MiB + 4 KiB |
+| Protected challenge/acknowledgment frame | 4 KiB |
+| Paths per batch / bytes per path | 256 / 32 KiB |
+| Receiver workers / active and waiting connections | 4 / 8 |
+| Pending batches / paths / path bytes | 16 / 1,024 / 4 MiB |
+| Election, connect wait and exchange deadlines | 5 seconds per stage |
+
+A total exchange deadline includes queue wait, nonblocking IO and asynchronous
+protection waits; trickled bytes cannot renew it. Admission checks the entire
+batch atomically. Queue saturation refuses admission before acknowledgment.
+Shutdown signals workers and joins them; their IO and async waits observe stop.
+
+## Compatibility and delivery limits
+
+Ordinary file-only launches use the existing OS-event/document-opening route.
+`--control`, other launch options, `--new-window`, image imports and empty launches
+keep upstream's independent-window behavior. Failures open a separate window,
+without a fatal handoff dialog or insecure protocol downgrade. Existing document,
+tab, workspace, session-restoration and renderer-fallback logic is unchanged.
+
+An acknowledgment means admitted to the primary's in-memory queue, not durable
+storage or successful document loading. A primary crash can lose queued paths.
+Lost acknowledgments retain upstream's fallback and may duplicate document opens.
+Old protocol/endpoint versions also fall back; restart older instances on upgrade.
+
+A Winsock connect has no cancellation API in this wrapper: one launch-local
+thread can outlive the caller's timeout until the OS returns. Late streams are
+dropped and the socket is not deleted. Synchronous OS activation cannot be
+forcibly interrupted either; bounded shutdown tests cover normal supported OS
+behavior, not a stuck OS API. Filesystem manipulation and clients occupying the
+bounded slots can still cause denial of service. No remote-peer rejection or
+race-free filesystem guarantee is claimed.
+
+macOS Apple Events and Linux/FreeBSD/web behavior are unchanged. Linux/FreeBSD
+single-instance forwarding, macOS direct-executable forwarding, tab detaching
+and Combine Files are not implemented by this contribution.
+
+## Verification and remaining manual work
+
+| Evidence | What it establishes |
+|---|---|
+| Portable automated tests | Framing/truncation, schemas, versions, nonce binding, path limits, atomic queue limits/draining, connection reservations, total deadlines and launch-option bypasses |
+| Native Windows automated tests | Real protection/tampering and sockets, Unicode/spaced paths, multiple documents, simultaneous thread/process elections, hostile messages, stalled clients, queue-full fallback, uncertain acknowledgments, crash recovery, normal shutdown and environment-independent routing |
+| Code/API inspection | User-protected nonce protocol, OS profile/session lookup, inherited filesystem permissions, unchanged startup/UI integration and lack of externally reachable network listener |
+| Manual Windows testing still required | Separate accounts, console/RDP sessions, mixed elevation, modified ACLs/reparse points, Explorer double-click/Open With, multiple-file associations, minimized focus, portable/removable/network-drive launches |
+
+Same-account automated tests do not verify different-account, elevation or session
+boundaries. Session-specific names route legitimate launches but do not prevent
+same-user access across sessions. Window focus is best effort. Engine fuzzing tests
+PDF processing, not the IPC handshake; malformed-protocol tests cover that path.
+
+### Crypto factory lifetime
+
+A cold-process regression reproduced a successful first crypto round trip followed
+by an access violation on activation after a temporary COM guard was dropped.
+The Windows bindings cache agile activation factories for process lifetime;
+`CoUninitialize` can invalidate those references despite their retained COM count.
+The fix uses the pinned `windows-core` automatic activation, which establishes
+process-lived MTA usage when needed. Providers and async operations remain local
+to their calling threads. Repeated cold crypto initialization/use/drop and real
+process startup remain regression tests. Native tests passed after this repair.
 
 ## Sources
 
 - [Microsoft: Windows AF_UNIX and pathname permissions](https://devblogs.microsoft.com/commandline/af_unix-comes-to-windows/)
 - [Microsoft: file security and inherited descriptors](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights)
 - [Microsoft: DataProtectionProvider](https://learn.microsoft.com/en-us/uwp/api/windows.security.cryptography.dataprotection.dataprotectionprovider)
-- [Microsoft: socket peer impersonation supports IP sockets](https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-wsaimpersonatesocketpeer)
-
-## Validation and review
-
-Portable regression tests cover framing/truncation, schema/version/path limits,
-nonce binding, queue admission/draining, concurrent reservations, total deadlines
-and all option bypasses. Windows tests additionally exercise real protection and
-sockets, hostile messages, simultaneous process launches, crashed election holders
-and primaries, missing ACKs/fallback, idle-client expiry and shutdown. Review
-identified environment-derived profile routing; it was replaced with the OS
-known-folder/token query, and reparse checks now precede directory creation.
-Full results and native Windows limitations are recorded in the follow-up PR draft.
-
-### Cold-process activation regression
-
-Diagnostic run [38295853595](https://github.com/mjshfrvstj-sys/printcraft/actions/runs/38295853595)
-reproduced an access violation without any sockets: the first user-protection
-round trip succeeded, its temporary COM guard was dropped, and the second provider
-activation crashed after successful COM initialization. A separate cold-process
-control using automatic Windows-binding activation completed all three cycles.
-The crash artifact contained only an empty event file, no minidump or native stack.
-
-The temporary guard is removed. The pinned `windows-core` activation machinery
-establishes a process-lived MTA usage when needed, matching its cached agile
-factory lifetimes. Per-call `CoUninitialize` can invalidate cached factory pointers,
-as [Microsoft documents](https://devblogs.microsoft.com/oldnewthing/20211105-00/?p=105878/).
-Providers and async operations remain local to the calling thread; protection,
-nonce validation, bounds, deadlines and fallback are unchanged. Cold-process
-crypto cycles and real-process startup races remain required native regressions.
-Fresh native validation is pending; no faulting instruction or module is claimed.
+- [Microsoft: peer impersonation supports IP sockets](https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-wsaimpersonatesocketpeer)
+- [Microsoft: cached factories invalidated by COM teardown](https://devblogs.microsoft.com/oldnewthing/20211105-00/?p=105878/)

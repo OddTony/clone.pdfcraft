@@ -141,13 +141,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
-- **2026-10-12 (fork, M14 crypto lifetime repair):** Cold-process crypto reproduces the access violation after temporary COM teardown; automatic activation control passes. Remove the per-call COM guard to match the Windows bindings’ process-lived factory cache. Security/protocol/election unchanged; fresh native validation pending. Estimates unchanged.
-
-- **2026-10-12 (fork, M14 native IPC crash isolation):** Add cold-process crypto activation/teardown and automatic-MTA control experiments, COM result markers, and temporary Windows minidump collection. Investigating the access violation before changing production behavior; FreeBSD rerun passed and remains unchanged. Estimates unchanged.
-
-- **2026-10-12 (fork, M14 IPC CI investigation):** Capture native child-process output and exit status to diagnose the Windows startup-race regression without changing protocol guarantees or deadlines. FreeBSD viewer code is unchanged from the upstream base; an identical-commit rerun is checking the asynchronous selection failure. Candidate validation remains incomplete.
-
-- **2026-10-12 (fork, M14 Windows IPC hardening):** Follow-up to #715 and echelon’s invitation in #616: preserve AF_UNIX and lenient new-window fallback, add user-protected nonce-bound frames, bounded inbox/connections and deadlines, OS profile/session routing, and crash/hostile-client regressions. No new dependency packages. Candidate only; native validation tracked in the follow-up draft. Effort estimates unchanged.
+- **2026-10-12 (fork, M14 Windows IPC hardening):** Follow-up to #715 and echelon’s invitation in #616: retain AF_UNIX, separate-window fallback and launch options; add user-protected nonce-bound frames, bounded admission/deadlines and OS profile/session routing. Native crypto lifetime and process-startup regressions pass on the repaired candidate; temporary instrumentation removed for final validation. Independent review found no blocker. No new dependency packages; not merged. Manual Windows boundaries and shell behavior remain unverified. Estimates unchanged.
 
 - **2026-10-12 (M1, #1339):** An incremental save of an unchanged classic-table file used to append `xref` and then `trailer` with no subsection, which qpdf reports as a damaged file. The section now has a zero-length subsection, so no object entry changes and a trailer-only edit is still written. Estimates unchanged.
 - **2026-10-12 (M12, auto-tag preview):** The engine and `accessibility_autotag_preview` propose paragraph and large-heading roles for bounded text blocks on one page, with locations and reasons. Every proposal needs review; images remain unclassified. No PDF tags are written yet. Synthetic tool tests cover normal text, a larger heading, bounds and unchanged source bytes. Estimates unchanged.

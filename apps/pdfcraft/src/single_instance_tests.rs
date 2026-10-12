@@ -407,55 +407,34 @@ mod native {
         assert!(path.exists(), "{}", path.display());
     }
 
-    struct ChildDiagnostics;
-    impl log::Log for ChildDiagnostics {
-        fn enabled(&self, _: &log::Metadata<'_>) -> bool {
-            true
-        }
-        fn log(&self, record: &log::Record<'_>) {
-            eprintln!("pid {} {:?}: {}", std::process::id(), std::thread::current().id(), record.args());
-        }
-        fn flush(&self) {}
-    }
-
     #[test]
     #[ignore = "helper invoked by real-process IPC tests"]
     fn process_child() {
-        static DIAGNOSTICS: ChildDiagnostics = ChildDiagnostics;
-        log::set_logger(&DIAGNOSTICS).unwrap();
-        log::set_max_level(log::LevelFilter::Debug);
         let path = std::path::PathBuf::from(std::env::var_os("PDFCRAFT_IPC_TEST_PATH").unwrap());
         let mode = std::env::var("PDFCRAFT_IPC_TEST_MODE").unwrap();
         let index: usize = std::env::var("PDFCRAFT_IPC_TEST_INDEX").unwrap().parse().unwrap();
         let dir = path.parent().unwrap();
-        eprintln!("child {index} pid {} mode {mode}", std::process::id());
         if mode == "auto-activation" {
             // Control experiment: safe windows bindings maintain their process MTA
             // when activation begins without a caller-owned, temporary COM guard.
             use windows::Security::Cryptography::DataProtection::DataProtectionProvider;
-            for cycle in 0..3 {
-                eprintln!("automatic activation cycle {cycle}: before activation");
+            for _ in 0..3 {
                 let encrypt = DataProtectionProvider::CreateOverloadExplicit(&"LOCAL=user".into()).unwrap();
                 let decrypt = DataProtectionProvider::new().unwrap();
                 drop((encrypt, decrypt));
-                eprintln!("automatic activation cycle {cycle}: dropped");
             }
             return;
         }
         if mode == "crypto-cycle" {
             // A cold process has no other test's COM apartment keeping factories alive.
             // Deliberately isolate activation/teardown from sockets and election.
-            for cycle in 0..3 {
-                eprintln!("crypto cycle {cycle}: before activation");
+            for _ in 0..3 {
                 let crypto = security::Protection::new().unwrap();
-                eprintln!("crypto cycle {cycle}: activated");
                 let stop = AtomicBool::new(false);
                 let deadline = Instant::now() + TIMEOUT;
                 let sealed = crypto.protect(b"cold process", deadline, &stop).unwrap();
                 assert_eq!(crypto.unprotect(&sealed, deadline, &stop).unwrap(), b"cold process");
-                eprintln!("crypto cycle {cycle}: before drop");
                 drop(crypto);
-                eprintln!("crypto cycle {cycle}: dropped");
             }
             return;
         }
@@ -473,15 +452,18 @@ mod native {
         if mode == "race" {
             wait_file(&dir.join("go"));
         }
-        eprintln!("child {index}: before election");
         let claim = claim_at(&path, &[paths(8).remove(index)], true);
         let role = match &claim {
             Claim::Primary(_) => "primary",
             Claim::HandedOff => "forwarded",
             Claim::Alone => "alone",
         };
-        eprintln!("child {index}: selected {role}");
-        std::fs::write(dir.join(format!("role-{index}")), role).unwrap();
+        // Publish the complete role atomically: existence must not expose a file
+        // between creation and writing while the parent waits for election results.
+        let role_path = dir.join(format!("role-{index}"));
+        let pending = role_path.with_extension("pending");
+        std::fs::write(&pending, role).unwrap();
+        std::fs::rename(pending, role_path).unwrap();
         if let Claim::Primary(server) = claim {
             std::fs::write(dir.join("ready"), b"ready").unwrap();
             wait_file(&dir.join("release"));
