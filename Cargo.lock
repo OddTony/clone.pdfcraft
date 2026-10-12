@@ -3850,6 +3850,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdfcraft-ps-export"
+version = "0.6.0"
+dependencies = [
+ "hayro",
+ "kurbo 0.13.1",
+]
+
+[[package]]
 name = "pdfcraft-redact"
 version = "0.6.0"
 dependencies = [
