@@ -1556,7 +1556,6 @@
 	Save image	Shrani sliko
 	Save pages	Shrani strani
 	Save the accessibility report	Shrani poročilo o dostopnosti
-	Save the document afterwards: saving rewrites the whole file so no trace of the removed content stays in it.	Nato shranite dokument: shranjevanje prepiše celotno datoteko, tako da v njej ne ostane nobena sled odstranjene vsebine.
 	Save the document afterwards; saving rewrites the whole file so nothing removed stays in it.	Nato shranite dokument; shranjevanje prepiše celotno datoteko, tako da v njej ne ostane nič odstranjenega.
 	Save the spreadsheet	Shrani preglednico
 	Save these pages as one PDF	Shrani te strani kot en PDF
@@ -2357,3 +2356,11 @@ animation effects	Off	Izklopljeni
 	This document is trying to open a local file:	Ta dokument poskuša odpreti lokalno datoteko:
 	Move tag earlier	Premakni oznako prej
 	Move tag later	Premakni oznako pozneje
+	Applying also sanitizes the document: bookmarks, named destinations, attachments, document information, metadata and XFA form data are deleted, and hidden layers are locked hidden for good.	Uveljavitev tudi očisti dokument: zaznamki, poimenovani cilji, priloge, podatki o dokumentu, metapodatki in podatki obrazcev XFA se izbrišejo, skrite plasti pa ostanejo trajno skrite.
+	Checked when applied: 1 region found clear of the removed text. Text that exists only as pixels of an image is not searched.	Preverjeno ob uveljavitvi: 1 območje ne vsebuje odstranjenega besedila. Besedilo, ki obstaja samo kot slikovne pike, se ne išče.
+	Checked when applied: {n} regions found clear of the removed text. Text that exists only as pixels of an image is not searched.	Preverjeno ob uveljavitvi: {n} območij ne vsebuje odstranjenega besedila. Besedilo, ki obstaja samo kot slikovne pike, se ne išče.
+	I understand that the redacted content is removed for good	Razumem, da bo prekrito besedilo trajno odstranjeno
+	This cannot be undone: applying redactions clears the undo history.	Tega ni mogoče razveljaviti: uveljavitev prekrivanja izbriše zgodovino razveljavitev.
+# Redaction confirmation and the save check of password-protected files
+	Save the result under a new name: saving rewrites the whole file so no trace of the removed content stays in it, and the original file stays as it is.	Rezultat shranite pod novim imenom: shranjevanje na novo zapiše celotno datoteko, zato v njej ne ostane nobena sled odstranjene vsebine, izvirna datoteka pa ostane nespremenjena.
+	A password-protected file is only checked to reopen when saved; its bytes are not searched again for the removed text.	Pri datoteki, zaščiteni z geslom, se ob shranjevanju preveri le, ali se znova odpre; njeni bajti se ne preiščejo znova za odstranjeno besedilo.

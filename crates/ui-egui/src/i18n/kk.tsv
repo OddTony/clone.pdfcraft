@@ -1097,7 +1097,6 @@
 	Apply redactions	Жасыруларды қолдану
 	You are about to apply 1 redaction mark. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Сіз қазір 1 жасыру белгісін қолданасыз. Белгілердің астындағы мәтін, кескіндер мен сызбалар, сондай-ақ олармен қабаттасқан түсініктемелер мен форма өрістері мәңгілікке жойылады.
 	You are about to apply {n} redaction marks. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Сіз қазір {n} жасыру белгісін қолданасыз. Белгілердің астындағы мәтін, кескіндер мен сызбалар, сондай-ақ олармен қабаттасқан түсініктемелер мен форма өрістері мәңгілікке жойылады.
-	Save the document afterwards: saving rewrites the whole file so no trace of the removed content stays in it.	Содан кейін құжатты сақтаңыз: сақтау бүкіл файлды қайта жазады, сондықтан жойылған мазмұнның ізі онда қалмайды.
 	Select the items to remove from this document.	Осы құжаттан алып тастайтын элементтерді таңдаңыз.
 	Metadata	Метадеректер
 	File attachments	Файл тіркемелері
@@ -2350,3 +2349,11 @@ animation effects	Off	Өшірулі
 	This document is trying to open a local file:	Бұл құжат жергілікті файлды ашуға әрекеттеніп жатыр:
 	Move tag earlier	Тегті ертерек жылжыту
 	Move tag later	Тегті кейінірек жылжыту
+	Applying also sanitizes the document: bookmarks, named destinations, attachments, document information, metadata and XFA form data are deleted, and hidden layers are locked hidden for good.	Қолдану құжатты да тазартады: бетбелгілер, атаулы нысаналар, тіркемелер, құжат туралы ақпарат, метадеректер және XFA пішін деректері жойылады, ал жасырын қабаттар біржола жасырын қалады.
+	Checked when applied: 1 region found clear of the removed text. Text that exists only as pixels of an image is not searched.	Қолдану кезінде тексерілді: 1 аймақта жойылған мәтін табылмады. Тек кескін пиксельдері түрінде бар мәтін ізделмейді.
+	Checked when applied: {n} regions found clear of the removed text. Text that exists only as pixels of an image is not searched.	Қолдану кезінде тексерілді: {n} аймақта жойылған мәтін табылмады. Тек кескін пиксельдері түрінде бар мәтін ізделмейді.
+	I understand that the redacted content is removed for good	Жасырылған мазмұнның біржола жойылатынын түсінемін
+	This cannot be undone: applying redactions clears the undo history.	Бұл әрекетті қайтару мүмкін емес: жасыруды қолдану қайтару тарихын тазартады.
+	Save the result under a new name: saving rewrites the whole file so no trace of the removed content stays in it, and the original file stays as it is.	Нәтижені жаңа атаумен сақтаңыз: сақтау бүкіл файлды қайта жазады, сондықтан жойылған мазмұнның ізі қалмайды, ал бастапқы файл өзгеріссіз қалады.
+# Redaction confirmation and the save check of password-protected files
+	A password-protected file is only checked to reopen when saved; its bytes are not searched again for the removed text.	Құпиясөзбен қорғалған файл сақталғанда тек қайта ашылатыны тексеріледі; оның байттарынан жойылған мәтін қайта ізделмейді.

@@ -733,7 +733,6 @@
 	Text alignment:	Στοίχιση κειμένου:
 	You are about to apply 1 redaction mark. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Πρόκειται να εφαρμόσετε 1 επισήμανση απόκρυψης. Το κείμενο, οι εικόνες και τα σχέδια κάτω από τις επισημάνσεις, καθώς και τα σχόλια και τα πεδία φόρμας που επικαλύπτονται, θα αφαιρεθούν οριστικά.
 	You are about to apply {n} redaction marks. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Πρόκειται να εφαρμόσετε {n} επισημάνσεις απόκρυψης. Το κείμενο, οι εικόνες και τα σχέδια κάτω από τις επισημάνσεις, καθώς και τα σχόλια και τα πεδία φόρμας που επικαλύπτονται, θα αφαιρεθούν οριστικά.
-	Save the document afterwards: saving rewrites the whole file so no trace of the removed content stays in it.	Αποθηκεύστε έπειτα το έγγραφο: η αποθήκευση επανεγγράφει ολόκληρο το αρχείο, ώστε να μη μείνει κανένα ίχνος του περιεχομένου που αφαιρέθηκε.
 	Select the items to remove from this document.	Επιλέξτε τα στοιχεία που θα αφαιρεθούν από αυτό το έγγραφο.
 	File attachments	Συνημμένα αρχεία
 	Comments and markups	Σχόλια και επισημάνσεις
@@ -2362,3 +2361,11 @@ animation effects	Off	Ανενεργά
 	This document is trying to open a local file:	Αυτό το έγγραφο προσπαθεί να ανοίξει ένα τοπικό αρχείο:
 	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
 	Move tag later	Μετακίνηση ετικέτας αργότερα
+# Redaction confirmation and the save check of password-protected files
+	Applying also sanitizes the document: bookmarks, named destinations, attachments, document information, metadata and XFA form data are deleted, and hidden layers are locked hidden for good.	Η εφαρμογή καθαρίζει επίσης το έγγραφο: διαγράφονται οι σελιδοδείκτες, οι επώνυμοι προορισμοί, τα συνημμένα, οι πληροφορίες εγγράφου, τα μεταδεδομένα και τα δεδομένα φόρμας XFA, και τα κρυφά επίπεδα κλειδώνονται οριστικά ως κρυφά.
+	Checked when applied: 1 region found clear of the removed text. Text that exists only as pixels of an image is not searched.	Ελέγχθηκε κατά την εφαρμογή: σε 1 περιοχή δεν βρέθηκε το κείμενο που αφαιρέθηκε. Κείμενο που υπάρχει μόνο ως εικονοστοιχεία μιας εικόνας δεν αναζητείται.
+	Checked when applied: {n} regions found clear of the removed text. Text that exists only as pixels of an image is not searched.	Ελέγχθηκε κατά την εφαρμογή: σε {n} περιοχές δεν βρέθηκε το κείμενο που αφαιρέθηκε. Κείμενο που υπάρχει μόνο ως εικονοστοιχεία μιας εικόνας δεν αναζητείται.
+	I understand that the redacted content is removed for good	Κατανοώ ότι το περιεχόμενο που αποκρύπτεται αφαιρείται οριστικά
+	This cannot be undone: applying redactions clears the undo history.	Δεν είναι δυνατή η αναίρεση: η εφαρμογή των αποκρύψεων διαγράφει το ιστορικό αναίρεσης.
+	Save the result under a new name: saving rewrites the whole file so no trace of the removed content stays in it, and the original file stays as it is.	Αποθηκεύστε το αποτέλεσμα με νέο όνομα: η αποθήκευση επανεγγράφει ολόκληρο το αρχείο, ώστε να μη μείνει κανένα ίχνος του περιεχομένου που αφαιρέθηκε, και το αρχικό αρχείο μένει ως έχει.
+	A password-protected file is only checked to reopen when saved; its bytes are not searched again for the removed text.	Ένα αρχείο με κωδικό πρόσβασης ελέγχεται κατά την αποθήκευση μόνο ως προς το αν ανοίγει ξανά· τα byte του δεν αναζητούνται ξανά για το κείμενο που αφαιρέθηκε.
