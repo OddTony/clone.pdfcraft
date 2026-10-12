@@ -2251,3 +2251,10 @@ animation effects	Off	ఆఫ్
 	Local cross-PDF links require the desktop app	PDFల మధ్య స్థానిక లింక్‌లకు డెస్క్‌టాప్ యాప్ అవసరం
 	The existing action will be preserved.	ఉన్న చర్య అలాగే ఉంచబడుతుంది.
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	ఒక స్క్రిప్ట్ చాలా సేపు నడిచినందున ఈ ఫారమ్ స్క్రిప్ట్‌లు ఆపివేయబడ్డాయి. వాటిని మళ్లీ నడపడానికి పత్రాన్ని మళ్లీ తెరవండి.
+	PIN	PIN
+	The PIN is incorrect.	PIN తప్పు.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	పరికరంలోని డిజిటల్ ఐడీని ఉపయోగించు (స్మార్ట్ కార్డ్, USB టోకెన్ లేదా క్లౌడ్ సర్టిఫికెట్)
+	Device library (PKCS #11)	పరికర లైబ్రరీ (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	పరికర తయారీదారులు ఇన్‌స్టాల్ చేసే లైబ్రరీల కోసం PdfCraft వెతుకుతుంది. మీ పరికరం దొరకకపోతే మాత్రమే ఒకటి ఎంచుకోండి.
+	No signing certificate was found on this device. Is it connected?	ఈ పరికరంలో సంతకం సర్టిఫికెట్ కనిపించలేదు. ఇది కనెక్ట్ అయి ఉందా?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	కీ {device}లో ఉంది, అది తనే ఆమోదం అడుగుతుంది (PIN ప్యాడ్ లేదా మీ ఫోన్‌లోని యాప్).

@@ -2334,3 +2334,10 @@ animation effects	Off	Kapalı
 	The linked PDF opened, but its named destination was not applied.	Bağlantılı PDF açıldı, ancak adlandırılmış hedefi uygulanmadı.
 	The linked PDF opened, but its page destination was out of range.	Bağlantılı PDF açıldı, ancak sayfa hedefi aralık dışında.
 	Local cross-PDF links require the desktop app	PDF'ler arası yerel bağlantılar masaüstü uygulamasını gerektirir
+	PIN	PIN kodu
+	The PIN is incorrect.	PIN yanlış.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	Bir cihazdaki Dijital Kimliği kullan (akıllı kart, USB token veya bulut sertifikası)
+	Device library (PKCS #11)	Cihaz kitaplığı (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft, cihaz üreticilerinin yüklediği kitaplıkları arar. Yalnızca cihazınız bulunamazsa birini seçin.
+	No signing certificate was found on this device. Is it connected?	Bu cihazda imzalama sertifikası bulunamadı. Bağlı mı?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	Anahtar {device} üzerinde; onay kendisi ister (PIN tuş takımı veya telefonunuzdaki bir uygulama).

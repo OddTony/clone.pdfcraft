@@ -2582,3 +2582,10 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Tarpas
+	PIN	PIN kodas
+	The PIN is incorrect.	PIN kodas neteisingas.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	Naudoti įrenginyje esantį skaitmeninį ID (lustinė kortelė, USB raktas arba debesijos sertifikatas)
+	Device library (PKCS #11)	Įrenginio biblioteka (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft ieško bibliotekų, kurias įdiegia įrenginių gamintojai. Pasirinkite ją tik tada, jei jūsų įrenginys nerandamas.
+	No signing certificate was found on this device. Is it connected?	Šiame įrenginyje nerastas pasirašymo sertifikatas. Ar jis prijungtas?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	Raktas yra įrenginyje {device}, kuris pats paprašo patvirtinimo (PIN klaviatūra arba programėlė jūsų telefone).

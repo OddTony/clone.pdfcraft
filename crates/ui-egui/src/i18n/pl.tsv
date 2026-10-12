@@ -2318,3 +2318,10 @@ animation effects	Off	Wyłączone
 	Local cross-PDF links require the desktop app	Lokalne łącza między plikami PDF wymagają aplikacji komputerowej
 	The existing action will be preserved.	Istniejąca akcja zostanie zachowana.
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Skrypty tego formularza są wyłączone, ponieważ jeden z nich działał zbyt długo. Otwórz dokument ponownie, aby znów je uruchomić.
+	PIN	PIN
+	The PIN is incorrect.	Kod PIN jest nieprawidłowy.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	Użyj identyfikatora cyfrowego z urządzenia (karta inteligentna, token USB lub certyfikat w chmurze)
+	Device library (PKCS #11)	Biblioteka urządzenia (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft szuka bibliotek instalowanych przez producentów urządzeń. Wybierz bibliotekę tylko wtedy, gdy urządzenie nie zostanie znalezione.
+	No signing certificate was found on this device. Is it connected?	Na tym urządzeniu nie znaleziono certyfikatu do podpisywania. Czy jest podłączone?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	Klucz znajduje się na urządzeniu {device}, które samo prosi o zgodę (klawiatura PIN lub aplikacja w telefonie).

@@ -2338,3 +2338,10 @@ animation effects	Off	Désactivés
 	The linked PDF opened, but its named destination was not applied.	Le PDF lié s'est ouvert, mais sa destination nommée n'a pas été appliquée.
 	The linked PDF opened, but its page destination was out of range.	Le PDF lié s'est ouvert, mais sa page de destination est hors limites.
 	Local cross-PDF links require the desktop app	Les liens locaux entre PDF nécessitent l'application de bureau
+	PIN	Code PIN
+	The PIN is incorrect.	Le code PIN est incorrect.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	Utiliser un ID numérique d'un périphérique (carte à puce, jeton USB ou certificat dans le cloud)
+	Device library (PKCS #11)	Bibliothèque du périphérique (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft recherche les bibliothèques installées par les fabricants de périphériques. N'en choisissez une que si votre périphérique n'est pas trouvé.
+	No signing certificate was found on this device. Is it connected?	Aucun certificat de signature n'a été trouvé sur ce périphérique. Est-il connecté ?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	La clé se trouve sur {device}, qui demande lui-même l'autorisation (clavier PIN ou application sur votre téléphone).

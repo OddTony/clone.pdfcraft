@@ -2301,3 +2301,10 @@ animation effects	Off	Изключени
 	The linked PDF opened, but its named destination was not applied.	Свързаният PDF се отвори, но именуваната му цел не беше приложена.
 	The linked PDF opened, but its page destination was out of range.	Свързаният PDF се отвори, но целевата му страница е извън обхвата.
 	Local cross-PDF links require the desktop app	Локалните връзки между PDF файлове изискват настолното приложение
+	PIN	ПИН
+	The PIN is incorrect.	ПИН кодът е грешен.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	Използвай цифров идентификатор от устройство (смарт карта, USB токен или облачен сертификат)
+	Device library (PKCS #11)	Библиотека на устройството (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft търси библиотеките, които инсталират производителите на устройства. Изберете библиотека само ако устройството ви не е намерено.
+	No signing certificate was found on this device. Is it connected?	На това устройство не е намерен сертификат за подписване. Свързано ли е?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	Ключът е в {device}, което само иска одобрение (клавиатура за ПИН или приложение на телефона ви).
