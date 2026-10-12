@@ -142,8 +142,16 @@ struct Job {
 
 impl Job {
     fn directory() -> Result<TempDir, String> {
-        // tempfile creates an unpredictable, owner-only directory (0700 on Unix).
-        tempfile::Builder::new().prefix("pdfcraft-speech-").tempdir().map_err(|e| format!("could not create private speech folder: {e}"))
+        let mut builder = tempfile::Builder::new();
+        builder.prefix("pdfcraft-speech-");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // Set 0700 at creation, rather than relying on tempfile's default or the
+            // user's umask. A later chmod would expose a window for reading WAV data.
+            builder.permissions(std::fs::Permissions::from_mode(0o700));
+        }
+        builder.tempdir().map_err(|e| format!("could not create private speech folder: {e}"))
     }
 
     fn spawn(mut command: Command, directory: TempDir, output: PathBuf, limit: u64, timeout: Duration) -> Result<Self, String> {
