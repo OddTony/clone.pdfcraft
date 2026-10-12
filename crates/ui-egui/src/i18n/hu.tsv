@@ -2337,3 +2337,10 @@ animation effects	Off	Ki
 	The linked PDF opened, but its named destination was not applied.	A hivatkozott PDF megnyílt, de a nevesített cél nem lett alkalmazva.
 	The linked PDF opened, but its page destination was out of range.	A hivatkozott PDF megnyílt, de a céloldal a tartományon kívül esik.
 	Local cross-PDF links require the desktop app	A PDF-ek közötti helyi hivatkozásokhoz az asztali alkalmazás szükséges
+	Interface font	Felület betűtípusa
+	Standard (Inter)	Normál (Inter)
+	System font	Rendszer-betűtípus
+	Font file	Betűtípusfájl
+	Text rendering	Szövegmegjelenítés
+	Standard	Normál
+	Like macOS (fuller strokes, sub-pixel placement)	Mint a macOS-en (teltebb vonalak, képpontnál finomabb elhelyezés)

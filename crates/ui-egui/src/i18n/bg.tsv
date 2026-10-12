@@ -2301,3 +2301,10 @@ animation effects	Off	Изключени
 	The linked PDF opened, but its named destination was not applied.	Свързаният PDF се отвори, но именуваната му цел не беше приложена.
 	The linked PDF opened, but its page destination was out of range.	Свързаният PDF се отвори, но целевата му страница е извън обхвата.
 	Local cross-PDF links require the desktop app	Локалните връзки между PDF файлове изискват настолното приложение
+	Interface font	Шрифт на интерфейса
+	Standard (Inter)	Стандартен (Inter)
+	System font	Системен шрифт
+	Font file	Файл с шрифт
+	Text rendering	Изобразяване на текста
+	Standard	Стандартно
+	Like macOS (fuller strokes, sub-pixel placement)	Като в macOS (по-плътни щрихи, позициониране под пиксел)

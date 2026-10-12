@@ -2302,3 +2302,10 @@ animation effects	Off	关
 	The linked PDF opened, but its named destination was not applied.	已打开链接的 PDF，但未应用其命名目标。
 	The linked PDF opened, but its page destination was out of range.	已打开链接的 PDF，但其页面目标超出范围。
 	Local cross-PDF links require the desktop app	PDF 之间的本地链接需要桌面应用
+	Interface font	界面字体
+	Standard (Inter)	标准 (Inter)
+	System font	系统字体
+	Font file	字体文件
+	Text rendering	文本渲染
+	Standard	标准
+	Like macOS (fuller strokes, sub-pixel placement)	与 macOS 相同（笔画更饱满，亚像素定位）

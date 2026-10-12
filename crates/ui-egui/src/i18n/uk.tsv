@@ -2360,3 +2360,10 @@ animation effects	Off	Вимкнено
 	The linked PDF opened, but its named destination was not applied.	Пов’язаний PDF відкрито, але його іменоване призначення не застосовано.
 	The linked PDF opened, but its page destination was out of range.	Пов’язаний PDF відкрито, але сторінка призначення поза межами діапазону.
 	Local cross-PDF links require the desktop app	Локальні посилання між PDF працюють лише в настільному застосунку
+	Interface font	Шрифт інтерфейсу
+	Standard (Inter)	Стандартний (Inter)
+	System font	Системний шрифт
+	Font file	Файл шрифту
+	Text rendering	Відображення тексту
+	Standard	Стандартне
+	Like macOS (fuller strokes, sub-pixel placement)	Як у macOS (щільніші штрихи, субпіксельне розміщення)

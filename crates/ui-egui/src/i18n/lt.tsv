@@ -2582,3 +2582,10 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Tarpas
+	Interface font	Sąsajos šriftas
+	Standard (Inter)	Standartinis (Inter)
+	System font	Sistemos šriftas
+	Font file	Šrifto failas
+	Text rendering	Teksto atvaizdavimas
+	Standard	Standartinis
+	Like macOS (fuller strokes, sub-pixel placement)	Kaip „macOS“ (pilnesni brūkšniai, subpikselinis išdėstymas)

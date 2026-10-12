@@ -2352,3 +2352,10 @@ animation effects	Off	Desativados
 	The linked PDF opened, but its named destination was not applied.	O PDF vinculado foi aberto, mas seu destino nomeado não foi aplicado.
 	The linked PDF opened, but its page destination was out of range.	O PDF vinculado foi aberto, mas sua página de destino está fora do intervalo.
 	Local cross-PDF links require the desktop app	Links locais entre PDFs exigem o aplicativo para desktop
+	Interface font	Fonte da interface
+	Standard (Inter)	Padrão (Inter)
+	System font	Fonte do sistema
+	Font file	Arquivo de fonte
+	Text rendering	Renderização do texto
+	Standard	Padrão
+	Like macOS (fuller strokes, sub-pixel placement)	Como no macOS (traço mais cheio, posição em fração de pixel)

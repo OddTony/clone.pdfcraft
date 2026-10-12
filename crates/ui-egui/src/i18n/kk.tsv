@@ -2336,3 +2336,10 @@ animation effects	Off	Өшірулі
 	The linked PDF opened, but its named destination was not applied.	Байланысты PDF ашылды, бірақ оның аталған мақсаты қолданылмады.
 	The linked PDF opened, but its page destination was out of range.	Байланысты PDF ашылды, бірақ оның мақсатты беті ауқымнан тыс.
 	Local cross-PDF links require the desktop app	PDF файлдары арасындағы жергілікті сілтемелер үшін жұмыс үстелі қолданбасы қажет
+	Interface font	Интерфейс қаріпі
+	Standard (Inter)	Стандартты (Inter)
+	System font	Жүйелік қаріп
+	Font file	Қаріп файлы
+	Text rendering	Мәтінді көрсету
+	Standard	Стандартты
+	Like macOS (fuller strokes, sub-pixel placement)	macOS сияқты (толығырақ сызықтар, субпиксельдік орналастыру)

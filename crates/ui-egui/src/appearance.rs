@@ -123,6 +123,7 @@ pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
             }
         });
     });
+    font_choice(ui, app, t);
     ui.add_space(4.0);
     let light_active = app.theme == ThemeKind::Light;
     ui.columns(2, |cols| {
@@ -130,6 +131,60 @@ pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
         card(light, t, tl!("Light theme"), light_active, LIGHT_THEMES);
         card(dark, t, tl!("Dark theme"), !light_active, DARK_THEMES);
     });
+}
+
+/// Interface font and text rendering. A font file opens the picker; the choice takes effect next
+/// frame (the app rebuilds its fonts when it changes).
+fn font_choice(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
+    use crate::theme::{TextRendering, UiFont};
+    #[cfg_attr(target_arch = "wasm32", expect(unused_mut))]
+    let mut pick = false;
+    ui.horizontal(|ui| {
+        ui.label(tl!("Interface font"));
+        let current = match &app.ui_font {
+            UiFont::Standard => tl!("Standard (Inter)"),
+            UiFont::System => tl!("System font"),
+            UiFont::File(_) => tl!("Font file"),
+        };
+        egui::ComboBox::from_id_salt("ui-font").selected_text(current).show_ui(ui, |ui| {
+            if ui.selectable_label(app.ui_font == UiFont::Standard, tl!("Standard (Inter)")).clicked() {
+                app.ui_font = UiFont::Standard;
+            }
+            // SF Pro on macOS, Segoe UI Variable on Windows; other systems have no one system face.
+            if cfg!(any(target_os = "macos", target_os = "windows"))
+                && ui.selectable_label(app.ui_font == UiFont::System, tl!("System font")).clicked()
+            {
+                app.ui_font = UiFont::System;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            if ui.selectable_label(matches!(app.ui_font, UiFont::File(_)), tl!("Font file")).clicked() {
+                pick = true;
+            }
+        });
+        if let UiFont::File(path) = &app.ui_font {
+            let name = std::path::Path::new(path).file_name().map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
+            ui.label(RichText::new(name).color(t.text_muted)).on_hover_text(path);
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label(tl!("Text rendering"));
+        let label = |r: TextRendering| match r {
+            TextRendering::Standard => tl!("Standard"),
+            TextRendering::MacLike => tl!("Like macOS (fuller strokes, sub-pixel placement)"),
+        };
+        egui::ComboBox::from_id_salt("text-rendering").selected_text(label(app.text_rendering)).show_ui(ui, |ui| {
+            for r in [TextRendering::Standard, TextRendering::MacLike] {
+                if ui.selectable_label(app.text_rendering == r, label(r)).clicked() {
+                    app.text_rendering = r;
+                }
+            }
+        });
+    });
+    #[cfg(not(target_arch = "wasm32"))]
+    if pick {
+        let dialog = rfd::AsyncFileDialog::new().add_filter(tl!("Fonts"), &["ttf", "otf", "ttc"]);
+        app.ask_one(crate::pickers::Ask::File(dialog), None, |app, p| app.ui_font = UiFont::File(p.to_string_lossy().into_owned()));
+    }
 }
 
 #[cfg(test)]
@@ -168,12 +223,14 @@ mod tests {
         }
 
         let combo = egui::accesskit::Role::ComboBox;
-        h.get_by_role(combo).click();
+        // The appearance mode is the first of the section's menus (then the font and the rendering).
+        h.query_all_by_role(combo).next().expect("the appearance mode menu").click();
         h.run();
         h.get_by_label("Dark").click();
         h.run();
         assert_eq!(h.state().theme_preference, ThemePreference::Dark);
-        h.get_by_role(combo).click();
+        // The appearance mode is the first of the section's menus (then the font and the rendering).
+        h.query_all_by_role(combo).next().expect("the appearance mode menu").click();
         h.run();
         h.get_by_label("Use system setting").click();
         h.run();

@@ -2334,3 +2334,10 @@ animation effects	Off	Kapalı
 	The linked PDF opened, but its named destination was not applied.	Bağlantılı PDF açıldı, ancak adlandırılmış hedefi uygulanmadı.
 	The linked PDF opened, but its page destination was out of range.	Bağlantılı PDF açıldı, ancak sayfa hedefi aralık dışında.
 	Local cross-PDF links require the desktop app	PDF'ler arası yerel bağlantılar masaüstü uygulamasını gerektirir
+	Interface font	Arayüz yazı tipi
+	Standard (Inter)	Standart (Inter)
+	System font	Sistem yazı tipi
+	Font file	Yazı tipi dosyası
+	Text rendering	Metin işleme
+	Standard	Standart
+	Like macOS (fuller strokes, sub-pixel placement)	macOS gibi (daha dolgun çizgiler, alt piksel yerleşimi)

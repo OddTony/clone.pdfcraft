@@ -675,6 +675,11 @@ pub struct PdfCraftApp {
     fonts_ready: bool,
     /// The CJK fallback order the installed fonts follow (see `theme::installed_font_definitions`).
     fonts_cjk: theme::CjkPreference,
+    /// The interface font and text rendering the installed fonts were built with.
+    fonts_choice: (theme::UiFont, theme::TextRendering),
+    /// Preferences ▸ Appearance: the interface font and how text is drawn.
+    pub ui_font: theme::UiFont,
+    pub text_rendering: theme::TextRendering,
     /// The window title last sent to the platform.
     pub window_title: String,
     /// The UI control channel, when enabled (`--control`; off by default).
@@ -931,6 +936,9 @@ impl PdfCraftApp {
             styled: false,
             fonts_ready: false,
             fonts_cjk: theme::CjkPreference::Default,
+            fonts_choice: Default::default(),
+            ui_font: theme::UiFont::Standard,
+            text_rendering: theme::TextRendering::Standard,
             control: None,
             bookmark_rename: None,
             last_opened_url: None,
@@ -1756,6 +1764,8 @@ impl PdfCraftApp {
             "reload_changed_files": self.reload_changed_files,
             "pinned_folders": self.pinned.folders,
             "theme": self.theme_preference,
+            "ui_font": self.ui_font,
+            "text_rendering": self.text_rendering,
             "scroll_speed": self.scroll_speed,
             "animation_effects": self.animation_effects,
             "default_mode": self.default_mode,
@@ -1839,6 +1849,8 @@ impl PdfCraftApp {
             self.reload_changed_files = on;
         }
         self.pinned.restore(&v["pinned_folders"]);
+        self.ui_font = serde_json::from_value(v["ui_font"].clone()).unwrap_or_default();
+        self.text_rendering = serde_json::from_value(v["text_rendering"].clone()).unwrap_or_default();
         if let Ok(preference) = serde_json::from_value::<ThemePreference>(v["theme"].clone()) {
             self.set_theme_preference(preference);
         }
@@ -2399,16 +2411,24 @@ impl eframe::App for PdfCraftApp {
         let cjk = theme::CjkPreference::for_language(lang.code());
         if !self.styled {
             egui_extras::install_image_loaders(ctx);
-            theme::install_fonts_for(ctx, cjk);
+            theme::install_fonts_with(ctx, cjk, &self.ui_font, self.text_rendering);
             self.fonts_cjk = cjk;
+            self.fonts_choice = (self.ui_font.clone(), self.text_rendering);
             theme::apply(ctx, self.theme);
             self.styled = true;
         } else {
             self.fonts_ready = true;
-            if cjk != self.fonts_cjk {
+            let choice = (self.ui_font.clone(), self.text_rendering);
+            if cjk != self.fonts_cjk || choice != self.fonts_choice {
                 // Same family names as before, so named fonts stay valid while the new set loads.
-                theme::install_fonts_for(ctx, cjk);
+                theme::install_fonts_with(ctx, cjk, &self.ui_font, self.text_rendering);
+                let rendering_changed = choice.1 != self.fonts_choice.1;
                 self.fonts_cjk = cjk;
+                self.fonts_choice = choice;
+                // The rendering also sets the visuals (sub-pixel placement, gamma).
+                if rendering_changed {
+                    theme::apply(ctx, self.theme);
+                }
             }
         }
         self.sync_theme(ctx);
