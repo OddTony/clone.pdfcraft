@@ -30,8 +30,10 @@ if pdfcraft_ofd::is_ofd(&bytes) {                 // a ZIP with OFD.xml at its r
 - **Objects**: `PathObject` (`AbbreviatedData`: `S`/`M`, `L`, `Q`, `B`, `A`, `C`), `TextObject`
   (`TextCode` with `X`/`Y` and `DeltaX`/`DeltaY` where `g N v` repeats `v` N times;
   `CGTransform` glyph indices), `ImageObject`, `CompositeObject` (reference only), nested
-  `PageBlock`, with the common `Boundary`, `CTM`, `DrawParam`, `LineWidth`, `Alpha`, `Visible`
-  and fill/stroke colours.
+  `PageBlock`, with the common `Boundary`, `CTM`, `DrawParam`, `LineWidth`, `Alpha`, `Visible`,
+  fill/stroke colours and `Clips` (`Clip` regions intersect, the `Area`s of one region form a
+  union; an area is a `Path`, read, or a `Text`, recorded but not read yet; `TransFlag` says
+  whether the object's CTM applies). `Graphic::clip_to_page` places an area in page space.
 
 Numbers stay in OFD's units (millimetres, y down). `geom` converts: `mm_to_pt`,
 `OfdBox::size_pt`, `OfdBox::page_to_pdf` (OFD page space to PDF page space) and

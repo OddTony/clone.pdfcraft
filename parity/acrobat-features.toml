@@ -7208,8 +7208,8 @@ milestone = "none"
 status = "partial"
 commands = ["file.open_ofd"]
 tools = []
-evidence = ["crates/create/src/ofd_tests.rs::pages_get_the_ofd_page_size", "crates/create/src/ofd_tests.rs::paths_keep_colours_width_and_curves", "crates/create/src/ofd_tests.rs::text_is_real_text_with_standard_and_chinese_fallback_fonts", "crates/create/src/ofd_tests.rs::embedded_fonts_are_embedded_with_widths_and_to_unicode"]
-notes = "not an Acrobat feature (#1036). Early alpha: pages, paths, PNG/JPEG images and text with OFD-embedded fonts. Not yet: composite units, shadings, clipping, JBIG2, seals and signatures (not carried over or checked). Chinese without an embedded font uses non-embedded STSong-Light (renders in PdfCraft once a CJK fallback lands). Unverified against real issuing systems' files"
+evidence = ["crates/create/src/ofd_tests.rs::pages_get_the_ofd_page_size", "crates/create/src/ofd_tests.rs::paths_keep_colours_width_and_curves", "crates/create/src/ofd_tests.rs::text_is_real_text_with_standard_and_chinese_fallback_fonts", "crates/create/src/ofd_tests.rs::embedded_fonts_are_embedded_with_widths_and_to_unicode", "crates/create/src/ofd_tests.rs::paths_text_and_images_are_clipped_in_page_space", "crates/create/src/ofd_tests.rs::clips_that_cannot_be_drawn_are_skipped_and_reported"]
+notes = "not an Acrobat feature (#1036). Early alpha: pages, paths, PNG/JPEG images and text with OFD-embedded fonts; template pages as shared forms; paths, text and images clipped to path clip areas. Not yet: composite units, shadings, clips made of text or of several areas (reported, drawn unclipped), JBIG2, seals and signatures (not carried over or checked). Chinese without an embedded font uses non-embedded STSong-Light (renders in PdfCraft once a CJK fallback lands). Unverified against real issuing systems' files"
 
 # ==================================================================================================
 # K. Optimize and standards

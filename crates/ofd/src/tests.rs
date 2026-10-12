@@ -234,6 +234,8 @@ fn ofd_page_space_maps_to_pdf_space() {
         line_width: None,
         alpha: 255,
         visible: true,
+        clips: Vec::new(),
+        clips_follow_ctm: false,
     };
     assert!(close(g.to_page().apply(1.0, 1.0), (23.0, 32.0)));
 }
@@ -578,4 +580,36 @@ fn parse_package_shares_the_unpacking_budget() {
     parse_package(&pkg, &tight).unwrap();
     assert!(matches!(pkg.read("Doc_0/Document.xml"), Err(OfdError::Limit(_))));
     assert!(zip::Package::open(&bytes, &tight).unwrap().read("Doc_0/Document.xml").is_ok());
+}
+
+#[test]
+fn reads_clips() {
+    let body = r#"<PathObject Boundary="10 20 30 40" CTM="2 0 0 2 0 0"><Clips TransFlag="true"><Clip><Area CTM="1 0 0 1 5 5" DrawParam="7">
+<Path Boundary="1 2 3 4" Rule="Even-Odd"><Clips><Clip><Area><Path Boundary="0 0 1 1"/></Area></Clip></Clips><AbbreviatedData>M 0 0 L 3 4 C</AbbreviatedData></Path></Area>
+<Area><Text Boundary="0 0 1 1" Font="4" Size="3"><TextCode>X</TextCode></Text></Area></Clip><Clip><Area/></Clip></Clips>
+<AbbreviatedData>M 0 0 L 1 1</AbbreviatedData></PathObject>"#;
+    let doc = parse(&with("Doc_0/Pages/Page_0/Content.xml", &page(body))).unwrap();
+    let Object::Path(p) = &doc.pages[0].content.layers[0].objects[0] else { panic!() };
+    let g = &p.graphic;
+    assert!(g.clips_follow_ctm);
+    assert_eq!(g.clips.len(), 2);
+    let areas = &g.clips[0].areas;
+    assert_eq!(areas.len(), 2);
+    assert_eq!(areas[0].draw_param, Some(7));
+    let ClipShape::Path(clip) = &areas[0].shape else { panic!("{:?}", areas[0].shape) };
+    assert_eq!(clip.rule, FillRule::EvenOdd);
+    assert_eq!(clip.path, [PathCmd::Move(0.0, 0.0), PathCmd::Line(3.0, 4.0), PathCmd::Close]);
+    assert!(clip.graphic.clips.is_empty(), "a clip path's own clips are not read");
+    assert_eq!(areas[1].shape, ClipShape::Text);
+    assert_eq!(g.clips[1].areas[0].shape, ClipShape::Empty);
+    // A clip path point: its boundary corner (1, 2), the area's CTM (+5, +5), the object's CTM
+    // (×2, with TransFlag) and its boundary corner (10, 20).
+    let m = clip.graphic.to_page().then(&g.clip_to_page(&areas[0]));
+    assert_eq!(m.apply(0.0, 0.0), (22.0, 34.0));
+    // Without TransFlag only the boundary corner applies.
+    let plain = Graphic { clips_follow_ctm: false, ..g.clone() };
+    assert_eq!(clip.graphic.to_page().then(&plain.clip_to_page(&areas[0])).apply(0.0, 0.0), (16.0, 27.0));
+    // Malformed clips are errors naming the part, like other objects.
+    let bad = body.replace(r#"CTM="1 0 0 1 5 5""#, r#"CTM="1 0 0""#);
+    assert!(invalid(&with("Doc_0/Pages/Page_0/Content.xml", &page(&bad))).contains("CTM"));
 }

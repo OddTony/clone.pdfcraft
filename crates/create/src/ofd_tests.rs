@@ -300,3 +300,74 @@ fn a_template_is_written_once_for_all_its_pages() {
     assert_eq!(form.dict.get(b"Subtype").and_then(Object::as_name), Some(&b"Form"[..]));
     assert!(String::from_utf8_lossy(&form.decoded().unwrap()).contains("77 0 l"));
 }
+
+/// A clip made of one path area, in the object's boundary space: the path's own boundary corner
+/// (1, 1), then the area's CTM (×2), then the object's boundary corner (10, 20).
+const CLIP: &str = r#"<ofd:Clips><ofd:Clip><ofd:Area CTM="2 0 0 2 0 0"><ofd:Path Boundary="1 1 5 5"><ofd:AbbreviatedData>M 0 0 L 5 0 L 5 5 L 0 5 C</ofd:AbbreviatedData></ofd:Path></ofd:Area></ofd:Clip></ofd:Clips>"#;
+
+#[test]
+fn paths_text_and_images_are_clipped_in_page_space() {
+    let path = format!(
+        r#"<ofd:PathObject ID="11" Boundary="10 20 50 30" CTM="3 0 0 3 0 0">{CLIP}<ofd:AbbreviatedData>M 0 0 L 9 9</ofd:AbbreviatedData></ofd:PathObject>"#
+    );
+    // TransFlag: the object's CTM (×2) applies to the clip too; an even-odd clip path.
+    let text = r#"<ofd:TextObject ID="12" Boundary="20 40 100 10" Font="4" Size="5" CTM="2 0 0 2 0 0"><ofd:Clips TransFlag="true"><ofd:Clip><ofd:Area>
+<ofd:Path Boundary="0 0 1 1" Rule="Even-Odd"><ofd:AbbreviatedData>M 0 0 L 1 0 L 1 1 C</ofd:AbbreviatedData></ofd:Path></ofd:Area></ofd:Clip></ofd:Clips>
+<ofd:TextCode X="0" Y="5">A</ofd:TextCode></ofd:TextObject>"#;
+    // An image clipped to its own unit square, through its CTM (×40).
+    let image = r#"<ofd:ImageObject ID="13" Boundary="150 10 40 40" CTM="40 0 0 40 0 0" ResourceID="6"><ofd:Clips TransFlag="true"><ofd:Clip><ofd:Area>
+<ofd:Path Boundary="0 0 1 1"><ofd:AbbreviatedData>M 0 0 L 1 0 L 1 1 C</ofd:AbbreviatedData></ofd:Path></ofd:Area></ofd:Clip></ofd:Clips></ofd:ImageObject>"#;
+    let (pages, report, _) = convert(&package(&[&page(&format!("{path}{text}{image}"))], false));
+    let ops = &pages[0].1;
+    let clipped_path = "q\n12 22 m\n22 22 l\n22 32 l\n12 32 l\nh\nW n\n3 0 0 3 10 20 cm\n";
+    assert!(ops.contains(clipped_path), "the clip comes before the object's own space: {ops}");
+    let clipped_text = "q\n20 40 m\n22 40 l\n22 42 l\nh\nW* n\n2 0 0 2 20 40 cm\n";
+    assert!(ops.contains(clipped_text), "{ops}");
+    let clipped_image = "q\n150 10 m\n190 10 l\n190 50 l\nh\nW n\n40 0 0 40 150 10 cm\n";
+    assert!(ops.contains(clipped_image), "{ops}");
+    assert_eq!(report.skipped, 0, "{:?}", report.notes);
+}
+
+#[test]
+fn several_clips_intersect_and_curves_are_mapped() {
+    let second = r#"<ofd:Clip><ofd:Area><ofd:Path Boundary="0 0 4 4"><ofd:AbbreviatedData>M 0 0 Q 4 0 4 4 A 2 2 0 0 1 0 0 C</ofd:AbbreviatedData></ofd:Path></ofd:Area></ofd:Clip>"#;
+    let clips = CLIP.replace("</ofd:Clips>", &format!("{second}</ofd:Clips>"));
+    let body =
+        format!(r#"<ofd:PathObject ID="11" Boundary="10 20 50 30">{clips}<ofd:AbbreviatedData>M 0 0 L 9 9</ofd:AbbreviatedData></ofd:PathObject>"#);
+    let (pages, report, _) = convert(&package(&[&page(&body)], false));
+    let ops = &pages[0].1;
+    assert_eq!(ops.matches("W n\n").count(), 2, "{ops}");
+    // The quadratic curve becomes a cubic, moved to the boundary corner: (0,0)→(10,20) and
+    // control points ⅔ of the way to (4,0), ending at (4,4)→(14,24).
+    assert!(ops.contains("10 20 m\n12.6667 20 14 21.3333 14 24 c\n"), "{ops}");
+    assert_eq!(report.skipped, 0, "{:?}", report.notes);
+}
+
+#[test]
+fn clips_that_cannot_be_drawn_are_skipped_and_reported() {
+    let text_area = r#"<ofd:Clips><ofd:Clip><ofd:Area><ofd:Text Boundary="0 0 5 5" Font="4" Size="3"><ofd:TextCode X="0" Y="3">X</ofd:TextCode></ofd:Text></ofd:Area></ofd:Clip></ofd:Clips>"#;
+    let two_areas = CLIP.replace(
+        "</ofd:Area>",
+        "</ofd:Area><ofd:Area><ofd:Path Boundary=\"0 0 1 1\"><ofd:AbbreviatedData>M 0 0 L 1 1</ofd:AbbreviatedData></ofd:Path></ofd:Area>",
+    );
+    let empty = r#"<ofd:Clips><ofd:Clip/><ofd:Clip><ofd:Area/></ofd:Clip></ofd:Clips>"#;
+    let objects = [text_area, two_areas.as_str(), empty]
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            format!(
+                r#"<ofd:PathObject ID="{}" Boundary="0 0 9 9">{c}<ofd:AbbreviatedData>M 0 0 L 9 {i}</ofd:AbbreviatedData></ofd:PathObject>"#,
+                20 + i
+            )
+        })
+        .collect::<String>();
+    let (pages, report, _) = convert(&package(&[&page(&objects)], false));
+    let ops = &pages[0].1;
+    // Everything is still drawn, without the clips.
+    assert!(!ops.contains(" W"), "{ops}");
+    assert!(ops.contains("9 0 l") && ops.contains("9 1 l") && ops.contains("9 2 l"), "{ops}");
+    let by_kind: Vec<(&str, usize)> = report.skipped_by_kind.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    assert_eq!(by_kind, [("clipping regions made of several areas", 1), ("empty clipping regions", 2), ("text used as a clipping region", 1)]);
+    assert_eq!(report.skipped, 4);
+    assert!(report.notes.iter().any(|n| n.contains("text used as a clipping region")), "{:?}", report.notes);
+}

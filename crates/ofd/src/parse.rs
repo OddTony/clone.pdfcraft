@@ -430,16 +430,16 @@ impl Reader<'_, '_> {
         let mut out = Vec::new();
         for n in parent.children().filter(Node::is_element) {
             let obj = match n.tag_name().name() {
-                "PathObject" => Object::Path(self.path_object(part, &n)?),
+                "PathObject" => Object::Path(self.path_object(part, &n, true)?),
                 "TextObject" => Object::Text(self.text_object(part, &n)?),
                 "ImageObject" => Object::Image(ImageObject {
-                    graphic: graphic(part, &n)?,
+                    graphic: self.graphic(part, &n)?,
                     resource_id: part.required_id(&n, "ResourceID")?,
                     substitution: part.id(&n, "Substitution")?,
                     image_mask: part.id(&n, "ImageMask")?,
                 }),
                 "CompositeObject" => {
-                    Object::Composite(CompositeObject { graphic: graphic(part, &n)?, resource_id: part.required_id(&n, "ResourceID")? })
+                    Object::Composite(CompositeObject { graphic: self.graphic(part, &n)?, resource_id: part.required_id(&n, "ResourceID")? })
                 }
                 "PageBlock" => Object::Block(PageBlock { id: part.id(&n, "ID")?, objects: self.objects(part, &n, depth + 1)? }),
                 _ => continue,
@@ -467,12 +467,14 @@ impl Reader<'_, '_> {
         }))
     }
 
-    fn path_object(&mut self, part: &Part, n: &Node) -> Result<PathObject, OfdError> {
+    /// A `PathObject`, or with `clips` false a clip area's `Path` (whose own clips mean nothing).
+    fn path_object(&mut self, part: &Part, n: &Node, clips: bool) -> Result<PathObject, OfdError> {
         let data = child(n, "AbbreviatedData").map(|d| text(&d)).unwrap_or_default();
         let path = values::path(&data, part.limits).map_err(|e| part.at(n, e))?;
         self.charge(part, 0, path.len().saturating_mul(size_of::<PathCmd>()), 0)?;
+        let graphic = if clips { self.graphic(part, n)? } else { graphic(part, n)? };
         Ok(PathObject {
-            graphic: graphic(part, n)?,
+            graphic,
             stroke: part.flag(n, "Stroke", true)?,
             fill: part.flag(n, "Fill", false)?,
             rule: match n.attribute("Rule") {
@@ -524,7 +526,7 @@ impl Reader<'_, '_> {
             codes.push(TextCode { x: part.num(&c, "X")?, y: part.num(&c, "Y")?, delta_x, delta_y, text });
         }
         Ok(TextObject {
-            graphic: graphic(part, n)?,
+            graphic: self.graphic(part, n)?,
             font: part.required_id(n, "Font")?,
             size,
             stroke: part.flag(n, "Stroke", false)?,
@@ -539,6 +541,28 @@ impl Reader<'_, '_> {
             cg_transforms,
             codes,
         })
+    }
+
+    /// An object's common attributes and its `Clips`.
+    fn graphic(&mut self, part: &Part, n: &Node) -> Result<Graphic, OfdError> {
+        let mut g = graphic(part, n)?;
+        let Some(clips) = child(n, "Clips") else { return Ok(g) };
+        g.clips_follow_ctm = part.flag(&clips, "TransFlag", false)?;
+        for c in children(&clips, "Clip") {
+            let mut areas = Vec::new();
+            for a in children(&c, "Area") {
+                let shape = match (child(&a, "Path"), child(&a, "Text")) {
+                    (Some(p), _) => ClipShape::Path(Box::new(self.path_object(part, &p, false)?)),
+                    (None, Some(_)) => ClipShape::Text,
+                    (None, None) => ClipShape::Empty,
+                };
+                self.charge(part, 1, size_of::<ClipArea>(), 0)?;
+                let ctm = a.attribute("CTM").map(|m| values::matrix(m, part.limits).map_err(|e| part.at(&a, format!("CTM: {e}")))).transpose()?;
+                areas.push(ClipArea { ctm, draw_param: part.id(&a, "DrawParam")?, shape });
+            }
+            g.clips.push(Clip { areas });
+        }
+        Ok(g)
     }
 
     /// Record references to templates, fonts and media that no resource defines.
@@ -602,5 +626,7 @@ fn graphic(part: &Part, n: &Node) -> Result<Graphic, OfdError> {
         line_width: part.num(n, "LineWidth")?,
         alpha: part.int(n, "Alpha", 255u8)?,
         visible: part.flag(n, "Visible", true)?,
+        clips: Vec::new(),
+        clips_follow_ctm: false,
     })
 }

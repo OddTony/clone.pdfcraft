@@ -138,6 +138,11 @@ pub struct Graphic {
     /// 0 (transparent) to 255 (opaque).
     pub alpha: u8,
     pub visible: bool,
+    /// `Clips`: the object is drawn only where all of these overlap (their intersection).
+    pub clips: Vec<Clip>,
+    /// `Clips/@TransFlag`: the clips are in the object's own space, so its CTM applies to them
+    /// too. Otherwise (the default) only the move to the boundary's corner does.
+    pub clips_follow_ctm: bool,
 }
 
 impl Graphic {
@@ -146,6 +151,41 @@ impl Graphic {
     pub fn to_page(&self) -> Matrix {
         self.ctm.unwrap_or(Matrix::IDENTITY).then(&Matrix::translate(self.boundary.x, self.boundary.y))
     }
+
+    /// The matrix from one of this object's clip areas to page space (mm): the area's CTM, then
+    /// the object's CTM when [`Graphic::clips_follow_ctm`], then the move to the object's
+    /// boundary corner. An area's path is placed in the area's space by its own
+    /// [`Graphic::to_page`] first.
+    pub fn clip_to_page(&self, area: &ClipArea) -> Matrix {
+        let m = area.ctm.unwrap_or(Matrix::IDENTITY);
+        let m = if self.clips_follow_ctm { m.then(&self.ctm.unwrap_or(Matrix::IDENTITY)) } else { m };
+        m.then(&Matrix::translate(self.boundary.x, self.boundary.y))
+    }
+}
+
+/// `Clips/Clip`: one clipping region, the union of its areas.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Clip {
+    pub areas: Vec<ClipArea>,
+}
+
+/// `Clip/Area`: a path or a text that is part of a clipping region.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClipArea {
+    pub ctm: Option<Matrix>,
+    pub draw_param: Option<u32>,
+    pub shape: ClipShape,
+}
+
+/// What a clip area is made of.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ClipShape {
+    /// `Area/Path`: the inside of the path, by its fill rule. Its own `Clips` are not read.
+    Path(Box<PathObject>),
+    /// `Area/Text`: the outlines of a text. Not read yet.
+    Text,
+    /// An area with neither a path nor a text.
+    Empty,
 }
 
 /// A colour (`CT_Color`). `value` is in the colour space's components (0–255 for 8-bit RGB).

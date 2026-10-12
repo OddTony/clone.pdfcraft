@@ -12,8 +12,15 @@
 //!
 //! Template pages are written once each, as form XObjects that every page using them draws.
 //!
-//! What isn't drawn (composite units, shadings, JBIG2 and other undecodable images, clipping) is
-//! counted in [`OfdReport::skipped`]. Signatures and seals are not carried over or checked.
+//! Paths, text and images are clipped to their `Clips`: each clip is a PDF clipping path (`W n`,
+//! or `W* n` for an even-odd path) in page space, so several clips intersect. A clip made of one
+//! path area is drawn exactly; one made of text or of several areas (a union, which PDF clipping
+//! can't express) and an empty one are skipped: the object is drawn unclipped and the clip is
+//! reported.
+//!
+//! What isn't drawn (composite units, shadings, JBIG2 and other undecodable images, the clips
+//! above) is counted in [`OfdReport::skipped`], by kind in [`OfdReport::skipped_by_kind`].
+//! Signatures and seals are not carried over or checked.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
@@ -21,8 +28,8 @@ use std::fmt::Write as _;
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
 use pdfcraft_fonts::{helvetica_width, win_ansi, win_ansi_encodable};
 use pdfcraft_ofd::{
-    Color, ColorSpaceKind, FillRule, Graphic, LayerKind, Matrix, Object as Item, PageContent, PathCmd, Resources, TemplatePage, TextObject, ZOrder,
-    zip::Package,
+    ClipShape, Color, ColorSpaceKind, FillRule, Graphic, LayerKind, Matrix, Object as Item, PageContent, PathCmd, Resources, TemplatePage,
+    TextObject, ZOrder, zip::Package,
 };
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider, instance::LocationRef, instance::Size};
@@ -35,6 +42,9 @@ pub struct OfdReport {
     pub pages: usize,
     /// Objects (or parts of objects) that were not drawn.
     pub skipped: usize,
+    /// [`OfdReport::skipped`] by kind ("composite graphic units", "text used as a clipping
+    /// region", …).
+    pub skipped_by_kind: BTreeMap<String, usize>,
     /// The OFD file is signed: its signatures and seals are not in the PDF and were not checked.
     pub signed: bool,
     /// Details: the reader's warnings and what was skipped, once each.
@@ -185,6 +195,7 @@ fn pdf_name(name: &str, fallback: &str) -> String {
 impl Writer<'_, '_> {
     fn skip(&mut self, what: &str) {
         self.report.skipped += 1;
+        *self.report.skipped_by_kind.entry(what.to_string()).or_default() += 1;
         let note = format!("not drawn yet: {what}");
         if !self.report.notes.contains(&note) {
             self.report.notes.push(note);
@@ -253,13 +264,14 @@ impl Writer<'_, '_> {
                     };
                     let line_width = p.graphic.line_width.or_else(|| self.param_line_width(param)).unwrap_or(0.353);
                     let mut s = String::from("q\n");
+                    self.clip(&p.graphic, &mut s);
                     s.push_str(&cm(&p.graphic.to_page()));
                     self.alpha(&p.graphic, fill.as_ref(), stroke.as_ref(), out, &mut s);
                     let _ = writeln!(s, "{} w", n(line_width));
                     for c in [fill_ops, stroke_ops].into_iter().flatten() {
                         s.push_str(&c);
                     }
-                    path_ops(&p.path, &mut s);
+                    path_ops(&p.path, &Matrix::IDENTITY, &mut s);
                     let _ = writeln!(s, "{paint}\nQ");
                     out.ops.push_str(&s);
                 }
@@ -269,6 +281,7 @@ impl Writer<'_, '_> {
                     let name = format!("Im{}", i.resource_id);
                     out.xobjects.insert(name.clone(), r);
                     let mut s = String::from("q\n");
+                    self.clip(&i.graphic, &mut s);
                     s.push_str(&cm(&i.graphic.to_page()));
                     self.alpha(&i.graphic, None, None, out, &mut s);
                     // OFD's image space runs down the page; PDF's unit square runs up.
@@ -278,6 +291,32 @@ impl Writer<'_, '_> {
                 Item::Composite(_) => self.skip("composite graphic units"),
                 Item::Block(b) => self.objects(&b.objects, layer_param, out),
                 _ => {}
+            }
+        }
+    }
+
+    /// Clip to `g`'s clips, in page space: call it right after `q`, before the object's `cm`.
+    /// A clip this can't draw is skipped and reported, and the object is drawn without it.
+    fn clip(&mut self, g: &Graphic, s: &mut String) {
+        for clip in &g.clips {
+            let area = match clip.areas.as_slice() {
+                [area] => area,
+                [] => {
+                    self.skip("empty clipping regions");
+                    continue;
+                }
+                _ => {
+                    self.skip("clipping regions made of several areas");
+                    continue;
+                }
+            };
+            match &area.shape {
+                ClipShape::Path(p) if !p.path.is_empty() => {
+                    path_ops(&p.path, &p.graphic.to_page().then(&g.clip_to_page(area)), s);
+                    s.push_str(if p.rule == FillRule::EvenOdd { "W* n\n" } else { "W n\n" });
+                }
+                ClipShape::Text => self.skip("text used as a clipping region"),
+                ClipShape::Path(_) | ClipShape::Empty => self.skip("empty clipping regions"),
             }
         }
     }
@@ -537,6 +576,7 @@ impl Writer<'_, '_> {
             }
         }
         let mut s = String::from("q\n");
+        self.clip(&t.graphic, &mut s);
         s.push_str(&cm(&t.graphic.to_page()));
         self.alpha(&t.graphic, fill.as_ref(), stroke.as_ref(), out, &mut s);
         for c in [fill.as_ref().and_then(|c| self.color(c, true)), stroke.as_ref().and_then(|c| self.color(c, false))].into_iter().flatten() {
@@ -640,14 +680,20 @@ fn black() -> Color {
     Color { value: vec![0.0, 0.0, 0.0], color_space: None, index: None, alpha: 255, shading: false }
 }
 
-/// Path operators for `path` (object space). Quadratic curves and arcs become cubic Béziers.
-fn path_ops(path: &[PathCmd], s: &mut String) {
+/// Path operators for `path`, its points mapped by `m`. Quadratic curves and arcs become cubic
+/// Béziers first, so an affine `m` maps them exactly.
+fn path_ops(path: &[PathCmd], m: &Matrix, s: &mut String) {
+    let pt = |s: &mut String, x: f64, y: f64| {
+        let (x, y) = m.apply(x, y);
+        let _ = write!(s, "{} {} ", n(x), n(y));
+    };
     let mut cur: Option<(f64, f64)> = None;
     let mut start = (0.0, 0.0);
     for cmd in path {
         match *cmd {
             PathCmd::Move(x, y) => {
-                let _ = writeln!(s, "{} {} m", n(x), n(y));
+                pt(s, x, y);
+                s.push_str("m\n");
                 cur = Some((x, y));
                 start = (x, y);
             }
@@ -663,7 +709,8 @@ fn path_ops(path: &[PathCmd], s: &mut String) {
                     None => {
                         // A drawing command without a current point starts one there.
                         let p = end_point(cmd);
-                        let _ = writeln!(s, "{} {} m", n(p.0), n(p.1));
+                        pt(s, p.0, p.1);
+                        s.push_str("m\n");
                         start = p;
                         cur = Some(p);
                         continue;
@@ -671,19 +718,27 @@ fn path_ops(path: &[PathCmd], s: &mut String) {
                 };
                 match *cmd {
                     PathCmd::Line(x, y) => {
-                        let _ = writeln!(s, "{} {} l", n(x), n(y));
+                        pt(s, x, y);
+                        s.push_str("l\n");
                     }
                     PathCmd::Quad(qx, qy, x, y) => {
-                        let c1 = (x0 + 2.0 / 3.0 * (qx - x0), y0 + 2.0 / 3.0 * (qy - y0));
-                        let c2 = (x + 2.0 / 3.0 * (qx - x), y + 2.0 / 3.0 * (qy - y));
-                        let _ = writeln!(s, "{} {} {} {} {} {} c", n(c1.0), n(c1.1), n(c2.0), n(c2.1), n(x), n(y));
+                        pt(s, x0 + 2.0 / 3.0 * (qx - x0), y0 + 2.0 / 3.0 * (qy - y0));
+                        pt(s, x + 2.0 / 3.0 * (qx - x), y + 2.0 / 3.0 * (qy - y));
+                        pt(s, x, y);
+                        s.push_str("c\n");
                     }
                     PathCmd::Cubic(a, b, c, d, x, y) => {
-                        let _ = writeln!(s, "{} {} {} {} {} {} c", n(a), n(b), n(c), n(d), n(x), n(y));
+                        pt(s, a, b);
+                        pt(s, c, d);
+                        pt(s, x, y);
+                        s.push_str("c\n");
                     }
                     PathCmd::Arc { rx, ry, angle, large, sweep, x, y } => {
                         for [a, b, c, d, e, f] in arc_to_cubics((x0, y0), rx, ry, angle, large, sweep, (x, y)) {
-                            let _ = writeln!(s, "{} {} {} {} {} {} c", n(a), n(b), n(c), n(d), n(e), n(f));
+                            pt(s, a, b);
+                            pt(s, c, d);
+                            pt(s, e, f);
+                            s.push_str("c\n");
                         }
                     }
                     PathCmd::Move(..) | PathCmd::Close => {}
