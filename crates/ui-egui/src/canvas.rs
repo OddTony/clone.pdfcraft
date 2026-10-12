@@ -1617,6 +1617,7 @@ impl DocView {
             let tex = ctx.load_texture(format!("page-{:?}-{page}", self.id), img, TextureOptions::LINEAR);
             self.pages.insert(page, PageTex { tag: r.request.tag, tex });
             self.signature_drag.page_received(page);
+            self.move_background.page_received(page);
             self.waiting_since.remove(&page);
             if !self.stale_tiles.iter().any(|k| k.0 == page) {
                 self.forms.unbaked.retain(|(_, p)| *p != page);
@@ -2552,7 +2553,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             view.text_background.paint(painter, &xf, i, view.line_editor.as_ref());
             if editing_content {
                 let page_tex = view.pages.get(&i).map(|p| p.tex.id());
-                view.move_background.paint(ui, painter, &xf, i, info, &added, &view.content, page_tex);
+                view.move_background.paint(ui, painter, &xf, i, info, &view.content, page_tex);
             }
             painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(0.5, t.border.gamma_multiply(0.8)), egui::StrokeKind::Outside);
 

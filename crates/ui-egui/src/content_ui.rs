@@ -113,6 +113,11 @@ pub(crate) struct MoveBackground {
     renderer: Option<pdfcraft_render::RenderPool>,
     texture: Option<egui::TextureHandle>,
     tag: Option<u64>,
+    /// The item's display-space box when the gesture started.
+    from: Option<[f64; 4]>,
+    /// The applied move's box. The page raster on screen still has the item where it was until
+    /// its replacement arrives, so the preview stays up until then.
+    settling: Option<[f64; 4]>,
 }
 
 impl MoveBackground {
@@ -125,11 +130,15 @@ impl MoveBackground {
             (Some((gp, Grab::Move, _)), Some((sp, si))) if gp == sp => Some((doc.edit_generation(), sp, si)),
             _ => None,
         };
-        if self.key != key {
+        if !(key.is_none() && self.settling.is_some()) && self.key != key {
             *self = Self { key, ..Default::default() };
             if let Some((_, page, index)) = key {
                 self.renderer = doc.added_content_preview(page, index).ok().map(|p| p.renderer());
+                self.from = on_page(&doc.added, page).into_iter().find(|(i, _)| *i == index).map(|(_, a)| a.content.rect());
             }
+        }
+        if self.settling.is_some() {
+            return;
         }
         let (Some((_, page, _)), Some(renderer)) = (self.key, self.renderer.as_ref()) else { return };
         let Some(p) = doc.info.pages.get(page) else { return };
@@ -159,8 +168,26 @@ impl MoveBackground {
         }
     }
 
+    /// The move was applied: keep the preview, now at the new generation, until the page is
+    /// rendered again. Any other edit ends it.
+    pub fn committed(&mut self, edit: &Edit, generation: u64) {
+        match edit {
+            Edit::UpdateContent { page, index, content } if self.texture.is_some() && self.key.is_some_and(|(_, p, i)| (p, i) == (*page, *index)) => {
+                self.key = Some((generation, *page, *index));
+                self.settling = Some(content.rect());
+            }
+            _ => *self = Self::default(),
+        }
+    }
+
+    pub fn page_received(&mut self, page: usize) {
+        if self.settling.is_some() && self.key.is_some_and(|(_, p, _)| p == page) {
+            *self = Self::default();
+        }
+    }
+
     /// The page without the moving item, then the item's pixels taken from `page_tex` (the page
-    /// as rendered, item included) at the dragged position.
+    /// as rendered, item included where it was) at the dragged or applied position.
     #[allow(clippy::too_many_arguments)]
     pub fn paint(
         &self,
@@ -169,17 +196,26 @@ impl MoveBackground {
         xf: &PageXform,
         page: usize,
         info: &DocInfo,
-        added: &[Added],
         cv: &ContentView,
         page_tex: Option<egui::TextureId>,
     ) {
-        let (Some((_, kp, index)), Some(background), Some(page_tex)) = (self.key, &self.texture, page_tex) else { return };
-        let (Some((_, _, start)), Some(p)) = (cv.grab, ui.input(|i| i.pointer.hover_pos())) else { return };
-        let Some((_, a)) = on_page(added, page).into_iter().find(|(i, _)| kp == page && *i == index) else { return };
+        let (Some((_, kp, _)), Some(background), Some(page_tex), Some(from)) = (self.key, &self.texture, page_tex, self.from) else { return };
+        if kp != page {
+            return;
+        }
+        let r = screen_rect(xf, info, page, from);
+        let d = if let Some((_, _, start)) = cv.grab {
+            let Some(p) = ui.input(|i| i.pointer.hover_pos()) else { return };
+            p - start
+        } else if let Some(to) = self.settling {
+            // A moved text box keeps its top edge (its height follows its lines).
+            screen_rect(xf, info, page, to).left_top() - r.left_top()
+        } else {
+            return;
+        };
         let painter = painter.with_clip_rect(painter.clip_rect().intersect(xf.rect));
         xf.paint_image(&painter, background.id(), 0.0, 0.0, 1.0, 1.0);
-        let r = screen_rect(xf, info, page, a.content.rect()).expand(1.0);
-        let d = p - start;
+        let r = r.expand(1.0);
         let mut mesh = egui::Mesh::with_texture(page_tex);
         for c in [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()] {
             let (u, v) = xf.screen_to_norm(c);

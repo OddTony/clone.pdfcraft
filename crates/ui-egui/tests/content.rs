@@ -7,10 +7,14 @@ use egui_kittest::kittest::Queryable;
 use pdfcraft_ui_egui::{PdfCraftApp, QuickTool};
 
 fn harness() -> Harness<'static, PdfCraftApp> {
-    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+    harness_bytes(include_bytes!("data/form.pdf").to_vec())
+}
+
+fn harness_bytes(bytes: Vec<u8>) -> Harness<'static, PdfCraftApp> {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
-        app.open_bytes("form.pdf", None, include_bytes!("data/form.pdf").to_vec()).unwrap();
+        app.open_bytes("form.pdf", None, bytes.clone()).unwrap();
         app.set_option("zoom", "150").unwrap();
         app
     });
@@ -251,23 +255,30 @@ fn ink(pixels: &image::RgbaImage, r: egui::Rect) -> usize {
         .count()
 }
 
-/// #1488: while a finished text box is dragged, its text follows the box instead of staying put
-/// until the button is released.
-#[test]
-fn dragged_text_follows_the_pointer_before_release() {
-    let mut h = harness();
+/// Only the left part of the glyphs: kittest paints its cursor down and right of the pointer.
+fn probe(r: egui::Rect) -> egui::Rect {
+    egui::Rect::from_min_size(r.min, egui::vec2(r.width() * 0.6, r.height()))
+}
+
+/// Ink in the probes of the text's first and dragged places.
+fn ink_at(h: &mut Harness<'static, PdfCraftApp>, from: egui::Rect, to: egui::Rect) -> (usize, usize) {
+    let pixels = h.render().unwrap();
+    (ink(&pixels, probe(from)), ink(&pixels, probe(to)))
+}
+
+/// Types text, finishes it, and drags it up without releasing, until the drag preview shows.
+/// Returns the text's box, its screen rectangles before and after, and the pointer.
+fn drag_added_text(h: &mut Harness<'static, PdfCraftApp>) -> ([f64; 4], egui::Rect, egui::Rect, Pos2) {
     assert!(h.state_mut().execute("edit.text"));
     h.run_steps(2);
-    let p = at(&h, 40.0, 300.0);
-    click(&mut h, p);
+    let p = at(h, 40.0, 300.0);
+    click(h, p);
     h.event(egui::Event::Text("MMMMMMMM".into()));
     h.run_steps(2);
     h.get_by_label("Done adding text").click();
     h.run_steps(3);
-    let rect = added(&h)[0].content.rect();
-    let from = item_on_screen(&h, rect);
-    // Only the left part of the glyphs: kittest paints its cursor down and right of the pointer.
-    let probe = |r: egui::Rect| egui::Rect::from_min_size(r.min, egui::vec2(r.width() * 0.6, r.height()));
+    let rect = added(h)[0].content.rect();
+    let from = item_on_screen(h, rect);
     let mut shown = 0;
     for _ in 0..100 {
         h.run_steps(2);
@@ -286,23 +297,66 @@ fn dragged_text_follows_the_pointer_before_release() {
     h.run_steps(1);
     h.hover_at(grab + shift);
     let to = from.translate(shift);
-    let (mut old, mut new) = (usize::MAX, 0);
     for _ in 0..100 {
         h.run_steps(2);
-        let pixels = h.render().unwrap();
-        (old, new) = (ink(&pixels, probe(from)), ink(&pixels, probe(to)));
+        let (old, new) = ink_at(h, from, to);
         if old == 0 && new > 20 {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
+    (rect, from, to, grab + shift)
+}
+
+/// #1488: while a finished text box is dragged, its text follows the box instead of staying put
+/// until the button is released.
+#[test]
+fn dragged_text_follows_the_pointer_before_release() {
+    let mut h = harness();
+    let (rect, from, to, end) = drag_added_text(&mut h);
     if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
         h.render().unwrap().save(format!("{dir}/added-text-drag.png")).unwrap();
     }
+    let (old, new) = ink_at(&mut h, from, to);
     assert!(new > 20, "the text is drawn where the box was dragged ({new} dark pixels)");
     assert_eq!(old, 0, "and no longer where it was");
     assert_eq!(added(&h)[0].content.rect(), rect, "nothing is applied before release");
-    h.drop_at(grab + shift);
+    h.drop_at(end);
     h.run_steps(3);
     assert_ne!(added(&h)[0].content.rect(), rect, "releasing moves it");
+}
+
+/// After release the text stays in its new place while the page is re-rendered with the move,
+/// instead of jumping back to where it was for those frames.
+#[test]
+fn released_text_does_not_jump_back_before_the_page_is_redrawn() {
+    // A page slow enough to render that the frames before its new raster can be looked at: many
+    // pale squares, too light to count as ink.
+    let mut content = String::from("0.9 g\n");
+    for i in 0..60_000 {
+        content.push_str(&format!("{} {} 1 1 re f\n", i % 290, (i / 290) % 390));
+    }
+    let pdf = format!(
+        "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj\n4 0 obj << /Length {} >> stream\n{content}\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF",
+        content.len()
+    );
+    let mut h = harness_bytes(pdf.into_bytes());
+    let (rect, from, to, end) = drag_added_text(&mut h);
+    h.drop_at(end);
+    // Frame by frame until the page has been re-rendered. The one frame that swaps in the new
+    // raster reads back blank here (kittest renders it after its old texture is freed).
+    let mut shown = Vec::new();
+    while h.state().render_pending() || shown.is_empty() {
+        h.run_steps(1);
+        assert!(shown.len() < 500, "the page is re-rendered");
+        let (old, new) = ink_at(&mut h, from, to);
+        assert_eq!(old, 0, "frame {} after release: the text is back where it was", shown.len() + 1);
+        shown.push(new);
+    }
+    assert!(shown.len() > 2, "frames before the new raster: {shown:?}");
+    assert!(shown.iter().filter(|n| **n <= 20).count() <= 1, "the text stays where it was released: {shown:?}");
+    assert_ne!(added(&h)[0].content.rect(), rect, "the move is applied");
+    h.run_steps(2);
+    let (old, new) = ink_at(&mut h, from, to);
+    assert!(new > 20 && old == 0, "the redrawn page has the text in its new place ({old} old, {new} new)");
 }
