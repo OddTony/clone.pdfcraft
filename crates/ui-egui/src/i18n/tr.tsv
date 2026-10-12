@@ -2334,3 +2334,5 @@ animation effects	Off	Kapalı
 	The linked PDF opened, but its named destination was not applied.	Bağlantılı PDF açıldı, ancak adlandırılmış hedefi uygulanmadı.
 	The linked PDF opened, but its page destination was out of range.	Bağlantılı PDF açıldı, ancak sayfa hedefi aralık dışında.
 	Local cross-PDF links require the desktop app	PDF'ler arası yerel bağlantılar masaüstü uygulamasını gerektirir
+	Native tabs (as in Finder on macOS and File Explorer on Windows)	Yerel sekmeler (macOS'taki Finder ve Windows'taki Dosya Gezgini gibi)
+	Compact Home (tools and recent files only)	Sade Giriş (yalnızca araçlar ve son dosyalar)

@@ -2302,3 +2302,5 @@ animation effects	Off	关
 	The linked PDF opened, but its named destination was not applied.	已打开链接的 PDF，但未应用其命名目标。
 	The linked PDF opened, but its page destination was out of range.	已打开链接的 PDF，但其页面目标超出范围。
 	Local cross-PDF links require the desktop app	PDF 之间的本地链接需要桌面应用
+	Native tabs (as in Finder on macOS and File Explorer on Windows)	原生标签页（如 macOS 的访达和 Windows 的文件资源管理器）
+	Compact Home (tools and recent files only)	精简主页（仅工具和最近的文件）

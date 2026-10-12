@@ -27,6 +27,15 @@ const TAB_HEIGHT: f32 = 30.0;
 const STRIP_BUTTON: f32 = 28.0;
 
 pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    // Native tabs (Preferences ▸ Appearance): on macOS, Finder's and Safari's (a title bar, then a
+    // tab bar under it); elsewhere this strip with Home as a tab and "+" after the last tab, as in
+    // Windows 11's File Explorer.
+    if app.native_tabs && cfg!(target_os = "macos") && app.integrated_titlebar {
+        mac_title_bar(app, ui);
+        mac_tab_bar(app, ui);
+        return;
+    }
+    let native = app.native_tabs;
     let t = Tokens::get(ui.ctx());
     // macOS: the strip is the 28 pt title bar, so the traffic lights are centred in it; tabs and
     // buttons shrink to keep a margin above and below.
@@ -37,25 +46,23 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         .exact_size(if mac { MAC_TITLE_BAR } else { TAB_STRIP })
         .frame(egui::Frame::NONE.fill(t.titlebar).inner_margin(egui::Margin { left, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
-            let full = ui.max_rect();
-            let drag = ui.interact(full, ui.id().with("titledrag"), Sense::click_and_drag());
-            if drag.drag_started() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-            }
-            if drag.double_clicked() {
-                let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
-            }
+            window_drag(ui);
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
-                if icons::button(ui, "house", button, app.active.is_none() && !app.combine_showing(), tl!("Home")).clicked() {
+                let home = app.active.is_none() && !app.combine_showing();
+                let home = if native { home_tab(ui, &t, button, tab_h, home) } else { icons::button(ui, "house", button, home, tl!("Home")) };
+                if home.clicked() {
                     app.active = None;
                     app.combine_tab.focused = false;
                 }
                 // Keep the two icon buttons, Discord's text/padding and three gaps outside the scrolling tabs.
                 let controls_width = ui.fonts_mut(|f| f.layout_no_wrap("Discord".into(), theme::medium(13.0), t.text).size().x) + 2.0 * button + 50.0;
                 // Open stays in sight after the tabs: its icon, text and padding, and the gaps around it.
-                let open_width = ui.fonts_mut(|f| f.layout_no_wrap(tl!("Open").into(), theme::medium(13.0), t.text).size().x) + 38.0 + 12.0;
+                let open_width = if native {
+                    button + 12.0
+                } else {
+                    ui.fonts_mut(|f| f.layout_no_wrap(tl!("Open").into(), theme::medium(13.0), t.text).size().x) + 38.0 + 12.0
+                };
                 let mut tabs_width = (ui.available_width() - controls_width - open_width).max(0.0);
                 // Tabs shrink to share the strip (names end in "…") and scroll only once they reach
                 // their narrowest; then arrows either side say so and step through them.
@@ -188,38 +195,247 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.data_mut(|d| d.insert_temp(scroll_id.with("to"), x));
                     ui.ctx().request_repaint();
                 }
-                ui.add_space(4.0);
                 let tip = crate::commands::command_tip(ui.ctx(), tl!("Open a PDF ({key})"), "file.open");
-                if widgets::ghost_button_sized(ui, "plus", tl!("Open"), tab_h).on_hover_text(tip).clicked() {
+                let open = if native {
+                    ui.add_space(2.0);
+                    icons::button(ui, "plus", button, false, tl!("Open"))
+                } else {
+                    ui.add_space(4.0);
+                    widgets::ghost_button_sized(ui, "plus", tl!("Open"), tab_h)
+                };
+                if open.on_hover_text(tip).clicked() {
                     app.open_dialog();
                 }
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let (icon, label) = match app.theme_preference {
-                        ThemePreference::System => ("monitor", tl!("Use system setting")),
-                        ThemePreference::Light => ("sun", tl!("Light gray")),
-                        ThemePreference::Dark => ("moon", tl!("Dark gray")),
-                    };
-                    let tip = format!("{}: {label}", tl!("Display theme"));
-                    let response = icons::button(ui, icon, button, false, &tip);
-                    // A click cycles System, Light, Dark; a right-click opens the menu.
-                    if response.clicked() {
-                        app.execute(match app.theme_preference {
-                            ThemePreference::System => "view.theme.light",
-                            ThemePreference::Light => "view.theme.dark",
-                            ThemePreference::Dark => "view.theme.system",
-                        });
-                    }
-                    egui::Popup::context_menu(&response).id(response.id.with("theme_menu")).show(|ui| appearance_menu(app, ui));
-                    if icons::button(ui, "circle-help", button, false, tl!("Keyboard shortcuts")).clicked() {
-                        app.dialog = Some(Dialog::Shortcuts);
-                    }
-                    // One click to the community, from anywhere in the app.
-                    if widgets::ghost_button_sized(ui, "messages-square", "Discord", tab_h).on_hover_text(pdfcraft_engine::links::DISCORD).clicked() {
-                        app.execute("help.discord");
-                    }
-                });
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| window_controls(app, ui, button, tab_h));
             });
         });
+}
+
+/// Drag the window from the title bar, and double-click it to zoom.
+fn window_drag(ui: &mut egui::Ui) {
+    let full = ui.max_rect();
+    let drag = ui.interact(full, ui.id().with("titledrag"), Sense::click_and_drag());
+    if drag.drag_started() {
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    }
+    if drag.double_clicked() {
+        let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
+    }
+}
+
+/// The theme, keyboard-shortcut and Discord buttons at the right of the title bar (laid out right
+/// to left).
+fn window_controls(app: &mut PdfCraftApp, ui: &mut egui::Ui, button: f32, height: f32) {
+    let (icon, label) = match app.theme_preference {
+        ThemePreference::System => ("monitor", tl!("Use system setting")),
+        ThemePreference::Light => ("sun", tl!("Light gray")),
+        ThemePreference::Dark => ("moon", tl!("Dark gray")),
+    };
+    let tip = format!("{}: {label}", tl!("Display theme"));
+    let response = icons::button(ui, icon, button, false, &tip);
+    // A click cycles System, Light, Dark; a right-click opens the menu.
+    if response.clicked() {
+        app.execute(match app.theme_preference {
+            ThemePreference::System => "view.theme.light",
+            ThemePreference::Light => "view.theme.dark",
+            ThemePreference::Dark => "view.theme.system",
+        });
+    }
+    egui::Popup::context_menu(&response).id(response.id.with("theme_menu")).show(|ui| appearance_menu(app, ui));
+    if icons::button(ui, "circle-help", button, false, tl!("Keyboard shortcuts")).clicked() {
+        app.dialog = Some(Dialog::Shortcuts);
+    }
+    // One click to the community, from anywhere in the app.
+    if widgets::ghost_button_sized(ui, "messages-square", "Discord", height).on_hover_text(pdfcraft_engine::links::DISCORD).clicked() {
+        app.execute("help.discord");
+    }
+}
+
+/// Height of the macOS tab bar, under the title bar (Finder and Safari).
+pub const MAC_TAB_BAR: f32 = 28.0;
+/// The pinned Home tab and the "+" at the end of the macOS tab bar.
+const MAC_HOME_TAB: f32 = 38.0;
+const MAC_PLUS: f32 = 32.0;
+
+/// macOS title bar with native tabs: the traffic lights, the active document's name centred, and the theme
+/// and shortcut buttons on the right. The tabs are in [`mac_tab_bar`] below it.
+fn mac_title_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    let t = Tokens::get(ui.ctx());
+    egui::Panel::top("tab_strip")
+        .exact_size(MAC_TITLE_BAR)
+        .frame(egui::Frame::NONE.fill(t.titlebar).inner_margin(egui::Margin { left: MAC_CONTENT_LEFT as i8, right: 10, top: 0, bottom: 0 }))
+        .show(ui, |ui| {
+            window_drag(ui);
+            let full = ui.max_rect();
+            let title = if app.combine_showing() {
+                tl!("Combine files").to_string()
+            } else {
+                app.active
+                    .and_then(|i| app.views.get(i))
+                    .and_then(|v| app.session.get(v.id))
+                    .map_or_else(|| "PdfCraft".to_string(), |d| d.display_name())
+            };
+            let font = theme::semibold(13.0);
+            let mut job = egui::text::LayoutJob::simple_singleline(crate::bidi::visual(&title).into_owned(), font, t.text);
+            job.wrap = egui::text::TextWrapping::truncate_at_width((full.width() - 2.0 * 160.0).max(40.0));
+            let galley = ui.fonts_mut(|f| f.layout_job(job));
+            let at = egui::pos2(ui.ctx().content_rect().center().x - galley.size().x / 2.0, full.center().y - galley.size().y / 2.0);
+            ui.painter().galley(at, galley, t.text);
+            ui.horizontal_centered(|ui| {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| window_controls(app, ui, 24.0, MAC_TITLE_BAR - 2.0));
+            });
+        });
+}
+
+/// macOS tab bar with native tabs, as in Finder and Safari: shown while a document (or Combine files) is
+/// open; Home pinned small at the left, the tabs sharing the width with their names centred, the
+/// close button on the left of a hovered tab, and "+" at the end. The active tab has the colour of
+/// the bar under it, so the two read as one.
+fn mac_tab_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    if app.views.is_empty() && !app.combine_tab.open {
+        return;
+    }
+    let t = Tokens::get(ui.ctx());
+    egui::Panel::top("mac_tab_bar").exact_size(MAC_TAB_BAR).frame(egui::Frame::NONE.fill(t.titlebar)).show(ui, |ui| {
+        let bar = ui.max_rect();
+        let line = Stroke::new(1.0, t.divider);
+        ui.painter().hline(bar.x_range(), bar.top() + 0.5, line);
+        ui.painter().hline(bar.x_range(), bar.bottom() - 0.5, line);
+        // Every tab at a computed place in the bar, centred on its height: Home, the tabs sharing
+        // what is left (narrower when many, as in Finder), then "+".
+        let home = app.active.is_none() && !app.combine_showing();
+        let home_rect = Rect::from_min_size(bar.min, vec2(MAC_HOME_TAB, bar.height()));
+        if mac_home_tab(ui, &t, home_rect, home).clicked() {
+            app.active = None;
+            app.combine_tab.focused = false;
+        }
+        let count = app.views.len() + usize::from(app.combine_tab.open);
+        let room = (bar.width() - MAC_HOME_TAB - MAC_PLUS).max(0.0);
+        let width = (room / count.max(1) as f32).min(room);
+        let mut x = home_rect.right();
+        let mut next = || {
+            let r = Rect::from_min_size(egui::pos2(x, bar.top()), vec2(width, bar.height()));
+            x += width;
+            r
+        };
+        let mut close = None;
+        for i in 0..app.views.len() {
+            let rect = next();
+            let Some(doc) = app.session.get(app.views[i].id) else { continue };
+            let (name, dirty) = (doc.display_name(), doc.dirty);
+            let file = (name != doc.name).then_some(doc.name.as_str());
+            let active = app.active == Some(i) && !app.combine_showing();
+            if mac_tab(ui, ui.id().with(("document-tab", app.views[i].id)), &t, rect, &name, file, dirty, active, &mut close, i).clicked() {
+                app.active = Some(i);
+            }
+        }
+        let mut close_combine = None;
+        if app.combine_tab.open {
+            let rect = next();
+            if mac_tab(
+                ui,
+                ui.id().with("combine-tab"),
+                &t,
+                rect,
+                tl!("Combine files"),
+                None,
+                false,
+                app.combine_showing(),
+                &mut close_combine,
+                usize::MAX,
+            )
+            .clicked()
+            {
+                app.open_combine_tab();
+            }
+        }
+        if let Some(i) = close {
+            app.request_close_tab(i);
+        }
+        if close_combine.is_some() {
+            app.close_combine_tab();
+        }
+        let plus = Rect::from_min_max(egui::pos2(bar.right() - MAC_PLUS, bar.top()), bar.max);
+        let resp = ui.interact(plus, ui.id().with("mac-open"), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Open")));
+        let press = theme::Press::track(ui, &resp);
+        press.wash(ui, plus.shrink2(vec2(4.0, 4.0)), 6, false);
+        ui.painter().vline(plus.left() + 0.5, plus.y_range(), line);
+        icons::paint(ui, Rect::from_center_size(plus.center(), vec2(15.0, 15.0)), "plus", 14.0, t.icon);
+        let tip = crate::commands::command_tip(ui.ctx(), tl!("Open a PDF ({key})"), "file.open");
+        if theme::hand(resp).on_hover_text(tip).clicked() {
+            app.open_dialog();
+        }
+    });
+}
+
+/// The pinned Home tab of the macOS tab bar.
+fn mac_home_tab(ui: &mut egui::Ui, t: &Tokens, rect: Rect, active: bool) -> egui::Response {
+    let resp = ui.interact(rect, ui.id().with("mac-home"), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, tl!("Home")));
+    let press = theme::Press::track(ui, &resp);
+    let bg = if active { t.chrome } else { press.fill(Color32::TRANSPARENT, t.hover, t.pressed) };
+    if bg.a() > 0 {
+        ui.painter().rect_filled(Rect::from_min_max(rect.min + vec2(0.0, 1.0), rect.max), 0.0, bg);
+    }
+    ui.painter().vline(rect.right() - 0.5, rect.y_range(), Stroke::new(1.0, t.divider));
+    icons::paint(ui, Rect::from_center_size(rect.center(), vec2(15.0, 15.0)), "house", 14.0, if active { t.text } else { t.text_muted });
+    theme::hand(resp).on_hover_text(tl!("Home"))
+}
+
+/// One macOS tab: the name centred, the close button on its left while hovered (or a dot for
+/// unsaved changes), a hairline between tabs.
+#[allow(clippy::too_many_arguments)]
+fn mac_tab(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    t: &Tokens,
+    rect: Rect,
+    name: &str,
+    file: Option<&str>,
+    dirty: bool,
+    active: bool,
+    close: &mut Option<usize>,
+    index: usize,
+) -> egui::Response {
+    let a11y = if dirty { format!("{name} (edited)") } else { name.to_string() };
+    let font = theme::regular(12.5);
+    let resp = craft_ui::tabs::Tab::new(id, &a11y, active).focus_stroke(Stroke::new(1.0, t.accent)).show_at(ui, rect, |ui, resp| {
+        let press = theme::Press::track(ui, resp);
+        let bg = if active { t.chrome } else { press.fill(Color32::TRANSPARENT, t.hover, t.pressed) };
+        if bg.a() > 0 {
+            // From under the top hairline down over the bottom one: the active tab joins the bar below.
+            ui.painter().rect_filled(Rect::from_min_max(rect.min + vec2(0.0, 1.0), rect.max), 0.0, bg);
+        }
+        let label = crate::bidi::visual(&tab_name(name)).into_owned();
+        let mut job = egui::text::LayoutJob::simple_singleline(label, font.clone(), if active { t.text } else { t.text_muted });
+        job.wrap = egui::text::TextWrapping::truncate_at_width((rect.width() - 56.0).max(10.0));
+        let galley = ui.fonts_mut(|f| f.layout_job(job));
+        ui.painter().galley(rect.center() - galley.size() / 2.0, galley, t.text);
+    });
+    ui.painter().vline(rect.right() - 0.5, rect.y_range(), Stroke::new(1.0, t.divider));
+    let x_rect = Rect::from_center_size(rect.left_center() + vec2(15.0, 0.0), vec2(18.0, 18.0));
+    let x = ui.interact(x_rect, id.with("close"), Sense::click());
+    let x_press = theme::Press::track(ui, &x);
+    x_press.wash(ui, x_rect, 4, false);
+    if resp.hovered() || x.hovered() {
+        icons::paint(ui, x_rect.shrink(3.0), "x", 12.0, t.text_muted);
+    } else if dirty {
+        ui.painter().circle_filled(x_rect.center(), 3.5, if active { t.text } else { t.text_muted });
+    }
+    if theme::hand(x).clicked() {
+        *close = Some(index);
+    }
+    let shown = match file {
+        Some(file) => std::borrow::Cow::Owned(format!("{}\n{}", crate::bidi::visual(name), crate::bidi::visual(file))),
+        None => crate::bidi::visual(name),
+    };
+    theme::hand(resp).on_hover_text(if dirty {
+        crate::i18n::fmt(tl!("{name} — unsaved changes"), &[("name", shown.as_ref())])
+    } else {
+        shown.into_owned()
+    })
 }
 
 /// Both theme entry points use the same choices and command path.
@@ -300,6 +516,31 @@ fn tab_cap(natural: &[f32], budget: f32, gap: f32, min: f32) -> Option<f32> {
         left -= w;
     }
     None
+}
+
+/// The Home tab with native tabs: the house icon in a tab-shaped button, filled like the active
+/// document tab when Home shows.
+fn home_tab(ui: &mut egui::Ui, t: &Tokens, width: f32, height: f32, active: bool) -> egui::Response {
+    let height = ui.available_height().max(height);
+    let (rect, resp) = ui.allocate_exact_size(vec2(width + 10.0, height), egui::Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, tl!("Home")));
+    let press = theme::Press::track(ui, &resp);
+    let bg = if active {
+        press.fill(t.chrome, t.chrome.lerp_to_gamma(t.hover, 0.65), t.hover)
+    } else {
+        press.fill(Color32::TRANSPARENT, t.hover, t.pressed)
+    };
+    if bg.a() > 0 {
+        ui.painter().rect_filled(rect, CornerRadius { nw: 7, ne: 7, sw: 0, se: 0 }, bg);
+    }
+    icons::paint(
+        ui,
+        Rect::from_center_size(rect.translate(press.offset()).center(), vec2(16.0, 16.0)),
+        "house",
+        15.0,
+        if active { t.accent } else { t.text_muted },
+    );
+    theme::hand(resp).on_hover_text(tl!("Home"))
 }
 
 #[allow(clippy::too_many_arguments)]

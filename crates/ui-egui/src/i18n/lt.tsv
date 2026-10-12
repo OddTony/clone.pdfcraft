@@ -2582,3 +2582,5 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Tarpas
+	Native tabs (as in Finder on macOS and File Explorer on Windows)	Sistemos kortelės (kaip „Finder“ sistemoje „macOS“ ir failų naršyklėje sistemoje „Windows“)
+	Compact Home (tools and recent files only)	Kompaktiškas pradžios puslapis (tik įrankiai ir naujausi failai)

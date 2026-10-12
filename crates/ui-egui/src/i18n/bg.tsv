@@ -2301,3 +2301,5 @@ animation effects	Off	Изключени
 	The linked PDF opened, but its named destination was not applied.	Свързаният PDF се отвори, но именуваната му цел не беше приложена.
 	The linked PDF opened, but its page destination was out of range.	Свързаният PDF се отвори, но целевата му страница е извън обхвата.
 	Local cross-PDF links require the desktop app	Локалните връзки между PDF файлове изискват настолното приложение
+	Native tabs (as in Finder on macOS and File Explorer on Windows)	Собствени раздели (като във Finder на macOS и File Explorer на Windows)
+	Compact Home (tools and recent files only)	Компактна начална страница (само инструменти и скорошни файлове)

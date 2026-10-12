@@ -28,7 +28,9 @@ pub fn left_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     );
 }
 
-fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool) -> (bool, bool) {
+/// `quiet`: native tabs (Preferences ▸ Appearance) give the panel a smaller, muted, left-aligned
+/// title, so the list under it leads.
+fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool, quiet: bool) -> (bool, bool) {
     let mut go_back = false;
     let mut close = false;
     ui.horizontal(|ui| {
@@ -38,8 +40,16 @@ fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool) -> (bool
         // Reserve space for Close before laying out the translated title. Long tool names
         // must never expand the fixed-width sidebar or push the Close control off-screen.
         let title_width = (ui.available_width() - 26.0 - ui.spacing().item_spacing.x).max(1.0);
-        ui.add_sized([title_width, 26.0], egui::Label::new(egui::RichText::new(tl!(title)).font(theme::semibold(15.5)).color(t.text)).truncate())
-            .on_hover_text(tl!(title));
+        if quiet {
+            ui.allocate_ui_with_layout(vec2(title_width, 26.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_min_width(title_width);
+                ui.add(egui::Label::new(egui::RichText::new(tl!(title)).font(theme::medium(13.0)).color(t.text_muted)).truncate())
+                    .on_hover_text(tl!(title));
+            });
+        } else {
+            ui.add_sized([title_width, 26.0], egui::Label::new(egui::RichText::new(tl!(title)).font(theme::semibold(15.5)).color(t.text)).truncate())
+                .on_hover_text(tl!(title));
+        }
         if icons::button(ui, "x", 26.0, false, tl!("Close panel")).clicked() {
             close = true;
         }
@@ -51,7 +61,7 @@ fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool) -> (bool
 }
 
 fn all_tools(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
-    let (_, close) = panel_header(ui, t, "All tools", false);
+    let (_, close) = panel_header(ui, t, "All tools", false, app.native_tabs);
     if close {
         app.left_open = false;
     }
@@ -137,7 +147,7 @@ fn tool_row(ui: &mut egui::Ui, t: &Tokens, g: &ToolGroup) -> egui::Response {
 }
 
 fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static ToolGroup) {
-    let (back, close) = panel_header(ui, t, g.label, true);
+    let (back, close) = panel_header(ui, t, g.label, true, app.native_tabs);
     if back {
         app.left = LeftPanel::AllTools;
         app.mode = crate::Mode::AllTools;

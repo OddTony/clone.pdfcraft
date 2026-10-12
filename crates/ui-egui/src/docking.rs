@@ -46,6 +46,13 @@ fn permissions(panel: &Panel) -> Permissions {
     if *panel == Panel::Canvas { Permissions::PROTECTED } else { Permissions::default() }
 }
 
+/// What the renderer is told: with native tabs (Preferences ▸ Appearance) the Tools panel draws
+/// without its "Tools" tab, like the document. The layout rules keep [`permissions`], so its ×
+/// still closes it.
+fn render_permissions(panel: &Panel, native_tabs: bool) -> Permissions {
+    if *panel == Panel::Canvas || (native_tabs && *panel == Panel::Tools) { Permissions::PROTECTED } else { Permissions::default() }
+}
+
 fn tabs(panel: Panel) -> Node<Panel> {
     Node::Tabs { panels: vec![panel], active: 0 }
 }
@@ -396,12 +403,13 @@ pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
         // Availability is a render projection: the saved group, selection and width survive Home.
         let _ = rendered.apply(Action::Close { panel: Panel::Inspector });
     }
+    let native_tabs = app.native_tabs;
     let output = DockArea::new(egui::Id::new("pdfcraft-docking")).show_with_limits(
         ui,
         &rendered,
         &style,
         |panel| crate::i18n::t(panel.label()).into(),
-        permissions,
+        |panel| render_permissions(panel, native_tabs),
         panel_limits,
         |ui, panel| match panel {
             Panel::Canvas => {
