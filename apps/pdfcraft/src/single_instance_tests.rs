@@ -407,13 +407,58 @@ mod native {
         assert!(path.exists(), "{}", path.display());
     }
 
+    struct ChildDiagnostics;
+    impl log::Log for ChildDiagnostics {
+        fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+            true
+        }
+        fn log(&self, record: &log::Record<'_>) {
+            eprintln!("pid {} {:?}: {}", std::process::id(), std::thread::current().id(), record.args());
+        }
+        fn flush(&self) {}
+    }
+
     #[test]
     #[ignore = "helper invoked by real-process IPC tests"]
     fn process_child() {
+        static DIAGNOSTICS: ChildDiagnostics = ChildDiagnostics;
+        log::set_logger(&DIAGNOSTICS).unwrap();
+        log::set_max_level(log::LevelFilter::Debug);
         let path = std::path::PathBuf::from(std::env::var_os("PDFCRAFT_IPC_TEST_PATH").unwrap());
         let mode = std::env::var("PDFCRAFT_IPC_TEST_MODE").unwrap();
         let index: usize = std::env::var("PDFCRAFT_IPC_TEST_INDEX").unwrap().parse().unwrap();
         let dir = path.parent().unwrap();
+        eprintln!("child {index} pid {} mode {mode}", std::process::id());
+        if mode == "auto-activation" {
+            // Control experiment: safe windows bindings maintain their process MTA
+            // when activation begins without a caller-owned, temporary COM guard.
+            use windows::Security::Cryptography::DataProtection::DataProtectionProvider;
+            for cycle in 0..3 {
+                eprintln!("automatic activation cycle {cycle}: before activation");
+                let encrypt = DataProtectionProvider::CreateOverloadExplicit(&"LOCAL=user".into()).unwrap();
+                let decrypt = DataProtectionProvider::new().unwrap();
+                drop((encrypt, decrypt));
+                eprintln!("automatic activation cycle {cycle}: dropped");
+            }
+            return;
+        }
+        if mode == "crypto-cycle" {
+            // A cold process has no other test's COM apartment keeping factories alive.
+            // Deliberately isolate activation/teardown from sockets and election.
+            for cycle in 0..3 {
+                eprintln!("crypto cycle {cycle}: before activation");
+                let crypto = security::Protection::new().unwrap();
+                eprintln!("crypto cycle {cycle}: activated");
+                let stop = AtomicBool::new(false);
+                let deadline = Instant::now() + TIMEOUT;
+                let sealed = crypto.protect(b"cold process", deadline, &stop).unwrap();
+                assert_eq!(crypto.unprotect(&sealed, deadline, &stop).unwrap(), b"cold process");
+                eprintln!("crypto cycle {cycle}: before drop");
+                drop(crypto);
+                eprintln!("crypto cycle {cycle}: dropped");
+            }
+            return;
+        }
         if mode == "profile" {
             let endpoint = socket_path().unwrap();
             std::fs::write(dir.join("profile-result"), endpoint.to_string_lossy().as_bytes()).unwrap();
@@ -428,12 +473,14 @@ mod native {
         if mode == "race" {
             wait_file(&dir.join("go"));
         }
+        eprintln!("child {index}: before election");
         let claim = claim_at(&path, &[paths(8).remove(index)], true);
         let role = match &claim {
             Claim::Primary(_) => "primary",
             Claim::HandedOff => "forwarded",
             Claim::Alone => "alone",
         };
+        eprintln!("child {index}: selected {role}");
         std::fs::write(dir.join(format!("role-{index}")), role).unwrap();
         if let Claim::Primary(server) = claim {
             std::fs::write(dir.join("ready"), b"ready").unwrap();
@@ -443,6 +490,32 @@ mod native {
                 std::fs::write(dir.join("received"), serde_json::to_vec(&poll_until(&mut poll, 7)).unwrap()).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn windows_bindings_automatic_activation_survives_cold_process_cycles() {
+        let path = socket("auto-activation");
+        let mut child = child(&path, "auto-activation", 0);
+        let status = child.wait().unwrap();
+        assert!(
+            status.success(),
+            "automatic activation child exited with {status}\n{}",
+            std::fs::read_to_string(path.parent().unwrap().join("child-0.log")).unwrap()
+        );
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn user_protection_survives_repeated_cold_process_activation() {
+        let path = socket("crypto-cycle");
+        let mut child = child(&path, "crypto-cycle", 0);
+        let status = child.wait().unwrap();
+        assert!(
+            status.success(),
+            "cold crypto child exited with {status}\n{}",
+            std::fs::read_to_string(path.parent().unwrap().join("child-0.log")).unwrap()
+        );
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]
@@ -459,14 +532,15 @@ mod native {
             })
             .collect();
         std::fs::write(dir.join("release"), b"release").unwrap();
-        for (index, child) in children.iter_mut().enumerate() {
-            let status = child.wait().unwrap();
-            assert!(
-                status.success(),
-                "child {index} exited with {status}; roles: {roles:?}\n{}",
-                std::fs::read_to_string(dir.join(format!("child-{index}.log"))).unwrap()
-            );
-        }
+        let outcomes: Vec<_> = children.iter_mut().enumerate().map(|(index, child)| (index, child.wait().unwrap())).collect();
+        let evidence = outcomes
+            .iter()
+            .map(|(index, status)| {
+                format!("child {index} exited with {status}\n{}", std::fs::read_to_string(dir.join(format!("child-{index}.log"))).unwrap())
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(outcomes.iter().all(|(_, status)| status.success()), "roles: {roles:?}\n{evidence}");
         assert_eq!(roles.iter().filter(|r| *r == "primary").count(), 1);
         assert_eq!(roles.iter().filter(|r| *r == "forwarded").count(), 7);
         let received: Vec<String> = serde_json::from_slice(&std::fs::read(dir.join("received")).unwrap()).unwrap();

@@ -15,7 +15,11 @@ pub(super) struct Protection {
 
 impl Protection {
     pub(super) fn new() -> io::Result<Self> {
+        #[cfg(test)]
+        eprintln!("protection: before COM initialization on {:?}", std::thread::current().id());
         let apartment = winsafe::CoInitializeEx(winsafe::co::COINIT::MULTITHREADED).map_err(io::Error::other)?;
+        #[cfg(test)]
+        eprintln!("protection: COM result {:?}; before provider activation", apartment.hr());
         Ok(Self {
             encrypt: DataProtectionProvider::CreateOverloadExplicit(&"LOCAL=user".into()).map_err(io::Error::other)?,
             decrypt: DataProtectionProvider::new().map_err(io::Error::other)?,
