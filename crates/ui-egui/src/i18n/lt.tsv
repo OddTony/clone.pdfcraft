@@ -2582,3 +2582,5 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Tarpas
+	Downloading the text recognition models…	Atsisiunčiami teksto atpažinimo modeliai…
+	Couldn't download the text recognition models: {e}	Nepavyko atsisiųsti teksto atpažinimo modelių: {e}

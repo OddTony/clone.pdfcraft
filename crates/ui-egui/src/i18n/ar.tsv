@@ -2359,3 +2359,5 @@ animation effects	Off	معطّلة
 	The linked PDF opened, but its named destination was not applied.	فُتح ملف PDF المرتبط، لكن لم تُطبَّق وجهته المسماة.
 	The linked PDF opened, but its page destination was out of range.	فُتح ملف PDF المرتبط، لكن وجهة الصفحة خارج النطاق.
 	Local cross-PDF links require the desktop app	تتطلب الروابط المحلية بين ملفات PDF تطبيق سطح المكتب
+	Downloading the text recognition models…	جارٍ تنزيل نماذج التعرف على النص…
+	Couldn't download the text recognition models: {e}	تعذّر تنزيل نماذج التعرف على النص: {e}

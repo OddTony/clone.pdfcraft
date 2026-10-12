@@ -2302,3 +2302,5 @@ animation effects	Off	关
 	The linked PDF opened, but its named destination was not applied.	已打开链接的 PDF，但未应用其命名目标。
 	The linked PDF opened, but its page destination was out of range.	已打开链接的 PDF，但其页面目标超出范围。
 	Local cross-PDF links require the desktop app	PDF 之间的本地链接需要桌面应用
+	Downloading the text recognition models…	正在下载文本识别模型…
+	Couldn't download the text recognition models: {e}	无法下载文本识别模型：{e}
