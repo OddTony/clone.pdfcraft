@@ -1558,12 +1558,12 @@ impl PdfCraftApp {
         self.notify(error.to_string());
     }
 
-    /// Notify with a `{name}`-style template in the UI language (placeholders filled once).
     /// The egui context, once the app has drawn a frame (for repaints from other threads).
     pub(crate) fn egui_ctx(&self) -> Option<egui::Context> {
         self.ctx.clone()
     }
 
+    /// Notify with a `{name}`-style template in the UI language (placeholders filled once).
     pub fn notify_fmt(&mut self, template: &str, args: &[(&str, &str)]) {
         self.notify(i18n::fmt(tl!(template), args));
     }
