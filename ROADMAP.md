@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~26% (ready for real work 49% → 75%) and ~400–700 h away
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M1 #1339: an unchanged incremental save of a classic cross-reference table writes a zero-length subsection; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M3 #1364 candidate: consent before absolute local GoToR access; estimates unchanged); earlier: minor (M1 #1339: an unchanged incremental save of a classic cross-reference table writes a zero-length subsection; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M14 Windows low-DPI font-hinting candidate measured on macOS; no Windows runtime claim; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M3: Windows' Animation effects setting is followed, and Preferences has Animation effects: system, on or off); earlier: exclusive image-crop resize follow-up; M2 short same-line redraws split before placement; estimates unchanged · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M7 #1200 candidate: local GoToR links and confined automation; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -140,6 +140,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+
+- **2026-10-12 (M3, #1364 candidate):** Absolute local GoToR links wait for Allow/Cancel before target-file access. Pending requests preserve their source and page/view destination; relative links retain their existing behavior. Headless `link_open` requires explicit `allow_absolute: true`, preserving existing root, symlink, file and password validation. Estimates unchanged.
 
 - **2026-10-12 (M1, #1339):** An incremental save of an unchanged classic-table file used to append `xref` and then `trailer` with no subsection, which qpdf reports as a damaged file. The section now has a zero-length subsection, so no object entry changes and a trailer-only edit is still written. Estimates unchanged.
 - **2026-10-12 (M12, auto-tag preview):** The engine and `accessibility_autotag_preview` propose paragraph and large-heading roles for bounded text blocks on one page, with locations and reasons. Every proposal needs review; images remain unclassified. No PDF tags are written yet. Synthetic tool tests cover normal text, a larger heading, bounds and unchanged source bytes. Estimates unchanged.
@@ -403,6 +405,7 @@ Newest first: the date, what moved, and the new overall estimate.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | M3/#1364 candidate: absolute local GoToR links require desktop consent or headless allow_absolute; existing relative navigation and validation retained. Estimates unchanged. |
 | 2026-10-12 | minor | M7/#1200 candidate: bounded local GoToR opening, root-confined automation, and action-preserving appearance edits; named destinations and window behavior remain partial; estimates unchanged. |
 | 2026-10-12 | minor | Exclusive image crops resize with their pixels across nested states, intervening operators and content streams; shared clips remain fixed. Synthetic engine/tool regressions and private image save/reopen checks; estimates unchanged. |
 | 2026-10-11 | minor | M10: borderless inferred tables and positioned invoice watermarks (#773); estimates unchanged. |
