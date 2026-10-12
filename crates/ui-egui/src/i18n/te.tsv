@@ -2251,3 +2251,7 @@ animation effects	Off	ఆఫ్
 	Local cross-PDF links require the desktop app	PDFల మధ్య స్థానిక లింక్‌లకు డెస్క్‌టాప్ యాప్ అవసరం
 	The existing action will be preserved.	ఉన్న చర్య అలాగే ఉంచబడుతుంది.
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	ఒక స్క్రిప్ట్ చాలా సేపు నడిచినందున ఈ ఫారమ్ స్క్రిప్ట్‌లు ఆపివేయబడ్డాయి. వాటిని మళ్లీ నడపడానికి పత్రాన్ని మళ్లీ తెరవండి.
+	App icon	యాప్ ఐకాన్
+	Use the default	డిఫాల్ట్‌ను ఉపయోగించు
+	The Dock shows it the next time PdfCraft opens.	తదుపరిసారి PdfCraft తెరిచినప్పుడు Dock దీన్ని చూపుతుంది.
+	The image couldn't be used as an icon: {e}	చిత్రాన్ని ఐకాన్‌గా ఉపయోగించలేకపోయాం: {e}

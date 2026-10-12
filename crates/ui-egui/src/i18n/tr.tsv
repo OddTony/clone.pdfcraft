@@ -2334,3 +2334,7 @@ animation effects	Off	Kapalı
 	The linked PDF opened, but its named destination was not applied.	Bağlantılı PDF açıldı, ancak adlandırılmış hedefi uygulanmadı.
 	The linked PDF opened, but its page destination was out of range.	Bağlantılı PDF açıldı, ancak sayfa hedefi aralık dışında.
 	Local cross-PDF links require the desktop app	PDF'ler arası yerel bağlantılar masaüstü uygulamasını gerektirir
+	App icon	Uygulama simgesi
+	Use the default	Varsayılanı kullan
+	The Dock shows it the next time PdfCraft opens.	Dock, PdfCraft bir sonraki açılışında gösterir.
+	The image couldn't be used as an icon: {e}	Görüntü simge olarak kullanılamadı: {e}

@@ -24,6 +24,8 @@ macro_rules! tl_ctx {
 
 mod a11y_ui;
 mod actions_ui;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod app_icon;
 mod appearance;
 pub mod canvas;
 mod chrome;
@@ -606,6 +608,10 @@ pub struct PdfCraftApp {
     pub alt_draft: a11y_ui::AltDraft,
     /// List the OS key store's signing identities among the digital IDs (the desktop app).
     pub os_key_store_ids: bool,
+    /// Preferences ▸ Appearance ▸ App icon: where the chosen icon is kept as a PNG (the app opens
+    /// with it when the file is there; the desktop app sets this), and the built-in icon to go back to.
+    pub app_icon_file: Option<std::path::PathBuf>,
+    pub default_app_icon: &'static [u8],
     pub cert_viewer: Option<sign_ui::CertViewer>,
     /// The last space audit.
     pub space_audit: Vec<pdfcraft_engine::optimize::SpaceUse>,
@@ -894,6 +900,8 @@ impl PdfCraftApp {
             a11y_skipped: Default::default(),
             alt_draft: Default::default(),
             os_key_store_ids: false,
+            app_icon_file: None,
+            default_app_icon: &[],
             cert_viewer: None,
             space_audit: Vec::new(),
             combine_draft: Vec::new(),
@@ -1542,6 +1550,11 @@ impl PdfCraftApp {
     }
 
     /// Notify with a `{name}`-style template in the UI language (placeholders filled once).
+    /// The egui context, once the app has drawn a frame (for viewport commands from callbacks).
+    pub(crate) fn egui_ctx(&self) -> Option<egui::Context> {
+        self.ctx.clone()
+    }
+
     pub fn notify_fmt(&mut self, template: &str, args: &[(&str, &str)]) {
         self.notify(i18n::fmt(tl!(template), args));
     }

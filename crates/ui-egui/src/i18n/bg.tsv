@@ -2301,3 +2301,7 @@ animation effects	Off	Изключени
 	The linked PDF opened, but its named destination was not applied.	Свързаният PDF се отвори, но именуваната му цел не беше приложена.
 	The linked PDF opened, but its page destination was out of range.	Свързаният PDF се отвори, но целевата му страница е извън обхвата.
 	Local cross-PDF links require the desktop app	Локалните връзки между PDF файлове изискват настолното приложение
+	App icon	Икона на приложението
+	Use the default	Използвай стандартната
+	The Dock shows it the next time PdfCraft opens.	Dock ще я покаже при следващото отваряне на PdfCraft.
+	The image couldn't be used as an icon: {e}	Изображението не може да се използва като икона: {e}

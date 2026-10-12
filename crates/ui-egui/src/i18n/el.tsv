@@ -2348,3 +2348,7 @@ animation effects	Off	Ανενεργά
 	Local cross-PDF links require the desktop app	Οι τοπικοί σύνδεσμοι μεταξύ PDF απαιτούν την εφαρμογή υπολογιστή
 	The existing action will be preserved.	Η υπάρχουσα ενέργεια θα διατηρηθεί.
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Τα σενάρια αυτής της φόρμας είναι απενεργοποιημένα, επειδή ένα από αυτά εκτελούνταν για πολύ ώρα. Ανοίξτε ξανά το έγγραφο για να εκτελεστούν ξανά.
+	App icon	Εικονίδιο εφαρμογής
+	Use the default	Χρήση του προεπιλεγμένου
+	The Dock shows it the next time PdfCraft opens.	Το Dock θα το δείξει την επόμενη φορά που θα ανοίξει το PdfCraft.
+	The image couldn't be used as an icon: {e}	Η εικόνα δεν μπορεί να χρησιμοποιηθεί ως εικονίδιο: {e}

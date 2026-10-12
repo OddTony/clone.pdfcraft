@@ -2582,3 +2582,7 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Tarpas
+	App icon	Programos piktograma
+	Use the default	Naudoti numatytąją
+	The Dock shows it the next time PdfCraft opens.	„Dock“ ją rodys kitą kartą atidarius „PdfCraft“.
+	The image couldn't be used as an icon: {e}	Paveikslėlio nepavyko naudoti kaip piktogramos: {e}

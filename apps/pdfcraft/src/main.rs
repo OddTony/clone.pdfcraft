@@ -257,6 +257,11 @@ fn retry_with_gl(choice: RendererChoice, app_started: bool) -> bool {
     choice == RendererChoice::Auto && !app_started
 }
 
+/// Where Preferences ▸ Appearance ▸ App icon keeps the chosen icon.
+fn app_icon_file() -> Option<std::path::PathBuf> {
+    settings_dir().map(|d| d.join("app-icon.png"))
+}
+
 /// The window and renderer settings for one run.
 fn native_options(integrated: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
     let mut viewport = egui::ViewportBuilder::default()
@@ -266,8 +271,10 @@ fn native_options(integrated: bool, renderer: eframe::Renderer) -> eframe::Nativ
         .with_drag_and_drop(true)
         // Wayland app id: matches packaging/linux/ai.storyteller.pdfcraft.desktop.
         .with_app_id(APP_ID);
-    // Dock, taskbar, Alt-Tab and launcher icon when running unbundled.
-    match eframe::icon_data::from_png_bytes(APP_ICON_PNG) {
+    // Dock, taskbar, Alt-Tab and launcher icon when running unbundled: the one chosen in
+    // Preferences ▸ Appearance when there is one, else the built-in one.
+    let chosen = app_icon_file().and_then(|p| std::fs::read(p).ok());
+    match eframe::icon_data::from_png_bytes(chosen.as_deref().unwrap_or(APP_ICON_PNG)).or_else(|_| eframe::icon_data::from_png_bytes(APP_ICON_PNG)) {
         Ok(icon) => viewport = viewport.with_icon(icon),
         Err(e) => log::warn!("app icon: {e}"),
     }
@@ -323,6 +330,8 @@ fn app_creator<'a>(
         app.update_source = Some(std::sync::Arc::new(updates::latest_release));
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
+        app.app_icon_file = app_icon_file();
+        app.default_app_icon = APP_ICON_PNG;
         #[cfg(target_os = "macos")]
         {
             app.os_events = Some(apple_events.connect(&cc.egui_ctx));
