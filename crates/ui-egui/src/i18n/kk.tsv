@@ -2336,3 +2336,10 @@ animation effects	Off	Өшірулі
 	The linked PDF opened, but its named destination was not applied.	Байланысты PDF ашылды, бірақ оның аталған мақсаты қолданылмады.
 	The linked PDF opened, but its page destination was out of range.	Байланысты PDF ашылды, бірақ оның мақсатты беті ауқымнан тыс.
 	Local cross-PDF links require the desktop app	PDF файлдары арасындағы жергілікті сілтемелер үшін жұмыс үстелі қолданбасы қажет
+	PIN	PIN коды
+	The PIN is incorrect.	PIN қате.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	Құрылғыдағы цифрлық ID-ді пайдалану (смарт-карта, USB токен немесе бұлттық сертификат)
+	Device library (PKCS #11)	Құрылғы кітапханасы (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft құрылғы өндірушілері орнататын кітапханаларды іздейді. Құрылғыңыз табылмаса ғана біреуін таңдаңыз.
+	No signing certificate was found on this device. Is it connected?	Бұл құрылғыда қолтаңба сертификаты табылмады. Ол қосулы ма?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	Кілт {device} құрылғысында, ол рұқсатты өзі сұрайды (PIN пернетақтасы немесе телефондағы қолданба).

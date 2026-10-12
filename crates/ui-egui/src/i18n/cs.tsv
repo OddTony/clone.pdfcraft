@@ -2412,3 +2412,10 @@ animation effects	Off	Vypnuto
 	The linked PDF opened, but its named destination was not applied.	Odkazovaný PDF se otevřel, ale jeho pojmenovaný cíl nebyl použit.
 	The linked PDF opened, but its page destination was out of range.	Odkazovaný PDF se otevřel, ale cílová stránka je mimo rozsah.
 	Local cross-PDF links require the desktop app	Místní odkazy mezi soubory PDF vyžadují desktopovou aplikaci
+	PIN	Kód PIN
+	The PIN is incorrect.	PIN je nesprávný.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	Použít digitální ID ze zařízení (čipová karta, USB token nebo cloudový certifikát)
+	Device library (PKCS #11)	Knihovna zařízení (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft hledá knihovny, které instalují výrobci zařízení. Vyberte knihovnu jen tehdy, když se vaše zařízení nenajde.
+	No signing certificate was found on this device. Is it connected?	V tomto zařízení nebyl nalezen podpisový certifikát. Je připojené?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	Klíč je v zařízení {device}, které si samo vyžádá schválení (klávesnice pro PIN nebo aplikace v telefonu).

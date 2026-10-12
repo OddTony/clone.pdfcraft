@@ -2338,3 +2338,10 @@ animation effects	Off	オフ
 	The linked PDF opened, but its named destination was not applied.	リンク先の PDF を開きましたが、名前付き移動先は適用されませんでした。
 	The linked PDF opened, but its page destination was out of range.	リンク先の PDF を開きましたが、移動先のページが範囲外です。
 	Local cross-PDF links require the desktop app	PDF 間のローカルリンクにはデスクトップアプリが必要です
+	PIN	PIN
+	The PIN is incorrect.	PIN が正しくありません。
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	デバイスのデジタル ID を使用 (スマートカード、USB トークン、クラウド証明書)
+	Device library (PKCS #11)	デバイスライブラリ (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft はデバイスのメーカーがインストールするライブラリを探します。デバイスが見つからない場合のみ選択してください。
+	No signing certificate was found on this device. Is it connected?	このデバイスに署名用の証明書が見つかりません。接続されていますか?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	鍵は {device} にあり、デバイス自身が承認を求めます (PIN パッド、またはスマートフォンのアプリ)。

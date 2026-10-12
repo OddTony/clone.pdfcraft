@@ -2360,3 +2360,10 @@ animation effects	Off	Вимкнено
 	The linked PDF opened, but its named destination was not applied.	Пов’язаний PDF відкрито, але його іменоване призначення не застосовано.
 	The linked PDF opened, but its page destination was out of range.	Пов’язаний PDF відкрито, але сторінка призначення поза межами діапазону.
 	Local cross-PDF links require the desktop app	Локальні посилання між PDF працюють лише в настільному застосунку
+	PIN	PIN-код
+	The PIN is incorrect.	Неправильний PIN-код.
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	Використати цифрове посвідчення з пристрою (смарт-картка, USB-токен або хмарний сертифікат)
+	Device library (PKCS #11)	Бібліотека пристрою (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft шукає бібліотеки, які встановлюють виробники пристроїв. Вибирайте бібліотеку, лише якщо ваш пристрій не знайдено.
+	No signing certificate was found on this device. Is it connected?	На цьому пристрої не знайдено сертифіката для підпису. Його під’єднано?
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	Ключ на пристрої {device}, який сам запитує схвалення (клавіатура для PIN-коду або застосунок на телефоні).

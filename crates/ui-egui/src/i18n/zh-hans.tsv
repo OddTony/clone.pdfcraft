@@ -2302,3 +2302,10 @@ animation effects	Off	关
 	The linked PDF opened, but its named destination was not applied.	已打开链接的 PDF，但未应用其命名目标。
 	The linked PDF opened, but its page destination was out of range.	已打开链接的 PDF，但其页面目标超出范围。
 	Local cross-PDF links require the desktop app	PDF 之间的本地链接需要桌面应用
+	PIN	PIN
+	The PIN is incorrect.	PIN 不正确。
+	Use a Digital ID from a device (smart card, USB token or cloud certificate)	使用设备中的数字 ID（智能卡、USB 令牌或云证书）
+	Device library (PKCS #11)	设备库 (PKCS #11)
+	PdfCraft looks for the libraries device vendors install. Choose one only if your device isn't found.	PdfCraft 会查找设备厂商安装的库。仅当找不到你的设备时才需要选择。
+	No signing certificate was found on this device. Is it connected?	此设备上未找到签名证书。设备已连接吗？
+	The key is on {device}, which asks for approval itself (a PIN pad, or an app on your phone).	密钥位于 {device}，由设备自行请求批准（PIN 键盘，或手机上的应用）。
