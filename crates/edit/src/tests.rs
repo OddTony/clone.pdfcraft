@@ -3242,3 +3242,37 @@ fn subset_indic_font_without_legacy_name_keeps_logical_text() {
     assert!(!lines[0].visual_order);
     assert_eq!(lines[0].text, "\u{092C}\u{0922}\u{093C}\u{093F}\u{092F}\u{093E}");
 }
+
+#[test]
+fn moving_text_boxes_preserves_turkish_characters() {
+    let mut doc = fixture();
+    let tr_box = added::AddedText { text: "\u{015F}\u{00E7}\u{00E7}".into(), rect: [50.0, 300.0, 150.0, 330.0], ..Default::default() };
+    added::add_content(&mut doc, 0, &Content::Text(tr_box.clone())).unwrap();
+
+    let en_box = added::AddedText { text: "Plain english".into(), rect: [50.0, 200.0, 150.0, 230.0], ..Default::default() };
+    added::add_content(&mut doc, 0, &Content::Text(en_box.clone())).unwrap();
+
+    // Move the non-Turkish text box around via update_content (simulates UI drag)
+    let moved_en = added::AddedText { rect: [70.0, 220.0, 170.0, 250.0], ..en_box.clone() };
+    added::update_content(&mut doc, 0, 1, &Content::Text(moved_en)).unwrap();
+
+    // Also move via move_objects
+    let objects = editable_objects(&doc, 0).unwrap();
+    let target = objects.iter().find(|o| o.text.as_deref() == Some("Plain english")).unwrap().target;
+    move_objects(&mut doc, 0, &[target], [10.0, 10.0]).unwrap();
+
+    // Verify Turkish text was NOT corrupted into '???' (\u{00FE}\u{00E7}\u{00E7})
+    let added_items = list_added(&doc);
+    let tr_added = added_items.iter().find(|a| match &a.content {
+        Content::Text(t) => t.text.contains('\u{015F}'),
+        _ => false,
+    });
+    assert!(tr_added.is_some(), "Turkish text must still have '?', not '?'");
+
+    // Verify text_lines / interpret reads it back as '???' and not '???'
+    let lines = text::text_lines(&doc, 0).unwrap();
+    let tr_line = lines.iter().find(|l| l.text.contains("\u{015F}\u{00E7}\u{00E7}") || l.text.contains('\u{00FE}'));
+    assert!(tr_line.is_some(), "Line should be found");
+    assert_eq!(tr_line.unwrap().text, "\u{015F}\u{00E7}\u{00E7}");
+    assert!(!tr_line.unwrap().text.contains('\u{00FE}'), "Must not contain '?'");
+}
