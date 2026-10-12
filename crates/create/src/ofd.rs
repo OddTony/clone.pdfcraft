@@ -21,7 +21,13 @@
 //! can't express) and an empty one are skipped: the object is drawn unclipped and the clip is
 //! reported.
 //!
-//! What isn't drawn (composite units, shadings, JBIG2 and other undecodable images, the clips
+//! Axial and radial shadings (`AxialShd`, `RadialShd`) fill paths and text as PDF shadings
+//! (types 2 and 3, several segments as a stitching function), painted with `sh` inside the
+//! object's outline (a clipping path, or text in clipping mode), in the object's boundary space.
+//! Shadings on strokes, repeating or reflecting ones, elliptical radial ones, patterns and
+//! Gouraud shadings are not drawn yet (reported).
+//!
+//! What isn't drawn (patterns, Gouraud shadings, JBIG2 and other undecodable images, the clips
 //! above) is counted in [`OfdReport::skipped`], by kind in [`OfdReport::skipped_by_kind`].
 //! Signatures and seals are not carried over or checked.
 
@@ -31,8 +37,8 @@ use std::fmt::Write as _;
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
 use pdfcraft_fonts::{helvetica_width, win_ansi, win_ansi_encodable};
 use pdfcraft_ofd::{
-    ClipShape, Color, ColorSpaceKind, FillRule, Graphic, LayerKind, Matrix, Object as Item, PageContent, PathCmd, Resources, TemplatePage,
-    TextObject, ZOrder, zip::Package,
+    ClipShape, Color, ColorSpaceKind, FillRule, Graphic, LayerKind, Matrix, Object as Item, PageContent, PathCmd, Resources, Shade, ShadeKind,
+    TemplatePage, TextObject, ZOrder, zip::Package,
 };
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId, MetadataProvider, instance::LocationRef, instance::Size};
@@ -76,6 +82,7 @@ pub fn from_ofd(bytes: &[u8]) -> Result<(Document, OfdReport), CreateError> {
         forms: HashMap::new(),
         units: HashMap::new(),
         unit_stack: Vec::new(),
+        shadings: 0,
         report: OfdReport { signed: model.signatures.is_some(), notes: model.warnings.clone(), ..OfdReport::default() },
     };
     let mut templates: HashMap<u32, &TemplatePage> = HashMap::new();
@@ -136,6 +143,7 @@ struct PageOut {
     fonts: BTreeMap<String, ObjRef>,
     xobjects: BTreeMap<String, ObjRef>,
     states: BTreeMap<String, ObjRef>,
+    shadings: BTreeMap<String, ObjRef>,
 }
 
 impl PageOut {
@@ -151,6 +159,9 @@ impl PageOut {
         res.set(b"Font".to_vec(), Object::Dict(dict(&self.fonts)));
         res.set(b"XObject".to_vec(), Object::Dict(dict(&self.xobjects)));
         res.set(b"ExtGState".to_vec(), Object::Dict(dict(&self.states)));
+        if !self.shadings.is_empty() {
+            res.set(b"Shading".to_vec(), Object::Dict(dict(&self.shadings)));
+        }
         res
     }
 }
@@ -171,6 +182,8 @@ struct Writer<'a, 'b> {
     units: HashMap<u32, Result<ObjRef, &'static str>>,
     /// The units being written, innermost last (a unit may not contain itself).
     unit_stack: Vec<u32>,
+    /// Shadings written so far (each gets its own name).
+    shadings: usize,
     report: OfdReport,
 }
 
@@ -301,8 +314,12 @@ impl Writer<'_, '_> {
                     let stroke = p.stroke.then(|| p.stroke_color.clone().or_else(|| self.param_color(param, false)).unwrap_or_else(black));
                     let fill_ops = fill.as_ref().and_then(|c| self.color(c, true));
                     let stroke_ops = stroke.as_ref().and_then(|c| self.color(c, false));
-                    if (p.fill && fill.as_ref().is_some_and(|c| c.shading)) || (p.stroke && stroke.as_ref().is_some_and(|c| c.shading)) {
-                        self.skip("pattern and shading colours");
+                    let shade = match fill.as_ref().filter(|c| c.shading) {
+                        Some(c) => self.shading(c, &p.graphic, out),
+                        None => None,
+                    };
+                    if p.stroke && stroke.as_ref().is_some_and(|c| c.shading) {
+                        self.skip("shading colours on strokes");
                     }
                     let paint = match (fill_ops.is_some(), stroke_ops.is_some(), p.rule) {
                         (true, true, FillRule::NonZero) => "B",
@@ -310,6 +327,7 @@ impl Writer<'_, '_> {
                         (true, false, FillRule::NonZero) => "f",
                         (true, false, FillRule::EvenOdd) => "f*",
                         (false, true, _) => "S",
+                        (false, false, _) if shade.is_some() => "",
                         (false, false, _) => continue,
                     };
                     let line_width = p.graphic.line_width.or_else(|| self.param_line_width(param)).unwrap_or(0.353);
@@ -321,8 +339,18 @@ impl Writer<'_, '_> {
                     for c in [fill_ops, stroke_ops].into_iter().flatten() {
                         s.push_str(&c);
                     }
-                    path_ops(&p.path, &Matrix::IDENTITY, &mut s);
-                    let _ = writeln!(s, "{paint}\nQ");
+                    if let Some(sh) = &shade {
+                        s.push_str("q\n");
+                        path_ops(&p.path, &Matrix::IDENTITY, &mut s);
+                        s.push_str(if p.rule == FillRule::EvenOdd { "W* n\n" } else { "W n\n" });
+                        s.push_str(sh);
+                        s.push_str("Q\n");
+                    }
+                    if !paint.is_empty() {
+                        path_ops(&p.path, &Matrix::IDENTITY, &mut s);
+                        let _ = writeln!(s, "{paint}");
+                    }
+                    s.push_str("Q\n");
                     out.ops.push_str(&s);
                 }
                 Item::Text(t) if t.graphic.visible => self.text(t, layer_param, out),
@@ -385,6 +413,125 @@ impl Writer<'_, '_> {
                 ClipShape::Path(_) | ClipShape::Empty => self.skip("empty clipping regions"),
             }
         }
+    }
+
+    /// The operators that paint `c`'s shading over the current clipping path, in `g`'s
+    /// boundary space (they undo `g`'s CTM first), with the shading added to `out`. `None`, with
+    /// the reason reported, when it can't be drawn.
+    fn shading(&mut self, c: &Color, g: &Graphic, out: &mut PageOut) -> Option<String> {
+        let Some(shade) = c.shade.as_deref() else {
+            self.skip("pattern and shading colours");
+            return None;
+        };
+        let undo = match g.ctm.map(|m| m.inverse()) {
+            None => None,
+            Some(Some(inverse)) => Some(inverse),
+            Some(None) => {
+                self.skip("shadings on objects flattened by their CTM");
+                return None;
+            }
+        };
+        let r = match self.shading_dict(shade) {
+            Ok(d) => self.doc.add(d),
+            Err(why) => {
+                self.skip(why);
+                return None;
+            }
+        };
+        self.shadings += 1;
+        let name = format!("Sh{}", self.shadings);
+        out.shadings.insert(name.clone(), r);
+        let mut s = String::new();
+        if let Some(m) = undo {
+            s.push_str(&cm(&m));
+        }
+        let _ = writeln!(s, "/{name} sh");
+        Some(s)
+    }
+
+    /// A PDF shading (type 2 axial, type 3 radial) for `shade`, with its segments as one
+    /// function (stitched when there are more than two).
+    fn shading_dict(&self, shade: &Shade) -> Result<Dict, &'static str> {
+        if shade.repeat {
+            return Err("repeating or reflecting shadings");
+        }
+        let ((x0, y0), (x1, y1)) = (shade.start, shade.end);
+        let (kind, coords) = match shade.kind {
+            ShadeKind::Axial => (2, vec![x0, y0, x1, y1]),
+            ShadeKind::Radial { eccentricity, .. } if eccentricity.abs() > 1e-9 => return Err("elliptical radial shadings"),
+            ShadeKind::Radial { start_radius, end_radius, .. } => (3, vec![x0, y0, start_radius, x1, y1, end_radius]),
+        };
+        // Each segment's colour from 0 to 1; segments without a position are spread evenly.
+        let count = shade.stops.len();
+        let mut stops: Vec<(f64, Vec<f64>)> = Vec::with_capacity(count);
+        for (i, stop) in shade.stops.iter().enumerate() {
+            let even = if count > 1 { i as f64 / (count - 1) as f64 } else { 0.0 };
+            let space = stop.color_space.and_then(|id| self.res.color_spaces.get(&id));
+            let bits = space.map_or(8, |s| s.bits_per_component).clamp(1, 16);
+            let max = f64::from((1u32 << bits) - 1);
+            let value: Vec<f64> = stop.value.iter().map(|v| (v / max).clamp(0.0, 1.0)).collect();
+            stops.push((stop.position.unwrap_or(even).clamp(0.0, 1.0), value));
+        }
+        let components = stops.first().map_or(0, |(_, v)| v.len());
+        let space = match components {
+            1 => "DeviceGray",
+            3 => "DeviceRGB",
+            4 => "DeviceCMYK",
+            _ => return Err("shadings in colour spaces other than gray, RGB and CMYK"),
+        };
+        if stops.iter().any(|(_, v)| v.len() != components) {
+            return Err("shadings that mix colour spaces");
+        }
+        stops.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // One colour per position (the last given wins), from exactly 0 to exactly 1.
+        let mut merged: Vec<(f64, Vec<f64>)> = Vec::with_capacity(stops.len() + 2);
+        for (p, v) in stops {
+            match merged.last_mut() {
+                Some(last) if (last.0 - p).abs() < 1e-9 => last.1 = v,
+                _ => merged.push((p, v)),
+            }
+        }
+        if let Some(first) = merged.first().cloned().filter(|f| f.0 > 0.0) {
+            merged.insert(0, (0.0, first.1));
+        }
+        if let Some(last) = merged.last().cloned().filter(|l| l.0 < 1.0) {
+            merged.push((1.0, last.1));
+        }
+        if let [(_, only)] = merged.as_slice() {
+            let only = only.clone();
+            merged = vec![(0.0, only.clone()), (1.0, only)];
+        }
+        let reals = |v: &[f64]| Object::Array(v.iter().map(|x| Object::Real(*x)).collect());
+        let blend = |a: &[f64], b: &[f64]| {
+            let mut f = Dict::new();
+            f.set(b"FunctionType".to_vec(), Object::Int(2));
+            f.set(b"Domain".to_vec(), reals(&[0.0, 1.0]));
+            f.set(b"C0".to_vec(), reals(a));
+            f.set(b"C1".to_vec(), reals(b));
+            f.set(b"N".to_vec(), Object::Int(1));
+            Object::Dict(f)
+        };
+        let pieces: Vec<Object> = merged.iter().zip(merged.iter().skip(1)).map(|(a, b)| blend(&a.1, &b.1)).collect();
+        let function = match <[Object; 1]>::try_from(pieces) {
+            Ok([one]) => one,
+            Err(pieces) => {
+                let mut f = Dict::new();
+                f.set(b"FunctionType".to_vec(), Object::Int(3));
+                f.set(b"Domain".to_vec(), reals(&[0.0, 1.0]));
+                let bounds: Vec<f64> = merged.iter().skip(1).take(merged.len().saturating_sub(2)).map(|(p, _)| *p).collect();
+                f.set(b"Bounds".to_vec(), reals(&bounds));
+                f.set(b"Encode".to_vec(), reals(&pieces.iter().flat_map(|_| [0.0, 1.0]).collect::<Vec<_>>()));
+                f.set(b"Functions".to_vec(), Object::Array(pieces));
+                Object::Dict(f)
+            }
+        };
+        let mut d = Dict::new();
+        d.set(b"ShadingType".to_vec(), Object::Int(kind));
+        d.set(b"ColorSpace".to_vec(), Object::name(space));
+        d.set(b"Coords".to_vec(), reals(&coords));
+        d.set(b"Function".to_vec(), function);
+        d.set(b"Extend".to_vec(), Object::Array(vec![Object::Bool(shade.extend_start), Object::Bool(shade.extend_end)]));
+        Ok(d)
     }
 
     fn param(&self, mut id: Option<u32>, mut pick: impl FnMut(&pdfcraft_ofd::DrawParam) -> bool) {
@@ -612,8 +759,18 @@ impl Writer<'_, '_> {
     fn text(&mut self, t: &TextObject, layer_param: Option<u32>, out: &mut PageOut) {
         let param = t.graphic.draw_param.or(layer_param);
         let fill = t.fill.then(|| t.fill_color.clone().or_else(|| self.param_color(param, true)).unwrap_or_else(black));
-        let stroke = t.stroke.then(|| t.stroke_color.clone().or_else(|| self.param_color(param, false)).unwrap_or_else(black));
+        let mut stroke = t.stroke.then(|| t.stroke_color.clone().or_else(|| self.param_color(param, false)).unwrap_or_else(black));
+        // A shaded fill: the glyphs become a clipping path (mode 7) that the shading paints.
+        let shade = match fill.as_ref().filter(|c| c.shading) {
+            Some(c) => self.shading(c, &t.graphic, out),
+            None => None,
+        };
+        if stroke.as_ref().is_some_and(|c| c.shading) || (shade.is_some() && stroke.is_some()) {
+            self.skip("shading colours on strokes");
+            stroke = None;
+        }
         let mode = match (fill.is_some(), stroke.is_some()) {
+            _ if shade.is_some() => 7,
             (true, false) => 0,
             (false, true) => 1,
             (true, true) => 2,
@@ -670,7 +827,11 @@ impl Writer<'_, '_> {
             x = prev.unwrap_or(pos.0);
             y = pos.1;
         }
-        s.push_str("ET\nQ\n");
+        s.push_str("ET\n");
+        if let Some(sh) = &shade {
+            s.push_str(sh);
+        }
+        s.push_str("Q\n");
         out.ops.push_str(&s);
     }
 
@@ -743,7 +904,7 @@ fn system_info(ordering: &str, supplement: i64) -> Dict {
 }
 
 fn black() -> Color {
-    Color { value: vec![0.0, 0.0, 0.0], color_space: None, index: None, alpha: 255, shading: false }
+    Color { value: vec![0.0, 0.0, 0.0], color_space: None, index: None, alpha: 255, shading: false, shade: None }
 }
 
 /// Path operators for `path`, its points mapped by `m`. Quadratic curves and arcs become cubic

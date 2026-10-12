@@ -688,3 +688,34 @@ fn reads_composite_units() {
     assert!(doc.warnings.iter().any(|w| w.contains("composite graphic unit 41 is used but not defined")), "{:?}", doc.warnings);
     assert!(!doc.warnings.iter().any(|w| w.contains("not read yet")), "{:?}", doc.warnings);
 }
+
+#[test]
+fn reads_axial_and_radial_shadings() {
+    let body = r#"<PathObject Boundary="0 0 9 9" Fill="true"><FillColor><AxialShd Extend="1" MapType="Reflect" StartPoint="1 2" EndPoint="3 4">
+<Segment Position="0.25"><Color Value="1 2 3" ColorSpace="3"/></Segment><Segment><Color Value="4 5 6"/></Segment></AxialShd></FillColor>
+<StrokeColor><RadialShd StartPoint="1 1" EndPoint="2 2" StartRadius="0.5" EndRadius="3" Eccentricity="0.2"><Segment><Color Value="9"/></Segment></RadialShd></StrokeColor>
+<AbbreviatedData>M 0 0 L 1 1</AbbreviatedData></PathObject>
+<PathObject Boundary="0 0 9 9" Fill="true"><FillColor><AxialShd StartPoint="1 2"><Segment><Color Value="1"/></Segment></AxialShd></FillColor></PathObject>"#;
+    let doc = parse(&with("Doc_0/Pages/Page_0/Content.xml", &page(body))).unwrap();
+    let objs = &doc.pages[0].content.layers[0].objects;
+    let Object::Path(p) = &objs[0] else { panic!("{:?}", objs[0]) };
+    let fill = p.fill_color.as_ref().unwrap();
+    let shade = fill.shade.as_deref().unwrap();
+    assert!(fill.shading);
+    assert_eq!((shade.kind, shade.start, shade.end), (ShadeKind::Axial, (1.0, 2.0), (3.0, 4.0)));
+    assert_eq!((shade.extend_start, shade.extend_end, shade.repeat), (true, false, true));
+    assert_eq!(shade.stops[0], ShadeStop { position: Some(0.25), value: vec![1.0, 2.0, 3.0], color_space: Some(3) });
+    assert_eq!(shade.stops[1].position, None);
+    let stroke = p.stroke_color.as_ref().unwrap().shade.as_deref().unwrap();
+    assert_eq!(stroke.kind, ShadeKind::Radial { start_radius: 0.5, end_radius: 3.0, eccentricity: 0.2 });
+    // No end point: left out, with a warning; the colour is still marked as a shading.
+    let Object::Path(q) = &objs[1] else { panic!("{:?}", objs[1]) };
+    let broken = q.fill_color.as_ref().unwrap();
+    assert!(broken.shading && broken.shade.is_none());
+    assert!(doc.warnings.iter().any(|w| w.contains("a <AxialShd> could not be read")), "{:?}", doc.warnings);
+    // An inverse undoes a matrix; a flat one has none.
+    let m = Matrix { a: 2.0, b: 1.0, c: 0.0, d: 3.0, e: 5.0, f: -1.0 };
+    let (x, y) = m.inverse().unwrap().apply(m.apply(1.5, -2.0).0, m.apply(1.5, -2.0).1);
+    assert!((x - 1.5).abs() < 1e-12 && (y + 2.0).abs() < 1e-12);
+    assert!(Matrix { a: 1.0, b: 2.0, c: 2.0, d: 4.0, e: 0.0, f: 0.0 }.inverse().is_none());
+}

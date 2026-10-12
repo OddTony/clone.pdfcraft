@@ -481,7 +481,11 @@ impl Reader<'_, '_> {
         let value = c.attribute("Value").map(|v| values::color_value(v, part.limits).map_err(|e| part.at(&c, e))).transpose()?;
         self.charge(part, 0, size_of::<Color>().saturating_add(value.as_ref().map_or(0, Vec::len).saturating_mul(size_of::<f64>())), 0)?;
         let shading = c.children().any(|k| k.is_element());
-        if shading {
+        let shade = match (child(&c, "AxialShd"), child(&c, "RadialShd")) {
+            (Some(s), _) | (None, Some(s)) => self.shade(part, &s)?,
+            (None, None) => None,
+        };
+        if shading && shade.is_none() {
             self.warn(format!("{}: a pattern or shading colour is not read yet", part.name));
         }
         Ok(Some(Color {
@@ -490,7 +494,61 @@ impl Reader<'_, '_> {
             index: part.id(&c, "Index")?,
             alpha: part.int(&c, "Alpha", 255u8)?,
             shading,
+            shade,
         }))
+    }
+
+    /// An `AxialShd` or `RadialShd`. One that can't be read is left out with a warning (the
+    /// colour stays a shading that isn't drawn) rather than failing the document.
+    fn shade(&mut self, part: &Part, s: &Node) -> Result<Option<Box<Shade>>, OfdError> {
+        /// More segments than any real blend has.
+        const MAX_STOPS: usize = 256;
+        let point = |attr: &str| -> Option<(f64, f64)> {
+            match *values::numbers(s.attribute(attr)?, part.limits).ok()?.as_slice() {
+                [x, y] => Some((x, y)),
+                _ => None,
+            }
+        };
+        let num = |attr: &str, default: f64| s.attribute(attr).map_or(Some(default), |v| values::number(v).ok());
+        let unreadable = |r: &mut Self| {
+            r.warn(format!("{}: a <{}> could not be read and is not drawn", part.name, s.tag_name().name()));
+            Ok(None)
+        };
+        let (Some(start), Some(end)) = (point("StartPoint"), point("EndPoint")) else { return unreadable(self) };
+        let kind = if s.tag_name().name() == "RadialShd" {
+            match (num("StartRadius", 0.0), s.attribute("EndRadius").and_then(|v| values::number(v).ok()), num("Eccentricity", 0.0)) {
+                (Some(start_radius), Some(end_radius), Some(eccentricity)) if start_radius >= 0.0 && end_radius >= 0.0 => {
+                    ShadeKind::Radial { start_radius, end_radius, eccentricity }
+                }
+                _ => return unreadable(self),
+            }
+        } else {
+            ShadeKind::Axial
+        };
+        let extend = s.attribute("Extend").map_or(Some(0u8), |v| v.trim().parse::<u8>().ok().filter(|e| *e <= 3));
+        let Some(extend) = extend else { return unreadable(self) };
+        let mut stops = Vec::new();
+        for seg in children(s, "Segment") {
+            let color = child(&seg, "Color");
+            let value = color.and_then(|c| c.attribute("Value")).and_then(|v| values::color_value(v, part.limits).ok());
+            let position = match seg.attribute("Position") {
+                None => None,
+                Some(p) => match values::number(p) {
+                    Ok(p) => Some(p),
+                    Err(_) => return unreadable(self),
+                },
+            };
+            let (Some(value), true) = (value, stops.len() < MAX_STOPS) else { return unreadable(self) };
+            let color_space = color.and_then(|c| c.attribute("ColorSpace")).and_then(|v| v.trim().parse().ok());
+            self.charge(part, 0, size_of::<ShadeStop>().saturating_add(value.len().saturating_mul(size_of::<f64>())), 0)?;
+            stops.push(ShadeStop { position, value, color_space });
+        }
+        if stops.is_empty() {
+            return unreadable(self);
+        }
+        let repeat = s.attribute("MapType").is_some_and(|m| m.trim() != "Direct");
+        self.charge(part, 0, size_of::<Shade>(), 0)?;
+        Ok(Some(Box::new(Shade { kind, start, end, extend_start: extend & 1 != 0, extend_end: extend & 2 != 0, repeat, stops })))
     }
 
     /// A `PathObject`, or with `clips` false a clip area's `Path` (whose own clips mean nothing).

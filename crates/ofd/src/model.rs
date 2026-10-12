@@ -195,8 +195,47 @@ pub struct Color {
     pub color_space: Option<u32>,
     pub index: Option<u32>,
     pub alpha: u8,
-    /// The colour is a pattern or shading (axial, radial, Gouraud), not read yet.
+    /// The colour is a pattern or shading (axial, radial, Gouraud) rather than a plain value.
     pub shading: bool,
+    /// The axial or radial shading, when `shading` is one and could be read. Patterns and
+    /// Gouraud shadings are not read yet.
+    pub shade: Option<Box<Shade>>,
+}
+
+/// `AxialShd` or `RadialShd`: colours blended between two points. The points are in the
+/// object's boundary space (its corner at the origin; the object's CTM does not apply).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shade {
+    pub kind: ShadeKind,
+    pub start: (f64, f64),
+    pub end: (f64, f64),
+    /// `Extend`: colour beyond the start point, beyond the end point.
+    pub extend_start: bool,
+    pub extend_end: bool,
+    /// `MapType` other than `Direct`: the blend repeats or reflects.
+    pub repeat: bool,
+    /// `Segment`s in order.
+    pub stops: Vec<ShadeStop>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ShadeKind {
+    Axial,
+    /// Circles around the start and end points; an `eccentricity` other than 0 makes them
+    /// ellipses.
+    Radial {
+        start_radius: f64,
+        end_radius: f64,
+        eccentricity: f64,
+    },
+}
+
+/// One `Segment`: a colour at a position from 0 (start) to 1 (end), if given.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShadeStop {
+    pub position: Option<f64>,
+    pub value: Vec<f64>,
+    pub color_space: Option<u32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

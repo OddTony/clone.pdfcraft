@@ -416,3 +416,87 @@ fn deeply_nested_composite_units_stop() {
     let (_, report, _) = convert(&package_full(&[&page(body)], false, b"not a font", &[], &units));
     assert_eq!(report.skipped_by_kind.get("composite graphic units nested too deep"), Some(&1), "{:?}", report.skipped_by_kind);
 }
+
+/// Four segments as real writers send them: two pairs at nearly the same place.
+const AXIAL: &str = r#"<ofd:AxialShd Extend="3" StartPoint="0 5" EndPoint="40 5"><ofd:Segment Position="0"><ofd:Color Value="100 192 171"/></ofd:Segment>
+<ofd:Segment Position="0.0001"><ofd:Color Value="100 192 171"/></ofd:Segment><ofd:Segment Position="0.9835"><ofd:Color Value="0 140 207"/></ofd:Segment>
+<ofd:Segment Position="1"><ofd:Color Value="0 140 207"/></ofd:Segment></ofd:AxialShd>"#;
+
+#[test]
+fn axial_and_radial_shadings_fill_paths_and_text() {
+    let radial = r#"<ofd:RadialShd Extend="2" StartPoint="5 5" EndPoint="5 5" EndRadius="6"><ofd:Segment><ofd:Color Value="255"/></ofd:Segment><ofd:Segment><ofd:Color Value="0"/></ofd:Segment></ofd:RadialShd>"#;
+    let path = format!(
+        r#"<ofd:PathObject ID="11" Boundary="10 20 40 10" CTM="2 0 0 2 0 0" Fill="true" Stroke="false"><ofd:FillColor>{AXIAL}</ofd:FillColor><ofd:AbbreviatedData>M 0 0 L 20 0 L 20 5 C</ofd:AbbreviatedData></ofd:PathObject>"#
+    );
+    let ring = format!(
+        r#"<ofd:PathObject ID="12" Boundary="60 20 10 10" Fill="true" Rule="Even-Odd"><ofd:FillColor>{radial}</ofd:FillColor><ofd:AbbreviatedData>M 0 0 L 10 0 L 10 10 C</ofd:AbbreviatedData></ofd:PathObject>"#
+    );
+    let text = format!(
+        r#"<ofd:TextObject ID="13" Boundary="20 40 100 10" Font="4" Size="5"><ofd:FillColor>{AXIAL}</ofd:FillColor><ofd:TextCode X="0" Y="5">Hi</ofd:TextCode></ofd:TextObject>"#
+    );
+    let (pages, report, doc) = convert(&package(&[&page(&format!("{path}{ring}{text}"))], false));
+    let (dict, ops) = &pages[0];
+    // The outline clips; the shading paints in the boundary's space (the CTM undone).
+    assert!(ops.contains("2 0 0 2 10 20 cm\n"), "{ops}");
+    assert!(ops.contains("q\n0 0 m\n20 0 l\n20 5 l\nh\nW n\n0.5 0 0 0.5 0 0 cm\n/Sh1 sh\nQ\nQ\n"), "{ops}");
+    // Even-odd outline, then the default black stroke over the shading.
+    assert!(ops.contains("h\nW* n\n/Sh2 sh\nQ\n0 0 m\n10 0 l\n10 10 l\nh\nS\nQ\n"), "{ops}");
+    // Text: the glyphs clip (mode 7), the shading paints them; still real text.
+    assert!(ops.contains("BT\n7 Tr\n") && ops.contains("<69> Tj\nET\n/Sh3 sh\nQ\n"), "{ops}");
+    assert_eq!(report.skipped, 0, "{:?}", report.notes);
+
+    let res = doc.resolve(dict.get(b"Resources").unwrap()).as_dict().cloned().unwrap();
+    let shadings = doc.resolve(res.get(b"Shading").unwrap()).as_dict().cloned().unwrap();
+    let get = |name: &[u8]| doc.resolve(shadings.get(name).unwrap()).as_dict().cloned().unwrap();
+    let nums = |o: &Object| o.as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).collect::<Vec<_>>();
+    let axial = get(b"Sh1");
+    assert_eq!(axial.get(b"ShadingType").and_then(Object::as_int), Some(2));
+    assert_eq!(axial.get(b"ColorSpace").and_then(Object::as_name), Some(&b"DeviceRGB"[..]));
+    assert_eq!(nums(axial.get(b"Coords").unwrap()), [0.0, 5.0, 40.0, 5.0]);
+    assert_eq!(axial.get(b"Extend").unwrap().as_array().unwrap(), &[Object::Bool(true), Object::Bool(true)]);
+    let f = axial.get(b"Function").and_then(Object::as_dict).unwrap();
+    assert_eq!(f.get(b"FunctionType").and_then(Object::as_int), Some(3));
+    assert_eq!(nums(f.get(b"Bounds").unwrap()), [0.0001, 0.9835]);
+    let pieces = f.get(b"Functions").unwrap().as_array().unwrap();
+    assert_eq!(pieces.len(), 3);
+    let first = pieces[0].as_dict().unwrap();
+    assert!((nums(first.get(b"C0").unwrap())[1] - 192.0 / 255.0).abs() < 1e-9);
+    let radial = get(b"Sh2");
+    assert_eq!(radial.get(b"ShadingType").and_then(Object::as_int), Some(3));
+    assert_eq!(radial.get(b"ColorSpace").and_then(Object::as_name), Some(&b"DeviceGray"[..]));
+    assert_eq!(nums(radial.get(b"Coords").unwrap()), [5.0, 5.0, 0.0, 5.0, 5.0, 6.0]);
+    assert_eq!(radial.get(b"Extend").unwrap().as_array().unwrap(), &[Object::Bool(false), Object::Bool(true)]);
+    let f = radial.get(b"Function").and_then(Object::as_dict).unwrap();
+    assert_eq!((f.get(b"FunctionType").and_then(Object::as_int), nums(f.get(b"C1").unwrap())), (Some(2), vec![0.0]));
+}
+
+#[test]
+fn shadings_that_cannot_be_drawn_are_reported() {
+    let fill = |c: &str, i: usize| {
+        format!(
+            r#"<ofd:PathObject ID="{i}" Boundary="0 0 9 9" Fill="true"><ofd:FillColor>{c}</ofd:FillColor><ofd:AbbreviatedData>M 0 0 L 9 {i}</ofd:AbbreviatedData></ofd:PathObject>"#
+        )
+    };
+    let repeat =
+        r#"<ofd:AxialShd MapType="Repeat" StartPoint="0 0" EndPoint="1 1"><ofd:Segment><ofd:Color Value="0 0 0"/></ofd:Segment></ofd:AxialShd>"#;
+    let ellipse = r#"<ofd:RadialShd Eccentricity="0.5" StartPoint="0 0" EndPoint="1 1" EndRadius="2"><ofd:Segment><ofd:Color Value="0 0 0"/></ofd:Segment></ofd:RadialShd>"#;
+    let gouraud = r#"<ofd:GouraudShd><ofd:Point X="0" Y="0"/></ofd:GouraudShd>"#;
+    let unreadable = r#"<ofd:AxialShd StartPoint="0" EndPoint="1 1"><ofd:Segment><ofd:Color Value="0 0 0"/></ofd:Segment></ofd:AxialShd>"#;
+    let stroked = format!(
+        r#"<ofd:PathObject ID="30" Boundary="0 0 9 9"><ofd:StrokeColor>{AXIAL}</ofd:StrokeColor><ofd:AbbreviatedData>M 0 0 L 9 9</ofd:AbbreviatedData></ofd:PathObject>"#
+    );
+    let body = format!("{}{}{}{}{stroked}", fill(repeat, 20), fill(ellipse, 21), fill(gouraud, 22), fill(unreadable, 23));
+    let (pages, report, _) = convert(&package(&[&page(&body)], false));
+    assert!(!pages[0].1.contains(" sh\n"), "{}", pages[0].1);
+    let by_kind: Vec<(&str, usize)> = report.skipped_by_kind.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    assert_eq!(
+        by_kind,
+        [
+            ("elliptical radial shadings", 1),
+            ("pattern and shading colours", 2),
+            ("repeating or reflecting shadings", 1),
+            ("shading colours on strokes", 1)
+        ]
+    );
+    assert!(report.notes.iter().any(|n| n.contains("<AxialShd> could not be read")), "{:?}", report.notes);
+}

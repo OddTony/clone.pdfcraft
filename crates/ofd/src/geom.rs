@@ -69,4 +69,16 @@ impl Matrix {
     pub fn apply(&self, x: f64, y: f64) -> (f64, f64) {
         (self.a * x + self.c * y + self.e, self.b * x + self.d * y + self.f)
     }
+
+    /// The matrix that undoes this one, or `None` when it flattens the plane (or isn't
+    /// finite).
+    pub fn inverse(&self) -> Option<Matrix> {
+        let det = self.a * self.d - self.b * self.c;
+        if !det.is_finite() || det.abs() < 1e-12 {
+            return None;
+        }
+        let (a, b, c, d) = (self.d / det, -self.b / det, -self.c / det, self.a / det);
+        let m = Matrix { a, b, c, d, e: -(self.e * a + self.f * c), f: -(self.e * b + self.f * d) };
+        [m.a, m.b, m.c, m.d, m.e, m.f].iter().all(|v| v.is_finite()).then_some(m)
+    }
 }
