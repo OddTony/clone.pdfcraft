@@ -1648,6 +1648,8 @@ pub struct BlockStyle {
     pub family: Option<(crate::added::Family, bool, bool)>,
     /// Override weight without choosing a different family (`None` keeps the source weight).
     pub bold: Option<bool>,
+    /// Override slant without choosing a different family (`None` keeps the source slant).
+    pub italic: Option<bool>,
     /// Font size in points (user space).
     pub size: Option<f64>,
     /// Fill colour (RGB 0–1).
@@ -1713,19 +1715,25 @@ pub(crate) fn rewrite_block_with_limit(
         ));
     }
     let visual_indic = members.iter().any(|line| line.visual_order);
+    // Several runs or source styles (a large title over a smaller date, a bold word in a
+    // sentence): each run keeps its size, colour, row and position, also when the whole region
+    // takes another font or weight. The single-style rewrite below would set every run in the
+    // first one's size and rewrap the rows together.
+    let mixed = b.rows.iter().any(|row| row.len() > 1)
+        || members.iter().any(|line| line.font != first.font || line.size != first.size || line.color != first.color);
     if !hebrew
         && !visual_indic
         && (!style.ranges.is_empty()
             || style.resource.is_some()
+            || mixed
             || (text.is_some_and(|draft| {
                 draft.contains('\n')
                     || pdfcraft_fonts::source_shaping::required(draft)
                     || !pdfcraft_fonts::embedding::matching_faces(&b.base_font).is_empty()
-            }) || registered_face
-                || b.rows.iter().any(|row| row.len() > 1)
-                || members.iter().any(|line| line.font != first.font || line.size != first.size || line.color != first.color))
+            }) || registered_face)
                 && style.family.is_none()
-                && style.bold.is_none())
+                && style.bold.is_none()
+                && style.italic.is_none())
     {
         return rewrite_styled_block(doc, page, &b, &lines, text, style);
     }
@@ -1750,12 +1758,15 @@ pub(crate) fn rewrite_block_with_limit(
     let metrics = fonts_res.get(font_name.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned()).map(|d| Metrics::from_dict(doc, &d));
     let visual_indic = metrics.as_ref().is_some_and(|m| m.visual_order) || first.visual_order;
     let indic_text = if visual_indic { crate::indic::to_visual(&text) } else { text.clone() };
-    let reuse = style.family.is_none() && style.bold.is_none() && metrics.as_ref().is_some_and(|m| source_encodes(m, &indic_text));
+    let reuse =
+        style.family.is_none() && style.bold.is_none() && style.italic.is_none() && metrics.as_ref().is_some_and(|m| source_encodes(m, &indic_text));
     let space = metrics.as_ref().map_or(0.33, |m| source_space(doc, &fonts_res, m));
     // The chosen style also determines the real Japanese fallback outlines and advances.
     let (family, bold, italic) = style.family.unwrap_or((source_family(&b.base_font), b.bold, b.italic));
     let bold = style.bold.unwrap_or(bold);
-    // The face is chosen after `bold` settles, so a bold request measures with the bold metrics.
+    let italic = style.italic.unwrap_or(italic);
+    // The face is chosen after `bold` and `italic` settle, so a bold or italic request measures
+    // with that face's metrics.
     let face = family.std14(bold, italic);
     let std_width = move |s: &str, size: f64| -> f64 { face.text_width(s, size) };
     let [dx, dy] = style.offset.unwrap_or([0.0, 0.0]);
@@ -1837,9 +1848,12 @@ pub(crate) fn rewrite_block_with_limit(
         f.set(b"Subtype".to_vec(), Object::name("Type1"));
         f.set(b"BaseFont".to_vec(), Object::name(base));
         f.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
-        let name = if style.family.is_none() { String::from_utf8_lossy(SUBSTITUTE).into_owned() } else { format!("PCEd{}", base.replace('-', "")) };
+        // A chosen family, weight or slant has a resource of its own; only a fallback for a
+        // source font that can't show the text shares the substitute's (and is reported).
+        let chosen = style.family.is_some() || style.bold.is_some() || style.italic.is_some();
+        let name = if chosen { format!("PCEd{}", base.replace('-', "")) } else { String::from_utf8_lossy(SUBSTITUTE).into_owned() };
         fonts_res.set(name.clone().into_bytes(), Object::Dict(f));
-        if style.family.is_none() {
+        if !chosen {
             substituted = Some(base.to_string());
         }
         let shown = name.clone();
