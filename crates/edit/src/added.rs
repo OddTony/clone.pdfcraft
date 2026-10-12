@@ -697,7 +697,11 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
             font.set(b"Type".to_vec(), Object::name("Font"));
             font.set(b"Subtype".to_vec(), Object::name("Type1"));
             font.set(b"BaseFont".to_vec(), Object::name(base));
-            if t.family != Family::Courier || !t.text.is_ascii() {
+            if pdfcraft_fonts::has_turkish(&t.text) {
+                font.set(b"Encoding".to_vec(), Object::Dict(pdfcraft_fonts::turkish_encoding_dict()));
+                let to_unicode = doc.add(Object::Stream(pdfcraft_cos::Stream::flate(Dict::new(), pdfcraft_fonts::TURKISH_TO_UNICODE)));
+                font.set(b"ToUnicode".to_vec(), Object::Ref(to_unicode));
+            } else if t.family != Family::Courier || !t.text.is_ascii() {
                 font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
             }
             let mut fonts = Dict::new();

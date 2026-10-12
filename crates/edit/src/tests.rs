@@ -297,6 +297,10 @@ fn added_items_follow_the_page_user_unit() {
     let text = AddedText { rect: [72.0, 600.0, 300.0, 700.0], text: "Scaled".into(), size: 14.0, ..AddedText::default() };
     add_content(&mut doc, 2, &Content::Text(text.clone())).unwrap();
     add_content(&mut doc, 0, &Content::Text(text.clone())).unwrap();
+    // Turkish specialized characters (ş, ı, ğ, ö, ü, İ, etc.) are supported as added text.
+    let tr_text =
+        AddedText { rect: [72.0, 500.0, 300.0, 600.0], text: "Açıklama: Türkçe şapkalı ğ ve İŞÇİ".into(), ..AddedText::default() };
+    add_content(&mut doc, 0, &Content::Text(tr_text)).unwrap();
     let doc = reopen(&doc);
     let all = list_added(&doc);
     let on = |page: usize| all.iter().find(|a| a.page == page).unwrap();
