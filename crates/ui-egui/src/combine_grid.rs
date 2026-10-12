@@ -1050,7 +1050,7 @@ impl Card {
         // The same actions on a right click, show large first (and Unlock… for a locked file).
         let at = resp.rect.left_bottom();
         let locked = f.lock.is_some();
-        resp.context_menu(|ui| {
+        crate::rtl::context_menu(&resp, |ui| {
             let item = |ui: &mut egui::Ui, icon: &str, label: &str| {
                 ui.add(egui::Button::image_and_text(icons::image(icon, 15.0, ui.visuals().text_color()), label)).clicked()
             };
@@ -1139,11 +1139,11 @@ pub(crate) fn preview(app: &mut PdfCraftApp, ctx: &egui::Context, t: &Tokens) {
     // No larger than the GPU takes, or the render would be refused.
     let longest = ctx.input(|i| i.max_texture_side as f32).min(PREVIEW_SIDE);
     let thumbs = &mut app.combine_thumbs;
-    let modal = egui::Modal::new(egui::Id::new("combine-preview")).show(ctx, |ui| {
+    let modal = crate::rtl::modal(egui::Id::new("combine-preview")).show(ctx, |ui| {
         ui.set_width(width);
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(crate::bidi::visual(&f.name)).font(theme::semibold(15.0)));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
                 if icons::button(ui, "x", 30.0, false, tl!("Close")).clicked() {
                     close = true;
                 }
@@ -1200,10 +1200,10 @@ pub(crate) fn preview(app: &mut PdfCraftApp, ctx: &egui::Context, t: &Tokens) {
         // Previous and next, centred below.
         ui.horizontal(|ui| {
             ui.add_space((width - 2.0 * 30.0 - 6.0) / 2.0);
-            if ui.add_enabled_ui(at > 0, |ui| icons::button(ui, "chevron-left", 30.0, false, tl!("Previous page"))).inner.clicked() {
+            if ui.add_enabled_ui(at > 0, |ui| icons::button(ui, crate::rtl::back_chevron(), 30.0, false, tl!("Previous page"))).inner.clicked() {
                 step = -1;
             }
-            if ui.add_enabled_ui(at + 1 < n, |ui| icons::button(ui, "chevron-right", 30.0, false, tl!("Next page"))).inner.clicked() {
+            if ui.add_enabled_ui(at + 1 < n, |ui| icons::button(ui, crate::rtl::forward_chevron(), 30.0, false, tl!("Next page"))).inner.clicked() {
                 step = 1;
             }
         });

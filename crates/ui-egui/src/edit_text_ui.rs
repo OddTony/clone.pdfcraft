@@ -153,7 +153,7 @@ pub(crate) fn extras_panel(ui: &mut egui::Ui, e: &mut Extras) -> bool {
         }
         let zero = tl!("Line spacing").to_string();
         let label = |v: f64| if v == 0.0 { zero.clone() } else { format!("{v:.2}×") };
-        egui::ComboBox::from_id_salt("line-spacing").selected_text(label(e.line_spacing)).width(110.0).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("line-spacing").selected_text(label(e.line_spacing)).width(110.0), |ui| {
             for v in [1.0, 1.15, 1.5, 2.0] {
                 ui.selectable_value(&mut e.line_spacing, v, label(v));
             }
@@ -576,7 +576,7 @@ pub(crate) fn image_input(
         view.image_selection = Some(ImageSelection { page, index: hit, drag: None });
     }
     if selected == Some(hit) {
-        resp.context_menu(|ui| {
+        crate::rtl::context_menu(resp, |ui| {
             use pdfcraft_engine::ImageEdit as E;
             let items: [(&str, Option<E>); 4] = [
                 (tl!("Rotate Clockwise"), Some(E::Rotate(1))),

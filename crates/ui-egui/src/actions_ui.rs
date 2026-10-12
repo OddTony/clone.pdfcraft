@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use egui::{Align, Layout};
+use egui::Align;
 use pdfcraft_engine::actions::{Action, Step, builtin};
 
 use crate::theme::{self, Tokens};
@@ -241,7 +241,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool
         app.wizard.selected = actions.first().map(|a| a.name.clone());
     }
     ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.set_width(220.0);
             egui::Frame::new().fill(t.hover).corner_radius(egui::CornerRadius::same(6)).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
                 ui.set_width(208.0);
@@ -255,7 +255,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool
                 }
             });
         });
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             let Some(a) = actions.iter().find(|a| app.wizard.selected.as_deref() == Some(a.name.as_str())) else { return };
             let name = if a.builtin { tl!(&a.name) } else { &a.name };
             ui.label(egui::RichText::new(name).font(theme::semibold(15.0)));
@@ -288,7 +288,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool
                 app.wizard.selected = None;
             }
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if widgets::pill_button(ui, tl_ctx!("action wizard", "Start"), true).clicked() {
                 close = true;
                 app.start_selected_action();
@@ -305,7 +305,7 @@ fn edit_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     let Some((original, a)) = app.wizard.editing.as_mut() else { return false };
     ui.label(egui::RichText::new(if original.is_some() { tl!("Edit Action") } else { tl!("New Action") }).font(theme::semibold(18.0)));
     ui.add_space(8.0);
-    egui::Grid::new("action-edit").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("action-edit").num_columns(2).spacing([12.0, 8.0]), |ui| {
         ui.label(tl!("Action name:"));
         ui.add(crate::widgets::line(&mut a.name).desired_width(320.0).id_salt("action-name"));
         ui.end_row();
@@ -328,7 +328,7 @@ fn edit_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                     if let Some(arg) = s.arg_mut() {
                         ui.add(crate::widgets::line(arg).desired_width(220.0));
                     }
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
                         if ui.button(tl!("Remove")).clicked() {
                             remove = Some(i);
                         }
@@ -343,11 +343,15 @@ fn edit_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     let all = Step::all();
     let add = &mut app.wizard.add;
     ui.horizontal(|ui| {
-        egui::ComboBox::from_id_salt("action-add-step").selected_text(tl!(all[(*add).min(all.len() - 1)].label())).width(240.0).show_ui(ui, |ui| {
-            for (i, s) in all.iter().enumerate() {
-                ui.selectable_value(add, i, tl!(s.label()));
-            }
-        });
+        crate::rtl::combo(
+            ui,
+            egui::ComboBox::from_id_salt("action-add-step").selected_text(tl!(all[(*add).min(all.len() - 1)].label())).width(240.0),
+            |ui| {
+                for (i, s) in all.iter().enumerate() {
+                    ui.selectable_value(add, i, tl!(s.label()));
+                }
+            },
+        );
         if ui.button(tl!("Add Step")).clicked() {
             a.steps.push(all[(*add).min(all.len() - 1)].clone());
         }
@@ -362,7 +366,7 @@ fn edit_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     let (mut done, mut cancel) = (false, false);
     let ok = !name.is_empty() && !taken && !a.steps.is_empty();
     ui.horizontal(|ui| {
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if ui.add_enabled_ui(ok, |ui| widgets::pill_button(ui, tl!("Save"), true)).inner.clicked() {
                 done = true;
             }

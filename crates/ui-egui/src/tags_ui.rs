@@ -137,7 +137,7 @@ pub(crate) fn panel(ui: &mut Ui, t: &Tokens, doc: DocId, tags: &[TagInfo], state
                     let closed = state.collapsed.contains(&tag.object);
                     if icons::button(
                         ui,
-                        if closed { "chevron-right" } else { "chevron-down" },
+                        if closed { crate::rtl::forward_chevron() } else { "chevron-down" },
                         18.0,
                         false,
                         if closed { tl!("Expand tag") } else { tl!("Collapse tag") },

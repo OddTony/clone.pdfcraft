@@ -2,7 +2,7 @@
 //! (replaced blue, inserted green, deleted red), shades them on the newer document's pages, and
 //! offers a report or the differences as comments.
 
-use egui::{Align, Color32, Layout};
+use egui::{Align, Color32};
 use pdfcraft_engine::DocId;
 use pdfcraft_engine::compare::{Comparison, Kind};
 
@@ -46,11 +46,11 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
         app.compare_old = others.first().map(|(id, _)| *id);
     }
     let new_name = app.session.get(new).map(|d| d.name.clone()).unwrap_or_default();
-    egui::Grid::new("compare-files").num_columns(2).spacing([12.0, 10.0]).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("compare-files").num_columns(2).spacing([12.0, 10.0]), |ui| {
         ui.label(tl!("Old file:"));
         let shown =
             others.iter().find(|(id, _)| Some(*id) == app.compare_old).map_or(tl!("Open the older version first").to_string(), |(_, n)| n.clone());
-        egui::ComboBox::from_id_salt("compare-old").selected_text(shown).width(320.0).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("compare-old").selected_text(shown).width(320.0), |ui| {
             for (id, n) in &others {
                 ui.selectable_value(&mut app.compare_old, Some(*id), n);
             }
@@ -65,7 +65,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
     ui.add_space(10.0);
     let (mut go, mut cancel) = (false, false);
     ui.horizontal(|ui| {
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if ui.add_enabled_ui(app.compare_old.is_some(), |ui| widgets::pill_button(ui, tl!("Compare"), true)).inner.clicked() {
                 go = true;
             }
@@ -122,7 +122,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &Option<CompareState>,
             ui.horizontal(|ui| {
                 let (bar, _) = ui.allocate_exact_size(egui::vec2(4.0, 34.0), egui::Sense::hover());
                 ui.painter().rect_filled(bar, egui::CornerRadius::same(2), colour(ch.kind));
-                ui.vertical(|ui| {
+                crate::rtl::vertical(ui, |ui| {
                     ui.label(
                         egui::RichText::new(crate::i18n::fmt(
                             tl!("{kind} · page {p}"),

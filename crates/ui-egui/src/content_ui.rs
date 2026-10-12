@@ -553,13 +553,13 @@ pub(crate) fn format_panel(ui: &mut egui::Ui, t: &Tokens, style: &AddedText) -> 
     let mut s = style.clone();
     widgets::section_title(ui, tl!("Format text"));
     ui.horizontal(|ui| {
-        egui::ComboBox::from_id_salt("font-family").selected_text(s.family.label()).width(110.0).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("font-family").selected_text(s.family.label()).width(110.0), |ui| {
             for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
                 ui.selectable_value(&mut s.family, f, f.label());
             }
         });
         // A list rather than a drag value: every change is an undo step.
-        egui::ComboBox::from_id_salt("font-size").selected_text(format!("{} pt", s.size)).width(70.0).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("font-size").selected_text(format!("{} pt", s.size)).width(70.0), |ui| {
             for size in [8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 36.0, 48.0, 72.0] {
                 ui.selectable_value(&mut s.size, size, format!("{size} pt"));
             }

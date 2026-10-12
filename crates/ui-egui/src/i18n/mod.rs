@@ -2956,8 +2956,8 @@ mod tests {
         assert_eq!(tr(ar, "Save as…"), "…باسم حفظ");
         // Latin names keep their own direction inside the phrase.
         assert_eq!(tr(ar, "About PdfCraft"), "PdfCraft حول");
-        // A caption's colon stays beside the widget on its right.
-        assert_eq!(tr(ar, "Name:"), "الاسم:");
+        // A caption ends at its colon, beside the widget on its left.
+        assert_eq!(tr(ar, "Name:"), ":الاسم");
         assert_eq!(tr(ar, "Issued by: "), "عن صادرة: ");
         // Placeholders survive and are filled in place.
         assert_eq!(tr(ar, "Couldn't open {name}: {e}"), "{name}: {e} فتح تعذّر");

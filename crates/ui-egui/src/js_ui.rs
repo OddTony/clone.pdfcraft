@@ -1,7 +1,7 @@
 //! Acrobat JavaScript in the shell: what scripts ask for (alerts, printing, navigation, links),
 //! the JavaScript console (⌘J), Document JavaScripts, and Preferences ▸ JavaScript.
 
-use egui::{Align, Layout};
+use egui::Align;
 use pdfcraft_engine::js::{JsOutput, Request};
 use pdfcraft_engine::{DocId, Edit};
 
@@ -143,7 +143,7 @@ impl PdfCraftApp {
 fn buttons(ui: &mut egui::Ui, primary: &str, others: &[&str]) -> Option<String> {
     let mut clicked = None;
     ui.horizontal(|ui| {
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             // Stable ids: the console's output above changes how many widgets come first.
             // Labels are translated for display; the returned id stays English.
             if ui.push_id(primary, |ui| widgets::pill_button(ui, tl!(primary), true)).inner.clicked() {
@@ -267,7 +267,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         ui.label(tl!("Interface language"));
         let selected = crate::i18n::Lang::from_code(&app.language).map_or(tl!("Auto"), crate::i18n::Lang::name);
         let before = app.language.clone();
-        egui::ComboBox::from_id_salt("interface-language").selected_text(selected).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("interface-language").selected_text(selected), |ui| {
             if ui.selectable_value(&mut app.language, crate::i18n::AUTO.to_string(), tl!("Auto")).clicked() {
                 ui.close();
             }
@@ -290,7 +290,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         let auto_percent = ui_scale::percent(ui_scale::drawn(None, app.system_text_scale, native));
         let auto = crate::i18n::fmt(tl!("Auto ({percent}%)"), &[("percent", &auto_percent.to_string())]);
         let selected = app.ui_scale.map_or_else(|| auto.clone(), |f| format!("{}%", ui_scale::percent(f)));
-        egui::ComboBox::from_id_salt("interface-size").selected_text(selected).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("interface-size").selected_text(selected), |ui| {
             if ui.selectable_value(&mut app.ui_scale, None, auto).clicked() {
                 ui.close();
             }
@@ -310,14 +310,17 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     );
     ui.horizontal(|ui| {
         ui.label(tl!("Tools panel side"));
-        let right = app.docking.tools_on_right();
+        // The side on screen: a right-to-left interface shows the saved arrangement mirrored
+        // (`docking::show`), so there the panel saved on the left is the one on the right.
+        let mirror = crate::rtl::on();
+        let right = app.docking.tools_on_right() != mirror;
         if ui.selectable_label(!right, tl!("Left")).clicked()
-            && let Err(error) = app.docking.set_tools_on_right(false)
+            && let Err(error) = app.docking.set_tools_on_right(mirror)
         {
             app.notify(error);
         }
         if ui.selectable_label(right, tl!("Right")).clicked()
-            && let Err(error) = app.docking.set_tools_on_right(true)
+            && let Err(error) = app.docking.set_tools_on_right(!mirror)
         {
             app.notify(error);
         }
@@ -408,7 +411,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     ui.horizontal(|ui| {
         ui.label(tl!("Replace document colours"));
         let mode = app.reading_colors.mode_name();
-        egui::ComboBox::from_id_salt("reading-colors").selected_text(tl!(reading_mode_label(mode))).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("reading-colors").selected_text(tl!(reading_mode_label(mode))), |ui| {
             for (m, label) in [
                 ("off", "Off"),
                 ("black-on-white", "Black on white"),
@@ -504,19 +507,16 @@ fn date_format(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         let label = ui.label(tl!("Fill & Sign dates"));
         let current = app.session.date_format().to_string();
         let selected = if DATE_FORMATS.contains(&current.as_str()) { sample(app, &current) } else { tl!("Custom").to_string() };
-        egui::ComboBox::from_id_salt("date-format")
-            .selected_text(selected)
-            .width(240.0)
-            .show_ui(ui, |ui| {
-                for f in DATE_FORMATS {
-                    if ui.selectable_label(current == f, sample(app, f)).clicked() && app.session.set_date_format(f).is_ok() {
-                        app.date_format_draft = None;
-                        ui.close();
-                    }
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("date-format").selected_text(selected).width(240.0), |ui| {
+            for f in DATE_FORMATS {
+                if ui.selectable_label(current == f, sample(app, f)).clicked() && app.session.set_date_format(f).is_ok() {
+                    app.date_format_draft = None;
+                    ui.close();
                 }
-            })
-            .response
-            .labelled_by(label.id);
+            }
+        })
+        .response
+        .labelled_by(label.id);
     });
     ui.horizontal(|ui| {
         let label = ui.label(tl!("Pattern"));
@@ -556,23 +556,18 @@ fn date_format(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         let follow = crate::i18n::fmt(tl!("Same as interface ({language})"), &[("language", interface)]);
         let current = app.session.date_language().map(str::to_string);
         let selected = DATE_LANGUAGES.iter().find(|l| current.as_deref() == Some(l.code)).map_or(follow.clone(), |l| l.name.to_string());
-        egui::ComboBox::from_id_salt("date-language")
-            .selected_text(selected)
-            .width(240.0)
-            .show_ui(ui, |ui| {
-                if ui.selectable_label(current.is_none(), follow).clicked() && app.session.set_date_language(None).is_ok() {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("date-language").selected_text(selected).width(240.0), |ui| {
+            if ui.selectable_label(current.is_none(), follow).clicked() && app.session.set_date_language(None).is_ok() {
+                ui.close();
+            }
+            for l in &DATE_LANGUAGES {
+                if ui.selectable_label(current.as_deref() == Some(l.code), l.name).clicked() && app.session.set_date_language(Some(l.code)).is_ok() {
                     ui.close();
                 }
-                for l in &DATE_LANGUAGES {
-                    if ui.selectable_label(current.as_deref() == Some(l.code), l.name).clicked()
-                        && app.session.set_date_language(Some(l.code)).is_ok()
-                    {
-                        ui.close();
-                    }
-                }
-            })
-            .response
-            .labelled_by(label.id);
+            }
+        })
+        .response
+        .labelled_by(label.id);
     });
     ui.label(
         egui::RichText::new(crate::i18n::fmt(

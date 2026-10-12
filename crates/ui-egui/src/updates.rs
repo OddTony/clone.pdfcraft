@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use egui::{Align, Layout};
+use egui::Align;
 
 use crate::{PdfCraftApp, theme, widgets};
 
@@ -167,7 +167,7 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 .small(),
         );
         ui.add_space(12.0);
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if let Some(url) = download.take() {
                 let get = widgets::pill_button(ui, tl!("Download"), true).clicked();
                 let later = widgets::pill_button(ui, tl!("Later"), false).clicked();

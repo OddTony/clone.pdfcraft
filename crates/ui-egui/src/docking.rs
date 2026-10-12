@@ -396,9 +396,13 @@ pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
         // Availability is a render projection: the saved group, selection and width survive Home.
         let _ = rendered.apply(Action::Close { panel: Panel::Inspector });
     }
+    // A right-to-left interface shows the arrangement mirrored: what is saved is the same in
+    // every language, so the Tools panel that is on the left in English is on the right here.
+    let mirror = crate::rtl::on();
+    let shown = if mirror { mirrored_layout(&rendered) } else { rendered.clone() };
     let output = DockArea::new(egui::Id::new("pdfcraft-docking")).show_with_limits(
         ui,
-        &rendered,
+        &shown,
         &style,
         |panel| crate::i18n::t(panel.label()).into(),
         permissions,
@@ -406,16 +410,17 @@ pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
         |ui, panel| match panel {
             Panel::Canvas => {
                 ui.painter().rect_filled(ui.max_rect(), 0.0, t.pasteboard);
+                // Home and Combine Files follow the interface; a document never does.
                 match app.active {
-                    None if app.combine_showing() => crate::combine_ui::page(app, ui),
-                    None => crate::home::show(app, ui),
+                    None if app.combine_showing() => crate::rtl::root(ui, |ui| crate::combine_ui::page(app, ui)),
+                    None => crate::rtl::root(ui, |ui| crate::home::show(app, ui)),
                     Some(index) => crate::canvas::document_area(app, index, ui),
                 }
             }
-            Panel::Tools => crate::panels::left_panel(app, ui),
+            Panel::Tools => crate::rtl::root(ui, |ui| crate::panels::left_panel(app, ui)),
             Panel::Inspector => {
                 ui.data_mut(|data| data.insert_temp(egui::Id::new("pdfcraft-inspector-body"), ui.max_rect()));
-                crate::panels::right_panel(app, ui);
+                crate::rtl::root(ui, |ui| crate::panels::right_panel(app, ui));
             }
         },
     );
@@ -424,6 +429,11 @@ pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
     publish_visibility(app, &workspace);
     app.docking = workspace;
     for mut action in output.actions {
+        if mirror {
+            // The gesture was made on the mirrored arrangement.
+            let Some(saved) = unmirrored_action(&rendered, action) else { continue };
+            action = saved;
+        }
         if app.active.is_none()
             && let Action::ResizeSplit { path, .. } = &mut action
         {
@@ -438,6 +448,67 @@ pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
     }
 }
 
+/// Splits nest; deeper than this the arrangement is shown as saved rather than recursed into.
+const MAX_MIRROR_DEPTH: usize = 64;
+
+/// A side-by-side split's size once its children have swapped sides.
+fn mirrored_size(size: SplitSize) -> SplitSize {
+    match size {
+        SplitSize::Ratio(ratio) => SplitSize::Ratio(if ratio.is_finite() { (1.0 - ratio).clamp(0.0, 1.0) } else { ratio }),
+        SplitSize::FixedFirst(points) => SplitSize::FixedSecond(points),
+        SplitSize::FixedSecond(points) => SplitSize::FixedFirst(points),
+    }
+}
+
+fn mirrored_node(node: &Node<Panel>, depth: usize) -> Node<Panel> {
+    match node {
+        Node::Split { axis, size, first, second } if depth < MAX_MIRROR_DEPTH => {
+            let (first, second) = (mirrored_node(first, depth.saturating_add(1)), mirrored_node(second, depth.saturating_add(1)));
+            match axis {
+                SplitAxis::Horizontal => Node::Split { axis: *axis, size: mirrored_size(*size), first: Box::new(second), second: Box::new(first) },
+                SplitAxis::Vertical => Node::Split { axis: *axis, size: *size, first: Box::new(first), second: Box::new(second) },
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+/// `layout` as a right-to-left interface shows it: the children of every side-by-side split
+/// swap sides and keep their sizes. Tab order, stacks and floating panels are as saved.
+fn mirrored_layout(layout: &Layout<Panel>) -> Layout<Panel> {
+    Layout { root: layout.root.as_ref().map(|root| mirrored_node(root, 0)), floating: layout.floating.clone() }
+}
+
+/// An action made on [`mirrored_layout`] of `layout`, as it applies to `layout` itself: left and
+/// right swap. `None` for a split that `layout` does not have.
+fn unmirrored_action(layout: &Layout<Panel>, action: Action<Panel>) -> Option<Action<Panel>> {
+    let side = |placement: Placement<Panel>| match placement {
+        Placement::Split(Zone::Left) => Placement::Split(Zone::Right),
+        Placement::Split(Zone::Right) => Placement::Split(Zone::Left),
+        other => other,
+    };
+    Some(match action {
+        Action::Move { panel, anchor, placement } => Action::Move { panel, anchor, placement: side(placement) },
+        Action::OpenAt { panel, anchor, placement } => Action::OpenAt { panel, anchor, placement: side(placement) },
+        Action::ResizeSplit { path, size } => {
+            // Walk the saved tree: at a side-by-side split the mirrored first child is the saved second.
+            let mut node = layout.root.as_ref()?;
+            let mut saved = Vec::with_capacity(path.len());
+            for (depth, shown_second) in path.iter().enumerate() {
+                let Node::Split { axis, first, second, .. } = node else { return None };
+                let swapped = *axis == SplitAxis::Horizontal && depth < MAX_MIRROR_DEPTH;
+                let second_child = *shown_second != swapped;
+                saved.push(second_child);
+                node = if second_child { second } else { first };
+            }
+            let Node::Split { axis, .. } = node else { return None };
+            let swapped = *axis == SplitAxis::Horizontal && path.len() < MAX_MIRROR_DEPTH;
+            Action::ResizeSplit { path: saved, size: if swapped { mirrored_size(size) } else { size } }
+        }
+        other => other,
+    })
+}
+
 fn panel_limits(panel: &Panel) -> PanelLimits {
     let (min, max_width) = match panel {
         Panel::Canvas => (egui::vec2(160.0, 160.0), 1_000_000.0),
@@ -450,6 +521,75 @@ fn panel_limits(panel: &Panel) -> PanelLimits {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The panels of `node` from left to right, ignoring stacked (top/bottom) order.
+    fn left_to_right(node: &Node<Panel>, out: &mut Vec<Panel>) {
+        match node {
+            Node::Split { first, second, .. } => {
+                left_to_right(first, out);
+                left_to_right(second, out);
+            }
+            Node::Tabs { panels, .. } => out.extend(panels.iter().copied()),
+            Node::Stack { entries } => out.extend(entries.iter().map(|entry| entry.panel)),
+        }
+    }
+
+    #[test]
+    fn a_right_to_left_interface_shows_the_arrangement_mirrored() {
+        let saved = Workspace::default().layout;
+        let shown = mirrored_layout(&saved);
+        let (mut before, mut after) = (Vec::new(), Vec::new());
+        left_to_right(saved.root.as_ref().unwrap(), &mut before);
+        left_to_right(shown.root.as_ref().unwrap(), &mut after);
+        assert_eq!(before, [Panel::Tools, Panel::Canvas, Panel::Inspector]);
+        assert_eq!(after, [Panel::Inspector, Panel::Canvas, Panel::Tools]);
+        // Mirroring twice is the saved arrangement, sizes included.
+        assert_eq!(mirrored_layout(&shown), saved);
+        // A panel keeps its width on the other side.
+        assert_eq!(mirrored_size(SplitSize::FixedFirst(272.0)), SplitSize::FixedSecond(272.0));
+        assert_eq!(mirrored_size(SplitSize::FixedSecond(330.0)), SplitSize::FixedFirst(330.0));
+        assert_eq!(mirrored_size(SplitSize::Ratio(0.25)), SplitSize::Ratio(0.75));
+        // A top/bottom split is not mirrored.
+        let stacked =
+            Layout { root: Some(split(SplitAxis::Vertical, SplitSize::Ratio(0.3), tabs(Panel::Tools), tabs(Panel::Canvas))), floating: Vec::new() };
+        assert_eq!(mirrored_layout(&stacked), stacked);
+    }
+
+    #[test]
+    fn gestures_on_the_mirrored_arrangement_apply_to_the_saved_one() {
+        let saved = Workspace::default().layout;
+        // Left and right swap; everything else is as made.
+        let moved = Action::Move { panel: Panel::Tools, anchor: Panel::Canvas, placement: Placement::Split(Zone::Left) };
+        assert_eq!(
+            unmirrored_action(&saved, moved),
+            Some(Action::Move { panel: Panel::Tools, anchor: Panel::Canvas, placement: Placement::Split(Zone::Right) })
+        );
+        let top = Action::Move { panel: Panel::Tools, anchor: Panel::Canvas, placement: Placement::Split(Zone::Top) };
+        assert_eq!(unmirrored_action(&saved, top.clone()), Some(top));
+        let closed = Action::Close { panel: Panel::Inspector };
+        assert_eq!(unmirrored_action(&saved, closed.clone()), Some(closed));
+
+        // Resizing a split of the mirrored tree resizes the same split of the saved one: applying
+        // the translated action and mirroring gives what applying it to the mirrored tree gives.
+        let shown = mirrored_layout(&saved);
+        for path in [vec![], vec![false], vec![true]] {
+            for size in [SplitSize::FixedFirst(300.0), SplitSize::FixedSecond(280.0), SplitSize::Ratio(0.25)] {
+                let on_shown = Action::ResizeSplit { path: path.clone(), size };
+                let mut expected = shown.clone();
+                let applies = expected.apply(on_shown.clone()).is_ok();
+                let translated = unmirrored_action(&saved, on_shown);
+                assert_eq!(translated.is_some(), applies, "{path:?}");
+                if let Some(action) = translated {
+                    let mut actual = saved.clone();
+                    actual.apply(action).unwrap();
+                    assert_eq!(mirrored_layout(&actual), expected, "{path:?} {size:?}");
+                }
+            }
+        }
+        // A split the arrangement does not have is dropped, never a panic.
+        assert_eq!(unmirrored_action(&saved, Action::ResizeSplit { path: vec![true; 200], size: SplitSize::Ratio(0.5) }), None);
+        assert_eq!(unmirrored_action(&Layout::default(), Action::ResizeSplit { path: Vec::new(), size: SplitSize::Ratio(0.5) }), None);
+    }
 
     #[test]
     fn lithuanian_translates_every_dynamic_panel_title() {

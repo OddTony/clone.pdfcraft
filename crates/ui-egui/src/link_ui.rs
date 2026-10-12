@@ -224,17 +224,23 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut LinkDraft, pages: usize, t: &Token
     ui.label(egui::RichText::new(if d.index.is_some() { tl!("Link Properties") } else { tl!("Create Link") }).font(theme::semibold(18.0)));
     ui.add_space(8.0);
     widgets::section_title(ui, tl!("Link Appearance"));
-    egui::Grid::new("link-appearance").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("link-appearance").num_columns(2).spacing([12.0, 8.0]), |ui| {
         ui.label(tl!("Link Type:"));
-        egui::ComboBox::from_id_salt("link-type")
-            .selected_text(if d.style.visible { tl!("Visible Rectangle") } else { tl!("Invisible Rectangle") })
-            .show_ui(ui, |ui| {
+        crate::rtl::combo(
+            ui,
+            egui::ComboBox::from_id_salt("link-type").selected_text(if d.style.visible {
+                tl!("Visible Rectangle")
+            } else {
+                tl!("Invisible Rectangle")
+            }),
+            |ui| {
                 ui.selectable_value(&mut d.style.visible, true, tl!("Visible Rectangle"));
                 ui.selectable_value(&mut d.style.visible, false, tl!("Invisible Rectangle"));
-            });
+            },
+        );
         ui.end_row();
         ui.label(tl!("Highlight Style:"));
-        egui::ComboBox::from_id_salt("link-hl").selected_text(tl!(d.style.highlight.label())).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("link-hl").selected_text(tl!(d.style.highlight.label())), |ui| {
             for h in LinkHighlight::ALL {
                 ui.selectable_value(&mut d.style.highlight, h, tl!(h.label()));
             }
@@ -242,19 +248,21 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut LinkDraft, pages: usize, t: &Token
         ui.end_row();
         if d.style.visible {
             ui.label(tl!("Line Thickness:"));
-            egui::ComboBox::from_id_salt("link-w")
-                .selected_text(if d.style.width <= 1.0 {
+            crate::rtl::combo(
+                ui,
+                egui::ComboBox::from_id_salt("link-w").selected_text(if d.style.width <= 1.0 {
                     tl!("Thin")
                 } else if d.style.width <= 2.0 {
                     tl!("Medium")
                 } else {
                     tl!("Thick")
-                })
-                .show_ui(ui, |ui| {
+                }),
+                |ui| {
                     ui.selectable_value(&mut d.style.width, 1.0, tl!("Thin"));
                     ui.selectable_value(&mut d.style.width, 2.0, tl!("Medium"));
                     ui.selectable_value(&mut d.style.width, 3.0, tl!("Thick"));
-                });
+                },
+            );
             ui.end_row();
             ui.label(tl!("Line Style:"));
             let mut style = if d.style.dashed {
@@ -264,7 +272,7 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut LinkDraft, pages: usize, t: &Token
             } else {
                 0
             };
-            egui::ComboBox::from_id_salt("link-s").selected_text(tl!(["Solid", "Dashed", "Underline"][style])).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt("link-s").selected_text(tl!(["Solid", "Dashed", "Underline"][style])), |ui| {
                 for (k, l) in ["Solid", "Dashed", "Underline"].iter().enumerate() {
                     ui.selectable_value(&mut style, k, tl!(l));
                 }
@@ -307,7 +315,7 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut LinkDraft, pages: usize, t: &Token
     }
     ui.add_space(12.0);
     let (mut a, mut c) = (false, false);
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+    ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
         if ui.add_enabled_ui(ok, |ui| widgets::pill_button(ui, tl!("OK"), true)).inner.clicked() {
             a = true;
         }

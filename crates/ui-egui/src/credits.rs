@@ -243,7 +243,7 @@ pub fn contributors_ui(ui: &mut egui::Ui) {
         }
         ui.separator();
         ui.label(crate::i18n::t("Sort"));
-        egui::ComboBox::from_id_salt("credits_sort").selected_text(crate::i18n::t(v.key.label().0)).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt("credits_sort").selected_text(crate::i18n::t(v.key.label().0)), |ui| {
             for k in SortKey::ALL {
                 if ui.selectable_label(v.key == k, crate::i18n::t(k.label().0)).clicked() {
                     v.key = k;
@@ -266,27 +266,30 @@ pub fn contributors_ui(ui: &mut egui::Ui) {
     let counts = crate::i18n::fmt(crate::i18n::t("{n} contributors · {c} commits"), &[("n", &list.len().to_string()), ("c", &group(TOTAL_COMMITS))]);
     ui.label(RichText::new(counts).small().color(t.text_muted));
     ui.separator();
-    egui::ScrollArea::both().id_salt("credits_list").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
-        if list.is_empty() {
-            ui.label(crate::i18n::t("No contributor data was built into this copy."));
-        } else if v.table {
-            table(ui, &list, &mut v);
-        } else {
-            ui.horizontal_wrapped(|ui| {
-                for (i, c) in list.iter().enumerate() {
-                    if i > 0 {
-                        ui.label(RichText::new("·").color(t.text_faint));
+    // egui scrolls sideways from the left only.
+    crate::rtl::island(ui, |ui| {
+        egui::ScrollArea::both().id_salt("credits_list").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
+            if list.is_empty() {
+                ui.label(crate::i18n::t("No contributor data was built into this copy."));
+            } else if v.table {
+                table(ui, &list, &mut v);
+            } else {
+                ui.horizontal_wrapped(|ui| {
+                    for (i, c) in list.iter().enumerate() {
+                        if i > 0 {
+                            ui.label(RichText::new("·").color(t.text_faint));
+                        }
+                        ui.hyperlink_to(c.name(v.names), format!("https://github.com/{}", c.login)).on_hover_text(c.summary());
                     }
-                    ui.hyperlink_to(c.name(v.names), format!("https://github.com/{}", c.login)).on_hover_text(c.summary());
-                }
-            });
-        }
+                });
+            }
+        });
     });
     ui.data_mut(|d| d.insert_temp(id, v));
 }
 
 fn table(ui: &mut egui::Ui, list: &[&Contributor], v: &mut View) {
-    egui::Grid::new("credits_table").striped(true).num_columns(SortKey::ALL.len()).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("credits_table").striped(true).num_columns(SortKey::ALL.len()), |ui| {
         for k in SortKey::ALL {
             let arrow = if v.key == k { if v.ascending { " ▲" } else { " ▼" } } else { "" };
             if ui
@@ -326,21 +329,24 @@ pub fn models_ui(ui: &mut egui::Ui) {
         return;
     }
     let assisted: u64 = MODELS.iter().map(|m| m.commits).max().unwrap_or(0).max(1);
-    egui::ScrollArea::both().id_salt("credits_models").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
-        egui::Grid::new("credits_models").striped(true).num_columns(6).show(ui, |ui| {
-            for h in MODEL_COLUMNS {
-                ui.label(RichText::new(crate::i18n::t(h)).strong());
-            }
-            ui.end_row();
-            for m in MODELS {
-                ui.label(m.company);
-                ui.label(m.model);
-                ui.label(m.version);
-                ui.label(group(m.commits));
-                ui.label(format!("{:.0}%", 100.0 * m.commits as f64 / TOTAL_COMMITS.max(assisted) as f64));
-                ui.label(format!("+{} / −{}", group(m.lines_added), group(m.lines_deleted)));
+    // egui scrolls sideways from the left only.
+    crate::rtl::island(ui, |ui| {
+        egui::ScrollArea::both().id_salt("credits_models").max_height(LIST_HEIGHT).auto_shrink([false, true]).show(ui, |ui| {
+            crate::rtl::grid(ui, egui::Grid::new("credits_models").striped(true).num_columns(6), |ui| {
+                for h in MODEL_COLUMNS {
+                    ui.label(RichText::new(crate::i18n::t(h)).strong());
+                }
                 ui.end_row();
-            }
+                for m in MODELS {
+                    ui.label(m.company);
+                    ui.label(m.model);
+                    ui.label(m.version);
+                    ui.label(group(m.commits));
+                    ui.label(format!("{:.0}%", 100.0 * m.commits as f64 / TOTAL_COMMITS.max(assisted) as f64));
+                    ui.label(format!("+{} / −{}", group(m.lines_added), group(m.lines_deleted)));
+                    ui.end_row();
+                }
+            });
         });
     });
 }

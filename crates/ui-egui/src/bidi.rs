@@ -205,8 +205,10 @@ fn is_paragraph_separator(c: char) -> bool {
 /// - `{name}` placeholders stay whole and unmirrored, so [`crate::i18n::fmt`] still fills them.
 ///   What it inserts is drawn left to right at that place.
 /// - Spaces and separator dots at either end stay at that end: the code appends to a label on
-///   its right (`"Issued by: "` + a name), as the interface is still laid out left to right.
-/// - A short caption's closing colon stays on the right too, next to the widget it captions.
+///   its right (`"Issued by: "` + a name), whichever way the window is laid out.
+/// - The colon of such a caption stays on the right with them, next to what is appended. A
+///   caption that ends at its colon stands beside its widget, which the mirrored layout
+///   ([`crate::rtl`]) puts on its left: its colon ends it there, as in any Arabic sentence.
 ///
 /// Text without right-to-left characters comes back unchanged. Like [`visual`], this is for
 /// painting one line; a label egui wraps breaks at the wrong end.
@@ -224,7 +226,7 @@ pub fn display_rtl(text: &str) -> String {
     out
 }
 
-/// The most words a caption may have for its closing colon to stay on the right.
+/// The most words a caption that the code appends to may have for its colon to stay on the right.
 const CAPTION_WORDS: usize = 3;
 /// First of the private-use characters that stand for placeholders while a line is reordered.
 /// They are strong left-to-right, like the names they replace.
@@ -240,7 +242,8 @@ fn push_rtl_line(out: &mut String, line: &str) {
     let tail = core.get(trimmed.len()..).unwrap_or_default();
     let mut core = trimmed;
     let mut colon = "";
-    if let Some(caption) = core.strip_suffix(':')
+    if !tail.is_empty()
+        && let Some(caption) = core.strip_suffix(':')
         && caption.split_whitespace().count() <= CAPTION_WORDS
     {
         core = caption;
@@ -426,9 +429,10 @@ mod tests {
         assert_eq!(display_rtl(" (صفحة {p})"), " ({p} صفحة)");
         assert_eq!(display_rtl(" · محمي بكلمة مرور"), " · مرور بكلمة محمي");
         assert_eq!(display_rtl("سلسلة المفاتيح  ·  "), "المفاتيح سلسلة  ·  ");
-        // A caption's colon stays next to its widget; a sentence's colon ends the sentence.
-        assert_eq!(display_rtl("الاسم:"), "الاسم:");
+        // A caption the code appends to keeps its colon next to what follows; a caption beside
+        // its widget, like a sentence, ends at its colon (on the left).
         assert_eq!(display_rtl("صادرة عن: "), "عن صادرة: ");
+        assert_eq!(display_rtl("الاسم:"), ":الاسم");
         assert_eq!(display_rtl("اختر المعرّف الرقمي الذي تريد استخدامه:"), ":استخدامه تريد الذي الرقمي المعرّف اختر");
         // Each line is its own paragraph.
         assert_eq!(display_rtl("تعذّر عرض الصفحة.\n{e}"), ".الصفحة عرض تعذّر\n{e}");

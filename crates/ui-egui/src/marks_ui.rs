@@ -2,7 +2,7 @@
 //! dialog snapshots d13, d14, d12d). Each has the shared Page Range Options and a schematic
 //! preview of the current page. "Update" opens the same dialog in replace mode.
 
-use egui::{Align, Color32, CornerRadius, Layout, Rect, Stroke, pos2, vec2};
+use egui::{Align, Color32, CornerRadius, Rect, Stroke, pos2, vec2};
 use pdfcraft_engine::{Background, Edit, HeaderFooter, MarkKind, Watermark};
 
 use crate::theme::{self, Tokens};
@@ -63,7 +63,7 @@ impl PageRange {
                 Subset::Even => tl!("Even pages only"),
                 Subset::Odd => tl!("Odd pages only"),
             };
-            egui::ComboBox::from_id_salt("mark-subset").selected_text(label).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt("mark-subset").selected_text(label), |ui| {
                 ui.selectable_value(&mut self.subset, Subset::All, tl!("All pages in range"));
                 ui.selectable_value(&mut self.subset, Subset::Even, tl!("Even pages only"));
                 ui.selectable_value(&mut self.subset, Subset::Odd, tl!("Odd pages only"));
@@ -180,7 +180,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 }
             });
             ui.add_space(8.0);
-            egui::Grid::new("hf-boxes").num_columns(3).spacing([10.0, 4.0]).show(ui, |ui| {
+            crate::rtl::grid(ui, egui::Grid::new("hf-boxes").num_columns(3).spacing([10.0, 4.0]), |ui| {
                 for row in 0..2 {
                     for col in 0..3 {
                         ui.label(egui::RichText::new(tl!(BOX_NAMES[row * 3 + col])).small());
@@ -197,8 +197,9 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 }
             });
             ui.horizontal(|ui| {
-                egui::ComboBox::from_id_salt("hf-page-format").selected_text(PAGE_FORMATS[d.page_format].trim_matches(['<', '>'])).show_ui(
+                crate::rtl::combo(
                     ui,
+                    egui::ComboBox::from_id_salt("hf-page-format").selected_text(PAGE_FORMATS[d.page_format].trim_matches(['<', '>'])),
                     |ui| {
                         for (k, f) in PAGE_FORMATS.iter().enumerate() {
                             ui.selectable_value(&mut d.page_format, k, f.trim_matches(['<', '>']));
@@ -209,8 +210,9 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     d.hf.text[d.focused_box].push_str(PAGE_FORMATS[d.page_format]);
                 }
                 ui.add_space(12.0);
-                egui::ComboBox::from_id_salt("hf-date-format").selected_text(DATE_FORMATS[d.date_format].trim_matches(['<', '>'])).show_ui(
+                crate::rtl::combo(
                     ui,
+                    egui::ComboBox::from_id_salt("hf-date-format").selected_text(DATE_FORMATS[d.date_format].trim_matches(['<', '>'])),
                     |ui| {
                         for (k, f) in DATE_FORMATS.iter().enumerate() {
                             ui.selectable_value(&mut d.date_format, k, f.trim_matches(['<', '>']));
@@ -235,7 +237,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 browse |= file_source(ui, d, MarkKind::Watermark);
             }
             ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
+                crate::rtl::vertical(ui, |ui| {
                     ui.add_enabled_ui(!d.use_file, |ui| {
                         ui.label(tl!("Text"));
                         ui.add(
@@ -366,7 +368,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 p.rect_filled(r, CornerRadius::ZERO, rgb32(bg.color).gamma_multiply(bg.opacity as f32));
             }
         });
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.label(
                 egui::RichText::new(crate::i18n::fmt(
                     tl!("Preview: page {p} of {n}"),
@@ -386,7 +388,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
     });
     ui.add_space(10.0);
     let (mut apply, mut cancel) = (false, false);
-    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+    ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
         let ready = match kind {
             MarkKind::HeaderFooter => d.hf.text.iter().any(|x| !x.trim().is_empty()),
             MarkKind::Watermark => {

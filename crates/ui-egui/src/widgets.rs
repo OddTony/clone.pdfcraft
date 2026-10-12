@@ -25,7 +25,7 @@ fn dialog_frame(ctx: &egui::Context) -> egui::Frame {
 
 /// A modal with the card fill, a 10-point corner and room around its contents.
 pub fn modal(ctx: &egui::Context, id: impl std::hash::Hash + std::fmt::Debug) -> egui::Modal {
-    egui::Modal::new(egui::Id::new(id)).frame(dialog_frame(ctx))
+    crate::rtl::modal(egui::Id::new(id)).frame(dialog_frame(ctx))
 }
 
 /// Show [`modal`], outline its controls, and remember the card rect for layout checks.
@@ -157,6 +157,8 @@ pub fn ghost_button_sized(ui: &mut egui::Ui, icon: &str, label: &str, height: f3
     let font = theme::medium(13.0);
     let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
     let (rect, resp) = ui.allocate_exact_size(vec2(w + 38.0, height), Sense::click());
+    // Painted for a left-to-right interface; a right-to-left one mirrors the parts in place.
+    let _mirror = crate::rtl::mirror_scope(ui, rect);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
     let press = theme::Press::track(ui, &resp);
     press.wash(ui, rect, 6, false);
@@ -170,6 +172,8 @@ pub fn ghost_button_sized(ui: &mut egui::Ui, icon: &str, label: &str, height: f3
 pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response {
     let t = Tokens::get(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
+    // Painted for a left-to-right interface; a right-to-left one mirrors the parts in place.
+    let _mirror = crate::rtl::mirror_scope(ui, rect);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), placeholder));
     let press = theme::Press::track(ui, &resp);
     let fill = press.fill(t.field, t.hover, t.pressed);
@@ -195,7 +199,7 @@ pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response 
 }
 
 pub fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> Response {
-    ui.add(egui::Button::new(label).shortcut_text(shortcut))
+    crate::rtl::menu_item(ui, true, label, shortcut)
 }
 
 /// Corner radius of a checkbox's box. With the widgets' radius (`Tokens::radius`, 6) egui's 14 px
@@ -245,26 +249,29 @@ pub fn radio_value<'a, V: PartialEq>(ui: &mut egui::Ui, current: &mut V, alterna
 /// - for a checkbox, a corner radius small enough to keep the box square.
 fn toggle<'a>(widget: impl egui::Widget + 'a, radius: Option<u8>) -> impl egui::Widget + 'a {
     move |ui: &mut egui::Ui| {
-        ui.scope(|ui| {
-            let t = Tokens::get(ui.ctx());
-            let w = &mut ui.visuals_mut().widgets;
-            if let Some(radius) = radius {
-                for v in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
-                    v.corner_radius = CornerRadius::same(radius);
+        // egui draws the box at the left of its label: a right-to-left interface swaps them.
+        crate::rtl::mirrored_widget(ui, |ui| {
+            ui.scope(|ui| {
+                let t = Tokens::get(ui.ctx());
+                let w = &mut ui.visuals_mut().widgets;
+                if let Some(radius) = radius {
+                    for v in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
+                        v.corner_radius = CornerRadius::same(radius);
+                    }
                 }
-            }
-            if !t.dark() && w.inactive.bg_fill == t.field {
-                w.inactive.bg_fill = t.hover;
-            }
-            if w.inactive.bg_stroke.is_empty() {
-                w.inactive.bg_stroke = Stroke::new(1.0, t.border);
-            }
-            if w.hovered.bg_stroke.is_empty() {
-                w.hovered.bg_stroke = Stroke::new(1.0, t.text_muted);
-            }
-            ui.add(widget)
+                if !t.dark() && w.inactive.bg_fill == t.field {
+                    w.inactive.bg_fill = t.hover;
+                }
+                if w.inactive.bg_stroke.is_empty() {
+                    w.inactive.bg_stroke = Stroke::new(1.0, t.border);
+                }
+                if w.hovered.bg_stroke.is_empty() {
+                    w.hovered.bg_stroke = Stroke::new(1.0, t.text_muted);
+                }
+                ui.add(widget)
+            })
+            .inner
         })
-        .inner
     }
 }
 
@@ -391,6 +398,7 @@ pub fn toast(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let card = if app.progress_notice.is_some() { ctx.data(|d| d.get_temp::<f32>(egui::Id::new(PROGRESS_HEIGHT))).unwrap_or(0.0) } else { 0.0 };
     let lift = if card > 0.0 { 28.0 + card + 10.0 } else { 28.0 };
     egui::Area::new(egui::Id::new("toast"))
+        .layout(crate::rtl::area_layout())
         .order(egui::Order::Tooltip)
         .pivot(Align2::CENTER_BOTTOM)
         .fixed_pos(screen.center_bottom() - vec2(0.0, lift))
@@ -447,6 +455,7 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
     let now = ctx.input(|i| i.time);
     let mut cancel = false;
     let area = egui::Area::new(egui::Id::new("progress-notice"))
+        .layout(crate::rtl::area_layout())
         .order(egui::Order::Tooltip)
         .pivot(Align2::CENTER_BOTTOM)
         .fixed_pos(screen.center_bottom() - vec2(0.0, 28.0))
@@ -456,7 +465,7 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
                 ui.set_width(width);
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(&p.label).color(text));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
                         ui.label(egui::RichText::new(format!("{:.0}%", shown * 100.0)).font(theme::medium(12.0)).color(text.gamma_multiply(0.7)));
                     });
                 });
@@ -487,7 +496,7 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
                 }
                 if p.cancellable {
                     ui.add_space(4.0);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
                         let b = egui::Button::new(egui::RichText::new(tl!("Cancel")).font(theme::medium(12.5)).color(text)).frame(false);
                         cancel = ui.add(b).clicked();
                     });
@@ -543,8 +552,12 @@ pub fn split_pill(ui: &mut egui::Ui, icon: &str, label: &str, more: &str) -> (Re
     let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
     let (rect, _) = ui.allocate_exact_size(vec2(w + 46.0 + 28.0, 30.0), Sense::hover());
     let (main_rect, more_rect) = rect.split_left_right_at_x(rect.right() - 28.0);
-    let main = ui.interact(main_rect, ui.id().with(("split-pill", label)), Sense::click());
-    let arrow = ui.interact(more_rect, ui.id().with(("split-pill-more", label)), Sense::click());
+    // Painted for a left-to-right interface and mirrored in place in a right-to-left one, where
+    // each half is clicked at its mirrored place (the ▾ trails).
+    let rtl = crate::rtl::on();
+    let _mirror = crate::rtl::mirror_scope(ui, rect);
+    let main = ui.interact(crate::rtl::mirrored(rtl, rect, main_rect), ui.id().with(("split-pill", label)), Sense::click());
+    let arrow = ui.interact(crate::rtl::mirrored(rtl, rect, more_rect), ui.id().with(("split-pill-more", label)), Sense::click());
     main.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
     arrow.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), more));
     let radius = CornerRadius::same(15);
@@ -574,6 +587,8 @@ pub fn icon_pill(ui: &mut egui::Ui, icon: &str, label: &str, primary: bool) -> R
     let font = theme::medium(12.5);
     let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
     let (rect, resp) = ui.allocate_exact_size(vec2(w + 46.0, 30.0), Sense::click());
+    // Painted for a left-to-right interface; a right-to-left one mirrors the parts in place.
+    let _mirror = crate::rtl::mirror_scope(ui, rect);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
     let press = theme::Press::track(ui, &resp);
     let (fill, stroke, text) = if primary {

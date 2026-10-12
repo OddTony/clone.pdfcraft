@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use egui::{Align, Layout};
+use egui::Align;
 use pdfcraft_cos::ObjRef;
 use pdfcraft_engine::DocId;
 use pdfcraft_engine::a11y::{Category, Options, Report, Rule, Status};
@@ -103,7 +103,7 @@ pub(crate) fn options_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
     group(ui, &crate::i18n::fmt(tl!("Checking Options ({on} of 32 in all categories)"), &[("on", &on.to_string())]), &mut |ui| {
         ui.horizontal(|ui| {
             ui.label(tl!("Category:"));
-            egui::ComboBox::from_id_salt("a11y-category").selected_text(tl!(o.category.label())).width(260.0).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt("a11y-category").selected_text(tl!(o.category.label())).width(260.0), |ui| {
                 for c in Category::ALL {
                     ui.selectable_value(&mut o.category, c, tl!(c.label()));
                 }
@@ -135,7 +135,7 @@ pub(crate) fn options_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
     ui.add_space(10.0);
     let (mut start, mut cancel) = (false, false);
     ui.horizontal(|ui| {
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if widgets::pill_button(ui, tl!("Start Checking"), true).clicked() {
                 start = true;
             }
@@ -193,7 +193,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &mut A11yState, doc: D
             })
             .color(t.text_muted),
         );
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if widgets::pill_button(ui, tl!("Check again"), false).clicked() {
                 action = Some(PanelAction::CheckAgain);
             }
@@ -241,7 +241,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &mut A11yState, doc: D
             .horizontal(|ui| {
                 let toggle = icons::button(
                     ui,
-                    if open { "chevron-down" } else { "chevron-right" },
+                    if open { "chevron-down" } else { crate::rtl::forward_chevron() },
                     20.0,
                     false,
                     if open { tl!("Collapse") } else { tl!("Expand") },
@@ -284,7 +284,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &mut A11yState, doc: D
             if row.clicked() && !r.findings.is_empty() && !state.expanded.remove(&r.rule) {
                 state.expanded.insert(r.rule);
             }
-            row.context_menu(|ui| {
+            crate::rtl::context_menu(&row, |ui| {
                 ui.set_min_width(170.0);
                 if ui.add_enabled(fixable(r.rule) && r.status == Status::Failed, egui::Button::new(tl!("Fix"))).clicked() {
                     action = Some(PanelAction::Fix(r.rule));
@@ -549,7 +549,7 @@ pub(crate) fn alt_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> 
         ui.label(egui::RichText::new(tl!("This document has no tagged figures.")).color(t.text_muted));
         let mut cancel = false;
         ui.horizontal(|ui| {
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| cancel = widgets::pill_button(ui, tl!("Close"), true).clicked())
+            ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| cancel = widgets::pill_button(ui, tl!("Close"), true).clicked())
         });
         return (false, cancel);
     }
@@ -589,13 +589,13 @@ pub(crate) fn alt_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> 
     ui.add_space(10.0);
     let (mut save, mut cancel) = (false, false);
     ui.horizontal(|ui| {
-        if ui.add_enabled_ui(i > 0, |ui| icons::button(ui, "chevron-left", 28.0, false, tl!("Previous figure"))).inner.clicked() {
+        if ui.add_enabled_ui(i > 0, |ui| icons::button(ui, crate::rtl::back_chevron(), 28.0, false, tl!("Previous figure"))).inner.clicked() {
             d.index -= 1;
         }
-        if ui.add_enabled_ui(i + 1 < n, |ui| icons::button(ui, "chevron-right", 28.0, false, tl!("Next figure"))).inner.clicked() {
+        if ui.add_enabled_ui(i + 1 < n, |ui| icons::button(ui, crate::rtl::forward_chevron(), 28.0, false, tl!("Next figure"))).inner.clicked() {
             d.index += 1;
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if widgets::pill_button(ui, tl!("Save & Close"), true).clicked() {
                 save = true;
             }

@@ -2,7 +2,7 @@
 //! Password Security settings behind "Advanced Options" (compatibility, what to encrypt,
 //! printing, changes, copying, screen readers). Execution plan M8.1.
 
-use egui::{Align, Color32, Layout};
+use egui::{Align, Color32};
 use pdfcraft_engine::{Changes, Edit, Printing, Protection};
 
 use crate::theme::{self, Tokens};
@@ -77,6 +77,7 @@ pub fn strength(pw: &str) -> (&'static str, Color32) {
 /// A radio button drawn like Acrobat's: an outlined circle, filled blue with a white dot when on.
 fn radio(ui: &mut egui::Ui, t: &Tokens, on: bool, label: &str) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(220.0, 26.0), egui::Sense::click());
+    let _mirror = crate::rtl::mirror_scope(ui, rect);
     let c = egui::pos2(rect.left() + 9.0, rect.center().y);
     if on {
         ui.painter().circle_filled(c, 8.0, t.accent);
@@ -135,7 +136,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
     }
     if d.advanced {
         let p = &mut d.protection;
-        egui::Grid::new("protect-advanced").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+        crate::rtl::grid(ui, egui::Grid::new("protect-advanced").num_columns(2).spacing([12.0, 8.0]), |ui| {
             ui.label(tl!("Compatibility"));
             let algos = [
                 (A::Aes256, tl!("Acrobat X and later (256-bit AES)")),
@@ -144,14 +145,14 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
                 (A::Rc4_40, tl!("Acrobat 3.0 and later (40-bit RC4)")),
             ];
             let cur = algos.iter().find(|(a, _)| *a == p.algorithm).map_or(algos[0].1, |(_, l)| *l);
-            egui::ComboBox::from_id_salt("protect-algo").width(300.0).selected_text(cur).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt("protect-algo").width(300.0).selected_text(cur), |ui| {
                 for (a, l) in algos {
                     ui.selectable_value(&mut p.algorithm, a, l);
                 }
             });
             ui.end_row();
             ui.label(tl!("Encrypt"));
-            ui.vertical(|ui| {
+            crate::rtl::vertical(ui, |ui| {
                 widgets::radio_value(ui, &mut p.encrypt_metadata, true, tl!("All document contents"));
                 // Unencrypted metadata needs crypt filters (Acrobat 6.0 and later).
                 ui.add_enabled_ui(p.algorithm != A::Rc4_40 && p.algorithm != A::Rc4_128, |ui| {
@@ -164,7 +165,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
                 let opts =
                     [(Printing::None, tl!("None")), (Printing::Low, tl!("Low Resolution (150 dpi)")), (Printing::High, tl!("High Resolution"))];
                 let cur = opts.iter().find(|(o, _)| *o == p.printing).map_or(tl!("High Resolution"), |(_, l)| *l);
-                egui::ComboBox::from_id_salt("protect-print").width(300.0).selected_text(cur).show_ui(ui, |ui| {
+                crate::rtl::combo(ui, egui::ComboBox::from_id_salt("protect-print").width(300.0).selected_text(cur), |ui| {
                     for (o, l) in opts {
                         ui.selectable_value(&mut p.printing, o, l);
                     }
@@ -179,14 +180,14 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
                     (Changes::AnyExceptExtract, tl!("Any except extracting pages")),
                 ];
                 let cur = opts.iter().find(|(o, _)| *o == p.changes).map_or(tl!("None"), |(_, l)| *l);
-                egui::ComboBox::from_id_salt("protect-changes").width(300.0).selected_text(cur).show_ui(ui, |ui| {
+                crate::rtl::combo(ui, egui::ComboBox::from_id_salt("protect-changes").width(300.0).selected_text(cur), |ui| {
                     for (o, l) in opts {
                         ui.selectable_value(&mut p.changes, o, l);
                     }
                 });
                 ui.end_row();
                 ui.label("");
-                ui.vertical(|ui| {
+                crate::rtl::vertical(ui, |ui| {
                     ui.add(widgets::checkbox(&mut p.copy, tl!("Enable copying of text, images, and other content")));
                     ui.add(widgets::checkbox(&mut p.accessibility, tl!("Enable text access for screen reader devices for the visually impaired")));
                 });
@@ -213,7 +214,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
     );
     ui.add_space(12.0);
     let (mut apply, mut cancel) = (false, false);
-    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+    ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
         let ok = d.problem().is_none();
         if ui.add_enabled_ui(ok, |ui| widgets::pill_button(ui, tl!("Apply"), true)).inner.clicked() {
             apply = true;

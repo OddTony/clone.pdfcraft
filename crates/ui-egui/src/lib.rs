@@ -98,6 +98,7 @@ pub mod units;
 mod web_print;
 pub use print_ui::{Handling as PrintHandling, PrintDraft, PrinterSource, Which as PrintWhich, system_printers};
 mod redact_ui;
+mod rtl;
 pub use redact_ui::{HiddenDraft, PagesDraft as RedactPagesDraft, RedactPrefs, SearchDraft as RedactSearchDraft, SearchMode as RedactSearchMode};
 pub mod i18n;
 
@@ -2941,20 +2942,20 @@ impl eframe::App for PdfCraftApp {
             // there, so its buttons (Bookmarks, Page thumbnails, ...) must open their panels.
             // Outside Read mode the docking workspace draws the inspector.
             if self.mode == Mode::Read && self.right.is_some() {
-                egui::Panel::right("read_right_panel")
+                crate::rtl::end_panel("read_right_panel")
                     .resizable(true)
                     .default_size(330.0)
                     .size_range(260.0..=520.0)
                     .frame(egui::Frame::NONE)
-                    .show(ui, |ui| panels::right_panel(self, ui));
+                    .show(ui, |ui| crate::rtl::root(ui, |ui| panels::right_panel(self, ui)));
             }
         }
         let t = theme::Tokens::get(&ctx);
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
             if self.mode == Mode::Read {
                 match self.active {
-                    None if self.combine_showing() => combine_ui::page(self, ui),
-                    None => home::show(self, ui),
+                    None if self.combine_showing() => crate::rtl::root(ui, |ui| combine_ui::page(self, ui)),
+                    None => crate::rtl::root(ui, |ui| home::show(self, ui)),
                     Some(index) => canvas::document_area(self, index, ui),
                 }
             } else {
