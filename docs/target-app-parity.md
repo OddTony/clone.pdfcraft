@@ -1,6 +1,6 @@
 # PdfCraft parity with Adobe Acrobat Pro
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** web OCR downloads its models (partial), scores not re-judged; web printing shipped, gap 4 closed, scores not re-judged; exclusive image-crop resize follow-up; minor (document-font subset completion, source styles and curved/shared image clips in the contributor fork; closed issues synced, scores not re-judged: #774, #756, #740, #759, #799–#821, #825, #844; earlier: readiness table with hours per audience; full number restated as the standard's additive weighted sum, 47% → 49%; earlier: second look: cross-cutting double count removed, mainstream-practitioner number added, core-workflow gate applied → alpha) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** web OCR reads in Web Workers with SIMD (partial), scores not re-judged; web printing shipped, gap 4 closed, scores not re-judged; exclusive image-crop resize follow-up; minor (document-font subset completion, source styles and curved/shared image clips in the contributor fork; closed issues synced, scores not re-judged: #774, #756, #740, #759, #799–#821, #825, #844; earlier: readiness table with hours per audience; full number restated as the standard's additive weighted sum, 47% → 49%; earlier: second look: cross-cutting double count removed, mainstream-practitioner number added, core-workflow gate applied → alpha) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 The authoritative assessment of how close PdfCraft is to Acrobat Pro. [ROADMAP.md](../ROADMAP.md)
 summarizes it; [gaps.md](gaps.md) lists every shortfall one by one; the deep-dive checklists are
@@ -184,7 +184,7 @@ features total and are shown for orientation; the others add to it.
 | Localization | ≈ 59% over the 12 key languages | 5% | 35–60 | additional | 15 catalogs, 13 at 94–100%; Chinese UI shows tofu in releases (#826, #688); Arabic not mirrored; no Hindi, Indonesian, Korean, Vietnamese | [localization-parity.md](localization-parity.md) |
 | Performance | ≈ 40% | 6% | 25–45 | additional | 500-page smooth scrolling and large-file memory work (#307) done; no performance budgets (`misc.performance-budgets`), no lazy loading of GB files; blurry text at 1080p/1440p (#730) | [gaps.md](gaps.md) |
 | Stability | ≈ 50% | 8% | 45–80 | additional | Never-crash rules and nightly fuzzing; 245 open issues on 2026-10-10, many of them `fix(...)` reports of wrong results in shipped features (the #799–#821 batch is fixed) | [gaps.md](gaps.md) |
-| Platforms | ≈ 70% | 5% | 15–30 | additional | macOS (signed, notarized), Windows x64/x86/ARM64 (signed), Linux (AppImage, deb, rpm, Flatpak), FreeBSD, web (WASM). Acrobat has no Linux, FreeBSD or full web editor; web OCR downloads its models but blocks the page while it reads, and we lack web recovery | [hardware-parity.md](hardware-parity.md) |
+| Platforms | ≈ 70% | 5% | 15–30 | additional | macOS (signed, notarized), Windows x64/x86/ARM64 (signed), Linux (AppImage, deb, rpm, Flatpak), FreeBSD, web (WASM). Acrobat has no Linux, FreeBSD or full web editor; web OCR reads in Web Workers but is far slower than native, and we lack web recovery | [hardware-parity.md](hardware-parity.md) |
 | Ecosystem and plug-ins | ≈ 30% | 1% | 10–20 | within features | No plug-in SDK or folder-level JavaScript; Action Wizard partial. Agent automation (CLI, MCP, UI control channel) has no Acrobat equivalent | [gaps.md](gaps.md) |
 | AI features | ≈ 0% (in scope) | 1% | 20–40 | within features | Acrobat's AI Assistant is cloud-only (out of scope). Local, opt-in provider interface (`misc.ai-provider`) not started | [gaps.md](gaps.md) |
 | **Total (weighted sum)** | **≈ 49%** | 100% | **≈ 780–1,400** | | | |
@@ -292,7 +292,7 @@ licensed OCR or AI model.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-12 | minor | Web OCR (`ocr.ocr-web`, partial): the web zip serves the models, Recognize Text downloads and loads them on first use. Platforms text updated; scores not re-judged |
+| 2026-10-12 | minor | Web OCR (`ocr.ocr-web`, partial): the web zip serves the models, Recognize Text downloads them on first use, and pages are read in Web Workers built with SIMD. Platforms text updated; scores not re-judged |
 | 2026-10-12 | minor | Exclusive image crops resize with their pixels across nested states, intervening operators and content streams; shared clips remain fixed. Synthetic engine/tool regressions and private image save/reopen checks; estimates unchanged. |
 | 2026-10-11 | minor | Web printing shipped (gap 4): Hardware, Platforms and L Print text updated. Text only: scores, readiness and hours not re-judged |
 | 2026-10-11 | minor | Contributor fork: document-font selection and subset completion, CFF, style ranges, contextual/bidi save/reopen and all-page Chinese keyboard acceptance; curve/hole hit testing (shared clips stay fixed, as on main). Scope remains bounded; percentages unchanged |

@@ -51,6 +51,8 @@ mod js_ui;
 mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
+#[cfg(target_arch = "wasm32")]
+mod ocr_web;
 mod optimize_ui;
 mod search_ui;
 mod sign_ui;
@@ -584,6 +586,9 @@ pub struct PdfCraftApp {
     pub ocr_draft: ocr_ui::OcrDraft,
     pub ocr_run: Option<ocr_ui::OcrRun>,
     pub ocr_batch: Option<std::sync::Arc<std::sync::Mutex<ocr_ui::BatchProgress>>>,
+    /// The web build's files being read in Web Workers (progress in `ocr_batch`).
+    #[cfg(target_arch = "wasm32")]
+    ocr_web_batch: Option<ocr_web::Batch>,
     /// Background jobs (OCR, actions, listing pinned folders) run inline instead (tests).
     pub run_inline: bool,
     /// Action Wizard: the user's actions, the dialog state, the running action and (tests) the
@@ -879,6 +884,8 @@ impl PdfCraftApp {
             ocr_draft: ocr_ui::OcrDraft::default(),
             ocr_run: None,
             ocr_batch: None,
+            #[cfg(target_arch = "wasm32")]
+            ocr_web_batch: None,
             run_inline: false,
             custom_actions: Vec::new(),
             wizard: Default::default(),

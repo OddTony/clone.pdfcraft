@@ -3826,7 +3826,18 @@ dependencies = [
  "ocrs",
  "pdfcraft-fonts",
  "rten",
+ "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "pdfcraft-ocr-worker"
+version = "0.7.1"
+dependencies = [
+ "js-sys",
+ "pdfcraft-ocr",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
