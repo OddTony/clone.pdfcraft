@@ -2318,3 +2318,7 @@ animation effects	Off	Wyłączone
 	Local cross-PDF links require the desktop app	Lokalne łącza między plikami PDF wymagają aplikacji komputerowej
 	The existing action will be preserved.	Istniejąca akcja zostanie zachowana.
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Skrypty tego formularza są wyłączone, ponieważ jeden z nich działał zbyt długo. Otwórz dokument ponownie, aby znów je uruchomić.
+	App icon	Ikona aplikacji
+	Use the default	Użyj domyślnej
+	The Dock shows it the next time PdfCraft opens.	Dock pokaże ją przy następnym otwarciu PdfCraft.
+	The image couldn't be used as an icon: {e}	Nie można użyć obrazu jako ikony: {e}

@@ -2347,3 +2347,7 @@ animation effects	Off	Disattivati
 	The linked PDF opened, but its named destination was not applied.	Il PDF collegato è stato aperto, ma la sua destinazione con nome non è stata applicata.
 	The linked PDF opened, but its page destination was out of range.	Il PDF collegato è stato aperto, ma la pagina di destinazione è fuori intervallo.
 	Local cross-PDF links require the desktop app	I collegamenti locali tra PDF richiedono l'app desktop
+	App icon	Icona dell'app
+	Use the default	Usa quella predefinita
+	The Dock shows it the next time PdfCraft opens.	Il Dock la mostrerà alla prossima apertura di PdfCraft.
+	The image couldn't be used as an icon: {e}	Impossibile usare l'immagine come icona: {e}

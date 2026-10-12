@@ -2302,3 +2302,7 @@ animation effects	Off	关
 	The linked PDF opened, but its named destination was not applied.	已打开链接的 PDF，但未应用其命名目标。
 	The linked PDF opened, but its page destination was out of range.	已打开链接的 PDF，但其页面目标超出范围。
 	Local cross-PDF links require the desktop app	PDF 之间的本地链接需要桌面应用
+	App icon	应用图标
+	Use the default	使用默认图标
+	The Dock shows it the next time PdfCraft opens.	下次打开 PdfCraft 时，程序坞将显示此图标。
+	The image couldn't be used as an icon: {e}	无法将该图像用作图标：{e}

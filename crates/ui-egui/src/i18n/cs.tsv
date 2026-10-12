@@ -2412,3 +2412,7 @@ animation effects	Off	Vypnuto
 	The linked PDF opened, but its named destination was not applied.	Odkazovaný PDF se otevřel, ale jeho pojmenovaný cíl nebyl použit.
 	The linked PDF opened, but its page destination was out of range.	Odkazovaný PDF se otevřel, ale cílová stránka je mimo rozsah.
 	Local cross-PDF links require the desktop app	Místní odkazy mezi soubory PDF vyžadují desktopovou aplikaci
+	App icon	Ikona aplikace
+	Use the default	Použít výchozí
+	The Dock shows it the next time PdfCraft opens.	Dock ji zobrazí při příštím otevření PdfCraftu.
+	The image couldn't be used as an icon: {e}	Obrázek nelze použít jako ikonu: {e}

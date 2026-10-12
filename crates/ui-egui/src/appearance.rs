@@ -123,6 +123,8 @@ pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
             }
         });
     });
+    #[cfg(not(target_arch = "wasm32"))]
+    app_icon_choice(ui, app, t);
     ui.add_space(4.0);
     let light_active = app.theme == ThemeKind::Light;
     ui.columns(2, |cols| {
@@ -130,6 +132,52 @@ pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
         card(light, t, tl!("Light theme"), light_active, LIGHT_THEMES);
         card(dark, t, tl!("Dark theme"), !light_active, DARK_THEMES);
     });
+}
+
+/// App icon: an image of the user's (kept as a PNG in the settings folder) or the built-in one.
+/// The window shows it at once; the macOS Dock takes it the next time PdfCraft opens.
+#[cfg(not(target_arch = "wasm32"))]
+fn app_icon_choice(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
+    let Some(file) = app.app_icon_file.clone() else { return };
+    let custom = file.is_file();
+    let mut pick = false;
+    let mut reset = false;
+    ui.horizontal(|ui| {
+        ui.label(tl!("App icon"));
+        pick = ui.button(tl!("Choose image…")).clicked();
+        reset = custom && ui.button(tl!("Use the default")).clicked();
+    });
+    if custom && cfg!(target_os = "macos") {
+        ui.label(RichText::new(tl!("The Dock shows it the next time PdfCraft opens.")).small().color(t.text_muted));
+    }
+    if reset {
+        let _ = std::fs::remove_file(&file);
+        if let Ok(icon) = eframe_icon(app.default_app_icon) {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Icon(Some(std::sync::Arc::new(icon))));
+        }
+    }
+    if pick {
+        let dialog = rfd::AsyncFileDialog::new().add_filter(tl!("Images"), &["png", "jpg", "jpeg", "webp", "ico", "icns", "svg"]);
+        app.ask_one(crate::pickers::Ask::File(dialog), None, move |app, p| {
+            let applied = crate::app_icon::to_png(&p).and_then(|png| {
+                std::fs::write(&file, &png).map_err(|e| e.to_string())?;
+                crate::app_icon::icon_data(&png).ok_or_else(|| "the icon couldn't be read back".to_string())
+            });
+            match applied {
+                Ok(icon) => {
+                    if let Some(ctx) = app.egui_ctx() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Icon(Some(std::sync::Arc::new(icon))));
+                    }
+                }
+                Err(e) => app.notify_fmt("The image couldn't be used as an icon: {e}", &[("e", &e)]),
+            }
+        });
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn eframe_icon(png: &[u8]) -> Result<egui::IconData, ()> {
+    crate::app_icon::icon_data(png).ok_or(())
 }
 
 #[cfg(test)]
