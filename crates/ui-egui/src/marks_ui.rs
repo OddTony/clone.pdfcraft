@@ -49,8 +49,8 @@ impl PageRange {
 
     pub(crate) fn ui(&mut self, ui: &mut egui::Ui, count: usize) {
         ui.horizontal(|ui| {
-            ui.radio_value(&mut self.all, true, tl!("All pages"));
-            ui.radio_value(&mut self.all, false, tl!("Pages from"));
+            widgets::radio_value(ui, &mut self.all, true, tl!("All pages"));
+            widgets::radio_value(ui, &mut self.all, false, tl!("Pages from"));
             ui.add_enabled(!self.all, egui::DragValue::new(&mut self.from).range(1..=count.max(1)));
             ui.label(tl!("to"));
             if self.to == 1 && self.from == 1 {
@@ -164,7 +164,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 ui.label(tl!("Font: Helvetica"));
                 ui.label(tl!("Size"));
                 ui.add(egui::DragValue::new(&mut d.hf.font_size).range(4.0..=72.0).speed(0.5));
-                ui.checkbox(&mut d.hf.underline, tl!("Underline"));
+                ui.add(widgets::checkbox(&mut d.hf.underline, tl!("Underline")));
                 color_button(ui, &mut d.hf.color);
                 ui.add_space(16.0);
                 ui.label(format!("{} ({})", tl!("Margins"), units.label()));
@@ -228,8 +228,8 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
         MarkKind::Watermark => {
             ui.horizontal(|ui| {
                 ui.label(tl!("Source"));
-                ui.radio_value(&mut d.use_file, false, tl!("Text"));
-                ui.radio_value(&mut d.use_file, true, tl!("File"));
+                widgets::radio_value(ui, &mut d.use_file, false, tl!("Text"));
+                widgets::radio_value(ui, &mut d.use_file, true, tl!("File"));
             });
             if d.use_file {
                 browse |= file_source(ui, d, MarkKind::Watermark);
@@ -243,7 +243,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                         );
                     });
                     ui.horizontal(|ui| {
-                        ui.add_enabled_ui(!d.use_file, |ui| ui.checkbox(&mut d.fit, tl!("Fit to page")));
+                        ui.add_enabled_ui(!d.use_file, |ui| ui.add(widgets::checkbox(&mut d.fit, tl!("Fit to page"))));
                         ui.add_enabled_ui(!d.fit, |ui| {
                             ui.label(tl!("Size"));
                             if d.wm.font_size == 0.0 {
@@ -256,7 +256,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     ui.horizontal(|ui| {
                         ui.label(tl!("Rotation"));
                         for r in [-45.0, 0.0, 45.0] {
-                            ui.radio_value(&mut d.wm.rotation, r, if r == 0.0 { tl!("None").to_string() } else { format!("{r}°") });
+                            widgets::radio_value(ui, &mut d.wm.rotation, r, if r == 0.0 { tl!("None").to_string() } else { format!("{r}°") });
                         }
                         ui.add(egui::DragValue::new(&mut d.wm.rotation).range(-180.0..=180.0).suffix("°"));
                     });
@@ -269,8 +269,8 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     });
                     ui.horizontal(|ui| {
                         ui.label(tl!("Location"));
-                        ui.radio_value(&mut d.wm.behind, true, tl!("Appear behind page"));
-                        ui.radio_value(&mut d.wm.behind, false, tl!("Appear on top of page"));
+                        widgets::radio_value(ui, &mut d.wm.behind, true, tl!("Appear behind page"));
+                        widgets::radio_value(ui, &mut d.wm.behind, false, tl!("Appear on top of page"));
                     });
                     ui.horizontal(|ui| {
                         ui.label(tl!("Offset from centre"));
@@ -284,10 +284,10 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
         }
         MarkKind::Background => {
             ui.horizontal(|ui| {
-                ui.radio_value(&mut d.use_file, false, tl!("From colour"));
+                widgets::radio_value(ui, &mut d.use_file, false, tl!("From colour"));
                 ui.add_enabled_ui(!d.use_file, |ui| color_button(ui, &mut d.bg.color));
                 ui.add_space(12.0);
-                ui.radio_value(&mut d.use_file, true, tl!("File"));
+                widgets::radio_value(ui, &mut d.use_file, true, tl!("File"));
             });
             if d.use_file {
                 browse |= file_source(ui, d, MarkKind::Background);

@@ -8,7 +8,7 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use pdfcraft_cos::Document;
 
@@ -17,10 +17,12 @@ mod content;
 mod headings;
 mod report;
 mod structure;
+mod tags;
 
 pub use alt::{AltError, Figure, figures, mark_decorative, set_alt};
 pub use headings::{Heading, headings};
 pub use report::{REPORT_WORDS, report_html};
+pub use tags::{TagError, TagInfo, TagPlacement, TagProperty, move_tag, set_tag_property, tags};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Category {
@@ -422,6 +424,10 @@ impl Status {
 pub struct Finding {
     /// 0-based page, when the problem is on a page.
     pub page: Option<usize>,
+    /// Indirect structure element that caused the finding, when one is available.
+    pub object: Option<pdfcraft_cos::ObjRef>,
+    /// Bounds in PDF user space when the affected content can be located safely.
+    pub bbox: Option<[f64; 4]>,
     pub message: String,
     /// The English sentence with a hole, such as `{p}` or `{what}`, where each value went.
     pub pattern: &'static str,
@@ -432,13 +438,13 @@ pub struct Finding {
 impl Finding {
     /// A finding whose sentence says the same thing however the document is put together.
     pub fn plain(page: Option<usize>, sentence: &'static str) -> Self {
-        Finding { page, message: sentence.to_owned(), pattern: sentence, values: Vec::new() }
+        Finding { page, object: None, bbox: None, message: sentence.to_owned(), pattern: sentence, values: Vec::new() }
     }
 
     /// A finding built from a wording and what goes in its holes. The English `message` is filled
     /// in here, so it and `pattern` can never drift apart.
     pub fn worded(page: Option<usize>, pattern: &'static str, values: Vec<(&'static str, String)>) -> Self {
-        Finding { page, message: say(pattern, &values), pattern, values }
+        Finding { page, object: None, bbox: None, message: say(pattern, &values), pattern, values }
     }
 
     /// A finding that says where the problem is and, in `{what}`, what is wrong, each worded
@@ -450,7 +456,7 @@ impl Finding {
     pub fn nested(page: Option<usize>, pattern: &'static str, what: &'static str, mut values: Vec<(&'static str, String)>) -> Self {
         let message = say(&pattern.replace("{what}", what), &values);
         values.push(("{what}", what.to_owned()));
-        Finding { page, message, pattern, values }
+        Finding { page, object: None, bbox: None, message, pattern, values }
     }
 
     /// This finding as one sentence, said in the language `words` translates into.
@@ -612,6 +618,7 @@ pub fn check(doc: &Document, options: &Options) -> Report {
     let tagged = structure::has_struct_tree(doc);
     let scan = content::Scan::run(doc, &pages, &page_list);
     let mut tree_rules = structure::run(doc, &pages, &options.rules);
+    let mut figure_bounds: Option<HashMap<pdfcraft_cos::ObjRef, (usize, [f64; 4])>> = None;
     let mut results = Vec::with_capacity(32);
     for rule in Rule::ALL {
         if !options.rules.contains(&rule) {
@@ -636,6 +643,24 @@ pub fn check(doc: &Document, options: &Options) -> Report {
             }
             _ => tree_rules.remove(&rule).unwrap_or_default(),
         };
+        if rule.category() == Category::AlternateText && findings.iter().any(|f| f.object.is_some()) {
+            let bounds = figure_bounds.get_or_insert_with(|| {
+                figures(doc)
+                    .into_iter()
+                    .filter_map(|figure| {
+                        let (page, bbox) = (figure.page?, figure.bbox?);
+                        (bbox.iter().all(|v| v.is_finite()) && bbox[0] < bbox[2] && bbox[1] < bbox[3]).then_some((figure.obj, (page, bbox)))
+                    })
+                    .collect()
+            });
+            for finding in &mut findings {
+                if let Some((page, bbox)) = finding.object.and_then(|obj| bounds.get(&obj))
+                    && finding.page == Some(*page)
+                {
+                    finding.bbox = Some(*bbox);
+                }
+            }
+        }
         if total > MAX_FINDINGS {
             let more = total - MAX_FINDINGS;
             findings.truncate(MAX_FINDINGS);

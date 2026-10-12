@@ -61,6 +61,7 @@ const PICKERS: &[&str] = &[
     "ocr.recognize_batch",
     "form.merge_data",
     "export.docx",
+    "export.pptx",
     "export.html",
     "export.rtf",
     "measure.export",
@@ -231,6 +232,22 @@ fn the_palette_lists_commands_with_shortcuts_and_runs_them() {
     let doc = app.session.get(app.views[0].id).unwrap();
     assert_eq!(doc.info.pages[0].rotation, 90);
     assert_eq!(doc.can_undo(), Some("Rotate page"));
+}
+
+#[test]
+fn palette_arrow_keys_select_results_and_enter_runs_the_selection() {
+    let mut h = harness();
+    h.state_mut().set_option("palette", "rotate pages").unwrap();
+    h.run_steps(2);
+    h.get_by_label("Rotate pages clockwise");
+    h.get_by_label("Rotate pages counterclockwise");
+    h.key_press(Key::ArrowDown);
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    h.run_steps(2);
+    let app = h.state();
+    assert!(!app.palette_open);
+    assert_eq!(app.session.get(app.views[0].id).unwrap().info.pages[0].rotation, 270);
 }
 
 #[test]

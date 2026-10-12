@@ -12,6 +12,9 @@ use crate::PdfCraftApp;
 /// Why files were picked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilePurpose {
+    TextFont {
+        page: usize,
+    },
     Combine,
     InsertPages,
     ReplacePages,
@@ -19,17 +22,51 @@ pub enum FilePurpose {
     Ocr,
     /// Create a PDF ▸ Multiple files (PDFs, images and text).
     CreateMultiple,
+    /// Create one PDF per selected non-PDF file.
+    CreateMultipleSeparate,
     /// Find text and redact ▸ Import list: a text file with one word or phrase per line.
     RedactWords,
+}
+
+/// Discover installed document fonts off the GUI thread, only when the picker is opened.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn installed_font_files(ctx: &egui::Context) -> Option<Vec<pdfcraft_engine::text_fonts::FontFile>> {
+    use std::sync::{Mutex, OnceLock};
+    type Files = Arc<Mutex<Option<Vec<pdfcraft_engine::text_fonts::FontFile>>>>;
+    static CACHE: OnceLock<Files> = OnceLock::new();
+    let files = CACHE.get_or_init(|| {
+        let files: Files = Arc::new(Mutex::new(None));
+        let result = files.clone();
+        let ctx = ctx.clone();
+        if std::thread::Builder::new()
+            .name("document-font-discovery".into())
+            .spawn(move || {
+                let fonts = pdfcraft_engine::text_fonts::discover(&pdfcraft_engine::text_fonts::installed_directories());
+                if let Ok(mut result) = result.lock() {
+                    *result = Some(fonts);
+                }
+                ctx.request_repaint();
+            })
+            .is_err()
+            && let Ok(mut result) = files.lock()
+        {
+            *result = Some(Vec::new());
+        }
+        files
+    });
+    files.lock().ok().and_then(|f| f.clone())
 }
 
 /// The picker for `purpose`: PDFs, and for Create and Insert also what they convert.
 fn files_picker(purpose: FilePurpose) -> rfd::AsyncFileDialog {
     let dialog = rfd::AsyncFileDialog::new();
+    if matches!(purpose, FilePurpose::TextFont { .. }) {
+        return dialog.add_filter("TrueType / OpenType font", &["ttf", "otf"]);
+    }
     if purpose == FilePurpose::RedactWords {
         return dialog.add_filter(tl!("Text"), &["txt"]);
     }
-    if !matches!(purpose, FilePurpose::CreateMultiple | FilePurpose::InsertPages | FilePurpose::Combine) {
+    if !matches!(purpose, FilePurpose::CreateMultiple | FilePurpose::CreateMultipleSeparate | FilePurpose::InsertPages | FilePurpose::Combine) {
         return dialog.add_filter("PDF", &["pdf"]);
     }
     let all: Vec<&str> = std::iter::once("pdf").chain(pdfcraft_engine::CONVERTIBLE).collect();
@@ -53,7 +90,7 @@ pub struct ReplaceDraft {
 impl FilePurpose {
     /// Insert and Replace edit the active document, at its selection.
     pub(crate) fn edits_active_document(self) -> bool {
-        matches!(self, Self::InsertPages | Self::ReplacePages)
+        matches!(self, Self::InsertPages | Self::ReplacePages | Self::TextFont { .. })
     }
 }
 
@@ -193,6 +230,11 @@ impl PdfCraftApp {
         self.pick_files(FilePurpose::CreateMultiple, true);
     }
 
+    /// Create a PDF ▸ Separate PDFs: pick source files, then a destination folder.
+    pub fn create_multiple_separate_dialog(&mut self) {
+        self.pick_files(FilePurpose::CreateMultipleSeparate, true);
+    }
+
     /// Scan & OCR ▸ Recognize text ▸ In multiple files: ask for the PDFs.
     pub fn ocr_files_dialog(&mut self) {
         self.pick_files(FilePurpose::Ocr, true);
@@ -256,6 +298,25 @@ impl PdfCraftApp {
             }
             return;
         }
+        if purpose == FilePurpose::CreateMultipleSeparate {
+            if !paths.is_empty() {
+                let paths = paths.to_vec();
+                let convert = move |app: &mut Self, dir: std::path::PathBuf| {
+                    app.stage_create_separate(paths.iter().map(|p| read_named(p)), Some(dir));
+                };
+                match self.export_dir_override.clone() {
+                    Some(dir) => convert(self, std::path::PathBuf::from(dir)),
+                    None => {
+                        self.ask_one(
+                            crate::pickers::Ask::Folder(rfd::AsyncFileDialog::new().set_title(tl!("Choose a folder for the exported files"))),
+                            None,
+                            convert,
+                        );
+                    }
+                }
+            }
+            return;
+        }
         let mut files = Vec::new();
         let mut modified = Vec::new();
         for p in paths {
@@ -264,7 +325,17 @@ impl PdfCraftApp {
                 self.notify_fmt("{name} is too large for a word list (at most 1 MB).", &[("name", &name)]);
                 return;
             }
-            match std::fs::read(p) {
+            let read = if matches!(purpose, FilePurpose::TextFont { .. }) {
+                use std::io::Read;
+                std::fs::File::open(p).and_then(|f| {
+                    let mut bytes = Vec::new();
+                    f.take((16 << 20) + 1).read_to_end(&mut bytes)?;
+                    Ok(bytes)
+                })
+            } else {
+                std::fs::read(p)
+            };
+            match read {
                 Ok(b) => files.push((name, b)),
                 Err(e) => {
                     self.notify_fmt("Couldn't read {name}: {e}", &[("name", &name), ("e", &e.to_string())]);
@@ -368,6 +439,17 @@ impl PdfCraftApp {
     /// Use picked files (also the entry point for tests and automation).
     pub fn use_files(&mut self, purpose: FilePurpose, files: Vec<(String, Vec<u8>)>) {
         match purpose {
+            FilePurpose::TextFont { page } => {
+                let Some((_, bytes)) = files.into_iter().next() else { return };
+                if self.apply_edit(Edit::RegisterTextFont { page, bytes: Arc::new(bytes) })
+                    && let Some((index, id)) = self.active_ids()
+                    && let Some(doc) = self.session.get(id)
+                    && let Some(ed) = self.views[index].line_editor.as_mut()
+                    && let Some(ctx) = self.ctx.as_ref()
+                {
+                    ed.fonts = crate::edit_text_ui::install_source_fonts(ctx, doc, page);
+                }
+            }
             FilePurpose::Combine => self.stage_combine(files),
             FilePurpose::InsertPages => self.insert_files(files),
             FilePurpose::ReplacePages => {
@@ -377,6 +459,10 @@ impl PdfCraftApp {
             }
             FilePurpose::Ocr => self.ocr_files(files),
             FilePurpose::CreateMultiple => self.stage_create_multiple(files.into_iter().map(Ok)),
+            FilePurpose::CreateMultipleSeparate => {
+                let dir = self.export_dir_override.as_ref().map(std::path::PathBuf::from);
+                self.stage_create_separate(files.into_iter().map(Ok), dir);
+            }
             FilePurpose::RedactWords => {
                 let Some((name, bytes)) = files.into_iter().next() else { return };
                 if bytes.len() > crate::redact_ui::MAX_WORD_LIST_BYTES {
@@ -450,7 +536,13 @@ impl PdfCraftApp {
                 self.session.convert_to_pdf(&name, &Arc::new(bytes)).and_then(|(_, pdf)| Ok((self.session.page_count_of(&name, &pdf)?, pdf)));
             match converted {
                 Ok((pages, bytes)) => {
-                    if self.apply_edit(Edit::InsertPagesFrom { name, bytes, pages: None, at }) {
+                    if self.apply_edit(Edit::InsertPagesFrom {
+                        name,
+                        bytes,
+                        pages: None,
+                        at,
+                        field_conflicts: pdfcraft_engine::FieldConflicts::Rename,
+                    }) {
                         at = at.saturating_add(pages);
                     }
                 }
@@ -668,6 +760,8 @@ impl PdfCraftApp {
     pub(crate) fn open_created(&mut self, name: &str, bytes: Arc<Vec<u8>>, message: &str) {
         match self.session.open_new(name, bytes) {
             Ok(id) => {
+                // The reading-colours preference is app-wide: the newly created document starts with it.
+                self.session.set_reading_colors(id, self.reading_colors);
                 let Some(doc) = self.session.get(id) else { return };
                 self.views.push(crate::DocView::new(id, &doc.info, self.view_defaults));
                 self.active = Some(self.views.len() - 1);
@@ -695,11 +789,11 @@ impl PdfCraftApp {
                 Err(e) => app.notify_fmt("Couldn't read {name}: {e}", &[("name", &path.display().to_string()), ("e", &e.to_string())]),
             };
             match self.save_override.clone() {
-                Some(p) if [".xfdf", ".fdf", ".xml", ".csv", ".txt"].iter().any(|e| p.ends_with(e)) => import(self, p.into()),
+                Some(p) if [".xfdf", ".fdf", ".xml", ".xdp", ".csv", ".txt"].iter().any(|e| p.ends_with(e)) => import(self, p.into()),
                 Some(_) => {}
                 None => {
                     let dialog = rfd::AsyncFileDialog::new()
-                        .add_filter(tl!("Comment and form data").to_string(), &["xfdf", "fdf", "xml", "csv", "txt"])
+                        .add_filter(tl!("Comment and form data").to_string(), &["xfdf", "fdf", "xml", "xdp", "csv", "txt"])
                         .set_title(tl!("Import data").to_string());
                     let target = self.active_ids().map(|(_, id)| id);
                     self.ask_one(crate::pickers::Ask::File(dialog), target, import);
@@ -820,6 +914,7 @@ impl PdfCraftApp {
         let stem = doc.name.trim_end_matches(".pdf").trim_end_matches(".PDF").to_string();
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let xfa = doc.info.xfa.is_some();
             let write = move |app: &mut Self, path: std::path::PathBuf| {
                 // Include what was typed while the save panel was open (#166).
                 if !app.commit_typing_in(id) {
@@ -842,6 +937,15 @@ impl PdfCraftApp {
                     let d = rfd::AsyncFileDialog::new().set_title(title).set_file_name(format!("{stem}.xfdf"));
                     let d = if comments {
                         d.add_filter("XFDF", &["xfdf"]).add_filter("FDF", &["fdf"])
+                    } else if xfa {
+                        // An XFA form's data, as Acrobat exports it, first.
+                        d.set_file_name(format!("{stem}.xml"))
+                            .add_filter("XML", &["xml"])
+                            .add_filter("XDP", &["xdp"])
+                            .add_filter("XFDF", &["xfdf"])
+                            .add_filter("FDF", &["fdf"])
+                            .add_filter("CSV", &["csv"])
+                            .add_filter(tl!("Text").to_string(), &["txt"])
                     } else {
                         d.add_filter("XFDF", &["xfdf"])
                             .add_filter("FDF", &["fdf"])

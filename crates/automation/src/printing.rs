@@ -12,7 +12,16 @@ fn bad(m: impl Into<String>) -> ToolError {
 
 impl Automation {
     pub(crate) fn printers(&self) -> Result<Value> {
-        let list: Vec<Value> = spool::printers().into_iter().map(|p| json!({ "name": p.name, "default": p.default })).collect();
+        let list: Vec<Value> = spool::printers()
+            .into_iter()
+            .map(|p| {
+                let mut v = json!({ "name": p.name, "default": p.default });
+                if let Some(two_sided) = p.two_sided {
+                    v["two_sided"] = json!(two_sided);
+                }
+                v
+            })
+            .collect();
         Ok(json!({ "count": list.len(), "printers": list }))
     }
 
@@ -132,12 +141,13 @@ impl Automation {
                     printer: if printer == "default" { None } else { Some(printer.to_string()) },
                     copies: a.opt_int("copies")?.unwrap_or(1).clamp(1, 999) as u32,
                     collate: a.opt_bool("collate")?.unwrap_or(true),
-                    duplex: match a.opt_str("duplex")?.unwrap_or("off") {
+                    duplex: Some(match a.opt_str("duplex")?.unwrap_or("off") {
                         "off" => spool::Duplex::Off,
                         "long-edge" => spool::Duplex::LongEdge,
                         "short-edge" => spool::Duplex::ShortEdge,
                         d => return Err(bad(format!("unknown duplex {d:?}"))),
-                    },
+                    }),
+                    scaling: spool::Scaling::Exact,
                     grayscale: a.opt_bool("grayscale")?.unwrap_or(false),
                     title: name,
                     options: match a.get("options") {

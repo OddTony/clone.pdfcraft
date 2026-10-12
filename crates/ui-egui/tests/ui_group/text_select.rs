@@ -77,8 +77,28 @@ fn quick_clicks_with_the_highlighter_mark_only_the_word() {
     let (mut h, at) = harness(|app| assert!(app.execute("comment.highlight")));
     for _ in 0..4 {
         click(&mut h, at);
+        // The double-click's highlight re-renders the page; give its text layer up to 8 frames
+        // to come back (still well inside egui's 0.3 s multi-click window at 1/60 s a frame), so
+        // a loaded machine doesn't make the later clicks land on a page with no text yet.
+        for _ in 0..8 {
+            if !h.state().render_pending() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            h.run_steps(1);
+        }
     }
     h.run_steps(3);
+    // Under load the mark can land a few frames later; wait for it (egui's clock is fixed per
+    // frame, so waiting can't turn the clicks into a different run).
+    for _ in 0..200 {
+        let app = h.state();
+        if app.session.get(app.views[0].id).is_some_and(|d| !d.info.annotations.is_empty()) && !app.render_pending() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        h.run_steps(1);
+    }
     let app = h.state();
     let doc = app.session.get(app.views[0].id).unwrap();
     let marks: Vec<(&str, usize)> = doc.info.annotations.iter().map(|a| (a.subtype.as_str(), a.quads.len())).collect();

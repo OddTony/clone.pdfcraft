@@ -38,11 +38,13 @@ pub struct TextGlyph {
 /// combining dot (two characters) and leaves `ı` alone, so neither `İSTANBUL` nor `IRMAK` could
 /// be found by typing `istanbul` or `ırmak`. Search can't know the document's language, so the
 /// four are treated as one letter; this only adds matches where an `ı` or `İ` is involved.
+/// Greek sigma's normal and word-final forms (`σ`/`ς`) both fold to `σ`, as does `Σ`.
 pub fn fold_case(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
             'I' | 'i' | '\u{130}' | '\u{131}' => out.push('i'),
+            'Σ' | 'σ' | 'ς' => out.push('σ'),
             _ => out.extend(c.to_lowercase()),
         }
     }
@@ -95,6 +97,14 @@ impl PageText {
 
     /// Search with Acrobat's find options: case-sensitive, whole words only.
     pub fn find_opts(&self, needle: &str, case_sensitive: bool, whole_words: bool) -> Vec<std::ops::Range<usize>> {
+        self.find_opts_limited(needle, case_sensitive, whole_words, usize::MAX)
+    }
+
+    /// Search with Acrobat's find options, returning at most `limit` glyph ranges.
+    pub fn find_opts_limited(&self, needle: &str, case_sensitive: bool, whole_words: bool, limit: usize) -> Vec<std::ops::Range<usize>> {
+        if limit == 0 {
+            return Vec::new();
+        }
         let fold = |s: &str| if case_sensitive { s.to_string() } else { fold_case(s) };
         let needle: Vec<char> = fold(needle).split_whitespace().collect::<Vec<_>>().join(" ").chars().collect();
         if needle.is_empty() {
@@ -124,6 +134,9 @@ impl PageText {
                 let start = chars[i].1;
                 let end = chars[i + needle.len() - 1].1 + 1;
                 out.push(start..end);
+                if out.len() == limit {
+                    break;
+                }
                 i += needle.len();
             } else {
                 i += 1;
@@ -342,6 +355,183 @@ type Drawn = (usize, [f64; 2], TextGlyph);
 struct TextDevice {
     /// Every glyph in content order.
     glyphs: Vec<Drawn>,
+    /// How many marked content sequences are open.
+    depth: usize,
+    /// The outermost open `/ActualText` replacement: its depth, text and the glyphs drawn inside
+    /// it (with no text of their own yet).
+    actual: Option<(usize, String, Vec<Drawn>)>,
+    /// Every `/ActualText` replacement made on the page.
+    replaced: Vec<Replaced>,
+}
+
+/// An `/ActualText` replacement: the glyph standing for it in `TextDevice::glyphs` (none for an
+/// empty replacement), its text, and the text and box of each replaced glyph that has Unicode of
+/// its own.
+struct Replaced {
+    at: Option<usize>,
+    text: String,
+    originals: Vec<(String, [f32; 4])>,
+}
+
+/// Grid cell size, in points, for finding the glyphs drawn at a place.
+const CELL: f32 = 8.0;
+
+/// Most grid cells searched around one place: a glyph so tall its tolerance spans more is skipped.
+const MAX_CELLS: i64 = 4096;
+
+/// Most work (grid cells visited plus glyphs compared) the redraw dedupe in `TextDevice::finish`
+/// may do on one page. A hostile page stacking ~10^5 glyphs and ~10^5 replacements at one spot
+/// would otherwise make ~10^10 comparisons; past the budget the remaining replacements keep
+/// their unmarked redraws (the text reads twice, as it would without `/ActualText`).
+const MAX_REDRAW_WORK: usize = 1 << 22;
+
+fn cell(v: f32) -> i64 {
+    // Glyph boxes are finite (`draw_glyph` and `merge` drop the rest); `as` saturates.
+    (v / CELL).floor() as i64
+}
+
+/// How far a redrawn glyph may sit from the one it redraws: a fifth of its height, as in `redraws`.
+fn redraw_tolerance(rect: &[f32; 4]) -> f32 {
+    0.2 * (rect[3] - rect[1]).max(0.1)
+}
+
+/// One glyph carrying `text`, boxed around `drawn` in their writing direction; `None` when they
+/// span several lines or writing directions (one box would break selection and line grouping).
+fn merge(drawn: &[Drawn], text: String) -> Option<Drawn> {
+    let first = drawn.first()?;
+    let (quarter, u) = (first.0, first.1);
+    // Across the line: from the writing direction a quarter turn towards the line's bottom.
+    let n = [-u[1], u[0]];
+    let along = |p: &[f32; 2]| f64::from(p[0]) * u[0] + f64::from(p[1]) * u[1];
+    let across = |p: &[f32; 2]| f64::from(p[0]) * n[0] + f64::from(p[1]) * n[1];
+    let height = across(&first.2.quad[0]) - across(&first.2.quad[3]);
+    let (mut s0, mut s1, mut t0, mut t1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for p in drawn.iter().flat_map(|d| d.2.quad.iter()) {
+        (s0, s1) = (s0.min(along(p)), s1.max(along(p)));
+        (t0, t1) = (t0.min(across(p)), t1.max(across(p)));
+    }
+    let one_line = drawn.iter().all(|d| compatible(u, d.1)) && t1 - t0 <= 2.0 * height.abs();
+    if !(one_line && s0.is_finite() && s1.is_finite() && t0.is_finite() && t1.is_finite()) {
+        return None;
+    }
+    // The edge towards the next line is the one the first glyph's quad starts on.
+    let (near, far) = if height >= 0.0 { (t1, t0) } else { (t0, t1) };
+    let point = |s: f64, t: f64| [(s * u[0] + t * n[0]) as f32, (s * u[1] + t * n[1]) as f32];
+    let quad = [point(s0, near), point(s1, near), point(s1, far), point(s0, far)];
+    let rect = quad.iter().fold([f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY], |r, p| {
+        [r[0].min(p[0]), r[1].min(p[1]), r[2].max(p[0]), r[3].max(p[1])]
+    });
+    Some((quarter, u, TextGlyph { text, rect, quad, direction: first.2.direction }))
+}
+
+impl TextDevice {
+    fn new() -> Self {
+        TextDevice { glyphs: Vec::new(), depth: 0, actual: None, replaced: Vec::new() }
+    }
+
+    /// Ends the open `/ActualText` replacement (ISO 32000-2 §14.9.4): its glyphs become one glyph
+    /// carrying the replacement text, boxed around them all. Chrome (Skia) writes one around
+    /// each Thai, Indic or Arabic cluster whose shaped glyphs (a tone mark moved clear of a vowel,
+    /// a ligature) have no Unicode of their own, so without it those marks are lost and the
+    /// words can't be found.
+    ///
+    /// A replacement spanning several lines or writing directions stays per glyph (each glyph's own
+    /// Unicode). An empty one (a soft hyphen at a line break, say) stands for no text at all.
+    fn end_actual_text(&mut self) {
+        let Some((_, text, drawn)) = self.actual.take() else { return };
+        let Some(glyph) = merge(&drawn, text.clone()) else {
+            self.glyphs.extend(drawn.into_iter().filter(|d| !d.2.text.chars().all(|c| c.is_control())));
+            return;
+        };
+        let originals = drawn.iter().filter(|d| !d.2.text.chars().all(|c| c.is_control())).map(|d| (d.2.text.clone(), d.2.rect)).collect();
+        let at = if text.chars().all(|c| c.is_control()) {
+            None
+        } else {
+            self.glyphs.push(glyph);
+            Some(self.glyphs.len() - 1)
+        };
+        self.replaced.push(Replaced { at, text, originals });
+    }
+
+    /// Ends the page. Some producers draw text twice, the copy for an outline, shadow or
+    /// glow, and mark only one drawing with `/ActualText` (Canva). The unmarked redraw of a
+    /// replacement's glyphs (the same text at the same places, in content order) takes the same
+    /// replacement, so the two read alike and line layout drops the copy as a redraw.
+    fn finish(&mut self) {
+        self.end_actual_text();
+        if self.replaced.is_empty() {
+            return;
+        }
+        let mut taken = vec![false; self.glyphs.len()];
+        for at in self.replaced.iter().filter_map(|r| r.at) {
+            if let Some(t) = taken.get_mut(at) {
+                *t = true;
+            }
+        }
+        let mut grid: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+        for (i, g) in self.glyphs.iter().enumerate() {
+            if !taken.get(i).copied().unwrap_or(true) {
+                grid.entry((cell(g.2.rect[0]), cell(g.2.rect[1]))).or_default().push(i);
+            }
+        }
+        // Redraws found: the glyph range and the replacement standing for it.
+        let mut redraws: Vec<(std::ops::Range<usize>, usize)> = Vec::new();
+        let mut budget = MAX_REDRAW_WORK;
+        'replacements: for (k, r) in self.replaced.iter().enumerate() {
+            let Some((_, rect)) = r.originals.first() else { continue };
+            let tol = redraw_tolerance(rect);
+            let (x0, x1, y0, y1) = (cell(rect[0] - tol), cell(rect[0] + tol), cell(rect[1] - tol), cell(rect[1] + tol));
+            if x1.saturating_sub(x0).saturating_add(1).saturating_mul(y1.saturating_sub(y0).saturating_add(1)) > MAX_CELLS {
+                continue;
+            }
+            // Checking one candidate walks its run twice (free, then same).
+            let candidate_cost = r.originals.len().saturating_mul(2).saturating_add(1);
+            for key in (x0..=x1).flat_map(|x| (y0..=y1).map(move |y| (x, y))) {
+                let Some(rest) = budget.checked_sub(1) else { break 'replacements };
+                budget = rest;
+                for &i in grid.get(&key).map_or(&[][..], Vec::as_slice) {
+                    let Some(rest) = budget.checked_sub(candidate_cost) else { break 'replacements };
+                    budget = rest;
+                    let Some(range) = i.checked_add(r.originals.len()).map(|end| i..end) else { continue };
+                    let Some(run) = self.glyphs.get(range.clone()) else { continue };
+                    let free = taken.get(range.clone()).is_some_and(|t| t.iter().all(|t| !t));
+                    let same = run.iter().zip(&r.originals).all(|(g, (text, o))| {
+                        let tol = redraw_tolerance(o);
+                        g.2.text == *text && (g.2.rect[0] - o[0]).abs() < tol && (g.2.rect[1] - o[1]).abs() < tol
+                    });
+                    if free && same {
+                        if let Some(t) = taken.get_mut(range.clone()) {
+                            t.fill(true);
+                        }
+                        redraws.push((range, k));
+                    }
+                }
+            }
+        }
+        if redraws.is_empty() {
+            return;
+        }
+        redraws.sort_by_key(|(range, _)| range.start);
+        let glyphs = std::mem::take(&mut self.glyphs);
+        let mut redraws = redraws.into_iter().peekable();
+        let mut i = 0;
+        while let Some(g) = glyphs.get(i) {
+            let Some((range, k)) = redraws.next_if(|(range, _)| range.start == i) else {
+                self.glyphs.push(g.clone());
+                i += 1;
+                continue;
+            };
+            let run = glyphs.get(range.clone()).unwrap_or_default();
+            let text = self.replaced.get(k).map(|r| r.text.clone()).unwrap_or_default();
+            if !text.chars().all(|c| c.is_control()) {
+                match merge(run, text) {
+                    Some(glyph) => self.glyphs.push(glyph),
+                    None => self.glyphs.extend_from_slice(run),
+                }
+            }
+            i = range.end.max(i + 1);
+        }
+    }
 }
 
 impl<'a> Device<'a> for TextDevice {
@@ -351,17 +541,24 @@ impl<'a> Device<'a> for TextDevice {
     fn push_clip_path(&mut self, _: &ClipPath) {}
     fn push_transparency_group(&mut self, _: f32, _: Option<SoftMask<'a>>, _: BlendMode) {}
     fn draw_glyph(&mut self, glyph: &Glyph<'a>, transform: Affine, glyph_transform: Affine, _: &Paint<'a>, _: &GlyphDrawMode) {
-        let Some(u) = glyph.as_unicode() else {
-            if std::env::var_os("PDFCRAFT_TEXT_DEBUG").is_some() {
-                eprintln!("NOUNICODE {} {:?}", if matches!(glyph, Glyph::Type3(_)) { "t3" } else { "ol" }, (transform * glyph_transform).as_coeffs());
+        // Inside an `/ActualText` replacement only the glyph's box matters.
+        let replaced = self.actual.is_some();
+        let text = match glyph.as_unicode() {
+            Some(hayro::hayro_interpret::hayro_cmap::BfString::Char(c)) => c.to_string(),
+            Some(hayro::hayro_interpret::hayro_cmap::BfString::String(s)) => s,
+            None if replaced => String::new(),
+            None => {
+                if std::env::var_os("PDFCRAFT_TEXT_DEBUG").is_some() {
+                    eprintln!(
+                        "NOUNICODE {} {:?}",
+                        if matches!(glyph, Glyph::Type3(_)) { "t3" } else { "ol" },
+                        (transform * glyph_transform).as_coeffs()
+                    );
+                }
+                return;
             }
-            return;
         };
-        let text = match u {
-            hayro::hayro_interpret::hayro_cmap::BfString::Char(c) => c.to_string(),
-            hayro::hayro_interpret::hayro_cmap::BfString::String(s) => s,
-        };
-        if text.chars().all(|c| c.is_control()) {
+        if !replaced && text.chars().all(|c| c.is_control()) {
             return;
         }
         // Glyph space → view space. Glyph space uses 1000 units per em for outline glyphs; the em
@@ -416,11 +613,29 @@ impl<'a> Device<'a> for TextDevice {
             quad: corners.map(|p| [p.x as f32, p.y as f32]),
             direction: direction.map(|d| d as f32),
         };
-        self.glyphs.push((dir, direction, glyph));
+        match &mut self.actual {
+            Some((_, _, drawn)) => drawn.push((dir, direction, glyph)),
+            None => self.glyphs.push((dir, direction, glyph)),
+        }
     }
     fn draw_image(&mut self, _: Image<'a, '_>, _: Affine) {}
     fn pop_clip_path(&mut self) {}
     fn pop_transparency_group(&mut self) {}
+    fn begin_marked_content(&mut self, _: &[u8], _: Option<i32>) {
+        self.depth = self.depth.saturating_add(1);
+    }
+    fn actual_text(&mut self, text: &[u8]) {
+        // A replacement nested in another is already covered by the outer one.
+        if self.actual.is_none() {
+            self.actual = Some((self.depth, pdfcraft_cos::PdfString::literal(text).to_text(), Vec::new()));
+        }
+    }
+    fn end_marked_content(&mut self) {
+        if self.actual.as_ref().is_some_and(|(depth, _, _)| *depth == self.depth) {
+            self.end_actual_text();
+        }
+        self.depth = self.depth.saturating_sub(1);
+    }
 }
 
 /// Extract the text of one page. Panics inside the interpreter are the caller's to catch.
@@ -434,8 +649,10 @@ pub(crate) fn extract_page(pdf: &Pdf, page: usize, settings: &InterpreterSetting
     let settings = settings.clone();
     let initial = p.initial_transform(true).to_kurbo();
     let mut ctx = Context::new(initial, Rect::new(0.0, 0.0, w as f64, h as f64), &cache, p.xref(), settings);
-    let mut dev = TextDevice { glyphs: Vec::new() };
+    let mut dev = TextDevice::new();
     interpret_page(p, &mut ctx, &mut dev);
+    // A replacement the content never closed ends with the page.
+    dev.finish();
     let glyphs = dev.glyphs;
     // Text on a curved path: glyphs that each continue the previous one's line while the
     // direction turns. Each such run is one line.
@@ -729,6 +946,10 @@ const REDRAW_CANDIDATES: usize = 32;
 /// Pair tests that the collision sweep may make per glyph of a segment. Ordinary text overlaps each glyph with about one
 /// neighbour, so it stays far below this. A segment that needs more is dense, and [`collide`] joins its runs instead.
 const COLLIDE_PAIRS_PER_GLYPH: usize = 16;
+/// Glyph positions within a fifth of their height are considered the same for redraws.
+const REDRAW_POSITION_TOLERANCE: f32 = 0.2;
+/// A reset needs three matching glyphs at the start of the run, keeping local kerning from splitting it.
+const REDRAW_PREFIX_GLYPHS: usize = 3;
 
 /// Reusable buffers, so a page allocates them once rather than per segment. Glyph placement works in them, one
 /// segment at a time, when the segment is emitted.
@@ -807,11 +1028,42 @@ fn redraws(glyphs: &[&TextGlyph], a: Run, b: Run) -> bool {
     a.len() == b.len()
         && a.range().zip(b.range()).all(|(i, j)| match (glyphs.get(i), glyphs.get(j)) {
             (Some(p), Some(g)) => {
-                let tol = 0.2 * (g.rect[3] - g.rect[1]).max(0.1);
+                let tol = REDRAW_POSITION_TOLERANCE * (g.rect[3] - g.rect[1]).max(0.1);
                 p.text == g.text && (p.rect[0] - g.rect[0]).abs() < tol && (p.rect[1] - g.rect[1]).abs() < tol
             }
             _ => false,
         })
+}
+
+fn within_position_tolerance(a: f32, b: f32, tolerance: f32) -> bool {
+    (a - b).abs().partial_cmp(&tolerance) == Some(std::cmp::Ordering::Less)
+}
+
+/// Whether `next` restarts `start` after the run has advanced by a glyph height. The fixed prefix
+/// bounds this check and requires more than a single backward adjustment to split a run.
+fn restarts_run(glyphs: &[&TextGlyph], start: usize, next: usize, progress: f32) -> bool {
+    let (Some(first), Some(candidate)) = (glyphs.get(start), glyphs.get(next)) else { return false };
+    let tol = REDRAW_POSITION_TOLERANCE * (candidate.rect[3] - candidate.rect[1]).max(0.1);
+    if first.text != candidate.text
+        || !within_position_tolerance(first.rect[0], candidate.rect[0], tol)
+        || !within_position_tolerance(first.rect[1], candidate.rect[1], tol)
+    {
+        return false;
+    }
+    let h = (first.rect[3] - first.rect[1]).max(0.1);
+    if !progress.is_finite() || progress <= h {
+        return false;
+    }
+    for offset in 1..REDRAW_PREFIX_GLYPHS {
+        let (Some(a), Some(b)) = (start.checked_add(offset).and_then(|i| glyphs.get(i)), next.checked_add(offset).and_then(|i| glyphs.get(i))) else {
+            return false;
+        };
+        let tol = REDRAW_POSITION_TOLERANCE * (b.rect[3] - b.rect[1]).max(0.1);
+        if a.text != b.text || !within_position_tolerance(a.rect[0], b.rect[0], tol) || !within_position_tolerance(a.rect[1], b.rect[1], tol) {
+            return false;
+        }
+    }
+    true
 }
 
 /// Puts a segment's glyphs in visual reading order into `sc.placed`, and its forced word breaks into `sc.breaks`.
@@ -1048,6 +1300,8 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
 
     // 1. Segments in content order. Every run is a range of consecutive glyphs.
     let mut segs: Vec<Seg> = Vec::new();
+    let mut run_start_x = 0.0;
+    let mut furthest_progress = 0.0;
     for i in 0..n {
         let g = glyphs[i].rect;
         let cont = segs.last().is_some_and(|s| {
@@ -1056,12 +1310,19 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
             let gap = g[0] - glyphs[p].rect[2];
             (cy(i) - cy(p)).abs() < ph * 0.5 && gap < ph * 3.0 && g[0] > glyphs[p].rect[0] - ph * 2.0
         });
-        if cont && let Some(s) = segs.last_mut() {
+        let reset = cont && segs.last().is_some_and(|s| restarts_run(&glyphs, s.first.start, i, furthest_progress));
+        if cont
+            && !reset
+            && let Some(s) = segs.last_mut()
+        {
             s.first.end = i + 1;
             union(&mut s.bbox, &g);
             s.h = s.h.max(height(i));
+            furthest_progress = furthest_progress.max((g[0] - run_start_x).abs()).max((g[2] - run_start_x).abs());
         } else {
             segs.push(Seg::new(Run { start: i, end: i + 1 }, g, height(i)));
+            run_start_x = g[0];
+            furthest_progress = 0.0;
         }
     }
     // A run that redraws an earlier run at the same place (doubled or shadowed text) is dropped, as a doubled glyph is
@@ -1322,6 +1583,126 @@ mod tests {
         }
     }
 
+    /// One page per content stream, in Helvetica (`/F1`), with `/P1` in the resources'
+    /// `/Properties` naming the `/ActualText` "fi".
+    fn marked_pages(contents: &[&str]) -> Pdf {
+        use lopdf::{Document, Object, Stream, dictionary};
+        let mut doc = Document::with_version("1.7");
+        let font = doc.add_object(dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica" });
+        let pages = doc.new_object_id();
+        let mut kids = Vec::new();
+        for c in contents {
+            let content = doc.add_object(Stream::new(dictionary! {}, c.as_bytes().to_vec()));
+            let resources = dictionary! {
+                "Font" => dictionary! {"F1" => font},
+                "Properties" => dictionary! {"P1" => dictionary! {"ActualText" => Object::string_literal("fi")}},
+            };
+            let page = doc.add_object(dictionary! { "Type" => "Page", "Parent" => pages, "MediaBox" => vec![Object::Integer(0), Object::Integer(0), Object::Integer(300), Object::Integer(300)], "Resources" => resources, "Contents" => content });
+            kids.push(Object::Reference(page));
+        }
+        let count = kids.len() as i64;
+        doc.objects.insert(pages, dictionary! {"Type" => "Pages", "Kids" => kids, "Count" => count}.into());
+        let catalog = doc.add_object(dictionary! {"Type" => "Catalog", "Pages" => pages});
+        doc.trailer.set("Root", catalog);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        Pdf::new(std::sync::Arc::new(bytes)).unwrap()
+    }
+
+    fn marked_text(pdf: &Pdf, page: usize) -> PageText {
+        extract_page(pdf, page, &InterpreterSettings::default()).unwrap()
+    }
+
+    #[test]
+    fn actual_text_replaces_the_glyphs_it_marks_in_every_writing_direction() {
+        // Chrome marks each shaped Thai cluster this way: "น้ำ" (U+0E19 U+0E49 U+0E33) here stands
+        // for the two glyphs "xy", between "a" and "b". The same codes unmarked are the control.
+        let turns = ["1 0 0 1 100 150", "0 1 -1 0 150 100", "-1 0 0 -1 200 150", "0 -1 1 0 150 200"];
+        let marked: Vec<String> =
+            turns.iter().map(|m| format!("BT /F1 20 Tf {m} Tm (a) Tj /Span <</ActualText <FEFF0E190E490E33>>> BDC (xy) Tj EMC (b) Tj ET")).collect();
+        let plain: Vec<String> = turns.iter().map(|m| format!("BT /F1 20 Tf {m} Tm (axyb) Tj ET")).collect();
+        let marked = marked_pages(&marked.iter().map(String::as_str).collect::<Vec<_>>());
+        let plain = marked_pages(&plain.iter().map(String::as_str).collect::<Vec<_>>());
+        for (page, turn) in turns.iter().enumerate() {
+            let text = marked_text(&marked, page);
+            let control = marked_text(&plain, page);
+            assert_eq!(control.plain_text(), "axyb", "Tm {turn}");
+            assert_eq!(text.plain_text(), "aน้ำb", "Tm {turn}");
+            assert_eq!(text.glyphs.iter().map(|g| g.text.as_str()).collect::<Vec<_>>(), ["a", "น้ำ", "b"], "Tm {turn}");
+            assert_eq!(text.find("น้ำ"), vec![1..2], "Tm {turn}");
+            assert_eq!(text.line_rects(0..3).len(), 1, "one line, Tm {turn}");
+            // The replacement's box is the union of the boxes of the glyphs it replaces.
+            let (x, y) = (&control.glyphs[1].rect, &control.glyphs[2].rect);
+            let union = [x[0].min(y[0]), x[1].min(y[1]), x[2].max(y[2]), x[3].max(y[3])];
+            for (got, want) in text.glyphs[1].rect.iter().zip(union) {
+                assert!((got - want).abs() < 0.01, "box {:?} ≠ {union:?}, Tm {turn}", text.glyphs[1].rect);
+            }
+            assert_eq!(text.glyphs[1].direction, control.glyphs[1].direction, "Tm {turn}");
+        }
+    }
+
+    #[test]
+    fn redraw_dedupe_work_is_bounded_on_hostile_pages() {
+        // 100,000 replacements and 100,000 unmarked glyphs that never match, all at one spot:
+        // unbounded, every replacement would compare every glyph (10^10 comparisons).
+        const N: usize = 100_000;
+        let glyph = |text: &str| {
+            let quad = [[100.0, 110.0], [110.0, 110.0], [110.0, 100.0], [100.0, 100.0]];
+            (0, [1.0, 0.0], TextGlyph { text: text.into(), rect: [100.0, 100.0, 110.0, 110.0], quad, direction: [1.0, 0.0] })
+        };
+        let mut dev = TextDevice::new();
+        // A genuine redraw first: it is still deduplicated within the budget.
+        dev.glyphs.push(glyph("fi"));
+        dev.glyphs.push(glyph("x"));
+        dev.replaced.push(Replaced { at: Some(0), text: "fi".into(), originals: vec![("x".into(), [100.0, 100.0, 110.0, 110.0])] });
+        dev.glyphs.extend((0..N).map(|_| glyph("y")));
+        for _ in 0..N {
+            dev.glyphs.push(glyph("z"));
+            let at = dev.glyphs.len() - 1;
+            dev.replaced.push(Replaced { at: Some(at), text: "z".into(), originals: vec![("q".into(), [100.0, 100.0, 110.0, 110.0])] });
+        }
+        let started = std::time::Instant::now();
+        dev.finish();
+        assert!(started.elapsed() < std::time::Duration::from_secs(30), "took {:?}", started.elapsed());
+        assert_eq!(dev.glyphs.len(), 2 * N + 2, "unmatched glyphs are kept");
+        assert_eq!(dev.glyphs[1].2.text, "fi", "the redraw found within the budget takes the replacement");
+    }
+
+    #[test]
+    fn actual_text_follows_the_pdf_rules_for_marked_content() {
+        let pdf = marked_pages(&[
+            // Named in the resources' /Properties.
+            "BT /F1 20 Tf 1 0 0 1 100 150 Tm (o) Tj /Span /P1 BDC (W) Tj EMC (ce) Tj ET",
+            // Nested: the outermost replacement covers everything inside it.
+            "BT /F1 20 Tf 1 0 0 1 100 150 Tm /Span <</ActualText (AB)>> BDC /Span <</ActualText (Z)>> BDC (x) Tj EMC (y) Tj EMC ET",
+            // Empty: the marked glyphs stand for no text (a soft hyphen at a line break); the gap
+            // the hyphen leaves still reads as one.
+            "BT /F1 20 Tf 1 0 0 1 100 150 Tm (co) Tj /Span <</ActualText ()>> BDC (-) Tj EMC (op) Tj ET",
+            // Across two lines: each glyph keeps its own text, so selection and lines still work.
+            "BT /F1 20 Tf 1 0 0 1 100 150 Tm /Span <</ActualText (Q)>> BDC (x) Tj 0 -40 Td (y) Tj EMC ET",
+            // Unbalanced: a stray EMC first, and a replacement the page never closes.
+            "EMC BT /F1 20 Tf 1 0 0 1 100 150 Tm (a) Tj /Span <</ActualText (fi)>> BDC (xy) Tj ET",
+            // Marked content without /ActualText changes nothing.
+            "BT /F1 20 Tf 1 0 0 1 100 150 Tm /P <</MCID 0>> BDC (ab) Tj EMC /Artifact BMC (c) Tj EMC ET",
+        ]);
+        let plain: Vec<String> = (0..6).map(|p| marked_text(&pdf, p).plain_text()).collect();
+        assert_eq!(plain, ["ofice", "AB", "co op", "x\ny", "afi", "abc"]);
+    }
+
+    #[test]
+    fn an_unmarked_redraw_of_actual_text_reads_as_the_same_text() {
+        // Canva draws text twice (an outline or shadow) and marks only one drawing. The copy,
+        // before or after the marked one and half a point off, takes the same replacement and is
+        // dropped as a redraw; the same codes elsewhere on the page keep their own text.
+        let marked = "BT /F1 20 Tf 1 0 0 1 100 150 Tm (a) Tj /Span <</ActualText <FEFF0E190E490E33>>> BDC (xy) Tj EMC (b) Tj ET";
+        let copy = "BT /F1 20 Tf 1 0 0 1 100.5 150.5 Tm (axyb) Tj ET";
+        let elsewhere = "BT /F1 20 Tf 1 0 0 1 100 50 Tm (axyb) Tj ET";
+        let pdf = marked_pages(&[&format!("{marked} {copy} {elsewhere}"), &format!("{copy} {marked} {elsewhere}")]);
+        for page in 0..2 {
+            assert_eq!(marked_text(&pdf, page).plain_text(), "aน้ำb\naxyb", "page {page}");
+        }
+    }
+
     #[test]
     fn narrow_ligatures_keep_every_letter() {
         // Split evenly, this "ffi" put its two "f"s so close that the second was dropped as a
@@ -1413,13 +1794,37 @@ mod tests {
     }
 
     #[test]
+    fn greek_sigma_forms_match_without_changing_exact_search_or_glyph_ranges() {
+        let mut v = Vec::new();
+        word(&mut v, "κόσμος", 10.0, 10.0, 7.0);
+        word(&mut v, "ΚΌΣΜΟΣ", 80.0, 10.0, 7.0);
+        word(&mut v, "σςΣ", 150.0, 10.0, 7.0);
+        let text = layout(v);
+        assert_eq!(text.plain_text(), "κόσμος ΚΌΣΜΟΣ σςΣ");
+        for query in ["κόσμος", "ΚΌΣΜΟΣ"] {
+            assert_eq!(text.find(query), vec![0..6, 6..12]);
+            assert_eq!(text.find_opts(query, false, true), vec![0..6, 6..12]);
+        }
+        for query in ["σ", "ς", "Σ"] {
+            assert_eq!(text.find(query), vec![2..3, 5..6, 8..9, 11..12, 12..13, 13..14, 14..15]);
+            assert!(text.find_opts(query, false, true).is_empty());
+        }
+        assert_eq!(text.find_opts("κόσμος", true, false), vec![0..6]);
+        assert_eq!(text.find_opts("ΚΌΣΜΟΣ", true, false), vec![6..12]);
+        assert_eq!(text.find_opts("ς", true, false), vec![5..6, 13..14]);
+        assert_eq!(text.find_opts_limited("ς", false, false, 2), vec![2..3, 5..6]);
+        assert_eq!(text.line_rects(text.find("κόσμος")[1].clone()), text.line_rects(6..12));
+    }
+
+    #[test]
     fn case_folding_keeps_one_character_per_character() {
-        for s in ["İSTANBUL", "ırmak", "Hello WORLD", "ÇAĞLAR", "Straße", "ΣΟΦΙΑ", "日本語"] {
+        for s in ["İSTANBUL", "ırmak", "Hello WORLD", "ÇAĞLAR", "Straße", "ΣΟΦΙΑ", "Σσς", "日本語"] {
             assert_eq!(fold_case(s).chars().count(), s.chars().count(), "{s}");
         }
         assert_eq!(fold_case("Hello WORLD"), "hello world");
         assert_eq!(fold_case("ÇAĞLAR Şişli"), "çağlar şişli");
         assert_eq!(fold_case("İIıi"), "iiii");
+        assert_eq!(fold_case("Σσς"), "σσσ");
     }
 
     fn g(t: &str, x0: f32, y0: f32, x1: f32) -> TextGlyph {
@@ -1466,7 +1871,17 @@ mod tests {
         assert_eq!(t.find("quick\tbrown"), vec![0..12]);
         assert_eq!(t.find("quick"), vec![0..5]);
         assert_eq!(t.find("brown"), vec![7..12]);
+        assert_eq!(t.find_opts_limited("o", false, false, 0), Vec::new());
         assert!(t.find("quick absent").is_empty());
+    }
+
+    #[test]
+    fn limited_search_stops_after_the_requested_matches() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "oooo", 10.0, 10.0, 6.0);
+        let text = layout(glyphs);
+        assert_eq!(text.find_opts_limited("o", false, false, 2), vec![0..1, 1..2]);
+        assert_eq!(text.find_opts_limited("o", false, false, 10), vec![0..1, 1..2, 2..3, 3..4]);
     }
 
     fn word(v: &mut Vec<TextGlyph>, s: &str, x: f32, y: f32, advance: f32) {
@@ -1586,6 +2001,69 @@ mod tests {
     }
 
     #[test]
+    fn short_doubled_word_at_same_origin_does_not_interleave() {
+        let ops = "BT /F1 12 Tf 50 Tz 1 0 0 1 100 200 Tm (world) Tj ET\n".repeat(2);
+        assert_single_word(page_glyphs(&ops));
+    }
+
+    #[test]
+    fn short_near_shadow_does_not_interleave() {
+        let ops = "BT /F1 12 Tf 50 Tz 1 0 0 1 100 200 Tm (world) Tj ET\nBT /F1 12 Tf 50 Tz 1 0 0 1 101 200 Tm (world) Tj ET\n";
+        assert_single_word(page_glyphs(ops));
+    }
+
+    #[test]
+    fn turned_short_doubled_word_does_not_interleave() {
+        let one = turned(37.0, 1, 12.0, 100.0, 200.0, "50 Tz (world) Tj");
+        assert_single_word(page_glyphs(&(one.clone() + &one)));
+    }
+
+    #[test]
+    fn large_backward_tj_adjustment_stays_in_one_run() {
+        let text = page_glyphs("BT /F1 12 Tf 50 Tz 1 0 0 1 100 200 Tm [(wor) 3000 (ld)] TJ ET");
+        assert_eq!(text.plain_text(), "ld wor");
+        assert_eq!(text.glyphs.iter().map(|g| g.text.as_str()).collect::<Vec<_>>(), ["l", "d", "w", "o", "r"]);
+        assert!(text.line_of.iter().all(|line| *line == 0));
+        assert_eq!(text.space_before, [false, false, true, false, false]);
+    }
+
+    #[test]
+    fn reset_prefix_requires_one_glyph_height_of_progress() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "abc", 10.0, 10.0, 6.0);
+        word(&mut glyphs, "abc", 10.0, 10.0, 6.0);
+        let glyphs: Vec<&TextGlyph> = glyphs.iter().collect();
+        assert!(!restarts_run(&glyphs, 0, 3, 9.99));
+        assert!(!restarts_run(&glyphs, 0, 3, 10.0));
+        assert!(restarts_run(&glyphs, 0, 3, 10.01));
+    }
+
+    #[test]
+    fn reset_prefix_uses_the_existing_redraw_position_tolerance() {
+        let mut near = Vec::new();
+        word(&mut near, "abc", 10.0, 10.0, 6.0);
+        word(&mut near, "abc", 11.99, 10.0, 6.0);
+        let near: Vec<&TextGlyph> = near.iter().collect();
+        assert!(restarts_run(&near, 0, 3, 10.01));
+
+        let mut far = Vec::new();
+        word(&mut far, "abc", 10.0, 10.0, 6.0);
+        word(&mut far, "abc", 12.01, 10.0, 6.0);
+        let far: Vec<&TextGlyph> = far.iter().collect();
+        assert!(!restarts_run(&far, 0, 3, 10.01));
+    }
+
+    #[test]
+    fn reset_prefix_rejects_non_finite_positions() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "abc", 10.0, 10.0, 6.0);
+        word(&mut glyphs, "abc", 10.0, 10.0, 6.0);
+        glyphs[3].rect[0] = f32::NAN;
+        let glyphs: Vec<&TextGlyph> = glyphs.iter().collect();
+        assert!(!restarts_run(&glyphs, 0, 3, 10.01));
+    }
+
+    #[test]
     fn turned_lines_group_along_their_baseline() {
         // Two lines 13 pt apart, words separated by TJ offsets (no space glyphs), the second
         // line drawn first. Turned away from the quarter turns, the lines' boxes overlap.
@@ -1680,6 +2158,13 @@ mod tests {
 
     fn page_glyphs(ops: &str) -> PageText {
         extract_page(&text_page(ops), 0, &InterpreterSettings::default()).unwrap()
+    }
+
+    fn assert_single_word(text: PageText) {
+        assert_eq!(text.plain_text(), "world");
+        assert_eq!(text.glyphs.iter().map(|g| g.text.as_str()).collect::<String>(), "world");
+        assert_eq!(text.line_of, [0; 5]);
+        assert_eq!(text.space_before, [false; 5]);
     }
 
     #[test]

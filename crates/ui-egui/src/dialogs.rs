@@ -25,6 +25,10 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
         app.view_draft = None;
         return;
     };
+    // Properties ▸ Fonts shows the fonts as they are now, after any content edits.
+    if let (Dialog::Properties(PropsTab::Fonts), Some((_, id))) = (dialog, app.active_ids()) {
+        app.session.refresh_fonts(id);
+    }
     // Seed the editable Description fields from the document when the dialog opens.
     if let (Dialog::Properties(_), Some((_, id))) = (dialog, app.active_ids())
         && app.props_draft.as_ref().is_none_or(|(d, _)| *d != id)
@@ -219,13 +223,13 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                             ui.label("");
                             ui.add_enabled_ui(editable, |ui| {
                                 ui.vertical(|ui| {
-                                    ui.checkbox(&mut v.fit_window, tl!("Resize window to initial page"));
-                                    ui.checkbox(&mut v.center_window, tl!("Center window on screen"));
-                                    ui.checkbox(&mut v.full_screen, tl!("Open in Full Screen mode"));
+                                    ui.add(widgets::checkbox(&mut v.fit_window, tl!("Resize window to initial page")));
+                                    ui.add(widgets::checkbox(&mut v.center_window, tl!("Center window on screen")));
+                                    ui.add(widgets::checkbox(&mut v.full_screen, tl!("Open in Full Screen mode")));
                                     ui.horizontal(|ui| {
                                         ui.label(tl!("Show:"));
-                                        ui.radio_value(&mut v.display_title, false, tl!("File Name"));
-                                        ui.radio_value(&mut v.display_title, true, tl!("Document Title"));
+                                        widgets::radio_value(ui, &mut v.display_title, false, tl!("File Name"));
+                                        widgets::radio_value(ui, &mut v.display_title, true, tl!("Document Title"));
                                     });
                                 });
                             });
@@ -235,9 +239,9 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                             ui.label("");
                             ui.add_enabled_ui(editable, |ui| {
                                 ui.vertical(|ui| {
-                                    ui.checkbox(&mut v.hide_menubar, tl!("Hide menu bar"));
-                                    ui.checkbox(&mut v.hide_toolbar, tl!("Hide toolbars"));
-                                    ui.checkbox(&mut v.hide_window_ui, tl!("Hide window controls"));
+                                    ui.add(widgets::checkbox(&mut v.hide_menubar, tl!("Hide menu bar")));
+                                    ui.add(widgets::checkbox(&mut v.hide_toolbar, tl!("Hide toolbars")));
+                                    ui.add(widgets::checkbox(&mut v.hide_window_ui, tl!("Hide window controls")));
                                 });
                             });
                             ui.end_row();
@@ -355,8 +359,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                                 ui.label(egui::RichText::new(tl!("Binding")).color(t.text_muted));
                                 ui.add_enabled_ui(editable, |ui| {
                                     ui.horizontal(|ui| {
-                                        ui.radio_value(&mut v.right_to_left, false, tl!("Left Edge"));
-                                        ui.radio_value(&mut v.right_to_left, true, tl!("Right Edge"));
+                                        widgets::radio_value(ui, &mut v.right_to_left, false, tl!("Left Edge"));
+                                        widgets::radio_value(ui, &mut v.right_to_left, true, tl!("Right Edge"));
                                     });
                                 });
                                 ui.end_row();
@@ -399,7 +403,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 if selected.is_empty() && draft.mode == M::Selection {
                     draft.mode = M::Pages;
                 }
-                ui.radio_value(&mut draft.mode, M::Pages, tl!("Number of pages"));
+                widgets::radio_value(ui, &mut draft.mode, M::Pages, tl!("Number of pages"));
                 ui.add_enabled_ui(draft.mode == M::Pages, |ui| {
                     ui.horizontal(|ui| {
                         ui.add_space(24.0);
@@ -407,7 +411,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         ui.add(egui::DragValue::new(&mut draft.every).range(1..=n.max(1)));
                     });
                 });
-                ui.radio_value(&mut draft.mode, M::Size, tl!("File size"));
+                widgets::radio_value(ui, &mut draft.mode, M::Size, tl!("File size"));
                 ui.add_enabled_ui(draft.mode == M::Size, |ui| {
                     ui.horizontal(|ui| {
                         ui.add_space(24.0);
@@ -416,14 +420,15 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     });
                 });
                 ui.add_enabled_ui(!marks.is_empty(), |ui| {
-                    ui.radio_value(
+                    widgets::radio_value(
+                        ui,
                         &mut draft.mode,
                         M::Bookmarks,
                         crate::i18n::fmt(tl!("Top-level bookmarks ({n})"), &[("n", &marks.len().to_string())]),
                     )
                 });
                 ui.add_enabled_ui(!selected.is_empty(), |ui| {
-                    ui.radio_value(&mut draft.mode, M::Selection, tl!("Before each selected page (select pages in Organize)"))
+                    widgets::radio_value(ui, &mut draft.mode, M::Selection, tl!("Before each selected page (select pages in Organize)"))
                 });
                 let plan = match draft.mode {
                     M::Pages => crate::SplitPlan::By(pdfcraft_engine::SplitBy::PageCount(draft.every)),
@@ -566,8 +571,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     let l = ui.label(tl!("File name"));
                     ui.add(egui::TextEdit::singleline(&mut app.extract_draft.name).desired_width(240.0)).labelled_by(l.id);
                 });
-                ui.checkbox(&mut app.extract_draft.delete, tl!("Delete pages after extracting"));
-                ui.checkbox(&mut app.extract_draft.separate, tl!("Extract pages as separate files"));
+                ui.add(widgets::checkbox(&mut app.extract_draft.delete, tl!("Delete pages after extracting")));
+                ui.add(widgets::checkbox(&mut app.extract_draft.separate, tl!("Extract pages as separate files")));
                 ui.add_space(12.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if widgets::pill_button(ui, tl!("Extract"), true).clicked() {
@@ -602,10 +607,10 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     ui.end_row();
                     ui.label(tl!("Pages:"));
                     ui.vertical(|ui| {
-                        ui.radio_value(&mut d.which, 0, tl!("All"));
-                        ui.radio_value(&mut d.which, 1, tl!("Selection"));
+                        widgets::radio_value(ui, &mut d.which, 0, tl!("All"));
+                        widgets::radio_value(ui, &mut d.which, 1, tl!("Selection"));
                         ui.horizontal(|ui| {
-                            ui.radio_value(&mut d.which, 2, tl!("From"));
+                            widgets::radio_value(ui, &mut d.which, 2, tl!("From"));
                             ui.add_enabled(d.which == 2, egui::DragValue::new(&mut d.from).range(1..=n));
                             ui.label(tl!("to"));
                             ui.add_enabled(d.which == 2, egui::DragValue::new(&mut d.to).range(1..=n));
@@ -662,9 +667,9 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 ui.label(egui::RichText::new(tl!("Duplicate Field")).font(theme::semibold(18.0)));
                 ui.add_space(8.0);
                 ui.label(crate::i18n::fmt(tl!("Duplicate \"{name}\" onto:"), &[("name", &d.name)]));
-                ui.radio_value(&mut d.all, true, tl!("All pages"));
+                widgets::radio_value(ui, &mut d.all, true, tl!("All pages"));
                 ui.horizontal(|ui| {
-                    ui.radio_value(&mut d.all, false, tl!("From"));
+                    widgets::radio_value(ui, &mut d.all, false, tl!("From"));
                     ui.add_enabled(!d.all, egui::DragValue::new(&mut d.from).range(1..=n));
                     ui.label(tl!("to"));
                     ui.add_enabled(!d.all, egui::DragValue::new(&mut d.to).range(1..=n));
@@ -730,7 +735,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 ui.label(egui::RichText::new(tl!("Summarize Options")).font(theme::semibold(18.0)));
                 ui.add_space(8.0);
                 ui.label(tl!("Choose a layout:"));
-                let _ = ui.radio(true, tl!("Comments only"));
+                let _ = ui.add(widgets::radio(true, tl!("Comments only")));
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     ui.label(tl!("Sort comments by:"));
@@ -840,7 +845,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Signature => {
-                let (apply, cancel, browse) = crate::fill_sign::signature_pad(ui, &t, &mut app.signature_draft, &mut app.signature_preview);
+                let (apply, cancel, browse) =
+                    crate::fill_sign::signature_pad(ui, &t, &mut app.signature_draft, &mut app.signature_preview, &mut app.signature_photo);
                 if browse {
                     app.pick_signature_image();
                 }
@@ -897,7 +903,9 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Preferences => {
-                close = crate::js_ui::preferences_body(ui, app, &t);
+                // The settings outgrow a short window: scroll them rather than run off the screen.
+                let max = (ui.ctx().content_rect().height() - 120.0).max(200.0);
+                close = egui::ScrollArea::vertical().max_height(max).show(ui, |ui| crate::js_ui::preferences_body(ui, app, &t)).inner;
                 return;
             }
             Dialog::RecognizeText => {

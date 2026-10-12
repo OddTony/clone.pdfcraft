@@ -2,7 +2,8 @@
 //!
 //! The embedded faces (Inter, egui's defaults, craft-fonts) come first in every family; this one
 //! only draws characters none of them has, such as an Arabic file name in a build without
-//! craft-fonts, or the Simplified Chinese interface in a build without a `Hans` face (#826). It is
+//! craft-fonts, or the Simplified Chinese interface in a build without a `Hans` face (#826). A
+//! second installed face, [`devanagari_fallback`], draws Hindi when one is installed. It is
 //! read at runtime and never embedded or shipped (AGENTS.md §1.4), and `PDFCRAFT_SYSTEM_FONTS=0`
 //! turns it off (published screenshots do).
 
@@ -17,8 +18,10 @@ const MAX_BYTES: u64 = 32 << 20;
 const MAX_HAN_BYTES: u64 = 96 << 20;
 /// Faces tried in a collection (`.ttc`).
 const MAX_FACES: u32 = 16;
-/// Arabic letter alef: the face must have it to be worth loading.
+/// Arabic letter alef: the face must have it to be worth loading for Arabic script.
 const PROBE: char = '\u{0627}';
+/// Devanagari letter ka: the face must have it to cover Hindi.
+const DEVANAGARI_PROBE: char = '\u{0915}';
 /// 欢 (U+6B22): Simplified only, absent from the Japanese craft-fonts faces.
 const HANS_PROBE: char = '\u{6B22}';
 /// 說 (U+8AAA): Traditional only, absent from the Japanese craft-fonts faces.
@@ -60,6 +63,55 @@ fn load(need: Need) -> Option<Arc<FontData>> {
         Need::Hant => (HANT_PROBE, MAX_HAN_BYTES),
     };
     candidates(need).iter().find_map(|path| read(path, probe, max))
+}
+
+/// The installed fallback face for Devanagari (Hindi), read once. `None` when it is turned off
+/// or no candidate is installed; the interface then draws what the embedded faces can.
+pub fn devanagari_fallback() -> Option<Arc<FontData>> {
+    static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            if std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0") {
+                return None;
+            }
+            devanagari_candidates().iter().find_map(|path| read(path, DEVANAGARI_PROBE, MAX_BYTES))
+        })
+        .clone()
+}
+
+/// Well-known locations of Devanagari (Hindi) faces, best first.
+fn devanagari_candidates() -> Vec<PathBuf> {
+    if cfg!(windows) {
+        ["Nirmala.ttf", "NirmalaB.ttf", "mangal.ttf", "aparaj.ttf", "utsah.ttf"].iter().map(|f| windows_fonts().join(f)).collect()
+    } else if cfg!(target_os = "macos") {
+        [
+            "/System/Library/Fonts/Supplemental/DevanagariMT.ttc",
+            "/System/Library/Fonts/Supplemental/DevanagariSangamMN.ttc",
+            "/System/Library/Fonts/Supplemental/Kohinoor.ttc",
+            "/System/Library/Fonts/Kohinoor.ttc",
+            "/Library/Fonts/Arial Unicode.ttf",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
+    } else {
+        unix_fonts(&[
+            "google-noto/NotoSansDevanagariUI-Regular.ttf",
+            "google-noto/NotoSansDevanagari-Regular.ttf",
+            "google-noto-vf/NotoSansDevanagari[wght].ttf",
+            "truetype/noto/NotoSansDevanagari-Regular.ttf",
+            "truetype/noto/NotoSansDevanagariUI-Regular.ttf",
+            "noto/NotoSansDevanagari-Regular.ttf",
+            "noto/NotoSansDevanagariUI-Regular.ttf",
+            "lohit-devanagari-fonts/Lohit-Devanagari.ttf",
+            "truetype/lohit-devanagari/Lohit-Devanagari.ttf",
+            "truetype/deva/Lohit-Devanagari.ttf",
+            "lohit-hindi/Lohit-Hindi.ttf",
+            "google-droid-sans-fonts/DroidSansDevanagari-Regular.ttf",
+            "samyak-fonts/Samyak-Devanagari.ttf",
+            "gargi/Gargi.ttf",
+        ])
+    }
 }
 
 /// Well-known locations of faces with broad script coverage, best first.

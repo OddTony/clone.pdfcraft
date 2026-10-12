@@ -56,7 +56,7 @@ const AR_DAYS: [&str; 7] = ["الأحد", "الاثنين", "الثلاثاء", 
 
 /// The languages month and weekday names can be written in (Preferences ▸ Date format ▸ Language):
 /// the interface languages, in the same order and with the same names.
-pub const DATE_LANGUAGES: [DateLanguage; 21] = [
+pub static DATE_LANGUAGES: [DateLanguage; 22] = [
     DateLanguage {
         code: "en",
         name: "English",
@@ -297,9 +297,35 @@ pub const DATE_LANGUAGES: [DateLanguage; 21] = [
     DateLanguage {
         code: "el",
         name: "Ελληνικά",
-        months: ["Ιανουάριος", "Φεβρουάριος", "Μάρτιος", "Απρίλιος", "Μάιος", "Ιούνιος", "Ιούλιος", "Αύγουστος", "Σεπτέμβριος", "Οκτώβριος", "Νοέμβριος", "Δεκέμβριος"],
-        months_with_day: Some(["Ιανουαρίου", "Φεβρουαρίου", "Μαρτίου", "Απριλίου", "Μαΐου", "Ιουνίου", "Ιουλίου", "Αυγούστου", "Σεπτεμβρίου", "Οκτωβρίου", "Νοεμβρίου", "Δεκεμβρίου"]),
-        months_short: ["Ιαν", "Φεβ", "Μαρ", "Απρ", "Μαΐ", "Ιουν", "Ιουλ", "Αυγ", "Σεπ", "Οκτ", "Νοε", "Δεκ"],
+        months: [
+            "Ιανουάριος",
+            "Φεβρουάριος",
+            "Μάρτιος",
+            "Απρίλιος",
+            "Μάιος",
+            "Ιούνιος",
+            "Ιούλιος",
+            "Αύγουστος",
+            "Σεπτέμβριος",
+            "Οκτώβριος",
+            "Νοέμβριος",
+            "Δεκέμβριος",
+        ],
+        months_with_day: Some([
+            "Ιανουαρίου",
+            "Φεβρουαρίου",
+            "Μαρτίου",
+            "Απριλίου",
+            "Μαΐου",
+            "Ιουνίου",
+            "Ιουλίου",
+            "Αυγούστου",
+            "Σεπτεμβρίου",
+            "Οκτωβρίου",
+            "Νοεμβρίου",
+            "Δεκεμβρίου",
+        ]),
+        months_short: ["Ιαν", "Φεβ", "Μαρ", "Απρ", "Μάι", "Ιουν", "Ιουλ", "Αυγ", "Σεπ", "Οκτ", "Νοε", "Δεκ"],
         days: ["Κυριακή", "Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο"],
         days_short: ["Κυρ", "Δευ", "Τρί", "Τετ", "Πέμ", "Παρ", "Σάβ"],
     },
@@ -311,6 +337,28 @@ pub const DATE_LANGUAGES: [DateLanguage; 21] = [
         months_short: ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"],
         days: ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"],
         days_short: ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"],
+    },
+    DateLanguage {
+        code: "lt",
+        name: "Lietuvių",
+        months: ["sausis", "vasaris", "kovas", "balandis", "gegužė", "birželis", "liepa", "rugpjūtis", "rugsėjis", "spalis", "lapkritis", "gruodis"],
+        months_with_day: Some([
+            "sausio",
+            "vasario",
+            "kovo",
+            "balandžio",
+            "gegužės",
+            "birželio",
+            "liepos",
+            "rugpjūčio",
+            "rugsėjo",
+            "spalio",
+            "lapkričio",
+            "gruodžio",
+        ]),
+        months_short: ["saus.", "vas.", "kov.", "bal.", "geg.", "birž.", "liep.", "rugpj.", "rugs.", "spal.", "lapkr.", "gruod."],
+        days: ["sekmadienis", "pirmadienis", "antradienis", "trečiadienis", "ketvirtadienis", "penktadienis", "šeštadienis"],
+        days_short: ["sk", "pr", "an", "tr", "kt", "pn", "št"],
     },
 ];
 
@@ -625,6 +673,9 @@ mod tests {
         assert_eq!(s.today_text(Some("dddd d mmmm"), Some("de")).as_deref(), Ok("Dienstag 14 November"));
         assert!(s.set_date_language(Some("xx")).unwrap_err().contains("zh-hant"), "only the interface languages");
         assert_eq!(s.date_language(), Some("pt-br"), "an unknown language keeps the previous one");
+        s.set_date_language(Some("LT")).unwrap();
+        assert_eq!(s.date_language(), Some("lt"));
+        assert_eq!(s.today_text(Some("dddd d mmmm"), None).as_deref(), Ok("antradienis 14 lapkričio"));
         s.set_date_language(Some("IT")).unwrap();
         assert_eq!(s.date_language(), Some("it"));
         assert_eq!(s.today_text_for_pdf(None, None).as_deref(), Ok("martedì 14 novembre"), "Italian names and accents can be written into a PDF");

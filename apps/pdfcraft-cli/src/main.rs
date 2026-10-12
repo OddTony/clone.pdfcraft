@@ -151,6 +151,7 @@ fn version() -> Result<(), CliError> {
 /// Audit a document for faux redactions. Prints the findings as JSON; fails when any are
 /// found so scripts and CI can gate on it, and when the audit itself cannot run.
 fn audit(args: &[String]) -> Result<(), CliError> {
+    validate_options("audit", args, AUDIT_OPTIONS)?;
     let path = *positional(args).first().ok_or("audit: missing file")?;
     let bytes = read(path)?;
     let doc = pdfcraft_cos::Document::open_with_password(bytes, flag(args, "--password")).map_err(|e| format!("{path}: {e}"))?;
@@ -213,6 +214,7 @@ fn validate_options(command: &str, args: &[String], specs: &[OptionSpec]) -> Res
 }
 
 const INFO_OPTIONS: &[OptionSpec] = &[OptionSpec { name: "--password", takes_value: true }];
+const AUDIT_OPTIONS: &[OptionSpec] = &[OptionSpec { name: "--password", takes_value: true }];
 const TEXT_OPTIONS: &[OptionSpec] = &[OptionSpec { name: "--page", takes_value: true }, OptionSpec { name: "--password", takes_value: true }];
 const COMBINE_OPTIONS: &[OptionSpec] = &[OptionSpec { name: "--out", takes_value: true }];
 const EXTRACT_OPTIONS: &[OptionSpec] = &[
@@ -340,7 +342,7 @@ fn text(args: &[String]) -> Result<(), CliError> {
     };
     let mut failed: Vec<usize> = Vec::new();
     for (n, p) in pages.iter().enumerate() {
-        let out = r.render(RenderRequest { page: *p, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0 });
+        let out = r.render(RenderRequest { page: *p, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, preview: false });
         if let Some(e) = out.error {
             let _ = writeln!(std::io::stderr().lock(), "page {}: {e}", p + 1);
             failed.push(p + 1);
@@ -426,6 +428,17 @@ fn edit(args: &[String]) -> Result<(), CliError> {
     let mut session = Session::new();
     let id = session.open(path, Some(path.to_string()), read(path)?, password).map_err(|e| e.to_string())?;
     for e in edits {
+        // A destination past the end must fail like `page_move` / `page_insert_blank` do, not
+        // silently become an append (#1330). Checked per edit: earlier edits change the count.
+        let n = session.get(id).map_or(0, |d| d.info.pages.len());
+        let destination = match &e {
+            Edit::MovePages { to, .. } => Some(("--move target", *to)),
+            Edit::InsertBlankPage { at, .. } => Some(("--insert-blank", *at)),
+            _ => None,
+        };
+        if let Some((option, at)) = destination.filter(|(_, at)| *at > n) {
+            return Err(format!("{option} {} is past the end: it must be between 1 and {} (the document has {n} pages)", at + 1, n + 1).into());
+        }
         session.apply(id, e).map_err(|e| e.to_string())?;
     }
     let bytes = if full { session.save_full_bytes(id) } else { session.save_bytes(id) }.map_err(|e| e.to_string())?;
@@ -503,7 +516,7 @@ fn render(args: &[String]) -> Result<(), CliError> {
         read(path)?,
         RenderConfig { password: flag(args, "--password").map(Arc::from), reject_oversize: true, ..Default::default() },
     );
-    let p = r.render(RenderRequest { page: page_index, kind: RequestKind::Pixels, tile: None, scale: dpi / 72.0, tag: 0 });
+    let p = r.render(RenderRequest { page: page_index, kind: RequestKind::Pixels, tile: None, scale: dpi / 72.0, tag: 0, preview: false });
     if let Some(e) = p.error {
         return Err(e.into());
     }
@@ -541,8 +554,8 @@ fn check_one(args: &[String]) -> Result<(), CliError> {
             let mut r = PageRenderer::new(bytes, RenderConfig::default());
             let mut failed = Vec::new();
             for i in 0..info.pages.len().min(500) {
-                let p = r.render(RenderRequest { page: i, kind: RequestKind::Pixels, tile: None, scale: dpi / 72.0, tag: 0 });
-                if let Some(e) = r.render(RenderRequest { page: i, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0 }).error {
+                let p = r.render(RenderRequest { page: i, kind: RequestKind::Pixels, tile: None, scale: dpi / 72.0, tag: 0, preview: false });
+                if let Some(e) = r.render(RenderRequest { page: i, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, preview: false }).error {
                     failed.push(format!("p{} text: {e}", i + 1));
                 }
                 if let Some(e) = p.error {

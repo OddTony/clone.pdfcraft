@@ -10,9 +10,9 @@ use pdfcraft_render::{Annotation, DocInfo};
 
 use crate::canvas::DocView;
 use crate::comments::{CommentPrefs, CommentTool, SortBy, color32, status_badge};
-use crate::icons;
 use crate::panels::Nav;
 use crate::theme::{self, Tokens};
+use crate::{icons, widgets};
 
 /// Accent bar of the selected card (11-visual-spec §3: `#0165DD`).
 const CARD_ACCENT: Color32 = Color32::from_rgb(0x01, 0x65, 0xDD);
@@ -207,7 +207,8 @@ pub(crate) fn show(
             if g.is_some() && g != group {
                 ui.add_space(6.0);
                 let title = g.clone().unwrap_or_default();
-                let shown = if sort == SortBy::Author && a.author.is_some() { title.as_str() } else { tl!(&title) };
+                // Catalog labels are already in display order; an author's name is put in it here.
+                let shown = if sort == SortBy::Author && a.author.is_some() { crate::bidi::visual_auto(&title) } else { tl!(&title).into() };
                 ui.label(egui::RichText::new(shown).font(theme::semibold(12.5)).color(t.text_muted));
                 group = g;
             }
@@ -265,7 +266,8 @@ fn card(
             let mut buttons_left = f32::INFINITY;
             let head = ui.horizontal(|ui| {
                 avatar(ui, t, Some(subtype_icon(&a.subtype)), None, color);
-                ui.label(egui::RichText::new(a.author.as_deref().unwrap_or_else(|| tl!("Unknown author"))).font(theme::semibold(12.5)).color(t.text));
+                let author = a.author.as_deref().map_or_else(|| tl!("Unknown author").into(), crate::bidi::visual_auto);
+                ui.label(egui::RichText::new(author).font(theme::semibold(12.5)).color(t.text));
                 if let Some(m) = &a.modified {
                     ui.add(egui::Label::new(egui::RichText::new(m).font(theme::regular(11.0)).color(t.text_faint)).truncate());
                 }
@@ -311,16 +313,16 @@ fn card(
                     });
                 } else {
                     let body = a.contents.as_deref().unwrap_or("");
-                    let text = if body.is_empty() {
-                        egui::RichText::new(tl!(kind_label(a))).italics().color(t.text_faint)
+                    if body.is_empty() {
+                        let text = egui::RichText::new(tl!(kind_label(a))).italics().color(t.text_faint).font(theme::regular(13.0));
+                        let mut label = egui::Label::new(text).wrap();
+                        if !selected {
+                            label = label.truncate();
+                        }
+                        ui.add(label);
                     } else {
-                        egui::RichText::new(body).color(t.text)
-                    };
-                    let mut label = egui::Label::new(text.font(theme::regular(13.0))).wrap();
-                    if !selected {
-                        label = label.truncate();
+                        widgets::wrapped_text(ui, body, theme::regular(13.0), t.text, !selected);
                     }
-                    ui.add(label);
                 }
                 if let Some((icon, label, c)) = status.and_then(status_badge) {
                     ui.add_space(4.0);
@@ -338,15 +340,13 @@ fn card(
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(r.author.as_deref().unwrap_or_else(|| tl!("Reply"))).font(theme::semibold(12.0)));
+                            let author = r.author.as_deref().map_or_else(|| tl!("Reply").into(), crate::bidi::visual_auto);
+                            ui.label(egui::RichText::new(author).font(theme::semibold(12.0)));
                             if let Some(m) = &r.modified {
                                 ui.add(egui::Label::new(egui::RichText::new(m).font(theme::regular(11.0)).color(t.text_faint)).truncate());
                             }
                         });
-                        ui.add(
-                            egui::Label::new(egui::RichText::new(r.contents.as_deref().unwrap_or("")).font(theme::regular(12.5)).color(t.text))
-                                .wrap(),
-                        );
+                        widgets::wrapped_text(ui, r.contents.as_deref().unwrap_or(""), theme::regular(12.5), t.text, false);
                     });
                 });
                 let x = resp.response.rect.left() + 12.0;
@@ -510,7 +510,7 @@ pub(crate) fn header_controls(ui: &mut egui::Ui, info: &DocInfo, view: &mut DocV
             (SortBy::Type, tl!("Type")),
             (SortBy::Color, tl!("Colour")),
         ] {
-            if ui.radio(cv.sort == s, label).clicked() {
+            if ui.add(widgets::radio(cv.sort == s, label)).clicked() {
                 cv.sort = s;
                 ui.close();
             }
@@ -533,7 +533,7 @@ pub(crate) fn header_controls(ui: &mut egui::Ui, info: &DocInfo, view: &mut DocV
         ui.set_min_width(200.0);
         let toggle = |ui: &mut egui::Ui, list: &mut Vec<String>, value: &str, label: &str| {
             let mut shown = !list.iter().any(|x| x == value);
-            if ui.checkbox(&mut shown, label).changed() {
+            if ui.add(widgets::checkbox(&mut shown, label)).changed() {
                 if shown {
                     list.retain(|x| x != value);
                 } else {
@@ -548,7 +548,8 @@ pub(crate) fn header_controls(ui: &mut egui::Ui, info: &DocInfo, view: &mut DocV
         ui.separator();
         ui.label(egui::RichText::new(tl!("Author")).small());
         for a in &authors {
-            toggle(ui, &mut cv.hidden_authors, a, if a.is_empty() { tl!("Unknown author") } else { a });
+            let name = crate::bidi::visual_auto(a);
+            toggle(ui, &mut cv.hidden_authors, a, if a.is_empty() { tl!("Unknown author") } else { &name });
         }
         ui.separator();
         ui.label(egui::RichText::new(tl!("Status")).small());

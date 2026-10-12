@@ -135,15 +135,20 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
                 ui.end_row();
                 ui.label(tl!("Pages"));
                 ui.vertical(|ui| {
-                    ui.radio_value(&mut d.range, Range::All, tl!("All"));
-                    ui.radio_value(&mut d.range, Range::Current, crate::i18n::fmt(tl!("Current page ({n})"), &[("n", &(current + 1).to_string())]));
+                    widgets::radio_value(ui, &mut d.range, Range::All, tl!("All"));
+                    widgets::radio_value(
+                        ui,
+                        &mut d.range,
+                        Range::Current,
+                        crate::i18n::fmt(tl!("Current page ({n})"), &[("n", &(current + 1).to_string())]),
+                    );
                     let (mut a, mut b) = match d.range {
                         Range::Pages(a, b) => (a, b),
                         _ => (1, count),
                     };
                     ui.horizontal(|ui| {
                         let on = matches!(d.range, Range::Pages(..));
-                        if ui.radio(on, tl!("From")).clicked() {
+                        if ui.add(widgets::radio(on, tl!("From"))).clicked() {
                             d.range = Range::Pages(a, b);
                         }
                         let ra = ui.add(egui::DragValue::new(&mut a).range(1..=count));

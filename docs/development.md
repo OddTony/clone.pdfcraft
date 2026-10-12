@@ -22,8 +22,8 @@ Cargo stores custom-profile artifacts separately under `target/low-disk`. Switch
 normal and low-disk profiles can therefore leave both sets of artifacts on disk. To remove only
 the low-disk artifacts, run `cargo clean --profile low-disk`.
 
-The UI crate and complete desktop/web builds require Rust 1.95 or later, matching the pinned
-`craft-ui` dependency. The workspace's core-crate minimum is unchanged.
+Building PdfCraft requires Rust 1.95 or later: the UI crate and its `egui` and `craft-ui`
+dependencies need it, and the workspace `rust-version` states the same minimum.
 
 ## Interface appearance
 

@@ -154,6 +154,8 @@ fn kind_of(ty: &[u8]) -> Kind {
 /// is filled in as the walk goes on.
 #[derive(Debug)]
 pub(crate) struct Frame {
+    /// Indirect object holding this tag, if it is not an inline dictionary.
+    object: Option<ObjRef>,
     /// The standard type after the role map, or the type as written when it maps to nothing.
     ty: Vec<u8>,
     kind: Kind,
@@ -314,7 +316,7 @@ impl Walker<'_> {
             }
             Object::Int(_) => self.mark_content(),
             Object::Ref(r) => self.reference(*r, depth, page, v),
-            Object::Dict(_) => self.dict(loc, depth, page, v),
+            Object::Dict(_) => self.dict(loc, depth, page, None, v),
             _ => {}
         }
     }
@@ -326,13 +328,13 @@ impl Walker<'_> {
         }
         let target = self.doc.get(r);
         if target.as_dict().is_some() {
-            self.dict(&Loc { owner: target, path: Vec::new() }, depth, page, v);
+            self.dict(&Loc { owner: target, path: Vec::new() }, depth, page, Some(r), v);
         }
     }
 
     /// A dictionary. Marked content and object references only mark the open element; a
     /// dictionary with /S is an element, and its /K kids are read inside it.
-    fn dict<V: Visitor>(&mut self, loc: &Loc, depth: usize, page: Option<usize>, v: &mut V) {
+    fn dict<V: Visitor>(&mut self, loc: &Loc, depth: usize, page: Option<usize>, object: Option<ObjRef>, v: &mut V) {
         let Some(d) = loc.value().and_then(|o| o.as_dict()) else { return };
         match d.name(b"Type") {
             Some(b"MCR") => return self.mark_content(),
@@ -356,6 +358,7 @@ impl Walker<'_> {
         let kind = kind_of(&ty);
         let attrs = if matches!(kind, Kind::Table | Kind::Td | Kind::Th) { self.attr_dicts(d) } else { Vec::new() };
         let frame = Frame {
+            object,
             ty,
             kind,
             index: self.opened,
@@ -463,13 +466,15 @@ fn row_owner(path: &[Frame]) -> Option<usize> {
 fn worded(e: &Frame, what: &'static str, extra: Vec<(&'static str, String)>) -> Finding {
     let mut values = extra;
     values.push(("{ty}", String::from_utf8_lossy(&e.ty).into_owned()));
-    match e.page {
+    let mut finding = match e.page {
         Some(p) => {
             values.push(("{p}", p.saturating_add(1).to_string()));
             Finding::nested(e.page, "{ty} element on page {p}: {what}", what, values)
         }
         None => Finding::nested(None, "{ty} element: {what}", what, values),
-    }
+    };
+    finding.object = e.object;
+    finding
 }
 
 /// A finding whose `{what}` wording has no holes of its own.

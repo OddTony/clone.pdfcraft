@@ -37,6 +37,26 @@ fn home_shows_welcome_and_tools() {
     h.get_by_label("Open file");
 }
 
+#[test]
+fn tools_panel_side_preference_moves_and_persists() {
+    use pdfcraft_ui_egui::Dialog;
+
+    let mut h = harness(|_| {});
+    h.state_mut().dialog = Some(Dialog::Preferences);
+    h.run_steps(3);
+    h.get_by_label("Tools panel side");
+    h.get_by_label("Right").click();
+    h.run_steps(3);
+    assert!(h.state().docking.tools_on_right());
+    let saved = h.state().persist();
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&saved);
+    assert!(restored.docking.tools_on_right());
+    h.get_by_label("Left").click();
+    h.run_steps(3);
+    assert!(!h.state().docking.tools_on_right());
+}
+
 /// Every piece of text painted on the last frame: its whole text, whether it was cut with "…",
 /// and where it was drawn.
 fn painted_text(h: &Harness<'static, PdfCraftApp>) -> Vec<(String, bool, egui::Rect)> {
@@ -556,6 +576,30 @@ fn zoom_keeps_the_point_under_the_cursor_still() {
 }
 
 #[test]
+fn trackpad_pinch_zooms_the_pdf_under_the_pointer() {
+    let mut h = harness(|app| {
+        app.open_bytes("text.pdf", None, TEXT_FIXTURE.to_vec()).expect("opens");
+        app.set_option("left", "closed").unwrap();
+        app.set_option("panel", "none").unwrap();
+    });
+    settle(&mut h);
+    let before = h.state().views[0].glyph_screen_pos(0, 4).expect("glyph on screen");
+    let zoom = h.state().views[0].zoom;
+    h.hover_at(before);
+    h.run_steps(1);
+    h.event(egui::Event::Zoom(1.5));
+    h.run_steps(4);
+    let enlarged = &h.state().views[0];
+    assert!((enlarged.zoom - zoom * 1.5).abs() < 0.01);
+    let after = enlarged.glyph_screen_pos(0, 4).expect("glyph still on screen");
+    assert!((after - before).length() < 2.0, "moved from {before:?} to {after:?}");
+
+    h.event(egui::Event::Zoom(0.5));
+    h.run_steps(4);
+    assert!((h.state().views[0].zoom - zoom * 0.75).abs() < 0.01);
+}
+
+#[test]
 fn selection_works_in_every_view_rotation() {
     for deg in ["90", "180", "270"] {
         let mut h = harness(move |app| {
@@ -800,6 +844,8 @@ fn preferences_selects_default_workspace_for_next_open() {
     use pdfcraft_ui_egui::Mode;
     let mut h = harness(|app| app.set_option("dialog", "preferences").unwrap());
     h.get_by_label("Default workspace mode");
+    h.get_by_role_and_label(Role::RadioButton, "Read").scroll_to_me();
+    h.run_steps(4);
     h.get_by_role_and_label(Role::RadioButton, "Read").click();
     h.run_steps(2);
     assert_eq!(h.state().default_mode, Mode::Read);
@@ -808,6 +854,42 @@ fn preferences_selects_default_workspace_for_next_open() {
     h.run_steps(2);
     h.state_mut().open_bytes("fixture.pdf", None, FIXTURE.to_vec()).unwrap();
     assert_eq!(h.state().mode, Mode::Read);
+}
+
+/// Preferences ▸ Animation effects: the system's animation setting until the user chooses On or
+/// Off. The choice is saved, and settings holding anything else leave it alone.
+#[test]
+fn preferences_choose_animation_effects_and_the_choice_is_saved() {
+    use egui::accesskit::Role;
+    use pdfcraft_ui_egui::motion::AnimationEffects;
+    let mut h = harness(|app| app.set_option("dialog", "preferences").unwrap());
+    assert_eq!(h.state().animation_effects, AnimationEffects::System);
+    h.get_by_label("Animation effects");
+    for (label, choice) in [
+        ("Off", AnimationEffects::Off),
+        ("On", AnimationEffects::On),
+        ("Use system setting", AnimationEffects::System),
+        ("Off", AnimationEffects::Off),
+    ] {
+        h.get_by_role_and_label(Role::RadioButton, label).scroll_to_me();
+        h.run_steps(4);
+        h.get_by_role_and_label(Role::RadioButton, label).click();
+        h.run_steps(2);
+        assert_eq!(h.state().animation_effects, choice, "{label}");
+    }
+    let saved = h.state().persist();
+    assert!(saved.contains(r#""animation_effects":"off""#), "{saved}");
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&saved);
+    assert_eq!(restored.animation_effects, AnimationEffects::Off);
+    let mut fresh = PdfCraftApp::new();
+    fresh.restore(&saved.replace(r#""animation_effects":"off""#, r#""animation_effects":"sideways""#));
+    assert_eq!(fresh.animation_effects, AnimationEffects::System);
+    // The control channel and the command line take the same three names.
+    fresh.set_option("animation_effects", "ON").unwrap();
+    assert_eq!(fresh.animation_effects, AnimationEffects::On);
+    assert!(fresh.set_option("animation_effects", "sideways").unwrap_err().contains("system, on, or off"));
+    assert_eq!(fresh.animation_effects, AnimationEffects::On);
 }
 
 #[test]

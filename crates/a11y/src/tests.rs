@@ -164,6 +164,48 @@ fn structure_doc(objects: &[String]) -> Document {
     pdf(&objs, "")
 }
 
+#[test]
+fn reachable_tag_properties_round_trip_and_reject_unrelated_objects() {
+    let mut doc =
+        structure_doc(&["<< /S /Document /K [4 0 R] >>".into(), "<< /S /Figure /T (Old) /Alt (A chart) >>".into(), "<< /S /Figure >>".into()]);
+    let tag = pdfcraft_cos::ObjRef::new(4, 0);
+    let listed = tags(&doc);
+    assert_eq!(listed.len(), 2);
+    assert_eq!(listed[1].object, tag);
+    assert_eq!(listed[1].title.as_deref(), Some("Old"));
+    for (property, value) in [
+        (TagProperty::Type, "P"),
+        (TagProperty::Title, "Figure title"),
+        (TagProperty::ActualText, " Revenue increased "),
+        (TagProperty::AlternateText, "A rising chart"),
+        (TagProperty::Language, "en-GB"),
+    ] {
+        set_tag_property(&mut doc, tag, property, Some(value)).unwrap();
+    }
+    let edited = &tags(&doc)[1];
+    assert_eq!(edited.kind, "P");
+    assert_eq!(edited.title.as_deref(), Some("Figure title"));
+    assert_eq!(edited.actual_text.as_deref(), Some(" Revenue increased "));
+    assert_eq!(edited.alt.as_deref(), Some("A rising chart"));
+    assert_eq!(edited.language.as_deref(), Some("en-GB"));
+    set_tag_property(&mut doc, tag, TagProperty::Title, None).unwrap();
+    assert_eq!(tags(&doc)[1].title, None);
+    assert!(matches!(set_tag_property(&mut doc, tag, TagProperty::Type, None), Err(TagError::InvalidType)));
+    assert!(matches!(set_tag_property(&mut doc, tag, TagProperty::Type, Some("bad type")), Err(TagError::InvalidType)));
+    assert!(matches!(set_tag_property(&mut doc, pdfcraft_cos::ObjRef::new(5, 0), TagProperty::Title, Some("No")), Err(TagError::NotATag(_))));
+    assert!(matches!(set_tag_property(&mut doc, pdfcraft_cos::ObjRef::new(4, 1), TagProperty::Title, Some("No")), Err(TagError::NotATag(_))));
+}
+
+#[test]
+fn tag_hierarchy_keeps_indirect_parent_through_inline_tags() {
+    let doc = structure_doc(&["<< /S /Document /K 4 0 R >>".into(), "<< /S /Sect /K << /S /Div /K 5 0 R >> >>".into(), "<< /S /Figure >>".into()]);
+    let listed = tags(&doc);
+    assert_eq!(
+        listed.iter().map(|t| (t.object.num, t.parent.map(|p| p.num), t.depth)).collect::<Vec<_>>(),
+        [(3, None, 0), (4, Some(3), 1), (5, Some(4), 2)]
+    );
+}
+
 fn checked(doc: &Document, rules: &[Rule]) -> Report {
     check(doc, &Options { rules: rules.iter().copied().collect(), pages: None })
 }
@@ -214,6 +256,16 @@ fn cycles_shared_kids_and_missing_kids_are_read_once() {
     ]);
     let r = checked(&doc, &[Rule::FiguresAltText]);
     assert_eq!(r.result(Rule::FiguresAltText).unwrap().findings.len(), 1);
+}
+
+#[test]
+fn structure_findings_identify_indirect_elements_without_guessing_inline_objects() {
+    let doc = structure_doc(&["<< /S /Document /K [4 0 R << /S /Figure >>] >>".into(), "<< /S /Figure >>".into()]);
+    let r = checked(&doc, &[Rule::FiguresAltText]);
+    let found = &r.result(Rule::FiguresAltText).unwrap().findings;
+    assert_eq!(found.len(), 2);
+    assert_eq!(found[0].object.map(|r| r.num), Some(4));
+    assert_eq!(found[1].object, None);
 }
 
 #[test]
@@ -300,6 +352,19 @@ fn page_content_and_annotation_problems_are_found() {
     assert_eq!(got, [Rule::TaggedContent, Rule::TaggedAnnotations, Rule::TabOrder, Rule::FieldDescriptions]);
     assert_eq!(r.result(Rule::TaggedContent).unwrap().findings[0].message, "Page 1: 1 untagged content item");
     assert!(r.result(Rule::FieldDescriptions).unwrap().findings[0].message.contains("\"name\""));
+    assert_eq!(r.result(Rule::TaggedAnnotations).unwrap().findings[0].bbox, Some([20.0, 20.0, 80.0, 40.0]));
+    assert_eq!(r.result(Rule::FieldDescriptions).unwrap().findings[0].bbox, Some([20.0, 60.0, 120.0, 80.0]));
+}
+
+#[test]
+fn annotation_findings_only_locate_valid_rectangles() {
+    let cases = [("[80 40 20 20]", Some([20.0, 20.0, 80.0, 40.0])), ("[20 20 20 40]", None), ("[20 20 80]", None), ("[20 20 80 (bad)]", None)];
+    for (rect, expected) in cases {
+        let mut objs = good();
+        objs[8] = format!("<< /Type /Annot /Subtype /Link /Rect {rect} >>");
+        let r = checked(&pdf(&objs, "/Info 8 0 R"), &[Rule::TaggedAnnotations]);
+        assert_eq!(r.result(Rule::TaggedAnnotations).unwrap().findings[0].bbox, expected, "{rect}");
+    }
 }
 
 #[test]
@@ -356,6 +421,13 @@ fn rules_have_ids_and_the_report_lists_them() {
     let other = report_html(&report, "a<b>.pdf", "2026-10-02", "es", &|w| format!("«{w}»"));
     assert!(other.contains("<html lang=\"es\">") && other.contains("<h3>«Headings»</h3>") && other.contains("a&lt;b&gt;.pdf"));
     assert!(!other.contains(">Headings<"), "an English heading is left in the report: {other}");
+    let manual_only = Report { results: vec![RuleResult { rule: Rule::LogicalReadingOrder, status: Status::Manual, findings: Vec::new() }] };
+    let manual_html = report_html(&manual_only, "review.pdf", "2026-10-02", "en", &in_english);
+    assert!(manual_html.contains("<p>Needs manual check: 1</p>"));
+    assert!(!manual_html.contains("no problems"));
+    let all_passed = Report { results: vec![RuleResult { rule: Rule::LogicalReadingOrder, status: Status::Passed, findings: Vec::new() }] };
+    let passed_html = report_html(&all_passed, "review.pdf", "2026-10-02", "en", &in_english);
+    assert!(passed_html.contains("<p>The checker found no problems in this document.</p>"), "{passed_html}");
 }
 
 fn figures_doc() -> Document {
@@ -388,6 +460,49 @@ fn figures_are_listed_with_their_alt_text_and_place() {
     assert_eq!(f.len(), 2, "role-mapped Photo counts");
     assert_eq!((f[0].page, f[0].alt.as_deref(), f[0].bbox), (Some(0), None, Some([10.0, 150.0, 50.0, 170.0])));
     assert_eq!((f[1].alt.as_deref(), f[1].bbox), (Some("A bar"), Some([100.0, 100.0, 150.0, 130.0])));
+    let report = check(&doc, &Options { rules: [Rule::FiguresAltText].into(), pages: None });
+    let finding = &report.result(Rule::FiguresAltText).unwrap().findings[0];
+    assert_eq!((finding.object, finding.page, finding.bbox), (Some(f[0].obj), Some(0), f[0].bbox));
+}
+
+#[test]
+fn sibling_tags_move_in_reading_order_without_changing_content() {
+    let mut doc = figures_doc();
+    let before: Vec<_> = tags(&doc).into_iter().map(|tag| tag.object.num).collect();
+    assert_eq!(before, [6, 7, 8]);
+    let content = doc.get(pdfcraft_cos::ObjRef::new(4, 0));
+    move_tag(&mut doc, pdfcraft_cos::ObjRef::new(8, 0), pdfcraft_cos::ObjRef::new(7, 0), TagPlacement::Before).unwrap();
+    assert_eq!(tags(&doc).into_iter().map(|tag| tag.object.num).collect::<Vec<_>>(), [6, 8, 7]);
+    assert_eq!(doc.get(pdfcraft_cos::ObjRef::new(4, 0)), content, "page content stays unchanged");
+    assert_eq!(
+        move_tag(&mut doc, pdfcraft_cos::ObjRef::new(8, 0), pdfcraft_cos::ObjRef::new(7, 0), TagPlacement::Before),
+        Err(TagError::AlreadyThere)
+    );
+    move_tag(&mut doc, pdfcraft_cos::ObjRef::new(8, 0), pdfcraft_cos::ObjRef::new(7, 0), TagPlacement::After).unwrap();
+    assert_eq!(tags(&doc).into_iter().map(|tag| tag.object.num).collect::<Vec<_>>(), [6, 7, 8]);
+    assert_eq!(
+        move_tag(&mut doc, pdfcraft_cos::ObjRef::new(8, 0), pdfcraft_cos::ObjRef::new(6, 0), TagPlacement::Before),
+        Err(TagError::NotSiblings)
+    );
+    assert_eq!(
+        move_tag(&mut doc, pdfcraft_cos::ObjRef::new(8, 1), pdfcraft_cos::ObjRef::new(7, 0), TagPlacement::Before),
+        Err(TagError::NotSiblings)
+    );
+    doc.update_dict(pdfcraft_cos::ObjRef::new(6, 0), |d| {
+        d.set(
+            b"K".to_vec(),
+            pdfcraft_cos::Object::Array(vec![
+                pdfcraft_cos::Object::Ref(pdfcraft_cos::ObjRef::new(7, 0)),
+                pdfcraft_cos::Object::Ref(pdfcraft_cos::ObjRef::new(8, 0)),
+                pdfcraft_cos::Object::Ref(pdfcraft_cos::ObjRef::new(7, 0)),
+            ]),
+        );
+    })
+    .unwrap();
+    assert_eq!(
+        move_tag(&mut doc, pdfcraft_cos::ObjRef::new(8, 0), pdfcraft_cos::ObjRef::new(7, 0), TagPlacement::After),
+        Err(TagError::AmbiguousChildren)
+    );
 }
 
 #[test]

@@ -232,6 +232,21 @@ fn opt_export_values_select_button_states() {
     assert!(err.to_string().contains("options: Post, Pick-up"), "{err}");
 }
 
+/// Issue #1323: a text field without a format keeps a whitespace-only value as typed; only an
+/// empty value clears it.
+#[test]
+fn whitespace_only_text_is_kept_in_a_field_without_a_format() {
+    for value in [" ", "\t", "\u{a0}"] {
+        let mut doc = fixture();
+        set_value(&mut doc, "name", &FieldValue::Text(value.into())).unwrap();
+        let doc = reopen(&doc);
+        assert_eq!(field(&fields(&doc), "name").value, [value], "{value:?}");
+    }
+    let mut doc = fixture();
+    set_value(&mut doc, "name", &FieldValue::Text(String::new())).unwrap();
+    assert!(field(&fields(&reopen(&doc)), "name").value.is_empty());
+}
+
 #[test]
 fn text_fields_get_new_appearances() {
     let mut doc = fixture();
@@ -369,6 +384,8 @@ fn japanese_choices_use_the_unicode_cid_font() {
     assert_eq!(field(&fields(&doc), "era").options.get(2), Some(&("令".to_string(), "令".to_string())));
     set_value(&mut doc, "era", &FieldValue::Text("令".into())).unwrap();
     set_value(&mut doc, "address", &FieldValue::Text("日本語のテキスト入力欄です".into())).unwrap();
+    // An Identity-H subset can't be addressed by Unicode: Helvetica stands in, and can't draw 令.
+    // The value is kept, drawn as `??`, marked, and other viewers are asked to redraw the form.
     set_value(&mut doc, "subset", &FieldValue::Text("令和".into())).unwrap();
     let doc = reopen(&doc);
     let all = fields(&doc);
@@ -392,10 +409,115 @@ fn japanese_choices_use_the_unicode_cid_font() {
     let addr_text = String::from_utf8_lossy(&addr);
     assert!(addr_text.matches(" Tj").count() >= 4, "{addr_text}");
     assert!(addr.windows(4).any(|x| x == utf16("日本").as_slice()));
-    // An Identity-H subset can't be addressed by Unicode: Helvetica, as before.
     let (sub, sub_fonts) = raw("subset");
     assert!(String::from_utf8_lossy(&sub).contains("/Helv "), "{}", String::from_utf8_lossy(&sub));
+    assert!(sub.windows(4).any(|x| x == b"(??)"), "{}", String::from_utf8_lossy(&sub));
     assert_eq!(sub_fonts, ["Helv"]);
+    assert_eq!(field(&all, "subset").value, ["令和"]);
+    // Only that widget is marked: the CID fonts drew theirs.
+    assert_eq!(undrawn_fields(&doc), [("subset".to_string(), '令')]);
+    assert!(need_appearances(&doc));
+}
+
+/// Text a field's font can't hold is kept, as Acrobat keeps it: the value is stored as typed, the
+/// appearance draws `?` for those characters, the widget is marked with the first one, and the
+/// form asks other viewers to redraw it (`/NeedAppearances`). Drawable text clears the mark.
+#[test]
+fn text_a_field_font_cannot_hold_is_kept_marked_and_redrawn_elsewhere() {
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [7 0 R 8 0 R 9 0 R] >>".into(),
+        "<< /Fields [7 0 R 8 0 R 9 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 5 0 R /CN 6 0 R >> >> >>".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into(),
+        "<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> >>] >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /DA (/Helv 10 Tf 0 g) /V (Ada) /Rect [50 700 200 715] /P 3 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (cn) /DA (/CN 10 Tf 0 g) /Rect [50 600 200 615] /P 3 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Ch /T (city) /Ff 131072 /DA (/Helv 10 Tf 0 g) /Opt [(Zurich) <FEFF5317004E4EAC>] /Rect [50 500 200 515] /P 3 0 R >>".into(),
+    ];
+    let mut doc = document(&objs);
+    let shown = |doc: &Document, name: &str| {
+        let all = fields(doc);
+        let w = &field(&all, name).widgets[0];
+        let n = doc.get(w.obj).as_dict().unwrap().get(b"AP").unwrap().as_dict().unwrap().reference(b"N").unwrap();
+        let Object::Stream(s) = &*doc.get(n) else { panic!() };
+        let mark = doc.get(w.obj).as_dict().and_then(pdfcraft_fonts::undrawn_mark);
+        (String::from_utf8_lossy(&s.decoded().unwrap()).into_owned(), mark)
+    };
+    // A WinAnsi field: the Chinese value is kept and marked; Helvetica draws `?` for it.
+    assert!(!need_appearances(&doc));
+    set_value(&mut doc, "name", &FieldValue::Text("签名 Ada".into())).unwrap();
+    assert_eq!(field(&fields(&doc), "name").value, ["签名 Ada"]);
+    let (ap, mark) = shown(&doc, "name");
+    assert!(ap.contains("(?? Ada) Tj"), "{ap}");
+    assert_eq!(mark, Some('签'));
+    assert!(need_appearances(&doc), "other viewers are asked to redraw the form");
+    // A choice whose label Helvetica can't draw, the same way.
+    set_value(&mut doc, "city", &FieldValue::Text("北N京".into())).unwrap();
+    assert_eq!(shown(&doc, "city").1, Some('北'));
+    // A UCS-2 CMap holds 签, so nothing is marked, but not a character beyond U+FFFF.
+    set_value(&mut doc, "cn", &FieldValue::Text("签名".into())).unwrap();
+    assert_eq!(shown(&doc, "cn").1, None);
+    set_value(&mut doc, "cn", &FieldValue::Text("𠀋".into())).unwrap();
+    assert_eq!(field(&fields(&doc), "cn").value, ["𠀋"]);
+    assert_eq!(shown(&doc, "cn").1, Some('𠀋'));
+    let mut undrawn = undrawn_fields(&doc);
+    undrawn.sort();
+    assert_eq!(undrawn, [("city".to_string(), '北'), ("cn".to_string(), '𠀋'), ("name".to_string(), '签')]);
+    // Drawable text clears the mark; a line break in a single-line value is a space, not `?`.
+    set_value(&mut doc, "name", &FieldValue::Text("Ada\nLovelace".into())).unwrap();
+    let (ap, mark) = shown(&doc, "name");
+    assert!(ap.contains("(Ada Lovelace) Tj") && !ap.contains('?'), "{ap}");
+    assert_eq!(mark, None);
+    // Kept through a save.
+    let doc = reopen(&doc);
+    assert_eq!(field(&fields(&doc), "city").value, ["北N京"]);
+    assert!(need_appearances(&doc));
+}
+
+/// A document that declares PDF/A can't ask other viewers to redraw its fields (PDF/A forbids
+/// `/NeedAppearances`): the value is still kept and its widget marked, and the flag stays off.
+#[test]
+fn a_pdfa_form_keeps_the_value_without_asking_viewers_to_redraw() {
+    let xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:part="2" pdfaid:conformance="B"/></rdf:RDF></x:xmpmeta>"#;
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R /Metadata 7 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R] >>".into(),
+        "<< /Fields [6 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> >>".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /DA (/Helv 10 Tf 0 g) /Rect [50 700 200 715] /P 3 0 R >>".into(),
+        format!("<< /Type /Metadata /Subtype /XML /Length {} >>\nstream\n{xmp}\nendstream", xmp.len() + 1),
+    ];
+    let mut doc = document(&objs);
+    assert!(declares_pdfa(&doc));
+    set_value(&mut doc, "name", &FieldValue::Text("张三".into())).unwrap();
+    assert_eq!(field(&fields(&doc), "name").value, ["张三"]);
+    assert_eq!(undrawn_fields(&doc), [("name".to_string(), '张')]);
+    assert!(!need_appearances(&doc), "PDF/A forbids /NeedAppearances");
+}
+
+/// A button caption Helvetica can't draw is kept and marked like a value; redrawing a value another
+/// program stored (a dynamic form's layout, a property change) draws and marks it rather than
+/// failing, and an edit to an unrelated field never fails because of it.
+#[test]
+fn captions_and_redrawn_values_are_kept_and_marked() {
+    let mut doc = fixture();
+    let go = add_field(&mut doc, 0, [50.0, 50.0, 150.0, 80.0], &NewField::Button { caption: "提交".into() }, Some("go2")).unwrap();
+    assert_eq!(undrawn_fields(&doc), [(go.clone(), '提')]);
+    assert!(need_appearances(&doc));
+    // A value stored by another program that Helvetica can't draw.
+    let name = field(&fields(&doc), "name").clone();
+    doc.update_dict(name.obj, |d| d.set(b"V".to_vec(), PdfString::text("张三"))).unwrap();
+    redraw_field(&mut doc, "name").unwrap();
+    let mut undrawn = undrawn_fields(&doc);
+    undrawn.sort();
+    assert_eq!(undrawn, [(go, '提'), ("name".to_string(), '张')]);
+    set_value(&mut doc, "notes", &FieldValue::Text("Unrelated".into())).unwrap();
+    // Drawable again: the mark goes.
+    doc.update_dict(name.obj, |d| d.set(b"V".to_vec(), PdfString::text("Ada"))).unwrap();
+    redraw_field(&mut doc, "name").unwrap();
+    assert!(!undrawn_fields(&doc).iter().any(|(n, _)| n == "name"));
 }
 
 #[test]
@@ -1681,6 +1803,37 @@ fn partial_appearance_preserves_each_widgets_indirect_colours_and_border_extensi
         assert_eq!(mk.int(b"R"), Some(90));
         assert_eq!(mk.int(b"VendorKey"), Some(71));
     }
+}
+
+/// A whole look sets the colours of an indirect /MK and keeps its mark, rotation and unknown
+/// entries (#1322), as it already did for a direct one.
+#[test]
+fn a_whole_look_keeps_the_rest_of_an_indirect_mk() {
+    let mut doc = fixture();
+    let widget = field(&fields(&doc), "agree").widgets[0].obj;
+    let mut mk = pdfcraft_cos::Dict::new();
+    mk.set(b"CA".to_vec(), pdfcraft_cos::PdfString::text("8"));
+    mk.set(b"R".to_vec(), Object::Int(90));
+    mk.set(b"VendorKey".to_vec(), Object::Int(71));
+    let mk_ref = doc.add(Object::Dict(mk));
+    doc.update_dict(widget, |d| d.set(b"MK".to_vec(), Object::Ref(mk_ref))).unwrap();
+    let new = Look {
+        border: Some([1.0, 0.0, 0.0]),
+        fill: Some([1.0, 1.0, 0.8]),
+        width: 2.0,
+        style: BorderStyle::Solid,
+        text: [0.0; 3],
+        font: FieldFont::Helvetica,
+    };
+    set_props(&mut doc, "agree", &FieldProps { look: Some(new), ..FieldProps::default() }).unwrap();
+    let doc = reopen(&doc);
+    let f = field(&fields(&doc), "agree").clone();
+    assert_eq!((check_style(&doc, &f), f.widgets[0].rotation), (CheckStyle::Cross, 90));
+    let mk = doc.get(widget).as_dict().unwrap().get(b"MK").map(|v| doc.resolve(v)).unwrap();
+    let mk = mk.as_dict().unwrap();
+    assert_eq!(mk.int(b"VendorKey"), Some(71));
+    assert_eq!(look(&doc, &f).border, Some([1.0, 0.0, 0.0]));
+    assert_eq!(look(&doc, &f).fill, Some([1.0, 1.0, 0.8]));
 }
 
 #[test]
