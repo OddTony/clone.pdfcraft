@@ -75,9 +75,10 @@ pub struct Status {
     pub error: Option<String>,
 }
 
-/// Backend implementations must return promptly. Synthesis is polled, so Stop and Drop can
-/// cancel it even before any audio has been produced.
-pub trait Backend: Send {
+/// Backends are constructed and used on the speech worker. Native audio handles may be
+/// thread-bound (CoreAudio); only injected backends need Send to reach that worker.
+/// Implementations must return promptly so Stop/Drop can cancel preparation and playback.
+pub trait Backend {
     fn voices(&mut self) -> Result<Vec<Voice>, String>;
     fn start(&mut self, text: &str, options: &Options) -> Result<(), String>;
     fn pause(&mut self) -> Result<(), String>;
@@ -100,7 +101,7 @@ enum Request {
 pub struct Player {
     sender: Option<mpsc::SyncSender<Request>>,
     status: Arc<Mutex<Status>>,
-    backend: Option<Box<dyn Backend>>,
+    backend: Option<Box<dyn Backend + Send>>,
     available: bool,
     generation: Arc<AtomicU64>,
 }
@@ -123,7 +124,7 @@ impl Player {
     }
 
     /// Inject a backend for deterministic tests and hosts with their own speech service.
-    pub fn with_backend(backend: Box<dyn Backend>) -> Self {
+    pub fn with_backend(backend: Box<dyn Backend + Send>) -> Self {
         Self { backend: Some(backend), available: true, ..Self::new() }
     }
 
@@ -234,8 +235,8 @@ fn fail(status: &Mutex<Status>, message: String) {
     }
 }
 
-fn run(rx: mpsc::Receiver<Request>, status: &Mutex<Status>, injected: Option<Box<dyn Backend>>, generation: &AtomicU64) {
-    let mut backend = match injected.map(Ok).unwrap_or_else(native_backend) {
+fn run(rx: mpsc::Receiver<Request>, status: &Mutex<Status>, injected: Option<Box<dyn Backend + Send>>, generation: &AtomicU64) {
+    let mut backend = match injected.map(|b| Ok(b as Box<dyn Backend>)).unwrap_or_else(native_backend) {
         Ok(b) => b,
         Err(e) => {
             fail(status, e);
@@ -340,6 +341,16 @@ fn run(rx: mpsc::Receiver<Request>, status: &Mutex<Status>, injected: Option<Box
 #[cfg(windows)]
 fn native_backend() -> Result<Box<dyn Backend>, String> {
     Ok(Box::new(windows::WindowsSpeech::new()?))
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn native_backend() -> Result<Box<dyn Backend>, String> {
+    Ok(Box::new(unix::UnixSpeech::new()?))
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+fn native_backend() -> Result<Box<dyn Backend>, String> {
+    Err("Read out loud requires Windows, macOS or Linux with local speech voices; FreeBSD and web playback are not supported yet".into())
 }
 
 #[cfg(test)]
@@ -492,14 +503,4 @@ mod tests {
         std::thread::sleep(Duration::from_millis(150));
         assert_eq!(log.lock().unwrap().len(), before, "stale queued starts cannot restart stopped audio");
     }
-}
-
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-fn native_backend() -> Result<Box<dyn Backend>, String> {
-    Ok(Box::new(unix::UnixSpeech::new()?))
-}
-
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-fn native_backend() -> Result<Box<dyn Backend>, String> {
-    Err("Read out loud requires Windows, macOS or Linux with local speech voices; FreeBSD and web playback are not supported yet".into())
 }

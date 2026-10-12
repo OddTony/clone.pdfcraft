@@ -49,7 +49,7 @@ jobs:
       - name: Native Italian synthesis (macOS, when installed)
         if: runner.os == 'macOS'
         run: |
-          if /usr/bin/say -v '?' | grep -q 'it_IT'; then
+          if /usr/bin/say -v '?' | grep 'it_IT' >/dev/null; then
             cargo test -p pdfcraft-platform native_synthesizes_italian_to_valid_audio --locked -- --ignored --nocapture
           else
             echo 'Italian voice not installed on this runner: Italian native synthesis NOT TESTED.' >> "$GITHUB_STEP_SUMMARY"
