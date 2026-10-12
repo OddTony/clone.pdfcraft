@@ -622,8 +622,11 @@ pub use objects::{EditableObject, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget, ed
 
 mod flatten;
 pub use flatten::{flatten, flatten_fill_sign};
+mod geometry;
 pub mod images;
 pub use images::{ImageChange, PageImage, change_image, page_images, reading_images, rect_to_rect, turn_about_centre};
+pub mod paths;
+pub use paths::{FillRule, PagePath, Paint, page_paths};
 pub mod bidi;
 pub mod indic;
 pub mod text;

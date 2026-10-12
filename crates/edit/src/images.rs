@@ -3,12 +3,12 @@
 //! `q … cm … Q` with the extra transform), replace (it draws another XObject in the same place),
 //! or delete. Only the stream that draws it is rewritten, as a new object.
 
-use kurbo::{BezPath, Point, Shape};
+use kurbo::{Point, Shape};
 use pdfcraft_content::{Matrix, Op, parse, serialize_ops};
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
-use std::sync::Arc;
 
 use crate::EditError;
+use crate::geometry::{ClipPath, GState as ImageState, intersection};
 
 /// An image drawn on a page.
 #[derive(Clone, Debug, PartialEq)]
@@ -65,12 +65,6 @@ impl PageImage {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct ClipPath {
-    path: Arc<BezPath>,
-    even_odd: bool,
-}
-
 fn streams(doc: &Document, page: &Dict) -> Vec<(Object, Vec<u8>)> {
     let list: Vec<Object> = match page.get(b"Contents") {
         None => Vec::new(),
@@ -99,113 +93,6 @@ fn xobjects(doc: &Document, page: &Dict) -> Dict {
         .map(|r| doc.resolve(r))
         .and_then(|r| r.as_dict().and_then(|d| d.get(b"XObject").map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned())))
         .unwrap_or_default()
-}
-
-fn intersection(a: [f64; 4], b: [f64; 4]) -> Option<[f64; 4]> {
-    let r = [a[0].max(b[0]), a[1].max(b[1]), a[2].min(b[2]), a[3].min(b[3])];
-    (r.iter().all(|v| v.is_finite()) && r[2] > r[0] && r[3] > r[1]).then_some(r)
-}
-
-#[derive(Clone)]
-struct Placement {
-    matrix: Matrix,
-    clip: [f64; 4],
-    clips: Vec<ClipPath>,
-}
-
-/// Path coordinates are transformed when constructed; q/Q save clips, not the current path.
-struct ImageState {
-    placement: Placement,
-    stack: Vec<Placement>,
-    path: BezPath,
-    pending_clip: Option<bool>,
-}
-
-impl ImageState {
-    fn new(matrix: Matrix, clip: [f64; 4], clips: Vec<ClipPath>) -> Self {
-        Self { placement: Placement { matrix, clip, clips }, stack: Vec::new(), path: BezPath::new(), pending_clip: None }
-    }
-
-    fn point(&self, x: f64, y: f64) -> Point {
-        let (x, y) = self.placement.matrix.apply(x, y);
-        Point::new(x, y)
-    }
-
-    fn apply(&mut self, op: &Op) -> Result<(), EditError> {
-        if matches!(op.op.as_slice(), b"cm" | b"m" | b"l" | b"c" | b"v" | b"y" | b"re")
-            && op.operands.iter().any(|v| v.as_f64().is_some_and(|v| !v.is_finite() || v.abs() > 1e12))
-        {
-            return Err(EditError::Invalid("the image path contains invalid coordinates".into()));
-        }
-        if self.path.elements().len() > 16384 || self.stack.len() > 4096 || self.placement.clips.len() > 256 {
-            return Err(EditError::Invalid("the image clip or graphics state exceeds its complexity budget".into()));
-        }
-        match op.op.as_slice() {
-            b"q" => self.stack.push(self.placement.clone()),
-            b"Q" => {
-                if let Some(saved) = self.stack.pop() {
-                    self.placement = saved;
-                }
-            }
-            b"cm" => {
-                if let Some(m) = op.nums::<6>() {
-                    self.placement.matrix = Matrix(m).then(&self.placement.matrix);
-                }
-            }
-            b"m" => {
-                if let Some([x, y]) = op.nums::<2>() {
-                    self.path.move_to(self.point(x, y));
-                }
-            }
-            b"l" => {
-                if let Some([x, y]) = op.nums::<2>() {
-                    self.path.line_to(self.point(x, y));
-                }
-            }
-            b"c" => {
-                if let Some([x1, y1, x2, y2, x3, y3]) = op.nums::<6>() {
-                    self.path.curve_to(self.point(x1, y1), self.point(x2, y2), self.point(x3, y3));
-                }
-            }
-            b"v" => {
-                if let Some([x1, y1, x2, y2]) = op.nums::<4>()
-                    && let Some(current) = self.path.elements().last().and_then(|e| e.end_point())
-                {
-                    self.path.curve_to(current, self.point(x1, y1), self.point(x2, y2));
-                }
-            }
-            b"y" => {
-                if let Some([x1, y1, x2, y2]) = op.nums::<4>() {
-                    let end = self.point(x2, y2);
-                    self.path.curve_to(self.point(x1, y1), end, end);
-                }
-            }
-            b"h" => self.path.close_path(),
-            b"re" => {
-                if let Some([x, y, w, h]) = op.nums::<4>() {
-                    self.path.move_to(self.point(x, y));
-                    self.path.line_to(self.point(x + w, y));
-                    self.path.line_to(self.point(x + w, y + h));
-                    self.path.line_to(self.point(x, y + h));
-                    self.path.close_path();
-                }
-            }
-            b"W" => self.pending_clip = Some(false),
-            b"W*" => self.pending_clip = Some(true),
-            b"n" | b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" => {
-                if let Some(even_odd) = self.pending_clip.take() {
-                    // Filling/clipping implicitly closes open subpaths. BezPath's winding
-                    // follows the same rule, and its bounds use cubic extrema, not controls.
-                    let bounds = self.path.bounding_box();
-                    self.placement.clip = intersection(self.placement.clip, [bounds.x0, bounds.y0, bounds.x1, bounds.y1]).unwrap_or([0.0; 4]);
-                    self.placement.clips.push(ClipPath { path: Arc::new(std::mem::take(&mut self.path)), even_odd });
-                }
-                self.path = BezPath::new();
-            }
-            _ => {}
-        }
-        Ok(())
-    }
 }
 
 /// The images and Form artwork page `page` (0-based) draws, in drawing order.

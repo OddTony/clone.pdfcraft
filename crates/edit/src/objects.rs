@@ -47,7 +47,7 @@ pub struct EditableObject {
     pub text: Option<String>,
 }
 
-fn valid_rect(rect: [f64; 4]) -> bool {
+pub(crate) fn valid_rect(rect: [f64; 4]) -> bool {
     rect.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORDINATE) && rect[2] > rect[0] && rect[3] > rect[1]
 }
 
@@ -290,7 +290,7 @@ fn translate_added(doc: &mut Document, page: usize, indexes: &[usize], offset: [
 
 /// A missing or undecodable preceding stream can hide graphics state that affects every
 /// later item. Refuse group editing rather than inventing an inventory from partial data.
-fn checked_streams(doc: &Document, page: usize) -> Result<Vec<(Object, Vec<u8>)>, EditError> {
+pub(crate) fn checked_streams(doc: &Document, page: usize) -> Result<Vec<(Object, Vec<u8>)>, EditError> {
     let p = pdfcraft_model::pages(doc).into_iter().nth(page).ok_or(EditError::NoSuchPage(page))?;
     let contents = match p.dict.get(b"Contents") {
         None => Vec::new(),
