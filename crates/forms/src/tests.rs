@@ -62,6 +62,20 @@ fn reopen(doc: &Document) -> Document {
     Document::open(Arc::new(bytes)).expect("reopens")
 }
 
+fn legacy_two_call_enumeration(doc: &Document) -> (Vec<Field>, usize) {
+    (enumerate(doc).0, enumerate(doc).1)
+}
+
+fn assert_combined_matches_legacy(doc: &Document, adopted: usize) {
+    let (old_fields, old_adopted) = legacy_two_call_enumeration(doc);
+    let combined = fields_with_adopted(doc);
+    assert_eq!(combined.items, old_fields);
+    assert_eq!(combined.adopted_page_fields, old_adopted);
+    assert_eq!(combined.adopted_page_fields, adopted);
+    assert_eq!(fields(doc), old_fields, "the compatibility wrapper keeps the old fields");
+    assert_eq!(adopted_page_fields(doc), old_adopted, "the compatibility wrapper keeps the old count");
+}
+
 fn field<'a>(all: &'a [Field], name: &str) -> &'a Field {
     all.iter().find(|f| f.name == name).unwrap_or_else(|| panic!("no field {name}"))
 }
@@ -73,9 +87,28 @@ fn ap(doc: &Document, w: &Widget) -> String {
     String::from_utf8_lossy(&s.decoded().unwrap()).into_owned()
 }
 
+/// Read the drawn strings together with the appearance's actual font after saving and reopening.
+fn appearance_text(doc: &Document, w: &Widget, font_name: &[u8]) -> (Object, Vec<Vec<u8>>) {
+    let widget = doc.get(w.obj);
+    let normal = widget.as_dict().unwrap().get(b"AP").unwrap().as_dict().unwrap().reference(b"N").unwrap();
+    let appearance = doc.get(normal);
+    let Object::Stream(stream) = appearance.as_ref() else { panic!("appearance stream") };
+    let resources = doc.resolve(stream.dict.get(b"Resources").unwrap());
+    let fonts = doc.resolve(resources.as_dict().unwrap().get(b"Font").unwrap());
+    let font = doc.resolve(fonts.as_dict().unwrap().get(font_name).unwrap());
+    let shown = pdfcraft_content::parse(&stream.decoded().unwrap())
+        .ops
+        .into_iter()
+        .filter(|op| op.is("Tj"))
+        .map(|op| op.operands[0].as_string().unwrap().bytes.clone())
+        .collect();
+    (font.as_ref().clone(), shown)
+}
+
 #[test]
 fn the_field_tree_is_read_with_inheritance() {
     let doc = fixture();
+    assert_combined_matches_legacy(&doc, 0);
     let all = fields(&doc);
     let names: Vec<&str> = all.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, ["name", "notes", "zip", "pin", "id", "address.city", "agree", "size", "country", "toppings", "go", "bare"]);
@@ -93,6 +126,76 @@ fn the_field_tree_is_read_with_inheritance() {
     assert_eq!(field(&all, "toppings").kind, FieldKind::List);
     assert_eq!(field(&all, "go").kind, FieldKind::PushButton);
     assert_eq!(field(&all, "address.city").quadding, 1);
+}
+
+#[test]
+fn field_flags_reject_values_outside_the_unsigned_32_bit_domain() {
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [] >>".into(),
+        "<< /Fields [5 0 R 6 0 R 7 0 R 8 0 R 9 0 R] >>".into(),
+        "<< /FT /Btn /T (valid) /Ff 65536 >>".into(),
+        "<< /FT /Btn /T (negative) /Ff -1 >>".into(),
+        "<< /FT /Btn /T (overflow) /Ff 4295032832 >>".into(),
+        "<< /FT /Btn /T (wrong_type) /Ff (65536) >>".into(),
+        "<< /FT /Btn /T (missing) >>".into(),
+    ];
+    let all = fields(&document(&objs));
+    assert_eq!(field(&all, "valid").kind, FieldKind::PushButton);
+    assert_eq!(field(&all, "valid").flags, flags::PUSH_BUTTON);
+    for name in ["negative", "overflow", "wrong_type", "missing"] {
+        assert_eq!(field(&all, name).kind, FieldKind::CheckBox, "{name}");
+        assert_eq!(field(&all, name).flags, 0, "{name}");
+    }
+}
+
+/// Some writers leave every field out of `/Fields` and put the widgets only in the page
+/// annotations: the tree walk alone finds nothing, and Acrobat and the browsers fill them anyway.
+/// The pages' widgets are adopted as fields, after the listed tree fields.
+#[test]
+fn fields_listed_only_on_the_pages_are_adopted() {
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),                 // 1
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(), // 2
+        "<< /Type /Page /Parent 2 0 R /Annots [5 0 R 10 0 R 11 0 R 13 0 R 14 0 R 15 0 R] >>".into(), // 3
+        "<< /Fields [5 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 6 0 R >> >> >>".into(), // 4
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (listed) /V (keep) /Rect [50 700 250 720] /P 3 0 R >>".into(), // 5
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into(), // 6
+        "null".into(),                                                              // 7
+        "null".into(),                                                              // 8
+        "null".into(),                                                              // 9
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (alpha) /V (one) /Rect [50 600 250 620] /P 3 0 R >>".into(), // 10
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (beta) /DA (/Helv 9 Tf 0 g) /Rect [50 560 250 580] /P 3 0 R >>".into(), // 11
+        "<< /FT /Tx /T (pair) /Kids [13 0 R 14 0 R] >>".into(),                     // 12 unlisted parent field
+        "<< /Type /Annot /Subtype /Widget /Parent 12 0 R /Rect [50 500 150 520] /P 3 0 R >>".into(), // 13 its widget
+        "<< /Type /Annot /Subtype /Widget /Parent 12 0 R /Rect [50 460 150 480] /P 3 0 R >>".into(), // 14 its other widget
+        "<< /Type /Annot /Subtype /Widget /Rect [400 700 415 715] /P 3 0 R >>".into(), // 15 no /FT, /T or /Parent: not a field
+    ];
+    let mut doc = document(&objs);
+    assert_combined_matches_legacy(&doc, 3);
+    let all = fields(&doc);
+    let names: Vec<&str> = all.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, ["listed", "alpha", "beta", "pair"]);
+    assert_eq!(adopted_page_fields(&doc), 3);
+    let alpha = field(&all, "alpha");
+    assert_eq!((alpha.kind, alpha.value.as_slice(), alpha.widgets[0].page), (FieldKind::Text, &["one".to_string()][..], Some(0)));
+    assert_eq!(field(&all, "beta").da, "/Helv 9 Tf 0 g");
+    assert_eq!(field(&all, "pair").widgets.len(), 2, "one field carries both widgets");
+    // They are filled and keep the value across a save.
+    set_value(&mut doc, "beta", &FieldValue::Text("typed".into())).unwrap();
+    assert!(ap(&doc, &field(&fields(&doc), "beta").widgets[0]).contains("typed"));
+    let doc = reopen(&doc);
+    assert_eq!(field(&fields(&doc), "beta").value, ["typed"]);
+    // Without a /Fields list at all, everything on the pages is adopted.
+    let mut objs = objs;
+    objs[3] = "<< /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 6 0 R >> >> >>".into();
+    let doc = document(&objs);
+    assert_combined_matches_legacy(&doc, 4);
+    let all = fields(&doc);
+    let names: Vec<&str> = all.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, ["listed", "alpha", "beta", "pair"]);
+    assert_eq!(adopted_page_fields(&doc), 4);
 }
 
 /// pdf-lib and other writers give radio groups and check boxes an `/Opt` array and name the on
@@ -129,6 +232,21 @@ fn opt_export_values_select_button_states() {
     assert!(err.to_string().contains("options: Post, Pick-up"), "{err}");
 }
 
+/// Issue #1323: a text field without a format keeps a whitespace-only value as typed; only an
+/// empty value clears it.
+#[test]
+fn whitespace_only_text_is_kept_in_a_field_without_a_format() {
+    for value in [" ", "\t", "\u{a0}"] {
+        let mut doc = fixture();
+        set_value(&mut doc, "name", &FieldValue::Text(value.into())).unwrap();
+        let doc = reopen(&doc);
+        assert_eq!(field(&fields(&doc), "name").value, [value], "{value:?}");
+    }
+    let mut doc = fixture();
+    set_value(&mut doc, "name", &FieldValue::Text(String::new())).unwrap();
+    assert!(field(&fields(&reopen(&doc)), "name").value.is_empty());
+}
+
 #[test]
 fn text_fields_get_new_appearances() {
     let mut doc = fixture();
@@ -160,6 +278,93 @@ fn text_fields_get_new_appearances() {
 }
 
 #[test]
+fn existing_field_font_encoding_keeps_italian_punctuation_visible() {
+    // ReportLab-style Helvetica: an indirect encoding dictionary with PDFDoc-like Differences.
+    // WinAnsi 0x92/0x97 would show trademark/Scaron in this font, not quoteright/emdash.
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R] >>".into(),
+        "<< /Fields [6 0 R] /DA (/Helv 12 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> >>".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding 7 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (localita) /Rect [50 700 450 730] /P 3 0 R >>".into(),
+        "<< /Type /Encoding /Differences [39 /quotesingle 96 /grave 132 /emdash 144 /quoteright 146 /trademark 151 /Scaron 224 /agrave] >>".into(),
+    ];
+    let mut doc = document(&objs);
+    let original_font = doc.get(ObjRef::new(5, 0)).as_ref().clone();
+    let value = "Città Sant’Angelo — qualità";
+    set_value(&mut doc, "localita", &FieldValue::Text(value.into())).unwrap();
+    let doc = reopen(&doc);
+    let all = fields(&doc);
+    let f = field(&all, "localita");
+    assert_eq!(f.value, [value], "the stored value and the drawn text must agree");
+    let (font, lines) = appearance_text(&doc, &f.widgets[0], b"Helv");
+    assert_eq!(font, original_font, "keep the existing field's font and encoding");
+    let metrics = pdfcraft_fonts::pdf::Metrics::from_dict(&doc, font.as_dict().unwrap());
+    let shown = lines.concat();
+    assert_eq!(metrics.decode(&shown), value, "decode the appearance with its actual font");
+    assert_eq!(shown, b"Citt\xe0 Sant\x90Angelo \x84 qualit\xe0");
+}
+
+#[test]
+fn unavailable_glyph_uses_an_appearance_font_without_changing_the_source_font() {
+    // A subset font with only A cannot draw the newly entered accented text. Replacing its
+    // encoding would corrupt every existing use of that font, so only the appearance falls back.
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R] >>".into(),
+        "<< /Fields [6 0 R] /DA (/Original 12 Tf 0 g) /DR << /Font << /Original 5 0 R >> >> >>".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Custom /FirstChar 65 /LastChar 65 /Widths [600] /Encoding /WinAnsiEncoding >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (localita) /Rect [50 700 450 730] /P 3 0 R >>".into(),
+    ];
+    let mut doc = document(&objs);
+    let original_font = doc.get(ObjRef::new(5, 0)).as_ref().clone();
+    let value = "Città Sant’Angelo — qualità";
+    set_value(&mut doc, "localita", &FieldValue::Text(value.into())).unwrap();
+    let doc = reopen(&doc);
+    assert_eq!(doc.get(ObjRef::new(5, 0)).as_ref(), &original_font);
+    let all = fields(&doc);
+    let f = field(&all, "localita");
+    assert_eq!(f.value, [value]);
+    let (font, lines) = appearance_text(&doc, &f.widgets[0], b"Helv");
+    let font = font.as_dict().unwrap();
+    assert_eq!(font.name(b"BaseFont"), Some(&b"Helvetica"[..]));
+    assert_eq!(font.name(b"Encoding"), Some(&b"WinAnsiEncoding"[..]));
+    let metrics = pdfcraft_fonts::pdf::Metrics::from_dict(&doc, font);
+    let shown = lines.concat();
+    assert_eq!(metrics.decode(&shown), value);
+    assert_eq!(shown, b"Citt\xe0 Sant\x92Angelo \x97 qualit\xe0");
+}
+
+#[test]
+fn multiline_wrapping_keeps_encodable_text_without_requiring_ascii_space() {
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R] >>".into(),
+        "<< /Fields [6 0 R] /DA (/Helv 12 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> >>".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding 7 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (localita) /Ff 4096 /Rect [50 500 130 550] /P 3 0 R >>".into(),
+        "<< /Type /Encoding /Differences [32 /.notdef 144 /quoteright 160 /nbspace 224 /agrave] >>".into(),
+    ];
+    let mut doc = document(&objs);
+    let original_font = doc.get(ObjRef::new(5, 0)).as_ref().clone();
+    // NBSP remains part of the word; wrapping splits it by character without adding spaces.
+    let value = "Città\u{a0}Sant’Angelo\nqualità";
+    set_value(&mut doc, "localita", &FieldValue::Text(value.into())).unwrap();
+    let doc = reopen(&doc);
+    let all = fields(&doc);
+    let f = field(&all, "localita");
+    assert_eq!(f.value, [value]);
+    let (font, lines) = appearance_text(&doc, &f.widgets[0], b"Helv");
+    assert_eq!(font, original_font);
+    assert!(lines.len() >= 3 && lines.iter().all(|line| !line.is_empty()));
+    let metrics = pdfcraft_fonts::pdf::Metrics::from_dict(&doc, font.as_dict().unwrap());
+    assert_eq!(metrics.decode(&lines.concat()), value.replace('\n', ""));
+}
+
+#[test]
 fn japanese_choices_use_the_unicode_cid_font() {
     // A choice field whose /DA names a non-embedded CID font with a predefined Unicode CMap
     // (UniJIS-UTF16-H). Selecting 令 must draw it in that font, not "?" in Helvetica.
@@ -179,6 +384,8 @@ fn japanese_choices_use_the_unicode_cid_font() {
     assert_eq!(field(&fields(&doc), "era").options.get(2), Some(&("令".to_string(), "令".to_string())));
     set_value(&mut doc, "era", &FieldValue::Text("令".into())).unwrap();
     set_value(&mut doc, "address", &FieldValue::Text("日本語のテキスト入力欄です".into())).unwrap();
+    // An Identity-H subset can't be addressed by Unicode: Helvetica stands in, and can't draw 令.
+    // The value is kept, drawn as `??`, marked, and other viewers are asked to redraw the form.
     set_value(&mut doc, "subset", &FieldValue::Text("令和".into())).unwrap();
     let doc = reopen(&doc);
     let all = fields(&doc);
@@ -202,10 +409,115 @@ fn japanese_choices_use_the_unicode_cid_font() {
     let addr_text = String::from_utf8_lossy(&addr);
     assert!(addr_text.matches(" Tj").count() >= 4, "{addr_text}");
     assert!(addr.windows(4).any(|x| x == utf16("日本").as_slice()));
-    // An Identity-H subset can't be addressed by Unicode: Helvetica, as before.
     let (sub, sub_fonts) = raw("subset");
     assert!(String::from_utf8_lossy(&sub).contains("/Helv "), "{}", String::from_utf8_lossy(&sub));
+    assert!(sub.windows(4).any(|x| x == b"(??)"), "{}", String::from_utf8_lossy(&sub));
     assert_eq!(sub_fonts, ["Helv"]);
+    assert_eq!(field(&all, "subset").value, ["令和"]);
+    // Only that widget is marked: the CID fonts drew theirs.
+    assert_eq!(undrawn_fields(&doc), [("subset".to_string(), '令')]);
+    assert!(need_appearances(&doc));
+}
+
+/// Text a field's font can't hold is kept, as Acrobat keeps it: the value is stored as typed, the
+/// appearance draws `?` for those characters, the widget is marked with the first one, and the
+/// form asks other viewers to redraw it (`/NeedAppearances`). Drawable text clears the mark.
+#[test]
+fn text_a_field_font_cannot_hold_is_kept_marked_and_redrawn_elsewhere() {
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [7 0 R 8 0 R 9 0 R] >>".into(),
+        "<< /Fields [7 0 R 8 0 R 9 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 5 0 R /CN 6 0 R >> >> >>".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into(),
+        "<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> >>] >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /DA (/Helv 10 Tf 0 g) /V (Ada) /Rect [50 700 200 715] /P 3 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (cn) /DA (/CN 10 Tf 0 g) /Rect [50 600 200 615] /P 3 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Ch /T (city) /Ff 131072 /DA (/Helv 10 Tf 0 g) /Opt [(Zurich) <FEFF5317004E4EAC>] /Rect [50 500 200 515] /P 3 0 R >>".into(),
+    ];
+    let mut doc = document(&objs);
+    let shown = |doc: &Document, name: &str| {
+        let all = fields(doc);
+        let w = &field(&all, name).widgets[0];
+        let n = doc.get(w.obj).as_dict().unwrap().get(b"AP").unwrap().as_dict().unwrap().reference(b"N").unwrap();
+        let Object::Stream(s) = &*doc.get(n) else { panic!() };
+        let mark = doc.get(w.obj).as_dict().and_then(pdfcraft_fonts::undrawn_mark);
+        (String::from_utf8_lossy(&s.decoded().unwrap()).into_owned(), mark)
+    };
+    // A WinAnsi field: the Chinese value is kept and marked; Helvetica draws `?` for it.
+    assert!(!need_appearances(&doc));
+    set_value(&mut doc, "name", &FieldValue::Text("签名 Ada".into())).unwrap();
+    assert_eq!(field(&fields(&doc), "name").value, ["签名 Ada"]);
+    let (ap, mark) = shown(&doc, "name");
+    assert!(ap.contains("(?? Ada) Tj"), "{ap}");
+    assert_eq!(mark, Some('签'));
+    assert!(need_appearances(&doc), "other viewers are asked to redraw the form");
+    // A choice whose label Helvetica can't draw, the same way.
+    set_value(&mut doc, "city", &FieldValue::Text("北N京".into())).unwrap();
+    assert_eq!(shown(&doc, "city").1, Some('北'));
+    // A UCS-2 CMap holds 签, so nothing is marked, but not a character beyond U+FFFF.
+    set_value(&mut doc, "cn", &FieldValue::Text("签名".into())).unwrap();
+    assert_eq!(shown(&doc, "cn").1, None);
+    set_value(&mut doc, "cn", &FieldValue::Text("𠀋".into())).unwrap();
+    assert_eq!(field(&fields(&doc), "cn").value, ["𠀋"]);
+    assert_eq!(shown(&doc, "cn").1, Some('𠀋'));
+    let mut undrawn = undrawn_fields(&doc);
+    undrawn.sort();
+    assert_eq!(undrawn, [("city".to_string(), '北'), ("cn".to_string(), '𠀋'), ("name".to_string(), '签')]);
+    // Drawable text clears the mark; a line break in a single-line value is a space, not `?`.
+    set_value(&mut doc, "name", &FieldValue::Text("Ada\nLovelace".into())).unwrap();
+    let (ap, mark) = shown(&doc, "name");
+    assert!(ap.contains("(Ada Lovelace) Tj") && !ap.contains('?'), "{ap}");
+    assert_eq!(mark, None);
+    // Kept through a save.
+    let doc = reopen(&doc);
+    assert_eq!(field(&fields(&doc), "city").value, ["北N京"]);
+    assert!(need_appearances(&doc));
+}
+
+/// A document that declares PDF/A can't ask other viewers to redraw its fields (PDF/A forbids
+/// `/NeedAppearances`): the value is still kept and its widget marked, and the flag stays off.
+#[test]
+fn a_pdfa_form_keeps_the_value_without_asking_viewers_to_redraw() {
+    let xmp = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" pdfaid:part="2" pdfaid:conformance="B"/></rdf:RDF></x:xmpmeta>"#;
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R /Metadata 7 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R] >>".into(),
+        "<< /Fields [6 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> >>".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /DA (/Helv 10 Tf 0 g) /Rect [50 700 200 715] /P 3 0 R >>".into(),
+        format!("<< /Type /Metadata /Subtype /XML /Length {} >>\nstream\n{xmp}\nendstream", xmp.len() + 1),
+    ];
+    let mut doc = document(&objs);
+    assert!(declares_pdfa(&doc));
+    set_value(&mut doc, "name", &FieldValue::Text("张三".into())).unwrap();
+    assert_eq!(field(&fields(&doc), "name").value, ["张三"]);
+    assert_eq!(undrawn_fields(&doc), [("name".to_string(), '张')]);
+    assert!(!need_appearances(&doc), "PDF/A forbids /NeedAppearances");
+}
+
+/// A button caption Helvetica can't draw is kept and marked like a value; redrawing a value another
+/// program stored (a dynamic form's layout, a property change) draws and marks it rather than
+/// failing, and an edit to an unrelated field never fails because of it.
+#[test]
+fn captions_and_redrawn_values_are_kept_and_marked() {
+    let mut doc = fixture();
+    let go = add_field(&mut doc, 0, [50.0, 50.0, 150.0, 80.0], &NewField::Button { caption: "提交".into() }, Some("go2")).unwrap();
+    assert_eq!(undrawn_fields(&doc), [(go.clone(), '提')]);
+    assert!(need_appearances(&doc));
+    // A value stored by another program that Helvetica can't draw.
+    let name = field(&fields(&doc), "name").clone();
+    doc.update_dict(name.obj, |d| d.set(b"V".to_vec(), PdfString::text("张三"))).unwrap();
+    redraw_field(&mut doc, "name").unwrap();
+    let mut undrawn = undrawn_fields(&doc);
+    undrawn.sort();
+    assert_eq!(undrawn, [(go, '提'), ("name".to_string(), '张')]);
+    set_value(&mut doc, "notes", &FieldValue::Text("Unrelated".into())).unwrap();
+    // Drawable again: the mark goes.
+    doc.update_dict(name.obj, |d| d.set(b"V".to_vec(), PdfString::text("Ada"))).unwrap();
+    redraw_field(&mut doc, "name").unwrap();
+    assert!(!undrawn_fields(&doc).iter().any(|(n, _)| n == "name"));
 }
 
 #[test]
@@ -326,8 +638,42 @@ fn reset_restores_defaults() {
 #[test]
 fn documents_without_forms_say_so() {
     let mut doc = Document::new_empty();
+    assert_combined_matches_legacy(&doc, 0);
     assert!(fields(&doc).is_empty());
     assert_eq!(set_value(&mut doc, "x", &FieldValue::Text("y".into())), Err(FormError::NoForm));
+}
+
+#[test]
+fn combined_enumeration_keeps_page_order_across_pages() {
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [7 0 R] >>".into(),
+        "<< /Fields [6 0 R] >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (listed) /Rect [50 700 250 720] /P 3 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (adopted) /Rect [50 700 250 720] /P 4 0 R >>".into(),
+    ];
+    let doc = document(&objs);
+    assert_combined_matches_legacy(&doc, 1);
+
+    let combined = fields_with_adopted(&doc);
+    assert_eq!(combined.items.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["listed", "adopted"]);
+    assert_eq!(combined.items.iter().map(|f| f.widgets[0].page).collect::<Vec<_>>(), [Some(0), Some(1)]);
+}
+
+#[test]
+fn combined_enumeration_keeps_leniency_for_dangling_field_entries() {
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [] >>".into(),
+        "<< /Fields [99 0 R null 5 0 R] >>".into(),
+        "<< /FT /Tx /T (valid) >>".into(),
+    ];
+    let doc = document(&objs);
+    assert_combined_matches_legacy(&doc, 0);
+    assert_eq!(fields_with_adopted(&doc).items.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["valid"]);
 }
 
 #[test]
@@ -837,6 +1183,7 @@ fn field_actions_round_trip_on_every_trigger() {
     assert_eq!(field_actions(&doc, &name).unwrap(), [(Trigger::MouseExit, FieldAction::Named("NextPage".into()))]);
     // The Mouse Up script is what the button runs.
     set_field_actions(&mut doc, &name, &[(Trigger::MouseUp, FieldAction::JavaScript("this.print();".into()))]).unwrap();
+    assert_combined_matches_legacy(&doc, 0);
     assert_eq!(fields(&doc).iter().find(|f| f.name == "go").unwrap().button, Some(af::ButtonAction::Named("Print".into())));
 }
 
@@ -1267,4 +1614,254 @@ fn check_box_redraw_keeps_down_states_it_still_draws() {
     let d = d.as_dict().unwrap();
     assert!(d.contains(on.as_bytes()) && d.contains(b"Off"));
     assert!(!d.contains(b"Gone"), "a state the box no longer draws");
+}
+
+#[test]
+fn recalc_chain_where_script_changes_checkbox() {
+    struct TestScripts;
+    impl Scripts for TestScripts {
+        fn run(&mut self, _event: FieldEvent, script: &str, _target: &Field, _value: &str, fields: &[Field]) -> ScriptResult {
+            if script == "set_box" {
+                ScriptResult {
+                    rc: true,
+                    value: "calc1".into(),
+                    changes: vec![FieldChange {
+                        name: "agree".into(),
+                        value: Some(vec!["Yes".into()]),
+                        read_only: None,
+                        required: None,
+                        display: None,
+                    }],
+                    message: None,
+                }
+            } else if script == "read_box" {
+                let box_val = fields.iter().find(|f| f.name == "agree").and_then(|f| f.value.first()).cloned().unwrap_or_default();
+                ScriptResult { rc: true, value: format!("box_was_{box_val}"), changes: Vec::new(), message: None }
+            } else {
+                ScriptResult { rc: true, value: String::new(), changes: Vec::new(), message: None }
+            }
+        }
+    }
+
+    let mut doc = one_page();
+    add_field(&mut doc, 0, [10.0, 10.0, 100.0, 30.0], &NewField::Text { multiline: false }, Some("trigger")).unwrap();
+    add_field(&mut doc, 0, [10.0, 40.0, 30.0, 60.0], &NewField::CheckBox, Some("agree")).unwrap();
+    add_field(&mut doc, 0, [10.0, 70.0, 100.0, 90.0], &NewField::Text { multiline: false }, Some("result")).unwrap();
+
+    set_field_script(&mut doc, "trigger", "calculate", Some("set_box")).unwrap();
+    set_field_script(&mut doc, "result", "calculate", Some("read_box")).unwrap();
+
+    let changed = recalculate_with(&mut doc, &mut TestScripts).unwrap();
+    assert!(changed >= 2);
+
+    let all = fields(&doc);
+    assert_eq!(field(&all, "agree").value, ["Yes"], "checkbox was set by script in recalc chain");
+    assert_eq!(field(&all, "result").value, ["box_was_Yes"], "second recalc saw the normalized checkbox value");
+}
+
+#[test]
+fn partial_appearance_keeps_custom_default_appearance_and_font_resources() {
+    let mut doc = fixture();
+    let obj = field(&fields(&doc), "name").obj;
+    let af = doc.get(doc.root().unwrap()).as_dict().unwrap().reference(b"AcroForm").unwrap();
+    let mut dr = doc.get(af).as_dict().unwrap().get(b"DR").map(|v| doc.resolve(v)).unwrap().as_dict().cloned().unwrap();
+    let mut fonts = dr.get(b"Font").map(|v| doc.resolve(v)).unwrap().as_dict().cloned().unwrap();
+    let resource = fonts.get(b"Helv").cloned().unwrap();
+    fonts.set(b"ProjectFont".to_vec(), resource.clone());
+    dr.set(b"Font".to_vec(), Object::Dict(fonts));
+    doc.update_dict(af, |d| d.set(b"DR".to_vec(), Object::Dict(dr))).unwrap();
+    let da = "/ProjectFont 13 Tf 0.15 g 2 Tc";
+    doc.update_dict(obj, |d| d.set(b"DA".to_vec(), pdfcraft_cos::PdfString::literal(da.as_bytes().to_vec()))).unwrap();
+
+    let patch = LookPatch { border: Some(Some([1.0, 0.0, 0.0])), width: Some(3.0), ..Default::default() };
+    set_props(&mut doc, "name", &FieldProps { appearance: Some(patch), ..Default::default() }).unwrap();
+    let f = field(&fields(&doc), "name").clone();
+    assert_eq!(f.da, da, "a border edit must not replace the custom font or colour space");
+    assert_eq!(f.value, ["Ada"]);
+    assert_eq!(look(&doc, &f).fill, Some([1.0, 1.0, 0.9]));
+
+    set_props(&mut doc, "name", &FieldProps { font_size: Some(18.0), ..Default::default() }).unwrap();
+    let f = field(&fields(&doc), "name").clone();
+    // The size is rewritten in place: other operators survive and the string doesn't grow.
+    assert_eq!(f.da, "/ProjectFont 18 Tf 0.15 g 2 Tc", "other default-appearance operators survive");
+    assert_eq!(appearance::parse_da(&f.da).font, "ProjectFont");
+    assert_eq!(appearance::parse_da(&f.da).size, 18.0);
+
+    set_props(
+        &mut doc,
+        "name",
+        &FieldProps { appearance: Some(LookPatch { text: Some([0.0, 0.0, 1.0]), ..Default::default() }), ..Default::default() },
+    )
+    .unwrap();
+    let doc = reopen(&doc);
+    let f = field(&fields(&doc), "name").clone();
+    assert_eq!(f.da, "/ProjectFont 18 Tf 0 0 1 rg 2 Tc", "the colour is replaced where it was");
+    assert_eq!(appearance::parse_da(&f.da).font, "ProjectFont");
+    assert_eq!(appearance::parse_da(&f.da).color, "0 0 1 rg");
+    let dr = doc.get(af).as_dict().unwrap().get(b"DR").map(|v| doc.resolve(v)).unwrap();
+    let fonts = dr.as_dict().unwrap().get(b"Font").map(|v| doc.resolve(v)).unwrap();
+    assert_eq!(fonts.as_dict().unwrap().get(b"ProjectFont"), Some(&resource));
+}
+
+#[test]
+fn repeated_partial_appearance_edits_keep_the_default_appearance_one_operator_each() {
+    let mut doc = fixture();
+    for size in [9.0, 11.0, 14.0, 250.0, 400.0] {
+        let props = FieldProps {
+            appearance: Some(LookPatch { text: Some([0.0, 0.5, 0.0]), ..Default::default() }),
+            font_size: Some(size),
+            ..Default::default()
+        };
+        set_props(&mut doc, "name", &props).unwrap();
+    }
+    let da = field(&fields(&doc), "name").da.clone();
+    assert_eq!(da.matches("Tf").count(), 1, "{da}");
+    assert_eq!(da.matches(" rg").count() + da.matches(" g").count(), 1, "{da}");
+    // Sizes up to the 300 points `parse_da` reads are kept, not cut to 100.
+    assert_eq!(appearance::parse_da(&da).size, 300.0, "{da}");
+}
+
+#[test]
+fn a_font_only_edit_leaves_the_widget_and_a_shared_indirect_border_untouched() {
+    let mut doc = fixture();
+    let widgets = field(&fields(&doc), "size").widgets.clone();
+    let mut mk = pdfcraft_cos::Dict::new();
+    mk.set(b"BC".to_vec(), Object::Array(vec![0.into(), 0.into(), 1.into()]));
+    let shared = doc.add(Object::Dict(mk));
+    for w in &widgets {
+        doc.update_dict(w.obj, |d| d.set(b"MK".to_vec(), Object::Ref(shared))).unwrap();
+    }
+    let border = |doc: &Document| -> Vec<_> {
+        widgets.iter().map(|w| doc.get(w.obj).as_dict().map(|d| (d.get(b"MK").cloned(), d.get(b"BS").cloned()))).collect()
+    };
+    let before = border(&doc);
+    set_props(&mut doc, "size", &FieldProps { font_size: Some(12.0), ..Default::default() }).unwrap();
+    assert_eq!(border(&doc), before, "a size-only edit leaves each widget's /MK and /BS alone");
+    // A border edit updates the shared /MK where it lives instead of copying it into each widget.
+    let patch = LookPatch { border: Some(Some([1.0, 0.0, 0.0])), ..Default::default() };
+    set_props(&mut doc, "size", &FieldProps { appearance: Some(patch), ..Default::default() }).unwrap();
+    for w in &widgets {
+        assert_eq!(doc.get(w.obj).as_dict().unwrap().get(b"MK"), Some(&Object::Ref(shared)), "the widget still points at the shared /MK");
+    }
+    let shared_mk = doc.get(shared).as_dict().cloned().unwrap();
+    assert_eq!(shared_mk.get(b"BC"), Some(&Object::Array(vec![Object::Real(1.0), Object::Real(0.0), Object::Real(0.0)])));
+}
+
+#[test]
+fn partial_appearance_preserves_each_widgets_indirect_colours_and_border_extensions() {
+    let mut doc = fixture();
+    let widgets = field(&fields(&doc), "size").widgets.clone();
+    let mut refs = Vec::new();
+    for (i, widget) in widgets.iter().enumerate() {
+        let mut mk = pdfcraft_cos::Dict::new();
+        mk.set(b"BG".to_vec(), Object::Array(vec![Object::Real(i as f64), 0.into(), 1.into()]));
+        mk.set(b"BC".to_vec(), Object::Array(vec![0.into(), Object::Real(i as f64), 0.into()]));
+        mk.set(b"CA".to_vec(), pdfcraft_cos::PdfString::text("l"));
+        mk.set(b"R".to_vec(), Object::Int(90));
+        mk.set(b"VendorKey".to_vec(), Object::Int(71));
+        let mk_ref = doc.add(Object::Dict(mk));
+        let mut bs = pdfcraft_cos::Dict::new();
+        bs.set(b"S".to_vec(), Object::name("D"));
+        bs.set(b"W".to_vec(), Object::Real(1.0));
+        bs.set(b"D".to_vec(), Object::Array(vec![4.into(), 2.into()]));
+        bs.set(b"VendorKey".to_vec(), Object::Int(83));
+        let bs_ref = doc.add(Object::Dict(bs));
+        let da = if i == 0 { "/Helv 8 Tf 0.1 g" } else { "/Cour 19 Tf 0.3 g" };
+        doc.update_dict(widget.obj, |d| {
+            d.set(b"MK".to_vec(), Object::Ref(mk_ref));
+            d.set(b"BS".to_vec(), Object::Ref(bs_ref));
+            d.set(b"DA".to_vec(), pdfcraft_cos::PdfString::text(da));
+        })
+        .unwrap();
+        refs.push(mk_ref);
+    }
+    let patch = LookPatch { width: Some(5.0), ..Default::default() };
+    set_props(&mut doc, "size", &FieldProps { font_size: Some(16.0), appearance: Some(patch), ..Default::default() }).unwrap();
+    for (i, widget) in widgets.iter().enumerate() {
+        let wd = doc.get(widget.obj);
+        let wd = wd.as_dict().unwrap();
+        assert_eq!(wd.reference(b"MK"), Some(refs[i]), "untouched MK stays indirect");
+        let bs = wd.get(b"BS").map(|v| doc.resolve(v)).unwrap();
+        let bs = bs.as_dict().unwrap();
+        assert_eq!(bs.get(b"W").and_then(Object::as_f64), Some(5.0));
+        assert_eq!(bs.int(b"VendorKey"), Some(83));
+        assert_eq!(bs.get(b"D").unwrap().as_array().unwrap().len(), 2);
+        let da = wd.get(b"DA").map(|v| doc.resolve(v)).unwrap().as_string().unwrap().to_text();
+        let parsed = appearance::parse_da(&da);
+        assert_eq!(parsed.font, if i == 0 { "Helv" } else { "Cour" });
+        assert_eq!(parsed.color, if i == 0 { "0.1 g" } else { "0.3 g" });
+        assert_eq!(parsed.size, 16.0);
+    }
+    set_props(&mut doc, "size", &FieldProps { appearance: Some(LookPatch { fill: Some(None), ..Default::default() }), ..Default::default() })
+        .unwrap();
+    let doc = reopen(&doc);
+    for widget in &widgets {
+        let mk = doc.get(widget.obj).as_dict().unwrap().get(b"MK").map(|v| doc.resolve(v)).unwrap();
+        let mk = mk.as_dict().unwrap();
+        assert!(!mk.contains(b"BG"));
+        assert!(mk.contains(b"BC") && mk.contains(b"CA"));
+        assert_eq!(mk.int(b"R"), Some(90));
+        assert_eq!(mk.int(b"VendorKey"), Some(71));
+    }
+}
+
+/// A whole look sets the colours of an indirect /MK and keeps its mark, rotation and unknown
+/// entries (#1322), as it already did for a direct one.
+#[test]
+fn a_whole_look_keeps_the_rest_of_an_indirect_mk() {
+    let mut doc = fixture();
+    let widget = field(&fields(&doc), "agree").widgets[0].obj;
+    let mut mk = pdfcraft_cos::Dict::new();
+    mk.set(b"CA".to_vec(), pdfcraft_cos::PdfString::text("8"));
+    mk.set(b"R".to_vec(), Object::Int(90));
+    mk.set(b"VendorKey".to_vec(), Object::Int(71));
+    let mk_ref = doc.add(Object::Dict(mk));
+    doc.update_dict(widget, |d| d.set(b"MK".to_vec(), Object::Ref(mk_ref))).unwrap();
+    let new = Look {
+        border: Some([1.0, 0.0, 0.0]),
+        fill: Some([1.0, 1.0, 0.8]),
+        width: 2.0,
+        style: BorderStyle::Solid,
+        text: [0.0; 3],
+        font: FieldFont::Helvetica,
+    };
+    set_props(&mut doc, "agree", &FieldProps { look: Some(new), ..FieldProps::default() }).unwrap();
+    let doc = reopen(&doc);
+    let f = field(&fields(&doc), "agree").clone();
+    assert_eq!((check_style(&doc, &f), f.widgets[0].rotation), (CheckStyle::Cross, 90));
+    let mk = doc.get(widget).as_dict().unwrap().get(b"MK").map(|v| doc.resolve(v)).unwrap();
+    let mk = mk.as_dict().unwrap();
+    assert_eq!(mk.int(b"VendorKey"), Some(71));
+    assert_eq!(look(&doc, &f).border, Some([1.0, 0.0, 0.0]));
+    assert_eq!(look(&doc, &f).fill, Some([1.0, 1.0, 0.8]));
+}
+
+#[test]
+fn invalid_appearance_patches_are_refused_before_anything_is_written() {
+    let mut doc = fixture();
+    let before = write_incremental(&doc, &SaveOptions::default()).unwrap();
+    for size in [f64::NAN, f64::INFINITY, -1.0] {
+        assert!(
+            set_props(&mut doc, "name", &FieldProps { font_size: Some(size), tooltip: Some("Not applied".into()), ..Default::default() }).is_err()
+        );
+        assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+    }
+    for patch in [
+        LookPatch { width: Some(f64::NAN), ..Default::default() },
+        LookPatch { width: Some(-1.0), ..Default::default() },
+        LookPatch { fill: Some(Some([f64::INFINITY, 0.0, 0.0])), ..Default::default() },
+        LookPatch { text: Some([1.1, 0.0, 0.0]), ..Default::default() },
+    ] {
+        assert!(
+            set_props(&mut doc, "name", &FieldProps { appearance: Some(patch), tooltip: Some("Not applied".into()), ..Default::default() }).is_err()
+        );
+        assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+    }
+    let props = FieldProps {
+        appearance: Some(LookPatch { width: Some(2.0), ..Default::default() }),
+        look: Some(look(&doc, &field(&fields(&doc), "name").clone())),
+        ..Default::default()
+    };
+    assert!(set_props(&mut doc, "name", &props).is_err());
+    assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
 }

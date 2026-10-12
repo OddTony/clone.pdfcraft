@@ -191,8 +191,21 @@ impl Automation {
             .filter(|c| c.in_reply_to.is_none() && only.is_none_or(|p| c.page == p))
             .map(|c| {
                 let mut v = view(c);
-                let thread: Vec<&Annotation> = match &c.name {
-                    Some(nm) => all.iter().filter(|r| r.in_reply_to.as_deref() == Some(nm.as_str())).collect(),
+                // Every reply under this comment, at any depth, in document order. A reply to a
+                // reply keeps its `/IRT` on the direct parent, so following one level would drop it.
+                let descends_from = |r: &Annotation, root: &str| -> bool {
+                    let mut parent = r.in_reply_to.as_deref();
+                    for _ in 0..64 {
+                        let Some(nm) = parent else { return false };
+                        if nm == root {
+                            return true;
+                        }
+                        parent = all.iter().find(|x| x.name.as_deref() == Some(nm)).and_then(|x| x.in_reply_to.as_deref());
+                    }
+                    false
+                };
+                let thread: Vec<&Annotation> = match c.name.as_deref() {
+                    Some(nm) => all.iter().filter(|r| r.in_reply_to.is_some() && descends_from(r, nm)).collect(),
                     None => Vec::new(),
                 };
                 let status = thread.iter().rev().filter(|r| !r.is_mark()).find_map(|r| r.state.clone());
@@ -456,17 +469,45 @@ impl Automation {
         let at = to_user(&info, x, y);
         let author = a.opt_str("author")?.unwrap_or(DEFAULT_AUTHOR).to_string();
         let kind = a.str("type")?;
+        let scan = a.opt_bool("scan")?.unwrap_or(false);
+        let sensitivity = a.opt_int("sensitivity")?;
+        if (scan || sensitivity.is_some()) && a.opt_str("path")?.is_none() {
+            return Err(ToolError::InvalidArgs("scan and sensitivity need path, a photo of a signature on paper".into()));
+        }
+        if sensitivity.is_some() && !scan {
+            return Err(ToolError::InvalidArgs("sensitivity is only for scan: true".into()));
+        }
+        let requested_size = a.opt_num("font_size")?;
+        if requested_size.is_some() && !matches!(kind, "text" | "date") {
+            return Err(ToolError::InvalidArgs("font_size is only for type text or date".into()));
+        }
+        let size = requested_size.unwrap_or(10.0);
+        if !(4.0..=300.0).contains(&size) {
+            return Err(ToolError::InvalidArgs("font_size must be 4–300 pt".into()));
+        }
         if let Some(path) = a.opt_str("path")? {
             if !matches!(kind, "signature" | "initials") || a.opt_str("text")?.is_some() {
                 return Err(ToolError::InvalidArgs("path is only for an image signature or initials; pass either path or text".into()));
             }
             let path = self.resolve(path, false)?;
             let file = std::fs::File::open(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
-            let image = pdfcraft_engine::SignatureImage::read(file).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+            let image = if scan {
+                let sensitivity = match sensitivity {
+                    None => pdfcraft_engine::signature_scan::DEFAULT_SENSITIVITY,
+                    Some(s) => u8::try_from(s)
+                        .ok()
+                        .filter(|s| *s <= 100)
+                        .ok_or_else(|| ToolError::InvalidArgs(format!("sensitivity must be 0–100, got {s}")))?,
+                };
+                let mut photo = pdfcraft_engine::SignaturePhoto::read(file).map_err(|e| ToolError::InvalidArgs(e.to_string()))?;
+                let frame = photo.auto_frame();
+                photo.scan(frame, sensitivity, pdfcraft_engine::signature_scan::SCAN_MAX_SIDE).map_err(|e| ToolError::InvalidArgs(e.to_string()))?
+            } else {
+                pdfcraft_engine::SignatureImage::read(file).map_err(|e| ToolError::InvalidArgs(e.to_string()))?
+            };
             let edit = image.edit(page, &info, at, kind == "initials", &author).ok_or_else(|| ToolError::InvalidArgs("at must be finite".into()))?;
             return self.apply(a, edit);
         }
-        let size = 10.0;
         let text_at = |t: &str| {
             let w = (pdfcraft_engine::annot_text::text_width(t, size) + 8.0).clamp(20.0, 600.0);
             let h = size * 1.2 + 6.0;
@@ -488,6 +529,14 @@ impl Automation {
             // A typed signature or initials in the script font, left edge at `at`, upright as displayed.
             kind @ ("signature" | "initials") => {
                 let t = a.str("text")?;
+                // Nobody sees a preview here: refuse what the script font would leave out.
+                if let Some(c) = pdfcraft_engine::script_missing(t) {
+                    return Err(ToolError::InvalidArgs(format!(
+                        "the signature script font can't draw \"{}\" (U+{:04X}); type the {kind} in Latin, Cyrillic or Greek letters, or pass `path` to a PNG or JPEG image of it instead of `text`",
+                        c.escape_debug(),
+                        u32::from(c)
+                    )));
+                }
                 let h = if kind == "initials" { 24.0 } else { 32.0 };
                 let shape = pdfcraft_engine::typed_signature_shape(at, t, h, i64::from(info.rotation))
                     .ok_or_else(|| ToolError::InvalidArgs("text has nothing to draw".into()))?;
@@ -564,6 +613,10 @@ impl Automation {
         let (color, opacity, width) = (a.color("color")?, a.opt_num("opacity")?, a.opt_num("width")?);
         if color.is_some() || opacity.is_some() || width.is_some() {
             edits.push(Edit::StyleAnnotation { page, index, color, opacity, width, endings: None });
+        }
+        if let Some(f) = a.opt_str("fill")? {
+            let fill = if f.eq_ignore_ascii_case("none") { None } else { Some(parse_color(f)?) };
+            edits.push(Edit::FillAnnotation { page, index, fill });
         }
         if let Some(r) = a.nums::<4>("rect")? {
             edits.push(Edit::ResizeAnnotation { page, index, rect: rect_to_user(&info, r) });

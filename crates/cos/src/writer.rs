@@ -284,13 +284,18 @@ pub fn write_full(doc: &Document, opts: &SaveOptions) -> Result<Vec<u8>, CosErro
             collect_refs(&reader.get(r), &mut |x| pending.push(x));
         }
     }
+    // Acrobat refuses an encrypted file whose catalog sits in an object stream ("the file is
+    // damaged and could not be repaired", before it even asks for the password), while other
+    // readers accept it. qpdf keeps the catalog out of object streams too. Verified with
+    // Acrobat DC on macOS (#774).
+    let root_outside = if reader.document.output_security().0.is_some() { trailer_in.reference(b"Root") } else { None };
     let mut rows: BTreeMap<u32, Row> = BTreeMap::new();
     // Keep only references, not renamed copies of the entire object graph. Standalone
     // objects still precede object streams, preserving the established output order.
     let mut packed: Vec<(u32, ObjRef)> = Vec::new();
     for (i, (r, is_stream)) in order.iter().enumerate() {
         let num = output_number(i)?;
-        let in_stream = opts.object_streams && !is_stream && !encryption_objects.contains(r);
+        let in_stream = opts.object_streams && !is_stream && !encryption_objects.contains(r) && root_outside != Some(*r);
         if in_stream {
             packed.push((num, *r));
         } else {
@@ -425,6 +430,15 @@ fn write_xref_table(out: &mut Vec<u8>, offsets: &BTreeMap<u32, (u64, u16, bool)>
     let mut all: Vec<(u32, (u64, u16, bool))> = offsets.iter().map(|(k, v)| (*k, *v)).collect();
     if include_zero {
         all.insert(0, (0, (0, 65535, false)));
+    }
+    // A section is one or more subsections. `xref` followed immediately by `trailer` is not a
+    // table (qpdf: "xref syntax invalid") and is what an incremental save of a classic-table
+    // file used to append when nothing was edited. A zero-length subsection names no objects,
+    // so the free list and every in-use entry stay as they were, while a trailer-only change
+    // (a missing `/ID`, or a caller edit of the trailer) is still written.
+    if all.is_empty() {
+        let _ = writeln!(out, "0 0");
+        return;
     }
     let mut i = 0;
     while i < all.len() {

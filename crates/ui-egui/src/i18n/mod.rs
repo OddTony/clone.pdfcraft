@@ -44,6 +44,9 @@ pub struct LangInfo {
     /// Plural form index for a count (English: 0 = one, 1 = other; Japanese: always 0). A catalog's
     /// `@plural` entries list one form per index.
     pub plural: fn(u64) -> usize,
+    /// The language is written right to left. egui lays text out left to right, so the catalog's
+    /// translations are put into display order when it loads ([`crate::bidi::display_rtl`]).
+    pub rtl: bool,
     catalog: OnceLock<Catalog>,
 }
 
@@ -53,6 +56,17 @@ fn plural_one_other(n: u64) -> usize {
 
 fn plural_none(_: u64) -> usize {
     0
+}
+
+/// Lithuanian: one (ending in 1 except 11), few (ending in 2–9 except 12–19), other otherwise.
+fn plural_lithuanian(n: u64) -> usize {
+    match (n % 10, n % 100) {
+        (1, 11) => 2,
+        (1, _) => 0,
+        (2..=9, 12..=19) => 2,
+        (2..=9, _) => 1,
+        _ => 2,
+    }
 }
 
 /// Czech: 1 → one, 2–4 → few, everything else (0, 5+) → other.
@@ -99,34 +113,100 @@ fn plural_ukrainian(n: u64) -> usize {
     }
 }
 
+/// Arabic (CLDR `ar`, integer counts): zero (0), one (1), two (2), few (3–10, 103–110),
+/// many (11–99, 111–199), other (100–102, 200–202).
+fn plural_arabic(n: u64) -> usize {
+    match (n, n % 100) {
+        (0, _) => 0,
+        (1, _) => 1,
+        (2, _) => 2,
+        (_, 3..=10) => 3,
+        (_, 11..=99) => 4,
+        _ => 5,
+    }
+}
+
+/// Polish integer counts: 1 is one; endings 2–4 except 12–14 are few; the rest are many.
+fn plural_polish(n: u64) -> usize {
+    match (n, n % 100, n % 10) {
+        (1, _, _) => 0,
+        (_, 12..=14, _) => 2,
+        (_, _, 2..=4) => 1,
+        _ => 2,
+    }
+}
+
+/// Slovene (CLDR `sl`): one (1, 101, 201 ...) | two (2, 102 ...) | few (3, 4, 103 ...) | other.
+fn plural_sl(n: u64) -> usize {
+    match n % 100 {
+        1 => 0,
+        2 => 1,
+        3 | 4 => 2,
+        _ => 3,
+    }
+}
+
 /// The registry. English first: it is the fallback and the source language.
-pub static LANGUAGES: [LangInfo; 14] = [
-    LangInfo { code: "en", name: "English", source: "", plural: plural_one_other, catalog: OnceLock::new() },
-    LangInfo { code: "ja", name: "日本語", source: include_str!("ja.tsv"), plural: plural_none, catalog: OnceLock::new() },
+pub static LANGUAGES: [LangInfo; 22] = [
+    LangInfo { code: "en", name: "English", source: "", plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
+    LangInfo { code: "ja", name: "日本語", source: include_str!("ja.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new() },
     // Simplified Chinese; `zh`, `zh-CN`, `zh-SG` and `zh-Hans-*` locales resolve here (see `candidates`).
-    LangInfo { code: "zh-hans", name: "简体中文", source: include_str!("zh-hans.tsv"), plural: plural_none, catalog: OnceLock::new() },
+    LangInfo {
+        code: "zh-hans", name: "简体中文", source: include_str!("zh-hans.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new()
+    },
     // Traditional Chinese in the vocabulary used in Taiwan; `zh-TW`, `zh-HK`, `zh-MO` and `zh-Hant-*`
     // locales all resolve here (see `candidates`).
-    LangInfo { code: "zh-hant", name: "繁體中文", source: include_str!("zh-hant.tsv"), plural: plural_none, catalog: OnceLock::new() },
-    LangInfo { code: "cs", name: "Čeština", source: include_str!("cs.tsv"), plural: plural_cs, catalog: OnceLock::new() },
+    LangInfo {
+        code: "zh-hant", name: "繁體中文", source: include_str!("zh-hant.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new()
+    },
+    LangInfo { code: "cs", name: "Čeština", source: include_str!("cs.tsv"), plural: plural_cs, rtl: false, catalog: OnceLock::new() },
     // Brazilian Portuguese; `pt`, `pt-BR` and `pt-PT` locales all resolve here (see `candidates`).
-    LangInfo { code: "pt-br", name: "Português (Brasil)", source: include_str!("pt-br.tsv"), plural: plural_pt, catalog: OnceLock::new() },
+    LangInfo {
+        code: "pt-br",
+        name: "Português (Brasil)",
+        source: include_str!("pt-br.tsv"),
+        plural: plural_pt,
+        rtl: false,
+        catalog: OnceLock::new(),
+    },
     // German (informal "du"); every `de-*` locale (`de-DE`, `de-AT`, `de-CH` ...) resolves here.
-    LangInfo { code: "de", name: "Deutsch", source: include_str!("de.tsv"), plural: plural_one_other, catalog: OnceLock::new() },
+    LangInfo { code: "de", name: "Deutsch", source: include_str!("de.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
     // Spanish (European vocabulary); every `es-*` locale (`es-ES`, `es-MX`, `es-419` ...) resolves here.
-    LangInfo { code: "es", name: "Español", source: include_str!("es.tsv"), plural: plural_one_other, catalog: OnceLock::new() },
+    LangInfo { code: "es", name: "Español", source: include_str!("es.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
     // French; every `fr-*` locale (`fr-FR`, `fr-CA`, `fr-BE` ...) resolves here.
-    LangInfo { code: "fr", name: "Français", source: include_str!("fr.tsv"), plural: plural_fr, catalog: OnceLock::new() },
+    LangInfo { code: "fr", name: "Français", source: include_str!("fr.tsv"), plural: plural_fr, rtl: false, catalog: OnceLock::new() },
     // Russian; every `ru-*` locale (`ru-RU`, `ru-BY`, `ru-KZ` ...) resolves here.
-    LangInfo { code: "ru", name: "Русский", source: include_str!("ru.tsv"), plural: plural_russian, catalog: OnceLock::new() },
+    LangInfo { code: "ru", name: "Русский", source: include_str!("ru.tsv"), plural: plural_russian, rtl: false, catalog: OnceLock::new() },
+    // Kazakh; every `kk-*` locale (`kk-KZ`, `kk-KZ.UTF-8`) resolves here.
+    LangInfo { code: "kk", name: "Қазақша", source: include_str!("kk.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
     // Bulgarian; every `bg-*` locale (`bg-BG`) resolves here.
-    LangInfo { code: "bg", name: "Български", source: include_str!("bg.tsv"), plural: plural_one_other, catalog: OnceLock::new() },
+    LangInfo {
+        code: "bg", name: "Български", source: include_str!("bg.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new()
+    },
     // Telugu; every `te-*` locale (`te-IN`) resolves here.
-    LangInfo { code: "te", name: "తెలుగు", source: include_str!("te.tsv"), plural: plural_one_other, catalog: OnceLock::new() },
+    LangInfo {
+        code: "te", name: "తెలుగు", source: include_str!("te.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new()
+    },
     // Hungarian; every `hu-*` locale (`hu-HU`) resolves here.
-    LangInfo { code: "hu", name: "Magyar", source: include_str!("hu.tsv"), plural: plural_one_other, catalog: OnceLock::new() },
+    LangInfo { code: "hu", name: "Magyar", source: include_str!("hu.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
     // Ukrainian; every `uk-*` locale (`uk-UA`, `uk_UA.UTF-8`) resolves here.
-    LangInfo { code: "uk", name: "Українська", source: include_str!("uk.tsv"), plural: plural_ukrainian, catalog: OnceLock::new() },
+    LangInfo {
+        code: "uk", name: "Українська", source: include_str!("uk.tsv"), plural: plural_ukrainian, rtl: false, catalog: OnceLock::new()
+    },
+    // Italian; every `it-*` locale (`it-IT`) resolves here.
+    LangInfo { code: "it", name: "Italiano", source: include_str!("it.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
+    // Arabic (Modern Standard, Western digits); every `ar-*` locale (`ar-MA`, `ar-EG`, `ar-SA` ...)
+    // resolves here. Right to left: see `LangInfo::rtl`.
+    LangInfo { code: "ar", name: "العربية", source: include_str!("ar.tsv"), plural: plural_arabic, rtl: true, catalog: OnceLock::new() },
+    // Polish; every `pl-*` locale (`pl-pl`, `pl_pl.UTF-8`) resolves here.
+    LangInfo { code: "pl", name: "Polski", source: include_str!("pl.tsv"), plural: plural_polish, rtl: false, catalog: OnceLock::new() },
+    // Slovene; every `sl-*` locale (`sl-SI`) resolves here. Four plural forms (one, two, few, other).
+    LangInfo { code: "sl", name: "Slovenščina", source: include_str!("sl.tsv"), plural: plural_sl, rtl: false, catalog: OnceLock::new() },
+    LangInfo { code: "el", name: "Ελληνικά", source: include_str!("el.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
+    // Turkish; every `tr-*` locale (`tr-TR`, `tr_TR.UTF-8`) resolves here.
+    LangInfo { code: "tr", name: "Türkçe", source: include_str!("tr.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new() },
+    // Lithuanian; every `lt-*` locale (`lt-LT`, `lt_LT.UTF-8`) resolves here. Three plural forms (one, few, other).
+    LangInfo { code: "lt", name: "Lietuvių", source: include_str!("lt.tsv"), plural: plural_lithuanian, rtl: false, catalog: OnceLock::new() },
 ];
 
 impl LangInfo {
@@ -137,9 +217,12 @@ impl LangInfo {
 
     fn catalog(&self) -> &Catalog {
         self.catalog.get_or_init(|| {
-            let (catalog, errors) = Catalog::parse(self.source, self.plural_forms());
+            let (mut catalog, errors) = Catalog::parse(self.source, self.plural_forms());
             for error in errors {
                 log::warn!("{} interface catalog: {error}; that entry shows in English", self.code);
+            }
+            if self.rtl {
+                catalog.map_translations(crate::bidi::display_rtl);
             }
             catalog
         })
@@ -189,6 +272,12 @@ impl Lang {
 
     pub fn name(self) -> &'static str {
         self.0.name
+    }
+
+    /// Whether the language is written right to left. Its translations come back from the
+    /// lookups in display order (see [`LangInfo::rtl`]).
+    pub fn rtl(self) -> bool {
+        self.0.rtl
     }
 
     fn catalog(self) -> &'static Catalog {
@@ -336,9 +425,26 @@ pub fn t(s: &str) -> &str {
     tr(current(), s)
 }
 
+/// The name of a keyboard key, distinct from a command such as Delete. Missing key-name
+/// translations use the English key name, never a plain command translation.
+pub fn key_name(s: &str) -> &str {
+    current().catalog().contextual("key", s).unwrap_or(s)
+}
+
 /// Translate an English UI string; unknown strings come back unchanged.
 pub fn tr(lang: Lang, s: &str) -> &str {
     lang.catalog().plain(s).unwrap_or(s)
+}
+
+/// How the layers below say their own sentences in the current language.
+///
+/// The checker, the preflight profiles and the signature panel hand over a whole English wording
+/// — holes and all — and the document's own words apart from it, so this is all they need of us:
+/// `f.said(&i18n::words)` says the sentence here, and `in_english` says it in English. An unknown
+/// wording comes back as it stands, which is the English, so a catalog that is missing one is a
+/// sentence in English rather than a gap.
+pub fn words(wording: &str) -> String {
+    t(wording).to_owned()
 }
 
 /// Like [`tr`], for an English string that needs a disambiguating `context`.
@@ -396,7 +502,23 @@ pub fn action_label(text: &str) -> String {
     {
         return fmt(t("Change {key}"), &[("key", t(key))]);
     }
+    if let Some(n) = text.strip_prefix("Delete ").and_then(|rest| rest.strip_suffix(" fields")).and_then(|n| n.parse::<u64>().ok()) {
+        return trn(current(), n, "Delete {n} field", "Delete {n} fields");
+    }
     t(text).to_owned()
+}
+
+/// A history label in the current language, out of the engine's own two parts: the wording is
+/// looked up whole and the document's own word goes into its `{}` afterwards, so a file or field
+/// name is never read as part of the wording. This is exact where [`action_label`] has to guess
+/// from the English text, and is what the engine's own labels go through.
+pub fn edit_label(label: &pdfcraft_engine::Label) -> String {
+    // A batch's wording is only the hole: it carries its name as text, which from below L7 is one
+    // of `BATCH_LABELS` and so is looked up too.
+    if let Some(name) = label.value.as_deref().filter(|_| label.wording == "{batch}") {
+        return t(name).to_owned();
+    }
+    label.said(t(label.wording))
 }
 
 /// A command label such as "Undo Insert pages from a.pdf" in the current language. A catalog
@@ -437,6 +559,26 @@ mod tests {
     use super::*;
 
     const JA: fn() -> Lang = || Lang::from_code("ja").expect("ja registered");
+    // These physical key-cap names remain English in several keyboard layouts. Only their
+    // dedicated key context may use them unchanged; ordinary command labels still translate.
+    const KEY_CAP_NAMES: &[&str] = &["Ctrl", "Shift", "Delete", "Esc", "Home", "End"];
+
+    #[test]
+    fn keyboard_key_names_have_a_separate_context_and_english_fallback() {
+        for lang in Lang::all().filter(|l| *l != Lang::EN) {
+            for key in ["Ctrl", "Shift", "Delete", "Esc", "Home", "End", "Space"] {
+                assert!(lang.catalog().contextual("key", key).is_some(), "{}: {key}", lang.code());
+            }
+        }
+        let previous = current();
+        set_current(Lang::from_code("de").unwrap());
+        assert_eq!(key_name("Delete"), "Entf");
+        assert_eq!(t("Delete"), "Löschen");
+        assert_eq!(key_name("Open"), "Open", "a missing key name must not borrow a command translation");
+        set_current(Lang::EN);
+        assert_eq!(key_name("Delete"), "Delete");
+        set_current(previous);
+    }
 
     #[test]
     fn tags_map_to_languages() {
@@ -600,8 +742,14 @@ mod tests {
 
     #[test]
     fn broken_catalog_falls_back_to_english() {
-        static BROKEN: LangInfo =
-            LangInfo { code: "broken", name: "Broken test catalog", source: "malformed\n\\", plural: plural_none, catalog: OnceLock::new() };
+        static BROKEN: LangInfo = LangInfo {
+            code: "broken",
+            name: "Broken test catalog",
+            source: "malformed\n\\",
+            plural: plural_none,
+            rtl: false,
+            catalog: OnceLock::new(),
+        };
         assert_eq!(tr(Lang(&BROKEN), "File"), "File");
         assert_eq!(trn(Lang(&BROKEN), 2, "{n} page", "{n} pages"), "2 pages");
     }
@@ -613,6 +761,7 @@ mod tests {
             name: "Test catalog",
             source: "\tLight\tPlain light\nweight\tLight\tThin\n@id\tfile.open\tOpen dialog…\n@plural\t{n} page|{n} pages\tOne page: {n}|Many pages: {n}\n",
             plural: plural_one_other,
+            rtl: false,
             catalog: OnceLock::new(),
         };
         let l = Lang(&TEST);
@@ -644,7 +793,7 @@ mod tests {
         let error = pdfcraft_engine::ocr::OcrError::NoModels.to_string();
         let notice = "Text recognition isn't installed: its model files are missing. Reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them.";
         assert!(include_str!("../ocr_ui.rs").contains(notice), "keep in step with ocr_ui.rs");
-        for code in ["bg", "de", "es", "fr", "hu", "ja", "ru", "te", "uk", "zh-hans", "zh-hant"] {
+        for code in ["bg", "cs", "de", "es", "fr", "hu", "ja", "ru", "te", "uk", "zh-hans", "zh-hant"] {
             let lang = Lang::from_code(code).expect("registered");
             assert!(has(lang, notice) && has(lang, &error), "{code}");
         }
@@ -671,7 +820,55 @@ mod tests {
     }
 
     /// Every `tl!("…")` literal in the UI source (test modules aside), unescaped.
+    /// Every label Shared Field Properties shows, including those it passes through a variable
+    /// (flag labels, errors, the font label), exists in each full catalog.
+    #[test]
+    fn bulk_field_properties_labels_are_in_every_full_catalog() {
+        let source = include_str!("../bulk_fields.rs");
+        // The string literal starting right after `at`, unescaped.
+        fn literal(rest: &str) -> Option<String> {
+            let mut out = String::new();
+            let mut chars = rest.chars();
+            while let Some(c) = chars.next() {
+                match c {
+                    '"' => return Some(out),
+                    '\\' => out.push(chars.next()?),
+                    c => out.push(c),
+                }
+            }
+            None
+        }
+        let mut labels = std::collections::BTreeSet::new();
+        for marker in ["tl!(\"", "Err(\"", "ok_or(\"", "|| \"", "MISSING: &str = \"", "i18n::t(\"", "_ => \""] {
+            for (at, _) in source.match_indices(marker) {
+                labels.extend(source.get(at + marker.len()..).and_then(literal));
+            }
+        }
+        // Flag labels: `(field_flags::NAME, "Label", inverted)`.
+        for (at, _) in source.match_indices("(field_flags::") {
+            let line = source.get(at..).and_then(|s| s.lines().next()).unwrap_or_default();
+            if let Some(q) = line.find(", \"") {
+                labels.extend(line.get(q + 3..).and_then(literal));
+            }
+        }
+        labels.retain(|l| l.chars().any(char::is_alphabetic) && !l.contains("credits") && !l.starts_with("bulk"));
+        for label in ["Mixed", "Custom font", "The document is no longer open."] {
+            labels.insert(label.to_string());
+        }
+        assert!(labels.len() > 20 && labels.contains("Comb of characters"), "the scan found the dialog's labels: {labels:?}");
+        for code in ["bg", "cs", "de", "es", "fr", "hu", "it", "ja", "pt-br", "ru", "te", "tr", "uk", "zh-hans", "zh-hant"] {
+            let lang = Lang::from_code(code).expect("registered");
+            let missing: Vec<_> = labels.iter().filter(|l| !has(lang, l)).collect();
+            assert!(missing.is_empty(), "{code} lacks Shared Field Properties labels: {missing:#?}");
+        }
+    }
+
     fn ui_literals() -> std::collections::BTreeSet<String> {
+        scan_ui_literals(false)
+    }
+
+    // Lithuanian also checks direct lookup calls and multiline literal arguments.
+    fn scan_ui_literals(expanded: bool) -> std::collections::BTreeSet<String> {
         let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
         let mut literals = std::collections::BTreeSet::new();
         while let Some(dir) = stack.pop() {
@@ -683,8 +880,19 @@ mod tests {
                     }
                 } else if path.extension().is_some_and(|ext| ext == "rs") {
                     let source = std::fs::read_to_string(path).expect("UI source file").replace("\r\n", "\n");
+                    let source = if expanded { source.replace("crate::i18n::t(", "tl!(") } else { source };
                     let mut rest = source.split("#[cfg(test)]\nmod ").next().unwrap_or_default();
-                    while let Some((_, after)) = rest.split_once("tl!(\"") {
+                    while let Some((_, after)) = rest.split_once(if expanded { "tl!(" } else { "tl!(\"" }) {
+                        let after = if expanded {
+                            let after = after.trim_start();
+                            let Some(after) = after.strip_prefix('"') else {
+                                rest = after;
+                                continue;
+                            };
+                            after
+                        } else {
+                            after
+                        };
                         let mut escaped = false;
                         let end = after
                             .char_indices()
@@ -697,7 +905,10 @@ mod tests {
                             })
                             .expect("closed tl! literal");
                         let (raw, tail) = after.split_at(end);
-                        if tail.starts_with("\")") {
+                        let argument_end = tail.strip_prefix('"').expect("closing quote").trim_start();
+                        let literal_call =
+                            argument_end.starts_with(')') || argument_end.strip_prefix(',').is_some_and(|rest| rest.trim_start().starts_with(')'));
+                        if tail.starts_with("\")") || (expanded && literal_call) {
                             let label: String = serde_json::from_str(&format!("\"{raw}\"")).expect("UI literal escapes");
                             literals.insert(label);
                         }
@@ -717,6 +928,37 @@ mod tests {
         assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
         let missing: Vec<_> = literals.iter().filter(|label| !has(JA(), label)).collect();
         assert!(missing.is_empty(), "untranslated Japanese UI literals: {missing:#?}");
+    }
+
+    /// Italian translates every registered command and every All tools group, section and item.
+    #[test]
+    fn italian_covers_commands_and_catalogue() {
+        let it = Lang::from_code("it").expect("it registered");
+        for command in pdfcraft_engine::commands::COMMANDS {
+            assert!(has(it, command.label), "missing command: {}", command.label);
+            if let Some(menu) = command.menu {
+                assert!(has(it, menu), "missing menu: {menu}");
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            assert!(has(it, group.label), "missing group: {}", group.label);
+            for section in group.sections {
+                assert!(has(it, section.title), "missing section: {}", section.title);
+                for item in section.items {
+                    assert!(has(it, item.label), "missing item: {}", item.label);
+                }
+            }
+        }
+    }
+
+    /// New tl!("literal") labels must not silently fall back to English in Italian.
+    #[test]
+    fn italian_covers_ui_literals() {
+        let it = Lang::from_code("it").expect("it registered");
+        let literals = ui_literals();
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        let missing: Vec<_> = literals.iter().filter(|label| !has(it, label)).collect();
+        assert!(missing.is_empty(), "untranslated Italian UI literals: {missing:#?}");
     }
 
     /// With craft-fonts, every Japanese translation has glyphs: with all interface faces (desktop)
@@ -818,6 +1060,78 @@ mod tests {
         assert_eq!(restored.language, "pt-br");
     }
 
+    /// Brazilian Portuguese translates every registered command and every All tools group, section and item.
+    #[test]
+    fn brazilian_portuguese_covers_commands_and_catalogue() {
+        let pt = Lang::from_code("pt-br").expect("pt-br registered");
+        for command in pdfcraft_engine::commands::COMMANDS {
+            assert!(has(pt, command.label), "missing command: {}", command.label);
+            if let Some(menu) = command.menu {
+                assert!(has(pt, menu), "missing menu: {menu}");
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            assert!(has(pt, group.label), "missing group: {}", group.label);
+            for section in group.sections {
+                assert!(has(pt, section.title), "missing section: {}", section.title);
+                for item in section.items {
+                    assert!(has(pt, item.label), "missing item: {}", item.label);
+                }
+            }
+        }
+    }
+
+    /// Check direct lookups and multiline literals as well as ordinary tl!("literal") calls,
+    /// following the complete-catalog check for Simplified Chinese.
+    #[test]
+    fn brazilian_portuguese_covers_ui_literals() {
+        let pt = Lang::from_code("pt-br").expect("pt-br registered");
+        let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        let mut literals = std::collections::BTreeSet::new();
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(dir).expect("UI source directory") {
+                let path = entry.expect("UI source entry").path();
+                if path.is_dir() {
+                    if path.file_name().is_some_and(|name| name != "i18n") {
+                        stack.push(path);
+                    }
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    let source = std::fs::read_to_string(path).expect("UI source file").replace("\r\n", "\n").replace("crate::i18n::t(", "tl!(");
+                    let mut rest = source.split("#[cfg(test)]\nmod ").next().unwrap_or_default();
+                    while let Some((_, after)) = rest.split_once("tl!(") {
+                        let after = after.trim_start();
+                        let Some(after) = after.strip_prefix('"') else {
+                            rest = after;
+                            continue;
+                        };
+                        let mut escaped = false;
+                        let end = after
+                            .char_indices()
+                            .find_map(|(i, c)| {
+                                if c == '"' && !escaped {
+                                    return Some(i);
+                                }
+                                escaped = c == '\\' && !escaped;
+                                None
+                            })
+                            .expect("closed tl! literal");
+                        let (raw, tail) = after.split_at(end);
+                        let closing = tail.strip_prefix('"').expect("closing quote").trim_start();
+                        let closing = closing.strip_prefix(',').unwrap_or(closing).trim_start();
+                        if closing.starts_with(')') {
+                            let label: String = serde_json::from_str(&format!("\"{raw}\"")).expect("UI literal escapes");
+                            literals.insert(label);
+                        }
+                        rest = tail.strip_prefix('"').expect("closing quote");
+                    }
+                }
+            }
+        }
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        let missing: Vec<_> = literals.iter().filter(|label| !has(pt, label)).collect();
+        assert!(missing.is_empty(), "untranslated Brazilian Portuguese UI literals: {missing:#?}");
+    }
+
     #[test]
     fn spanish_is_registered() {
         let es = Lang::from_code("es").expect("es registered");
@@ -853,6 +1167,57 @@ mod tests {
                 for item in section.items {
                     assert!(has(es, item.label), "missing item: {}", item.label);
                 }
+            }
+        }
+    }
+
+    /// Spanish says everything the layers below word for themselves: what the accessibility
+    /// checker finds and what its saved report calls things, what the PDF/A verifier reports, what
+    /// a signature's details say and the changes they name, what can be wrong with the pages to
+    /// print, and what an edit is called in the history.
+    ///
+    /// These lists are the whole point of the engine handing the wording over apart from the
+    /// document's own words: a catalog that covers them says those sentences in its own language.
+    /// A sentence missing here is a sentence in English on a Spanish screen.
+    #[test]
+    fn spanish_covers_what_the_engine_says() {
+        let es = Lang::from_code("es").expect("es registered");
+        let lists: [(&str, &[&str]); 8] = [
+            ("accessibility finding", pdfcraft_engine::a11y::WORDINGS),
+            ("accessibility report", pdfcraft_engine::a11y::REPORT_WORDS),
+            ("PDF/A problem", pdfcraft_engine::pdfa::WORDINGS),
+            ("signature detail", pdfcraft_engine::sign::pdf::WORDINGS),
+            ("change after signing", pdfcraft_engine::sign::pdf::kind::ALL),
+            ("pages to print", pdfcraft_engine::print::WORDINGS),
+            ("edit label", pdfcraft_engine::EDIT_LABELS),
+            ("batch label", pdfcraft_engine::BATCH_LABELS),
+        ];
+        for (what, list) in lists {
+            assert!(!list.is_empty(), "no {what} wordings to cover");
+            for wording in list {
+                assert!(has(es, wording), "missing {what}: {wording}");
+            }
+        }
+    }
+
+    /// Each of those sentences keeps its holes when it is said in Spanish, so the document's own
+    /// words still have somewhere to go: a translation that drops `{p}` or `{}` would read as a
+    /// sentence about nothing in particular.
+    #[test]
+    fn spanish_keeps_the_holes_in_what_the_engine_says() {
+        let es = Lang::from_code("es").expect("es registered");
+        let lists: [&[&str]; 4] = [
+            pdfcraft_engine::a11y::WORDINGS,
+            pdfcraft_engine::pdfa::WORDINGS,
+            pdfcraft_engine::sign::pdf::WORDINGS,
+            pdfcraft_engine::print::WORDINGS,
+        ];
+        for wording in lists.into_iter().flatten() {
+            let said = tr(es, wording);
+            // `{}` is one hole; `{name}` holes are named, and each name must survive by itself.
+            assert_eq!(wording.matches("{}").count(), said.matches("{}").count(), "the Spanish of {wording:?} loses a hole: {said:?}");
+            for hole in wording.split('{').skip(1).filter_map(|rest| rest.split_once('}')).map(|(name, _)| name).filter(|n| !n.is_empty()) {
+                assert!(said.contains(&format!("{{{hole}}}")), "the Spanish of {wording:?} loses {{{hole}}}: {said:?}");
             }
         }
     }
@@ -962,12 +1327,38 @@ mod tests {
             assert!(has(cs, menu), "Czech lacks the menu title {menu:?}");
             assert!(has(cs, spec.label), "Czech lacks the {menu} menu label {:?} ({})", spec.label, spec.id);
         }
-        const KEEP_AS_IS: &[&str] = &["OK"];
-        let (entries, _) = parse_entries(cs.0.source, cs.0.plural_forms());
+        // Spelled the same in Czech: product and format names, abbreviations, key caps, words
+        // Czech shares with English, and templates with no English words.
+        const KEEP_AS_IS: &[&str] = &[
+            "OK",
+            "PDF/A…",
+            "Microsoft Word (.docx)",
+            "PostScript / EPS",
+            "Home / End",
+            "JavaScript",
+            "ZIP",
+            "Text",
+            "Index",
+            "Metadata",
+            "Model",
+            "{field}: {e}",
+            "{0}: {1}",
+            "{month} {y}",
+            "+LOC",
+            "−LOC",
+            "ΔLOC",
+            "+Bin",
+            "−Bin",
+        ];
+        let (entries, errors) = parse_entries(cs.0.source, cs.0.plural_forms());
+        assert!(errors.is_empty(), "{errors:?}");
+        // The code joins some labels with a space at either end: keep exactly the source's.
+        let edges = |s: &str| (s.len() - s.trim_start().len(), s.len() - s.trim_end().len());
         for e in &entries {
-            assert!(e.source != e.translation || KEEP_AS_IS.contains(&e.source.as_str()), "{:?} is untranslated", e.source);
+            let key_cap = e.context == "key" && KEY_CAP_NAMES.contains(&e.source.as_str());
+            assert!(e.source != e.translation || KEEP_AS_IS.contains(&e.source.as_str()) || key_cap, "{:?} is untranslated", e.source);
             assert!(!e.translation.contains("..."), "use … rather than three dots: {:?}", e.translation);
-            assert_eq!(e.translation.trim(), e.translation, "stray whitespace: {:?}", e.translation);
+            assert_eq!(edges(&e.translation), edges(&e.source), "stray whitespace: {:?}", e.translation);
         }
         let mut app = crate::PdfCraftApp::default();
         app.set_option("language", "cs").unwrap();
@@ -976,6 +1367,153 @@ mod tests {
         let mut restored = crate::PdfCraftApp::default();
         restored.restore(&app.persist());
         assert_eq!(restored.language, "cs");
+    }
+
+    /// Czech translates every registered command, menu and All tools label.
+    #[test]
+    fn czech_covers_commands_and_catalogue() {
+        let cs = Lang::from_code("cs").expect("cs registered");
+        for command in pdfcraft_engine::commands::COMMANDS {
+            assert!(has(cs, command.label), "missing command: {}", command.label);
+            if let Some(menu) = command.menu {
+                assert!(has(cs, menu), "missing menu: {menu}");
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            assert!(has(cs, group.label), "missing group: {}", group.label);
+            for section in group.sections {
+                assert!(has(cs, section.title), "missing section: {}", section.title);
+                for item in section.items {
+                    assert!(has(cs, item.label), "missing item: {}", item.label);
+                }
+            }
+        }
+    }
+
+    /// Czech translates every `tl!("…")` literal in the UI source.
+    #[test]
+    fn czech_covers_ui_literals() {
+        let cs = Lang::from_code("cs").expect("cs registered");
+        let literals = ui_literals();
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        let missing: Vec<_> = literals.iter().filter(|label| !has(cs, label)).collect();
+        assert!(missing.is_empty(), "untranslated Czech UI literals: {missing:#?}");
+    }
+
+    /// Czech counts take three forms (1; 2–4; 0 and 5+), dates use the genitive month after the
+    /// day, and history labels keep captured names.
+    #[test]
+    fn czech_plurals_dates_and_history_labels() {
+        let cs = Lang::from_code("cs").expect("cs registered");
+        assert_eq!(trn(cs, 1, "{n} page", "{n} pages"), "1 stránka");
+        assert_eq!(trn(cs, 3, "{n} page", "{n} pages"), "3 stránky");
+        assert_eq!(trn(cs, 5, "{n} page", "{n} pages"), "5 stránek");
+        assert_eq!(trn(cs, 0, "{n} field", "{n} fields"), "0 polí");
+        assert_eq!(trn(cs, 1, "{n} byte", "{n} bytes"), "1 bajt");
+        assert_eq!(trn(cs, 512, "{n} byte", "{n} bytes"), "512 bajtů");
+        assert_eq!(trn(cs, 3, "{n} image optimized", "{n} images optimized"), "3 obrázky optimalizovány");
+        assert_eq!(tr(cs, "October"), "Říjen");
+        let month = tr_ctx(cs, "calendar date", "October");
+        assert_eq!(fmt(tr(cs, "{month} {day}, {y}"), &[("month", month), ("day", "9"), ("y", "2026")]), "9. října 2026");
+        set_current(cs);
+        assert_eq!(command_label("Undo Insert pages from Zpráva {n}.pdf"), "Zpět: Vložit stránky ze souboru Zpráva {n}.pdf");
+        assert_eq!(command_label("Redo Fill in Kontakt {key}"), "Znovu: Vyplnit Kontakt {key}");
+        assert_eq!(action_label("Change Title"), "Změnit: Název");
+        assert_eq!(action_label("Delete 3 fields"), "Odstranit 3 pole");
+        assert_eq!(action_label("Delete 12 fields"), "Odstranit 12 polí");
+        assert_eq!(fmt(t("{n} pages selected"), &[("n", "3")]), "Vybráno stránek: 3");
+        set_current(Lang::EN);
+    }
+
+    /// Turkish covers every registered menu title and menu command label, keeps ellipses, and
+    /// persists in preferences.
+    #[test]
+    fn turkish_covers_every_menu_label() {
+        let tr_lang = Lang::from_code("tr").expect("tr registered");
+        assert_eq!(tr_lang.name(), "Türkçe");
+        assert_eq!(tr(tr_lang, "File"), "Dosya");
+        assert_eq!(tr(tr_lang, "Türkçe Belge.pdf"), "Türkçe Belge.pdf");
+        assert_eq!((0..=6).map(|n| (tr_lang.0.plural)(n)).collect::<Vec<_>>(), [0; 7]);
+        for spec in pdfcraft_engine::commands::COMMANDS {
+            let Some(menu) = spec.menu else { continue };
+            assert!(has(tr_lang, menu), "Turkish lacks the menu title {menu:?}");
+            assert!(has(tr_lang, spec.label), "Turkish lacks the {menu} menu label {:?} ({})", spec.label, spec.id);
+        }
+        const KEEP_AS_IS: &[&str] = &[
+            "OK",
+            "PDF/A…",
+            "Microsoft Word (.docx)",
+            "PostScript / EPS",
+            "Preflight",
+            "JavaScript",
+            "ZIP",
+            "{n} {kind}",
+            "{rule} - {status}",
+            "Poster",
+            "{field}: {e}",
+            "`{command}` {when}",
+            "{0}: {1}",
+            "{month} {y}",
+            "+LOC",
+            "−LOC",
+            "ΔLOC",
+            "+Bin",
+            "−Bin",
+            "Model",
+            "Home / End",
+        ];
+        let (entries, errors) = parse_entries(tr_lang.0.source, tr_lang.0.plural_forms());
+        assert!(errors.is_empty(), "Turkish catalog errors: {errors:?}");
+        for e in &entries {
+            assert!(
+                e.source != e.translation
+                    || KEEP_AS_IS.contains(&e.source.as_str())
+                    || (e.context == "key" && KEY_CAP_NAMES.contains(&e.source.as_str())),
+                "{:?} is untranslated",
+                e.source
+            );
+            assert!(!e.translation.contains("..."), "use … rather than three dots: {:?}", e.translation);
+            assert_eq!(e.source.starts_with(' '), e.translation.starts_with(' '), "leading space mismatch: {:?}", e.translation);
+            assert_eq!(e.source.ends_with(' '), e.translation.ends_with(' '), "trailing space mismatch: {:?}", e.translation);
+        }
+        let mut app = crate::PdfCraftApp::default();
+        app.set_option("language", "tr").unwrap();
+        assert!(app.set_option("language", "tu").is_err());
+        assert_eq!(app.language, "tr");
+        let mut restored = crate::PdfCraftApp::default();
+        restored.restore(&app.persist());
+        assert_eq!(restored.language, "tr");
+    }
+
+    /// Turkish translates every registered command, menu and All tools label.
+    #[test]
+    fn turkish_covers_commands_and_catalogue() {
+        let tr_lang = Lang::from_code("tr").expect("tr registered");
+        for command in pdfcraft_engine::commands::COMMANDS {
+            assert!(has(tr_lang, command.label), "missing command: {}", command.label);
+            if let Some(menu) = command.menu {
+                assert!(has(tr_lang, menu), "missing menu: {menu}");
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            assert!(has(tr_lang, group.label), "missing group: {}", group.label);
+            for section in group.sections {
+                assert!(has(tr_lang, section.title), "missing section: {}", section.title);
+                for item in section.items {
+                    assert!(has(tr_lang, item.label), "missing item: {}", item.label);
+                }
+            }
+        }
+    }
+
+    /// Turkish translates every `tl!("…")` literal in the UI source.
+    #[test]
+    fn turkish_covers_ui_literals() {
+        let literals = ui_literals();
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        let tr_lang = Lang::from_code("tr").expect("tr registered");
+        let missing: Vec<_> = literals.iter().filter(|label| !has(tr_lang, label)).collect();
+        assert!(missing.is_empty(), "untranslated Turkish UI literals: {missing:#?}");
     }
 
     #[test]
@@ -1128,6 +1666,32 @@ mod tests {
         for command in pdfcraft_engine::commands::COMMANDS {
             assert!(has(zh, command.label), "missing command: {}", command.label);
         }
+    }
+
+    /// Report statuses and rule descriptions must retain their meaning in Taiwan Chinese.
+    #[test]
+    fn traditional_chinese_accessibility_meaning() {
+        use pdfcraft_engine::a11y::{Rule, Status};
+        let zh = Lang::from_code("zh-hant").expect("zh-hant registered");
+        assert_eq!(tr(zh, Status::Passed.label()), "通過");
+        assert_eq!(tr(zh, Status::Failed.label()), "未通過");
+        assert_eq!(tr(zh, Rule::Scripts.description()), "沒有妨礙無障礙操作的指令碼");
+        assert_eq!(tr(zh, Rule::TableRows.name()), "列");
+        assert_eq!(tr(zh, Rule::TableRows.explanation()), "表格列應直接位於表格或其表頭、主體、表尾內。請修正表格標記。");
+        assert_eq!(tr(zh, Rule::TableRegularity.description()), "表格每列的欄數必須相同，每欄的列數也必須相同");
+        assert_eq!(tr(zh, Rule::TableCells.explanation()), "表格儲存格應位於列內。請修正表格標記。");
+        assert_eq!(tr(zh, Rule::TableHeaders.explanation()), "表頭儲存格（TH）讓聽者知道每欄或每列的內容。請標記表頭儲存格。");
+    }
+
+    /// A choice in a form is an item, not a project; field notices preserve user-supplied names.
+    #[test]
+    fn traditional_chinese_form_vocabulary() {
+        let zh = Lang::from_code("zh-hant").expect("zh-hant registered");
+        assert_eq!(tr(zh, "Item:"), "項目：");
+        assert_eq!(tr(zh, "Item List"), "項目清單");
+        assert_eq!(tr(zh, "Sort items"), "排序項目");
+        assert_eq!(tr(zh, "Read Only"), "唯讀");
+        assert_eq!(fmt(tr(zh, "{name} is read-only"), &[("name", "Field{n}")]), "Field{n} 為唯讀");
     }
 
     #[test]
@@ -1474,6 +2038,329 @@ mod tests {
     }
 
     #[test]
+    fn lithuanian_is_registered_and_persists() {
+        let lt = Lang::from_code("lt").expect("lt registered");
+        assert_eq!(lt.name(), "Lietuvių");
+        assert_eq!(normalize_pref("LT"), Some("lt"));
+        for tag in ["lt", "lt-LT", "lt_LT.UTF-8", "LT-lt"] {
+            assert_eq!(lang_from_tag(tag), Some(lt), "{tag}");
+        }
+        assert_eq!(tr(lt, "File"), "Failas");
+        assert_eq!(tr(lt, "Edit"), "Redaguoti");
+        assert_eq!(tr(lt, "Save"), "Įrašyti");
+        assert_eq!(tr(lt, "Interface language"), "Sąsajos kalba");
+        assert_eq!(trn(lt, 1, "{n} page", "{n} pages"), "1 puslapis");
+        assert_eq!(trn(lt, 2, "{n} page", "{n} pages"), "2 puslapiai");
+        assert_eq!(trn(lt, 10, "{n} page", "{n} pages"), "10 puslapių");
+        assert_eq!(trn(lt, 11, "{n} page", "{n} pages"), "11 puslapių");
+        assert_eq!(trn(lt, 21, "{n} page", "{n} pages"), "21 puslapis");
+        assert_eq!(trn(lt, 22, "{n} page", "{n} pages"), "22 puslapiai");
+        assert_eq!(trn(lt, 12, "{n} object selected", "{n} objects selected"), "Pažymėta 12 objektų");
+        assert_eq!(trn(lt, 22, "{n} object selected", "{n} objects selected"), "Pažymėti 22 objektai");
+        let mut app = crate::PdfCraftApp::default();
+        app.set_option("language", "LT").unwrap();
+        assert_eq!(app.language, "lt");
+        let mut restored = crate::PdfCraftApp::default();
+        restored.restore(&app.persist());
+        assert_eq!(restored.language, "lt");
+        assert!(restored.set_option("language", "xx").is_err());
+    }
+
+    #[test]
+    fn lithuanian_covers_commands_and_catalogue() {
+        let lt = Lang::from_code("lt").expect("lt registered");
+        let mut missing = std::collections::BTreeSet::new();
+        for command in pdfcraft_engine::commands::COMMANDS {
+            if !has(lt, command.label) {
+                missing.insert(command.label);
+            }
+            if let Some(menu) = command.menu
+                && !has(lt, menu)
+            {
+                missing.insert(menu);
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            if !has(lt, group.label) {
+                missing.insert(group.label);
+            }
+            for section in group.sections {
+                if !has(lt, section.title) {
+                    missing.insert(section.title);
+                }
+                for item in section.items {
+                    if !has(lt, item.label) {
+                        missing.insert(item.label);
+                    }
+                }
+            }
+        }
+        assert!(missing.is_empty(), "Lithuanian misses commands/tools: {missing:#?}");
+    }
+
+    #[test]
+    fn lithuanian_covers_ui_literals() {
+        let lt = Lang::from_code("lt").expect("lt registered");
+        let literals = scan_ui_literals(true);
+        assert!(literals.contains("Float panel"), "direct lookup literals are included");
+        assert!(literals.contains("@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}"), "multiline literal arguments are included");
+        let missing: Vec<_> = literals.iter().filter(|label| !has(lt, label)).collect();
+        assert!(missing.is_empty(), "Untranslated Lithuanian UI labels: {missing:#?}");
+    }
+
+    #[test]
+    fn lithuanian_covers_contextual_calendar_certificate_and_preference_labels() {
+        let lt = Lang::from_code("lt").expect("lt registered");
+        assert_eq!(tr_ctx(lt, "signature pad", "Type"), "Tekstu");
+        for label in ["All tools", "Read", "E-Sign", "Tools", "View more", "View less"] {
+            assert!(has(lt, label), "shell label remains untranslated: {label}");
+        }
+        assert_eq!(["Slow", "Normal", "Fast"].map(|label| tr_ctx(lt, "scroll speed", label)), ["Lėtas", "Įprastas", "Greitas"]);
+        let months = [
+            ("January", "sausis", "sausio"),
+            ("February", "vasaris", "vasario"),
+            ("March", "kovas", "kovo"),
+            ("April", "balandis", "balandžio"),
+            ("May", "gegužė", "gegužės"),
+            ("June", "birželis", "birželio"),
+            ("July", "liepa", "liepos"),
+            ("August", "rugpjūtis", "rugpjūčio"),
+            ("September", "rugsėjis", "rugsėjo"),
+            ("October", "spalis", "spalio"),
+            ("November", "lapkritis", "lapkričio"),
+            ("December", "gruodis", "gruodžio"),
+        ];
+        for (source, standalone, in_date) in months {
+            assert_eq!(tr(lt, source), standalone);
+            assert_eq!(tr_ctx(lt, "calendar date", source), in_date);
+        }
+        assert_eq!(
+            ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(|day| tr_ctx(lt, "calendar weekday", day)),
+            ["Sk", "Pr", "An", "Tr", "Kt", "Pn", "Št"]
+        );
+        assert_eq!(
+            fmt(tr(lt, "{month} {day}, {y}"), &[("month", tr_ctx(lt, "calendar date", "March")), ("day", "9"), ("y", "2026")]),
+            "2026 m. kovo 9 d."
+        );
+        assert_eq!(tr_ctx(lt, "certificate", "Subject"), "Sertifikato subjektas");
+        for field in [
+            "Issued to",
+            "Issued by",
+            "Valid from",
+            "Valid to",
+            "Intended usage",
+            "Serial number",
+            "Issuer",
+            "Validity starts",
+            "Validity ends",
+            "Public key",
+            "Basic constraints",
+            "Key usage",
+            "Self-signed",
+            "SHA-1 digest",
+            "SHA-256 digest",
+        ] {
+            assert_ne!(tr_ctx(lt, "certificate", field), field, "certificate field remains untranslated: {field}");
+        }
+    }
+
+    #[test]
+    fn lithuanian_dialog_wording_preserves_resolution_and_selection_counts() {
+        let lt = Lang::from_code("lt").expect("lt registered");
+        assert_eq!(tr(lt, "for images above"), "kai raiška viršija");
+        assert_eq!(
+            fmt(tr(lt, "Checking Options ({on} of 32 in all categories)"), &[("on", "31")]),
+            "Tikrinimo parinktys (visose kategorijose: 31 iš 32)"
+        );
+    }
+
+    #[test]
+    fn lithuanian_covers_bundled_catalog_keys_including_dynamic_dialog_labels() {
+        // Compare English keys, not other languages' translations. Literal scans alone
+        // miss labels passed through helpers, enum methods and conditional expressions.
+        let lt = Lang::from_code("lt").expect("lt registered");
+        let mut missing = std::collections::BTreeSet::new();
+        for reference in LANGUAGES.iter().filter(|language| language.code != "lt") {
+            let (entries, errors) = catalog::parse_entries(reference.source, reference.plural_forms());
+            assert!(errors.is_empty(), "{}: invalid reference catalog: {errors:?}", reference.code);
+            for entry in entries {
+                let translated = match entry.context.as_str() {
+                    "" => lt.catalog().plain(&entry.source),
+                    "@id" => lt.catalog().id(&entry.source),
+                    "@plural" => entry.source.split_once('|').and_then(|(one, other)| lt.catalog().plural(one, other, 0)),
+                    context => lt.catalog().contextual(context, &entry.source),
+                };
+                if translated.is_none() {
+                    missing.insert((entry.context, entry.source));
+                }
+            }
+        }
+        assert!(missing.is_empty(), "Lithuanian misses bundled catalog keys: {missing:#?}");
+    }
+
+    #[test]
+    fn lithuanian_covers_credits_labels() {
+        let lt = Lang::from_code("lt").expect("lt registered");
+        let labels = crate::credits::NameMode::ALL
+            .iter()
+            .map(|mode| mode.label())
+            .chain(crate::credits::SortKey::ALL.iter().flat_map(|key| {
+                let (menu, heading) = key.label();
+                [menu, heading]
+            }))
+            .chain(crate::credits::MODEL_COLUMNS.iter().copied());
+        let missing: Vec<_> = labels.filter(|label| !has(lt, label)).collect();
+        assert!(missing.is_empty(), "Lithuanian misses credits labels: {missing:#?}");
+    }
+
+    #[test]
+    fn lithuanian_wording_fixes_keep_context_and_meaning() {
+        let lt = Lang::from_code("lt").expect("lt registered");
+        assert_eq!(tr(lt, "of {name}"), "iš {name}");
+        assert_eq!(tr(lt, "Active"), "Aktyvi", "the adjective describes a theme (tema)");
+        for n in [1, 2, 12] {
+            let renamed = trn(
+                lt,
+                n,
+                "{n} field name collides with earlier files and will be renamed: {list}",
+                "{n} field names collide with earlier files and will be renamed: {list}",
+            );
+            assert!(renamed.contains("ankstesniuose failuose esančių laukų pavadinimais"));
+            assert!(renamed.contains("bus pervadint"));
+            assert!(renamed.contains("{list}"));
+        }
+        assert_eq!(tr(lt, "Two-Up (Facing)"), "Du atgręžti puslapiai");
+        assert_eq!(tr(lt, "Windows store  ·  "), "„Windows“ sertifikatų saugykla  ·  ");
+        assert_eq!(
+            tr(lt, "Adds invisible text over each word; the page image is not changed"),
+            "Virš kiekvieno žodžio prideda nematomą tekstą; puslapio vaizdas nesikeičia"
+        );
+        assert!(
+            tr(lt, "The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.")
+                .contains("visose PDF žiūryklėse")
+        );
+    }
+
+    #[test]
+    fn slovene_is_registered_and_persists() {
+        let sl = Lang::from_code("sl").expect("sl registered");
+        assert_eq!(sl.name(), "Slovenščina");
+        assert_eq!(normalize_pref("SL"), Some("sl"));
+        for tag in ["sl", "sl-SI", "sl_SI.UTF-8", "SL-si", "sl_SI@variant"] {
+            assert_eq!(lang_from_tag(tag), Some(sl), "{tag}");
+        }
+        assert_eq!(first_supported("sl-SI\r\nen-US"), Some(sl));
+        assert_eq!(tr(sl, "File"), "Datoteka");
+        assert_eq!(tr(sl, "Save as…"), "Shrani kot…");
+        assert_eq!(tr(sl, "Bookmarks"), "Zaznamki");
+        assert_eq!(tr(sl, "Layers"), "Plasti");
+        assert_eq!(tr(sl, "Poročilo {n}.pdf"), "Poročilo {n}.pdf");
+        assert_eq!(tr_ctx(sl, "comment menu", "Edit"), "Uredi");
+        assert_eq!(tr_ctx(sl, "signature pad", "Type"), "Vtipkaj");
+        assert_eq!(tr_ctx(sl, "action wizard", "Start"), "Začni");
+        // one (1), two (2), few (3, 4), other (0, 5+)
+        assert_eq!((0..=5).map(|n| (sl.0.plural)(n)).collect::<Vec<_>>(), [3, 0, 1, 2, 2, 3]);
+        let mut app = crate::PdfCraftApp::default();
+        app.set_option("language", "SL").unwrap();
+        assert_eq!(app.language, "sl");
+        let mut restored = crate::PdfCraftApp::default();
+        restored.restore(&app.persist());
+        assert_eq!(restored.language, "sl");
+        assert!(restored.set_option("language", "xx").is_err());
+        assert_eq!(restored.language, "sl");
+    }
+
+    #[test]
+    fn slovene_plurals_cover_dual_few_teens_and_large_counts() {
+        let sl = Lang::from_code("sl").expect("sl registered");
+        for (counts, page, field) in [
+            (vec![1, 101, 201, 1001, 1101], "stran", "polje"),
+            (vec![2, 102, 202, 1002], "strani", "polji"),
+            (vec![3, 4, 103, 104, 1003], "strani", "polja"),
+            (vec![0, 5, 10, 11, 12, 13, 14, 15, 20, 21, 22, 23, 24, 25, 31, 100, 111, 112, 121, 122, 1000, u64::MAX], "strani", "polj"),
+        ] {
+            for n in counts {
+                assert_eq!(trn(sl, n, "{n} page", "{n} pages"), format!("{n} {page}"));
+                assert_eq!(trn(sl, n, "{n} field", "{n} fields"), format!("{n} {field}"));
+            }
+        }
+    }
+
+    #[test]
+    fn slovene_diagnostics_preserve_user_values() {
+        let sl = Lang::from_code("sl").expect("sl registered");
+        set_current(sl);
+        assert_eq!(action_label("Custom action {n}"), "Custom action {n}");
+        assert_eq!(fmt(t("{n} pages selected"), &[("n", "3")]), "Izbranih strani: 3");
+        assert_eq!(tr(sl, "CheckBox"), "Potrditveno polje");
+        set_current(Lang::EN);
+    }
+
+    /// Slovene translates every registered command and every All tools group, section and item.
+    #[test]
+    fn slovene_covers_commands_and_catalogue() {
+        let sl = Lang::from_code("sl").expect("sl registered");
+        for command in pdfcraft_engine::commands::COMMANDS {
+            assert!(has(sl, command.label), "missing command: {}", command.label);
+            if let Some(menu) = command.menu {
+                assert!(has(sl, menu), "missing menu: {menu}");
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            assert!(has(sl, group.label), "missing group: {}", group.label);
+            for section in group.sections {
+                assert!(has(sl, section.title), "missing section: {}", section.title);
+                for item in section.items {
+                    assert!(has(sl, item.label), "missing item: {}", item.label);
+                }
+            }
+        }
+    }
+
+    /// New tl!("literal") labels must not silently fall back to English.
+    #[test]
+    fn slovene_covers_ui_literals() {
+        let sl = Lang::from_code("sl").expect("sl registered");
+        let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        let mut literals = std::collections::BTreeSet::new();
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(dir).expect("UI source directory") {
+                let path = entry.expect("UI source entry").path();
+                if path.is_dir() {
+                    if path.file_name().is_some_and(|name| name != "i18n") {
+                        stack.push(path);
+                    }
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    let source = std::fs::read_to_string(path).expect("UI source file").replace("\r\n", "\n");
+                    let mut rest = source.split("#[cfg(test)]\nmod ").next().unwrap_or_default();
+                    while let Some((_, after)) = rest.split_once("tl!(\"") {
+                        let mut escaped = false;
+                        let end = after
+                            .char_indices()
+                            .find_map(|(i, c)| {
+                                if c == '"' && !escaped {
+                                    return Some(i);
+                                }
+                                escaped = c == '\\' && !escaped;
+                                None
+                            })
+                            .expect("closed tl! literal");
+                        let (raw, tail) = after.split_at(end);
+                        if tail.starts_with("\")") {
+                            let label: String = serde_json::from_str(&format!("\"{raw}\"")).expect("UI literal escapes");
+                            literals.insert(label);
+                        }
+                        rest = tail.strip_prefix('"').expect("closing quote");
+                    }
+                }
+            }
+        }
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        let missing: Vec<_> = literals.iter().filter(|label| !has(sl, label)).collect();
+        assert!(missing.is_empty(), "untranslated Slovene UI literals: {missing:#?}");
+    }
+
+    #[test]
     fn bulgarian_is_registered() {
         let bg = Lang::from_code("bg").expect("bg registered");
         assert_eq!(bg.name(), "Български");
@@ -1790,7 +2677,13 @@ mod tests {
             "+Bin",
             "−Bin",
         ];
-        let unchanged: Vec<_> = entries.iter().filter(|e| e.source == e.translation && !keep.contains(&e.source.as_str())).collect();
+        let unchanged: Vec<_> = entries
+            .iter()
+            .filter(|e| {
+                let key_cap = e.context == "key" && KEY_CAP_NAMES.contains(&e.source.as_str());
+                e.source == e.translation && !keep.contains(&e.source.as_str()) && !key_cap
+            })
+            .collect();
         assert!(unchanged.is_empty(), "untranslated Ukrainian catalog entries: {unchanged:#?}");
     }
 
@@ -1815,6 +2708,112 @@ mod tests {
         }
     }
 
+    /// Kazakh translates every registered command and every All tools label.
+    #[test]
+    fn kazakh_covers_commands_and_catalogue() {
+        let kk = Lang::from_code("kk").expect("kk registered");
+        for command in pdfcraft_engine::commands::COMMANDS {
+            assert!(has(kk, command.label), "missing command: {}", command.label);
+            if let Some(menu) = command.menu {
+                assert!(has(kk, menu), "missing menu: {menu}");
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            assert!(has(kk, group.label), "missing group: {}", group.label);
+            for section in group.sections {
+                assert!(has(kk, section.title), "missing section: {}", section.title);
+                for item in section.items {
+                    assert!(has(kk, item.label), "missing item: {}", item.label);
+                }
+            }
+        }
+    }
+    /// Preserve only product/format names, abbreviations and templates with no English words.
+    #[test]
+    fn kazakh_catalog_does_not_leave_english_ui_text() {
+        let kk = Lang::from_code("kk").expect("kk registered");
+        let (entries, errors) = parse_entries(kk.0.source, kk.0.plural_forms());
+        assert!(errors.is_empty(), "{errors:?}");
+        let keep = [
+            "OK",
+            "PDF/A…",
+            "Microsoft Word (.docx)",
+            "PostScript / EPS",
+            // Key-cap names, printed in English on Kazakh keyboards.
+            "Home / End",
+            "JavaScript",
+            "ZIP",
+            "{n} {kind}",
+            "{rule} - {status}",
+            "{field}: {e}",
+            "`{command}` {when}",
+            "{0}: {1}",
+            "{month} {y}",
+            "+LOC",
+            "−LOC",
+            "ΔLOC",
+            "+Bin",
+            "−Bin",
+        ];
+        let unchanged: Vec<_> = entries
+            .iter()
+            .filter(|e| {
+                let key_cap = e.context == "key" && KEY_CAP_NAMES.contains(&e.source.as_str());
+                e.source == e.translation && !keep.contains(&e.source.as_str()) && !key_cap
+            })
+            .collect();
+        assert!(unchanged.is_empty(), "untranslated Kazakh catalog entries: {unchanged:#?}");
+    }
+    /// Kazakh translates every tl!("literal") in the UI source, including direct lookups and
+    /// multiline literals, following the complete-catalog check for Simplified Chinese.
+    #[test]
+    fn kazakh_covers_ui_literals() {
+        let kk = Lang::from_code("kk").expect("kk registered");
+        let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        let mut literals = std::collections::BTreeSet::new();
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(dir).expect("UI source directory") {
+                let path = entry.expect("UI source entry").path();
+                if path.is_dir() {
+                    if path.file_name().is_some_and(|name| name != "i18n") {
+                        stack.push(path);
+                    }
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    let source = std::fs::read_to_string(path).expect("UI source file").replace("\r\n", "\n").replace("crate::i18n::t(", "tl!(");
+                    let mut rest = source.split("#[cfg(test)]\nmod ").next().unwrap_or_default();
+                    while let Some((_, after)) = rest.split_once("tl!(") {
+                        let after = after.trim_start();
+                        let Some(after) = after.strip_prefix('"') else {
+                            rest = after;
+                            continue;
+                        };
+                        let mut escaped = false;
+                        let end = after
+                            .char_indices()
+                            .find_map(|(i, c)| {
+                                if c == '"' && !escaped {
+                                    return Some(i);
+                                }
+                                escaped = c == '\\' && !escaped;
+                                None
+                            })
+                            .expect("closed tl! literal");
+                        let (raw, tail) = after.split_at(end);
+                        let closing = tail.strip_prefix('"').expect("closing quote").trim_start();
+                        let closing = closing.strip_prefix(',').unwrap_or(closing).trim_start();
+                        if closing.starts_with(')') {
+                            let label: String = serde_json::from_str(&format!("\"{raw}\"")).expect("UI literal escapes");
+                            literals.insert(label);
+                        }
+                        rest = tail.strip_prefix('"').expect("closing quote");
+                    }
+                }
+            }
+        }
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        let missing: Vec<_> = literals.iter().filter(|label| !has(kk, label)).collect();
+        assert!(missing.is_empty(), "untranslated Kazakh UI literals: {missing:#?}");
+    }
     /// Check direct lookups and multiline literals as well as ordinary tl!("literal") calls,
     /// following the complete-catalog check for Simplified Chinese.
     #[test]
@@ -1897,6 +2896,132 @@ mod tests {
         );
         assert_eq!(contributor.name(crate::credits::NameMode::DisplayName), "Save");
         set_current(Lang::EN);
+    }
+
+    fn arabic() -> Lang {
+        Lang::from_code("ar").expect("ar registered")
+    }
+
+    #[test]
+    fn arabic_is_registered_and_persists() {
+        let ar = arabic();
+        assert_eq!(ar.name(), "العربية");
+        assert!(ar.rtl());
+        assert!(Lang::all().filter(|l| l.rtl()).eq([ar]), "Arabic is the only right-to-left language");
+        assert_eq!(normalize_pref("AR"), Some("ar"));
+        for tag in ["ar", "ar-MA", "ar_EG.UTF-8", "AR-sa", "ar_DZ@variant"] {
+            assert_eq!(lang_from_tag(tag), Some(ar), "{tag}");
+        }
+        assert_eq!(first_supported("ar-MA\r\nen-US"), Some(ar));
+        assert_eq!(tr(ar, "File"), "ملف");
+        assert_eq!(tr(ar, "Bookmarks"), "المرجعية الإشارات");
+        assert_eq!(tr_ctx(ar, "comment menu", "Edit"), "تحرير");
+        assert_eq!(tr_ctx(ar, "certificate", "Subject"), "الشهادة صاحب");
+        // Unknown strings and user text are never reordered by a lookup.
+        assert_eq!(tr(ar, "تقرير نهائي {n}.pdf"), "تقرير نهائي {n}.pdf");
+        let mut app = crate::PdfCraftApp::default();
+        app.set_option("language", "AR").unwrap();
+        assert_eq!(app.language, "ar");
+        let mut restored = crate::PdfCraftApp::default();
+        restored.restore(&app.persist());
+        assert_eq!(restored.language, "ar");
+        assert!(restored.set_option("language", "xx").is_err());
+        assert_eq!(restored.language, "ar");
+    }
+
+    /// Lookups return Arabic in display order: egui draws the words left to right as given, and
+    /// joins the letters of each word itself.
+    #[test]
+    fn arabic_lookups_are_in_display_order() {
+        let ar = arabic();
+        // "حفظ باسم…" as typed; the ellipsis ends the phrase on the left.
+        assert_eq!(tr(ar, "Save as…"), "…باسم حفظ");
+        // Latin names keep their own direction inside the phrase.
+        assert_eq!(tr(ar, "About PdfCraft"), "PdfCraft حول");
+        // A caption's colon stays beside the widget on its right.
+        assert_eq!(tr(ar, "Name:"), "الاسم:");
+        assert_eq!(tr(ar, "Issued by: "), "عن صادرة: ");
+        // Placeholders survive and are filled in place.
+        assert_eq!(tr(ar, "Couldn't open {name}: {e}"), "{name}: {e} فتح تعذّر");
+        assert_eq!(fmt(tr(ar, "Couldn't open {name}: {e}"), &[("name", "a {e}.pdf"), ("e", "x")]), "a {e}.pdf: x فتح تعذّر");
+        assert_eq!(fmt(tr(ar, "Page {p} of {n}"), &[("p", "3"), ("n", "12")]), "12 من 3 الصفحة");
+        set_current(ar);
+        assert_eq!(command_label("Undo Insert pages from a.pdf"), "a.pdf من صفحات إدراج عن التراجع");
+        assert_eq!(menu_label("file.saveAs", "Save as…"), "…باسم حفظ");
+        set_current(Lang::EN);
+    }
+
+    #[test]
+    fn arabic_plurals_follow_the_six_cldr_forms() {
+        let ar = arabic();
+        assert_eq!(ar.0.plural_forms(), 6);
+        let form = |n| (ar.0.plural)(n);
+        assert_eq!([0, 1, 2].map(form), [0, 1, 2]);
+        assert_eq!([3, 10, 103, 110, 1003].map(form), [3; 5]);
+        assert_eq!([11, 99, 111, 199, 1011].map(form), [4; 5]);
+        assert_eq!([100, 101, 102, 200, 1000, u64::MAX - 13].map(form), [5; 6]);
+        assert_eq!(trn(ar, 1, "{n} page", "{n} pages"), "صفحة 1");
+        assert_eq!(trn(ar, 2, "{n} page", "{n} pages"), "صفحتان 2");
+        assert_eq!(trn(ar, 5, "{n} page", "{n} pages"), "صفحات 5");
+        assert_eq!(trn(ar, 11, "{n} field", "{n} fields"), "حقلًا 11");
+        assert_eq!(trn(ar, 100, "{n} field", "{n} fields"), "حقل 100");
+    }
+
+    /// Arabic translates every registered command, menu and All tools label.
+    #[test]
+    fn arabic_covers_commands_and_catalogue() {
+        let ar = arabic();
+        for command in pdfcraft_engine::commands::COMMANDS {
+            assert!(has(ar, command.label), "missing command: {}", command.label);
+            if let Some(menu) = command.menu {
+                assert!(has(ar, menu), "missing menu: {menu}");
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            assert!(has(ar, group.label), "missing group: {}", group.label);
+            for section in group.sections {
+                assert!(has(ar, section.title), "missing section: {}", section.title);
+                for item in section.items {
+                    assert!(has(ar, item.label), "missing item: {}", item.label);
+                }
+            }
+        }
+    }
+
+    /// Arabic translates every `tl!("…")` literal in the UI source.
+    #[test]
+    fn arabic_covers_ui_literals() {
+        let literals = ui_literals();
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        let missing: Vec<_> = literals.iter().filter(|label| !has(arabic(), label)).collect();
+        assert!(missing.is_empty(), "untranslated Arabic UI literals: {missing:#?}");
+    }
+
+    /// With a craft-fonts Arabic face, every Arabic translation has glyphs: with all interface
+    /// faces (desktop) and with the Arabic face as the only craft-fonts face (the web build keeps
+    /// it; Arabic labels must not need a Japanese face).
+    #[test]
+    fn arabic_labels_have_glyphs() {
+        let faces: Vec<String> = pdfcraft_fonts::ui_arabic_fonts().iter().map(|f| f.name()).collect();
+        if faces.is_empty() {
+            eprintln!("skipping Arabic glyph checks: build with CRAFT_FONTS_DIR and an Arabic face to run them");
+            return;
+        }
+        let ar = arabic();
+        let (entries, _) = parse_entries(ar.0.source, ar.0.plural_forms());
+        let labels: String = entries.iter().flat_map(|e| e.translation.chars()).chain(ar.name().chars()).filter(|c| !c.is_control()).collect();
+        let mut arabic_only = crate::theme::font_definitions();
+        for family in arabic_only.families.values_mut() {
+            family.retain(|name| !pdfcraft_fonts::CRAFT_FONTS.iter().any(|face| face.name() == *name) || faces.contains(name));
+        }
+        use egui::epaint::text::{Fonts, TextOptions};
+        for (build, defs) in [("all faces", crate::theme::font_definitions()), ("Arabic face only", arabic_only)] {
+            let mut fonts = Fonts::new(TextOptions::default(), defs);
+            for id in [egui::FontId::proportional(13.0), egui::FontId::monospace(13.0), crate::theme::medium(13.0), crate::theme::semibold(17.0)] {
+                let missing: std::collections::BTreeSet<char> = labels.chars().filter(|c| !fonts.has_glyphs(&id, &c.to_string())).collect();
+                assert!(missing.is_empty(), "{build}: {id:?} lacks Arabic label glyphs {missing:?}");
+            }
+        }
     }
 
     /// Every bundled catalog is well-formed and consistent with its sources.

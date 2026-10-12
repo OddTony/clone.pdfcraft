@@ -1,193 +1,10 @@
-//! The system print spooler. On macOS and Linux this is CUPS: printers come from `lpstat`, jobs
-//! are piped to `lp` with the job options (copies, collation, duplex, colour). Other platforms
-//! report that printing isn't available yet; the print-ready PDF can still be saved.
+//! System print spooler supplied by craft-print. PDF composition and permission checks
+//! stay in PdfCraft; these adapters retain the application's print-error surface.
 
-use crate::PrintError;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Printer {
-    pub name: String,
-    pub default: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum Duplex {
-    #[default]
-    Off,
-    LongEdge,
-    ShortEdge,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Job {
-    /// `None` = the system default printer.
-    pub printer: Option<String>,
-    pub copies: u32,
-    pub collate: bool,
-    pub duplex: Duplex,
-    pub grayscale: bool,
-    pub title: String,
-    /// The printer driver's own job options (a PPD keyword and the chosen value), such as the
-    /// paper tray or paper type; see [`printer_options`]. CUPS only.
-    pub options: Vec<(String, String)>,
-}
-
-impl Default for Job {
-    fn default() -> Self {
-        Job { printer: None, copies: 1, collate: true, duplex: Duplex::Off, grayscale: false, title: "PdfCraft".into(), options: Vec::new() }
-    }
-}
-
-/// Parse `lpstat -p -d` output.
-pub fn parse_lpstat(out: &str) -> Vec<Printer> {
-    let default = out.lines().find_map(|l| l.strip_prefix("system default destination:")).map(|s| s.trim().to_string());
-    out.lines()
-        .filter_map(|l| l.strip_prefix("printer "))
-        .filter_map(|l| l.split_whitespace().next())
-        .map(|n| Printer { name: n.to_string(), default: default.as_deref() == Some(n) })
-        .collect()
-}
-
-/// The `lp` arguments for a job. There is no file argument: `lp` reads the job from stdin.
-pub fn lp_args(job: &Job) -> Vec<String> {
-    let mut a = Vec::new();
-    if let Some(p) = &job.printer {
-        a.extend(["-d".to_string(), p.clone()]);
-    }
-    a.extend(["-n".to_string(), job.copies.clamp(1, 999).to_string()]);
-    a.extend(["-t".to_string(), job.title.clone()]);
-    let mut opt = |o: &str| a.extend(["-o".to_string(), o.to_string()]);
-    opt(if job.collate { "collate=true" } else { "collate=false" });
-    opt(match job.duplex {
-        Duplex::Off => "sides=one-sided",
-        Duplex::LongEdge => "sides=two-sided-long-edge",
-        Duplex::ShortEdge => "sides=two-sided-short-edge",
-    });
-    if job.grayscale {
-        opt("print-color-mode=monochrome");
-    }
-    // The sheets are already laid out at their final size.
-    opt("fit-to-page=false");
-    for (key, value) in &job.options {
-        // Driver options are PPD keywords; anything else is not something lp can be given.
-        if is_ppd_keyword(key) && is_ppd_keyword(value) && !HANDLED_OPTIONS.contains(&key.as_str()) {
-            a.extend(["-o".to_string(), format!("{key}={value}")]);
-        }
-    }
-    a
-}
-
-/// One of the printer driver's job options (a PPD `OpenUI` entry), such as the paper tray.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PrinterOption {
-    /// The PPD keyword (`InputSlot`).
-    pub key: String,
-    /// What the driver calls it (`Paper tray`); the keyword when it gives no name.
-    pub label: String,
-    /// The driver's group (`Paper Handling`); empty outside a group.
-    pub group: String,
-    /// The choices: keyword and label (`Tray2`, `Tray 2`).
-    pub choices: Vec<(String, String)>,
-    /// The choice the printer uses when a job doesn't say.
-    pub default: String,
-}
-
-/// Options PdfCraft's Print dialog sets itself (paper, two-sided, collation), so the driver's
-/// copies of them are neither shown nor sent.
-pub const HANDLED_OPTIONS: &[&str] = &["PageSize", "PageRegion", "Duplex", "Collate", "ImageableArea", "PaperDimension"];
-
-/// Caps on what a PPD may make the dialog hold (PPDs are text files from the printer vendor).
-const MAX_OPTIONS: usize = 400;
-const MAX_CHOICES: usize = 400;
-
-/// A PPD keyword: printable ASCII without spaces, `/`, `:` or `=`.
-fn is_ppd_keyword(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 64 && s.bytes().all(|b| b.is_ascii_graphic() && !matches!(b, b'/' | b':' | b'=' | b'"'))
-}
-
-/// `Name/Label` → (`Name`, `Label`), the label falling back to the name.
-fn name_label(s: &str) -> (&str, &str) {
-    match s.split_once('/') {
-        Some((n, l)) if !l.trim().is_empty() => (n.trim(), l.trim()),
-        Some((n, _)) => (n.trim(), n.trim()),
-        None => (s.trim(), s.trim()),
-    }
-}
-
-/// The job options a PPD offers, in file order, without the installable-hardware group and the
-/// options PdfCraft sets itself ([`HANDLED_OPTIONS`]). Lenient: malformed lines are skipped.
-pub fn parse_ppd(ppd: &str) -> Vec<PrinterOption> {
-    let mut out: Vec<PrinterOption> = Vec::new();
-    let (mut group, mut group_key) = (String::new(), String::new());
-    let mut open: Option<PrinterOption> = None;
-    for line in ppd.lines() {
-        let line = line.trim_end_matches('\r');
-        if let Some(rest) = line.strip_prefix("*OpenGroup:") {
-            let (k, l) = name_label(rest);
-            (group_key, group) = (k.to_string(), l.to_string());
-        } else if line.starts_with("*CloseGroup") {
-            (group_key, group) = (String::new(), String::new());
-        } else if let Some(rest) = line.strip_prefix("*OpenUI") {
-            let Some((head, _kind)) = rest.trim().rsplit_once(':') else { continue };
-            let (key, label) = name_label(head.trim().trim_start_matches('*'));
-            open = is_ppd_keyword(key).then(|| PrinterOption {
-                key: key.to_string(),
-                label: label.to_string(),
-                group: group.clone(),
-                choices: Vec::new(),
-                default: String::new(),
-            });
-        } else if line.starts_with("*CloseUI") {
-            if let Some(o) = open.take()
-                && !o.choices.is_empty()
-                && group_key != "InstallableOptions"
-                && !HANDLED_OPTIONS.contains(&o.key.as_str())
-                && out.len() < MAX_OPTIONS
-            {
-                out.push(o);
-            }
-        } else if let Some(o) = open.as_mut() {
-            let Some(rest) = line.strip_prefix('*') else { continue };
-            if let Some(value) = rest.strip_prefix("Default").and_then(|r| r.strip_prefix(o.key.as_str())).and_then(|r| r.strip_prefix(':')) {
-                o.default = value.trim().to_string();
-            } else if let Some(rest) = rest.strip_prefix(o.key.as_str()).and_then(|r| r.strip_prefix(' ')) {
-                // `*InputSlot Tray2/Tray 2: "<< ... >>"`; the code after the colon is the driver's.
-                let head = rest.split_once(':').map_or(rest, |(h, _)| h);
-                let (choice, label) = name_label(head);
-                if is_ppd_keyword(choice) && o.choices.len() < MAX_CHOICES && o.choices.iter().all(|(c, _)| c != choice) {
-                    o.choices.push((choice.to_string(), label.to_string()));
-                }
-            }
-        }
-    }
-    for o in &mut out {
-        if !o.choices.iter().any(|(c, _)| *c == o.default) {
-            o.default = o.choices.first().map(|(c, _)| c.clone()).unwrap_or_default();
-        }
-    }
-    out
-}
-
-/// The current choice of each option in `lpoptions -p NAME -l` output (`Key/Label: a *b c`): the
-/// queue's defaults, including the user's own (`~/.cups/lpoptions`).
-pub fn parse_lpoptions(out: &str) -> Vec<(String, String)> {
-    out.lines()
-        .filter_map(|l| {
-            let (head, choices) = l.split_once(':')?;
-            let (key, _) = name_label(head);
-            let current = choices.split_whitespace().find_map(|c| c.strip_prefix('*'))?;
-            Some((key.to_string(), current.to_string()))
-        })
-        .collect()
-}
-
-/// A PPD's text: UTF-8, or ISO Latin-1 (the PPD default) when it isn't valid UTF-8.
-pub fn ppd_text(bytes: &[u8]) -> String {
-    match std::str::from_utf8(bytes) {
-        Ok(s) => s.to_string(),
-        Err(_) => bytes.iter().map(|&b| char::from(b)).collect(),
-    }
-}
+pub use craft_print::{
+    Duplex, HANDLED_OPTIONS, HAS_PRINTER_PREFERENCES, Job, Printer, PrinterOption, Scaling, lp_args, lpstat_command, parse_lpoptions, parse_lpstat,
+    parse_lpstat_e, parse_ppd, parse_windows_printers, ppd_text, printers, printers_parsed,
+};
 
 /// The driver's job options for a printer (CUPS: its PPD, with the queue's current defaults);
 /// empty when it has none or on other platforms. Reads files and runs `lpoptions`, so call it
@@ -195,6 +12,55 @@ pub fn ppd_text(bytes: &[u8]) -> String {
 pub fn printer_options(printer: &str) -> Vec<PrinterOption> {
     #[cfg(all(unix, not(target_arch = "wasm32")))]
     {
+        printer_options_via(printer, std::path::Path::new("/etc/cups/ppd"), std::process::Command::new("lpoptions"))
+    }
+    #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
+    {
+        craft_print::printer_options(printer)
+    }
+}
+
+/// Read a destination's options with the PPD directory and command supplied, so tests need
+/// neither a system queue nor a physical printer. CUPS instances share their queue's PPD but
+/// have their own defaults, queried with the complete `queue/instance` destination.
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+pub(crate) fn printer_options_via(printer: &str, ppd_dir: &std::path::Path, mut lpoptions: std::process::Command) -> Vec<PrinterOption> {
+    let (queue, instance) = printer.split_once('/').map_or((printer, None), |(q, i)| (q, Some(i)));
+    // Retain the conservative name checks, applied to each component. Neither component is
+    // a path: reject dot components, backslashes and any additional separator before I/O.
+    let valid = |name: &str| {
+        !name.is_empty()
+            && name.len() <= 64
+            && !matches!(name, "." | "..")
+            && name.bytes().all(|b| b.is_ascii_graphic() && !matches!(b, b'/' | b'\\' | b':' | b'=' | b'"'))
+    };
+    if !valid(queue) || instance.is_some_and(|name| !valid(name)) {
+        return Vec::new();
+    }
+    const PPD_CAP: u64 = 16 << 20;
+    let ppd = std::fs::File::open(ppd_dir.join(format!("{queue}.ppd"))).ok().and_then(|f| {
+        use std::io::Read as _;
+        let mut bytes = Vec::new();
+        f.take(PPD_CAP).read_to_end(&mut bytes).ok().map(|_| bytes)
+    });
+    let mut options = ppd.map(|b| parse_ppd(&ppd_text(&b))).unwrap_or_default();
+    let current = lpoptions.args(["-p", printer, "-l"]).output().map(|o| parse_lpoptions(&String::from_utf8_lossy(&o.stdout))).unwrap_or_default();
+    for (key, value) in current {
+        if let Some(o) = options.iter_mut().find(|o| o.key == key)
+            && o.choices.iter().any(|(c, _)| *c == value)
+        {
+            o.default = value;
+        }
+    }
+    options
+}
+
+pub fn submit(pdf: &[u8], job: &Job) -> Result<String, crate::PrintError> {
+    craft_print::submit(pdf, job).map_err(|e| crate::PrintError::Spool(e.to_string()))
+}
+
+pub fn open_printer_preferences(printer: &str) -> Result<(), crate::PrintError> {
+    craft_print::open_printer_preferences(printer).map_err(|e| crate::PrintError::Spool(e.to_string()))
         // Queue names never contain `/`; anything else is not a queue and not a path to follow.
         if !is_ppd_keyword(printer) {
             return Vec::new();

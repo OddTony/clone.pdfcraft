@@ -75,6 +75,9 @@ pub struct FieldProps {
     pub rect: Option<(usize, [f64; 4])>,
     /// Appearance tab (border, fill, line, text colour, font).
     pub look: Option<Look>,
+    /// Change only these appearance properties. Unlike `look`, this preserves each widget's
+    /// other colours, border settings and default appearance, including custom font resources.
+    pub appearance: Option<LookPatch>,
     /// Format, Validate and Calculate tabs (written as Acrobat's AF scripts).
     pub format: Option<crate::af::Format>,
     pub validate: Option<crate::af::Validate>,
@@ -159,6 +162,129 @@ pub struct Look {
     pub style: BorderStyle,
     pub text: [f64; 3],
     pub font: FieldFont,
+}
+
+/// A partial Appearance-tab edit. Outer `None` keeps a property; `Some(None)` removes a
+/// border or fill colour. The patch is applied to each widget's own dictionaries.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LookPatch {
+    pub border: Option<Option<[f64; 3]>>,
+    pub fill: Option<Option<[f64; 3]>>,
+    pub width: Option<f64>,
+    pub style: Option<BorderStyle>,
+    pub text: Option<[f64; 3]>,
+    pub font: Option<FieldFont>,
+}
+
+impl LookPatch {
+    fn validate(&self) -> Result<(), FormError> {
+        for c in self.border.flatten().into_iter().chain(self.fill.flatten()).chain(self.text) {
+            if !c.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v)) {
+                return invalid("appearance colours must be finite RGB values between 0 and 1");
+            }
+        }
+        if self.width.is_some_and(|v| !v.is_finite() || !(0.0..=12.0).contains(&v)) {
+            return invalid("border width must be between 0 and 12 points");
+        }
+        Ok(())
+    }
+}
+
+/// Rewrite only the selected operators in place: the last `Tf` (font and size) and the last
+/// fill colour (`g`, `rg` or `k`), appending one when the string has none. Everything else (a
+/// custom font resource, colour space or other graphics state) is kept, and repeated edits don't
+/// grow the string.
+fn patch_da(da: &str, size: Option<f64>, patch: &LookPatch) -> String {
+    if patch.font.is_none() && size.is_none() && patch.text.is_none() {
+        return da.to_string();
+    }
+    let mut toks: Vec<String> = da.split_whitespace().map(str::to_string).collect();
+    let numeric = |s: &str| s.parse::<f64>().is_ok();
+    if patch.font.is_some() || size.is_some() {
+        let old = appearance::parse_da(da);
+        let font = patch.font.map_or_else(|| old.font.clone(), |f| f.resource().to_string());
+        // `parse_da` reads sizes up to 300 points; keep the same bound when writing.
+        let size = appearance::fmt(size.unwrap_or(old.size).clamp(0.0, 300.0));
+        let at = toks.iter().enumerate().rev().find(|(i, t)| t.as_str() == "Tf" && *i >= 2).map(|(i, _)| i);
+        match at {
+            Some(i) => {
+                if let Some(slot) = toks.get_mut(i - 2) {
+                    *slot = format!("/{font}");
+                }
+                if let Some(slot) = toks.get_mut(i - 1) {
+                    *slot = size;
+                }
+            }
+            None => toks.extend([format!("/{font}"), size, "Tf".into()]),
+        }
+    }
+    if let Some(c) = patch.text {
+        let rgb = [appearance::fmt(c[0]), appearance::fmt(c[1]), appearance::fmt(c[2]), "rg".into()];
+        let at = toks.iter().enumerate().rev().find_map(|(i, t)| {
+            let n = match t.as_str() {
+                "g" => 1,
+                "rg" => 3,
+                "k" => 4,
+                _ => return None,
+            };
+            let start = i.checked_sub(n)?;
+            toks.get(start..i).is_some_and(|ops| ops.iter().all(|o| numeric(o))).then_some((start, i))
+        });
+        match at {
+            Some((start, end)) => {
+                toks.splice(start..=end, rgb);
+            }
+            None => toks.extend(rgb),
+        }
+    }
+    toks.join(" ")
+}
+
+fn patch_widget_look(doc: &mut Document, w: &Widget, patch: &LookPatch) -> Result<(), FormError> {
+    let touches_mk = patch.border.is_some() || patch.fill.is_some();
+    let touches_bs = patch.width.is_some() || patch.style.is_some();
+    // A size- or font-only edit changes /DA, not the widget: leave it out of the save.
+    if !touches_mk && !touches_bs {
+        return Ok(());
+    }
+    let wd = doc.get(w.obj).as_dict().cloned().ok_or_else(|| FormError::Invalid("the widget is not a dictionary".into()))?;
+    if touches_mk {
+        let indirect = wd.get(b"MK").and_then(Object::as_ref);
+        let mut mk = wd.get(b"MK").map(|m| doc.resolve(m)).and_then(|m| m.as_dict().cloned()).unwrap_or_default();
+        for (key, change) in [(b"BC".as_slice(), patch.border), (b"BG".as_slice(), patch.fill)] {
+            if let Some(change) = change {
+                match change {
+                    Some(c) => mk.set(key.to_vec(), rgb(c)),
+                    None => {
+                        mk.remove(key);
+                    }
+                }
+            }
+        }
+        // A shared indirect /MK is updated where it lives, not copied into each widget.
+        match indirect {
+            Some(r) => doc.set(r, Object::Dict(mk)),
+            None => doc.update_dict(w.obj, |d| d.set(b"MK".to_vec(), Object::Dict(mk)))?,
+        }
+    }
+    if touches_bs {
+        let indirect = wd.get(b"BS").and_then(Object::as_ref);
+        let mut bs = wd.get(b"BS").map(|b| doc.resolve(b)).and_then(|b| b.as_dict().cloned()).unwrap_or_default();
+        if let Some(width) = patch.width {
+            bs.set(b"W".to_vec(), Object::Real(width));
+        }
+        if let Some(style) = patch.style {
+            bs.set(b"S".to_vec(), Object::name(style.code()));
+            if style == BorderStyle::Dashed && !bs.contains(b"D") {
+                bs.set(b"D".to_vec(), Object::Array(vec![Object::Int(3)]));
+            }
+        }
+        match indirect {
+            Some(r) => doc.set(r, Object::Dict(bs)),
+            None => doc.update_dict(w.obj, |d| d.set(b"BS".to_vec(), Object::Dict(bs)))?,
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -543,13 +669,19 @@ pub fn add_field(doc: &mut Document, page: usize, rect: [f64; 4], kind: &NewFiel
     Ok(field_name)
 }
 
-/// Regenerate every widget appearance of a field from its current value and settings.
+/// Regenerate every widget appearance of a field from its current value and settings. A value or
+/// button caption its font can't hold is drawn with `?` for those characters, the widget is marked
+/// (`pdfcraft_fonts::UNDRAWN_MARK`) and other viewers are asked to redraw the form (see
+/// `ask_viewers_to_redraw`), as when a value is set.
 pub fn redraw_field(doc: &mut Document, name: &str) -> Result<(), FormError> {
     let f = fields(doc).into_iter().find(|f| f.name == name).ok_or_else(|| FormError::NoSuchField(name.into()))?;
+    let mut undrawn = false;
     for w in &f.widgets {
+        let mut missing = None;
         let ap = match f.kind {
             FieldKind::Text | FieldKind::Combo | FieldKind::List => {
-                let s = appearance::field_appearance(doc, &f, w, &f.value);
+                let (s, m) = appearance::field_appearance_drawn(doc, &f, w, &f.value, true);
+                missing = m;
                 let r = doc.add(Object::Stream(s));
                 let mut d = Dict::new();
                 d.set(b"N".to_vec(), Object::Ref(r));
@@ -560,7 +692,8 @@ pub fn redraw_field(doc: &mut Document, name: &str) -> Result<(), FormError> {
                 appearance::check_box_states(doc, w, f.kind, &on)
             }
             FieldKind::PushButton => {
-                let s = button_appearance(doc, w);
+                let (s, m) = button_appearance(doc, w);
+                missing = m;
                 let r = doc.add(Object::Stream(s));
                 let mut d = Dict::new();
                 d.set(b"N".to_vec(), Object::Ref(r));
@@ -574,8 +707,15 @@ pub fn redraw_field(doc: &mut Document, name: &str) -> Result<(), FormError> {
                 d
             }
         };
+        undrawn |= missing.is_some();
         let existing = crate::merged_appearance(doc, w.obj, &ap);
-        doc.update_dict(w.obj, |d| d.set(b"AP".to_vec(), Object::Dict(existing)))?;
+        doc.update_dict(w.obj, |d| {
+            d.set(b"AP".to_vec(), Object::Dict(existing));
+            pdfcraft_fonts::set_undrawn_mark(d, missing);
+        })?;
+    }
+    if undrawn {
+        crate::ask_viewers_to_redraw(doc)?;
     }
     Ok(())
 }
@@ -611,8 +751,9 @@ fn form_stream(place: crate::appearance::Placement, content: Vec<u8>, resources:
 }
 
 /// A push button: background, border, its icon (`/MK /I`, scaled to fit and centred) and its
-/// centred caption (unless the layout is icon only, `/TP 1`).
-fn button_appearance(doc: &Document, w: &Widget) -> Stream {
+/// centred caption (unless the layout is icon only, `/TP 1`). The caption is drawn in Helvetica,
+/// with the first character it can't draw (drawn as `?`), for the caller to mark and report.
+fn button_appearance(doc: &Document, w: &Widget) -> (Stream, Option<char>) {
     let (mut c, place) = frame_only(doc, w);
     let (width, height) = (place.layout_w, place.layout_h);
     let wobj = doc.get(w.obj);
@@ -636,7 +777,9 @@ fn button_appearance(doc: &Document, w: &Widget) -> Stream {
             xobjects.set(b"Icon".to_vec(), Object::Ref(icon));
         }
     }
+    let mut missing = None;
     if !icon_only && !caption.is_empty() {
+        missing = pdfcraft_fonts::first_undrawable(&caption);
         let size = ((height - 4.0) * 0.6).clamp(4.0, 14.0);
         let tw = helvetica_width(&caption, size);
         content.extend(format!("BT /Helv {size:.2} Tf 0 g 1 0 0 1 {:.3} {:.3} Tm ", (width - tw) / 2.0, (height - size * 0.7) / 2.0).bytes());
@@ -655,7 +798,7 @@ fn button_appearance(doc: &Document, w: &Widget) -> Stream {
     if !xobjects.is_empty() {
         res.set(b"XObject".to_vec(), Object::Dict(xobjects));
     }
-    form_stream(place, content, res)
+    (form_stream(place, content, res), missing)
 }
 
 /// Give a push button (an image field) the picture `image` (an image XObject of `px` pixels):
@@ -704,6 +847,15 @@ fn swapped_around_center(r: [f64; 4]) -> Option<[f64; 4]> {
 
 /// Change a field's properties (General and Options tabs) and redraw it.
 pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<String, FormError> {
+    if props.font_size.is_some_and(|size| !size.is_finite() || size < 0.0) {
+        return invalid("font size must be a finite, non-negative number");
+    }
+    if let Some(patch) = &props.appearance {
+        if props.look.is_some() {
+            return invalid("give an appearance patch or a complete look, not both");
+        }
+        patch.validate()?;
+    }
     let all = fields(doc);
     let f = all.iter().find(|f| f.name == name).ok_or_else(|| FormError::NoSuchField(name.into()))?.clone();
     // Validated before anything is written, so a refused rotation leaves the document unchanged.
@@ -754,13 +906,12 @@ pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<S
         doc.update_dict(f.obj, |d| d.set(b"T".to_vec(), PdfString::text(n)))?;
     }
     // The new default appearance when the size or the look changes.
-    let current = look(doc, &f);
     let size = props.font_size.unwrap_or_else(|| crate::appearance::parse_da(&f.da).size);
     let new_da = match &props.look {
         Some(l) => da_string(l.font, size, l.text),
-        None => da_string(current.font, size, current.text),
+        None => patch_da(&f.da, props.font_size, &props.appearance.unwrap_or_default()),
     };
-    if props.look.is_some() {
+    if props.look.is_some() || props.appearance.is_some_and(|p| p.font.is_some()) {
         ensure_form(doc)?;
     }
     let mut ff = f.flags;
@@ -855,15 +1006,36 @@ pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<S
             }
             None => {}
         }
-        if props.font_size.is_some() || props.look.is_some() {
+        if props.font_size.is_some() || props.look.is_some() || props.appearance.is_some_and(|p| p.font.is_some() || p.text.is_some()) {
             d.set(b"DA".to_vec(), PdfString::literal(new_da.clone().into_bytes()));
         }
     })?;
+    if props.appearance.is_some() || (props.font_size.is_some() && props.look.is_none()) {
+        let patch = &props.appearance.unwrap_or_default();
+        for w in &f.widgets {
+            patch_widget_look(doc, w, patch)?;
+            // A widget's own /DA overrides its field's /DA. Patch that override separately
+            // rather than replacing its font or colour with the first widget's defaults.
+            if w.obj != f.obj && (props.font_size.is_some() || patch.font.is_some() || patch.text.is_some()) {
+                let da = doc
+                    .get(w.obj)
+                    .as_dict()
+                    .and_then(|d| d.get(b"DA").cloned())
+                    .map(|v| doc.resolve(&v))
+                    .and_then(|v| v.as_string().map(|s| s.to_text()));
+                if let Some(da) = da {
+                    let da = patch_da(&da, props.font_size, patch);
+                    doc.update_dict(w.obj, |d| d.set(b"DA".to_vec(), PdfString::literal(da.into_bytes())))?;
+                }
+            }
+        }
+    }
     if let Some(l) = &props.look {
         let arr = |c: [f64; 3]| Object::Array(c.iter().map(|v| Object::Real(v.clamp(0.0, 1.0))).collect());
         for w in &f.widgets {
+            // Resolved first: an indirect /MK keeps its mark, rotation and other entries.
+            let mut mk = doc.get(w.obj).as_dict().and_then(|d| d.get(b"MK").map(|m| doc.resolve(m).as_dict().cloned())).flatten().unwrap_or_default();
             doc.update_dict(w.obj, |d| {
-                let mut mk = d.get(b"MK").and_then(|m| m.as_dict().cloned()).unwrap_or_default();
                 match l.border {
                     Some(c) => mk.set(b"BC".to_vec(), arr(c)),
                     None => {
@@ -970,8 +1142,9 @@ pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<S
             }
         })?;
     }
-    // Widgets may carry their own /DA; keep them in step with the field.
-    if props.font_size.is_some() || props.look.is_some() {
+    // A complete look replaces widget /DA overrides. Partial changes were patched above
+    // against each override, including size-only changes that keep its font and colour.
+    if props.look.is_some() {
         for w in &f.widgets {
             if w.obj != f.obj {
                 doc.update_dict(w.obj, |d| {

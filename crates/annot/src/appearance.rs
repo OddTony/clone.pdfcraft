@@ -11,8 +11,8 @@
 //! Helvetica's proportions by character class (no font program or metrics file is bundled).
 
 use pdfcraft_cos::{Dict, Object, PdfString, Stream};
+use pdfcraft_fonts::{first_undrawable, literal, win_ansi};
 pub use pdfcraft_fonts::{helvetica_width as text_width, wrap};
-use pdfcraft_fonts::{literal, win_ansi};
 
 use crate::{NOTE_SIZE, Rgb, n};
 
@@ -104,7 +104,7 @@ fn line_end(c: &mut String, kind: &[u8], tip: (f64, f64), from: (f64, f64), w: f
 /// point parallel to the chord between its neighbours (an end uses itself as the missing
 /// neighbour). Ink is drawn so, as Acrobat draws it, rather than as straight segments. The curve
 /// stays within its points and these control points.
-pub(crate) fn smooth_segments(pts: &[(f64, f64)]) -> Vec<[(f64, f64); 3]> {
+pub fn smooth_segments(pts: &[(f64, f64)]) -> Vec<[(f64, f64); 3]> {
     let Some(&last) = pts.last() else { return Vec::new() };
     let at = |i: usize| pts.get(i).copied().unwrap_or(last);
     (0..pts.len().saturating_sub(1))
@@ -168,6 +168,10 @@ fn color(d: &Dict, key: &[u8]) -> Option<Option<Rgb>> {
         [c, m, y, k] => Some([(1.0 - c) * (1.0 - k), (1.0 - m) * (1.0 - k), (1.0 - y) * (1.0 - k)]),
         _ => return None,
     })
+}
+
+fn interior_color(d: &Dict, fallback: Option<Rgb>) -> Option<Rgb> {
+    color(d, b"IC").flatten().or(fallback)
 }
 
 fn border_width(d: &Dict) -> f64 {
@@ -260,7 +264,27 @@ pub(crate) fn picture_turn(d: &Dict) -> i64 {
     d.get(b"PCPictureRotate").and_then(Object::as_int).unwrap_or(0).rem_euclid(360) / 90 * 90
 }
 
+/// The first text [`build`] would draw in the standard fonts (Helvetica, WinAnsiEncoding) that
+/// they can't, which would come out as `?`: what it is (for the message) and the character. The
+/// text of a text box, callout or Fill & Sign text, a measurement's label, a dynamic stamp's
+/// "By …" line, and a redaction mark's overlay text (drawn when it is applied). `None` when all of
+/// it can be drawn.
+pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
+    let text = |key: &[u8]| d.get(key).and_then(Object::as_string).map(PdfString::to_text);
+    let (what, text) = match d.name(b"Subtype")? {
+        b"FreeText" => ("the comment's text", text(b"Contents")?),
+        b"Line" | b"PolyLine" | b"Polygon" => ("the measurement label", text(b"PCMeasureValue")?),
+        b"Stamp" if matches!(d.get(b"PCStamp"), Some(Object::Bool(true))) => ("the stamp's \"By\" line", text(b"PCByLine")?),
+        // Drawn in Helvetica when the redaction is applied: refused when it is marked.
+        b"Redact" => ("the redaction's overlay text", text(b"OverlayText")?),
+        _ => return None,
+    };
+    Some((what, first_undrawable(&text)?))
+}
+
 /// Draw the normal appearance of an annotation, or `None` if this subtype/variant isn't supported.
+/// Text the standard fonts can't draw comes out as `?`: [`undrawable_text`] says which, and
+/// [`crate::set_appearance`] marks the annotation with it (`pdfcraft_fonts::UNDRAWN_MARK`).
 pub fn build(d: &Dict) -> Option<Stream> {
     // Imported measurement appearances may include leaders, captions and formatting that
     // this builder cannot reproduce. Preserve them rather than silently losing detail.
@@ -369,7 +393,7 @@ pub fn build(d: &Dict) -> Option<Stream> {
             }
         }
         b"Square" | b"Circle" => {
-            let fill = color(d, b"IC")?;
+            let fill = interior_color(d, None);
             if stroke.is_none() && fill.is_none() {
                 return Some(form(rect, c.as_bytes(), res));
             }
@@ -403,7 +427,7 @@ pub fn build(d: &Dict) -> Option<Stream> {
             if ends.len() != 2 || ends.iter().any(|e| !known_ending(e)) {
                 return None;
             }
-            let fill = color(d, b"IC")?.unwrap_or(col);
+            let fill = interior_color(d, Some(col)).unwrap_or(col);
             c.push_str(&format!("{}{}{} w 1 J 1 j\n{}", rg_stroke(col), rg(fill), n(w), dash(d)));
             c.push_str(&format!("{} {} m {} {} l S\n[] 0 d\n", n(l[0]), n(l[1]), n(l[2]), n(l[3])));
             for (end, (tip, from)) in ends.iter().zip([((l[0], l[1]), (l[2], l[3])), ((l[2], l[3]), (l[0], l[1]))]) {
@@ -417,7 +441,7 @@ pub fn build(d: &Dict) -> Option<Stream> {
             let pts: Vec<(f64, f64)> = v.as_chunks::<2>().0.iter().map(|p| (p[0], p[1])).collect();
             let col = stroke;
             let closed = subtype == b"Polygon";
-            let fill = if closed { color(d, b"IC")? } else { None };
+            let fill = if closed { interior_color(d, None) } else { None };
             let ends = if subtype == b"PolyLine" {
                 match d.get(b"LE") {
                     None => None,
@@ -461,7 +485,7 @@ pub fn build(d: &Dict) -> Option<Stream> {
                 let (Some(start), Some(end)) = (ends.first(), ends.get(1)) else { return None };
                 let (Some(&tip0), Some(&from0)) = (pts.first(), pts.get(1)) else { return None };
                 let (Some(&tip1), Some(&from1)) = (pts.last(), pts.get(pts.len().saturating_sub(2))) else { return None };
-                let fill = color(d, b"IC")?.unwrap_or(col);
+                let fill = interior_color(d, Some(col)).unwrap_or(col);
                 c.push_str(&format!("[] 0 d\n{}", rg(fill)));
                 if !line_end(&mut c, start, tip0, from0, w) || !line_end(&mut c, end, tip1, from1, w) {
                     return None;

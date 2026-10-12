@@ -14,7 +14,9 @@ use hayro::hayro_syntax::DecryptionError;
 use hayro::hayro_syntax::LoadPdfError;
 use hayro::hayro_syntax::Pdf;
 use lopdf::{Dictionary, Document, LoadOptions, Object, ObjectId};
-use pdfcraft_cos::page_labels::{MAX_LABEL_BYTES, MAX_LABEL_TOTAL_BYTES, MAX_LABEL_TREE_DEPTH, MAX_LABEL_TREE_WORK, MAX_PREFIX_BYTES, alpha, roman};
+use pdfcraft_cos::page_labels::{
+    MAX_LABEL_BYTES, MAX_LABEL_TOTAL_BYTES, MAX_LABEL_TREE_DEPTH, MAX_LABEL_TREE_WORK, MAX_PREFIX_BYTES, MAX_PREFIX_TOTAL_BYTES, alpha, roman,
+};
 
 use crate::OpenError;
 use crate::structure::{LazyStructure, Structure};
@@ -27,8 +29,19 @@ const LOAD_STREAM_LIMIT: usize = 256 << 20;
 /// At most this many `/State` entries of a set-layer-visibility action are read.
 const MAX_LAYER_STATE: usize = 1024;
 
+/// File specifications retained from a remote-Go-To action are deliberately small.
+const MAX_REMOTE_FILE_SPEC_BYTES: usize = 4096;
+const MAX_REMOTE_DESTINATION_NAME_BYTES: usize = 1024;
+
 /// At most this many layers are read from all of `/RBGroups` together.
 const MAX_LAYER_GROUP_ENTRIES: usize = 4096;
+
+/// `DocInfo::outline` holds the first this many bookmarks in outline order. Opening a document
+/// reads only this window; the rest are listed by page through `pdfcraft_organize`.
+const OUTLINE_WINDOW: usize = 10_000;
+
+/// Deepest level `DocInfo::outline` nests (the top level is 0); deeper bookmarks are left out.
+const OUTLINE_DEPTH: usize = 32;
 
 fn load_options(password: Option<&str>) -> LoadOptions {
     LoadOptions { password: password.map(str::to_owned), max_decompressed_size: Some(LOAD_STREAM_LIMIT), ..LoadOptions::default() }
@@ -51,6 +64,8 @@ pub struct DocInfo {
     pub xfa: Option<Xfa>,
     pub pages: Vec<PageInfo>,
     pub outline: Vec<OutlineItem>,
+    /// The outline has bookmarks that `outline` leaves out (see `OUTLINE_WINDOW`, `OUTLINE_DEPTH`).
+    pub outline_more: bool,
     pub annotations: Vec<Annotation>,
     pub fields: Vec<Field>,
     pub links: Vec<Link>,
@@ -161,6 +176,8 @@ impl PageInfo {
 #[derive(Clone, Debug)]
 pub struct Link {
     pub page: usize,
+    /// Zero-based position in the page's raw `/Annots` array.
+    pub index: usize,
     pub rect: [f32; 4],
     pub target: LinkTarget,
 }
@@ -177,7 +194,20 @@ pub enum LinkTarget {
         changes: Vec<(LayerOp, (u32, u16))>,
         preserve_rb: bool,
     },
+    /// A local-file remote Go-To action. The caller resolves `file` relative to the source path.
+    RemoteGoTo {
+        file: String,
+        destination: RemoteDestination,
+        new_window: Option<bool>,
+    },
     Other(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RemoteDestination {
+    Default,
+    Page { page: usize, view: DestView },
+    Named(String),
 }
 
 /// What a set-layer-visibility action does to a layer.
@@ -264,6 +294,9 @@ pub struct Annotation {
     pub locked: bool,
     /// `/IT`, the intent: `FreeTextCallout`, `PolygonCloud`, `FreeTextTypeWriter`…
     pub intent: Option<String>,
+    /// A Fill & Sign mark: typed text, a check, cross, dot or line, or a typed, drawn or picture
+    /// signature or initials (the rules of `pdfcraft_annot::is_fill_sign`).
+    pub fill_sign: bool,
 }
 
 impl Annotation {
@@ -332,6 +365,32 @@ pub struct FontInfo {
     pub embedded: bool,
     pub subset: bool,
     pub encoding: Option<String>,
+}
+
+/// Check that `bytes` still open as the same document: the parser reads them and the page
+/// count matches. Content-only edits skip the full [`inspect`] (seconds on very large files)
+/// but must still catch an edit that produced something the viewer cannot display, so the
+/// caller can roll it back. Never panics: parser crashes are caught and reported.
+pub fn check_pages(bytes: Arc<Vec<u8>>, password: Option<&str>, expected: usize) -> Result<(), OpenError> {
+    let pdf = catch_unwind(AssertUnwindSafe(|| Pdf::new_with_password(bytes, password.unwrap_or(""))))
+        .map_err(|p| OpenError::Invalid(format!("the parser crashed: {}", crate::raster::panic_message(&p))))?
+        .map_err(|e| match e {
+            LoadPdfError::Decryption(DecryptionError::PasswordProtected) => {
+                if password.is_some() {
+                    OpenError::WrongPassword
+                } else {
+                    OpenError::NeedsPassword
+                }
+            }
+            LoadPdfError::Decryption(other) => OpenError::Unsupported(format!("encryption not supported: {other:?}")),
+            LoadPdfError::Invalid => OpenError::Invalid("no readable page tree or cross-reference data was found".into()),
+        })?;
+    let pages = catch_unwind(AssertUnwindSafe(|| pdf.pages().len()))
+        .map_err(|p| OpenError::Invalid(format!("the page tree could not be read: {}", crate::raster::panic_message(&p))))?;
+    if pages != expected {
+        return Err(OpenError::Invalid(format!("the edit changed the page count from {expected} to {pages}")));
+    }
+    Ok(())
 }
 
 /// Inspect a document. Fails only if the renderer itself cannot open the file (or needs a
@@ -428,6 +487,7 @@ fn inspect_structure(info: &mut DocInfo, fill: impl FnOnce(&mut DocInfo) -> Resu
 
 struct Inspector<'a> {
     doc: &'a dyn Structure,
+    page_ids: Vec<ObjectId>,
     page_index: HashMap<ObjectId, usize>,
     /// Named destinations (`/Names /Dests` tree), keyed by raw string bytes, built once.
     /// Looking each name up by walking the tree was O(links × names): minutes on manuals.
@@ -436,8 +496,9 @@ struct Inspector<'a> {
 
 impl<'a> Inspector<'a> {
     fn new(doc: &'a dyn Structure) -> Self {
-        let page_index = doc.get_pages().into_iter().map(|(n, id)| (id, n as usize - 1)).collect();
-        let mut me = Self { doc, page_index, named: HashMap::new() };
+        let page_ids = doc.page_ids();
+        let page_index = page_ids.iter().copied().enumerate().map(|(index, id)| (id, index)).collect();
+        let mut me = Self { doc, page_ids, page_index, named: HashMap::new() };
         let mut named = HashMap::new();
         if let Some(tree) =
             doc.catalog().ok().and_then(|c| c.get(b"Names").ok()).and_then(|o| me.dict(o)).and_then(|n| n.get(b"Dests").ok()).and_then(|o| me.dict(o))
@@ -472,16 +533,34 @@ impl<'a> Inspector<'a> {
             Err(reason) => info.warnings.push(format!("Page labels were skipped: {reason}; using physical page numbers.")),
         }
         if let Some(first) = catalog.get(b"Outlines").ok().and_then(|o| self.dict(o)).and_then(|d| d.get(b"First").ok()) {
-            let mut seen = HashSet::new();
-            info.outline = self.outline_siblings(first, &mut seen, 0);
+            (info.outline, info.outline_more) = self.outline_window(first);
         }
         self.annotations(info);
+        let mut field_seen = HashSet::new();
         if let Some(form) = catalog.get(b"AcroForm").ok().and_then(|o| self.dict(o))
             && let Ok(fields) = form.get(b"Fields").and_then(|o| self.resolve(o).as_array())
         {
-            let mut seen = HashSet::new();
             for f in fields {
-                self.field(f, None, &mut info.fields, &mut seen, 0);
+                self.field(f, None, &mut info.fields, &mut field_seen, 0);
+            }
+        }
+        // Widgets no `/Fields` entry reaches are fields too (Acrobat and the browsers fill them);
+        // each is adopted through its topmost unlisted `/Parent`, so a split field stays one.
+        for &pid in &self.page_ids {
+            let Ok(page_dict) = self.doc.get_dictionary(pid) else { continue };
+            let Ok(Object::Array(annots)) = page_dict.get(b"Annots").map(|o| self.resolve(o)) else { continue };
+            for a in annots {
+                let Some(d) = self.dict(a) else { continue };
+                if self.name(d, b"Subtype").as_deref() != Some("Widget")
+                    || (d.get(b"FT").is_err() && d.get(b"T").is_err() && d.get(b"Parent").is_err())
+                {
+                    continue;
+                }
+                if let Object::Reference(id) = a
+                    && let Some(root) = self.unlisted_field(*id, &field_seen)
+                {
+                    self.field(&Object::Reference(root), None, &mut info.fields, &mut field_seen, 0);
+                }
             }
         }
         info.has_javascript |= info.fields.iter().any(|f| f.has_actions);
@@ -530,6 +609,25 @@ impl<'a> Inspector<'a> {
 
     fn name(&self, d: &Dictionary, key: &[u8]) -> Option<String> {
         self.resolve(d.get(key).ok()?).as_name().ok().map(|n| String::from_utf8_lossy(n).into_owned())
+    }
+
+    /// Whether an annotation is a Fill & Sign mark. Keep in step with
+    /// `pdfcraft_annot::is_fill_sign`, which the engine's comment list uses.
+    fn is_fill_sign(&self, d: &Dictionary, subtype: &str) -> bool {
+        let yes = |key: &[u8]| matches!(d.get(key).map(|o| self.resolve(o)), Ok(Object::Boolean(true)));
+        if yes(b"PCFillSign") {
+            return true;
+        }
+        match subtype {
+            "FreeText" => self.name(d, b"IT").as_deref() == Some("FreeTextTypeWriter"),
+            "Stamp" => match self.name(d, b"Name").as_deref() {
+                Some("PCCheck" | "PCCross" | "PCDot" | "PCLine" | "PCTypedSignature") => true,
+                Some("PCCustomSignature" | "PCCustomInitials") => yes(b"PCPictureImage"),
+                _ => false,
+            },
+            "Ink" => self.text(d, b"Subj").as_deref() == Some("Signature"),
+            _ => false,
+        }
     }
 
     fn page_of(&self, o: &Object) -> Option<usize> {
@@ -625,34 +723,49 @@ impl<'a> Inspector<'a> {
 
     // ── outline ─────────────────────────────────────────────────────────────────────────────
 
-    fn outline_siblings(&self, first: &'a Object, seen: &mut HashSet<ObjectId>, depth: u32) -> Vec<OutlineItem> {
-        let mut items = Vec::new();
-        let mut cur = Some(first);
-        while let Some(o) = cur {
+    /// The window `DocInfo::outline` keeps: the first `OUTLINE_WINDOW` bookmarks in outline order,
+    /// nested no deeper than `OUTLINE_DEPTH`, and whether any bookmark was left out. Iterative, and
+    /// each bookmark is read once, so the work and memory stay within the window.
+    fn outline_window(&self, first: &'a Object) -> (Vec<OutlineItem>, bool) {
+        let mut seen = HashSet::new();
+        // The listed bookmarks in outline order, with their depth.
+        let mut listed: Vec<(usize, OutlineItem)> = Vec::new();
+        // One entry per open level: its next sibling, or `None` once that run of siblings has ended.
+        let mut levels: Vec<Option<&'a Object>> = vec![Some(first)];
+        let mut more = false;
+        while let Some(depth) = levels.len().checked_sub(1) {
+            let Some(slot) = levels.get_mut(depth) else { break };
+            let Some(o) = slot.take() else {
+                levels.pop();
+                continue;
+            };
             if let Object::Reference(id) = o
                 && !seen.insert(*id)
             {
-                break; // cycle
+                continue; // cycle: this run of siblings ends here
             }
-            let Some(d) = self.dict(o) else { break };
+            let Some(d) = self.dict(o) else { continue };
+            if listed.len() >= OUTLINE_WINDOW {
+                more = true;
+                break;
+            }
+            *slot = d.get(b"Next").ok();
             let dest = d
                 .get(b"Dest")
                 .ok()
                 .and_then(|dest| self.dest(dest, 0))
                 .or_else(|| d.get(b"A").ok().and_then(|a| self.dict(a)).and_then(|a| a.get(b"D").ok()).and_then(|dest| self.dest(dest, 0)));
             let (page, view) = dest.map_or((None, DestView::Top), |(p, v)| (Some(p), v));
-            let children = match (d.get(b"First").ok(), depth < 32) {
-                (Some(f), true) => self.outline_siblings(f, seen, depth + 1),
-                _ => Vec::new(),
-            };
-            let open = d.get(b"Count").ok().and_then(|c| c.as_i64().ok()).is_some_and(|c| c > 0);
-            items.push(OutlineItem { title: self.text(d, b"Title").unwrap_or_default(), page, view, children, open });
-            cur = d.get(b"Next").ok();
-            if items.len() > 100_000 {
-                break;
+            match d.get(b"First").ok() {
+                Some(child) if depth < OUTLINE_DEPTH => levels.push(Some(child)),
+                Some(_) => more = true,
+                None => {}
             }
+            let open = d.get(b"Count").ok().and_then(|c| c.as_i64().ok()).is_some_and(|c| c > 0);
+            let title = self.text(d, b"Title").unwrap_or_default();
+            listed.push((depth, OutlineItem { title, page, view, children: Vec::new(), open }));
         }
-        items
+        (nest_outline(listed), more)
     }
 
     // ── page labels (ISO 32000-2 §12.4.2) ───────────────────────────────────────────────────
@@ -722,6 +835,7 @@ impl<'a> Inspector<'a> {
         }
         // Decode each bounded prefix once, rather than once for every page in its range.
         let mut specs = BTreeMap::new();
+        let mut prefix_total = 0usize;
         for (start, d) in ranges {
             let first = d.get(b"St").ok().and_then(|o| self.resolve(o).as_i64().ok()).unwrap_or(1).max(1) as u64;
             let prefix = match d.get(b"P").ok().map(|o| self.resolve(o)) {
@@ -735,6 +849,11 @@ impl<'a> Inspector<'a> {
             };
             if prefix.len() > MAX_LABEL_BYTES {
                 return Err("a decoded prefix exceeds 1024 UTF-8 bytes");
+            }
+            // A prefix object shared by many ranges is decoded once per range: count every copy.
+            prefix_total = prefix_total.saturating_add(prefix.len());
+            if prefix_total > MAX_PREFIX_TOTAL_BYTES {
+                return Err("decoded prefixes exceed 4 MiB in total");
             }
             let style = d.get(b"S").ok().and_then(|o| self.resolve(o).as_name().ok());
             specs.insert(start, (first, prefix, style));
@@ -807,7 +926,7 @@ impl<'a> Inspector<'a> {
                     info.attachments.push(self.attachment(name, fs, AttachmentSource::Annotation { page, index }));
                 }
                 if subtype == "Link" {
-                    if let Some(link) = self.link(page, d) {
+                    if let Some(link) = self.link(page, index, d) {
                         if matches!(&link.target, LinkTarget::Other(s) if s == "JavaScript") {
                             info.has_javascript = true;
                         }
@@ -850,11 +969,14 @@ impl<'a> Inspector<'a> {
                     _ => Vec::new(),
                 };
                 let in_reply_to = d.get(b"IRT").ok().and_then(|o| self.dict(o)).and_then(|p| self.text(p, b"NM"));
+                let fill_sign = self.is_fill_sign(d, &subtype);
                 info.annotations.push(Annotation {
                     page,
                     subtype,
                     author: self.text(d, b"T"),
-                    contents: self.text(d, b"Contents"),
+                    // Acrobat ends lines with CR, which the interface would draw as nothing (keep
+                    // in step with `pdfcraft_annot::summaries`).
+                    contents: self.text(d, b"Contents").map(|s| s.replace("\r\n", "\n").replace('\r', "\n")),
                     modified: self.text(d, b"M").map(|m| pretty_date(&m)),
                     name: self.text(d, b"NM"),
                     in_reply_to,
@@ -865,13 +987,14 @@ impl<'a> Inspector<'a> {
                     quads,
                     locked: d.get(b"F").ok().and_then(|f| self.resolve(f).as_i64().ok()).unwrap_or(0) & 128 != 0,
                     intent: self.name(d, b"IT"),
+                    fill_sign,
                 });
             }
         }
         info.annotations.sort_by(|a, b| a.page.cmp(&b.page).then(b.rect[3].total_cmp(&a.rect[3])));
     }
 
-    fn link(&self, page: usize, d: &Dictionary) -> Option<Link> {
+    fn link(&self, page: usize, index: usize, d: &Dictionary) -> Option<Link> {
         let rect = rect4(self.resolve(d.get(b"Rect").ok()?));
         let target = if let Ok(dest) = d.get(b"Dest") {
             let (page, view) = self.dest(dest, 0)?;
@@ -887,11 +1010,72 @@ impl<'a> Inspector<'a> {
                     LinkTarget::Uri(a.get(b"URI").ok().and_then(|u| self.resolve(u).as_str().ok()).map(|b| String::from_utf8_lossy(b).into_owned())?)
                 }
                 Some("SetOCGState") => self.layer_state(a),
+                Some("GoToR") => self.remote_go_to(a).unwrap_or_else(|| LinkTarget::Other("GoToR".into())),
                 Some(other) => LinkTarget::Other(other.to_string()),
                 None => return None,
             }
         };
-        Some(Link { page, rect, target })
+        Some(Link { page, index, rect, target })
+    }
+
+    fn remote_go_to(&self, action: &Dictionary) -> Option<LinkTarget> {
+        if self.name(action, b"FS").as_deref() == Some("URL") {
+            return None;
+        }
+        let file = match self.resolve(action.get(b"F").ok()?) {
+            Object::String(bytes, _) => limited_pdf_string(bytes, MAX_REMOTE_FILE_SPEC_BYTES)?,
+            Object::Dictionary(spec) => {
+                if self.name(spec, b"FS").as_deref() == Some("URL") {
+                    return None;
+                }
+                spec.get(b"UF")
+                    .ok()
+                    .and_then(|o| self.pdf_text(o, MAX_REMOTE_FILE_SPEC_BYTES))
+                    .or_else(|| spec.get(b"F").ok().and_then(|o| self.pdf_text(o, MAX_REMOTE_FILE_SPEC_BYTES)))?
+            }
+            _ => return None,
+        };
+        if file.is_empty() {
+            return None;
+        }
+        let destination = match action.get(b"D") {
+            Err(_) => RemoteDestination::Default,
+            Ok(o) => match self.resolve(o) {
+                Object::Array(items) => {
+                    let page = items.first().and_then(|o| self.resolve(o).as_i64().ok()).and_then(|n| usize::try_from(n).ok())?;
+                    let kind = items.get(1).map(|o| self.resolve(o)).and_then(|o| o.as_name().ok());
+                    let operands: [Option<f32>; 4] = std::array::from_fn(|i| items.get(i + 2).and_then(|o| self.resolve(o).as_float().ok()));
+                    RemoteDestination::Page { page, view: DestView::from_operands(kind, &operands) }
+                }
+                Object::Name(name) if name.len() <= MAX_REMOTE_DESTINATION_NAME_BYTES => {
+                    let name = String::from_utf8_lossy(name).into_owned();
+                    if name.is_empty() || name.len() > MAX_REMOTE_DESTINATION_NAME_BYTES {
+                        return None;
+                    }
+                    RemoteDestination::Named(name)
+                }
+                Object::String(bytes, _) if bytes.len() <= MAX_REMOTE_DESTINATION_NAME_BYTES => {
+                    let name = text_string(bytes);
+                    if name.is_empty() || name.len() > MAX_REMOTE_DESTINATION_NAME_BYTES {
+                        return None;
+                    }
+                    RemoteDestination::Named(name)
+                }
+                _ => return None,
+            },
+        };
+        let new_window = match action.get(b"NewWindow").map(|o| self.resolve(o)) {
+            Ok(Object::Boolean(value)) => Some(*value),
+            _ => None,
+        };
+        Some(LinkTarget::RemoteGoTo { file, destination, new_window })
+    }
+
+    fn pdf_text(&self, o: &Object, max_bytes: usize) -> Option<String> {
+        match self.resolve(o) {
+            Object::String(bytes, _) => limited_pdf_string(bytes, max_bytes),
+            _ => None,
+        }
     }
 
     /// A set-OCG-state action: `/State` is `ON`, `OFF` or `Toggle`, each followed by the groups
@@ -1006,6 +1190,31 @@ impl<'a> Inspector<'a> {
         })
     }
 
+    /// The topmost field above widget `id` (itself without a `/Parent`), or `None` when it or an
+    /// ancestor is already reachable from the `/Fields` tree, or a `/Parent` loop hides the top.
+    fn unlisted_field(&self, id: ObjectId, seen: &HashSet<ObjectId>) -> Option<ObjectId> {
+        let mut top = id;
+        let mut visited = HashSet::from([id]);
+        loop {
+            let o = Object::Reference(top);
+            let d = self.dict(&o)?;
+            let parent = match d.get(b"Parent") {
+                Ok(Object::Reference(p)) => Some(*p),
+                _ => None,
+            };
+            let Some(p) = parent else {
+                return if seen.contains(&top) { None } else { Some(top) };
+            };
+            if !visited.insert(p) || visited.len() > 64 {
+                return None;
+            }
+            if seen.contains(&p) {
+                return None;
+            }
+            top = p;
+        }
+    }
+
     // ── optional content ────────────────────────────────────────────────────────────────────
 
     fn layers(&self, catalog: &Dictionary, out: &mut Vec<Layer>) {
@@ -1064,9 +1273,7 @@ impl<'a> Inspector<'a> {
 
     fn fonts(&self, out: &mut Vec<FontInfo>) {
         let mut seen = HashSet::new();
-        let mut pages: Vec<_> = self.page_index.iter().collect();
-        pages.sort_by_key(|(_, i)| **i);
-        for (&pid, _) in pages {
+        for &pid in &self.page_ids {
             let Ok(fonts) = self.doc.get_page_fonts(pid) else { continue };
             for (_, f) in fonts {
                 let base = f
@@ -1131,6 +1338,41 @@ impl<'a> Inspector<'a> {
 /// ([`pdfcraft_cos::PdfString::to_text`]) so the panels and outline editing agree.
 fn text_string(bytes: &[u8]) -> String {
     pdfcraft_cos::PdfString::literal(bytes).to_text()
+}
+
+fn limited_pdf_string(bytes: &[u8], max_bytes: usize) -> Option<String> {
+    if bytes.len() > max_bytes {
+        return None;
+    }
+    let text = text_string(bytes);
+    (text.len() <= max_bytes).then_some(text)
+}
+
+/// Nests a pre-order list of `(depth, item)` into the outline tree.
+fn nest_outline(listed: Vec<(usize, OutlineItem)>) -> Vec<OutlineItem> {
+    let mut roots = Vec::new();
+    // The open ancestors, outermost first; each collects its children until it closes.
+    let mut open: Vec<(usize, OutlineItem)> = Vec::new();
+    for (depth, item) in listed {
+        while open.last().is_some_and(|(d, _)| *d >= depth) {
+            close_outline(&mut open, &mut roots);
+        }
+        open.push((depth, item));
+    }
+    while !open.is_empty() {
+        close_outline(&mut open, &mut roots);
+    }
+    roots
+}
+
+/// Closes the innermost open bookmark: it joins its parent's children, or the top level.
+fn close_outline(open: &mut Vec<(usize, OutlineItem)>, roots: &mut Vec<OutlineItem>) {
+    if let Some((_, item)) = open.pop() {
+        match open.last_mut() {
+            Some((_, parent)) => parent.children.push(item),
+            None => roots.push(item),
+        }
+    }
 }
 
 fn rect4(o: &Object) -> [f32; 4] {
@@ -1262,6 +1504,204 @@ mod tests {
             let stream = tiff_predictor_stream(encoded.repeat(32), columns, colors, bits);
             assert_eq!(stream.decompressed_content_with_limit(128).unwrap(), decoded.repeat(32), "{bits}-bit, {colors} colours");
         }
+    }
+
+    // Xref-stream fixtures exercise indirect /Length lookup during document loading: stream 2's /Length is `3 0 R`,
+    // `containers` lists compressed (id, container, index) entries and `objects` the other objects in the file.
+    fn compressed_length_pdf(containers: &[(u32, u32, u16)], objects: &[(u32, &[u8])]) -> Vec<u8> {
+        let mut pdf = b"%PDF-1.7\n".to_vec();
+        let ids = containers.iter().flat_map(|&(id, container, _)| [id, container]).chain(objects.iter().map(|&(id, _)| id));
+        let xref_id = ids.max().unwrap_or(3) + 1;
+        let mut records = vec![[0u8; 7]; (xref_id + 1) as usize];
+        records[0] = [0, 0, 0, 0, 0, 255, 255];
+        let mut append = |id: u32, body: &[u8]| {
+            records[id as usize][0] = 1;
+            records[id as usize][1..5].copy_from_slice(&(pdf.len() as u32).to_be_bytes());
+            pdf.extend_from_slice(format!("{id} 0 obj\n").as_bytes());
+            pdf.extend_from_slice(body);
+            pdf.extend_from_slice(b"\nendobj\n");
+        };
+        append(1, b"<< /Type /Catalog >>");
+        append(2, b"<< /Length 3 0 R >>\nstream\nhello\nendstream");
+        for &(id, body) in objects {
+            append(id, body);
+        }
+        for &(id, container, index) in containers {
+            records[id as usize][0] = 2;
+            records[id as usize][1..5].copy_from_slice(&container.to_be_bytes());
+            records[id as usize][5..7].copy_from_slice(&index.to_be_bytes());
+        }
+        let xref_offset = pdf.len();
+        records[xref_id as usize][0] = 1;
+        records[xref_id as usize][1..5].copy_from_slice(&(xref_offset as u32).to_be_bytes());
+        pdf.extend_from_slice(
+            format!("{xref_id} 0 obj\n<< /Type /XRef /Size {} /Root 1 0 R /W [1 4 2] /Length {} >>\nstream\n", records.len(), records.len() * 7)
+                .as_bytes(),
+        );
+        for record in records {
+            pdf.extend_from_slice(&record);
+        }
+        pdf.extend_from_slice(format!("\nendstream\nendobj\nstartxref\n{xref_offset}\n%%EOF\n").as_bytes());
+        pdf
+    }
+
+    // Stream 2's /Length starts a chain of `hops` indirect /Length lookups, each naming a new object; only the last
+    // link's /Length is direct. Compressed: link k is the integer 3 + 2k (the length it measures) alone in the object
+    // stream 4 + 2k, whose own /Length is link k + 1. Plain: link k is the stream 3 + k, whose /Length is link k + 1.
+    fn length_chain_pdf(hops: u32, compressed: bool) -> Vec<u8> {
+        let length = |hop: u32, next: u32, data: &str| if hop + 1 < hops { format!("{next} 0 R") } else { data.len().to_string() };
+        let (mut containers, mut objects) = (Vec::new(), Vec::new());
+        let mut value = 5; // the length of stream 2's data, "hello"
+        for hop in 0..hops {
+            if compressed {
+                let (id, container) = (3 + 2 * hop, 4 + 2 * hop);
+                let index = format!("{id} 0 ");
+                let data = format!("{index}{value}");
+                let dict = format!("/Type /ObjStm /N 1 /First {} /Length {}", index.len(), length(hop, id + 2, &data));
+                objects.push((container, format!("<< {dict} >>\nstream\n{data}\nendstream")));
+                containers.push((id, container, 0));
+                value = data.len();
+            } else {
+                objects.push((3 + hop, format!("<< /Length {} >>\nstream\n\nendstream", length(hop, 4 + hop, ""))));
+            }
+        }
+        let objects: Vec<_> = objects.iter().map(|(id, body)| (*id, body.as_bytes())).collect();
+        compressed_length_pdf(&containers, &objects)
+    }
+
+    // Lenient loading keeps a document whose stream 2 has an unresolvable /Length: the catalog, and stream 2's
+    // dictionary without its data.
+    fn load_without_stream_2_data(pdf: &[u8]) -> Document {
+        let doc = Document::load_mem(pdf).unwrap();
+        assert!(doc.catalog().unwrap().has_type(b"Catalog"));
+        assert!(doc.get_object((2, 0)).unwrap().as_stream().unwrap().content.is_empty());
+        doc
+    }
+
+    #[test]
+    fn compressed_object_self_container_does_not_recurse() {
+        let doc = load_without_stream_2_data(&compressed_length_pdf(&[(3, 3, 0)], &[]));
+        assert!(doc.get_object((3, 0)).is_err());
+    }
+
+    #[test]
+    fn compressed_object_mutual_containers_do_not_recurse() {
+        let doc = load_without_stream_2_data(&compressed_length_pdf(&[(3, 4, 0), (4, 3, 0)], &[]));
+        assert!(doc.get_object((3, 0)).is_err());
+        assert!(doc.get_object((4, 0)).is_err());
+    }
+
+    #[test]
+    fn object_stream_length_cycle_does_not_recurse() {
+        let pdf = compressed_length_pdf(&[(3, 4, 0)], &[(4, b"<< /Type /ObjStm /N 1 /First 4 /Length 3 0 R >>\nstream\n3 0 5\nendstream")]);
+        let doc = load_without_stream_2_data(&pdf);
+        // The container's /Length is the object it holds: the container is kept without data, so 3 never loads.
+        assert!(doc.get_object((4, 0)).unwrap().as_stream().unwrap().content.is_empty());
+        assert!(doc.get_object((3, 0)).is_err());
+    }
+
+    #[test]
+    fn compressed_object_container_chain_does_not_recurse() {
+        let containers: Vec<_> = (3..100_003).map(|id| (id, id + 1, 0)).collect();
+        let pdf = compressed_length_pdf(&containers, &[(100_003, b"<< /Type /ObjStm /N 1 /First 4 /Length 5 >>\nstream\n3 0 5\nendstream")]);
+        let doc = load_without_stream_2_data(&pdf);
+        // The object stream in the file loads, but the xref puts 3 in the compressed container 4, which is refused.
+        assert_eq!(doc.get_object((100_003, 0)).unwrap().as_stream().unwrap().content, b"3 0 5");
+        assert!(doc.get_object((3, 0)).is_err());
+    }
+
+    #[test]
+    fn compressed_objects_and_indirect_stream_length_still_load() {
+        let pdf = compressed_length_pdf(
+            &[(3, 4, 0), (5, 4, 1)],
+            &[(4, b"<< /Type /ObjStm /N 2 /First 8 /Length 17 >>\nstream\n3 0 5 2 5 (value)\nendstream")],
+        );
+        let doc = Document::load_mem_with_options(&pdf, LoadOptions { strict: true, ..Default::default() }).unwrap();
+        assert_eq!(doc.get_object((3, 0)).unwrap().as_i64().unwrap(), 5);
+        assert_eq!(doc.get_object((5, 0)).unwrap().as_str().unwrap(), b"value");
+        assert_eq!(doc.get_object((2, 0)).unwrap().as_stream().unwrap().content, b"hello");
+    }
+
+    #[test]
+    fn compressed_length_in_a_container_with_an_indirect_length_still_loads() {
+        // Two hops, as in a valid file: stream 2's /Length (3) is compressed in container 4, whose own /Length (5) is
+        // a plain indirect integer.
+        let pdf =
+            compressed_length_pdf(&[(3, 4, 0)], &[(4, b"<< /Type /ObjStm /N 1 /First 4 /Length 5 0 R >>\nstream\n3 0 5\nendstream"), (5, b"5")]);
+        let doc = Document::load_mem_with_options(&pdf, LoadOptions { strict: true, ..Default::default() }).unwrap();
+        assert_eq!(doc.get_object((3, 0)).unwrap().as_i64().unwrap(), 5);
+        assert_eq!(doc.get_object((5, 0)).unwrap().as_i64().unwrap(), 5);
+        assert_eq!(doc.get_object((2, 0)).unwrap().as_stream().unwrap().content, b"hello");
+    }
+
+    #[test]
+    fn compressed_length_chain_does_not_recurse() {
+        // Every container is an ordinary object in the file and every hop names a new object, so neither the
+        // container check nor the cycle history stops the chain; each hop recursed once more (a 512 KiB stack
+        // overflowed within 150 hops). Lookups past the cap fail: the first link never loads, while the last one,
+        // next to the direct /Length, does.
+        let hops = 5_000;
+        let doc = load_without_stream_2_data(&length_chain_pdf(hops, true));
+        assert!(doc.get_object((3, 0)).is_err());
+        assert!(doc.get_object((3 + 2 * (hops - 1), 0)).unwrap().as_i64().is_ok());
+        // The cap itself: loading link j reads its container's /Length, a chain of 2 * (hops - 1 - j) lookups, and
+        // 16 are allowed, so the 9th link from the end loads and the 10th does not.
+        assert!(doc.get_object((3 + 2 * (hops - 9), 0)).is_ok());
+        assert!(doc.get_object((3 + 2 * (hops - 10), 0)).is_err());
+    }
+
+    #[test]
+    fn plain_stream_length_chain_does_not_recurse() {
+        // The same recursion without object streams: each stream's /Length names the next stream (a 512 KiB stack
+        // overflowed within 200 hops). A stream is no length, so every link is kept as a stream without data.
+        let hops = 5_000;
+        let doc = load_without_stream_2_data(&length_chain_pdf(hops, false));
+        assert!((3..3 + hops).all(|id| doc.get_object((id, 0)).is_ok_and(|link| link.as_stream().is_ok_and(|s| s.content.is_empty()))));
+    }
+
+    fn indexed_object_stream(pairs: &[(u32, usize)], members: &[u8]) -> lopdf::Stream {
+        let mut content = Vec::new();
+        for &(id, offset) in pairs {
+            content.extend_from_slice(format!("{id} {offset} ").as_bytes());
+        }
+        let mut dict = Dictionary::new();
+        dict.set("Type", "ObjStm");
+        dict.set("N", pairs.len() as i64);
+        dict.set("First", content.len() as i64);
+        content.extend_from_slice(members);
+        lopdf::Stream::new(dict, content)
+    }
+
+    #[test]
+    fn object_stream_member_extents_bound_owned_strings() {
+        let mut members = vec![b'('; 32];
+        members.extend(vec![b'x'; 1 << 20]);
+        members.extend([b')'; 32]);
+        // Put the innermost (complete) string first in index order, then overlapping starts
+        // and duplicates. Only this first member at offset 31 may own the large string.
+        let mut pairs = vec![(100, 31)];
+        pairs.extend((0..31).map(|offset| (offset as u32 + 1, offset)));
+        pairs.extend([(200, 31), (201, 31)]);
+        let stream = indexed_object_stream(&pairs, &members);
+        let parsed = lopdf::ObjectStream::new_with_limit(&stream, Some(2 << 20)).unwrap();
+        assert_eq!(parsed.objects.get(&(100, 0)).unwrap().as_str().unwrap().len(), 1 << 20);
+        let total: usize = parsed.objects.values().filter_map(|object| object.as_str().ok()).map(<[u8]>::len).sum();
+        assert!(total <= stream.content.len(), "owned {total} string bytes from {} decoded bytes", stream.content.len());
+        assert!(!parsed.objects.contains_key(&(200, 0)));
+        assert!(!parsed.objects.contains_key(&(201, 0)));
+    }
+
+    #[test]
+    fn object_stream_member_extents_preserve_index_order_and_whitespace() {
+        let members = b" \n42\n /Name \n[true 7]\n << /Key (value) >>\n (last)";
+        // Unsorted offsets, and object 9 appears twice: its last index entry still wins.
+        let pairs = [(9, 0), (12, 21), (10, 5), (11, 12), (9, 41)];
+        let parsed = lopdf::ObjectStream::new(&indexed_object_stream(&pairs, members)).unwrap();
+        assert_eq!(parsed.objects.len(), 4);
+        assert_eq!(parsed.objects.get(&(9, 0)).unwrap().as_str().unwrap(), b"last");
+        assert_eq!(parsed.objects.get(&(10, 0)).unwrap().as_name().unwrap(), b"Name");
+        assert_eq!(parsed.objects.get(&(11, 0)).unwrap().as_array().unwrap(), &[Object::Boolean(true), Object::Integer(7)]);
+        assert_eq!(parsed.objects.get(&(12, 0)).unwrap().as_dict().unwrap().get(b"Key").unwrap().as_str().unwrap(), b"value");
     }
 
     #[test]
@@ -1427,6 +1867,36 @@ mod tests {
     }
 
     #[test]
+    fn page_label_limits_bound_the_total_of_decoded_prefixes() {
+        // `ranges` ranges naming one shared prefix object of `prefix` bytes, without a style.
+        let shared = |ranges: i64, prefix: usize| {
+            let mut doc = Document::with_version("1.7");
+            doc.objects.insert((7, 0), Object::String(vec![b'x'; prefix], lopdf::StringFormat::Literal));
+            let mut spec = Dictionary::new();
+            spec.set("P", Object::Reference((7, 0)));
+            doc.objects.insert((8, 0), Object::Dictionary(spec));
+            let mut tree = Dictionary::new();
+            tree.set("Nums", (0..ranges).flat_map(|i| [Object::Integer(i), Object::Reference((8, 0))]).collect::<Vec<_>>());
+            let mut catalog = Dictionary::new();
+            catalog.set("PageLabels", Object::Dictionary(tree));
+            (doc, catalog)
+        };
+        let mut pages: Vec<_> =
+            (1..=3).map(|n| PageInfo { width: 200.0, height: 300.0, crop: [0.0, 0.0, 200.0, 300.0], rotation: 0, label: n.to_string() }).collect();
+        // Each range decodes its prefix, so a small file sharing one prefix object asks for a
+        // copy per range: 5,000 ranges and a 1,000-byte prefix make 5 MB, past the 4 MiB total.
+        // Three pages make three labels, far below the label total: the prefixes alone refuse it.
+        let (doc, catalog) = shared(5000, 1000);
+        let err = Inspector::new(&doc).page_labels(&catalog, &mut pages).unwrap_err();
+        assert!(err.contains("prefixes exceed 4 MiB"), "{err}");
+        assert!(pages.iter().enumerate().all(|(i, p)| p.label == (i + 1).to_string()));
+        // Exactly 4 MiB of prefixes is still read.
+        let (doc, catalog) = shared((MAX_PREFIX_TOTAL_BYTES / MAX_LABEL_BYTES) as i64, MAX_LABEL_BYTES);
+        Inspector::new(&doc).page_labels(&catalog, &mut pages).unwrap();
+        assert!(pages.iter().all(|p| p.label.len() == MAX_LABEL_BYTES));
+    }
+
+    #[test]
     fn page_label_limits_handle_prefix_only_and_reference_cycles() {
         let info = label_info(vec![Object::Integer(0), label_spec("", b"prefix".to_vec(), i64::MAX)], Vec::new());
         assert!(info.warnings.is_empty());
@@ -1537,6 +2007,23 @@ trailer << /Root 1 0 R >>
         assert_eq!(info.layer_groups, [vec![(5, 0), (6, 0)], vec![(6, 0), (7, 0)]]);
     }
 
+    const ORPHAN_FIELDS: &[u8] = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Annots [5 0 R 6 0 R] >> endobj
+4 0 obj << /Fields [] >> endobj
+5 0 obj << /Type /Annot /Subtype /Widget /FT /Tx /T (alpha) /V (one) /Rect [10 100 90 120] >> endobj
+6 0 obj << /Type /Annot /Subtype /Widget /FT /Tx /T (beta) /Rect [10 60 90 80] >> endobj
+trailer << /Root 1 0 R >>
+%%EOF";
+
+    #[test]
+    fn fields_listed_only_on_the_pages_are_listed() {
+        let info = inspect(Arc::new(ORPHAN_FIELDS.to_vec()), None).expect("opens");
+        let listed: Vec<_> = info.fields.iter().map(|f| (f.name.as_str(), f.value.as_deref(), f.page)).collect();
+        assert_eq!(listed, [("alpha", Some("one"), Some(0)), ("beta", None, Some(0))], "{:?}", info.fields);
+    }
+
     #[test]
     fn lazy_structure_matches_the_compatibility_inspector() {
         // Each fixture as lopdf writes it, and with its objects in object streams.
@@ -1580,6 +2067,72 @@ trailer << /Root 1 0 R >>
                 LinkTarget::SetLayers { changes: vec![(On, (6, 0)), (Toggle, (5, 0)), (Toggle, (7, 0))], preserve_rb: false },
                 // An indirect /State; /PreserveRB defaults to true.
                 LinkTarget::SetLayers { changes: vec![(Off, (5, 0))], preserve_rb: true },
+            ]
+        );
+    }
+
+    #[test]
+    fn links_read_bounded_local_remote_go_to_actions() {
+        use DestView::{Fit, Xyz};
+        let too_long = "a".repeat(MAX_REMOTE_FILE_SPEC_BYTES + 1);
+        let wide_file = format!("<FEFF{}>", "4E00".repeat(1400));
+        let wide_name = format!("<FEFF{}>", "4E00".repeat(342));
+        let pdf = format!(
+            "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+             2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >> endobj\n\
+             3 0 obj << /Type /Page /Parent 2 0 R /Annots [99 0 R 30 0 R 31 0 R 32 0 R 33 0 R 34 0 R 35 0 R 36 0 R 37 0 R 38 0 R 39 0 R 40 0 R 41 0 R] >> endobj\n\
+             30 0 obj << /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S /GoToR /F (chapters/remote.pdf) /D [2 /XYZ 10 20 1.5] /NewWindow true >> >> endobj\n\
+             31 0 obj << /Type /Annot /Subtype /Link /Rect [0 20 10 30] /A << /S /GoToR /F << /Type /Filespec /F (fallback.pdf) /UF <FEFF0066006F006F002E007000640066> >> /D [0 /Fit] /NewWindow false >> >> endobj\n\
+             32 0 obj << /Type /Annot /Subtype /Link /Rect [0 40 10 50] /A << /S /GoToR /F (remote.pdf) >> >> endobj\n\
+             33 0 obj << /Type /Annot /Subtype /Link /Rect [0 60 10 70] /A << /S /GoToR /F (chapter.pdf) /D (chapter) >> >> endobj\n\
+             34 0 obj << /Type /Annot /Subtype /Link /Rect [0 80 10 90] /A << /S /GoToR /FS /URL /F (https://example.com) /D [0 /Fit] >> >> endobj\n\
+             35 0 obj << /Type /Annot /Subtype /Link /Rect [0 100 10 110] /A << /S /GoToR /F ({too_long}) /D [0 /Fit] >> >> endobj\n\
+             36 0 obj << /Type /Annot /Subtype /Link /Rect [0 120 10 130] /A << /S /GoToR /F (chapter.pdf) /D /chapter >> >> endobj\n\
+             37 0 obj << /Type /Annot /Subtype /Link /Rect [0 140 10 150] /A << /S /GoToR /F (chapter.pdf) /D [-1 /Fit] >> >> endobj\n\
+             38 0 obj << /Type /Annot /Subtype /Link /Rect [0 160 10 170] /A << /S /GoToR /F (chapter.pdf) /D [1.5 /Fit] >> >> endobj\n\
+             39 0 obj << /Type /Annot /Subtype /Link /Rect [0 180 10 190] /A << /S /GoToR /F (chapter.pdf) /D [9223372036854775807 /Fit] >> >> endobj\n\
+             40 0 obj << /Type /Annot /Subtype /Link /Rect [0 200 10 210] /A << /S /GoToR /F << /Type /Filespec /UF {wide_file} >> /D [0 /Fit] >> >> endobj\n\
+             41 0 obj << /Type /Annot /Subtype /Link /Rect [0 220 10 230] /A << /S /GoToR /F (chapter.pdf) /D {wide_name} >> >> endobj\n\
+             trailer << /Root 1 0 R >>\n%%EOF"
+        );
+        let info = inspect(Arc::new(pdf.into_bytes()), None).expect("opens");
+        let targets: Vec<_> = info.links.iter().map(|l| (l.index, l.target.clone())).collect();
+        let huge_page_target = usize::try_from(i64::MAX)
+            .map(|page| LinkTarget::RemoteGoTo {
+                file: "chapter.pdf".into(),
+                destination: RemoteDestination::Page { page, view: Fit },
+                new_window: None,
+            })
+            .unwrap_or_else(|_| LinkTarget::Other("GoToR".into()));
+        assert_eq!(
+            targets,
+            [
+                (
+                    1,
+                    LinkTarget::RemoteGoTo {
+                        file: "chapters/remote.pdf".into(),
+                        destination: RemoteDestination::Page { page: 2, view: Xyz { left: Some(10.0), top: Some(20.0), zoom: Some(1.5) } },
+                        new_window: Some(true),
+                    }
+                ),
+                (
+                    2,
+                    LinkTarget::RemoteGoTo {
+                        file: "foo.pdf".into(),
+                        destination: RemoteDestination::Page { page: 0, view: Fit },
+                        new_window: Some(false),
+                    }
+                ),
+                (3, LinkTarget::RemoteGoTo { file: "remote.pdf".into(), destination: RemoteDestination::Default, new_window: None }),
+                (4, LinkTarget::RemoteGoTo { file: "chapter.pdf".into(), destination: RemoteDestination::Named("chapter".into()), new_window: None }),
+                (5, LinkTarget::Other("GoToR".into())),
+                (6, LinkTarget::Other("GoToR".into())),
+                (7, LinkTarget::RemoteGoTo { file: "chapter.pdf".into(), destination: RemoteDestination::Named("chapter".into()), new_window: None }),
+                (8, LinkTarget::Other("GoToR".into())),
+                (9, LinkTarget::Other("GoToR".into())),
+                (10, huge_page_target),
+                (11, LinkTarget::Other("GoToR".into())),
+                (12, LinkTarget::Other("GoToR".into())),
             ]
         );
     }
@@ -1695,6 +2248,95 @@ trailer << /Root 1 0 R >>
         assert_eq!(titles, ["第一章", "目录", "A\u{FFFD}B", "概述", "Café", "A"]);
     }
 
+    /// A file whose objects are `bodies` in order (object 1 first), with a cross-reference table.
+    fn pdf_of(bodies: &[String]) -> Vec<u8> {
+        let mut out = b"%PDF-1.7\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, body) in bodies.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref = out.len();
+        out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", bodies.len() + 1).as_bytes());
+        for o in offsets {
+            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", bodies.len() + 1).as_bytes());
+        out
+    }
+
+    /// A one-page file whose outline is `items` (objects 5, 6, … in order).
+    fn outline_file(items: &[String]) -> Vec<u8> {
+        let mut bodies = vec![
+            "<< /Type /Catalog /Pages 2 0 R /Outlines 4 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R >>".to_string(),
+            format!("<< /Type /Outlines /First 5 0 R /Count {} >>", items.len()),
+        ];
+        bodies.extend(items.iter().cloned());
+        pdf_of(&bodies)
+    }
+
+    /// The titles of `items`, with children in brackets (`Parent[Child]`).
+    fn shape(items: &[OutlineItem]) -> Vec<String> {
+        items.iter().map(|o| if o.children.is_empty() { o.title.clone() } else { format!("{}[{}]", o.title, shape(&o.children).join(",")) }).collect()
+    }
+
+    #[test]
+    fn outline_window_keeps_the_first_bookmarks_and_says_when_more_follow() {
+        const COUNT: usize = OUTLINE_WINDOW + 5;
+        let items: Vec<String> = (0..COUNT)
+            .map(|k| {
+                let prev = if k == 0 { String::new() } else { format!(" /Prev {} 0 R", 4 + k) };
+                let next = if k + 1 == COUNT { String::new() } else { format!(" /Next {} 0 R", 6 + k) };
+                format!("<< /Title (Item {k}) /Parent 4 0 R{prev}{next} /Dest [3 0 R /Fit] >>")
+            })
+            .collect();
+        let info = inspect(Arc::new(outline_file(&items)), None).expect("opens");
+        assert_eq!(info.outline.len(), OUTLINE_WINDOW);
+        assert_eq!(info.outline.last().map(|o| o.title.as_str()), Some("Item 9999"));
+        assert!(info.outline_more);
+
+        let one = inspect(Arc::new(outline_file(&["<< /Title (Only) /Parent 4 0 R /Dest [3 0 R /Fit] >>".into()])), None).expect("opens");
+        assert_eq!(shape(&one.outline), ["Only"]);
+        assert!(!one.outline_more);
+    }
+
+    #[test]
+    fn outline_window_nests_no_deeper_than_its_depth_limit() {
+        // A chain of 40 bookmarks, each the first child of the one before.
+        let items: Vec<String> = (0..40)
+            .map(|k| {
+                let parent = if k == 0 { 4 } else { 4 + k };
+                let first = if k + 1 == 40 { String::new() } else { format!(" /First {} 0 R", 6 + k) };
+                format!("<< /Title (Deep {k}) /Parent {parent} 0 R{first} /Dest [3 0 R /Fit] >>")
+            })
+            .collect();
+        let info = inspect(Arc::new(outline_file(&items)), None).expect("opens");
+        let mut levels = 0;
+        let mut level = info.outline.first();
+        while let Some(item) = level {
+            levels += 1;
+            level = item.children.first();
+        }
+        assert_eq!(levels, OUTLINE_DEPTH + 1);
+        assert!(info.outline_more);
+    }
+
+    #[test]
+    fn outline_window_ends_cycles_and_broken_links_without_looping() {
+        let listed = |items: &[&str]| {
+            let items: Vec<String> = items.iter().map(|s| s.to_string()).collect();
+            shape(&inspect(Arc::new(outline_file(&items)), None).expect("opens").outline)
+        };
+        assert_eq!(listed(&["<< /Title (Self) /Parent 4 0 R /Next 5 0 R >>"]), ["Self"]);
+        assert_eq!(listed(&["<< /Title (Self) /Parent 4 0 R /First 5 0 R >>"]), ["Self"]);
+        assert_eq!(listed(&["<< /Title (A) /Parent 4 0 R /Next 6 0 R >>", "<< /Title (B) /Parent 4 0 R /Next 5 0 R >>"]), ["A", "B"]);
+        assert_eq!(listed(&["<< /Title (A) /Parent 4 0 R /First 6 0 R >>", "<< /Title (B) /Parent 5 0 R /First 5 0 R >>"]), ["A[B]"]);
+        assert_eq!(listed(&["<< /Title (A) /Parent 4 0 R /Next 99 0 R >>"]), ["A"]);
+        assert_eq!(listed(&["<< /Title (A) /Parent 4 0 R /Next 6 0 R >>", "42"]), ["A"]);
+    }
+
     #[test]
     fn destination_points_map_to_the_displayed_page() {
         // A crop box away from the origin: x 100..400, y 50..450.
@@ -1807,6 +2449,35 @@ trailer << /Root 1 0 R >>
         assert_eq!(info.annotations.len(), 1);
         assert_eq!(info.annotations[0].modified.as_deref(), Some(date));
         assert!(info.warnings.is_empty(), "{:?}", info.warnings);
+    }
+
+    #[test]
+    fn carriage_returns_in_comment_text_become_line_breaks() {
+        use lopdf::dictionary;
+
+        let mut doc = Document::with_version("1.7");
+        let pages_id = doc.new_object_id();
+        let annot_id = doc.add_object(dictionary! {
+            "Type" => "Annot",
+            "Subtype" => "Text",
+            "Rect" => vec![10.into(), 10.into(), 30.into(), 30.into()],
+            // Acrobat ends lines in /Contents with CR; the interface only breaks lines at LF.
+            "Contents" => Object::string_literal("one\r\rtwo\r\nthree"),
+        });
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "MediaBox" => vec![0.into(), 0.into(), 200.into(), 300.into()],
+            "Annots" => vec![annot_id.into()],
+        });
+        doc.objects.insert(pages_id, dictionary! { "Type" => "Pages", "Kids" => vec![page_id.into()], "Count" => 1 }.into());
+        let catalog_id = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", catalog_id);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).expect("write synthetic fixture");
+
+        let info = inspect(Arc::new(bytes), None).expect("opens");
+        assert_eq!(info.annotations[0].contents.as_deref(), Some("one\n\ntwo\nthree"));
     }
 
     #[test]

@@ -50,6 +50,7 @@ published (`gh workflow run release.yml --ref <branch>`).
 | Windows 11 on ARM64 | `pdfcraft-<v>-windows-arm64.msi`, `pdfcraft-<v>-windows-arm64-portable.zip` | `windows-latest` (cross-compiled) |
 | Linux x86_64 | `pdfcraft-<v>-linux-x86_64.{AppImage,AppImage.zsync,deb,rpm,tar.gz}`, `pdfcraft-cli-<v>-linux-x86_64.tar.gz` | `ubuntu-22.04` |
 | Linux aarch64 | `pdfcraft-<v>-linux-aarch64.{AppImage,AppImage.zsync,deb,rpm,tar.gz}`, `pdfcraft-cli-<v>-linux-aarch64.tar.gz` | `ubuntu-22.04-arm` |
+| Linux riscv64 | `pdfcraft-<v>-linux-riscv64.tar.gz`, `pdfcraft-cli-<v>-linux-riscv64.tar.gz` (glibc 2.39+) | `ubuntu-24.04` (cross-compiled; CLI smoke-tested under QEMU) |
 | Flatpak x86_64 | `pdfcraft-<v>-linux-x86_64.flatpak` | `ubuntu-24.04` (repackages the Linux tarball) |
 | Flatpak aarch64 | `pdfcraft-<v>-linux-aarch64.flatpak` | `ubuntu-24.04-arm` (repackages the Linux tarball) |
 | FreeBSD 14 x86_64 | `pdfcraft-<v>-freebsd-x86_64.tar.gz` | FreeBSD VM on `ubuntu-latest` |
@@ -118,10 +119,18 @@ neither the MSI nor the portable zip needs the Visual C++ redistributable.
   this.
 - `installer-ui.wxs` supplies native welcome, maintenance, progress, files-in-use and outcome
   dialogs. Full UI confirms success with Finish; failures and cancellations have distinct messages.
-  The welcome dialog has a "Create a desktop shortcut" checkbox, ticked by default. `/qn` and `/qb`
-  stay unattended and create the desktop shortcut unless `INSTALLDESKTOPSHORTCUT=0` is passed.
-- `test-msi.ps1 <file.msi>` checks the compiled shortcut and dialog tables. Packaging runs it in a
-  child process before signing, so the MSI isn't held open when signtool runs. The ARM64 install
+  The welcome dialog has a "Create a desktop shortcut" checkbox and an "Edit with PdfCraft"
+  right-click menu checkbox, both ticked by default. `/qn` and `/qb` stay unattended and create
+  both unless `INSTALLDESKTOPSHORTCUT=0` or `INSTALLPDFCONTEXTMENU=0` is passed.
+- The PDF right-click entry (#682) is a classic verb under
+  `HKLM\Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Edit`, so it shows whichever app
+  is the default for `.pdf` and never changes that default. Several selected PDFs (up to 15, the
+  limit for a `Document` verb) start one `pdfcraft.exe "<file>"` each, and the single-instance
+  hand-off opens them as tabs. On Windows 11 it is under "Show more options"; a first-level entry
+  needs an `IExplorerCommand` handler and package identity (a sparse MSIX package), which the MSI
+  doesn't have.
+- `test-msi.ps1 <file.msi>` checks the compiled shortcut, context-menu and dialog tables. Packaging
+  runs it in a child process before signing, so the MSI isn't held open when signtool runs. The ARM64 install
   smoke test checks that both all-users shortcuts point at the installed `pdfcraft.exe` and are
   removed on uninstall, and that `INSTALLDESKTOPSHORTCUT=0` skips the desktop one.
 - The portable zip holds both executables, the README, the licences, the OFL licence of each
@@ -204,3 +213,44 @@ unsigned and the run shows a warning.
 a PowerShell parse, xmllint (WiX, plist, MIME), `desktop-file-validate`, `appstreamcli validate`, and
 the MSI icon-id check. The FreeBSD and Windows ARM64 workflows also exercise their packaging before a
 release does.
+
+## Scanner detections
+
+Antivirus and reputation scanners sometimes flag a released file. Check the facts before you change
+code or answer publicly. The first report was [issue #747](https://github.com/storytold/pdfcraft/issues/747),
+a match of the `CobaltStrikeBeacon` family rule.
+
+1. **Confirm the file is the release.** Compare its SHA-256 with `SHA256SUMS.txt` on the GitHub
+   Release. Only a file whose hash matches the release says anything about that release.
+2. **Record the signature.** `packaging/windows/security-audit.ps1` prints the Authenticode status:
+   - `Valid`: the signature verifies.
+   - `NotSigned`: no signature, as in developer and test builds. Not evidence of compromise by itself.
+   - `HashMismatch`: the file changed after it was signed. Investigate.
+   - `NotTrusted` or `UnknownError`: a signature exists but did not validate on this machine. Compare
+     the signer and the hash with the release.
+3. **Extract the payloads without running them.** Scan the executables inside the MSI and the
+   portable zip, not only the outer installer. `7z x -oDIR pdfcraft-<version>-windows-x64.msi`
+   extracts them. The payload names are WiX-internal, so tell the executables apart by their file
+   type. Don't install or run the MSI or the extracted files.
+4. **Scan with YARA and keep every match.** Use your own copies of YARA and the rule. PdfCraft
+   bundles neither, and the helper never runs in the app, the installer or CI:
+
+   ```powershell
+   pwsh packaging/windows/security-audit.ps1 -Path .\pdfcraft.exe, .\pdfcraft-cli.exe -YaraExe C:\tools\yara64.exe -YaraRule C:\rules\CobaltStrikeBeacon.yar
+   ```
+
+   The output lists each matched identifier with its offset, and the SHA-256 of the rule file.
+   Record where the rule came from and its revision. For CAPEv2's `CobaltStrikeBeacon` rule, that is
+   the commit that last changed `data/yara/CAPE/CobaltStrikeBeacon.yar`.
+5. **Find the condition branch.** Family rules usually have alternative branches, such as
+   `all of ($x*) or 2 of ($a*) or ...`. Copy the rule, make one rule per branch with only the strings
+   it uses, and scan again to see which branch fired.
+6. **Interpret with care.** A match on generic repeated-byte patterns says much less than a match on
+   distinctive code or strings, and it does not show that the software belongs to the family. Rules
+   change too: CAPEv2 commit `9b599185` (2024-12-05) lengthened this rule's two repeated-byte patterns
+   from 4 to 16 bytes to reduce false positives, so an older rule revision can match files that the
+   current one does not. Don't alter PdfCraft's binaries to change a scanner's result. That changes
+   nothing about the software.
+7. **Report.** To the scanner, send the file's SHA-256, the release URL, the rule name and revision,
+   and the matched identifiers and offsets. Report PdfCraft problems at
+   <https://github.com/storytold/pdfcraft/issues> with the same facts.
