@@ -315,7 +315,7 @@ fn app_creator<'a>(
         if let Some(dir) = settings_dir() {
             if let Err(error) = std::fs::create_dir_all(&dir) {
                 app.notify(format!("Theme storage: {error}"));
-            } else if let Err(error) = app.enable_theme_store(dir.join("themes.json")) {
+            } else if let Err(error) = app.enable_background_theme_store(dir.join("themes.json")) {
                 app.notify(format!("Theme storage: {error}"));
             }
         }

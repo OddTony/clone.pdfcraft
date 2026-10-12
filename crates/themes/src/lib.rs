@@ -6,6 +6,8 @@ use ecolor::Color32;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod store;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod watch;
+#[cfg(not(target_arch = "wasm32"))]
 pub use store::ThemeStore;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -37,8 +39,16 @@ pub enum ThemePreference {
     Custom(CustomThemeId),
 }
 
+mod cache;
+mod imports;
+pub use cache::ActivePaletteCache;
 mod library;
 pub use library::*;
+
+pub mod contrast;
+pub use contrast::{
+    ContrastDiagnostic, PrimaryButtonFills, contrast_diagnostics, contrast_ratio, contrast_warnings, primary_button_fill, primary_button_fills,
+};
 
 impl ThemePreference {
     pub fn resolve(self, system: Option<ThemeKind>, fallback: ThemeKind) -> ThemeKind {

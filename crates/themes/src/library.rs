@@ -221,38 +221,141 @@ impl ThemeDefinition {
 
 /// Preserve the entire envelope, including future schemas and malformed entries.
 /// There is no arbitrary count limit. Mutating an unsupported schema is refused.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ThemeLibrary(Value);
+#[derive(Clone, Debug)]
+pub struct ThemeLibrary(std::sync::Arc<LibraryData>);
+#[derive(Debug)]
+struct LibraryData {
+    raw: Value,
+    index: std::sync::OnceLock<LibraryIndex>,
+    choices: std::sync::OnceLock<ChoiceIndex>,
+}
+impl Clone for LibraryData {
+    fn clone(&self) -> Self {
+        Self { raw: self.raw.clone(), index: Default::default(), choices: Default::default() }
+    }
+}
+#[derive(Debug, Default)]
+struct LibraryIndex {
+    entries: BTreeMap<CustomThemeId, Vec<usize>>,
+}
+#[derive(Debug, Default)]
+struct ChoiceIndex {
+    choices: std::sync::Arc<[ThemeChoice]>,
+    names: BTreeMap<CustomThemeId, String>,
+}
+/// Cached selector metadata; palette records are decoded only when selected.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ThemeChoice {
+    pub id: CustomThemeId,
+    pub name: String,
+}
+impl PartialEq for ThemeLibrary {
+    fn eq(&self, other: &Self) -> bool {
+        self.same_snapshot(other) || self.0.raw == other.0.raw
+    }
+}
+impl Serialize for ThemeLibrary {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.raw.serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for ThemeLibrary {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::from_value(Value::deserialize(deserializer)?))
+    }
+}
 impl Default for ThemeLibrary {
     fn default() -> Self {
-        Self(serde_json::json!({"schema_version": THEME_SCHEMA_VERSION, "themes": []}))
+        Self::from_value(serde_json::json!({"schema_version": THEME_SCHEMA_VERSION, "themes": []}))
     }
 }
 impl ThemeLibrary {
     pub fn supported(&self) -> bool {
-        self.0.get("schema_version").and_then(Value::as_u64) == Some(u64::from(THEME_SCHEMA_VERSION))
+        self.0.raw.get("schema_version").and_then(Value::as_u64) == Some(u64::from(THEME_SCHEMA_VERSION))
     }
     pub fn definitions(&self) -> impl Iterator<Item = ThemeDefinition> + '_ {
-        self.0.get("themes").and_then(Value::as_array).into_iter().flatten().filter_map(|entry| serde_json::from_value(entry.clone()).ok())
+        self.0.raw.get("themes").and_then(Value::as_array).into_iter().flatten().filter_map(|entry| serde_json::from_value(entry.clone()).ok())
+    }
+    pub(crate) fn id_count(&self, id: CustomThemeId) -> usize {
+        self.index().entries.get(&id).map_or(0, Vec::len)
     }
     pub fn get(&self, id: CustomThemeId) -> Option<ThemeDefinition> {
         if !self.supported() {
             return None;
         }
-        self.0
-            .get("themes")
-            .and_then(Value::as_array)?
-            .iter()
-            .filter(|entry| entry.get("id").and_then(Value::as_str).and_then(CustomThemeId::parse) == Some(id))
-            .find_map(|entry| serde_json::from_value(entry.clone()).ok())
+        let entries = self.0.raw.get("themes")?.as_array()?;
+        self.index().entries.get(&id)?.iter().find_map(|position| serde_json::from_value(entries.get(*position)?.clone()).ok())
+    }
+    fn from_value(raw: Value) -> Self {
+        Self(std::sync::Arc::new(LibraryData { raw, index: Default::default(), choices: Default::default() }))
+    }
+    fn raw_mut(&mut self) -> &mut Value {
+        let data = std::sync::Arc::make_mut(&mut self.0);
+        data.index.take();
+        data.choices.take();
+        &mut data.raw
+    }
+    /// Identity changes on every mutation/deserialization; clones share their immutable data.
+    pub fn same_snapshot(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+    fn index(&self) -> &LibraryIndex {
+        self.0.index.get_or_init(|| {
+            let mut entries: BTreeMap<CustomThemeId, Vec<usize>> = BTreeMap::new();
+            if self.supported() {
+                for (position, entry) in self.0.raw.get("themes").and_then(Value::as_array).into_iter().flatten().enumerate() {
+                    if let Some(id) = entry.get("id").and_then(Value::as_str).and_then(CustomThemeId::parse) {
+                        entries.entry(id).or_default().push(position);
+                    }
+                }
+            }
+            LibraryIndex { entries }
+        })
+    }
+    fn choice_index(&self) -> &ChoiceIndex {
+        self.0.choices.get_or_init(|| {
+            if !self.supported() {
+                return ChoiceIndex::default();
+            }
+            let mut names = BTreeMap::new();
+            let mut choices = Vec::new();
+            for definition in self.definitions().filter(|_| self.supported()) {
+                if names.contains_key(&definition.id) {
+                    continue;
+                }
+                names.insert(definition.id, definition.name.clone());
+                if definition.schema_version == THEME_SCHEMA_VERSION {
+                    choices.push(ThemeChoice { id: definition.id, name: definition.name });
+                }
+            }
+            ChoiceIndex { names, choices: choices.into() }
+        })
+    }
+    pub fn name(&self, id: CustomThemeId) -> Option<&str> {
+        if let Some(choices) = self.0.choices.get() {
+            return choices.names.get(&id).map(String::as_str);
+        }
+        // Startup can retrieve the active label without deserializing every theme.
+        let entries = self.0.raw.get("themes")?.as_array()?;
+        self.index().entries.get(&id)?.iter().find_map(|position| {
+            let entry = entries.get(*position)?;
+            serde_json::from_value::<ThemeDefinition>(entry.clone()).ok()?;
+            entry.get("name")?.as_str()
+        })
+    }
+    pub fn choices_if_ready(&self) -> Option<std::sync::Arc<[ThemeChoice]>> {
+        self.0.choices.get().map(|index| index.choices.clone())
+    }
+    pub fn choices(&self) -> std::sync::Arc<[ThemeChoice]> {
+        let _ = self.index();
+        self.choice_index().choices.clone()
     }
     /// Diagnostics are collected at load time, never on every render frame.
     pub fn diagnostics(&self) -> Vec<String> {
         if !self.supported() {
             return vec!["unsupported theme library schema; data retained".into()];
         }
-        let Some(entries) = self.0.get("themes").and_then(Value::as_array) else { return vec!["invalid theme list; data retained".into()] };
+        let Some(entries) = self.0.raw.get("themes").and_then(Value::as_array) else { return vec!["invalid theme list; data retained".into()] };
         let mut warnings = Vec::new();
         let mut ids = std::collections::BTreeSet::new();
         for entry in entries {
@@ -277,6 +380,7 @@ impl ThemeLibrary {
     fn ensure_unambiguous(&self, id: CustomThemeId) -> Result<(), String> {
         let count = self
             .0
+            .raw
             .get("themes")
             .and_then(Value::as_array)
             .into_iter()
@@ -306,7 +410,7 @@ impl ThemeLibrary {
         let id = theme.id;
         let value = serde_json::to_value(theme).map_err(|e| e.to_string())?;
         let entry = self
-            .0
+            .raw_mut()
             .get_mut("themes")
             .and_then(Value::as_array_mut)
             .and_then(|entries| entries.iter_mut().find(|entry| entry.get("id").and_then(Value::as_str).and_then(CustomThemeId::parse) == Some(id)))
@@ -330,7 +434,7 @@ impl ThemeLibrary {
         if current.schema_version != THEME_SCHEMA_VERSION {
             return Err("future theme is read-only".into());
         }
-        let entries = self.0.get_mut("themes").and_then(Value::as_array_mut).ok_or("invalid theme library")?;
+        let entries = self.raw_mut().get_mut("themes").and_then(Value::as_array_mut).ok_or("invalid theme library")?;
         entries.retain(|entry| entry.get("id").and_then(Value::as_str).and_then(CustomThemeId::parse) != Some(id));
         Ok(())
     }
@@ -344,6 +448,7 @@ impl ThemeLibrary {
         }
         if self
             .0
+            .raw
             .get("themes")
             .and_then(Value::as_array)
             .into_iter()
@@ -353,7 +458,7 @@ impl ThemeLibrary {
             return Err("theme ID already exists; create a new copy ID".into());
         }
         let value = serde_json::to_value(theme).map_err(|e| e.to_string())?;
-        self.0.get_mut("themes").and_then(Value::as_array_mut).ok_or("invalid theme library")?.push(value);
+        self.raw_mut().get_mut("themes").and_then(Value::as_array_mut).ok_or("invalid theme library")?.push(value);
         Ok(())
     }
 }
@@ -598,8 +703,8 @@ mod editing_tests {
         for id in [a, b] {
             library.insert(ThemeDefinition::duplicate_builtin(ThemePreference::Sunset, id, "Same name".into()).unwrap()).unwrap();
         }
-        library.0["future"] = serde_json::json!({"retained":true});
-        library.0["themes"].as_array_mut().unwrap().push(serde_json::json!({"malformed":true}));
+        library.raw_mut()["future"] = serde_json::json!({"retained":true});
+        library.raw_mut()["themes"].as_array_mut().unwrap().push(serde_json::json!({"malformed":true}));
         library.rename(a, "Renamed".into()).unwrap();
         assert_eq!(library.get(a).unwrap().name, "Renamed");
         assert_eq!(library.get(b).unwrap().name, "Same name");
@@ -614,16 +719,16 @@ mod editing_tests {
         assert_eq!(library.get(a).unwrap().palette.0["unknown"], serde_json::json!([1, 2, 3]));
         library.remove(b).unwrap();
         assert!(library.get(b).is_none());
-        assert_eq!(library.0["themes"].as_array().unwrap().len(), 2);
-        assert_eq!(library.0["future"]["retained"], true);
-        assert_eq!(library.0["themes"][1]["malformed"], true);
+        assert_eq!(library.0.raw["themes"].as_array().unwrap().len(), 2);
+        assert_eq!(library.0.raw["future"]["retained"], true);
+        assert_eq!(library.0.raw["themes"][1]["malformed"], true);
     }
     #[test]
     fn duplicate_or_malformed_ids_cannot_be_overwritten_or_deleted() {
         let id = CustomThemeId::from_bytes([9; 16]);
         let valid = ThemeDefinition::duplicate_builtin(ThemePreference::Ocean, id, "Kept".into()).unwrap();
         for first in [serde_json::json!({"id": id, "corrupt": true}), serde_json::to_value(&valid).unwrap()] {
-            let mut library = ThemeLibrary(serde_json::json!({"schema_version":1,"themes":[first,valid]}));
+            let mut library = ThemeLibrary::from_value(serde_json::json!({"schema_version":1,"themes":[first,valid]}));
             let original = library.clone();
             assert_eq!(library.get(id).unwrap().name, "Kept");
             assert!(library.rename(id, "Changed".into()).is_err());

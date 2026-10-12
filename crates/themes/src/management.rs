@@ -1,6 +1,6 @@
 //! Structured operations for CLI, UI and future automation clients.
-use crate::{ColorToken, CustomThemeId, Palette, PaletteDocument, THEME_SCHEMA_VERSION, ThemeDefinition, ThemeKind, ThemeLibrary, ThemePreference};
-use ecolor::Color32;
+use crate::{ColorToken, CustomThemeId, PaletteDocument, THEME_SCHEMA_VERSION, ThemeDefinition, ThemeKind, ThemeLibrary, ThemePreference};
+use crate::{contrast_diagnostics, contrast_warnings};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -118,7 +118,7 @@ impl ThemeState {
         }
         for theme in self.theme_library.definitions() {
             let palette = theme.resolve();
-            themes.push(json!({"id":format!("custom:{}",theme.id),"name":theme.name,"kind":kind_name(palette.kind),"built_in":false,"active":self.theme==ThemePreference::Custom(theme.id),"palette":PaletteDocument::from_palette(&palette),"warnings":contrast_warnings(&palette)}));
+            themes.push(json!({"id":format!("custom:{}",theme.id),"name":theme.name,"kind":kind_name(palette.kind),"built_in":false,"active":self.theme==ThemePreference::Custom(theme.id),"palette":PaletteDocument::from_palette(&palette),"warnings":contrast_warnings(&palette),"contrast_diagnostics":contrast_diagnostics(&palette)}));
         }
         Ok(json!({"revision":self.revision,"active_theme":self.theme.id(),"themes":themes,"diagnostics":self.theme_library.diagnostics()}))
     }
@@ -127,7 +127,7 @@ impl ThemeState {
         let preference = ThemePreference::parse(id).ok_or_else(|| ThemeError::missing(format!("unknown theme ID: {id}")))?;
         let follows_system = preference == ThemePreference::System;
         let palette = preference.palette(&self.theme_library, None, ThemeKind::Light);
-        let mut result = json!({"revision":self.revision,"id":preference.id(),"name":preference.label(),"kind":kind_name(palette.kind),"built_in":true,"active":self.theme==preference,"follows_system":follows_system,"schema_version":THEME_SCHEMA_VERSION,"metadata":{},"base_theme_id":null,"extensions":{},"palette":PaletteDocument::from_palette(&palette),"warnings":contrast_warnings(&palette)});
+        let mut result = json!({"revision":self.revision,"id":preference.id(),"name":preference.label(),"kind":kind_name(palette.kind),"built_in":true,"active":self.theme==preference,"follows_system":follows_system,"schema_version":THEME_SCHEMA_VERSION,"metadata":{},"base_theme_id":null,"extensions":{},"palette":PaletteDocument::from_palette(&palette),"warnings":contrast_warnings(&palette),"contrast_diagnostics":contrast_diagnostics(&palette)});
         if let ThemePreference::Custom(custom_id) = preference {
             let definition = self.theme_library.get(custom_id).ok_or_else(|| ThemeError::missing(format!("unknown custom theme ID: {custom_id}")))?;
             result["name"] = json!(definition.name);
@@ -179,7 +179,9 @@ impl ThemeState {
         validate_known_tokens(&definition.palette)?;
         let id = definition.id;
         self.theme_library.insert(definition.clone()).map_err(map_library_error)?;
-        Ok(json!({"theme":definition,"id":format!("custom:{id}"),"warnings":contrast_warnings(&definition.resolve())}))
+        Ok(
+            json!({"theme":definition,"id":format!("custom:{id}"),"warnings":contrast_warnings(&definition.resolve()),"contrast_diagnostics":contrast_diagnostics(&definition.resolve())}),
+        )
     }
 
     fn clone_theme(&mut self, args: &Value) -> Result<Value, ThemeError> {
@@ -200,7 +202,9 @@ impl ThemeState {
         validate_known_tokens(&definition.palette)?;
         definition.schema_version = THEME_SCHEMA_VERSION;
         self.theme_library.insert(definition.clone()).map_err(map_library_error)?;
-        Ok(json!({"theme":definition,"id":format!("custom:{id}"),"warnings":contrast_warnings(&definition.resolve())}))
+        Ok(
+            json!({"theme":definition,"id":format!("custom:{id}"),"warnings":contrast_warnings(&definition.resolve()),"contrast_diagnostics":contrast_diagnostics(&definition.resolve())}),
+        )
     }
 
     fn update(&mut self, args: &Value) -> Result<Value, ThemeError> {
@@ -212,7 +216,9 @@ impl ThemeState {
         apply_patch(&mut definition.palette, args.get("palette").ok_or_else(|| ThemeError::invalid("missing palette object"))?)?;
         validate_known_tokens(&definition.palette)?;
         self.theme_library.replace(definition.clone()).map_err(map_library_error)?;
-        Ok(json!({"theme":definition,"warnings":contrast_warnings(&definition.resolve())}))
+        Ok(
+            json!({"theme":definition,"warnings":contrast_warnings(&definition.resolve()),"contrast_diagnostics":contrast_diagnostics(&definition.resolve())}),
+        )
     }
 
     fn rename(&mut self, args: &Value) -> Result<Value, ThemeError> {
@@ -232,7 +238,9 @@ impl ThemeState {
             validate_known_tokens(&definition.palette)?;
         }
         self.theme = preference;
-        Ok(json!({"active_theme":preference.id(),"warnings":contrast_warnings(&preference.palette(&self.theme_library, None, ThemeKind::Light))}))
+        Ok(
+            json!({"active_theme":preference.id(),"warnings":contrast_warnings(&preference.palette(&self.theme_library, None, ThemeKind::Light)),"contrast_diagnostics":contrast_diagnostics(&preference.palette(&self.theme_library, None, ThemeKind::Light))}),
+        )
     }
 
     fn delete(&mut self, args: &Value) -> Result<Value, ThemeError> {
@@ -270,7 +278,7 @@ impl ThemeState {
             return Err(ThemeError::unsupported("unsupported import document schema"));
         }
         let raw = document;
-        let definition: ThemeDefinition =
+        let mut definition: ThemeDefinition =
             serde_json::from_value(raw.clone()).map_err(|e| ThemeError::invalid(format!("invalid theme definition: {e}")))?;
         if definition.schema_version != THEME_SCHEMA_VERSION {
             return Err(ThemeError::unsupported("unsupported theme definition schema"));
@@ -279,9 +287,16 @@ impl ThemeState {
             return Err(ThemeError::invalid("theme name cannot be empty"));
         }
         validate_known_tokens(&definition.palette)?;
+        if let Some(base) = crate::imports::validate_import_base(&definition, &self.theme_library)? {
+            for (key, color) in base.0 {
+                definition.palette.0.entry(key).or_insert(color);
+            }
+        }
         let id = definition.id;
         self.theme_library.insert(definition.clone()).map_err(map_library_error)?;
-        Ok(json!({"id":format!("custom:{id}"),"theme":definition,"warnings":contrast_warnings(&definition.resolve())}))
+        Ok(
+            json!({"id":format!("custom:{id}"),"theme":definition,"warnings":contrast_warnings(&definition.resolve()),"contrast_diagnostics":contrast_diagnostics(&definition.resolve())}),
+        )
     }
 }
 
@@ -374,46 +389,6 @@ fn kind_name(kind: ThemeKind) -> &'static str {
         ThemeKind::Light => "light",
         ThemeKind::Dark => "dark",
     }
-}
-
-/// Return accessibility warnings without changing user-selected colors.
-pub fn contrast_warnings(palette: &Palette) -> Vec<String> {
-    let checks = [
-        ("text", palette.text, palette.panel, 4.5),
-        ("muted_text", palette.text_muted, palette.panel, 4.5),
-        ("faint_text", palette.text_faint, palette.panel, 4.5),
-        ("icon", palette.icon, palette.panel, 3.0),
-        ("accent_text", palette.accent_text, palette.panel, 4.5),
-        ("on_accent", palette.on_accent, palette.accent, 4.5),
-        ("focus", palette.focus, palette.field, 3.0),
-        ("selection_text", palette.selection_text, palette.accent_soft, 4.5),
-        ("notice_text", palette.notice_text, palette.notice_bg, 4.5),
-    ];
-    let mut warnings: Vec<String> = ColorToken::ALL
-        .iter()
-        .filter(|token| !matches!(token, ColorToken::PageShadow | ColorToken::WindowShadow | ColorToken::PopupShadow))
-        .filter(|token| token.get(palette).a() < 255)
-        .map(|token| format!("{} is translucent; contrast depends on underlying surfaces", token.key()))
-        .collect();
-    warnings.extend(checks.into_iter().filter_map(|(name, fg, bg, min)| {
-        if fg.a() < 255 || bg.a() < 255 {
-            return None;
-        }
-        let ratio = contrast(fg, bg);
-        (ratio < min).then(|| format!("{name} contrast {:.2}:1 is below {min:.1}:1", ratio))
-    }));
-    warnings
-}
-fn contrast(a: Color32, b: Color32) -> f32 {
-    let lum = |c: Color32| {
-        let channel = |v: u8| {
-            let v = f32::from(v) / 255.0;
-            if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
-        };
-        0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
-    };
-    let (a, b) = (lum(a) + 0.05, lum(b) + 0.05);
-    a.max(b) / a.min(b)
 }
 
 #[cfg(test)]

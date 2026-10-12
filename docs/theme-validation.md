@@ -195,3 +195,46 @@ System-font loading was disabled; images and logs are ignored local artifacts.
 Natural-language generation and a graphical custom-theme editor remain future
 work. Their integration plan, native storage concurrency protocol, browser limits
 and import/export contract are documented in [themes.md](themes.md).
+
+## Maintainer feedback follow-up (2026-10-12)
+
+Integrated upstream `0a0986483378b57d62103a36490bd66166d32c8f` once into the
+existing feature branch. No stored palette values, preset names or IDs, schema-1
+format, or CLI/MCP operations changed.
+
+The follow-up addresses the four review findings:
+
+- Primary-button resting, hover and pressed fills now use the same derived-state
+  calculations in diagnostics and GUI painting. Contrast tests exercise the actual
+  colors across all presets and interpolation; Editorial's failing pressed state is
+  adjusted as a derived treatment without changing its stored palette.
+- Advisory contrast findings now cover cards, panels, inputs, placeholders,
+  selection, badges, feedback colors and button states. The Ocean `#e0effa`
+  text-on-card example reports 1:1. Low-contrast custom palettes remain usable;
+  diagnostics never block saving, importing or activation, and translucent colors
+  are reported as surface-dependent.
+- Native GUI theme loading and watching run on one bounded background worker.
+  An immutable indexed library and active-palette cache avoid reparsing the full
+  store on every frame. A synthetic 10,000-theme store parsed once over 63
+  unchanged polls; the initial decode/index took 124 ms, index plus first active
+  resolution took 46 ms, and 60 cached resolutions took 5 microseconds in this
+  local optimized test profile. These are measurements, not timing thresholds.
+- New imports validate built-in and custom base references, reject invalid,
+  missing, self-referential and cyclic bases atomically, and inherit the exact raw
+  supported color values. Tests verify unknown/future stored data remains intact.
+
+The current full workspace run passed **2,903 tests, zero failures, 13 ignored**
+across 157 test groups. It includes 38 shared theme-core tests, five focused GUI
+reload tests and four headless CLI theme tests. Six core regression cases and the worker lock-retry regression were also
+run with their respective fixes removed and failed as expected; a separate
+translucent-inheritance regression reproduced the bug before its fix. Formatting,
+all-target Clippy, native desktop/CLI builds, CLI without MCP, assets, layering and
+parity passed. The 34-image visual check passed; the Editorial Appearance dialog was inspected.
+Exact CLI JSON comparison
+confirmed all nine selections still have the same names, IDs and 31 palette
+values.
+
+Local WASM validation could not run because `wasm32-unknown-unknown` is not
+installed. `cargo-deny` is unavailable, so the dependency audit is **SKIPPED**.
+The new PR-head hosted checks had not started at this validation snapshot; earlier
+head CI results do not establish the result for this commit.

@@ -4,6 +4,7 @@
 use egui::{Rect, RichText, pos2, vec2};
 
 use crate::PdfCraftApp;
+use crate::theme::ThemeContext as _;
 use crate::theme::{self, ThemeKind, ThemePreference, Tokens};
 use crate::widgets;
 
@@ -18,7 +19,7 @@ fn mode_label(preference: ThemePreference) -> &'static str {
 
 fn mode_name(app: &PdfCraftApp, preference: ThemePreference) -> String {
     match preference {
-        ThemePreference::Custom(id) => app.theme_library.get(id).map(|theme| theme.name).unwrap_or_else(|| tl!("Custom theme").into()),
+        ThemePreference::Custom(id) => app.theme_library.name(id).map(theme::display_name).unwrap_or_else(|| tl!("Custom theme").into()),
         _ => tl!(mode_label(preference)).into(),
     }
 }
@@ -106,21 +107,30 @@ pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
     ui.horizontal(|ui| {
         ui.label(tl!("Appearance mode"));
         egui::ComboBox::from_id_salt("appearance-mode").selected_text(mode_name(app, app.theme_preference)).show_ui(ui, |ui| {
-            let choices: Vec<_> =
-                ThemePreference::ALL.into_iter().chain(app.theme_library.definitions().map(|theme| ThemePreference::Custom(theme.id))).collect();
-            for preference in choices {
-                ui.push_id(preference.id(), |ui| {
-                    if ui.selectable_label(app.theme_preference == preference, mode_name(app, preference)).clicked() {
-                        app.set_theme_preference(preference);
-                        ui.close();
-                    }
-                });
-            }
+            let custom = app.theme_choices();
+            let length = custom.len().saturating_add(ThemePreference::ALL.len());
+            egui::ScrollArea::vertical().max_height(300.0).show_rows(ui, ui.spacing().interact_size.y, length, |ui, rows| {
+                for row in rows {
+                    let preference = if let Some(preference) = ThemePreference::ALL.get(row) {
+                        *preference
+                    } else if let Some(choice) = custom.get(row.saturating_sub(ThemePreference::ALL.len())) {
+                        ThemePreference::Custom(choice.id)
+                    } else {
+                        continue;
+                    };
+                    ui.push_id(preference.id(), |ui| {
+                        if ui.selectable_label(app.theme_preference == preference, mode_name(app, preference)).clicked() {
+                            app.set_theme_preference(preference);
+                            ui.close();
+                        }
+                    });
+                }
+            });
         });
     });
     ui.add_space(4.0);
     let light_active = app.theme == ThemeKind::Light;
-    let active_palette = app.theme_preference.palette(&app.theme_library, Some(app.theme), app.theme);
+    let active_palette = Tokens::get(ui.ctx());
     let active_label = if app.theme_preference == ThemePreference::System {
         tl!(if light_active { "Light gray" } else { "Dark gray" }).to_owned()
     } else if matches!(app.theme_preference, ThemePreference::Custom(_)) {
@@ -143,7 +153,6 @@ mod tests {
     use egui_kittest::kittest::Queryable;
 
     use super::*;
-    use crate::theme::ThemeContext as _;
 
     /// The mode is chosen in Preferences and both theme cards show, the one on screen marked
     /// Active.

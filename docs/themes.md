@@ -96,9 +96,24 @@ Layout metrics and fonts are not color tokens. `legacy_defaults` preserves the
 historical Light/Dark defaults in untouched copies; editing a role overrides its
 legacy consumers, while resetting to the legacy value restores that treatment.
 
-Inspect and editing results report contrast warnings without modifying colors.
-These are practical checks, not an accessibility certification. Translucent roles
-receive a warning because their contrast depends on underlying surfaces.
+Inspect and editing results report advisory `warnings` and structured
+`contrast_diagnostics`, without rejecting or rewriting valid low-contrast colors.
+Each finding has stable `role`, `foreground_token`, `background_token`, `ratio`,
+`threshold`, `kind`, and `message` fields. Normal-sized text uses 4.5:1; icons and
+focus outlines use 3:1 as non-text indicators. Checks cover actual card/panel/field
+surfaces, placeholders, hover/pressed/selected states, badges, feedback, notices,
+and primary/secondary buttons. These are practical checks, not an accessibility
+certification. Translucent roles report an unknown ratio because their contrast
+depends on compositing; shadows are excluded from text checks.
+
+Both primary button painters share the same derived state calculation. Editorial’s
+pressed fill is moved only as far toward its original accent as necessary to reach
+4.5:1. The known legacy Dark primary fill also needs a minimal derived adjustment.
+All built-in fills and tested animation states meet 4.5:1. Stored palette tokens
+stay unchanged, and exact built-in copies render identically. Arbitrary custom
+palettes with a low-contrast resting accent retain their chosen treatment and
+receive advisory diagnostics. Derived button fills are computed once when a
+palette is applied, rather than on every painted button.
 
 ## CLI command reference
 
@@ -206,7 +221,8 @@ with Light defaults. Former PrintCraft *folder* migration still belongs to deskt
 startup: run the upgraded app once before pointing the CLI at that older profile.
 
 The dedicated file is authoritative after migration. eframe settings retain a
-compatibility mirror, but GUI autosave never writes it back over `themes.json`.
+compatibility mirror of accepted state, but GUI autosave never writes it back over
+`themes.json`; an unvalidated pending native selection is not mirrored.
 If a store is invalid/unreadable, the GUI keeps its last usable theme, reports the
 error, and refuses persistence edits; it still launches. The invalid file is never
 automatically replaced. Browser builds continue using eframe browser storage with
@@ -221,6 +237,64 @@ lose unrelated edits. `expected_revision` also protects edits made from an old
 snapshot. Manual edits or older app versions do not participate in this protocol.
 Power-loss durability remains subject to the filesystem. There is no entry-count
 cap; files have a 64 MiB practical safety bound. Reads/inspection do not create files.
+
+### Native loading and active-color caching
+
+Native GUI startup initializes/loads the dedicated store on one background worker.
+The frontend polls its completion without waiting on file reads or JSON parsing.
+Each second the worker checks file length, modification/creation times and, on
+Unix, device/inode/change-time identity. Changed metadata triggers a bounded read.
+During active GUI polling, once ten seconds have elapsed it also compares exact
+bytes, even if all metadata is
+unchanged; this catches coarse timestamps, timestamp-preserving in-place edits and
+atomic replacement on filesystems with weaker metadata. There are no hash-collision
+assumptions. Identical contents (valid or rejected) are not reparsed. Arbitrary
+metadata-preserving changes are detected at the next verification, plus worker
+loading/scheduling time; paused hosts catch up when polling resumes. Current and cached byte buffers retain the existing 64 MiB bound.
+
+A single worker and bounded channels prevent reload jobs accumulating. Selector
+changes coalesce to the newest choice. Generation tags discard old completions;
+failed loads keep the last accepted valid palette/library. Native selections use
+the same validated store transaction API on the worker. Shutdown drains the latest
+pending choice before joining the worker. Transient cross-process lock contention
+is retried on the worker for up to two seconds. Permanent lock or write failures
+retain the last accepted state; shutdown cannot guarantee a write to an unavailable
+store. No retries or joins run during normal UI frames.
+Synchronous `manage_theme` and `enable_theme_store` remain available to headless
+hosts; while frontend work is pending, synchronous management returns `store_busy`
+instead of racing an older activation. Running GUI control selections are queued;
+storage failures are reported through the existing notification path.
+
+Library snapshots share their immutable JSON envelope through copy-on-write data.
+A lazily cached ID index and selector metadata never enter the wire format. The
+worker prewarms selector metadata and resolves the active palette before delivery;
+GUI lists use cached names and virtualized rows. Display labels are bounded to 160
+Unicode characters without truncating stored names or changing IDs.
+The worker prepares active custom colors before handing a snapshot to the GUI.
+The active palette is reused until selection, library snapshot (including revision
+or definition changes), or a relevant System appearance/fallback input changes.
+Manual palettes are not invalidated by irrelevant OS appearance changes. Legacy
+eframe settings restoration still decodes its compatibility mirror once at startup;
+browser hosts retain their existing persistence backend and build the index lazily.
+The periodic native JSON parse and active-last linear frame scans are eliminated.
+
+### New-import reference validation
+
+Current-schema `theme_import` validates a declared `base_theme_id` before committing.
+Concrete built-in IDs and existing current-schema custom bases are accepted. Unknown,
+malformed, missing, ambiguous, self-referential, cyclic or unsupported-schema bases
+return `invalid_base_theme` with an actionable message; System is not a concrete
+base palette. Custom chains are walked iteratively with a visited-ID set, without
+an arbitrary depth/count cap. Missing supported colors are materialized from the
+resolved base at import, retaining exact inherited hex values (including translucent
+input), the declared ID, explicit colors and unknown
+extensions. These are snapshots, not live inheritance links.
+
+Existing stored unfamiliar references/schemas are preserved and retain their old
+fallback behavior. They are not silently migrated, rewritten or rejected during
+loading. Unrelated imports leave them untouched; an import that newly depends on
+an unresolvable reference fails atomically. The versioned JSON format remains
+schema 1.
 
 ## MCP and future AI agents
 

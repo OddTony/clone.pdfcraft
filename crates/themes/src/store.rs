@@ -46,18 +46,7 @@ impl ThemeStore {
     /// Listing/inspection never creates files, directories or locks.
     pub fn load(&self) -> Result<ThemeState, ThemeError> {
         if let Some(bytes) = read_optional(&self.path)? {
-            let value: Value = serde_json::from_slice(&bytes).map_err(|e| error("invalid_store", e))?;
-            if value.get("theme").is_none() || value.get("theme_library").is_none() {
-                return Err(error(
-                    "invalid_store",
-                    "expected a theme store with theme and theme_library; import standalone theme definitions using theme_import",
-                ));
-            }
-            let state: ThemeState = serde_json::from_value(value).map_err(|e| error("invalid_store", e))?;
-            if state.schema_version != THEME_SCHEMA_VERSION {
-                return Err(error("unsupported_schema", "theme store version is unsupported; file left unchanged"));
-            }
-            return Ok(state);
+            return decode_state(&bytes);
         }
         self.legacy_seed()
     }
@@ -91,6 +80,10 @@ impl ThemeStore {
         Ok(seed)
     }
     pub fn execute(&self, tool: &str, args: &Value) -> Result<Value, ThemeError> {
+        self.execute_with_state(tool, args).map(|(result, _)| result)
+    }
+    /// Return the committed snapshot with the result, avoiding a second full parse.
+    pub fn execute_with_state(&self, tool: &str, args: &Value) -> Result<(Value, ThemeState), ThemeError> {
         let read_only = matches!(tool, "theme_list" | "theme_inspect" | "theme_export");
         let _lock = if read_only { None } else { Some(self.lock()?) };
         let mut state = self.load()?;
@@ -105,7 +98,7 @@ impl ThemeStore {
         if !read_only {
             self.write(&state)?;
         }
-        Ok(result)
+        Ok((result, state))
     }
     fn write(&self, state: &ThemeState) -> Result<(), ThemeError> {
         regular_or_missing(&self.path)?;
@@ -129,6 +122,21 @@ impl ThemeStore {
     }
 }
 
+pub(crate) fn decode_state(bytes: &[u8]) -> Result<ThemeState, ThemeError> {
+    let value: Value = serde_json::from_slice(bytes).map_err(|e| error("invalid_store", e))?;
+    if value.get("theme").is_none() || value.get("theme_library").is_none() {
+        return Err(error(
+            "invalid_store",
+            "expected a theme store with theme and theme_library; import standalone theme definitions using theme_import",
+        ));
+    }
+    let state: ThemeState = serde_json::from_value(value).map_err(|e| error("invalid_store", e))?;
+    if state.schema_version != THEME_SCHEMA_VERSION {
+        return Err(error("unsupported_schema", "theme store version is unsupported; file left unchanged"));
+    }
+    Ok(state)
+}
+
 fn regular_or_missing(path: &Path) -> Result<bool, ThemeError> {
     match fs::symlink_metadata(path) {
         Ok(meta) if meta.file_type().is_file() => Ok(true),
@@ -137,7 +145,7 @@ fn regular_or_missing(path: &Path) -> Result<bool, ThemeError> {
         Err(e) => Err(io_error(e)),
     }
 }
-fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, ThemeError> {
+pub(crate) fn read_optional(path: &Path) -> Result<Option<Vec<u8>>, ThemeError> {
     if !regular_or_missing(path)? {
         return Ok(None);
     }

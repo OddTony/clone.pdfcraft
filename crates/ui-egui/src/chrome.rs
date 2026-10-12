@@ -235,11 +235,11 @@ fn theme_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             ui.close();
         }
     }
-    let custom: Vec<_> = app.theme_library.definitions().filter(|theme| theme.schema_version == crate::theme::THEME_SCHEMA_VERSION).collect();
+    let custom = app.theme_choices();
     egui::ScrollArea::vertical().max_height(300.0).show_rows(ui, ui.spacing().interact_size.y, custom.len(), |ui, rows| {
         for theme in custom.get(rows).unwrap_or_default() {
             let preference = ThemePreference::Custom(theme.id);
-            if ui.add(widgets::radio(app.theme_preference == preference, &theme.name)).clicked() {
+            if ui.add(widgets::radio(app.theme_preference == preference, crate::theme::display_name(&theme.name))).clicked() {
                 app.set_theme_preference(preference);
                 ui.close();
             }

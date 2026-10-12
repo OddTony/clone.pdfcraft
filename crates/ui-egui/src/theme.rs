@@ -270,11 +270,36 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     apply_palette(ctx, Tokens::for_kind(kind));
 }
 
+/// Bound GUI label work without changing the stored name or its stable ID.
+pub(crate) fn display_name(name: &str) -> String {
+    let mut characters = name.chars();
+    let mut label: String = characters.by_ref().take(160).collect();
+    if characters.next().is_some() {
+        label.push('…');
+    }
+    label
+}
+
+/// Resolve derived button colors once per palette application, never per painted button.
+pub fn button_fills(ctx: &egui::Context) -> PrimaryButtonFills {
+    let id = egui::Id::new("pdfcraft-primary-button-fills");
+    if let Some(fills) = ctx.data(|data| data.get_temp::<PrimaryButtonFills>(id)) {
+        return fills;
+    }
+    let fills = primary_button_fills(&Tokens::get(ctx));
+    ctx.data_mut(|data| data.insert_temp(id, fills));
+    fills
+}
+
 pub fn apply_palette(ctx: &egui::Context, t: Palette) {
     // Keep native appearance inherited so OS changes continue reaching winit.
     // Both egui style branches receive the selected palette below.
     ctx.set_theme(egui::ThemePreference::System);
-    ctx.data_mut(|d| d.insert_temp(egui::Id::new("pdfcraft-theme"), t));
+    let fills = primary_button_fills(&t);
+    ctx.data_mut(|d| {
+        d.insert_temp(egui::Id::new("pdfcraft-theme"), t);
+        d.insert_temp(egui::Id::new("pdfcraft-primary-button-fills"), fills);
+    });
     let mut v = if t.dark() { Visuals::dark() } else { Visuals::light() };
     v.panel_fill = t.panel;
     v.window_fill = t.card;
