@@ -9,12 +9,12 @@
 use std::ptr;
 
 use windows_sys::Win32::Foundation::GetLastError;
-use windows_sys::core::BOOL;
 use windows_sys::Win32::Security::Cryptography::{
-    CALG_SHA_256, CALG_SHA_384, CALG_SHA_512, CERT_CONTEXT, CERT_KEY_PROV_INFO_PROP_ID, CERT_NCRYPT_KEY_SPEC,
-    CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG, CRYPT_KEY_PROV_INFO, CertGetCertificateContextProperty, CryptAcquireCertificatePrivateKey,
-    CryptCreateHash, CryptDestroyHash, CryptReleaseContext, CryptSetHashParam, CryptSignHashW, HP_HASHVAL, NCryptFreeObject,
+    CALG_SHA_256, CALG_SHA_384, CALG_SHA_512, CERT_CONTEXT, CERT_KEY_PROV_INFO_PROP_ID, CERT_NCRYPT_KEY_SPEC, CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG,
+    CRYPT_KEY_PROV_INFO, CertGetCertificateContextProperty, CryptAcquireCertificatePrivateKey, CryptCreateHash, CryptDestroyHash,
+    CryptReleaseContext, CryptSetHashParam, CryptSignHashW, HP_HASHVAL, NCryptFreeObject,
 };
+use windows_sys::core::BOOL;
 
 /// The digest a signature is made over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
