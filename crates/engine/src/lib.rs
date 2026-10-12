@@ -29,6 +29,7 @@ pub mod links;
 pub mod ocr;
 pub mod optimizer;
 pub mod printcheck;
+pub mod safe_save;
 mod scan_colours;
 pub mod signature_image;
 pub mod signature_scan;
@@ -128,6 +129,8 @@ pub use pdfcraft_forms::detect;
 pub use pdfcraft_optimize as optimize;
 pub use pdfcraft_preflight as pdfa;
 pub use pdfcraft_print as print;
+pub use pdfcraft_redact::Proof as RedactProof;
+pub use pdfcraft_redact::Report as RedactReport;
 pub use pdfcraft_redact::codes::{CODE_SETS as REDACTION_CODE_SETS, CodeSet as RedactionCodeSet};
 pub use pdfcraft_redact::patterns::{
     MAX_WORDS as REDACT_MAX_WORDS, PATTERNS as REDACT_PATTERNS, Pattern as RedactPattern, find as find_pattern, word_list as redact_word_list,
@@ -136,6 +139,7 @@ pub use pdfcraft_redact::sanitize::{HIDDEN, Hidden};
 pub use pdfcraft_sign as sign;
 pub use pdfcraft_sign::{SignOptions, SignatureInfo, Status as SignatureStatus, TrustStore};
 pub use pdfcraft_xfdf::Format as DataFormat;
+pub use safe_save::write_private_atomic;
 
 /// Forms ▸ Merge data files into spreadsheet: the field values of each file (FDF, XFDF or a
 /// filled-in PDF form), as CSV with one row per file.
@@ -316,6 +320,18 @@ pub struct Document {
     generation: u64,
     /// The generation last handed out by `autosave_snapshots`.
     snapshot_generation: u64,
+    /// Redactions were applied, or content was sanitized away, and the result hasn't been saved
+    /// yet.
+    redaction_unsaved: bool,
+    /// What the last applied redaction removed and its proof.
+    last_redaction: Option<RedactOutcome>,
+    /// What that redaction removed, so [`Session::verify_save`] can sweep the bytes about to be
+    /// written. It holds the removed text (needles for the sweep), so it lives no longer than
+    /// needed. Dropped: when an edit, undo or redo changes the document (removed text may
+    /// legitimately be back); on `revert`; as soon as `mark_saved` records the save that
+    /// `verify_save` checked against it; and when the document is closed (the document is
+    /// dropped with it). Never dropped by `verify_save` itself, which only borrows it.
+    redaction_snapshot: Option<Arc<pdfcraft_redact::Snapshot>>,
     /// Why the document cannot be edited (e.g. encryption), if so.
     pub read_only_reason: Option<String>,
     /// Interactive form fields of the current state (empty without a form).
@@ -570,6 +586,30 @@ impl Document {
 
     pub fn initial_view(&self) -> InitialView {
         self.editor.as_ref().map(|e| pdfcraft_organize::initial_view(&e.cos)).unwrap_or_default()
+    }
+
+    /// Why redactions can't be applied to this document, if so: it is signed. An XFA form is
+    /// not a reason: applying redactions always sanitizes too, which removes the XFA packets
+    /// (they repeat the form data), so none of the redacted content stays in them.
+    ///
+    /// This uses the same fail-closed notion as the rewrite that follows (`Document::is_signed`
+    /// of the object graph: signature values, `/SigFlags`, `/DocMDP`, `/UR3`, or a form that
+    /// can't be read), so a document the writer would refuse is refused here, before any work.
+    pub fn redaction_refusal(&self) -> Option<EditError> {
+        let graph_signed = self.editor.as_ref().is_some_and(|e| e.cos.is_signed());
+        (graph_signed || self.is_signed()).then_some(EditError::SignedRedaction)
+    }
+
+    /// Redactions were applied, or the document was sanitized, and that isn't saved yet: Save must
+    /// not silently replace the source file with the result (see [`Session::verify_save`] and
+    /// [`write_private_atomic`]).
+    pub fn has_unsaved_redaction(&self) -> bool {
+        self.redaction_unsaved
+    }
+
+    /// The report and proof of the redaction applied last in this session, if any.
+    pub fn last_redaction(&self) -> Option<&RedactOutcome> {
+        self.last_redaction.as_ref()
     }
 
     /// Signed: at least one signature field holds a signature.
@@ -1747,6 +1787,25 @@ pub const EDIT_LABELS: &[&str] = &[
 pub const BATCH_LABELS: &[&str] = &["Set document title", "Mark differences", "Detect form fields", "Run JavaScript", "Recognize text"];
 
 impl Edit {
+    /// Whether the edit removes content for good from the saved file (Sanitize, Remove Hidden
+    /// Information), alone or inside a batch: its result must not silently replace the original.
+    pub fn drops_content(&self) -> bool {
+        match self {
+            Edit::Sanitize | Edit::RemoveHidden { .. } => true,
+            Edit::Batch { edits, .. } => edits.iter().any(Edit::drops_content),
+            _ => false,
+        }
+    }
+
+    /// Whether the edit applies redaction marks (alone or inside a batch).
+    pub fn applies_redactions(&self) -> bool {
+        match self {
+            Edit::ApplyRedactions { .. } => true,
+            Edit::Batch { edits, .. } => edits.iter().any(Edit::applies_redactions),
+            _ => false,
+        }
+    }
+
     /// Label for the Edit menu and history ("Undo Rotate pages").
     pub fn label(&self) -> Label {
         match self {
@@ -2049,6 +2108,33 @@ struct EditCtx {
     /// Fields the edit renamed to keep imported names separate (old → new), for the repair
     /// log and the undo label.
     renamed_fields: Vec<(String, String)>,
+    /// What the last applied redaction removed, and the proof that it is gone.
+    redaction: Option<RedactOutcome>,
+    /// The snapshot behind that outcome.
+    snapshot: Option<Arc<pdfcraft_redact::Snapshot>>,
+}
+
+/// What an applied redaction removed, and the proof that it was gone from the output when it was
+/// applied (an applied redaction always carries a proof that passed: a failed one fails the edit).
+///
+/// The proof sweeps one serialization of the redacted document. [`Session::verify_save`] sweeps
+/// the bytes Save is about to write against the same snapshot (an unencrypted file, and only while
+/// the document has not been edited since: an edit drops the snapshot, and then the check is
+/// that the file reopens with the same page count).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RedactOutcome {
+    pub report: RedactReport,
+    pub proof: RedactProof,
+}
+
+/// A redaction error as the edit error the user sees (none of them carries redacted text).
+fn redact_error(e: pdfcraft_redact::RedactError) -> EditError {
+    match e {
+        pdfcraft_redact::RedactError::Signed => EditError::SignedRedaction,
+        // An XFA form's packets are removed on apply; `RedactError::Xfa` (packets that could not
+        // be removed safely) keeps its own message.
+        other => EditError::Redact(other),
+    }
 }
 
 impl EditCtx {
@@ -2074,6 +2160,8 @@ impl EditCtx {
             seed,
             count: 0,
             renamed_fields: Vec::new(),
+            redaction: None,
+            snapshot: None,
         }
     }
 
@@ -2398,7 +2486,13 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             pdfcraft_edit::update_content(doc, *page, *index, &AddedContent::Image(pdfcraft_edit::AddedImage { image, ..old }))?;
         }
         Edit::ApplyRedactions { pages } => {
-            pdfcraft_redact::apply(doc, pages.as_deref())?;
+            // Sanitizing around what was removed and the proof are part of applying: the result is
+            // a redacted document that was checked, or an error and the document as it was.
+            let (report, proof, snapshot) =
+                pdfcraft_redact::apply_with_snapshot(doc, pages.as_deref(), &pdfcraft_redact::ApplyOptions::default(), &Default::default())
+                    .map_err(redact_error)?;
+            cx.redaction = Some(RedactOutcome { report, proof });
+            cx.snapshot = Some(Arc::new(snapshot));
         }
         Edit::ClearRedactions => {
             pdfcraft_redact::clear_marks(doc, None)?;
@@ -2661,6 +2755,12 @@ pub enum EditError {
     SignedRewrite(String),
     #[error("this document is signed: rewriting it would invalidate its signatures (save it incrementally instead)")]
     Signed,
+    #[error(
+        "redaction isn't possible in a signed document: it needs a full rewrite, and an incremental save would keep the original content in an earlier revision"
+    )]
+    SignedRedaction,
+    #[error("the saved file failed its check ({0}), so nothing was written")]
+    SaveCheck(String),
     #[error("{0}")]
     Invalid(String),
 }
@@ -2685,6 +2785,8 @@ pub struct Session {
     date_format: Option<String>,
     /// Preferences ▸ Date format ▸ Language, when not following the interface language.
     date_language: Option<String>,
+    /// Host-supplied entropy for new file identifiers.
+    id_entropy: Option<[u8; 16]>,
 }
 
 /// Immutable session state needed while a document is prepared away from its owning thread.
@@ -2962,6 +3064,20 @@ impl Session {
     /// Seconds since the Unix epoch from the session clock (0 when unknown).
     pub fn now_secs(&self) -> i64 {
         self.now().unwrap_or(0)
+    }
+
+    /// The options of every write: the session clock for `/ModDate`, and the host's entropy for
+    /// new file identifiers ([`Session::with_id_entropy`]).
+    fn save_options(&self) -> SaveOptions {
+        SaveOptions { mod_date: self.now().map(pdfcraft_cos::pdf_date), id_entropy: self.id_entropy, ..SaveOptions::default() }
+    }
+
+    /// Entropy for the file identifiers of rewritten files. Native builds get a per-process
+    /// seed from the standard library; wasm32 has a fixed one, so the web host passes random
+    /// bytes here (see `SaveOptions::id_entropy`).
+    pub fn with_id_entropy(mut self, entropy: [u8; 16]) -> Self {
+        self.id_entropy = Some(entropy);
+        self
     }
 
     fn now(&self) -> Option<i64> {
@@ -3263,6 +3379,9 @@ impl Session {
             dirty: false,
             generation: 0,
             snapshot_generation: 0,
+            redaction_unsaved: false,
+            last_redaction: None,
+            redaction_snapshot: None,
             read_only_reason,
             form: Arc::new(form),
             marks,
@@ -3289,6 +3408,15 @@ impl Session {
 
     /// Apply an edit. On success the previous state is undoable and the view data is refreshed.
     pub fn apply(&mut self, id: DocId, edit: Edit) -> Result<(), EditError> {
+        self.apply_reporting(id, edit).map(|_| ())
+    }
+
+    /// [`Session::apply`], also returning what a redaction removed and its proof (`None` for
+    /// other edits).
+    ///
+    /// Applying redactions is the one edit that can't be undone: the history holds documents
+    /// that still contain the removed content, so it is dropped once the redaction succeeded.
+    pub fn apply_reporting(&mut self, id: DocId, edit: Edit) -> Result<Option<RedactOutcome>, EditError> {
         let now = self.now();
         let today = self.today();
         let js_off = self.js_off;
@@ -3304,6 +3432,12 @@ impl Session {
         cx.today = today;
         let reason = doc.read_only_reason.clone().unwrap_or_default();
         let signed = doc.is_signed();
+        let redacts = edit.applies_redactions();
+        // Refused before anything is copied: a signed file can only be saved incrementally, which
+        // would keep the original in an earlier revision.
+        if redacts && let Some(refusal) = doc.redaction_refusal() {
+            return Err(refusal);
+        }
         let editor = doc.editor.as_mut().ok_or(EditError::ReadOnly(reason))?;
         if let Some(p) = editor.cos.permissions() {
             check_permission(&edit, &p)?;
@@ -3327,7 +3461,7 @@ impl Session {
         };
         // Nothing to bake: leave undo history and the dirty flag alone.
         if matches!(&edit, Edit::FlattenFillSign) && !pdfcraft_annot::has_visible_fill_sign(&editor.cos) {
-            return Ok(());
+            return Ok(None);
         }
         let mut next = editor.cos.clone();
         if !js_off && uses_scripts(&edit) {
@@ -3461,6 +3595,18 @@ impl Session {
         note_warnings(&mut doc.xfa_warnings, &xfa_notes);
         let notes = doc.xfa_warnings.clone();
         note_warnings(&mut doc.info.warnings, &notes);
+        // Whatever the last redaction's proof said is about a document that has changed since.
+        doc.last_redaction = None;
+        doc.redaction_snapshot = None;
+        if redacts && let Some(ed) = doc.editor.as_mut() {
+            ed.undo.clear();
+            ed.redo.clear();
+            doc.redaction_unsaved = true;
+            doc.last_redaction = cx.redaction.clone();
+            doc.redaction_snapshot = cx.snapshot.take();
+        } else if edit.drops_content() {
+            doc.redaction_unsaved = true;
+        }
         if let Some(js) = cx.js {
             doc.js_output.append(js.output);
         }
@@ -3470,7 +3616,7 @@ impl Session {
             doc.xfa_scripts_off = true;
             doc.js_output.errors.push(XFA_SCRIPTS_OFF.into());
         }
-        Ok(())
+        Ok(cx.redaction)
     }
 
     pub fn undo(&mut self, id: DocId) -> Result<Label, EditError> {
@@ -3484,6 +3630,8 @@ impl Session {
         Self::adopt_keys(doc);
         Self::refresh_scoped(doc, scope).inspect_err(|_| Self::show_released(doc))?;
         doc.dirty = true;
+        doc.last_redaction = None;
+        doc.redaction_snapshot = None;
         doc.generation += 1;
         Ok(label)
     }
@@ -3499,6 +3647,8 @@ impl Session {
         Self::adopt_keys(doc);
         Self::refresh_scoped(doc, scope).inspect_err(|_| Self::show_released(doc))?;
         doc.dirty = true;
+        doc.last_redaction = None;
+        doc.redaction_snapshot = None;
         doc.generation += 1;
         Ok(label)
     }
@@ -3726,7 +3876,7 @@ impl Session {
         if !editor.cos.is_modified() {
             return Ok(editor.cos.bytes().clone());
         }
-        let opts = SaveOptions { mod_date: self.now().map(pdfcraft_cos::pdf_date), ..SaveOptions::default() };
+        let opts = self.save_options();
         guard(|| write_incremental(&editor.cos, &opts)).map_err(EditError::Write)?.map(Arc::new).map_err(|e| EditError::Write(e.to_string()))
     }
 
@@ -3737,7 +3887,7 @@ impl Session {
             return Err(EditError::Signed);
         }
         let editor = doc.editor.as_ref().ok_or_else(|| EditError::ReadOnly(doc.read_only_reason.clone().unwrap_or_default()))?;
-        let opts = SaveOptions { mod_date: self.now().map(pdfcraft_cos::pdf_date), ..SaveOptions::default() };
+        let opts = self.save_options();
         guard(|| write_full(&editor.cos, &opts)).map_err(EditError::Write)?.map(Arc::new).map_err(|e| EditError::Write(e.to_string()))
     }
 
@@ -3756,6 +3906,9 @@ impl Session {
             doc.path = Some(p);
         }
         doc.dirty = false;
+        doc.redaction_unsaved = false;
+        // The saved bytes passed `verify_save` against it: the removed text need not stay.
+        doc.redaction_snapshot = None;
         doc.generation += 1;
         Self::refresh(doc).inspect_err(|_| Self::show_released(doc))
     }
@@ -3793,6 +3946,32 @@ impl Session {
         Ok(())
     }
 
+    /// Check `bytes` (about to be written as the saved file) before anything is replaced: they
+    /// must reopen and have as many pages as the document. Redacted output must never be
+    /// written without this. See [`RedactOutcome`] for the sweep of the bytes.
+    pub fn verify_save(&self, id: DocId, bytes: &Arc<Vec<u8>>) -> Result<(), EditError> {
+        let doc = self.get(id).ok_or(EditError::NoDocument)?;
+        let password = doc.editor.as_ref().and_then(|e| e.keys.reopen.clone());
+        let check = guard(|| {
+            let reopened = pdfcraft_cos::Document::open_with_password(bytes.clone(), password.as_deref()).map_err(|e| e.to_string())?;
+            let pages = pdfcraft_model::pages(&reopened).len();
+            if pages != doc.info.pages.len() {
+                return Err(format!("it has {pages} page(s) instead of {}", doc.info.pages.len()));
+            }
+            // The redaction's own snapshot, against the very bytes that will be written. An
+            // encrypted file can't be read without its password here, so it is only reopened.
+            if let Some(snapshot) = doc.redaction_snapshot.as_ref().filter(|_| password.is_none()) {
+                let proof = snapshot.prove_saved(bytes, &pdfcraft_redact::ProofOptions::default());
+                if !proof.passed() {
+                    // Counts only: never what was removed.
+                    return Err(format!("the redaction check of the file failed ({} survivor(s), {} unswept)", proof.survivors(), proof.unswept()));
+                }
+            }
+            Ok(())
+        });
+        check.unwrap_or_else(|m| Err(format!("checking it failed unexpectedly ({m})"))).map_err(EditError::SaveCheck)
+    }
+
     /// File ▸ Revert: back to the last saved version (or the file as opened). Undo history is
     /// cleared, as in Acrobat.
     pub fn revert(&mut self, id: DocId) -> Result<(), EditError> {
@@ -3814,6 +3993,10 @@ impl Session {
         editor.redo.clear();
         Self::adopt_keys(doc);
         doc.dirty = false;
+        // The unsaved redaction (or sanitizing) is gone, and so is what its proof was about.
+        doc.redaction_unsaved = false;
+        doc.last_redaction = None;
+        doc.redaction_snapshot = None;
         doc.generation += 1;
         Self::refresh(doc).inspect_err(|_| Self::show_released(doc))
     }
@@ -4254,8 +4437,11 @@ impl Session {
         doc.editor.as_ref().map(|e| &e.cos).ok_or_else(|| EditError::ReadOnly(doc.read_only_reason.clone().unwrap_or_default()))
     }
 
+    /// A document built from scratch or derived from others (Create, Combine, Extract, Split):
+    /// there is no signed revision to keep valid, so a signature field it carries over doesn't
+    /// block the write.
     fn write_new(&self, doc: &pdfcraft_cos::Document) -> Result<Arc<Vec<u8>>, EditError> {
-        let opts = SaveOptions { mod_date: self.now().map(pdfcraft_cos::pdf_date), ..SaveOptions::default() };
+        let opts = SaveOptions { allow_signed_rewrite: true, ..self.save_options() };
         write_full(doc, &opts).map(Arc::new).map_err(|e| EditError::Write(e.to_string()))
     }
 
@@ -4636,6 +4822,8 @@ pub fn comment_summary(name: &str, all: &[pdfcraft_render::Annotation], sort: Su
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_redact;
 
 /// Page filters of Acrobat's Rotate Pages and page selection: even/odd page numbers and
 /// orientation (as displayed).

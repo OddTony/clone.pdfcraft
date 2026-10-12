@@ -274,8 +274,10 @@ impl Pieces {
     }
 
     /// The piece holding joined position `at` (the last piece for positions past the end).
+    /// `ends` only grows, so this is a binary search: callers look up every operator of a page,
+    /// and a page can be split into many thousands of pieces.
     pub fn piece_of(&self, at: usize) -> usize {
-        self.ends.iter().position(|&e| at < e).unwrap_or(self.ends.len().saturating_sub(1))
+        self.ends.partition_point(|&e| e <= at).min(self.ends.len().saturating_sub(1))
     }
 
     /// The pieces an operator spans: (the one its first token is in, the one its keyword is in).

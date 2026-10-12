@@ -511,7 +511,9 @@ fn an_in_place_save_reports_a_required_rewrite_as_not_incremental() {
         let mut args = args;
         args["doc"] = json!(doc);
         ok(&mut a, tool, args);
-        let saved = ok(&mut a, "doc_save", json!({ "doc": doc }));
+        // Removing hidden information cannot be undone, so saving it over the source takes an explicit opt-in.
+        let save_args = if tool == "doc_remove_hidden" { json!({ "doc": doc, "overwrite_source": true }) } else { json!({ "doc": doc }) };
+        let saved = ok(&mut a, "doc_save", save_args);
         let kept = std::fs::read(dir.join("a.pdf")).unwrap().starts_with(&original);
         assert_eq!((saved["incremental"].as_bool(), kept), (Some(incremental), incremental), "{tool}");
     }

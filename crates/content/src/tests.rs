@@ -118,3 +118,34 @@ fn pieces_parse_as_one_stream_and_splice_back() {
     assert_eq!(out.len(), 3);
     assert!(Pieces::join::<&[u8]>(&[]).splice([(0..1, b"x".to_vec())]).is_empty());
 }
+
+#[test]
+fn piece_of_finds_the_piece_among_many() {
+    // 100 000 pieces of different lengths: every position maps to the piece holding it (checked
+    // against a plain scan), and the lookups stay fast enough for a page of that many pieces.
+    let parts: Vec<Vec<u8>> = (0..100_000).map(|i| vec![b'q'; 1 + i % 7]).collect();
+    let pieces = Pieces::join(&parts);
+    assert_eq!(pieces.len(), parts.len());
+    let mut ends = Vec::new();
+    let mut at = 0;
+    for p in &parts {
+        at += p.len() + 1;
+        ends.push(at);
+    }
+    let scan = |x: usize| ends.iter().position(|&e| x < e).unwrap_or(ends.len() - 1);
+    for x in (0..at + 10).step_by(13) {
+        assert_eq!(pieces.piece_of(x), scan(x), "position {x}");
+    }
+    for (i, &e) in ends.iter().enumerate() {
+        assert_eq!(pieces.piece_of(e - 1), i);
+    }
+    assert_eq!(pieces.piece_of(usize::MAX), parts.len() - 1);
+    assert_eq!(Pieces::join::<&[u8]>(&[]).piece_of(5), 0);
+    let started = std::time::Instant::now();
+    let mut sum = 0usize;
+    for x in 0..at {
+        sum = sum.wrapping_add(pieces.piece_of(x));
+    }
+    assert!(sum > 0);
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "took {:?}", started.elapsed());
+}
