@@ -3856,6 +3856,7 @@ dependencies = [
  "hayro",
  "kurbo 0.13.1",
  "pdfcraft-filters",
+ "skrifa 0.47.0",
 ]
 
 [[package]]
