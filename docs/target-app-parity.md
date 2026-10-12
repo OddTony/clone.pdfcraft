@@ -1,6 +1,6 @@
 # PdfCraft parity with Adobe Acrobat Pro
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** web OCR reads in Web Workers with SIMD (partial), scores not re-judged; web printing shipped, gap 4 closed, scores not re-judged; exclusive image-crop resize follow-up; minor (document-font subset completion, source styles and curved/shared image clips in the contributor fork; closed issues synced, scores not re-judged: #774, #756, #740, #759, #799–#821, #825, #844; earlier: readiness table with hours per audience; full number restated as the standard's additive weighted sum, 47% → 49%; earlier: second look: cross-cutting double count removed, mainstream-practitioner number added, core-workflow gate applied → alpha) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** web OCR shipped (Web Workers with SIMD, checked in a browser), scores not re-judged; web printing shipped, gap 4 closed, scores not re-judged; exclusive image-crop resize follow-up; minor (document-font subset completion, source styles and curved/shared image clips in the contributor fork; closed issues synced, scores not re-judged: #774, #756, #740, #759, #799–#821, #825, #844; earlier: readiness table with hours per audience; full number restated as the standard's additive weighted sum, 47% → 49%; earlier: second look: cross-cutting double count removed, mainstream-practitioner number added, core-workflow gate applied → alpha) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 The authoritative assessment of how close PdfCraft is to Acrobat Pro. [ROADMAP.md](../ROADMAP.md)
 summarizes it; [gaps.md](gaps.md) lists every shortfall one by one; the deep-dive checklists are
@@ -292,6 +292,7 @@ licensed OCR or AI model.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-12 | minor | Web OCR (`ocr.ocr-web`) shipped after a browser check; scores not re-judged |
 | 2026-10-12 | minor | Web OCR (`ocr.ocr-web`, partial): the web zip serves the models, Recognize Text downloads them on first use, and pages are read in Web Workers built with SIMD. Platforms text updated; scores not re-judged |
 | 2026-10-12 | minor | Exclusive image crops resize with their pixels across nested states, intervening operators and content streams; shared clips remain fixed. Synthetic engine/tool regressions and private image save/reopen checks; estimates unchanged. |
 | 2026-10-11 | minor | Web printing shipped (gap 4): Hardware, Platforms and L Print text updated. Text only: scores, readiness and hours not re-judged |
