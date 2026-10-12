@@ -2237,6 +2237,8 @@ certificate	Subject	Власник сертифіката
 	Finish or discard the text being edited before selecting several objects.	Завершіть або скасуйте редагування тексту, перш ніж вибирати кілька об’єктів.
 	Move object	Перемістити об’єкт
 	Move objects	Перемістити об’єкти
+	Align objects	Вирівняти об’єкти
+	Distribute objects	Розподілити об’єкти
 	Vertical text cannot be moved with this selection.	Вертикальний текст не можна перемістити разом із цим виділенням.
 	Text used as a clipping path cannot be moved with this selection.	Текст, що використовується як контур відсікання, не можна перемістити разом із цим виділенням.
 	These objects could not be moved. Select them again and try a smaller move.	Не вдалося перемістити ці об’єкти. Виберіть їх знову та спробуйте менше зміщення.

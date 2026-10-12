@@ -63,7 +63,7 @@ pub use pdfcraft_edit::{BlockStyle, PageImage, RangeStyle, TextBlock, TextLine, 
 pub use pdfcraft_measure as measure;
 pub use pdfcraft_xfa::Report as XfaLayout;
 
-pub use pdfcraft_edit::{EditableObject, FillRule, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget, PagePath, Paint};
+pub use pdfcraft_edit::{EditableObject, FillRule, MAX_MOVE_OBJECTS, ObjectAlign, ObjectKind, ObjectTarget, PagePath, Paint};
 
 /// A change to an existing page image.
 #[derive(Clone, Debug, PartialEq)]
@@ -219,6 +219,7 @@ fn scope_of(edit: &Edit) -> Scope {
         // Page content, resources and added content/marks only: the page tree, annotations,
         // fields, links and document metadata are untouched (see `refresh_content`).
         Edit::MoveObjects { .. }
+        | Edit::AlignObjects { .. }
         | Edit::EditTextLine { .. }
         | Edit::EditTextBlock { .. }
         | Edit::EditPageImage { .. }
@@ -1422,6 +1423,13 @@ pub enum Edit {
         objects: Vec<ObjectTarget>,
         offset: [f64; 2],
     },
+    /// Align objects to an edge or centre of their union, or space them evenly, as the page is
+    /// displayed. One group move: each object moves by its own offset.
+    AlignObjects {
+        page: usize,
+        objects: Vec<ObjectTarget>,
+        align: ObjectAlign,
+    },
     /// Edit text in a paragraph box: replace paragraph `block` (from `Document::text_blocks`),
     /// rewrapped to the box's width.
     EditTextBlock {
@@ -1717,6 +1725,8 @@ pub const EDIT_LABELS: &[&str] = &[
     "Load document font",
     "Move object",
     "Move objects",
+    "Align objects",
+    "Distribute objects",
     "Move image",
     "Rotate image",
     "Flip image",
@@ -1842,6 +1852,7 @@ impl Edit {
             Edit::EditTextLine { .. } | Edit::EditTextBlock { .. } => Label::of("Edit text"),
             Edit::RegisterTextFont { .. } => Label::of("Load document font"),
             Edit::MoveObjects { objects, .. } => plural("Move object", "Move objects", objects.len()),
+            Edit::AlignObjects { align, .. } => Label::of(if align.is_distribute() { "Distribute objects" } else { "Align objects" }),
             Edit::EditPageImage { change, .. } => Label::of(match change {
                 ImageEdit::Move(_) => "Move image",
                 ImageEdit::Rotate(_) => "Rotate image",
@@ -1998,6 +2009,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::AddImage { .. }
         | Edit::UpdateContent { .. }
         | Edit::MoveObjects { .. }
+        | Edit::AlignObjects { .. }
         | Edit::DeleteContent { .. }
         | Edit::ReplaceImage { .. }
         | Edit::ClearRedactions
@@ -2349,6 +2361,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             pdfcraft_edit::change_image(doc, *page, *index, &c)?;
         }
         Edit::MoveObjects { page, objects, offset } => pdfcraft_edit::move_objects(doc, *page, objects, *offset)?,
+        Edit::AlignObjects { page, objects, align } => pdfcraft_edit::align_objects(doc, *page, objects, *align)?,
         Edit::EditTextBlock { page, block, text, style } => {
             pdfcraft_edit::rewrite_block(doc, *page, *block, Some(text), style)?;
         }
@@ -3616,7 +3629,7 @@ impl Session {
             matches!(
                 e,
                 Edit::AddText { .. } | Edit::AddImage { .. } | Edit::UpdateContent { .. } | Edit::DeleteContent { .. } | Edit::ReplaceImage { .. }
-            ) || matches!(e, Edit::MoveObjects { objects, .. } if objects.iter().any(|o| o.kind == ObjectKind::Added))
+            ) || matches!(e, Edit::MoveObjects { objects, .. } | Edit::AlignObjects { objects, .. } if objects.iter().any(|o| o.kind == ObjectKind::Added))
         });
         let touches_marks = edit.is_none_or(|e| {
             matches!(e, Edit::AddHeaderFooter { .. } | Edit::AddWatermark { .. } | Edit::AddBackground { .. } | Edit::RemoveMarks { .. })

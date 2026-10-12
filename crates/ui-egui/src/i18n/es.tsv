@@ -2353,6 +2353,8 @@ action wizard	Start	Iniciar
 	Finish or discard the text being edited before selecting several objects.	Termina o descarta la edición del texto antes de seleccionar varios objetos.
 	Move object	Mover objeto
 	Move objects	Mover objetos
+	Align objects	Alinear objetos
+	Distribute objects	Distribuir objetos
 	Vertical text cannot be moved with this selection.	El texto vertical no se puede mover con esta selección.
 	Text used as a clipping path cannot be moved with this selection.	El texto usado como trazado de recorte no se puede mover con esta selección.
 	These objects could not be moved. Select them again and try a smaller move.	No se pudieron mover estos objetos. Vuelve a seleccionarlos e intenta un desplazamiento menor.

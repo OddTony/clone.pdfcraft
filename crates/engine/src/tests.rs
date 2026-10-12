@@ -4068,6 +4068,78 @@ fn group_moves_preserve_rotated_added_content_raster_geometry() {
 }
 
 #[test]
+fn aligning_objects_is_one_undo_step_and_survives_save_reopen() {
+    let (mut s, id) = session_with(1);
+    let text = AddedText { text: "Added label".into(), rect: [20.0, 240.0, 140.0, 265.0], ..Default::default() };
+    s.apply(id, Edit::AddText { page: 0, text }).unwrap();
+    let image = image::RgbImage::from_pixel(12, 8, image::Rgb([240, 20, 20]));
+    let mut png = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    s.apply(id, Edit::AddImage { page: 0, rect: Some([40.0, 40.0, 80.0, 70.0]), name: "red.png".into(), bytes: Arc::new(png.into_inner()) }).unwrap();
+    let saved = s.save_bytes(id).unwrap();
+    s.mark_saved(id, saved.clone(), None).unwrap();
+    let before = s.get(id).unwrap().editable_objects(0).unwrap();
+    assert_eq!(before.len(), 3, "one native paragraph, one added label and one added image");
+    let objects: Vec<_> = before.iter().map(|o| o.target).collect();
+    let right = before.iter().map(|o| o.rect[2]).fold(f64::MIN, f64::max);
+    // The label is already rightmost: the paragraph and the image move, the label stays.
+    s.apply(id, Edit::AlignObjects { page: 0, objects: objects.clone(), align: ObjectAlign::Right }).unwrap();
+    let doc = s.get(id).unwrap();
+    assert!(doc.dirty);
+    assert_eq!(doc.can_undo(), Some("Align objects"));
+    let after = doc.editable_objects(0).unwrap();
+    for (a, b) in before.iter().zip(&after) {
+        assert_eq!(a.text, b.text);
+        assert!((b.rect[2] - right).abs() < 0.001, "{a:?} -> {b:?}");
+        assert!((b.rect[2] - b.rect[0] - (a.rect[2] - a.rect[0])).abs() < 0.001 && (b.rect[1] - a.rect[1]).abs() < 0.001, "{a:?} -> {b:?}");
+    }
+    let aligned = s.save_bytes(id).unwrap();
+    assert!(aligned.starts_with(saved.as_ref()), "an incremental update preserves the original revision");
+    let mut again = Session::new();
+    let other = again.open("aligned.pdf", None, aligned, None).unwrap();
+    assert_eq!(again.get(other).unwrap().editable_objects(0).unwrap(), after);
+    assert_eq!(s.undo(id).unwrap().as_str(), "Align objects");
+    assert_eq!(s.get(id).unwrap().editable_objects(0).unwrap(), before);
+    assert_eq!(s.get(id).unwrap().can_undo(), Some("Add image"), "one undo restores every object");
+    s.apply(id, Edit::AlignObjects { page: 0, objects, align: ObjectAlign::DistributeVertical }).unwrap();
+    assert_eq!(s.get(id).unwrap().can_undo(), Some("Distribute objects"));
+}
+
+#[test]
+fn refused_alignments_change_nothing() {
+    let (mut s, id) = session_with(1);
+    let text = AddedText { text: "Added label".into(), rect: [100.0, 40.0, 180.0, 60.0], ..Default::default() };
+    s.apply(id, Edit::AddText { page: 0, text }).unwrap();
+    let objects: Vec<_> = s.get(id).unwrap().editable_objects(0).unwrap().iter().map(|o| o.target).collect();
+    assert_eq!(objects.len(), 2);
+    let before = s.save_bytes(id).unwrap();
+    let generation = s.get(id).unwrap().edit_generation();
+    let missing = ObjectTarget { kind: ObjectKind::Image, index: 9 };
+    for (objects, align) in [
+        (objects[..1].to_vec(), ObjectAlign::Left),
+        (objects.clone(), ObjectAlign::DistributeHorizontal),
+        ([objects.clone(), vec![missing]].concat(), ObjectAlign::Left),
+    ] {
+        assert!(s.apply(id, Edit::AlignObjects { page: 0, objects, align }).is_err());
+        let doc = s.get(id).unwrap();
+        assert_eq!(doc.edit_generation(), generation);
+        assert_eq!(doc.can_undo(), Some("Add text"));
+        assert_eq!(s.save_bytes(id).unwrap(), before);
+    }
+    let mut p = protection(None, Some("owner"));
+    p.changes = Changes::None;
+    s.apply(id, Edit::Protect(p)).unwrap();
+    let bytes = s.save_bytes(id).unwrap();
+    let mut reader = Session::new();
+    let id = reader.open("restricted.pdf", None, bytes, None).unwrap();
+    let objects = reader.get(id).unwrap().editable_objects(0).unwrap().iter().map(|o| o.target).collect();
+    let refused = reader.apply(id, Edit::AlignObjects { page: 0, objects, align: ObjectAlign::Left });
+    assert_eq!(refused, Err(EditError::NotPermitted("changes to the document")));
+    let doc = reader.get(id).unwrap();
+    assert!(!doc.dirty && doc.can_undo().is_none());
+}
+
+#[test]
 fn legacy_passwords_with_turkish_characters_open() {
     // RC4-128 (R3): user "ılık€" in PDFDocEncoding (ı = 0x9A, € = 0xA0), owner "Çağlar"
     // (PDFDocEncoding has no ğ: written without it, as pdfcraft-crypt writes R2–R4 passwords).
@@ -4347,6 +4419,7 @@ fn content_refresh_lists_match_the_storages_an_edit_touches() {
             },
         },
         Edit::MoveObjects { page: 0, objects: vec![target(crate::ObjectKind::Added)], offset: [1.0, 0.0] },
+        Edit::AlignObjects { page: 0, objects: vec![target(crate::ObjectKind::Text), target(crate::ObjectKind::Added)], align: ObjectAlign::Left },
     ];
     for edit in &added {
         assert_eq!(Session::content_refresh_lists(Some(edit)), (true, false), "{}", edit.label());
@@ -4354,6 +4427,11 @@ fn content_refresh_lists_match_the_storages_an_edit_touches() {
     let plain = [
         Edit::MoveObjects { page: 0, objects: vec![target(crate::ObjectKind::Text)], offset: [1.0, 0.0] },
         Edit::MoveObjects { page: 0, objects: vec![target(crate::ObjectKind::Path)], offset: [1.0, 0.0] },
+        Edit::AlignObjects {
+            page: 0,
+            objects: vec![target(crate::ObjectKind::Text), target(crate::ObjectKind::Image)],
+            align: ObjectAlign::DistributeVertical,
+        },
         Edit::EditTextBlock { page: 0, block: 0, text: String::new(), style: pdfcraft_edit::BlockStyle::default() },
     ];
     for edit in &plain {

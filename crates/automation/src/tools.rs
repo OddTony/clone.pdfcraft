@@ -52,6 +52,16 @@ fn measure_schema() -> Value {
     )
 }
 
+/// 1–1000 `{kind, index}` references from object_list.
+fn object_refs() -> Value {
+    json!({"type":"array","minItems":1,"maxItems":1000,"uniqueItems":true,"items":{
+        "type":"object","properties":{"kind":{"type":"string","enum":["added","text","image","path"]},"index":{"type":"integer","minimum":1}},"required":["kind","index"],"additionalProperties":false}})
+}
+
+fn generation() -> Value {
+    json!({"type":"integer","minimum":0,"description":"Use generation returned by object_list to reject a stale selection."})
+}
+
 fn color() -> Value {
     json!({ "type": "string", "description": "#RRGGBB or a name: yellow, red, orange, green, blue, purple, pink, black, gray, white." })
 }
@@ -166,11 +176,13 @@ pub fn tools() -> Vec<ToolDef> {
         t("object_list", "List editable objects", "List existing paragraphs, Image/Form artwork, added content and painted vector paths once, with source kind/index references, displayed rectangles and document generation. Path rows (kind path) also give fill and stroke colours (#RRGGBB, null when that part isn't painted or isn't a Gray/RGB/CMYK colour) and the stroke line_width in points (null when not stroked). Paths inside Form artwork, clipping paths and pages with too many paths aren't listed as paths. Indexes change when content changes; use generation in object_move to reject stale references.")
             .ro().with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1}}), &["doc","page"])),
         t("object_move", "Move objects together", "Atomically translate 1–1000 mixed references (added, text, image or path) from object_list by [dx, dy] in displayed points (right/down). Preserves glyph codes, fonts, image data, path data and relative spacing; success is one undo step. Clipping and vertical text are refused. A bad/stale reference refuses the entire move.")
-            .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},
-                "objects":{"type":"array","minItems":1,"maxItems":1000,"uniqueItems":true,"items":{
-                    "type":"object","properties":{"kind":{"type":"string","enum":["added","text","image","path"]},"index":{"type":"integer","minimum":1}},"required":["kind","index"],"additionalProperties":false}},
+            .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"objects":object_refs(),
                 "offset":{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2},
-                "generation":{"type":"integer","minimum":0,"description":"Use generation returned by object_list to reject a stale selection."}}), &["doc","page","objects","offset"])),
+                "generation":generation()}), &["doc","page","objects","offset"])),
+        t("object_align", "Align or distribute objects", "Atomically line up 2–1000 references from object_list on the left, centre or right (top, middle or bottom) of their combined bounds, or space 3 or more evenly with distribute_horizontal/distribute_vertical (the outermost two stay put), as the page is displayed. Success is one undo step; a bad/stale reference, too few objects, objects already in place, or an image or path that would show a different part once moved (partly hidden by a clipping path shared with other content, or by the page edge) refuse the entire edit.")
+            .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"objects":object_refs(),
+                "action":{"type":"string","enum":["left","centre","center","right","top","middle","bottom","distribute_horizontal","distribute_vertical"]},
+                "generation":generation()}), &["doc","page","objects","action"])),
         t("text_extract", "Extract text", "Extract the text of some or all pages, in reading order. With rect, only the text inside that rectangle on each page, as Column select takes it: one row per visual line, side-by-side pieces (table cells) separated by a tab.")
             .ro()
             .cmd("edit.column_select")

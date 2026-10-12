@@ -2176,6 +2176,8 @@ action wizard	Start	Старт
 	Finish or discard the text being edited before selecting several objects.	Завършете или отменете редактирането на текста, преди да изберете няколко обекта.
 	Move object	Преместване на обект
 	Move objects	Преместване на обекти
+	Align objects	Подравняване на обекти
+	Distribute objects	Разпределяне на обекти
 	Vertical text cannot be moved with this selection.	Вертикалният текст не може да се премести с този избор.
 	Text used as a clipping path cannot be moved with this selection.	Текстът, използван като изрязващ контур, не може да се премести с този избор.
 	These objects could not be moved. Select them again and try a smaller move.	Тези обекти не можаха да бъдат преместени. Изберете ги отново и опитайте по-малко отместване.

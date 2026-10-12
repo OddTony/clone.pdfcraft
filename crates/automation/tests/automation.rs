@@ -5221,6 +5221,115 @@ fn object_list_reports_vector_paths_with_their_paint() {
 }
 
 #[test]
+fn vector_paths_move_and_align_through_object_tools() {
+    use pdfcraft_cos::{Dict, Document, Object, Stream, write_incremental};
+    let dir = workdir("object-move-paths");
+    let mut cos = Document::open(std::sync::Arc::new(fixture(1))).unwrap();
+    let page = pdfcraft_model::pages(&cos)[0].obj;
+    let contents = cos.add(Object::Stream(Stream::flate(
+        Dict::new(),
+        b"BT /F1 24 Tf 20 150 Td (Page 1) Tj ET 1 0 0 rg 20 40 100 50 re f 0 0 1 RG 4 w 30 200 m 170 200 l S 0 1 1 0 k 60 100 30 20 re f",
+    )));
+    cos.update_dict(page, |d| d.set(b"Contents".to_vec(), Object::Ref(contents))).unwrap();
+    std::fs::write(dir.join("paths.pdf"), write_incremental(&cos, &Default::default()).unwrap()).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"paths.pdf"}))["doc"].as_u64().unwrap();
+    let list = |a: &mut Automation, doc: u64| ok(a, "object_list", json!({"doc":doc,"page":1}));
+    let near = |listed: &Value, row: usize, expected: [f64; 4]| {
+        (0..4).all(|i| (listed["objects"][row]["rect"][i].as_f64().unwrap() - expected[i]).abs() < 0.02)
+    };
+    let inventory = list(&mut a, doc);
+    assert_eq!(inventory["count"], 4);
+    assert_eq!(inventory["objects"][1]["kind"], "path");
+    // Displayed (y down) on the 200 x 300 page: user [20 40 120 90] shows at [20 210 120 260].
+    assert!(near(&inventory, 1, [20.0, 210.0, 120.0, 260.0]) && near(&inventory, 3, [60.0, 180.0, 90.0, 200.0]), "{inventory}");
+
+    let moved = ok(
+        &mut a,
+        "object_move",
+        json!({"doc":doc,"page":1,"generation":inventory["generation"],"objects":[{"kind":"path","index":1}],"offset":[10,20]}),
+    );
+    assert_eq!(moved["moved"], 1);
+    let after = list(&mut a, doc);
+    assert!(near(&after, 1, [30.0, 230.0, 130.0, 280.0]), "{after}");
+    assert_eq!(after["objects"][1]["fill"], "#FF0000");
+    for row in [0, 2, 3] {
+        assert_eq!(after["objects"][row], inventory["objects"][row], "only the path moved");
+    }
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(list(&mut a, doc)["objects"], inventory["objects"]);
+    ok(&mut a, "edit_redo", json!({"doc":doc}));
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"moved.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"moved.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(list(&mut a, reopened)["objects"], after["objects"]);
+
+    // Path 1 is now the leftmost at x 30; path 3 moves 30 left to meet it.
+    let redone = list(&mut a, doc);
+    let objects = json!([{"kind":"path","index":1},{"kind":"path","index":3}]);
+    let aligned = ok(&mut a, "object_align", json!({"doc":doc,"page":1,"objects":objects,"action":"left"}));
+    assert_eq!(aligned["aligned"], 2);
+    let lined = list(&mut a, doc);
+    assert!(near(&lined, 3, [30.0, 180.0, 60.0, 200.0]), "{lined}");
+    for row in [0, 1, 2] {
+        assert_eq!(lined["objects"][row], redone["objects"][row], "only path 3 moved");
+    }
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(list(&mut a, doc)["objects"], redone["objects"]);
+}
+
+#[test]
+fn objects_align_as_displayed_with_one_undo() {
+    let dir = workdir("object-align");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"a.pdf"}))["doc"].as_u64().unwrap();
+    ok(&mut a, "page_add_text", json!({"doc":doc,"page":1,"text":"One","rect":[40,20,110,40]}));
+    ok(&mut a, "page_add_text", json!({"doc":doc,"page":1,"text":"Two","rect":[60,200,150,230]}));
+    // Turned a quarter, the displayed top is the lowest user-space x.
+    ok(&mut a, "page_rotate", json!({"doc":doc,"pages":[1],"degrees":90}));
+    let inventory = ok(&mut a, "object_list", json!({"doc":doc,"page":1}));
+    assert_eq!(inventory["count"], 3);
+    let objects: Vec<_> = inventory["objects"].as_array().unwrap().iter().map(|o| json!({"kind":o["kind"],"index":o["index"]})).collect();
+    let rect = |o: &Value, i: usize| o["rect"][i].as_f64().unwrap();
+    let top = inventory["objects"].as_array().unwrap().iter().map(|o| rect(o, 1)).fold(f64::MAX, f64::min);
+    let aligned = ok(&mut a, "object_align", json!({"doc":doc,"page":1,"generation":inventory["generation"],"objects":objects,"action":"top"}));
+    assert_eq!(aligned["aligned"], 3);
+    let after = ok(&mut a, "object_list", json!({"doc":doc,"page":1}));
+    for (old, new) in inventory["objects"].as_array().unwrap().iter().zip(after["objects"].as_array().unwrap()) {
+        assert!((rect(new, 1) - top).abs() < 0.02, "{old} -> {new}");
+        assert!(
+            (rect(new, 0) - rect(old, 0)).abs() < 0.02 && (rect(new, 3) - rect(new, 1) - rect(old, 3) + rect(old, 1)).abs() < 0.03,
+            "{old} -> {new}"
+        );
+        assert_eq!(old["text"], new["text"]);
+    }
+    assert!(inventory["objects"].as_array().unwrap().iter().any(|o| (rect(o, 1) - top).abs() > 1.0), "something moved");
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(ok(&mut a, "object_list", json!({"doc":doc,"page":1}))["objects"], inventory["objects"]);
+    ok(&mut a, "edit_redo", json!({"doc":doc}));
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"aligned.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"aligned.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "object_list", json!({"doc":reopened,"page":1}))["objects"], after["objects"]);
+    // One object, two to distribute, already in place, an unknown action, a stale generation.
+    let stable = ok(&mut a, "object_list", json!({"doc":doc,"page":1}));
+    for mut args in [
+        json!({"objects":[objects[0]],"action":"left"}),
+        json!({"objects":objects[..2],"action":"distribute_vertical"}),
+        json!({"objects":objects,"action":"top"}),
+        json!({"objects":objects,"action":"diagonal"}),
+        json!({"objects":objects,"action":"left","generation":inventory["generation"]}),
+    ] {
+        args["doc"] = json!(doc);
+        args["page"] = json!(1);
+        assert!(a.call("object_align", &args).is_err(), "{args}");
+        assert_eq!(ok(&mut a, "object_list", json!({"doc":doc,"page":1})), stable);
+    }
+    ok(&mut a, "object_align", json!({"doc":doc,"page":1,"objects":objects,"action":"center"}));
+    let centred = ok(&mut a, "object_list", json!({"doc":doc,"page":1}));
+    let centres: Vec<f64> = centred["objects"].as_array().unwrap().iter().map(|o| rect(o, 0) + rect(o, 2)).collect();
+    assert!(centres.iter().all(|c| (c - centres[0]).abs() < 0.03), "{centres:?}");
+}
+
+#[test]
 fn a_deleted_image_is_not_kept_by_reduce_or_optimize() {
     let dir = workdir("deleted-image");
     let (w, h) = (600u32, 400u32);

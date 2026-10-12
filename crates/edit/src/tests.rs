@@ -32,7 +32,7 @@ fn fixture() -> Document {
     Document::open(Arc::new(out)).unwrap()
 }
 
-fn reopen(doc: &Document) -> Document {
+pub(crate) fn reopen(doc: &Document) -> Document {
     let bytes = write_incremental(doc, &SaveOptions::default()).unwrap();
     hayro_syntax::Pdf::new(bytes.clone()).expect("parses");
     Document::open(Arc::new(bytes)).unwrap()
@@ -1559,7 +1559,7 @@ fn image_page() -> Document {
     image_page_with("q 200 0 0 100 100 100 cm /Im0 Do Q BT /F1 12 Tf 72 700 Td (Caption) Tj ET")
 }
 
-fn image_page_with(content: &str) -> Document {
+pub(crate) fn image_page_with(content: &str) -> Document {
     let objs: Vec<String> = vec![
         "<< /Type /Catalog /Pages 2 0 R >>".into(),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
@@ -1611,12 +1611,12 @@ fn moving_an_image_moves_its_own_clip_too() {
     let moved = [80.0, 420.0, 380.0, 620.0];
     images::change_image(&mut doc, 0, 0, &images::ImageChange::Transform(images::rect_to_rect(target, moved))).unwrap();
     assert!(close(first_rect_in_user_space(&doc), moved));
-    images::translate_images(&mut doc, 0, &[0], [10.0, 0.0]).unwrap();
+    images::translate_images(&mut doc, 0, &[(0, [10.0, 0.0])]).unwrap();
     assert!(close(images::page_images(&doc, 0).unwrap()[0].rect, [90.0, 420.0, 390.0, 620.0]));
     assert!(close(first_rect_in_user_space(&doc), [90.0, 420.0, 390.0, 620.0]));
     // Moving it with the group move helper takes the clip along as well.
     let mut doc = image_page_with(content);
-    images::translate_images(&mut doc, 0, &[0], [30.0, -20.0]).unwrap();
+    images::translate_images(&mut doc, 0, &[(0, [30.0, -20.0])]).unwrap();
     assert!(close(images::page_images(&doc, 0).unwrap()[0].rect, [130.0, 80.0, 330.0, 180.0]));
     assert!(close(first_rect_in_user_space(&doc), [130.0, 80.0, 330.0, 180.0]));
     // A clip shared with other drawing is left where it is.

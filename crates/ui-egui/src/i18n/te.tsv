@@ -2139,6 +2139,8 @@ action wizard	Start	ప్రారంభించు
 	Finish or discard the text being edited before selecting several objects.	అనేక వస్తువులను ఎంచుకునే ముందు వచన సవరణను పూర్తి చేయండి లేదా విస్మరించండి.
 	Move object	వస్తువును కదిలించు
 	Move objects	వస్తువులను కదిలించు
+	Align objects	వస్తువులను అమర్చు
+	Distribute objects	వస్తువులను సమాన అంతరంతో అమర్చు
 	Vertical text cannot be moved with this selection.	ఈ ఎంపికతో నిలువు వచనాన్ని కదిలించలేరు.
 	Text used as a clipping path cannot be moved with this selection.	క్లిప్పింగ్ పాత్‌గా ఉపయోగించిన వచనాన్ని ఈ ఎంపికతో కదిలించలేరు.
 	These objects could not be moved. Select them again and try a smaller move.	ఈ వస్తువులను కదిలించలేకపోయాము. మళ్లీ ఎంచుకుని తక్కువ దూరం కదిలించడానికి ప్రయత్నించండి.

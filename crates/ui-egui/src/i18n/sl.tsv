@@ -2188,6 +2188,8 @@ signature pad	Type	Vtipkaj
 	List view	Pogled seznama
 	Move object	Premakni objekt
 	Move objects	Premakni objekte
+	Align objects	Poravnaj objekte
+	Distribute objects	Porazdeli objekte
 	No fill	Brez polnila
 	Pages: {k} of {n}	Strani: {k} od {n}
 	Preview unavailable: {e}	Predogled ni na voljo: {e}

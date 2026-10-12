@@ -855,6 +855,7 @@ impl PdfCraftApp {
 fn content_page(edit: &Edit) -> Option<usize> {
     match edit {
         Edit::MoveObjects { page, .. }
+        | Edit::AlignObjects { page, .. }
         | Edit::EditTextLine { page, .. }
         | Edit::EditTextBlock { page, .. }
         | Edit::EditPageImage { page, .. }
@@ -1491,7 +1492,7 @@ mod revert_draft_tests {
 #[cfg(test)]
 mod content_page_tests {
     use super::content_page;
-    use pdfcraft_engine::{Edit, ObjectKind, ObjectTarget};
+    use pdfcraft_engine::{Edit, ObjectAlign, ObjectKind, ObjectTarget};
 
     /// Single-page content edits keep every other page's rasters; anything else still
     /// invalidates the whole document.
@@ -1499,6 +1500,8 @@ mod content_page_tests {
     fn single_page_content_edits_map_to_their_page() {
         let moved = Edit::MoveObjects { page: 3, objects: vec![ObjectTarget { kind: ObjectKind::Text, index: 0 }], offset: [1.0, 0.0] };
         assert_eq!(content_page(&moved), Some(3));
+        let aligned = Edit::AlignObjects { page: 2, objects: vec![ObjectTarget { kind: ObjectKind::Image, index: 0 }], align: ObjectAlign::Top };
+        assert_eq!(content_page(&aligned), Some(2));
         assert_eq!(content_page(&Edit::RotatePages { pages: vec![0], degrees: 90 }), None);
         assert_eq!(content_page(&Edit::SetInfo { key: "Title".into(), value: "x".into() }), None);
     }

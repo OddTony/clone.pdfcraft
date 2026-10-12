@@ -2178,6 +2178,8 @@ key	Space	Boşluk
 	Finish or discard the text being edited before selecting several objects.	Birden fazla nesne seçmeden önce düzenlenen metni tamamlayın veya iptal edin.
 	Move object	Nesneyi taşı
 	Move objects	Nesneleri taşı
+	Align objects	Nesneleri hizala
+	Distribute objects	Nesneleri dağıt
 	Vertical text cannot be moved with this selection.	Dikey metin bu seçimle taşınamaz.
 	Text used as a clipping path cannot be moved with this selection.	Kırpma yolu olarak kullanılan metin bu seçimle taşınamaz.
 	These objects could not be moved. Select them again and try a smaller move.	Bu nesneler taşınamadı. Bunları tekrar seçin ve daha küçük bir taşıma deneyin.

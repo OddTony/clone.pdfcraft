@@ -2212,6 +2212,8 @@ action wizard	Start	Indítás
 	Finish or discard the text being edited before selecting several objects.	Több objektum kijelölése előtt fejezze be vagy vesse el a szöveg szerkesztését.
 	Move object	Objektum áthelyezése
 	Move objects	Objektumok áthelyezése
+	Align objects	Objektumok igazítása
+	Distribute objects	Objektumok elosztása
 	Vertical text cannot be moved with this selection.	A függőleges szöveg nem helyezhető át ezzel a kijelöléssel.
 	Text used as a clipping path cannot be moved with this selection.	A vágógörbeként használt szöveg nem helyezhető át ezzel a kijelöléssel.
 	These objects could not be moved. Select them again and try a smaller move.	Ezeket az objektumokat nem sikerült áthelyezni. Jelölje ki őket újra, és próbáljon kisebb elmozdítást.

@@ -2217,6 +2217,8 @@ signature pad	Type	Saisir
 	Finish or discard the text being edited before selecting several objects.	Terminez ou abandonnez la modification du texte avant de sélectionner plusieurs objets.
 	Move object	Déplacer un objet
 	Move objects	Déplacer des objets
+	Align objects	Aligner les objets
+	Distribute objects	Répartir les objets
 	Vertical text cannot be moved with this selection.	Le texte vertical ne peut pas être déplacé avec cette sélection.
 	Text used as a clipping path cannot be moved with this selection.	Le texte utilisé comme chemin de découpe ne peut pas être déplacé avec cette sélection.
 	These objects could not be moved. Select them again and try a smaller move.	Ces objets n’ont pas pu être déplacés. Sélectionnez-les à nouveau et essayez un déplacement plus petit.

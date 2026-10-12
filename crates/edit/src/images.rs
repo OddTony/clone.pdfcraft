@@ -532,16 +532,16 @@ fn transform_image(
 
 /// Plan all transforms before changing a stream; indexes refer to the original inventory.
 /// Splice only the chosen Do operators and preserve all other bytes and stream dictionaries.
-pub(crate) fn translate_images(doc: &mut Document, page: usize, indexes: &[usize], offset: [f64; 2]) -> Result<(), EditError> {
-    if indexes.is_empty() {
+pub(crate) fn translate_images(doc: &mut Document, page: usize, moves: &[(usize, [f64; 2])]) -> Result<(), EditError> {
+    if moves.is_empty() {
         return Ok(());
     }
     let images = page_images(doc, page)?;
     let p = page_of(doc, page)?;
     let all = streams(doc, &p.dict);
     let mut plans = std::collections::BTreeMap::new();
-    for index in indexes {
-        let image = images.get(*index).ok_or_else(|| EditError::Invalid("a selected image no longer exists".into()))?;
+    for &(index, offset) in moves {
+        let image = images.get(index).ok_or_else(|| EditError::Invalid("a selected image no longer exists".into()))?;
         let placement = Matrix(image.draw_matrix);
         let inverse = placement.invert().ok_or_else(|| EditError::Invalid("a selected image has no area".into()))?;
         let [a, b, c, d, _, _] = inverse.0;

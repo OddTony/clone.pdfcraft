@@ -2094,6 +2094,8 @@
 	Finish or discard the text being edited before selecting several objects.	請先完成或放棄正在編輯的文字，再選取多個物件。
 	Move object	移動物件
 	Move objects	移動多個物件
+	Align objects	對齊物件
+	Distribute objects	分佈物件
 	Vertical text cannot be moved with this selection.	無法隨此選取範圍移動直排文字。
 	Text used as a clipping path cannot be moved with this selection.	無法隨此選取範圍移動用作裁切路徑的文字。
 	These objects could not be moved. Select them again and try a smaller move.	無法移動這些物件。請重新選取並嘗試較小的移動距離。

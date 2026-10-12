@@ -1589,6 +1589,8 @@
 	Finish or discard the text being edited before selecting several objects.	Ολοκληρώστε ή απορρίψτε την επεξεργασία κειμένου προτού επιλέξετε πολλά αντικείμενα.
 	Move object	Μετακίνηση αντικειμένου
 	Move objects	Μετακίνηση αντικειμένων
+	Align objects	Στοίχιση αντικειμένων
+	Distribute objects	Ισοκατανομή αντικειμένων
 	Vertical text cannot be moved with this selection.	Δεν είναι δυνατή η μετακίνηση κατακόρυφου κειμένου με αυτή την επιλογή.
 	Text used as a clipping path cannot be moved with this selection.	Δεν είναι δυνατή η μετακίνηση κειμένου που χρησιμοποιείται ως διαδρομή αποκοπής με αυτή την επιλογή.
 	These objects could not be moved. Select them again and try a smaller move.	Δεν ήταν δυνατή η μετακίνηση αυτών των αντικειμένων. Επιλέξτε τα ξανά και δοκιμάστε μικρότερη μετακίνηση.
