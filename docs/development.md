@@ -117,3 +117,12 @@ driver's shader compilation, and explicit `PDFCRAFT_RENDERER=wgpu` still disable
 | `PDFCRAFT_RENDERER` | `gl` starts with OpenGL (glow) and never loads wgpu; `wgpu` reports a wgpu failure instead of retrying with OpenGL; unset, wgpu is retried with OpenGL when it can't start (see [Renderer fallback](#renderer-fallback)) |
 | `CRAFT_FONTS_DIR` | Build time: a [craft-fonts](https://github.com/storytold/craft-fonts) checkout to embed (Japanese fonts) |
 | `PDFCRAFT_SYSTEM_FONTS` | `0` stops the desktop app from using an installed font for characters its embedded fonts lack (`cargo xtask screenshots` sets it) |
+| `FONTCONFIG_FILE` | On Linux/Unix, the Fontconfig configuration file used to discover installed UI fallback fonts (default: `/etc/fonts/fonts.conf`); relative filenames are resolved under `FONTCONFIG_PATH` |
+| `FONTCONFIG_PATH` | Directory for a relative `FONTCONFIG_FILE` (default: `/etc/fonts`; the first entry of a search path is used) |
+
+On Linux/Unix, the UI's existing fallback filenames are also searched in Fontconfig's configured
+directories and their subdirectories. This finds fonts in Nix store paths and user font directories
+without invoking `fc-match` or linking libfontconfig. The scan is cached and bounded; missing or
+malformed configuration leaves the ordinary `/usr/share/fonts` and `/usr/local/share/fonts`
+candidates available. Font size and glyph-coverage checks still apply. This only reads installed
+fonts for the interface; it does not embed them into PDFs or packages.
