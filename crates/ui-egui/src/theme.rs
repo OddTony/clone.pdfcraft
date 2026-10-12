@@ -211,7 +211,47 @@ impl CjkPreference {
 /// first for Chinese, Japanese first otherwise). Call it when the language changes; the new
 /// faces take effect next frame.
 pub fn install_fonts_for(ctx: &egui::Context, cjk: CjkPreference) {
-    ctx.set_fonts(installed_font_definitions(cjk));
+    install_fonts_with(ctx, cjk, &UiFont::Standard, TextRendering::Standard);
+}
+
+/// The interface font (Preferences ▸ Appearance).
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiFont {
+    /// Inter (and JetBrains Mono for code), embedded.
+    #[default]
+    Standard,
+    /// The system's own: SF Pro and SF Mono on macOS, Segoe UI Variable and Cascadia Mono on
+    /// Windows. Read from the installed fonts, never embedded. Elsewhere, Standard.
+    System,
+    /// A TrueType or OpenType file (.ttf, .otf, .ttc) for the proportional faces; a variable one
+    /// gives its regular, medium and semibold weights.
+    File(String),
+}
+
+/// How glyphs are drawn (Preferences ▸ Appearance).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextRendering {
+    #[default]
+    Standard,
+    /// Measured against AppKit at 2x: outlines grow 0.15 physical pixel (CoreText's font
+    /// smoothing), glyphs sit at quarter-pixel offsets, and light-theme coverage uses gamma 0.9.
+    MacLike,
+}
+
+static MAC_LIKE_RENDERING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn text_rendering() -> TextRendering {
+    if MAC_LIKE_RENDERING.load(std::sync::atomic::Ordering::Relaxed) { TextRendering::MacLike } else { TextRendering::Standard }
+}
+
+/// [`install_fonts_for`] with the interface font and text rendering chosen in Preferences. Call
+/// [`apply`] after it so the visuals follow the rendering.
+pub fn install_fonts_with(ctx: &egui::Context, cjk: CjkPreference, font: &UiFont, rendering: TextRendering) {
+    MAC_LIKE_RENDERING.store(rendering == TextRendering::MacLike, std::sync::atomic::Ordering::Relaxed);
+    egui::epaint::text::set_glyph_dilation(if rendering == TextRendering::MacLike { 0.15 } else { 0.0 });
+    ctx.set_fonts(installed_font_definitions_with(cjk, font));
 }
 
 /// The name of the installed face [`installed_font_definitions`] may add after the embedded ones.
@@ -235,11 +275,28 @@ pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
 ///
 /// `PDFCRAFT_SYSTEM_FONTS=0` leaves them out.
 pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
+    installed_font_definitions_with(cjk, &UiFont::Standard)
+}
+
+/// [`installed_font_definitions`] with the chosen interface font: its faces go in front of the
+/// embedded ones they replace (which stay as the fallback), so a face missing a character, or a
+/// font that can't be read, never leaves text blank.
+pub fn installed_font_definitions_with(cjk: CjkPreference, font: &UiFont) -> FontDefinitions {
     #[cfg_attr(target_arch = "wasm32", expect(unused_mut))]
     let mut fonts = font_definitions_for(cjk == CjkPreference::SimplifiedChinese);
+    #[cfg(target_arch = "wasm32")]
+    let _ = font;
     #[cfg(not(target_arch = "wasm32"))]
     {
         use crate::system_fonts::{Need, fallback};
+        for face in crate::system_fonts::ui_faces(font) {
+            fonts.font_data.insert(face.name.clone(), face.data.clone());
+            for stack in fonts.families.values_mut() {
+                if let Some(at) = stack.iter().position(|n| n == face.embedded) {
+                    stack.insert(at, face.name.clone());
+                }
+            }
+        }
         // Before the general installed face, which stays the last fallback outside Chinese.
         if let Some(data) = crate::system_fonts::devanagari_fallback() {
             fonts.font_data.insert(SYSTEM_DEVANAGARI_FALLBACK.to_owned(), data);
@@ -415,6 +472,14 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     v.text_options.subpixel_binning = false;
     if !t.dark() {
         v.text_options.color_transfer_function = egui::epaint::FontColorTransferFunction::Gamma(0.75);
+    }
+    // Text rendering like macOS (Preferences ▸ Appearance): quarter-pixel placement, as CoreText
+    // places glyphs, and a lighter gamma, since the dilated outlines already carry the weight.
+    if text_rendering() == TextRendering::MacLike {
+        v.text_options.subpixel_binning = true;
+        if !t.dark() {
+            v.text_options.color_transfer_function = egui::epaint::FontColorTransferFunction::Gamma(0.9);
+        }
     }
     ctx.set_visuals(v);
     ctx.global_style_mut(|s| {

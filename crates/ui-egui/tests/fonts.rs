@@ -282,3 +282,37 @@ fn primary_ui_fonts_cover_latin_and_cyrillic_catalogs() {
         }
     }
 }
+
+/// Width of `text` laid out once in the proportional family at `size` points.
+fn width_at(fonts: &mut Fonts, text: &str, size: f32) -> f32 {
+    let mut view = fonts.with_pixels_per_point(2.0);
+    view.layout_no_wrap(text.to_owned(), FontId::new(size, FontFamily::Proportional), Color32::BLACK).size().x
+}
+
+/// The system interface font on macOS (SF Pro, a variable face with an `opsz` axis and a `trak`
+/// table): the patched epaint follows the optical size and applies the tracking as CoreText does,
+/// so text twice as large is not twice as wide (the display cut and the size's tracking are
+/// tighter). Without the patch the face stays at its default optical size with no tracking and the
+/// width scales exactly.
+#[test]
+fn system_ui_font_follows_the_optical_size_and_tracking() {
+    let defs = theme::installed_font_definitions_with(theme::CjkPreference::Default, &theme::UiFont::System);
+    if !defs.font_data.contains_key("ui-system-0") {
+        eprintln!("skipping system_ui_font_follows_the_optical_size_and_tracking: no system interface font here");
+        return;
+    }
+    let mut fonts = Fonts::new(TextOptions::default(), defs);
+    let text = "An open-source PDF workbench";
+    let ratio = width_at(&mut fonts, text, 26.0) / width_at(&mut fonts, text, 13.0);
+    // Measured: 1.855 with SF Pro on macOS 27.
+    assert!(ratio < 1.98, "26 pt is {ratio:.3}× as wide as 13 pt");
+}
+
+/// A font file that can't be read leaves the standard faces in place.
+#[test]
+fn an_unreadable_font_file_falls_back_to_the_standard_faces() {
+    let missing = theme::UiFont::File("/definitely/not/a/font.ttf".into());
+    let defs = theme::installed_font_definitions_with(theme::CjkPreference::Default, &missing);
+    assert!(!defs.font_data.keys().any(|k| k.starts_with("ui-file")));
+    assert_eq!(defs.families[&FontFamily::Proportional].first().map(String::as_str), Some("Inter"));
+}

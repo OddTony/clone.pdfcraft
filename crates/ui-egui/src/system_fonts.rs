@@ -79,6 +79,103 @@ pub fn devanagari_fallback() -> Option<Arc<FontData>> {
         .clone()
 }
 
+/// Variation coordinates for a face (`wght`, …).
+type Coords = Vec<(&'static [u8; 4], f32)>;
+/// A font file read whole and the face in it that draws Latin letters.
+type WholeFont = Option<(&'static [u8], u32)>;
+
+/// One face of the chosen interface font and the embedded face it goes in front of.
+pub struct UiFace {
+    /// The embedded face it precedes in every stack (`Inter`, `Inter-Medium`, …).
+    pub embedded: &'static str,
+    /// Its key in the font definitions.
+    pub name: String,
+    pub data: Arc<FontData>,
+}
+
+/// The faces of the interface font chosen in Preferences ▸ Appearance: none for Standard; the
+/// system's faces at the weights its own apps use; or a file's (its regular, medium and semibold
+/// weights when it is variable). Hinting is off for them, as in CoreText and DirectWrite's
+/// natural mode. A file that can't be read gives none, and the embedded faces draw.
+pub fn ui_faces(font: &crate::theme::UiFont) -> Vec<UiFace> {
+    use crate::theme::UiFont;
+    if std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0") {
+        return Vec::new();
+    }
+    let weights: [(&'static str, f32); 3] = [("Inter", 400.0), ("Inter-Medium", 510.0), ("Inter-SemiBold", 590.0)];
+    let face = |embedded: &'static str, name: String, bytes: &'static [u8], index: u32, coords: &[(&'static [u8; 4], f32)]| {
+        let mut data = FontData::from_static(bytes);
+        data.index = index;
+        data.tweak.coords = egui::epaint::text::VariationCoords::new(coords.iter().copied());
+        data.tweak.hinting = Some(false);
+        UiFace { embedded, name, data: Arc::new(data) }
+    };
+    let mut out = Vec::new();
+    match font {
+        UiFont::Standard => {}
+        UiFont::System => {
+            let (sans, mono): (Vec<PathBuf>, Vec<(PathBuf, Coords)>) = if cfg!(target_os = "macos") {
+                (
+                    vec![PathBuf::from("/System/Library/Fonts/SFNS.ttf")],
+                    vec![(PathBuf::from("/System/Library/Fonts/SFNSMono.ttf"), vec![(b"wght", 400.0), (b"YAXS", 324.334)])],
+                )
+            } else if cfg!(windows) {
+                (
+                    vec![windows_fonts().join("SegUIVar.ttf")],
+                    vec![(windows_fonts().join("CascadiaMono.ttf"), vec![(b"wght", 400.0)]), (windows_fonts().join("consola.ttf"), Vec::new())],
+                )
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            // Segoe UI's own medium and semibold are 500 and 600.
+            let weights: [(&'static str, f32); 3] =
+                if cfg!(windows) { [("Inter", 400.0), ("Inter-Medium", 500.0), ("Inter-SemiBold", 600.0)] } else { weights };
+            if let Some((bytes, index)) = sans.iter().find_map(|p| read_whole(p)) {
+                for (i, (embedded, wght)) in weights.into_iter().enumerate() {
+                    out.push(face(embedded, format!("ui-system-{i}"), bytes, index, &[(b"wght", wght)]));
+                }
+            }
+            if let Some(((bytes, index), coords)) = mono.iter().find_map(|(p, c)| read_whole(p).map(|f| (f, c))) {
+                out.push(face("JetBrainsMono", "ui-system-mono".to_owned(), bytes, index, coords));
+            }
+        }
+        UiFont::File(path) => {
+            if let Some((bytes, index)) = read_whole(Path::new(path)) {
+                for (i, (embedded, wght)) in weights.into_iter().enumerate() {
+                    // A static face ignores the weight; a variable one draws each weight.
+                    out.push(face(embedded, format!("ui-file-{i}"), bytes, index, &[(b"wght", wght)]));
+                }
+            } else {
+                log::warn!("interface font {path} couldn't be read; using the standard one");
+            }
+        }
+    }
+    out
+}
+
+/// A whole font file and the first of its faces that draws Latin letters, read once per run and
+/// shared by every weight that uses it. `None` when it can't be read or isn't a font.
+fn read_whole(path: &Path) -> WholeFont {
+    static READ: OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, WholeFont>>> = OnceLock::new();
+    let mut read = READ.get_or_init(Default::default).lock().ok()?;
+    if let Some(known) = read.get(path) {
+        return *known;
+    }
+    let loaded = (|| {
+        let meta = std::fs::metadata(path).ok()?;
+        if !meta.is_file() || meta.len() > MAX_BYTES {
+            return None;
+        }
+        let bytes = std::fs::read(path).ok()?;
+        let index = face_with(&bytes, 'a')?;
+        log::info!("interface font: {}", path.display());
+        // Kept for the rest of the run: egui borrows font bytes for 'static.
+        Some((&*Box::leak(bytes.into_boxed_slice()), index))
+    })();
+    read.insert(path.to_path_buf(), loaded);
+    loaded
+}
+
 /// Well-known locations of Devanagari (Hindi) faces, best first.
 fn devanagari_candidates() -> Vec<PathBuf> {
     if cfg!(windows) {

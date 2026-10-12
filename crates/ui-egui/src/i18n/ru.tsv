@@ -2251,3 +2251,10 @@ animation effects	Off	Выкл
 	The linked PDF opened, but its named destination was not applied.	Связанный PDF открыт, но его именованное назначение не применено.
 	The linked PDF opened, but its page destination was out of range.	Связанный PDF открыт, но страница назначения вне допустимого диапазона.
 	Local cross-PDF links require the desktop app	Локальные ссылки между PDF работают только в настольном приложении
+	Interface font	Шрифт интерфейса
+	Standard (Inter)	Стандартный (Inter)
+	System font	Системный шрифт
+	Font file	Файл шрифта
+	Text rendering	Отрисовка текста
+	Standard	Стандартная
+	Like macOS (fuller strokes, sub-pixel placement)	Как в macOS (более плотные штрихи, субпиксельное размещение)

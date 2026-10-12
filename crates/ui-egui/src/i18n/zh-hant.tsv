@@ -2212,3 +2212,10 @@ animation effects	Off	關
 	The linked PDF opened, but its page destination was out of range.	已開啟連結的 PDF，但其頁面目的地超出範圍。
 	Local cross-PDF links require the desktop app	PDF 之間的本機連結需要桌面應用程式
 	The existing action will be preserved.	將保留現有動作。
+	Interface font	介面字型
+	Standard (Inter)	標準 (Inter)
+	System font	系統字型
+	Font file	字型檔案
+	Text rendering	文字轉譯
+	Standard	標準
+	Like macOS (fuller strokes, sub-pixel placement)	與 macOS 相同（筆畫更飽滿，次像素定位）
