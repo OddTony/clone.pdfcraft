@@ -450,6 +450,9 @@
 	Diamond	Rombas
 	Digital ID	Skaitmeninis ID
 	Digital ID password	Skaitmeninio ID slaptažodis
+	PKCS #11 token  ·  	PKCS #11 raktas  ·  
+	Token PIN	Rakto PIN
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	Nepavyko gauti „PKCS #11“ raktuose esančių skaitmeninių ID sąrašo: {e}
 	Direction:	Kryptis:
 	Discard	Atmesti
 	Discard Objects	Pašalinti objektus

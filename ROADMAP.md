@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~26% (ready for real work 49% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M9: PKCS #11 token and smart-card signing on Unix; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M13: CLI check visits each directory once through aliases and cycles; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M4: Extract and Split preserve shared Type 3 glyph resources; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M2: packed TIFF-predictor RGB rows retain their byte boundaries; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -442,3 +443,4 @@ Newest first: the date, what moved, and the new overall estimate.
 | 2026-10-05 | major | Honest assessment and "Where we're lacking" added |
 
 - **2026-10-12 (M8):** Redaction cleans indirect and form structure references, preserving surviving form tags.
+- **2026-10-13 (M9):** PKCS #11 token and smart-card signing on Unix (loaded at run time, PIN prompted per session); sign a PDF from a CV cryptovision, PIV/CAC or SoftHSM token and validate it.

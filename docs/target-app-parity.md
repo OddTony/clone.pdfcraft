@@ -1,5 +1,6 @@
 # PdfCraft parity with Adobe Acrobat Pro
 
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (PKCS #11 token signing on Unix; H and Hardware text updated, scores not re-judged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** web printing shipped, gap 4 closed, scores not re-judged; exclusive image-crop resize follow-up; minor (document-font subset completion, source styles and curved/shared image clips in the contributor fork; closed issues synced, scores not re-judged: #774, #756, #740, #759, #799–#821, #825, #844; earlier: readiness table with hours per audience; full number restated as the standard's additive weighted sum, 47% → 49%; earlier: second look: cross-cutting double count removed, mainstream-practitioner number added, core-workflow gate applied → alpha) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 The authoritative assessment of how close PdfCraft is to Acrobat Pro. [ROADMAP.md](../ROADMAP.md)
@@ -180,7 +181,7 @@ features total and are shown for orientation; the others add to it.
 | UI/UX fidelity | ≈ 55% | 10% | 30–60 | additional | Acrobat-style shell, All tools, Home, command palette; missing single-key accelerators, rulers/guides, multiple windows, popups; user reports #739, #744, #746, #789 (#759 and #844 fixed) | [ui-parity.md](ui-parity.md) |
 | File formats and conversion | ≈ 40% | 12% | 120–220 | within features | PDF read/write strong, encrypted output included (#774 fixed); export Word is layout-poor (#773); no Excel/PowerPoint export, no Office/HTML/PostScript import | [file-format-parity.md](file-format-parity.md) |
 | PDF specification and standards | ≈ 60% | 8% | 150–260 | within features | ISO 32000 syntax, encryption, annotations and AcroForm strong; rendering and fonts borrowed from `hayro`; PDF 2.0 extras, linearization, public-key security absent; PDF/A partial, PDF/X/UA none | [pdf-spec-parity.md](pdf-spec-parity.md) |
-| Hardware | ≈ 35% | 4% | 25–50 | additional | Page raster is CPU only (Acrobat has GPU rendering); Windows CNG and macOS Keychain keys sign, no PKCS #11; no scanners; web printing goes through the browser's print dialog as pictures, not vectors | [hardware-parity.md](hardware-parity.md) |
+| Hardware | ≈ 35% | 4% | 25–50 | additional | Page raster is CPU only (Acrobat has GPU rendering); Windows CNG, macOS Keychain and Unix PKCS #11 token keys sign; no scanners; web printing goes through the browser's print dialog as pictures, not vectors | [hardware-parity.md](hardware-parity.md) |
 | Localization | ≈ 59% over the 12 key languages | 5% | 35–60 | additional | 15 catalogs, 13 at 94–100%; Chinese UI shows tofu in releases (#826, #688); Arabic not mirrored; no Hindi, Indonesian, Korean, Vietnamese | [localization-parity.md](localization-parity.md) |
 | Performance | ≈ 40% | 6% | 25–45 | additional | 500-page smooth scrolling and large-file memory work (#307) done; no performance budgets (`misc.performance-budgets`), no lazy loading of GB files; blurry text at 1080p/1440p (#730) | [gaps.md](gaps.md) |
 | Stability | ≈ 50% | 8% | 45–80 | additional | Never-crash rules and nightly fuzzing; 245 open issues on 2026-10-10, many of them `fix(...)` reports of wrong results in shipped features (the #799–#821 batch is fixed) | [gaps.md](gaps.md) |
@@ -203,7 +204,7 @@ full parity in that area.
 | E Comments and review | 65 | 46 | 9 | 77.7% | 70% | 12–25 | Every markup type with appearances, replies, status, filters, stamps (custom, dynamic), XFDF/FDF, summaries, flatten, 2D measuring. Missing: rich-text runs, popup windows, summary layouts with pages, per-type hiding (XFDF fidelity fixes #807, #809, #819 shipped) |
 | F Forms and JavaScript | 79 | 58 | 8 | 78.5% | 65% | 40–75 | Fill and author every AcroForm field type, Acrobat's AF functions in Acrobat's event order, sandboxed JavaScript (boa), data exchange, Fill & Sign; XFA static/dynamic layout, FormCalc and XFA data (partial). Missing: wider JavaScript object model, document actions, submit, debugger, barcode fields, XFA flattening and full dynamic fidelity |
 | G Protect, redact, sanitize | 41 | 23 | 2 | 58.5% | 55% | 15–30 | Passwords and permissions, Remove security, redaction that removes glyphs, pixels, vectors, annotations and tags, with verification; word lists, patterns, FOIA/Privacy Act codes; sanitize. Missing: certificate security, pattern locales, custom code sets, partial-word redaction, folder redaction, protected view |
-| H Digital signatures | 45 | 23 | 10 | 62.2% | 45% | 40–70 | PAdES B-B signing and validation (PKCS #12, macOS Keychain, Windows store with PIN prompts), certification, encrypted documents, certificate usage checks; B-T, LTV, OCSP/CRL with caller-supplied evidence. Missing: PKCS #11 and smart cards outside Windows, timestamp-server preferences, online revocation fetching, FieldMDP and field locking, OS trust store, EU Trusted Lists, compare signed version |
+| H Digital signatures | 45 | 23 | 10 | 62.2% | 45% | 40–70 | PAdES B-B signing and validation (PKCS #12, macOS Keychain, Windows store with PIN prompts, Unix PKCS #11 tokens), certification, encrypted documents, certificate usage checks; B-T, LTV, OCSP/CRL with caller-supplied evidence. Missing: timestamp-server preferences, online revocation fetching, FieldMDP and field locking, OS trust store, EU Trusted Lists, compare signed version |
 | I Scan and OCR | 26 | 5 | 2 | 23.1% | 15% | 40–75 | Searchable image (ocrs, Latin script without accents) on pages, ranges and many files. Missing: every other language (#744 Dutch; accents, CJK, Cyrillic, Arabic), editable-text output, deskew, rotation, despeckle, camera images beyond straightening (found or placed corners): orientation, clean-up, MRC compression, scanners |
 | J Create and export | 34 | 12 | 3 | 39.7% | 25% | 55–100 | Create from images, multipage TIFF, text, clipboard, blank, many files at once; export PNG/JPEG/TIFF, text, RTF; Word and HTML partial. Missing: Office/HTML/web/PostScript to PDF, Excel and PowerPoint export, Word layout fidelity (#773), SVG/XML/EPS/PS/JPEG 2000 export, accessible text |
 | K Optimize and standards | 58 | 15 | 10 | 34.5% | 20% | 65–115 | Reduce File Size and the Optimizer (images, discards, clean-up, space audit); PDF/A-2b/3b verify and convert (partial). Missing: Preflight (profiles, fixups, reports), PDF/A-1/4 and a/u levels, PDF/X, PDF/UA, PDF/E, PDF/VT, transparency flattening, font unembedding, monochrome JBIG2/CCITT |
@@ -252,7 +253,7 @@ stage set to pre-alpha; see the revision history.)
 | Printing on Windows and the web | 15–30 |
 | OCR in the major languages (accents, Cyrillic, CJK), deskew and rotation | 35–60 |
 | Export: Word that keeps layout; Excel and PowerPoint | 45–80 |
-| Signatures: timestamp servers, online revocation and LTV, PKCS #11, OS trust | 30–55 |
+| Signatures: timestamp servers, online revocation and LTV, OS trust | 30–55 |
 | PDF/A (all parts and levels), PDF/UA validation, a first Preflight | 45–80 |
 | Accessibility tagging: autotag, Tags panel, Reading Order | 35–60 |
 | Open-issue backlog, stability and performance budgets | 40–70 |
@@ -292,6 +293,7 @@ licensed OCR or AI model.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | PKCS #11 token signing on Unix (Hardware and H rows). Text only: scores, readiness and hours not re-judged |
 | 2026-10-12 | minor | Exclusive image crops resize with their pixels across nested states, intervening operators and content streams; shared clips remain fixed. Synthetic engine/tool regressions and private image save/reopen checks; estimates unchanged. |
 | 2026-10-11 | minor | Web printing shipped (gap 4): Hardware, Platforms and L Print text updated. Text only: scores, readiness and hours not re-judged |
 | 2026-10-11 | minor | Contributor fork: document-font selection and subset completion, CFF, style ranges, contextual/bidi save/reopen and all-page Chinese keyboard acceptance; curve/hole hit testing (shared clips stay fixed, as on main). Scope remains bounded; percentages unchanged |

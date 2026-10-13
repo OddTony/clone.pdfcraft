@@ -859,6 +859,9 @@ comment menu	Edit	సవరించు
 	Form fill-in and digital signatures	ఫారం నింపడం మరియు డిజిటల్ సంతకాలు
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	కీ macOS Keychainలో ఉంది; దాన్ని ఉపయోగించడానికి PdfCraftను అనుమతించమని Keychain అడగవచ్చు.
 	Digital ID password	డిజిటల్ ఐడీ పాస్‌వర్డ్
+	PKCS #11 token  ·  	PKCS #11 టోకెన్  ·  
+	Token PIN	టోకెన్ PIN
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	PKCS #11 టోకెన్ల డిజిటల్ IDలను జాబితా చేయలేకపోయాము: {e}
 	Back	వెనుకకు
 	Validate all	అన్నీ ధృవీకరించు
 	Sign this field…	ఈ ఫీల్డ్‌లో సంతకం చేయి…

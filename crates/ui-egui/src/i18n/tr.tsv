@@ -839,6 +839,9 @@
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	Anahtar macOS Anahtar Zinciri'ndedir ve PdfCraft'ın kullanmasına izin vermenizi isteyebilir.
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	Anahtar Windows sertifika deposundadır ve PdfCraft'ın kullanmasına izin vermenizi isteyebilir.
 	Digital ID password	Dijital kimlik parolası
+	PKCS #11 token  ·  	PKCS #11 jetonu  ·  
+	Token PIN	Jeton PIN'i
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	PKCS #11 jetonlarının dijital kimlikleri listelenemedi: {e}
 	Back	Geri
 	Validate all	Tümünü doğrula
 	Sign this field…	Bu alanı imzala…

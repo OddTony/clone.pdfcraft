@@ -516,6 +516,9 @@
 	Form fill-in and digital signatures	Preenchimento de formulário e assinaturas digitais
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	A chave está no Chaveiro do macOS, que pode solicitar permissão para o PdfCraft usá-la.
 	Digital ID password	Senha da ID digital
+	PKCS #11 token  ·  	token PKCS #11  ·  
+	Token PIN	PIN do token
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	Não foi possível listar os IDs digitais dos tokens PKCS #11: {e}
 	Back	Voltar
 	Validate all	Validar tudo
 	Sign this field…	Assinar este campo…

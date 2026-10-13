@@ -962,6 +962,9 @@ key	Space	Mezerník
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	Klíč je v Klíčence systému macOS, která se může zeptat, zda PdfCraftu povolit jeho použití.
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	Klíč je v úložišti certifikátů Windows, které se může zeptat, zda PdfCraftu povolit jeho použití.
 	Digital ID password	Heslo digitálního ID
+	PKCS #11 token  ·  	token PKCS #11  ·  
+	Token PIN	PIN tokenu
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	Digitální ID z tokenů PKCS #11 nelze vypsat: {e}
 	Back	Zpět
 	Validate all	Ověřit vše
 	Sign this field…	Podepsat toto pole…

@@ -859,6 +859,9 @@
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	A kulcs a macOS Kulcskarikában van, amely megkérdezheti, engedélyezed-e a PdfCraftnak a használatát.
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	A kulcs a Windows tanúsítványtárolójában van, amely megkérdezheti, engedélyezed-e a PdfCraftnak a használatát.
 	Digital ID password	A digitális azonosító jelszava
+	PKCS #11 token  ·  	PKCS #11 token  ·  
+	Token PIN	Token PIN
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	A PKCS #11 tokenek digitális azonosítóit nem sikerült listázni: {e}
 	Back	Vissza
 	Validate all	Összes ellenőrzése
 	Sign this field…	Mező aláírása…

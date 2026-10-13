@@ -489,6 +489,9 @@
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	Το κλειδί βρίσκεται στην Κλειδοθήκη του macOS, η οποία ενδέχεται να ζητήσει άδεια χρήσης από το PdfCraft.
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	Το κλειδί βρίσκεται στο χώρο αποθήκευσης πιστοποιητικών των Windows, ο οποίος ενδέχεται να ζητήσει άδεια χρήσης από το PdfCraft.
 	Digital ID password	Κωδικός πρόσβασης ψηφιακής ταυτότητας
+	PKCS #11 token  ·  	διακριτικό PKCS #11  ·  
+	Token PIN	PIN διακριτικού
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	Δεν ήταν δυνατή η ανάκτηση των ψηφιακών ταυτοτήτων από διακριτικά PKCS #11: {e}
 	Validate all	Επικύρωση όλων
 	Sign this field…	Υπογραφή αυτού του πεδίου…
 	Signature is valid:	Η υπογραφή είναι έγκυρη:

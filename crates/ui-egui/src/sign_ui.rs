@@ -241,6 +241,17 @@ fn windows_id(reference: &str) -> Result<DigitalId, String> {
     Err(format!("{reference}: Windows certificate store identities are only available on Windows"))
 }
 
+/// A PKCS #11 token identity by its `pkcs11:` reference, signing with the token `pin`.
+fn pkcs11_id(reference: &str, pin: &str) -> Result<DigitalId, String> {
+    #[cfg(all(unix, not(target_arch = "wasm32")))]
+    return {
+        sign::pkcs11::set_pin(reference, pin);
+        sign::pkcs11::find(reference).map_err(|e| e.to_string())
+    };
+    #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
+    Err(format!("{reference}: PKCS#11 identities are only available on Unix"))
+}
+
 pub fn entry_for(path: &str, c: &Certificate) -> DigitalIdEntry {
     DigitalIdEntry {
         path: path.to_string(),
@@ -257,6 +268,19 @@ pub fn entry_for(path: &str, c: &Certificate) -> DigitalIdEntry {
 fn entry_unusable(u: &sign::windows::Unusable) -> DigitalIdEntry {
     DigitalIdEntry {
         path: format!("windows:{}", u.fingerprint.split(' ').collect::<String>().to_ascii_lowercase()),
+        name: u.subject.clone(),
+        issuer: String::new(),
+        email: String::new(),
+        expires: String::new(),
+        unusable: Some(u.reason.clone()),
+    }
+}
+
+/// A greyed entry for a token certificate that can't sign, with the reason.
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+fn entry_unusable_pkcs11(u: &sign::pkcs11::Unusable) -> DigitalIdEntry {
+    DigitalIdEntry {
+        path: if u.reference.is_empty() { "pkcs11:".to_string() } else { u.reference.clone() },
         name: u.subject.clone(),
         issuer: String::new(),
         email: String::new(),
@@ -283,7 +307,7 @@ impl PdfCraftApp {
 
     /// List OS key store signing identities (after the file-based IDs).
     fn refresh_os_key_store_ids(&mut self) {
-        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:"));
+        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("pkcs11:"));
         #[cfg(target_os = "macos")]
         if self.os_key_store_ids {
             match sign::keychain::identities(None) {
@@ -316,6 +340,24 @@ impl PdfCraftApp {
                 Err(e) => self.notify_fmt("The Windows store's digital IDs couldn't be listed: {e}", &[("e", &e.to_string())]),
             }
         }
+        #[cfg(all(unix, not(target_arch = "wasm32")))]
+        if self.os_key_store_ids {
+            match sign::pkcs11::identities() {
+                Ok(listing) => {
+                    for identity in listing.ids {
+                        let mut entry = entry_for(&identity.reference, &identity.id.certificate);
+                        if let Some(name) = identity.id.friendly_name {
+                            entry.name = name;
+                        }
+                        self.digital_ids.push(entry);
+                    }
+                    for u in listing.unusable.iter().filter(|u| !u.no_private_key) {
+                        self.digital_ids.push(entry_unusable_pkcs11(u));
+                    }
+                }
+                Err(e) => self.notify_fmt("The PKCS #11 tokens' digital IDs couldn't be listed: {e}", &[("e", &e.to_string())]),
+            }
+        }
     }
 
     /// Add a digital ID file to the list (or select it if it's there).
@@ -329,10 +371,15 @@ impl PdfCraftApp {
     }
 
     /// Take the digital ID file at `index` off the list (issue #1396). The file itself stays on
-    /// disk. Keychain and Windows store IDs belong to the OS and are listed again on every
-    /// signing, so they can't be removed here. The open dialog's selection follows the list.
+    /// disk. Keychain, Windows store and PKCS #11 token IDs belong to the OS or hardware and are
+    /// listed again on every signing, so they can't be removed here. The open dialog's selection
+    /// follows the list.
     pub fn remove_digital_id(&mut self, index: usize) -> bool {
-        if self.digital_ids.get(index).is_none_or(|e| e.path.starts_with("keychain:") || e.path.starts_with("windows:")) {
+        if self
+            .digital_ids
+            .get(index)
+            .is_none_or(|e| e.path.starts_with("keychain:") || e.path.starts_with("windows:") || e.path.starts_with("pkcs11:"))
+        {
             return false;
         }
         self.digital_ids.remove(index);
@@ -412,6 +459,8 @@ impl PdfCraftApp {
             keychain_id(&entry.path)?
         } else if entry.path.starts_with("windows:") {
             windows_id(&entry.path)?
+        } else if entry.path.starts_with("pkcs11:") {
+            pkcs11_id(&entry.path, &d.password)?
         } else {
             let bytes = std::fs::read(&entry.path).map_err(|e| format!("{}: {e}", entry.path))?;
             sign::pkcs12::open(&bytes, &d.password).map_err(|e| match e {
@@ -621,6 +670,8 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 tl!("Keychain  ·  ").to_string()
             } else if e.path.starts_with("windows:") {
                 tl!("Windows store  ·  ").to_string()
+            } else if e.path.starts_with("pkcs11:") {
+                tl!("PKCS #11 token  ·  ").to_string()
             } else {
                 String::new()
             };
@@ -670,7 +721,9 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         });
         ui.add_space(10.0);
     }
-    let removable = d.selected.filter(|&i| ids.get(i).is_some_and(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:")));
+    let removable = d.selected.filter(|&i| {
+        ids.get(i).is_some_and(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("pkcs11:"))
+    });
     ui.horizontal(|ui| {
         if widgets::pill_button(ui, tl!("Configure New Digital ID"), false).clicked() {
             d.step = SignStep::Configure;
@@ -949,7 +1002,10 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 .color(t.text_muted),
             );
         } else {
-            let l = ui.label(tl!("Digital ID password"));
+            // A token asks for its PIN (it can't be read or cached), like a .p12 asks for its
+            // password; a token with a keypad can leave it empty.
+            let label = if entry.path.starts_with("pkcs11:") { "Token PIN" } else { "Digital ID password" };
+            let l = ui.label(tl!(label));
             let r = ui.add(crate::widgets::line(&mut d.password).password(true).desired_width(200.0)).labelled_by(l.id);
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 go = true;

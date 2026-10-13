@@ -889,6 +889,9 @@
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	鍵は macOS のキーチェーンに保存されています。PdfCraft に使用を許可するか確認される場合があります。
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	鍵は Windows の証明書ストアに保存されています。PdfCraft に使用を許可するか確認される場合があります。
 	Digital ID password	デジタル ID のパスワード
+	PKCS #11 token  ·  	PKCS #11 トークン  ·  
+	Token PIN	トークンの PIN
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	PKCS #11 トークンのデジタル ID の一覧を取得できませんでした：{e}
 	Back	戻る
 	Validate all	すべて検証
 	Sign this field…	このフィールドに署名…
