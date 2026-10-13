@@ -847,6 +847,7 @@
 	, Expires: 	, Wygasa: 
 	No digital IDs yet.	Brak identyfikatorów cyfrowych.
 	Configure New Digital ID	Skonfiguruj nowy identyfikator cyfrowy
+	Remove "{name}" from this list? The file itself is not deleted.	Usunąć „{name}” z tej listy? Sam plik nie zostanie usunięty.
 	Continue	Kontynuuj
 	Configure a Digital ID for Signing	Skonfiguruj identyfikator cyfrowy do podpisywania
 	Use a Digital ID from a file	Użyj identyfikatora cyfrowego z pliku
@@ -2329,3 +2330,16 @@ animation effects	Off	Wyłączone
 	Preparing read-aloud text…	Przygotowywanie tekstu do czytania…
 	Read out loud requires Windows, macOS or Linux.	Czytanie na głos wymaga obecnie systemu Windows / macOS / Linux.
 	Scanned pages need OCR. Reading order follows extracted page text.	Zeskanowane strony wymagają OCR. Kolejność czytania odpowiada tekstowi wyodrębnionemu ze strony.
+	Minimize	Zminimalizuj
+	Maximize	Zmaksymalizuj
+	Restore	Przywróć
+	Use system title bar	Używaj systemowego paska tytułu
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Pokazuj prosty pasek tytułu z przyciskami okna zamiast paska kart. GNOME nie rysuje pasków tytułu dla aplikacji, więc ten nie pasuje do jego motywu.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	Zezwól
+	Only allow this if you trust the source document.	Zezwól na to tylko wtedy, gdy ufasz dokumentowi źródłowemu.
+	Open this local PDF?	Otworzyć ten lokalny plik PDF?
+	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
+	Move tag earlier	Przenieś znacznik wcześniej
+	Move tag later	Przenieś znacznik później

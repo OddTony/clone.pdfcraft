@@ -826,6 +826,7 @@
 	, Expires: 	, lejár: 
 	No digital IDs yet.	Még nincs digitális azonosító.
 	Configure New Digital ID	Új digitális azonosító beállítása
+	Remove "{name}" from this list? The file itself is not deleted.	Eltávolítja a(z) „{name}” elemet erről a listáról? Maga a fájl nem törlődik.
 	Continue	Tovább
 	Configure a Digital ID for Signing	Digitális azonosító beállítása aláíráshoz
 	Use a Digital ID from a file	Digitális azonosító használata fájlból
@@ -2348,3 +2349,16 @@ animation effects	Off	Ki
 	Preparing read-aloud text…	A felolvasandó szöveg előkészítése…
 	Read out loud requires Windows, macOS or Linux.	A felolvasáshoz jelenleg Windows / macOS / Linux szükséges.
 	Scanned pages need OCR. Reading order follows extracted page text.	A szkennelt oldalakhoz OCR szükséges. Az olvasási sorrend az oldal kinyert szövegét követi.
+	Minimize	Minimalizálás
+	Maximize	Maximalizálás
+	Restore	Visszaállítás
+	Use system title bar	Rendszer címsorának használata
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Egyszerű címsor megjelenítése az ablakgombokkal a lapsáv helyett. A GNOME nem rajzol címsort az alkalmazásoknak, ezért ez nem követi a témáját.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	Engedélyezés
+	Only allow this if you trust the source document.	Csak akkor engedélyezze ezt, ha megbízik a forrásdokumentumban.
+	Open this local PDF?	Megnyitja ezt a helyi PDF-fájlt?
+	This document is trying to open a local file:	Ez a dokumentum egy helyi fájlt próbál megnyitni:
+	Move tag earlier	Címke korábbra helyezése
+	Move tag later	Címke későbbre helyezése

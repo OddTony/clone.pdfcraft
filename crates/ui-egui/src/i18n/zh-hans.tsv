@@ -537,6 +537,7 @@
 	, Expires: 	，有效期至：
 	No digital IDs yet.	尚无数字 ID。
 	Configure New Digital ID	配置新数字 ID
+	Remove "{name}" from this list? The file itself is not deleted.	从此列表中移除“{name}”？文件本身不会被删除。
 	Continue	继续
 	Configure a Digital ID for Signing	配置用于签名的数字 ID
 	Use a Digital ID from a file	使用文件中的数字 ID
@@ -2313,3 +2314,16 @@ animation effects	Off	关
 	Preparing read-aloud text…	正在准备朗读文本…
 	Read out loud requires Windows, macOS or Linux.	朗读功能目前需要Windows / macOS / Linux。
 	Scanned pages need OCR. Reading order follows extracted page text.	扫描页面需要OCR。朗读顺序遵循从页面提取的文本。
+	Minimize	最小化
+	Maximize	最大化
+	Restore	还原
+	Use system title bar	使用系统标题栏
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	用简单的标题栏显示窗口按钮，而不是在标签栏中。GNOME 不为应用绘制标题栏，因此此标题栏不会跟随其主题。
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	允许
+	Only allow this if you trust the source document.	仅在您信任源文档时才允许此操作。
+	Open this local PDF?	是否打开此本地 PDF？
+	This document is trying to open a local file:	此文档正尝试打开本地文件：
+	Move tag earlier	将标签前移
+	Move tag later	将标签后移

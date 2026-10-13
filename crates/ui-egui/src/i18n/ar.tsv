@@ -855,6 +855,7 @@
 	, Expires: 	، تنتهي: 
 	No digital IDs yet.	لا توجد معرّفات رقمية بعد.
 	Configure New Digital ID	إعداد معرّف رقمي جديد
+	Remove "{name}" from this list? The file itself is not deleted.	إزالة "{name}" من هذه القائمة؟ لن يُحذف الملف نفسه.
 	Continue	متابعة
 	Configure a Digital ID for Signing	إعداد معرّف رقمي للتوقيع
 	Use a Digital ID from a file	استخدام معرّف رقمي من ملف
@@ -2370,3 +2371,16 @@ animation effects	Off	معطّلة
 	Preparing read-aloud text…	جارٍ إعداد النص للقراءة…
 	Read out loud requires Windows, macOS or Linux.	تتطلب القراءة بصوت عالٍ حاليًا Windows / macOS / Linux.
 	Scanned pages need OCR. Reading order follows extracted page text.	تحتاج الصفحات الممسوحة إلى OCR. يتبع ترتيب القراءة النص المستخرج من الصفحة.
+	Minimize	تصغير
+	Maximize	تكبير
+	Restore	استعادة
+	Use system title bar	استخدام شريط عنوان النظام
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	إظهار شريط عنوان بسيط لأزرار النافذة بدلًا من شريط الألسنة. لا يرسم GNOME أشرطة العناوين للتطبيقات، لذلك لا يتبع هذا الشريط سمته.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	السماح
+	Only allow this if you trust the source document.	لا تسمح بذلك إلا إذا كنت تثق بالمستند المصدر.
+	Open this local PDF?	هل تريد فتح ملف PDF المحلي هذا؟
+	This document is trying to open a local file:	يحاول هذا المستند فتح ملف محلي:
+	Move tag earlier	نقل العلامة للأعلى
+	Move tag later	نقل العلامة للأسفل

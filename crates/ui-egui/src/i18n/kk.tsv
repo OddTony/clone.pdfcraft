@@ -811,6 +811,7 @@
 	, Expires: 	, Жарамдылық мерзімі: 
 	No digital IDs yet.	Әзірге цифрлық ID жоқ.
 	Configure New Digital ID	Жаңа цифрлық ID теңшеу
+	Remove "{name}" from this list? The file itself is not deleted.	«{name}» осы тізімнен алып тасталсын ба? Файлдың өзі жойылмайды.
 	Continue	Жалғастыру
 	Configure a Digital ID for Signing	Қол қоюға арналған цифрлық ID теңшеу
 	Use a Digital ID from a file	Файлдағы цифрлық ID-ді пайдалану
@@ -2347,3 +2348,16 @@ animation effects	Off	Өшірулі
 	Preparing read-aloud text…	Оқылатын мәтін дайындалуда…
 	Read out loud requires Windows, macOS or Linux.	Дауыстап оқу үшін әзірге Windows / macOS / Linux қажет.
 	Scanned pages need OCR. Reading order follows extracted page text.	Сканерленген беттерге OCR қажет. Оқу реті беттен алынған мәтінге сәйкес келеді.
+	Minimize	Жию
+	Maximize	Жаю
+	Restore	Қалпына келтіру
+	Use system title bar	Жүйелік тақырып жолағын пайдалану
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Терезе батырмалары үшін қойындылар жолағының орнына қарапайым тақырып жолағын көрсету. GNOME қолданбаларға тақырып жолағын салмайды, сондықтан бұл жолақ оның тақырыбына сәйкес келмейді.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	Рұқсат беру
+	Only allow this if you trust the source document.	Бастапқы құжатқа сенсеңіз ғана рұқсат беріңіз.
+	Open this local PDF?	Осы жергілікті PDF файлын ашу керек пе?
+	This document is trying to open a local file:	Бұл құжат жергілікті файлды ашуға әрекеттеніп жатыр:
+	Move tag earlier	Тегті ертерек жылжыту
+	Move tag later	Тегті кейінірек жылжыту
