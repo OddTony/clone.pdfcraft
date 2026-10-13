@@ -364,3 +364,45 @@ fn a_radio_buttons_chained_actions_all_run() {
     assert_eq!(value(h, "scan"), ["No"]);
     assert!(!hidden(h, "photo") && hidden(h, "caption"));
 }
+
+/// Pixels in `r` darker than near-white.
+fn ink(img: &image::RgbaImage, r: egui::Rect) -> usize {
+    let (x0, y0) = (r.min.x.max(0.0) as u32, r.min.y.max(0.0) as u32);
+    let (x1, y1) = ((r.max.x as u32).min(img.width()), (r.max.y as u32).min(img.height()));
+    (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|(x, y)| img.get_pixel(*x, *y).0[..3].iter().any(|c| *c < 235)).count()
+}
+
+#[test]
+fn a_chosen_picture_shows_on_screen_at_once() {
+    let h = &mut shell(pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (photo) /F 4 /Rect [20 150 280 320] /P 3 0 R /A << /S /JavaScript /JS (event.target.buttonImportIcon();) >> >>",
+    ]));
+    let dir = std::env::temp_dir().join(format!("pdfcraft-picture-shows-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let picture = dir.join("photo.png");
+    std::fs::write(&picture, png()).unwrap();
+    let inside = {
+        let s = h.state();
+        let doc = s.session.get(s.views[0].id).unwrap();
+        let f = doc.form.iter().find(|f| f.name == "photo").unwrap();
+        pdfcraft_ui_egui::forms_ui::field_screen_rect(&s.views[0], &doc.info, f, 0).unwrap().shrink(20.0)
+    };
+    let before = ink(&h.render().unwrap(), inside);
+    h.state_mut().pick_override = Some(vec![picture.to_string_lossy().into_owned()]);
+    click_widget(h, "photo", 0);
+    h.hover_at(egui::pos2(2.0, 2.0));
+    let mut after = 0;
+    for _ in 0..100 {
+        h.run_steps(2);
+        after = ink(&h.render().unwrap(), inside);
+        if after > before + 1000 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(after > before + 1000, "the picture is drawn in the field ({before} -> {after} inked pixels)");
+}

@@ -110,6 +110,13 @@ impl PdfCraftApp {
                             }
                         }
                     }
+                    // A picture or appearance change redraws the field without changing what the form
+                    // model compares, so its pages are redrawn whatever the comparison found.
+                    if let Some(name) = appearance_field(&edit) {
+                        for f in doc.form.iter().filter(|f| f.name == name) {
+                            changed_pages.extend(f.widgets.iter().filter_map(|w| w.page));
+                        }
+                    }
                     for page in changed_pages {
                         view.page_changed(page);
                     }
@@ -950,6 +957,15 @@ fn comment_page(edit: &Edit) -> Option<usize> {
 }
 
 /// Whether `edit` is a form-related modification.
+/// The field whose appearance `edit` may change without changing its form data (a button's
+/// picture, Field Properties ▸ Appearance).
+fn appearance_field(edit: &Edit) -> Option<&str> {
+    match edit {
+        Edit::SetFieldImage { name, .. } | Edit::SetFieldProps { name, .. } => Some(name),
+        _ => None,
+    }
+}
+
 fn is_form_edit(edit: &Edit) -> bool {
     matches!(
         edit,
