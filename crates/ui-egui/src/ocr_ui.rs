@@ -187,6 +187,9 @@ pub struct BatchProgress {
 pub struct OcrRun {
     pub doc: DocId,
     pub progress: Arc<Mutex<OcrProgress>>,
+    /// What the document looked like when the job started: a result is applied only while it
+    /// still does (the dialog closes on Go, so the user can edit, or redact, while this runs).
+    pub guard: pdfcraft_engine::ocr::OcrGuard,
 }
 
 /// The Tesseract probe runs in the background (the interface never waits on a process): while
@@ -334,6 +337,7 @@ impl PdfCraftApp {
         };
         let settings = d.settings();
         let Some(job) = self.session.ocr_job(id, &pages, settings.clone()) else { return };
+        let guard = job.guard.clone();
         let progress = Arc::new(Mutex::new(OcrProgress { total: job.pages.len(), ..Default::default() }));
         let p = progress.clone();
         let work = move || {
@@ -357,7 +361,7 @@ impl PdfCraftApp {
         }
         #[cfg(target_arch = "wasm32")]
         work();
-        self.ocr_run = Some(OcrRun { doc: id, progress });
+        self.ocr_run = Some(OcrRun { doc: id, progress, guard });
         self.poll_ocr();
     }
 
@@ -507,7 +511,7 @@ impl PdfCraftApp {
             }
         }
         let Some(run) = self.ocr_run.as_ref() else { return };
-        let (doc, progress) = (run.doc, run.progress.clone());
+        let (doc, progress, guard) = (run.doc, run.progress.clone(), run.guard.clone());
         let Ok(mut s) = progress.lock() else { return };
         let Some(result) = s.result.take() else {
             let msg = crate::i18n::fmt(
@@ -534,7 +538,7 @@ impl PdfCraftApp {
         };
         let read = found.iter().filter(|p| p.skipped.is_none()).count();
         let skipped = found.len() - read;
-        match self.session.apply_ocr(doc, &found) {
+        match self.session.apply_ocr_checked(doc, &found, &guard) {
             Ok(words) => {
                 if let Some(info) = self.session.get(doc).map(|d| d.info.clone())
                     && let Some(view) = self.views.iter_mut().find(|v| v.id == doc)
@@ -806,5 +810,39 @@ mod tests {
         assert!(toast.contains("a.pdf"), "the colliding names are in the error: {toast}");
         assert_eq!(app.ocr_draft.output_folder.as_deref(), Some(dir.to_string_lossy().as_ref()), "the folder stays remembered for the next batch");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A result that arrives after the document changed (here: a page turned while the worker was
+    /// reading; the same applies to a redaction applied meanwhile) is refused with the reason and
+    /// writes nothing, so words read before a redaction cannot come back as invisible text.
+    #[test]
+    fn a_result_that_arrives_after_the_document_changed_is_refused() {
+        let mut app = PdfCraftApp::new();
+        let pdf = pdfcraft_engine::Session::new().create_from_text("t", "Typed text").expect("fixture");
+        app.open_bytes("a.pdf", None, pdf.to_vec()).expect("opens");
+        let id = app.active_ids().expect("a document").1;
+        let guard = app.session.ocr_guard(id).expect("a guard");
+        app.session.apply(id, pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 }).expect("an edit while the worker runs");
+        let after_edit = app.session.get(id).and_then(|d| d.can_undo().map(str::to_owned));
+        let word = pdfcraft_engine::ocr::PlacedWord {
+            text: "123-45-6789".into(),
+            origin: [40.0, 40.0],
+            across: [50.0, 0.0],
+            up: [0.0, 12.0],
+            confidence: Some(95.0),
+            source: "fake".into(),
+        };
+        let page = OcrPage { page: 0, words: vec![word], already_on_page: 0, skipped: None, notes: Vec::new() };
+        let progress = Arc::new(Mutex::new(OcrProgress { total: 1, done: 1, result: Some(Ok(vec![page])), cancel: false }));
+        app.ocr_run = Some(OcrRun { doc: id, progress, guard });
+        app.poll_ocr();
+        assert!(app.ocr_run.is_none(), "the run is over");
+        let toast = app.toast.clone().map(|t| t.0).unwrap_or_default();
+        assert!(toast.contains("changed since recognition started"), "{toast}");
+        assert_eq!(
+            app.session.get(id).and_then(|d| d.can_undo().map(str::to_owned)),
+            after_edit,
+            "nothing was written: the last undoable step is still the edit"
+        );
     }
 }
