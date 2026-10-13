@@ -58,6 +58,15 @@ jobs:
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
+      - name: Debug - inspect generated project for Sample.pdf resource
+        working-directory: ios
+        run: |
+          set -x
+          ls -la Resources/
+          echo "--- PBXFileReference for Sample.pdf ---"
+          grep -n "Sample.pdf" ArtiPDF.xcodeproj/project.pbxproj || echo "NOT FOUND in pbxproj"
+          echo "--- PBXResourcesBuildPhase section ---"
+          awk '/Begin PBXResourcesBuildPhase/,/End PBXResourcesBuildPhase/' ArtiPDF.xcodeproj/project.pbxproj || echo "NO RESOURCES PHASE SECTION"
       - name: Select simulator destination
         id: destination
         run: |
