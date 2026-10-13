@@ -2374,7 +2374,7 @@ licence_file = "LICENSE-MIT"
 kind = "data"
 adobe_data = true
 usage = "Advance widths for the fourteen standard fonts, which a PDF may name without embedding. Non-visual data, not a typeface: the item AGENTS.md 1.1 permits, held first-party so generated appearance streams and the renderer agree."
-sha256 = "4ce47db7e65467d4ea1d1642ff76dfcaeb9669c1811a93819d7e00e63fa9fcf8"
+sha256 = "d7c210cc2f8b83876830711fbb4ddce4192b4c389216837d6e3ec66e9d00c414"
 
 [[bundled]]
 crate = "epaint_default_fonts"

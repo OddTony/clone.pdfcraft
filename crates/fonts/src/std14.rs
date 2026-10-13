@@ -94,6 +94,13 @@ impl Std14 {
         crate::win_ansi(text).iter().map(|&c| self.width(c)).sum::<f64>() * size / 1000.0
     }
 
+    /// The advance of `c` in thousandths of an em when it is one of the [`EXTRA_LATIN`] letters,
+    /// which have no WinAnsi code. `None` for any other character, and for Symbol and ZapfDingbats.
+    pub fn extra_latin_width(self, c: char) -> Option<f64> {
+        let (_, _, widths) = EXTRA_LATIN.iter().find(|(e, _, _)| *e == c)?;
+        widths.get(self as usize).map(|w| f64::from(*w))
+    }
+
     /// Courier is the only fixed-pitch family of the fourteen.
     pub fn is_fixed_pitch(self) -> bool {
         matches!(self, Self::Courier | Self::CourierBold | Self::CourierOblique | Self::CourierBoldOblique)
@@ -120,6 +127,21 @@ static BASE_FONTS: [&str; 14] = [
     "Courier-BoldOblique",
     "Symbol",
     "ZapfDingbats",
+];
+
+/// Letters outside WinAnsiEncoding that every one of the twelve text fonts has a glyph for (the
+/// Core14 AFMs cover all of Latin Extended-A), with their glyph names and advance widths, one per
+/// text font in [`Std14`] declaration order. Text with them is written with a `/Differences`
+/// encoding over WinAnsi ([`crate::LatinEncoding`]). Today: the Turkish letters.
+#[rustfmt::skip]
+pub(crate) static EXTRA_LATIN: [(char, &str, [u16; 12]); 6] = [
+    //                         Helvetica (4 styles)  Times-Roman, -Bold, -Italic, -BoldItalic  Courier (4 styles)
+    ('\u{11E}', "Gbreve",     [778, 778, 778, 778,  722, 778, 722, 722,  600, 600, 600, 600]),
+    ('\u{11F}', "gbreve",     [556, 611, 556, 611,  500, 500, 500, 500,  600, 600, 600, 600]),
+    ('\u{130}', "Idotaccent", [278, 278, 278, 278,  333, 389, 333, 389,  600, 600, 600, 600]),
+    ('\u{131}', "dotlessi",   [278, 278, 278, 278,  278, 278, 278, 278,  600, 600, 600, 600]),
+    ('\u{15E}', "Scedilla",   [667, 667, 667, 667,  556, 556, 500, 556,  600, 600, 600, 600]),
+    ('\u{15F}', "scedilla",   [500, 556, 500, 556,  389, 389, 389, 389,  600, 600, 600, 600]),
 ];
 
 /// Advance widths by code, one row per [`Std14`] variant in declaration order.

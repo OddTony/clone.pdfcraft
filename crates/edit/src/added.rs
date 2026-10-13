@@ -11,7 +11,9 @@
 use std::collections::{HashMap, HashSet};
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};
-use pdfcraft_fonts::{GlyphError, GlyphOutline, ShapedCluster, ShapedScript, Std14, literal, shape_arabic, shape_thai, shaped_glyph, win_ansi};
+use pdfcraft_fonts::{
+    GlyphError, GlyphOutline, LatinEncoding, ShapedCluster, ShapedScript, Std14, literal, shape_arabic, shape_thai, shaped_glyph, win_ansi,
+};
 use unicode_bidi::{Level, ParagraphBidiInfo};
 
 use crate::{EditError, MarkKind, check, contents, n, page_list, place_tagged};
@@ -69,8 +71,15 @@ impl Family {
     ///
     /// `italic` matters: the item is written out as the oblique/italic face (see [`Family::base_font`]),
     /// whose published widths differ from the upright face (Times-Italic `A` is 611, Times-Roman 722).
+    ///
+    /// Letters WinAnsi lacks that the item's font is given ([`LatinEncoding`], Turkish `ı`) are
+    /// measured as their own glyphs.
     pub fn width(self, s: &str, size: f64, bold: bool, italic: bool) -> f64 {
-        self.std14(bold, italic).text_width(s, size)
+        let font = self.std14(bold, italic);
+        match LatinEncoding::new([s]) {
+            Ok(enc) => enc.text_width(font, s, size),
+            Err(_) => font.text_width(s, size),
+        }
     }
 
     /// The standard-14 face this family means at the given style.
@@ -330,8 +339,9 @@ pub fn first_undrawable(t: &AddedText) -> Option<char> {
     }
     if pdfcraft_fonts::document_arabic_font().is_none() || !t.text.chars().any(is_arabic) {
         // Drawn line by line in the item's standard font (`\n` splits lines). Without the face
-        // that is also how `draw` redraws an existing item, so it's checked that way.
-        return t.text.split('\n').find_map(pdfcraft_fonts::first_non_win_ansi);
+        // that is also how `draw` redraws an existing item, so it's checked that way. The font
+        // draws WinAnsi and the letters `LatinEncoding` adds to it (Turkish ı İ ğ Ğ ş Ş).
+        return LatinEncoding::new(t.text.split('\n')).err();
     }
     // What `shaped_layout` leaves to the standard font, exactly as `draw_shaped` splits it.
     wrapped(t).into_iter().find_map(|(line, rtl)| {
@@ -466,6 +476,10 @@ pub fn text_rect(t: &AddedText) -> [f64; 4] {
     let h = lines(t).len().max(1) as f64 * t.size * 1.2;
     [r[0], r[3] - h, r[2], r[3]]
 }
+
+/// The resource-name prefix of an item's own standard font, whose encoding adds letters WinAnsi
+/// lacks ([`LatinEncoding`]).
+const LATIN_FONT_PREFIX: &str = "PCLat";
 
 fn font_name(base: &str) -> String {
     format!("PCF{}", base.replace('-', ""))
@@ -721,12 +735,40 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
                 out.extend_from_slice(b"Q\n");
                 return Ok((out, res));
             }
+            // Letters WinAnsi lacks (Turkish Ğ ğ İ ı Ş ş) are added to the encoding of a font of the
+            // item's own (#1608). Text no encoding holds is refused by `validate`, except in an
+            // existing item without the Arabic face, which keeps drawing it as `?`.
+            let enc = LatinEncoding::new(t.text.split('\n')).unwrap_or_default();
+            let name = match enc.encoding() {
+                None => name,
+                Some(encoding) => {
+                    let mut font = Dict::new();
+                    font.set(b"Type".to_vec(), Object::name("Font"));
+                    font.set(b"Subtype".to_vec(), Object::name("Type1"));
+                    font.set(b"BaseFont".to_vec(), Object::name(base));
+                    font.set(b"Encoding".to_vec(), Object::Dict(encoding));
+                    font.set(b"ToUnicode".to_vec(), Object::Ref(doc.add(Object::Stream(Stream::flate(Dict::new(), &enc.to_unicode())))));
+                    let font = doc.add(Object::Dict(font));
+                    // A name no font on the page has, as for the shaped fonts: the encoding is this
+                    // item's, so another item must never replace it.
+                    let mut own = format!("{LATIN_FONT_PREFIX}{}", font.num);
+                    let mut suffix = 0usize;
+                    while taken.contains(own.as_bytes()) {
+                        suffix = suffix.saturating_add(1);
+                        own = format!("{LATIN_FONT_PREFIX}{}_{suffix}", font.num);
+                    }
+                    fonts.remove(name.as_bytes());
+                    fonts.set(own.clone().into_bytes(), Object::Ref(font));
+                    own
+                }
+            };
             res.set(b"Font".to_vec(), Object::Dict(fonts));
+            let std14 = t.family.std14(t.bold, t.italic);
             let r = text_rect(t);
             let [cr, cg, cb] = t.color.map(|v| v.clamp(0.0, 1.0));
             out.extend(format!("BT /{name} {} Tf {} {} {} rg\n", n(t.size), n(cr), n(cg), n(cb)).bytes());
             for (i, line) in lines(t).iter().enumerate() {
-                let w = t.family.width(line, t.size, t.bold, t.italic);
+                let w = enc.text_width(std14, line, t.size);
                 let x = match t.align {
                     Align::Left | Align::Justify => r[0],
                     Align::Center => r[0] + ((r[2] - r[0]) - w) / 2.0,
@@ -740,7 +782,7 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
                 let tw =
                     if t.align == Align::Justify && i + 1 < all.len() && spaces > 0 { ((r[2] - r[0]) - w).max(0.0) / spaces as f64 } else { 0.0 };
                 out.extend(format!("1 0 0 1 {} {} Tm {} Tw ", n(x), n(y), n(tw)).bytes());
-                out.extend(literal(&win_ansi(line)));
+                out.extend(literal(&enc.encode(line)));
                 out.extend_from_slice(b" Tj\n");
             }
             out.extend_from_slice(b"ET\n");
@@ -1073,12 +1115,17 @@ pub fn delete_content(doc: &mut Document, page: usize, index: usize) -> Result<(
     Ok(())
 }
 
-/// The Type 3 fonts an Arabic item's stream shows text with. Each item has its own (`draw_shaped`
-/// names them so), so they go when the item is replaced or deleted.
+/// The fonts an item's stream shows text with that are its own: the Type 3 fonts of shaped text
+/// (`draw_shaped` names them so) and a standard font with an encoding of its own (`draw`). They go
+/// when the item is replaced or deleted.
 fn own_fonts(doc: &Document, obj: ObjRef) -> Vec<Vec<u8>> {
     let Object::Stream(s) = &*doc.get(obj) else { return Vec::new() };
     let Ok(data) = s.decoded() else { return Vec::new() };
-    data.split(u8::is_ascii_whitespace).filter_map(|w| w.strip_prefix(b"/")).filter(|w| w.starts_with(b"PCAr")).map(<[u8]>::to_vec).collect()
+    data.split(u8::is_ascii_whitespace)
+        .filter_map(|w| w.strip_prefix(b"/"))
+        .filter(|w| w.starts_with(b"PCAr") || w.starts_with(LATIN_FONT_PREFIX.as_bytes()))
+        .map(<[u8]>::to_vec)
+        .collect()
 }
 
 fn drop_fonts(doc: &Document, res: &mut Dict, names: &[Vec<u8>]) {

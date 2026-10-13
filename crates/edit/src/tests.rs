@@ -649,6 +649,66 @@ fn arabic_font_names(doc: &Document, page: usize) -> Vec<String> {
     fonts.as_dict().unwrap().iter().map(|(k, _)| String::from_utf8_lossy(k).into_owned()).filter(|k| k.starts_with("PCAr")).collect()
 }
 
+/// The page's fonts whose resource name starts with `prefix`, as dictionaries.
+fn page_fonts(doc: &Document, page: usize, prefix: &str) -> Vec<(String, Dict)> {
+    let p = &pdfcraft_model::pages(doc)[page];
+    let Some(res) = p.dict.get(b"Resources").map(|r| doc.resolve(r)) else { return vec![] };
+    let Some(fonts) = res.as_dict().and_then(|r| r.get(b"Font")).map(|f| doc.resolve(f)) else { return vec![] };
+    fonts
+        .as_dict()
+        .unwrap()
+        .iter()
+        .filter(|(k, _)| k.starts_with(prefix.as_bytes()))
+        .map(|(k, v)| (String::from_utf8_lossy(k).into_owned(), doc.resolve(v).as_dict().unwrap().clone()))
+        .collect()
+}
+
+/// #1513, #1608: Turkish letters WinAnsi lacks (Ğ ğ İ ı Ş ş) are added as page text in the standard
+/// fonts, with an encoding of the item's own, and read back as typed. Icelandic letters on the codes
+/// #1513 reused stay themselves.
+#[test]
+fn added_turkish_text_is_drawn_in_the_standard_fonts_and_reads_back_as_typed() {
+    let mut doc = fixture();
+    let typed = "İstanbul'da ışık; Iğdır, Şile\nÖğüt Çeşme ÝýÞþÐð";
+    let text = AddedText { rect: [72.0, 600.0, 500.0, 700.0], text: typed.into(), size: 14.0, ..AddedText::default() };
+    assert_eq!(first_undrawable(&text), None);
+    add_content(&mut doc, 0, &Content::Text(text.clone())).unwrap();
+    let doc2 = reopen(&doc);
+    let Content::Text(t) = &list_added(&doc2)[0].content else { panic!() };
+    assert_eq!(t.text, typed, "the item keeps the typed text");
+    let fonts = page_fonts(&doc2, 0, "PCLat");
+    assert_eq!(fonts.len(), 1, "{fonts:?}");
+    let (name, font) = &fonts[0];
+    assert!(streams(&doc2, 0).join("\n").contains(&format!("/{name} 14 Tf")));
+    assert_eq!(font.name(b"BaseFont"), Some(&b"Helvetica"[..]));
+    let enc = doc2.resolve(font.get(b"Encoding").unwrap());
+    let enc = enc.as_dict().unwrap();
+    assert_eq!(enc.name(b"BaseEncoding"), Some(&b"WinAnsiEncoding"[..]));
+    let Some(Object::Array(diff)) = enc.get(b"Differences") else { panic!("{enc:?}") };
+    let names: Vec<&[u8]> = diff.iter().filter_map(Object::as_name).collect();
+    for glyph in [&b"Idotaccent"[..], b"dotlessi", b"gbreve", b"Scedilla", b"scedilla"] {
+        assert!(names.contains(&glyph), "{}", String::from_utf8_lossy(glyph));
+    }
+    assert!(font.get(b"ToUnicode").is_some());
+    // Copy and search get the letters, Turkish and Icelandic alike.
+    let read: String = text::text_blocks(&doc2, 0).unwrap().iter().map(|b| b.text.clone()).collect::<Vec<_>>().join("\n");
+    for line in typed.lines() {
+        assert!(read.contains(line), "{line:?} in {read:?}");
+    }
+    // A second Turkish item gets a font of its own; retyping one in plain WinAnsi drops its font.
+    let mut doc = doc2;
+    let second = AddedText { rect: [72.0, 400.0, 500.0, 500.0], text: "Ş".into(), ..text.clone() };
+    add_content(&mut doc, 0, &Content::Text(second)).unwrap();
+    assert_eq!(page_fonts(&doc, 0, "PCLat").len(), 2);
+    update_content(&mut doc, 0, 0, &Content::Text(AddedText { text: "Istanbul".into(), ..text.clone() })).unwrap();
+    let left = page_fonts(&reopen(&doc), 0, "PCLat");
+    assert_eq!(left.len(), 1, "{left:?}");
+    assert_ne!(&left[0].0, name);
+    // Letters outside WinAnsi and the Turkish ones are still refused, not written as `?`.
+    let err = add_content(&mut doc, 0, &Content::Text(AddedText { text: "Iğdır Račun".into(), ..text })).unwrap_err().to_string();
+    assert!(err.contains("U+010D"), "{err}");
+}
+
 #[test]
 fn arabic_items_keep_their_own_fonts_through_saves_updates_and_deletes() {
     let mut doc = fixture();
