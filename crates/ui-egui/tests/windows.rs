@@ -956,6 +956,59 @@ fn promoting_a_window_with_its_own_combine_list_adds_the_old_files_to_it() {
     assert_windows_ok(h.state());
 }
 
+fn stage_in(h: &mut Harness<'static, PdfCraftApp>, window: Option<WindowId>, name: &str) {
+    let files = vec![(name.to_string(), fixture_pdf())];
+    match window {
+        None => h.state_mut().use_files(pdfcraft_ui_egui::FilePurpose::Combine, files),
+        Some(w) => _ = h.state_mut().with_window(w, |a| a.use_files(pdfcraft_ui_egui::FilePurpose::Combine, files)),
+    }
+}
+
+#[test]
+fn merge_all_windows_keeps_a_childs_combine_list_and_its_history() {
+    let (mut h, child) = root_and_child();
+    stage_in(&mut h, Some(child), "a.pdf");
+    stage_in(&mut h, Some(child), "b.pdf");
+    h.run_steps(2);
+    assert!(h.state_mut().execute("window.merge_all"));
+    h.run_steps(3);
+    assert_eq!(h.state().window_count(), 1);
+    assert!(h.state().combine_tab.open);
+    assert_eq!(combine_names(h.state()), ["a.pdf", "b.pdf"]);
+    h.state_mut().open_combine_tab();
+    h.state_mut().execute("edit.undo");
+    assert_eq!(combine_names(h.state()), ["a.pdf"]);
+    h.state_mut().execute("edit.redo");
+    assert_eq!(combine_names(h.state()), ["a.pdf", "b.pdf"]);
+    assert_windows_ok(h.state());
+}
+
+#[test]
+fn merge_all_windows_adds_a_childs_combine_files_as_one_undo_step() {
+    let (mut h, child) = root_and_child();
+    stage_in(&mut h, None, "m1.pdf");
+    stage_in(&mut h, None, "m2.pdf");
+    stage_in(&mut h, Some(child), "c1.pdf");
+    stage_in(&mut h, Some(child), "c2.pdf");
+    h.run_steps(2);
+    assert!(h.state_mut().execute("window.merge_all"));
+    h.run_steps(3);
+    assert_eq!(combine_names(h.state()), ["m1.pdf", "m2.pdf", "c1.pdf", "c2.pdf"]);
+    let mut ids: Vec<u64> = h.state().combine_draft.iter().map(|f| f.id).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), 4, "every row has an id of its own");
+    h.state_mut().open_combine_tab();
+    h.state_mut().execute("edit.undo");
+    assert_eq!(combine_names(h.state()), ["m1.pdf", "m2.pdf"], "one Undo takes exactly the appended files off");
+    h.state_mut().execute("edit.undo");
+    assert_eq!(combine_names(h.state()), ["m1.pdf"], "then the main window's own history");
+    h.state_mut().execute("edit.redo");
+    h.state_mut().execute("edit.redo");
+    assert_eq!(combine_names(h.state()), ["m1.pdf", "m2.pdf", "c1.pdf", "c2.pdf"]);
+    assert_windows_ok(h.state());
+}
+
 #[test]
 fn files_dragged_over_a_window_of_its_own_use_the_pointer_the_system_reported() {
     let mut h = form_harness();

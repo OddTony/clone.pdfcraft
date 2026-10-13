@@ -611,7 +611,9 @@ impl PdfCraftApp {
 
     /// The Combine files list of the old main window (`old`, swapped out by the promotion) is
     /// work the user has not finished: it moves to the window that took over. When that one has
-    /// a list of its own, the old files are added to the end of it.
+    /// a list of its own, the old files are added to the end of it, as one undo step of that
+    /// list (one Undo takes them off again, the earlier history stays). The old window's own
+    /// Undo/Redo history cannot be merged into another list and is dropped; the files are kept.
     fn carry_over_combine(&mut self, old: &mut WindowState) {
         if !old.combine_tab.open && old.combine_draft.is_empty() {
             return;
@@ -622,6 +624,10 @@ impl PdfCraftApp {
             return;
         }
         self.combine_tab.open = true;
+        if !old.combine_draft.is_empty() {
+            // Without this step an Undo would not know about the appended rows.
+            self.combine_record();
+        }
         for mut f in old.combine_draft.drain(..) {
             f.id = self.combine_tab.next_id;
             self.combine_tab.next_id = self.combine_tab.next_id.wrapping_add(1);
@@ -767,7 +773,8 @@ impl PdfCraftApp {
     }
 
     /// Bring every tab of every other window into the main window; a document the main window
-    /// shows already is not added twice.
+    /// shows already is not added twice. A window's Combine files work comes along too (see
+    /// `carry_over_combine`).
     fn merge_all_windows(&mut self) {
         let slots = std::mem::take(&mut self.windows);
         for mut slot in slots {
@@ -784,6 +791,7 @@ impl PdfCraftApp {
                     }
                 }
             }
+            self.carry_over_combine(&mut slot.state);
         }
         self.focused_window = WindowId::ROOT;
     }

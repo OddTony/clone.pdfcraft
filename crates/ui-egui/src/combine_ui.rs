@@ -1937,7 +1937,7 @@ impl PdfCraftApp {
     }
 
     /// Remember the list before a change, for Undo.
-    fn combine_record(&mut self) {
+    pub(crate) fn combine_record(&mut self) {
         let now = self.combine_snapshot();
         self.combine_push_undo(now);
         self.combine_tab.range_edit = None;
