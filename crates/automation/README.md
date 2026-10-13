@@ -98,6 +98,16 @@ claude mcp add pdfcraft -- "C:\Program Files\PdfCraft\pdfcraft-cli.exe" mcp --ro
 claude mcp add pdfcraft -- pdfcraft-cli mcp --root <dir>
 ```
 
+## Security regression tests
+
+Run `cargo test -p pdfcraft-automation --test hostile_args -- --nocapture` for the
+hostile-argument and root-confinement sweep. On Windows without symbolic-link
+privileges (error 1314), the sweep reports that only its symlink cases are unavailable;
+all traversal and absolute-path cases still run. It never treats an ordinary path
+inside the root as a symlink escape. Windows CI sets `PDFCRAFT_REQUIRE_SYMLINK_TESTS=1`
+to require a real planted link and fail if that fixture cannot be created. Set the
+same environment variable locally when checking the full symlink coverage.
+
 ## Adding a tool
 
 1. Add the engine capability first, with its tests (the tool is a thin adapter).

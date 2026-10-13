@@ -2390,6 +2390,10 @@ key	Space	Espacio
 	Resize panel window	Cambiar tamaño de la ventana del panel
 	Tools	Herramientas
 	Inspector	Inspector
+
+# Touch and pen controls
+	Touch and pen	Táctil y lápiz
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	Herramientas de dibujo más grandes. Usa dos dedos para mover o ampliar, o la herramienta Mano para mover con un dedo.
 	Select page {label}	Seleccionar la página {label}
 	Rotate page {label} counterclockwise	Girar la página {label} a la izquierda
 	Rotate page {label} clockwise	Girar la página {label} a la derecha

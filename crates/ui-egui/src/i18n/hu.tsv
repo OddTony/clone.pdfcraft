@@ -2250,6 +2250,9 @@ key	Space	Szóköz
 	Tools	Eszközök
 	Inspector	Tulajdonságvizsgáló
 
+# Touch and pen controls
+	Touch and pen	Érintés és toll
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	Nagyobb rajzeszközök. Két ujjal mozgathatsz vagy nagyíthatsz; egyujjas mozgatáshoz használd a Kéz eszközt.
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	PDF-oldal: {size}
 	Match page at 100%	Papír illesztése az oldalhoz, 100%

@@ -2131,6 +2131,10 @@ key	Space	空格
 	Resize panel window	調整面板視窗大小
 	Tools	工具
 	Inspector	檢查器
+
+# Touch and pen controls
+	Touch and pen	觸控與手寫筆
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	較大的繪圖工具。以雙指移動或縮放；使用手形工具以單指移動。
 	Reload documents when their files change on disk	檔案在磁碟上變更時重新載入對應的文件
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	此檔案已在磁碟上變更。請重新載入以查看新版本；未儲存的變更將會遺失。
 	Reload	重新載入

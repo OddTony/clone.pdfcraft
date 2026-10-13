@@ -2214,6 +2214,9 @@ key	Space	Интервал
 	Tools	Инструменти
 	Inspector	Инспектор
 
+# Touch and pen controls
+	Touch and pen	Докосване и писалка
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	По-големи инструменти за рисуване. С два пръста местете или мащабирайте; с инструмента Ръка местете с един пръст.
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	PDF страница: {size}
 	Match page at 100%	Хартия по страницата, мащаб 100%

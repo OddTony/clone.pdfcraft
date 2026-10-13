@@ -2253,6 +2253,9 @@ key	Space	Espaço
 	Tools	Ferramentas
 	Inspector	Inspetor
 
+# Touch and pen controls
+	Touch and pen	Toque e caneta
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	Ferramentas de desenho maiores. Use dois dedos para mover ou ampliar, ou a ferramenta Mão para mover com um dedo.
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	Página PDF: {size}
 	Match page at 100%	Ajustar papel à página a 100%

@@ -2603,8 +2603,11 @@ fn recognize_text_makes_a_scanned_page_searchable() {
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let text = s.create_from_text("t", "The quick brown fox jumps over the lazy dog.").unwrap();
     let id = s.open("text.pdf", None, text, None).unwrap();
-    let png = export::Exporter::new(s.get(id).unwrap()).png(0, 150.0).unwrap();
-    let scan = s.create_from_images(&[("scan.png".into(), png)]).unwrap();
+    // Match the normal OCR resolution so this text-layer integration test does not
+    // depend on recognition of an undersampled 11 pt fixture.
+    let png = export::Exporter::new(s.get(id).unwrap()).png(0, 300.0).unwrap();
+    // PNG export has no density metadata; preserve the original page's point size.
+    let scan = s.create_from_images_with_resolution(&[("scan.png".into(), png)], ImageResolution::Dpi(300.0)).unwrap();
     let id = s.open("scan.pdf", None, scan, None).unwrap();
     assert_eq!(page_texts(&s, id), [""], "a picture has no text");
 

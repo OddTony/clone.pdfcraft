@@ -203,6 +203,9 @@ key	Space	Mezerník
 	Tools	Nástroje
 	Inspector	Inspektor
 
+# Touch and pen controls
+	Touch and pen	Dotyk a pero
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	Větší nástroje kreslení. Dvěma prsty posouvejte nebo přibližujte; nástrojem Ruka posouvejte jedním prstem.
 # The rest of the interface: Home, All tools, panels, dialogs, notices and history labels.
 	Folders	Složky
 	Pin a folder…	Připnout složku…

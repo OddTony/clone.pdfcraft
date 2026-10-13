@@ -2272,6 +2272,9 @@ key	Space	مسافة
 	Resize panels	تغيير حجم اللوحات
 	Resize panel window	تغيير حجم نافذة اللوحة
 
+# Touch and pen controls
+	Touch and pen	اللمس والقلم
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	أدوات رسم أكبر. استخدم إصبعين للتحريك أو التكبير، أو أداة اليد للتحريك بإصبع واحد.
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	صفحة PDF: {size}
 	Match page at 100%	مطابقة الورق للصفحة بنسبة 100%

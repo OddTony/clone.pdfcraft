@@ -2256,6 +2256,9 @@ key	Space	Leertaste
 	Tools	Werkzeuge
 	Inspector	Inspektor
 
+# Touch and pen controls
+	Touch and pen	Touch und Stift
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	Größere Zeichenwerkzeuge. Mit zwei Fingern verschieben oder zoomen; mit dem Handwerkzeug mit einem Finger verschieben.
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	PDF-Seite: {size}
 	Match page at 100%	Papier an Seite anpassen, 100%

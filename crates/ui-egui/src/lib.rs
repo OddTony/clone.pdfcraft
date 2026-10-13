@@ -5,6 +5,8 @@
 //! Everything here is presentation: documents, rendering and the tool catalogue live in
 //! `pdfcraft-engine`.
 
+// The persisted settings object exceeds serde_json's default macro expansion depth.
+#![recursion_limit = "256"]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 /// Translate an English UI string into the current language (see [`i18n`]).
@@ -56,6 +58,7 @@ mod search_ui;
 mod sign_ui;
 mod stamps_ui;
 mod standards_ui;
+pub mod touch;
 mod zoom_snap;
 /// Header & footer / watermark / background dialog types (tests and automation).
 pub mod marks {
@@ -526,6 +529,9 @@ pub struct PdfCraftApp {
     pub language: String,
     /// Preferences ▸ Interface size as a factor, or `None` to follow [`Self::system_text_scale`].
     pub ui_scale: Option<f32>,
+    /// Larger drawing tools: automatic after touch input, always on, or off.
+    pub touch_mode: touch::TouchMode,
+    touch_input: touch::TouchState,
     /// The desktop's text scaling (GNOME's text scaling factor), which the desktop app reads at
     /// launch. 1.0 elsewhere, so tests and screenshots don't depend on the machine.
     pub system_text_scale: f32,
@@ -891,6 +897,8 @@ impl PdfCraftApp {
             motion: motion::Motion::default(),
             language: i18n::AUTO.to_string(),
             ui_scale: None,
+            touch_mode: touch::TouchMode::Auto,
+            touch_input: touch::TouchState::default(),
             system_text_scale: 1.0,
             ui_scale_applied: None,
             flatten_fill_sign_on_save: false,
@@ -2105,6 +2113,7 @@ impl PdfCraftApp {
             "reading_colors": self.reading_colors,
             // Null follows the system's text scaling.
             "ui_scale": self.ui_scale,
+            "touch_mode": self.touch_mode,
             "flatten_fill_sign": self.flatten_fill_sign_on_save,
             "fill_text_size": self.fill_text_size,
             "date_format": self.session.date_format(),
@@ -2227,6 +2236,7 @@ impl PdfCraftApp {
         }
         // Settings are untrusted: a size out of range follows the system instead.
         self.ui_scale = v["ui_scale"].as_f64().and_then(ui_scale::valid);
+        self.touch_mode = v["touch_mode"].as_str().and_then(|value| touch::TouchMode::parse(value).ok()).unwrap_or_default();
         // Settings are untrusted: an unusable pattern keeps the default.
         if let Some(f) = v["date_format"].as_str() {
             let _ = self.session.set_date_format(f);
@@ -2542,6 +2552,7 @@ impl PdfCraftApp {
             }
             ("author", _) => self.comment_prefs.author = value.to_string(),
             ("ui-scale", _) => self.ui_scale = ui_scale::parse(value)?,
+            ("touch-mode", _) => self.touch_mode = touch::TouchMode::parse(value)?,
             ("system-title-bar", _) => {
                 self.system_title_bar = match value {
                     "true" => true,
@@ -2726,6 +2737,12 @@ impl PdfCraftApp {
     }
 }
 
+impl PdfCraftApp {
+    pub fn touch_active(&self) -> bool {
+        self.touch_mode.active(self.touch_input.detected())
+    }
+}
+
 impl eframe::App for PdfCraftApp {
     /// While files are dragged over the window the system sends no pointer moves, so egui
     /// would keep the place the pointer entered at: tell it where the pointer really is, so the
@@ -2776,6 +2793,14 @@ impl eframe::App for PdfCraftApp {
             }
         }
         self.sync_theme(ctx);
+        ctx.input(|input| self.touch_input.observe(&input.events, input.focused, input.pointer.any_down()));
+        ctx.data_mut(|data| data.insert_temp(egui::Id::new("pdfcraft-touch"), self.touch_active()));
+        if self.touch_input.blocked {
+            for view in &mut self.views {
+                view.comments.cancel_pointer_gesture();
+                view.clear_selection();
+            }
+        }
         let native = ctx.native_pixels_per_point().unwrap_or(1.0);
         ui_scale::sync(ctx, ui_scale::zoom(self.ui_scale, self.system_text_scale, native), &mut self.ui_scale_applied);
         // Remember user work even if its tab is subsequently closed or Home is selected.

@@ -2168,6 +2168,9 @@ key	Space	Пробел
 	Tools	Инструменты
 	Inspector	Инспектор
 
+# Touch and pen controls
+	Touch and pen	Сенсорный ввод и перо
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	Крупные инструменты рисования. Двумя пальцами перемещайте страницу или меняйте масштаб; инструментом «Рука» перемещайте одним пальцем.
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	Страница PDF: {size}
 	Match page at 100%	Подобрать бумагу, масштаб 100%

@@ -2251,6 +2251,9 @@ key	Space	スペース
 	Tools	ツール
 	Inspector	インスペクター
 
+# Touch and pen controls
+	Touch and pen	タッチとペン
+	Larger drawing tools. Use two fingers to move or zoom; use Hand to move with one finger.	描画ツールを大きく表示します。2本指で移動やズーム、手のひらツールで1本指による移動ができます。
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	PDFページ: {size}
 	Match page at 100%	ページに合わせて100%に設定
