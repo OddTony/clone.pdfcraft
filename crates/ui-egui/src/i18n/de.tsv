@@ -1361,6 +1361,24 @@
 	Encrypt	Verschlüsseln
 	All document contents	Alle Dokumentinhalte
 	All document contents except metadata	Alle Dokumentinhalte außer Metadaten
+	Protect PDF with a password	PDF mit einem Passwort schützen
+	Require a password to	Passwort erforderlich für
+	Open the document	Dokument öffnen
+	Password required to view the PDF.	Passwort zum Anzeigen der PDF-Datei erforderlich.
+	Restrict editing	Bearbeitung einschränken
+	Password required to change editing permissions.	Passwort zum Ändern der Bearbeitungsberechtigungen erforderlich.
+	Confirm password	Passwort bestätigen
+	Show confirm password	Bestätigungspasswort anzeigen
+	Hide confirm password	Bestätigungspasswort ausblenden
+	Advanced settings	Erweiterte Einstellungen
+	Content to encrypt	Zu verschlüsselnde Inhalte
+	All contents except metadata	Alle Inhalte außer Metadaten
+	Metadata includes details such as title and author.	Metadaten enthalten Angaben wie Titel und Autor.
+	Protection takes effect when you save the PDF.	Der Schutz wird wirksam, wenn Sie die PDF-Datei speichern.
+	Apply protection	Schutz anwenden
+	Enter a password.	Geben Sie ein Passwort ein.
+	Confirm your password.	Bestätigen Sie Ihr Passwort.
+	Passwords do not match.	Die Passwörter stimmen nicht überein.
 	Printing allowed	Drucken erlaubt
 	Low Resolution (150 dpi)	Niedrige Auflösung (150 dpi)
 	Changes allowed	Änderungen erlaubt

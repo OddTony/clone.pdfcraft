@@ -280,14 +280,15 @@ fn lithuanian_password_dialog_translates_dynamic_labels_and_validation() {
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "lt" }));
     ok(&mut h, &c, "ui.set", json!({ "key": "dialog", "value": "protect" }));
     h.run_steps(2);
-    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Peržiūrėti");
-    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Redaguoti").click();
+    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Atidaryti dokumentą");
+    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Apriboti redagavimą").click();
     h.run_steps(2);
-    assert!(!h.state().protect_draft.viewing);
-    h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Įveskite slaptažodį");
+    assert_eq!(h.state().protect_draft.mode, pdfcraft_ui_egui::protect::ProtectionMode::RestrictEditing);
+    h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Slaptažodis");
     h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Pakartokite slaptažodį");
     h.state_mut().protect_draft.password = "abc".into();
     h.state_mut().protect_draft.confirm = "xyz".into();
+    h.state_mut().protect_draft.confirm_touched = true;
     h.run_steps(2);
     h.get_by_label("Slaptažodžiai nesutampa.");
 }

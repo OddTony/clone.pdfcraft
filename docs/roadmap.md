@@ -162,6 +162,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | M8: Protect with a password redesigned (purpose cards, field-level errors, collapsible Advanced settings) with Remove security in its footer; the password strength meter is dropped. Estimates unchanged. |
 | 2026-10-12 | minor | M13: CLI check directory identity, with overlap and symlink regressions; estimates unchanged |
 | 2026-10-12 | minor | M4: shared Type 3 glyph resources survive extraction, with save/reopen and independent raster regressions; estimates unchanged |
 | 2026-10-12 | minor | M2: packed TIFF-predictor RGB row boundaries, with decoding and page-render regressions; estimates unchanged |

@@ -1374,6 +1374,24 @@
 	Encrypt	Зашифрувати
 	All document contents	Увесь вміст документа
 	All document contents except metadata	Увесь вміст документа, крім метаданих
+	Protect PDF with a password	Захистити PDF паролем
+	Require a password to	Вимагати пароль для
+	Open the document	Відкриття документа
+	Password required to view the PDF.	Для перегляду PDF потрібен пароль.
+	Restrict editing	Обмеження редагування
+	Password required to change editing permissions.	Для зміни дозволів на редагування потрібен пароль.
+	Confirm password	Підтвердьте пароль
+	Show confirm password	Показати підтвердження пароля
+	Hide confirm password	Сховати підтвердження пароля
+	Advanced settings	Додаткові налаштування
+	Content to encrypt	Що шифрувати
+	All contents except metadata	Увесь вміст, крім метаданих
+	Metadata includes details such as title and author.	Метадані містять такі відомості, як назва й автор.
+	Protection takes effect when you save the PDF.	Захист набуде чинності після збереження PDF.
+	Apply protection	Застосувати захист
+	Enter a password.	Введіть пароль.
+	Confirm your password.	Підтвердьте пароль.
+	Passwords do not match.	Паролі не збігаються.
 	Printing allowed	Дозволений друк
 	Low Resolution (150 dpi)	Низька роздільна здатність (150 dpi)
 	Changes allowed	Дозволені зміни

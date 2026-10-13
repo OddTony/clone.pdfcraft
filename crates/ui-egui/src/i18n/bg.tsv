@@ -1318,6 +1318,24 @@
 	Encrypt	Шифровай
 	All document contents	Цялото съдържание на документа
 	All document contents except metadata	Цялото съдържание на документа без метаданните
+	Protect PDF with a password	Защита на PDF с парола
+	Require a password to	Изисквай парола за
+	Open the document	Отваряне на документа
+	Password required to view the PDF.	Необходима е парола за преглед на PDF.
+	Restrict editing	Ограничаване на редактирането
+	Password required to change editing permissions.	Необходима е парола за промяна на разрешенията за редактиране.
+	Confirm password	Потвърдете паролата
+	Show confirm password	Показване на потвърждението на паролата
+	Hide confirm password	Скриване на потвърждението на паролата
+	Advanced settings	Разширени настройки
+	Content to encrypt	Съдържание за шифроване
+	All contents except metadata	Цялото съдържание освен метаданните
+	Metadata includes details such as title and author.	Метаданните включват подробности като заглавие и автор.
+	Protection takes effect when you save the PDF.	Защитата влиза в сила, когато запазите PDF.
+	Apply protection	Прилагане на защитата
+	Enter a password.	Въведете парола.
+	Confirm your password.	Потвърдете паролата си.
+	Passwords do not match.	Паролите не съвпадат.
 	Printing allowed	Разрешен печат
 	Low Resolution (150 dpi)	Ниска разделителна способност (150 dpi)
 	Changes allowed	Разрешени промени

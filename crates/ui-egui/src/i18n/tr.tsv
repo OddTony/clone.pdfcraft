@@ -1333,6 +1333,24 @@
 	Encrypt	Şifrele
 	All document contents	Tüm belge içerikleri
 	All document contents except metadata	Meta veriler dışındaki tüm belge içerikleri
+	Protect PDF with a password	PDF'yi parolayla koru
+	Require a password to	Şunun için parola iste
+	Open the document	Belgeyi açma
+	Password required to view the PDF.	PDF'yi görüntülemek için parola gerekir.
+	Restrict editing	Düzenlemeyi kısıtlama
+	Password required to change editing permissions.	Düzenleme izinlerini değiştirmek için parola gerekir.
+	Confirm password	Parolayı onayla
+	Show confirm password	Onay parolasını göster
+	Hide confirm password	Onay parolasını gizle
+	Advanced settings	Gelişmiş ayarlar
+	Content to encrypt	Şifrelenecek içerik
+	All contents except metadata	Meta veriler hariç tüm içerik
+	Metadata includes details such as title and author.	Meta veriler, başlık ve yazar gibi ayrıntıları içerir.
+	Protection takes effect when you save the PDF.	Koruma, PDF'yi kaydettiğinizde etkinleşir.
+	Apply protection	Korumayı uygula
+	Enter a password.	Bir parola girin.
+	Confirm your password.	Parolanızı onaylayın.
+	Passwords do not match.	Parolalar eşleşmiyor.
 	Printing allowed	Baskıya izin verildi
 	Low Resolution (150 dpi)	Düşük Çözünürlük (150 dpi)
 	Changes allowed	Değişikliklere izin verildi

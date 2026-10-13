@@ -1261,6 +1261,24 @@
 	Encrypt	Criptografar
 	All document contents	Todo o conteúdo do documento
 	All document contents except metadata	Todo o conteúdo do documento, exceto metadados
+	Protect PDF with a password	Proteger o PDF com senha
+	Require a password to	Exigir uma senha para
+	Open the document	Abrir o documento
+	Password required to view the PDF.	Senha necessária para visualizar o PDF.
+	Restrict editing	Restringir a edição
+	Password required to change editing permissions.	Senha necessária para alterar as permissões de edição.
+	Confirm password	Confirmar senha
+	Show confirm password	Mostrar confirmação de senha
+	Hide confirm password	Ocultar confirmação de senha
+	Advanced settings	Configurações avançadas
+	Content to encrypt	Conteúdo a criptografar
+	All contents except metadata	Todo o conteúdo, exceto metadados
+	Metadata includes details such as title and author.	Os metadados incluem detalhes como título e autor.
+	Protection takes effect when you save the PDF.	A proteção entra em vigor quando você salva o PDF.
+	Apply protection	Aplicar proteção
+	Enter a password.	Digite uma senha.
+	Confirm your password.	Confirme sua senha.
+	Passwords do not match.	As senhas não coincidem.
 	Printing allowed	Impressão permitida
 	Low Resolution (150 dpi)	Baixa resolução (150 dpi)
 	Changes allowed	Alterações permitidas

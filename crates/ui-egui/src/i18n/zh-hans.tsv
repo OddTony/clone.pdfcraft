@@ -1325,6 +1325,24 @@
 	Encrypt	加密
 	All document contents	所有文档内容
 	All document contents except metadata	除元数据外的所有文档内容
+	Protect PDF with a password	使用密码保护 PDF
+	Require a password to	要求输入密码以
+	Open the document	打开文档
+	Password required to view the PDF.	查看 PDF 需要密码。
+	Restrict editing	限制编辑
+	Password required to change editing permissions.	更改编辑权限需要密码。
+	Confirm password	确认密码
+	Show confirm password	显示确认密码
+	Hide confirm password	隐藏确认密码
+	Advanced settings	高级设置
+	Content to encrypt	要加密的内容
+	All contents except metadata	除元数据外的所有内容
+	Metadata includes details such as title and author.	元数据包括标题和作者等详细信息。
+	Protection takes effect when you save the PDF.	保护将在您保存 PDF 时生效。
+	Apply protection	应用保护
+	Enter a password.	请输入密码。
+	Confirm your password.	请确认密码。
+	Passwords do not match.	两次输入的密码不一致。
 	Printing allowed	允许打印
 	Low Resolution (150 dpi)	低分辨率（150 dpi）
 	Changes allowed	允许的更改

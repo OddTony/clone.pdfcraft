@@ -1346,6 +1346,24 @@ signature pad	Type	టైప్ చేయి
 	Encrypt	ఎన్‌క్రిప్ట్ చేయాల్సినవి
 	All document contents	పత్రంలోని మొత్తం కంటెంట్
 	All document contents except metadata	మెటాడేటా తప్ప పత్రంలోని మొత్తం కంటెంట్
+	Protect PDF with a password	PDFను పాస్‌వర్డ్‌తో రక్షించండి
+	Require a password to	పాస్‌వర్డ్ అవసరం:
+	Open the document	పత్రాన్ని తెరవడానికి
+	Password required to view the PDF.	PDFని చూడటానికి పాస్‌వర్డ్ అవసరం.
+	Restrict editing	సవరణను పరిమితం చేయడానికి
+	Password required to change editing permissions.	సవరణ అనుమతులను మార్చడానికి పాస్‌వర్డ్ అవసరం.
+	Confirm password	పాస్‌వర్డ్‌ను నిర్ధారించండి
+	Show confirm password	నిర్ధారణ పాస్‌వర్డ్‌ను చూపించు
+	Hide confirm password	నిర్ధారణ పాస్‌వర్డ్‌ను దాచు
+	Advanced settings	అధునాతన సెట్టింగ్‌లు
+	Content to encrypt	ఎన్‌క్రిప్ట్ చేయవలసిన కంటెంట్
+	All contents except metadata	మెటాడేటా మినహా మొత్తం కంటెంట్
+	Metadata includes details such as title and author.	మెటాడేటాలో శీర్షిక, రచయిత వంటి వివరాలు ఉంటాయి.
+	Protection takes effect when you save the PDF.	మీరు PDFని సేవ్ చేసినప్పుడు రక్షణ అమలులోకి వస్తుంది.
+	Apply protection	రక్షణను వర్తింపజేయి
+	Enter a password.	పాస్‌వర్డ్‌ను నమోదు చేయండి.
+	Confirm your password.	మీ పాస్‌వర్డ్‌ను నిర్ధారించండి.
+	Passwords do not match.	పాస్‌వర్డ్‌లు సరిపోలడం లేదు.
 	Printing allowed	ముద్రణకు అనుమతి
 	Low Resolution (150 dpi)	తక్కువ రిజల్యూషన్ (150 dpi)
 	Changes allowed	మార్పులకు అనుమతి
