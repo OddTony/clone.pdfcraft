@@ -39,13 +39,19 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         .show(ui, |ui| {
             let full = ui.max_rect();
             let drag = ui.interact(full, ui.id().with("titledrag"), Sense::click_and_drag());
-            if drag.drag_started() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            let drag_id = ui.id().with("document-tab-drag");
+            let mut tab_drag = ui.data_mut(|d| {
+                let intent = d.get_temp::<crate::tab_drag::TabDrag>(drag_id);
+                d.remove::<crate::tab_drag::TabDrag>(drag_id);
+                intent
+            });
+            let canceled = tab_drag.is_some() && ui.ctx().input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+            if canceled || app.modal_open() || !ui.ctx().input(|i| i.focused) {
+                tab_drag = None;
             }
-            if drag.double_clicked() {
-                let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
-            }
+            let mut document_region = Rect::NOTHING;
+            let mut special_region = Rect::NOTHING;
+            let mut placement = None;
             // GNOME on Wayland: the strip is the header bar, with the window buttons at its ends.
             let fullscreen = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
             let controls = app
@@ -107,6 +113,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 });
                 let mut action = None;
                 let mut close = None;
+                let mut tab_rects = Vec::with_capacity(app.views.len());
                 ui.scope(|ui| {
                     ui.style_mut().always_scroll_the_only_direction = true;
                     let mut area = egui::ScrollArea::horizontal().id_salt("document_tabs").max_width(tabs_width).auto_shrink([true, true]);
@@ -134,12 +141,25 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     cap,
                                     tab_h,
                                 );
-                                if changed && app.active == Some(i) && !app.combine_showing() {
+                                tab_rects.push((app.views[i].id, response.rect));
+                                if response.drag_started() && !canceled && !app.modal_open() && ui.ctx().input(|i| i.focused) {
+                                    tab_drag = Some(crate::tab_drag::TabDrag { source: app.views[i].id, target: None });
+                                }
+                                if changed && tab_drag.is_none() && app.active == Some(i) && !app.combine_showing() {
                                     response.scroll_to_me(Some(Align::Center));
                                 }
                                 let id = app.views[i].id;
                                 let reveal = cfg!(not(target_arch = "wasm32")) && doc.path.is_some();
                                 response.context_menu(|ui| {
+                                    if ui.add_enabled(i > 0, egui::Button::new(tl!("Move Tab Left"))).clicked() {
+                                        action = Some(crate::tab_context::Action::MoveLeft(id));
+                                        ui.close();
+                                    }
+                                    if ui.add_enabled(i + 1 < app.views.len(), egui::Button::new(tl!("Move Tab Right"))).clicked() {
+                                        action = Some(crate::tab_context::Action::MoveRight(id));
+                                        ui.close();
+                                    }
+                                    ui.separator();
                                     if ui.button(tl!("Close Tab")).clicked() {
                                         action = Some(crate::tab_context::Action::Close(id));
                                         ui.close();
@@ -163,9 +183,6 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             {
                                 action.get_or_insert(crate::tab_context::Action::Close(view.id));
                             }
-                            if let Some(action) = action {
-                                app.tab_action(action);
-                            }
                             if app.combine_tab.open {
                                 // After the document tabs; its index can't clash with theirs.
                                 let mut close = None;
@@ -183,6 +200,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     cap,
                                     tab_h,
                                 );
+                                special_region = response.rect;
                                 if changed && app.combine_showing() {
                                     response.scroll_to_me(Some(Align::Center));
                                 }
@@ -195,8 +213,43 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             }
                         });
                     });
+                    special_region = special_region.intersect(out.inner_rect);
                     let max = (out.content_size.x - out.inner_rect.width()).max(0.0);
                     ui.data_mut(|d| d.insert_temp(scroll_id, (out.state.offset.x, max)));
+                    if let (Some((_, first)), Some((_, last))) = (tab_rects.first(), tab_rects.last()) {
+                        document_region = first.union(*last).intersect(out.inner_rect);
+                    }
+                    if let Some(intent) = tab_drag.as_mut() {
+                        let pointer = ui.ctx().input(|i| i.pointer.interact_pos());
+                        intent.update(pointer, document_region, &tab_rects);
+                        if let Some(target) = intent.target {
+                            // Slot coordinates exclude the moving tab, matching final-index semantics.
+                            let remaining: Vec<_> = tab_rects.iter().filter(|(id, _)| *id != intent.source).collect();
+                            let x = remaining
+                                .get(target)
+                                .map(|(_, r)| r.left() - gap / 2.0)
+                                .or_else(|| remaining.last().map(|(_, r)| r.right() + gap / 2.0));
+                            if let Some(x) = x {
+                                ui.painter().with_clip_rect(out.inner_rect).vline(
+                                    x.clamp(document_region.left(), document_region.right()),
+                                    document_region.y_range().shrink(3.0),
+                                    Stroke::new(3.0, t.accent),
+                                );
+                            }
+                        }
+                        if overflow
+                            && let Some(next) =
+                                crate::tab_drag::edge_scroll(pointer, document_region, out.state.offset.x, max, ui.ctx().input(|i| i.stable_dt))
+                        {
+                            scroll_to = Some(next);
+                            ui.ctx().request_repaint();
+                        }
+                        if ui.ctx().input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
+                            placement = tab_drag.take().and_then(|intent| intent.finish(canceled));
+                        } else if !ui.ctx().input(|i| i.pointer.primary_down()) {
+                            tab_drag = None;
+                        }
+                    }
                 });
                 if overflow && arrow(ui, "chevron-right", offset < max_offset - 0.5, tl!("Scroll tabs right")) {
                     scroll_to = Some((offset + TAB_MIN_WIDTH + gap).min(max_offset));
@@ -204,6 +257,10 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 if let Some(x) = scroll_to {
                     ui.data_mut(|d| d.insert_temp(scroll_id.with("to"), x));
                     ui.ctx().request_repaint();
+                }
+                if let Some(action) = action {
+                    tab_drag = None;
+                    app.tab_action(action);
                 }
                 ui.add_space(4.0);
                 let tip = crate::commands::command_tip(ui.ctx(), tl!("Open a PDF ({key})"), "file.open");
@@ -246,6 +303,27 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     }
                 });
             });
+            // Child tab bodies own reorder gestures. Never turn a tab/close-button
+            // gesture into a native titlebar move or maximize.
+            let title_gesture = ui
+                .ctx()
+                .input(|i| i.pointer.press_origin().or_else(|| i.pointer.interact_pos()))
+                .is_some_and(|p| !document_region.contains(p) && !special_region.contains(p));
+            if drag.drag_started() && title_gesture && tab_drag.is_none() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+            if drag.double_clicked() && title_gesture {
+                let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
+            }
+            if let Some((id, target)) = placement
+                && let Some(source) = app.views.iter().position(|v| v.id == id)
+            {
+                app.move_tab(source, target);
+            }
+            if let Some(intent) = tab_drag {
+                ui.data_mut(|d| d.insert_temp(drag_id, intent));
+            }
         });
 }
 
@@ -361,7 +439,9 @@ fn tab(
     let height = ui.available_height().max(height);
     let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
     let a11y = if dirty { format!("{name} (edited)") } else { name.to_string() };
-    let resp = craft_ui::tabs::Tab::new(id, &a11y, active).focus_stroke(Stroke::new(1.0, t.accent)).show_at(ui, rect, |ui, resp| {
+    let x_rect = Rect::from_center_size(rect.right_center() - vec2(16.0, 0.0), vec2(20.0, 20.0));
+    let sense = if index == usize::MAX { Sense::click() } else { Sense::click_and_drag() };
+    let resp = craft_ui::tabs::Tab::new(id, &a11y, active).sense(sense).focus_stroke(Stroke::new(1.0, t.accent)).show_at(ui, rect, |ui, resp| {
         let press = theme::Press::track(ui, resp);
         let bg = if active {
             press.fill(t.chrome, t.chrome.lerp_to_gamma(t.hover, 0.65), t.hover)
@@ -380,8 +460,9 @@ fn tab(
         );
         ui.painter().text(rect.min + vec2(28.0, rect.height() / 2.0), Align2::LEFT_CENTER, label, font, if active { t.text } else { t.text_muted });
     });
-    let x_rect = Rect::from_center_size(rect.right_center() - vec2(16.0, 0.0), vec2(20.0, 20.0));
-    let x = ui.interact(x_rect, id.with("close"), Sense::click());
+    // The close button captures its own drag without reordering, keeping the
+    // accessible tab bounds and existing close coordinates unchanged.
+    let x = ui.interact(x_rect, id.with("close"), Sense::click_and_drag());
     let x_press = theme::Press::track(ui, &x);
     x_press.wash(ui, x_rect, 4, false);
     // Unsaved changes: a dot where the close button sits, until the tab is hovered.

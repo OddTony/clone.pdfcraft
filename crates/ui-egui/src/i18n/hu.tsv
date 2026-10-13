@@ -2329,6 +2329,10 @@ animation effects	Off	Ki
 
 # PDF tab context menu (#1233)
 	Close Tab	Lap bezárása
+	Move Tab Left	Lap áthelyezése balra
+	Move Tab Right	Lap áthelyezése jobbra
+	This tab is already first	Ez a lap már az első
+	This tab is already last	Ez a lap már az utolsó
 	Reopen Closed Tab	Bezárt lap újranyitása
 	Reveal in Finder	Megjelenítés a Finderben
 	Reveal in File Explorer	Megjelenítés a fájlkezelőben

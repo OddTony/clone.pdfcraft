@@ -2330,6 +2330,10 @@ animation effects	Off	オフ
 
 # PDF tab context menu (#1233)
 	Close Tab	タブを閉じる
+	Move Tab Left	タブを左に移動
+	Move Tab Right	タブを右に移動
+	This tab is already first	このタブはすでに先頭です
+	This tab is already last	このタブはすでに最後です
 	Reopen Closed Tab	閉じたタブを再度開く
 	Reveal in Finder	Finderで表示
 	Reveal in File Explorer	ファイルエクスプローラーで表示

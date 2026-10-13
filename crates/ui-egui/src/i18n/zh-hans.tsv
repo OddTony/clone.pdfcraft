@@ -2294,6 +2294,10 @@ animation effects	Off	关
 
 # PDF tab context menu (#1233)
 	Close Tab	关闭标签页
+	Move Tab Left	将标签页左移
+	Move Tab Right	将标签页右移
+	This tab is already first	此标签页已是第一个
+	This tab is already last	此标签页已是最后一个
 	Reopen Closed Tab	重新打开已关闭的标签页
 	Reveal in Finder	在 Finder 中显示
 	Reveal in File Explorer	在文件资源管理器中显示

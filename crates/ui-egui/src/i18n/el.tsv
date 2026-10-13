@@ -2328,6 +2328,10 @@ animation effects	Off	Ανενεργά
 
 # PDF tab context menu (#1233)
 	Close Tab	Κλείσιμο καρτέλας
+	Move Tab Left	Μετακίνηση καρτέλας αριστερά
+	Move Tab Right	Μετακίνηση καρτέλας δεξιά
+	This tab is already first	Αυτή η καρτέλα είναι ήδη πρώτη
+	This tab is already last	Αυτή η καρτέλα είναι ήδη τελευταία
 	Reopen Closed Tab	Επαναφορά κλειστής καρτέλας
 	Reveal in Finder	Εμφάνιση στο Finder
 	Reveal in File Explorer	Εμφάνιση στη διαχείριση αρχείων

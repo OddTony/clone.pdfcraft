@@ -2293,6 +2293,10 @@ animation effects	Off	Изключени
 
 # PDF tab context menu (#1233)
 	Close Tab	Затваряне на раздела
+	Move Tab Left	Преместване на раздел наляво
+	Move Tab Right	Преместване на раздел надясно
+	This tab is already first	Този раздел вече е първи
+	This tab is already last	Този раздел вече е последен
 	Reopen Closed Tab	Отваряне на затворения раздел
 	Reveal in Finder	Показване във Finder
 	Reveal in File Explorer	Показване във файловия мениджър

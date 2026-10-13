@@ -2339,6 +2339,10 @@ animation effects	Off	Disattivati
 
 # PDF tab context menu (#1233)
 	Close Tab	Chiudi scheda
+	Move Tab Left	Sposta scheda a sinistra
+	Move Tab Right	Sposta scheda a destra
+	This tab is already first	Questa scheda è già la prima
+	This tab is already last	Questa scheda è già l’ultima
 	Reopen Closed Tab	Riapri scheda chiusa
 	Reveal in Finder	Mostra nel Finder
 	Reveal in File Explorer	Mostra in Esplora file

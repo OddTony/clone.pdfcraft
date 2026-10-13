@@ -2331,6 +2331,10 @@ animation effects	Off	Aus
 
 # PDF tab context menu (#1233)
 	Close Tab	Tab schließen
+	Move Tab Left	Tab nach links verschieben
+	Move Tab Right	Tab nach rechts verschieben
+	This tab is already first	Dieser Tab ist bereits der erste
+	This tab is already last	Dieser Tab ist bereits der letzte
 	Reopen Closed Tab	Geschlossenen Tab wieder öffnen
 	Reveal in Finder	Im Finder anzeigen
 	Reveal in File Explorer	Im Datei-Explorer anzeigen

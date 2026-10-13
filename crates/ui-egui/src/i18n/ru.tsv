@@ -2243,6 +2243,10 @@ animation effects	Off	Выкл
 
 # PDF tab context menu (#1233)
 	Close Tab	Закрыть вкладку
+	Move Tab Left	Переместить вкладку влево
+	Move Tab Right	Переместить вкладку вправо
+	This tab is already first	Эта вкладка уже первая
+	This tab is already last	Эта вкладка уже последняя
 	Reopen Closed Tab	Открыть закрытую вкладку
 	Reveal in Finder	Показать в Finder
 	Reveal in File Explorer	Показать в проводнике

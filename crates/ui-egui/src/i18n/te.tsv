@@ -2231,6 +2231,10 @@ animation effects	Off	ఆఫ్
 
 # PDF tab context menu (#1233)
 	Close Tab	ట్యాబ్‌ను మూసివేయి
+	Move Tab Left	ట్యాబ్‌ను ఎడమకు తరలించండి
+	Move Tab Right	ట్యాబ్‌ను కుడికి తరలించండి
+	This tab is already first	ఈ ట్యాబ్ ఇప్పటికే మొదటిది
+	This tab is already last	ఈ ట్యాబ్ ఇప్పటికే చివరిది
 	Reopen Closed Tab	మూసివేసిన ట్యాబ్‌ను మళ్లీ తెరువు
 	Reveal in Finder	Finderలో చూపు
 	Reveal in File Explorer	ఫైల్ ఎక్స్‌ప్లోరర్‌లో చూపు

@@ -2298,6 +2298,10 @@ animation effects	Off	Wyłączone
 
 # PDF tab context menu (#1233)
 	Close Tab	Zamknij kartę
+	Move Tab Left	Przenieś kartę w lewo
+	Move Tab Right	Przenieś kartę w prawo
+	This tab is already first	Ta karta jest już pierwsza
+	This tab is already last	Ta karta jest już ostatnia
 	Reopen Closed Tab	Otwórz ponownie zamkniętą kartę
 	Reveal in Finder	Pokaż w Finderze
 	Reveal in File Explorer	Pokaż w Eksploratorze plików

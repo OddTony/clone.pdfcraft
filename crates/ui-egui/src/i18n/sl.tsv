@@ -2335,6 +2335,10 @@ animation effects	Off	Izklopljeni
 
 # PDF tab context menu (#1233)
 	Close Tab	Zapri zavihek
+	Move Tab Left	Premakni zavihek levo
+	Move Tab Right	Premakni zavihek desno
+	This tab is already first	Ta zavihek je že prvi
+	This tab is already last	Ta zavihek je že zadnji
 	Reopen Closed Tab	Znova odpri zaprti zavihek
 	Reveal in Finder	Prikaži v Finderju
 	Reveal in File Explorer	Prikaži v upravljalniku datotek

@@ -2318,6 +2318,10 @@ animation effects	Off	Өшірулі
 
 # PDF tab context menu (#1233)
 	Close Tab	Қойындыны жабу
+	Move Tab Left	Қойындыны солға жылжыту
+	Move Tab Right	Қойындыны оңға жылжыту
+	This tab is already first	Бұл қойынды бірінші орында тұр
+	This tab is already last	Бұл қойынды соңғы орында тұр
 	Reopen Closed Tab	Жабылған қойындыны қайта ашу
 	Reveal in Finder	Finder ішінде көрсету
 	Reveal in File Explorer	Файл шолғышында көрсету

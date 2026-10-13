@@ -2193,6 +2193,10 @@ animation effects	Off	關
 
 # PDF tab context menu (#1233)
 	Close Tab	關閉分頁
+	Move Tab Left	將分頁左移
+	Move Tab Right	將分頁右移
+	This tab is already first	此分頁已是第一個
+	This tab is already last	此分頁已是最後一個
 	Reopen Closed Tab	重新開啟已關閉的分頁
 	Reveal in Finder	在 Finder 中顯示
 	Reveal in File Explorer	在檔案總管中顯示

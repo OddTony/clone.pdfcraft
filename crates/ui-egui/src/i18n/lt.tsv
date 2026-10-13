@@ -364,6 +364,10 @@
 	Clockwise 90 degrees	90 laipsnių pagal laikrodžio rodyklę
 	Close (Esc)	Užverti (Esc)
 	Close Tab	Užverti kortelę
+	Move Tab Left	Perkelti skirtuką į kairę
+	Move Tab Right	Perkelti skirtuką į dešinę
+	This tab is already first	Šis skirtukas jau yra pirmas
+	This tab is already last	Šis skirtukas jau yra paskutinis
 	Close panel	Užverti skydelį
 	Closed arrow	Uždara rodyklė
 	Collapse	Suskleisti

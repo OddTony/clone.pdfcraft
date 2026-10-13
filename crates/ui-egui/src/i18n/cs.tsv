@@ -2404,6 +2404,10 @@ animation effects	Off	Vypnuto
 
 # PDF tab context menu (#1233)
 	Close Tab	Zavřít kartu
+	Move Tab Left	Přesunout kartu doleva
+	Move Tab Right	Přesunout kartu doprava
+	This tab is already first	Tato karta je už první
+	This tab is already last	Tato karta je už poslední
 	Reopen Closed Tab	Znovu otevřít zavřenou kartu
 	Reveal in Finder	Zobrazit ve Finderu
 	Reveal in File Explorer	Zobrazit v Průzkumníku souborů

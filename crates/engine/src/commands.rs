@@ -187,6 +187,10 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("file.save_as", "Save as…", FILE, Some(Shortcut::cmd_shift("S")), Document, "save"),
     c("file.close", "Close file", FILE, Some(Shortcut::cmd("W")), Document, "x"),
     c("file.close_all", "Close all", FILE, Some(Shortcut::cmd_shift("W")), Document, "x"),
+    // Tab order belongs to the UI window, not the engine Session. These commands are in the
+    // shared registry so the palette, shortcuts, and opt-in UI control channel can invoke them.
+    c("tab.move_left", "Move Tab Left", None, None, Document, "chevron-left"),
+    c("tab.move_right", "Move Tab Right", None, None, Document, "chevron-right"),
     c("file.revert", "Revert", FILE, None, Undo, "rotate-ccw"),
     c("print.dialog", "Print…", FILE, Some(Shortcut::cmd("P")), Document, "printer"),
     c("file.properties", "Document properties…", FILE, Some(Shortcut::cmd("D")), Document, "info"),

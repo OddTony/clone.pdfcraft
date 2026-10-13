@@ -2351,6 +2351,10 @@ animation effects	Off	معطّلة
 
 # PDF tab context menu (#1233)
 	Close Tab	إغلاق علامة التبويب
+	Move Tab Left	نقل علامة التبويب إلى اليسار
+	Move Tab Right	نقل علامة التبويب إلى اليمين
+	This tab is already first	علامة التبويب هذه هي الأولى بالفعل
+	This tab is already last	علامة التبويب هذه هي الأخيرة بالفعل
 	Reopen Closed Tab	إعادة فتح علامة التبويب المغلقة
 	Reveal in Finder	إظهار في Finder
 	Reveal in File Explorer	إظهار في مستكشف الملفات

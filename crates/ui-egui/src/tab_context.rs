@@ -5,6 +5,8 @@ pub(crate) enum Action {
     Close(DocId),
     Reopen,
     Reveal(DocId),
+    MoveLeft(DocId),
+    MoveRight(DocId),
 }
 
 impl crate::PdfCraftApp {
@@ -42,6 +44,12 @@ impl crate::PdfCraftApp {
                 }
                 #[cfg(target_arch = "wasm32")]
                 let _ = id;
+            }
+            Action::MoveLeft(id) => {
+                self.move_tab_by_id(id, -1);
+            }
+            Action::MoveRight(id) => {
+                self.move_tab_by_id(id, 1);
             }
         }
     }

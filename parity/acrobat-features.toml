@@ -578,6 +578,18 @@ evidence = ["crates/ui-egui/tests/editing.rs::closing_a_dirty_tab_asks_and_cance
 notes = ""
 
 [[feature]]
+id = "viewer.tab-reorder"
+title = "Reorder document tabs within one window"
+area = "B"
+tier = "P2"
+milestone = "M3"
+status = "shipped"
+commands = ["tab.move_left", "tab.move_right"]
+tools = []
+evidence = ["crates/ui-egui/tests/tab_reordering.rs::dragging_tab_commits_on_release_and_preserves_active_document", "crates/ui-egui/tests/tab_reordering.rs::escape_and_outside_release_cancel_without_closing_tabs", "crates/ui-egui/tests/control.rs::tab_move_commands_are_available_through_opt_in_control"]
+notes = "Single-window document tabs only: release-to-commit dragging, cancellation, overflow edge scrolling and context/palette/UI-control commands. Preserves existing DocView and engine document state. Native macOS control-driven wgpu/Glow smoke tests passed; physical input, Windows and Linux validation remain required. Detachment and cross-window transfers are not implemented. UI placement has no standalone engine/MCP tab model; use opt-in UI control."
+
+[[feature]]
 id = "core.dirty-indicator"
 title = "Unsaved-changes marker on document tabs"
 area = "A"

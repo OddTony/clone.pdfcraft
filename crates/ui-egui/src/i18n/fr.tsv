@@ -2330,6 +2330,10 @@ animation effects	Off	Désactivés
 
 # PDF tab context menu (#1233)
 	Close Tab	Fermer l’onglet
+	Move Tab Left	Déplacer l’onglet vers la gauche
+	Move Tab Right	Déplacer l’onglet vers la droite
+	This tab is already first	Cet onglet est déjà le premier
+	This tab is already last	Cet onglet est déjà le dernier
 	Reopen Closed Tab	Rouvrir l’onglet fermé
 	Reveal in Finder	Afficher dans le Finder
 	Reveal in File Explorer	Afficher dans l’explorateur de fichiers
