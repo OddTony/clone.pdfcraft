@@ -8,6 +8,8 @@
 
 use crate::keys::DigestAlg;
 use crate::{Certificate, SignError};
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::{Path, PathBuf};
 
 /// The `pkcs11:<SHA-256 of the certificate DER>` reference kept for an identity.
 pub fn reference(certificate: &Certificate) -> String {
@@ -71,6 +73,101 @@ pub fn digest_info(alg: DigestAlg, digest: &[u8]) -> Result<Vec<u8>, SignError> 
     Ok(crate::der::seq(&[&id, &crate::der::octets(digest)]))
 }
 
+// ── modules and tokens (native targets only; the browser can't load a DLL) ──────────────
+
+/// A token in a slot: what the settings UI lists and what a `pkcs11:` reference resolves
+/// against. Plain data, so the UI can show it without touching the module.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Token {
+    /// The token's label, without the space padding PKCS #11 strings carry.
+    pub label: String,
+    /// The device serial number, unpadded.
+    pub serial: String,
+    /// The device manufacturer, unpadded.
+    pub manufacturer: String,
+    /// Whether signing needs a PIN entered: login is required and the token has no pinpad
+    /// reading it itself.
+    pub needs_pin: bool,
+    /// Whether the token reads the PIN itself (`PROTECTED_AUTHENTICATION_PATH`): login
+    /// passes no PIN.
+    pub pinpad: bool,
+    /// Whether the user PIN is locked.
+    pub pin_locked: bool,
+}
+
+/// A loaded PKCS #11 module. Lives as long as the app (never finalized); the path is the
+/// one the user chose, kept for error messages.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+pub struct Module {
+    inner: cryptoki::context::Pkcs11,
+    path: PathBuf,
+}
+
+/// Load the module at `path` — a DLL the user picked explicitly. Modules are never searched
+/// for or loaded on their own: a DLL executes code.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn load_module(path: &Path) -> Result<Module, SignError> {
+    let inner = cryptoki::context::Pkcs11::new(path)
+        .map_err(|e| SignError::Crypto(format!("the PKCS #11 module at {} couldn't be loaded: {}", path.display(), describe(&e))))?;
+    inner
+        .initialize(cryptoki::context::CInitializeArgs::new(cryptoki::context::CInitializeFlags::OS_LOCKING_OK))
+        .map_err(|e| SignError::Crypto(format!("the PKCS #11 module at {} couldn't be started: {}", path.display(), describe(&e))))?;
+    Ok(Module { inner, path: path.to_path_buf() })
+}
+
+/// Every slot holding a token: its label, serial number, manufacturer, and whether a PIN
+/// is needed or read by a pinpad.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn tokens(module: &Module) -> Result<Vec<Token>, SignError> {
+    let slots = module
+        .inner
+        .get_slots_with_token()
+        .map_err(|e| SignError::Crypto(format!("the PKCS #11 module at {} couldn't list its slots: {}", module.path.display(), describe(&e))))?;
+    let mut out = Vec::new();
+    for slot in slots {
+        let info = module.inner.get_token_info(slot).map_err(|e| {
+            SignError::Crypto(format!(
+                "a token in the PKCS #11 module at {} couldn't be read (was it removed?): {}",
+                module.path.display(),
+                describe(&e)
+            ))
+        })?;
+        let pinpad = info.protected_authentication_path();
+        out.push(Token {
+            label: info.label().trim_end().to_string(),
+            serial: info.serial_number().trim_end().to_string(),
+            manufacturer: info.manufacturer_id().trim_end().to_string(),
+            needs_pin: info.login_required() && !pinpad,
+            pinpad,
+            pin_locked: info.user_pin_locked(),
+        });
+    }
+    Ok(out)
+}
+
+/// A PKCS #11 failure as a sentence saying what happened, instead of a bare return code.
+#[cfg(not(target_arch = "wasm32"))]
+fn describe(error: &cryptoki::error::Error) -> String {
+    use cryptoki::error::{Error, RvError};
+    let rv = match error {
+        Error::Pkcs11(rv, ..) => rv,
+        _ => return error.to_string(),
+    };
+    let meaning = match rv {
+        RvError::PinIncorrect => "the PIN is incorrect",
+        RvError::PinLocked => "the PIN is locked",
+        RvError::PinExpired => "the PIN has expired and must be changed",
+        RvError::TokenNotPresent => "the token isn't inserted",
+        RvError::TokenNotRecognized => "the token isn't recognized",
+        RvError::DeviceRemoved => "the device was removed",
+        RvError::DeviceError | RvError::DeviceMemory => "the device reported an error",
+        RvError::UserAlreadyLoggedIn => "already logged in",
+        _ => return error.to_string(),
+    };
+    format!("{meaning} ({rv:?})")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,5 +218,29 @@ mod tests {
         assert!(digest_info(DigestAlg::Sha256, &[0u8; 31]).is_err());
         assert!(digest_info(DigestAlg::Sha384, &[0u8; 32]).is_err());
         assert!(digest_info(DigestAlg::Sha512, &[0u8; 64]).is_ok());
+    }
+
+    /// A missing or garbage module is an error naming the path, never a crash. `file!()` is
+    /// this test's own source: it exists but is no DLL.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn broken_modules_are_errors_naming_the_path() {
+        for path in ["/nonexistent/pkcs11-test-module.so", file!()] {
+            let e = super::load_module(std::path::Path::new(path)).unwrap_err().to_string();
+            assert!(e.contains("couldn't be loaded"), "{path}: {e}");
+            assert!(e.contains(path), "{e}");
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn failures_say_what_happened() {
+        use cryptoki::error::{Error, RvError};
+        // `Function` carries no meaning here; any value does.
+        let at = |rv| super::describe(&Error::Pkcs11(rv, cryptoki::context::Function::GetInfo));
+        assert!(at(RvError::PinIncorrect).contains("incorrect"));
+        assert!(at(RvError::PinLocked).contains("locked"));
+        assert!(at(RvError::TokenNotPresent).contains("isn't inserted"));
+        assert!(at(RvError::DeviceRemoved).contains("removed"));
     }
 }

@@ -41,6 +41,9 @@ ed25519-dalek = "3.0.0"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 aws-lc-rs = { version = "1.18", default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
 getrandom = "0.4"
+# PKCS #11 tokens through a maintained safe wrapper (Apache-2.0). The module path always
+# comes from the user; nothing here searches for or loads modules on its own.
+cryptoki = { version = "0.12.1", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Safe Windows certificate store and CNG signing wrappers (MIT OR Apache-2.0).
