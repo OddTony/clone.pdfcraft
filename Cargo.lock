@@ -3713,6 +3713,7 @@ dependencies = [
  "pdfcraft-organize",
  "pdfcraft-preflight",
  "pdfcraft-print",
+ "pdfcraft-ps-export",
  "pdfcraft-redact",
  "pdfcraft-render",
  "pdfcraft-sign",
