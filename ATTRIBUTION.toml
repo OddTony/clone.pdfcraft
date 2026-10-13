@@ -63,7 +63,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Brazilian Portuguese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "bae3ce4daf23db6c3e80710b246d920ad8a70291c0ce4f427e29429f1b89fee0"
+sha256 = "f7ff5b2ffb0784f21873f309989e79e8b53ed9cf558d50d80c4840af402edf11"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/es.tsv"
