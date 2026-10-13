@@ -2424,3 +2424,10 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+	Comments to send	Gönderilecek yorumlar
+	Entire PDF document to send: {bytes} bytes	Gönderilecek tam PDF belgesi: {bytes} bayt
+	Form values to send: {count}	Gönderilecek form değerleri: {count}
+	Only send if you trust this document and destination. GET puts form values in the URL.	Yalnızca bu belgeye ve hedefe güveniyorsanız gönderin. GET form değerlerini URL’ye koyar.
+	Only send if you trust this document and destination. The entire PDF leaves this computer.	Yalnızca bu belgeye ve hedefe güveniyorsanız gönderin. Tam PDF belgesi bu bilgisayardan çıkar.
+	Only send if you trust this document and destination. The form values leave this computer.	Yalnızca bu belgeye ve hedefe güveniyorsanız gönderin. Form değerleri bu bilgisayardan çıkar.
+	Submit PDF document	PDF belgesini gönder>>>>>>> aa26fd07 (M6: reconcile integration with current main)
