@@ -5948,8 +5948,8 @@ milestone = "M9"
 status = "shipped"
 commands = ["sign.digital"]
 tools = ["sign_document"]
-evidence = ["crates/ui-egui/tests/signing.rs::drawing_a_signature_creating_an_id_signing_and_trusting", "crates/automation/tests/automation.rs::digital_ids_signing_and_validation_through_tools"]
-notes = "drag a rectangle; Acrobat's name-and-details appearance"
+evidence = ["crates/ui-egui/tests/signing.rs::drawing_a_signature_creating_an_id_signing_and_trusting", "crates/automation/tests/automation.rs::digital_ids_signing_and_validation_through_tools", "crates/sign/tests/pdf.rs::one_signature_shows_on_several_pages"]
+notes = "drag a rectangle; Acrobat's name-and-details appearance. One signature can also show on a page range (a widget per page, same place relative to each crop box; sign_document also_pages). Not yet: checked against Acrobat or an external validator"
 
 [[feature]]
 id = "sign.sign-existing-field"
