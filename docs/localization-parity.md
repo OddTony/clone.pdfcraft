@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (list all registered interface languages; preserve the original coverage snapshot) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (list all registered interface languages; preserve the original coverage snapshot) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Per-language status of PdfCraft's interface against Acrobat Pro's. How translations work and how to
 add a language: [localization.md](localization.md). Summary in [ROADMAP.md](../ROADMAP.md).
@@ -60,12 +60,12 @@ none has translated help.
 | Hungarian | `hu` | 2,126 (99.2%) | partial | yes |
 | Ukrainian | `uk` | 2,142 (100%) | partial | yes |
 | Italian | `it` | 2,130 (99.4%) | partial | yes |
-| Kazakh | `kk` | 2,327 entries | partial | no |
-| Polish | `pl` | 2,287 entries | partial | yes |
-| Slovenian | `sl` | 2,324 entries | partial | no |
-| Greek | `el` | 2,341 entries | partial | no |
-| Turkish | `tr` | 2,313 entries | partial | yes |
-| Lithuanian | `lt` | 2,578 entries | partial; community native-speaker review ([#1401](https://github.com/storytold/pdfcraft/pull/1401)) | no |
+| Kazakh | `kk` | 2,423 entries | partial | no |
+| Polish | `pl` | 2,383 entries | partial | yes |
+| Slovenian | `sl` | 2,420 entries | partial | no |
+| Greek | `el` | 2,431 entries | partial | no |
+| Turkish | `tr` | 2,409 entries | partial | yes |
+| Lithuanian | `lt` | 2,668 entries | partial; community native-speaker review of the catalog as added ([#1401](https://github.com/storytold/pdfcraft/pull/1401)); the 90 OCR entries are not reviewed | no |
 
 **14 other languages** ship (21 catalogs plus English, 22 interface languages in Preferences).
 The entry counts without percentages were measured on 2026-10-12; they are not percentages of the older 2,143-key snapshot above. Their presence does not imply a detailed linguistic or runtime review.
@@ -75,5 +75,6 @@ Acrobat languages PdfCraft lacks: Danish, Dutch, Finnish, Norwegian, Swedish, He
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | M10: the Scan & OCR review strings (90 entries) were added to all 21 catalogs; the entry counts of Kazakh, Polish, Slovenian, Greek, Turkish and Lithuanian were re-measured; the Lithuanian additions were written without native review; the percentage snapshot of the twelve key languages is unchanged |
 | 2026-10-12 | minor | Added current counts for Kazakh, Polish, Slovenian, Greek, Turkish and Lithuanian; retained existing language assessments and the original percentage snapshot |
 | 2026-10-10 | major | Created. Catalog counts measured from `crates/ui-egui/src/i18n/*.tsv` against the 2,143-key union; Acrobat's localizations from its bundle's `.lproj` and Sequences folder names |

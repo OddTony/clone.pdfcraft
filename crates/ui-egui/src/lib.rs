@@ -5,6 +5,7 @@
 //! Everything here is presentation: documents, rendering and the tool catalogue live in
 //! `pdfcraft-engine`.
 
+#![recursion_limit = "256"]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 /// Translate an English UI string into the current language (see [`i18n`]).
@@ -51,6 +52,7 @@ mod js_ui;
 mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
+mod ocr_verify;
 mod optimize_ui;
 mod search_ui;
 mod sign_ui;
@@ -141,7 +143,8 @@ use pdfcraft_engine::{DocId, Session};
 pub use canvas::{DocView, RasterMemory};
 pub use editing::{CloseRequest, SaveTarget};
 pub use files::{ExtractDraft, FilePurpose, FileRequest, RotateDraft, SplitDraft, SplitMode, SplitPlan};
-pub use recovery::{AUTOSAVE_SECS, RecoveryMeta, RecoveryStore};
+pub use ocr_verify::{OcrVerify, Phase};
+pub use recovery::{AUTOSAVE_SECS, RecoveryMeta, RecoveryStore, default_dictionary_dir};
 use theme::{ThemeKind, ThemePreference};
 
 /// Top-level workspace modes (Acrobat's mode bar).
@@ -638,6 +641,8 @@ pub struct PdfCraftApp {
     pub ocr_draft: ocr_ui::OcrDraft,
     pub ocr_run: Option<ocr_ui::OcrRun>,
     pub ocr_batch: Option<std::sync::Arc<std::sync::Mutex<ocr_ui::BatchProgress>>>,
+    /// Scan & OCR ▸ Correct recognized text: the OCR Verify screen (its state, never persisted).
+    pub ocr_verify: ocr_verify::OcrVerify,
     /// Background jobs (OCR, actions, listing pinned folders) run inline instead (tests).
     pub run_inline: bool,
     /// Action Wizard: the user's actions, the dialog state, the running action and (tests) the
@@ -956,6 +961,7 @@ impl PdfCraftApp {
             ocr_draft: ocr_ui::OcrDraft::default(),
             ocr_run: None,
             ocr_batch: None,
+            ocr_verify: ocr_verify::OcrVerify::default(),
             run_inline: false,
             custom_actions: Vec::new(),
             wizard: Default::default(),
@@ -2133,6 +2139,7 @@ impl PdfCraftApp {
             "combine_zoom": self.combine_zoom,
             "comments_panel_closed": self.comments_panel_closed,
             "right_panel_closed": self.right_panel_closed,
+            "ocr": self.ocr_draft.to_pref(),
         })
         .to_string()
     }
@@ -2287,6 +2294,9 @@ impl PdfCraftApp {
             let certs = pems.iter().filter_map(|p| pdfcraft_engine::sign::x509::load_certificates(p.as_bytes()).ok()).flatten().collect();
             self.session.set_trusted_certificates(certs);
         }
+        // Scan & OCR choices (language, engine, strategy, output mode, preprocessing and skip
+        // flags); unknown or malformed values keep the defaults.
+        self.ocr_draft.apply_pref(&v["ocr"]);
     }
 
     /// `true` while any open document still waits for page renders (used by headless capture).
@@ -2884,6 +2894,10 @@ impl eframe::App for PdfCraftApp {
         self.poll_ocr();
         self.poll_optimize();
         self.poll_action();
+        // The OCR Verify screen's worker may have finished while no frame was drawn.
+        if self.ocr_verify.phase == ocr_verify::Phase::Running {
+            ocr_verify::with_state(self, ocr_verify::OcrVerify::poll);
+        }
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]
         self.process_picked();
@@ -2932,6 +2946,14 @@ impl eframe::App for PdfCraftApp {
         self.sync_window_frame(&ctx);
         if self.draws_window_frame() {
             window_controls::resize_edges(&ctx);
+        }
+        if self.ocr_verify.open {
+            // The OCR Verify screen owns the window (its four panes); dialogs and notices
+            // still show above it.
+            ocr_verify::show(self, ui);
+            dialogs::show(self, &ctx);
+            widgets::toast(self, &ctx);
+            return;
         }
         chrome::tab_strip(self, ui);
         chrome::mode_bar(self, ui);
