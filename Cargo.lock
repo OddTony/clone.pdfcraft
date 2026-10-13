@@ -4005,6 +4005,7 @@ dependencies = [
  "pollster 1.0.1",
  "rfd",
  "rustix 1.1.5",
+ "secrecy",
  "serde",
  "serde_json",
  "skrifa 0.44.0",

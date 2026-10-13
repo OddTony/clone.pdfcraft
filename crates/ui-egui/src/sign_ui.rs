@@ -293,6 +293,59 @@ fn windows_id(reference: &str) -> Result<DigitalId, String> {
     Err(format!("{reference}: Windows certificate store identities are only available on Windows"))
 }
 
+/// A token identity by its `pkcs11:` reference, looked up on every configured module: the
+/// reference names the token object, not the module holding it.
+fn pkcs11_id(modules: &[String], reference: &str, pin: &str) -> Result<DigitalId, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if modules.is_empty() {
+            return Err("There are no PKCS #11 modules configured.".into());
+        }
+        let uri = sign::pkcs11::parse_uri(reference).map_err(|e| e.to_string())?;
+        let pin = sign::pkcs11::PinSource::Value(secrecy::SecretString::new(pin.to_owned().into()));
+        let mut hits = Vec::new();
+        let mut load_error = None;
+        for path in modules {
+            let module = match sign::pkcs11::load_module(std::path::Path::new(path)) {
+                Ok(module) => module,
+                // A module that broke since listing still shouldn't hide the others; when
+                // nothing matches at all, its failure is the error to report.
+                Err(e) => {
+                    load_error.get_or_insert_with(|| e.to_string());
+                    continue;
+                }
+            };
+            let Ok(listing) = sign::pkcs11::list(&module, &pin) else { continue };
+            hits.extend(listing.ids.into_iter().filter(|id| id.matches(&uri)).map(|id| id.id));
+        }
+        match hits.len() {
+            1 => Ok(hits.into_iter().next().ok_or_else(|| format!("no PKCS #11 identity {reference}"))?),
+            0 => Err(load_error.unwrap_or_else(|| format!("no PKCS #11 identity {reference}"))),
+            _ => Err(format!("the PKCS #11 reference {reference} matches several identities")),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (modules, pin);
+        Err(format!("{reference}: PKCS #11 tokens aren't available in the browser"))
+    }
+}
+
+/// A greyed entry for a token certificate that can't sign, with the reason.
+#[cfg(not(target_arch = "wasm32"))]
+fn entry_unusable_pkcs11(index: usize, subject: &str, reason: &str) -> DigitalIdEntry {
+    DigitalIdEntry {
+        // Never a real reference (it would not parse): only the prefix matters, for the
+        // store label and for keeping these out of the settings.
+        path: format!("pkcs11:unusable:{index}"),
+        name: subject.to_string(),
+        issuer: String::new(),
+        email: String::new(),
+        expires: String::new(),
+        unusable: Some(reason.to_string()),
+    }
+}
+
 pub fn entry_for(path: &str, c: &Certificate) -> DigitalIdEntry {
     DigitalIdEntry {
         path: path.to_string(),
@@ -335,7 +388,7 @@ impl PdfCraftApp {
 
     /// List OS key store signing identities (after the file-based IDs).
     fn refresh_os_key_store_ids(&mut self) {
-        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:"));
+        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("pkcs11:"));
         #[cfg(target_os = "macos")]
         if self.os_key_store_ids {
             match sign::keychain::identities(None) {
@@ -366,6 +419,33 @@ impl PdfCraftApp {
                     }
                 }
                 Err(e) => self.notify_fmt("The Windows store's digital IDs couldn't be listed: {e}", &[("e", &e.to_string())]),
+            }
+        }
+        // Token identities from every configured module (the desktop app). Listing never
+        // asks for a PIN; a module that won't load says so and the rest still list.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut unusable = 0usize;
+            for path in self.pkcs11_modules.clone() {
+                let module = match sign::pkcs11::load_module(std::path::Path::new(&path)) {
+                    Ok(module) => module,
+                    Err(e) => {
+                        self.notify_fmt("The PKCS #11 module's digital IDs couldn't be listed: {e}", &[("e", &e.to_string())]);
+                        continue;
+                    }
+                };
+                match sign::pkcs11::list(&module, &sign::pkcs11::PinSource::None) {
+                    Ok(listing) => {
+                        for id in &listing.ids {
+                            self.digital_ids.push(entry_for(&id.reference(), &id.id.certificate));
+                        }
+                        for u in &listing.unusable {
+                            self.digital_ids.push(entry_unusable_pkcs11(unusable, &u.subject, &u.reason));
+                            unusable += 1;
+                        }
+                    }
+                    Err(e) => self.notify_fmt("The PKCS #11 module's digital IDs couldn't be listed: {e}", &[("e", &e.to_string())]),
+                }
             }
         }
     }
@@ -487,6 +567,8 @@ impl PdfCraftApp {
             keychain_id(&entry.path)?
         } else if entry.path.starts_with("windows:") {
             windows_id(&entry.path)?
+        } else if entry.path.starts_with("pkcs11:") {
+            pkcs11_id(&self.pkcs11_modules, &entry.path, &d.password)?
         } else {
             let bytes = std::fs::read(&entry.path).map_err(|e| format!("{}: {e}", entry.path))?;
             sign::pkcs12::open(&bytes, &d.password).map_err(|e| match e {
@@ -696,6 +778,8 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 tl!("Keychain  ·  ").to_string()
             } else if e.path.starts_with("windows:") {
                 tl!("Windows store  ·  ").to_string()
+            } else if e.path.starts_with("pkcs11:") {
+                tl!("Token  ·  ").to_string()
             } else {
                 String::new()
             };
@@ -947,6 +1031,7 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         ),
     );
     let in_os_key_store = entry.path.starts_with("keychain:") || entry.path.starts_with("windows:");
+    let on_token = entry.path.starts_with("pkcs11:");
     let mut close = false;
     let mut go = false;
     #[cfg(not(target_arch = "wasm32"))]
@@ -1023,6 +1108,13 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 .small()
                 .color(t.text_muted),
             );
+        } else if on_token {
+            // The token signs on request; the PIN below is hidden and never stored.
+            let l = ui.label(tl!("Token PIN"));
+            let r = ui.add(crate::widgets::line(&mut d.password).password(true).desired_width(200.0)).labelled_by(l.id);
+            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                go = true;
+            }
         } else {
             let l = ui.label(tl!("Digital ID password"));
             let r = ui.add(crate::widgets::line(&mut d.password).password(true).desired_width(200.0)).labelled_by(l.id);
