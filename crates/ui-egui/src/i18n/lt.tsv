@@ -2596,3 +2596,5 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+	PKCS #11 modules	PKCS #11 moduliai
+	Tokens and smart cards sign through a PKCS #11 module. Only add modules you trust: a module runs its own code.	Raktai ir lustinės kortelės pasirašo per PKCS #11 modulį. Pridėkite tik modulius, kuriais pasitikite: modulis vykdo savo kodą.

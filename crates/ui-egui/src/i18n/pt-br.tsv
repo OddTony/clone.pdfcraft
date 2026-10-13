@@ -2366,3 +2366,5 @@ animation effects	Off	Desativados
 	This document is trying to open a local file:	Este documento está tentando abrir um arquivo local:
 	Move tag earlier	Mover tag para antes
 	Move tag later	Mover tag para depois
+	PKCS #11 modules	Módulos PKCS #11
+	Tokens and smart cards sign through a PKCS #11 module. Only add modules you trust: a module runs its own code.	Tokens e smart cards assinam por meio de um módulo PKCS #11. Adicione apenas módulos confiáveis: um módulo executa o próprio código.

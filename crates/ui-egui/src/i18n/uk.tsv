@@ -2374,3 +2374,5 @@ animation effects	Off	Вимкнено
 	This document is trying to open a local file:	Цей документ намагається відкрити локальний файл:
 	Move tag earlier	Перемістити тег раніше
 	Move tag later	Перемістити тег пізніше
+	PKCS #11 modules	Модулі PKCS #11
+	Tokens and smart cards sign through a PKCS #11 module. Only add modules you trust: a module runs its own code.	Токени та смарт-картки підписують через модуль PKCS #11. Додавайте лише модулі, яким довіряєте: модуль виконує власний код.
