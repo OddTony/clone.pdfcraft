@@ -608,9 +608,9 @@ pub struct PdfCraftApp {
     pub alt_draft: a11y_ui::AltDraft,
     /// List the OS key store's signing identities among the digital IDs (the desktop app).
     pub os_key_store_ids: bool,
-    /// ICP-Brasil cloud certificates: the HTTPS transport (the desktop app sets it), the providers
-    /// configured (kept in the settings), this run's sessions with their certificates, and a
-    /// sign-in waiting for the browser.
+    /// ICP-Brasil cloud certificates: the HTTPS transport and the providers the build is
+    /// registered with (the desktop app sets both), this run's sessions with their certificates,
+    /// and a sign-in waiting for the browser.
     pub psc_transport: Option<std::sync::Arc<dyn pdfcraft_engine::sign::psc::Transport>>,
     pub psc_providers: Vec<pdfcraft_engine::sign::psc::Provider>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -1820,7 +1820,6 @@ impl PdfCraftApp {
                 .iter()
                 .filter(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("psc:"))
                 .collect::<Vec<_>>(),
-            "psc_providers": self.psc_providers,
             "trusted": trusted,
             "custom_stamps": stamps_ui::encode(&self.custom_stamps),
             "javascript": self.session.javascript(),
@@ -1967,9 +1966,6 @@ impl PdfCraftApp {
         self.sign_graphic = serde_json::from_value(v["sign_graphic"].clone()).unwrap_or_default();
         if let Ok(ids) = serde_json::from_value::<Vec<DigitalIdEntry>>(v["digital_ids"].clone()) {
             self.digital_ids = ids;
-        }
-        if let Ok(providers) = serde_json::from_value(v["psc_providers"].clone()) {
-            self.psc_providers = providers;
         }
         self.custom_stamps = stamps_ui::decode(&v["custom_stamps"]);
         self.custom_actions = actions_ui::decode(&v["actions"]);

@@ -404,23 +404,21 @@ impl PdfCraftApp {
         Ok(self.add_digital_id(&path.to_string_lossy(), &cert))
     }
 
-    /// Configure New Digital ID ▸ Use a cloud certificate: keep the provider, open its page, and
-    /// wait (off the UI thread) for the holder's approval.
+    /// Configure New Digital ID ▸ Use a cloud certificate: open the chosen provider's page and wait
+    /// (off the UI thread) for the holder's approval.
     #[cfg(not(target_arch = "wasm32"))]
     fn start_cloud_sign_in(&mut self) -> Result<(), String> {
         let provider = self.sign_draft.as_ref().map(|d| d.new_id.provider.clone()).unwrap_or_default();
-        if provider.name.trim().is_empty() || provider.base.trim().is_empty() || provider.client_id.trim().is_empty() {
-            return Err(tl!("Fill in the provider, its API address and the client ID.").to_string());
+        if provider.base.is_empty() {
+            return Err(tl!("Choose a provider.").to_string());
         }
         let transport = self.psc_transport.clone().ok_or("cloud certificates are unavailable here")?;
         let ctx = self.egui_ctx();
-        let (url, pending) = crate::cloud_sign::start(provider.clone(), transport, move || {
+        let (url, pending) = crate::cloud_sign::start(provider, transport, move || {
             if let Some(ctx) = &ctx {
                 ctx.request_repaint();
             }
         })?;
-        self.psc_providers.retain(|p| p.name != provider.name);
-        self.psc_providers.insert(0, provider);
         self.psc_pending = Some(pending);
         self.open_url(&url);
         Ok(())
@@ -749,8 +747,8 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     // A cloud sign-in that finished since the last frame.
     #[cfg(not(target_arch = "wasm32"))]
     app.poll_cloud_sign_in();
-    let cloud_available = app.psc_transport.is_some();
-    let first_provider = app.psc_providers.first().cloned();
+    // Shown only when the build is registered with a provider.
+    let providers = if app.psc_transport.is_some() { app.psc_providers.clone() } else { Vec::new() };
     #[cfg(not(target_arch = "wasm32"))]
     let waiting = app.psc_pending.as_ref().map(|p| p.provider.clone());
     #[cfg(target_arch = "wasm32")]
@@ -767,35 +765,35 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     }
     // Cloud certificates sign over the network from the desktop app.
     #[cfg(not(target_arch = "wasm32"))]
-    if cloud_available && ui.add(widgets::radio(n.cloud, tl!("Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)"))).clicked() {
+    if !providers.is_empty() && ui.add(widgets::radio(n.cloud, tl!("Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)"))).clicked()
+    {
         (n.create, n.cloud) = (false, true);
-        if n.provider == sign::psc::Provider::default() {
-            n.provider = first_provider
-                .clone()
-                .unwrap_or_else(|| sign::psc::Provider { redirect_uri: "http://127.0.0.1:43821/callback".into(), ..Default::default() });
+        if !providers.contains(&n.provider) {
+            n.provider = providers[0].clone();
         }
     }
     if ui.add(widgets::radio(n.create && !n.cloud, tl!("Create a new Digital ID (self-signed, saved to a password-protected file)"))).clicked() {
         (n.create, n.cloud) = (true, false);
     }
     #[cfg(target_arch = "wasm32")]
-    let _ = (cloud_available, &first_provider);
+    let _ = &providers;
     ui.add_space(8.0);
     if n.cloud {
-        egui::Grid::new("id-cloud").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-            for (label, value, hint, secret) in [
-                (tl!("Provider"), &mut n.provider.name, "BirdID", false),
-                (tl!("API address"), &mut n.provider.base, "https://…/v0/", false),
-                (tl!("Client ID"), &mut n.provider.client_id, "", false),
-                (tl!("Client secret"), &mut n.provider.client_secret, "", true),
-                (tl!("Redirect URI"), &mut n.provider.redirect_uri, "http://127.0.0.1:43821/callback", false),
-            ] {
-                let l = ui.label(label);
-                ui.add(crate::widgets::line(value).hint_text(hint).password(secret).desired_width(260.0)).labelled_by(l.id);
-                ui.end_row();
-            }
+        ui.horizontal(|ui| {
+            ui.label(tl!("Provider"));
+            egui::ComboBox::from_id_salt("psc-provider").selected_text(n.provider.name.clone()).show_ui(ui, |ui| {
+                for p in &providers {
+                    if ui.selectable_label(n.provider == *p, &p.name).clicked() {
+                        n.provider = p.clone();
+                    }
+                }
+            });
         });
-        ui.label(egui::RichText::new(tl!("Your provider gives these when you register PdfCraft with it.")).small().color(t.text_muted));
+        ui.label(
+            egui::RichText::new(tl!("PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code."))
+                .small()
+                .color(t.text_muted),
+        );
         if waiting.is_some() {
             ui.label(egui::RichText::new(tl!("Waiting for your approval in the browser…")).color(t.accent_text));
         }

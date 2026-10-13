@@ -2253,14 +2253,10 @@ animation effects	Off	ఆఫ్
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	ఒక స్క్రిప్ట్ చాలా సేపు నడిచినందున ఈ ఫారమ్ స్క్రిప్ట్‌లు ఆపివేయబడ్డాయి. వాటిని మళ్లీ నడపడానికి పత్రాన్ని మళ్లీ తెరవండి.
 	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	క్లౌడ్ సర్టిఫికెట్‌ను ఉపయోగించు (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
 	Provider	ప్రొవైడర్
-	API address	API చిరునామా
-	Client ID	క్లయింట్ ID
-	Client secret	క్లయింట్ సీక్రెట్
-	Redirect URI	రీడైరెక్ట్ URI
-	Your provider gives these when you register PdfCraft with it.	PdfCraftను మీ ప్రొవైడర్ వద్ద నమోదు చేసినప్పుడు వీటిని ఇస్తారు.
 	Waiting for your approval in the browser…	బ్రౌజర్‌లో మీ ఆమోదం కోసం వేచి ఉంది…
 	The session with {provider} has ended. Sign in again from Configure a Digital ID.	{provider}తో సెషన్ ముగిసింది. డిజిటల్ ఐడీని కాన్ఫిగర్ చేయి నుండి మళ్లీ సైన్ ఇన్ అవ్వండి.
-	Fill in the provider, its API address and the client ID.	ప్రొవైడర్, దాని API చిరునామా, క్లయింట్ ID నింపండి.
 	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	రీడైరెక్ట్ URI పోర్ట్‌తో కూడిన http://127.0.0.1 లేదా http://localhost అయి ఉండాలి.
 	No certificate was found with this provider.	ఈ ప్రొవైడర్ వద్ద సర్టిఫికెట్ కనిపించలేదు.
 	The provider's page didn't come back in time. Try again.	ప్రొవైడర్ పేజీ సమయానికి తిరిగి రాలేదు. మళ్లీ ప్రయత్నించండి.
+	Choose a provider.	ఒక ప్రొవైడర్‌ను ఎంచుకోండి.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft ప్రొవైడర్ పేజీని తెరుస్తుంది, అక్కడ మీ CPF, PIN, వన్-టైమ్ కోడ్‌తో సైన్ ఇన్ అవ్వండి.

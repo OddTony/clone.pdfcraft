@@ -4,7 +4,32 @@
 
 use std::time::Duration;
 
-use pdfcraft_engine::sign::psc::Transport;
+use pdfcraft_engine::sign::psc::{KNOWN, Provider, Transport};
+
+/// The redirect URI registered with every provider: PdfCraft listens there for the code.
+const REDIRECT_URI: &str = "http://127.0.0.1:43821/callback";
+
+/// Client credentials set at build time, by provider name: `PDFCRAFT_PSC_<NAME>_CLIENT_ID` and
+/// `PDFCRAFT_PSC_<NAME>_CLIENT_SECRET`. A provider without a client ID isn't offered.
+const CREDENTIALS: &[(&str, Option<&str>, Option<&str>)] =
+    &[("Certisign", option_env!("PDFCRAFT_PSC_CERTISIGN_CLIENT_ID"), option_env!("PDFCRAFT_PSC_CERTISIGN_CLIENT_SECRET"))];
+
+/// The known providers this build is registered with.
+pub fn registered() -> Vec<Provider> {
+    KNOWN
+        .iter()
+        .filter_map(|(name, base)| {
+            let (_, id, secret) = CREDENTIALS.iter().find(|(n, _, _)| n == name)?;
+            Some(Provider {
+                name: (*name).to_string(),
+                base: (*base).to_string(),
+                client_id: (*id)?.to_string(),
+                client_secret: secret.unwrap_or_default().to_string(),
+                redirect_uri: REDIRECT_URI.to_string(),
+            })
+        })
+        .collect()
+}
 
 pub struct Https {
     agent: ureq::Agent,

@@ -14,7 +14,12 @@ use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use crate::keys::{DigestAlg, ExternalKey, PrivateKey};
 use crate::{Certificate, DigitalId, SignError};
 
-/// A provider the user registered PdfCraft with: its API base (the "URI-base", ending in the API
+/// The providers whose API base is known, by name. Signing with one needs the app registered with
+/// it: the provider issues a client ID and secret to the app (not to the holder, who only signs in
+/// on the provider's page), and a build passes them in.
+pub const KNOWN: &[(&str, &str)] = &[("Certisign", "https://remoteidcertisign.com.br/api/v0/")];
+
+/// A provider the app is registered with: its API base (the "URI-base", ending in the API
 /// version, e.g. `https://psc.example/v0/`) and the client credentials it issued.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Provider {

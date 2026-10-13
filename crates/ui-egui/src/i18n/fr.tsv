@@ -2340,14 +2340,10 @@ animation effects	Off	Désactivés
 	Local cross-PDF links require the desktop app	Les liens locaux entre PDF nécessitent l'application de bureau
 	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Utiliser un certificat dans le cloud (ICP-Brasil : BirdID, VIDaaS, NeoID, SafeID…)
 	Provider	Fournisseur
-	API address	Adresse de l'API
-	Client ID	ID client
-	Client secret	Secret client
-	Redirect URI	URI de redirection
-	Your provider gives these when you register PdfCraft with it.	Votre fournisseur vous les donne quand vous y enregistrez PdfCraft.
 	Waiting for your approval in the browser…	En attente de votre approbation dans le navigateur…
 	The session with {provider} has ended. Sign in again from Configure a Digital ID.	La session avec {provider} est terminée. Reconnectez-vous depuis Configurer un ID numérique.
-	Fill in the provider, its API address and the client ID.	Renseignez le fournisseur, l'adresse de son API et l'ID client.
 	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	L'URI de redirection doit être http://127.0.0.1 ou http://localhost avec un port.
 	No certificate was found with this provider.	Aucun certificat n'a été trouvé chez ce fournisseur.
 	The provider's page didn't come back in time. Try again.	La page du fournisseur n'est pas revenue à temps. Réessayez.
+	Choose a provider.	Choisissez un fournisseur.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft ouvre la page du fournisseur, où vous vous connectez avec votre CPF, votre PIN et un code à usage unique.

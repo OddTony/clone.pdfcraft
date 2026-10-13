@@ -2361,14 +2361,10 @@ animation effects	Off	معطّلة
 	Local cross-PDF links require the desktop app	تتطلب الروابط المحلية بين ملفات PDF تطبيق سطح المكتب
 	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	استخدام شهادة سحابية (ICP-Brasil: BirdID وVIDaaS وNeoID وSafeID…)
 	Provider	المزوّد
-	API address	عنوان API
-	Client ID	معرّف العميل
-	Client secret	سرّ العميل
-	Redirect URI	عنوان URI لإعادة التوجيه
-	Your provider gives these when you register PdfCraft with it.	يقدّم مزوّدك هذه البيانات عند تسجيل PdfCraft لديه.
 	Waiting for your approval in the browser…	بانتظار موافقتك في المتصفح…
 	The session with {provider} has ended. Sign in again from Configure a Digital ID.	انتهت الجلسة مع {provider}. سجّل الدخول مجددًا من «تكوين معرّف رقمي».
-	Fill in the provider, its API address and the client ID.	املأ المزوّد وعنوان API ومعرّف العميل.
 	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	يجب أن يكون عنوان URI لإعادة التوجيه http://127.0.0.1 أو http://localhost مع منفذ.
 	No certificate was found with this provider.	لم يُعثر على أي شهادة لدى هذا المزوّد.
 	The provider's page didn't come back in time. Try again.	لم تعُد صفحة المزوّد في الوقت المحدد. حاول مرة أخرى.
+	Choose a provider.	اختر مزوّدًا.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	يفتح PdfCraft صفحة المزوّد، حيث تسجّل الدخول برقم CPF ورمز PIN ورمز لمرة واحدة.

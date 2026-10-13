@@ -447,7 +447,8 @@ fn an_unusable_id_is_shown_with_its_reason_and_cannot_be_chosen() {
 
 /// Configure a Digital ID ▸ Use a cloud certificate: PdfCraft opens the provider's page, the
 /// browser comes back to the loopback redirect with the code, and the holder's certificate becomes
-/// a selected digital ID (a fake provider stands in for HTTPS).
+/// a selected digital ID (a fake provider stands in for HTTPS). Without a provider the build is
+/// registered with, the option isn't there.
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_cloud_certificate_signs_in_through_the_browser() {
@@ -471,17 +472,20 @@ fn a_cloud_certificate_signs_in_through_the_browser() {
     h.state_mut().psc_transport = Some(std::sync::Arc::new(Fake));
     assert!(h.state_mut().execute("sign.certify_invisible"));
     h.run_steps(2);
-    h.get_by_label("Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)").click();
-    h.run_steps(2);
+    let option = "Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)";
+    assert!(h.query_by_label(option).is_none(), "no provider registered: no option");
     let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    {
-        let p = &mut h.state_mut().sign_draft.as_mut().unwrap().new_id.provider;
-        p.name = "Test PSC".into();
-        p.base = "https://psc.example/v0/".into();
-        p.client_id = "pdfcraft".into();
-        p.redirect_uri = format!("http://127.0.0.1:{port}/callback");
-    }
-    h.run_steps(1);
+    h.state_mut().psc_providers = vec![pdfcraft_engine::sign::psc::Provider {
+        name: "Test PSC".into(),
+        base: "https://psc.example/v0/".into(),
+        client_id: "pdfcraft".into(),
+        client_secret: String::new(),
+        redirect_uri: format!("http://127.0.0.1:{port}/callback"),
+    }];
+    h.run_steps(2);
+    h.get_by_label(option).click();
+    h.run_steps(2);
+    assert_eq!(h.state().sign_draft.as_ref().unwrap().new_id.provider.name, "Test PSC", "the only provider is chosen");
     h.get_by_label("Continue").click();
     h.run_steps(2);
     let opened = h.state().last_opened_url.clone().expect("the provider's page opened");
@@ -500,5 +504,4 @@ fn a_cloud_certificate_signs_in_through_the_browser() {
     let s = h.state();
     let selected = s.sign_draft.as_ref().and_then(|d| d.selected).and_then(|i| s.digital_ids.get(i)).expect("the cloud certificate selected");
     assert_eq!(selected.path, "psc:Test PSC#TEST:00000000001");
-    assert_eq!(s.psc_providers.first().map(|p| p.name.as_str()), Some("Test PSC"), "the provider is kept");
 }

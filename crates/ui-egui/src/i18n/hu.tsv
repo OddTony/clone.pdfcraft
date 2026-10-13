@@ -2339,14 +2339,10 @@ animation effects	Off	Ki
 	Local cross-PDF links require the desktop app	A PDF-ek közötti helyi hivatkozásokhoz az asztali alkalmazás szükséges
 	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Felhőalapú tanúsítvány használata (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
 	Provider	Szolgáltató
-	API address	API-cím
-	Client ID	Ügyfél-azonosító
-	Client secret	Ügyféltitok
-	Redirect URI	Átirányítási URI
-	Your provider gives these when you register PdfCraft with it.	A szolgáltató adja meg ezeket, amikor regisztrálja nála a PdfCraftot.
 	Waiting for your approval in the browser…	Várakozás a jóváhagyására a böngészőben…
 	The session with {provider} has ended. Sign in again from Configure a Digital ID.	A(z) {provider} munkamenete véget ért. Jelentkezzen be újra a Digitális azonosító beállítása résznél.
-	Fill in the provider, its API address and the client ID.	Adja meg a szolgáltatót, az API-címét és az ügyfél-azonosítót.
 	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	Az átirányítási URI csak http://127.0.0.1 vagy http://localhost lehet porttal.
 	No certificate was found with this provider.	Ennél a szolgáltatónál nem található tanúsítvány.
 	The provider's page didn't come back in time. Try again.	A szolgáltató oldala nem tért vissza időben. Próbálja újra.
+	Choose a provider.	Válasszon szolgáltatót.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	A PdfCraft megnyitja a szolgáltató oldalát, ahol CPF-fel, PIN-kóddal és egyszer használatos kóddal jelentkezik be.

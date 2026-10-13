@@ -2362,14 +2362,10 @@ animation effects	Off	Вимкнено
 	Local cross-PDF links require the desktop app	Локальні посилання між PDF працюють лише в настільному застосунку
 	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Використати хмарний сертифікат (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
 	Provider	Постачальник
-	API address	Адреса API
-	Client ID	Ідентифікатор клієнта
-	Client secret	Секрет клієнта
-	Redirect URI	URI переспрямування
-	Your provider gives these when you register PdfCraft with it.	Постачальник надає їх, коли ви реєструєте в нього PdfCraft.
 	Waiting for your approval in the browser…	Очікування вашого схвалення в браузері…
 	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Сеанс із {provider} завершився. Увійдіть знову в розділі «Налаштувати цифрове посвідчення».
-	Fill in the provider, its API address and the client ID.	Укажіть постачальника, адресу його API та ідентифікатор клієнта.
 	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	URI переспрямування має бути http://127.0.0.1 або http://localhost із портом.
 	No certificate was found with this provider.	У цього постачальника не знайдено сертифіката.
 	The provider's page didn't come back in time. Try again.	Сторінка постачальника не повернулася вчасно. Спробуйте ще раз.
+	Choose a provider.	Виберіть постачальника.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft відкриває сторінку постачальника, де ви входите за допомогою CPF, PIN-коду та одноразового коду.

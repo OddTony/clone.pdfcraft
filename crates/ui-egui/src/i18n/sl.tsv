@@ -2345,14 +2345,10 @@ animation effects	Off	Izklopljeni
 	Local cross-PDF links require the desktop app	Lokalne povezave med PDF-ji zahtevajo namizno aplikacijo
 	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Uporabi potrdilo v oblaku (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID …)
 	Provider	Ponudnik
-	API address	Naslov API-ja
-	Client ID	ID odjemalca
-	Client secret	Skrivnost odjemalca
-	Redirect URI	URI za preusmeritev
-	Your provider gives these when you register PdfCraft with it.	Ponudnik vam jih da, ko pri njem registrirate PdfCraft.
 	Waiting for your approval in the browser…	Čakanje na vašo odobritev v brskalniku …
 	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Seja s ponudnikom {provider} je potekla. Znova se prijavite v razdelku Konfiguriraj digitalno identiteto.
-	Fill in the provider, its API address and the client ID.	Izpolnite ponudnika, naslov njegovega API-ja in ID odjemalca.
 	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	URI za preusmeritev mora biti http://127.0.0.1 ali http://localhost z vrati.
 	No certificate was found with this provider.	Pri tem ponudniku ni bilo najdenega potrdila.
 	The provider's page didn't come back in time. Try again.	Stran ponudnika se ni pravočasno vrnila. Poskusite znova.
+	Choose a provider.	Izberite ponudnika.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft odpre stran ponudnika, kjer se prijavite s CPF, kodo PIN in enkratno kodo.

@@ -2214,14 +2214,10 @@ animation effects	Off	關
 	The existing action will be preserved.	將保留現有動作。
 	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	使用雲端憑證（ICP-Brasil：BirdID、VIDaaS、NeoID、SafeID…）
 	Provider	提供者
-	API address	API 位址
-	Client ID	用戶端 ID
-	Client secret	用戶端密碼
-	Redirect URI	重新導向 URI
-	Your provider gives these when you register PdfCraft with it.	在提供者處註冊 PdfCraft 時會取得這些資訊。
 	Waiting for your approval in the browser…	正在等候您在瀏覽器中核准…
 	The session with {provider} has ended. Sign in again from Configure a Digital ID.	與 {provider} 的工作階段已結束。請從「設定數位 ID」重新登入。
-	Fill in the provider, its API address and the client ID.	請填寫提供者、其 API 位址和用戶端 ID。
 	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	重新導向 URI 必須是含連接埠的 http://127.0.0.1 或 http://localhost。
 	No certificate was found with this provider.	在此提供者處找不到憑證。
 	The provider's page didn't come back in time. Try again.	提供者頁面未及時返回。請再試一次。
+	Choose a provider.	請選擇提供者。
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft 會開啟提供者頁面，您在該頁面以 CPF、PIN 和一次性驗證碼登入。

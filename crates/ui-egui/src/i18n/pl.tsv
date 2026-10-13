@@ -2320,14 +2320,10 @@ animation effects	Off	Wyłączone
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Skrypty tego formularza są wyłączone, ponieważ jeden z nich działał zbyt długo. Otwórz dokument ponownie, aby znów je uruchomić.
 	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Użyj certyfikatu w chmurze (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
 	Provider	Dostawca
-	API address	Adres API
-	Client ID	Identyfikator klienta
-	Client secret	Klucz tajny klienta
-	Redirect URI	URI przekierowania
-	Your provider gives these when you register PdfCraft with it.	Dostawca podaje je, gdy zarejestrujesz u niego PdfCraft.
 	Waiting for your approval in the browser…	Oczekiwanie na Twoją zgodę w przeglądarce…
 	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Sesja z {provider} wygasła. Zaloguj się ponownie w sekcji Skonfiguruj identyfikator cyfrowy.
-	Fill in the provider, its API address and the client ID.	Uzupełnij dostawcę, adres jego API i identyfikator klienta.
 	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	URI przekierowania musi być adresem http://127.0.0.1 lub http://localhost z portem.
 	No certificate was found with this provider.	U tego dostawcy nie znaleziono certyfikatu.
 	The provider's page didn't come back in time. Try again.	Strona dostawcy nie wróciła na czas. Spróbuj ponownie.
+	Choose a provider.	Wybierz dostawcę.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft otwiera stronę dostawcy, na której logujesz się numerem CPF, kodem PIN i kodem jednorazowym.
