@@ -340,7 +340,10 @@ fn text(args: &[String]) -> Result<(), CliError> {
     // permissions password, a document that doesn't allow copying gives no text.
     let mut session = pdfcraft_engine::Session::new();
     if let Some(doc) = session.open(path, None, bytes, password).ok().and_then(|id| session.get(id)) {
-        doc.check_copying().map_err(|e| format!("text: {e}"))?;
+        // The engine's hint is about editing in the app; on the command line the way in is
+        // `--password`.
+        doc.check_copying()
+            .map_err(|_| "text: the document's permissions don't allow copying its text; pass the owner password with --password to extract it")?;
     }
     let pages: Vec<usize> = match selected_page {
         Some(page) => vec![page],

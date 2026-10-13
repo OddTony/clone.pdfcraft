@@ -124,6 +124,7 @@ fn text_respects_a_document_that_does_not_allow_copying() {
     assert!(out.stdout.is_empty(), "{}", String::from_utf8_lossy(&out.stdout));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("don't allow copying"), "the reason must be named: {stderr}");
+    assert!(stderr.contains("--password"), "and the way in: {stderr}");
     let out = Command::new(BIN).args(["text", path.to_str().unwrap(), "--password", "boss"]).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let stdout = String::from_utf8_lossy(&out.stdout);
