@@ -1,0 +1,36 @@
+name: Demo PDF
+
+# One-off/manual workflow to generate the showcase demo PDF
+# (dist/demo/pdfcraft-showcase.pdf) on a runner with a reliable headless
+# Chrome, and upload it as a build artifact. Not run automatically.
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: demo-pdf (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+
+      - name: Generate showcase PDF
+        run: cargo xtask demo-pdf --chrome "${{ steps.setup-chrome.outputs.chrome-path }}"
+
+      - name: Upload showcase PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdfcraft-showcase
+          path: dist/demo/pdfcraft-showcase.pdf
+          if-no-files-found: error
