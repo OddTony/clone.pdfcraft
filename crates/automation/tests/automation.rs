@@ -347,6 +347,43 @@ fn arabic_actual_text_stays_logical_through_editor_tools_and_save_reopen() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
+#[test]
+fn arabic_ligature_actual_text_is_one_editable_word_through_save_reopen() {
+    use pdfcraft_cos::{Dict, Document, ObjRef, Object, SaveOptions, Stream, write_full};
+    use std::sync::Arc;
+
+    let dir = workdir("arabic-ligature-actual-text");
+    let mut doc = Document::open(Arc::new(fixture(1))).unwrap();
+    // Synthetic glyph codes: A س, B م, X lam-alef. No installed Arabic font is needed.
+    let cmap = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapType 2 def \
+                1 begincodespacerange <00> <FF> endcodespacerange 3 beginbfchar \
+                <41> <0633> <42> <0645> <58> <FEFB> \
+                endbfchar endcmap CMapName currentdict /CMap defineresource pop end end";
+    let unicode = doc.add(Object::Stream(Stream::flate(Dict::new(), cmap.as_bytes())));
+    doc.update_dict(ObjRef::new(3, 0), |d| d.set(b"ToUnicode".to_vec(), Object::Ref(unicode))).unwrap();
+    let content = "BT /F1 24 Tf 20 150 Td (B) Tj /Span <</ActualText <FEFF06440627>>> BDC (X) Tj EMC (A) Tj ET";
+    doc.set(ObjRef::new(5, 0), Object::Stream(Stream::flate(Dict::new(), content.as_bytes())));
+    std::fs::write(dir.join("arabic.pdf"), write_full(&doc, &SaveOptions::default()).unwrap()).unwrap();
+
+    let mut a = auto(&dir);
+    let id = ok(&mut a, "doc_open", json!({"path":"arabic.pdf"}))["doc"].as_u64().unwrap();
+    let lines = ok(&mut a, "text_lines", json!({"doc":id,"page":1}));
+    assert_eq!(lines["lines"].as_array().unwrap().len(), 1);
+    assert_eq!(lines["lines"][0]["text"], "سلام");
+    assert_eq!(page_text(&mut a, id), ["سلام"]);
+    assert_eq!(ok(&mut a, "text_find", json!({"doc":id,"query":"سلام"}))["matches"].as_array().unwrap().len(), 1);
+    let render = a.call("page_render", &json!({"doc":id,"page":1,"dpi":72})).unwrap();
+    ok(&mut a, "doc_save", json!({"doc":id,"path":"saved.pdf"}));
+    let re = ok(&mut a, "doc_open", json!({"path":"saved.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "text_lines", json!({"doc":re,"page":1})), lines);
+    assert_eq!(a.call("page_render", &json!({"doc":re,"page":1,"dpi":72})).unwrap(), render);
+    ok(&mut a, "text_edit", json!({"doc":re,"page":1,"paragraph":1,"text":"Replacement"}));
+    ok(&mut a, "doc_save", json!({"doc":re,"path":"edited.pdf"}));
+    let edited = ok(&mut a, "doc_open", json!({"path":"edited.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, edited), ["Replacement"]);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 /// Each of these writes to its required `path` and replaces an existing file there, so the MCP
 /// annotations must not tell clients the call is read-only or harmless (#130).
 #[test]
@@ -3449,7 +3486,12 @@ fn local_gotor_link_open_applies_destinations_and_honors_root() {
     assert_eq!(a.session().get(pdfcraft_engine::DocId(target_id)).unwrap().info.pages.len(), 3);
 
     let absolute = ok(&mut a, "doc_open", json!({ "path": "absolute.pdf" }))["doc"].as_u64().unwrap();
-    let opened = ok(&mut a, "link_open", json!({ "doc": absolute, "page": 1, "index": 1 }));
+    let before = a.session().docs().len();
+    for args in [json!({ "doc": absolute, "page": 1, "index": 1 }), json!({ "doc": absolute, "page": 1, "index": 1, "allow_absolute": false })] {
+        assert!(matches!(err(&mut a, "link_open", args), ToolError::Failed(m) if m.contains("allow_absolute")));
+        assert_eq!(a.session().docs().len(), before);
+    }
+    let opened = ok(&mut a, "link_open", json!({ "doc": absolute, "page": 1, "index": 1, "allow_absolute": true }));
     assert_eq!(opened["path"], "target.pdf");
     assert_eq!(opened["destination"]["page"], 2);
 
@@ -5585,4 +5627,48 @@ fn private_crops_with_nested_state_resize_save_reopen_through_tools() {
         assert_eq!(a.call("page_render", &json!({"doc":doc,"page":1,"dpi":72})).unwrap(), pixels);
         assert_eq!(ok(&mut a, "page_images", json!({"doc":doc,"page":1})), original);
     }
+}
+
+#[test]
+fn absolute_gotor_consent_does_not_bypass_validation_or_passwords() {
+    let (base, root) = sandbox("gotor-absolute-consent");
+    std::fs::create_dir_all(root.join("folder.pdf")).unwrap();
+    std::fs::write(root.join("notes.txt"), fixture(1)).unwrap();
+    std::fs::write(root.join("encrypted.pdf"), protected_fixture("secret")).unwrap();
+    link_dir(&root, "outside-link", &base.join("outside"));
+    let mut a = auto(&root);
+    for (name, target, reason) in [
+        ("missing", root.join("missing.pdf"), "missing.pdf"),
+        ("folder", root.join("folder.pdf"), "not a regular file"),
+        ("text", root.join("notes.txt"), "not a .pdf file"),
+        ("outside", base.join("outside/secret.pdf"), "outside"),
+        ("symlink", root.join("outside-link/secret.pdf"), "outside"),
+    ] {
+        let path = format!("{name}-source.pdf");
+        std::fs::write(root.join(&path), remote_link_pdf(target.to_str().unwrap(), Some("[0 /Fit]"))).unwrap();
+        let doc = ok(&mut a, "doc_open", json!({ "path": path }))["doc"].as_u64().unwrap();
+        let before = a.session().docs().len();
+        // The absence of a target or a root escape must not be probed before consent.
+        assert!(
+            matches!(err(&mut a, "link_open", json!({ "doc": doc, "page": 1, "index": 1 })), ToolError::Failed(m) if m.contains("allow_absolute"))
+        );
+        assert!(
+            matches!(err(&mut a, "link_open", json!({ "doc": doc, "page": 1, "index": 1, "allow_absolute": true })), ToolError::Failed(m) if m.contains(reason)),
+            "{name}"
+        );
+        assert_eq!(a.session().docs().len(), before);
+    }
+    std::fs::write(root.join("password-source.pdf"), remote_link_pdf(root.join("encrypted.pdf").to_str().unwrap(), Some("[0 /Fit]"))).unwrap();
+    let doc = ok(&mut a, "doc_open", json!({ "path": "password-source.pdf" }))["doc"].as_u64().unwrap();
+    let before = a.session().docs().len();
+    for password in ["", "wrong"] {
+        assert!(matches!(
+            err(&mut a, "link_open", json!({ "doc": doc, "page": 1, "index": 1, "allow_absolute": true, "password": password })),
+            ToolError::Failed(_)
+        ));
+        assert_eq!(a.session().docs().len(), before);
+    }
+    let opened = ok(&mut a, "link_open", json!({ "doc": doc, "page": 1, "index": 1, "allow_absolute": true, "password": "secret" }));
+    assert_eq!(opened["document"]["encrypted"], true);
+    assert_eq!(opened["destination_applied"], true);
 }
