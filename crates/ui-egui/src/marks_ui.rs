@@ -49,8 +49,8 @@ impl PageRange {
 
     pub(crate) fn ui(&mut self, ui: &mut egui::Ui, count: usize) {
         ui.horizontal(|ui| {
-            ui.radio_value(&mut self.all, true, tl!("All pages"));
-            ui.radio_value(&mut self.all, false, tl!("Pages from"));
+            widgets::radio_value(ui, &mut self.all, true, tl!("All pages"));
+            widgets::radio_value(ui, &mut self.all, false, tl!("Pages from"));
             ui.add_enabled(!self.all, egui::DragValue::new(&mut self.from).range(1..=count.max(1)));
             ui.label(tl!("to"));
             if self.to == 1 && self.from == 1 {
@@ -147,6 +147,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
     let Some(doc) = app.session.get(id) else { return (false, true) };
     let count = doc.info.pages.len();
     let page = doc.info.pages.get(current).map(|p| (p.width as f64, p.height as f64)).unwrap_or((612.0, 792.0));
+    let units = app.units;
     let d = &mut app.marks_draft;
     let mut browse = false;
     let verb = if d.replace { tl!("Update") } else { tl!("Add") };
@@ -163,15 +164,18 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                 ui.label(tl!("Font: Helvetica"));
                 ui.label(tl!("Size"));
                 ui.add(egui::DragValue::new(&mut d.hf.font_size).range(4.0..=72.0).speed(0.5));
-                ui.checkbox(&mut d.hf.underline, tl!("Underline"));
+                ui.add(widgets::checkbox(&mut d.hf.underline, tl!("Underline")));
                 color_button(ui, &mut d.hf.color);
                 ui.add_space(16.0);
-                ui.label(tl!("Margins (in)"));
+                ui.label(format!("{} ({})", tl!("Margins"), units.label()));
+                let per = units.per_point();
                 for (label, k) in [(tl!("Top"), 0), (tl!("Bottom"), 1), (tl!("Left"), 2), (tl!("Right"), 3)] {
                     ui.label(label);
-                    let mut v = d.hf.margins[k] / 72.0;
-                    if ui.add(egui::DragValue::new(&mut v).range(0.0..=10.0).speed(0.05).max_decimals(2)).changed() {
-                        d.hf.margins[k] = v * 72.0;
+                    let mut v = d.hf.margins[k] * per;
+                    // Up to 10 inches, whatever the unit.
+                    let max = 720.0 * per;
+                    if ui.add(egui::DragValue::new(&mut v).range(0.0..=max).speed(units.speed()).max_decimals(units.decimals())).changed() {
+                        d.hf.margins[k] = v / per;
                     }
                 }
             });
@@ -184,7 +188,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     ui.end_row();
                     for col in 0..3 {
                         let k = row * 3 + col;
-                        let r = ui.add_sized([220.0, 40.0], egui::TextEdit::multiline(&mut d.hf.text[k]).desired_rows(2).id_salt(("hf-box", k)));
+                        let r = ui.add_sized([220.0, 40.0], crate::widgets::block(&mut d.hf.text[k]).desired_rows(2).id_salt(("hf-box", k)));
                         if r.gained_focus() || r.has_focus() {
                             d.focused_box = k;
                         }
@@ -224,8 +228,8 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
         MarkKind::Watermark => {
             ui.horizontal(|ui| {
                 ui.label(tl!("Source"));
-                ui.radio_value(&mut d.use_file, false, tl!("Text"));
-                ui.radio_value(&mut d.use_file, true, tl!("File"));
+                widgets::radio_value(ui, &mut d.use_file, false, tl!("Text"));
+                widgets::radio_value(ui, &mut d.use_file, true, tl!("File"));
             });
             if d.use_file {
                 browse |= file_source(ui, d, MarkKind::Watermark);
@@ -235,15 +239,11 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     ui.add_enabled_ui(!d.use_file, |ui| {
                         ui.label(tl!("Text"));
                         ui.add(
-                            egui::TextEdit::multiline(&mut d.wm.text)
-                                .desired_rows(2)
-                                .desired_width(320.0)
-                                .hint_text("CONFIDENTIAL")
-                                .id_salt("wm-text"),
+                            crate::widgets::block(&mut d.wm.text).desired_rows(2).desired_width(320.0).hint_text("CONFIDENTIAL").id_salt("wm-text"),
                         );
                     });
                     ui.horizontal(|ui| {
-                        ui.add_enabled_ui(!d.use_file, |ui| ui.checkbox(&mut d.fit, tl!("Fit to page")));
+                        ui.add_enabled_ui(!d.use_file, |ui| ui.add(widgets::checkbox(&mut d.fit, tl!("Fit to page"))));
                         ui.add_enabled_ui(!d.fit, |ui| {
                             ui.label(tl!("Size"));
                             if d.wm.font_size == 0.0 {
@@ -256,7 +256,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     ui.horizontal(|ui| {
                         ui.label(tl!("Rotation"));
                         for r in [-45.0, 0.0, 45.0] {
-                            ui.radio_value(&mut d.wm.rotation, r, if r == 0.0 { tl!("None").to_string() } else { format!("{r}°") });
+                            widgets::radio_value(ui, &mut d.wm.rotation, r, if r == 0.0 { tl!("None").to_string() } else { format!("{r}°") });
                         }
                         ui.add(egui::DragValue::new(&mut d.wm.rotation).range(-180.0..=180.0).suffix("°"));
                     });
@@ -269,8 +269,8 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     });
                     ui.horizontal(|ui| {
                         ui.label(tl!("Location"));
-                        ui.radio_value(&mut d.wm.behind, true, tl!("Appear behind page"));
-                        ui.radio_value(&mut d.wm.behind, false, tl!("Appear on top of page"));
+                        widgets::radio_value(ui, &mut d.wm.behind, true, tl!("Appear behind page"));
+                        widgets::radio_value(ui, &mut d.wm.behind, false, tl!("Appear on top of page"));
                     });
                     ui.horizontal(|ui| {
                         ui.label(tl!("Offset from centre"));
@@ -284,10 +284,10 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
         }
         MarkKind::Background => {
             ui.horizontal(|ui| {
-                ui.radio_value(&mut d.use_file, false, tl!("From colour"));
+                widgets::radio_value(ui, &mut d.use_file, false, tl!("From colour"));
                 ui.add_enabled_ui(!d.use_file, |ui| color_button(ui, &mut d.bg.color));
                 ui.add_space(12.0);
-                ui.radio_value(&mut d.use_file, true, tl!("File"));
+                widgets::radio_value(ui, &mut d.use_file, true, tl!("File"));
             });
             if d.use_file {
                 browse |= file_source(ui, d, MarkKind::Background);

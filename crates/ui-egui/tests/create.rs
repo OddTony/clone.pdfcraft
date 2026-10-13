@@ -201,6 +201,53 @@ fn mixed_files(app: &PdfCraftApp) -> Vec<(String, Vec<u8>)> {
 }
 
 #[test]
+fn separate_batch_creates_one_pdf_per_source_without_replacing_existing_files() {
+    use pdfcraft_ui_egui::FilePurpose;
+    let dir = std::env::temp_dir().join(format!("pdfcraft-separate-batch-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("notes.pdf"), b"keep this file").unwrap();
+
+    let mut app = PdfCraftApp::new();
+    app.set_option("language", "en").unwrap();
+    app.export_dir_override = Some(dir.to_string_lossy().into_owned());
+    let mut files = mixed_files(&app);
+    files.push(("notes.txt".into(), b"another text file".to_vec()));
+    app.use_files(FilePurpose::CreateMultipleSeparate, files);
+
+    assert_eq!(std::fs::read(dir.join("notes.pdf")).unwrap(), b"keep this file");
+    for name in ["notes (2).pdf", "notes (3).pdf", "photo.pdf"] {
+        assert!(std::fs::read(dir.join(name)).unwrap().starts_with(b"%PDF-"), "{name}");
+    }
+    assert!(!dir.join("a (2).pdf").exists(), "an already-PDF input is skipped");
+    assert!(!dir.join("report.pdf").exists(), "an invalid Office file is skipped");
+    assert!(app.views.is_empty(), "batch conversion must not open PDF tabs");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn separate_batch_command_picks_files_and_writes_to_the_chosen_folder() {
+    use egui_kittest::Harness;
+    let dir = std::env::temp_dir().join(format!("pdfcraft-separate-command-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let source = dir.join("letter.txt");
+    std::fs::write(&source, b"A separate PDF").unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1000.0, 720.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.pick_override = Some(vec![source.to_string_lossy().into_owned()]);
+        app.export_dir_override = Some(dir.to_string_lossy().into_owned());
+        app
+    });
+    assert!(h.state_mut().execute("create.multiple_separate"));
+    h.run_steps(2);
+    assert!(std::fs::read(dir.join("letter.pdf")).unwrap().starts_with(b"%PDF-"));
+    assert!(h.state().views.is_empty());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn multiple_files_open_as_one_document_in_the_page_grid() {
     use egui_kittest::{Harness, kittest::Queryable};
     let path = std::env::temp_dir().join(format!("pdfcraft-create-multiple-{}.pdf", std::process::id()));

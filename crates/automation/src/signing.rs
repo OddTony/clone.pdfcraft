@@ -70,7 +70,8 @@ impl Automation {
             "timestamp_time": s.timestamp_time.map(|t| t.to_string()),
             "modification": modification,
             "changes": changes,
-            "details": s.details,
+            // Scripts read this, so the sentences stay in English, whatever the interface reads in.
+            "details": s.details.iter().map(|d| d.message.clone()).collect::<Vec<_>>(),
         }))
     }
 
@@ -213,6 +214,14 @@ impl Automation {
         }
         if let Some(text) = o.get("text") {
             let text = text.as_str().ok_or_else(|| bad("graphic.text must be a string"))?;
+            // Nobody sees a preview here: refuse what the script font and its fallback would leave out.
+            if let Some(c) = pdfcraft_engine::script_missing(text) {
+                return Err(bad(format!(
+                    "the signature script font can't draw \"{}\" (U+{:04X}) in graphic.text; type it in Latin, Cyrillic or Greek letters, or pass graphic.image instead",
+                    c.escape_debug(),
+                    u32::from(c)
+                )));
+            }
             return pdfcraft_engine::typed_signature_graphic(text).ok_or_else(|| {
                 bad(format!(
                     "graphic.text {text:?} has nothing the script font can draw (at most {} characters)",

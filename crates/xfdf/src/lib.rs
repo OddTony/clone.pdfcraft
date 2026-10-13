@@ -41,6 +41,9 @@ pub enum Format {
     Xml,
     Csv,
     Txt,
+    /// An XFA form's data as an XML Data Package (the engine writes it; for a form without
+    /// XFA packets it is the XML format).
+    Xdp,
 }
 
 impl Format {
@@ -49,6 +52,7 @@ impl Format {
             "xfdf" => Format::Xfdf,
             "fdf" => Format::Fdf,
             "xml" => Format::Xml,
+            "xdp" => Format::Xdp,
             "csv" => Format::Csv,
             "txt" | "tab" | "tsv" => Format::Txt,
             _ => return None,
@@ -577,7 +581,7 @@ pub fn export_data(doc: &Document, format: Format) -> String {
         })
         .collect();
     match format {
-        Format::Xml => {
+        Format::Xml | Format::Xdp => {
             let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<fields xmlns:xfdf=\"http://ns.adobe.com/xfdf-transition/\">\n");
             for (k, v) in &fields {
                 let tag = xml_name(k);
@@ -754,7 +758,27 @@ fn annot_from_xml(node: roxmltree::Node, subtype: &str, page_ref: ObjRef) -> Opt
 
 /// Put an annotation dictionary on a page, replacing one with the same `/NM`. Returns its
 /// reference.
-fn place(doc: &mut Document, page_ref: ObjRef, d: Dict) -> Result<ObjRef, DataError> {
+/// `/F` bits an imported file may not set on a redaction mark: Invisible, Hidden, NoView — so a
+/// mark it brings in is always drawn for the user to review before content is removed.
+const REDACT_UNSEEN: i64 = 1 | 2 | 32;
+/// `/F` Locked (ISO 32000-2 Table 167): the user protected this annotation from change.
+const LOCKED: i64 = 128;
+
+/// An existing annotation an import must never replace, move or unlock: one the user locked, or a
+/// redaction mark (replacing it would drop the region the user marked to remove).
+fn import_protected(x: &Dict) -> bool {
+    x.int(b"F").unwrap_or(0) & LOCKED != 0 || x.name(b"Subtype") == Some(b"Redact".as_slice())
+}
+
+fn place(doc: &mut Document, page_ref: ObjRef, mut d: Dict) -> Result<ObjRef, DataError> {
+    // A redaction mark the import carries is always made visible: clear any Invisible/Hidden/NoView
+    // flag so it cannot remove content the user never sees.
+    if d.name(b"Subtype") == Some(b"Redact".as_slice()) {
+        let f = d.int(b"F").unwrap_or(0);
+        if f & REDACT_UNSEEN != 0 {
+            d.set(b"F".to_vec(), Object::Int(f & !REDACT_UNSEEN));
+        }
+    }
     let nm = d.get(b"NM").and_then(|n| n.as_string().map(|s| s.to_text()));
     let annots: Vec<Object> = doc
         .get(page_ref)
@@ -765,21 +789,39 @@ fn place(doc: &mut Document, page_ref: ObjRef, d: Dict) -> Result<ObjRef, DataEr
         .unwrap_or_default();
     let mut kept = Vec::new();
     let mut removed: Vec<ObjRef> = Vec::new();
+    // Never let a same-name import replace a locked comment or a redaction mark: keep it, and add
+    // the imported dict beside it under no name of its own.
+    let mut clash = false;
     for a in annots {
-        let same = nm.is_some()
-            && a.as_ref().and_then(|r| doc.get(r).as_dict().and_then(|x| x.get(b"NM").and_then(|n| n.as_string().map(|s| s.to_text())))) == nm;
-        if same {
+        let existing = a.as_ref().and_then(|r| doc.get(r).as_dict().cloned());
+        let same = nm.is_some() && existing.as_ref().and_then(|x| x.get(b"NM").and_then(|n| doc.resolve(n).as_string().map(|s| s.to_text()))) == nm;
+        if same && existing.as_ref().is_some_and(import_protected) {
+            clash = true;
+            kept.push(a);
+        } else if same {
             removed.extend(a.as_ref());
         } else {
             kept.push(a);
         }
+    }
+    if clash {
+        d.remove(b"NM");
     }
     // The replaced note's pop-up goes with it; otherwise it stays on the page pointing at a note that is no longer there.
     kept.retain(|a| {
         let Some(x) = a.as_ref().map(|r| doc.get(r)).and_then(|o| o.as_dict().cloned()) else { return true };
         x.name(b"Subtype") != Some(b"Popup".as_slice()) || x.reference(b"Parent").is_none_or(|p| !removed.contains(&p))
     });
-    let r = doc.add(Object::Dict(d));
+    // Keep the replaced comment's identity: replies and review statuses not included in a
+    // partial import still point at it through /IRT. Allocating a new object would detach
+    // those comments and leave their parent outside the page's annotation list.
+    let r = match removed.first().copied() {
+        Some(r) => {
+            doc.set(r, Object::Dict(d));
+            r
+        }
+        None => doc.add(Object::Dict(d)),
+    };
     // Our own appearance where we can draw one; others keep none (viewers draw a default).
     let _ = pdfcraft_annot::set_appearance(doc, r);
     kept.push(Object::Ref(r));
@@ -798,7 +840,7 @@ fn import_xfdf(doc: &mut Document, text: &str) -> Result<Report, DataError> {
     let pages: Vec<ObjRef> = pdfcraft_model::pages(doc).iter().map(|p| p.obj).collect();
     // Comments: parents first, then replies (whose /IRT needs the parent's reference).
     let mut by_name: HashMap<String, ObjRef> = HashMap::new();
-    let mut later: Vec<(ObjRef, String)> = Vec::new();
+    let mut later: HashMap<ObjRef, String> = HashMap::new();
     if let Some(annots) = root.children().find(|c| c.has_tag_name("annots")) {
         for node in annots.children().filter(|c| c.is_element()) {
             let tag = node.tag_name().name().to_ascii_lowercase();
@@ -806,11 +848,13 @@ fn import_xfdf(doc: &mut Document, text: &str) -> Result<Report, DataError> {
             let Some(page) = node.attribute("page").and_then(|p| p.parse::<usize>().ok()).and_then(|p| pages.get(p).copied()) else { continue };
             let Some(d) = annot_from_xml(node, subtype, page) else { continue };
             let r = place(doc, page, d)?;
+            // A later same-name record replaces this comment, including its reply relation.
+            later.remove(&r);
             if let Some(nm) = node.attribute("name") {
                 by_name.insert(nm.to_string(), r);
             }
             if let Some(irt) = node.attribute("inreplyto") {
-                later.push((r, irt.to_string()));
+                later.insert(r, irt.to_string());
             }
             // A pop-up window.
             if let Some(pop) = node.children().find(|c| c.has_tag_name("popup"))
@@ -995,7 +1039,7 @@ fn import_fdf(doc: &mut Document, bytes: &[u8]) -> Result<Report, DataError> {
     // Comments: parents first, then replies (whose /IRT needs the parent's new reference).
     let pages: Vec<ObjRef> = pdfcraft_model::pages(doc).iter().map(|p| p.obj).collect();
     let mut placed: HashMap<ObjRef, ObjRef> = HashMap::new();
-    let mut later: Vec<(ObjRef, Option<ObjRef>, Option<String>)> = Vec::new();
+    let mut later: HashMap<ObjRef, (Option<ObjRef>, Option<String>)> = HashMap::new();
     for a in body.get(b"Annots").map(|a| fdf.resolve(a)).and_then(|a| a.as_array().cloned()).unwrap_or_default() {
         let Some(mut src) = fdf.resolve(&a).as_dict().cloned() else { continue };
         // The parent is another comment: link it below rather than copying it in.
@@ -1011,16 +1055,17 @@ fn import_fdf(doc: &mut Document, bytes: &[u8]) -> Result<Report, DataError> {
         d.remove(b"Page");
         d.set(b"P".to_vec(), Object::Ref(page));
         let r = place(doc, page, d)?;
+        later.remove(&r);
         if let Some(fr) = a.as_ref() {
             placed.insert(fr, r);
         }
         if let Some(irt) = irt {
             let parent_name = fdf.resolve(&irt).as_dict().and_then(|p| text_of(&fdf, p, b"NM"));
-            later.push((r, irt.as_ref(), parent_name));
+            later.insert(r, (irt.as_ref(), parent_name));
         }
         report.comments += 1;
     }
-    for (r, parent_obj, parent_name) in later {
+    for (r, (parent_obj, parent_name)) in later {
         // The parent imported from this file, else one already in the document with its name.
         let parent = parent_obj.and_then(|p| placed.get(&p).copied()).or_else(|| parent_name.and_then(|nm| find_by_name(doc, &nm)));
         if let Some(parent) = parent.filter(|p| *p != r) {
@@ -1048,15 +1093,14 @@ fn import_table(doc: &mut Document, text: &str) -> Result<Report, DataError> {
             })
             .collect()
     } else if t.lines().next().is_some_and(|l| l.contains('\t')) {
-        let mut lines = t.lines();
-        let (Some(head), Some(row)) = (lines.next(), lines.next()) else { return Err(DataError::UnknownFormat) };
-        head.split('\t').map(str::to_string).zip(row.split('\t')).map(|(k, v)| (k, vec![v.to_string()])).collect()
+        tab_delimited(t)?
     } else {
         // CSV with quotes: a quoted value may hold commas, doubled quotes and line breaks.
-        let mut records: Vec<Vec<String>> = Vec::new();
+        let mut records: Vec<(Vec<String>, bool)> = Vec::new();
         let mut record = Vec::new();
         let mut cur = String::new();
         let mut quoted = false;
+        let mut has_quotes = false;
         let mut chars = t.chars().peekable();
         while let Some(c) = chars.next() {
             match c {
@@ -1064,25 +1108,39 @@ fn import_table(doc: &mut Document, text: &str) -> Result<Report, DataError> {
                     cur.push('"');
                     chars.next();
                 }
-                '"' => quoted = !quoted,
+                '"' => {
+                    quoted = !quoted;
+                    has_quotes = true;
+                }
                 ',' if !quoted => record.push(std::mem::take(&mut cur)),
                 '\r' if !quoted && chars.peek() == Some(&'\n') => {}
                 '\n' if !quoted => {
                     record.push(std::mem::take(&mut cur));
-                    records.push(std::mem::take(&mut record));
+                    records.push((std::mem::take(&mut record), std::mem::take(&mut has_quotes)));
                 }
                 c => cur.push(c),
             }
         }
         record.push(cur);
-        records.push(record);
-        // Blank lines (such as the one a trailing line break leaves) are not records.
-        let mut records = records.into_iter().filter(|r| !matches!(r.as_slice(), [only] if only.is_empty()));
+        records.push((record, has_quotes));
+        // Blank lines (such as the one a trailing line break leaves) are not records, but a
+        // quoted empty value is a record that clears a field.
+        let mut records =
+            records.into_iter().filter(|(r, has_quotes)| *has_quotes || !matches!(r.as_slice(), [only] if only.is_empty())).map(|(r, _)| r);
         let (Some(head), Some(row)) = (records.next(), records.next()) else { return Err(DataError::UnknownFormat) };
-        head.into_iter().zip(row).map(|(k, v)| (k, vec![v])).collect()
+        // Text exported from a one-field form has no tab to show for it (#1321). CSV quotes a
+        // value with a comma, so one name over several unquoted cells is that text, not CSV.
+        if head.len() == 1 && row.len() > 1 { tab_delimited(t)? } else { head.into_iter().zip(row).map(|(k, v)| (k, vec![v])).collect() }
     };
     apply_values(doc, &values, &mut report);
     Ok(report)
+}
+
+/// Tab-delimited text: a row of names, a row of values.
+fn tab_delimited(t: &str) -> Result<Vec<(String, Vec<String>)>, DataError> {
+    let mut lines = t.lines();
+    let (Some(head), Some(row)) = (lines.next(), lines.next()) else { return Err(DataError::UnknownFormat) };
+    Ok(head.split('\t').map(str::to_string).zip(row.split('\t')).map(|(k, v)| (k, vec![v.to_string()])).collect())
 }
 
 /// Import comments and/or field values from XFDF, FDF, XML, CSV or tab-delimited text
