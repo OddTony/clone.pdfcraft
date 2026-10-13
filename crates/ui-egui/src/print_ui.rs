@@ -148,8 +148,8 @@ impl PrintDraft {
                 m => m,
             }),
             Handling::Multiple => match Layout::multiple(self.per_sheet) {
-                Layout::Multiple { cols, rows, .. } => {
-                    Layout::Multiple { cols, rows, order: self.order, border: self.border, auto_rotate: self.auto_rotate }
+                Layout::Multiple { cols, rows, per_sheet, .. } => {
+                    Layout::Multiple { cols, rows, per_sheet, order: self.order, border: self.border, auto_rotate: self.auto_rotate }
                 }
                 other => other,
             },
@@ -1027,6 +1027,34 @@ pub(crate) fn body(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn current_page_preview_uses_positions_and_selection_guards() {
+        for labels in [["i", "ii", "iii", "1", "2"], ["1", "1", "1", "1", "1"], ["1", "2", "3", "4", "5"]] {
+            let labels: Vec<String> = labels.into_iter().map(str::to_owned).collect();
+            for current_page in 0..5 {
+                let draft = PrintDraft { which: Which::Current, current_page, ..Default::default() };
+                let rasters = preview_rasters(&draft, &[(200.0, 300.0); 5], &labels, 1.0, 8192.0);
+                assert_eq!(rasters.iter().map(|(page, _)| *page).collect::<Vec<_>>(), vec![current_page]);
+            }
+        }
+        let labels: Vec<String> = ["i", "ii", "iii", "1", "2"].into_iter().map(str::to_owned).collect();
+        let mut draft = PrintDraft { which: Which::Selected, selected: vec![0, 3], ..Default::default() };
+        assert_eq!(draft.settings(5, &labels).unwrap().pages, vec![0, 3]);
+        draft.which = Which::All;
+        assert_eq!(draft.settings(5, &labels).unwrap().pages, vec![0, 1, 2, 3, 4]);
+        draft.which = Which::Current;
+        draft.reverse = true;
+        draft.subset = Subset::Odd;
+        assert_eq!(draft.settings(5, &labels).unwrap().pages, vec![0]);
+        draft.subset = Subset::Even;
+        assert!(draft.settings(5, &labels).is_err());
+        draft.subset = Subset::All;
+        for (count, current) in [(0, 0), (5, 5), (5, usize::MAX)] {
+            draft.current_page = current;
+            assert!(draft.settings(count, &labels).is_err());
+        }
+    }
 
     #[test]
     fn composed_sheets_keep_exact_scaling_and_the_dialogs_duplex_choice() {
