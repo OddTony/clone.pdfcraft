@@ -2317,3 +2317,31 @@ animation effects	Off	Изключени
 	This document is trying to open a local file:	Този документ се опитва да отвори локален файл:
 	Move tag earlier	Преместване на етикета по-рано
 	Move tag later	Преместване на етикета по-късно
+
+# Read Out Loud
+	Activate Read Out Loud	Активиране на четене на глас
+	Deactivate Read Out Loud	Деактивиране на четене на глас
+	Pause	Пауза
+	Pause / resume reading	Пауза / възобновяване на четенето
+	Pause reading	Пауза на четенето
+	Paused (page {page})	На пауза (страница {page})
+	Pitch:	Височина на тона:
+	Read Out Loud	Четене на глас
+	Read Out Loud ({key})	Четене на глас ({key})
+	Read Out Loud ready	Четенето на глас е готово
+	Read this page only	Четене само на тази страница
+	Read to end of document	Четене до края на документа
+	Reading Preferences	Предпочитания за четене
+	Reading options…	Опции за четене…
+	Reading page {page}…	Четене на страница {page}…
+	Reading preferences…	Предпочитания за четене…
+	Resume	Възобновяване
+	Resume reading	Възобновяване на четенето
+	Speed:	Скорост:
+	Stop	Спиране
+	Stop reading	Спиране на четенето
+	System default	По подразбиране за системата
+	Test voice	Тест на гласа
+	Voice and Speech	Глас и реч
+	Voice:	Глас:
+	Volume:	Сила на звука:

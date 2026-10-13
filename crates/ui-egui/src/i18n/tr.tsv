@@ -2350,3 +2350,31 @@ animation effects	Off	Kapalı
 	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
 	Move tag earlier	Etiketi daha erken taşı
 	Move tag later	Etiketi daha geç taşı
+
+# Read Out Loud
+	Activate Read Out Loud	Sesli Okumayı Etkinleştir
+	Deactivate Read Out Loud	Sesli Okumayı Devre Dışı Bırak
+	Pause	Duraklat
+	Pause / resume reading	Okumayı duraklat / sürdür
+	Pause reading	Okumayı duraklat
+	Paused (page {page})	Duraklatıldı (sayfa {page})
+	Pitch:	Perde:
+	Read Out Loud	Sesli Oku
+	Read Out Loud ({key})	Sesli Oku ({key})
+	Read Out Loud ready	Sesli okuma hazır
+	Read this page only	Yalnızca bu sayfayı oku
+	Read to end of document	Belgenin sonuna kadar oku
+	Reading Preferences	Okuma Tercihleri
+	Reading options…	Okuma seçenekleri…
+	Reading page {page}…	{page}. sayfa okunuyor…
+	Reading preferences…	Okuma tercihleri…
+	Resume	Sürdür
+	Resume reading	Okumayı sürdür
+	Speed:	Hız:
+	Stop	Durdur
+	Stop reading	Okumayı durdur
+	System default	Sistem varsayılanı
+	Test voice	Sesi sına
+	Voice and Speech	Ses ve Konuşma
+	Voice:	Ses:
+	Volume:	Ses Düzeyi:

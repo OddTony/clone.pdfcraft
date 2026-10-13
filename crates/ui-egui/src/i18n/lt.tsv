@@ -2598,3 +2598,31 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+
+# Read Out Loud
+	Activate Read Out Loud	Aktyvuoti garsinį skaitymą
+	Deactivate Read Out Loud	Išjungti garsinį skaitymą
+	Pause	Pauzė
+	Pause / resume reading	Pristabdyti / tęsti skaitymą
+	Pause reading	Pristabdyti skaitymą
+	Paused (page {page})	Pristabdyta ({page} psl.)
+	Pitch:	Aukštis:
+	Read Out Loud	Garsinis skaitymas
+	Read Out Loud ({key})	Garsinis skaitymas ({key})
+	Read Out Loud ready	Garsinis skaitymas paruoštas
+	Read this page only	Skaityti tik šį puslapį
+	Read to end of document	Skaityti iki dokumento pabaigos
+	Reading Preferences	Skaitymo nuostatos
+	Reading options…	Skaitymo parinktys…
+	Reading page {page}…	Skaitomas {page} puslapis…
+	Reading preferences…	Skaitymo nuostatos…
+	Resume	Tęsti
+	Resume reading	Tęsti skaitymą
+	Speed:	Greitis:
+	Stop	Stabdyti
+	Stop reading	Stabdyti skaitymą
+	System default	Sistemos numatytasis
+	Test voice	Išbandyti balsą
+	Voice and Speech	Balsas ir kalba
+	Voice:	Balsas:
+	Volume:	Garsumas:

@@ -129,3 +129,8 @@ sync_github_name = false
 
 [people.webdevtodayjason]
 display_name = "Jason Brashear"
+
+[people.Victor476]
+real_name = "Victor Angelo"
+display_name = "Victor Angelo"
+sync_github_name = true

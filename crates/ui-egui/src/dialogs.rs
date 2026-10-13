@@ -921,6 +921,12 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 close = start || cancel;
                 return;
             }
+            Dialog::ReadAloudOptions => {
+                ui.set_width(460.0);
+                let (ok, cancel) = crate::a11y_ui::read_aloud_options_body(ui, app, &t);
+                close = ok || cancel;
+                return;
+            }
             Dialog::Export(kind) => {
                 let (apply, cancel) = crate::export_ui::body(ui, app, &t, kind);
                 export_now = apply;

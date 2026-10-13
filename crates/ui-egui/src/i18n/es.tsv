@@ -2484,3 +2484,31 @@ animation effects	Off	Desactivados
 	This document is trying to open a local file:	Este documento intenta abrir un archivo local:
 	Move tag earlier	Mover etiqueta antes
 	Move tag later	Mover etiqueta después
+
+# Read Out Loud
+	Activate Read Out Loud	Activar lectura en voz alta
+	Deactivate Read Out Loud	Desactivar lectura en voz alta
+	Pause	Pausar
+	Pause / resume reading	Pausar / reanudar lectura
+	Pause reading	Pausar lectura
+	Paused (page {page})	En pausa (página {page})
+	Pitch:	Tono:
+	Read Out Loud	Leer en voz alta
+	Read Out Loud ({key})	Leer en voz alta ({key})
+	Read Out Loud ready	Lectura en voz alta lista
+	Read this page only	Leer solo esta página
+	Read to end of document	Leer hasta el final del documento
+	Reading Preferences	Preferencias de lectura
+	Reading options…	Opciones de lectura…
+	Reading page {page}…	Leyendo página {page}…
+	Reading preferences…	Preferencias de lectura…
+	Resume	Reanudar
+	Resume reading	Reanudar lectura
+	Speed:	Velocidad:
+	Stop	Detener
+	Stop reading	Detener lectura
+	System default	Predeterminado del sistema
+	Test voice	Probar voz
+	Voice and Speech	Voz y habla
+	Voice:	Voz:
+	Volume:	Volumen:
