@@ -3855,8 +3855,11 @@ name = "pdfcraft-ps-export"
 version = "0.6.0"
 dependencies = [
  "hayro",
+ "image",
  "kurbo 0.13.1",
  "pdfcraft-filters",
+ "pdfcraft-render",
+ "png 0.18.1",
  "skrifa 0.47.0",
 ]
 
