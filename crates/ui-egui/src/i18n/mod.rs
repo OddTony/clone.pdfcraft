@@ -414,6 +414,17 @@ pub fn in_sentence(label: &str) -> std::borrow::Cow<'_, str> {
     if current().code() == "de" { std::borrow::Cow::Borrowed(label) } else { std::borrow::Cow::Owned(label.to_lowercase()) }
 }
 
+/// `text` in capitals, for section labels and initials. Georgian has no capitals in ordinary
+/// writing (Mtavruli is a display style, not upper case), so its letters stay as they are.
+pub fn upper(text: &str) -> String {
+    text.chars().map(|c| if capitalizes(c) { c.to_uppercase().collect() } else { c.to_string() }).collect()
+}
+
+/// Whether [`upper`] capitalises `c`: not Georgian (Mkhedruli, Mtavruli, Asomtavruli, Nuskhuri).
+fn capitalizes(c: char) -> bool {
+    !matches!(c, '\u{10A0}'..='\u{10FF}' | '\u{1C90}'..='\u{1CBF}' | '\u{2D00}'..='\u{2D2F}')
+}
+
 pub fn current() -> Lang {
     CURRENT.get()
 }
@@ -1016,6 +1027,13 @@ mod tests {
         assert_eq!(menu_label("file.open", "Open…"), "開く…");
         set_current(Lang::EN);
         assert_eq!(command_label("Undo Fill in Save {e}"), "Undo Fill in Save {e}");
+    }
+
+    #[test]
+    fn upper_leaves_georgian_uncapitalised() {
+        assert_eq!(upper("Privacy"), "PRIVACY");
+        assert_eq!(upper("კონფიდენციალურობა"), "კონფიდენციალურობა");
+        assert_eq!(upper("pdf-ის ექსპორტი"), "PDF-ის ექსპორტი");
     }
 
     #[test]
