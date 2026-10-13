@@ -1669,7 +1669,7 @@ fn files_dropped_before_the_pointer_is_known_wait_for_it() {
 
 #[test]
 fn files_dropped_outside_the_page_grid_still_open_as_documents() {
-    let mut h = harness(2, |_| {});
+    let mut h = harness(2, |app| app.run_inline = true);
     drop_files(&mut h, vec![Dropped("other.pdf", fixture(1))]);
     h.run_steps(3);
     assert_eq!(h.state().views.len(), 2);
