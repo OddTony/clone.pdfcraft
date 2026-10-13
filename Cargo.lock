@@ -3895,6 +3895,7 @@ dependencies = [
  "pdfcraft-fonts",
  "pdfcraft-forms",
  "pdfcraft-model",
+ "sha2",
  "thiserror 2.0.21",
 ]
 

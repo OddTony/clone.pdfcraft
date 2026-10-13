@@ -7,7 +7,22 @@ pub(crate) fn fixture(n: usize) -> Vec<u8> {
     let mut objs: Vec<Vec<u8>> = vec![b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()];
     let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", 4 + 2 * i)).collect();
     objs.push(format!("<< /Type /Pages /Kids [{}] /Count {n} /MediaBox [0 0 200 300] >>", kids.join(" ")).into_bytes());
-    objs.push(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_vec());
+    // Redaction places glyphs from /Widths (it doesn't guess standard-font metrics): Helvetica's
+    // for space and "P", 556 for everything else the fixture uses.
+    let widths: Vec<&str> = (32..127u8)
+        .map(|c| {
+            if c == b' ' {
+                "278"
+            } else if c == b'P' {
+                "667"
+            } else {
+                "556"
+            }
+        })
+        .collect();
+    objs.push(
+        format!("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /FirstChar 32 /LastChar 126 /Widths [{}] >>", widths.join(" ")).into_bytes(),
+    );
     for i in 0..n {
         objs.push(format!("<< /Type /Page /Parent 2 0 R /Contents {} 0 R /Resources << /Font << /F1 3 0 R >> >> >>", 5 + 2 * i).into_bytes());
         let body = format!("BT /F1 24 Tf 20 150 Td (Page {}) Tj ET", i + 1);
@@ -1759,7 +1774,14 @@ fn redaction_is_refused_when_the_page_still_shows_text_under_a_mark() {
     let id = s.open("gs.pdf", None, Arc::new(by_gs), None).unwrap();
     mark_shown_text(&mut s, id, "SECRET42");
     let refused = s.apply(id, Edit::ApplyRedactions { pages: None });
-    assert!(matches!(refused, Err(EditError::Redact(pdfcraft_redact::RedactError::Residue(n))) if n > 0), "{refused:?}");
+    // Refused either way: the interpreter stops on a font it cannot resolve (one set through an
+    // ExtGState), or, failing that, the check of the result finds the text still under the mark.
+    let residue = matches!(&refused, Err(EditError::Redact(pdfcraft_redact::RedactError::Residue(n))) if *n > 0);
+    let unresolved = matches!(
+        &refused,
+        Err(EditError::Redact(pdfcraft_redact::RedactError::Unsupported { reason: pdfcraft_redact::Unsupported::UnresolvedFont, .. }))
+    );
+    assert!(residue || unresolved, "{refused:?}");
     // Nothing was changed: the mark is still pending and the page still shows the line.
     assert_eq!(s.get(id).unwrap().redaction_marks(), 1);
     assert_eq!(page_texts(&s, id), [line]);
@@ -1774,7 +1796,7 @@ fn redaction_is_refused_when_the_page_still_shows_text_under_a_mark() {
 }
 
 #[test]
-fn redaction_marks_apply_for_good_and_undo() {
+fn redaction_marks_apply_for_good() {
     let (mut s, id) = session_with(2);
     // "Page 1" at 24 pt from x 20: the "1" starts near x 82.7 (Helvetica widths).
     let shape =
@@ -1787,7 +1809,8 @@ fn redaction_marks_apply_for_good_and_undo() {
     assert_eq!(page_texts(&s, id), ["Page 1", "Page 2"], "marking alone changes nothing");
     s.apply(id, Edit::ApplyRedactions { pages: None }).unwrap();
     let d = s.get(id).unwrap();
-    assert_eq!((d.can_undo(), d.redaction_marks()), (Some("Apply redactions"), 0));
+    // Applying can't be undone: the history that held the original is dropped.
+    assert_eq!((d.can_undo(), d.redaction_marks()), (None, 0));
     // An independent extractor (the renderer's) no longer finds the "1".
     assert_eq!(page_texts(&s, id), ["Page", "Page 2"]);
     let saved = s.save_bytes(id).unwrap();
@@ -1796,9 +1819,8 @@ fn redaction_marks_apply_for_good_and_undo() {
     let mut s2 = Session::new();
     let id2 = s2.open("r.pdf", None, saved, None).unwrap();
     assert_eq!(page_texts(&s2, id2), ["Page", "Page 2"]);
-    s.undo(id).unwrap();
-    assert_eq!(page_texts(&s, id), ["Page 1", "Page 2"]);
-    assert_eq!(s.apply(id, Edit::ClearRedactions).map(|_| s.get(id).unwrap().redaction_marks()), Ok(0));
+    assert_eq!(s.undo(id), Err(EditError::NothingToUndo));
+    assert_eq!(page_texts(&s, id), ["Page", "Page 2"]);
     assert!(matches!(s.apply(id, Edit::ApplyRedactions { pages: None }), Err(EditError::Redact(_))));
 }
 

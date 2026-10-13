@@ -1220,7 +1220,6 @@ key	Space	Mezerník
 	Apply redactions	Provést začernění
 	You are about to apply 1 redaction mark. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Chystáte se použít 1 značku začernění. Text, obrázky a kresby pod značkami a komentáře a formulářová pole, která je překrývají, budou trvale odstraněny.
 	You are about to apply {n} redaction marks. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Chystáte se použít značky začernění (počet: {n}). Text, obrázky a kresby pod značkami a komentáře a formulářová pole, která je překrývají, budou trvale odstraněny.
-	Save the document afterwards: saving rewrites the whole file so no trace of the removed content stays in it.	Dokument poté uložte: uložení přepíše celý soubor, takže v něm nezůstane žádná stopa po odstraněném obsahu.
 	Select the items to remove from this document.	Vyberte položky, které chcete z dokumentu odebrat.
 	Metadata	Metadata
 	File attachments	Připojené soubory
@@ -2426,3 +2425,11 @@ animation effects	Off	Vypnuto
 	This document is trying to open a local file:	Tento dokument se pokouší otevřít místní soubor:
 	Move tag earlier	Přesunout značku dříve
 	Move tag later	Přesunout značku později
+	Applying also sanitizes the document: bookmarks, named destinations, attachments, document information, metadata and XFA form data are deleted, and hidden layers are locked hidden for good.	Použití také vyčistí dokument: záložky, pojmenované cíle, přílohy, informace o dokumentu, metadata a data formulářů XFA se odstraní a skryté vrstvy zůstanou trvale skryté.
+	Checked when applied: 1 region found clear of the removed text. Text that exists only as pixels of an image is not searched.	Kontrola při použití: 1 oblast neobsahuje odstraněný text. Text existující pouze jako pixely obrázku se neprohledává.
+	Checked when applied: {n} regions found clear of the removed text. Text that exists only as pixels of an image is not searched.	Kontrola při použití: {n} oblastí neobsahuje odstraněný text. Text existující pouze jako pixely obrázku se neprohledává.
+	I understand that the redacted content is removed for good	Rozumím, že redigovaný obsah bude trvale odstraněn
+	This cannot be undone: applying redactions clears the undo history.	Tuto akci nelze vrátit: použití redakce vymaže historii vracení změn.
+# Redaction confirmation and the save check of password-protected files
+	Save the result under a new name: saving rewrites the whole file so no trace of the removed content stays in it, and the original file stays as it is.	Uložte výsledek pod novým názvem: uložení přepíše celý soubor, takže v něm nezůstane žádná stopa po odstraněném obsahu, a původní soubor zůstane beze změny.
+	A password-protected file is only checked to reopen when saved; its bytes are not searched again for the removed text.	U souboru chráněného heslem se při uložení ověří jen to, že jde znovu otevřít; jeho bajty se znovu neprohledávají na odstraněný text.

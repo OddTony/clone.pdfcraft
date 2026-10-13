@@ -864,9 +864,17 @@ impl Automation {
             Some(p) => self.resolve(p, true)?,
             None => PathBuf::from(doc.path.clone().ok_or_else(|| failed("the document has never been saved: pass a path"))?),
         };
-        let same_file = doc.path.as_deref().is_some_and(|p| Path::new(p) == target);
+        // `./x.pdf`, `dir/../x.pdf` or another spelling of the source is still the source.
+        let same_file = doc.path.as_deref().is_some_and(|p| same_path(Path::new(p), &target));
+        // Redacted (or sanitized) output replaces the source only when asked to, and is always a full rewrite.
+        let redacted = doc.has_unsaved_redaction();
+        if redacted && same_file && !a.opt_bool("overwrite_source")?.unwrap_or(false) {
+            return Err(failed(
+                "the document has applied redactions or removed hidden information: saving in place would replace the original file. Save to a new path, or pass overwrite_source: true",
+            ));
+        }
         // Saving to a new file is a full rewrite unless asked otherwise, like Save As.
-        let full = a.opt_bool("full")?.unwrap_or(!same_file);
+        let full = redacted || a.opt_bool("full")?.unwrap_or(!same_file);
         let flatten_fill_sign = a.opt_bool("flatten_fill_sign")?.unwrap_or(false);
         if flatten_fill_sign {
             self.apply(a, Edit::FlattenFillSign)?;
@@ -875,7 +883,13 @@ impl Automation {
         // A save that adds or removes encryption, or must not keep the old revision (Sanitize,
         // redaction), is rewritten in full even when an incremental save was asked for.
         let incremental = !full && bytes.starts_with(&self.doc(a)?.saved_bytes());
-        write_atomic(&target, &bytes)?;
+        if redacted {
+            // Checked before anything is replaced; the temporary file is owner-only.
+            self.session.verify_save(id, &bytes).map_err(failed)?;
+            pdfcraft_engine::write_private_atomic(&target, &bytes).map_err(|e| failed(format!("{}: {e}", target.display())))?;
+        } else {
+            write_atomic(&target, &bytes)?;
+        }
         let path = target.to_string_lossy().into_owned();
         self.session.mark_saved(id, bytes.clone(), Some(path.clone())).map_err(failed)?;
         Ok(json!({ "path": path, "bytes": bytes.len(), "incremental": incremental, "document": summary(self.doc(a)?) }))
@@ -2334,6 +2348,30 @@ fn write_atomic_with(path: &Path, bytes: &[u8], suffixes: impl IntoIterator<Item
     })
 }
 
+/// Do `a` and `b` name the same file? Compared as written first, then by their canonical forms
+/// (symbolic links, `.` and `..` resolved, and on Windows the case of the name); a path that does
+/// not exist yet is compared through its existing parent directory.
+fn same_path(a: &Path, b: &Path) -> bool {
+    if a == b {
+        return true;
+    }
+    match (canonical_path(a), canonical_path(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => false,
+    }
+}
+
+fn canonical_path(p: &Path) -> Option<PathBuf> {
+    if let Ok(c) = std::fs::canonicalize(p) {
+        return Some(c);
+    }
+    let name = p.file_name()?;
+    let parent = match p.parent() {
+        Some(d) if !d.as_os_str().is_empty() => d,
+        _ => Path::new("."),
+    };
+    std::fs::canonicalize(parent).ok().map(|d| d.join(name))
+}
 #[cfg(test)]
 mod tests {
     use super::*;

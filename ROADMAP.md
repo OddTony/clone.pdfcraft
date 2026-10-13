@@ -44,7 +44,7 @@ and add a line to the [progress log](#progress-log); when a gap closes, remove i
 
 | | Value | Kind |
 |---|---|---|
-| **Feature breadth** | **≈ 67%** tier-weighted (56.9% unweighted: 423 shipped + 74 partial of 808; P0 94.2%) | measured, `parity/acrobat-features.toml` |
+| **Feature breadth** | **≈ 68%** tier-weighted (58.2% unweighted: 429 shipped + 88 partial of 813; P0 94.2%) | measured, `parity/acrobat-features.toml` |
 | Feature breadth, mainstream practitioner | ≈ 70% tier-weighted (63.2% unweighted; P0 95.3%) | measured ([split](docs/target-app-parity.md#mainstream-practitioner-vs-full-acrobat-pro)) |
 | **Ready for real work**, full Acrobat Pro | **≈ 49%** (45–53%) | estimated, weighted sum over [dimensions](#by-dimension) |
 | **Ready for real work**, mainstream practitioner | **≈ 55%** (50–60%) | estimated ([split](docs/target-app-parity.md#mainstream-practitioner-vs-full-acrobat-pro)) |
@@ -90,19 +90,19 @@ Hours are calibrated as in [Effort and calibration](docs/target-app-parity.md#ef
 
 | Area | Breadth (measured) | Ready (estimated) | Remaining (h) |
 |---|---|---|---|
-| A Core model and fidelity | 76.8% | 70% | 25–45 |
-| B View and navigation | 62.5% | 55% | 110–190 |
-| C Content editing | 53.3% | 30% | 100–180 |
-| D Organize pages | 61.2% | 70% | 12–25 |
+| A Core model and fidelity | 77.2% | 70% | 25–45 |
+| B View and navigation | 62.8% | 55% | 110–190 |
+| C Content editing | 56.6% | 30% | 100–180 |
+| D Organize pages | 63.0% | 70% | 12–25 |
 | E Comments and review | 77.7% | 70% | 12–25 |
 | F Forms and JavaScript | 78.5% | 65% | 40–75 |
-| G Protect, redact, sanitize | 58.5% | 55% | 15–30 |
+| G Protect, redact, sanitize | 58.3% | 55% | 15–30 |
 | H Digital signatures | 62.2% | 45% | 40–70 |
-| I Scan and OCR | 23.1% | 15% | 40–75 |
-| J Create and export | 39.7% | 25% | 55–100 |
+| I Scan and OCR | 32.7% | 15% | 40–75 |
+| J Create and export | 41.2% | 25% | 55–100 |
 | K Optimize and standards | 34.5% | 20% | 65–115 |
 | L Print | 39.7% | 35% | 30–55 |
-| M Accessibility | 63.1% | 30% | 40–70 |
+| M Accessibility | 68.0% | 30% | 40–70 |
 | N Automation, preferences, misc | 30.0% | 35% | 25–45 |
 
 What's strong and missing in each: [target-app-parity.md](docs/target-app-parity.md#by-feature-area).
@@ -148,6 +148,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-12 (M8, redaction hardening):** Applying redactions asks for an acknowledgement, clears the undo history and sanitizes by default (bookmarks, attachments, metadata, XFA data); XFA packets are removed on every apply so a relayout cannot restore redacted fields, signed documents and vertical-writing text under a mark are refused, and nothing changes when apply fails. An independent proof re-reads the result and, on Save, the bytes about to be written (a password-protected file only gets the reopen check), failing closed on unreadable content; it says "checked", not "guaranteed". Partly redacted scans leave no extractable original after a full save, whether the image is inherited, drawn by a form without resources, shared by two pages, Flate or JPEG. Tags follow rewritten forms: references to surviving marked content move to the cleaned copy, removed content loses its alternate text. Decoding is bounded on the redaction paths; the operator-to-piece lookup is a binary search again. Saves are a full rewrite with a new /ID to a new path (or with `overwrite_source`, which now recognises any spelling of the source path). Known gap: a font without /Widths is measured by its exact published widths only when it is one of the standard fourteen text faces (or a metric-compatible name for one) with the WinAnsi or default encoding; Symbol, ZapfDingbats, a standard face with an encoding of its own and any other font without /Widths can't be redacted (the page is refused when a mark lies on such a line). The measured breadth in the tables is refreshed from `cargo xtask parity` (58.2% unweighted, ≈ 68% tier-weighted: P0 94.2%, P1 63.0%, P2 15.1%, P3 2.3%); no feature changed status here, and the readiness estimates are unchanged.
 - **2026-10-12 (M13, CLI robustness scans):** `pdfcraft-cli check` visits a directory once even when input roots overlap or directory symlinks lead back into the tree. PDFs reached through file symlinks remain accepted. Three real CLI regressions cover overlapping roots, a directory cycle and directory/file aliases. Estimates unchanged.
 - **2026-10-12 (M4, Type 3 extraction fidelity):** Extract and Split preserve shared image/resource dictionaries reached through Type 3 glyphs, including nested forms, patterns and soft masks. A bounded object-graph walk protects unknown glyph content; unreadable pages/forms retain their glyph resources, and shared explicit fonts are visited once. Separate page dictionaries still prune unused images. Synthetic save/reopen regressions and an opt-in Poppler pixel oracle cover resource ownership, nested forms, cycles, limits and repeated fonts. Estimates unchanged.
 - **2026-10-12 (M2, TIFF predictor rows):** Packed RGB images using TIFF horizontal differencing keep every row when samples do not fill the last byte. The renderer aligns each decoded row before moving to the next. Synthetic decoding tests cover 1/2/4-bit samples, horizontal differencing and an 8-bit control; a red/green page-render regression verifies visible output. Estimates unchanged.

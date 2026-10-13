@@ -1110,7 +1110,6 @@
 	Apply redactions	Karartmaları uygula
 	You are about to apply 1 redaction mark. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	1 karartma işaretini uygulamak üzeresiniz. İşaretlerin altındaki metin, resim ve çizimler ile bunlarla örtüşen yorumlar ve form alanları kalıcı olarak kaldırılacaktır.
 	You are about to apply {n} redaction marks. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	{n} karartma işaretini uygulamak üzeresiniz. İşaretlerin altındaki metin, resim ve çizimler ile bunlarla örtüşen yorumlar ve form alanları kalıcı olarak kaldırılacaktır.
-	Save the document afterwards: saving rewrites the whole file so no trace of the removed content stays in it.	Ardından belgeyi kaydedin: Kaydetme tüm dosyayı yeniden yazar, böylece kaldırılan içeriğin hiçbir izi kalmaz.
 	Select the items to remove from this document.	Bu belgeden kaldırılacak öğeleri seçin.
 	Metadata	Meta veriler
 	File attachments	Dosya ekleri
@@ -2348,3 +2347,11 @@ animation effects	Off	Kapalı
 	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
 	Move tag earlier	Etiketi daha erken taşı
 	Move tag later	Etiketi daha geç taşı
+	Applying also sanitizes the document: bookmarks, named destinations, attachments, document information, metadata and XFA form data are deleted, and hidden layers are locked hidden for good.	Uygulama belgeyi de temizler: yer imleri, adlandırılmış hedefler, ekler, belge bilgileri, meta veriler ve XFA form verileri silinir; gizli katmanlar kalıcı olarak gizli kalır.
+	Checked when applied: 1 region found clear of the removed text. Text that exists only as pixels of an image is not searched.	Uygulama sırasında kontrol edildi: 1 bölgede kaldırılan metin bulunamadı. Yalnızca görüntü pikselleri olarak var olan metin aranmaz.
+	Checked when applied: {n} regions found clear of the removed text. Text that exists only as pixels of an image is not searched.	Uygulama sırasında kontrol edildi: {n} bölgede kaldırılan metin bulunamadı. Yalnızca görüntü pikselleri olarak var olan metin aranmaz.
+	I understand that the redacted content is removed for good	Karartılan içeriğin kalıcı olarak kaldırılacağını anlıyorum
+	This cannot be undone: applying redactions clears the undo history.	Bu işlem geri alınamaz: karartmaları uygulamak geri alma geçmişini temizler.
+# Redaction confirmation and the save check of password-protected files
+	Save the result under a new name: saving rewrites the whole file so no trace of the removed content stays in it, and the original file stays as it is.	Sonucu yeni bir adla kaydedin: kaydetme tüm dosyayı yeniden yazar, böylece kaldırılan içerikten hiçbir iz kalmaz ve özgün dosya olduğu gibi kalır.
+	A password-protected file is only checked to reopen when saved; its bytes are not searched again for the removed text.	Parola korumalı bir dosya kaydedilirken yalnızca yeniden açılıp açılmadığı denetlenir; baytlarında kaldırılan metin yeniden aranmaz.

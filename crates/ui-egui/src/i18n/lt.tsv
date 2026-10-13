@@ -993,7 +993,6 @@
 	Save pages	Įrašyti puslapius
 	Save tag properties	Įrašyti žymos savybes
 	Save the accessibility report	Įrašyti prieinamumo ataskaitą
-	Save the document afterwards: saving rewrites the whole file so no trace of the removed content stays in it.	Po to įrašykite dokumentą: įrašant perrašomas visas failas, kad neliktų pašalinto turinio pėdsakų.
 	Save the document afterwards; saving rewrites the whole file so nothing removed stays in it.	Po to įrašykite dokumentą; įrašant perrašomas visas failas, kad neliktų pašalinto turinio.
 	Save the spreadsheet	Įrašyti skaičiuoklę
 	Save these pages as one PDF	Įrašyti šiuos puslapius kaip vieną PDF
@@ -2596,3 +2595,11 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+# Redaction confirmation and the save check of password-protected files
+	Applying also sanitizes the document: bookmarks, named destinations, attachments, document information, metadata and XFA form data are deleted, and hidden layers are locked hidden for good.	Taikymas taip pat išvalo dokumentą: ištrinamos žymės, įvardyti paskirties taškai, priedai, dokumento informacija, metaduomenys ir XFA formos duomenys, o paslėpti sluoksniai visam laikui užrakinami kaip paslėpti.
+	Checked when applied: 1 region found clear of the removed text. Text that exists only as pixels of an image is not searched.	Patikrinta taikant: 1 srityje nerasta pašalinto teksto. Tekstas, esantis tik kaip vaizdo pikseliai, neieškomas.
+	Checked when applied: {n} regions found clear of the removed text. Text that exists only as pixels of an image is not searched.	Patikrinta taikant: {n} srityse nerasta pašalinto teksto. Tekstas, esantis tik kaip vaizdo pikseliai, neieškomas.
+	I understand that the redacted content is removed for good	Suprantu, kad užtemdytas turinys pašalinamas visam laikui
+	This cannot be undone: applying redactions clears the undo history.	Šio veiksmo atšaukti negalima: pritaikius užtemdymus išvaloma atšaukimo istorija.
+	Save the result under a new name: saving rewrites the whole file so no trace of the removed content stays in it, and the original file stays as it is.	Išsaugokite rezultatą nauju pavadinimu: išsaugant perrašomas visas failas, todėl jame neliks jokio pašalinto turinio pėdsako, o originalus failas lieka nepakeistas.
+	A password-protected file is only checked to reopen when saved; its bytes are not searched again for the removed text.	Slaptažodžiu apsaugotas failas išsaugant tik patikrinamas, ar jį galima atidaryti iš naujo; jo baitai pašalinto teksto dar kartą neieškomi.

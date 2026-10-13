@@ -1136,7 +1136,6 @@
 	Apply redactions	Zastosuj utajnienia
 	You are about to apply 1 redaction mark. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Zamierzasz zastosować 1 oznaczenie do utajnienia. Tekst, obrazy i rysunki pod oznaczeniami oraz nakładające się na nie komentarze i pola formularza zostaną trwale usunięte.
 	You are about to apply {n} redaction marks. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Zamierzasz zastosować oznaczenia do utajnienia w liczbie {n}. Tekst, obrazy i rysunki pod oznaczeniami oraz nakładające się na nie komentarze i pola formularza zostaną trwale usunięte.
-	Save the document afterwards: saving rewrites the whole file so no trace of the removed content stays in it.	Następnie zapisz dokument: zapis tworzy cały plik na nowo, aby nie pozostał w nim żaden ślad usuniętej zawartości.
 	Select the items to remove from this document.	Wybierz elementy do usunięcia z tego dokumentu.
 	Metadata	Metadane
 	File attachments	Załączniki plikowe
@@ -2332,3 +2331,11 @@ animation effects	Off	Wyłączone
 	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
 	Move tag earlier	Przenieś znacznik wcześniej
 	Move tag later	Przenieś znacznik później
+# Redaction confirmation and the save check of password-protected files
+	Applying also sanitizes the document: bookmarks, named destinations, attachments, document information, metadata and XFA form data are deleted, and hidden layers are locked hidden for good.	Zastosowanie także oczyszcza dokument: zakładki, nazwane miejsca docelowe, załączniki, informacje o dokumencie, metadane i dane formularza XFA zostają usunięte, a ukryte warstwy zostają trwale zablokowane jako ukryte.
+	Checked when applied: 1 region found clear of the removed text. Text that exists only as pixels of an image is not searched.	Sprawdzono przy zastosowaniu: w 1 obszarze nie znaleziono usuniętego tekstu. Tekst istniejący tylko jako piksele obrazu nie jest przeszukiwany.
+	Checked when applied: {n} regions found clear of the removed text. Text that exists only as pixels of an image is not searched.	Sprawdzono przy zastosowaniu: liczba obszarów bez usuniętego tekstu: {n}. Tekst istniejący tylko jako piksele obrazu nie jest przeszukiwany.
+	I understand that the redacted content is removed for good	Rozumiem, że utajniona zawartość zostaje usunięta na zawsze
+	This cannot be undone: applying redactions clears the undo history.	Tego nie można cofnąć: zastosowanie utajnień czyści historię cofania.
+	Save the result under a new name: saving rewrites the whole file so no trace of the removed content stays in it, and the original file stays as it is.	Zapisz wynik pod nową nazwą: zapis tworzy cały plik na nowo, aby nie pozostał w nim żaden ślad usuniętej zawartości, a oryginalny plik pozostaje bez zmian.
+	A password-protected file is only checked to reopen when saved; its bytes are not searched again for the removed text.	Plik chroniony hasłem jest przy zapisie sprawdzany tylko pod kątem ponownego otwarcia; jego bajty nie są ponownie przeszukiwane pod kątem usuniętego tekstu.
