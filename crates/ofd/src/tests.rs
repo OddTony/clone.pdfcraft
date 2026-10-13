@@ -747,3 +747,32 @@ fn reads_annotations() {
     let doc = parse(&build(&files)).unwrap();
     assert!(doc.warnings.iter().any(|w| w.contains("Page_1/Annotation.xml is listed but missing")), "{:?}", doc.warnings);
 }
+
+#[test]
+fn reads_tiling_patterns_and_bounds_their_nesting() {
+    let cell = |inner: &str| {
+        format!(
+            r#"<Pattern Width="10" Height="5" XStep="12" CTM="1 0 0 1 2 3"><CellContent><PathObject Boundary="0 0 1 1" Fill="true"><FillColor>{inner}</FillColor><AbbreviatedData>M 0 0 L 1 1</AbbreviatedData></PathObject></CellContent></Pattern>"#
+        )
+    };
+    // Patterns inside patterns, ten deep: read to four, never followed further.
+    let deep = (0..10).fold(String::new(), |inner, _| cell(&inner));
+    let body = format!(
+        r#"<PathObject Boundary="0 0 9 9" Fill="true"><FillColor>{deep}</FillColor><AbbreviatedData>M 0 0 L 1 1</AbbreviatedData></PathObject>"#
+    );
+    let doc = parse(&with("Doc_0/Pages/Page_0/Content.xml", &page(&body))).unwrap();
+    let Object::Path(p) = &doc.pages[0].content.layers[0].objects[0] else { panic!() };
+    let pattern = p.fill_color.as_ref().unwrap().pattern.as_deref().unwrap();
+    assert_eq!((pattern.width, pattern.height, pattern.x_step, pattern.y_step), (10.0, 5.0, 12.0, 5.0));
+    assert_eq!(pattern.ctm, Some(Matrix { a: 1.0, b: 0.0, c: 0.0, d: 1.0, e: 2.0, f: 3.0 }));
+    assert!(!pattern.reflect && !pattern.relative_to_page);
+    let mut depth = 0;
+    let mut at = Some(pattern);
+    while let Some(pt) = at {
+        depth += 1;
+        let Object::Path(inner) = &pt.objects[0] else { panic!() };
+        at = inner.fill_color.as_ref().and_then(|c| c.pattern.as_deref());
+    }
+    assert_eq!(depth, 4);
+    assert!(doc.warnings.iter().any(|w| w.contains("nested more than 4 deep")), "{:?}", doc.warnings);
+}

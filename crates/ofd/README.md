@@ -34,8 +34,8 @@ if pdfcraft_ofd::is_ofd(&bytes) {                 // a ZIP with OFD.xml at its r
   `CGTransform` glyph indices), `ImageObject`, `CompositeObject` (its unit, a resource, in
   `Resources::composites`), nested
   `PageBlock`, with the common `Boundary`, `CTM`, `DrawParam`, `LineWidth`, `Alpha`, `Visible`,
-  fill/stroke colours (plain values, and `AxialShd`/`RadialShd` blends as `Color::shade`;
-  patterns and Gouraud shadings are not read yet) and `Clips` (`Clip` regions intersect, the `Area`s of one region form a
+  fill/stroke colours (plain values, `AxialShd`/`RadialShd` blends as `Color::shade` and
+  tiling `Pattern`s as `Color::pattern`; Gouraud shadings are not read yet) and `Clips` (`Clip` regions intersect, the `Area`s of one region form a
   union; an area is a `Path`, read, or a `Text`, recorded but not read yet; `TransFlag` says
   whether the object's CTM applies). `Graphic::clip_to_page` places an area in page space.
 
@@ -45,7 +45,7 @@ Numbers stay in OFD's units (millimetres, y down). `geom` converts: `mm_to_pt`,
 
 Elements are matched by local name, so files with and without the `ofd:` prefix read alike.
 Required things that are missing or malformed are errors naming the part; unknown elements are
-ignored; what is tolerated or not read yet (patterns, Gouraud shadings, extra `DocBody` elements,
+ignored; what is tolerated or not read yet (Gouraud shadings, extra `DocBody` elements,
 references to undefined fonts, images, templates or composite graphic units) is listed in
 `OfdDocument::warnings`, each message once. Tolerated because real writers produce them (all
 seen in the ofdrw test files): a listed resource file missing from the package (its resources

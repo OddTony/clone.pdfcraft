@@ -27,10 +27,13 @@
 //! Axial and radial shadings (`AxialShd`, `RadialShd`) fill paths and text as PDF shadings
 //! (types 2 and 3, several segments as a stitching function), painted with `sh` inside the
 //! object's outline (a clipping path, or text in clipping mode), in the object's boundary space.
-//! Shadings on strokes, repeating or reflecting ones, elliptical radial ones, patterns and
-//! Gouraud shadings are not drawn yet (reported).
+//! Tiling patterns (`Pattern`) fill the same way, their cell drawn at every step over the
+//! object's boundary. Shadings and patterns on strokes, repeating or reflecting shadings,
+//! elliptical radial ones, mirrored or page-aligned patterns, patterns that would need more than
+//! [`MAX_TILES`] cells (or more than [`MAX_TOTAL_TILES`] in the document) and Gouraud shadings
+//! are not drawn yet (reported).
 //!
-//! What isn't drawn (patterns, Gouraud shadings, JBIG2 and other undecodable images, the clips
+//! What isn't drawn (Gouraud shadings, JBIG2 and other undecodable images, the clips
 //! above) is counted in [`OfdReport::skipped`], by kind in [`OfdReport::skipped_by_kind`].
 //! Signatures and seals are not carried over or checked.
 
@@ -50,6 +53,13 @@ use crate::{CreateError, MAX_SIDE, add_page, set_title};
 
 /// How deep composite graphic units may nest in one another.
 const MAX_UNIT_DEPTH: usize = 16;
+
+/// The most cells one pattern-filled object may draw.
+const MAX_TILES: usize = 4096;
+
+/// The most pattern cells one conversion may draw: a small file must not make the PDF huge by
+/// filling many objects with tiny cells.
+const MAX_TOTAL_TILES: usize = 100_000;
 
 /// What the conversion could not do, for the user.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -86,6 +96,7 @@ pub fn from_ofd(bytes: &[u8]) -> Result<(Document, OfdReport), CreateError> {
         units: HashMap::new(),
         unit_stack: Vec::new(),
         shadings: 0,
+        tiles: 0,
         report: OfdReport { signed: model.signatures.is_some(), notes: model.warnings.clone(), ..OfdReport::default() },
     };
     let mut templates: HashMap<u32, &TemplatePage> = HashMap::new();
@@ -188,6 +199,8 @@ struct Writer<'a, 'b> {
     unit_stack: Vec<u32>,
     /// Shadings written so far (each gets its own name).
     shadings: usize,
+    /// Pattern cells drawn so far (at most [`MAX_TOTAL_TILES`]).
+    tiles: usize,
     report: OfdReport,
 }
 
@@ -456,6 +469,9 @@ impl Writer<'_, '_> {
     /// boundary space (they undo `g`'s CTM first), with the shading added to `out`. `None`, with
     /// the reason reported, when it can't be drawn.
     fn shading(&mut self, c: &Color, g: &Graphic, out: &mut PageOut) -> Option<String> {
+        if let Some(pattern) = c.pattern.as_deref() {
+            return self.pattern(pattern, g, out);
+        }
         let Some(shade) = c.shade.as_deref() else {
             self.skip("pattern and shading colours");
             return None;
@@ -483,6 +499,73 @@ impl Writer<'_, '_> {
             s.push_str(&cm(&m));
         }
         let _ = writeln!(s, "/{name} sh");
+        Some(s)
+    }
+
+    /// The operators that tile `pattern`'s cell over the current clipping path, in `g`'s
+    /// boundary space: the cell is a form XObject (clipped to the cell), drawn at every step
+    /// that can meet the object's boundary, at most [`MAX_TILES`] times.
+    fn pattern(&mut self, pattern: &pdfcraft_ofd::Pattern, g: &Graphic, out: &mut PageOut) -> Option<String> {
+        if pattern.reflect {
+            self.skip("mirrored patterns");
+            return None;
+        }
+        if pattern.relative_to_page {
+            self.skip("patterns aligned to the page");
+            return None;
+        }
+        let undo = match g.ctm.map(|m| m.inverse()) {
+            None => None,
+            Some(Some(inverse)) => Some(inverse),
+            Some(None) => {
+                self.skip("shadings on objects flattened by their CTM");
+                return None;
+            }
+        };
+        let place = pattern.ctm.unwrap_or(Matrix::IDENTITY);
+        let (Some(back), true) = (place.inverse(), pattern.x_step.abs() > 1e-9 && pattern.y_step.abs() > 1e-9) else {
+            self.skip("patterns without a size");
+            return None;
+        };
+        // The object's boundary, in the pattern's space: which cells can show.
+        let b = g.boundary;
+        let corners = [(0.0, 0.0), (b.w, 0.0), (0.0, b.h), (b.w, b.h)].map(|(x, y)| back.apply(x, y));
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for (x, y) in corners {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+        }
+        let (xs, ys) = (pattern.x_step.abs(), pattern.y_step.abs());
+        let (i0, i1) = ((x0 / xs).floor() - 1.0, (x1 / xs).ceil());
+        let (j0, j1) = ((y0 / ys).floor() - 1.0, (y1 / ys).ceil());
+        let tiles = (i1 - i0 + 1.0) * (j1 - j0 + 1.0);
+        if !tiles.is_finite() || tiles > MAX_TILES as f64 || self.tiles.saturating_add(tiles as usize) > MAX_TOTAL_TILES {
+            self.skip("patterns with too many cells");
+            return None;
+        }
+        // At most MAX_TILES, a whole number: the cast is exact.
+        self.tiles += tiles as usize;
+        let mut cell = PageOut::default();
+        self.objects(&pattern.objects, None, &mut cell);
+        let mut d = Dict::new();
+        d.set(b"Type".to_vec(), Object::name("XObject"));
+        d.set(b"Subtype".to_vec(), Object::name("Form"));
+        d.set(b"BBox".to_vec(), Object::Array(vec![Object::Real(0.0), Object::Real(0.0), Object::Real(pattern.width), Object::Real(pattern.height)]));
+        d.set(b"Resources".to_vec(), Object::Dict(cell.resources()));
+        let r = self.doc.add(Object::Stream(Stream::flate(d, cell.ops.as_bytes())));
+        self.shadings += 1;
+        let name = format!("Pc{}", self.shadings);
+        out.xobjects.insert(name.clone(), r);
+        let mut s = String::new();
+        if let Some(m) = undo {
+            s.push_str(&cm(&m));
+        }
+        // Whole numbers within MAX_TILES of each other, so the casts are exact.
+        for j in (j0 as i64)..=(j1 as i64) {
+            for i in (i0 as i64)..=(i1 as i64) {
+                let at = Matrix::translate(i as f64 * xs, j as f64 * ys).then(&place);
+                let _ = writeln!(s, "q\n{}/{name} Do\nQ", cm(&at));
+            }
+        }
         Some(s)
     }
 
@@ -941,7 +1024,7 @@ fn system_info(ordering: &str, supplement: i64) -> Dict {
 }
 
 fn black() -> Color {
-    Color { value: vec![0.0, 0.0, 0.0], color_space: None, index: None, alpha: 255, shading: false, shade: None }
+    Color { value: vec![0.0, 0.0, 0.0], color_space: None, index: None, alpha: 255, shading: false, shade: None, pattern: None }
 }
 
 /// Path operators for `path`, its points mapped by `m`. Quadratic curves and arcs become cubic

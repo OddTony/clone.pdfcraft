@@ -538,3 +538,54 @@ fn annotations_are_drawn_over_the_page() {
     assert_eq!(report.skipped_by_kind.get("annotations shown only when printed"), Some(&1));
     assert!(report.notes.iter().any(|n| n.contains("not clickable")), "{:?}", report.notes);
 }
+
+#[test]
+fn tiling_patterns_repeat_their_cell_inside_the_outline() {
+    let pattern = |attrs: &str| {
+        format!(
+            r#"<ofd:Pattern Width="10" Height="5" {attrs}><ofd:CellContent><ofd:PathObject ID="91" Boundary="0 0 10 5" Fill="true"><ofd:FillColor Value="255 0 0"/><ofd:AbbreviatedData>M 0 0 L 7 0 L 7 3 C</ofd:AbbreviatedData></ofd:PathObject></ofd:CellContent></ofd:Pattern>"#
+        )
+    };
+    let filled = |i: usize, attrs: &str| {
+        format!(
+            r#"<ofd:PathObject ID="{i}" Boundary="0 0 20 10" Fill="true" Stroke="false"><ofd:FillColor>{}</ofd:FillColor><ofd:AbbreviatedData>M 0 0 L 20 0 L 20 10 C</ofd:AbbreviatedData></ofd:PathObject>"#,
+            pattern(attrs)
+        )
+    };
+    let (pages, report, doc) = convert(&package(&[&page(&filled(20, ""))], false));
+    let (dict, ops) = &pages[0];
+    // Clipped to the outline; cells every 10 × 5 over the 20 × 10 boundary, one beyond each edge.
+    assert!(ops.contains("h\nW n\nq\n1 0 0 1 -10 -5 cm\n/Pc1 Do\nQ\n"), "{ops}");
+    assert_eq!(ops.matches("/Pc1 Do").count(), 4 * 4, "{ops}");
+    assert!(ops.contains("q\n1 0 0 1 10 5 cm\n/Pc1 Do\nQ\n"), "{ops}");
+    let res = doc.resolve(dict.get(b"Resources").unwrap()).as_dict().cloned().unwrap();
+    let xobjects = doc.resolve(res.get(b"XObject").unwrap()).as_dict().cloned().unwrap();
+    let cell = doc.resolve(xobjects.get(b"Pc1").unwrap());
+    let Object::Stream(cell) = &*cell else { panic!("the cell is not a stream") };
+    let bbox: Vec<f64> = cell.dict.get(b"BBox").unwrap().as_array().unwrap().iter().map(|o| o.as_f64().unwrap()).collect();
+    assert_eq!(bbox, [0.0, 0.0, 10.0, 5.0], "a cell is clipped to its size");
+    assert!(String::from_utf8_lossy(&cell.decoded().unwrap()).contains("7 3 l"));
+    assert_eq!(report.skipped, 0, "{:?}", report.notes);
+
+    // What isn't drawn is reported.
+    let body = [filled(21, r#"ReflectMethod="Row""#), filled(22, r#"RelativeTo="Page""#), filled(23, r#"XStep="0.0001" YStep="0.0001""#)].concat();
+    let (pages, report, _) = convert(&package(&[&page(&body)], false));
+    assert!(!pages[0].1.contains(" Do"), "{}", pages[0].1);
+    let by_kind: Vec<(&str, usize)> = report.skipped_by_kind.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+    assert_eq!(by_kind, [("mirrored patterns", 1), ("patterns aligned to the page", 1), ("patterns with too many cells", 1)]);
+}
+
+#[test]
+fn pattern_cells_are_bounded_for_the_whole_document() {
+    // 30 objects of 3,844 cells each (600 × 300 at 10 × 5, one beyond each edge): 26 fit in the
+    // document's 100,000 cells, the other 4 are reported instead of growing the PDF.
+    let cell = r#"<ofd:Pattern Width="10" Height="5"><ofd:CellContent><ofd:PathObject Boundary="0 0 1 1"><ofd:AbbreviatedData>M 0 0 L 1 1</ofd:AbbreviatedData></ofd:PathObject></ofd:CellContent></ofd:Pattern>"#;
+    let body: String = (0..30)
+        .map(|i| {
+            format!(r#"<ofd:PathObject ID="{}" Boundary="0 0 600 300" Fill="true" Stroke="false"><ofd:FillColor>{cell}</ofd:FillColor><ofd:AbbreviatedData>M 0 0 L 1 1</ofd:AbbreviatedData></ofd:PathObject>"#, 200 + i)
+        })
+        .collect();
+    let (pages, report, _) = convert(&package(&[&page(&body)], false));
+    assert_eq!(pages[0].1.matches(" Do\n").count(), 26 * 3844);
+    assert_eq!(report.skipped_by_kind.get("patterns with too many cells"), Some(&4), "{:?}", report.skipped_by_kind);
+}

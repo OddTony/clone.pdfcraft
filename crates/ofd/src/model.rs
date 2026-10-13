@@ -216,9 +216,29 @@ pub struct Color {
     pub alpha: u8,
     /// The colour is a pattern or shading (axial, radial, Gouraud) rather than a plain value.
     pub shading: bool,
-    /// The axial or radial shading, when `shading` is one and could be read. Patterns and
-    /// Gouraud shadings are not read yet.
+    /// The axial or radial shading, when `shading` is one and could be read. Gouraud shadings
+    /// are not read yet.
     pub shade: Option<Box<Shade>>,
+    /// The tiling pattern, when `shading` is one and could be read.
+    pub pattern: Option<Box<Pattern>>,
+}
+
+/// `Pattern`: a cell of drawing repeated every `x_step` × `y_step`. Its space is the object's
+/// boundary space (the object's CTM does not apply), through the pattern's own `ctm`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pattern {
+    pub width: f64,
+    pub height: f64,
+    /// `XStep`/`YStep`; the cell's size when not given.
+    pub x_step: f64,
+    pub y_step: f64,
+    /// `ReflectMethod` other than `Normal`: cells are mirrored in rows or columns.
+    pub reflect: bool,
+    /// `RelativeTo="Page"`: the cells line up with the page, not the object.
+    pub relative_to_page: bool,
+    pub ctm: Option<Matrix>,
+    /// `CellContent`.
+    pub objects: Vec<Object>,
 }
 
 /// `AxialShd` or `RadialShd`: colours blended between two points. The points are in the

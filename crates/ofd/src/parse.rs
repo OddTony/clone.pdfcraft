@@ -145,6 +145,8 @@ struct Reader<'p, 'b> {
     objects: usize,
     model_bytes: usize,
     text_chars: usize,
+    /// Patterns being read, innermost last (a pattern's cells may use patterns too).
+    pattern_depth: usize,
 }
 
 pub(crate) fn document(pkg: &Package, limits: &Limits) -> Result<OfdDocument, OfdError> {
@@ -162,6 +164,7 @@ pub(crate) fn document(pkg: &Package, limits: &Limits) -> Result<OfdDocument, Of
         objects: 0,
         model_bytes: 0,
         text_chars: 0,
+        pattern_depth: 0,
     };
     let src = r.read_xml(entry)?;
     let doc = xml(entry, &src, limits)?;
@@ -562,7 +565,11 @@ impl Reader<'_, '_> {
             (Some(s), _) | (None, Some(s)) => self.shade(part, &s)?,
             (None, None) => None,
         };
-        if shading && shade.is_none() {
+        let pattern = match child(&c, "Pattern") {
+            Some(p) => self.pattern(part, &p)?,
+            None => None,
+        };
+        if shading && shade.is_none() && pattern.is_none() {
             self.warn(format!("{}: a pattern or shading colour is not read yet", part.name));
         }
         Ok(Some(Color {
@@ -572,7 +579,48 @@ impl Reader<'_, '_> {
             alpha: part.int(&c, "Alpha", 255u8)?,
             shading,
             shade,
+            pattern,
         }))
+    }
+
+    /// A `Pattern`. One that can't be read, or that nests in other patterns' cells more than 4
+    /// deep, is left out with a warning.
+    fn pattern(&mut self, part: &Part, p: &Node) -> Result<Option<Box<Pattern>>, OfdError> {
+        let num = |attr: &str| p.attribute(attr).map(values::number).transpose();
+        let (Ok(Some(width)), Ok(Some(height)), Ok(x_step), Ok(y_step)) = (num("Width"), num("Height"), num("XStep"), num("YStep")) else {
+            self.warn(format!("{}: a <Pattern> could not be read and is not drawn", part.name));
+            return Ok(None);
+        };
+        let ctm = match p.attribute("CTM").map(|m| values::matrix(m, part.limits)) {
+            None => None,
+            Some(Ok(m)) => Some(m),
+            Some(Err(_)) => {
+                self.warn(format!("{}: a <Pattern> could not be read and is not drawn", part.name));
+                return Ok(None);
+            }
+        };
+        if self.pattern_depth >= 4 {
+            self.warn(format!("{}: patterns nested more than 4 deep are not drawn", part.name));
+            return Ok(None);
+        }
+        self.pattern_depth += 1;
+        let objects = match child(p, "CellContent") {
+            Some(cell) => self.objects(part, &cell, 0),
+            None => Ok(Vec::new()),
+        };
+        self.pattern_depth -= 1;
+        let objects = objects?;
+        self.charge(part, 0, size_of::<Pattern>(), 0)?;
+        Ok(Some(Box::new(Pattern {
+            width,
+            height,
+            x_step: x_step.unwrap_or(width),
+            y_step: y_step.unwrap_or(height),
+            reflect: p.attribute("ReflectMethod").is_some_and(|r| r.trim() != "Normal"),
+            relative_to_page: p.attribute("RelativeTo").is_some_and(|r| r.trim() == "Page"),
+            ctm,
+            objects,
+        })))
     }
 
     /// An `AxialShd` or `RadialShd`. One that can't be read is left out with a warning (the
