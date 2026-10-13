@@ -41,7 +41,8 @@ fn every_catalog_tool_is_listed_after_view_more() {
     let mut h = harness(|_| {});
     h.get_by_label("View more").click();
     h.run_steps(3);
-    for g in pdfcraft_engine::catalog::TOOL_GROUPS {
+    // Only groups with at least one usable item are shown; `Planned`-only groups are hidden.
+    for g in pdfcraft_engine::catalog::TOOL_GROUPS.iter().filter(|g| g.is_visible()) {
         assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from All tools", g.label);
     }
 }
