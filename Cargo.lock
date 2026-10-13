@@ -3901,6 +3901,7 @@ version = "0.7.1"
 dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
+ "pdfcraft-filters",
  "pdfcraft-fonts",
  "pdfcraft-model",
  "thiserror 2.0.21",
@@ -4000,6 +4001,7 @@ dependencies = [
  "png 0.18.1",
  "thiserror 2.0.21",
  "tiff",
+ "zune-jpeg",
 ]
 
 [[package]]

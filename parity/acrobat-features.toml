@@ -1166,8 +1166,8 @@ milestone = "M3"
 status = "shipped"
 commands = []
 tools = ["link_open"]
-evidence = ["crates/ui-egui/tests/view.rs::clicking_a_link_goes_to_its_destination", "crates/ui-egui/tests/view.rs::link_destinations_scroll_to_their_position", "crates/render/src/inspect.rs::bookmarks_and_links_keep_their_destination_view", "crates/render/src/inspect.rs::links_read_bounded_local_remote_go_to_actions", "crates/automation/tests/automation.rs::local_gotor_link_open_applies_destinations_and_honors_root", "crates/ui-egui/tests/document_links.rs::a_local_gotor_link_opens_in_a_tab_and_applies_its_destination"]
-notes = "GoTo and URI links plus local-PDF GoToR links: source-relative or local absolute /F paths, /UF preferred in file-spec dictionaries, explicit numeric page/view destinations, and internal tabs. link_open honors --root. Named remote destinations open at default view with a warning; /NewWindow is a tab hint. URL/network file systems, GoToE, Launch and other actions are not executed. Same-document destinations retain their supported /XYZ, /Fit, /FitH, /FitV and /FitR views; /FitB* is read as whole-page fit."
+evidence = ["crates/ui-egui/tests/view.rs::clicking_a_link_goes_to_its_destination", "crates/ui-egui/tests/view.rs::link_destinations_scroll_to_their_position", "crates/render/src/inspect.rs::bookmarks_and_links_keep_their_destination_view", "crates/render/src/inspect.rs::links_read_bounded_local_remote_go_to_actions", "crates/automation/tests/automation.rs::local_gotor_link_open_applies_destinations_and_honors_root", "crates/ui-egui/tests/document_links.rs::a_local_gotor_link_opens_in_a_tab_and_applies_its_destination", "crates/ui-egui/tests/document_links.rs::an_absolute_gotor_waits_for_consent_and_keeps_its_destination_across_tabs", "crates/ui-egui/tests/document_links.rs::cancelling_an_absolute_gotor_by_button_escape_or_dismissal_changes_nothing", "crates/automation/tests/automation.rs::absolute_gotor_consent_does_not_bypass_validation_or_passwords"]
+notes = "GoTo and URI links plus local-PDF GoToR links: source-relative or local absolute /F paths, /UF preferred in file-spec dictionaries, explicit numeric page/view destinations, and internal tabs. Absolute local GoToR targets require desktop Allow/Cancel confirmation or an explicit allow_absolute opt-in in link_open; relative links open normally. link_open honors --root. Named remote destinations open at default view with a warning; /NewWindow is a tab hint. URL/network file systems, GoToE, Launch and other actions are not executed. Same-document destinations retain their supported /XYZ, /Fit, /FitH, /FitV and /FitR views; /FitB* is read as whole-page fit."
 
 [[feature]]
 id = "view.annotation-hover"
@@ -3424,8 +3424,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["file.properties"]
 tools = ["doc_set_info"]
-evidence = ["crates/organize/src/tests.rs::document_info_edits_round_trip_with_unicode", "crates/ui-egui/tests/editing.rs::document_properties_edit_is_one_undoable_step"]
-notes = ""
+evidence = ["crates/organize/src/tests.rs::document_info_edits_round_trip_with_unicode", "crates/organize/src/tests.rs::document_info_edits_update_the_xmp_packet", "crates/ui-egui/tests/editing.rs::document_properties_edit_is_one_undoable_step"]
+notes = "When the file has an XMP packet, the matching property (dc:title, dc:creator, dc:description, pdf:Keywords, xmp:CreatorTool, pdf:Producer) is changed or removed with the /Info entry; a packet that isn't UTF-8 is left as it was. Not yet: xmp:ModifyDate and xmp:MetadataDate on save, other languages of a title kept apart (the new value replaces them)."
 
 [[feature]]
 id = "organize.fonts-list"
@@ -4052,8 +4052,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.stamp"]
 tools = ["comment_add"]
-evidence = ["crates/annot/src/tests.rs::stamps_draw_their_label_and_by_line", "crates/ui-egui/tests/stamps.rs::choosing_and_placing_stamps", "crates/automation/tests/automation.rs::stamps_through_tools"]
-notes = "12 standard business stamps in PdfCraft's own design; ISO 32000 stamp names where defined"
+evidence = ["crates/annot/src/tests.rs::stamps_draw_their_label_and_by_line", "crates/ui-egui/tests/stamps.rs::choosing_and_placing_stamps", "crates/automation/tests/automation.rs::stamps_through_tools", "crates/engine/src/tests.rs::rubber_stamps_point_left_as_displayed_on_rotated_pages"]
+notes = "12 standard business stamps in PdfCraft's own design; ISO 32000 stamp names where defined. A stamp placed on a rotated page reads upright as the page is displayed (#1398)"
 
 [[feature]]
 id = "comment.stamps-sign-here"
@@ -4064,8 +4064,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.stamp"]
 tools = ["comment_add"]
-evidence = ["crates/annot/src/tests.rs::stamps_draw_their_label_and_by_line", "crates/ui-egui/tests/stamps.rs::choosing_and_placing_stamps", "crates/automation/tests/automation.rs::stamps_through_tools"]
-notes = "Accepted, Initial Here, Rejected, Sign Here, Witness as pointed tags"
+evidence = ["crates/annot/src/tests.rs::stamps_draw_their_label_and_by_line", "crates/ui-egui/tests/stamps.rs::choosing_and_placing_stamps", "crates/automation/tests/automation.rs::stamps_through_tools", "crates/engine/src/tests.rs::rubber_stamps_point_left_as_displayed_on_rotated_pages"]
+notes = "Accepted, Initial Here, Rejected, Sign Here, Witness as pointed tags. The point stays on the left as the page is displayed, including /Rotate 90, 180 and 270 (#1398)"
 
 [[feature]]
 id = "comment.stamps-dynamic"
@@ -4076,8 +4076,8 @@ milestone = "M6"
 status = "shipped"
 commands = ["comment.stamp"]
 tools = ["comment_add"]
-evidence = ["crates/annot/src/tests.rs::stamps_draw_their_label_and_by_line", "crates/ui-egui/tests/stamps.rs::choosing_and_placing_stamps", "crates/automation/tests/automation.rs::stamps_through_tools"]
-notes = "Approved, Confidential, Received, Reviewed, Revised with a By author at time, date line (local time)"
+evidence = ["crates/annot/src/tests.rs::stamps_draw_their_label_and_by_line", "crates/ui-egui/tests/stamps.rs::choosing_and_placing_stamps", "crates/automation/tests/automation.rs::stamps_through_tools", "crates/engine/src/tests.rs::rubber_stamps_point_left_as_displayed_on_rotated_pages"]
+notes = "Approved, Confidential, Received, Reviewed, Revised with a By author at time, date line (local time). The label is turned with the page's /Rotate so it reads upright as displayed (#1398)"
 
 [[feature]]
 id = "comment.stamps-custom"
@@ -4088,8 +4088,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.stamp"]
 tools = ["stamp_custom"]
-evidence = ["crates/ui-egui/tests/stamps.rs::creating_placing_and_keeping_custom_stamps", "crates/automation/tests/automation.rs::stamps_through_tools"]
-notes = "Create custom stamp from a PDF page or an image (category and name), kept in the app's settings; placed at natural size (at most 200 pt) keeping its shape; resizable (appearance redrawn from /PCPicture); delete from the palette"
+evidence = ["crates/ui-egui/tests/stamps.rs::creating_placing_and_keeping_custom_stamps", "crates/automation/tests/automation.rs::stamps_through_tools", "crates/engine/src/tests.rs::explicit_image_stamps_keep_displayed_orientation_on_rotated_pages", "crates/engine/src/tests.rs::pdf_page_stamps_keep_displayed_orientation_on_rotated_pages"]
+notes = "Create custom stamp from a PDF page or an image (category and name), kept in the app's settings; placed at natural size (at most 200 pt) keeping its shape; resizable (appearance redrawn from /PCPicture); delete from the palette. Natural-size and explicit-rectangle images, and PDF-page stamps, read upright on a rotated page (#1398)"
 
 [[feature]]
 id = "comment.stamps-manage"
@@ -6784,8 +6784,8 @@ milestone = "M10"
 status = "shipped"
 commands = ["create.images", "create.file"]
 tools = ["doc_create"]
-evidence = ["crates/create/src/tests.rs::bmp_gif_and_multi_page_tiff_images"]
-notes = "every page; 1-bit scans stay 1-bit; resolution from the TIFF"
+evidence = ["crates/create/src/tests.rs::bmp_gif_and_multi_page_tiff_images", "crates/create/src/tests.rs::bigtiff_images_become_pages"]
+notes = "every page; 1-bit scans stay 1-bit; resolution from the TIFF; classic TIFF and BigTIFF"
 
 [[feature]]
 id = "create.from-text"
@@ -8826,10 +8826,10 @@ area = "M"
 tier = "P1"
 milestone = "M12"
 status = "partial"
-commands = []
-tools = ["accessibility_autotag_preview"]
-evidence = ["crates/automation/tests/automation.rs::autotag_preview_proposes_text_without_changing_the_pdf"]
-notes = "Preview proposes paragraph or heading roles for bounded visible text blocks on one page and flags them for review. It does not write tags, mark content, build a parent tree or classify images, tables, lists and annotations."
+commands = ["a11y.autotag"]
+tools = ["accessibility_autotag_preview", "accessibility_autotag_apply"]
+evidence = ["crates/automation/tests/automation.rs::autotag_preview_proposes_text_without_changing_the_pdf", "crates/automation/tests/automation.rs::autotag_apply_writes_reviewable_tags_and_survives_save_reopen", "crates/ui-egui/tests/accessibility.rs::automatic_text_tagging_opens_reviewable_tags"]
+notes = "Auto-tag writes real marked content, a Document structure element, P tags and a parent tree for text-only PDFs, with undo and Tags-panel review. It refuses mixed content, forms, annotations and existing tags. The preview separately proposes headings. Images, tables, lists, links, fields and headings are not classified or tagged by Apply."
 
 [[feature]]
 id = "a11y.autotag-fields"
