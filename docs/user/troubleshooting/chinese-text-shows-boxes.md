@@ -1,11 +1,11 @@
 ---
 title: Chinese text in the interface shows as boxes
-description: Why the Simplified Chinese interface of PdfCraft 0.6.0 shows empty boxes for some characters, and what is changing.
+description: Why the Chinese interface of PdfCraft can show empty boxes for some characters, and how to fix it.
 order: 30
-verified: 0.6.0
+verified: 0.7.1
 ---
 
-In PdfCraft 0.6.0, some Chinese characters in the menus and dialogs, mostly Simplified-only ones, appear as empty boxes. The release has no Simplified Chinese interface font. A change merged after 0.6.0 draws them with a Chinese font already installed on your PC. Until you have it, switch the interface language to English or another language.
+In PdfCraft 0.6.0 and earlier, some Chinese characters in the menus and dialogs, mostly Simplified-only ones, appear as empty boxes. Since 0.7.0, PdfCraft draws them with a Chinese font already installed on your computer. Update to the latest release. If you still see boxes, switch the interface language to English or another language.
 
 Shortcuts on this page use Ctrl. On macOS, use Cmd instead of Ctrl.
 
@@ -16,18 +16,22 @@ Shortcuts on this page use Ctrl. On macOS, use Cmd instead of Ctrl.
 
 ## Fix
 
-Change the interface language:
+1. Check your version in **Help**, **About PdfCraft**. If it is 0.6.0 or earlier, install the latest release. See [Install PdfCraft](../getting-started/install.md).
+2. If boxes remain, check that your computer has one of the Chinese fonts PdfCraft looks for:
+   - Windows: Microsoft YaHei or Microsoft JhengHei (SimSun and MingLiU also work).
+   - macOS: PingFang, Hiragino Sans GB or STHeiti.
+   - Linux: WenQuanYi Micro Hei or Zen Hei, Droid Sans Fallback, or AR PL UMing.
+
+If none helps, change the interface language:
 
 1. Click the **Menu** button, then **Edit**, then **Preferences…** (`Ctrl+,`).
 2. Set **Interface language** to a language you can read. **Auto** follows your system language.
 
-A user in [issue #778](https://github.com/storytold/pdfcraft/issues/778) reported that choosing Traditional Chinese removed the boxes. Another user replied that Simplified Chinese text still turned into boxes when editing. The project notes say Traditional Chinese is drawn with fonts that miss some characters, which then show as boxes.
-
 ## Why this happens
 
-PdfCraft's release builds embed Japanese fonts from craft-fonts but no Simplified Chinese interface font. Changing that is on the project's list ([ROADMAP](https://github.com/storytold/pdfcraft/blob/main/ROADMAP.md), issue #826).
+PdfCraft's release builds embed Japanese fonts from craft-fonts but no Chinese interface font. Changing that is on the project's list ([ROADMAP](https://github.com/storytold/pdfcraft/blob/main/ROADMAP.md), issue #826).
 
-The change after 0.6.0 ([#925](https://github.com/storytold/pdfcraft/pull/925)) makes PdfCraft read one Chinese font that is already installed on your PC when the build has none. It does not copy or ship that font. It is in the main branch, not in 0.6.0: the 0.6.0 source of `system_fonts.rs` has no Chinese probe.
+Since 0.7.0 ([#925](https://github.com/storytold/pdfcraft/pull/925)), when the interface is in Simplified or Traditional Chinese, PdfCraft reads one Chinese font that is already installed on your computer and uses it before the Japanese fonts. It does not copy or ship that font. The web build does not do this.
 
 ## Still stuck?
 

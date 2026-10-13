@@ -1,7 +1,7 @@
 ---
 title: PdfCraft
 description: PdfCraft is a free, open-source PDF workbench for reading, organizing, combining, splitting and protecting PDFs, and an alternative to Adobe Acrobat.
-verified: 0.6.0
+verified: 0.7.1
 ---
 
 PdfCraft is a free, open-source app for working with PDF files. You read them, rearrange their pages, combine and split them, comment on them, fill in forms and protect them with a password. It is an alternative to Adobe Acrobat.

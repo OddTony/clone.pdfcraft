@@ -2,10 +2,10 @@
 title: Install PdfCraft
 description: Download PdfCraft for Windows 11, macOS or Linux from getartcraft.com or GitHub, or install it with ArtCraft Launcher.
 order: 10
-verified: 0.6.0
+verified: 0.7.1
 ---
 
-Download PdfCraft from the [PdfCraft page on getartcraft.com](https://getartcraft.com/apps/pdfcraft), or pick a specific file from the [latest GitHub release](https://github.com/storytold/pdfcraft/releases/latest). In the file names, `<version>` stands for the version number, for example `0.6.0`.
+Download PdfCraft from the [PdfCraft page on getartcraft.com](https://getartcraft.com/apps/pdfcraft), or pick a specific file from the [latest GitHub release](https://github.com/storytold/pdfcraft/releases/latest). In the file names, `<version>` stands for the version number, for example `0.7.1`.
 
 ## Windows 11
 
@@ -23,7 +23,7 @@ Pick the file that matches your PC:
 
 The release also has `x86` files. Do not use them: users who installed the `x86` build on a 64-bit PC reported that PdfCraft exited at launch (see [PdfCraft does not start](../troubleshooting/pdfcraft-does-not-start.md)).
 
-The installer adds PdfCraft to **Open with** for PDF files. It does not change which app opens PDFs by default.
+The installer adds PdfCraft to **Open with** for PDF files. It does not change which app opens PDFs by default. Unless you untick it, it also adds **Edit with PdfCraft** to the right-click menu of PDF files (on Windows 11, under **Show more options**). See [PdfCraft is missing from Open with](../faq/open-with-menu.md).
 
 ### Portable version
 

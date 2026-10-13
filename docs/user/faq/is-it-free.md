@@ -2,7 +2,7 @@
 title: Is PdfCraft free?
 description: PdfCraft is free and open source, needs no account, and keeps your documents on your computer.
 order: 10
-verified: 0.6.0
+verified: 0.7.1
 ---
 
 Yes. PdfCraft is free and open source, under the MIT or Apache-2.0 license (your choice). It needs no account.

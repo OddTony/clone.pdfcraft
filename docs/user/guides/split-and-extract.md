@@ -2,7 +2,7 @@
 title: Split a PDF or extract pages
 description: Cut a PDF into several files, or copy chosen pages into a new document, in PdfCraft.
 order: 40
-verified: 0.6.0
+verified: 0.7.1
 ---
 
 To copy chosen pages into one new document, use **Extract pages…**. To cut a whole document into several files, use **Split document…**. Both are in the **Pages** menu.

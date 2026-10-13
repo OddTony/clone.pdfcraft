@@ -2,7 +2,7 @@
 title: Open and read a PDF
 description: Open a PDF, change the page layout, zoom, switch to Read mode and search for text in PdfCraft.
 order: 10
-verified: 0.6.0
+verified: 0.7.1
 ---
 
 Open a file with **File**, **Open…** (`Ctrl+O`), then use the **View** menu for layout and zoom and `Ctrl+F` to search.
@@ -12,7 +12,7 @@ Shortcuts on this page use Ctrl. On macOS, use Cmd instead of Ctrl.
 ## Open a file
 
 1. Click the **Menu** button, then **File**, then **Open…**. Or press `Ctrl+O`.
-2. Choose the PDF.
+2. Choose the PDF. To open several at once, select them all in the dialog.
 
 You can also drop a PDF on the window, or click a file under **Recent** on the home screen. If the file is protected, PdfCraft asks for the password: "Password required", then **Open**.
 

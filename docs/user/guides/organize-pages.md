@@ -2,7 +2,7 @@
 title: Rotate, delete, insert and reorder pages
 description: Use Organize pages in PdfCraft to rotate, delete, insert, replace and move pages, then save.
 order: 20
-verified: 0.6.0
+verified: 0.7.1
 ---
 
 Open **Menu**, **Pages**, **Organize pages** to see every page as a thumbnail. Select pages, use the toolbar above the grid, then save.
@@ -13,7 +13,7 @@ Shortcuts on this page use Ctrl. On macOS, use Cmd instead of Ctrl.
 
 1. Open the PDF.
 2. Click the **Menu** button, then **Pages**, then **Organize pages**.
-3. Select pages. Click one page, `Ctrl`-click (`Cmd`-click on macOS) to add or remove single pages, or `Shift`-click to select a range. The toolbar shows how many pages are selected.
+3. Select pages. Click one page, `Ctrl`-click (`Cmd`-click on macOS) or tick the checkbox in a page's corner to add or remove single pages, or `Shift`-click to select a range. You can also type page numbers in **Selected pages** above the toolbar, such as `1, 12, 16-18`, and click **Apply**. The toolbar shows how many pages are selected.
 4. Use the toolbar buttons above the grid. Hover over a button to see its name.
 
    | Button                                  | What it does                                  |
@@ -29,6 +29,8 @@ Shortcuts on this page use Ctrl. On macOS, use Cmd instead of Ctrl.
    | Move earlier, Move later                | Moves the selected pages                      |
 
 5. Click **Save pages** to save, or choose **File**, **Save** (`Ctrl+S`). **Save pages** is greyed out until you change something. Click **Close** to go back to the document.
+
+To rotate or delete one page, point at it: buttons to rotate it either way or delete it appear under the thumbnail.
 
 The **Select pages** button in the toolbar offers **All pages**, **Odd pages**, **Even pages**, **Landscape pages**, **Portrait pages** and **None**. **Larger pages** and **Smaller pages** change the thumbnail size.
 

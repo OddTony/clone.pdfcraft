@@ -2,7 +2,7 @@
 title: Getting started
 description: Install PdfCraft and open your first PDF.
 order: 10
-verified: 0.6.0
+verified: 0.7.1
 ---
 
 - [Install PdfCraft](install.md)

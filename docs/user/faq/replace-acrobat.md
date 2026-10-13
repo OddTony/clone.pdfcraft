@@ -2,7 +2,7 @@
 title: Can PdfCraft replace Adobe Acrobat?
 description: What PdfCraft does well today, what is missing compared with Adobe Acrobat, and what is planned.
 order: 20
-verified: 0.6.0
+verified: 0.7.1
 ---
 
 For viewing, organizing, combining, splitting, commenting, form filling and passwords, often yes. For converting files and some Pro workflows, not yet. PdfCraft is in alpha.
@@ -17,7 +17,7 @@ The project lists these as good today:
 - filling and authoring forms
 - passwords, redaction and sanitizing
 - basic digital signatures
-- printing (on Windows, 0.6.0 can list no printers; see [No printers are listed](../troubleshooting/no-printers-listed.md))
+- printing (if no printers are listed, see [No printers are listed](../troubleshooting/no-printers-listed.md))
 - the Accessibility Checker
 
 It opens files protected with every standard encryption level, from 40-bit RC4 to AES-256.
