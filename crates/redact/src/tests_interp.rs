@@ -81,14 +81,30 @@ fn text_in_an_unresolved_font_fails_closed_when_it_could_reach_a_mark() {
 }
 
 #[test]
-fn standard_fonts_without_widths_are_not_approximated() {
-    let times = "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>";
+fn standard_fonts_without_widths_use_their_exact_published_widths_and_nothing_else_is_guessed() {
     let src = b"BT /F2 10 Tf 50 100 Td (SECRET) Tj ET";
-    let mut doc = page(times, "", src, vec![]);
-    assert_eq!(refused(&mut doc, &[[50.0, 98.0, 80.0, 108.0]]), Some(Unsupported::UnresolvedFont));
-    let helv = "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
-    let mut doc = page(helv, "", src, vec![]);
-    assert_eq!(refused(&mut doc, &[[50.0, 98.0, 80.0, 108.0]]), Some(Unsupported::UnresolvedFont));
+    // The standard text faces have exact published widths (WinAnsi codes), so a line in one is
+    // redacted, and the proof, which measures with the same table, passes.
+    for base in ["Times-Roman", "Helvetica", "Helvetica-Bold"] {
+        let font = format!("/F2 << /Type /Font /Subtype /Type1 /BaseFont /{base} >>");
+        let mut doc = page(&font, "", src, vec![]);
+        mark(&mut doc, 0, &[[57.0, 98.0, 61.0, 108.0]], "");
+        let r = apply(&mut doc, None).unwrap_or_else(|e| panic!("{base}: {e:?}"));
+        assert_eq!(r.glyphs, 1, "{base}: {r:?}");
+    }
+    // Anything else without a /Widths table is still refused: a face that is not one of the
+    // standard fourteen (or a metric-compatible name for one), Symbol and ZapfDingbats (their own built-in encodings), and a standard
+    // face with an encoding of its own.
+    for font in [
+        "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Garamond >>",
+        "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Symbol >>",
+        "/F2 << /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>",
+        "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /Differences [83 /Euro] >> >>",
+        "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /MacRomanEncoding >>",
+    ] {
+        let mut doc = page(font, "", src, vec![]);
+        assert_eq!(refused(&mut doc, &[[50.0, 98.0, 80.0, 108.0]]), Some(Unsupported::UnresolvedFont), "{font}");
+    }
     // Courier's widths are exact (600 units), so it is redacted normally.
     let courier = "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Courier >>";
     let mut doc = page(courier, "", b"BT /F2 10 Tf 50 100 Td (AB) Tj ET", vec![]);

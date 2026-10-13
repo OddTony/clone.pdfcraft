@@ -1774,7 +1774,14 @@ fn redaction_is_refused_when_the_page_still_shows_text_under_a_mark() {
     let id = s.open("gs.pdf", None, Arc::new(by_gs), None).unwrap();
     mark_shown_text(&mut s, id, "SECRET42");
     let refused = s.apply(id, Edit::ApplyRedactions { pages: None });
-    assert!(matches!(refused, Err(EditError::Redact(pdfcraft_redact::RedactError::Residue(n))) if n > 0), "{refused:?}");
+    // Refused either way: the interpreter stops on a font it cannot resolve (one set through an
+    // ExtGState), or, failing that, the check of the result finds the text still under the mark.
+    let residue = matches!(&refused, Err(EditError::Redact(pdfcraft_redact::RedactError::Residue(n))) if *n > 0);
+    let unresolved = matches!(
+        &refused,
+        Err(EditError::Redact(pdfcraft_redact::RedactError::Unsupported { reason: pdfcraft_redact::Unsupported::UnresolvedFont, .. }))
+    );
+    assert!(residue || unresolved, "{refused:?}");
     // Nothing was changed: the mark is still pending and the page still shows the line.
     assert_eq!(s.get(id).unwrap().redaction_marks(), 1);
     assert_eq!(page_texts(&s, id), [line]);

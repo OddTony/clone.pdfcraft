@@ -206,6 +206,13 @@ impl Font {
                     }
                 }
                 f.default_width = missing.unwrap_or(0.0);
+            } else if let Some(std) = pdfcraft_fonts::Std14::from_base_font(&String::from_utf8_lossy(font.name(b"BaseFont").unwrap_or(b""))) {
+                // No /Widths: a standard font has exact published widths, by WinAnsi code (Symbol,
+                // ZapfDingbats and other encodings are refused before the proof is reached).
+                for code in 0..=255u8 {
+                    f.widths.insert(u32::from(code), std.width(code) / 1000.0);
+                }
+                f.default_width = if std.is_fixed_pitch() { 0.6 } else { 0.0 };
             }
         }
         Ok(f)

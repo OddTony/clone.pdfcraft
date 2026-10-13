@@ -59,7 +59,7 @@ never echo page text):
 
 - `UnresolvedFont`: text in a font without usable metrics (missing font, no `/Widths` or a code
   outside them, a composite font without `/DW`/`/W` or with a predefined CMap other than
-  Identity, a standard font other than Courier without `/Widths`). The text may extend any
+  Identity, a font without `/Widths` that is not one of the standard fourteen or a metric-compatible name for one, Symbol or ZapfDingbats without `/Widths`, or a standard face with an encoding of its own). The text may extend any
   distance along its line, so this fires when a mark lies on the line it sweeps;
 - `VerticalWriting`: `Identity-V` / `/WMode 1` text, the same way, for the column it sweeps;
 - `PatternText`, `PatternUnreadable`, `SoftMask`, `Type3Text`: a tiling pattern, soft-mask group

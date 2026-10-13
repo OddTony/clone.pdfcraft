@@ -206,11 +206,20 @@ fn font_info(doc: &Document, d: &Dict) -> FontInfo {
                     info.coded = u32::try_from(w.len()).ok().and_then(|n| first.checked_add(n)).map(|end| first..end);
                     info.doubt = info.coded.is_none().then_some(Unsupported::UnresolvedFont);
                 }
-                // The only standard fonts whose widths are exact without a table.
+                // The standard fonts have exact published widths without a table (`Std14`). Courier is
+                // 600 units wide in every encoding; the other text faces are measured by WinAnsi code, so
+                // they count only with that encoding or none named. Symbol and ZapfDingbats carry their own
+                // built-in encodings, so their widths by code are not those of that table: refused.
                 _ => {
                     let base = d.name(b"BaseFont").unwrap_or(b"");
                     let courier = matches!(base, b"Courier" | b"Courier-Bold" | b"Courier-Oblique" | b"Courier-BoldOblique");
-                    info.doubt = if courier && !d.contains(b"Widths") { None } else { unresolved };
+                    let text_face = pdfcraft_fonts::Std14::from_base_font(&String::from_utf8_lossy(base))
+                        .is_some_and(|f| !matches!(f, pdfcraft_fonts::Std14::Symbol | pdfcraft_fonts::Std14::ZapfDingbats));
+                    let encoding_fits = match d.get(b"Encoding").map(|e| doc.resolve(e)) {
+                        None => true,
+                        Some(e) => matches!(&*e, Object::Name(n) if n.as_slice() == b"WinAnsiEncoding"),
+                    };
+                    info.doubt = if (courier || (text_face && encoding_fits)) && !d.contains(b"Widths") { None } else { unresolved };
                 }
             }
         }
