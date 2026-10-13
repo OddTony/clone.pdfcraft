@@ -171,6 +171,7 @@ fn parse_common(n: XmlNode) -> Common {
         id: n.attribute("id").map(str::to_string),
         x: attr_measure(n, "x"),
         y: attr_measure(n, "y"),
+        anchor: Anchor::parse(n.attribute("anchorType")),
         w: attr_measure(n, "w"),
         h: attr_measure(n, "h"),
         min_w: attr_measure(n, "minW"),
@@ -640,6 +641,13 @@ fn collect_page_roles(nodes: &[Node], out: &mut Vec<(String, PageRole)>, depth: 
 
 /// Parse a template packet. Returns the template and the warnings met on the way.
 pub fn parse(xml: &str) -> Result<(Template, Vec<String>), XfaError> {
+    let depth = crate::xml_nesting_depth(xml);
+    if depth > crate::MAX_XML_DEPTH {
+        return Err(XfaError::Malformed(format!(
+            "the template nests XML elements {depth} deep, past the {} the reader accepts",
+            crate::MAX_XML_DEPTH
+        )));
+    }
     let opts = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: MAX_NODES };
     let doc = roxmltree::Document::parse_with_options(xml, opts).map_err(|e| XfaError::Malformed(format!("template XML: {e}")))?;
     let root = doc.root_element();
