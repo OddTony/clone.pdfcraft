@@ -7,7 +7,7 @@
 #   PDFCRAFT_BUILD_LABEL    optional label for a local or patched build (letters, digits, dots);
 #                           compiled into `--version` and About, and appended to the package release
 #   DIST                    output directory for release artifacts (default: $ROOT/dist/release)
-#   PDFCRAFT_BUILD_SHA    git commit, recorded in the macOS Info.plist (PdfCraftBuildCommit)
+#   PDFCRAFT_BUILD_SHA    git commit, recorded in pdfcraft_engine::build_info
 #   PDFCRAFT_BUILD_DATE   UTC build date, YYYY-MM-DD
 #   CARGO_TARGET_DIR        cargo's target dir (default: $ROOT/target)
 
@@ -31,7 +31,7 @@ fi
 export VERSION
 
 # A labelled build says so in `--version` and About (pdfcraft_engine::build_info) and in its
-# package release (packaging/linux/nfpm.yaml), so it can't be mistaken for the release.
+# package release, so it can't be mistaken for the release.
 if [ -n "${PDFCRAFT_BUILD_LABEL:-}" ]; then
   case "$PDFCRAFT_BUILD_LABEL" in
     *[!A-Za-z0-9.]* | .* | *.)
