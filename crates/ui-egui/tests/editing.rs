@@ -1907,7 +1907,12 @@ fn password_prompt_opens_and_security_tab_reports_the_details() {
     field.type_text("pw");
     h.run_steps(2);
     h.key_press(Key::Enter);
-    h.run_steps(4);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while h.state().views.is_empty() {
+        h.run_steps(1);
+        assert!(std::time::Instant::now() < deadline, "the unlocked document did not finish opening");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     assert_eq!(h.state().views.len(), 1);
     h.state_mut().set_option("dialog", "properties").unwrap();
     h.run_steps(2);

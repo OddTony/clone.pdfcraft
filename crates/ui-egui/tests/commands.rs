@@ -44,6 +44,19 @@ fn harness() -> Harness<'static, PdfCraftApp> {
     h
 }
 
+/// Opening prepares a document on a worker; drawing a fixed number of frames need not finish it.
+fn wait_for_open(h: &mut Harness<'static, PdfCraftApp>, ready: impl Fn(&PdfCraftApp) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        h.run_steps(1);
+        if ready(h.state()) {
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "the document did not finish opening");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
 /// Commands that open a native file picker can't run headless.
 /// (Create ▸ Clipboard reads the system clipboard: tests use `create_from_clip`.)
 const PICKERS: &[&str] = &[
@@ -184,7 +197,7 @@ fn a_tool_chosen_with_no_document_asks_for_one_and_runs_on_it() {
     h.run_steps(2);
     h.state_mut().run_command("export.text");
     assert!(h.state().toast.as_ref().is_none_or(|t| t.0 != "Open a document first"));
-    h.run_steps(3);
+    wait_for_open(&mut h, |app| app.active.is_some());
     assert!(h.state().active.is_some(), "the picked file is open");
     assert!(matches!(h.state().dialog, Some(Dialog::Export(_))), "and the tool runs on it: {:?}", h.state().dialog);
     // Cancelled: nothing opens and nothing runs.
@@ -287,7 +300,7 @@ fn the_open_recent_menu_lists_files_and_opens_one() {
     h.get_by_label("Open Recent ⏵").hover();
     h.run_steps(3);
     h.get_by_label_contains("recent.pdf").click();
-    h.run_steps(4);
+    wait_for_open(&mut h, |app| app.views.len() > 1);
     let app = h.state();
     assert_eq!(app.views.len(), 2, "the recent file opened in a new tab");
     let active = app.active.unwrap();

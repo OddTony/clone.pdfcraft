@@ -1206,6 +1206,7 @@ fn selection_mouse_wheel_resumes_after_point_scrolling() {
         });
         h.run_steps(delay);
         let before = h.state().views[view].page_screen_rect(0).unwrap().top();
+        let line_points = h.ctx.options(|options| options.input_options.line_scroll_speed);
         h.event(egui::Event::MouseWheel {
             unit: egui::MouseWheelUnit::Line,
             delta: egui::vec2(0.0, -1.0),
@@ -1215,6 +1216,6 @@ fn selection_mouse_wheel_resumes_after_point_scrolling() {
         h.run_steps(40);
         let after = h.state().views[view].page_screen_rect(0).unwrap().top();
         eprintln!("Point-to-Line delay={delay}: point={}, line={}", start - before, before - after);
-        assert!(before - after > 50.0, "Line input must resume after Point: {before} -> {after}");
+        assert!(before - after > line_points - 1.0, "Line input must resume at the configured speed after Point: {before} -> {after}");
     }
 }

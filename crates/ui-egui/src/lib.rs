@@ -1179,11 +1179,15 @@ impl PdfCraftApp {
             open_worker::ResultKind::Failed(reason) => {
                 self.notify_fmt("Couldn't open {name}: {reason}", &[("name", &pending.name), ("reason", &reason)]);
             }
-            open_worker::ResultKind::Conversion(bytes) => {
-                if let Some(Err(error)) = self.open_converted(&pending.name, &bytes) {
-                    self.notify_fmt("Couldn't open {name}: {e}", &[("name", &pending.name), ("e", &error)]);
+            open_worker::ResultKind::Conversion(bytes) => match self.open_converted(&pending.name, &bytes) {
+                Some(Ok(())) => {
+                    if let Some(command) = pending.then {
+                        self.execute(command);
+                    }
                 }
-            }
+                Some(Err(error)) => self.notify_fmt("Couldn't open {name}: {e}", &[("name", &pending.name), ("e", &error)]),
+                None => {}
+            },
             open_worker::ResultKind::Prepared { bytes, result } => match *result {
                 Ok(prepared) => match self.finish_open(&pending.name, pending.path.clone(), bytes.len(), prepared, pending.activate) {
                     Ok(id) => {
@@ -1973,8 +1977,16 @@ impl PdfCraftApp {
         self.ask_one(pickers::Ask::File(dialog), None, move |app, path| {
             let path = path.to_string_lossy().into_owned();
             let before = app.views.len();
+            let pending_before = app.pending_opens.len();
             app.open_path(&path);
-            if let Some(prompt) = app.password_prompt.as_mut().filter(|p| p.path.as_deref() == Some(path.as_str())) {
+            // A live window queues preparation. Retain the chosen tool on that new request,
+            // rather than expecting the document to exist before the worker has answered.
+            // If scheduling was refused, leave older pending requests unchanged.
+            if app.pending_opens.len() > pending_before
+                && let Some(pending) = app.pending_opens.last_mut()
+            {
+                pending.then = Some(command);
+            } else if let Some(prompt) = app.password_prompt.as_mut().filter(|p| p.path.as_deref() == Some(path.as_str())) {
                 // Encrypted: the tool runs once the password is in.
                 prompt.then = Some(command);
             } else if app.views.len() > before && app.active.is_some() {
@@ -2804,9 +2816,15 @@ impl eframe::App for PdfCraftApp {
                 self.notify_fmt("Couldn't open {name}: {e}", &[("name", &name), ("e", &e.to_string())]);
             }
         }
-        // Don't replace a pending prompt or import. A startup file may need its own password
-        // prompt, so its bytes stay queued until the current interaction finishes.
-        if self.password_prompt.is_none()
+        // Don't replace a pending prompt or import, or overtake an open still being prepared.
+        // A startup file may need its own password prompt, so its bytes stay queued until the
+        // current interaction finishes.
+        #[cfg(not(target_arch = "wasm32"))]
+        let open_ready = self.pending_opens.is_empty();
+        #[cfg(target_arch = "wasm32")]
+        let open_ready = true;
+        if open_ready
+            && self.password_prompt.is_none()
             && self.image_import.is_none()
             && self.dialog.is_none()
             && self.close_request.is_none()

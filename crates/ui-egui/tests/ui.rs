@@ -29,6 +29,18 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
     h
 }
 
+fn wait_for_open(h: &mut Harness<'static, PdfCraftApp>, ready: impl Fn(&PdfCraftApp) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        h.run_steps(1);
+        if ready(h.state()) {
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "the document did not finish opening");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
 #[test]
 fn home_shows_welcome_and_tools() {
     let h = harness(|_| {});
@@ -681,7 +693,7 @@ fn dropping_a_pdf_on_the_window_opens_it() {
     assert!(h.state().views.is_empty());
     let file: egui::DroppedFileHandle = std::sync::Arc::new(Dropped { path: "dropped.pdf".into(), bytes: FIXTURE.to_vec() });
     h.input_mut().dropped_files.push(file);
-    h.run_steps(3);
+    wait_for_open(&mut h, |app| !app.views.is_empty());
     assert_eq!(h.state().views.len(), 1, "the dropped PDF opens in a tab");
     h.get_by_label_contains("dropped.pdf");
 }
@@ -782,6 +794,7 @@ fn files_and_quit_from_the_operating_system() {
     let queue = std::rc::Rc::new(std::cell::RefCell::new(vec![OsEvent::Open(vec![path.to_string_lossy().into_owned()])]));
     let q = queue.clone();
     let mut h = harness(move |app| app.os_events = Some(Box::new(move || q.borrow_mut().drain(..).collect())));
+    wait_for_open(&mut h, |app| !app.views.is_empty());
     std::fs::remove_file(&path).ok();
     assert_eq!(h.state().views.len(), 1, "the file opens in a tab");
     h.get_by_label_contains(&name);

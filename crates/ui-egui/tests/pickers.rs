@@ -40,6 +40,18 @@ fn pages(app: &PdfCraftApp, view: usize) -> usize {
     PageRenderer::new(doc.bytes.clone(), Default::default()).page_count()
 }
 
+fn wait_for_open(h: &mut Harness<'static, PdfCraftApp>, ready: impl Fn(&PdfCraftApp) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        h.run_steps(1);
+        if ready(h.state()) {
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "the document did not finish opening");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
 /// A shell with `docs` open, each the given number of pages.
 fn harness(docs: &[usize]) -> Harness<'static, PdfCraftApp> {
     let docs = docs.to_vec();
@@ -66,7 +78,7 @@ fn file_open_returns_at_once_and_opens_the_pick_on_the_next_frame() {
     h.state_mut().pick_override = Some(vec![file.to_string_lossy().into_owned()]);
     assert!(h.state_mut().execute("file.open"));
     assert!(h.state().views.is_empty(), "the command must not wait for the picker");
-    h.run_steps(2);
+    wait_for_open(&mut h, |app| !app.views.is_empty());
     assert_eq!(h.state().views.len(), 1, "the picked file opens on a later frame");
     assert_eq!(pages(h.state(), 0), 2);
     let _ = std::fs::remove_dir_all(&dir);
@@ -622,13 +634,14 @@ fn a_startup_url_does_not_replace_another_documents_password_prompt() {
     for cancel in [false, true] {
         let mut h = harness(&[]);
         h.state_mut().open_bytes("local-encrypted.pdf", None, encrypted_fixture()).unwrap();
+        wait_for_open(&mut h, |app| app.password_prompt.is_some());
         deliver_startup(&h, "late.pdf", fixture(2));
         h.run_steps(2);
         assert_eq!(h.state().password_prompt.as_ref().unwrap().name, "local-encrypted.pdf");
         assert!(h.state().views.is_empty());
         assert_eq!(h.state().startup_inbox.lock().unwrap().len(), 1, "startup bytes wait for the prompt");
         h.state_mut().submit_password((!cancel).then(|| "test-password".into()));
-        h.run_steps(2);
+        wait_for_open(&mut h, |app| app.views.len() >= if cancel { 1 } else { 2 });
         assert!(h.state().password_prompt.is_none());
         assert!(h.state().startup_inbox.lock().unwrap().is_empty());
         assert_eq!(h.state().active, if cancel { None } else { Some(0) });
@@ -640,15 +653,15 @@ fn a_startup_url_does_not_replace_another_documents_password_prompt() {
 fn unlocking_a_late_startup_url_keeps_it_in_the_background() {
     let mut h = harness(&[3]);
     deliver_startup(&h, "late-encrypted.pdf", encrypted_fixture());
-    h.run_steps(2);
+    wait_for_open(&mut h, |app| app.password_prompt.is_some());
     assert_eq!(h.state().active, Some(0));
     assert_eq!(h.state().password_prompt.as_ref().unwrap().name, "late-encrypted.pdf");
     h.state_mut().submit_password(Some("wrong-password".into()));
-    h.run_steps(2);
+    wait_for_open(&mut h, |app| app.password_prompt.as_ref().is_some_and(|p| p.error.is_some()));
     assert!(h.state().password_prompt.as_ref().unwrap().error.is_some());
     assert_eq!(h.state().active, Some(0));
     h.state_mut().submit_password(Some("test-password".into()));
-    h.run_steps(2);
+    wait_for_open(&mut h, |app| app.views.len() > 1);
     assert!(h.state().password_prompt.is_none());
     assert_eq!(h.state().active, Some(0));
     assert_eq!(h.state().views.len(), 2);
