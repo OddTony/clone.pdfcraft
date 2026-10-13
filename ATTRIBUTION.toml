@@ -206,7 +206,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Arabic UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "889a0d0a9ea53ca0a818c2ba672c053c232d2cca140f8d63127353e6f36505fe"
+sha256 = "2bcc512bb159227c352e72f841fcc00e11f4260a991fb3cf283d78fb5656049b"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/tr.tsv"
