@@ -3975,6 +3975,7 @@ dependencies = [
  "pdfcraft-engine",
  "pdfcraft-fonts",
  "pdfcraft-model",
+ "pdfcraft-ocr",
  "pdfcraft-platform",
  "pdfcraft-render",
  "pdfcraft-xfa",
