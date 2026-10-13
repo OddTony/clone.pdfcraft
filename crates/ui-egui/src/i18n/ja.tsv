@@ -2352,3 +2352,18 @@ animation effects	Off	オフ
 	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
 	Move tag earlier	タグを前へ移動
 	Move tag later	タグを後へ移動
+	Window	ウインドウ
+	New window	新規ウインドウ
+	Move tab to new window	タブを新規ウインドウに移動
+	Merge all windows	すべてのウインドウを統合
+	Close window	ウインドウを閉じる
+	In new window	新規ウインドウで開く
+	Move to new window	新規ウインドウに移動
+	Move to window	ウインドウに移動
+	Close other tabs	他のタブを閉じる
+	Close tabs to the right	右側のタブを閉じる
+	Copy path	パスをコピー
+	Show in Finder	Finder で表示
+	Show in Explorer	エクスプローラーで表示
+	Show in folder	フォルダーで表示
+	The document was changed in another window. Check your text, then apply it again.	別のウインドウで文書が変更されました。テキストを確認して、もう一度適用してください。

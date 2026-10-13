@@ -40,7 +40,7 @@ fn score(hay: &str, needle: &str) -> Option<usize> {
 }
 
 pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
-    let palette_rect_id = egui::Id::new("palette_rect");
+    let palette_rect_id = crate::windows::wid("palette_rect");
     if !app.palette_open {
         return;
     }
@@ -111,8 +111,8 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
     hits.truncate(12);
     let (down, up) = ctx.input(|i| (i.key_pressed(egui::Key::ArrowDown), i.key_pressed(egui::Key::ArrowUp)));
     let selected = ctx.data_mut(|data| {
-        let id = egui::Id::new("palette_selected");
-        let query_id = egui::Id::new("palette_selected_query");
+        let id = crate::windows::wid("palette_selected");
+        let query_id = crate::windows::wid("palette_selected_query");
         let previous_query = data.get_temp::<String>(query_id);
         let selected =
             if previous_query.as_deref() == Some(&q) { data.get_temp::<usize>(id).unwrap_or(0) } else { 0 }.min(hits.len().saturating_sub(1));
@@ -143,7 +143,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
         return;
     }
     let mut chosen: Option<(Option<&'static str>, Option<&'static str>)> = None;
-    let area_response = egui::Area::new(egui::Id::new("palette"))
+    let area_response = egui::Area::new(crate::windows::wid("palette"))
         .order(egui::Order::Foreground)
         .pivot(Align2::CENTER_TOP)
         .fixed_pos(egui::pos2(screen.center().x, screen.top() + 96.0))

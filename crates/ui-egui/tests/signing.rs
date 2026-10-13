@@ -29,7 +29,7 @@ fn dir() -> std::path::PathBuf {
 
 fn harness(dir: std::path::PathBuf) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("contract.pdf", None, FIXTURE.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
@@ -155,7 +155,7 @@ fn drawing_a_signature_creating_an_id_signing_and_trusting() {
     assert!(v.name.contains("signed version") && v.signatures.iter().any(|x| x.signed));
     // Trusted certificates and the ID list persist.
     let saved = s.persist();
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.set_option("language", "en").unwrap();
     fresh.restore(&saved);
     assert_eq!((fresh.digital_ids.len(), fresh.session.trusted_certificates().len()), (1, 1));
@@ -307,7 +307,7 @@ fn the_fill_and_sign_signature_or_an_image_shows_in_a_digital_signature() {
     let signed = std::fs::read(dir.join("contract_signed.pdf")).unwrap();
     assert!(signed.windows(6).any(|w| w == b"/Image"), "the image is embedded");
     assert_eq!(s.session.get(s.views[0].id).unwrap().signatures.iter().filter(|x| x.signed).count(), 2);
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.restore(&s.persist());
     assert_eq!(fresh.sign_graphic, SignGraphic::Image(image));
     // A saved choice that can't be read back falls back to the name.
@@ -317,7 +317,7 @@ fn the_fill_and_sign_signature_or_an_image_shows_in_a_digital_signature() {
 
 #[test]
 fn os_store_identities_are_not_persisted() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     for path in ["windows:Store signer", "keychain:Store signer", "file-id.p12"] {
         app.digital_ids.push(pdfcraft_ui_egui::DigitalIdEntry {
@@ -333,7 +333,7 @@ fn os_store_identities_are_not_persisted() {
     let settings: serde_json::Value = serde_json::from_str(&saved).unwrap();
     assert_eq!(settings["digital_ids"].as_array().unwrap().len(), 1);
     assert_eq!(settings["digital_ids"][0]["path"], "file-id.p12");
-    let mut restored = PdfCraftApp::new();
+    let mut restored = PdfCraftApp::new_for_test();
     restored.set_option("language", "en").unwrap();
     restored.restore(&saved);
     assert_eq!(restored.digital_ids.len(), 1);

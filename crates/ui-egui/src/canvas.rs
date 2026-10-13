@@ -362,6 +362,24 @@ pub struct DocView {
     last_press_time: f64,
     last_press_pos: Option<Pos2>,
     last_queue: Vec<RenderRequest>,
+    /// This view's own queue and inbox in its document's render pool (registered on first use).
+    pub(crate) render_client: Option<(u64, pdfcraft_render::ClientId)>,
+    /// Which view of its document this is (1, 2, ...; 0 until numbered). Numbers are not reused,
+    /// so closing view 1 leaves view 2 where it was.
+    pub view_no: u32,
+    /// The document's edit generation this view has caught up with (see `sync_views`).
+    pub(crate) seen_generation: u64,
+    pub(crate) seen_display_generation: u64,
+    /// This view took a change into account itself and has not been stamped yet (see
+    /// `PdfCraftApp::stamp_handled`).
+    pub(crate) change_handled: bool,
+    /// The document generations this view itself accounted for (stamped when it handled a
+    /// change). A later change from another window is newer than these and still reaches it.
+    pub(crate) handled_generation: u64,
+    pub(crate) handled_display_generation: u64,
+    /// An open editor could not apply its text because the document changed in another window:
+    /// the app tells the user (see `foreign_change`).
+    pub(crate) elsewhere_notice: bool,
     viewport_w: f32,
     viewport_h: f32,
     page_count: usize,
@@ -621,6 +639,14 @@ impl DocView {
             last_press_time: 0.0,
             last_press_pos: None,
             last_queue: Vec::new(),
+            render_client: None,
+            view_no: 0,
+            seen_generation: 0,
+            seen_display_generation: 0,
+            change_handled: false,
+            handled_generation: 0,
+            handled_display_generation: 0,
+            elsewhere_notice: false,
             viewport_w: 800.0,
             viewport_h: 600.0,
             page_count: info.pages.len(),
@@ -683,6 +709,21 @@ impl DocView {
     /// The document's content or page list changed (an edit, undo or redo): drop caches and
     /// adopt the new page geometry, keeping the reader's place where possible.
     pub fn document_changed(&mut self, info: &DocInfo) {
+        self.document_changed_with(info, None);
+    }
+
+    /// [`Self::document_changed`], knowing where the pages went when the page list was rebuilt
+    /// (by another view of the document): the reader's place, the selection and the history
+    /// follow the pages instead of staying at the same numbers.
+    pub fn document_changed_with(&mut self, info: &DocInfo, map: Option<&pdfcraft_engine::PageMap>) {
+        if let Some(map) = map {
+            let follow = |p: usize| map.nearest(p);
+            self.current = follow(self.current).unwrap_or(0);
+            self.selected = self.selected.iter().filter_map(|p| map.old_to_new.get(*p).copied().flatten()).collect();
+            self.select_anchor = self.select_anchor.and_then(|a| map.old_to_new.get(a).copied().flatten());
+            self.back = self.back.iter().filter_map(|p| follow(*p)).collect();
+            self.forward = self.forward.iter().filter_map(|p| follow(*p)).collect();
+        }
         self.invalidate_content();
         self.page_count = info.pages.len();
         self.page_heights = info.pages.iter().map(|p| p.height).collect();
@@ -735,6 +776,70 @@ impl DocView {
         *self = fresh;
         // Marks the kept images out of date and clamps the page to the new page count.
         self.document_changed(info);
+    }
+
+    /// What another window did to the document: selections whose page or item is gone are
+    /// dropped, those on moved pages follow, and an open editor learns that its target may have
+    /// changed (it asks before applying; nothing the user typed is discarded).
+    pub(crate) fn foreign_change(&mut self, doc: &pdfcraft_engine::Document, change: &pdfcraft_engine::Change) {
+        use pdfcraft_engine::Change;
+        let pages = doc.info.pages.len();
+        let map = match change {
+            Change::Remap(m) => Some(m),
+            _ => None,
+        };
+        // Where an old page is now (`None`: gone).
+        let follow = |p: usize| -> Option<usize> {
+            let n = match map {
+                Some(m) => m.old_to_new.get(p).copied().flatten()?,
+                None => p,
+            };
+            (n < pages).then_some(n)
+        };
+        // A page of the old list in selections that follow pages, with a check on the item.
+        let keep_item = |sel: Option<(usize, usize)>, exists: &dyn Fn(usize, usize) -> bool| -> Option<(usize, usize)> {
+            let (p, i) = sel?;
+            let p = follow(p)?;
+            exists(p, i).then_some((p, i))
+        };
+        self.comments.selected = keep_item(self.comments.selected, &|p, i| doc.info.annotations.iter().any(|a| a.page == p && a.index == i));
+        self.links.selected = keep_item(self.links.selected, &|p, i| doc.links.iter().any(|l| l.page == p && l.index == i));
+        self.content.selected = keep_item(self.content.selected, &|p, i| doc.added.iter().filter(|a| a.page == p).count() > i);
+        if let Some(s) = self.image_selection.as_mut() {
+            match follow(s.page) {
+                Some(p) if doc.page_images(p).len() > s.index => s.page = p,
+                _ => self.image_selection = None,
+            }
+        }
+        let has_field = |name: &str| doc.form.iter().any(|f| f.name == name);
+        if self.prepare.selected.as_ref().is_some_and(|(n, _)| !has_field(n)) {
+            self.prepare.selected = None;
+        }
+        self.prepare.also.retain(|(n, _)| has_field(n));
+        // Editors keep their text. A form field that is gone has nothing to type into any more.
+        if self.forms.focus.as_ref().is_some_and(|f| !has_field(&f.name)) {
+            self.forms.focus = None;
+            self.elsewhere_notice = true;
+        }
+        let rebuilt = !matches!(change, Change::Pages(_));
+        if let Some(ed) = self.line_editor.as_mut() {
+            match follow(ed.page) {
+                Some(p) => ed.page = p,
+                None => ed.page = usize::MAX, // gone: shown beside the page, applied nowhere
+            }
+            ed.stale |= rebuilt;
+        }
+        if let Some(c) = self.comments.composer.as_mut() {
+            match follow(c.page) {
+                Some(p) => c.page = p,
+                None => c.page = usize::MAX,
+            }
+            let touched = match change {
+                Change::Pages(set) => set.contains(&c.page),
+                _ => true,
+            };
+            self.comments.composer_stale |= touched;
+        }
     }
 
     /// Pages an organize command acts on: the selection, or the current page.
@@ -793,6 +898,7 @@ impl DocView {
     /// was toggled). Out-of-date rasters stay on screen until their replacements arrive, so the
     /// view never flashes blank.
     pub fn invalidate_content(&mut self) {
+        self.change_handled = true;
         for p in self.pages.values_mut() {
             p.tag = STALE_TAG;
         }
@@ -821,6 +927,7 @@ impl DocView {
     /// Only `page` changed (a comment was added, edited or removed): re-render that page and
     /// re-read its text, keep everything else. Out-of-date tiles stay on screen until replacements arrive.
     pub fn page_changed(&mut self, page: usize) {
+        self.change_handled = true;
         if let Some(p) = self.pages.get_mut(&page) {
             p.tag = STALE_TAG;
         }
@@ -850,6 +957,65 @@ impl DocView {
         if self.selection.is_some_and(|s| s.page == page) {
             self.selection = None;
         }
+    }
+
+    /// The document generation this view has caught up with (tests).
+    #[doc(hidden)]
+    pub fn seen_edit_generation(&self) -> u64 {
+        self.seen_generation
+    }
+
+    /// Pretend the text of `page` has arrived (one glyph per character) and search it (tests).
+    #[doc(hidden)]
+    pub fn test_deliver_text(&mut self, page: usize, text: &str) {
+        let glyphs = text
+            .chars()
+            .enumerate()
+            .map(|(i, c)| {
+                let (x0, x1) = (i as f32 * 6.0, i as f32 * 6.0 + 5.0);
+                pdfcraft_render::TextGlyph {
+                    text: c.to_string(),
+                    rect: [x0, 0.0, x1, 10.0],
+                    quad: [[x0, 10.0], [x1, 10.0], [x1, 0.0], [x0, 0.0]],
+                    direction: [1.0, 0.0],
+                }
+            })
+            .collect();
+        self.texts.insert(page, Arc::new(pdfcraft_render::text::layout(glyphs)));
+        self.refresh_find_page(page);
+    }
+
+    /// Open the paragraph editor on `block` of `page` holding `text` (tests).
+    #[doc(hidden)]
+    pub fn test_open_line_editor(&mut self, page: usize, block: usize, text: &str) {
+        self.line_editor = Some(crate::edit_text_ui::LineEditor::test_new(page, block, text));
+    }
+
+    /// Select image `index` on `page` in Edit text (tests).
+    #[doc(hidden)]
+    pub fn test_select_image(&mut self, page: usize, index: usize) {
+        self.image_selection = Some(crate::edit_text_ui::ImageSelection::test_new(page, index));
+    }
+
+    /// The pages the search found something on (tests).
+    #[doc(hidden)]
+    pub fn find_match_pages(&self) -> Vec<usize> {
+        self.find.as_ref().map(|f| f.matches.iter().map(|(p, _)| *p).collect()).unwrap_or_default()
+    }
+
+    /// Pages whose picture is out of date and will be drawn again (tests).
+    #[doc(hidden)]
+    pub fn stale_pages(&self) -> Vec<usize> {
+        let mut pages: Vec<usize> = self.pages.iter().filter(|(_, p)| p.tag == STALE_TAG).map(|(i, _)| *i).collect();
+        pages.sort_unstable();
+        pages
+    }
+
+    /// Pretend page `page` has been drawn (tests).
+    #[doc(hidden)]
+    pub fn test_set_page_texture(&mut self, ctx: &egui::Context, page: usize) {
+        let tex = ctx.load_texture("test-page", egui::ColorImage::filled([2, 2], Color32::WHITE), Default::default());
+        self.pages.insert(page, PageTex { tag: 1, tex });
     }
 
     /// Pages drawn last frame and their screen rectangles.
@@ -1313,6 +1479,33 @@ impl DocView {
         }
     }
 
+    /// This view's client in `pool`; the default client when the pool has no room for another.
+    pub(crate) fn client(&mut self, pool: &RenderPool) -> pdfcraft_render::ClientId {
+        match self.render_client {
+            Some((pool_id, client)) if pool_id == pool.pool_id() => client,
+            // A document gets a new pool after edits: ask it for a client of its own.
+            _ => {
+                let client = pool.register_client().unwrap_or_default();
+                self.render_client = Some((pool.pool_id(), client));
+                client
+            }
+        }
+    }
+
+    fn set_render_queue(&mut self, pool: &RenderPool, queue: Vec<RenderRequest>) {
+        let client = self.client(pool);
+        pool.set_queue_for(client, queue);
+    }
+
+    /// Give back the view's place in its pool (the view is going away).
+    pub(crate) fn release_render_client(&mut self, pool: &RenderPool) {
+        if let Some((pool_id, client)) = self.render_client.take()
+            && pool_id == pool.pool_id()
+        {
+            pool.unregister_client(client);
+        }
+    }
+
     /// Start collecting demand from every consumer before scheduling or uploading results.
     pub(crate) fn begin_render_frame(&mut self) {
         self.thumb_demand.clear();
@@ -1351,13 +1544,14 @@ impl DocView {
         self.text_background = Default::default();
         self.move_background = Default::default();
         if !self.last_queue.is_empty() {
-            pool.set_queue(Vec::new());
+            self.set_render_queue(pool, Vec::new());
             self.last_queue.clear();
         }
         // Results already finished for this tab would otherwise sit in its pool, rasters and
         // all, until the tab is shown again. (An inline pool renders inside try_recv: skip it.)
         if !pool.is_inline() {
-            while pool.try_recv().is_some() {}
+            let client = self.client(pool);
+            while pool.try_recv_for(client).is_some() {}
         }
     }
 
@@ -1525,7 +1719,7 @@ impl DocView {
     pub(crate) fn finish_render_frame(&mut self, ctx: &egui::Context, info: &DocInfo, pool: &RenderPool) {
         let queue = self.prepare_render_queue(info, ctx.pixels_per_point());
         if queue != self.last_queue {
-            pool.set_queue(queue.clone());
+            self.set_render_queue(pool, queue.clone());
             self.last_queue = queue;
         }
         self.receive(ctx, pool);
@@ -1538,11 +1732,12 @@ impl DocView {
     /// offscreen results and obsolete scale/configuration tags never allocate a ColorImage.
     pub fn receive(&mut self, ctx: &egui::Context, pool: &RenderPool) {
         let budget = if pool.is_inline() { 1 } else { RESULTS_PER_FRAME };
+        let client = self.client(pool);
         let mut uploaded = 0usize;
         #[cfg(not(target_arch = "wasm32"))]
         let started = std::time::Instant::now();
         for _ in 0..budget {
-            let Some(r) = pool.try_recv() else { break };
+            let Some(r) = pool.try_recv_for(client) else { break };
             uploaded = uploaded.saturating_add(self.receive_result(ctx, r));
             // One whole-page upload may exceed the frame allowance; it must still progress.
             if uploaded >= UPLOAD_BYTES_PER_FRAME {
@@ -3037,7 +3232,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         }
         if view.continuous {
             view.current = current;
-            if !ui.memory(|m| m.has_focus(egui::Id::new("page-input"))) {
+            if !ui.memory(|m| m.has_focus(crate::windows::wid("page-input"))) {
                 view.page_input = (current + 1).to_string();
             }
         }
@@ -3116,7 +3311,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 && let Some((page, at)) = view.comments.context_at
             {
                 // The page's content is parsed once per right-click, not on every frame the menu is open.
-                let key = egui::Id::new("copy-image-under-menu");
+                let key = crate::windows::wid("copy-image-under-menu");
                 let cached = ui.data(|d| d.get_temp::<(usize, [f64; 2], Option<usize>)>(key)).filter(|c| c.0 == page && c.1 == at);
                 let hit = match cached {
                     Some(c) => c.2,
@@ -3250,7 +3445,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     view.frame_visible = visible_now.iter().copied().collect();
 
     if let Some((pos, text)) = hover_text {
-        egui::Area::new(egui::Id::new("canvas-hover")).order(egui::Order::Tooltip).fixed_pos(pos + vec2(14.0, 16.0)).show(ui.ctx(), |ui| {
+        egui::Area::new(crate::windows::wid("canvas-hover")).order(egui::Order::Tooltip).fixed_pos(pos + vec2(14.0, 16.0)).show(ui.ctx(), |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.set_max_width(320.0);
                 ui.label(text);
@@ -3264,7 +3459,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if let Some(e) = comments::composer(ui.ctx(), view, info, prefs) {
         view.pending_edit = Some(e);
     }
-    if let Some(e) = crate::edit_text_ui::overlay(ui.ctx(), view, info) {
+    if let Some(e) = crate::edit_text_ui::overlay(ui.ctx(), view, info, doc) {
         view.pending_edit = Some(e);
     }
     if let Some(e) = crate::forms_ui::overlay(ui.ctx(), view, info, &form, today) {
@@ -3281,6 +3476,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         refused = Some(why);
     }
     let form_notice = view.forms.notice.take();
+    let elsewhere_notice = std::mem::take(&mut view.elsewhere_notice);
     // One crop, then back to selecting (as Acrobat does).
     let cropped = view.pending_edit.as_ref().is_some_and(|e| matches!(e, pdfcraft_engine::Edit::SetPageBox { .. }));
     let mut tool = app.quick_tool;
@@ -3415,6 +3611,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         app.boxes_draft.seeded = None;
         app.dialog = Some(crate::Dialog::PageBoxes);
     }
+    if elsewhere_notice {
+        app.notify_tr("The document was changed in another window. Check your text, then apply it again.");
+    }
     if let Some(n) = form_notice {
         match n {
             crate::forms_ui::FormNotice::Security => app.notify_tr("The document's security settings don't allow filling in form fields"),
@@ -3459,26 +3658,29 @@ fn selection_actions(ui: &mut egui::Ui, viewport: Rect, view: &mut DocView, info
     let x = rect.left().clamp(viewport.left() + 8.0, (viewport.right() - 520.0).max(viewport.left() + 8.0));
     let y = if rect.bottom() + 48.0 < viewport.bottom() { rect.bottom() + 6.0 } else { (rect.top() - 44.0).max(viewport.top() + 6.0) };
     let mut chosen = None;
-    egui::Area::new(egui::Id::new(("text-selection-actions", view.id.0))).order(egui::Order::Foreground).fixed_pos(pos2(x, y)).show(ui.ctx(), |ui| {
-        egui::Frame::popup(ui.style()).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for (label, action) in [
-                    (tl!("Add comment"), SelectionAction::Note),
-                    (tl!("Highlight"), SelectionAction::Markup(comments::CommentTool::Highlight)),
-                    (tl!("Underline"), SelectionAction::Markup(comments::CommentTool::Underline)),
-                    (tl!("Strikethrough"), SelectionAction::Markup(comments::CommentTool::StrikeOut)),
-                    (tl!("Replace text"), SelectionAction::Replace),
-                ] {
-                    if ui.add_enabled(can_comment, egui::Button::new(label)).clicked() {
-                        chosen = Some(action);
+    egui::Area::new(crate::windows::wid(("text-selection-actions", view.id.0))).order(egui::Order::Foreground).fixed_pos(pos2(x, y)).show(
+        ui.ctx(),
+        |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for (label, action) in [
+                        (tl!("Add comment"), SelectionAction::Note),
+                        (tl!("Highlight"), SelectionAction::Markup(comments::CommentTool::Highlight)),
+                        (tl!("Underline"), SelectionAction::Markup(comments::CommentTool::Underline)),
+                        (tl!("Strikethrough"), SelectionAction::Markup(comments::CommentTool::StrikeOut)),
+                        (tl!("Replace text"), SelectionAction::Replace),
+                    ] {
+                        if ui.add_enabled(can_comment, egui::Button::new(label)).clicked() {
+                            chosen = Some(action);
+                        }
                     }
-                }
-                if ui.button(tl!("Copy")).clicked() {
-                    chosen = Some(SelectionAction::Copy);
-                }
+                    if ui.button(tl!("Copy")).clicked() {
+                        chosen = Some(SelectionAction::Copy);
+                    }
+                });
             });
-        });
-    });
+        },
+    );
     let Some(action) = chosen else { return };
     if let SelectionAction::Copy = action {
         ui.ctx().copy_text(selected);
@@ -3616,7 +3818,7 @@ fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: 
     let mut close = false;
     let mut step: Option<bool> = None;
     let searched = view.texts.len() + view.text_failed.len();
-    egui::Area::new(egui::Id::new("find-bar"))
+    egui::Area::new(crate::windows::wid("find-bar"))
         .order(egui::Order::Middle)
         .pivot(Align2::RIGHT_TOP)
         .fixed_pos(area.right_top() + vec2(-18.0, 12.0))
@@ -3631,7 +3833,7 @@ fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: 
                     ui.horizontal(|ui| {
                         ui.add(icons::image("search", 16.0, t.text_muted));
                         let edit = egui::TextEdit::singleline(&mut find.query)
-                            .id(egui::Id::new("find-input"))
+                            .id(crate::windows::wid("find-input"))
                             .hint_text(tl!("Find text"))
                             .desired_width(220.0)
                             .frame(egui::Frame::NONE);
@@ -3891,7 +4093,7 @@ fn notice_bar(ui: &mut egui::Ui, t: &Tokens, icon: &str, icon_color: Color32, te
 fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let pos = area.left_top() + vec2(14.0, 14.0);
-    egui::Area::new(egui::Id::new("quick-bar")).order(egui::Order::Middle).fixed_pos(pos).show(ui.ctx(), |ui| {
+    egui::Area::new(crate::windows::wid("quick-bar")).order(egui::Order::Middle).fixed_pos(pos).show(ui.ctx(), |ui| {
         egui::Frame::NONE
             .fill(t.card)
             .stroke(Stroke::new(1.0, t.border))
@@ -4480,7 +4682,7 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, editable: bool, dirty: bool
     });
     // Files dragged in from outside go to the gap under the pointer. Some platforms don't say
     // where the pointer is until the files are dropped; then the whole grid is the target.
-    let pointer = ui.input(|i| i.pointer.hover_pos()).filter(|p| viewport.contains(*p));
+    let pointer = crate::drag_pointer::hint().or_else(|| ui.input(|i| i.pointer.hover_pos())).filter(|p| viewport.contains(*p));
     view.grid_gap = pointer.filter(|_| editable && view.org_drag.is_none()).and_then(|p| drop_gap(&cells, p));
     if editable && ui.input(|i| !i.raw.hovered_files.is_empty()) {
         let painter = ui.painter().with_clip_rect(viewport);

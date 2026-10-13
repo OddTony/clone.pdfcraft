@@ -2226,3 +2226,18 @@ animation effects	Off	關
 	This document is trying to open a local file:	此文件正嘗試開啟本機檔案：
 	Move tag earlier	將標記前移
 	Move tag later	將標記後移
+	Window	視窗
+	New window	新增視窗
+	Move tab to new window	將分頁移至新視窗
+	Merge all windows	合併所有視窗
+	Close window	關閉視窗
+	In new window	在新視窗中開啟
+	Move to new window	移至新視窗
+	Move to window	移至視窗
+	Close other tabs	關閉其他分頁
+	Close tabs to the right	關閉右側分頁
+	Copy path	複製路徑
+	Show in Finder	在 Finder 中顯示
+	Show in Explorer	在檔案總管中顯示
+	Show in folder	在資料夾中顯示
+	The document was changed in another window. Check your text, then apply it again.	文件已在另一個視窗中被變更。請檢查您的文字，然後再次套用。

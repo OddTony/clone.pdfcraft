@@ -39,6 +39,18 @@
 //! - `ui.open {path}`: accept a file open; native opens report `pending: true` until they
 //!   complete and are listed in `ui.state.pending_opens`.
 //! - `ui.screenshot {region?}`: PNG of the window (base64), optionally cropped to a rect.
+//!
+//! Several windows: `ui.state`, `ui.command`, `ui.set`, `ui.open` and `ui.screenshot` take an
+//! optional `window` (a number from `ui.windows`; the window that has the focus when left out; the
+//! main window for `ui.screenshot`, which cannot capture the other windows).
+//! `ui.inspect`, `ui.click`, `ui.drag`, `ui.move`, `ui.type` and `ui.key` take it too (the main
+//! window when left out): each window has its own widget tree and its own input, so ids, labels and
+//! coordinates are the window's. (Windows embedded in the main one, as in tests, share its tree.)
+//! A number that is no window answers `no window N`.
+//! - `ui.windows`: every window with its `id`, `title`, `focused` and `tabs` (`name`, `view_no`, `dirty`).
+//! - `ui.window_new_view {window?}`: show the window's document in a new window.
+//! - `ui.window_move_tab {window?, doc_index, to?}`: move tab `doc_index` to window `to` (a new one without it).
+//! - `ui.window_close {window}` and `ui.window_focus {window?}`.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -100,16 +112,33 @@ impl ControlClient {
     }
 }
 
-/// State shared between the plugin (frame hooks) and the app.
+/// What the plugin keeps of one viewport (one window): each window has its own widget tree,
+/// its own input and its own passes.
 #[derive(Default)]
-struct Shared {
+struct ViewShared {
     nodes: HashMap<NodeId, accesskit::Node>,
     root: Option<NodeId>,
     focus: Option<NodeId>,
-    /// Event batches to inject, one batch per frame.
+    /// Event batches to inject, one batch per frame of this window.
     inject: VecDeque<Vec<egui::Event>>,
-    /// Real egui passes so far (counted in `output_hook`, which `logic`-only calls never reach).
+    /// Real egui passes of this window so far (counted in `output_hook`, which `logic`-only
+    /// calls never reach).
     passes: u64,
+}
+
+/// State shared between the plugin (frame hooks) and the app.
+#[derive(Default)]
+struct Shared {
+    views: HashMap<egui::ViewportId, ViewShared>,
+    /// The viewports whose passes are running (a window's pass can run inside the main
+    /// window's), innermost last: `output_hook` is not told which pass it ends.
+    running: Vec<egui::ViewportId>,
+}
+
+impl Shared {
+    fn view(&mut self, id: egui::ViewportId) -> &mut ViewShared {
+        self.views.entry(id).or_default()
+    }
 }
 
 /// The egui plugin half of the control channel.
@@ -124,28 +153,39 @@ impl egui::Plugin for ControlPlugin {
 
     fn input_hook(&mut self, ctx: &egui::Context, input: &mut egui::RawInput) {
         let Ok(mut s) = self.shared.lock() else { return };
-        if let Some(batch) = s.inject.pop_front() {
+        let id = input.viewport_id;
+        if s.running.len() >= 16 {
+            s.running.remove(0); // bounded, whatever happens
+        }
+        s.running.push(id);
+        let view = s.view(id);
+        if let Some(batch) = view.inject.pop_front() {
             input.events.extend(batch);
         }
-        if !s.inject.is_empty() {
-            ctx.request_repaint();
+        if !view.inject.is_empty() {
+            ctx.request_repaint_of(id);
         }
     }
 
     fn output_hook(&mut self, _ctx: &egui::Context, output: &mut egui::FullOutput) {
         let Ok(mut s) = self.shared.lock() else { return };
-        s.passes += 1;
+        let id = s.running.pop().unwrap_or(egui::ViewportId::ROOT);
+        let view = s.view(id);
+        view.passes += 1;
         let Some(update) = &output.platform_output.accesskit_update else { return };
-        s.nodes = update.nodes.iter().cloned().collect();
-        s.root = update.tree.as_ref().map(|t| t.root);
-        s.focus = Some(update.focus);
+        view.nodes = update.nodes.iter().cloned().collect();
+        view.root = update.tree.as_ref().map(|t| t.root);
+        view.focus = Some(update.focus);
     }
 }
 
 enum Pending {
     /// Answer after `frames` more frames (the injected input has been handled by then).
     Frames {
-        /// Answer once this many egui passes have run (the injected input has been handled).
+        /// The window the input went to.
+        viewport: egui::ViewportId,
+        /// Answer once this many egui passes of that window have run (the injected input has
+        /// been handled).
         until_pass: u64,
         since: f64,
         reply: Sender<Reply>,
@@ -154,6 +194,8 @@ enum Pending {
     Screenshot {
         tag: u64,
         region: Option<egui::Rect>,
+        /// The window's viewport: its screenshot arrives in that viewport's input.
+        viewport: egui::ViewportId,
         reply: Sender<Reply>,
         /// When it was requested (egui time, seconds).
         since: f64,
@@ -178,14 +220,26 @@ pub fn attach(ctx: &egui::Context) -> (Control, ControlClient) {
 }
 
 /// What a request needs from the app (implemented by `PdfCraftApp`).
+///
+/// `window` is the window a request is for (`None`: the one that has the focus).
 pub(crate) trait Host {
-    fn state(&self) -> Value;
-    fn command(&mut self, id: &str) -> Reply;
+    fn state(&mut self, window: Option<u32>) -> Reply;
+    fn command(&mut self, window: Option<u32>, id: &str) -> Reply;
     fn dock(&mut self, reset: bool, params: &Value) -> Reply;
     fn commands(&self) -> Value;
-    fn set(&mut self, key: &str, value: &str) -> Reply;
-    fn open(&mut self, path: &str) -> Reply;
+    fn set(&mut self, window: Option<u32>, key: &str, value: &str) -> Reply;
+    fn open(&mut self, window: Option<u32>, path: &str) -> Reply;
     fn quit(&mut self, ctx: &egui::Context) -> bool;
+    fn windows(&mut self) -> Value;
+    fn window_new_view(&mut self, window: Option<u32>) -> Reply;
+    fn window_move_tab(&mut self, window: Option<u32>, doc_index: usize, to: Option<u32>) -> Reply;
+    fn window_close(&mut self, window: Option<u32>) -> Reply;
+    fn window_focus(&mut self, window: Option<u32>) -> Reply;
+    /// The egui viewport of window `window`, if there is such a window (screenshots).
+    fn viewport_of(&mut self, window: Option<u32>) -> Result<egui::ViewportId, String>;
+    /// The viewport whose widget tree and input a request for window `window` (`None`: the main
+    /// window) works on.
+    fn input_viewport(&mut self, window: Option<u32>) -> Result<egui::ViewportId, String>;
 }
 
 impl Control {
@@ -197,15 +251,17 @@ impl Control {
                 Handled::Now(r) => {
                     let _ = req.reply.send(r);
                 }
-                Handled::AfterFrames(frames, value) => {
-                    let until_pass = self.passes() + u64::from(frames);
-                    self.pending.push(Pending::Frames { until_pass, since: now_secs(), reply: req.reply, value });
+                Handled::AfterFrames(viewport, frames, value) => {
+                    let until_pass = self.passes(viewport) + u64::from(frames);
+                    ctx.request_repaint_of(viewport);
+                    self.pending.push(Pending::Frames { viewport, until_pass, since: now_secs(), reply: req.reply, value });
                 }
-                Handled::Screenshot(region) => {
+                Handled::Screenshot(region, viewport) => {
                     let tag = self.next_tag;
                     self.next_tag += 1;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(tag)));
-                    self.pending.push(Pending::Screenshot { tag, region, reply: req.reply, since: now_secs() });
+                    ctx.send_viewport_cmd_to(viewport, egui::ViewportCommand::Screenshot(egui::UserData::new(tag)));
+                    ctx.request_repaint_of(viewport);
+                    self.pending.push(Pending::Screenshot { tag, region, viewport, reply: req.reply, since: now_secs() });
                 }
             }
         }
@@ -215,36 +271,44 @@ impl Control {
     }
 
     fn finish_pending(&mut self, ctx: &egui::Context) {
-        let shots: Vec<(u64, Arc<egui::ColorImage>)> = ctx.input(|i| {
-            i.raw
-                .events
-                .iter()
-                .filter_map(|e| match e {
-                    egui::Event::Screenshot { user_data, image, .. } => {
-                        user_data.data.as_ref().and_then(|d| d.downcast_ref::<u64>()).map(|tag| (*tag, image.clone()))
-                    }
-                    _ => None,
-                })
-                .collect()
-        });
+        let mut viewports: Vec<egui::ViewportId> =
+            self.pending.iter().filter_map(|p| if let Pending::Screenshot { viewport, .. } = p { Some(*viewport) } else { None }).collect();
+        viewports.push(egui::ViewportId::ROOT);
+        viewports.sort();
+        viewports.dedup();
+        let mut shots: Vec<(u64, Arc<egui::ColorImage>)> = Vec::new();
+        for viewport in viewports {
+            shots.extend(ctx.input_for(viewport, |i| {
+                i.raw
+                    .events
+                    .iter()
+                    .filter_map(|e| match e {
+                        egui::Event::Screenshot { user_data, image, .. } => {
+                            user_data.data.as_ref().and_then(|d| d.downcast_ref::<u64>()).map(|tag| (*tag, image.clone()))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            }));
+        }
         let ppp = ctx.pixels_per_point();
         let now = now_secs();
-        let passes = self.passes();
         let mut keep = Vec::new();
-        for p in self.pending.drain(..) {
+        let waiting: Vec<Pending> = self.pending.drain(..).collect();
+        for p in waiting {
             match p {
-                Pending::Frames { until_pass, reply, value, .. } if passes >= until_pass => {
+                Pending::Frames { viewport, until_pass, reply, value, .. } if self.passes(viewport) >= until_pass => {
                     let _ = reply.send(Ok(value));
                 }
-                Pending::Frames { since, reply, .. } if now - since > NOT_DRAWN_TIMEOUT => {
+                Pending::Frames { viewport, since, reply, .. } if now - since > NOT_DRAWN_TIMEOUT => {
                     // The agent is told it failed, so it must not happen later either.
                     if let Ok(mut sh) = self.shared.lock() {
-                        sh.inject.clear();
+                        sh.view(viewport).inject.clear();
                     }
                     let _ = reply.send(Err(not_drawn("handling the input")));
                 }
                 p @ Pending::Frames { .. } => keep.push(p),
-                Pending::Screenshot { tag, region, reply, since } => match shots.iter().find(|(t, _)| *t == tag) {
+                Pending::Screenshot { tag, region, viewport, reply, since } => match shots.iter().find(|(t, _)| *t == tag) {
                     Some((_, image)) => {
                         let _ = reply.send(screenshot_png(image, region, ppp));
                     }
@@ -253,21 +317,21 @@ impl Control {
                     None if now - since > NOT_DRAWN_TIMEOUT => {
                         let _ = reply.send(Err(not_drawn("the screenshot")));
                     }
-                    None => keep.push(Pending::Screenshot { tag, region, reply, since }),
+                    None => keep.push(Pending::Screenshot { tag, region, viewport, reply, since }),
                 },
             }
         }
         self.pending = keep;
     }
 
-    fn passes(&self) -> u64 {
-        self.shared.lock().map(|s| s.passes).unwrap_or(0)
+    fn passes(&self, viewport: egui::ViewportId) -> u64 {
+        self.shared.lock().map(|s| s.views.get(&viewport).map_or(0, |v| v.passes)).unwrap_or(0)
     }
 
-    fn inject(&self, batches: Vec<Vec<egui::Event>>) -> u32 {
+    fn inject(&self, viewport: egui::ViewportId, batches: Vec<Vec<egui::Event>>) -> u32 {
         let n = batches.len() as u32;
         if let Ok(mut s) = self.shared.lock() {
-            s.inject.extend(batches);
+            s.view(viewport).inject.extend(batches);
         }
         // The last batch is handled during the frame it is injected into; answer one frame later.
         n + 1
@@ -275,31 +339,72 @@ impl Control {
 
     fn handle(&mut self, ctx: &egui::Context, host: &mut impl Host, method: &str, p: &Value) -> Handled {
         let str_param = |k: &str| p.get(k).and_then(Value::as_str).ok_or_else(|| format!("{method}: missing string parameter {k}"));
+        // Which window the request is for. A number that does not fit is no window.
+        let window: Result<Option<u32>, String> = match p.get("window") {
+            None | Some(Value::Null) => Ok(None),
+            Some(v) => v.as_u64().and_then(|n| u32::try_from(n).ok()).map(Some).ok_or_else(|| format!("no window {v}")),
+        };
         let r: Result<Handled, String> = (|| match method {
             "ui.state" => {
-                let mut state = host.state();
-                let size = ctx.input(|i| i.viewport_rect().size());
-                state["window"] = json!({ "width": size.x, "height": size.y, "pixels_per_point": ctx.pixels_per_point() });
-                Ok(Handled::Now(Ok(state)))
+                let window = window?;
+                let mut reply = host.state(window);
+                if let Ok(state) = reply.as_mut() {
+                    // The size of the window the request is for (the main window's input when it
+                    // has none of its own, as embedded windows).
+                    let viewport = host.input_viewport(window).unwrap_or(egui::ViewportId::ROOT);
+                    let size = ctx.input_for(viewport, |i| i.viewport_rect().size());
+                    let id = state.get("window").cloned().unwrap_or(Value::Null);
+                    state["window"] = json!({ "id": id, "width": size.x, "height": size.y, "pixels_per_point": ctx.pixels_per_point() });
+                }
+                Ok(Handled::Now(reply))
             }
             "ui.commands" => Ok(Handled::Now(Ok(host.commands()))),
+            "ui.windows" => Ok(Handled::Now(Ok(host.windows()))),
+            "ui.window_new_view" => Ok(Handled::Now(host.window_new_view(window?))),
+            "ui.window_move_tab" => {
+                let index = p
+                    .get("doc_index")
+                    .and_then(Value::as_u64)
+                    .and_then(|n| usize::try_from(n).ok())
+                    .ok_or("ui.window_move_tab: doc_index must be the tab's number")?;
+                let to = match p.get("to") {
+                    None | Some(Value::Null) => None,
+                    Some(v) => Some(v.as_u64().and_then(|n| u32::try_from(n).ok()).ok_or_else(|| format!("no window {v}"))?),
+                };
+                Ok(Handled::Now(host.window_move_tab(window?, index, to)))
+            }
+            "ui.window_close" => Ok(Handled::Now(host.window_close(window?))),
+            "ui.window_focus" => Ok(Handled::Now(host.window_focus(window?))),
             "ui.dock" | "ui.dock.reset" => Ok(Handled::Now(host.dock(method == "ui.dock.reset", p))),
             "ui.command" if str_param("id")? == "ui.dock" => Ok(Handled::Now(host.dock(false, p.get("params").unwrap_or(p)))),
-            "ui.command" => Ok(Handled::Now(host.command(str_param("id")?))),
+            "ui.command" => Ok(Handled::Now(host.command(window?, str_param("id")?))),
             "ui.set" => {
                 let value = match p.get("value") {
                     Some(Value::String(s)) => s.clone(),
                     Some(v) => v.to_string(),
                     None => return Err("ui.set: missing parameter value".into()),
                 };
-                Ok(Handled::Now(host.set(str_param("key")?, &value)))
+                Ok(Handled::Now(host.set(window?, str_param("key")?, &value)))
             }
-            "ui.open" => Ok(Handled::Now(host.open(str_param("path")?))),
-            "ui.inspect" => Ok(Handled::Now(Ok(self.inspect(p)))),
-            "ui.click" => self.click(p),
-            "ui.focus" => self.focus(p),
+            "ui.open" => Ok(Handled::Now(host.open(window?, str_param("path")?))),
+            "ui.inspect" => {
+                let vp = host.input_viewport(window?)?;
+                Ok(Handled::Now(Ok(self.inspect(vp, p))))
+            }
+            "ui.click" => {
+                let vp = host.input_viewport(window?)?;
+                self.click(vp, p)
+            }
+            "ui.drag" => {
+                let vp = host.input_viewport(window?)?;
+                self.drag(vp, p)
+            }
+            "ui.focus" => {
+                let vp = host.input_viewport(window?)?;
+                self.focus(vp, p)
+            }
             "ui.resize" => {
-                only_params(p, method, &["width", "height"])?;
+                only_params(p, method, &["width", "height", "window"])?;
                 let dimension = |key: &str| -> Result<f32, String> {
                     p.get(key)
                         .and_then(Value::as_f64)
@@ -311,9 +416,10 @@ impl Control {
                 if cfg!(target_arch = "wasm32") {
                     return Err("ui.resize needs a native window".into());
                 }
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
+                let vp = host.viewport_of(window?)?;
+                ctx.send_viewport_cmd_to(vp, egui::ViewportCommand::InnerSize(size));
                 ctx.request_repaint();
-                Ok(Handled::AfterFrames(2, json!({ "requested": [size.x, size.y] })))
+                Ok(Handled::AfterFrames(vp, 2, json!({ "requested": [size.x, size.y] })))
             }
             "ui.quit" => {
                 only_params(p, method, &[])?;
@@ -323,8 +429,8 @@ impl Control {
                 let quitting = host.quit(ctx);
                 Ok(Handled::Now(Ok(json!({ "quitting": quitting, "needs_confirmation": !quitting }))))
             }
-            "ui.drag" => self.drag(p),
             "ui.move" => {
+                let vp = host.input_viewport(window?)?;
                 let point = |key: &str| -> Result<f32, String> {
                     p.get(key)
                         .and_then(Value::as_f64)
@@ -333,19 +439,21 @@ impl Control {
                         .ok_or_else(|| format!("ui.move: {key} must be a finite coordinate in points"))
                 };
                 let pos = egui::pos2(point("x")?, point("y")?);
-                Ok(Handled::AfterFrames(self.inject(vec![vec![egui::Event::PointerMoved(pos)]]), json!({ "moved": [pos.x, pos.y] })))
+                Ok(Handled::AfterFrames(vp, self.inject(vp, vec![vec![egui::Event::PointerMoved(pos)]]), json!({ "moved": [pos.x, pos.y] })))
             }
             "ui.type" => {
+                let vp = host.input_viewport(window?)?;
                 let text = str_param("text")?.to_string();
-                Ok(Handled::AfterFrames(self.inject(vec![vec![egui::Event::Text(text)]]), json!({ "typed": true })))
+                Ok(Handled::AfterFrames(vp, self.inject(vp, vec![vec![egui::Event::Text(text)]]), json!({ "typed": true })))
             }
             "ui.key" => {
+                let vp = host.input_viewport(window?)?;
                 let name = str_param("key")?;
                 let key = egui::Key::from_name(name)
                     .ok_or_else(|| format!("ui.key: unknown key {name:?} (egui key names: A, Enter, Escape, ArrowDown, F5, …)"))?;
                 let modifiers = modifiers(p.get("modifiers"))?;
                 let ev = |pressed| egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers };
-                Ok(Handled::AfterFrames(self.inject(vec![vec![ev(true)], vec![ev(false)]]), json!({ "key": name })))
+                Ok(Handled::AfterFrames(vp, self.inject(vp, vec![vec![ev(true)], vec![ev(false)]]), json!({ "key": name })))
             }
             "ui.screenshot" => {
                 let region = match p.get("region") {
@@ -353,21 +461,22 @@ impl Control {
                     Some(r) => Some(rect_param(r)?),
                 };
                 ctx.request_repaint();
-                Ok(Handled::Screenshot(region))
+                Ok(Handled::Screenshot(region, host.viewport_of(window?)?))
             }
             other => Err(format!(
-                "unknown method {other:?} (ui.state, ui.inspect, ui.click, ui.focus, ui.resize, ui.quit, ui.move, ui.drag, ui.type, ui.key, ui.command, ui.commands, ui.set, ui.open, ui.screenshot)"
+                "unknown method {other:?} (ui.state, ui.inspect, ui.click, ui.focus, ui.resize, ui.quit, ui.move, ui.drag, ui.type, ui.key, ui.command, ui.commands, ui.set, ui.open, ui.screenshot, ui.windows, ui.window_new_view, ui.window_move_tab, ui.window_close, ui.window_focus)"
             )),
         })();
         r.unwrap_or_else(|e| Handled::Now(Err(e)))
     }
 
-    fn inspect(&self, p: &Value) -> Value {
+    fn inspect(&self, viewport: egui::ViewportId, p: &Value) -> Value {
         let query = p.get("query").and_then(Value::as_str).map(str::to_lowercase);
         let role = p.get("role").and_then(Value::as_str).map(str::to_lowercase);
         let focused = p.get("focused").and_then(Value::as_bool);
         let limit = p.get("limit").and_then(Value::as_u64).unwrap_or(500) as usize;
-        let Ok(s) = self.shared.lock() else { return json!({ "widgets": [] }) };
+        let Ok(shared) = self.shared.lock() else { return json!({ "widgets": [] }) };
+        let Some(s) = shared.views.get(&viewport) else { return json!({ "widgets": [], "count": 0, "truncated": false }) };
         let mut out = Vec::new();
         let mut total = 0usize;
         let mut stack: Vec<(NodeId, usize)> = s.root.map(|r| vec![(r, 0)]).unwrap_or_default();
@@ -394,7 +503,7 @@ impl Control {
     }
 
     /// Press at `from`, move to `to` in `steps` frames, release (drawing, selecting text, moving).
-    fn drag(&mut self, p: &Value) -> Result<Handled, String> {
+    fn drag(&mut self, viewport: egui::ViewportId, p: &Value) -> Result<Handled, String> {
         let point = |k: &str| -> Result<egui::Pos2, String> {
             match p.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).collect::<Vec<_>>()).as_deref() {
                 Some([x, y]) => Some(egui::pos2(*x as f32, *y as f32))
@@ -416,11 +525,11 @@ impl Control {
             frames.push(vec![egui::Event::PointerMoved(from + (to - from) * (k as f32 / steps as f32))]);
         }
         frames.push(vec![button(to, false)]);
-        let n = self.inject(frames);
-        Ok(Handled::AfterFrames(n, json!({ "dragged": [[from.x, from.y], [to.x, to.y]] })))
+        let n = self.inject(viewport, frames);
+        Ok(Handled::AfterFrames(viewport, n, json!({ "dragged": [[from.x, from.y], [to.x, to.y]] })))
     }
 
-    fn click(&mut self, p: &Value) -> Result<Handled, String> {
+    fn click(&mut self, viewport: egui::ViewportId, p: &Value) -> Result<Handled, String> {
         if let (Some(x), Some(y)) = (p.get("x").and_then(Value::as_f64), p.get("y").and_then(Value::as_f64)) {
             let point = |key: &str, n: f64| {
                 Some(n as f32).filter(|n| n.is_finite()).ok_or_else(|| format!("ui.click: {key} must be a finite coordinate in points"))
@@ -428,10 +537,12 @@ impl Control {
             let pos = egui::pos2(point("x", x)?, point("y", y)?);
             let which = pointer_button(p, "ui.click")?;
             let button = |pressed| egui::Event::PointerButton { pos, button: which, pressed, modifiers: egui::Modifiers::NONE };
-            let frames = self.inject(vec![vec![egui::Event::PointerMoved(pos)], vec![button(true)], vec![button(false)]]);
-            return Ok(Handled::AfterFrames(frames, json!({ "clicked": [x, y] })));
+            let frames = self.inject(viewport, vec![vec![egui::Event::PointerMoved(pos)], vec![button(true)], vec![button(false)]]);
+            return Ok(Handled::AfterFrames(viewport, frames, json!({ "clicked": [x, y] })));
         }
-        let s = self.shared.lock().map_err(|_| "control state poisoned")?;
+        let shared = self.shared.lock().map_err(|_| "control state poisoned")?;
+        let empty = ViewShared::default();
+        let s = shared.views.get(&viewport).unwrap_or(&empty);
         let id = match (p.get("id"), p.get("label").and_then(Value::as_str)) {
             (Some(id), _) => {
                 let id: u64 =
@@ -464,14 +575,16 @@ impl Control {
         }
         let label = node.label().map(str::to_owned);
         let action = accesskit::ActionRequest { action: Action::Click, target_tree: accesskit::TreeId::ROOT, target_node: id, data: None };
-        drop(s);
-        let frames = self.inject(vec![vec![egui::Event::AccessKitActionRequest(action)]]);
-        Ok(Handled::AfterFrames(frames, json!({ "clicked": id.0.to_string(), "label": label })))
+        drop(shared);
+        let frames = self.inject(viewport, vec![vec![egui::Event::AccessKitActionRequest(action)]]);
+        Ok(Handled::AfterFrames(viewport, frames, json!({ "clicked": id.0.to_string(), "label": label })))
     }
 
-    fn focus(&mut self, p: &Value) -> Result<Handled, String> {
-        only_params(p, "ui.focus", &["id", "label"])?;
-        let s = self.shared.lock().map_err(|_| "control state poisoned")?;
+    fn focus(&mut self, viewport: egui::ViewportId, p: &Value) -> Result<Handled, String> {
+        only_params(p, "ui.focus", &["id", "label", "window"])?;
+        let shared = self.shared.lock().map_err(|_| "control state poisoned")?;
+        let empty = ViewShared::default();
+        let s = shared.views.get(&viewport).unwrap_or(&empty);
         let id = match (p.get("id"), p.get("label")) {
             (Some(id), None) => {
                 NodeId(id.as_u64().or_else(|| id.as_str().and_then(|s| s.parse().ok())).ok_or("ui.focus: id must be a widget id from ui.inspect")?)
@@ -496,16 +609,16 @@ impl Control {
             return Err(format!("ui.focus: widget {} is disabled or not focusable", id.0));
         }
         let action = accesskit::ActionRequest { action: Action::Focus, target_tree: accesskit::TreeId::ROOT, target_node: id, data: None };
-        drop(s);
-        let frames = self.inject(vec![vec![egui::Event::AccessKitActionRequest(action)]]);
-        Ok(Handled::AfterFrames(frames, json!({ "focus_requested": id.0.to_string() })))
+        drop(shared);
+        let frames = self.inject(viewport, vec![vec![egui::Event::AccessKitActionRequest(action)]]);
+        Ok(Handled::AfterFrames(viewport, frames, json!({ "focus_requested": id.0.to_string() })))
     }
 }
 
 enum Handled {
     Now(Reply),
-    AfterFrames(u32, Value),
-    Screenshot(Option<egui::Rect>),
+    AfterFrames(egui::ViewportId, u32, Value),
+    Screenshot(Option<egui::Rect>, egui::ViewportId),
 }
 
 fn widget(id: NodeId, n: &accesskit::Node, depth: usize, focused: bool) -> Value {
@@ -631,16 +744,15 @@ fn screenshot_png(image: &egui::ColorImage, region: Option<egui::Rect>, ppp: f32
     Ok(json!({ "png_base64": base64::engine::general_purpose::STANDARD.encode(out), "width": cw, "height": ch, "pixels_per_point": ppp }))
 }
 
-impl Host for crate::PdfCraftApp {
-    fn dock(&mut self, reset: bool, params: &Value) -> Reply {
-        crate::docking::command(self, reset, params)
+impl crate::PdfCraftApp {
+    /// Run `f` with the window a request names (default: the focused one) loaded.
+    fn in_window(&mut self, window: Option<u32>, f: impl FnOnce(&mut Self) -> Reply) -> Reply {
+        let id = window.map_or(self.focused_window, crate::WindowId);
+        self.with_window(id, f).unwrap_or_else(|| Err(format!("no window {}", id.0)))
     }
 
-    fn quit(&mut self, ctx: &egui::Context) -> bool {
-        self.request_quit(ctx)
-    }
-
-    fn state(&self) -> Value {
+    /// The state of the loaded window (`ui.state`).
+    fn loaded_state(&self) -> Value {
         let active = self.active.and_then(|i| self.views.get(i));
         let docs: Vec<Value> = self
             .views
@@ -730,13 +842,38 @@ impl Host for crate::PdfCraftApp {
         })
     }
 
-    fn command(&mut self, id: &str) -> Reply {
+    fn command_here(&mut self, id: &str) -> Reply {
         let spec = pdfcraft_engine::commands::command(id).ok_or_else(|| format!("unknown command {id:?} (see ui.commands)"))?;
         if !self.command_enabled(spec) {
             return Err(format!("{id} is disabled right now"));
         }
         self.execute(id);
         Ok(json!({ "ran": id }))
+    }
+}
+
+impl Host for crate::PdfCraftApp {
+    fn dock(&mut self, reset: bool, params: &Value) -> Reply {
+        crate::docking::command(self, reset, params)
+    }
+
+    fn quit(&mut self, ctx: &egui::Context) -> bool {
+        self.control_quit(ctx)
+    }
+
+    fn state(&mut self, window: Option<u32>) -> Reply {
+        self.in_window(window, |a| {
+            let mut state = a.loaded_state();
+            if let Some(map) = state.as_object_mut() {
+                map.insert("window".into(), json!(a.current_window().0));
+                map.insert("window_count".into(), json!(a.window_count()));
+            }
+            Ok(state)
+        })
+    }
+
+    fn command(&mut self, window: Option<u32>, id: &str) -> Reply {
+        self.in_window(window, |a| a.command_here(id))
     }
 
     fn commands(&self) -> Value {
@@ -748,26 +885,113 @@ impl Host for crate::PdfCraftApp {
         json!({ "commands": list })
     }
 
-    fn set(&mut self, key: &str, value: &str) -> Reply {
-        self.set_option(key, value).map(|()| json!({ "set": key, "value": value }))
+    fn set(&mut self, window: Option<u32>, key: &str, value: &str) -> Reply {
+        self.in_window(window, |a| a.set_option(key, value).map(|()| json!({ "set": key, "value": value })))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn open(&mut self, path: &str) -> Reply {
-        let before = self.views.len();
-        self.open_path(path);
-        if self.views.len() > before || self.password_prompt.is_some() {
-            Ok(json!({ "opened": path, "password_prompt": self.password_prompt.is_some() }))
-        } else if self.pending_opens.iter().any(|pending| pending.path.as_deref() == Some(path)) {
-            Ok(json!({ "accepted": path, "pending": true }))
-        } else {
-            Err(self.toast.as_ref().map(|t| t.0.clone()).unwrap_or_else(|| format!("couldn't open {path}")))
-        }
+    fn open(&mut self, window: Option<u32>, path: &str) -> Reply {
+        self.in_window(window, |a| {
+            let before = a.views.len();
+            a.open_path(path);
+            if a.views.len() > before || a.password_prompt.is_some() {
+                Ok(json!({ "opened": path, "password_prompt": a.password_prompt.is_some() }))
+            } else if a.pending_opens.iter().any(|pending| pending.path.as_deref() == Some(path)) {
+                Ok(json!({ "accepted": path, "pending": true }))
+            } else {
+                Err(a.toast.as_ref().map(|t| t.0.clone()).unwrap_or_else(|| format!("couldn't open {path}")))
+            }
+        })
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn open(&mut self, _path: &str) -> Reply {
+    fn open(&mut self, _window: Option<u32>, _path: &str) -> Reply {
         Err("ui.open needs a file system; on the web, drop the file on the page".into())
+    }
+
+    fn windows(&mut self) -> Value {
+        let focused = self.focused_window;
+        let list: Vec<Value> = self
+            .window_ids()
+            .into_iter()
+            .filter_map(|id| {
+                self.with_window(id, |a| {
+                    let tabs: Vec<Value> = a
+                        .views
+                        .iter()
+                        .filter_map(|v| {
+                            let d = a.session.get(v.id)?;
+                            Some(json!({ "name": d.name, "view_no": v.view_no, "dirty": d.dirty }))
+                        })
+                        .collect();
+                    json!({ "id": id.0, "title": a.window_title, "focused": id == focused, "tabs": tabs })
+                })
+            })
+            .collect();
+        json!({ "windows": list })
+    }
+
+    fn window_new_view(&mut self, window: Option<u32>) -> Reply {
+        self.in_window(window, |a| a.command_here("window.new_view"))
+    }
+
+    fn window_move_tab(&mut self, window: Option<u32>, doc_index: usize, to: Option<u32>) -> Reply {
+        let to = match to {
+            Some(n) if !self.has_window(crate::WindowId(n)) => return Err(format!("no window {n}")),
+            other => other.map(crate::WindowId),
+        };
+        self.in_window(window, |a| {
+            let doc = a.views.get(doc_index).map(|v| v.id).ok_or_else(|| format!("no tab {doc_index}"))?;
+            let from = a.current_window();
+            a.pending_window_ops.push(crate::WindowOp::MoveTab { doc, from, to });
+            Ok(json!({ "moved": doc_index }))
+        })
+    }
+
+    fn window_close(&mut self, window: Option<u32>) -> Reply {
+        self.in_window(window, |a| {
+            let id = a.current_window();
+            if id == crate::WindowId::ROOT {
+                return Err("the main window closes with the app (use the file ▸ close commands for its tabs)".into());
+            }
+            a.pending_window_ops.push(crate::WindowOp::Close(id));
+            Ok(json!({ "closing": id.0 }))
+        })
+    }
+
+    fn window_focus(&mut self, window: Option<u32>) -> Reply {
+        self.in_window(window, |a| {
+            let id = a.current_window();
+            a.pending_window_ops.push(crate::WindowOp::Focus(id));
+            Ok(json!({ "focused": id.0 }))
+        })
+    }
+
+    fn input_viewport(&mut self, window: Option<u32>) -> Result<egui::ViewportId, String> {
+        let id = crate::WindowId(window.unwrap_or(0));
+        if !self.has_window(id) {
+            return Err(format!("no window {}", id.0));
+        }
+        // Embedded windows (no windowing system of their own, as in tests) are drawn inside the
+        // main window's pass and share its widget tree and input.
+        let embedded = self.ctx.as_ref().is_some_and(|c| c.embed_viewports());
+        Ok(if embedded { crate::WindowId::ROOT.viewport() } else { id.viewport() })
+    }
+
+    fn viewport_of(&mut self, window: Option<u32>) -> Result<egui::ViewportId, String> {
+        let id = crate::WindowId(window.unwrap_or(0));
+        if !self.has_window(id) {
+            return Err(format!("no window {}", id.0));
+        }
+        if id != crate::WindowId::ROOT {
+            // eframe paints windows beyond the main one as immediate viewports and ignores a
+            // screenshot request for them.
+            return Err(format!(
+                "no screenshot of window {}: only the main window (0) can be captured; use the system's screenshot tool for the others",
+                id.0
+            ));
+        }
+        Ok(id.viewport())
     }
 }
 
@@ -1009,5 +1233,81 @@ mod transport_tests {
         assert_eq!(reply(&mut r)["error"]["code"], -32700, "a long line after auth is parsed, not refused");
         writeln!(w, "y").unwrap();
         assert_eq!(reply(&mut r)["error"]["code"], -32700, "and the connection is still open");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    fn input(viewport: egui::ViewportId) -> egui::RawInput {
+        let viewports = [egui::ViewportId::ROOT, child()].into_iter().map(|id| (id, egui::ViewportInfo::default())).collect();
+        egui::RawInput { viewport_id: viewport, viewports, ..Default::default() }
+    }
+
+    /// Run a pass of `viewport` (the textures it made are not needed).
+    fn run(ctx: &egui::Context, viewport: egui::ViewportId, ui_fn: impl FnMut(&mut egui::Ui)) {
+        ctx.run_ui(input(viewport), ui_fn).textures_delta.clear();
+    }
+
+    /// One pass of `viewport` showing a button called `label`.
+    fn pass(ctx: &egui::Context, viewport: egui::ViewportId, label: &str) {
+        run(ctx, viewport, |ui| {
+            let _ = ui.button(label.to_owned());
+        });
+    }
+
+    fn labels(control: &Control, viewport: egui::ViewportId) -> Vec<String> {
+        let v = control.inspect(viewport, &json!({ "role": "button" }));
+        v["widgets"].as_array().unwrap().iter().filter_map(|w| w["label"].as_str().map(str::to_owned)).collect()
+    }
+
+    fn child() -> egui::ViewportId {
+        egui::ViewportId::from_hash_of("child window")
+    }
+
+    #[test]
+    fn each_window_has_its_own_widget_tree_and_input() {
+        let ctx = egui::Context::default();
+        let (control, _client) = attach(&ctx);
+        // The child's pass runs inside the main window's, as eframe draws immediate viewports.
+        run(&ctx, egui::ViewportId::ROOT, |ui| {
+            let _ = ui.button("In main");
+            pass(ui.ctx(), child(), "In child");
+        });
+        assert_eq!(labels(&control, egui::ViewportId::ROOT), ["In main"]);
+        assert_eq!(labels(&control, child()), ["In child"]);
+        // Input for the child reaches the child's next pass only.
+        control.inject(child(), vec![vec![egui::Event::Text("x".into())]]);
+        let mut main_events = 0;
+        let mut child_events = 0;
+        run(&ctx, egui::ViewportId::ROOT, |ui| {
+            main_events = ui.input(|i| i.events.len());
+            run(ui.ctx(), child(), |ui| {
+                child_events = ui.input(|i| i.events.iter().filter(|e| matches!(e, egui::Event::Text(_))).count());
+            });
+        });
+        assert_eq!((main_events, child_events), (0, 1));
+        assert_eq!(control.passes(child()), 2);
+    }
+
+    #[test]
+    fn a_click_by_label_goes_to_the_window_that_has_the_button() {
+        let ctx = egui::Context::default();
+        let (mut control, _client) = attach(&ctx);
+        pass(&ctx, child(), "Only here");
+        let handled = control.click(child(), &json!({ "label": "Only here" })).unwrap();
+        assert!(matches!(handled, Handled::AfterFrames(v, _, _) if v == child()));
+        // The main window has no such button.
+        assert!(control.click(egui::ViewportId::ROOT, &json!({ "label": "Only here" })).is_err());
+    }
+
+    #[test]
+    fn a_window_that_was_never_drawn_has_nothing_to_inspect() {
+        let ctx = egui::Context::default();
+        let (control, _client) = attach(&ctx);
+        let v = control.inspect(child(), &json!({}));
+        assert_eq!(v["count"], 0);
     }
 }

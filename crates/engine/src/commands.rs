@@ -60,6 +60,8 @@ pub struct Shortcut {
     pub shift: bool,
     /// ⌃ on macOS (in addition to ⌘); unused elsewhere.
     pub mac_ctrl: bool,
+    /// ⌥ on macOS, Alt elsewhere.
+    pub alt: bool,
     /// Key name: a letter, a digit, punctuation such as `,`, or `Delete`.
     pub key: &'static str,
 }
@@ -67,12 +69,17 @@ pub struct Shortcut {
 impl Shortcut {
     /// ⌘ (Ctrl elsewhere) and `key`.
     pub const fn cmd(key: &'static str) -> Self {
-        Self { command: true, shift: false, mac_ctrl: false, key }
+        Self { command: true, shift: false, mac_ctrl: false, alt: false, key }
     }
 
     /// ⇧⌘ (Ctrl+Shift elsewhere) and `key`.
     pub const fn cmd_shift(key: &'static str) -> Self {
-        Self { command: true, shift: true, mac_ctrl: false, key }
+        Self { command: true, shift: true, mac_ctrl: false, alt: false, key }
+    }
+
+    /// ⌥⌘ (Ctrl+Alt elsewhere) and `key`.
+    pub const fn cmd_alt(key: &'static str) -> Self {
+        Self { command: true, shift: false, mac_ctrl: false, alt: true, key }
     }
 
     /// The command modifier on its own, for text such as "⌘-scroll" / "Ctrl-scroll".
@@ -87,6 +94,9 @@ impl Shortcut {
             if self.mac_ctrl {
                 s.push('⌃');
             }
+            if self.alt {
+                s.push('⌥');
+            }
             if self.shift {
                 s.push('⇧');
             }
@@ -100,6 +110,9 @@ impl Shortcut {
             if self.command || self.mac_ctrl {
                 parts.push("Ctrl");
             }
+            if self.alt {
+                parts.push("Alt");
+            }
             if self.shift {
                 parts.push("Shift");
             }
@@ -110,7 +123,7 @@ impl Shortcut {
 
     /// Number of modifiers (more specific shortcuts are matched first).
     pub fn modifier_count(&self) -> usize {
-        usize::from(self.command) + usize::from(self.shift) + usize::from(self.mac_ctrl)
+        usize::from(self.command) + usize::from(self.shift) + usize::from(self.mac_ctrl) + usize::from(self.alt)
     }
 }
 
@@ -157,6 +170,7 @@ const FILE: Option<&str> = Some("File");
 const EDIT: Option<&str> = Some("Edit");
 const VIEW: Option<&str> = Some("View");
 const PAGES: Option<&str> = Some("Pages");
+const WINDOW: Option<&str> = Some("Window");
 const HELP: Option<&str> = Some("Help");
 
 /// Every command, in menu order.
@@ -215,7 +229,14 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("edit.column_select", "Column select", EDIT, None, Document, "text-select"),
     c("edit.snapshot", "Take a snapshot", EDIT, None, Copying, "camera"),
     c("view.full_screen", "Full screen mode", VIEW, Some(Shortcut::cmd("L")), Document, "maximize"),
-    c("view.read_mode", "Read mode", VIEW, Some(Shortcut { command: true, shift: false, mac_ctrl: true, key: "H" }), Document, "book-open"),
+    c(
+        "view.read_mode",
+        "Read mode",
+        VIEW,
+        Some(Shortcut { command: true, shift: false, mac_ctrl: true, alt: false, key: "H" }),
+        Document,
+        "book-open",
+    ),
     c("view.focus_page_input", "Go to page…", VIEW, Some(Shortcut::cmd_shift("N")), Document, "text-cursor-input"),
     c("ui.dock.reset", "Reset panel layout", VIEW, None, Nothing, "settings"),
     c("view.theme", "Switch light / dark theme", None, None, Nothing, "moon"),
@@ -356,6 +377,10 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("page.extract", "Extract pages…", PAGES, None, Assembly, "file-output"),
     c("page.split", "Split document…", PAGES, None, Assembly, "scissors"),
     c("page.number", "Number pages…", PAGES, None, Assembly, "hash"),
+    c("window.new_view", "New window", WINDOW, Some(Shortcut::cmd_alt("N")), Document, "app-window"),
+    c("window.move_tab_new", "Move tab to new window", WINDOW, None, Document, "external-link"),
+    c("window.merge_all", "Merge all windows", WINDOW, None, Nothing, "layers"),
+    c("window.close", "Close window", WINDOW, None, Nothing, "x"),
     c("help.shortcuts", "Keyboard shortcuts", HELP, None, Nothing, "circle-help"),
     c("help.discord", "Join the ArtCraft Discord", HELP, None, Nothing, "messages-square"),
     c("help.app_page", "PdfCraft web page", HELP, None, Nothing, "globe"),
@@ -456,6 +481,18 @@ mod tests {
         assert_eq!(Shortcut::cmd_shift("−").label(false), "Ctrl+Shift+−");
         assert_eq!(Shortcut::command_name(true), "⌘");
         assert_eq!(Shortcut::command_name(false), "Ctrl");
+    }
+
+    #[test]
+    fn alt_shortcuts_are_labelled_and_counted() {
+        let new_window = command("window.new_view").unwrap().shortcut.unwrap();
+        assert_eq!(new_window.label(true), "⌥⌘N");
+        assert_eq!(new_window.label(false), "Ctrl+Alt+N");
+        assert_eq!(new_window.modifier_count(), 2);
+        let both = Shortcut { command: true, shift: true, mac_ctrl: true, alt: true, key: "X" };
+        assert_eq!(both.label(true), "⌃⌥⇧⌘X");
+        assert_eq!(both.label(false), "Ctrl+Alt+Shift+X");
+        assert_eq!(both.modifier_count(), 4);
     }
 
     #[test]

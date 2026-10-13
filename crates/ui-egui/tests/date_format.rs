@@ -32,7 +32,7 @@ fn retype(h: &mut Harness<'static, PdfCraftApp>, text: &str) {
 #[test]
 fn fill_and_sign_dates_follow_the_date_format_preference_and_it_is_remembered() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("form.pdf", None, PDF.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
@@ -87,10 +87,10 @@ fn fill_and_sign_dates_follow_the_date_format_preference_and_it_is_remembered() 
     assert!(expected.ends_with('.') && expected.matches('.').count() == 3, "{expected}");
 
     // It survives a restart; an unusable saved pattern keeps the default; the control channel checks it too.
-    let mut restored = PdfCraftApp::new();
+    let mut restored = PdfCraftApp::new_for_test();
     restored.restore(&h.state().persist());
     assert_eq!(restored.session.date_format(), "yyyy.mm.dd.");
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.restore(&format!(r#"{{"date_format": "{}"}}"#, "d".repeat(10_000)));
     fresh.restore(r#"{"date_format": "HH:MM"}"#);
     assert_eq!(fresh.session.date_format(), "m/d/yyyy");
@@ -102,7 +102,7 @@ fn fill_and_sign_dates_follow_the_date_format_preference_and_it_is_remembered() 
 #[test]
 fn month_names_follow_the_date_language_or_else_the_interface_language() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.set_option("date-format", "d mmmm yyyy").unwrap();
         app.set_option("language", "cs").unwrap();
@@ -120,10 +120,10 @@ fn month_names_follow_the_date_language_or_else_the_interface_language() {
     assert!(shows(&h, "Español"));
 
     // Remembered; an unknown saved language is ignored; auto follows the interface again.
-    let mut restored = PdfCraftApp::new();
+    let mut restored = PdfCraftApp::new_for_test();
     restored.restore(&h.state().persist());
     assert_eq!(restored.session.date_language(), Some("es"));
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.restore(r#"{"date_language": "klingon"}"#);
     assert_eq!(fresh.session.date_language(), None);
     assert!(fresh.set_option("date-language", "klingon").is_err());
@@ -134,7 +134,7 @@ fn month_names_follow_the_date_language_or_else_the_interface_language() {
 #[test]
 fn a_date_the_pdf_cannot_hold_is_refused_with_a_warning_first() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("form.pdf", None, PDF.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();

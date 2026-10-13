@@ -152,6 +152,46 @@ use std::sync::Arc;
 use pdfcraft_cos::{SaveOptions, write_full, write_incremental};
 use pdfcraft_render::{DocInfo, Layer, LayerOp, OpenError, ReadingColors, RenderConfig, RenderPool, inspect};
 
+/// How an edit changed what the pages show; other views of the document use it to keep as much
+/// of their rendering as they can (see [`Document::changes_since`]).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Change {
+    /// Only these pages (comment edits).
+    Pages(std::collections::BTreeSet<usize>),
+    /// The page list was rebuilt: where each old page went.
+    Remap(PageMap),
+    /// Anything else (all other edits, undo, redo, revert, new bytes).
+    All,
+}
+
+/// Where the pages of the old page list are in the new one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PageMap {
+    /// Per old page: its new index, or `None` when it is gone.
+    pub old_to_new: Vec<Option<usize>>,
+    pub new_len: usize,
+}
+
+impl PageMap {
+    /// The new index of old page `old`; for a deleted page the next page that stayed (else the
+    /// last one that did).
+    pub fn nearest(&self, old: usize) -> Option<usize> {
+        let kept = |i: usize| self.old_to_new.get(i).copied().flatten();
+        (old..self.old_to_new.len()).find_map(kept).or_else(|| (0..old.min(self.old_to_new.len())).rev().find_map(kept))
+    }
+
+    /// This map followed by `next` (which maps the new list on).
+    fn then(&self, next: &PageMap) -> PageMap {
+        PageMap {
+            old_to_new: self.old_to_new.iter().map(|m| m.and_then(|i| next.old_to_new.get(i).copied().flatten())).collect(),
+            new_len: next.new_len,
+        }
+    }
+}
+
+/// How many changes a document remembers for [`Document::changes_since`].
+const CHANGE_LOG_LEN: usize = 256;
+
 /// Stable identifier of an open document within a session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DocId(pub u64);
@@ -191,6 +231,47 @@ fn uses_scripts(edit: &Edit) -> bool {
         Edit::SetFieldValue { .. } | Edit::ApplyScriptChanges { .. } | Edit::SetFieldScript { .. } => true,
         Edit::Batch { edits, .. } => edits.iter().any(uses_scripts),
         _ => false,
+    }
+}
+
+/// The pages a comment edit changes (`None` for other edits).
+fn comment_pages(edit: &Edit) -> Option<std::collections::BTreeSet<usize>> {
+    match edit {
+        Edit::AddAnnotation(a) => Some([a.page].into()),
+        Edit::DeleteAnnotation { page, .. }
+        | Edit::SetAnnotationContents { page, .. }
+        | Edit::ReplyToAnnotation { page, .. }
+        | Edit::SetAnnotationStatus { page, .. }
+        | Edit::MoveAnnotation { page, .. }
+        | Edit::ResizeAnnotation { page, .. }
+        | Edit::StyleAnnotation { page, .. }
+        | Edit::SetAnnotationInfo { page, .. } => Some([*page].into()),
+        Edit::Batch { edits, .. } => {
+            let mut all = std::collections::BTreeSet::new();
+            for e in edits {
+                all.extend(comment_pages(e)?);
+            }
+            (!edits.is_empty()).then_some(all)
+        }
+        _ => None,
+    }
+}
+
+/// What `edit` changed in the pages: one page's comments, a rebuilt page list (found by
+/// comparing the page objects before and after), or everything.
+fn change_of(edit: &Edit, before: &pdfcraft_cos::Document, after: &pdfcraft_cos::Document) -> Change {
+    if let Some(pages) = comment_pages(edit) {
+        return Change::Pages(pages);
+    }
+    if scope_of(edit) != Scope::Full {
+        return Change::All;
+    }
+    match (pdfcraft_annot::page_refs(before), pdfcraft_annot::page_refs(after)) {
+        (Ok(old), Ok(new)) if old != new => {
+            let position: std::collections::HashMap<_, _> = new.iter().enumerate().map(|(i, r)| (*r, i)).collect();
+            Change::Remap(PageMap { old_to_new: old.iter().map(|r| position.get(r).copied()).collect(), new_len: new.len() })
+        }
+        _ => Change::All,
     }
 }
 
@@ -314,6 +395,10 @@ pub struct Document {
     pub dirty: bool,
     /// Bumped on every change to the working file (edit, undo, redo, save); autosave compares it.
     generation: u64,
+    /// What each of the latest changes did: (generation after the change, change).
+    change_log: std::collections::VecDeque<(u64, Change)>,
+    /// Bumped when only the way the pages are shown changes (layers); see [`Self::display_generation`].
+    display_generation: u64,
     /// The generation last handed out by `autosave_snapshots`.
     snapshot_generation: u64,
     /// Why the document cannot be edited (e.g. encryption), if so.
@@ -523,6 +608,46 @@ impl Document {
     /// A counter that changes with every edit (for caches of derived data).
     pub fn edit_generation(&self) -> u64 {
         self.generation
+    }
+
+    /// A counter for changes that leave the file alone but change what the pages show (layers).
+    pub fn display_generation(&self) -> u64 {
+        self.display_generation
+    }
+
+    /// Record a change to the working file: the one place `generation` moves.
+    fn bump(&mut self, change: Change) {
+        self.generation += 1;
+        self.change_log.push_back((self.generation, change));
+        while self.change_log.len() > CHANGE_LOG_LEN {
+            self.change_log.pop_front();
+        }
+    }
+
+    /// Everything that happened since generation `since`, in one change: `None` when nothing
+    /// did, the union of the pages when only comments changed, the chained maps when only page
+    /// lists did, else [`Change::All`] (also when `since` is older than the log).
+    pub fn changes_since(&self, since: u64) -> Option<Change> {
+        if since >= self.generation {
+            return None;
+        }
+        let oldest = self.change_log.front().map_or(self.generation + 1, |(g, _)| *g);
+        if since.saturating_add(1) < oldest {
+            return Some(Change::All);
+        }
+        let mut total: Option<Change> = None;
+        for (_, change) in self.change_log.iter().filter(|(g, _)| *g > since) {
+            total = Some(match (total, change) {
+                (None, c) => c.clone(),
+                (Some(Change::Pages(mut a)), Change::Pages(b)) => {
+                    a.extend(b);
+                    Change::Pages(a)
+                }
+                (Some(Change::Remap(a)), Change::Remap(b)) => Change::Remap(a.then(b)),
+                _ => Change::All,
+            });
+        }
+        total
     }
 
     /// Edit a PDF ▸ Edit text: the lines of existing text on `page` (0-based).
@@ -852,6 +977,7 @@ fn use_layer_choices(doc: &mut Document) {
     let overrides: Vec<(i32, i32, bool)> = doc.info.layers.iter().map(|l| (l.id.0 as i32, l.id.1 as i32, l.visible)).collect();
     doc.config.layers = Arc::new(overrides);
     doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
+    doc.display_generation += 1;
 }
 
 /// Apply a set-layer-visibility action to `layers`, one change at a time, so a toggle flips the
@@ -3262,6 +3388,8 @@ impl Session {
             password: render_password,
             dirty: false,
             generation: 0,
+            change_log: Default::default(),
+            display_generation: 0,
             snapshot_generation: 0,
             read_only_reason,
             form: Arc::new(form),
@@ -3429,6 +3557,7 @@ impl Session {
         } else {
             Vec::new()
         };
+        let change = change_of(&edit, &editor.cos, &next);
         let previous = std::mem::replace(&mut editor.cos, next);
         let keys = keys_after(&edit).unwrap_or_else(|| editor.keys.clone());
         let previous_keys = std::mem::replace(&mut editor.keys, keys);
@@ -3456,7 +3585,7 @@ impl Session {
             return Err(e);
         }
         doc.dirty = true;
-        doc.generation += 1;
+        doc.bump(change);
         doc.edit_notices = notices;
         note_warnings(&mut doc.xfa_warnings, &xfa_notes);
         let notes = doc.xfa_warnings.clone();
@@ -3484,7 +3613,7 @@ impl Session {
         Self::adopt_keys(doc);
         Self::refresh_scoped(doc, scope).inspect_err(|_| Self::show_released(doc))?;
         doc.dirty = true;
-        doc.generation += 1;
+        doc.bump(Change::All);
         Ok(label)
     }
 
@@ -3499,7 +3628,7 @@ impl Session {
         Self::adopt_keys(doc);
         Self::refresh_scoped(doc, scope).inspect_err(|_| Self::show_released(doc))?;
         doc.dirty = true;
-        doc.generation += 1;
+        doc.bump(Change::All);
         Ok(label)
     }
 
@@ -3756,7 +3885,7 @@ impl Session {
             doc.path = Some(p);
         }
         doc.dirty = false;
-        doc.generation += 1;
+        doc.bump(Change::All);
         Self::refresh(doc).inspect_err(|_| Self::show_released(doc))
     }
 
@@ -3814,7 +3943,7 @@ impl Session {
         editor.redo.clear();
         Self::adopt_keys(doc);
         doc.dirty = false;
-        doc.generation += 1;
+        doc.bump(Change::All);
         Self::refresh(doc).inspect_err(|_| Self::show_released(doc))
     }
 
@@ -3826,7 +3955,7 @@ impl Session {
     pub fn reload(&mut self, id: DocId, bytes: Arc<Vec<u8>>) -> Result<(), OpenError> {
         let old = self.docs.iter().position(|d| d.id == id).ok_or_else(|| OpenError::Invalid("the document is not open".into()))?;
         let doc = &self.docs[old];
-        let (name, path, generation) = (doc.name.clone(), doc.path.clone(), doc.generation);
+        let (name, path, generation, display_generation) = (doc.name.clone(), doc.path.clone(), doc.generation, doc.display_generation);
         let password = doc.editor.as_ref().and_then(|e| e.keys.reopen.clone()).or_else(|| doc.password.clone());
         let new_id = self.open(name, path, bytes, password.as_deref())?;
         let at = self.docs.iter().position(|d| d.id == new_id).ok_or_else(|| OpenError::Invalid("the new version was not kept".into()))?;
@@ -3834,7 +3963,9 @@ impl Session {
         doc.id = id;
         // Caches keyed by the edit generation (edit lines, images, measurements) must see a new
         // one; there is nothing new to autosave.
-        doc.generation = generation + 1;
+        doc.generation = generation;
+        doc.bump(Change::All);
+        doc.display_generation = display_generation + 1;
         doc.snapshot_generation = doc.generation;
         // `open` pushed the new version last, so the old one is still at `old`.
         *self.docs.get_mut(old).ok_or_else(|| OpenError::Invalid("the document is not open".into()))? = doc;
@@ -4244,7 +4375,7 @@ impl Session {
         if let Some(d) = self.docs.iter_mut().find(|d| d.id == id) {
             d.dirty = true;
             // Unsaved work with no edit yet still needs its first recovery snapshot.
-            d.generation += 1;
+            d.bump(Change::All);
         }
         Ok(id)
     }
@@ -4284,7 +4415,7 @@ impl Session {
         if let Some(d) = self.docs.iter_mut().find(|d| d.id == id) {
             d.path = path;
             d.dirty = true;
-            d.generation += 1;
+            d.bump(Change::All);
             d.snapshot_generation = d.generation; // its bytes are already in the recovery store
         }
     }
@@ -4325,7 +4456,7 @@ impl Session {
         }
         doc.config.hide_comments = hide;
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
-        doc.generation += 1;
+        doc.bump(Change::All);
         true
     }
 
@@ -4338,7 +4469,7 @@ impl Session {
         }
         doc.config.reading_colors = colors;
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
-        doc.generation += 1;
+        doc.bump(Change::All);
         true
     }
 

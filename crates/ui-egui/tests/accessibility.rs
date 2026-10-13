@@ -34,7 +34,7 @@ fn right_click(h: &mut Harness<'static, PdfCraftApp>, label: &str) {
 #[test]
 fn automatic_text_tagging_opens_reviewable_tags() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("notes.pdf", None, FIXTURE.to_vec()).unwrap();
         app
@@ -57,7 +57,7 @@ fn checking_fixing_skipping_and_reporting() {
     std::fs::create_dir_all(&dir).unwrap();
     let d = dir.clone();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("notes.pdf", None, FIXTURE.to_vec()).unwrap();
         app.export_dir_override = Some(d.to_string_lossy().into_owned());
@@ -117,7 +117,7 @@ fn checking_fixing_skipping_and_reporting() {
 #[test]
 fn a_rule_skipped_in_one_document_is_not_skipped_in_another() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("a.pdf", None, FIXTURE.to_vec()).unwrap();
         app.open_bytes("b.pdf", None, FIXTURE.to_vec()).unwrap();
@@ -168,7 +168,7 @@ fn a_rule_skipped_in_one_document_is_not_skipped_in_another() {
 #[test]
 fn checker_summary_does_not_hide_manual_review() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("notes.pdf", None, FIXTURE.to_vec()).unwrap();
         app
@@ -196,7 +196,7 @@ fn a_saved_page_range_past_the_document_still_checks_its_pages() {
     // dialog is turned off. Unclamped, it selected no page, and the page rules came out Passed
     // without having looked at the untagged text (#1300).
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("notes.pdf", None, FIXTURE.to_vec()).unwrap();
         app
@@ -232,7 +232,7 @@ trailer << /Root 1 0 R >>
 #[test]
 fn checker_shows_a_figure_finding_on_its_page() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("figures.pdf", None, FIGURES.to_vec()).unwrap();
         app
@@ -251,7 +251,7 @@ fn checker_shows_a_figure_finding_on_its_page() {
 #[test]
 fn setting_alternate_text_figure_by_figure() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("figures.pdf", None, FIGURES.to_vec()).unwrap();
         app
@@ -281,7 +281,7 @@ fn setting_alternate_text_figure_by_figure() {
 #[test]
 fn tags_panel_edits_a_tag_property_and_undoes_it() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("figures.pdf", None, FIGURES.to_vec()).unwrap();
         app
@@ -319,7 +319,7 @@ fn tags_panel_edits_a_tag_property_and_undoes_it() {
 #[test]
 fn tags_panel_moves_a_tag_within_its_siblings() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("figures.pdf", None, FIGURES.to_vec()).unwrap();
         app
@@ -340,7 +340,7 @@ fn tags_panel_moves_a_tag_within_its_siblings() {
 #[test]
 fn checker_finding_opens_its_structure_tag() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("figures.pdf", None, FIGURES.to_vec()).unwrap();
         app

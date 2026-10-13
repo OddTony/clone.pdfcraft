@@ -396,7 +396,7 @@ pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
         // Availability is a render projection: the saved group, selection and width survive Home.
         let _ = rendered.apply(Action::Close { panel: Panel::Inspector });
     }
-    let output = DockArea::new(egui::Id::new("pdfcraft-docking")).show_with_limits(
+    let output = DockArea::new(crate::windows::wid("pdfcraft-docking")).show_with_limits(
         ui,
         &rendered,
         &style,
@@ -414,7 +414,7 @@ pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
             }
             Panel::Tools => crate::panels::left_panel(app, ui),
             Panel::Inspector => {
-                ui.data_mut(|data| data.insert_temp(egui::Id::new("pdfcraft-inspector-body"), ui.max_rect()));
+                ui.data_mut(|data| data.insert_temp(crate::windows::wid("pdfcraft-inspector-body"), ui.max_rect()));
                 crate::panels::right_panel(app, ui);
             }
         },

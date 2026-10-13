@@ -40,7 +40,7 @@ fn harness(pages: usize, setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harn
         builder = builder.wgpu();
     }
     let mut h = builder.build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("doc.pdf", None, fixture(pages)).expect("fixture opens");
         setup(&mut app);
@@ -149,7 +149,7 @@ fn organize_tool_opens_the_overview_directly_and_can_be_reentered() {
 
 #[test]
 fn organize_tool_chosen_before_opening_a_document_shows_its_pages() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("tool", "organize").unwrap();
     app.open_bytes("doc.pdf", None, fixture(3)).unwrap();
     assert!(app.views[0].organize);
@@ -639,7 +639,7 @@ impl Drop for TempPdfs {
 /// The app with Preferences ▸ Reopen the files that were open when PdfCraft last closed on.
 fn session_harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.reopen_last_session = true;
         setup(&mut app);
@@ -695,7 +695,7 @@ fn quitting_with_unsaved_changes_still_remembers_every_file() {
         h.run_steps(3);
     }
     assert!(h.state().views.is_empty());
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.restore(&h.state().persist());
     app.reopen_last_files(&[]);
     assert_eq!(open_paths(&app), files, "both files come back");
@@ -706,21 +706,21 @@ fn quitting_with_unsaved_changes_still_remembers_every_file() {
 fn the_last_session_is_off_by_default_and_skips_missing_and_duplicate_files() {
     let dir = TempPdfs::new("skip");
     let (a, b) = (dir.file("a.pdf", 1), dir.file("b.pdf", 1));
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.open_path(&a);
     app.open_path(&b);
     let off: serde_json::Value = serde_json::from_str(&app.persist()).unwrap();
     assert!(off["last_session"].is_null(), "nothing is kept while the preference is off");
     app.reopen_last_session = true;
     let settings = app.persist();
-    let mut later = PdfCraftApp::new();
+    let mut later = PdfCraftApp::new_for_test();
     later.restore(&settings);
     later.reopen_last_session = false;
     later.reopen_last_files(&[]);
     assert!(later.views.is_empty(), "turned off again: nothing reopens");
     // b.pdf is gone, and a.pdf is about to open from the command line.
     std::fs::remove_file(&b).unwrap();
-    let mut later = PdfCraftApp::new();
+    let mut later = PdfCraftApp::new_for_test();
     later.restore(&settings);
     later.reopen_last_files(&[a]);
     assert!(later.views.is_empty(), "neither opens from the session");
@@ -733,7 +733,7 @@ fn save_prompt_stays_inside_the_screen_for_a_long_filename() {
     let name = "Psychology_ The Science of Mind and Behaviour, -- Nigel Holt, Andy Bremner, Michael \
                 Vliek, Ed Sutherland, -- 5, 2024 -- McGraw-Hill Education (UK) Ltd -- isbn13 97815268.pdf";
     let mut h = Harness::builder().with_size(egui::vec2(1365.0, 719.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes(name, None, fixture(1)).expect("fixture opens");
         app.close_request = Some(CloseRequest::Tab(app.views[0].id));
@@ -768,7 +768,7 @@ fn save_prompt_fits_the_smallest_window_whatever_the_name() {
     for name in names {
         let start: String = name.chars().take(10).collect();
         let mut h = Harness::builder().with_size(size).build_eframe(move |_cc| {
-            let mut app = PdfCraftApp::new();
+            let mut app = PdfCraftApp::new_for_test();
             app.set_option("language", "en").unwrap();
             app.open_bytes(&name, None, fixture(1)).expect("fixture opens");
             app.close_request = Some(CloseRequest::Tab(app.views[0].id));
@@ -920,7 +920,7 @@ fn combine_list_does_not_warn_that_a_split_file_collides_with_itself() {
 /// copy keeps the field's name rather than becoming Text1-1.
 #[test]
 fn pasting_pages_into_their_own_document_keeps_field_names() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.open_bytes("form.pdf", None, form_pdf("Text1")).unwrap();
     app.views[0].select_pages(&[0]);
@@ -1244,7 +1244,7 @@ fn columns_resize_and_the_layout_is_kept_in_the_settings() {
     let size_index = pdfcraft_ui_egui::SortKey::Size as usize;
     assert!(widths[size_index] > 120.0, "{widths:?}");
     let saved = h.state().persist();
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.set_option("language", "en").unwrap();
     fresh.restore(&saved);
     assert_eq!(fresh.combine_columns, h.state().combine_columns);
@@ -1801,7 +1801,7 @@ fn save_pages_writes_what_the_grid_shows() {
     h.get_by_label("Save pages").click();
     h.run_steps(4);
     assert!(!dirty(&h));
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.open_bytes("saved.pdf", None, std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(texts_of(&app, 0), ["Page 1", "Page 3"]);
@@ -1895,7 +1895,7 @@ fn protected_with(algorithm: pdfcraft_cos::Algorithm, user: &str, owner: &str, p
 #[test]
 fn password_prompt_opens_and_security_tab_reports_the_details() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("secret.pdf", None, protected("pw", "owner", -1)).unwrap();
         app
@@ -1925,7 +1925,7 @@ fn the_security_notice_wraps_beside_its_buttons_and_lines_up_with_them() {
     // Wide: one line. Narrower: wrapped. Narrowest: cut short (the full text is on hover).
     for (width, wraps) in [(1700.0, false), (1250.0, true), (900.0, false)] {
         let mut h = Harness::builder().with_size(egui::vec2(width, 800.0)).build_eframe(|_cc| {
-            let mut app = PdfCraftApp::new();
+            let mut app = PdfCraftApp::new_for_test();
             app.set_option("language", "en").unwrap();
             app.open_bytes("locked.pdf", None, protected("", "owner", 0b0100)).unwrap();
             app.set_option("panel", "bookmarks").unwrap();
@@ -1951,7 +1951,7 @@ fn the_security_notice_wraps_beside_its_buttons_and_lines_up_with_them() {
 #[test]
 fn the_security_notice_unlocks_with_the_permissions_password() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("locked.pdf", None, protected("", "owner", 0b0100)).unwrap();
         app
@@ -1979,7 +1979,7 @@ fn the_security_notice_unlocks_with_the_permissions_password() {
 #[test]
 fn remove_security_asks_for_the_permissions_password_first() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("locked.pdf", None, protected("", "owner", 0b0100)).unwrap();
         app
@@ -2004,7 +2004,7 @@ fn remove_security_asks_for_the_permissions_password_first() {
 #[test]
 fn restricted_documents_show_a_notice_and_block_page_changes() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("locked.pdf", None, protected("", "owner", 0b0100)).unwrap(); // opens without a password
         app.set_option("organize", "on").unwrap();
@@ -2035,7 +2035,7 @@ fn restricted_documents_show_a_notice_and_block_page_changes() {
 fn copying_out_of_a_document_honours_its_security() {
     fn open(password: &'static str) -> Harness<'static, PdfCraftApp> {
         let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-            let mut app = PdfCraftApp::new();
+            let mut app = PdfCraftApp::new_for_test();
             app.set_option("language", "en").unwrap();
             app.system_clipboard = false;
             app.open_bytes("no-copy.pdf", None, protected("pw", "owner", -1 ^ 0b1_0000)).unwrap();
@@ -2104,7 +2104,7 @@ fn copying_out_of_a_document_honours_its_security() {
 
 #[test]
 fn replace_pages_dialog_swaps_page_content() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.open_bytes("doc.pdf", None, fixture(3)).unwrap();
     app.views[0].select_pages(&[1]);
@@ -2233,7 +2233,7 @@ fn source_font_fixture_with_text(body: &str) -> Vec<u8> {
 
 fn open_source_font_fixture() -> Harness<'static, PdfCraftApp> {
     Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("fonts.pdf", None, source_font_fixture()).expect("font fixture opens");
         app
@@ -2326,7 +2326,7 @@ fn switching_from_a_narrow_editor_keeps_one_frame_and_a_wide_heading_on_one_line
         "BT /F1 18 Tf 20 220 Td (Editable PDF heading) Tj ET BT /F2 18 Tf 20 120 Td (Mono) Tj ET BT /F2 18 Tf 20 98 Td (Text) Tj ET",
     );
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("editor.pdf", None, bytes).unwrap();
         app
@@ -2437,7 +2437,7 @@ fn double_drawn() -> Vec<u8> {
 #[test]
 fn editing_a_double_drawn_line_replaces_every_copy() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("bold.pdf", None, double_drawn()).expect("opens");
         app
@@ -2496,7 +2496,7 @@ fn editing_existing_form_artwork_on_the_page() {
 
 fn check_existing_artwork(name: &'static str, bytes: Vec<u8>) {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes(name, None, bytes.clone()).expect("opens");
         app
@@ -2687,7 +2687,7 @@ fn arrow_keys_nudge_a_selected_image_instead_of_turning_the_page() {
     .unwrap();
     let bytes = write_incremental(&doc, &SaveOptions::default()).unwrap();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("figure.pdf", None, bytes.clone()).expect("opens");
         app
@@ -2778,7 +2778,7 @@ fn paragraph_drag_fixture(content: &str, rotation: i64, unit: i64) -> Vec<u8> {
 
 fn paragraph_drag_harness(bytes: Vec<u8>, view_rotation: u16) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.session = pdfcraft_engine::Session::new().with_clock(|| 1_700_000_000);
         app.set_option("language", "en").unwrap();
         app.open_bytes("paragraphs.pdf", None, bytes).unwrap();
@@ -3200,7 +3200,7 @@ fn a_quick_flick_on_either_edge_rewraps_the_paragraph() {
 /// The Pages panel, in a window tall enough to show every thumbnail of a short fixture.
 fn pages_panel(pages: usize) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("doc.pdf", None, fixture(pages)).expect("fixture opens");
         app.set_option("panel", "pages").unwrap();
@@ -3422,7 +3422,7 @@ fn one_editor_contains_mixed_styles_and_visual_rows() {
          BT /F2 10 Tf 20 195 Td (Last row) Tj ET",
     );
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("mixed.pdf", None, bytes).unwrap();
         app
@@ -3499,7 +3499,7 @@ fn private_document_regions_open_as_one_editor() {
     let bytes = std::fs::read(&path).unwrap();
     let original = bytes.clone();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("private.pdf", None, bytes).unwrap();
         app
@@ -3630,7 +3630,7 @@ fn inline_editor_preserves_source_font_and_previews_live_bounds() {
     cos.update_dict(pdfcraft_cos::ObjRef::new(3, 0), |d| *d = font).unwrap();
     let bytes = write_incremental(&cos, &Default::default()).unwrap();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("stable.pdf", None, bytes).unwrap();
         app
@@ -3762,7 +3762,7 @@ fn clipped_artwork_with_labels_drawn(own_clip: bool) -> Vec<u8> {
 #[test]
 fn cropped_images_do_not_intercept_text_and_stay_inside_each_page() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels()).unwrap();
         app
@@ -3813,7 +3813,7 @@ fn cropped_images_do_not_intercept_text_and_stay_inside_each_page() {
 #[test]
 fn cropped_image_corner_resize_keeps_opposite_corner_and_scales_crop() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("clipped.pdf", None, clipped_artwork_with_labels_drawn(true)).unwrap();
         app
@@ -3885,7 +3885,7 @@ fn private_cropped_image_grips_resize_without_moving_the_opposite_corner() {
     let original = std::fs::read(&path).unwrap();
     let bytes = original.clone();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("private.pdf", None, bytes).unwrap();
         app
@@ -3977,7 +3977,7 @@ fn private_document_cropped_artwork_does_not_block_text() {
     let original = std::fs::read(&path).unwrap();
     let bytes = original.clone();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("private.pdf", None, bytes).unwrap();
         app
@@ -4042,7 +4042,7 @@ fn private_new_chinese_keyboard_input_preserves_font_layout_and_saved_pixels() {
     let bytes = original.clone();
     let font = Arc::new(std::fs::read(font_path).unwrap());
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("private.pdf", None, bytes).unwrap();
         app

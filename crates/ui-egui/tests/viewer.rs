@@ -33,7 +33,7 @@ fn fixture(n: usize) -> Vec<u8> {
 
 fn harness() -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("a.pdf", None, fixture(5)).unwrap();
         app.open_bytes("b.pdf", None, fixture(2)).unwrap();
@@ -337,7 +337,7 @@ trailer << /Root 1 0 R >>
 %%EOF"
         .to_vec();
     let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("damaged.pdf", None, damaged.clone()).unwrap();
         app
@@ -377,7 +377,7 @@ fn initial_view_is_edited_and_honoured_on_open() {
     assert_eq!(s.session.get(id).unwrap().can_undo(), Some("Change document properties"));
     // Opening the saved file follows it.
     let bytes = s.session.save_bytes(id).unwrap();
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.open_bytes("again.pdf", None, bytes.to_vec()).unwrap();
     let view = &app.views[0];
@@ -611,7 +611,7 @@ fn a_new_document_opens_at_the_top_after_a_relaunch() {
     // Next launch: a document never seen before, which gets a.pdf's old id.
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|cc| {
         cc.egui_ctx.memory_mut(|m| *m = memory);
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("c.pdf", None, fixture(5)).unwrap();
         app.views[0].fit = Fit::Width;
@@ -806,7 +806,7 @@ fn page_down_steps_every_spread_when_several_fit_on_screen() {
     for fit in [Fit::Width, Fit::Page, Fit::Height] {
         let bytes = sized_fixture(&sizes);
         let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-            let mut app = PdfCraftApp::new();
+            let mut app = PdfCraftApp::new_for_test();
             app.set_option("language", "en").unwrap();
             app.open_bytes("book.pdf", None, bytes).unwrap();
             app
@@ -832,7 +832,7 @@ fn page_down_steps_every_spread_when_several_fit_on_screen() {
 fn pages_panel_harness(sizes: &[(u32, u32)]) -> Harness<'static, PdfCraftApp> {
     let bytes = sized_fixture(sizes);
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("cheques.pdf", None, bytes).unwrap();
         app.right = Some(pdfcraft_ui_egui::RightPanel::Pages);
@@ -914,10 +914,10 @@ fn the_scroll_speed_preference_scales_mouse_wheel_notches() {
     let point = egui::MouseWheelUnit::Point;
     let (normal_points, fast_points) = (scrolled(ScrollSpeed::Normal, point, 30.0), scrolled(ScrollSpeed::Fast, point, 30.0));
     assert!(normal_points > 0.0 && (normal_points - fast_points).abs() < 1.0, "trackpad: {normal_points} vs {fast_points}");
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("scroll_speed", "fast").unwrap();
     assert!(app.set_option("scroll_speed", "warp").unwrap_err().contains("slow, normal, or fast"));
-    let mut again = PdfCraftApp::new();
+    let mut again = PdfCraftApp::new_for_test();
     again.restore(&app.persist());
     assert_eq!(again.scroll_speed, ScrollSpeed::Fast);
 }
@@ -930,7 +930,7 @@ fn picture_harness() -> (image::RgbaImage, Harness<'static, PdfCraftApp>) {
     image::DynamicImage::ImageRgba8(px.clone()).write_to(&mut png, image::ImageFormat::Png).unwrap();
     let pdf = pdfcraft_engine::Session::new().create_from_images(&[("p.png".into(), png.into_inner())]).unwrap();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("pic.pdf", None, pdf.to_vec()).unwrap();
         app
@@ -1014,7 +1014,7 @@ fn a_picture_inside_form_artwork_under_text_is_selected_and_copied() {
     }
     pdf.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("scan.pdf", None, pdf).unwrap();
         app

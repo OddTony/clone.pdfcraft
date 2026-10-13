@@ -47,7 +47,7 @@ fn protected() -> Vec<u8> {
 #[test]
 fn document_properties_fields_are_tall_and_inset() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("doc.pdf", None, fixture()).unwrap();
         app.set_option("dialog", "properties").unwrap();
@@ -67,7 +67,7 @@ fn document_properties_fields_are_tall_and_inset() {
 #[test]
 fn password_prompt_field_is_tall_and_inset() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("secret.pdf", None, protected()).unwrap();
         app

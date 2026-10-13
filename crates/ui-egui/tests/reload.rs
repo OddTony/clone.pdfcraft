@@ -76,7 +76,7 @@ impl Drop for TempPdf {
 fn harness(path: &str) -> Harness<'static, PdfCraftApp> {
     let path = path.to_owned();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.run_inline = true;
         app.open_path(&path);
         app
@@ -176,7 +176,7 @@ fn a_deleted_file_leaves_the_document_open() {
 
 #[test]
 fn nothing_reloads_with_the_preference_off() {
-    assert!(PdfCraftApp::new().reload_changed_files, "on by default");
+    assert!(PdfCraftApp::new_for_test().reload_changed_files, "on by default");
     let file = TempPdf::new("off", &fixture(2));
     let mut h = harness(&file.path);
     h.state_mut().reload_changed_files = false;
@@ -184,7 +184,7 @@ fn nothing_reloads_with_the_preference_off() {
     file.rebuild(&fixture(3));
     h.run_steps(4);
     assert_eq!(pages(&h), 2);
-    let mut restarted = PdfCraftApp::new();
+    let mut restarted = PdfCraftApp::new_for_test();
     restarted.restore(&h.state().persist());
     assert!(!restarted.reload_changed_files, "the choice is kept");
 }

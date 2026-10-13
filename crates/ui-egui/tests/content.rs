@@ -12,7 +12,7 @@ fn harness() -> Harness<'static, PdfCraftApp> {
 
 fn harness_bytes(bytes: Vec<u8>) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("form.pdf", None, bytes.clone()).unwrap();
         app.set_option("zoom", "150").unwrap();

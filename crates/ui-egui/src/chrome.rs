@@ -33,7 +33,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let mac = cfg!(target_os = "macos") && app.integrated_titlebar;
     let left = if mac { MAC_CONTENT_LEFT as i8 } else { 8 };
     let (tab_h, button) = if mac { (MAC_TITLE_BAR - 2.0, 24.0) } else { (TAB_HEIGHT, STRIP_BUTTON) };
-    egui::Panel::top("tab_strip")
+    egui::Panel::top(crate::windows::wid("tab_strip"))
         .exact_size(if mac { MAC_TITLE_BAR } else { TAB_STRIP })
         .frame(egui::Frame::NONE.fill(t.titlebar).inner_margin(egui::Margin { left, right: 10, top: 0, bottom: 0 }))
         .show(ui, |ui| {
@@ -79,7 +79,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 let mut natural: Vec<f32> = Vec::with_capacity(app.views.len() + 1);
                 for v in &app.views {
                     if let Some(doc) = app.session.get(v.id) {
-                        natural.push(tab_natural_width(ui, &t, &doc.display_name()));
+                        natural.push(tab_natural_width(ui, &t, &app.display_label(v).unwrap_or_else(|| doc.display_name())));
                     }
                 }
                 if app.combine_tab.open {
@@ -107,6 +107,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 });
                 let mut action = None;
                 let mut close = None;
+                let mut menu_action: Option<(usize, TabAction)> = None;
                 ui.scope(|ui| {
                     ui.style_mut().always_scroll_the_only_direction = true;
                     let mut area = egui::ScrollArea::horizontal().id_salt("document_tabs").max_width(tabs_width).auto_shrink([true, true]);
@@ -117,7 +118,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         ui.horizontal_centered(|ui| {
                             for i in 0..app.views.len() {
                                 let Some(doc) = app.session.get(app.views[i].id) else { continue };
-                                let (name, dirty) = (doc.display_name(), doc.dirty);
+                                let (name, dirty) = (app.display_label(&app.views[i]).unwrap_or_else(|| doc.display_name()), doc.dirty);
                                 // A tab showing the document's title names its file on hover.
                                 let file = (name != doc.name).then_some(doc.name.as_str());
                                 let response = tab(
@@ -139,7 +140,11 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 }
                                 let id = app.views[i].id;
                                 let reveal = cfg!(not(target_arch = "wasm32")) && doc.path.is_some();
+                                let doc_path_exists = doc.path.is_some();
                                 response.context_menu(|ui| {
+                                    if let Some(a) = window_items(app, ui) {
+                                        menu_action = Some((i, a));
+                                    }
                                     if ui.button(tl!("Close Tab")).clicked() {
                                         action = Some(crate::tab_context::Action::Close(id));
                                         ui.close();
@@ -153,6 +158,9 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                         action = Some(crate::tab_context::Action::Reveal(id));
                                         ui.close();
                                     }
+                                    if let Some(a) = tab_extras(app, ui, i, doc_path_exists) {
+                                        menu_action = Some((i, a));
+                                    }
                                 });
                                 if response.clicked() {
                                     app.active = Some(i);
@@ -165,6 +173,9 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             }
                             if let Some(action) = action {
                                 app.tab_action(action);
+                            }
+                            if let Some((i, action)) = menu_action {
+                                app.apply_tab_action(i, action);
                             }
                             if app.combine_tab.open {
                                 // After the document tabs; its index can't clash with theirs.
@@ -329,6 +340,110 @@ fn tab_cap(natural: &[f32], budget: f32, gap: f32, min: f32) -> Option<f32> {
     None
 }
 
+/// What the window and tab-management entries of the tab's context menu asked for.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum TabAction {
+    NewWindow,
+    MoveToNewWindow,
+    MoveToWindow(crate::WindowId),
+    CloseOthers,
+    CloseToTheRight,
+    CopyPath,
+    MergeAll,
+}
+
+fn pick(ui: &mut egui::Ui, action: &mut Option<TabAction>, label: &str, enabled: bool, a: TabAction) {
+    if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+        *action = Some(a);
+        ui.close();
+    }
+}
+
+/// The window entries at the top of a document tab's context menu.
+fn window_items(app: &mut PdfCraftApp, ui: &mut egui::Ui) -> Option<TabAction> {
+    let mut action = None;
+    if cfg!(target_arch = "wasm32") {
+        return action;
+    }
+    pick(ui, &mut action, tl!("In new window"), true, TabAction::NewWindow);
+    pick(ui, &mut action, tl!("Move to new window"), app.views.len() > 1, TabAction::MoveToNewWindow);
+    if app.window_count() > 1 {
+        let current = app.current_window();
+        let mut others: Vec<(crate::WindowId, String)> = Vec::new();
+        for w in app.window_ids().into_iter().filter(|w| *w != current) {
+            let label = app.with_window(w, |a| a.active.and_then(|i| a.views.get(i)).and_then(|v| a.display_label(v))).flatten();
+            others.push((w, label.unwrap_or_else(|| "PdfCraft".to_owned())));
+        }
+        ui.menu_button(tl!("Move to window"), |ui| {
+            for (w, label) in &others {
+                if ui.button(label).clicked() {
+                    action = Some(TabAction::MoveToWindow(*w));
+                    ui.close();
+                }
+            }
+        });
+    }
+    ui.separator();
+    action
+}
+
+/// The entries after the tab's Close, Reopen and Reveal: closing several tabs, copying the path,
+/// merging windows.
+fn tab_extras(app: &mut PdfCraftApp, ui: &mut egui::Ui, i: usize, has_path: bool) -> Option<TabAction> {
+    let mut action = None;
+    ui.separator();
+    pick(ui, &mut action, tl!("Close other tabs"), app.views.len() > 1, TabAction::CloseOthers);
+    pick(ui, &mut action, tl!("Close tabs to the right"), i + 1 < app.views.len(), TabAction::CloseToTheRight);
+    if has_path {
+        pick(ui, &mut action, tl!("Copy path"), true, TabAction::CopyPath);
+    }
+    if !cfg!(target_arch = "wasm32") && app.window_count() > 1 {
+        ui.separator();
+        pick(ui, &mut action, tl!("Merge all windows"), true, TabAction::MergeAll);
+    }
+    action
+}
+
+impl PdfCraftApp {
+    /// Do what the tab menu of tab `i` chose.
+    pub(crate) fn apply_tab_action(&mut self, i: usize, action: TabAction) {
+        let Some(view) = self.views.get(i) else { return };
+        let doc = view.id;
+        let from = self.current_window();
+        match action {
+            TabAction::NewWindow => self.pending_window_ops.push(crate::WindowOp::NewView { doc, from }),
+            TabAction::MoveToNewWindow => self.pending_window_ops.push(crate::WindowOp::MoveTab { doc, from, to: None }),
+            TabAction::MoveToWindow(to) => self.pending_window_ops.push(crate::WindowOp::MoveTab { doc, from, to: Some(to) }),
+            TabAction::CloseOthers => self.close_tabs_where(|at| at != i),
+            TabAction::CloseToTheRight => self.close_tabs_where(|at| at > i),
+            TabAction::CopyPath => {
+                if let (Some(path), Some(ctx)) = (self.session.get(doc).and_then(|d| d.path.clone()), self.ctx.clone()) {
+                    ctx.copy_text(path);
+                }
+            }
+            TabAction::MergeAll => self.pending_window_ops.push(crate::WindowOp::MergeAll),
+        }
+    }
+
+    /// Close the tabs `which` picks (by index): the ones with nothing unsaved at once, and ask
+    /// about each one that has, one after the other (Cancel stops the run).
+    fn close_tabs_where(&mut self, which: impl Fn(usize) -> bool) {
+        let ids: std::collections::VecDeque<_> = self.views.iter().enumerate().filter(|(at, _)| which(*at)).map(|(_, v)| v.id).collect();
+        if self.close_request.is_some() {
+            // A question is open already: close what needs no question; leave the rest.
+            for id in ids {
+                if let Some(at) = self.views.iter().position(|v| v.id == id)
+                    && (self.view_count(id) > 1 || !self.has_unsaved_work(at))
+                {
+                    self.request_close_tab(at);
+                }
+            }
+            return;
+        }
+        self.close_in_turn(ids);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn tab(
     ui: &mut egui::Ui,
@@ -406,7 +521,7 @@ fn tab(
 
 pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
-    egui::Panel::top("mode_bar")
+    egui::Panel::top(crate::windows::wid("mode_bar"))
         .exact_size(48.0)
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(10, 0)).stroke(Stroke::new(1.0, t.divider)))
         .show(ui, |ui| {
@@ -509,6 +624,8 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 ui.separator();
             }
             crate::commands::registry_menu(app, ui, "View");
+            #[cfg(not(target_arch = "wasm32"))]
+            ui.menu_button(tl!("Window"), |ui| crate::commands::registry_menu(app, ui, "Window"));
             ui.menu_button(tl!("Display theme"), |ui| theme_menu(app, ui));
             ui.menu_button(tl!("Side panels"), |ui| {
                 for (p, label) in [
@@ -549,7 +666,7 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     );
     let page_count = doc.info.pages.len();
     let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
-    egui::Panel::right("rail")
+    egui::Panel::right(crate::windows::wid("rail"))
         .resizable(false)
         .exact_size(48.0)
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(6, 8)).stroke(Stroke::new(1.0, t.divider)))
@@ -623,7 +740,7 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 }
                 ui.label(egui::RichText::new(page_count.to_string()).font(theme::regular(11.0)).color(t.text_muted));
                 let edit = egui::TextEdit::singleline(&mut view.page_input)
-                    .id(egui::Id::new("page-input"))
+                    .id(crate::windows::wid("page-input"))
                     .desired_width(34.0)
                     .horizontal_align(Align::Center)
                     .font(theme::medium(12.0))

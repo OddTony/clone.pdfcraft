@@ -127,6 +127,9 @@ pub struct LineEditor {
     /// horizontal scale (%), and what they were.
     pub extras: Extras,
     extras0: Extras,
+    /// The document changed in another window while this paragraph was open: the first Apply
+    /// asks the user to check the text (the paragraph may not be the same any more).
+    pub(crate) stale: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -183,6 +186,48 @@ impl LineEditor {
     /// Whether the edited text differs from the original (unsaved changes).
     pub fn has_unsaved_text(&self) -> bool {
         self.text != self.original
+    }
+
+    /// Something the user typed must not be applied to a paragraph that is not the one they
+    /// opened: when the document changed in another window (or the paragraph is gone) the first
+    /// Apply is refused, the editor stays open with its text, and the user is told. A second
+    /// Apply goes through when the paragraph still exists.
+    pub(crate) fn must_check_first(&mut self, info: &DocInfo, doc: &pdfcraft_engine::Document) -> bool {
+        let at_stake = self.text != self.original || self.style() != pdfcraft_engine::BlockStyle::default();
+        let stale = std::mem::take(&mut self.stale);
+        let missing = self.page >= info.pages.len() || doc.text_blocks(self.page).len() <= self.block;
+        if at_stake && (stale || missing) {
+            self.focus = true;
+            return true;
+        }
+        false
+    }
+
+    /// An editor on paragraph `block` of `page` holding `text` (tests).
+    #[doc(hidden)]
+    pub fn test_new(page: usize, block: usize, text: &str) -> Self {
+        Self {
+            selection: None,
+            font_resource: None,
+            page,
+            block,
+            text: text.to_owned(),
+            original: String::new(),
+            rect: Rect::NOTHING,
+            source_rect: [0.0; 4],
+            multiline: false,
+            source: None,
+            fonts: BTreeMap::new(),
+            overflow: false,
+            max_width: 0.0,
+            size: 12.0,
+            focus: false,
+            look: pdfcraft_engine::AddedText::default(),
+            look0: pdfcraft_engine::AddedText::default(),
+            extras: Extras::default(),
+            extras0: Extras::default(),
+            stale: false,
+        }
     }
 
     /// The formatting the panel changed.
@@ -322,6 +367,12 @@ pub struct ImageSelection {
 impl ImageSelection {
     pub(crate) fn dragging(&self) -> bool {
         self.drag.is_some()
+    }
+
+    /// Image `index` on `page`, selected (tests).
+    #[doc(hidden)]
+    pub fn test_new(page: usize, index: usize) -> Self {
+        Self { page, index, drag: None }
     }
 }
 
@@ -752,6 +803,7 @@ pub(crate) fn page_input(
             look0: look_of(l),
             extras: Extras::default(),
             extras0: Extras::default(),
+            stale: false,
         });
     }
     true
@@ -944,19 +996,26 @@ fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: 
 }
 
 /// The inline editor; returns the edit once the text is applied.
-pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -> Option<Edit> {
+pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, doc: &pdfcraft_engine::Document) -> Option<Edit> {
     // Clicks outside the document (the Format text panel) keep the paragraph open.
     let outside = ctx.input(|i| i.pointer.latest_pos()).is_some_and(|p| !view.viewport_rect().contains(p));
     let page = view.line_editor.as_ref()?.page;
-    let xf = view.page_xform(page)?;
+    // The paragraph's page was deleted in another window: the editor stays, beside the page area.
+    let gone = page >= info.pages.len();
+    let xf = view.page_xform(page);
+    if xf.is_none() && !gone {
+        return None; // scrolled away
+    }
+    let viewport = view.viewport_rect();
     let hold = view.objects.hold_editor;
     // An OCR word is invisible text over a scan: the textless background still shows the scanned
     // word, so the editor covers it, as the applied edit will.
-    let background_ready = view
-        .line_editor
-        .as_ref()
-        .is_some_and(|ed| view.text_background.ready(ed.page, ed.block) && !ed.source.as_ref().is_some_and(|(b, _)| b.invisible));
-    let draft_rect = view.text_background.draft_rect.map(|r| xf.user_rect(info, page, r.map(|v| v as f32)));
+    let background_ready = !gone
+        && view
+            .line_editor
+            .as_ref()
+            .is_some_and(|ed| view.text_background.ready(ed.page, ed.block) && !ed.source.as_ref().is_some_and(|(b, _)| b.invisible));
+    let draft_rect = xf.as_ref().and_then(|xf| view.text_background.draft_rect.map(|r| xf.user_rect(info, page, r.map(|v| v as f32))));
     let ed = view.line_editor.as_mut()?;
     if hold {
         ed.focus = true;
@@ -969,14 +1028,23 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
         ctx.request_repaint();
         return None;
     }
-    ed.rect = xf.user_rect(info, ed.page, ed.source_rect);
-    ed.max_width = ed.rect.width();
-    let scale = (ed.rect.width() / (ed.source_rect[2] - ed.source_rect[0]).abs().max(0.01)).max(0.01);
-    ed.size = (ed.look.size as f32 * scale).clamp(1.0, 300.0);
+    let scale = if let Some(xf) = &xf {
+        ed.rect = xf.user_rect(info, ed.page, ed.source_rect);
+        ed.max_width = ed.rect.width();
+        let scale = (ed.rect.width() / (ed.source_rect[2] - ed.source_rect[0]).abs().max(0.01)).max(0.01);
+        ed.size = (ed.look.size as f32 * scale).clamp(1.0, 300.0);
+        scale
+    } else {
+        ed.rect = Rect::from_min_size(viewport.left_top() + egui::vec2(24.0, 24.0), egui::vec2(280.0, 60.0));
+        ed.max_width = ed.rect.width();
+        ed.size = 14.0;
+        1.0
+    };
+    let page_right = xf.as_ref().map_or_else(|| ed.rect.right(), |xf| xf.rect.right());
     let font = editor_font(&ed.look, ed.size);
     let text_color = color32(ed.look.color);
     let mut done = None;
-    egui::Area::new(egui::Id::new("edit-text-line")).order(egui::Order::Foreground).fixed_pos(Pos2::new(ed.rect.left(), ed.rect.top())).show(
+    egui::Area::new(crate::windows::wid("edit-text-line")).order(egui::Order::Foreground).fixed_pos(Pos2::new(ed.rect.left(), ed.rect.top())).show(
         ctx,
         |ui| {
             // The editor opens at the source size. Once text changes, show the real draft
@@ -987,7 +1055,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             let width = if !ed.multiline && single_run && !ed.text.contains('\n') && ed.has_changes() {
                 let job = editor_job(ui, ed, &ed.text, scale, f32::INFINITY);
                 let natural = ui.fonts_mut(|f| f.layout_job(job)).size().x;
-                natural.max(ed.size * 0.4).min((xf.rect.right() - ed.rect.left() - 36.0 * scale).max(ed.rect.width()))
+                natural.max(ed.size * 0.4).min((page_right - ed.rect.left() - 36.0 * scale).max(ed.rect.width()))
             } else {
                 ed.rect.width().max(1.0)
             };
@@ -1017,7 +1085,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                 let mut layouter =
                     |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| editor_galley(ui, &snapshot, text.as_str(), scale, wrap_width);
                 let output = egui::TextEdit::multiline(&mut ed.text)
-                    .id(egui::Id::new("edit-text-line-input"))
+                    .id(crate::windows::wid("edit-text-line-input"))
                     .font(font.clone())
                     .margin(egui::Margin::ZERO)
                     .layouter(&mut layouter)
@@ -1050,6 +1118,10 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             });
         },
     );
+    if done == Some(true) && view.line_editor.as_mut().is_some_and(|ed| ed.must_check_first(info, doc)) {
+        view.elsewhere_notice = true;
+        done = None;
+    }
     match done {
         Some(apply) => {
             let ed = view.line_editor.take()?;
@@ -1104,6 +1176,7 @@ mod tests {
             look0: look_of(&block),
             extras: Extras::default(),
             extras0: Extras::default(),
+            stale: false,
         };
         let ctx = egui::Context::default();
         let mut background = TextBackground::default();

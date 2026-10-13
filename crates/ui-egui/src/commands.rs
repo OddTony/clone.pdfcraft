@@ -84,8 +84,24 @@ impl PdfCraftApp {
         if self.combine_showing() && matches!(spec.needs, commands::Needs::Undo | commands::Needs::Redo) {
             return self.combine_can_undo(spec.needs == commands::Needs::Undo);
         }
+        if let Some(enabled) = self.window_command_enabled(spec.id) {
+            return enabled;
+        }
         commands::is_enabled(spec, &self.session, self.active_ids().map(|(_, id)| id))
             && (spec.needs != commands::Needs::TwoPageView || self.active.and_then(|i| self.views.get(i)).is_some_and(crate::DocView::cover_applies))
+    }
+
+    /// Whether a window command is available: `None` for other commands. Windows exist on the
+    /// desktop only; merging and closing need a second window, moving a tab a second tab.
+    fn window_command_enabled(&self, id: &str) -> Option<bool> {
+        let desktop = !cfg!(target_arch = "wasm32");
+        match id {
+            "window.new_view" => Some(desktop && self.active.is_some()),
+            "window.move_tab_new" => Some(desktop && self.active.is_some() && self.views.len() > 1),
+            "window.merge_all" => Some(desktop && self.window_count() > 1),
+            "window.close" => Some(desktop && self.window_count() > 1),
+            _ => None,
+        }
     }
 
     /// Run a registered command by id. Returns `false` when the id is unknown or the command
@@ -143,13 +159,25 @@ impl PdfCraftApp {
             return false;
         }
         let active = self.active;
-        let targets = active.map(|i| self.views[i].target_pages()).unwrap_or_default();
+        let targets = active.and_then(|i| self.views.get(i)).map(|v| v.target_pages()).unwrap_or_default();
         match id {
             "ui.dock.reset" => {
                 if let Err(error) = crate::docking::command(self, true, &serde_json::Value::Null) {
                     self.notify(error);
                 }
             }
+            "window.new_view" | "window.move_tab_new" => {
+                if let Some((_, doc)) = self.active_ids() {
+                    let from = self.current_window;
+                    self.pending_window_ops.push(if id == "window.new_view" {
+                        crate::WindowOp::NewView { doc, from }
+                    } else {
+                        crate::WindowOp::MoveTab { doc, from, to: None }
+                    });
+                }
+            }
+            "window.merge_all" => self.pending_window_ops.push(crate::WindowOp::MergeAll),
+            "window.close" => self.pending_window_ops.push(crate::WindowOp::Close(self.current_window)),
             "file.open" => self.open_dialog(),
             "file.open_recent" => match self.recent.first().map(|r| r.path.clone()) {
                 // The palette runs commands without a submenu: open the most recent file.
@@ -216,7 +244,7 @@ impl PdfCraftApp {
             "view.focus_page_input" => {
                 if let (Some(ctx), Some(view)) = (self.ctx.clone(), active.and_then(|i| self.views.get(i))) {
                     // The page box in the toolbar (chrome.rs); select its number so typing replaces it.
-                    let id = egui::Id::new("page-input");
+                    let id = crate::windows::wid("page-input");
                     ctx.memory_mut(|m| m.request_focus(id));
                     let mut state = egui::TextEdit::load_state(&ctx, id).unwrap_or_default();
                     let len = view.page_input.chars().count();
@@ -664,6 +692,9 @@ impl PdfCraftApp {
             }
             if s.mac_ctrl {
                 m |= Modifiers::CTRL;
+            }
+            if s.alt {
+                m |= Modifiers::ALT;
             }
             if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, key))) {
                 if form_typing {

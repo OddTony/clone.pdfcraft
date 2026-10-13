@@ -135,6 +135,7 @@ impl PdfCraftApp {
         #[cfg(target_arch = "wasm32")]
         work();
         self.action_run = Some(progress);
+        self.job_started("action");
         self.poll_action();
     }
 

@@ -190,6 +190,7 @@ impl PdfCraftApp {
         #[cfg(target_arch = "wasm32")]
         work();
         self.ocr_run = Some(OcrRun { doc: id, progress });
+        self.job_started("ocr");
         self.poll_ocr();
     }
 
@@ -276,6 +277,7 @@ impl PdfCraftApp {
         #[cfg(target_arch = "wasm32")]
         work();
         self.ocr_batch = Some(progress);
+        self.job_started("ocr");
         self.poll_ocr();
     }
 

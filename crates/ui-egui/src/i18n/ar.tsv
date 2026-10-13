@@ -2373,3 +2373,20 @@ animation effects	Off	معطّلة
 	This document is trying to open a local file:	يحاول هذا المستند فتح ملف محلي:
 	Move tag earlier	نقل العلامة للأعلى
 	Move tag later	نقل العلامة للأسفل
+	Window	النافذة
+	New window	نافذة جديدة
+	Move tab to new window	نقل علامة التبويب إلى نافذة جديدة
+	Merge all windows	دمج كل النوافذ
+	Close window	إغلاق النافذة
+	In new window	في نافذة جديدة
+	Move to new window	نقل إلى نافذة جديدة
+	Move to window	نقل إلى نافذة
+	Close other tabs	إغلاق علامات التبويب الأخرى
+	Close tabs to the right	إغلاق علامات التبويب على اليمين
+	Copy path	نسخ المسار
+	Show in Finder	إظهار في Finder
+	Show in Explorer	إظهار في مستكشف الملفات
+	Show in folder	إظهار في المجلد
+	The document was changed in another window. Check your text, then apply it again.	تم تغيير المستند في نافذة أخرى. راجع نصك ثم طبّقه مرة أخرى.
+	Too many windows are open	عدد النوافذ المفتوحة كبير جدًا
+	Too many windows for this document	عدد النوافذ لهذا المستند كبير جدًا

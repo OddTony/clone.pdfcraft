@@ -130,6 +130,8 @@ pub mod theme;
 pub mod ui_scale;
 pub mod updates;
 mod wheel_pager;
+pub mod windows;
+pub use windows::{WindowId, WindowOp, WindowState};
 mod widgets;
 pub mod window_controls;
 
@@ -140,6 +142,12 @@ use pdfcraft_engine::{DocId, Session};
 
 pub use canvas::{DocView, RasterMemory};
 pub use editing::{CloseRequest, SaveTarget};
+
+/// Set the pointer position the page grid uses for files dragged over a window (tests).
+#[doc(hidden)]
+pub fn test_set_drop_pointer(pos: Option<egui::Pos2>) {
+    drag_pointer::set_hint(pos);
+}
 pub use files::{ExtractDraft, FilePurpose, FileRequest, RotateDraft, SplitDraft, SplitMode, SplitPlan};
 pub use recovery::{AUTOSAVE_SECS, RecoveryMeta, RecoveryStore};
 use theme::{ThemeKind, ThemePreference};
@@ -425,6 +433,8 @@ struct PendingOpen {
     after_open: Option<pdfcraft_render::RemoteDestination>,
     recovered: Option<RecoveryMeta>,
     then: Option<&'static str>,
+    /// The window the open was asked for in: the document opens there.
+    window: WindowId,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -466,322 +476,410 @@ pub struct RecentFile {
 }
 
 pub struct PdfCraftApp {
+    /// [global] The docked panels' layout (shared by every window).
     pub docking: docking::Workspace,
+    /// [global]
     pub(crate) pending_panel_reveals: Vec<docking::Panel>,
+    /// [global]
     pub session: Session,
+    /// [window]
     pub views: Vec<DocView>,
+    /// [global] Recently closed tabs, for reopening.
     pub(crate) closed_tabs: Vec<String>,
-    /// `None` shows the Home tab.
+    /// [window] `None` shows the Home tab.
     pub active: Option<usize>,
+    /// [window]
     pub mode: Mode,
-    /// Workspace used for newly opened PDFs; independent of PDF Initial View metadata.
+    /// [global] Workspace used for newly opened PDFs; independent of PDF Initial View metadata.
     pub default_mode: Mode,
-    /// Page display and zoom for newly opened PDFs that don't ask for their own (Preferences ▸
+    /// [global] Page display and zoom for newly opened PDFs that don't ask for their own (Preferences ▸
     /// Documents and view). Continuous scrolling at fit width by default, which never snaps
     /// between pages.
     pub view_defaults: canvas::ViewDefaults,
-    /// The unit page sizes and margins are shown in (Preferences ▸ Documents and view).
+    /// [global] The unit page sizes and margins are shown in (Preferences ▸ Documents and view).
     pub units: units::Unit,
-    /// The Preferences ▸ Date format box while it's being edited, or while it holds an invalid
+    /// [global] The Preferences ▸ Date format box while it's being edited, or while it holds an invalid
     /// pattern (the session keeps the last valid one).
     pub date_format_draft: Option<String>,
-    /// Explicit CLI/control mode lasts for this session and is never persisted.
+    /// [window] Explicit CLI/control mode lasts for this session and is never persisted.
     mode_override: Option<Mode>,
+    /// [window]
     pub left: LeftPanel,
+    /// [window]
     pub left_open: bool,
+    /// [window]
     pub right: Option<RightPanel>,
-    /// The right panel that was open when the user switched to Read mode, which starts with the
+    /// [window] The right panel that was open when the user switched to Read mode, which starts with the
     /// panes closed; leaving Read mode brings it back unless the user opened or closed a pane in
     /// Read mode meanwhile.
     right_before_read: Option<RightPanel>,
-    /// The user closed the Comments panel, so picking a comment tool leaves it closed until they
+    /// [global] The user closed the Comments panel, so picking a comment tool leaves it closed until they
     /// open it again (#225). Remembered across restarts.
     pub comments_panel_closed: bool,
-    /// The user closed the right panel, so opening a document leaves it closed instead of
+    /// [global] The user closed the right panel, so opening a document leaves it closed instead of
     /// showing its comments or bookmarks (#1590). Remembered across restarts.
     pub right_panel_closed: bool,
+    /// [window]
     pub quick_tool: QuickTool,
-    /// The tool to go back to when Space, held for a temporary Hand, is released.
+    /// [window] The tool to go back to when Space, held for a temporary Hand, is released.
     space_hand: Option<QuickTool>,
-    /// Comment author, per-tool colours and widths, pin.
+    /// [global] Comment author, per-tool colours and widths, pin.
     pub comment_prefs: comments::CommentPrefs,
-    /// Resolved colours, including the current OS theme when following the system.
+    /// [global] Resolved colours, including the current OS theme when following the system.
     pub theme: ThemeKind,
+    /// [global]
     pub theme_preference: ThemePreference,
-    /// The reading-colours preference (Preferences ▸ Reading colours): applied to every open
+    /// [global] The reading-colours preference (Preferences ▸ Reading colours): applied to every open
     /// document, and documents open with it (Acrobat's Replace Document Colors).
     pub reading_colors: pdfcraft_render::ReadingColors,
-    /// The Linux portal is enabled only by the native host, and starts on the first System choice.
+    /// [global] The Linux portal is enabled only by the native host, and starts on the first System choice.
     #[cfg(target_os = "linux")]
     desktop_theme: Option<pdfcraft_platform::desktop_theme::DesktopTheme>,
+    /// [global]
     #[cfg(target_os = "linux")]
     desktop_theme_enabled: bool,
-    /// How far a mouse-wheel notch scrolls.
+    /// [global] How far a mouse-wheel notch scrolls.
     pub scroll_speed: scroll_speed::ScrollSpeed,
-    /// Preferences ▸ Animation effects: on, off, or as the system's animation setting says.
+    /// [global] Preferences ▸ Animation effects: on, off, or as the system's animation setting says.
     pub animation_effects: motion::AnimationEffects,
-    /// Whether the system asked for no animations, and how the desktop app asks it.
+    /// [global] Whether the system asked for no animations, and how the desktop app asks it.
     pub motion: motion::Motion,
-    /// Interface language preference: `auto` (follow the system) or a code from [`i18n::LANGUAGES`].
+    /// [global] Interface language preference: `auto` (follow the system) or a code from [`i18n::LANGUAGES`].
     pub language: String,
-    /// Preferences ▸ Interface size as a factor, or `None` to follow [`Self::system_text_scale`].
+    /// [global] Preferences ▸ Interface size as a factor, or `None` to follow [`Self::system_text_scale`].
     pub ui_scale: Option<f32>,
-    /// The desktop's text scaling (GNOME's text scaling factor), which the desktop app reads at
+    /// [global] The desktop's text scaling (GNOME's text scaling factor), which the desktop app reads at
     /// launch. 1.0 elsewhere, so tests and screenshots don't depend on the machine.
     pub system_text_scale: f32,
-    /// The interface size last given to egui ([`ui_scale::sync`]).
+    /// [global] The interface size last given to egui ([`ui_scale::sync`]).
     ui_scale_applied: Option<f32>,
-    /// Preferences: bake Fill & Sign marks into the page when saving. Off, so a normal save stays editable.
+    /// [global] Preferences: bake Fill & Sign marks into the page when saving. Off, so a normal save stays editable.
     pub flatten_fill_sign_on_save: bool,
-    /// Point size for new Fill & Sign text and dates, kept across launches.
+    /// [global] Point size for new Fill & Sign text and dates, kept across launches.
     pub fill_text_size: f64,
+    /// [window]
     pub dialog: Option<Dialog>,
-    /// How to ask for the latest release (the desktop app sets it; see `updates`).
+    /// [global] How to ask for the latest release (the desktop app sets it; see `updates`).
     pub update_source: Option<updates::UpdateSource>,
+    /// [global]
     pub(crate) updates: updates::Updates,
-    /// Lists the Print dialog's printers in the background (the desktop app sets it; see
+    /// [global] Lists the Print dialog's printers in the background (the desktop app sets it; see
     /// [`PrinterSource`]).
     pub printer_source: Option<PrinterSource>,
     // A browser has no background print work: the type is empty there.
+    /// [global]
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) print_tasks: print_ui::PrintTasks,
+    /// [window]
     pub palette_open: bool,
+    /// [window]
     pub palette_query: String,
+    /// [window]
     pub all_tools_expanded: bool,
+    /// [global]
     pub recent: Vec<RecentFile>,
-    /// Preferences: reopen the files that were open when PdfCraft last closed (#442).
+    /// [global] Preferences: reopen the files that were open when PdfCraft last closed (#442).
     pub reopen_last_session: bool,
-    /// The files open when PdfCraft last closed, read from the settings for
+    /// [global] The files open when PdfCraft last closed, read from the settings for
     /// [`PdfCraftApp::reopen_last_files`].
     pub last_session: last_session::LastSession,
-    /// Quitting closes unsaved tabs one by one: what was open when the quit began.
+    /// [global] Quitting closes unsaved tabs one by one: what was open when the quit began.
     quit_session: Option<last_session::LastSession>,
-    /// Preferences: reload a document when its file changes on disk (#431).
+    /// [global] Preferences: reload a document when its file changes on disk (#431).
     pub reload_changed_files: bool,
-    /// Open documents' files, watched for changes on disk.
+    /// [global] Open documents' files, watched for changes on disk.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) watch: file_watch::FileWatch,
-    /// One native worker prepares opened documents without owning app or session state.
+    /// [global] One native worker prepares opened documents without owning app or session state.
     #[cfg(not(target_arch = "wasm32"))]
     open_worker: Option<open_worker::OpenWorker>,
+    /// [global]
     #[cfg(not(target_arch = "wasm32"))]
     pending_opens: Vec<PendingOpen>,
+    /// [global]
     #[cfg(not(target_arch = "wasm32"))]
     next_open_token: u64,
+    /// [global]
     #[cfg(all(test, not(target_arch = "wasm32")))]
     open_prepare_gate: Option<std::sync::Arc<open_worker::PrepareGate>>,
-    /// Folders pinned to Home, and what they held when last listed.
+    /// [global] Folders pinned to Home, and what they held when last listed.
     pub pinned: folders_ui::PinnedFolders,
+    /// [window]
     pub toast: Option<(String, f64)>,
-    /// Whether the macOS title bar is drawn by us (traffic lights over our tab strip).
+    /// [global] Whether the macOS title bar is drawn by us (traffic lights over our tab strip).
     pub integrated_titlebar: bool,
-    /// Set when the desktop leaves the window frame to the app (GNOME on Wayland): the tab strip
+    /// [global] Set when the desktop leaves the window frame to the app (GNOME on Wayland): the tab strip
     /// carries these window buttons and the window's edges resize it.
     pub window_controls: Option<window_controls::Layout>,
-    /// Preferences ▸ Use system title bar: where `window_controls` is set, give the window back
+    /// [global] Preferences ▸ Use system title bar: where `window_controls` is set, give the window back
     /// winit's frame instead of drawing the header bar (#1001).
     pub system_title_bar: bool,
-    /// Whether the window currently has the app's header bar (`None` until the first frame).
+    /// [global] Whether the window currently has the app's header bar (`None` until the first frame).
     app_frame_shown: Option<bool>,
+    /// [window]
     pub password_prompt: Option<PasswordPrompt>,
+    /// [window]
     pub unlock_prompt: Option<UnlockPrompt>,
+    /// [window]
     pub full_screen: bool,
-    /// Files delivered asynchronously (web drag-and-drop, web file picker).
+    /// [global] Files delivered asynchronously (web drag-and-drop, web file picker).
     pub inbox: Inbox,
-    /// The browser's startup `?file=` download. Unlike a deliberate Open or drop, a late
+    /// [global] The browser's startup `?file=` download. Unlike a deliberate Open or drop, a late
     /// arrival opens in the background once the user has started working (#171).
     pub startup_inbox: Inbox,
+    /// [global]
     startup_superseded: bool,
-    /// Asynchronous opens that failed (web `?file=` fetches), shown as a notice.
+    /// [global] Asynchronous opens that failed (web `?file=` fetches), shown as a notice.
     pub failed_inbox: FailedInbox,
-    /// Mirrors "some document has unsaved work" each frame, so the web page's `beforeunload` handler can read it (#812).
+    /// [global] Mirrors "some document has unsaved work" each frame, so the web page's `beforeunload` handler can read it (#812).
     pub unsaved_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// Requests from the operating system, polled every frame (macOS Apple events).
+    /// [global] Requests from the operating system, polled every frame (macOS Apple events).
     pub os_events: Option<OsEventsFn>,
-    /// Save delivers to the embedding page instead of downloading (web, see [`HostSaveFn`]).
+    /// [global] Save delivers to the embedding page instead of downloading (web, see [`HostSaveFn`]).
     pub host_save: Option<HostSaveFn>,
-    /// Reports unsaved work to the embedding page (web, see [`HostDirtyFn`]).
+    /// [global] Reports unsaved work to the embedding page (web, see [`HostDirtyFn`]).
     pub host_dirty: Option<HostDirtyFn>,
-    /// A pending "save changes?" question (closing a dirty tab or quitting).
+    /// [window] A pending "save changes?" question (closing a dirty tab or quitting).
     pub close_request: Option<CloseRequest>,
-    /// Save to this path instead of asking (tests and automation).
+    /// [window] "Close other tabs" and "Close tabs to the right": the documents still to ask about,
+    /// after the one being asked now.
+    pub(crate) close_queue: Option<editing::CloseQueue>,
+    /// [global] Save to this path instead of asking (tests and automation).
     pub save_override: Option<String>,
-    /// Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
+    /// [window] Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
     pub props_draft: Option<(DocId, [String; 4])>,
-    /// Document Properties ▸ Initial View (and reading options) being edited.
+    /// [window] Document Properties ▸ Initial View (and reading options) being edited.
     pub view_draft: Option<(DocId, pdfcraft_engine::InitialView)>,
-    /// Files picked asynchronously for combine / insert (web).
+    /// [global] Files picked asynchronously for combine / insert (web).
     pub requests: files::Requests,
-    /// Native file pickers in flight (they never block the frame; see `pickers`).
+    /// [global] Native file pickers in flight (they never block the frame; see `pickers`).
     #[cfg(not(target_arch = "wasm32"))]
     pickers: pickers::Pickers,
-    /// Pick these files instead of showing a picker (tests and automation).
+    /// [global] Pick these files instead of showing a picker (tests and automation).
     #[cfg(not(target_arch = "wasm32"))]
     pub pick_override: Option<Vec<String>>,
-    /// Write exported files (split) here instead of asking (tests and automation).
+    /// [global] Write exported files (split) here instead of asking (tests and automation).
     pub export_dir_override: Option<String>,
-    /// Split dialog settings.
+    /// [window] Split dialog settings.
     pub split_draft: SplitDraft,
+    /// [window]
     pub extract_draft: ExtractDraft,
+    /// [window]
     pub rotate_draft: RotateDraft,
-    /// Summarize Comments: sort order.
+    /// [global] Summarize Comments: sort order.
     pub summary_sort: pdfcraft_engine::SummarySort,
-    /// The signing dialogs' state.
+    /// [window] The signing dialogs' state.
     pub sign_draft: Option<SignDraft>,
-    /// Digital ID files the user has created or added.
+    /// [global] Digital ID files the user has created or added.
     pub digital_ids: Vec<DigitalIdEntry>,
-    /// Signatures panel: expanded entries (field names).
+    /// [global] Signatures panel: expanded entries (field names).
     pub sig_expanded: Vec<String>,
-    /// Accessibility Checker: options, the last check, and rules skipped by hand.
+    /// [global] Accessibility Checker: options, the last check, and rules skipped by hand.
     pub a11y_options: a11y_ui::A11yOptions,
-    /// Scan & OCR: the Recognize Text choices, the running job, and (tests) run it inline.
+    /// [window] Scan & OCR: the Recognize Text choices, the running job, and (tests) run it inline.
     pub ocr_draft: ocr_ui::OcrDraft,
+    /// [global]
     pub ocr_run: Option<ocr_ui::OcrRun>,
+    /// [global]
     pub ocr_batch: Option<std::sync::Arc<std::sync::Mutex<ocr_ui::BatchProgress>>>,
-    /// Background jobs (OCR, actions, listing pinned folders) run inline instead (tests).
+    /// [global] Background jobs (OCR, actions, listing pinned folders) run inline instead (tests).
     pub run_inline: bool,
-    /// Action Wizard: the user's actions, the dialog state, the running action and (tests) the
+    /// [global] Action Wizard: the user's actions, the dialog state, the running action and (tests) the
     /// files to use instead of a picker.
     pub custom_actions: Vec<pdfcraft_engine::actions::Action>,
+    /// [window]
     pub wizard: actions_ui::Wizard,
+    /// [global]
     pub action_run: Option<std::sync::Arc<std::sync::Mutex<actions_ui::RunProgress>>>,
+    /// [global]
     pub action_files_override: Option<Vec<String>>,
-    /// Standards ▸ PDF/A: level and last result.
+    /// [window] Standards ▸ PDF/A: level and last result.
     pub pdfa: standards_ui::PdfaState,
-    /// Compare files: the chosen older document and the last result.
+    /// [window] Compare files: the chosen older document and the last result.
     pub compare_old: Option<DocId>,
+    /// [window]
     pub compare: Option<compare_ui::CompareState>,
-    /// The JavaScript console and the Document JavaScripts draft.
+    /// [global] The JavaScript console and the Document JavaScripts draft.
     pub js_console: js_ui::JsConsole,
+    /// [window]
     pub doc_js: js_ui::DocJsDraft,
+    /// [window]
     pub a11y: a11y_ui::A11yState,
+    /// [global]
     pub(crate) tags_state: tags_ui::State,
-    /// Rules skipped by hand, for the document they were skipped in.
+    /// [global] Rules skipped by hand, for the document they were skipped in.
     pub a11y_skipped: std::collections::HashSet<(DocId, pdfcraft_engine::a11y::Rule)>,
+    /// [window]
     pub alt_draft: a11y_ui::AltDraft,
-    /// List the OS key store's signing identities among the digital IDs (the desktop app).
+    /// [global] List the OS key store's signing identities among the digital IDs (the desktop app).
     pub os_key_store_ids: bool,
+    /// [window]
     pub cert_viewer: Option<sign_ui::CertViewer>,
-    /// The last space audit.
+    /// [window] The last space audit.
     pub space_audit: Vec<pdfcraft_engine::optimize::SpaceUse>,
-    /// Combine files: the files staged so far.
+    /// [window] Combine files: the files staged so far.
     pub combine_draft: Vec<combine_ui::CombineFile>,
-    /// The combine list's field-name conflict preview (computed once per list, never saved).
+    /// [global] The combine list's field-name conflict preview (computed once per list, never saved).
     pub combine_conflicts: combine_ui::ConflictPreview,
-    /// The Combine files tab: whether it is open, shown, its selection and undo history.
+    /// [window] The Combine files tab: whether it is open, shown, its selection and undo history.
     pub combine_tab: combine_ui::CombineTab,
-    /// The Combine files table's column order and widths (kept in the settings).
+    /// [global] The Combine files table's column order and widths (kept in the settings).
     pub combine_columns: combine_ui::Columns,
-    /// Combine files as thumbnails or as the table (kept in the settings).
+    /// [global] Combine files as thumbnails or as the table (kept in the settings).
     pub combine_view: combine_ui::CombineView,
-    /// How large the Combine grid draws its cards (1.0 = the usual; kept in the settings). Set
+    /// [global] How large the Combine grid draws its cards (1.0 = the usual; kept in the settings). Set
     /// with [`PdfCraftApp::set_combine_zoom`].
     pub combine_zoom: f32,
-    /// The Combine grid's thumbnails: rendered off the UI thread, a few at a time.
+    /// [global] The Combine grid's thumbnails: rendered off the UI thread, a few at a time.
     pub(crate) combine_thumbs: combine_grid::Thumbs,
-    /// Images waiting for the resolution choice (released on cancel).
+    /// [window] Images waiting for the resolution choice (released on cancel).
     pub image_import: Option<create_ui::ImageImport>,
-    /// The custom stamp library, and the stamp being created.
+    /// [global] The custom stamp library, and the stamp being created.
     pub custom_stamps: Vec<stamps_ui::CustomStamp>,
+    /// [window]
     pub stamp_draft: stamps_ui::StampDraft,
-    /// PDF Optimizer choices.
+    /// [window] PDF Optimizer choices.
     pub optimize_draft: OptimizeDraft,
-    /// The running optimization (Optimize PDF ▸ Advanced optimization).
+    /// [global] The running optimization (Optimize PDF ▸ Advanced optimization).
     pub optimize_run: Option<optimize_ui::OptimizeRun>,
-    /// A background job's progress card (see [`widgets::progress_notice`]).
+    /// [window] A background job's progress card (see [`widgets::progress_notice`]).
     pub progress_notice: Option<widgets::ProgressNotice>,
-    /// Pages copied or cut in Organize Pages, ready to paste (into any document).
+    /// [global] Pages copied or cut in Organize Pages, ready to paste (into any document).
     pub page_clipboard: Option<PageClip>,
-    /// Files dropped on the page grid, waiting for the pointer to say which gap they go to.
+    /// [window] Files dropped on the page grid, waiting for the pointer to say which gap they go to.
     grid_drop: Option<GridDrop>,
-    /// The last snapshot (width, height, RGBA); `system_clipboard` also puts it on the
+    /// [global] The last snapshot (width, height, RGBA); `system_clipboard` also puts it on the
     /// system clipboard (tests turn that off).
     pub last_snapshot: Option<(u32, u32, pdfcraft_render::Pixels)>,
-    /// The last image copied with Copy Image (width, height, straight RGBA), also put on the
+    /// [global] The last image copied with Copy Image (width, height, straight RGBA), also put on the
     /// system clipboard when `system_clipboard` is on.
     pub last_copied_image: Option<(u32, u32, Vec<u8>)>,
-    /// The last image copied in its original format (file name, bytes), also put on the
+    /// [global] The last image copied in its original format (file name, bytes), also put on the
     /// system clipboard as a file when `system_clipboard` is on.
     pub last_copied_file: Option<(String, Vec<u8>)>,
+    /// [global]
     pub system_clipboard: bool,
-    /// Attach file: the file to attach instead of asking (tests, automation).
+    /// [global] Attach file: the file to attach instead of asking (tests, automation).
     pub attach_override: Option<(String, Vec<u8>)>,
-    /// Duplicate Field: which field and onto which pages.
+    /// [window] Duplicate Field: which field and onto which pages.
     pub duplicate_draft: Option<DuplicateDraft>,
-    /// Prepare a form ▸ Preview: fill the form instead of editing its fields.
+    /// [window] Prepare a form ▸ Preview: fill the form instead of editing its fields.
     pub form_preview: bool,
-    /// Where autosaves go (`None`: autosave off, e.g. on the web and in tests).
+    /// [global] Where autosaves go (`None`: autosave off, e.g. on the web and in tests).
     pub recovery: Option<RecoveryStore>,
-    /// Entries left by a previous session, offered in the Recovery dialog.
+    /// [global] Entries left by a previous session, offered in the Recovery dialog.
     pub recoverable: Vec<RecoveryMeta>,
+    /// [global]
     recovery_keys: std::collections::HashMap<DocId, String>,
+    /// [global]
     last_autosave: f64,
+    /// [global]
     allow_quit: bool,
-    /// Shortcuts pressed while a text field had the keyboard, run on the next frame (see
+    /// [window] Shortcuts pressed while a text field had the keyboard, run on the next frame (see
     /// `registry_shortcuts`).
     deferred_commands: Vec<(&'static str, Option<DocId>)>,
-    /// The dialog seen at the last check, and a counter bumped whenever it changes (see
+    /// [window] The dialog seen at the last check, and a counter bumped whenever it changes (see
     /// [`Self::dialog_epoch`]).
     dialog_seen: Option<Dialog>,
+    /// [window]
     dialog_epoch: u64,
-    /// The egui context, for commands that change window or theme state.
+    /// [global] The egui context, for commands that change window or theme state.
     ctx: Option<egui::Context>,
+    /// [global]
     styled: bool,
+    /// [global]
     fonts_ready: bool,
-    /// The CJK fallback order the installed fonts follow (see `theme::installed_font_definitions`).
+    /// [global] The CJK fallback order the installed fonts follow (see `theme::installed_font_definitions`).
     fonts_cjk: theme::CjkPreference,
-    /// The window title last sent to the platform.
+    /// [window] The window title last sent to the platform.
     pub window_title: String,
-    /// The UI control channel, when enabled (`--control`; off by default).
+    /// [global] The UI control channel, when enabled (`--control`; off by default).
     control: Option<control::Control>,
-    /// A bookmark being renamed in the Bookmarks panel: (path, text so far).
+    /// [window] A bookmark being renamed in the Bookmarks panel: (path, text so far).
     pub bookmark_rename: Option<(Vec<usize>, String)>,
-    /// Number pages dialog settings (1-based pages).
+    /// [window] Number pages dialog settings (1-based pages).
     pub number_draft: NumberDraft,
-    /// Protect Using Password dialog state.
+    /// [window] Protect Using Password dialog state.
     pub protect_draft: protect::ProtectDraft,
-    /// Set Page Boxes dialog state.
+    /// [window] Set Page Boxes dialog state.
     pub boxes_draft: pageboxes::BoxesDraft,
-    /// Header & footer / watermark / background dialog state.
+    /// [window] Header & footer / watermark / background dialog state.
     pub marks_draft: marks_ui::MarksDraft,
-    /// Export dialog settings.
+    /// [window] Export dialog settings.
     pub export_draft: export_ui::ExportDraft,
-    /// A running export's progress.
+    /// [global] A running export's progress.
     export_status: Option<export_ui::ExportStatus>,
-    /// The saved Fill & Sign signature and initials (drawn or typed).
+    /// [global] The saved Fill & Sign signature and initials (drawn or typed).
     pub signature: Option<fill_sign::SavedSig>,
+    /// [global]
     pub initials: Option<fill_sign::SavedSig>,
-    /// The Create signature / initials dialog, and its typed preview.
+    /// [window] The Create signature / initials dialog, and its typed preview.
     pub signature_draft: fill_sign::SigDraft,
+    /// [window]
     pub(crate) signature_preview: Option<(fill_sign::SavedSig, egui::TextureHandle)>,
-    /// The Scan tab's photo, keyed by its version.
+    /// [global] The Scan tab's photo, keyed by its version.
     pub(crate) signature_photo: Option<(u64, egui::TextureHandle)>,
+    /// [global]
     pub(crate) saved_signature_previews: [Option<(fill_sign::SavedSig, egui::TextureHandle)>; 2],
-    /// What visible digital signatures show on their left, and its preview in Sign as.
+    /// [global] What visible digital signatures show on their left, and its preview in Sign as.
     pub sign_graphic: sign_ui::SignGraphic,
+    /// [global]
     pub(crate) sign_graphic_preview: Option<(fill_sign::SavedSig, egui::TextureHandle)>,
+    /// [window]
     #[cfg(target_arch = "wasm32")]
     pub(crate) signature_images: fill_sign::ImageInbox,
-    /// The Comment Properties dialog's state.
+    /// [window] The Comment Properties dialog's state.
     pub comment_props: Option<comment_props::PropsDraft>,
+    /// [window]
     pub field_props: Option<prepare::FieldDraft>,
+    /// [global]
     pub bulk_field_props: Option<bulk_fields::Draft>,
+    /// [global]
     pub redact_prefs: RedactPrefs,
+    /// [window]
     pub redact_pages_draft: RedactPagesDraft,
+    /// [window]
     pub redact_search: RedactSearchDraft,
+    /// [window]
     pub hidden_draft: HiddenDraft,
+    /// [window]
     pub print_draft: PrintDraft,
+    /// [window]
     pub link_draft: Option<LinkDraft>,
-    /// The style new text gets (Edit a PDF ▸ Format text).
+    /// [global] The style new text gets (Edit a PDF ▸ Format text).
     pub text_style: pdfcraft_engine::AddedText,
-    /// The Replace Pages dialog's state.
+    /// [window] The Replace Pages dialog's state.
     pub replace_draft: Option<files::ReplaceDraft>,
-    /// The last web link the app asked the system to open (tests and automation).
+    /// [global] The last web link the app asked the system to open (tests and automation).
     pub last_opened_url: Option<String>,
-    /// A document asked to open this address; the user hasn't answered yet (#90, #91).
+    /// [window] A document asked to open this address; the user hasn't answered yet (#90, #91).
     pub pending_link: Option<PendingLink>,
-    /// An absolute GoToR target waiting for approval, before any target-file I/O (#1364).
+    /// [window] An absolute GoToR target waiting for approval, before any target-file I/O (#1364).
     pub pending_remote_link: Option<PendingRemoteLink>,
+    /// [window] The main window's state while another window is loaded (empty otherwise).
+    root_state: WindowState,
+    /// [global] The windows besides the main one, their state parked while not loaded.
+    pub(crate) windows: Vec<windows::WindowSlot>,
+    /// [global] The window whose state the fields above hold right now.
+    pub(crate) current_window: WindowId,
+    /// [global] The window that last had the keyboard focus.
+    pub(crate) focused_window: WindowId,
+    /// [global] The id the next window gets.
+    pub(crate) next_window_id: u32,
+    /// [global] Changes to the set of windows, applied after the frame.
+    pub(crate) pending_window_ops: Vec<WindowOp>,
+    /// [global] The icon new windows get (the desktop app sets it).
+    pub window_icon: Option<std::sync::Arc<egui::IconData>>,
+    /// [global] The main window's last reported outer rectangle.
+    pub(crate) root_rect: Option<egui::Rect>,
+    /// [global] The window that started each running background job.
+    job_origin: std::collections::HashMap<&'static str, WindowId>,
+    /// [global] The operating system asked to quit (not just to close the main window).
+    quit_requested: bool,
+    /// [global] Which windows had the keyboard focus last frame.
+    window_had_focus: std::collections::HashMap<WindowId, bool>,
+    /// [global] The number the next view of each document gets.
+    next_view_no: std::collections::HashMap<DocId, u32>,
 }
 
 /// Where in a document a request to open an address came from.
@@ -856,28 +954,99 @@ fn rgb_triple(v: &serde_json::Value) -> Option<[f64; 3]> {
 }
 
 impl PdfCraftApp {
+    /// An app whose interface language is English whatever the machine's locale is: tests find
+    /// widgets by their English labels (`tests/language.rs` keeps tests from using
+    /// [`Self::new`] directly).
+    #[doc(hidden)]
+    pub fn new_for_test() -> Self {
+        let mut app = Self::new();
+        app.language = "en".to_owned();
+        app
+    }
+
     pub fn new() -> Self {
+        let WindowState {
+            views,
+            active,
+            mode,
+            mode_override,
+            left,
+            left_open,
+            right,
+            right_before_read,
+            quick_tool,
+            space_hand,
+            dialog,
+            dialog_seen,
+            dialog_epoch,
+            palette_open,
+            palette_query,
+            all_tools_expanded,
+            toast,
+            password_prompt,
+            unlock_prompt,
+            full_screen,
+            close_request,
+            close_queue,
+            grid_drop,
+            deferred_commands,
+            window_title,
+            combine_tab,
+            combine_draft,
+            bookmark_rename,
+            pending_link,
+            pending_remote_link,
+            progress_notice,
+            image_import,
+            form_preview,
+            cert_viewer,
+            props_draft,
+            view_draft,
+            split_draft,
+            extract_draft,
+            rotate_draft,
+            sign_draft,
+            duplicate_draft,
+            comment_props,
+            field_props,
+            link_draft,
+            replace_draft,
+            number_draft,
+            protect_draft,
+            boxes_draft,
+            marks_draft,
+            export_draft,
+            print_draft,
+            redact_pages_draft,
+            redact_search,
+            hidden_draft,
+            optimize_draft,
+            ocr_draft,
+            alt_draft,
+            doc_js,
+            stamp_draft,
+            signature_draft,
+            signature_preview,
+            wizard,
+            compare_old,
+            compare,
+            pdfa,
+            a11y,
+            space_audit,
+            #[cfg(target_arch = "wasm32")]
+            signature_images,
+        } = WindowState::default();
         Self {
             session: Session::new(),
-            views: Vec::new(),
             closed_tabs: Vec::new(),
-            active: None,
-            mode: Mode::AllTools,
             default_mode: Mode::AllTools,
             view_defaults: Default::default(),
             units: Default::default(),
             date_format_draft: None,
-            mode_override: None,
-            left: LeftPanel::AllTools,
             docking: docking::Workspace::default(),
             pending_panel_reveals: Vec::new(),
-            left_open: true,
-            right: None,
-            right_before_read: None,
             comments_panel_closed: false,
             right_panel_closed: false,
-            quick_tool: QuickTool::Select,
-            space_hand: None,
             comment_prefs: Default::default(),
             theme: ThemeKind::Light,
             theme_preference: ThemePreference::Light,
@@ -895,14 +1064,10 @@ impl PdfCraftApp {
             ui_scale_applied: None,
             flatten_fill_sign_on_save: false,
             fill_text_size: fill_sign::TEXT_SIZE,
-            dialog: None,
             update_source: None,
             updates: updates::Updates::default(),
             printer_source: None,
             print_tasks: print_ui::PrintTasks::default(),
-            palette_open: false,
-            palette_query: String::new(),
-            all_tools_expanded: false,
             recent: Vec::new(),
             reopen_last_session: false,
             last_session: Default::default(),
@@ -919,14 +1084,10 @@ impl PdfCraftApp {
             #[cfg(all(test, not(target_arch = "wasm32")))]
             open_prepare_gate: None,
             pinned: Default::default(),
-            toast: None,
             integrated_titlebar: false,
             window_controls: None,
             system_title_bar: false,
             app_frame_shown: None,
-            password_prompt: None,
-            unlock_prompt: None,
-            full_screen: false,
             inbox: Default::default(),
             startup_inbox: Default::default(),
             startup_superseded: false,
@@ -935,111 +1096,142 @@ impl PdfCraftApp {
             os_events: None,
             host_save: None,
             host_dirty: None,
-            close_request: None,
             save_override: None,
-            props_draft: None,
-            view_draft: None,
             requests: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             pickers: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             pick_override: None,
             export_dir_override: None,
-            split_draft: SplitDraft::default(),
-            extract_draft: ExtractDraft::default(),
-            rotate_draft: RotateDraft::default(),
             summary_sort: Default::default(),
-            sign_draft: None,
             digital_ids: Vec::new(),
             sig_expanded: Vec::new(),
             a11y_options: a11y_ui::A11yOptions::default(),
-            ocr_draft: ocr_ui::OcrDraft::default(),
             ocr_run: None,
             ocr_batch: None,
             run_inline: false,
             custom_actions: Vec::new(),
-            wizard: Default::default(),
             action_run: None,
             action_files_override: None,
-            pdfa: Default::default(),
-            compare_old: None,
-            compare: None,
             js_console: Default::default(),
-            doc_js: Default::default(),
-            a11y: a11y_ui::A11yState::default(),
             tags_state: Default::default(),
             a11y_skipped: Default::default(),
-            alt_draft: Default::default(),
             os_key_store_ids: false,
-            cert_viewer: None,
-            space_audit: Vec::new(),
-            combine_draft: Vec::new(),
             combine_conflicts: Default::default(),
-            combine_tab: Default::default(),
             combine_columns: Default::default(),
             combine_view: Default::default(),
             combine_zoom: 1.0,
             combine_thumbs: Default::default(),
-            image_import: None,
             custom_stamps: Vec::new(),
-            stamp_draft: Default::default(),
-            optimize_draft: OptimizeDraft::default(),
             optimize_run: None,
-            progress_notice: None,
             page_clipboard: None,
-            grid_drop: None,
             last_snapshot: None,
             last_copied_image: None,
             last_copied_file: None,
             system_clipboard: true,
             attach_override: None,
-            duplicate_draft: None,
-            form_preview: false,
-            window_title: String::new(),
             recovery: None,
             recoverable: Vec::new(),
             recovery_keys: Default::default(),
             last_autosave: 0.0,
             allow_quit: false,
-            deferred_commands: Vec::new(),
-            dialog_seen: None,
-            dialog_epoch: 0,
             ctx: None,
             styled: false,
             fonts_ready: false,
             fonts_cjk: theme::CjkPreference::Default,
             control: None,
-            bookmark_rename: None,
             last_opened_url: None,
-            pending_link: None,
-            pending_remote_link: None,
-            protect_draft: Default::default(),
-            boxes_draft: Default::default(),
-            marks_draft: Default::default(),
-            export_draft: Default::default(),
             export_status: None,
             signature: None,
             initials: None,
-            signature_draft: Default::default(),
-            signature_preview: None,
             signature_photo: None,
             saved_signature_previews: [None, None],
             sign_graphic: sign_ui::SignGraphic::Name,
             sign_graphic_preview: None,
-            #[cfg(target_arch = "wasm32")]
-            signature_images: Default::default(),
-            comment_props: None,
-            field_props: None,
             bulk_field_props: None,
             redact_prefs: RedactPrefs::default(),
-            redact_pages_draft: RedactPagesDraft::default(),
-            redact_search: RedactSearchDraft::default(),
-            hidden_draft: HiddenDraft::default(),
-            print_draft: PrintDraft::default(),
-            link_draft: None,
             text_style: content_ui::default_style(),
-            replace_draft: None,
-            number_draft: NumberDraft { from: 1, to: 1, style: pdfcraft_engine::LabelStyle::Decimal, prefix: String::new(), start: 1 },
+            root_state: WindowState::default(),
+            windows: Vec::new(),
+            current_window: WindowId::ROOT,
+            focused_window: WindowId::ROOT,
+            next_window_id: 1,
+            pending_window_ops: Vec::new(),
+            window_icon: None,
+            root_rect: None,
+            window_had_focus: Default::default(),
+            quit_requested: false,
+            job_origin: Default::default(),
+            next_view_no: Default::default(),
+            views,
+            active,
+            mode,
+            mode_override,
+            left,
+            left_open,
+            right,
+            right_before_read,
+            quick_tool,
+            space_hand,
+            dialog,
+            dialog_seen,
+            dialog_epoch,
+            palette_open,
+            palette_query,
+            all_tools_expanded,
+            toast,
+            password_prompt,
+            unlock_prompt,
+            full_screen,
+            close_request,
+            close_queue,
+            grid_drop,
+            deferred_commands,
+            window_title,
+            combine_tab,
+            combine_draft,
+            bookmark_rename,
+            pending_link,
+            pending_remote_link,
+            progress_notice,
+            image_import,
+            form_preview,
+            cert_viewer,
+            props_draft,
+            view_draft,
+            split_draft,
+            extract_draft,
+            rotate_draft,
+            sign_draft,
+            duplicate_draft,
+            comment_props,
+            field_props,
+            link_draft,
+            replace_draft,
+            number_draft,
+            protect_draft,
+            boxes_draft,
+            marks_draft,
+            export_draft,
+            print_draft,
+            redact_pages_draft,
+            redact_search,
+            hidden_draft,
+            optimize_draft,
+            ocr_draft,
+            alt_draft,
+            doc_js,
+            stamp_draft,
+            signature_draft,
+            signature_preview,
+            wizard,
+            compare_old,
+            compare,
+            pdfa,
+            a11y,
+            space_audit,
+            #[cfg(target_arch = "wasm32")]
+            signature_images,
         }
     }
 
@@ -1139,6 +1331,7 @@ impl PdfCraftApp {
             after_open: request.after_open,
             recovered: request.recovered,
             then: request.then,
+            window: self.current_window,
         });
         Ok(token)
     }
@@ -1160,7 +1353,9 @@ impl PdfCraftApp {
         }
         self.pending_opens = waiting;
         for (pending, kind) in ready {
-            self.finish_pending_open(pending, kind);
+            // In the window it was asked for in; the main window if that one has closed since.
+            let window = if self.has_window(pending.window) { pending.window } else { WindowId::ROOT };
+            self.with_window(window, |a| a.finish_pending_open(pending, kind));
         }
     }
 
@@ -1594,9 +1789,28 @@ impl PdfCraftApp {
 
     /// Open a file from a recent list: focus the tab already showing it, else open it (File ▸
     /// Open Recent and the Home view's list share this).
+    /// Another window whose tab shows the file at `path`, and the tab's index there.
+    fn other_window_showing(&mut self, path: &str) -> Option<(WindowId, usize)> {
+        let current = self.current_window;
+        for window in self.window_ids().into_iter().filter(|w| *w != current) {
+            let at = self
+                .with_window(window, |a| a.views.iter().position(|v| a.session.get(v.id).and_then(|d| d.path.as_deref()) == Some(path)))
+                .flatten();
+            if let Some(i) = at {
+                return Some((window, i));
+            }
+        }
+        None
+    }
+
     pub fn open_recent(&mut self, path: &str) {
-        if let Some(i) = self.views.iter().position(|v| self.session.get(v.id).and_then(|d| d.path.as_deref()) == Some(path)) {
+        let shows = |a: &Self| a.views.iter().position(|v| a.session.get(v.id).and_then(|d| d.path.as_deref()) == Some(path));
+        if let Some(i) = shows(self) {
             self.active = Some(i);
+        } else if let Some((window, i)) = self.other_window_showing(path) {
+            // Another window shows it: bring that tab forward there.
+            self.with_window(window, |a| a.active = Some(i));
+            self.pending_window_ops.push(WindowOp::Focus(window));
         } else {
             #[cfg(not(target_arch = "wasm32"))]
             self.open_path(path);
@@ -1767,16 +1981,24 @@ impl PdfCraftApp {
         if index >= self.views.len() {
             return;
         }
-        let id = self.views.remove(index).id;
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(path) = self.session.get(id).and_then(|d| d.path.clone()) {
-            if self.closed_tabs.len() == 10 {
-                self.closed_tabs.remove(0);
-            }
-            self.closed_tabs.push(path);
+        let mut view = self.views.remove(index);
+        let id = view.id;
+        if let Some(doc) = self.session.get(id) {
+            view.release_render_client(&doc.renderer);
         }
-        self.forget_recovery(id);
-        self.session.close(id);
+        // The document stays open while another window still shows it.
+        if self.view_count(id) == 0 {
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(path) = self.session.get(id).and_then(|d| d.path.clone()) {
+                if self.closed_tabs.len() == 10 {
+                    self.closed_tabs.remove(0);
+                }
+                self.closed_tabs.push(path);
+            }
+            self.forget_recovery(id);
+            self.session.close(id);
+            self.next_view_no.remove(&id);
+        }
         self.active = match self.active {
             _ if self.views.is_empty() => None,
             Some(a) if a > index => Some(a - 1),
@@ -2690,7 +2912,10 @@ impl PdfCraftApp {
     /// palette has the keyboard.
     fn tool_keys(&mut self, i: usize, ctx: &egui::Context) {
         use egui::Key;
-        let free = self.dialog.is_none() && !self.palette_open && !ctx.egui_wants_keyboard_input() && self.views[i].forms.focus.is_none();
+        let free = self.dialog.is_none()
+            && !self.palette_open
+            && !ctx.egui_wants_keyboard_input()
+            && self.views.get(i).is_some_and(|v| v.forms.focus.is_none());
         let (plain, space) = ctx.input(|input| (input.modifiers.is_none(), input.key_down(Key::Space)));
         if let Some(previous) = self.space_hand
             && !space
@@ -2714,6 +2939,66 @@ impl PdfCraftApp {
         if space && self.space_hand.is_none() && self.quick_tool != QuickTool::Hand {
             self.space_hand = Some(self.quick_tool);
             self.quick_tool = QuickTool::Hand;
+        }
+    }
+}
+
+impl PdfCraftApp {
+    /// The window-bound start of a frame: a grid drop that is waiting, the Combine files tab and
+    /// the files dropped on this window. Runs for the main window in `logic`, for the others at
+    /// the start of their pass.
+    pub(crate) fn window_input(&mut self, ctx: &egui::Context) {
+        // Before taking this frame's drop: the grid must be drawn once with the pointer where
+        // the files were let go before the gap is read.
+        self.finish_grid_drop(ctx);
+        // Showing a document hides the Combine files tab.
+        if self.active.is_some() {
+            self.combine_tab.focused = false;
+        }
+        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        self.handle_drops(dropped, ctx);
+    }
+
+    /// Files dropped on the window: onto the page grid, into the Combine files list, or opened.
+    #[doc(hidden)]
+    pub fn handle_drops(&mut self, dropped: Vec<egui::DroppedFileHandle>, ctx: &egui::Context) {
+        #[cfg(not(target_arch = "wasm32"))]
+        let dropped = self.drop_on_signature_pad(dropped);
+        #[cfg(not(target_arch = "wasm32"))]
+        let dropped = self.drop_on_grid(dropped, ctx);
+        for f in dropped {
+            // Files dropped on the Combine files tab join its list instead of opening.
+            if self.combine_showing() {
+                self.drop_into_combine(f, ctx);
+            } else {
+                self.open_dropped(f, ctx);
+            }
+        }
+    }
+
+    /// Shortcuts, keys and queued edits of the window being drawn (see [`Self::window_input`]).
+    pub(crate) fn window_keys(&mut self, ctx: &egui::Context) {
+        // Shortcuts deferred last frame: the text field has taken that frame's typing since.
+        let deferred = std::mem::take(&mut self.deferred_commands);
+        self.shortcuts(ctx);
+        // Scrolling and group-drag previews are transient: never resume after changing tabs,
+        // opening a modal/palette, or returning to a window that lost focus.
+        let blocked = self.modal_open() || self.palette_open || !ctx.input(|i| i.focused);
+        for (index, view) in self.views.iter_mut().enumerate() {
+            view.objects.set_input_blocked(blocked || self.active != Some(index));
+            if blocked || self.active != Some(index) {
+                view.auto_scroll.cancel();
+            }
+        }
+        // A field that refused its value this frame keeps the shortcut from saving or printing
+        // behind the user's back; so does a save prompt opened since.
+        if self.process_pending_edits() && self.close_request.is_none() {
+            for (id, doc) in deferred {
+                // Only in the document the shortcut was pressed in.
+                if self.active_ids().map(|(_, active)| active) == doc {
+                    self.execute(id);
+                }
+            }
         }
     }
 }
@@ -2776,28 +3061,9 @@ impl eframe::App for PdfCraftApp {
         self.scroll_speed.set_line_speed(ctx);
         // Before anything reads this frame's wheel input or draws, and with the line speed just set.
         self.motion.begin_pass(ctx, self.animation_effects);
-        // Before taking this frame's drop: the grid must be drawn once with the pointer where
-        // the files were let go before the gap is read.
-        self.finish_grid_drop(ctx);
-        // Showing a document hides the Combine files tab.
-        if self.active.is_some() {
-            self.combine_tab.focused = false;
-        }
         #[cfg(target_arch = "wasm32")]
         self.process_signature_images();
-        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
-        #[cfg(not(target_arch = "wasm32"))]
-        let dropped = self.drop_on_signature_pad(dropped);
-        #[cfg(not(target_arch = "wasm32"))]
-        let dropped = self.drop_on_grid(dropped, ctx);
-        for f in dropped {
-            // Files dropped on the Combine files tab join its list instead of opening.
-            if self.combine_showing() {
-                self.drop_into_combine(f, ctx);
-            } else {
-                self.open_dropped(f, ctx);
-            }
-        }
+        self.window_input(ctx);
         let arrived: Vec<(String, Vec<u8>)> = self.inbox.lock().map(|mut q| std::mem::take(&mut *q)).unwrap_or_default();
         for (name, bytes) in arrived {
             if let Err(e) = self.open_bytes(&name, None, bytes) {
@@ -2829,11 +3095,21 @@ impl eframe::App for PdfCraftApp {
         for e in os_events {
             match e {
                 #[cfg(not(target_arch = "wasm32"))]
-                OsEvent::Open(paths) => paths.iter().for_each(|p| self.open_path(p)),
+                OsEvent::Open(paths) => {
+                    // In the window the user is working in; a file that is open already is shown.
+                    let window = self.focused_window;
+                    let open = |a: &mut Self| paths.iter().for_each(|p| a.open_recent(p));
+                    if self.with_window(window, open).is_none() {
+                        paths.iter().for_each(|p| self.open_recent(p));
+                    }
+                }
                 #[cfg(target_arch = "wasm32")]
                 OsEvent::Open(_) => {}
-                // Like closing the window: `guard_quit` asks about unsaved changes.
-                OsEvent::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+                // Like closing the window: `guard_root_close` asks about unsaved changes.
+                OsEvent::Quit => {
+                    self.quit_requested = true;
+                    ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Close);
+                }
             }
         }
         if let Some((_, id)) = self.active_ids() {
@@ -2844,52 +3120,84 @@ impl eframe::App for PdfCraftApp {
             control.tick(ctx, self);
             self.control = Some(control);
         }
-        self.guard_quit(ctx);
+        self.guard_root_close(ctx);
         let now = ctx.input(|i| i.time);
         self.autosave_tick(now);
         // Reload documents whose files a build rewrote (#431).
         #[cfg(not(target_arch = "wasm32"))]
         self.watch_files();
         if self.host_dirty.is_some() {
-            let dirty = self.first_dirty().is_some();
+            let dirty = self.window_with_unsaved_work().is_some();
             if let Some(report) = self.host_dirty.as_mut() {
                 report(dirty);
             }
         }
         self.poll_updates();
         self.poll_print();
-        // Shortcuts deferred last frame: the text field has taken that frame's typing since.
-        let deferred = std::mem::take(&mut self.deferred_commands);
-        self.shortcuts(ctx);
-        // Scrolling and group-drag previews are transient: never resume after changing tabs,
-        // opening a modal/palette, or returning to a window that lost focus.
-        let blocked = self.modal_open() || self.palette_open || !ctx.input(|i| i.focused);
-        for (index, view) in self.views.iter_mut().enumerate() {
-            view.objects.set_input_blocked(blocked || self.active != Some(index));
-            if blocked || self.active != Some(index) {
-                view.auto_scroll.cancel();
-            }
-        }
-        // A field that refused its value this frame keeps the shortcut from saving or printing
-        // behind the user's back; so does a save prompt opened since.
-        if self.process_pending_edits() && self.close_request.is_none() {
-            for (id, doc) in deferred {
-                // Only in the document the shortcut was pressed in.
-                if self.active_ids().map(|(_, active)| active) == doc {
-                    self.execute(id);
-                }
-            }
-        }
-        self.poll_export();
-        self.poll_ocr();
-        self.poll_optimize();
-        self.poll_action();
+        self.window_keys(ctx);
+        self.note_job_origins();
+        self.poll_in_origin("export", |a| a.poll_export());
+        self.poll_in_origin("ocr", |a| a.poll_ocr());
+        self.poll_in_origin("optimize", |a| a.poll_optimize());
+        self.poll_in_origin("action", |a| a.poll_action());
+        self.note_job_origins();
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]
         self.process_picked();
+        // Views of a document that another view changed catch up, then finished renders become
+        // textures for every open document.
+        self.sync_views();
+        self.for_each_view(|_, view, session| {
+            if let Some(doc) = session.get(view.id) {
+                view.receive(ctx, &doc.renderer);
+            }
+        });
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.window_pass(WindowId::ROOT, ui, egui::ViewportClass::Root);
+        #[cfg(not(target_arch = "wasm32"))]
+        self.show_child_windows();
+        self.apply_window_ops();
+    }
+}
+
+impl PdfCraftApp {
+    /// Draw one window: the whole interface of the window loaded into the app fields.
+    pub(crate) fn window_pass(&mut self, id: WindowId, ui: &mut egui::Ui, class: egui::ViewportClass) {
+        let previous = self.current_window;
+        windows::set_drawing(id);
+        self.track_window(id, ui.ctx());
+        if id == WindowId::ROOT {
+            self.window_body(ui, class);
+        } else {
+            // The main window's input, keys and close are handled in `logic`; do the same here.
+            let ctx = ui.ctx().clone();
+            // (An embedded window shares the main window's input: the main window takes the drops.)
+            if class == egui::ViewportClass::Immediate {
+                // eframe's pointer hook only runs for the main window: ask for this window's.
+                drag_pointer::note_for_pass(&ctx);
+                self.window_input(&ctx);
+            } else {
+                self.finish_grid_drop(&ctx);
+            }
+            // (An embedded window shares the main window's input, and with it its close request.)
+            if class == egui::ViewportClass::Immediate && ctx.input(|i| i.viewport().close_requested()) {
+                self.guard_close_window(&ctx, id);
+            }
+            self.window_keys(&ctx);
+            // Ids that are not absolute differ per window as well.
+            if class == egui::ViewportClass::EmbeddedWindow {
+                ui.set_min_size(egui::vec2(900.0, 600.0));
+            }
+            ui.push_id(("window", id.0), |ui| self.window_body(ui, class));
+        }
+        drag_pointer::set_hint(None);
+        self.note_job_origins();
+        windows::set_drawing(previous);
+    }
+
+    fn window_body(&mut self, ui: &mut egui::Ui, _class: egui::ViewportClass) {
         let ctx = ui.ctx().clone();
         i18n::set_current(i18n::Lang::from_pref(&self.language));
         // Fonts registered via set_fonts only take effect next frame; named families would panic now.
@@ -2903,8 +3211,8 @@ impl eframe::App for PdfCraftApp {
         // The window shows the active document's name (or title, if it asks for that).
         let title = self
             .active
-            .and_then(|i| self.session.get(self.views[i].id))
-            .map(|d| d.display_name())
+            .and_then(|i| self.views.get(i))
+            .and_then(|v| self.display_label(v))
             .or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
             .map_or_else(|| "PdfCraft".to_owned(), |name| format!("{name} — PdfCraft"));
         if title != self.window_title {
@@ -2941,7 +3249,7 @@ impl eframe::App for PdfCraftApp {
             // there, so its buttons (Bookmarks, Page thumbnails, ...) must open their panels.
             // Outside Read mode the docking workspace draws the inspector.
             if self.mode == Mode::Read && self.right.is_some() {
-                egui::Panel::right("read_right_panel")
+                egui::Panel::right(crate::windows::wid("read_right_panel"))
                     .resizable(true)
                     .default_size(330.0)
                     .size_range(260.0..=520.0)

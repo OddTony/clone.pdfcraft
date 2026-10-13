@@ -25,12 +25,12 @@ fn dialog_frame(ctx: &egui::Context) -> egui::Frame {
 
 /// A modal with the card fill, a 10-point corner and room around its contents.
 pub fn modal(ctx: &egui::Context, id: impl std::hash::Hash + std::fmt::Debug) -> egui::Modal {
-    egui::Modal::new(egui::Id::new(id)).frame(dialog_frame(ctx))
+    egui::Modal::new(crate::windows::wid(id)).frame(dialog_frame(ctx))
 }
 
 /// Show [`modal`], outline its controls, and remember the card rect for layout checks.
 pub fn show_modal<R>(ctx: &egui::Context, id: &str, content: impl FnOnce(&mut egui::Ui) -> R) -> egui::ModalResponse<R> {
-    let stored = egui::Id::new(id);
+    let stored = crate::windows::wid(id);
     modal(ctx, id).show(ctx, |ui| {
         begin_dialog(ui);
         let inner = content(ui);
@@ -339,7 +339,7 @@ fn wrapped_lines(ui: &egui::Ui, text: &str, font: &egui::FontId, width: f32, tru
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     (text, font, width.to_bits(), ui.ctx().pixels_per_point().to_bits(), truncate).hash(&mut hasher);
     let key = hasher.finish();
-    let cache_id = egui::Id::new("pdfcraft-rtl-wrap-cache");
+    let cache_id = crate::windows::wid("pdfcraft-rtl-wrap-cache");
     if let Some(hit) = ui.ctx().data_mut(|d| d.get_temp_mut_or_default::<WrapCache>(cache_id).lines.get(&key).cloned()) {
         return hit;
     }
@@ -388,9 +388,9 @@ pub fn toast(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
     let screen = ctx.content_rect();
     // Above the progress notice while a job runs.
-    let card = if app.progress_notice.is_some() { ctx.data(|d| d.get_temp::<f32>(egui::Id::new(PROGRESS_HEIGHT))).unwrap_or(0.0) } else { 0.0 };
+    let card = if app.progress_notice.is_some() { ctx.data(|d| d.get_temp::<f32>(crate::windows::wid(PROGRESS_HEIGHT))).unwrap_or(0.0) } else { 0.0 };
     let lift = if card > 0.0 { 28.0 + card + 10.0 } else { 28.0 };
-    egui::Area::new(egui::Id::new("toast"))
+    egui::Area::new(crate::windows::wid("toast"))
         .order(egui::Order::Tooltip)
         .pivot(Align2::CENTER_BOTTOM)
         .fixed_pos(screen.center_bottom() - vec2(0.0, lift))
@@ -443,10 +443,10 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
     };
     let fraction = if p.fraction.is_finite() { p.fraction.clamp(0.0, 1.0) } else { 0.0 };
     let animated = crate::motion::animated(ctx);
-    let shown = ctx.animate_value_with_time(egui::Id::new("progress-notice-bar"), fraction, if animated { 0.3 } else { 0.0 });
+    let shown = ctx.animate_value_with_time(crate::windows::wid("progress-notice-bar"), fraction, if animated { 0.3 } else { 0.0 });
     let now = ctx.input(|i| i.time);
     let mut cancel = false;
-    let area = egui::Area::new(egui::Id::new("progress-notice"))
+    let area = egui::Area::new(crate::windows::wid("progress-notice"))
         .order(egui::Order::Tooltip)
         .pivot(Align2::CENTER_BOTTOM)
         .fixed_pos(screen.center_bottom() - vec2(0.0, 28.0))
@@ -494,7 +494,7 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
                 }
             });
         });
-    ctx.data_mut(|d| d.insert_temp(egui::Id::new(PROGRESS_HEIGHT), area.response.rect.height()));
+    ctx.data_mut(|d| d.insert_temp(crate::windows::wid(PROGRESS_HEIGHT), area.response.rect.height()));
     ctx.request_repaint_after(std::time::Duration::from_millis(33));
     cancel
 }
@@ -698,7 +698,7 @@ mod tests {
             );
             output.drop_without_applying_deltas();
         }
-        ctx.memory(|memory| memory.area_rect(egui::Id::new("toast")).unwrap())
+        ctx.memory(|memory| memory.area_rect(crate::windows::wid("toast")).unwrap())
     }
 
     #[test]
@@ -748,8 +748,9 @@ mod tests {
     fn rtl_wrapping_is_cached_and_bounded() {
         let ctx = egui::Context::default();
         ctx.set_fonts(theme::font_definitions());
-        let cache_len =
-            |ctx: &egui::Context| ctx.data_mut(|d| d.get_temp_mut_or_default::<WrapCache>(egui::Id::new("pdfcraft-rtl-wrap-cache")).lines.len());
+        let cache_len = |ctx: &egui::Context| {
+            ctx.data_mut(|d| d.get_temp_mut_or_default::<WrapCache>(crate::windows::wid("pdfcraft-rtl-wrap-cache")).lines.len())
+        };
         let persian = "این یک نظر طولانی به زبان فارسی است که باید در چند خط شکسته شود";
         let long = persian.repeat(2_000);
         let mut first = None;

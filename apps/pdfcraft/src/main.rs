@@ -44,7 +44,10 @@ mod updates;
 #[path = "windows_manifest.rs"]
 mod windows_manifest;
 
-/// Freedesktop app id: the `.desktop` file name and the hicolor icon name.
+/// Freedesktop app id: the `.desktop` file name and the hicolor icon name. Windows get it from
+/// `pdfcraft_ui_egui::windows::window_builder`; this copy is what the packaging gate and a test
+/// compare it with.
+#[cfg_attr(not(test), allow(dead_code))]
 const APP_ID: &str = "ai.storyteller.pdfcraft";
 
 /// The app icon (assets/app-icon/README.md). macOS gets the version on Apple's icon grid, with a
@@ -290,23 +293,20 @@ fn retry_with_gl(choice: RendererChoice, app_started: bool) -> bool {
     choice == RendererChoice::Auto && !app_started
 }
 
+/// Dock, taskbar, Alt-Tab and launcher icon when running unbundled (every window gets it).
+fn app_icon() -> Option<std::sync::Arc<egui::IconData>> {
+    match eframe::icon_data::from_png_bytes(APP_ICON_PNG) {
+        Ok(icon) => Some(std::sync::Arc::new(icon)),
+        Err(e) => {
+            log::warn!("app icon: {e}");
+            None
+        }
+    }
+}
+
 /// The window and renderer settings for one run.
 fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
-    let mut viewport = egui::ViewportBuilder::default()
-        .with_title("PdfCraft")
-        .with_inner_size([1440.0, 920.0])
-        .with_min_inner_size([820.0, 520.0])
-        .with_drag_and_drop(true)
-        // Wayland app id: matches packaging/linux/ai.storyteller.pdfcraft.desktop.
-        .with_app_id(APP_ID);
-    // Dock, taskbar, Alt-Tab and launcher icon when running unbundled.
-    match eframe::icon_data::from_png_bytes(APP_ICON_PNG) {
-        Ok(icon) => viewport = viewport.with_icon(icon),
-        Err(e) => log::warn!("app icon: {e}"),
-    }
-    if integrated {
-        viewport = viewport.with_fullsize_content_view(true).with_titlebar_shown(false).with_title_shown(false);
-    }
+    let mut viewport = pdfcraft_ui_egui::windows::window_builder("PdfCraft", integrated, app_icon());
     if app_frame {
         // The tab strip is the title bar (pdfcraft_ui_egui::window_controls).
         viewport = viewport.with_decorations(false);
@@ -360,6 +360,7 @@ fn app_creator<'a>(
         {
             app.motion.source = Some(motion::source());
         }
+        app.window_icon = app_icon();
         app.update_source = Some(std::sync::Arc::new(updates::latest_release));
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
@@ -719,6 +720,12 @@ fn pick_adapter(adapters: &[(u32, u32, eframe::wgpu::DeviceType)], displays: &[D
 
 #[cfg(test)]
 mod tests {
+    /// Windows other than the first are built in `pdfcraft-ui-egui` with its own copy of the id.
+    #[test]
+    fn child_windows_use_the_app_id() {
+        assert_eq!(super::APP_ID, pdfcraft_ui_egui::windows::APP_ID);
+    }
+
     use pdfcraft_ui_egui::control::Endpoint;
 
     fn endpoint() -> std::io::Result<Endpoint> {

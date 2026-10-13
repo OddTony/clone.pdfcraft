@@ -257,6 +257,7 @@ impl PdfCraftApp {
                     std::thread::Builder::new().name("pdfcraft-export".into()).spawn(work).ok();
                 }
                 app.export_status = Some(status);
+                app.job_started("export");
             };
             match self.export_dir_override.clone() {
                 Some(d) => start(self, d.into(), true),
@@ -284,6 +285,7 @@ impl PdfCraftApp {
                 *s = Some((0, 0, Some(msg)));
             }
             self.export_status = Some(status);
+            self.job_started("export");
         }
     }
 

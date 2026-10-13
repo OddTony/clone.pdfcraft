@@ -2350,3 +2350,20 @@ animation effects	Off	Өшірулі
 	This document is trying to open a local file:	Бұл құжат жергілікті файлды ашуға әрекеттеніп жатыр:
 	Move tag earlier	Тегті ертерек жылжыту
 	Move tag later	Тегті кейінірек жылжыту
+	Window	Терезе
+	New window	Жаңа терезе
+	Move tab to new window	Қойындыны жаңа терезеге жылжыту
+	Merge all windows	Барлық терезелерді біріктіру
+	Close window	Терезені жабу
+	In new window	Жаңа терезеде
+	Move to new window	Жаңа терезеге жылжыту
+	Move to window	Терезеге жылжыту
+	Close other tabs	Басқа қойындыларды жабу
+	Close tabs to the right	Оң жақтағы қойындыларды жабу
+	Copy path	Жолды көшіру
+	Show in Finder	Finder ішінде көрсету
+	Show in Explorer	Файл шолғышында көрсету
+	Show in folder	Қалтада көрсету
+	The document was changed in another window. Check your text, then apply it again.	Құжат басқа терезеде өзгертілді. Мәтінді тексеріп, қайта қолданыңыз.
+	Too many windows are open	Тым көп терезе ашық
+	Too many windows for this document	Бұл құжат үшін терезе тым көп

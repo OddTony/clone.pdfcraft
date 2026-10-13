@@ -224,6 +224,30 @@ impl WorkQueue {
         }
     }
 
+    /// Like [`Self::send_valid_with_tokens`] for a result another client's render produced:
+    /// never waits for room (the worker belongs to someone else). A request that can't be
+    /// stored now, or whose parser generation failed, is asked for again instead.
+    #[cfg(any(test, not(target_arch = "wasm32")))]
+    pub(super) fn offer(&self, page: RenderedPage, tokens: Vec<Arc<AtomicBool>>) {
+        let key = Key::from(page.request);
+        let bytes = result_bytes(&page);
+        let mut state = lock(&self.state);
+        if state.closed || !state.desired.contains_key(&key) {
+            state.active.remove(&key);
+            return;
+        }
+        if valid(&tokens) && state.results.len() < self.max_count && (state.results.is_empty() || state.bytes.saturating_add(bytes) <= self.max_bytes)
+        {
+            state.active.remove(&key);
+            state.bytes = state.bytes.saturating_add(bytes);
+            state.results.push_back(Completed { page, bytes, valid: tokens });
+        } else {
+            state.retry(page.request);
+        }
+        drop(state);
+        self.changed.notify_all();
+    }
+
     /// A shared-parser timeout may belong to another page holding a cold-load gate.
     /// Retry still-current demand after the pool switches permanently to private parsers.
     #[cfg(any(test, not(target_arch = "wasm32")))]

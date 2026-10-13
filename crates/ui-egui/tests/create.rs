@@ -18,7 +18,7 @@ fn png() -> Vec<u8> {
 fn image_import_dialog_chooses_dpi_and_cancels() {
     use egui_kittest::{Harness, kittest::Queryable};
     let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.begin_image_import(vec![("scan.png".into(), png())]);
         app
@@ -53,7 +53,7 @@ fn image_import_dialog_chooses_dpi_and_cancels() {
 
 #[test]
 fn opening_images_and_text_converts_them_to_new_pdfs() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.open_bytes("photo.png", Some("/tmp/photo.png".into()), png()).unwrap();
     app.open_bytes("notes.txt", None, b"first line\nsecond line".to_vec()).unwrap();
@@ -73,7 +73,7 @@ fn opening_images_and_text_converts_them_to_new_pdfs() {
 fn reduce(name: &'static str, bytes: Vec<u8>, out: &std::path::Path) -> egui_kittest::Harness<'static, PdfCraftApp> {
     let out2 = out.to_path_buf();
     let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes(name, None, bytes).unwrap();
         app.save_override = Some(out2.to_string_lossy().into_owned());
@@ -131,7 +131,7 @@ fn reduce_file_size_saves_nothing_when_the_file_is_already_small() {
 #[test]
 fn clipboard_images_and_text_become_new_pdfs() {
     use pdfcraft_ui_egui::Clip;
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.create_from_clip(Clip::Image { width: 40, height: 20, rgba: [10u8, 20, 30, 255].repeat(40 * 20) }).unwrap();
     app.create_from_clip(Clip::Text("Pasted\nlines".into())).unwrap();
@@ -153,7 +153,7 @@ fn the_pdf_optimizer_dialog_saves_an_optimized_copy() {
     let out = dir.join("optimized.pdf");
     let out2 = out.clone();
     let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("notes.txt", None, "lorem ipsum ".repeat(500).into_bytes()).unwrap();
         app.save_override = Some(out2.to_string_lossy().into_owned());
@@ -208,7 +208,7 @@ fn separate_batch_creates_one_pdf_per_source_without_replacing_existing_files() 
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("notes.pdf"), b"keep this file").unwrap();
 
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.export_dir_override = Some(dir.to_string_lossy().into_owned());
     let mut files = mixed_files(&app);
@@ -234,7 +234,7 @@ fn separate_batch_command_picks_files_and_writes_to_the_chosen_folder() {
     let source = dir.join("letter.txt");
     std::fs::write(&source, b"A separate PDF").unwrap();
     let mut h = Harness::builder().with_size(egui::vec2(1000.0, 720.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.pick_override = Some(vec![source.to_string_lossy().into_owned()]);
         app.export_dir_override = Some(dir.to_string_lossy().into_owned());
@@ -252,7 +252,7 @@ fn multiple_files_open_as_one_document_in_the_page_grid() {
     use egui_kittest::{Harness, kittest::Queryable};
     let path = std::env::temp_dir().join(format!("pdfcraft-create-multiple-{}.pdf", std::process::id()));
     let mut h = Harness::builder().with_size(egui::vec2(1000.0, 720.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         let files = mixed_files(&app);
         app.use_files(pdfcraft_ui_egui::FilePurpose::CreateMultiple, files);
@@ -291,7 +291,7 @@ fn multiple_files_open_as_one_document_in_the_page_grid() {
 
 #[test]
 fn multiple_files_that_cannot_be_converted_open_nothing() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.use_files(pdfcraft_ui_egui::FilePurpose::CreateMultiple, vec![("report.docx".into(), b"PK\x03\x04".to_vec())]);
     assert!(app.views.is_empty());
@@ -300,7 +300,7 @@ fn multiple_files_that_cannot_be_converted_open_nothing() {
 
 #[test]
 fn multiple_files_past_a_thousand_are_all_used() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     let pdf = app.session.create_from_text("a", "from a pdf").unwrap();
     let files: Vec<(String, Vec<u8>)> = (0..1001).map(|i| (format!("f{i}.pdf"), pdf.to_vec())).collect();

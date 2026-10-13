@@ -19,7 +19,7 @@ trailer << /Root 1 0 R >>
 
 fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         setup(&mut app);
         app
@@ -49,7 +49,7 @@ fn tools_panel_side_preference_moves_and_persists() {
     h.run_steps(3);
     assert!(h.state().docking.tools_on_right());
     let saved = h.state().persist();
-    let mut restored = PdfCraftApp::new();
+    let mut restored = PdfCraftApp::new_for_test();
     restored.restore(&saved);
     assert!(restored.docking.tools_on_right());
     h.get_by_label("Left").click();
@@ -91,7 +91,7 @@ fn long_recent_names_and_paths_are_cut_before_the_page_count() {
 fn home_removes_one_recent_file_or_clears_them_all() {
     // Tall enough that the Recent list is on screen without scrolling.
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1600.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         for name in ["first.pdf", "second.pdf", "third.pdf"] {
             app.recent.push(pdfcraft_ui_egui::RecentFile { name: name.into(), path: format!("/nowhere/{name}"), pages: 1, size: 0 });
@@ -388,7 +388,7 @@ fn the_integrated_title_bar_is_the_traffic_light_band() {
 fn narrow_tab_strips_accept_vertical_wheel_scrolling() {
     for width in [600.0, 900.0] {
         let mut h = Harness::builder().with_size(egui::vec2(width, 700.0)).build_eframe(|_cc| {
-            let mut app = PdfCraftApp::new();
+            let mut app = PdfCraftApp::new_for_test();
             app.set_option("language", "en").unwrap();
             for i in 0..12 {
                 app.open_bytes(&format!("narrow-{i:02}.pdf"), None, FIXTURE.to_vec()).unwrap();
@@ -427,7 +427,7 @@ fn narrow_tab_strips_accept_vertical_wheel_scrolling() {
 
 #[test]
 fn garbage_input_is_rejected_without_panicking() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     assert!(app.open_bytes("junk.pdf", None, b"this is not a pdf".to_vec()).is_err());
     assert!(app.open_bytes("empty.pdf", None, Vec::new()).is_err());
@@ -526,11 +526,11 @@ fn drag_selects_text_and_copy_returns_it() {
 
 #[test]
 fn persistence_round_trips_and_tolerates_garbage() {
-    let mut a = PdfCraftApp::new();
+    let mut a = PdfCraftApp::new_for_test();
     a.set_option("language", "en").unwrap();
     a.set_option("theme", "dark").unwrap();
     let json = a.persist();
-    let mut b = PdfCraftApp::new();
+    let mut b = PdfCraftApp::new_for_test();
     b.set_option("language", "en").unwrap();
     b.restore(&json);
     assert_eq!(b.theme, pdfcraft_ui_egui::theme::ThemeKind::Dark);
@@ -549,16 +549,16 @@ fn a_saved_no_fill_clears_a_comment_tool_default_fill() {
         s.fill = Some([0.2, 0.4, 0.6]);
         a.comment_prefs.set_style(CommentTool::Rectangle, s);
     };
-    let mut a = PdfCraftApp::new();
+    let mut a = PdfCraftApp::new_for_test();
     filled(&mut a);
     a.restore(r#"{"comment_styles":[{"tool":"comment.square","fill":null}]}"#);
     assert_eq!(a.comment_prefs.style(CommentTool::Rectangle).fill, None, "null clears the fill");
-    let mut b = PdfCraftApp::new();
+    let mut b = PdfCraftApp::new_for_test();
     filled(&mut b);
     b.restore(r#"{"comment_styles":[{"tool":"comment.square","color":[0,0,1]},{"tool":"comment.square","fill":"red"}]}"#);
     assert_eq!(b.comment_prefs.style(CommentTool::Rectangle).fill, Some([0.2, 0.4, 0.6]), "missing or malformed keeps it");
     // A round trip keeps a cleared fill cleared.
-    let mut c = PdfCraftApp::new();
+    let mut c = PdfCraftApp::new_for_test();
     c.restore(&a.persist());
     assert_eq!(c.comment_prefs.style(CommentTool::Rectangle).fill, None);
 }
@@ -568,7 +568,7 @@ fn a_saved_no_fill_clears_a_comment_tool_default_fill() {
 #[test]
 fn comment_style_settings_clamp_and_refuse_hostile_values() {
     use pdfcraft_ui_egui::comments::CommentTool;
-    let mut a = PdfCraftApp::new();
+    let mut a = PdfCraftApp::new_for_test();
     a.restore(
         r#"{"comment_styles":[
             {"tool":"comment.highlight","color":[2,-1,0.5],"opacity":99,"width":-4},
@@ -673,7 +673,7 @@ impl egui::DroppedFile for Dropped {
 #[test]
 fn dropping_a_pdf_on_the_window_opens_it() {
     let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app
     });
@@ -693,11 +693,11 @@ fn a_file_dropped_on_the_page_grid_is_read_from_disk_and_inserted() {
     let dir = std::env::temp_dir().join(format!("pdfcraft-grid-drop-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("dropped.pdf");
-    let setup = PdfCraftApp::new();
+    let setup = PdfCraftApp::new_for_test();
     let pdf = setup.session.create_from_text("dropped", "from disk").unwrap();
     std::fs::write(&path, pdf.as_slice()).unwrap();
     let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         let grid = app.session.create_from_text("grid", "one page").unwrap();
         app.open_bytes("grid.pdf", None, grid.to_vec()).unwrap();
@@ -726,7 +726,7 @@ fn a_file_dropped_on_the_page_grid_is_read_from_disk_and_inserted() {
 #[test]
 fn pdfs_dropped_on_the_combine_tab_join_its_list() {
     let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app
     });
@@ -757,7 +757,7 @@ fn a_folder_dropped_on_the_combine_tab_adds_its_pdfs() {
     std::fs::write(dir.join("one.pdf"), FIXTURE).unwrap();
     std::fs::write(dir.join("inner").join("two.pdf"), FIXTURE).unwrap();
     let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app
     });
@@ -796,11 +796,11 @@ fn files_and_quit_from_the_operating_system() {
 fn default_workspace_mode_persists_and_tolerates_invalid_settings() {
     use pdfcraft_ui_egui::Mode;
     for mode in [Mode::AllTools, Mode::Read, Mode::Edit, Mode::Convert, Mode::Sign] {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.default_mode = mode;
         app.set_option("mode", "sign").unwrap();
-        let mut restored = PdfCraftApp::new();
+        let mut restored = PdfCraftApp::new_for_test();
         restored.set_option("language", "en").unwrap();
         restored.restore(&app.persist());
         assert_eq!(restored.default_mode, mode);
@@ -808,7 +808,7 @@ fn default_workspace_mode_persists_and_tolerates_invalid_settings() {
         assert_eq!(restored.mode, mode, "session override must not be persisted");
     }
     for json in ["{}", "{not json", r#"{"default_mode": null}"#, r#"{"default_mode": 5}"#, r#"{"default_mode": "unknown"}"#] {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.restore(json);
         assert_eq!(app.default_mode, Mode::AllTools);
@@ -820,7 +820,7 @@ fn default_workspace_mode_persists_and_tolerates_invalid_settings() {
 #[test]
 fn newly_opened_pdfs_use_the_default_workspace() {
     use pdfcraft_ui_egui::{LeftPanel, Mode};
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.restore(r#"{"default_mode": "edit"}"#);
     app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
@@ -844,7 +844,7 @@ fn explicit_mode_overrides_default_before_and_after_open() {
     use pdfcraft_ui_egui::Mode;
     for before in [false, true] {
         for (value, mode) in [("all", Mode::AllTools), ("read", Mode::Read), ("edit", Mode::Edit), ("convert", Mode::Convert), ("sign", Mode::Sign)] {
-            let mut app = PdfCraftApp::new();
+            let mut app = PdfCraftApp::new_for_test();
             app.set_option("language", "en").unwrap();
             app.default_mode = Mode::Read;
             if before {
@@ -914,7 +914,7 @@ fn use_system_title_bar_swaps_the_header_bar_for_the_window_frame() {
     assert!(h.query_by_label("Minimize").is_none(), "and the tab strip loses its buttons");
     let saved = h.state().persist();
     assert!(saved.contains(r#""system_title_bar":true"#), "{saved}");
-    let mut restored = PdfCraftApp::new();
+    let mut restored = PdfCraftApp::new_for_test();
     restored.restore(&saved);
     assert!(restored.system_title_bar);
     restored.set_option("system-title-bar", "false").unwrap();
@@ -951,10 +951,10 @@ fn preferences_choose_animation_effects_and_the_choice_is_saved() {
     }
     let saved = h.state().persist();
     assert!(saved.contains(r#""animation_effects":"off""#), "{saved}");
-    let mut restored = PdfCraftApp::new();
+    let mut restored = PdfCraftApp::new_for_test();
     restored.restore(&saved);
     assert_eq!(restored.animation_effects, AnimationEffects::Off);
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.restore(&saved.replace(r#""animation_effects":"off""#, r#""animation_effects":"sideways""#));
     assert_eq!(fresh.animation_effects, AnimationEffects::System);
     // The control channel and the command line take the same three names.
@@ -967,7 +967,7 @@ fn preferences_choose_animation_effects_and_the_choice_is_saved() {
 #[test]
 fn explicit_mode_preserves_independent_tool_and_panel_options() {
     use pdfcraft_ui_egui::LeftPanel;
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.set_option("tool", "export").unwrap();
     app.set_option("left", "closed").unwrap();
@@ -983,7 +983,7 @@ fn explicit_mode_preserves_independent_tool_and_panel_options() {
 fn opening_a_pdf_keeps_a_closed_left_panel_and_the_chosen_tool() {
     use pdfcraft_ui_egui::{LeftPanel, Mode};
     // `--left closed` without `--mode`, default workspace Edit: the panel stays closed.
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.default_mode = Mode::Edit;
     app.set_option("left", "closed").unwrap();
@@ -991,7 +991,7 @@ fn opening_a_pdf_keeps_a_closed_left_panel_and_the_chosen_tool() {
     assert_eq!(app.mode, Mode::Edit);
     assert!(!app.left_open);
     // Default All Tools: opening another PDF leaves the tool panel the user picked.
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     app.set_option("tool", "export").unwrap();
     app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();

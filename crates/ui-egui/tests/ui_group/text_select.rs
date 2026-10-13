@@ -33,7 +33,7 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> (Harness<'static, 
 /// `harness` with another document; the pointer ends over glyph 5 of its first page.
 fn harness_with(pdf: Vec<u8>, setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> (Harness<'static, PdfCraftApp>, Pos2) {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).with_step_dt(1.0 / 60.0).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("lines.pdf", None, pdf).expect("opens");
         app.set_option("left", "closed").unwrap();

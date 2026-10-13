@@ -386,7 +386,11 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
             changed = true;
         }
         changed |= crate::edit_text_ui::extras_panel(ui, &mut ed.extras);
-        if changed {
+        let page_exists = app.session.get(app.views[i].id).is_some_and(|d| ed.page < d.info.pages.len());
+        if changed && !page_exists {
+            app.views[i].elsewhere_notice = true; // the page is gone: keep the text, apply nothing
+            app.views[i].line_editor = Some(ed);
+        } else if changed {
             let edit = pdfcraft_engine::Edit::EditTextBlock { page: ed.page, block: ed.block, text: ed.text.clone(), style: ed.style() };
             if app.apply_edit(edit) {
                 ed.applied();
@@ -566,7 +570,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     });
                 });
                 ui.add_space(6.0);
-                let search_id = egui::Id::new(("bookmark_search", id.0));
+                let search_id = crate::windows::wid(("bookmark_search", id.0));
                 let mut bookmark_query = ui.data(|d| d.get_temp::<String>(search_id)).unwrap_or_default();
                 if panel == RightPanel::Bookmarks && !info.outline.is_empty() {
                     ui.horizontal(|ui| {

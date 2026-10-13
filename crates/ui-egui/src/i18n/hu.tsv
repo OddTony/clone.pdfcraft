@@ -2351,3 +2351,18 @@ animation effects	Off	Ki
 	This document is trying to open a local file:	Ez a dokumentum egy helyi fájlt próbál megnyitni:
 	Move tag earlier	Címke korábbra helyezése
 	Move tag later	Címke későbbre helyezése
+	Window	Ablak
+	New window	Új ablak
+	Move tab to new window	Lap áthelyezése új ablakba
+	Merge all windows	Összes ablak egyesítése
+	Close window	Ablak bezárása
+	In new window	Megnyitás új ablakban
+	Move to new window	Áthelyezés új ablakba
+	Move to window	Áthelyezés ablakba
+	Close other tabs	Többi lap bezárása
+	Close tabs to the right	Jobbra lévő lapok bezárása
+	Copy path	Elérési út másolása
+	Show in Finder	Megjelenítés a Finderben
+	Show in Explorer	Megjelenítés az Intézőben
+	Show in folder	Megjelenítés mappában
+	The document was changed in another window. Check your text, then apply it again.	A dokumentumot egy másik ablakban módosították. Ellenőrizd a szöveget, majd alkalmazd újra.

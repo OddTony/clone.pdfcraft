@@ -2348,3 +2348,20 @@ animation effects	Off	Kapalı
 	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
 	Move tag earlier	Etiketi daha erken taşı
 	Move tag later	Etiketi daha geç taşı
+	Window	Pencere
+	New window	Yeni pencere
+	Move tab to new window	Sekmeyi yeni pencereye taşı
+	Merge all windows	Tüm pencereleri birleştir
+	Close window	Pencereyi kapat
+	In new window	Yeni pencerede
+	Move to new window	Yeni pencereye taşı
+	Move to window	Pencereye taşı
+	Close other tabs	Diğer sekmeleri kapat
+	Close tabs to the right	Sağdaki sekmeleri kapat
+	Copy path	Yolu kopyala
+	Show in Finder	Finder’da göster
+	Show in Explorer	Dosya Gezgini’nde göster
+	Show in folder	Klasörde göster
+	The document was changed in another window. Check your text, then apply it again.	Belge başka bir pencerede değiştirildi. Metninizi kontrol edin, sonra yeniden uygulayın.
+	Too many windows are open	Çok fazla pencere açık
+	Too many windows for this document	Bu belge için çok fazla pencere var

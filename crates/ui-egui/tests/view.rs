@@ -34,7 +34,7 @@ fn harness(options: &'static [(&'static str, &'static str)]) -> Harness<'static,
 /// [`harness`] with frames `step_dt` seconds apart (a quarter second is kittest's default).
 fn harness_stepping(step_dt: f32, options: &'static [(&'static str, &'static str)]) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).with_step_dt(step_dt).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("pages.pdf", None, PAGES.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
@@ -63,7 +63,7 @@ trailer << /Root 1 0 R >>
 
 fn mixed_harness(options: &'static [(&'static str, &'static str)]) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("mixed.pdf", None, MIXED.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
@@ -374,7 +374,7 @@ fn layout_option_rejects_typos() {
 
 #[test]
 fn view_options_without_a_document() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.set_option("language", "en").unwrap();
     assert!(app.set_option("default-layout", "single").is_ok(), "the default needs no document");
     assert_eq!(app.view_defaults.layout, pdfcraft_ui_egui::canvas::PageLayout::Single);
@@ -386,8 +386,8 @@ fn view_options_without_a_document() {
 fn default_page_display_is_used_for_new_documents() {
     use pdfcraft_ui_egui::canvas::PageLayout;
     // The factory default is single page, scrolling continuously, without snap jumps.
-    assert_eq!(PdfCraftApp::new().view_defaults.layout, PageLayout::Single);
-    assert!(PdfCraftApp::new().view_defaults.continuous);
+    assert_eq!(PdfCraftApp::new_for_test().view_defaults.layout, PageLayout::Single);
+    assert!(PdfCraftApp::new_for_test().view_defaults.continuous);
     let mut h = harness(&[]);
     h.state_mut().set_option("default-layout", "single").unwrap();
     h.state_mut().open_bytes("other.pdf", None, PAGES.to_vec()).expect("opens");
@@ -397,7 +397,7 @@ fn default_page_display_is_used_for_new_documents() {
     assert_eq!(h.state().views[2].layout, PageLayout::Single);
     // Persisted preferences survive a restart.
     let saved = h.state().persist();
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.set_option("language", "en").unwrap();
     fresh.restore(&saved);
     assert_eq!(fresh.view_defaults.layout, PageLayout::Single);
@@ -406,7 +406,7 @@ fn default_page_display_is_used_for_new_documents() {
     assert_eq!(fresh.view_defaults.layout, PageLayout::Single);
     fresh.restore(r#"{"default_layout":"TWO-UP"}"#);
     assert_eq!(fresh.view_defaults.layout, PageLayout::TwoUp);
-    let mut legacy = PdfCraftApp::new();
+    let mut legacy = PdfCraftApp::new_for_test();
     legacy.set_option("language", "en").unwrap();
     legacy.restore("{}");
     assert_eq!(legacy.view_defaults.layout, PageLayout::Single);
@@ -436,7 +436,7 @@ fn default_zoom_is_used_for_new_documents() {
     }
     // Saved settings keep it, and garbage leaves it alone.
     let saved = h.state().persist();
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.set_option("language", "en").unwrap();
     fresh.restore(&saved);
     fresh.restore(r#"{"default_zoom":"bogus"}"#);
@@ -616,7 +616,7 @@ trailer << /Root 1 0 R >>
 
 fn dests_harness() -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("dests.pdf", None, DESTS.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
@@ -714,7 +714,7 @@ trailer << /Root 1 0 R >>
 
 fn form_harness() -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("form.pdf", None, FORM.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
@@ -783,7 +783,7 @@ trailer << /Root 1 0 R >>
 fn required_radio_buttons_get_a_round_red_border() {
     let _gpu = gpu();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("radios.pdf", None, RADIOS.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();
@@ -835,7 +835,7 @@ fn field_highlighting_is_remembered() {
     h.run_steps(4);
     assert!(h.state().views[1].highlight_fields, "the next document opens highlighted");
     let saved = h.state().persist();
-    let mut next = PdfCraftApp::new();
+    let mut next = PdfCraftApp::new_for_test();
     next.set_option("language", "en").unwrap();
     next.restore(&saved);
     next.open_bytes("form.pdf", None, FORM.to_vec()).expect("opens");
@@ -927,7 +927,7 @@ trailer << /Root 1 0 R >>
     for ppp in [1.0, 2.0] {
         let bytes = pdf.clone();
         let mut h = Harness::builder().with_size(egui::vec2(1000.0, 800.0)).with_pixels_per_point(ppp).build_eframe(move |_cc| {
-            let mut app = PdfCraftApp::new();
+            let mut app = PdfCraftApp::new_for_test();
             app.set_option("language", "en").unwrap();
             app.open_bytes("lines.pdf", None, bytes.clone()).expect("opens");
             app.set_option("left", "closed").unwrap();
@@ -1004,7 +1004,7 @@ trailer << /Root 1 0 R >>
     )
     .into_bytes();
     let mut h = Harness::builder().with_size(egui::vec2(1000.0, 800.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.open_bytes("grid.pdf", None, pdf.clone()).expect("opens");
         app.set_option("left", "closed").unwrap();
         app.set_option("panel", "none").unwrap();
@@ -1042,7 +1042,7 @@ trailer << /Root 1 0 R >>
 fn sidebar_collapse_and_resize_preserves_scroll_position() {
     use pdfcraft_ui_egui::canvas::Fit;
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("pages.pdf", None, PAGES.to_vec()).expect("opens");
         app.set_option("left", "closed").unwrap();

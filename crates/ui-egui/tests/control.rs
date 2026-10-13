@@ -46,7 +46,7 @@ fn harness_pages_at(pages: usize, width: f32, scale: f32) -> (Harness<'static, P
     let slot: Arc<Mutex<Option<ControlClient>>> = Arc::default();
     let s = slot.clone();
     let mut h = Harness::builder().with_size(egui::vec2(width, 900.0)).with_pixels_per_point(scale).build_eframe(move |cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         *s.lock().unwrap() = Some(app.attach_control(&cc.egui_ctx));
         app.open_bytes("doc.pdf", None, fixture(pages)).unwrap();
@@ -1385,7 +1385,7 @@ fn home_and_combine_suppress_inspector_without_forgetting_layout_or_choice() {
 
 #[test]
 fn malformed_docking_settings_preserve_other_preferences() {
-    let mut app = PdfCraftApp::new();
+    let mut app = PdfCraftApp::new_for_test();
     app.restore(r#"{"docking":{"layout":{"root":null,"floating":[]},"hidden":[]},"default_mode":"edit","flatten_fill_sign":true}"#);
     assert_eq!(app.default_mode, pdfcraft_ui_egui::Mode::Edit);
     app.docking.validate().unwrap();
@@ -1541,7 +1541,7 @@ fn wheel_zoom_is_scoped_to_the_viewport_and_respects_existing_limits() {
 fn initial_zoom_option_is_applied_before_the_first_viewport_layout() {
     for percent in [50, 100, 200, 400] {
         let h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-            let mut app = PdfCraftApp::new();
+            let mut app = PdfCraftApp::new_for_test();
             app.open_bytes("initial-zoom.pdf", None, fixture(3)).unwrap();
             app.set_option("zoom", &percent.to_string()).unwrap();
             assert_eq!(app.views[0].zoom, percent as f32 / 100.0, "initial options must work before the viewport exists");
@@ -1575,4 +1575,99 @@ fn click_and_drag_refuse_coordinates_that_overflow_like_move() {
     let (x, y) = (read[0].as_f64().unwrap() + 4.0, read[1].as_f64().unwrap() + 4.0);
     assert_eq!(ok(&mut h, &c, "ui.click", json!({ "x": x, "y": y }))["clicked"], json!([x, y]));
     ok(&mut h, &c, "ui.drag", json!({ "from": [x, y], "to": [x + 10.0, y], "steps": 2 }));
+}
+
+// --- several windows ---
+
+#[test]
+fn requests_can_name_a_window() {
+    let (mut h, c) = harness_pages(3);
+    let windows = call(&mut h, &c, "ui.windows", json!({})).unwrap();
+    assert_eq!(windows["windows"].as_array().map(Vec::len), Some(1));
+    call(&mut h, &c, "ui.command", json!({ "id": "window.new_view" })).unwrap();
+    h.run_steps(4);
+    let windows = call(&mut h, &c, "ui.windows", json!({})).unwrap();
+    let list = windows["windows"].as_array().unwrap();
+    assert_eq!(list.len(), 2, "{windows}");
+    assert_eq!(list[0]["tabs"][0]["name"], "doc.pdf");
+    assert_eq!((list[0]["tabs"][0]["view_no"].as_u64(), list[1]["tabs"][0]["view_no"].as_u64()), (Some(1), Some(2)));
+    let child = list[1]["id"].as_u64().unwrap();
+    // The state of each window, by number; the zoom is the window's own.
+    call(&mut h, &c, "ui.set", json!({ "key": "zoom", "value": "250", "window": child })).unwrap();
+    let main = call(&mut h, &c, "ui.state", json!({ "window": 0 })).unwrap();
+    let other = call(&mut h, &c, "ui.state", json!({ "window": child })).unwrap();
+    assert_eq!(other["active"]["zoom_percent"], 250.0);
+    assert_ne!(main["active"]["zoom_percent"], 250.0);
+    assert_eq!((main["window"]["id"].as_u64(), other["window"]["id"].as_u64(), main["window_count"].as_u64()), (Some(0), Some(child), Some(2)));
+    // Commands run in the window they name.
+    call(&mut h, &c, "ui.window_close", json!({ "window": child })).unwrap();
+    h.run_steps(4);
+    assert_eq!(call(&mut h, &c, "ui.windows", json!({})).unwrap()["windows"].as_array().map(Vec::len), Some(1));
+}
+
+#[test]
+fn a_window_that_does_not_exist_is_an_error_not_a_crash() {
+    let (mut h, c) = harness_pages(1);
+    for bad in [json!(7), json!(4294967295u64), json!(99999999999u64), json!(-1), json!("x"), json!(1.5)] {
+        for method in ["ui.state", "ui.window_close", "ui.window_focus", "ui.window_new_view"] {
+            let r = call(&mut h, &c, method, json!({ "window": bad }));
+            assert!(r.as_ref().is_err_and(|e| e.contains("no window")), "{method} {bad}: {r:?}");
+        }
+    }
+    let r = call(&mut h, &c, "ui.window_move_tab", json!({ "doc_index": 0, "to": 12 }));
+    assert!(r.is_err_and(|e| e.contains("no window")));
+    let r = call(&mut h, &c, "ui.window_move_tab", json!({ "doc_index": 9 }));
+    assert!(r.is_err_and(|e| e.contains("no tab")));
+    let r = call(&mut h, &c, "ui.window_close", json!({}));
+    assert!(r.is_err(), "the main window is not closed this way");
+    let r = call(&mut h, &c, "ui.screenshot", json!({ "window": 3 }));
+    assert!(r.is_err_and(|e| e.contains("no window")));
+    call(&mut h, &c, "ui.command", json!({ "id": "window.new_view" })).unwrap();
+    h.run_steps(3);
+    let r = call(&mut h, &c, "ui.screenshot", json!({ "window": 1 }));
+    assert!(r.is_err_and(|e| e.contains("only the main window")), "other windows cannot be captured");
+}
+
+#[test]
+fn a_tab_can_be_moved_to_a_new_window_through_the_channel() {
+    let (mut h, c) = harness_pages(2);
+    h.state_mut().open_bytes("second.pdf", None, fixture(2)).unwrap();
+    h.run_steps(2);
+    call(&mut h, &c, "ui.window_move_tab", json!({ "doc_index": 1 })).unwrap();
+    h.run_steps(4);
+    let windows = call(&mut h, &c, "ui.windows", json!({})).unwrap();
+    let list = windows["windows"].as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[1]["tabs"][0]["name"], "second.pdf");
+}
+
+#[test]
+fn input_requests_take_a_window_and_refuse_one_that_does_not_exist() {
+    let (mut h, c) = harness_pages(3);
+    call(&mut h, &c, "ui.command", json!({ "id": "window.new_view" })).unwrap();
+    h.run_steps(4);
+    let child = call(&mut h, &c, "ui.windows", json!({})).unwrap()["windows"][1]["id"].as_u64().unwrap();
+    // Windows embedded in the main one (as here) share its tree: naming one still works.
+    for window in [json!(0), json!(child)] {
+        let found = call(&mut h, &c, "ui.inspect", json!({ "window": window, "query": "doc.pdf" })).unwrap();
+        assert!(found["count"].as_u64().unwrap_or(0) > 0, "{window}: {found}");
+        call(&mut h, &c, "ui.move", json!({ "x": 700.0, "y": 400.0, "window": window })).unwrap();
+        call(&mut h, &c, "ui.key", json!({ "key": "Escape", "window": window })).unwrap();
+        call(&mut h, &c, "ui.type", json!({ "text": "", "window": window })).unwrap();
+        call(&mut h, &c, "ui.click", json!({ "x": 700.0, "y": 400.0, "window": window })).unwrap();
+        call(&mut h, &c, "ui.drag", json!({ "from": [700.0, 400.0], "to": [710.0, 410.0], "window": window })).unwrap();
+    }
+    for bad in [json!(77), json!(-1), json!(1.5), json!(4_294_967_295_u64), json!("x")] {
+        for (method, params) in [
+            ("ui.inspect", json!({ "window": bad })),
+            ("ui.click", json!({ "x": 1.0, "y": 1.0, "window": bad })),
+            ("ui.drag", json!({ "from": [1.0, 1.0], "to": [2.0, 2.0], "window": bad })),
+            ("ui.move", json!({ "x": 1.0, "y": 1.0, "window": bad })),
+            ("ui.type", json!({ "text": "a", "window": bad })),
+            ("ui.key", json!({ "key": "A", "window": bad })),
+        ] {
+            let r = call(&mut h, &c, method, params);
+            assert!(r.as_ref().is_err_and(|e| e.contains("no window")), "{method} {bad}: {r:?}");
+        }
+    }
 }

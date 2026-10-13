@@ -120,3 +120,27 @@ driver's shader compilation, and explicit `PDFCRAFT_RENDERER=wgpu` still disable
 | `PDFCRAFT_BUILD_LABEL` | Build time: a label for a local or patched build (letters, digits, inner dots), shown after the version in `--version`, About and the log (`0.7.1 (titlebar)`). `packaging/linux/package.sh` also puts it in the file names and the .rpm/.deb release (`1.titlebar`), which upgrades over the release of the same version |
 | `CRAFT_FONTS_DIR` | Build time: a [craft-fonts](https://github.com/storytold/craft-fonts) checkout to embed (Japanese fonts) |
 | `PDFCRAFT_SYSTEM_FONTS` | `0` stops the desktop app from using an installed font for characters its embedded fonts lack (`cargo xtask screenshots` sets it) |
+
+## Several windows
+
+PdfCraft can show one document in several windows (Window ▸ New window, or a right-click on a
+tab). They share the document, its undo history and its unsaved state; each has its own page,
+zoom, selection and panels. With the control channel running, every window can be driven:
+
+```bash
+cargo run -p pdfcraft -- --control /tmp/pc.json some.pdf &
+cargo run -p pdfcraft-cli -- ui --control /tmp/pc.json command id=window.new_view
+cargo run -p pdfcraft-cli -- ui --control /tmp/pc.json windows
+cargo run -p pdfcraft-cli -- ui --control /tmp/pc.json state --window 1
+cargo run -p pdfcraft-cli -- ui --control /tmp/pc.json set key=zoom value=200 --window 1
+cargo run -p pdfcraft-cli -- ui --control /tmp/pc.json window_move_tab doc_index=0
+cargo run -p pdfcraft-cli -- ui --control /tmp/pc.json window_close --window 1
+```
+
+Without `--window`, `state`, `command`, `set` and `open` go to the window that has the focus, and `inspect`,
+`click`, `drag`, `move`, `type` and `key` to the main window. Every window has its own widget tree and input, so
+widget ids and coordinates from `inspect --window 1` are for window 1. `screenshot` can only capture the main window
+(eframe draws the other windows as immediate viewports and ignores screenshot requests for them;
+use the system's screenshot tool, e.g. `screencapture -l <window id>` on macOS). In tests, windows are drawn inside the main one
+(egui's embedded viewports), so `egui_kittest` can click in all of them; see
+`crates/ui-egui/tests/windows.rs`.

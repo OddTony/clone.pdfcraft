@@ -76,7 +76,7 @@ fn remote_fixture(file: &str, destination: &str) -> Vec<u8> {
 
 fn remote_harness(source_path: Option<String>, file: &str, destination: &str) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("source.pdf", source_path, remote_fixture(file, destination)).unwrap();
         app.set_option("left", "closed").unwrap();
@@ -103,7 +103,7 @@ fn linked_pages(count: usize, password: Option<&str>) -> Vec<u8> {
 
 fn harness() -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("links.pdf", None, fixture()).unwrap();
         app.set_option("left", "closed").unwrap();
@@ -583,7 +583,7 @@ fn overlapping_annotation_fixture_with_form(subtype: &str, internal: bool, with_
 
 fn overlapping_annotation_harness(bytes: Vec<u8>) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.open_bytes("highlighted-link.pdf", None, bytes).unwrap();
         app.set_option("left", "closed").unwrap();

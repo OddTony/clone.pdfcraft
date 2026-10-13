@@ -1079,7 +1079,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
             }
             Dialog::About => {
                 // Tabs About · Contributors · Models (craftrules standards/contributors.md).
-                let tab_id = egui::Id::new("about_tab");
+                let tab_id = crate::windows::wid("about_tab");
                 let mut tab = ui.data_mut(|d| d.get_temp::<u8>(tab_id)).unwrap_or(0);
                 ui.horizontal_wrapped(|ui| {
                     for (i, label) in ["About", "Contributors", "Models"].into_iter().enumerate() {
@@ -1383,7 +1383,8 @@ fn save_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let Some(req) = app.close_request else { return };
     let index = match req {
         CloseRequest::Tab(id) => app.views.iter().position(|v| v.id == id),
-        CloseRequest::Quit | CloseRequest::All => app.first_dirty(),
+        CloseRequest::Quit => app.first_dirty(),
+        CloseRequest::All | CloseRequest::Window(_) => app.first_dirty_exclusive(),
     };
     let Some(name) = index.and_then(|i| app.views.get(i)).and_then(|v| app.session.get(v.id)).map(|d| d.name.clone()) else {
         // Nothing left to ask about (tab already gone or no dirty documents).

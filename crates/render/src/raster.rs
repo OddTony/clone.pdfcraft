@@ -193,7 +193,7 @@ impl From<RenderRequest> for RequestFailureKey {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RenderedPage {
     pub request: RenderRequest,
     pub width: u32,
@@ -495,6 +495,10 @@ struct Busy {
     stage: BusyStage,
     cancelled: Arc<AtomicBool>,
     valid: Arc<AtomicBool>,
+    /// The queue of the client that asked for this render.
+    queue: Arc<WorkQueue>,
+    /// Requests other clients made for the same page meanwhile: answered from this render.
+    followers: Arc<Mutex<Vec<Follower>>>,
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -523,11 +527,55 @@ struct ParseGate {
     release: Arc<std::sync::Barrier>,
 }
 
+/// Who asked for a render. Every view of a document registers its own client, so two windows
+/// showing one document keep separate queues and each receives exactly the pages it asked for.
+/// `ClientId(0)` is the default client that [`RenderPool::set_queue`] and
+/// [`RenderPool::try_recv`] use.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct ClientId(pub u32);
+
+/// Most clients (besides the default one) a pool serves.
+pub const MAX_CLIENTS: usize = 64;
+/// Most requests one client can have queued; the rest of a longer queue is ignored.
+pub const MAX_QUEUE_PER_CLIENT: usize = 4096;
+
+/// A registered client: its own queue of requests and results (the default client's queue is
+/// `Shared::queue`).
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+struct ClientSlot {
+    id: ClientId,
+    /// Higher goes first (0 normal, 1 the focused window).
+    priority: u8,
+    queue: Arc<WorkQueue>,
+}
+
+/// A request that another client's equal render is answering.
+#[cfg(not(target_arch = "wasm32"))]
+struct Follower {
+    queue: Arc<WorkQueue>,
+    request: RenderRequest,
+}
+
+/// Which clients exist.
+#[derive(Default)]
+struct Registry {
+    next: u32,
+    slots: Vec<ClientSlot>,
+}
+
 /// State shared by the pool and its workers.
 #[derive(Default)]
 struct Shared {
-    /// Desired requests, active jobs and bounded completed results share one deduplication key.
+    /// The default client's desired requests, active jobs and bounded completed results share
+    /// one deduplication key. Other clients have a queue of their own (`clients`).
     queue: Arc<WorkQueue>,
+    /// The default client's priority (see `ClientSlot::priority`).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    default_priority: std::sync::atomic::AtomicU8,
+    /// Round-robin position among clients of the same priority.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    next_rr: std::sync::atomic::AtomicUsize,
+    clients: Mutex<Registry>,
     /// Per worker id: the request it is rendering and since when.
     #[cfg(not(target_arch = "wasm32"))]
     busy: Mutex<Vec<Option<Busy>>>,
@@ -581,15 +629,109 @@ fn same_request(a: RenderRequest, b: RenderRequest) -> bool {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Shared {
-    fn cancel_in_flight(&self, obsolete: &[RenderRequest]) {
+    /// Stop every render for `queue`'s client (it went away), unless other clients joined it.
+    fn cancel_in_flight_of(&self, queue: &Arc<WorkQueue>) {
         let busy = lock(&self.busy);
         for busy in busy.iter().flatten() {
-            if obsolete.iter().copied().any(|request| same_request(request, busy.request)) {
+            if Arc::ptr_eq(&busy.queue, queue) && lock(&busy.followers).is_empty() {
                 busy.cancelled.store(true, Ordering::Release);
                 busy.valid.store(false, Ordering::Release);
             }
         }
     }
+
+    /// Stop the renders `queue`'s client no longer wants, unless other clients joined them.
+    fn cancel_in_flight(&self, queue: &Arc<WorkQueue>, obsolete: &[RenderRequest]) {
+        let busy = lock(&self.busy);
+        for busy in busy.iter().flatten() {
+            if Arc::ptr_eq(&busy.queue, queue)
+                && lock(&busy.followers).is_empty()
+                && obsolete.iter().copied().any(|request| same_request(request, busy.request))
+            {
+                busy.cancelled.store(true, Ordering::Release);
+                busy.valid.store(false, Ordering::Release);
+            }
+        }
+    }
+}
+
+/// [`same_request`], whatever the callers' tags, when the tags don't change how it renders.
+#[cfg(not(target_arch = "wasm32"))]
+fn same_work(a: RenderRequest, b: RenderRequest) -> bool {
+    (a.page, a.kind, a.tile, a.scale.to_bits(), a.preview) == (b.page, b.kind, b.tile, b.scale.to_bits(), b.preview)
+        && (a.tag ^ b.tag) & PRINT_TAG == 0
+}
+
+/// Another client's render of the same page is running: wait for it instead of rendering again.
+#[cfg(not(target_arch = "wasm32"))]
+fn join_running(shared: &Shared, queue: &Arc<WorkQueue>, req: RenderRequest) -> bool {
+    let busy = lock(&shared.busy);
+    for b in busy.iter().flatten() {
+        if !Arc::ptr_eq(&b.queue, queue) && same_work(b.request, req) && !b.cancelled.load(Ordering::Acquire) {
+            lock(&b.followers).push(Follower { queue: queue.clone(), request: req });
+            return true;
+        }
+    }
+    false
+}
+
+/// Pop the most urgent queued request of the clients, and mark it active. Clients with a higher
+/// priority go first; equal ones take turns.
+#[cfg(not(target_arch = "wasm32"))]
+fn take_next(shared: &Shared) -> Option<(Arc<WorkQueue>, RenderRequest)> {
+    let mut clients: Vec<(u8, Arc<WorkQueue>)> = vec![(shared.default_priority.load(Ordering::Relaxed), shared.queue.clone())];
+    clients.extend(lock(&shared.clients).slots.iter().map(|c| (c.priority, c.queue.clone())));
+    let mut priorities: Vec<u8> = clients.iter().map(|c| c.0).collect();
+    priorities.sort_unstable_by(|a, b| b.cmp(a));
+    priorities.dedup();
+    let turn = shared.next_rr.load(std::sync::atomic::Ordering::Relaxed);
+    for priority in priorities {
+        let group: Vec<&Arc<WorkQueue>> = clients.iter().filter(|c| c.0 == priority).map(|c| &c.1).collect();
+        for k in 0..group.len() {
+            let Some(queue) = group.get(turn.wrapping_add(k) % group.len()) else { continue };
+            while let Some(req) = queue.pop() {
+                if join_running(shared, queue, req) {
+                    continue;
+                }
+                shared.next_rr.store(turn.wrapping_add(1), std::sync::atomic::Ordering::Relaxed);
+                return Some(((*queue).clone(), req));
+            }
+        }
+    }
+    None
+}
+
+/// Take a worker's busy slot (`None` when the watchdog already did).
+#[cfg(not(target_arch = "wasm32"))]
+fn take_busy(shared: &Shared, id: usize) -> Option<Busy> {
+    lock(&shared.busy).get_mut(id).and_then(Option::take)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl Busy {
+    fn take_followers(&self) -> Vec<Follower> {
+        std::mem::take(&mut *lock(&self.followers))
+    }
+}
+
+/// The render that would have answered these requests did not finish: they are asked again.
+#[cfg(not(target_arch = "wasm32"))]
+fn retry_followers(followers: Vec<Follower>) {
+    for f in followers {
+        f.queue.retry(f.request);
+    }
+}
+
+/// Deliver a finished page to the client that asked and to those that joined its render. A
+/// joined client whose result buffer is full asks again instead of holding the worker.
+#[cfg(not(target_arch = "wasm32"))]
+fn publish(queue: &WorkQueue, followers: Vec<Follower>, page: RenderedPage, valid: Vec<Arc<AtomicBool>>) -> Result<(), ()> {
+    for f in followers {
+        let mut copy = page.clone();
+        copy.request = f.request;
+        f.queue.offer(copy, valid.clone());
+    }
+    queue.send_valid_with_tokens(page, valid)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -704,10 +846,13 @@ impl PoolParser {
 /// retired after that budget is spent, pending and future requests fail explicitly instead of
 /// waiting forever.
 pub struct RenderPool {
+    /// Tells this pool from the one that replaces it (a document gets a new pool after edits).
+    pool_id: u64,
     shared: Arc<Shared>,
     wake: Mutex<Vec<SyncSender<()>>>,
     results: ResultReceiver,
-    results_tx: Arc<WorkQueue>,
+    /// The result receivers of the registered clients (the default client's is `results`).
+    receivers: Mutex<std::collections::HashMap<ClientId, ResultReceiver>>,
     bytes: Arc<Vec<u8>>,
     config: RenderConfig,
     _workers: Mutex<Vec<JoinHandle<()>>>,
@@ -727,13 +872,14 @@ impl RenderPool {
     fn with_mode(bytes: Arc<Vec<u8>>, threads: usize, config: RenderConfig, inline: bool) -> Self {
         let threads = if inline || cfg!(target_arch = "wasm32") { 0 } else { threads.max(1) };
         let shared = Arc::new(Shared::default());
-        let results_tx = shared.queue.clone();
+        static NEXT_POOL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let results = ResultReceiver(shared.queue.clone());
         let mut pool = Self {
+            pool_id: NEXT_POOL.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             shared,
             wake: Mutex::new(Vec::new()),
             results,
-            results_tx,
+            receivers: Mutex::default(),
             bytes: bytes.clone(),
             config: config.clone(),
             _workers: Mutex::new(Vec::new()),
@@ -765,8 +911,8 @@ impl RenderPool {
                 (busy.len() - 1, stop)
             };
             let (wtx, wrx) = sync_channel::<()>(1);
-            let (shared, out, bytes, config) = (self.shared.clone(), self.results_tx.clone(), self.bytes.clone(), self.config.clone());
-            match std::thread::Builder::new().name(format!("pdfcraft-render-{id}")).spawn(move || worker(id, bytes, config, shared, wrx, out, stop)) {
+            let (shared, bytes, config) = (self.shared.clone(), self.bytes.clone(), self.config.clone());
+            match std::thread::Builder::new().name(format!("pdfcraft-render-{id}")).spawn(move || worker(id, bytes, config, shared, wrx, stop)) {
                 Ok(h) => {
                     lock(&self.wake).push(wtx);
                     lock(&self._workers).push(h);
@@ -800,21 +946,83 @@ impl RenderPool {
         self.stuck_after = limit;
     }
 
-    /// Replace desired work (most urgent first), retaining matching in-flight/completed jobs.
-    /// Obsolete results are released before they reach the caller, and active obsolete renders
-    /// are asked to stop at their next cancellation point.
+    /// A number that is different for every pool ever made.
+    pub fn pool_id(&self) -> u64 {
+        self.pool_id
+    }
+
+    /// A new client, with a queue and an inbox of its own. `None` when the pool serves
+    /// [`MAX_CLIENTS`] already; the caller then uses the default client.
+    pub fn register_client(&self) -> Option<ClientId> {
+        let mut registry = lock(&self.shared.clients);
+        if registry.slots.len() >= MAX_CLIENTS {
+            return None;
+        }
+        registry.next = registry.next.checked_add(1)?;
+        let id = ClientId(registry.next);
+        let queue = Arc::new(WorkQueue::default());
+        // Dropping the receiver closes the queue, as for the default client.
+        lock(&self.receivers).insert(id, ResultReceiver(queue.clone()));
+        registry.slots.push(ClientSlot { id, priority: 0, queue });
+        Some(id)
+    }
+
+    /// Drop a client's wishes and the answers it has not collected. Unknown ids do nothing.
+    pub fn unregister_client(&self, client: ClientId) {
+        let slot = {
+            let mut registry = lock(&self.shared.clients);
+            let Some(at) = registry.slots.iter().position(|c| c.id == client) else { return };
+            registry.slots.remove(at)
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        self.shared.cancel_in_flight_of(&slot.queue);
+        #[cfg(target_arch = "wasm32")]
+        let _ = slot;
+        // Closes the queue: pending requests and uncollected results go.
+        lock(&self.receivers).remove(&client);
+    }
+
+    /// The queue of a client; `None` for an unknown one.
+    fn queue_of(&self, client: ClientId) -> Option<Arc<WorkQueue>> {
+        if client == ClientId(0) {
+            return Some(self.shared.queue.clone());
+        }
+        lock(&self.shared.clients).slots.iter().find(|c| c.id == client).map(|c| c.queue.clone())
+    }
+
+    /// Higher priority clients are served first (0 normal, 1 the focused window).
+    pub fn set_priority(&self, client: ClientId, priority: u8) {
+        if client == ClientId(0) {
+            self.shared.default_priority.store(priority, Ordering::Relaxed);
+        } else if let Some(slot) = lock(&self.shared.clients).slots.iter_mut().find(|c| c.id == client) {
+            slot.priority = priority;
+        }
+    }
+
+    /// Replace this client's desired work (most urgent first; at most [`MAX_QUEUE_PER_CLIENT`]
+    /// are kept), retaining matching in-flight/completed jobs. Obsolete results are released
+    /// before they reach the caller, and active obsolete renders are asked to stop at their
+    /// next cancellation point. A request another client is rendering already is answered from
+    /// that render.
     ///
     /// The contract: a result is delivered only while its request is in the latest queue.
     /// A caller still waiting for a page (or text, or a thumbnail) must keep listing it in
     /// every call, or the finished result is dropped to save memory.
-    pub fn set_queue(&self, requests: Vec<RenderRequest>) {
+    pub fn set_queue_for(&self, client: ClientId, mut requests: Vec<RenderRequest>) {
+        let Some(queue) = self.queue_of(client) else { return };
+        requests.truncate(MAX_QUEUE_PER_CLIENT);
         #[cfg(not(target_arch = "wasm32"))]
-        let obsolete = self.shared.queue.replace(requests);
+        let obsolete = queue.replace(requests);
         #[cfg(target_arch = "wasm32")]
-        let _ = self.shared.queue.replace(requests);
+        let _ = queue.replace(requests);
         #[cfg(not(target_arch = "wasm32"))]
-        self.shared.cancel_in_flight(&obsolete);
+        self.shared.cancel_in_flight(&queue, &obsolete);
         self.wake_workers();
+    }
+
+    /// [`Self::set_queue_for`] the default client.
+    pub fn set_queue(&self, requests: Vec<RenderRequest>) {
+        self.set_queue_for(ClientId(0), requests);
     }
 
     fn wake_workers(&self) {
@@ -824,15 +1032,18 @@ impl RenderPool {
         }
     }
 
-    pub fn try_recv(&self) -> Option<RenderedPage> {
+    /// The next finished page for this client.
+    pub fn try_recv_for(&self, client: ClientId) -> Option<RenderedPage> {
+        let queue = self.queue_of(client)?;
         if let Some(r) = &self.inline {
-            let req = self.shared.queue.pop()?;
+            let req = queue.pop()?;
             let page = r.borrow_mut().render(req);
-            self.shared.queue.finish_inline(req);
+            queue.finish_inline(req);
             return Some(page);
         }
         self.watchdog();
-        let page = self.results.try_recv().ok();
+        let page =
+            if client == ClientId(0) { self.results.try_recv().ok() } else { lock(&self.receivers).get(&client).and_then(|r| r.try_recv().ok()) };
         // Consuming a result releases byte/count capacity. An invalid parser generation
         // can also requeue work without returning a page, so wake in both cases.
         self.wake_workers();
@@ -843,8 +1054,8 @@ impl RenderPool {
             }
             // Count successful handles, not reserved busy slots: thread spawning
             // can fail. No worker remains able to service these pending requests.
-            let request = self.shared.queue.pop()?;
-            self.shared.queue.finish_inline(request);
+            let request = queue.pop()?;
+            queue.finish_inline(request);
             Some(RenderedPage {
                 request,
                 width: 0,
@@ -856,6 +1067,11 @@ impl RenderPool {
                 millis: 0,
             })
         })
+    }
+
+    /// [`Self::try_recv_for`] the default client.
+    pub fn try_recv(&self) -> Option<RenderedPage> {
+        self.try_recv_for(ClientId(0))
     }
 
     /// Give up on renders that exceeded `stuck_after` (see the type docs).
@@ -894,7 +1110,7 @@ impl RenderPool {
                     // The shared cold-decode gate can make a healthy page wait
                     // behind another page. Only its private retry can attribute
                     // the timeout to this page; do not blacklist it here.
-                    self.shared.queue.retry(req);
+                    busy.queue.retry(req);
                 } else {
                     lock(&self.shared.stuck).insert(req.into());
                     let what = if req.kind == RequestKind::Text { "text extraction for page" } else { "page" };
@@ -903,7 +1119,7 @@ impl RenderPool {
                         req.page + 1,
                         self.stuck_after.as_secs_f32().max(1.0)
                     );
-                    self.shared.queue.abandon(RenderedPage {
+                    busy.queue.abandon(RenderedPage {
                         request: req,
                         width: 0,
                         height: 0,
@@ -914,6 +1130,8 @@ impl RenderPool {
                         millis: 0,
                     });
                 }
+                // Clients that joined this render ask again; their requests are served on their own.
+                retry_followers(busy.take_followers());
                 let mut left = lock(&self.replacements_left);
                 if *left > 0 && self.spawn_worker() {
                     *left -= 1;
@@ -985,15 +1203,7 @@ fn worker_settings(config: &RenderConfig, stop: &Arc<std::sync::atomic::AtomicBo
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn worker(
-    id: usize,
-    bytes: Arc<Vec<u8>>,
-    config: RenderConfig,
-    shared: Arc<Shared>,
-    wake: Receiver<()>,
-    out: Arc<WorkQueue>,
-    stop: Arc<std::sync::atomic::AtomicBool>,
-) {
+fn worker(id: usize, bytes: Arc<Vec<u8>>, config: RenderConfig, shared: Arc<Shared>, wake: Receiver<()>, stop: Arc<std::sync::atomic::AtomicBool>) {
     let warnings = Arc::new(Mutex::new(Vec::new()));
     // A local cell keeps Pdf borrows used by RenderCache stable. Drop both on an
     // epoch change/panic before publishing an error or taking another request.
@@ -1004,14 +1214,14 @@ fn worker(
                 if parsed.get().is_some_and(|(_, _, shared_generation)| *shared_generation) && !shared.parser.valid.load(Ordering::Acquire) {
                     break None;
                 }
-                let next = shared.queue.pop();
-                let Some(req) = next else {
+                let next = take_next(&shared);
+                let Some((queue, req)) = next else {
                     if wake.recv().is_err() {
                         return; // pool dropped
                     }
                     continue;
                 };
-                if shared.queue.cancel_obsolete(req) {
+                if queue.cancel_obsolete(req) {
                     continue;
                 }
                 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -1033,9 +1243,8 @@ fn worker(
                         warnings: Vec::new(),
                         millis: 0,
                     };
-                    if out.send_valid(page, None).is_err() {
-                        return;
-                    }
+                    // A closed queue is a client that went away: nothing to tell it.
+                    let _ = queue.send_valid(page, None);
                     continue;
                 }
                 let start = Stopwatch::start();
@@ -1053,12 +1262,15 @@ fn worker(
                         stage,
                         cancelled: request_cancelled.clone(),
                         valid: request_valid.clone(),
+                        queue: queue.clone(),
+                        followers: Arc::default(),
                     });
                 }
-                if shared.queue.cancel_obsolete(req) {
-                    if lock(&shared.busy).get_mut(id).is_none_or(|slot| slot.take().is_none()) {
+                if queue.cancel_obsolete(req) {
+                    let Some(busy) = take_busy(&shared, id) else {
                         return;
-                    }
+                    };
+                    retry_followers(busy.take_followers());
                     continue;
                 }
                 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -1107,18 +1319,20 @@ fn worker(
                         }
                     };
                     if aborted() {
-                        if lock(&shared.busy).get_mut(id).is_none_or(|slot| slot.take().is_none()) {
+                        let Some(busy) = take_busy(&shared, id) else {
                             return;
-                        }
+                        };
+                        retry_followers(busy.take_followers());
                         continue;
                     }
                     let _ = parsed.set(init);
                 }
                 // Set just above when it was empty.
                 let Some((pdf, cache, shared_generation)) = parsed.get() else {
-                    if lock(&shared.busy).get_mut(id).is_none_or(|slot| slot.take().is_none()) {
+                    let Some(busy) = take_busy(&shared, id) else {
                         return;
-                    }
+                    };
+                    retry_followers(busy.take_followers());
                     continue;
                 };
                 // Acquisition may have waited or parsed privately after shared
@@ -1128,17 +1342,20 @@ fn worker(
                 if !set_busy_stage(&shared, id, stage) {
                     return;
                 }
-                if shared.queue.cancel_obsolete(req) {
-                    if lock(&shared.busy).get_mut(id).is_none_or(|slot| slot.take().is_none()) {
+                if queue.cancel_obsolete(req) {
+                    let Some(busy) = take_busy(&shared, id) else {
                         return;
-                    }
+                    };
+                    retry_followers(busy.take_followers());
                     continue;
                 }
                 if *shared_generation && !shared.parser.valid.load(Ordering::Acquire) {
-                    if lock(&shared.busy).get_mut(id).is_none_or(|slot| slot.take().is_none()) {
+                    let Some(busy) = take_busy(&shared, id) else {
                         return;
-                    }
+                    };
                     break Some((
+                        queue,
+                        busy.take_followers(),
                         finish(req, start, Err(("the shared parser was retired".into(), false)), Vec::new()),
                         vec![request_valid, shared.parser.valid.clone()],
                     ));
@@ -1191,7 +1408,9 @@ fn worker(
                 let request_warnings = take_warnings(&warnings);
                 // If the watchdog cleared our slot meanwhile, it already answered for this request
                 // and started a replacement: drop the late result and retire.
-                let abandoned = lock(&shared.busy).get_mut(id).is_none_or(|slot| slot.take().is_none());
+                let finished = take_busy(&shared, id);
+                let abandoned = finished.is_none();
+                let followers = finished.map(|busy| busy.take_followers()).unwrap_or_default();
                 if abandoned {
                     #[cfg(all(test, not(target_arch = "wasm32")))]
                     if let Some(gate) = render_gate {
@@ -1203,24 +1422,21 @@ fn worker(
                 if panicked {
                     shared.parser.abandon();
                     lock(&shared.stuck).insert(req.into());
-                    break Some((finish(req, start, r, request_warnings), vec![request_valid]));
+                    break Some((queue, followers, finish(req, start, r, request_warnings), vec![request_valid]));
                 }
                 let mut valid = vec![request_valid];
                 if *shared_generation {
                     valid.push(shared.parser.valid.clone());
                 }
                 if *shared_generation && !shared.parser.valid.load(Ordering::Acquire) {
-                    break Some((finish(req, start, r, request_warnings), valid));
+                    break Some((queue, followers, finish(req, start, r, request_warnings), valid));
                 }
-                if out.send_valid_with_tokens(finish(req, start, r, request_warnings), valid).is_err() {
-                    return;
-                }
+                // A closed queue is a client that went away: the worker serves the others.
+                let _ = publish(&queue, followers, finish(req, start, r, request_warnings), valid);
             }
         }; // drop the parser and its borrowing cache before delivering reset_result
-        if let Some((page, valid)) = reset_result
-            && out.send_valid_with_tokens(page, valid).is_err()
-        {
-            return;
+        if let Some((queue, followers, page, valid)) = reset_result {
+            let _ = publish(&queue, followers, page, valid);
         }
     }
 }
@@ -1469,7 +1685,7 @@ mod tests {
         let mut old = pool.results.recv_timeout(std::time::Duration::from_secs(8)).unwrap();
         old.width = 999; // a stale surface must never reach the caller
         pool.shared.parser.abandon();
-        pool.results_tx.send_valid(old, Some(pool.shared.parser.valid.clone())).unwrap();
+        pool.shared.queue.send_valid(old, Some(pool.shared.parser.valid.clone())).unwrap();
         let page = receive_before_deadline(&pool);
         assert_eq!((page.width, page.height, page.request.tag), (100, 50, 77));
         assert!(page.error.is_none());
@@ -1654,12 +1870,11 @@ mod tests {
             let bytes = Arc::new(ONE_PAGE.to_vec());
             let source = Arc::downgrade(&bytes);
             let (wake_tx, wake_rx) = sync_channel(1);
-            let out = shared.queue.clone();
             let results = ResultReceiver(shared.queue.clone());
             // A dropped pool disconnects this channel. Running synchronously makes this check
             // deterministic even when a worker starts after the pool has already been replaced.
             drop(wake_tx);
-            worker(0, bytes, RenderConfig::default(), shared.clone(), wake_rx, out, Arc::new(std::sync::atomic::AtomicBool::new(false)));
+            worker(0, bytes, RenderConfig::default(), shared.clone(), wake_rx, Arc::new(std::sync::atomic::AtomicBool::new(false)));
             assert_eq!(shared.parses.load(std::sync::atomic::Ordering::Relaxed), 0);
             assert!(source.upgrade().is_none(), "retired workers release their source bytes");
             if skipped {
@@ -2214,6 +2429,242 @@ mod tests {
         }
         assert_eq!(got, vec![1; pages]);
         assert_eq!(pool.shared.render_started.load(Ordering::Relaxed), pages, "no duplicated work was hidden by delivery filtering");
+    }
+
+    trait WithScale {
+        fn with_scale(self, scale: f32) -> Self;
+    }
+    impl WithScale for RenderRequest {
+        fn with_scale(self, scale: f32) -> Self {
+            Self { scale, ..self }
+        }
+    }
+
+    fn page_req(page: usize, tag: u64) -> RenderRequest {
+        RenderRequest { page, scale: 0.5, tag, ..Default::default() }
+    }
+
+    /// Pages a client receives until `count` arrived (or 10 s passed).
+    fn collect(pool: &RenderPool, client: ClientId, count: usize) -> Vec<RenderedPage> {
+        let mut got = Vec::new();
+        let t = std::time::Instant::now();
+        while got.len() < count && t.elapsed() < std::time::Duration::from_secs(10) {
+            match pool.try_recv_for(client) {
+                Some(p) => got.push(p),
+                None => std::thread::sleep(std::time::Duration::from_millis(2)),
+            }
+        }
+        got
+    }
+
+    /// A document of `n` small pages.
+    fn pages_pdf(n: usize) -> Arc<Vec<u8>> {
+        let mut pdf = format!(
+            "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [{}] /Count {n} /MediaBox [0 0 100 100] >> endobj\n",
+            (0..n).map(|i| format!("{} 0 R", 4 + i)).collect::<Vec<_>>().join(" ")
+        );
+        pdf += "3 0 obj << /Length 25 >> stream\n0 0 1 rg 10 10 30 20 re f\nendstream endobj\n";
+        for i in 0..n {
+            pdf += &format!("{} 0 obj << /Type /Page /Parent 2 0 R /Contents 3 0 R >> endobj\n", 4 + i);
+        }
+        pdf += "trailer << /Root 1 0 R >>\n%%EOF";
+        Arc::new(pdf.into_bytes())
+    }
+
+    #[test]
+    fn two_clients_each_get_all_their_pages() {
+        let pool = RenderPool::new(pages_pdf(6), 2, RenderConfig::default());
+        let (a, b) = (pool.register_client().unwrap(), pool.register_client().unwrap());
+        pool.set_queue_for(a, (0..4).map(|p| page_req(p, 1)).collect());
+        pool.set_queue_for(b, (2..6).map(|p| page_req(p, 2)).collect());
+        let mut got_a: Vec<_> = collect(&pool, a, 4).iter().map(|p| (p.request.page, p.request.tag)).collect();
+        let mut got_b: Vec<_> = collect(&pool, b, 4).iter().map(|p| (p.request.page, p.request.tag)).collect();
+        got_a.sort();
+        got_b.sort();
+        assert_eq!(got_a, vec![(0, 1), (1, 1), (2, 1), (3, 1)]);
+        assert_eq!(got_b, vec![(2, 2), (3, 2), (4, 2), (5, 2)]);
+        assert!(pool.try_recv_for(a).is_none() && pool.try_recv_for(b).is_none());
+        assert!(lock(&pool.shared.busy).iter().all(Option::is_none), "every render was collected");
+    }
+
+    #[test]
+    fn same_request_renders_once() {
+        let pool = RenderPool::new(Arc::new(ONE_PAGE_TWICE.to_vec()), 2, RenderConfig::default());
+        *lock(&pool.shared.slow_page) = Some((0, std::time::Duration::from_millis(600)));
+        let (a, b) = (pool.register_client().unwrap(), pool.register_client().unwrap());
+        pool.set_queue_for(a, vec![page_req(0, 11)]);
+        let t = std::time::Instant::now();
+        while !lock(&pool.shared.busy).iter().flatten().any(|b| b.request.page == 0) {
+            assert!(t.elapsed() < std::time::Duration::from_secs(8), "never started");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        // B asks for the same page while A's render runs; it keeps asking every frame.
+        for _ in 0..3 {
+            pool.set_queue_for(b, vec![page_req(0, 22)]);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let from_a = collect(&pool, a, 1);
+        let from_b = collect(&pool, b, 1);
+        assert_eq!((from_a.len(), from_b.len()), (1, 1));
+        assert_eq!((from_a[0].request.tag, from_b[0].request.tag), (11, 22), "each gets its own tag");
+        assert_eq!(from_a[0].rgba, from_b[0].rgba);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(pool.try_recv_for(b).is_none() && pool.try_recv_for(a).is_none(), "no second copy");
+        assert_eq!(pool.shared.render_started.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn unregister_drops_only_that_client() {
+        let pool = RenderPool::new(pages_pdf(4), 1, RenderConfig::default());
+        let (a, b) = (pool.register_client().unwrap(), pool.register_client().unwrap());
+        pool.set_queue_for(a, vec![page_req(0, 1), page_req(1, 1)]);
+        pool.set_queue_for(b, vec![page_req(2, 2), page_req(3, 2)]);
+        pool.unregister_client(a);
+        let got_b = collect(&pool, b, 2);
+        assert_eq!(got_b.len(), 2);
+        assert!(pool.try_recv_for(a).is_none());
+        pool.set_queue_for(a, vec![page_req(0, 1)]);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(pool.try_recv_for(a).is_none(), "an unregistered client gets nothing");
+    }
+
+    #[test]
+    fn priority_client_first() {
+        let pool = RenderPool::new(pages_pdf(40), 1, RenderConfig::default());
+        let (low, high) = (pool.register_client().unwrap(), pool.register_client().unwrap());
+        pool.set_priority(high, 1);
+        // Nothing runs until both queues exist: hold the single worker busy with a slow page.
+        *lock(&pool.shared.slow_page) = Some((39, std::time::Duration::from_millis(300)));
+        pool.set_queue_for(low, vec![page_req(39, 0)]);
+        let t = std::time::Instant::now();
+        while !lock(&pool.shared.busy).iter().flatten().any(|b| b.request.page == 39) {
+            assert!(t.elapsed() < std::time::Duration::from_secs(8));
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        pool.set_queue_for(low, (0..10).map(|p| page_req(p, 1)).collect());
+        pool.set_queue_for(high, (10..20).map(|p| page_req(p, 2)).collect());
+        // Poll the focused client first; note how much the other has when its last page arrives.
+        let (mut high_done, mut low_done, mut low_when_high_done) = (0, 0, None);
+        let t = std::time::Instant::now();
+        while (high_done < 10 || low_done < 10) && t.elapsed() < std::time::Duration::from_secs(10) {
+            while pool.try_recv_for(high).is_some() {
+                high_done += 1;
+            }
+            if high_done == 10 && low_when_high_done.is_none() {
+                low_when_high_done = Some(low_done);
+            }
+            while pool.try_recv_for(low).is_some() {
+                low_done += 1;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert_eq!(high_done, 10);
+        // Page 39 was the low client's own and may have finished; nothing else of it did.
+        let low_first = low_when_high_done.unwrap_or(usize::MAX);
+        assert!(low_first <= 1, "low had {low_first} while high finished (the focused window goes first)");
+    }
+
+    #[test]
+    fn round_robin_no_starvation() {
+        let pool = RenderPool::new(pages_pdf(50), 1, RenderConfig::default());
+        let (a, b) = (pool.register_client().unwrap(), pool.register_client().unwrap());
+        *lock(&pool.shared.slow_page) = Some((49, std::time::Duration::from_millis(200)));
+        pool.set_queue_for(a, vec![page_req(49, 0)]);
+        let t = std::time::Instant::now();
+        while !lock(&pool.shared.busy).iter().flatten().any(|b| b.request.page == 49) {
+            assert!(t.elapsed() < std::time::Duration::from_secs(8));
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        pool.set_queue_for(a, (0..40).map(|p| page_req(p, 1)).collect());
+        pool.set_queue_for(b, (0..40).map(|p| page_req(p, 2).with_scale(0.25)).collect());
+        let (mut na, mut nb, mut total) = (0, 0, 0);
+        let t = std::time::Instant::now();
+        while total < 10 && t.elapsed() < std::time::Duration::from_secs(10) {
+            for (c, n) in [(a, &mut na), (b, &mut nb)] {
+                if let Some(p) = pool.try_recv_for(c)
+                    && p.request.tag != 0
+                {
+                    *n += 1;
+                    total += 1;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(na >= 4 && nb >= 4, "a: {na}, b: {nb}");
+    }
+
+    #[test]
+    fn watchdog_still_reports_stuck_pages_per_client() {
+        let mut pool = RenderPool::new(Arc::new(ONE_PAGE_TWICE.to_vec()), 1, RenderConfig::default());
+        pool.set_stuck_after(std::time::Duration::from_millis(500));
+        *lock(&pool.shared.slow_page) = Some((0, std::time::Duration::from_secs(2)));
+        let (a, b) = (pool.register_client().unwrap(), pool.register_client().unwrap());
+        pool.set_queue_for(b, vec![page_req(0, 5)]);
+        let got = collect(&pool, b, 1);
+        assert!(got.first().is_some_and(|p| p.error.as_deref().is_some_and(|e| e.contains("took longer"))), "{got:?}");
+        assert!(pool.try_recv_for(a).is_none(), "the other client hears nothing");
+        std::thread::sleep(std::time::Duration::from_millis(2200));
+    }
+
+    #[test]
+    fn inline_mode_two_clients() {
+        let pool = RenderPool::new_inline(Arc::new(ONE_PAGE_TWICE.to_vec()), RenderConfig::default());
+        let (a, b) = (pool.register_client().unwrap(), pool.register_client().unwrap());
+        pool.set_queue_for(a, vec![page_req(0, 1)]);
+        pool.set_queue_for(b, vec![page_req(1, 2)]);
+        assert_eq!(pool.try_recv_for(b).map(|p| (p.request.page, p.request.tag)), Some((1, 2)));
+        assert!(pool.try_recv_for(b).is_none());
+        assert_eq!(pool.try_recv_for(a).map(|p| (p.request.page, p.request.tag)), Some((0, 1)));
+    }
+
+    #[test]
+    fn unknown_client_is_noop() {
+        let pool = RenderPool::new(Arc::new(ONE_PAGE.to_vec()), 1, RenderConfig::default());
+        let ghost = ClientId(999);
+        pool.set_queue_for(ghost, vec![page_req(0, 1)]);
+        pool.set_priority(ghost, 3);
+        pool.unregister_client(ghost);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert!(pool.try_recv_for(ghost).is_none());
+        assert!(pool.try_recv().is_none(), "nothing leaked into the default client");
+    }
+
+    #[test]
+    fn client_cap() {
+        let pool = RenderPool::new_inline(Arc::new(ONE_PAGE.to_vec()), RenderConfig::default());
+        let ids: Vec<_> = (0..MAX_CLIENTS).map(|_| pool.register_client()).collect();
+        assert!(ids.iter().all(Option::is_some));
+        assert!(pool.register_client().is_none(), "the 65th client");
+        pool.unregister_client(ids[0].unwrap());
+        assert!(pool.register_client().is_some(), "a freed slot can be used again");
+    }
+
+    #[test]
+    fn long_queues_are_capped() {
+        let pool = RenderPool::new_inline(Arc::new(ONE_PAGE.to_vec()), RenderConfig::default());
+        let a = pool.register_client().unwrap();
+        pool.set_queue_for(a, (0..MAX_QUEUE_PER_CLIENT + 10).map(|p| page_req(0, p as u64)).collect());
+        let queue = pool.queue_of(a).unwrap();
+        let mut kept = 0;
+        while queue.pop().is_some() {
+            kept += 1;
+        }
+        assert_eq!(kept, MAX_QUEUE_PER_CLIENT);
+    }
+
+    #[test]
+    fn legacy_set_queue_try_recv_unchanged() {
+        let pool = RenderPool::new(Arc::new(ONE_PAGE_TWICE.to_vec()), 1, RenderConfig::default());
+        pool.set_queue(vec![page_req(1, 3), page_req(0, 4)]);
+        let mut got = Vec::new();
+        let t = std::time::Instant::now();
+        while got.len() < 2 && t.elapsed() < std::time::Duration::from_secs(8) {
+            match pool.try_recv() {
+                Some(p) => got.push((p.request.page, p.request.tag)),
+                None => std::thread::sleep(std::time::Duration::from_millis(2)),
+            }
+        }
+        assert_eq!(got, vec![(1, 3), (0, 4)], "most urgent first");
     }
 
     #[test]

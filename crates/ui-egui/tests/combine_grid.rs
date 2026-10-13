@@ -96,7 +96,7 @@ fn grid_of(files: Vec<(&str, Vec<u8>)>, size: egui::Vec2) -> Harness<'static, Pd
 fn grid_after(files: Vec<(&str, Vec<u8>)>, size: egui::Vec2, steps: usize) -> Harness<'static, PdfCraftApp> {
     let files: Vec<(String, Vec<u8>)> = files.into_iter().map(|(n, b)| (n.to_string(), b)).collect();
     let mut h = Harness::builder().with_size(size).build_eframe(move |_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         app.use_files(FilePurpose::Combine, files);
         app
@@ -225,12 +225,12 @@ fn combine_shows_a_grid_by_default_and_the_view_is_kept_in_the_settings() {
     h.get_by_label("File name");
     // Kept in the settings, and read back.
     let saved = h.state().persist();
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     assert_eq!(fresh.combine_view, CombineView::Grid);
     fresh.restore(&saved);
     assert_eq!(fresh.combine_view, CombineView::List);
     // A damaged setting keeps the default.
-    let mut damaged = PdfCraftApp::new();
+    let mut damaged = PdfCraftApp::new_for_test();
     damaged.restore(r#"{"combine_view": "tiles"}"#);
     assert_eq!(damaged.combine_view, CombineView::Grid);
     // Scriptable, with a clear refusal for anything else.
@@ -754,7 +754,7 @@ fn the_toolbar_sizes_the_cards_within_limits_and_the_size_is_kept_in_the_setting
     assert!(smallest.width() < before.width() && smallest.height() < before.height(), "{smallest:?}");
     // Kept in the settings, and read back; a damaged setting is clamped or ignored.
     let saved = h.state().persist();
-    let mut fresh = PdfCraftApp::new();
+    let mut fresh = PdfCraftApp::new_for_test();
     fresh.restore(&saved);
     assert_eq!(fresh.combine_zoom, 0.6);
     fresh.restore(r#"{"combine_zoom": 99}"#);
@@ -1807,7 +1807,7 @@ fn open_documents_already_in_the_list_are_not_added_again() {
     // #1356: Add open documents left out none of the open documents, but added again the ones
     // already listed. Two documents with the same name and the same bytes are still two documents.
     let mut h = Harness::builder().with_size(vec2(1400.0, 900.0)).build_eframe(|_cc| {
-        let mut app = PdfCraftApp::new();
+        let mut app = PdfCraftApp::new_for_test();
         app.set_option("language", "en").unwrap();
         for (name, pages) in [("a.pdf", 1), ("b.pdf", 2), ("report.pdf", 3)] {
             app.open_bytes(name, None, fixture(pages)).unwrap();

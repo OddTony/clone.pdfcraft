@@ -68,8 +68,9 @@ pdfcraft-cli run    --script steps.json [--root DIR]      [{\"tool\": \"doc_open
 ",
     mcp_usage!(),
     "\
-pdfcraft-cli ui     --control FILE <method> [key=value …] [--out shot.png]
-                                                           drive a running app started with --control FILE
+pdfcraft-cli ui     --control FILE <method> [key=value …] [--window N] [--out shot.png]
+                                                           drive a running app started with --control FILE;
+                                                           --window N picks a window (see `ui windows`)
 help and feedback: https://discord.gg/artcraft"
 );
 
@@ -821,12 +822,18 @@ fn ui(args: &[String]) -> Result<(), CliError> {
     let port = u16::try_from(port).map_err(|_| format!("{file}: {port} is not a port number"))?;
     let token = info["token"].as_str().ok_or(format!("{file}: no token"))?;
     let pos = positional(args);
-    let method = *pos.first().ok_or("ui: missing method (state, inspect, click, drag, type, key, command, commands, set, open, screenshot)")?;
+    let method = *pos.first().ok_or(
+        "ui: missing method (state, inspect, click, drag, type, key, command, commands, set, open, screenshot, windows, window_new_view, window_move_tab, window_close, window_focus)",
+    )?;
     let method = if method.starts_with("ui.") { method.to_string() } else { format!("ui.{method}") };
     let mut params = serde_json::Map::new();
     for kv in pos.iter().skip(1) {
         let (k, v) = kv.split_once('=').ok_or(format!("ui: expected key=value, got {kv:?}"))?;
         params.insert(k.to_string(), serde_json::from_str(v).unwrap_or_else(|_| serde_json::Value::String(v.to_string())));
+    }
+    if let Some(window) = flag(args, "--window") {
+        let n: u32 = window.parse().map_err(|_| format!("ui: --window needs a window number, got {window:?}"))?;
+        params.insert("window".to_string(), serde_json::json!(n));
     }
     let stream =
         std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|e| format!("can't reach the app on port {port}: {e} (is it still running?)"))?;
