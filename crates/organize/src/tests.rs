@@ -28,6 +28,20 @@ fn rotate_rejects_angles_that_are_not_multiples_of_90() {
     assert_eq!(page_rotation(&doc, 0).unwrap(), 0);
 }
 
+#[test]
+fn rotate_handles_large_quarter_turns() {
+    let large = i64::MAX - i64::MAX % 90;
+    for (current, degrees, expected) in [(90, large, 90), (-90, -large, 270), (large, 90, 90), (-large, -90, 270), (180, large - 90, 90)] {
+        for inherited in [false, true] {
+            let mut doc = open(fixture());
+            let target = if inherited { pages_root(&doc).unwrap() } else { pages(&doc).unwrap()[0].obj };
+            doc.update_dict(target, |d| d.set(b"Rotate".to_vec(), Object::Int(current))).unwrap();
+            rotate_pages(&mut doc, &[0], degrees).unwrap();
+            assert_eq!(page_rotation(&doc, 0).unwrap(), expected);
+        }
+    }
+}
+
 /// A 3-page document with a nested page tree. MediaBox and Rotate are inherited from the root,
 /// Resources from an intermediate node; each page's content says which page it is.
 fn fixture() -> Vec<u8> {
@@ -215,6 +229,7 @@ fn cannot_delete_every_page_or_missing_pages() {
     assert_eq!(delete_pages(&mut doc, &[0, 1, 2]), Err(OrganizeError::WouldRemoveAllPages));
     assert_eq!(delete_pages(&mut doc, &[7]), Err(OrganizeError::NoSuchPage(7)));
     assert_eq!(rotate_pages(&mut doc, &[3], 90), Err(OrganizeError::NoSuchPage(3)));
+    assert_eq!(OrganizeError::NoSuchPage(3).to_string(), "page 4 does not exist", "the message counts pages from 1 (#1550)");
     assert!(!doc.is_modified(), "failed operations leave the document untouched");
 }
 
@@ -459,6 +474,40 @@ fn inherited_attributes_travel_with_copied_pages() {
     assert!(p.contains(b"MediaBox") && p.contains(b"Resources"));
     let hay = hayro_syntax::Pdf::new(write_full(&out, &SaveOptions::default()).unwrap()).unwrap();
     assert_eq!(hay.pages().first().unwrap().render_dimensions(), (250.0, 500.0), "rotated 90°");
+}
+
+#[test]
+fn resources_split_between_page_and_tree_travel_together() {
+    // The page names its own font but draws a form that only the page-tree node lists. Readers
+    // (ours included) look a name up the whole chain, so the page shows; a copy that kept only
+    // the page's own dictionary drew nothing (#1628).
+    let b: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] /Resources << /XObject << /X0 5 0 R >> /Font << /F1 6 0 R /F2 6 0 R >> >> >>"
+            .into(),
+        "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /F2 7 0 R >> >> >>".into(),
+        {
+            let s = "q 100 0 0 100 50 50 cm /X0 Do Q BT /F2 12 Tf (x) Tj ET";
+            format!("<< /Length {} >>\nstream\n{s}\nendstream", s.len())
+        },
+        {
+            let s = "0 0 1 rg 0 0 1 1 re f";
+            format!("<< /Type /XObject /Subtype /Form /BBox [0 0 1 1] /Length {} >>\nstream\n{s}\nendstream", s.len())
+        },
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into(),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>".into(),
+    ];
+    let src = open(build(&b, "/Root 1 0 R"));
+    let out = full_roundtrip(&combine(&[("S", &src), ("S again", &src)]).unwrap());
+    for i in 0..2 {
+        let res = out.dict(page_dict(&out, i).get(b"Resources").unwrap()).unwrap();
+        let entry = |cat: &[u8], name: &[u8]| res.get(cat).and_then(|c| out.dict(c)).and_then(|d| d.get(name).map(|v| out.resolve(v)));
+        let form = entry(b"XObject", b"X0").expect("the tree's form comes along");
+        assert_eq!(form.as_dict().and_then(|d| d.name(b"Subtype")), Some(&b"Form"[..]));
+        let font = |name: &[u8]| entry(b"Font", name).and_then(|f| f.as_dict().and_then(|d| d.name(b"BaseFont").map(<[u8]>::to_vec)));
+        assert_eq!(font(b"F1").as_deref(), Some(&b"Helvetica"[..]), "a name only the tree has is added");
+        assert_eq!(font(b"F2").as_deref(), Some(&b"Courier"[..]), "the page's own entry wins over the tree's");
+    }
 }
 
 #[test]

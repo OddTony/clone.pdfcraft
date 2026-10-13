@@ -2583,3 +2583,5 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Tarpas
+	Move tag earlier	Perkelti žymą anksčiau
+	Move tag later	Perkelti žymą vėliau
