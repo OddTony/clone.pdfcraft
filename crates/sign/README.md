@@ -49,7 +49,8 @@ for s in signatures(&doc, &bytes, &trust) {                                // li
   signer's chain and a verified revocation invalidates the signature.
 
 Not yet: revocation fetching (AIA/CRLDP extraction and a fetcher), timestamp-server
-configuration, FieldMDP locks, certificate security, direct PKCS #11 access to tokens.
+configuration, FieldMDP locks, certificate security, GOST algorithms, RSA-PSS, session or PIN
+caching, nssdb/CryptoTokenKit, and a run of the PKCS #11 path against SoftHSM or a real token.
 macOS Keychain and Windows Current User Personal (My) store identities sign through
 `ExternalKey` without exporting private keys. Windows CNG supports RSA PKCS #1 v1.5 and
 ECDSA P-256/P-384; the store integration is tested with software-backed keys. A smart card
@@ -61,6 +62,18 @@ sign (no private key, another key type, a key CNG can't open) are returned by
 `windows::list` as `unusable` with the reason and the Windows error code, shown greyed in
 the Sign dialog and by `sign_windows_ids`, instead of being left out silently; a key that
 needs a prompt to open is listed and asks at signing (issue #179).
+- **PKCS #11 tokens (`pkcs11`, through `cryptoki` 0.12.1):** identities are RFC 7512 URIs
+  (`pkcs11:token=…;object=…;id=…;type=cert`) from modules the user names explicitly — nothing
+  is searched for or loaded on its own. RSA signs `CKM_RSA_PKCS` over a locally built
+  `DigestInfo`, ECDSA P-256/P-384 signs `CKM_ECDSA` over the digest (raw `r ‖ s` to DER).
+  The PIN is asked per signature (environment variable, UI dialog, or the reader's pinpad)
+  and never stored; listing never prompts, logging in only with a non-interactive PIN it
+  was already given (strict tokens hide private keys until login). Unusable certificates
+  are reported with the reason, greyed in the Sign dialog like the Windows ones. The
+  `pkcs11_softhsm_token_round_trip` test provisions RSA-2048 and P-256 pairs on a scratch
+  token and CMS-validates both signatures, but skips without `PDFCRAFT_PKCS11_TEST_MODULE`
+  (and `SOFTHSM2_CONF` at a scratch store); SoftHSM implements no PIN retry counters, so
+  the locked-PIN mapping is unit-tested.
 - **Validation:** `/ByteRange` and the CMS are read from the file's own bytes; the digest,
   the signature value and the signer's chain (against a `TrustStore`) are checked. Later
   revisions are diffed against the signed one, and the changes are classified (signing, form
