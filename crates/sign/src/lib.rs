@@ -17,6 +17,7 @@ pub mod keychain;
 pub mod keys;
 pub mod pdf;
 pub mod pkcs12;
+pub mod psc;
 pub mod revocation;
 mod rsa_pad;
 pub mod timestamp;

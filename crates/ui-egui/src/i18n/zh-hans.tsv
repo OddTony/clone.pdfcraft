@@ -2302,3 +2302,12 @@ animation effects	Off	关
 	The linked PDF opened, but its named destination was not applied.	已打开链接的 PDF，但未应用其命名目标。
 	The linked PDF opened, but its page destination was out of range.	已打开链接的 PDF，但其页面目标超出范围。
 	Local cross-PDF links require the desktop app	PDF 之间的本地链接需要桌面应用
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	使用云证书（ICP-Brasil：BirdID、VIDaaS、NeoID、SafeID…）
+	Provider	提供商
+	Waiting for your approval in the browser…	正在等待你在浏览器中批准…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	与 {provider} 的会话已结束。请在“配置数字 ID”中重新登录。
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	重定向 URI 必须是带端口的 http://127.0.0.1 或 http://localhost。
+	No certificate was found with this provider.	在此提供商处未找到证书。
+	The provider's page didn't come back in time. Try again.	提供商页面未及时返回。请重试。
+	Choose a provider.	请选择提供商。
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft 会打开提供商页面，你在那里用 CPF、PIN 和一次性验证码登录。

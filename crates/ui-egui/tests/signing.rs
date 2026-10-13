@@ -444,3 +444,64 @@ fn an_unusable_id_is_shown_with_its_reason_and_cannot_be_chosen() {
     h.run_steps(3);
     assert_eq!(h.state().sign_draft.as_ref().unwrap().selected, Some(1));
 }
+
+/// Configure a Digital ID ▸ Use a cloud certificate: PdfCraft opens the provider's page, the
+/// browser comes back to the loopback redirect with the code, and the holder's certificate becomes
+/// a selected digital ID (a fake provider stands in for HTTPS). Without a provider the build is
+/// registered with, the option isn't there.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_cloud_certificate_signs_in_through_the_browser() {
+    use pdfcraft_engine::sign::psc::Transport;
+    struct Fake;
+    impl Transport for Fake {
+        fn get(&self, _: &str, _: &str) -> Result<String, String> {
+            let pem = include_str!("../../sign/tests/data/rsa.crt.pem");
+            Ok(serde_json::json!({"status": "S", "certificates": [{"alias": "TEST:00000000001", "certificate": pem}]}).to_string())
+        }
+        fn post_form(&self, _: &str, _: &str) -> Result<String, String> {
+            Ok(r#"{"access_token":"tok","expires_in":3600,"token_type":"Bearer","authorized_identification_type":"CPF","authorized_identification":"00000000001"}"#.into())
+        }
+        fn post_json(&self, _: &str, _: &str, _: &str) -> Result<String, String> {
+            Err("not signing in this test".into())
+        }
+    }
+    let dir = dir().join("cloud");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut h = harness(dir.clone());
+    h.state_mut().psc_transport = Some(std::sync::Arc::new(Fake));
+    assert!(h.state_mut().execute("sign.certify_invisible"));
+    h.run_steps(2);
+    let option = "Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)";
+    assert!(h.query_by_label(option).is_none(), "no provider registered: no option");
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    h.state_mut().psc_providers = vec![pdfcraft_engine::sign::psc::Provider {
+        name: "Test PSC".into(),
+        base: "https://psc.example/v0/".into(),
+        client_id: "pdfcraft".into(),
+        client_secret: String::new(),
+        redirect_uri: format!("http://127.0.0.1:{port}/callback"),
+    }];
+    h.run_steps(2);
+    h.get_by_label(option).click();
+    h.run_steps(2);
+    assert_eq!(h.state().sign_draft.as_ref().unwrap().new_id.provider.name, "Test PSC", "the only provider is chosen");
+    h.get_by_label("Continue").click();
+    h.run_steps(2);
+    let opened = h.state().last_opened_url.clone().expect("the provider's page opened");
+    assert!(opened.starts_with("https://psc.example/v0/oauth/authorize?"), "{opened}");
+    let state = opened.split('&').find_map(|kv| kv.strip_prefix("state=")).unwrap().to_string();
+    let mut browser = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+    use std::io::Write as _;
+    browser.write_all(format!("GET /callback?code=c0de&state={state} HTTP/1.1\r\nHost: x\r\n\r\n").as_bytes()).unwrap();
+    for _ in 0..100 {
+        h.run_steps(1);
+        if h.state().digital_ids.iter().any(|e| e.path.starts_with("psc:")) {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let s = h.state();
+    let selected = s.sign_draft.as_ref().and_then(|d| d.selected).and_then(|i| s.digital_ids.get(i)).expect("the cloud certificate selected");
+    assert_eq!(selected.path, "psc:Test PSC#TEST:00000000001");
+}

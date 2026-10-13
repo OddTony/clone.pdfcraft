@@ -2582,3 +2582,12 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Tarpas
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Naudoti debesijos sertifikatą („ICP-Brasil“: „BirdID“, „VIDaaS“, „NeoID“, „SafeID“…)
+	Provider	Teikėjas
+	Waiting for your approval in the browser…	Laukiama jūsų patvirtinimo naršyklėje…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Seansas su {provider} baigėsi. Prisijunkite iš naujo skiltyje „Konfigūruoti skaitmeninį ID“.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	Peradresavimo URI turi būti http://127.0.0.1 arba http://localhost su prievadu.
+	No certificate was found with this provider.	Pas šį teikėją sertifikato nerasta.
+	The provider's page didn't come back in time. Try again.	Teikėjo puslapis laiku negrįžo. Bandykite dar kartą.
+	Choose a provider.	Pasirinkite teikėją.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	„PdfCraft“ atidaro teikėjo puslapį, kuriame prisijungiate su CPF, PIN kodu ir vienkartiniu kodu.

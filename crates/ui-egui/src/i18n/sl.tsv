@@ -2343,3 +2343,12 @@ animation effects	Off	Izklopljeni
 	The linked PDF opened, but its named destination was not applied.	Povezani PDF se je odprl, vendar njegov poimenovani cilj ni bil uporabljen.
 	The linked PDF opened, but its page destination was out of range.	Povezani PDF se je odprl, vendar je ciljna stran zunaj obsega.
 	Local cross-PDF links require the desktop app	Lokalne povezave med PDF-ji zahtevajo namizno aplikacijo
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Uporabi potrdilo v oblaku (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID …)
+	Provider	Ponudnik
+	Waiting for your approval in the browser…	Čakanje na vašo odobritev v brskalniku …
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Seja s ponudnikom {provider} je potekla. Znova se prijavite v razdelku Konfiguriraj digitalno identiteto.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	URI za preusmeritev mora biti http://127.0.0.1 ali http://localhost z vrati.
+	No certificate was found with this provider.	Pri tem ponudniku ni bilo najdenega potrdila.
+	The provider's page didn't come back in time. Try again.	Stran ponudnika se ni pravočasno vrnila. Poskusite znova.
+	Choose a provider.	Izberite ponudnika.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft odpre stran ponudnika, kjer se prijavite s CPF, kodo PIN in enkratno kodo.

@@ -2251,3 +2251,12 @@ animation effects	Off	Выкл
 	The linked PDF opened, but its named destination was not applied.	Связанный PDF открыт, но его именованное назначение не применено.
 	The linked PDF opened, but its page destination was out of range.	Связанный PDF открыт, но страница назначения вне допустимого диапазона.
 	Local cross-PDF links require the desktop app	Локальные ссылки между PDF работают только в настольном приложении
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Использовать облачный сертификат (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
+	Provider	Поставщик
+	Waiting for your approval in the browser…	Ожидание вашего подтверждения в браузере…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Сеанс с {provider} завершён. Войдите снова в разделе «Настроить цифровой идентификатор».
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	URI перенаправления должен быть http://127.0.0.1 или http://localhost с портом.
+	No certificate was found with this provider.	У этого поставщика не найдено сертификатов.
+	The provider's page didn't come back in time. Try again.	Страница поставщика не вернулась вовремя. Попробуйте ещё раз.
+	Choose a provider.	Выберите поставщика.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft открывает страницу поставщика, где вы входите с CPF, PIN-кодом и одноразовым кодом.

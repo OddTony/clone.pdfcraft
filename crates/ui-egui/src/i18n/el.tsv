@@ -2348,3 +2348,12 @@ animation effects	Off	Ανενεργά
 	Local cross-PDF links require the desktop app	Οι τοπικοί σύνδεσμοι μεταξύ PDF απαιτούν την εφαρμογή υπολογιστή
 	The existing action will be preserved.	Η υπάρχουσα ενέργεια θα διατηρηθεί.
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Τα σενάρια αυτής της φόρμας είναι απενεργοποιημένα, επειδή ένα από αυτά εκτελούνταν για πολύ ώρα. Ανοίξτε ξανά το έγγραφο για να εκτελεστούν ξανά.
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Χρήση πιστοποιητικού cloud (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
+	Provider	Πάροχος
+	Waiting for your approval in the browser…	Αναμονή για την έγκρισή σας στο πρόγραμμα περιήγησης…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Η περίοδος σύνδεσης με τον {provider} έληξε. Συνδεθείτε ξανά από τη Διαμόρφωση ψηφιακής ταυτότητας.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	Το URI ανακατεύθυνσης πρέπει να είναι http://127.0.0.1 ή http://localhost με θύρα.
+	No certificate was found with this provider.	Δεν βρέθηκε πιστοποιητικό σε αυτόν τον πάροχο.
+	The provider's page didn't come back in time. Try again.	Η σελίδα του παρόχου δεν επέστρεψε εγκαίρως. Δοκιμάστε ξανά.
+	Choose a provider.	Επιλέξτε πάροχο.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	Το PdfCraft ανοίγει τη σελίδα του παρόχου, όπου συνδέεστε με CPF, PIN και κωδικό μίας χρήσης.

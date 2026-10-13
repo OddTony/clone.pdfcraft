@@ -2347,3 +2347,12 @@ animation effects	Off	Disattivati
 	The linked PDF opened, but its named destination was not applied.	Il PDF collegato è stato aperto, ma la sua destinazione con nome non è stata applicata.
 	The linked PDF opened, but its page destination was out of range.	Il PDF collegato è stato aperto, ma la pagina di destinazione è fuori intervallo.
 	Local cross-PDF links require the desktop app	I collegamenti locali tra PDF richiedono l'app desktop
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Usa un certificato nel cloud (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
+	Provider	Fornitore
+	Waiting for your approval in the browser…	In attesa della tua approvazione nel browser…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	La sessione con {provider} è terminata. Accedi di nuovo da Configura un ID digitale.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	L'URI di reindirizzamento deve essere http://127.0.0.1 o http://localhost con una porta.
+	No certificate was found with this provider.	Nessun certificato trovato presso questo fornitore.
+	The provider's page didn't come back in time. Try again.	La pagina del fornitore non è tornata in tempo. Riprova.
+	Choose a provider.	Scegli un fornitore.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft apre la pagina del fornitore, dove accedi con CPF, PIN e codice monouso.

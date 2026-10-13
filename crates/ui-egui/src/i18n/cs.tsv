@@ -2412,3 +2412,12 @@ animation effects	Off	Vypnuto
 	The linked PDF opened, but its named destination was not applied.	Odkazovaný PDF se otevřel, ale jeho pojmenovaný cíl nebyl použit.
 	The linked PDF opened, but its page destination was out of range.	Odkazovaný PDF se otevřel, ale cílová stránka je mimo rozsah.
 	Local cross-PDF links require the desktop app	Místní odkazy mezi soubory PDF vyžadují desktopovou aplikaci
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	Použít cloudový certifikát (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)
+	Provider	Poskytovatel
+	Waiting for your approval in the browser…	Čeká se na vaše schválení v prohlížeči…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	Relace s poskytovatelem {provider} skončila. Přihlaste se znovu v části Konfigurovat digitální ID.
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	URI přesměrování musí být http://127.0.0.1 nebo http://localhost s portem.
+	No certificate was found with this provider.	U tohoto poskytovatele nebyl nalezen žádný certifikát.
+	The provider's page didn't come back in time. Try again.	Stránka poskytovatele se včas nevrátila. Zkuste to znovu.
+	Choose a provider.	Vyberte poskytovatele.
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft otevře stránku poskytovatele, kde se přihlásíte pomocí CPF, kódu PIN a jednorázového kódu.

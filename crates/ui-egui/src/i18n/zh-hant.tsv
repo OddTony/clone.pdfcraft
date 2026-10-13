@@ -2212,3 +2212,12 @@ animation effects	Off	關
 	The linked PDF opened, but its page destination was out of range.	已開啟連結的 PDF，但其頁面目的地超出範圍。
 	Local cross-PDF links require the desktop app	PDF 之間的本機連結需要桌面應用程式
 	The existing action will be preserved.	將保留現有動作。
+	Use a cloud certificate (ICP-Brasil: BirdID, VIDaaS, NeoID, SafeID…)	使用雲端憑證（ICP-Brasil：BirdID、VIDaaS、NeoID、SafeID…）
+	Provider	提供者
+	Waiting for your approval in the browser…	正在等候您在瀏覽器中核准…
+	The session with {provider} has ended. Sign in again from Configure a Digital ID.	與 {provider} 的工作階段已結束。請從「設定數位 ID」重新登入。
+	The redirect URI must be http://127.0.0.1 or http://localhost with a port.	重新導向 URI 必須是含連接埠的 http://127.0.0.1 或 http://localhost。
+	No certificate was found with this provider.	在此提供者處找不到憑證。
+	The provider's page didn't come back in time. Try again.	提供者頁面未及時返回。請再試一次。
+	Choose a provider.	請選擇提供者。
+	PdfCraft opens the provider's page, where you sign in with your CPF, PIN and one-time code.	PdfCraft 會開啟提供者頁面，您在該頁面以 CPF、PIN 和一次性驗證碼登入。
