@@ -2257,3 +2257,5 @@ animation effects	Off	Выкл
 	Only allow this if you trust the source document.	Разрешите это действие, только если доверяете исходному документу.
 	Open this local PDF?	Открыть этот локальный PDF?
 	This document is trying to open a local file:	Этот документ пытается открыть локальный файл:
+	Move tag earlier	Переместить тег раньше
+	Move tag later	Переместить тег позже

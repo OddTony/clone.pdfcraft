@@ -2365,3 +2365,5 @@ animation effects	Off	معطّلة
 	Only allow this if you trust the source document.	لا تسمح بذلك إلا إذا كنت تثق بالمستند المصدر.
 	Open this local PDF?	هل تريد فتح ملف PDF المحلي هذا؟
 	This document is trying to open a local file:	يحاول هذا المستند فتح ملف محلي:
+	Move tag earlier	نقل العلامة للأعلى
+	Move tag later	نقل العلامة للأسفل

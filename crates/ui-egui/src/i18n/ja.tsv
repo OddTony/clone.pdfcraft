@@ -2344,3 +2344,5 @@ animation effects	Off	オフ
 	Only allow this if you trust the source document.	元の文書を信頼できる場合にのみ許可してください。
 	Open this local PDF?	このローカルPDFを開きますか？
 	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
+	Move tag earlier	タグを前へ移動
+	Move tag later	タグを後へ移動
