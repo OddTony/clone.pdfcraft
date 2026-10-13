@@ -5411,6 +5411,153 @@ fn refused_object_edits_through_tools_change_nothing() {
     assert_eq!((state["dirty"].clone(), state["undo"].clone()), (json!(false), Value::Null), "{state}");
 }
 
+/// `stacked.pdf` in `dir`: the page's paragraph, then a red box R at user [20 200 100 260] under
+/// an image at [70 210 110 230] under a blue box B at [50 220 130 280], each overlapping the
+/// others, and a green box G at [150 20 180 50] apart from everything. object_list rows: text 1,
+/// image 1, path 1 (R), path 2 (B), path 3 (G).
+fn write_stacked_page(dir: &Path) {
+    use pdfcraft_cos::{Dict, Document, Object, Stream, write_incremental};
+    let mut cos = Document::open(std::sync::Arc::new(fixture(1))).unwrap();
+    let page = pdfcraft_model::pages(&cos)[0].obj;
+    let mut image = Dict::new();
+    image.set(b"Subtype".to_vec(), Object::name("Image"));
+    image.set(b"Width".to_vec(), Object::Int(4));
+    image.set(b"Height".to_vec(), Object::Int(2));
+    image.set(b"ColorSpace".to_vec(), Object::name("DeviceGray"));
+    image.set(b"BitsPerComponent".to_vec(), Object::Int(8));
+    let image = cos.add(Object::Stream(Stream::flate(image, &[0x80; 8])));
+    let contents = cos.add(Object::Stream(Stream::flate(
+        Dict::new(),
+        b"BT /F1 24 Tf 20 150 Td (Page 1) Tj ET 1 0 0 rg 20 200 80 60 re f q 40 0 0 20 70 210 cm /Im0 Do Q \
+          0 0 1 rg 50 220 80 60 re f 0 1 0 rg 150 20 30 30 re f",
+    )));
+    cos.update_dict(page, |d| {
+        d.set(b"Contents".to_vec(), Object::Ref(contents));
+        let mut resources = d.get(b"Resources").and_then(Object::as_dict).cloned().unwrap_or_default();
+        let mut xobjects = Dict::new();
+        xobjects.set(b"Im0".to_vec(), Object::Ref(image));
+        resources.set(b"XObject".to_vec(), Object::Dict(xobjects));
+        d.set(b"Resources".to_vec(), Object::Dict(resources));
+    })
+    .unwrap();
+    std::fs::write(dir.join("stacked.pdf"), write_incremental(&cos, &Default::default()).unwrap()).unwrap();
+}
+
+#[test]
+fn objects_arrange_through_object_tools_with_one_undo() {
+    let dir = workdir("object-arrange");
+    write_stacked_page(&dir);
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"stacked.pdf"}))["doc"].as_u64().unwrap();
+    let list = |a: &mut Automation, doc: u64| ok(a, "object_list", json!({"doc":doc,"page":1}));
+    let arrange =
+        |a: &mut Automation, object: &Value, order: &str| ok(a, "object_arrange", json!({"doc":doc,"page":1,"object":object,"order":order}));
+    // The path rows' fills, in painting order.
+    let fills = |listed: &Value| -> Vec<Value> {
+        listed["objects"].as_array().unwrap().iter().filter(|o| o["kind"] == "path").map(|o| o["fill"].clone()).collect()
+    };
+    // Every row but its index, in no particular order.
+    let unordered = |listed: &Value| {
+        let mut rows: Vec<String> = listed["objects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| {
+                let mut o = o.clone();
+                o["index"] = Value::Null;
+                o.to_string()
+            })
+            .collect();
+        rows.sort();
+        rows
+    };
+    let inventory = list(&mut a, doc);
+    let kinds: Vec<_> = inventory["objects"].as_array().unwrap().iter().map(|o| o["kind"].clone()).collect();
+    assert_eq!(kinds, ["text", "image", "path", "path", "path"], "{inventory}");
+    assert_eq!(fills(&inventory), ["#FF0000", "#0000FF", "#00FF00"], "{inventory}");
+
+    // R to the front: above B, the last object it overlaps; G overlaps nothing and stays on top.
+    let front = ok(
+        &mut a,
+        "object_arrange",
+        json!({"doc":doc,"page":1,"generation":inventory["generation"],"object":{"kind":"path","index":1},"order":"front"}),
+    );
+    assert_eq!((front["undo"].clone(), front["object"].clone()), (json!("Bring to front"), json!({"kind":"path","index":2})), "{front}");
+    let after = list(&mut a, doc);
+    assert_eq!(fills(&after), ["#0000FF", "#FF0000", "#00FF00"], "{after}");
+    assert_eq!(unordered(&after), unordered(&inventory), "the same objects in the same places");
+    // The returned reference is R's row.
+    let mut red = inventory["objects"][2].clone();
+    red["index"] = json!(2);
+    assert_eq!(after["objects"][3], red);
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(list(&mut a, doc)["objects"], inventory["objects"]);
+
+    // B to the back: below R, the first object it overlaps, and so below the image between them.
+    let back = arrange(&mut a, &json!({"kind":"path","index":2}), "back");
+    assert_eq!((back["undo"].clone(), back["object"].clone()), (json!("Send to back"), json!({"kind":"path","index":1})), "{back}");
+    let after = list(&mut a, doc);
+    assert_eq!(fills(&after), ["#0000FF", "#FF0000", "#00FF00"], "{after}");
+    assert_eq!(unordered(&after), unordered(&inventory), "the same objects in the same places");
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(list(&mut a, doc)["objects"], inventory["objects"]);
+
+    // The image forward, above B: images are listed apart from paths, so its reference and the
+    // list stay, and nothing above it overlaps it any more.
+    let image = json!({"kind":"image","index":1});
+    let forward = arrange(&mut a, &image, "forward");
+    assert_eq!((forward["undo"].clone(), forward["object"].clone()), (json!("Bring forward"), image.clone()), "{forward}");
+    assert_eq!(list(&mut a, doc)["objects"], inventory["objects"]);
+    let message = err(&mut a, "object_arrange", json!({"doc":doc,"page":1,"object":image,"order":"forward"})).to_string();
+    assert!(message.contains("nothing above this object overlaps it"), "{message}");
+    let undone = ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!((undone["undone"].clone(), undone["document"]["undo"].clone()), (json!("Bring forward"), Value::Null), "{undone}");
+
+    // Under B again, so it comes forward again; saved and reopened, it stays above B.
+    arrange(&mut a, &image, "forward");
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"arranged.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"arranged.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(list(&mut a, reopened)["objects"], inventory["objects"]);
+    let message = err(&mut a, "object_arrange", json!({"doc":reopened,"page":1,"object":image,"order":"forward"})).to_string();
+    assert!(message.contains("nothing above this object overlaps it"), "{message}");
+}
+
+#[test]
+fn refused_arranges_through_tools_change_nothing() {
+    let dir = workdir("object-arrange-refusals");
+    write_stacked_page(&dir);
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"stacked.pdf"}))["doc"].as_u64().unwrap();
+    let before = ok(&mut a, "object_list", json!({"doc":doc,"page":1}));
+    let stale = before["generation"].as_u64().unwrap() + 1;
+    let (red, blue, green) = (json!({"kind":"path","index":1}), json!({"kind":"path","index":2}), json!({"kind":"path","index":3}));
+    let only = "only vector paths, images and grouped artwork can be arranged";
+    let refused = [
+        // Nothing overlaps G, nothing is below R and nothing above B.
+        (json!({"object":green,"order":"front"}), "nothing above this object overlaps it"),
+        (json!({"object":green,"order":"back"}), "nothing below this object overlaps it"),
+        (json!({"object":red,"order":"backward"}), "nothing below this object overlaps it"),
+        (json!({"object":blue,"order":"forward"}), "nothing above this object overlaps it"),
+        // Text, added content, no such path, not an order, two objects, no object, stale.
+        (json!({"object":{"kind":"text","index":1},"order":"back"}), only),
+        (json!({"object":{"kind":"added","index":1},"order":"front"}), only),
+        (json!({"object":{"kind":"path","index":9},"order":"front"}), "no longer exists"),
+        (json!({"object":red,"order":"top"}), "order must be front, forward, backward or back"),
+        (json!({"object":[red, blue],"order":"front"}), "each object must contain kind and index"),
+        (json!({"order":"front"}), "missing argument object"),
+        (json!({"object":red,"order":"front","generation":stale}), "call object_list again"),
+    ];
+    for (mut args, why) in refused {
+        args["doc"] = json!(doc);
+        args["page"] = json!(1);
+        let message = err(&mut a, "object_arrange", args.clone()).to_string();
+        assert!(message.contains(why), "{args}: {message}");
+        assert_eq!(ok(&mut a, "object_list", json!({"doc":doc,"page":1})), before, "{args}");
+    }
+    let state = ok(&mut a, "doc_info", json!({"doc":doc}))["document"].clone();
+    assert_eq!((state["dirty"].clone(), state["undo"].clone()), (json!(false), Value::Null), "{state}");
+}
+
 #[test]
 fn objects_align_as_displayed_with_one_undo() {
     let dir = workdir("object-align");

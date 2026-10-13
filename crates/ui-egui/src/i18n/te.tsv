@@ -2145,6 +2145,10 @@ action wizard	Start	ప్రారంభించు
 	Change colour	రంగును మార్చు
 	Delete object	వస్తువును తొలగించు
 	Delete objects	వస్తువులను తొలగించు
+	Bring to front	అన్నింటికంటే ముందుకు తీసుకురా
+	Bring forward	ఒక స్థాయి ముందుకు తీసుకురా
+	Send backward	ఒక స్థాయి వెనక్కి పంపు
+	Send to back	అన్నింటికంటే వెనక్కి పంపు
 	Vertical text cannot be moved with this selection.	ఈ ఎంపికతో నిలువు వచనాన్ని కదిలించలేరు.
 	Text used as a clipping path cannot be moved with this selection.	క్లిప్పింగ్ పాత్‌గా ఉపయోగించిన వచనాన్ని ఈ ఎంపికతో కదిలించలేరు.
 	These objects could not be moved. Select them again and try a smaller move.	ఈ వస్తువులను కదిలించలేకపోయాము. మళ్లీ ఎంచుకుని తక్కువ దూరం కదిలించడానికి ప్రయత్నించండి.

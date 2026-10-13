@@ -4435,6 +4435,7 @@ fn content_refresh_lists_match_the_storages_an_edit_touches() {
         Edit::TransformPath { page: 0, index: 0, rect: [0.0, 0.0, 1.0, 1.0] },
         Edit::RecolourObjects { page: 0, objects: vec![target(crate::ObjectKind::Path)], fill: Some([0.0; 3]), stroke: None },
         Edit::DeleteObjects { page: 0, objects: vec![target(crate::ObjectKind::Path), target(crate::ObjectKind::Image)] },
+        Edit::ArrangeObjects { page: 0, object: target(crate::ObjectKind::Image), order: ZOrder::Front },
         Edit::EditTextBlock { page: 0, block: 0, text: String::new(), style: pdfcraft_edit::BlockStyle::default() },
     ];
     for edit in &plain {
@@ -4804,4 +4805,100 @@ fn refused_object_edits_change_nothing() {
     }
     let doc = reader.get(id).unwrap();
     assert!(!doc.dirty && doc.can_undo().is_none());
+}
+
+/// The paragraph, then red R (path 0) under blue B (path 1) under yellow Y (path 2), each
+/// overlapping the other two, and a green box (path 3) apart from everything.
+fn stacked_session() -> (Session, DocId) {
+    use pdfcraft_cos::{Dict, Object, Stream};
+    let mut cos = pdfcraft_cos::Document::open(Arc::new(fixture(1))).unwrap();
+    let page = pdfcraft_model::pages(&cos)[0].obj;
+    let content = cos.add(Object::Stream(Stream::flate(
+        Dict::new(),
+        b"BT /F1 24 Tf 20 150 Td (Page 1) Tj ET 1 0 0 rg 20 200 80 60 re f 0 0 1 rg 50 220 80 60 re f \
+          1 1 0 rg 80 230 60 50 re f 0 1 0 rg 150 20 30 30 re f",
+    )));
+    cos.update_dict(page, |d| {
+        d.set(b"Contents".to_vec(), Object::Ref(content));
+    })
+    .unwrap();
+    let bytes = Arc::new(pdfcraft_cos::write_incremental(&cos, &pdfcraft_cos::SaveOptions::default()).unwrap());
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("stacked.pdf", None, bytes, None).unwrap();
+    (s, id)
+}
+
+#[test]
+fn each_arrange_order_is_one_undo_step() {
+    let (red, blue, yellow, green) = (Some([1.0, 0.0, 0.0]), Some([0.0, 0.0, 1.0]), Some([1.0, 1.0, 0.0]), Some([0.0, 1.0, 0.0]));
+    let path = |index| ObjectTarget { kind: ObjectKind::Path, index };
+    let (mut s, id) = stacked_session();
+    let paths = s.get(id).unwrap().page_paths(0).unwrap();
+    let objects = s.get(id).unwrap().editable_objects(0).unwrap();
+    assert_eq!(paths.iter().map(|p| p.fill_rgb).collect::<Vec<_>>(), [red, blue, yellow, green]);
+    let box_of = |fill| paths.iter().find(|p| p.fill_rgb == fill).map(|p| p.rect);
+    // Front and back go past every object it overlaps, forward and backward past the next one;
+    // the green box overlaps nothing and stays on top.
+    let cases = [
+        (path(0), ZOrder::Front, "Bring to front", path(2), [blue, yellow, red, green]),
+        (path(0), ZOrder::Forward, "Bring forward", path(1), [blue, red, yellow, green]),
+        (path(2), ZOrder::Backward, "Send backward", path(1), [red, yellow, blue, green]),
+        (path(2), ZOrder::Back, "Send to back", path(0), [yellow, red, blue, green]),
+    ];
+    for (object, order, label, moved, fills) in cases {
+        assert_eq!(s.get(id).unwrap().arranged_target(0, object, order), Ok(moved), "{label}");
+        s.apply(id, Edit::ArrangeObjects { page: 0, object, order }).unwrap();
+        let doc = s.get(id).unwrap();
+        assert!(doc.dirty, "{label}");
+        assert_eq!(doc.can_undo(), Some(label));
+        let after: Vec<_> = doc.page_paths(0).unwrap().iter().map(|p| (p.fill_rgb, Some(p.rect))).collect();
+        assert_eq!(after, fills.map(|f| (f, box_of(f))), "{label}: the same boxes in the same places, in a new order");
+        assert_eq!(after.get(moved.index).map(|a| a.0), Some(paths[object.index].fill_rgb), "{label}");
+        assert_eq!(s.undo(id).unwrap().as_str(), label);
+        let doc = s.get(id).unwrap();
+        assert_eq!((doc.page_paths(0).unwrap(), doc.editable_objects(0).unwrap()), (paths.clone(), objects.clone()), "{label}");
+        assert!(doc.can_undo().is_none(), "{label}: one undo step");
+    }
+}
+
+#[test]
+fn refused_arranges_change_nothing() {
+    let (mut s, id) = stacked_session();
+    let before = s.save_bytes(id).unwrap();
+    let generation = s.get(id).unwrap().edit_generation();
+    let t = |kind, index| ObjectTarget { kind, index };
+    let arrange = |object, order| Edit::ArrangeObjects { page: 0, object, order };
+    let only = "only vector paths, images and grouped artwork can be arranged";
+    let refused = [
+        // Nothing above the top box or below the bottom one overlaps it, nor anything the green box.
+        (arrange(t(ObjectKind::Path, 2), ZOrder::Front), "nothing above this object overlaps it"),
+        (arrange(t(ObjectKind::Path, 0), ZOrder::Back), "nothing below this object overlaps it"),
+        (arrange(t(ObjectKind::Path, 3), ZOrder::Forward), "nothing above this object overlaps it"),
+        (arrange(t(ObjectKind::Path, 3), ZOrder::Backward), "nothing below this object overlaps it"),
+        // Text, added content, a path that doesn't exist.
+        (arrange(t(ObjectKind::Text, 0), ZOrder::Front), only),
+        (arrange(t(ObjectKind::Added, 0), ZOrder::Back), only),
+        (arrange(t(ObjectKind::Path, 7), ZOrder::Front), "the selected object no longer exists; select it again"),
+    ];
+    for (edit, why) in refused {
+        let label = format!("{edit:?}");
+        let message = s.apply(id, edit).unwrap_err().to_string();
+        assert!(message.contains(why), "{label}: {message}");
+        let doc = s.get(id).unwrap();
+        assert_eq!((doc.edit_generation(), doc.can_undo(), doc.dirty), (generation, None, false), "{label}");
+        assert_eq!(s.save_bytes(id).unwrap(), before, "{label}");
+    }
+    // Bringing R to the front applies above (each_arrange_order_is_one_undo_step), but not here.
+    let mut p = protection(None, Some("owner"));
+    p.changes = Changes::None;
+    s.apply(id, Edit::Protect(p)).unwrap();
+    let mut reader = Session::new();
+    let id = reader.open("restricted.pdf", None, s.save_bytes(id).unwrap(), None).unwrap();
+    assert_eq!(reader.apply(id, arrange(t(ObjectKind::Path, 0), ZOrder::Front)), Err(EditError::NotPermitted("changes to the document")));
+    let doc = reader.get(id).unwrap();
+    assert!(!doc.dirty && doc.can_undo().is_none());
+    // The dry run gives the security reason too, even for a move it would otherwise refuse.
+    let not_permitted = Err(EditError::NotPermitted("changes to the document").to_string());
+    assert_eq!(doc.arranged_target(0, t(ObjectKind::Path, 0), ZOrder::Front), not_permitted);
+    assert_eq!(doc.arranged_target(0, t(ObjectKind::Path, 2), ZOrder::Front), not_permitted);
 }

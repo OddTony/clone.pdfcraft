@@ -621,6 +621,8 @@ pub mod objects;
 pub use objects::{EditableObject, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget, editable_objects, move_objects, move_objects_each};
 pub mod align;
 pub use align::{ObjectAlign, align_objects};
+pub mod arrange;
+pub use arrange::{ZOrder, arrange_object, arranged_target};
 pub mod delete;
 pub use delete::delete_objects;
 

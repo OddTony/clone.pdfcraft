@@ -318,6 +318,12 @@ impl TextLine {
         (self.stream, self.ops.iter().max().copied().unwrap_or(0))
     }
 
+    /// The line's operators in the page's joined content: its text-showing operators, and the
+    /// marked-content operators of any `/ActualText` in it.
+    pub(crate) fn ops(&self) -> &[usize] {
+        &self.ops
+    }
+
     fn rotation(&self) -> f64 {
         let m = Matrix(self.origin.tm).then(&Matrix(self.origin.ctm)).0;
         m[1].atan2(m[0]).to_degrees()

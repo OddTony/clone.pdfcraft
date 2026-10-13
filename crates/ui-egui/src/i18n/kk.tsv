@@ -2151,6 +2151,10 @@ calendar date	December	Желтоқсан
 	Change colour	Түсін өзгерту
 	Delete object	Объектіні жою
 	Delete objects	Объектілерді жою
+	Bring to front	Ең алдыңғы қатарға шығару
+	Bring forward	Алға жылжыту
+	Send backward	Артқа жылжыту
+	Send to back	Ең артқы қатарға жіберу
 	Multiple words or phrases	Бірнеше сөз немесе тіркес
 	New bookmark ({key})	Жаңа бетбелгі ({key})
 	New bookmarks from structure	Құрылымнан жаңа бетбелгілер

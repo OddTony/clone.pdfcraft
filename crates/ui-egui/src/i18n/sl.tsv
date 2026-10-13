@@ -2194,6 +2194,10 @@ signature pad	Type	Vtipkaj
 	Change colour	Spremeni barvo
 	Delete object	Izbriši objekt
 	Delete objects	Izbriši objekte
+	Bring to front	Postavi v ospredje
+	Bring forward	Pomakni naprej
+	Send backward	Pomakni nazaj
+	Send to back	Postavi v ozadje
 	No fill	Brez polnila
 	Pages: {k} of {n}	Strani: {k} od {n}
 	Preview unavailable: {e}	Predogled ni na voljo: {e}

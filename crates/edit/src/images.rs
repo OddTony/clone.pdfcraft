@@ -67,6 +67,11 @@ impl PageImage {
             if clip.even_odd { winding % 2 != 0 } else { winding != 0 }
         })
     }
+
+    /// The content stream that draws it, and its `Do`'s index among that stream's operators.
+    pub(crate) fn drawn_at(&self) -> (usize, usize) {
+        (self.stream, self.op)
+    }
 }
 
 fn streams(doc: &Document, page: &Dict) -> Vec<(Object, Vec<u8>)> {

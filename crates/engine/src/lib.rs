@@ -63,7 +63,7 @@ pub use pdfcraft_edit::{BlockStyle, PageImage, RangeStyle, TextBlock, TextLine, 
 pub use pdfcraft_measure as measure;
 pub use pdfcraft_xfa::Report as XfaLayout;
 
-pub use pdfcraft_edit::{EditableObject, FillRule, MAX_MOVE_OBJECTS, ObjectAlign, ObjectKind, ObjectTarget, PagePath, Paint};
+pub use pdfcraft_edit::{EditableObject, FillRule, MAX_MOVE_OBJECTS, ObjectAlign, ObjectKind, ObjectTarget, PagePath, Paint, ZOrder};
 
 /// A change to an existing page image.
 #[derive(Clone, Debug, PartialEq)]
@@ -223,6 +223,7 @@ fn scope_of(edit: &Edit) -> Scope {
         | Edit::TransformPath { .. }
         | Edit::RecolourObjects { .. }
         | Edit::DeleteObjects { .. }
+        | Edit::ArrangeObjects { .. }
         | Edit::EditTextLine { .. }
         | Edit::EditTextBlock { .. }
         | Edit::EditPageImage { .. }
@@ -471,6 +472,21 @@ impl Document {
     /// `tolerance` points: its index in [`Self::page_paths`].
     pub fn path_at(&self, page: usize, point: [f64; 2], tolerance: f64) -> Option<usize> {
         self.page_paths(page).ok()?.iter().rposition(|p| p.contains(point, tolerance))
+    }
+
+    /// Where [`Edit::ArrangeObjects`] would list `target` afterwards (paths and images are
+    /// listed in painting order), or why it would be refused, without changing anything.
+    pub fn arranged_target(&self, page: usize, target: ObjectTarget, order: ZOrder) -> Result<ObjectTarget, String> {
+        let edit = Edit::ArrangeObjects { page, object: target, order };
+        let editor = self.editor.as_ref().ok_or_else(|| EditError::ReadOnly(self.read_only_reason.clone().unwrap_or_default()).to_string())?;
+        // Refuse exactly when `Session::apply` would, for the same reason.
+        if let Some(p) = editor.cos.permissions() {
+            check_permission(&edit, &p).map_err(|e| e.to_string())?;
+        }
+        // It rewrites a copy of the page as the edit would, so it runs inside the same net.
+        guard(|| pdfcraft_edit::arranged_target(&editor.cos, page, target, order))
+            .map_err(|m| format!("{} failed unexpectedly ({m}); the document was not changed", edit.label()))?
+            .map_err(|e| e.to_string())
     }
 
     /// Displayed top-left-origin motion to a user-space vector. Use the linear map only,
@@ -1454,6 +1470,14 @@ pub enum Edit {
         page: usize,
         objects: Vec<ObjectTarget>,
     },
+    /// Bring a vector path, image or Form artwork forward or send it backward among the objects
+    /// it overlaps (see [`ZOrder`]). Text and added content are refused, and so is a move that
+    /// would change nothing. `Document::arranged_target` says where it is listed afterwards.
+    ArrangeObjects {
+        page: usize,
+        object: ObjectTarget,
+        order: ZOrder,
+    },
     /// Edit text in a paragraph box: replace paragraph `block` (from `Document::text_blocks`),
     /// rewrapped to the box's width.
     EditTextBlock {
@@ -1755,6 +1779,10 @@ pub const EDIT_LABELS: &[&str] = &[
     "Change colour",
     "Delete object",
     "Delete objects",
+    "Bring to front",
+    "Bring forward",
+    "Send backward",
+    "Send to back",
     "Move image",
     "Rotate image",
     "Flip image",
@@ -1884,6 +1912,12 @@ impl Edit {
             Edit::TransformPath { .. } => Label::of("Resize object"),
             Edit::RecolourObjects { .. } => Label::of("Change colour"),
             Edit::DeleteObjects { objects, .. } => plural("Delete object", "Delete objects", objects.len()),
+            Edit::ArrangeObjects { order, .. } => Label::of(match order {
+                ZOrder::Front => "Bring to front",
+                ZOrder::Forward => "Bring forward",
+                ZOrder::Backward => "Send backward",
+                ZOrder::Back => "Send to back",
+            }),
             Edit::EditPageImage { change, .. } => Label::of(match change {
                 ImageEdit::Move(_) => "Move image",
                 ImageEdit::Rotate(_) => "Rotate image",
@@ -2044,6 +2078,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::TransformPath { .. }
         | Edit::RecolourObjects { .. }
         | Edit::DeleteObjects { .. }
+        | Edit::ArrangeObjects { .. }
         | Edit::DeleteContent { .. }
         | Edit::ReplaceImage { .. }
         | Edit::ClearRedactions
@@ -2422,6 +2457,9 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             pdfcraft_edit::recolour_paths(doc, *page, &paths, *fill, *stroke)?;
         }
         Edit::DeleteObjects { page, objects } => pdfcraft_edit::delete_objects(doc, *page, objects)?,
+        Edit::ArrangeObjects { page, object, order } => {
+            pdfcraft_edit::arrange_object(doc, *page, *object, *order)?;
+        }
         Edit::EditTextBlock { page, block, text, style } => {
             pdfcraft_edit::rewrite_block(doc, *page, *block, Some(text), style)?;
         }

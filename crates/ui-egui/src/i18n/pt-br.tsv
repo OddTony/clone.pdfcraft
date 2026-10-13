@@ -2221,6 +2221,10 @@ comment menu	Edit	Editar
 	Change colour	Alterar cor
 	Delete object	Excluir objeto
 	Delete objects	Excluir objetos
+	Bring to front	Trazer para a frente
+	Bring forward	Avançar
+	Send backward	Recuar
+	Send to back	Enviar para trás
 	Vertical text cannot be moved with this selection.	O texto vertical não pode ser movido com esta seleção.
 	Text used as a clipping path cannot be moved with this selection.	O texto usado como caminho de recorte não pode ser movido com esta seleção.
 	These objects could not be moved. Select them again and try a smaller move.	Não foi possível mover estes objetos. Selecione-os novamente e tente um deslocamento menor.

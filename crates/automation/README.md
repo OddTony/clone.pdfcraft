@@ -122,7 +122,12 @@ point across are listed a point wide, and a stroke resized unevenly at its avera
 `object_recolour {doc, page, objects, fill?, stroke?, generation?}` paints `path` references in new
 `#RRGGBB` colours, written as DeviceRGB, where they fill and where they stroke.
 `object_delete {doc, page, objects, generation?}` deletes `image` and `path` references together;
-text and added content are refused. A refusal changes nothing; success is one undo step. See
+text and added content are refused. `object_arrange {doc, page, object, order, generation?}` moves
+one `path` or `image` reference in the painting order among the objects it overlaps: `front` or
+`back` past all of them, `forward` or `backward` past the next one. It returns the object's new
+reference as `object`, since paths and images are listed in painting order; text, added content
+and a move with nothing overlapping that way are refused. A refusal changes nothing; success is
+one undo step. See
 [the selection and movement guide](../../docs/editing-multiple-objects.md) for limits and examples.
 
 ## Accessibility review record

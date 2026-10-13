@@ -701,6 +701,7 @@ impl Automation {
             "object_resize" => self.object_resize(&a)?,
             "object_recolour" => self.object_recolour(&a)?,
             "object_delete" => self.object_delete(&a)?,
+            "object_arrange" => self.object_arrange(&a)?,
             "content_list" => self.content_list(&a)?,
             "page_add_text" => self.page_add_text(&a)?,
             "page_add_image" => self.page_add_image(&a)?,

@@ -2223,6 +2223,10 @@ signature pad	Type	Saisir
 	Change colour	Changer la couleur
 	Delete object	Supprimer un objet
 	Delete objects	Supprimer des objets
+	Bring to front	Mettre au premier plan
+	Bring forward	Avancer
+	Send backward	Reculer
+	Send to back	Mettre à l'arrière-plan
 	Vertical text cannot be moved with this selection.	Le texte vertical ne peut pas être déplacé avec cette sélection.
 	Text used as a clipping path cannot be moved with this selection.	Le texte utilisé comme chemin de découpe ne peut pas être déplacé avec cette sélection.
 	These objects could not be moved. Select them again and try a smaller move.	Ces objets n’ont pas pu être déplacés. Sélectionnez-les à nouveau et essayez un déplacement plus petit.

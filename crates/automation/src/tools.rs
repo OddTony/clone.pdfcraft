@@ -197,6 +197,10 @@ pub fn tools() -> Vec<ToolDef> {
         t("object_delete", "Delete objects", "Delete 1–1000 images, Form artwork and vector paths (image or path references from object_list) together; the graphics state and marked content around them stay. Success is one undo step; text, added content (see content_delete) or a bad/stale reference refuses the entire delete.")
             .destructive()
             .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"objects":object_refs(),"generation":generation()}), &["doc","page","objects"])),
+        t("object_arrange", "Arrange an object", "Bring one vector path, image or Form artwork (a path or image reference from object_list) to the front or forward, or send it backward or to the back, among the objects it overlaps: front and back go past all of them, forward and backward past the next one. Returns its new reference as object (kind and 1-based index), since paths and images are listed in painting order. Success is one undo step; text, added content, nothing overlapping it that way, content too irregular to rearrange, or a bad/stale reference is refused.")
+            .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"object":object_ref(),
+                "order":{"type":"string","enum":["front","forward","backward","back"]},
+                "generation":generation()}), &["doc","page","object","order"])),
         t("text_extract", "Extract text", "Extract the text of some or all pages, in reading order. With rect, only the text inside that rectangle on each page, as Column select takes it: one row per visual line, side-by-side pieces (table cells) separated by a tab.")
             .ro()
             .cmd("edit.column_select")

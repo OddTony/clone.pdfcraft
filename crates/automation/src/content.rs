@@ -314,6 +314,26 @@ impl Automation {
         result["deleted"] = json!(count);
         Ok(result)
     }
+
+    pub(crate) fn object_arrange(&mut self, a: &Args) -> Result<Value> {
+        use pdfcraft_engine::ZOrder;
+        let page = self.page(a)?;
+        let object = a.get("object").ok_or_else(|| bad("object must be one path or image reference from object_list")).and_then(object_target)?;
+        let order = match a.get("order").and_then(Value::as_str) {
+            Some("front") => ZOrder::Front,
+            Some("forward") => ZOrder::Forward,
+            Some("backward") => ZOrder::Backward,
+            Some("back") => ZOrder::Back,
+            _ => return Err(bad("order must be front, forward, backward or back")),
+        };
+        let doc = self.doc(a)?;
+        check_generation(a, doc, "arranging")?;
+        // Paths and images are listed in painting order, so the reference changes with it.
+        let moved = doc.arranged_target(page, object, order).map_err(failed)?;
+        let mut result = self.apply(a, Edit::ArrangeObjects { page, object, order })?;
+        result["object"] = json!({"kind":moved.kind.as_str(),"index":moved.index.saturating_add(1)});
+        Ok(result)
+    }
 }
 
 /// `objects`: 1–1000 `{kind, index}` references from object_list (1-based indexes).

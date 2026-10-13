@@ -2136,6 +2136,10 @@
 	Change colour	Изменить цвет
 	Delete object	Удалить объект
 	Delete objects	Удалить объекты
+	Bring to front	На передний план
+	Bring forward	Переместить вперёд
+	Send backward	Переместить назад
+	Send to back	На задний план
 	Vertical text cannot be moved with this selection.	Вертикальный текст нельзя переместить вместе с этим выделением.
 	Text used as a clipping path cannot be moved with this selection.	Текст, используемый как обтравочный контур, нельзя переместить вместе с этим выделением.
 	These objects could not be moved. Select them again and try a smaller move.	Не удалось переместить эти объекты. Выберите их снова и попробуйте меньшее смещение.

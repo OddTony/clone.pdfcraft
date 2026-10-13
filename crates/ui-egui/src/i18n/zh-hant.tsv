@@ -2100,6 +2100,10 @@
 	Change colour	變更顏色
 	Delete object	刪除物件
 	Delete objects	刪除多個物件
+	Bring to front	移至最上層
+	Bring forward	上移一層
+	Send backward	下移一層
+	Send to back	移至最下層
 	Vertical text cannot be moved with this selection.	無法隨此選取範圍移動直排文字。
 	Text used as a clipping path cannot be moved with this selection.	無法隨此選取範圍移動用作裁切路徑的文字。
 	These objects could not be moved. Select them again and try a smaller move.	無法移動這些物件。請重新選取並嘗試較小的移動距離。
