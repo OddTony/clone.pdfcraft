@@ -3896,6 +3896,7 @@ dependencies = [
  "pdfcraft-fonts",
  "pdfcraft-render",
  "png 0.18.1",
+ "sha2",
  "skrifa 0.47.0",
 ]
 
