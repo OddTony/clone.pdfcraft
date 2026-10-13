@@ -183,7 +183,9 @@ pub(crate) fn toolbar(ui: &mut egui::Ui, app: &mut crate::PdfCraftApp) {
                     }
                     if let QuickTool::Comment(tool) = app.quick_tool {
                         ui.separator();
-                        crate::comments::quick_bar_controls(ui, tool, &mut app.comment_prefs);
+                        if let Some(color) = crate::comments::quick_bar_controls(ui, tool, &mut app.comment_prefs) {
+                            crate::comments::apply_quick_bar_color(app, tool, color);
+                        }
                     }
                 });
             });

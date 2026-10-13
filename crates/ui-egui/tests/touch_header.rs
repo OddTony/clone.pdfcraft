@@ -57,18 +57,22 @@ fn reachable(h: &Harness<'static, PdfCraftApp>, label: &str, rect: Rect) {
     assert!(h.ctx.content_rect().contains_rect(rect), "{label} outside viewport: {rect:?}");
 }
 
+fn save_shortcut(h: &Harness<'static, PdfCraftApp>) -> String {
+    if h.ctx.os() == egui::os::OperatingSystem::Mac { "⌘S".to_owned() } else { format!("{}+S", i18n::key_name("Ctrl")) }
+}
+
 fn check_header(h: &Harness<'static, PdfCraftApp>, language: i18n::Lang, width: f32) {
     let mut targets = Vec::new();
-    for key in ["Menu", "Find tools and commands", "Save (M4)"] {
-        let label = i18n::tr(language, key);
-        let rect = header(h, label).unwrap_or_else(|| panic!("missing {label} at {width}"));
-        reachable(h, label, rect);
+    for key in ["Menu", "Find tools and commands", "Save ({key})"] {
+        let label = i18n::tr(language, key).replace("{key}", &save_shortcut(h));
+        let rect = header(h, &label).unwrap_or_else(|| panic!("missing {label} at {width}"));
+        reachable(h, &label, rect);
         targets.push((label.to_owned(), rect));
     }
     for key in ["All tools", "Read", "Edit", "Convert", "E-Sign"] {
-        let label = i18n::tr(language, key);
-        if let Some(rect) = header(h, label) {
-            reachable(h, label, rect);
+        let label = i18n::tr(language, key).replace("{key}", &save_shortcut(h));
+        if let Some(rect) = header(h, &label) {
+            reachable(h, &label, rect);
             targets.push((label.to_owned(), rect));
         }
     }
@@ -153,9 +157,9 @@ fn touch_save_activates_the_existing_save_path_at_each_width() {
             h.run_steps(2);
             let id = h.state().views[0].id;
             assert!(h.state().session.get(id).unwrap().dirty);
-            let label = i18n::tr(i18n::Lang::from_code(language).unwrap(), "Save (M4)");
-            let save = header(&h, label).unwrap();
-            reachable(&h, label, save);
+            let label = i18n::tr(i18n::Lang::from_code(language).unwrap(), "Save ({key})").replace("{key}", &save_shortcut(&h));
+            let save = header(&h, &label).unwrap();
+            reachable(&h, &label, save);
             tap(&mut h, save.center());
             assert!(!h.state().session.get(id).unwrap().dirty);
             let bytes = std::fs::read(&path).unwrap();
