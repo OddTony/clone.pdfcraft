@@ -18,8 +18,8 @@ targets:
     sources:
       - path: Sources/App
       - path: Sources/Generated
-    resources:
       - path: Resources/Sample.pdf
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.refinedtech.artipdf
