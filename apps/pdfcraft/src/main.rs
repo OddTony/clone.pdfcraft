@@ -36,6 +36,8 @@ mod decorations;
 mod logging;
 #[cfg(target_os = "windows")]
 mod motion;
+#[cfg(target_os = "macos")]
+mod native_menu;
 mod reopen;
 mod single_instance;
 mod text_scale;
@@ -332,6 +334,39 @@ struct Launch {
     window_controls: Option<pdfcraft_ui_egui::window_controls::Layout>,
 }
 
+struct App {
+    app: PdfCraftApp,
+    #[cfg(target_os = "macos")]
+    native_menu: Option<native_menu::NativeMenu>,
+}
+
+impl eframe::App for App {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        self.app.raw_input_hook(ctx, raw);
+    }
+
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        self.app.save(storage);
+    }
+
+    fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        #[cfg(target_os = "macos")]
+        {
+            if self.native_menu.is_none() && std::env::var_os("PDFCRAFT_NO_NATIVE_MENU").is_none() {
+                self.native_menu = Some(native_menu::NativeMenu::install(&self.app, ctx));
+            }
+            if let Some(m) = &self.native_menu {
+                m.poll(&mut self.app, ctx);
+            }
+        }
+        self.app.logic(ctx, frame);
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.app.ui(ui, frame);
+    }
+}
+
 fn app_creator<'a>(
     launch: Launch,
     started: Rc<Cell<bool>>,
@@ -415,7 +450,11 @@ fn app_creator<'a>(
                 log::warn!("--{k} {v}: {e}");
             }
         }
-        Ok(Box::new(app))
+        Ok(Box::new(App {
+            app,
+            #[cfg(target_os = "macos")]
+            native_menu: None,
+        }))
     })
 }
 

@@ -177,6 +177,7 @@ fn a_tool_chosen_with_no_document_asks_for_one_and_runs_on_it() {
     let pick = path.to_string_lossy().into_owned();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
+        app.run_inline = true;
         app.set_option("language", "en").unwrap();
         app.pick_override = Some(vec![pick]);
         app
@@ -190,6 +191,7 @@ fn a_tool_chosen_with_no_document_asks_for_one_and_runs_on_it() {
     // Cancelled: nothing opens and nothing runs.
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
+        app.run_inline = true;
         app.set_option("language", "en").unwrap();
         app.pick_override = Some(Vec::new());
         app

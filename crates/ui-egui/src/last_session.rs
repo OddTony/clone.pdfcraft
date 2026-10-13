@@ -101,6 +101,9 @@ impl PdfCraftApp {
     /// password and later ones stay closed (they are in the recent-files list).
     pub fn reopen_last_files(&mut self, skip: &[String]) {
         let last = std::mem::take(&mut self.last_session);
+        if !last.files.is_empty() {
+            self.last_session_history = last.files.clone();
+        }
         #[cfg(not(target_arch = "wasm32"))]
         if self.reopen_last_session {
             let skip: Vec<String> =
@@ -135,6 +138,35 @@ impl PdfCraftApp {
         }
         #[cfg(target_arch = "wasm32")]
         let _ = (last, skip);
+    }
+
+    /// Reopen the files from the last session, or from recent files if no session was preserved.
+    pub fn reopen_previous_session(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut paths: Vec<String> = self.last_session_history.iter().map(|f| f.path.clone()).collect();
+            if paths.is_empty() {
+                paths = self.recent.iter().take(10).map(|r| r.path.clone()).collect();
+            }
+            let valid: Vec<String> = paths.into_iter().filter(|p| std::path::Path::new(p).is_file()).collect();
+            if valid.is_empty() {
+                self.notify_tr("No recent PDFs to reopen");
+                return;
+            }
+            let count = valid.len();
+            for p in &valid {
+                self.open_path(p);
+            }
+            if count == 1 {
+                self.notify_tr("Reopened 1 PDF from last session");
+            } else {
+                self.notify_fmt("Reopened {n} PDFs from last session", &[("n", &count.to_string())]);
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.notify_tr("No recent PDFs to reopen");
+        }
     }
 }
 

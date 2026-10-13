@@ -142,7 +142,7 @@ pub use canvas::{DocView, RasterMemory};
 pub use editing::{CloseRequest, SaveTarget};
 pub use files::{ExtractDraft, FilePurpose, FileRequest, RotateDraft, SplitDraft, SplitMode, SplitPlan};
 pub use recovery::{AUTOSAVE_SECS, RecoveryMeta, RecoveryStore};
-use theme::{ThemeKind, ThemePreference};
+pub use theme::{ThemeKind, ThemePreference};
 
 /// Top-level workspace modes (Acrobat's mode bar).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -554,6 +554,8 @@ pub struct PdfCraftApp {
     /// The files open when PdfCraft last closed, read from the settings for
     /// [`PdfCraftApp::reopen_last_files`].
     pub last_session: last_session::LastSession,
+    /// History of files in the previous session for Reopen PDFs from Last Session
+    pub last_session_history: Vec<last_session::SessionFile>,
     /// Quitting closes unsaved tabs one by one: what was open when the quit began.
     quit_session: Option<last_session::LastSession>,
     /// Preferences: reload a document when its file changes on disk (#431).
@@ -906,6 +908,7 @@ impl PdfCraftApp {
             recent: Vec::new(),
             reopen_last_session: false,
             last_session: Default::default(),
+            last_session_history: Vec::new(),
             quit_session: None,
             reload_changed_files: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -2165,7 +2168,9 @@ impl PdfCraftApp {
         if let Some(on) = v["reopen_last_session"].as_bool() {
             self.reopen_last_session = on;
         }
-        self.last_session = last_session::LastSession::from_json(&v["last_session"]);
+        let ls = last_session::LastSession::from_json(&v["last_session"]);
+        self.last_session_history = ls.files.clone();
+        self.last_session = ls;
         if let Some(on) = v["system_title_bar"].as_bool() {
             self.system_title_bar = on;
         }
@@ -2682,6 +2687,39 @@ impl PdfCraftApp {
         let Some((id, text)) = self.views.get(i).and_then(|v| Some((v.id, v.selected_text()?))) else { return };
         if self.may_copy(id) {
             ctx.copy_text(text);
+        }
+    }
+
+    /// Select all objects or text in the active document.
+    pub fn select_all(&mut self) {
+        if let Some(i) = self.active {
+            if self.is_preparing() {
+                if let Some(doc) = self.session.get(self.views[i].id) {
+                    prepare::select_all(&mut self.views[i], &doc.form);
+                }
+            } else {
+                self.views[i].select_all();
+            }
+        }
+    }
+
+    /// Clear selection in the active document.
+    pub fn deselect_all(&mut self) {
+        if let Some(i) = self.active {
+            self.views[i].clear_selection();
+        }
+    }
+
+    /// Copy current selection (selected text, or pages) to clipboard.
+    pub fn copy_selection(&mut self, ctx: &egui::Context) {
+        if let Some(i) = self.active {
+            if let Some(text) = self.views[i].selected_text() {
+                if self.may_copy(self.views[i].id) {
+                    ctx.copy_text(text);
+                }
+            } else {
+                self.copy_pages(false);
+            }
         }
     }
 

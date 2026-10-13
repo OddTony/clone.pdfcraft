@@ -25,10 +25,22 @@ serde_json = { workspace = true }
 log = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# macOS native menu bar (NSMenu) matching Adobe Acrobat's toolbar/menu hierarchy
+muda = { version = "0.21", default-features = false }
 # Finder double-click / Open With / Dock drops arrive as Apple events (#73); this small audited
 # crate registers the handler (Objective-C interop needs unsafe, which our workspace forbids)
 # behind a safe API. Same version as PhotoCraft. Pinned exactly: review the diff before bumping.
 fmv-macos-events = "=0.1.0"
+
+# tests/mac_menu_appkit.rs: reads AppKit's menu bar back. Already in Cargo.lock (muda, winit);
+# pinned exactly to the same versions.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2 = "=0.6.4"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSApplication", "NSMenu", "NSMenuItem", "NSResponder"] }
+
+[[test]]
+name = "mac_menu_appkit"
+harness = false
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Asks the Wayland compositor which GPU it draws with (linux-dmabuf feedback), so the window is
