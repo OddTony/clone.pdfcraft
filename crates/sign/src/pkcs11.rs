@@ -1,10 +1,9 @@
 //! PKCS #11 tokens and smart cards (plan: `sign.pkcs11`).
 //!
-//! The first step is deliberately small and has no hardware in it: the reference a token
-//! identity is kept under (`pkcs11:<SHA-256 of the certificate DER>`, like the
-//! `windows:` and `keychain:` references) and the `DigestInfo` a `CKM_RSA_PKCS` signature
-//! is computed over. Module loading (explicit user-chosen paths only), slot listing and
-//! signing through `cryptoki` come later; nothing here opens a DLL.
+//! Identities are named by RFC 7512 URIs (`pkcs11:token=…;object=…;id=…;type=cert`), and the
+//! `DigestInfo` a `CKM_RSA_PKCS` signature is computed over is built here. Module loading
+//! (explicit user-chosen paths only), slot listing and signing go through `cryptoki`;
+//! nothing here searches for modules on its own.
 
 use crate::keys::DigestAlg;
 #[cfg(not(target_arch = "wasm32"))]
@@ -13,14 +12,126 @@ use crate::{Certificate, DigitalId, SignError};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 
-/// The `pkcs11:<SHA-256 of the certificate DER>` reference kept for an identity.
-pub fn reference(certificate: &Certificate) -> String {
-    let digest = DigestAlg::Sha256.digest(&[&certificate.raw]);
-    let mut out = String::with_capacity("pkcs11:".len() + digest.len() * 2);
-    out.push_str("pkcs11:");
-    for b in digest {
+/// A `pkcs11:` identity reference (RFC 7512): the token object a signature uses. Only the
+/// attributes naming a certificate object are kept (`token`, `manufacturer`, `serial`,
+/// `model`, `object`, `id` — the `CKA_ID` bytes — and `type`). Anything else in the URI
+/// is refused, and so is a query (`?...`): a PIN never belongs in a reference — it comes
+/// from [`PinSource`] at signing time.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Pkcs11Uri {
+    pub token: Option<String>,
+    pub manufacturer: Option<String>,
+    pub serial: Option<String>,
+    pub model: Option<String>,
+    pub object: Option<String>,
+    pub id: Option<Vec<u8>>,
+    pub kind: Option<UriObjectKind>,
+}
+
+/// The `type` of object a `pkcs11:` URI names. PdfCraft only lists certificate objects
+/// backed by a private key, so matching only ever meets `Cert`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UriObjectKind {
+    Cert,
+    Public,
+    Private,
+}
+
+/// An identity's reference: `pkcs11:token=<label>;object=<label>;id=<CKA_ID>;type=cert`.
+pub fn reference(token: &str, object: &str, id: &[u8]) -> String {
+    format!("pkcs11:token={};object={};id={};type=cert", encode(token), encode(object), encode_bytes(id))
+}
+
+/// Parse a `pkcs11:` reference back into its attributes.
+pub fn parse_uri(reference: &str) -> Result<Pkcs11Uri, SignError> {
+    let malformed = |what: &str| SignError::Malformed(format!("a PKCS #11 identity reference {what}"));
+    let path = reference.strip_prefix("pkcs11:").ok_or_else(|| malformed("starts with pkcs11:"))?;
+    // The query is where RFC 7512 puts `pin-value`: refused, always. The PIN comes
+    // from `PinSource`, never from a string that lands in logs and scripts.
+    if path.contains('?') {
+        return Err(malformed("must not carry a query (a PIN never belongs in a reference)"));
+    }
+    let mut uri = Pkcs11Uri::default();
+    // `pkcs11:` alone names nothing yet: `find` reports the ambiguity instead.
+    if path.is_empty() {
+        return Ok(uri);
+    }
+    for pair in path.split(';') {
+        let (name, value) = pair.split_once('=').ok_or_else(|| malformed("holds name=value pairs separated by ';'"))?;
+        if value.is_empty() {
+            return Err(malformed("holds no empty values"));
+        }
+        let set_string = |slot: &mut Option<String>| -> Result<(), SignError> {
+            if slot.is_some() {
+                return Err(malformed("holds no attribute twice"));
+            }
+            *slot = Some(decode_string(value)?);
+            Ok(())
+        };
+        match name {
+            "token" => set_string(&mut uri.token)?,
+            "manufacturer" => set_string(&mut uri.manufacturer)?,
+            "serial" => set_string(&mut uri.serial)?,
+            "model" => set_string(&mut uri.model)?,
+            "object" => set_string(&mut uri.object)?,
+            "id" => {
+                if uri.id.is_some() {
+                    return Err(malformed("holds no attribute twice"));
+                }
+                uri.id = Some(decode_bytes(value)?);
+            }
+            "type" => {
+                if uri.kind.is_some() {
+                    return Err(malformed("holds no attribute twice"));
+                }
+                uri.kind = Some(match value {
+                    "cert" => UriObjectKind::Cert,
+                    "public" => UriObjectKind::Public,
+                    "private" => UriObjectKind::Private,
+                    _ => return Err(malformed("names a cert, public or private object")),
+                });
+            }
+            _ => return Err(malformed(&format!("has no {name} attribute (token, manufacturer, serial, model, object, id, type)"))),
+        }
+    }
+    Ok(uri)
+}
+
+impl Pkcs11Uri {
+    /// Whether the URI names this token object: every attribute it sets must match.
+    /// Unset attributes are wildcards. The object `type` is not compared: every listed
+    /// identity is a certificate backed by its private key.
+    pub fn matches(&self, token: &str, manufacturer: &str, serial: &str, model: &str, object: &str, id: &[u8]) -> bool {
+        self.token.as_deref().is_none_or(|t| t == token)
+            && self.manufacturer.as_deref().is_none_or(|m| m == manufacturer)
+            && self.serial.as_deref().is_none_or(|s| s == serial)
+            && self.model.as_deref().is_none_or(|m| m == model)
+            && self.object.as_deref().is_none_or(|o| o == object)
+            && self.id.as_deref().is_none_or(|i| i == id)
+    }
+}
+
+/// Percent-encode a URI attribute: everything but the unreserved characters.
+fn encode(text: &str) -> String {
+    let mut out = String::new();
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+            out.push(b as char);
+        } else {
+            out.push('%');
+            out.push(hex(b >> 4));
+            out.push(hex(b & 0x0F));
+        }
+    }
+    out
+}
+
+fn encode_bytes(bytes: &[u8]) -> String {
+    let mut out = String::new();
+    for b in bytes {
+        out.push('%');
         out.push(hex(b >> 4));
-        out.push(hex(b & 0x0F));
+        out.push(hex(*b & 0x0F));
     }
     out
 }
@@ -29,24 +140,39 @@ fn hex(nibble: u8) -> char {
     (b'0' + nibble + 7 * (nibble / 10)) as char
 }
 
-/// The fingerprint a `pkcs11:` reference names, as 32 bytes.
-pub fn parse_reference(reference_or_name: &str) -> Result<[u8; 32], SignError> {
-    let hex = reference_or_name
-        .strip_prefix("pkcs11:")
-        .ok_or_else(|| SignError::Malformed("a PKCS #11 identity reference looks like pkcs11:<64 hex chars of the certificate SHA-256>".into()))?;
-    if hex.len() != 64 {
-        return Err(SignError::Malformed(format!("a PKCS #11 identity reference holds 64 hex chars, not {}", hex.len())));
-    }
-    let mut out = [0u8; 32];
-    let bytes = hex.as_bytes();
-    for (i, slot) in out.iter_mut().enumerate() {
-        let Some(pair) = bytes.get(i * 2..i * 2 + 2) else {
-            return Err(SignError::Malformed("a PKCS #11 identity reference holds hex chars".into()));
-        };
-        *slot = (nibble(pair[0]).ok_or_else(|| SignError::Malformed("a PKCS #11 identity reference holds hex chars".into()))? << 4)
-            | nibble(pair[1]).ok_or_else(|| SignError::Malformed("a PKCS #11 identity reference holds hex chars".into()))?;
+/// The `CKA_ID` bytes of an `id` attribute (capped: real identifiers are tiny).
+fn decode_bytes(value: &str) -> Result<Vec<u8>, SignError> {
+    /// Longer than any token's key identifier.
+    const MAX_ID_LEN: usize = 512;
+    let raw = value.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < raw.len() {
+        let Some(b) = raw.get(i) else { break };
+        if *b == b'%' {
+            let (Some(h), Some(l)) = (raw.get(i + 1).copied(), raw.get(i + 2).copied()) else {
+                return Err(SignError::Malformed("a PKCS #11 identity reference percent-encodes every byte as %XX".into()));
+            };
+            let (Some(h), Some(l)) = (nibble(h), nibble(l)) else {
+                return Err(SignError::Malformed("a PKCS #11 identity reference percent-encodes every byte as %XX".into()));
+            };
+            out.push(h << 4 | l);
+            i += 3;
+        } else {
+            out.push(*b);
+            i += 1;
+        }
+        if out.len() > MAX_ID_LEN {
+            return Err(SignError::Malformed("a PKCS #11 identity reference holds a short key identifier".into()));
+        }
     }
     Ok(out)
+}
+
+/// A text attribute: percent-decoded UTF-8.
+fn decode_string(value: &str) -> Result<String, SignError> {
+    let bytes = decode_bytes(value)?;
+    String::from_utf8(bytes).map_err(|_| SignError::Malformed("a PKCS #11 identity reference holds UTF-8 text attributes".into()))
 }
 
 fn nibble(b: u8) -> Option<u8> {
@@ -87,6 +213,8 @@ pub struct Token {
     pub serial: String,
     /// The device manufacturer, unpadded.
     pub manufacturer: String,
+    /// The device model, unpadded.
+    pub model: String,
     /// Whether signing needs a PIN entered: login is required and the token has no pinpad
     /// reading it itself.
     pub needs_pin: bool,
@@ -140,6 +268,7 @@ pub fn tokens(module: &Module) -> Result<Vec<Token>, SignError> {
             label: info.label().trim_end().to_string(),
             serial: info.serial_number().trim_end().to_string(),
             manufacturer: info.manufacturer_id().trim_end().to_string(),
+            model: info.model().trim_end().to_string(),
             needs_pin: info.login_required() && !pinpad,
             pinpad,
             pin_locked: info.user_pin_locked(),
@@ -181,10 +310,35 @@ pub struct Unusable {
     pub reason: String,
 }
 
+/// A listed token identity: the signable [`DigitalId`] plus what names it.
+#[derive(Debug)]
+pub struct Identity {
+    /// The identity itself, ready to sign.
+    pub id: DigitalId,
+    /// The token holding it.
+    pub token: Token,
+    /// The certificate object's `CKA_LABEL` (empty when the token sets none).
+    pub object: String,
+    /// The `CKA_ID` pairing the certificate with its private key.
+    pub key_id: Vec<u8>,
+}
+
+impl Identity {
+    /// The identity's RFC 7512 reference, for `find` and `sign_document`.
+    pub fn reference(&self) -> String {
+        reference(&self.token.label, &self.object, &self.key_id)
+    }
+
+    /// Whether a parsed reference names this identity.
+    pub fn matches(&self, uri: &Pkcs11Uri) -> bool {
+        uri.matches(&self.token.label, &self.token.manufacturer, &self.token.serial, &self.token.model, &self.object, &self.key_id)
+    }
+}
+
 /// Every token's signing identities and the certificates that can't sign.
 #[derive(Default)]
 pub struct Listing {
-    pub ids: Vec<DigitalId>,
+    pub ids: Vec<Identity>,
     pub unusable: Vec<Unusable>,
 }
 
@@ -227,8 +381,17 @@ pub fn list(module: &Module, pin: &PinSource) -> Result<Listing, SignError> {
         };
         let pinpad = info.protected_authentication_path();
         let login_required = info.login_required();
+        let token = Token {
+            label: info.label().trim_end().to_string(),
+            serial: info.serial_number().trim_end().to_string(),
+            manufacturer: info.manufacturer_id().trim_end().to_string(),
+            model: info.model().trim_end().to_string(),
+            needs_pin: login_required && !pinpad,
+            pinpad,
+            pin_locked: info.user_pin_locked(),
+        };
         for handle in handles {
-            let attrs = match session.get_attributes(handle, &[AttributeType::Value, AttributeType::Id]) {
+            let attrs = match session.get_attributes(handle, &[AttributeType::Value, AttributeType::Id, AttributeType::Label]) {
                 Ok(attrs) => attrs,
                 Err(e) => {
                     skip("(unreadable certificate)".to_string(), format!("the certificate can't be read: {}", describe(&e)));
@@ -270,19 +433,20 @@ pub fn list(module: &Module, pin: &PinSource) -> Result<Listing, SignError> {
                 continue;
             }
             let public = certificate.public_key.clone();
+            let object = object_label(&attrs);
             let key = PrivateKey::external(
                 public.clone(),
                 std::sync::Arc::new(Pkcs11Key {
                     module: module.clone(),
                     slot,
+                    token: token.clone(),
                     key_id: key_id.to_vec(),
                     public,
-                    login_required,
-                    pinpad,
                     pin: pin.clone(),
                 }),
             );
-            ids.push(DigitalId { key, certificate, chain: Vec::new(), friendly_name: Some(subject) });
+            let id = DigitalId { key, certificate, chain: Vec::new(), friendly_name: Some(subject) };
+            ids.push(Identity { id, token: token.clone(), object, key_id: key_id.to_vec() });
         }
     }
     Ok(Listing { ids, unusable })
@@ -306,16 +470,40 @@ fn object_id(attrs: &[cryptoki::object::Attribute]) -> Option<&[u8]> {
     })
 }
 
+/// The `CKA_LABEL` of a certificate object, if it has one and it reads as text.
+#[cfg(not(target_arch = "wasm32"))]
+fn object_label(attrs: &[cryptoki::object::Attribute]) -> String {
+    attrs
+        .iter()
+        .find_map(|a| match a {
+            cryptoki::object::Attribute::Label(v) => Some(String::from_utf8_lossy(v).into_owned()),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+/// Find the listed identity a `pkcs11:` URI names. Zero matches and more than one are
+/// both errors saying so: signing must never pick a key the reference leaves ambiguous.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn find(module: &Module, uri: &str, pin: &PinSource) -> Result<DigitalId, SignError> {
+    let want = parse_uri(uri)?;
+    let hits: Vec<Identity> = list(module, pin)?.ids.into_iter().filter(|id| id.matches(&want)).collect();
+    match hits.len() {
+        1 => Ok(hits.into_iter().next().map(|id| id.id).ok_or_else(|| SignError::Crypto(format!("no PKCS #11 identity {uri}")))?),
+        0 => Err(SignError::Crypto(format!("no PKCS #11 identity {uri}"))),
+        n => Err(SignError::Crypto(format!("the PKCS #11 reference {uri} matches {n} identities; be specific"))),
+    }
+}
+
 /// A token private key: found by `CKA_ID` at listing, opened for one session at signing.
 /// The PIN is asked then and lives only in that call.
 #[cfg(not(target_arch = "wasm32"))]
 struct Pkcs11Key {
     module: Module,
     slot: cryptoki::slot::Slot,
+    token: Token,
     key_id: Vec<u8>,
     public: PublicKey,
-    login_required: bool,
-    pinpad: bool,
     pin: PinSource,
 }
 
@@ -361,10 +549,10 @@ impl Pkcs11Key {
     /// its remaining-tries flags left for the caller to read from the token info.
     fn login(&self, session: &cryptoki::session::Session) -> Result<(), SignError> {
         use cryptoki::session::UserType;
-        if !self.login_required {
+        if !self.token.needs_pin && !self.token.pinpad {
             return Ok(());
         }
-        if self.pinpad {
+        if self.token.pinpad {
             return session
                 .login(UserType::User, None)
                 .map_err(|e| SignError::Crypto(format!("the token's reader couldn't log in (was the token removed?): {}", describe(&e))));
@@ -408,31 +596,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn references_round_trip_through_the_fingerprint() {
-        let fp = parse_reference("pkcs11:b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c").unwrap();
-        assert_eq!(
-            fp,
-            [
-                0xb5, 0xbb, 0x9d, 0x80, 0x14, 0xa0, 0xf9, 0xb1, 0xd6, 0x1e, 0x21, 0xe7, 0x96, 0xd7, 0x8d, 0xcc, 0xdf, 0x13, 0x52, 0xf2, 0x3c, 0xd3,
-                0x28, 0x12, 0xf4, 0x85, 0x0b, 0x87, 0x8a, 0xe4, 0x94, 0x4c
-            ]
-        );
-        // Upper-case hex reads too (fingerprints are shown upper-case elsewhere).
-        assert_eq!(parse_reference("pkcs11:B5BB9D8014A0F9B1D61E21E796D78DCCDF1352F23CD32812F4850B878AE4944C").unwrap(), fp);
+    fn references_round_trip_as_rfc_7512() {
+        let uri = reference("My Token", "Smile Лиза", &[1, 2, 0xAB]);
+        assert_eq!(uri, "pkcs11:token=My%20Token;object=Smile%20%D0%9B%D0%B8%D0%B7%D0%B0;id=%01%02%AB;type=cert");
+        let parsed = parse_uri(&uri).unwrap();
+        assert_eq!(parsed.token.as_deref(), Some("My Token"));
+        assert_eq!(parsed.object.as_deref(), Some("Smile Лиза"));
+        assert_eq!(parsed.id.as_deref(), Some([1, 2, 0xAB].as_slice()));
+        assert_eq!(parsed.kind, Some(UriObjectKind::Cert));
+        // Matching: set attributes must agree, unset ones are wildcards.
+        assert!(parsed.matches("My Token", "", "", "", "Smile Лиза", &[1, 2, 0xAB]));
+        assert!(!parsed.matches("Other", "", "", "", "Smile Лиза", &[1, 2, 0xAB]));
+        assert!(!parsed.matches("My Token", "", "", "", "Smile Лиза", &[9]));
+        assert!(parse_uri("pkcs11:id=%01%02%AB").unwrap().matches("anything", "", "", "", "whatever", &[1, 2, 0xAB]));
+        assert!(parse_uri("pkcs11:").unwrap().matches("anything", "", "", "", "whatever", &[1]));
     }
 
     #[test]
-    fn references_reject_anything_but_pkcs11_colon_and_64_hex() {
+    fn references_reject_garbage_and_queries() {
         for bad in [
             "",
-            "pkcs11:",
-            "windows:b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c",
-            "pkcs11:b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944",
-            "pkcs11:b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c00",
-            "pkcs11:zbbs9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c",
-            "pkcs11: b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944",
+            "windows:token=x",
+            "pkcs11",
+            "pkcs11:token",
+            "pkcs11:token=",
+            "pkcs11:unknown=x",
+            "pkcs11:type=secret-key",
+            "pkcs11:token=x;token=y",
+            "pkcs11:id=%",
+            "pkcs11:id=%ZZ",
+            "pkcs11:token=%FF",
+            "pkcs11:token=x?pin-value=1234",
+            "pkcs11:object=a;bogus",
         ] {
-            assert!(parse_reference(bad).is_err(), "{bad:?}");
+            assert!(parse_uri(bad).is_err(), "{bad:?}");
         }
     }
 
