@@ -149,7 +149,7 @@ pub fn text_edit_layout(doc: &Document, page: usize, block: usize, text: &str, s
     let lines = text_lines(doc, page)?;
     let original = group_blocks(&lines);
     let source = original.get(block).ok_or(EditError::Invalid("text block does not exist".into()))?;
-    if text == source.editor_text && *style == BlockStyle::default() {
+    if source.unchanged(text) && *style == BlockStyle::default() {
         return Ok(TextEditLayout { source_rect: source.rect, draft_rect: Some(source.rect), overflow: false });
     }
     // Subtract the untouched runs by value, rather than by operator offsets: a rewrite may
@@ -262,6 +262,10 @@ pub struct TextBlock {
     pub rows: Vec<Vec<usize>>,
     /// Text for the inline editor, with a newline only between visual rows.
     pub editor_text: String,
+    /// Byte offsets in `editor_text` of the row breaks that only wrap the paragraph: the next row's
+    /// first word wouldn't have fit on the row before. A draft may have a space there instead and
+    /// is then rewrapped across those rows; every newline a draft has stays a line break.
+    pub soft_breaks: Vec<usize>,
     /// Byte ranges in `editor_text` and their source line indexes.
     pub spans: Vec<(std::ops::Range<usize>, usize)>,
     /// Every line is invisible text (rendering mode 3): an OCR layer over a scanned image, whose
@@ -270,6 +274,41 @@ pub struct TextBlock {
 }
 
 impl TextBlock {
+    /// `editor_text` with its wrapping breaks ([`Self::soft_breaks`]) as spaces: the paragraph as
+    /// flowing text, with a newline only where a paragraph ends.
+    pub fn flowing_text(&self) -> String {
+        let mut bytes = self.editor_text.clone().into_bytes();
+        for at in &self.soft_breaks {
+            if let Some(b) = bytes.get_mut(*at).filter(|b| **b == b'\n') {
+                *b = b' ';
+            }
+        }
+        String::from_utf8(bytes).unwrap_or_else(|_| self.editor_text.clone())
+    }
+
+    /// Whether `draft` is the paragraph's text unchanged, each wrapping break a newline or a space.
+    pub fn unchanged(&self, draft: &str) -> bool {
+        draft.len() == self.editor_text.len()
+            && draft.bytes().zip(self.editor_text.bytes()).enumerate().all(|(i, (new, old))| new == old || self.soft_space(i, old, new))
+    }
+
+    /// Whether `new` at byte `at` is a space written for the wrapping break `old` there.
+    fn soft_space(&self, at: usize, old: u8, new: u8) -> bool {
+        old == b'\n' && new == b' ' && self.soft_breaks.binary_search(&at).is_ok()
+    }
+
+    /// `editor_text` and `draft` as characters, and how many characters they share at the start and
+    /// at the end. A space where a wrapping break was counts as the same character.
+    pub(crate) fn common_ends(&self, draft: &str) -> (Vec<char>, Vec<char>, usize, usize) {
+        let old: Vec<(usize, char)> = self.editor_text.char_indices().collect();
+        let new: Vec<char> = draft.chars().collect();
+        let same = |(at, a): &(usize, char), b: &char| a == b || (*a == '\n' && *b == ' ' && self.soft_breaks.binary_search(at).is_ok());
+        let prefix = old.iter().zip(&new).take_while(|(a, b)| same(a, b)).count();
+        let suffix =
+            old.iter().rev().zip(new.iter().rev()).take(old.len().min(new.len()).saturating_sub(prefix)).take_while(|(a, b)| same(a, b)).count();
+        (old.into_iter().map(|(_, c)| c).collect(), new, prefix, suffix)
+    }
+
     /// Preserve styles outside the changed ranges; inserted characters inherit the surrounding
     /// source run. The texts are aligned word by word, so words left untouched between two edits
     /// keep their own runs (#2198); past [`MAX_CHANGED_WORDS`] the draft counts as one change.
@@ -290,8 +329,16 @@ impl TextBlock {
             original.push(self.spans.get(span).or_else(|| self.spans.last()).map_or(0, |(_, i)| *i));
         }
         let mut sources = Vec::with_capacity(new.len());
-        let slices = |text: &[char]| words(text).into_iter().map(|w| text.get(w).unwrap_or_default().to_vec()).collect::<Vec<_>>();
-        let (old_words, new_words) = (slices(&old), slices(&chars));
+        // Words are compared as [`Aligned`] characters, so a space where a wrapping break was
+        // still matches that word.
+        let soft: Vec<bool> = self.editor_text.char_indices().map(|(at, c)| c == '\n' && self.soft_breaks.binary_search(&at).is_ok()).collect();
+        let slices = |text: &[char], soft: &[bool]| {
+            words(text)
+                .into_iter()
+                .map(|w| w.map(|i| Aligned(text.get(i).copied().unwrap_or(' '), soft.get(i).copied().unwrap_or(false))).collect::<Vec<_>>())
+                .collect::<Vec<_>>()
+        };
+        let (old_words, new_words) = (slices(&old, &soft), slices(&chars, &[]));
         match edit_script(&old_words, &new_words, MAX_CHANGED_WORDS) {
             Some(script) => {
                 // `(o, n)`: where the current change starts in the old and new text; `(x, y)`: where it ends.
@@ -327,6 +374,17 @@ impl TextBlock {
             }
         }
         result
+    }
+}
+
+/// A character as [`TextBlock::edited_spans`] aligns it, and whether it is a wrapping break
+/// ([`TextBlock::soft_breaks`]), which matches a space as well as a newline.
+#[derive(Clone, Copy, Debug)]
+struct Aligned(char, bool);
+
+impl PartialEq for Aligned {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0 || ((self.1 || other.1) && matches!((self.0, other.0), ('\n', ' ') | (' ', '\n')))
     }
 }
 
@@ -2040,6 +2098,9 @@ fn rewrite_block_from(
                     || !pdfcraft_fonts::embedding::matching_faces(&b.base_font).is_empty()
             }) || registered_face
                 || text.is_some_and(|draft| source_program_completes(doc, &fonts_res, first, draft))
+                // A text edit of a wrapped paragraph rewraps it across rows and keeps the rows it
+                // doesn't reach as they are.
+                || (text.is_some() && !b.soft_breaks.is_empty() && *style == BlockStyle::default())
                 || b.rows.iter().any(|row| row.len() > 1)
                 || members.iter().any(|line| line.font != first.font || line.size != first.size || line.color != first.color))
                 && style.family.is_none()
@@ -2561,6 +2622,48 @@ pub(crate) fn translate_blocks(doc: &mut Document, page: usize, indexes: &[usize
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_space_at_a_wrapping_break_keeps_the_rows_around_it_aligned() {
+        // Forty rows, each its own source line, every break between them a wrapping break.
+        let mut editor_text = String::new();
+        let (mut spans, mut soft_breaks) = (Vec::new(), Vec::new());
+        for row in 0..40 {
+            if row > 0 {
+                soft_breaks.push(editor_text.len());
+                editor_text.push('\n');
+            }
+            let start = editor_text.len();
+            editor_text.push_str(&format!("word{row}"));
+            spans.push((start..editor_text.len(), row));
+        }
+        let block = TextBlock {
+            text: String::new(),
+            editor_text,
+            soft_breaks,
+            spans,
+            rect: [0.0; 4],
+            base_font: String::new(),
+            size: 12.0,
+            bold: false,
+            italic: false,
+            color: [0.0; 3],
+            rotation: 0.0,
+            lines: (0..40).collect(),
+            rows: (0..40).map(|row| vec![row]).collect(),
+            invisible: false,
+        };
+        // The flowing text with its first word changed: every other word keeps its own line, even
+        // though each break is now a space (one changed word, not one per break).
+        let draft = block.flowing_text().replacen("word0", "changed", 1);
+        let spans = block.edited_spans(&draft);
+        for row in 1..40 {
+            let word = format!(" word{row}");
+            let at = draft.find(&format!("{word} ")).or_else(|| draft.rfind(&word)).unwrap() + 1;
+            let source = spans.iter().find(|(r, _)| r.contains(&at)).map(|(_, line)| *line);
+            assert_eq!(source, Some(row), "word{row} in {spans:?}");
+        }
+    }
 
     #[test]
     fn paragraph_wrapping_keeps_ideographic_spaces() {

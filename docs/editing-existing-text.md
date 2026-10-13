@@ -4,6 +4,16 @@ Click a text region in **Edit a PDF → Edit text and images**. One editor conta
 source rows and mixed styles. Embedded TrueType and OpenType/CFF faces are used in memory;
 source font programs, colour, size and baseline anchors stay intact. A textless preview
 prevents a second copy underneath. The frame shows the live extent as text grows or shrinks.
+A paragraph's rows are wrapped text, so an edit rewraps it: words added or removed in one row
+flow on through the rows below instead of leaving a short row behind. A row break counts as
+wrapping when the row before had no room for the next row's first word; a break is kept when
+the next row is indented, starts a list item (a bullet, `1.`, `1)` or `(a)`), sits further down
+than the paragraph's line spacing, or follows a row ending in a hyphen. A row that began a
+paragraph keeps its position and indent when rows above it rewrap. For headless editing,
+`text_paragraphs` lists each paragraph's `flowing_text`, with a newline only where a paragraph
+ends; edit that and pass it to `text_edit`. Every newline in the text given to `text_edit` stays
+a line break, so passing `editor_text` keeps every row break as before.
+
 Rows a text edit doesn't reach keep their original operators, so their kerning, `TJ` word
 gaps and glyph widths stay exactly as they were. Only rows whose characters changed, or that
 moved because an earlier row wrapped, are rewritten, and formatting a selection rewrites

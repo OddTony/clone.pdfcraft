@@ -4249,3 +4249,114 @@ fn japanese_paragraphs_wrap_between_characters_without_closing_marks_at_a_row_st
         }
     }
 }
+
+/// `text` wrapped greedily at `width` points in 12 pt Helvetica: each row as long as it can be.
+fn wrapped_rows(text: &str, width: f64) -> Vec<String> {
+    let mut rows: Vec<String> = Vec::new();
+    for word in text.split(' ') {
+        match rows.last_mut() {
+            Some(row) if pdfcraft_fonts::helvetica_width(&format!("{row} {word}"), 12.0) <= width => {
+                row.push(' ');
+                row.push_str(word);
+            }
+            _ => rows.push(word.to_string()),
+        }
+    }
+    rows
+}
+
+/// A page with one region: a paragraph wrapped at 260 pt, then rows that each begin a paragraph
+/// (indented), a list item, and a short row whose follower would have fitted after it.
+fn wrapped_paragraph_page(paragraph: &str) -> (Document, Vec<String>, Vec<&'static str>) {
+    let rows = wrapped_rows(paragraph, 260.0);
+    let rest = vec!["Indented rows begin a paragraph.", "\u{2022} a list item", "Short.", "Next words fit after it."];
+    let mut content = String::from("BT /F1 12 Tf");
+    let mut y = 700.0;
+    for (i, row) in rows.iter().map(String::as_str).chain(rest.iter().copied()).enumerate() {
+        let x = if i == rows.len() { 83.0 } else { 72.0 };
+        let encoded: Vec<u8> = pdfcraft_fonts::win_ansi(row);
+        let escaped: String = encoded
+            .iter()
+            .map(|b| {
+                if matches!(b, b'(' | b')' | b'\\') {
+                    format!("\\{}", *b as char)
+                } else if *b < 128 {
+                    (*b as char).to_string()
+                } else {
+                    format!("\\{b:o}")
+                }
+            })
+            .collect();
+        content.push_str(&format!(" 1 0 0 1 {x} {y} Tm ({escaped}) Tj"));
+        y -= 14.0;
+    }
+    content.push_str(" ET");
+    (text_page(&content), rows, rest)
+}
+
+const WRAPPED: &str = "Paragraphs in a PDF are drawn one row at a time, so an editor has to work out which row breaks only wrapped the text and which ones end a paragraph.";
+
+#[test]
+fn row_breaks_that_only_wrap_a_paragraph_are_soft() {
+    let (doc, rows, rest) = wrapped_paragraph_page(WRAPPED);
+    assert!(rows.len() >= 3, "{rows:?}");
+    let blocks = text::text_blocks(&doc, 0).unwrap();
+    assert_eq!(blocks.len(), 1, "{blocks:#?}");
+    let block = &blocks[0];
+    // Only the paragraph's own breaks are soft; the indented row, the list item and the row whose
+    // first word would have fitted after "Short." each keep their break.
+    let expected = format!("{}\n{}", rows.join(" "), rest.join("\n"));
+    assert_eq!(block.flowing_text(), expected);
+    assert_eq!(block.editor_text, format!("{}\n{}", rows.join("\n"), rest.join("\n")));
+    assert_eq!(block.soft_breaks.len(), rows.len() - 1);
+    assert!(block.unchanged(&block.flowing_text()) && block.unchanged(&block.editor_text) && !block.unchanged(&expected.replacen(' ', "  ", 1)));
+}
+
+#[test]
+fn a_flowing_draft_rewraps_the_paragraph_and_keeps_the_rows_after_it() {
+    let (doc, rows, rest) = wrapped_paragraph_page(WRAPPED);
+    let block = text::text_blocks(&doc, 0).unwrap().remove(0);
+    let width = block.rect[2] - block.rect[0];
+    // Unchanged flowing text is no edit at all.
+    let mut same = doc.clone();
+    text::rewrite_block(&mut same, 0, 0, Some(&block.flowing_text()), &text::BlockStyle::default()).unwrap();
+    assert_eq!(page_content_bytes(&same, 0), page_content_bytes(&doc, 0));
+    // The same number of rows, a row fewer, and a row more (the rows after it move down).
+    for (from, to) in [("drawn", "drawn and redrawn"), ("only wrapped", "wrapped"), ("drawn", "measured, laid out in rows, and then drawn")] {
+        let mut edited = doc.clone();
+        let draft = block.flowing_text().replacen(from, to, 1);
+        text::rewrite_block(&mut edited, 0, 0, Some(&draft), &text::BlockStyle::default()).unwrap();
+        let edited = reopen(&edited);
+        let paragraph = WRAPPED.replacen(from, to, 1);
+        let expected = wrapped_rows(&paragraph, width);
+        assert!(to != "measured, laid out in rows, and then drawn" || expected.len() > rows.len(), "{expected:?}");
+        let lines = text::text_lines(&edited, 0).unwrap();
+        let texts: Vec<_> = lines.iter().map(|l| l.text.clone()).collect();
+        // Every row of the paragraph is full again: no short row is left behind the edit.
+        assert_eq!(texts[..expected.len()], expected[..], "{to}: {texts:#?}");
+        assert_eq!(texts[expected.len()..], rest[..], "{to}");
+        // A row that began a paragraph keeps its own indent, whichever row it lands on.
+        let indented = &lines[expected.len()];
+        assert!((indented.rect[0] - 83.0).abs() < 0.01, "{to}: {:?}", indented.rect);
+        if expected.len() == rows.len() {
+            // Rows after the paragraph line up with their source rows, so they keep their operators.
+            let bytes = String::from_utf8_lossy(&page_content_bytes(&edited, 0)).into_owned();
+            assert!(rest.iter().all(|row| bytes.contains(&format!("({row}) Tj")) || row.starts_with('\u{2022}')), "{to}:\n{bytes}");
+        }
+        // The edit is undone by the editor text with all its row breaks (each one kept).
+        assert_eq!(text::text_blocks(&edited, 0).unwrap()[0].flowing_text(), format!("{}\n{}", expected.join(" "), rest.join("\n")), "{to}");
+    }
+}
+
+#[test]
+fn every_newline_a_draft_has_stays_a_line_break() {
+    let (doc, rows, rest) = wrapped_paragraph_page(WRAPPED);
+    let block = text::text_blocks(&doc, 0).unwrap().remove(0);
+    // The editor text with all its row breaks rewrites the edited row only, as before.
+    let mut edited = doc.clone();
+    let draft = block.editor_text.replacen("drawn", "drawn and redrawn", 1);
+    text::rewrite_block(&mut edited, 0, 0, Some(&draft), &text::BlockStyle::default()).unwrap();
+    let texts: Vec<_> = text::text_lines(&reopen(&edited), 0).unwrap().into_iter().map(|l| l.text).collect();
+    assert_eq!(texts[1..rows.len() + 1].iter().filter(|t| rows.contains(t)).count(), rows.len() - 1, "{texts:#?}");
+    assert!(texts.ends_with(&rest.iter().map(|s| s.to_string()).collect::<Vec<_>>()));
+}
