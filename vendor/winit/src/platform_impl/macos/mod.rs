@@ -9,7 +9,7 @@ mod event_handler;
 mod event_loop;
 mod ffi;
 mod ime_startup;
-mod menu;
+pub(crate) mod menu;
 mod monitor;
 mod observer;
 mod view;
