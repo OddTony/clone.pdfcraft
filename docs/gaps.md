@@ -159,11 +159,11 @@ update the numbers.
 - **Missing:** Word export that keeps layout; Excel and PowerPoint export; creating PDFs from Office,
 - **Missing:** Word export that keeps layout; Excel and PowerPoint export; creating PDFs from Office,
   HTML, web pages and PostScript; SVG/XML/JPEG 2000 export. PostScript/EPS *export* is partially
-  done (Layer A, #1561): geometry, images, shadings, Type 1 text and annotations redraw as a
-  DSC-structured program whose Ghostscript-rasterized output matches PdfCraft's own render within a
-  mean per-channel delta of 2/255 — transparency is unflattened and embedded TrueType vectorized
-  (gs resolves Type 42 codes through the font's own cmap), both recorded as warnings; tiling
-  patterns fall back to flat gray.
+  done (Layer A + Layer B W1, #1561): geometry, images, shadings, Type 1 text, embedded TrueType
+  as Type 42 text and annotations redraw as a DSC-structured program whose Ghostscript-rasterized
+  output matches PdfCraft's own render within a mean per-channel delta of 2/255 and whose text
+  Ghostscript's txtwrite extracts — transparency is unflattened and CFF/CID fonts vectorized,
+  both recorded as warnings; tiling patterns fall back to flat gray.
 - **Evidence:** `create.export-docx` partial; the synthetic invoice regression for
   [#773](https://github.com/storytold/pdfcraft/issues/773) now covers absent inferred borders,
   floating watermark text and per-page section sizes. Exact font matching, vector rules and
