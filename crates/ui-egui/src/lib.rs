@@ -6,6 +6,9 @@
 //! `pdfcraft-engine`.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+// `persist`'s settings `json!({ ... })` literal is one big object; each new preference adds to
+// the macro's expansion depth, not to any real complexity here.
+#![recursion_limit = "256"]
 
 /// Translate an English UI string into the current language (see [`i18n`]).
 macro_rules! tl {
@@ -661,6 +664,11 @@ pub struct PdfCraftApp {
     pub alt_draft: a11y_ui::AltDraft,
     /// List the OS key store's signing identities among the digital IDs (the desktop app).
     pub os_key_store_ids: bool,
+    /// List PKCS #11 token (smart card, HSM) signing identities among the digital IDs.
+    pub pkcs11_enabled: bool,
+    /// An explicit PKCS #11 module path; empty uses the default search order (p11-kit proxy,
+    /// then OpenSC).
+    pub pkcs11_module: String,
     pub cert_viewer: Option<sign_ui::CertViewer>,
     /// The last space audit.
     pub space_audit: Vec<pdfcraft_engine::optimize::SpaceUse>,
@@ -971,6 +979,8 @@ impl PdfCraftApp {
             a11y_skipped: Default::default(),
             alt_draft: Default::default(),
             os_key_store_ids: false,
+            pkcs11_enabled: false,
+            pkcs11_module: String::new(),
             cert_viewer: None,
             space_audit: Vec::new(),
             combine_draft: Vec::new(),
@@ -2144,8 +2154,15 @@ impl PdfCraftApp {
             "signature_image": match &self.signature { Some(s @ fill_sign::SavedSig::Image(_)) => Some(s), _ => None },
             "initials": self.initials,
             "sign_graphic": self.sign_graphic,
-            // macOS Keychain and Windows store identities are read from their OS key stores each time.
-            "digital_ids": self.digital_ids.iter().filter(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:")).collect::<Vec<_>>(),
+            // macOS Keychain, Windows store and PKCS #11 identities are read from their key
+            // stores each time.
+            "digital_ids": self
+                .digital_ids
+                .iter()
+                .filter(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("pkcs11:"))
+                .collect::<Vec<_>>(),
+            "pkcs11_enabled": self.pkcs11_enabled,
+            "pkcs11_module": self.pkcs11_module,
             "trusted": trusted,
             "custom_stamps": stamps_ui::encode(&self.custom_stamps),
             "javascript": self.session.javascript(),
@@ -2299,6 +2316,12 @@ impl PdfCraftApp {
         self.sign_graphic = serde_json::from_value(v["sign_graphic"].clone()).unwrap_or_default();
         if let Ok(ids) = serde_json::from_value::<Vec<DigitalIdEntry>>(v["digital_ids"].clone()) {
             self.digital_ids = ids;
+        }
+        if let Some(on) = v["pkcs11_enabled"].as_bool() {
+            self.pkcs11_enabled = on;
+        }
+        if let Some(module) = v["pkcs11_module"].as_str() {
+            self.pkcs11_module = module.to_string();
         }
         self.custom_stamps = stamps_ui::decode(&v["custom_stamps"]);
         self.custom_actions = actions_ui::decode(&v["actions"]);
