@@ -424,14 +424,24 @@ pub(crate) fn nudge_keys(ctx: &egui::Context, view: &mut DocView, doc: &Document
     }
 }
 
-pub(crate) fn paint(painter: &egui::Painter, xf: &PageXform, page: usize, info: &DocInfo, selection: &ObjectSelection) {
+pub(crate) fn paint(
+    painter: &egui::Painter,
+    xf: &PageXform,
+    page: usize,
+    info: &DocInfo,
+    selection: &ObjectSelection,
+    raster: Option<egui::TextureId>,
+) {
     if selection.page != Some(page) {
         return;
     }
     let delta = selection.gesture.map_or(egui::Vec2::ZERO, |g| g.delta());
     let mut union = Rect::NOTHING;
     for object in &selection.selected {
-        let rect = screen(xf, info, page, object).translate(delta);
+        let at = screen(xf, info, page, object);
+        let rect = at.translate(delta);
+        // The pixels follow the selection while it is dragged (#1714).
+        crate::edit_text_ui::carry_pixels(painter, xf, raster, at, rect);
         painter.rect_filled(rect, 0.0, BLUE.gamma_multiply(0.05));
         painter.rect_stroke(rect, 0.0, Stroke::new(1.5, BLUE), egui::StrokeKind::Outside);
         union = union.union(rect);

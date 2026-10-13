@@ -429,6 +429,28 @@ pub(crate) fn draw_guides(painter: &egui::Painter, guides: &[Guide], page: Rect,
     }
 }
 
+/// The pixels follow the box while it is dragged (#1714): the page raster's picture of `from`,
+/// drawn into `to` over a blank where it was. Re-rendering every frame of a drag would lag; the
+/// edit renders it properly on release. Without a raster on screen yet, only the frame moves.
+pub(crate) fn carry_pixels(painter: &egui::Painter, xf: &PageXform, raster: Option<egui::TextureId>, from: Rect, to: Rect) {
+    let Some(tex) = raster.filter(|_| from != to && from.is_positive()) else { return };
+    let clipped = painter.with_clip_rect(painter.clip_rect().intersect(xf.rect));
+    clipped.rect_filled(from, CornerRadius::ZERO, Color32::WHITE);
+    let mut mesh = egui::Mesh::with_texture(tex);
+    for (a, b) in [
+        (from.left_top(), to.left_top()),
+        (from.right_top(), to.right_top()),
+        (from.right_bottom(), to.right_bottom()),
+        (from.left_bottom(), to.left_bottom()),
+    ] {
+        let (u, v) = xf.screen_to_norm(a);
+        mesh.vertices.push(egui::epaint::Vertex { pos: b, uv: Pos2::new(u, v), color: Color32::WHITE });
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    clipped.add(egui::Shape::mesh(mesh));
+}
+
 /// The screen frames of the page's images (the other kind of box a drag aligns to).
 pub(crate) fn image_frames(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize) -> Vec<Rect> {
     view.edit_images
@@ -775,6 +797,9 @@ pub(crate) fn page_input(
             Grip::Left => Rect::from_min_max(Pos2::new((b.left() + dx).min(b.right() - 12.0), b.min.y), b.max),
             Grip::Right => Rect::from_min_max(b.min, Pos2::new((b.right() + dx).max(b.left() + 12.0), b.max.y)),
         };
+        if d.grip == Grip::Move {
+            carry_pixels(painter, xf, view.page_raster(page), b, preview);
+        }
         painter.rect_stroke(preview, CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
         draw_guides(painter, &guides, xf.rect, preview);
         let resizing = d.grip != Grip::Move;

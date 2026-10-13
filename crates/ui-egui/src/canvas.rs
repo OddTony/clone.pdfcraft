@@ -876,6 +876,11 @@ impl DocView {
         self.thumbs.get(&page).map(|t| t.tex.id())
     }
 
+    /// The whole-page raster on screen for `page` (the low-res backdrop of a tiled page), if any.
+    pub fn page_raster(&self, page: usize) -> Option<egui::TextureId> {
+        self.pages.get(&page).map(|p| p.tex.id())
+    }
+
     /// The print preview's picture of `page`: the sheet raster when it has arrived, otherwise the
     /// thumbnail.
     pub(crate) fn page_preview(&self, page: usize) -> Option<egui::TextureId> {
@@ -2907,7 +2912,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 crate::content_ui::paint_page(ui, painter, &xf, i, info, &added, view);
             }
             if tool == QuickTool::EditText {
-                crate::object_ui::paint(painter, &xf, i, info, &view.objects);
+                crate::object_ui::paint(painter, &xf, i, info, &view.objects, view.page_raster(i));
             }
             if tool == QuickTool::EnhanceCamera {
                 crate::camera_ui::paint(painter, &xf, i, view);
