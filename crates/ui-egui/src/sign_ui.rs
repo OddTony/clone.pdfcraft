@@ -57,8 +57,8 @@ pub struct NewIdDraft {
     /// Use a Digital ID from a file: its path and password.
     pub file: String,
     pub file_password: String,
-    /// Use a cloud certificate (ICP-Brasil): the provider's API address and the credentials it
-    /// issued for PdfCraft.
+    /// Use a cloud certificate (ICP-Brasil): the provider chosen among those the build is
+    /// registered with.
     pub cloud: bool,
     pub provider: sign::psc::Provider,
 }
