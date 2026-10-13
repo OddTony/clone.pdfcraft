@@ -16,6 +16,8 @@ repository = "https://github.com/storytold/pdfcraft"
 craft-ui = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "5c874d51eeb3de70e735c8ce87a59a7dedd47675", features = ["serde"] }
 # Shared system spooler; document composition remains in pdfcraft-print.
 craft-print = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "d991bf6792f8ade99c51358bf3c1d902c8cd96b5" }
+# Shared native application termination.
+craft-quit = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e", features = ["egui"] }
 # internal
 pdfcraft-geom = { path = "crates/geom", version = "0.7.0" }
 pdfcraft-filters = { path = "crates/filters", version = "0.7.0" }

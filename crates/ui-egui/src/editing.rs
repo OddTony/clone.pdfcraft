@@ -1429,6 +1429,39 @@ mod revert_draft_tests {
     }
 
     #[test]
+    fn quit_intercept_preserves_dirty_documents_and_forwards_clean_close() {
+        {
+            let ctx = egui::Context::default();
+            let mut app = app();
+            let mut raw = egui::RawInput::default();
+            raw.viewports.entry(egui::ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close);
+            let mut out = ctx.run_ui(raw, |ui| {
+                app.guard_quit(ui.ctx());
+                assert!(app.close_request.is_none());
+                let taken = craft_quit::on_close_request(ui.ctx());
+                if cfg!(target_os = "macos") {
+                    assert!(taken);
+                }
+            });
+            out.textures_delta.clear();
+        }
+
+        {
+            let ctx = egui::Context::default();
+            let mut app = app();
+            assert!(app.apply_edit(Edit::SetFieldValue { name: "name".into(), value: FieldValue::Text("Changed".into()) }));
+            let mut raw = egui::RawInput::default();
+            raw.viewports.entry(egui::ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close);
+            let mut out = ctx.run_ui(raw, |ui| {
+                app.guard_quit(ui.ctx());
+                assert_eq!(app.close_request, Some(CloseRequest::Quit));
+                assert!(!craft_quit::on_close_request(ui.ctx()));
+            });
+            out.textures_delta.clear();
+        }
+    }
+
+    #[test]
     fn successful_revert_clears_focused_or_queued_drafts_only_on_its_document() {
         for queued in [false, true] {
             let mut app = app();

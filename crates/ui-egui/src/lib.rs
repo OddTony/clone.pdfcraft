@@ -2800,6 +2800,7 @@ impl eframe::App for PdfCraftApp {
             self.control = Some(control);
         }
         self.guard_quit(ctx);
+        craft_quit::on_close_request(ctx);
         let now = ctx.input(|i| i.time);
         self.autosave_tick(now);
         // Reload documents whose files a build rewrote (#431).
