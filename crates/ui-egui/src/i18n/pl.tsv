@@ -2332,3 +2332,5 @@ animation effects	Off	Wyłączone
 	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
 	Move tag earlier	Przenieś znacznik wcześniej
 	Move tag later	Przenieś znacznik później
+# OCR: the Correct recognized text command (the Verify screen's other strings come with the screen).
+	Correct recognized text…	Popraw rozpoznany tekst…

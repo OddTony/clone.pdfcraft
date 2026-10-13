@@ -2362,3 +2362,5 @@ animation effects	Off	Ανενεργά
 	This document is trying to open a local file:	Αυτό το έγγραφο προσπαθεί να ανοίξει ένα τοπικό αρχείο:
 	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
 	Move tag later	Μετακίνηση ετικέτας αργότερα
+# OCR: the Correct recognized text command (the Verify screen's other strings come with the screen).
+	Correct recognized text…	Διόρθωση αναγνωρισμένου κειμένου…

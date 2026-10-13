@@ -2265,3 +2265,5 @@ animation effects	Off	Выкл
 	This document is trying to open a local file:	Этот документ пытается открыть локальный файл:
 	Move tag earlier	Переместить тег раньше
 	Move tag later	Переместить тег позже
+# OCR: the Correct recognized text command (the Verify screen's other strings come with the screen).
+	Correct recognized text…	Исправить распознанный текст…

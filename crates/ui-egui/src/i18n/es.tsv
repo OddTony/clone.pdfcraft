@@ -2482,3 +2482,5 @@ animation effects	Off	Desactivados
 	This document is trying to open a local file:	Este documento intenta abrir un archivo local:
 	Move tag earlier	Mover etiqueta antes
 	Move tag later	Mover etiqueta después
+# OCR: the Correct recognized text command (the Verify screen's other strings come with the screen).
+	Correct recognized text…	Corregir texto reconocido…

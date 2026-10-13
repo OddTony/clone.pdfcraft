@@ -320,6 +320,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("ocr.recognize", "Recognize text…", None, None, Modification, "scan-text"),
     c("ocr.enhance_camera", "Enhance camera image", None, None, Modification, "camera"),
     c("ocr.recognize_batch", "Recognize text in multiple files…", None, None, Nothing, "files"),
+    c("ocr.correct", "Correct recognized text…", None, None, Document, "text-select"),
     c("a11y.check", "Check for accessibility…", None, None, Document, "accessibility"),
     c("a11y.autotag", "Automatically tag PDF", None, None, Document, "tag"),
     c("a11y.report", "Open accessibility report", None, None, Document, "file-text"),
