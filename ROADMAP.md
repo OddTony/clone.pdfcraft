@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~26% (ready for real work 49% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M3 candidate: native opens retain chosen tools through password retries and defer startup intake while preparation is pending; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M13: CLI check visits each directory once through aliases and cycles; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M4: Extract and Split preserve shared Type 3 glyph resources; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M2: packed TIFF-predictor RGB rows retain their byte boundaries; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -148,6 +149,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-13 (M3, native-opening candidate):** Chosen tools survive preparation, conversion and password retries; startup intake waits for pending preparation. Regression tests cover completion, cancellation and document identity. Estimates unchanged.
 - 2026-10-13: M3 update-release-details candidate: stable SemVer checks, bounded notes/assets, exact manual package links and managed-installation guidance; offline metadata inspection; no automatic installation or startup checks.
 
 - **2026-10-12 (M13, CLI robustness scans):** `pdfcraft-cli check` visits a directory once even when input roots overlap or directory symlinks lead back into the tree. PDFs reached through file symlinks remain accepted. Three real CLI regressions cover overlapping roots, a directory cycle and directory/file aliases. Estimates unchanged.
