@@ -2374,3 +2374,5 @@ animation effects	Off	Вимкнено
 	This document is trying to open a local file:	Цей документ намагається відкрити локальний файл:
 	Move tag earlier	Перемістити тег раніше
 	Move tag later	Перемістити тег пізніше
+	Choose paper by PDF page size	Вибирати папір за розміром сторінки PDF
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Кожна сторінка друкується на відповідному стандартному аркуші (A4, US Letter, …); сторінки іншого розміру — на папері, вказаному вище. Лише з «Розмір».

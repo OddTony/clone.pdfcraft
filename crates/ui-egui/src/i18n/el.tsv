@@ -2362,3 +2362,5 @@ animation effects	Off	Ανενεργά
 	This document is trying to open a local file:	Αυτό το έγγραφο προσπαθεί να ανοίξει ένα τοπικό αρχείο:
 	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
 	Move tag later	Μετακίνηση ετικέτας αργότερα
+	Choose paper by PDF page size	Επιλογή χαρτιού κατά μέγεθος σελίδας PDF
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Κάθε σελίδα εκτυπώνεται στο τυπικό φύλλο στο οποίο ταιριάζει (A4, US Letter, …)· οι σελίδες άλλου μεγέθους στο παραπάνω χαρτί. Μόνο με «Μέγεθος».

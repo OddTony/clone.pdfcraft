@@ -322,8 +322,8 @@ fn architectural_page_can_be_matched_at_100_percent() {
     assert!(h.state_mut().execute("print.dialog"));
     h.run_steps(3);
     h.get_by_label("PDF page: 36.00 × 24.00 in");
-    h.get_by_label("Match page at 100%").click();
-    h.run_steps(3);
+    // Paper by page size is on, so the dialog already opens matched at 100%.
+    assert!(h.get_by_label("Match page at 100%").accesskit_node().toggled() == Some(egui::accesskit::Toggled::True));
     h.get_by_value("ARCH D (24 x 36 in)");
     h.get_by_label("PDF scale: 100.00%");
     h.get_by_label("36.00 × 24.00 in");
@@ -331,6 +331,23 @@ fn architectural_page_can_be_matched_at_100_percent() {
     let settings = h.state().print_draft.settings(1, &[]).unwrap();
     assert_eq!(settings.paper, (1728.0, 2592.0));
     assert_eq!(settings.layout, pdfcraft_engine::print::Layout::Size(pdfcraft_engine::print::SizeMode::Actual));
+    // Off: Fit, which shrinks by the margin; on again: 100%.
+    h.get_by_label("Match page at 100%").click();
+    h.run_steps(3);
+    assert_eq!(h.state().print_draft.size, pdfcraft_engine::print::SizeMode::Fit);
+    assert!(h.query_by_label("PDF scale: 100.00%").is_none());
+    h.get_by_label("Match page at 100%").click();
+    h.run_steps(3);
+    h.get_by_label("PDF scale: 100.00%");
+    // Without paper by page size, the box picks the matching sheet: another paper unticks it.
+    h.state_mut().print_draft.paper_from_page = false;
+    h.state_mut().print_draft.paper = 0;
+    h.run_steps(2);
+    assert!(h.get_by_label("Match page at 100%").accesskit_node().toggled() != Some(egui::accesskit::Toggled::True));
+    h.get_by_label("Match page at 100%").click();
+    h.run_steps(3);
+    h.get_by_value("ARCH D (24 x 36 in)");
+    assert!(h.get_by_label("Match page at 100%").accesskit_node().toggled() == Some(egui::accesskit::Toggled::True));
 }
 
 #[test]
@@ -341,11 +358,20 @@ fn custom_page_cannot_silently_match_a_standard_paper() {
     // The 300 x 400 pt fixture is not a standard sheet.
     assert!(pdfcraft_engine::print::matching_paper((300.0, 400.0)).is_none());
     let before = h.state().print_draft.clone();
+    // With paper by page size, the box only sets the scale; the paper stays.
+    assert!(h.get_by_label("Match page at 100%").accesskit_node().toggled() == Some(egui::accesskit::Toggled::True));
+    h.get_by_label("Match page at 100%").click();
+    h.run_steps(3);
+    assert_eq!(h.state().print_draft.paper, before.paper);
+    assert_eq!(h.state().print_draft.size, pdfcraft_engine::print::SizeMode::Fit);
+    // Without it, a page no sheet matches can't be matched at all.
+    h.state_mut().print_draft.paper_from_page = false;
+    h.run_steps(2);
     assert!(h.get_by_label("Match page at 100%").accesskit_node().is_disabled());
     h.get_by_label("Match page at 100%").click();
     h.run_steps(3);
     assert_eq!(h.state().print_draft.paper, before.paper);
-    assert_eq!(h.state().print_draft.size, before.size);
+    assert_eq!(h.state().print_draft.size, pdfcraft_engine::print::SizeMode::Fit);
 }
 
 /// A driver Windows reports without two-sided printing keeps its own setting whatever Two-sided
@@ -372,4 +398,125 @@ fn a_printer_without_two_sided_printing_points_to_its_properties() {
     h.state_mut().print_draft.printer = Some("Office PS".into());
     h.run_steps(2);
     h.get_by_label_contains(note);
+}
+
+/// A PDF whose pages have the given MediaBox sizes (points), each painted so it renders.
+fn pdf_with_pages(sizes: &[(f64, f64)]) -> Vec<u8> {
+    let kids: Vec<String> = (0..sizes.len()).map(|i| format!("{} 0 R", 3 + i * 2)).collect();
+    let mut objects =
+        vec!["<< /Type /Catalog /Pages 2 0 R >>".to_owned(), format!("<< /Type /Pages /Kids [{}] /Count {} >>", kids.join(" "), sizes.len())];
+    for (i, (w, h)) in sizes.iter().enumerate() {
+        objects.push(format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {w} {h}] /Resources << >> /Contents {} 0 R >>", 4 + i * 2));
+        let content = format!("0.5 g 10 10 {} {} re f", w - 20.0, h - 20.0);
+        objects.push(format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()));
+    }
+    let mut bytes = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, object) in objects.iter().enumerate() {
+        offsets.push(bytes.len());
+        bytes.extend_from_slice(format!("{} 0 obj\n{object}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = bytes.len();
+    bytes.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    for offset in offsets {
+        bytes.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    bytes.extend_from_slice(format!("trailer << /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objects.len() + 1).as_bytes());
+    bytes
+}
+
+fn paper_index(name: &str) -> usize {
+    pdfcraft_engine::print::PAPERS.iter().position(|(n, _)| *n == name).unwrap()
+}
+
+/// #1103: the Print dialog opens on the standard sheet the document's pages match, and with
+/// "Choose paper by PDF page size" each page prints on its own sheet.
+#[test]
+fn the_print_dialog_chooses_paper_by_pdf_page_size() {
+    const A4: (f64, f64) = (595.28, 841.89);
+    const A4_LANDSCAPE: (f64, f64) = (841.89, 595.28);
+    const LETTER: (f64, f64) = (612.0, 792.0);
+    const ODD: (f64, f64) = (200.0, 300.0);
+    let docs = [("a4.pdf", vec![A4, A4_LANDSCAPE]), ("mixed.pdf", vec![LETTER, A4, A4, ODD]), ("odd.pdf", vec![ODD])];
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        for (name, sizes) in &docs {
+            app.open_bytes(name, None, pdf_with_pages(sizes)).unwrap();
+        }
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state().print_draft.paper_from_page, "on by default, as the issue asks");
+    let open_print = |h: &mut Harness<'static, PdfCraftApp>, tab: usize| {
+        h.state_mut().active = Some(tab);
+        h.run_steps(2);
+        assert!(h.state_mut().execute("print.dialog"));
+        h.run_steps(3);
+        assert_eq!(h.state().dialog, Some(Dialog::Print));
+    };
+    let close_print = |h: &mut Harness<'static, PdfCraftApp>| {
+        h.get_by_label("Cancel").click();
+        h.run_steps(3);
+        assert_eq!(h.state().dialog, None);
+    };
+    // A4 pages, one of them landscape: the dialog opens on A4.
+    open_print(&mut h, 0);
+    assert_eq!(h.state().print_draft.paper, paper_index("A4"));
+    h.get_by_label("Choose paper by PDF page size");
+    close_print(&mut h);
+    // Mostly A4: A4. Only the current page, which is Letter: Letter.
+    open_print(&mut h, 1);
+    assert_eq!(h.state().print_draft.paper, paper_index("A4"));
+    h.get_by_label("Current page").click();
+    h.run_steps(2);
+    close_print(&mut h);
+    open_print(&mut h, 1);
+    assert_eq!(h.state().print_draft.current_page, 0);
+    assert_eq!(h.state().print_draft.paper, paper_index("US Letter"), "the current page alone decides");
+    h.get_by_label("All").click();
+    h.run_steps(2);
+    close_print(&mut h);
+    // Back to all pages: A4 again. Saved as PDF: Letter, A4, A4 sheets, and the odd page on the
+    // paper shown, A4.
+    open_print(&mut h, 1);
+    assert_eq!(h.state().print_draft.paper, paper_index("A4"));
+    h.get_by_label("Sheet 1 of 4");
+    let out = std::env::temp_dir().join(format!("pdfcraft-print-paper-{}.pdf", std::process::id()));
+    h.state_mut().save_override = Some(out.to_string_lossy().into_owned());
+    h.state_mut().print_draft.printer = None;
+    h.run_steps(1);
+    h.get_by_label("Save as PDF").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, None);
+    let saved = std::fs::read(&out).unwrap();
+    std::fs::remove_file(&out).unwrap();
+    h.state_mut().open_bytes("printed.pdf", None, saved).unwrap();
+    h.run_steps(2);
+    let id = h.state().views.last().unwrap().id;
+    let round = |v: f32| (f64::from(v) * 100.0).round() / 100.0;
+    let sheets: Vec<(f64, f64)> = h.state().session.get(id).unwrap().info.pages.iter().map(|p| (round(p.width), round(p.height))).collect();
+    assert_eq!(sheets, [LETTER, A4, A4, A4], "each page on its own sheet, the odd one on the dialog's paper");
+    h.state_mut().execute("file.close");
+    h.run_steps(2);
+    // No standard sheet matches: the paper chosen last stays.
+    h.state_mut().print_draft.paper = paper_index("A5");
+    open_print(&mut h, 2);
+    assert_eq!(h.state().print_draft.paper, paper_index("A5"));
+    close_print(&mut h);
+    // Off: the paper chosen last stays, whatever the pages measure, and every sheet is that paper.
+    h.state_mut().print_draft.paper_from_page = false;
+    open_print(&mut h, 1);
+    assert_eq!(h.state().print_draft.paper, paper_index("A5"));
+    let labels: Vec<String> = (1..=4).map(|n| n.to_string()).collect();
+    let settings = h.state().print_draft.settings(4, &labels).unwrap();
+    let a5 = pdfcraft_engine::print::PAPERS[paper_index("A5")].1;
+    let laid = pdfcraft_engine::print::layout(&[LETTER, A4, A4, ODD], &settings).unwrap();
+    assert!(laid.iter().all(|s| s.size == a5 || s.size == (a5.1, a5.0)), "{:?}", laid.iter().map(|s| s.size).collect::<Vec<_>>());
+    close_print(&mut h);
+    // The choice persists across restarts.
+    let json = h.state().persist();
+    let mut fresh = PdfCraftApp::new();
+    fresh.restore(&json);
+    assert!(!fresh.print_draft.paper_from_page);
 }

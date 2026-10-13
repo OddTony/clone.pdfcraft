@@ -2316,3 +2316,5 @@ animation effects	Off	关
 	This document is trying to open a local file:	此文档正尝试打开本地文件：
 	Move tag earlier	将标签前移
 	Move tag later	将标签后移
+	Choose paper by PDF page size	按 PDF 页面大小选择纸张
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	每一页打印在与其匹配的标准纸张上（A4、US Letter 等）；其他大小的页面打印在上方所选纸张上。仅在“大小”模式下有效。

@@ -2332,3 +2332,5 @@ animation effects	Off	Wyłączone
 	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
 	Move tag earlier	Przenieś znacznik wcześniej
 	Move tag later	Przenieś znacznik później
+	Choose paper by PDF page size	Wybierz papier według rozmiaru strony PDF
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Każda strona jest drukowana na pasującym arkuszu standardowym (A4, US Letter, …); strony o innym rozmiarze na papierze powyżej. Tylko przy opcji „Rozmiar”.

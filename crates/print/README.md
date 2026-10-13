@@ -66,8 +66,14 @@ For example, `doc_print` with `paper: "ARCH D"`, `layout: "actual"`,
 **Match page at 100%** uses the currently viewed document page to choose a standard
 sheet (either orientation, within 0.5 pt for rounded metric dimensions), Actual size
 and Auto orientation. It leaves the selected page range intact. It is disabled
-for a custom page size with no matching preset. One preset applies to the whole job;
-this is not per-page paper-source selection.
+for a custom page size with no matching preset.
+
+**Choose paper by PDF page size** (`Settings::paper_from_page`, the dialog's checkbox, on by
+default and remembered; `doc_print` with `paper: "auto"`) is Acrobat's "Choose paper source by
+PDF page size": with a Size layout, each page prints on the standard sheet it matches and only
+pages of another size on the chosen paper, and the dialog opens on the sheet most of the pages
+to print match (#1103). Multiple, Booklet and Poster share sheets and keep the one paper. The
+print-ready PDF carries the sheet sizes; which tray a driver takes them from is its own affair.
 
 **PDF scale** describes the source-to-sheet transform in the previewed print-ready
 PDF, not measured physical output. Fit reserves an 18 pt margin and can reduce even

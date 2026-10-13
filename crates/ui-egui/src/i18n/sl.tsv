@@ -2357,3 +2357,5 @@ animation effects	Off	Izklopljeni
 	This document is trying to open a local file:	Ta dokument poskuša odpreti lokalno datoteko:
 	Move tag earlier	Premakni oznako prej
 	Move tag later	Premakni oznako pozneje
+	Choose paper by PDF page size	Izberi papir glede na velikost strani PDF
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Vsaka stran se natisne na ustrezen standardni list (A4, US Letter, …); strani druge velikosti na papir zgoraj. Samo pri možnosti »Velikost«.

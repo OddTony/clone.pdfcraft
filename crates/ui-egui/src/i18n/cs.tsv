@@ -2426,3 +2426,5 @@ animation effects	Off	Vypnuto
 	This document is trying to open a local file:	Tento dokument se pokouší otevřít místní soubor:
 	Move tag earlier	Přesunout značku dříve
 	Move tag later	Přesunout značku později
+	Choose paper by PDF page size	Vybrat papír podle velikosti stránky PDF
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Každá stránka se tiskne na standardní list, kterému odpovídá (A4, US Letter, …); stránky jiné velikosti se tisknou na papír výše. Pouze u volby Velikost.
