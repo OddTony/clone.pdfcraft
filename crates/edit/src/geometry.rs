@@ -44,15 +44,16 @@ pub(crate) fn intersection(a: [f64; 4], b: [f64; 4]) -> Option<[f64; 4]> {
 }
 
 /// A fill or stroke colour: how many components its device colour space has (none for other
-/// spaces) and, when it can be read, an RGB approximation.
+/// spaces), when it can be read an RGB approximation, and whether it is a pattern.
 #[derive(Clone, Copy)]
 pub(crate) struct Colour {
     components: Option<usize>,
     pub(crate) rgb: Option<[f64; 3]>,
+    pub(crate) pattern: bool,
 }
 
 impl Colour {
-    const BLACK: Colour = Colour { components: Some(1), rgb: Some([0.0; 3]) };
+    const BLACK: Colour = Colour { components: Some(1), rgb: Some([0.0; 3]), pattern: false };
 
     /// `g`/`rg`/`k` (and the stroke forms) and `sc`/`scn` in a device space.
     fn device(components: usize, op: &Op) -> Colour {
@@ -67,7 +68,7 @@ impl Colour {
             Some(&[c, m, y, k]) => Some([(1.0 - c) * (1.0 - k), (1.0 - m) * (1.0 - k), (1.0 - y) * (1.0 - k)]),
             _ => None,
         };
-        Colour { components: Some(components), rgb }
+        Colour { components: Some(components), rgb, pattern: false }
     }
 }
 
@@ -173,13 +174,14 @@ impl GState {
                     _ => None,
                 };
                 // Setting a colour space selects its initial colour: black for the device spaces.
-                *colour = Colour { components, rgb: components.map(|_| [0.0; 3]) };
+                // A pattern space named by a resource is the caller's to mark.
+                *colour = Colour { components, rgb: components.map(|_| [0.0; 3]), pattern: matches!(op.name(0), Some(b"Pattern")) };
             }
+            // Other spaces have no RGB to update, and a pattern stays one.
             b"sc" | b"scn" | b"SC" | b"SCN" => {
-                *colour = match colour.components {
-                    Some(n) => Colour::device(n, op),
-                    None => Colour { components: None, rgb: None },
-                };
+                if let Some(n) = colour.components {
+                    *colour = Colour::device(n, op);
+                }
             }
             b"m" => {
                 if let Some([x, y]) = op.nums::<2>() {

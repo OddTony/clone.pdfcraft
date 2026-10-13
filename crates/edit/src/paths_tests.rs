@@ -14,6 +14,11 @@ fn page_dict(entries: &str, streams: &[(&str, &str)]) -> Document {
         format!("<< /Type /Page /Parent 2 0 R {entries} /Contents [{}] >>", refs.join(" ")),
     ];
     objs.extend(streams.iter().map(|(dict, data)| format!("<< {dict} /Length {} >>\nstream\n{data}\nendstream", data.len())));
+    document(&objs)
+}
+
+/// A document of these objects, numbered from 1; the first is the catalog.
+pub(crate) fn document(objs: &[String]) -> Document {
     let mut out = b"%PDF-1.7\n".to_vec();
     let mut offs = Vec::new();
     for (i, o) in objs.iter().enumerate() {
@@ -30,11 +35,11 @@ fn page_dict(entries: &str, streams: &[(&str, &str)]) -> Document {
 }
 
 /// A 600 × 800 page whose content is these streams.
-fn page_with(streams: &[(&str, &str)]) -> Document {
+pub(crate) fn page_with(streams: &[(&str, &str)]) -> Document {
     page_dict("/MediaBox [0 0 600 800]", streams)
 }
 
-fn page(content: &str) -> Document {
+pub(crate) fn page(content: &str) -> Document {
     page_with(&[("", content)])
 }
 
@@ -42,7 +47,7 @@ fn paths(content: &str) -> Vec<PagePath> {
     page_paths(&page(content), 0).unwrap()
 }
 
-fn close(a: [f64; 4], b: [f64; 4]) -> bool {
+pub(crate) fn close(a: [f64; 4], b: [f64; 4]) -> bool {
     a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-6)
 }
 
@@ -126,6 +131,16 @@ fn colours_follow_the_graphics_state() {
     );
     assert_eq!(found[2].paint, Paint { fill: Some(FillRule::NonZero), stroke: true });
     assert_eq!(found[3].paint, Paint { fill: Some(FillRule::EvenOdd), stroke: true });
+    // Only a pattern the path paints with counts: the stroked square after it keeps the fill.
+    assert_eq!(found.iter().map(|p| p.pattern).collect::<Vec<_>>(), [false, false, false, true, false, false, false]);
+}
+
+#[test]
+fn a_pattern_colour_space_resource_marks_its_paths() {
+    let resources = "/MediaBox [0 0 600 800] /Resources << /ColorSpace << /CS0 [/Pattern /DeviceRGB] /CS1 /Pattern /CS2 [/CalGray << /WhitePoint [1 1 1] >>] >> >>";
+    let content = "/CS0 CS /P0 SCN 0 100 m 100 100 l S /CS1 cs /P1 scn 10 10 10 10 re f /CS2 cs 0.5 sc 30 30 10 10 re f /Missing cs 50 50 10 10 re f q 1 0 0 rg 70 70 10 10 re B Q";
+    let found = page_paths(&page_dict(resources, &[("", content)]), 0).unwrap();
+    assert_eq!(found.iter().map(|p| p.pattern).collect::<Vec<_>>(), [true, true, false, false, true]);
 }
 
 #[test]

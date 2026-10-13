@@ -3,6 +3,8 @@
 //! `q … cm … Q` with the extra transform), replace (it draws another XObject in the same place),
 //! or delete. Only the stream that draws it is rewritten, as a new object.
 
+use std::ops::RangeInclusive;
+
 use kurbo::{Point, Shape};
 use pdfcraft_content::{Matrix, Op, parse, serialize_ops};
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
@@ -378,17 +380,26 @@ pub(crate) fn selectable_images(
         .collect())
 }
 
-/// Find the saved graphics-state scope containing just this image and its crop. Applying
-/// the transform before that scope moves the actual clipping path as well as the pixels.
-/// A shared clip must never be moved along with unrelated artwork or text.
-fn image_transform_scope(ops: &[Op], target: usize) -> Result<Option<(usize, usize, Matrix)>, EditError> {
+/// Find the saved graphics-state scope containing just these operators (an image's `Do`, or a
+/// path from its first construction operator through its painting one) and their crop.
+/// Applying the transform before that scope moves the actual clipping path as well as the
+/// content. A shared clip must never be moved along with unrelated artwork or text.
+/// With `fixed` (paths), a scope may also inherit a clip, which then stays: the outermost scope
+/// painting nothing else wins, since every clip inside it is the target's alone. Scopes whose
+/// `q` or `Q` operator `fixed` names are passed over.
+pub(crate) fn transform_scope(
+    ops: &[Op],
+    target: RangeInclusive<usize>,
+    fixed: Option<&dyn Fn(usize) -> bool>,
+) -> Result<Option<(usize, usize, Matrix)>, EditError> {
     struct Scope {
         start: usize,
         matrix: Matrix,
         inherited_clip: bool,
         inherited_path: bool,
         selected: bool,
-        other_paint: bool,
+        /// `other_paint` when it was pushed: more by its `Q` means it paints something else.
+        other_paint: usize,
     }
     let mut stack: Vec<Scope> = Vec::new();
     let mut matrix = Matrix::IDENTITY;
@@ -398,19 +409,26 @@ fn image_transform_scope(ops: &[Op], target: usize) -> Result<Option<(usize, usi
     let mut text = false;
     let mut at_image = None;
     let mut isolated = None;
+    let mut other_paint = 0_usize;
     for (index, op) in ops.iter().enumerate() {
         match op.op.as_slice() {
             b"q" => {
                 if stack.len() >= 256 {
-                    return Err(EditError::Invalid("the image graphics state is too deeply nested to transform".into()));
+                    return Err(EditError::Invalid("the page graphics state is too deeply nested to transform this object".into()));
                 }
-                stack.push(Scope { start: index, matrix, inherited_clip: clipped, inherited_path: path, selected: false, other_paint: false });
+                stack.push(Scope { start: index, matrix, inherited_clip: clipped, inherited_path: path, selected: false, other_paint });
             }
             b"Q" => {
                 if let Some(scope) = stack.pop() {
-                    if scope.selected && !scope.other_paint && !scope.inherited_clip && !scope.inherited_path {
-                        // Prefer the innermost scope that contains every active clipping path.
-                        isolated.get_or_insert((scope.start, index, scope.matrix));
+                    if scope.selected && scope.other_paint == other_paint && !scope.inherited_path {
+                        match fixed {
+                            // Prefer the innermost scope that contains every active clipping path.
+                            None if !scope.inherited_clip => {
+                                isolated.get_or_insert((scope.start, index, scope.matrix));
+                            }
+                            Some(fixed) if !fixed(scope.start) && !fixed(index) => isolated = Some((scope.start, index, scope.matrix)),
+                            _ => {}
+                        }
                     }
                     matrix = scope.matrix;
                     clipped = scope.inherited_clip;
@@ -427,7 +445,7 @@ fn image_transform_scope(ops: &[Op], target: usize) -> Result<Option<(usize, usi
             b"W" | b"W*" => pending_clip = true,
             _ => {}
         }
-        if index == target {
+        if index == *target.start() {
             if text {
                 return Err(EditError::Invalid("an image inside a text object cannot be transformed".into()));
             }
@@ -435,13 +453,13 @@ fn image_transform_scope(ops: &[Op], target: usize) -> Result<Option<(usize, usi
             for scope in &mut stack {
                 scope.selected = true;
             }
-        } else if matches!(
-            op.op.as_slice(),
-            b"Do" | b"Tj" | b"TJ" | b"'" | b"\"" | b"sh" | b"BI" | b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*"
-        ) {
-            for scope in &mut stack {
-                scope.other_paint = true;
-            }
+        } else if !target.contains(&index)
+            && matches!(
+                op.op.as_slice(),
+                b"Do" | b"Tj" | b"TJ" | b"'" | b"\"" | b"sh" | b"BI" | b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*"
+            )
+        {
+            other_paint = other_paint.saturating_add(1);
         }
         if matches!(op.op.as_slice(), b"n" | b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*") {
             clipped |= pending_clip;
@@ -451,7 +469,7 @@ fn image_transform_scope(ops: &[Op], target: usize) -> Result<Option<(usize, usi
     }
     let (placement, clipped) = at_image.ok_or_else(|| EditError::Invalid("the image operation is missing".into()))?;
     if !clipped {
-        return Ok(Some((target, target, placement)));
+        return Ok(Some((*target.start(), *target.end(), placement)));
     }
     Ok(isolated)
 }
@@ -484,7 +502,7 @@ fn transform_image(
         .ok_or_else(|| EditError::Invalid("the image operation could not be located".into()))?;
     // A private path crop moves with its image regardless of intervening state operators.
     // Shared crops retain the existing fixed-clip behavior, preserving neighbouring paint.
-    let (start, end, placement) = image_transform_scope(&ops, target)?.unwrap_or((target, target, Matrix(image.draw_matrix)));
+    let (start, end, placement) = transform_scope(&ops, target..=target, None)?.unwrap_or((target, target, Matrix(image.draw_matrix)));
     let inverse = placement.invert().ok_or_else(|| EditError::Invalid("the image has no area".into()))?;
     let local = placement.then(&Matrix(transform)).then(&inverse);
     if !local.0.iter().all(|v| v.is_finite() && v.abs() <= 1e12) {

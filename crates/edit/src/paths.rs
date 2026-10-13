@@ -1,15 +1,14 @@
 //! Edit a PDF ▸ the vector paths a page paints. One path is the path object from its first
 //! construction operator (`m l c v y h re`) through its painting operator. Clipping paths (`W`/
 //! `W*`, even when they also paint), `n`, paths inside text objects, under a text clip or in
-//! added content, and the contents of Form XObjects (one grouped item, see [`crate::images`])
-//! are not listed.
+//! PdfCraft's own marks and added content (`/PCMark` streams, edited with their own tools), and
+//! the contents of Form XObjects (one grouped item, see [`crate::images`]) are not listed.
 
-use std::collections::BTreeSet;
 use std::ops::RangeInclusive;
 
 use kurbo::{BezPath, ParamCurveNearest, PathEl, Point, Shape};
 use pdfcraft_content::{Matrix, Op, Pieces};
-use pdfcraft_cos::{Dict, Document, ObjRef};
+use pdfcraft_cos::{Dict, Document};
 
 use crate::EditError;
 use crate::geometry::{ClipPath, GState, closed, intersection};
@@ -51,9 +50,13 @@ pub struct PagePath {
     pub fill_rgb: Option<[f64; 3]>,
     pub stroke_rgb: Option<[f64; 3]>,
     pub line_width_user: f64,
+    /// Whether it fills or strokes with a pattern (a tiling or a shading), which is fixed to the
+    /// page: a `cm` moves the path but not its pattern.
+    pub pattern: bool,
     /// Its operators in the page's joined content (see [`Pieces`]), for the path edits.
-    #[cfg_attr(not(test), allow(dead_code))]
-    ops: RangeInclusive<usize>,
+    pub(crate) ops: RangeInclusive<usize>,
+    /// The CTM it is drawn with.
+    pub(crate) matrix: Matrix,
     clips: Vec<ClipPath>,
 }
 
@@ -107,20 +110,31 @@ fn gs_line_width(doc: &Document, ext_gstates: &Dict, op: &Op) -> Option<f64> {
     doc.resolve(gs.as_dict()?.get(b"LW")?).as_f64().filter(|w| (0.0..=MAX_COORDINATE).contains(w))
 }
 
+/// Whether a `cs`/`CS` operator names a pattern space resource (`/Pattern`, or `[/Pattern base]`
+/// for uncoloured patterns).
+fn named_pattern_space(doc: &Document, colour_spaces: &Dict, op: &Op) -> bool {
+    let Some(space) = op.name(0).and_then(|n| colour_spaces.get(n)).map(|s| doc.resolve(s)) else { return false };
+    let first = space.as_array().and_then(|a| a.first()).map(|f| doc.resolve(f));
+    matches!(first.as_deref().unwrap_or(&space).as_name(), Some(b"Pattern"))
+}
+
 /// The vector paths page `page` (0-based) paints, in painting order. Refuses a page whose
 /// content can't be read within the group-selection budgets or that paints too many paths.
 pub fn page_paths(doc: &Document, page: usize) -> Result<Vec<PagePath>, EditError> {
     let p = pdfcraft_model::pages(doc).into_iter().nth(page).ok_or(EditError::NoSuchPage(page))?;
     let streams = crate::objects::checked_streams(doc, page)?;
-    let ext_gstates = p
-        .dict
-        .get(b"Resources")
-        .map(|r| doc.resolve(r))
-        .and_then(|r| r.as_dict().and_then(|r| r.get(b"ExtGState")).map(|g| doc.resolve(g)))
-        .and_then(|g| g.as_dict().cloned())
-        .unwrap_or_default();
-    let added: BTreeSet<ObjRef> = crate::list_added(doc).into_iter().filter(|a| a.page == page).map(|a| a.obj).collect();
-    let in_added = |piece: usize| streams.get(piece).and_then(|(o, _)| o.as_ref()).is_some_and(|r| added.contains(&r));
+    let resources = p.dict.get(b"Resources").map(|r| doc.resolve(r));
+    let category = |key: &[u8]| {
+        resources
+            .as_ref()
+            .and_then(|r| r.as_dict().and_then(|r| r.get(key)).map(|c| doc.resolve(c)))
+            .and_then(|c| c.as_dict().cloned())
+            .unwrap_or_default()
+    };
+    let (ext_gstates, colour_spaces) = (category(b"ExtGState"), category(b"ColorSpace"));
+    let marked: Vec<bool> = streams.iter().map(|(o, _)| crate::stream_tag(doc, o).is_some()).collect();
+    let any_marked = marked.contains(&true);
+    let in_mark = |piece: usize| marked.get(piece) == Some(&true);
     let pieces = Pieces::join(&streams.iter().map(|(_, data)| data.as_slice()).collect::<Vec<_>>());
     let ops = pieces.parse().ops;
     let mut state = GState::new(Matrix::IDENTITY, p.crop(doc), Vec::new());
@@ -139,6 +153,10 @@ pub fn page_paths(doc: &Document, page: usize) -> Result<Vec<PagePath>, EditErro
         {
             state.placement.line_width = w;
         }
+        if matches!(name, b"cs" | b"CS") && named_pattern_space(doc, &colour_spaces, op) {
+            let colour = if name == b"CS" { &mut state.placement.stroke } else { &mut state.placement.fill };
+            colour.pattern = true;
+        }
         if matches!(name, b"m" | b"l" | b"c" | b"v" | b"y" | b"h" | b"re") {
             start.get_or_insert(index);
             continue;
@@ -156,7 +174,7 @@ pub fn page_paths(doc: &Document, page: usize) -> Result<Vec<PagePath>, EditErro
         // Under a text clip only the glyph outlines show, and those aren't modelled.
         if text > 0
             || state.placement.text_clip
-            || (!added.is_empty() && (ops.get(first).is_some_and(|o| in_added(pieces.pieces_of(o).0)) || in_added(pieces.pieces_of(op).1)))
+            || (any_marked && (ops.get(first).is_some_and(|o| in_mark(pieces.pieces_of(o).0)) || in_mark(pieces.pieces_of(op).1)))
             || path.segments().next().is_none()
         {
             continue;
@@ -197,7 +215,9 @@ pub fn page_paths(doc: &Document, page: usize) -> Result<Vec<PagePath>, EditErro
             fill_rgb: paint.fill.and(state.placement.fill.rgb),
             stroke_rgb: if paint.stroke { state.placement.stroke.rgb } else { None },
             line_width_user,
+            pattern: (paint.fill.is_some() && state.placement.fill.pattern) || (paint.stroke && state.placement.stroke.pattern),
             ops: first..=index,
+            matrix: state.placement.matrix,
             clips: state.placement.clips.clone(),
         });
     }
@@ -206,4 +226,4 @@ pub fn page_paths(doc: &Document, page: usize) -> Result<Vec<PagePath>, EditErro
 
 #[cfg(test)]
 #[path = "paths_tests.rs"]
-mod tests;
+pub(crate) mod tests;
