@@ -68,6 +68,11 @@ pub struct Tokens {
 }
 
 impl Tokens {
+    /// Foreground for a filled accent control in the standard dark palette.
+    pub fn on_accent(&self) -> Color32 {
+        if self.dark() { Color32::from_rgb(0x06, 0x06, 0x07) } else { Color32::WHITE }
+    }
+
     pub fn for_kind(kind: ThemeKind) -> Self {
         match kind {
             ThemeKind::Light => Self {
@@ -96,25 +101,26 @@ impl Tokens {
             },
             ThemeKind::Dark => Self {
                 kind,
-                titlebar: Color32::from_rgb(0x1B, 0x1B, 0x1E),
-                chrome: Color32::from_rgb(0x26, 0x26, 0x2A),
-                panel: Color32::from_rgb(0x26, 0x26, 0x2A),
+                // ArtCraft standard dark UI. Pasteboard and page pixels remain document roles.
+                titlebar: Color32::from_rgb(0x0A, 0x0A, 0x0C),
+                chrome: Color32::from_rgb(0x12, 0x13, 0x16),
+                panel: Color32::from_rgb(0x10, 0x10, 0x14),
                 pasteboard: Color32::from_rgb(0x19, 0x19, 0x1C),
-                card: Color32::from_rgb(0x2E, 0x2E, 0x33),
-                border: Color32::from_rgb(0x3C, 0x3C, 0x43),
-                divider: Color32::from_rgb(0x33, 0x33, 0x39),
-                text: Color32::from_rgb(0xEC, 0xEC, 0xEF),
-                text_muted: Color32::from_rgb(0xAE, 0xAE, 0xB6),
-                text_faint: Color32::from_rgb(0x97, 0x97, 0x9E),
-                icon: Color32::from_rgb(0xD4, 0xD4, 0xDA),
-                hover: Color32::from_rgb(0x34, 0x34, 0x3A),
-                pressed: Color32::from_rgb(0x3E, 0x3E, 0x45),
-                selected: Color32::from_rgb(0x23, 0x3A, 0x63),
-                accent: Color32::from_rgb(0x4B, 0x8B, 0xF5),
-                accent_text: Color32::from_rgb(0x8C, 0xB6, 0xFA),
-                accent_soft: Color32::from_rgb(0x24, 0x36, 0x57),
-                field: Color32::from_rgb(0x1E, 0x1E, 0x22),
-                badge_new: Color32::from_rgb(0x3D, 0x7D, 0xEE),
+                card: Color32::from_rgb(0x1E, 0x1F, 0x22),
+                border: Color32::from_rgb(0x36, 0x37, 0x3A),
+                divider: Color32::from_rgb(0x36, 0x37, 0x3A),
+                text: Color32::from_rgb(0xF2, 0xF1, 0xEE),
+                text_muted: Color32::from_rgb(0xA6, 0xA6, 0xA8),
+                text_faint: Color32::from_rgb(0x71, 0x71, 0x76),
+                icon: Color32::from_rgb(0xA6, 0xA6, 0xA8),
+                hover: Color32::from_rgb(0x32, 0x33, 0x37),
+                pressed: Color32::from_rgb(0x41, 0x42, 0x46),
+                selected: Color32::from_rgb(0x20, 0x3B, 0x65),
+                accent: Color32::from_rgb(0x2D, 0x81, 0xFF),
+                accent_text: Color32::from_rgb(0x59, 0xA7, 0xFF),
+                accent_soft: Color32::from_rgb(0x20, 0x3B, 0x65),
+                field: Color32::from_rgb(0x06, 0x06, 0x07),
+                badge_new: Color32::from_rgb(0x2D, 0x81, 0xFF),
                 page_shadow: Color32::from_black_alpha(120),
                 radius: 6,
             },
@@ -389,8 +395,8 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     v.window_stroke = Stroke::new(1.0, t.border);
     v.extreme_bg_color = t.field;
     v.faint_bg_color = t.hover;
-    v.selection.bg_fill = t.accent_soft;
-    v.selection.stroke = Stroke::new(1.0, t.accent);
+    v.selection.bg_fill = if t.dark() { t.selected } else { t.accent_soft };
+    v.selection.stroke = Stroke::new(1.0, if t.dark() { t.text } else { t.accent });
     v.hyperlink_color = t.accent_text;
     v.override_text_color = Some(t.text);
     v.window_corner_radius = CornerRadius::same(10);
@@ -446,6 +452,22 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
 mod tests {
     use super::*;
     use egui::epaint::text::{Fonts, TextOptions};
+
+    #[test]
+    fn dark_chrome_uses_standard_roles_and_keeps_light_and_pages() {
+        let dark = Tokens::for_kind(ThemeKind::Dark);
+        let light = Tokens::for_kind(ThemeKind::Light);
+        assert_eq!(dark.chrome, Color32::from_rgb(0x12, 0x13, 0x16));
+        assert_eq!(dark.panel, Color32::from_rgb(0x10, 0x10, 0x14));
+        assert_eq!(dark.card, Color32::from_rgb(0x1e, 0x1f, 0x22));
+        assert_eq!(dark.selected, Color32::from_rgb(0x20, 0x3b, 0x65));
+        assert_eq!(dark.on_accent(), Color32::from_rgb(0x06, 0x06, 0x07));
+        assert_eq!(dark.pasteboard, Color32::from_rgb(0x19, 0x19, 0x1c));
+        assert_eq!(light.panel, Color32::WHITE);
+        assert_eq!(light.on_accent(), Color32::WHITE);
+        assert_eq!(ThemePreference::System.resolve(Some(true), ThemeKind::Light), ThemeKind::Dark);
+        assert_eq!(ThemePreference::System.resolve(Some(false), ThemeKind::Dark), ThemeKind::Light);
+    }
 
     const HINTING_CORPUS: [&str; 4] = ["Il1MWmw", "Hamburgefonts", "0123456789 .,;:!?()[]{}+-=/\\", "Café Ångström déjà-vu Ωμέγα Ελληνικά Журнал"];
     const HINTING_SIZES: [f32; 6] = [10.0, 11.0, 12.0, 13.0, 14.0, 16.0];
