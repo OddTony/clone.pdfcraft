@@ -903,8 +903,13 @@ mod tests {
     fn provision_rsa(session: &Session) {
         const ID: &[u8] = b"pdfcraft-test-rsa";
         const LABEL: &[u8] = b"PdfCraft test RSA";
-        if !session.find_objects(&[Attribute::Class(ObjectClass::PRIVATE_KEY), Attribute::Id(ID.to_vec())]).unwrap_or_default().is_empty() {
+        // Done when the certificate is there; a key left by a run that stopped before its
+        // certificate is replaced, so the pair always matches.
+        if !session.find_objects(&[Attribute::Class(ObjectClass::CERTIFICATE), Attribute::Id(ID.to_vec())]).unwrap_or_default().is_empty() {
             return;
+        }
+        for stale in session.find_objects(&[Attribute::Class(ObjectClass::PRIVATE_KEY), Attribute::Id(ID.to_vec())]).unwrap_or_default() {
+            session.destroy_object(stale).expect("a stale test key is removed");
         }
         let local = PrivateKey::generate_rsa(2048).unwrap();
         let name = crate::x509::Name::build("PdfCraft Test", "", "", "", "");
@@ -943,6 +948,10 @@ mod tests {
                 Attribute::Private(false),
                 Attribute::Label(LABEL.to_vec()),
                 Attribute::Id(ID.to_vec()),
+                // CKA_SUBJECT is required for X.509 certificate objects (SoftHSM refuses
+                // the template without it: CKR_TEMPLATE_INCOMPLETE).
+                Attribute::Subject(cert.subject.raw.clone()),
+                Attribute::Issuer(cert.issuer.raw.clone()),
                 Attribute::Value(cert.raw.clone()),
             ])
             .expect("its certificate imports");
@@ -951,8 +960,13 @@ mod tests {
     fn provision_ec(session: &Session, params: &[u8]) {
         const ID: &[u8] = b"pdfcraft-test-ec";
         const LABEL: &[u8] = b"PdfCraft test P-256";
-        if !session.find_objects(&[Attribute::Class(ObjectClass::PRIVATE_KEY), Attribute::Id(ID.to_vec())]).unwrap_or_default().is_empty() {
+        // Done when the certificate is there; a key left by a run that stopped before its
+        // certificate is replaced, so the pair always matches.
+        if !session.find_objects(&[Attribute::Class(ObjectClass::CERTIFICATE), Attribute::Id(ID.to_vec())]).unwrap_or_default().is_empty() {
             return;
+        }
+        for stale in session.find_objects(&[Attribute::Class(ObjectClass::PRIVATE_KEY), Attribute::Id(ID.to_vec())]).unwrap_or_default() {
+            session.destroy_object(stale).expect("a stale test key is removed");
         }
         let local = PrivateKey::generate_p256().unwrap();
         let name = crate::x509::Name::build("PdfCraft Test", "", "", "", "");
@@ -986,6 +1000,10 @@ mod tests {
                 Attribute::Private(false),
                 Attribute::Label(LABEL.to_vec()),
                 Attribute::Id(ID.to_vec()),
+                // CKA_SUBJECT is required for X.509 certificate objects (SoftHSM refuses
+                // the template without it: CKR_TEMPLATE_INCOMPLETE).
+                Attribute::Subject(cert.subject.raw.clone()),
+                Attribute::Issuer(cert.issuer.raw.clone()),
                 Attribute::Value(cert.raw.clone()),
             ])
             .expect("its certificate imports");
