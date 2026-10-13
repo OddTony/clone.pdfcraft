@@ -1978,3 +1978,95 @@ fn a_cross_reference_entry_that_misses_its_object_is_not_an_unchanged_object() {
     let s = signatures(&open(&honest), &honest, &trust).into_iter().find(|s| s.signed).unwrap();
     assert_eq!(s.status, Status::Valid, "{:?}", s.details);
 }
+
+/// Three pages, no fields.
+fn three_pages() -> Vec<u8> {
+    let objs: Vec<&[u8]> = vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 6 0 R /Resources << /Font << /F1 9 0 R >> >> >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 7 0 R /Resources << /Font << /F1 9 0 R >> >> >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 8 0 R /Resources << /Font << /F1 9 0 R >> >> >>",
+        b"<< /Length 42 >>\nstream\nBT /F1 14 Tf 20 250 Td (Page one) Tj ET\nendstream",
+        b"<< /Length 42 >>\nstream\nBT /F1 14 Tf 20 250 Td (Page two) Tj ET\nendstream",
+        b"<< /Length 44 >>\nstream\nBT /F1 14 Tf 20 250 Td (Page three) Tj ET\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(o);
+        out.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+/// "Sign All Pages" (#1673): one signature field on each page, every signature an incremental
+/// update over the last.
+#[test]
+fn signing_every_page_adds_a_signed_field_to_each() {
+    let id = pkcs12::open(&data("ec-p256.p12"), "test").unwrap();
+    let signed = pdfcraft_sign::sign_each(&open(&three_pages()), &id, &opts(), &[0, 1, 2]).unwrap();
+    assert!(signed.starts_with(&three_pages()), "incremental updates all the way");
+    let doc = open(&signed);
+    let sigs = signatures(&doc, &signed, &TrustStore::default());
+    let signed_fields: Vec<_> = sigs.iter().filter(|s| s.signed).collect();
+    assert_eq!(signed_fields.len(), 3, "{:?}", sigs.iter().map(|s| (&s.field, s.signed)).collect::<Vec<_>>());
+    for (i, s) in signed_fields.iter().enumerate() {
+        // Signing order gives each page its own field and revision.
+        assert_eq!(s.field, format!("Signature{}", i + 1));
+        assert_eq!((s.page, s.revision), (Some(i), i + 2));
+        assert!(s.visible);
+        assert_eq!(s.status, Status::Unknown, "{:?}", s.details);
+    }
+    // Earlier signatures saw the later fields arrive: allowed, like a counter-signature.
+    assert_eq!(signed_fields[0].modification, Modification::Allowed(vec![kind::SIGNATURE]));
+    assert_eq!(signed_fields[1].modification, Modification::Allowed(vec![kind::SIGNATURE]));
+    assert_eq!(signed_fields[2].modification, Modification::None);
+    // Trusting the signer validates them all.
+    let trust = TrustStore { certs: vec![id.certificate.clone()] };
+    let trusted = signatures(&doc, &signed, &trust);
+    assert!(trusted.iter().filter(|s| s.signed).all(|s| s.status == Status::Valid), "{:?}", trusted.iter().map(|s| &s.details).collect::<Vec<_>>());
+}
+
+#[test]
+fn sign_each_keeps_the_given_order_names_once_and_refuses_bad_pages() {
+    let id = pkcs12::open(&data("ec-p256.p12"), "test").unwrap();
+    // Page order is signing order, duplicates sign once, a name applies to the first.
+    let signed =
+        pdfcraft_sign::sign_each(&open(&three_pages()), &id, &SignOptions { new_field_name: Some("Stamp".into()), ..opts() }, &[1, 0, 0]).unwrap();
+    let sigs = signatures(&open(&signed), &signed, &TrustStore::default());
+    let signed_fields: Vec<_> = sigs.iter().filter(|s| s.signed).collect();
+    assert_eq!(signed_fields.len(), 2);
+    let stamp = sigs.iter().find(|s| s.field == "Stamp").unwrap();
+    assert_eq!((stamp.page, stamp.revision), (Some(1), 2));
+    let auto = sigs.iter().find(|s| s.field == "Signature1").unwrap();
+    assert_eq!((auto.page, auto.revision), (Some(0), 3));
+    // Refusals produce nothing: bad page, no pages, an existing field.
+    for (pages, field) in [(&[3usize][..], None), (&[][..], None), (&[0usize][..], Some("Approval".to_string()))] {
+        let o = SignOptions { field, ..opts() };
+        assert!(matches!(pdfcraft_sign::sign_each(&open(&three_pages()), &id, &o, pages), Err(SignError::Pdf(_))), "{pages:?}");
+    }
+}
+
+/// Certifying a batch certifies the last signature only: the pages signed before it are
+/// changes the certification's DocMDP then allows.
+#[test]
+fn sign_each_certifies_the_last_signature() {
+    let id = pkcs12::open(&data("ec-p256.p12"), "test").unwrap();
+    let signed = pdfcraft_sign::sign_each(&open(&three_pages()), &id, &SignOptions { certify: Some(2), ..opts() }, &[0, 1]).unwrap();
+    let sigs = signatures(&open(&signed), &signed, &TrustStore::default());
+    let first = sigs.iter().find(|s| s.field == "Signature1").unwrap();
+    let last = sigs.iter().find(|s| s.field == "Signature2").unwrap();
+    assert_eq!((first.certify, first.revision), (None, 2));
+    assert_eq!((last.certify, last.revision), (Some(2), 3));
+    assert_eq!(first.modification, Modification::Allowed(vec![kind::SIGNATURE]));
+}

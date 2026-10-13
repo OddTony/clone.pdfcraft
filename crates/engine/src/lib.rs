@@ -4413,6 +4413,62 @@ impl Session {
         Ok(Arc::new(pdfcraft_sign::sign_with_timestamp(&editor.cos, id, &opts, tsa)?))
     }
 
+    /// [`Session::sign`] once per page in `pages` (0-based, in the order given, each at most
+    /// once): every page gets its own signature field showing the same appearance — the way
+    /// "Sign All Pages" works. `opts.certify` certifies the last signature only.
+    pub fn sign_each(&self, doc: DocId, id: &pdfcraft_sign::DigitalId, mut opts: SignOptions, pages: &[usize]) -> Result<Arc<Vec<u8>>, EditError> {
+        let d = self.get(doc).ok_or(EditError::NoDocument)?;
+        let editor = d.editor.as_ref().ok_or_else(|| EditError::ReadOnly(d.read_only_reason.clone().unwrap_or_default()))?;
+        if opts.date.is_empty() {
+            opts.date = self.signing_date();
+        }
+        Ok(Arc::new(pdfcraft_sign::sign_each(&editor.cos, id, &opts, pages)?))
+    }
+
+    /// The 0-based pages a typed range names ("1-3, 6"; `None`, empty or "all": every page).
+    /// Ranges count physical pages, not page labels.
+    pub fn resolve_page_range(&self, doc: DocId, range: Option<&str>) -> Result<Vec<usize>, EditError> {
+        let d = self.get(doc).ok_or(EditError::NoDocument)?;
+        pdfcraft_print::select_pages(
+            d.info.pages.len(),
+            range.map(str::trim).filter(|r| !r.is_empty() && !r.eq_ignore_ascii_case("all")),
+            &[],
+            pdfcraft_print::Subset::All,
+            false,
+        )
+        .map_err(|e| EditError::Print(e.to_string()))
+    }
+
+    /// [`Session::sign_each`], choosing the pages with a typed range ("1-3, 6"; `None`,
+    /// empty or "all": every page).
+    pub fn sign_each_pages(
+        &self,
+        doc: DocId,
+        id: &pdfcraft_sign::DigitalId,
+        opts: SignOptions,
+        range: Option<&str>,
+    ) -> Result<Arc<Vec<u8>>, EditError> {
+        let pages = self.resolve_page_range(doc, range)?;
+        self.sign_each(doc, id, opts, &pages)
+    }
+
+    /// [`Session::sign_each`], embedding an RFC 3161 timestamp in each signature (PAdES B-T).
+    pub fn sign_each_with_timestamp(
+        &self,
+        doc: DocId,
+        id: &pdfcraft_sign::DigitalId,
+        mut opts: SignOptions,
+        pages: &[usize],
+        tsa: &dyn pdfcraft_sign::TimestampAuthority,
+    ) -> Result<Arc<Vec<u8>>, EditError> {
+        let d = self.get(doc).ok_or(EditError::NoDocument)?;
+        let editor = d.editor.as_ref().ok_or_else(|| EditError::ReadOnly(d.read_only_reason.clone().unwrap_or_default()))?;
+        if opts.date.is_empty() {
+            opts.date = self.signing_date();
+        }
+        Ok(Arc::new(pdfcraft_sign::sign_each_with_timestamp(&editor.cos, id, &opts, pages, tsa)?))
+    }
+
     /// Append a standalone document timestamp (RFC 3161, `/ETSI.RFC3161`) covering the file's
     /// current state. An empty `date` takes the session clock; the transport is the caller's.
     pub fn timestamp_document(&self, doc: DocId, tsa: &dyn pdfcraft_sign::TimestampAuthority, date: String) -> Result<Arc<Vec<u8>>, EditError> {

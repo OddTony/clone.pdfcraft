@@ -90,12 +90,28 @@ pub enum SignGraphic {
     Image(#[serde(with = "crate::fill_sign::image_data")] SignatureImage),
 }
 
+/// Which pages a visible signature goes on (Sign as ▸ Pages): only the page the rectangle
+/// was drawn on, all of them (a signature field each, as "Sign All Pages" does), or a typed
+/// range such as "1-3, 6".
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum SignPages {
+    /// Just the page the rectangle was drawn on.
+    #[default]
+    One,
+    /// Every page of the document.
+    All,
+    /// The pages a range names ("1-3, 6").
+    Range(String),
+}
+
 /// The signing dialogs' state.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SignDraft {
     pub page: usize,
     /// The signature rectangle (user space); `None`: invisible.
     pub rect: Option<[f64; 4]>,
+    /// The pages the signature appears on (a field of its own on each).
+    pub pages: SignPages,
     /// Sign this empty signature field instead.
     pub field: Option<String>,
     /// Certify (DocMDP) with these permissions: 1 none, 2 form fill and signing, 3 also comments.
@@ -122,6 +138,7 @@ impl SignDraft {
         Self {
             page,
             rect,
+            pages: SignPages::default(),
             field,
             certify,
             step: if ids.is_empty() { SignStep::Configure } else { SignStep::Choose },
@@ -437,6 +454,14 @@ impl PdfCraftApp {
             graphic,
             ..SignOptions::default()
         };
+        // A bad page range stays in the dialog with the reason, before asking where to save.
+        let pages: Option<Vec<usize>> = match &d.pages {
+            SignPages::One => None,
+            SignPages::All => Some(self.session.resolve_page_range(doc_id, None)),
+            SignPages::Range(r) => Some(self.session.resolve_page_range(doc_id, Some(r))),
+        }
+        .transpose()
+        .map_err(|e| e.to_string())?;
         // Signing saves, as in Acrobat: choose where (a cancelled save cancels signing). The
         // document is signed once the user has chosen.
         let name = self.session.get(doc_id).map(|d| d.name.clone()).unwrap_or_default();
@@ -447,7 +472,11 @@ impl PdfCraftApp {
             if !app.commit_typing_in(doc_id) {
                 return Err(String::new());
             }
-            let signed = app.session.sign(doc_id, &id, opts).map_err(|e| e.to_string())?;
+            let signed = match &pages {
+                Some(pages) => app.session.sign_each(doc_id, &id, opts, pages),
+                None => app.session.sign(doc_id, &id, opts),
+            }
+            .map_err(|e| e.to_string())?;
             crate::editing::write_atomically(&path.to_string_lossy(), signed.as_slice()).map_err(|e| format!("Could not save: {e}"))?;
             // Our own write is not a change on disk to reload (#431).
             #[cfg(not(target_arch = "wasm32"))]
@@ -915,6 +944,22 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         ui.label(egui::RichText::new(tl!("The signature will be invisible.")).color(t.text_muted));
     }
     egui::Grid::new("sign-as").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+        // A drawn signature can repeat on every page ("Sign All Pages"); an existing field
+        // signs where it already sits, and an invisible one needs no placement.
+        if d.rect.is_some() && d.field.is_none() {
+            ui.label(tl!("Pages"));
+            ui.horizontal_wrapped(|ui| {
+                widgets::radio_value(ui, &mut d.pages, SignPages::One, tl!("This page only"));
+                widgets::radio_value(ui, &mut d.pages, SignPages::All, tl!("All pages"));
+                if ui.add(widgets::radio(matches!(d.pages, SignPages::Range(_)), tl!("Range"))).clicked() && !matches!(d.pages, SignPages::Range(_)) {
+                    d.pages = SignPages::Range(String::new());
+                }
+                if let SignPages::Range(range) = &mut d.pages {
+                    ui.add(crate::widgets::line(range).hint_text("1-3, 6").desired_width(90.0));
+                }
+            });
+            ui.end_row();
+        }
         if d.certify.is_some() {
             ui.label(tl!("Permitted actions after certifying"));
             let mut p = d.certify.unwrap_or(2);

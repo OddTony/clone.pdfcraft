@@ -382,6 +382,13 @@ impl PdfCraftApp {
         }
     }
 
+    /// Add the files at `paths` to the Combine files list (the `--combine` flag and the
+    /// operating system's "Combine files in PdfCraft" entry, which names one file per launch).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn combine_paths(&mut self, paths: &[std::path::PathBuf]) {
+        self.use_paths(FilePurpose::Combine, paths);
+    }
+
     /// A file dropped on the Combine files tab: added to its list.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn drop_into_combine(&mut self, f: egui::DroppedFileHandle, _ctx: &egui::Context) {

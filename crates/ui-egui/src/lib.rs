@@ -67,7 +67,7 @@ mod object_ui;
 pub use create_ui::Clip;
 pub use link_ui::LinkDraft;
 pub use optimize_ui::{OptimizeDraft, OptimizeTab};
-pub use sign_ui::{DigitalIdEntry, SignDraft, SignGraphic, SignStep};
+pub use sign_ui::{DigitalIdEntry, SignDraft, SignGraphic, SignPages, SignStep};
 mod autoscroll;
 mod bidi;
 pub mod bulk_fields;
@@ -379,6 +379,10 @@ pub type FailedInbox = std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>;
 pub enum OsEvent {
     /// Open these files.
     Open(Vec<String>),
+    /// Stage these files in the Combine files tab (Windows: "Combine files in PdfCraft" on
+    /// selected PDFs sends each file in its own `--combine` launch, which the single-instance
+    /// hand-off turns into one of these).
+    Combine(Vec<String>),
     /// Quit (the Dock's Quit, logging out), asking about unsaved changes first.
     Quit,
 }
@@ -2830,8 +2834,10 @@ impl eframe::App for PdfCraftApp {
             match e {
                 #[cfg(not(target_arch = "wasm32"))]
                 OsEvent::Open(paths) => paths.iter().for_each(|p| self.open_path(p)),
+                #[cfg(not(target_arch = "wasm32"))]
+                OsEvent::Combine(paths) => self.combine_paths(&paths.iter().map(std::path::PathBuf::from).collect::<Vec<_>>()),
                 #[cfg(target_arch = "wasm32")]
-                OsEvent::Open(_) => {}
+                OsEvent::Open(_) | OsEvent::Combine(_) => {}
                 // Like closing the window: `guard_quit` asks about unsaved changes.
                 OsEvent::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             }

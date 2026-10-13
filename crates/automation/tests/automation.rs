@@ -4040,6 +4040,52 @@ fn digital_ids_signing_and_validation_through_tools() {
     assert_eq!(ok(&mut a, "sign_list", json!({ "doc": doc }))["signatures"][0]["status"], "unknown");
 }
 
+/// "Sign All Pages" (#1673): `pages` signs a field of its own on each page at once.
+#[test]
+fn signing_every_page_through_tools() {
+    let dir = workdir("signing-each");
+    let mut a = auto(&dir);
+    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret1", "path": "ada.p12" }));
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    // `pages` needs a visible signature, can't mix with `page`, and refuses a bad range.
+    for args in [
+        json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "pages": "all", "out": "x.pdf" }),
+        json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "pages": "all", "page": 1, "rect": [20, 200, 180, 250], "out": "x.pdf" }),
+        json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "pages": "nonsense", "rect": [20, 200, 180, 250], "out": "x.pdf" }),
+        json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "pages": "7-9", "rect": [20, 200, 180, 250], "out": "x.pdf" }),
+    ] {
+        let r = a.call("sign_document", &args);
+        assert!(matches!(r, Err(ToolError::InvalidArgs(_))), "{args}: {r:?}");
+        assert!(!dir.join("x.pdf").exists(), "{args}");
+    }
+    // All three pages at once: three signature fields, each visible on its own page.
+    ok(
+        &mut a,
+        "sign_document",
+        json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "pages": "all", "rect": [20, 200, 180, 250], "out": "signed.pdf" }),
+    );
+    assert!(dir.join("signed.pdf").exists());
+    let list = ok(&mut a, "sign_list", json!({ "doc": doc }));
+    assert_eq!(list["count"], 3, "{list}");
+    let mut pages: Vec<u64> = list["signatures"].as_array().unwrap().iter().filter_map(|s| s["page"].as_u64()).collect();
+    pages.sort_unstable();
+    assert_eq!(pages, [1, 2, 3], "{list}");
+    for s in list["signatures"].as_array().unwrap() {
+        assert_eq!((s["visible"].as_bool(), s["signed"].as_bool(), s["status"].as_str()), (Some(true), Some(true), Some("unknown")), "{s}");
+    }
+    // A range signs only its pages; the same doc signed again is still coherent.
+    let doc2 = ok(&mut a, "doc_open", json!({ "path": "b.pdf" }))["doc"].as_u64().unwrap();
+    ok(
+        &mut a,
+        "sign_document",
+        json!({ "doc": doc2, "id": "ada.p12", "password": "secret1", "pages": "2", "rect": [20, 200, 180, 250], "out": "signed2.pdf" }),
+    );
+    let list = ok(&mut a, "sign_list", json!({ "doc": doc2 }));
+    assert_eq!(list["count"], 1, "{list}");
+    assert_eq!(list["signatures"][0]["page"], 2);
+    assert_eq!(list["signatures"][0]["revision"], 2);
+}
+
 #[test]
 fn optimizing_through_tools() {
     let dir = workdir("optimize");

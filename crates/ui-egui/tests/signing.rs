@@ -489,3 +489,64 @@ fn an_imported_digital_id_can_be_removed() {
     assert_eq!(h.state().sign_draft.as_ref().map(|d| d.step), Some(SignStep::Configure));
     h.get_by_label("Configure a Digital ID for Signing");
 }
+
+const THREE_PAGES: &[u8] = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 6 0 R /Resources << /Font << /F1 7 0 R >> >> >> endobj
+4 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 8 0 R /Resources << /Font << /F1 7 0 R >> >> >> endobj
+5 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 9 0 R /Resources << /Font << /F1 7 0 R >> >> >> endobj
+6 0 obj << /Length 39 >> stream
+BT /F1 14 Tf 20 150 Td (Page one) Tj ET
+endstream endobj
+7 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+8 0 obj << /Length 39 >> stream
+BT /F1 14 Tf 20 150 Td (Page two) Tj ET
+endstream endobj
+9 0 obj << /Length 41 >> stream
+BT /F1 14 Tf 20 150 Td (Page three) Tj ET
+endstream endobj
+trailer << /Root 1 0 R >>
+%%EOF";
+
+/// "Sign All Pages" (#1673): the Pages option repeats the drawn signature on every page.
+#[test]
+fn signing_all_pages_at_once() {
+    use pdfcraft_ui_egui::SignPages;
+    let dir = dir().join("all-pages");
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = dir.join("signed.pdf");
+    let save = out.clone();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("contract.pdf", None, THREE_PAGES.to_vec()).expect("opens");
+        app.set_option("left", "closed").unwrap();
+        app.save_override = Some(save.to_string_lossy().into_owned());
+        app
+    });
+    h.run_steps(6);
+    let p12 = concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12");
+    let cert = pdfcraft_engine::sign::pkcs12::open(&std::fs::read(p12).unwrap(), "test").unwrap().certificate;
+    h.state_mut().start_signing(0, Some([20.0, 110.0, 280.0, 140.0]), None, None);
+    let entry = h.state_mut().add_digital_id(p12, &cert);
+    let d = h.state_mut().sign_draft.as_mut().unwrap();
+    (d.selected, d.step, d.password, d.pages) = (Some(entry), SignStep::SignAs, "test".into(), SignPages::All);
+    h.run_steps(4);
+    h.get_by_label("Sign").click();
+    h.run_steps(4);
+    // A click can be swallowed while the fresh dialog settles; sign again if it is still open.
+    if let Some(sign) = h.query_all_by_label("Sign").last() {
+        sign.click();
+    }
+    h.run_steps(6);
+    let s = h.state();
+    assert_eq!(s.sign_draft.as_ref().and_then(|d| d.error.clone()), None);
+    let sigs = &s.session.get(s.views[0].id).unwrap().signatures;
+    let signed: Vec<_> = sigs.iter().filter(|x| x.signed).collect();
+    assert_eq!(signed.len(), 3, "{sigs:?}");
+    let mut pages: Vec<_> = signed.iter().filter_map(|x| x.page).collect();
+    pages.sort_unstable();
+    assert_eq!(pages, [0, 1, 2], "one visible signed field on each page");
+    assert!(signed.iter().all(|x| x.visible));
+}

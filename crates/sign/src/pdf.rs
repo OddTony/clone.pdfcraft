@@ -1862,6 +1862,74 @@ fn sign_inner(
     Ok(out)
 }
 
+/// [`sign`] on every page in `pages` (0-based, in the order given, each at most once): every
+/// page gets a new signature field of its own, showing the same appearance and signed in
+/// turn, so the last signature covers the earlier revisions (Foxit's "Sign All Pages").
+/// `opts.field` may not be used — each page needs a field of its own — and `opts.rect`
+/// places the appearance in the same spot on every page. `opts.new_field_name` applies to
+/// the first page signed; the rest take the next free `Signature{i}` name. `opts.certify`,
+/// when set, certifies the last signature only: an earlier DocMDP would refuse the
+/// signature fields the later pages still add (P=1) or never cover the file's end.
+pub fn sign_each(doc: &Document, id: &DigitalId, opts: &SignOptions, pages: &[usize]) -> Result<Vec<u8>, SignError> {
+    sign_each_inner(doc, id, opts, pages, None)
+}
+
+/// [`sign_each`], embedding an RFC 3161 timestamp in each signature (PAdES B-T). A rejected
+/// or malformed token fails the signing at that page.
+pub fn sign_each_with_timestamp(
+    doc: &Document,
+    id: &DigitalId,
+    opts: &SignOptions,
+    pages: &[usize],
+    tsa: &dyn crate::timestamp::TimestampAuthority,
+) -> Result<Vec<u8>, SignError> {
+    sign_each_inner(doc, id, opts, pages, Some(tsa))
+}
+
+fn sign_each_inner(
+    doc: &Document,
+    id: &DigitalId,
+    opts: &SignOptions,
+    pages: &[usize],
+    tsa: Option<&dyn crate::timestamp::TimestampAuthority>,
+) -> Result<Vec<u8>, SignError> {
+    if opts.field.is_some() {
+        return Err(SignError::Pdf("signing several pages needs a new signature field on each, not an existing field".into()));
+    }
+    // Every page must exist before the first signature is produced.
+    let count = pdfcraft_annot::page_refs(doc).map_err(|e| SignError::Pdf(e.to_string()))?.len();
+    let mut seen = HashSet::new();
+    let mut todo = Vec::with_capacity(pages.len());
+    for &p in pages {
+        if p >= count {
+            return Err(SignError::Pdf(format!("page {} does not exist", p + 1)));
+        }
+        if seen.insert(p) {
+            todo.push(p);
+        }
+    }
+    if todo.is_empty() {
+        return Err(SignError::Pdf("no pages to sign".into()));
+    }
+    let mut doc = doc.clone();
+    let mut out = Vec::new();
+    for (i, &p) in todo.iter().enumerate() {
+        let last = i + 1 == todo.len();
+        let o = SignOptions {
+            page: p,
+            new_field_name: if i == 0 { opts.new_field_name.clone() } else { None },
+            certify: if last { opts.certify } else { None },
+            ..opts.clone()
+        };
+        out = sign_inner(&doc, id, &o, tsa)?;
+        // The next signature is an incremental update on this one: reopen it.
+        if !last {
+            doc = Document::open(Arc::new(out.clone()))?;
+        }
+    }
+    Ok(out)
+}
+
 /// Append a document timestamp (ISO 32000-2 §12.8.2.2): a standalone signature dictionary
 /// whose `/Contents` is an RFC 3161 token covering the whole current file (`/ETSI.RFC3161`).
 /// The transport is the caller's; a rejected or malformed token produces no file.

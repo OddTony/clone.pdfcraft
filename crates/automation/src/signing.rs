@@ -145,6 +145,12 @@ impl Automation {
         let doc = self.doc(a)?;
         let doc_id = doc.id;
         let field = a.opt_str("field")?.map(str::to_string);
+        // `pages` signs a new field of its own on each listed page ("all", or "1-3, 6");
+        // it cannot be combined with `page` or `field`.
+        let pages = a.opt_str("pages")?.map(str::to_string);
+        if pages.is_some() && (a.get("page").is_some_and(|v| !v.is_null()) || field.is_some()) {
+            return Err(bad("pages cannot be used with page or field"));
+        }
         let page = match a.opt_int("page")? {
             Some(p) if p >= 1 && (p as usize) <= doc.info.pages.len() => p as usize - 1,
             Some(p) => return Err(bad(format!("page {p} does not exist"))),
@@ -177,6 +183,11 @@ impl Automation {
             Some(g) if rect.is_none() && field.is_none() => return Err(bad(format!("graphic {g} needs a visible signature: pass rect or field"))),
             Some(g) => Some(self.signature_graphic(g)?),
         };
+        // A signature on every page must have its appearance: an invisible signature already
+        // covers the whole document, so one on each page would only repeat it.
+        if pages.is_some() && rect.is_none() {
+            return Err(bad("pages needs a visible signature: pass rect"));
+        }
         let out = self.resolve(a.str("out")?, true)?;
         let opts = SignOptions {
             field,
@@ -189,9 +200,14 @@ impl Automation {
             graphic,
             ..SignOptions::default()
         };
-        let signed = self.session.sign(doc_id, &id, opts).map_err(|e| match e {
-            // A graphic the signer refuses is the caller's to fix.
+        let signed = match &pages {
+            Some(range) => self.session.sign_each_pages(doc_id, &id, opts, Some(range.as_str())),
+            None => self.session.sign(doc_id, &id, opts),
+        }
+        .map_err(|e| match e {
+            // A graphic the signer refuses is the caller's to fix; so is a bad page range.
             pdfcraft_engine::EditError::Sign(m) if m.starts_with("the signature graphic") => bad(m),
+            pdfcraft_engine::EditError::Print(m) => bad(format!("pages: {m}")),
             e => failed(e),
         })?;
         write_atomic(&out, &signed)?;
