@@ -216,21 +216,25 @@ pub fn install_fonts_for(ctx: &egui::Context, cjk: CjkPreference) {
 
 /// The name of the installed face [`installed_font_definitions`] may add after the embedded ones.
 pub const SYSTEM_FALLBACK: &str = "system-fallback";
+/// The name of the installed Chinese (Hans/Hant) fallback face [`installed_font_definitions`] may add.
+pub const SYSTEM_HAN_FALLBACK: &str = "system-han-fallback";
 /// The name of the installed Devanagari (Hindi) face [`installed_font_definitions`] may add.
 pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
 /// The name of the installed Telugu face [`installed_font_definitions`] may add.
 pub const SYSTEM_TELUGU_FALLBACK: &str = "system-telugu-fallback";
 
-/// What [`install_fonts_for`] installs: [`font_definitions_for`], then, on desktop, one face
-/// already installed on this machine. It only draws characters no embedded face has.
+/// What [`install_fonts_for`] installs: [`font_definitions_for`], then installed desktop
+/// fallback faces for characters missing from the embedded fonts.
 ///
 /// - In a Chinese interface built without a `Hans` craft-fonts face (every release so far,
 ///   #826), it is a Chinese system face (Microsoft YaHei, PingFang, …), placed before the
 ///   Japanese craft-fonts faces: they lack hundreds of the catalog's characters (欢, 导, 签, …),
 ///   and one line drawn from two faces with different vertical metrics would not sit on one
 ///   baseline.
-/// - Otherwise it is the last fallback of every family (an Arabic file name in a build without
-///   craft-fonts).
+/// - In other languages, the general installed face (e.g. for Arabic file names in a build
+///   without craft-fonts) is placed near the end of every family; when embedded Chinese faces are
+///   absent, an installed Chinese fallback face is appended after it so Chinese document
+///   titles draw glyphs rather than replacement boxes.
 ///
 /// An installed Devanagari face and an installed Telugu face, when there are, end every family
 /// just before that one, so Hindi and Telugu text draw in a build without such faces (#1531).
@@ -268,6 +272,18 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                     Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
                 };
                 stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
+            }
+        }
+        // In non-Chinese UI, when embedded Chinese faces are absent, append an installed Han face
+        // as late fallback so Chinese document titles/text render glyphs instead of boxes, without
+        // displacing Arabic/Hindi/Telugu or overriding current locale glyph priority.
+        if cjk == CjkPreference::Default && pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+            let han_data = fallback(Need::Hans).or_else(|| fallback(Need::Hant));
+            if let Some(data) = han_data {
+                fonts.font_data.insert(SYSTEM_HAN_FALLBACK.to_owned(), data);
+                for stack in fonts.families.values_mut() {
+                    stack.push(SYSTEM_HAN_FALLBACK.to_owned());
+                }
             }
         }
     }

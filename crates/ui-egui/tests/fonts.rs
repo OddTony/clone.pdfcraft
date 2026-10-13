@@ -124,8 +124,8 @@ fn telugu_ui_text_uses_craft_fonts() {
     }
 }
 
-/// On a machine with a suitable installed font, the installed definitions end every family
-/// with it and Arabic text has glyphs; the embedded-only definitions never name it.
+/// The installed general face remains after embedded/script faces and before optional Han
+/// fallback; Arabic text has glyphs, and embedded-only definitions never name it.
 #[test]
 fn system_fallback_fills_missing_scripts() {
     assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_FALLBACK));
@@ -136,7 +136,11 @@ fn system_fallback_fills_missing_scripts() {
         return;
     }
     for (family, stack) in &defs.families {
-        assert_eq!(stack.last().map(String::as_str), Some(theme::SYSTEM_FALLBACK), "{family:?}: {stack:?}");
+        assert_eq!(
+            stack.iter().rev().find(|name| name.as_str() != theme::SYSTEM_HAN_FALLBACK).map(String::as_str),
+            Some(theme::SYSTEM_FALLBACK),
+            "{family:?}: {stack:?}"
+        );
         assert_eq!(stack.iter().filter(|n| *n == theme::SYSTEM_FALLBACK).count(), 1, "{family:?}");
     }
     let mut fonts = Fonts::new(TextOptions::default(), defs);
@@ -242,11 +246,43 @@ fn chinese_ui_uses_an_installed_chinese_face() {
             assert!(missing.is_empty(), "{cjk:?} {id:?} lacks {missing}");
         }
     }
-    // Other languages keep the installed face last, as before.
+    // Other languages keep the installed general face before/near the end, with Han fallback as last if added.
     let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
     for stack in defs.families.values() {
-        assert!(stack.iter().position(|n| n == theme::SYSTEM_FALLBACK).is_none_or(|i| i + 1 == stack.len()), "{stack:?}");
+        if let Some(pos) = stack.iter().position(|n| n == theme::SYSTEM_FALLBACK) {
+            let remaining = stack.len() - 1 - pos;
+            assert!(remaining <= 1, "SYSTEM_FALLBACK should be last or followed only by Han fallback: {stack:?}");
+            if remaining == 1 {
+                assert_eq!(stack.last().map(String::as_str), Some(theme::SYSTEM_HAN_FALLBACK));
+            }
+        }
     }
+}
+
+/// In non-Chinese UI (CjkPreference::Default), installed Chinese system fallback fonts
+/// (Hans or Hant) must be appended as late fallback so Chinese document titles
+/// (e.g. '阿里巴巴_人工智能应用发展研究报告2026.pdf') can render glyphs instead of boxes,
+/// while Arabic/Hindi/Telugu are not lost.
+#[test]
+fn default_cjk_draws_chinese_title_when_system_han_is_installed() {
+    const TITLE: &str = "阿里巴巴_人工智能应用发展研究报告2026.pdf";
+    let hans_defs = theme::installed_font_definitions(theme::CjkPreference::SimplifiedChinese);
+    let hant_defs = theme::installed_font_definitions(theme::CjkPreference::TraditionalChinese);
+    let mut hans_fonts = Fonts::new(TextOptions::default(), hans_defs);
+    let mut hant_fonts = Fonts::new(TextOptions::default(), hant_defs);
+
+    let system_han_available = families().iter().any(|id| hans_fonts.has_glyphs(id, TITLE) || hant_fonts.has_glyphs(id, TITLE));
+    if !system_han_available {
+        eprintln!("skipping default_cjk_draws_chinese_title_when_system_han_is_installed: no Han font available in environment");
+        return;
+    }
+
+    let default_defs = theme::installed_font_definitions(theme::CjkPreference::Default);
+    let mut default_fonts = Fonts::new(TextOptions::default(), default_defs);
+    for id in families() {
+        assert!(default_fonts.has_glyphs(&id, TITLE), "{id:?} lacks {TITLE}");
+    }
+    assert!(layout_widths(&mut default_fonts, TITLE).iter().all(|w| w.is_finite() && *w > 0.0));
 }
 
 /// Without craft-fonts the interface fonts still install and lay out any text (Japanese falls
