@@ -18,6 +18,15 @@ pub enum Availability {
     Provider,
 }
 
+impl Availability {
+    /// Whether to surface this in a tool list. `Ready` and `Provider` both work today — a
+    /// `Provider` item just needs the user to configure an optional service — while `Planned`
+    /// items don't exist yet and are hidden until they ship, instead of being shown unusable.
+    pub fn is_visible(self) -> bool {
+        !matches!(self, Availability::Planned(_))
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct ToolItem {
     pub label: &'static str,
@@ -42,6 +51,17 @@ pub struct ToolGroup {
     pub badge: Option<&'static str>,
     pub availability: Availability,
     pub sections: &'static [ToolSection],
+}
+
+impl ToolGroup {
+    /// Whether the group has anything to show once not-ready items are filtered out. The
+    /// group-level `availability` is a stale "when does the whole group finish" estimate, not a
+    /// visibility switch — some groups (e.g. `edit`) carry a `Planned` group availability even
+    /// though most of their items are individually `Ready`, so visibility must be computed from
+    /// the items themselves.
+    pub fn is_visible(&self) -> bool {
+        self.sections.iter().any(|s| s.items.iter().any(|i| i.availability.is_visible()))
+    }
 }
 
 const fn item(label: &'static str, icon: &'static str, command: &'static str, availability: Availability) -> ToolItem {

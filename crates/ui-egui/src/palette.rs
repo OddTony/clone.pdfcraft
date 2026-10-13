@@ -60,7 +60,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
             ));
         }
     }
-    for g in TOOL_GROUPS {
+    for g in TOOL_GROUPS.iter().filter(|g| g.is_visible()) {
         if let Some(s) = score(tl!(g.label), &q).or_else(|| score(g.label, &q)) {
             hits.push((
                 s,
@@ -76,6 +76,9 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
         }
         for sec in g.sections {
             for i in sec.items {
+                if !i.availability.is_visible() {
+                    continue;
+                }
                 if pdfcraft_engine::commands::command(i.command).is_some() {
                     continue; // listed above as a command
                 }
