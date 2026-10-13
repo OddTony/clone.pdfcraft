@@ -614,9 +614,7 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     view.rotate_view(true);
                 }
                 // A click switches to the next reading theme; the choice list is in Menu ▸ View.
-                if icons::button(ui, "palette", 32.0, reading_theme != crate::canvas::PageTheme::Normal, tl!("Reading theme (click to switch)"))
-                    .clicked()
-                {
+                if icons::button(ui, "palette", 32.0, reading_theme != crate::canvas::PageTheme::Normal, tl!("Switch page theme")).clicked() {
                     page_display = Some("view.reading_theme.next");
                 }
                 // Not `columns-2` while fitting the page: that is the two-page view's icon.
