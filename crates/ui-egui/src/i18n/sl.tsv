@@ -2212,6 +2212,7 @@ signature pad	Type	Vtipkaj
 	These objects could not be moved. Select them again and try a smaller move.	Teh objektov ni bilo mogoče premakniti. Izberite jih znova in poskusite z manjšim premikom.
 	This file is already as small as it can be made ({size}). No copy was saved.	Ta datoteka je že tako majhna, kot je mogoče ({size}). Kopija ni bila shranjena.
 	This page contains objects that cannot be selected together.	Ta stran vsebuje objekte, ki jih ni mogoče izbrati skupaj.
+	Text and added items can't be deleted with this selection.	Besedila in dodanih elementov s tem izborom ni mogoče izbrisati.
 	Vertical text cannot be moved with this selection.	Navpičnega besedila s tem izborom ni mogoče premakniti.
 key	Ctrl	Ctrl
 key	Delete	Delete

@@ -4,17 +4,21 @@
 use std::collections::HashMap;
 
 use egui::{Color32, Pos2, Rect, Stroke};
-use pdfcraft_engine::{Document, Edit, EditableObject, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget};
+use pdfcraft_engine::{Document, Edit, EditableObject, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget, PagePath};
 use pdfcraft_render::DocInfo;
 
 use crate::canvas::{DocView, PageXform};
 
 const BLUE: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);
+/// The size and reach of a resize handle (screen pixels), as for images.
+const HANDLE: f32 = 8.0;
 
 #[derive(Default)]
 pub(crate) struct ObjectSelection {
     generation: Option<u64>,
     cache: HashMap<usize, Result<Vec<EditableObject>, String>>,
+    /// One page's vector paths, for hit tests: each press would parse the page again.
+    paths: Option<(usize, Vec<PagePath>)>,
     page: Option<usize>,
     selected: Vec<EditableObject>,
     gesture: Option<Gesture>,
@@ -32,11 +36,21 @@ struct Gesture {
     now: Pos2,
     marquee: bool,
     additive: bool,
+    /// The resize handle being dragged (see [`crate::edit_text_ui::corners`]).
+    corner: Option<usize>,
 }
 
 impl ObjectSelection {
     pub fn count(&self) -> usize {
         self.selected.len()
+    }
+
+    /// The selection's only object, when that is a vector path: it gets resize handles.
+    fn single_path(&self) -> Option<&EditableObject> {
+        match self.selected.as_slice() {
+            [object] if object.target.kind == ObjectKind::Path => Some(object),
+            _ => None,
+        }
     }
 
     /// A preview belongs to the active, focused document. Returning from another tab or a
@@ -66,6 +80,7 @@ impl ObjectSelection {
         let generation = doc.edit_generation();
         if self.generation != Some(generation) {
             self.cache.clear();
+            self.paths = None;
             self.gesture = None;
             let expected = self.pending.take();
             let remapped = self.page.zip(expected).and_then(|(page, expected)| {
@@ -76,7 +91,13 @@ impl ObjectSelection {
                         o.target.kind == old.target.kind
                             && o.content_type == old.content_type
                             && o.text == old.text
-                            && o.rect.iter().zip(old.rect).all(|(a, b)| (a - b).abs() < 0.01)
+                            // Path edits keep the paint order, and a resized stroke's box lands
+                            // only near the one asked for (its width scales too).
+                            && if old.target.kind == ObjectKind::Path {
+                                o.target == old.target
+                            } else {
+                                o.rect.iter().zip(old.rect).all(|(a, b)| (a - b).abs() < 0.01)
+                            }
                     });
                     let object = matches.next()?;
                     if matches.next().is_some() || out.iter().any(|o: &EditableObject| o.target == object.target) {
@@ -143,6 +164,7 @@ fn path_hit<'a>(
     doc: &Document,
     objects: &'a [EditableObject],
     selected: &[EditableObject],
+    paths: &mut Option<(usize, Vec<PagePath>)>,
     p: Pos2,
 ) -> Option<&'a EditableObject> {
     let candidate =
@@ -151,14 +173,66 @@ fn path_hit<'a>(
     if !objects.iter().any(|o| candidate(o) && screen(xf, &doc.info, page, o).expand(2.0).contains(p)) {
         return None;
     }
-    let info = doc.info.pages.get(page)?;
-    let user = |q: Pos2| {
-        let (x, y) = xf.screen_to_view(q);
-        info.view_to_user(x, y).map(f64::from)
-    };
-    let (a, b) = (user(p), user(p + egui::vec2(2.0, 0.0)));
-    let index = doc.path_at(page, a, (b[0] - a[0]).hypot(b[1] - a[1]))?;
+    let (a, b) = (user(xf, &doc.info, page, p)?, user(xf, &doc.info, page, p + egui::vec2(2.0, 0.0))?);
+    if paths.as_ref().is_none_or(|(cached, _)| *cached != page) {
+        *paths = Some((page, doc.page_paths(page).unwrap_or_default()));
+    }
+    let index = paths.as_ref()?.1.iter().rposition(|path| path.contains(a, (b[0] - a[0]).hypot(b[1] - a[1])))?;
     objects.iter().find(|o| o.target == ObjectTarget { kind: ObjectKind::Path, index }).filter(|o| candidate(o))
+}
+
+/// A screen point in user space.
+fn user(xf: &PageXform, info: &DocInfo, page: usize, q: Pos2) -> Option<[f64; 2]> {
+    let (x, y) = xf.screen_to_view(q);
+    Some(info.pages.get(page)?.view_to_user(x, y).map(f64::from))
+}
+
+/// The box (screen) a drag of resize handle `corner` by `delta` gives `b`: the opposite corner
+/// stays. None once the box would be empty or turned inside out.
+fn resized(b: Rect, corner: usize, delta: egui::Vec2) -> Option<Rect> {
+    let corners = crate::edit_text_ui::corners(b);
+    let (grabbed, fixed) = (*corners.get(corner)?, *corners.get(3_usize.checked_sub(corner)?)?);
+    let moved = grabbed + handle_delta(b, delta);
+    let same_side = |extent: f32, m: f32, g: f32, f: f32| extent < HANDLE || if g < f { m < f } else { m > f };
+    (same_side(b.width(), moved.x, grabbed.x, fixed.x) && same_side(b.height(), moved.y, grabbed.y, fixed.y))
+        .then(|| Rect::from_two_pos(fixed, moved))
+}
+
+/// A handle drag by `delta`, less its motion along an axis on which `b` (screen) is thinner
+/// than a handle: lengthening a hairline rule with an unsteady hand neither flips nor thickens it.
+fn handle_delta(b: Rect, delta: egui::Vec2) -> egui::Vec2 {
+    egui::vec2(if b.width() < HANDLE { 0.0 } else { delta.x }, if b.height() < HANDLE { 0.0 } else { delta.y })
+}
+
+/// The user-space box of `object` once handle `corner` is dragged from `start` to `now`. The
+/// fixed sides come from the object and the drag goes through the linear map, so a large
+/// crop-box origin can neither shift them nor round a small drag away.
+fn resized_user(xf: &PageXform, doc: &Document, page: usize, object: &EditableObject, corner: usize, start: Pos2, now: Pos2) -> Option<[f64; 4]> {
+    let b = screen(xf, &doc.info, page, object);
+    resized(b, corner, now - start)?;
+    let corners = crate::edit_text_ui::corners(b);
+    let along = |from: Pos2, to: Pos2| {
+        let (a, b) = (xf.screen_to_view(from), xf.screen_to_view(to));
+        doc.object_move_offset(page, [f64::from(b.0 - a.0), f64::from(b.1 - a.1)]).ok()
+    };
+    // Which sides the grabbed corner is on, whatever the page and view rotation.
+    let span = along(*corners.get(3_usize.checked_sub(corner)?)?, *corners.get(corner)?)?;
+    let [dx, dy] = along(start, start + handle_delta(b, now - start))?;
+    let mut rect = object.rect;
+    rect[if span[0] > 0.0 { 2 } else { 0 }] += dx;
+    rect[if span[1] > 0.0 { 3 } else { 1 }] += dy;
+    (rect[2] > rect[0] && rect[3] > rect[1] && rect != object.rect).then_some(rect)
+}
+
+/// The resize handle of the selected path's box `b` (screen) under `p`. Inside a small box
+/// they reach less far, so a press in its middle still moves it.
+fn handle_at(b: Rect, p: Pos2) -> Option<usize> {
+    let reach = if b.contains(p) { HANDLE.min(b.width().min(b.height()) / 3.0) } else { HANDLE };
+    crate::edit_text_ui::corners(b).iter().position(|c| c.distance(p) < reach)
+}
+
+fn corner_cursor(corner: usize) -> egui::CursorIcon {
+    if matches!(corner, 0 | 3) { egui::CursorIcon::ResizeNwSe } else { egui::CursorIcon::ResizeNeSw }
 }
 
 fn modified(ui: &egui::Ui) -> bool {
@@ -268,6 +342,15 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
                 if s.selected.is_empty() {
                     s.clear();
                 }
+            } else if let Some(corner) = gesture.corner {
+                if gesture.start.distance(gesture.now) > 3.0
+                    && view.pending_edit.is_none()
+                    && let Some(object) = s.single_path().cloned()
+                    && let Some(rect) = resized_user(xf, doc, page, &object, corner, gesture.start, gesture.now)
+                {
+                    view.pending_edit = Some(Edit::TransformPath { page, index: object.target.index, rect });
+                    s.pending = Some(vec![object]);
+                }
             } else if gesture.start.distance(gesture.now) > 3.0 && view.pending_edit.is_none() {
                 let (a, b) = (xf.screen_to_view(gesture.start), xf.screen_to_view(gesture.now));
                 match doc.object_move_offset(page, [f64::from(b.0 - a.0), f64::from(b.1 - a.1)]) {
@@ -278,16 +361,24 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         } else {
             s.gesture = Some(gesture);
         }
-        ui.ctx().set_cursor_icon(if gesture.marquee { egui::CursorIcon::Crosshair } else { egui::CursorIcon::Grabbing });
+        ui.ctx().set_cursor_icon(match gesture.corner {
+            Some(corner) => corner_cursor(corner),
+            None if gesture.marquee => egui::CursorIcon::Crosshair,
+            None => egui::CursorIcon::Grabbing,
+        });
         return true;
     }
     let Some(p) = pointer.filter(|p| xf.rect.contains(*p) && ui.clip_rect().contains(*p) && resp.rect.contains(*p)) else {
         return s.page == Some(page) && !s.selected.is_empty();
     };
+    // A handle sits on the box's edge, half outside it: it is looked for before the box.
+    let handle = s.single_path().filter(|_| s.page == Some(page)).and_then(|o| handle_at(screen(xf, info, page, o), p));
     if !pressed {
         if s.page == Some(page) && !s.selected.is_empty() {
             let union = s.selected.iter().fold(Rect::NOTHING, |r, o| r.union(screen(xf, info, page, o)));
-            if union.contains(p) {
+            if let Some(corner) = handle {
+                ui.ctx().set_cursor_icon(corner_cursor(corner));
+            } else if union.contains(p) {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
             }
             return true;
@@ -307,16 +398,16 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
     let additive = modified(ui);
     // A page-sized background image must not hide editable labels, added notes or the vector
     // paths drawn over it. Within each kind, prefer the last object as the ordinary single-item
-    // tools do. Vector paths only join a selection: a plain press on artwork starts a marquee.
-    // Any other image still wins over a path without comparing paint order; the inventory
-    // doesn't carry image op indices yet.
+    // tools do. A press on a path's painted shape takes the path (a plain one selects it alone);
+    // a page-covering path is left to the marquee. Any other image still wins over a path
+    // without comparing paint order; the inventory doesn't carry image op indices yet.
     let boxed = |kind: ObjectKind| objects.iter().rev().find(|o| o.target.kind == kind && screen(xf, info, page, o).expand(2.0).contains(p));
     let image = boxed(ObjectKind::Image);
     let selected: &[EditableObject] = if s.page == Some(page) { &s.selected } else { &[] };
     let hit = boxed(ObjectKind::Added)
         .or_else(|| boxed(ObjectKind::Text))
         .or_else(|| image.filter(|o| !covers_page(info, page, o)))
-        .or_else(|| additive.then(|| path_hit(xf, page, doc, &objects, selected, p)).flatten())
+        .or_else(|| path_hit(xf, page, doc, &objects, selected, &mut s.paths, p))
         .or(image);
     if additive {
         if s.page != Some(page) {
@@ -337,29 +428,37 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
                 s.notice = Some(tl!("Select at most 1000 objects at a time.").into());
             }
         } else {
-            s.gesture = Some(Gesture { start: p, now: p, marquee: true, additive: true });
+            s.gesture = Some(Gesture { start: p, now: p, marquee: true, additive: true, corner: None });
         }
         leave_single(view);
         view.current = page;
         return true;
     }
     if s.page == Some(page) && !s.selected.is_empty() {
+        if handle.is_some() {
+            s.gesture = Some(Gesture { start: p, now: p, marquee: false, additive: false, corner: handle });
+            return true;
+        }
         let union = s.selected.iter().fold(Rect::NOTHING, |r, o| r.union(screen(xf, info, page, o)));
         if union.contains(p) && !resp.double_clicked() {
-            s.gesture = Some(Gesture { start: p, now: p, marquee: false, additive: false });
+            s.gesture = Some(Gesture { start: p, now: p, marquee: false, additive: false, corner: None });
             return true;
         }
     }
     // The frame of the paragraph open for typing takes hold of the box, as in Acrobat: a click
-    // selects it (for the arrow keys), a drag moves it. Its text keeps the caret.
-    if let Some(block) = view.line_editor.as_ref().filter(|e| e.page == page && !e.has_changes()).map(|e| e.block)
-        && let Some(object) = objects.iter().find(|o| o.target == ObjectTarget { kind: ObjectKind::Text, index: block })
-        && on_frame(screen(xf, info, page, object), p)
-    {
+    // selects it (for the arrow keys), a drag moves it. Its text keeps the caret. A vector path
+    // is taken the same way by its painted shape.
+    let frame = view
+        .line_editor
+        .as_ref()
+        .filter(|e| e.page == page && !e.has_changes())
+        .and_then(|e| objects.iter().find(|o| o.target == ObjectTarget { kind: ObjectKind::Text, index: e.block }))
+        .filter(|o| on_frame(screen(xf, info, page, o), p));
+    if let Some(object) = frame.or(hit.filter(|o| o.target.kind == ObjectKind::Path)) {
         s.clear();
         s.page = Some(page);
         s.selected.push(object.clone());
-        s.gesture = Some(Gesture { start: p, now: p, marquee: false, additive: false });
+        s.gesture = Some(Gesture { start: p, now: p, marquee: false, additive: false, corner: None });
         leave_single(view);
         view.current = page;
         return true;
@@ -370,7 +469,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
     }
     leave_single(view);
     s.page = Some(page);
-    s.gesture = Some(Gesture { start: p, now: p, marquee: true, additive: false });
+    s.gesture = Some(Gesture { start: p, now: p, marquee: true, additive: false, corner: None });
     view.current = page;
     true
 }
@@ -385,16 +484,39 @@ fn on_frame(r: Rect, p: Pos2) -> bool {
 const FRAME_REACH: f32 = 6.0;
 
 /// The arrow keys move the selected image or objects a point, Shift and an arrow ten points,
-/// as in Acrobat. They are taken before the view turns the page with them.
+/// as in Acrobat. They are taken before the view turns the page with them. Delete removes the
+/// selected objects.
 pub(crate) fn nudge_keys(ctx: &egui::Context, view: &mut DocView, doc: &Document) {
-    if ctx.egui_wants_keyboard_input() || view.pending_edit.is_some() {
+    // The page grid has keys of its own, and the selection is out of sight there.
+    if ctx.egui_wants_keyboard_input() || view.pending_edit.is_some() || view.organize {
         return;
     }
     let image = view.image_selection.as_ref().filter(|s| !s.dragging()).map(|s| (s.page, s.index));
-    let objects = view.objects.page.filter(|_| !view.objects.selected.is_empty() && view.objects.gesture.is_none());
+    // An undo earlier in this frame leaves the selection naming objects that may have moved in
+    // the inventory; the view finds them again before it draws.
+    let objects = view
+        .objects
+        .page
+        .filter(|_| !view.objects.selected.is_empty() && view.objects.gesture.is_none() && view.objects.generation == Some(doc.edit_generation()));
+    use egui::{Key, Modifiers};
+    // A group selection never coexists with a single selected image or added item
+    // (`leave_single`); taking the key also keeps their own Delete from firing. With the
+    // pointer over a panel, Delete is the panel's (the Pages panel deletes pages with it).
+    let over_document = ctx.input(|i| i.pointer.hover_pos()).is_none_or(|p| view.viewport_rect().contains(p));
+    if let Some(page) = objects.filter(|_| over_document && view.line_editor.is_none() && view.content.draft.is_none())
+        && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Delete) || i.consume_key(Modifiers::NONE, Key::Backspace))
+    {
+        let s = &mut view.objects;
+        if s.selected.iter().any(|o| matches!(o.target.kind, ObjectKind::Text | ObjectKind::Added)) {
+            s.notice = Some(tl!("Text and added items can't be deleted with this selection.").into());
+        } else {
+            view.pending_edit = Some(Edit::DeleteObjects { page, objects: s.selected.iter().map(|o| o.target).collect() });
+            s.clear();
+        }
+        return;
+    }
     let Some(page) = objects.or(image.map(|(page, _)| page)) else { return };
     let Some(xf) = view.page_xform(page) else { return };
-    use egui::{Key, Modifiers};
     let mut step = egui::Vec2::ZERO;
     ctx.input_mut(|i| {
         for (key, direction) in [
@@ -438,13 +560,22 @@ pub(crate) fn paint(painter: &egui::Painter, xf: &PageXform, page: usize, info: 
     if selection.page != Some(page) {
         return;
     }
-    let delta = selection.gesture.filter(|g| !g.marquee).map_or(egui::Vec2::ZERO, |g| g.now - g.start);
+    let drag = selection.gesture.filter(|g| !g.marquee);
+    let delta = drag.map_or(egui::Vec2::ZERO, |g| g.now - g.start);
     let mut union = Rect::NOTHING;
     for object in &selection.selected {
-        let rect = screen(xf, info, page, object).translate(delta);
+        let b = screen(xf, info, page, object);
+        // A handle dragged inside out leaves the box as it was until it comes back.
+        let rect = match drag.and_then(|g| g.corner) {
+            Some(corner) => resized(b, corner, delta).unwrap_or(b),
+            None => b.translate(delta),
+        };
         painter.rect_filled(rect, 0.0, BLUE.gamma_multiply(0.05));
         painter.rect_stroke(rect, 0.0, Stroke::new(1.5, BLUE), egui::StrokeKind::Outside);
         union = union.union(rect);
+    }
+    if selection.single_path().is_some() {
+        crate::edit_text_ui::paint_handles(painter, union);
     }
     if selection.selected.len() > 1 {
         painter.rect_stroke(union.expand(4.0), 0.0, Stroke::new(1.0, BLUE.gamma_multiply(0.7)), egui::StrokeKind::Outside);
@@ -483,6 +614,7 @@ mod tests {
                 "Text used as a clipping path cannot be moved with this selection.",
                 "These objects could not be moved. Select them again and try a smaller move.",
                 "This page contains objects that cannot be selected together.",
+                "Text and added items can't be deleted with this selection.",
             ] {
                 assert_ne!(crate::i18n::tr(lang, label), label, "{}: {label}", language.code);
             }

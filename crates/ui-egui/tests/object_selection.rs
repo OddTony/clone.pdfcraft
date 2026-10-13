@@ -2,7 +2,7 @@
 use egui::{Key, Modifiers, Pos2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
-use pdfcraft_engine::{AddedText, Edit, EditableObject};
+use pdfcraft_engine::{AddedText, Edit, EditableObject, ObjectKind};
 use pdfcraft_ui_egui::PdfCraftApp;
 
 fn fixture(clipping: bool) -> Vec<u8> {
@@ -397,21 +397,26 @@ fn modifier_selection_picks_foreground_text_and_added_items_over_background_artw
 }
 
 #[test]
-fn vector_paths_join_a_selection_on_their_painted_shape() {
+fn vector_paths_are_selected_by_their_painted_shape() {
     // A diagonal stroke from (300, 100) to (380, 180): its box is mostly empty page.
     let mut h = harness_document(false, false, " 0 0 1 RG 3 w 300 100 m 380 180 l S");
     let before = objects(&h);
     assert_eq!(before.len(), 5);
     let line = before.last().unwrap();
-    assert_eq!((line.target.kind, line.content_type), (pdfcraft_engine::ObjectKind::Path, "path"));
+    assert_eq!((line.target.kind, line.content_type), (ObjectKind::Path, "path"));
     let hint = "Shift-click to select several objects. Drag empty space to select an area.";
-    // A plain click on artwork still starts a marquee rather than picking the path.
+    // Inside the line's box, away from its stroke, a press is on empty page.
+    let p = at(&h, 370.0, 390.0);
+    click(&mut h, p, Modifiers::NONE);
+    h.get_by_label(hint);
+    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label(hint);
+    // A plain click on the stroke selects the line alone; a modifier click toggles it.
     let on_line = at(&h, 340.0, 360.0);
     click(&mut h, on_line, Modifiers::NONE);
-    h.get_by_label(hint);
-    // Inside the line's box, away from its stroke.
-    let p = at(&h, 370.0, 390.0);
-    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label("1 object selected");
+    assert!(h.state().views[0].line_editor.is_none() && h.state().views[0].image_selection.is_none());
+    click(&mut h, on_line, Modifiers::COMMAND);
     h.get_by_label(hint);
     click(&mut h, on_line, Modifiers::SHIFT);
     h.get_by_label("1 object selected");
@@ -457,12 +462,15 @@ fn a_page_covering_vector_background_stays_out_of_clicks_and_small_marquees() {
     let before = objects(&h);
     assert_eq!(before.len(), 5);
     assert_eq!(before.last().unwrap().target.kind, pdfcraft_engine::ObjectKind::Path);
+    // A plain click on it starts a marquee instead of selecting it.
+    let p = at(&h, 300.0, 250.0);
+    click(&mut h, p, Modifiers::NONE);
+    h.get_by_label("Shift-click to select several objects. Drag empty space to select an area.");
     // Around the figure only (40..100 across, 130..160 down).
     let (a, b) = (at(&h, 30.0, 120.0), at(&h, 110.0, 170.0));
     drag(&mut h, a, b);
     h.get_by_label("1 object selected");
     // A shift-press on empty page doesn't toggle the background...
-    let p = at(&h, 300.0, 250.0);
     click(&mut h, p, Modifiers::SHIFT);
     h.get_by_label("1 object selected");
     // ...and an additive marquee picks it up only when drawn over most of the page.
@@ -477,4 +485,250 @@ fn a_page_covering_vector_background_stays_out_of_clicks_and_small_marquees() {
     h.get_by_label("4 objects selected");
     assert_eq!(objects(&h), before);
     assert!(!h.state().session.get(h.state().views[0].id).unwrap().dirty);
+}
+
+fn near(a: [f64; 4], b: [f64; 4]) -> bool {
+    a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.01)
+}
+fn undo_label(h: &Harness<'static, PdfCraftApp>) -> Option<String> {
+    let app = h.state();
+    app.session.get(app.views[0].id).unwrap().can_undo().map(str::to_owned)
+}
+fn dirty(h: &Harness<'static, PdfCraftApp>) -> bool {
+    let app = h.state();
+    app.session.get(app.views[0].id).unwrap().dirty
+}
+
+#[test]
+fn a_plain_drag_on_a_vector_path_moves_it_alone() {
+    let mut h = harness_document(false, false, " 0 0 1 RG 3 w 300 100 m 380 180 l S");
+    let before = objects(&h);
+    // From a point on the stroke, 40 points left and 20 up.
+    let (a, b) = (at(&h, 340.0, 360.0), at(&h, 300.0, 340.0));
+    drag(&mut h, a, b);
+    let after = objects(&h);
+    for old in &before {
+        let new = after.iter().find(|o| o.target == old.target).unwrap();
+        let [dx, dy] = if old.target.kind == ObjectKind::Path { [-40.0, 20.0] } else { [0.0, 0.0] };
+        assert!(near(new.rect, [old.rect[0] + dx, old.rect[1] + dy, old.rect[2] + dx, old.rect[3] + dy]), "{old:?} -> {new:?}");
+    }
+    assert_eq!(undo_label(&h).as_deref(), Some("Move object"));
+    h.get_by_label("1 object selected");
+}
+
+#[test]
+fn a_corner_handle_resizes_the_one_selected_path() {
+    // A panel 300..360 across, 360..400 down.
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f");
+    let before = objects(&h);
+    let panel = before.last().unwrap().clone();
+    assert_eq!(panel.target.kind, ObjectKind::Path);
+    assert!(near(panel.rect, [300.0, 100.0, 360.0, 140.0]), "{panel:?}");
+    let p = at(&h, 330.0, 380.0);
+    click(&mut h, p, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    // Its top-right handle dragged past the opposite corner would turn it inside out: ignored.
+    let (a, b) = (at(&h, 360.0, 360.0), at(&h, 280.0, 420.0));
+    drag(&mut h, a, b);
+    assert_eq!(objects(&h), before);
+    assert!(!dirty(&h));
+    h.get_by_label("1 object selected");
+    // Dragged 20 points right and up: the bottom-left corner stays.
+    let b = at(&h, 380.0, 340.0);
+    drag(&mut h, a, b);
+    let after = objects(&h);
+    let resized = after.iter().find(|o| o.target == panel.target).unwrap();
+    assert!(near(resized.rect, [300.0, 100.0, 380.0, 160.0]), "{resized:?}");
+    for old in before.iter().filter(|o| o.target != panel.target) {
+        assert!(after.iter().any(|o| o.target == old.target && near(o.rect, old.rect)), "{old:?}");
+    }
+    assert_eq!(undo_label(&h).as_deref(), Some("Resize object"));
+    h.get_by_label("1 object selected");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.run_steps(4);
+    assert_eq!(objects(&h), before);
+}
+
+#[test]
+fn delete_removes_the_selected_path_and_image_in_one_step() {
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f");
+    let before = objects(&h);
+    assert_eq!(before.len(), 5);
+    // The figure, then the panel.
+    for (x, y) in [(60.0, 145.0), (330.0, 380.0)] {
+        let p = at(&h, x, y);
+        click(&mut h, p, Modifiers::SHIFT);
+    }
+    h.get_by_label("2 objects selected");
+    h.key_press(Key::Delete);
+    h.run_steps(4);
+    let after = objects(&h);
+    assert_eq!(after.len(), 3);
+    assert!(after.iter().all(|o| matches!(o.target.kind, ObjectKind::Text | ObjectKind::Added)), "{after:?}");
+    assert_eq!(undo_label(&h).as_deref(), Some("Delete objects"));
+    h.get_by_label("Shift-click to select several objects. Drag empty space to select an area.");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.run_steps(4);
+    assert_eq!(objects(&h), before);
+}
+
+#[test]
+fn delete_with_text_in_the_selection_explains_and_keeps_everything() {
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f");
+    let before = objects(&h);
+    // The headline, then the panel.
+    for (x, y) in [(55.0, 70.0), (330.0, 380.0)] {
+        let p = at(&h, x, y);
+        click(&mut h, p, Modifiers::SHIFT);
+    }
+    h.get_by_label("2 objects selected");
+    h.key_press(Key::Backspace);
+    h.run_steps(4);
+    assert_eq!(objects(&h), before);
+    assert!(!dirty(&h));
+    h.get_by_label("2 objects selected");
+    assert!(h.state().toast.as_ref().unwrap().0.contains("Text and added items can't be deleted with this selection."));
+}
+
+#[test]
+fn text_over_a_vector_path_still_opens_for_typing() {
+    // A panel 30..230 across, 40..80 down, around the headline.
+    let mut h = harness_document(false, false, " 0.9 0.9 0.6 rg 30 420 200 40 re f");
+    assert_eq!(objects(&h).len(), 5);
+    let p = at(&h, 55.0, 70.0);
+    click(&mut h, p, Modifiers::NONE);
+    assert!(h.state().views[0].line_editor.is_some());
+    h.get_by_label("Shift-click to select several objects. Drag empty space to select an area.");
+    // Beside the headline the press reaches the panel.
+    let p = at(&h, 210.0, 50.0);
+    click(&mut h, p, Modifiers::NONE);
+    assert!(h.state().views[0].line_editor.is_none());
+    h.get_by_label("1 object selected");
+}
+
+#[test]
+fn a_resized_stroke_stays_selected() {
+    // The diagonal's box is 298.5..381.5 across and 318.5..401.5 down.
+    let mut h = harness_document(false, false, " 0 0 1 RG 3 w 300 100 m 380 180 l S");
+    let on_line = at(&h, 340.0, 360.0);
+    click(&mut h, on_line, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    // Its top-right handle, 10 points to the right. The pen scales too, so the new box lands
+    // only near the one asked for.
+    let (a, b) = (at(&h, 381.5, 318.5), at(&h, 391.5, 318.5));
+    drag(&mut h, a, b);
+    let line = objects(&h).last().unwrap().clone();
+    assert_eq!(line.target.kind, ObjectKind::Path);
+    assert!((line.rect[0] - 298.5).abs() < 0.5 && (line.rect[2] - 391.5).abs() < 0.5, "{line:?}");
+    assert_eq!(undo_label(&h).as_deref(), Some("Resize object"));
+    h.get_by_label("1 object selected");
+}
+
+#[test]
+fn a_small_selected_path_still_moves_from_its_middle() {
+    // A 10-point square, 300..310 across and 390..400 down: every point in it is near a corner.
+    let mut h = harness_document(false, false, " 0 0 1 rg 300 100 10 10 re f");
+    let p = at(&h, 305.0, 395.0);
+    click(&mut h, p, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    let b = at(&h, 335.0, 395.0);
+    drag(&mut h, p, b);
+    let square = objects(&h).last().unwrap().clone();
+    assert!(near(square.rect, [330.0, 100.0, 340.0, 110.0]), "{square:?}");
+    assert_eq!(undo_label(&h).as_deref(), Some("Move object"));
+    h.get_by_label("1 object selected");
+}
+
+#[test]
+fn a_hairline_rule_lengthens_without_turning_over_or_thickening() {
+    // A rule 50..350 across at 200 down: its box is a point tall.
+    let mut h = harness_document(false, false, " 0 0 0 RG 1 w 50 300 m 350 300 l S");
+    let p = at(&h, 200.0, 200.0);
+    click(&mut h, p, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    let rule = objects(&h).last().unwrap().clone();
+    assert!(near(rule.rect, [49.5, 299.5, 350.5, 300.5]), "{rule:?}");
+    // Its right-hand handle, 30 points to the right with a little drift down.
+    let (a, b) = (at(&h, 352.0, 197.0), at(&h, 382.0, 199.0));
+    drag(&mut h, a, b);
+    let rule = objects(&h).last().unwrap().clone();
+    // The pen grows by the square root of the stretch only.
+    assert!((rule.rect[0] - 49.5).abs() < 0.2 && (rule.rect[2] - 380.5).abs() < 0.2, "{rule:?}");
+    assert!(rule.rect[3] - rule.rect[1] < 1.5 && ((rule.rect[1] + rule.rect[3]) / 2.0 - 300.0).abs() < 0.01, "{rule:?}");
+    assert_eq!(undo_label(&h).as_deref(), Some("Resize object"));
+}
+
+#[test]
+fn delete_leaves_pages_to_the_page_grid_and_the_pages_panel() {
+    for organize in [false, true] {
+        let mut h = harness_document(false, false, " 0 0 1 RG 3 w 300 100 m 380 180 l S");
+        assert!(h.state_mut().apply_edit(Edit::InsertBlankPage { at: 1, width: 400.0, height: 500.0 }));
+        h.state_mut().right = Some(pdfcraft_ui_egui::RightPanel::Pages);
+        h.run_steps(4);
+        let before = objects(&h);
+        let on_line = at(&h, 340.0, 360.0);
+        click(&mut h, on_line, Modifiers::NONE);
+        h.get_by_label("1 object selected");
+        if organize {
+            // The selection stays behind the page grid, out of sight.
+            assert!(h.state_mut().execute("page.organize"));
+        } else {
+            // The Pages panel thumbnail: in the window, outside the document area.
+            let (v, window) = (h.state().views[0].viewport_rect(), egui::Rect::from_min_size(Pos2::ZERO, egui::vec2(1400.0, 900.0)));
+            let thumb = h.get_all_by_label("Page 2").map(|n| n.rect()).find(|r| !r.intersects(v) && window.contains(r.center())).unwrap();
+            h.hover_at(thumb.center());
+        }
+        h.run_steps(3);
+        h.state_mut().views[0].select_pages(&[1]);
+        h.run_steps(2);
+        assert_eq!(h.state().views[0].target_pages(), vec![1], "organize: {organize}");
+        h.key_press(Key::Delete);
+        h.run_steps(4);
+        let app = h.state();
+        assert_eq!(app.session.get(app.views[0].id).unwrap().info.pages.len(), 1, "organize: {organize}");
+        assert_eq!(undo_label(&h).as_deref(), Some("Delete page"), "organize: {organize}");
+        assert_eq!(objects(&h), before, "organize: {organize}");
+    }
+}
+
+#[test]
+fn delete_and_backspace_in_a_text_field_leave_the_selection_alone() {
+    let mut h = harness_document(false, false, " 0 0 1 RG 3 w 300 100 m 380 180 l S");
+    let before = objects(&h);
+    let on_line = at(&h, 340.0, 360.0);
+    click(&mut h, on_line, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    // The page number box in the toolbar.
+    assert!(h.state_mut().execute("view.focus_page_input"));
+    h.run_steps(2);
+    assert!(h.ctx.memory(|m| m.has_focus(egui::Id::new("page-input"))));
+    for key in [Key::Backspace, Key::Delete] {
+        h.key_press(key);
+        h.run_steps(3);
+    }
+    assert_eq!(objects(&h), before);
+    assert!(!dirty(&h));
+    h.get_by_label("1 object selected");
+}
+
+#[test]
+fn delete_in_the_frame_of_an_undo_leaves_the_restored_objects_alone() {
+    // A panel (the first path) and a diagonal line (the second), apart.
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f 0 0 1 RG 3 w 300 200 m 380 280 l S");
+    let before = objects(&h);
+    let panel = at(&h, 330.0, 380.0);
+    click(&mut h, panel, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    h.key_press(Key::Delete);
+    h.run_steps(4);
+    assert_eq!(objects(&h).len(), before.len() - 1);
+    // The line is now the first path. Undo makes the panel the first path again, in the same
+    // frame as a Delete for the selection made before the undo.
+    let on_line = at(&h, 340.0, 260.0);
+    click(&mut h, on_line, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.key_press(Key::Delete);
+    h.run_steps(4);
+    assert_eq!(objects(&h), before);
 }

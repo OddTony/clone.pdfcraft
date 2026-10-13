@@ -1603,6 +1603,7 @@
 	Text used as a clipping path cannot be moved with this selection.	Δεν είναι δυνατή η μετακίνηση κειμένου που χρησιμοποιείται ως διαδρομή αποκοπής με αυτή την επιλογή.
 	These objects could not be moved. Select them again and try a smaller move.	Δεν ήταν δυνατή η μετακίνηση αυτών των αντικειμένων. Επιλέξτε τα ξανά και δοκιμάστε μικρότερη μετακίνηση.
 	This page contains objects that cannot be selected together.	Αυτή η σελίδα περιέχει αντικείμενα που δεν μπορούν να επιλεγούν μαζί.
+	Text and added items can't be deleted with this selection.	Δεν είναι δυνατή η διαγραφή κειμένου και προστιθέμενων στοιχείων με αυτή την επιλογή.
 	Fill colour	Χρώμα γεμίσματος
 	No fill	Χωρίς γέμισμα
 	Fill colour: none	Χρώμα γεμίσματος: κανένα

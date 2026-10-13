@@ -2196,6 +2196,7 @@ calendar date	December	Желтоқсан
 	These objects could not be moved. Select them again and try a smaller move.	Бұл объектілерді жылжыту мүмкін болмады. Оларды қайта таңдап, кішілеу жылжытуға тырысыңыз.
 	This file is already as small as it can be made ({size}). No copy was saved.	Бұл файлды одан әрі кішірейту мүмкін емес ({size}). Көшірме сақталмады.
 	This page contains objects that cannot be selected together.	Бұл бетте бірге таңдалмайтын объектілер бар.
+	Text and added items can't be deleted with this selection.	Мәтін мен қосылған элементтерді бұл таңдаумен жоюға болмайды.
 	To change locked fields, also set Locked to No.	Бұғатталған өрістерді өзгерту үшін сонымен қатар «Бұғаттау» параметрін «Жоқ» етіп қойыңыз.
 	Vertical text cannot be moved with this selection.	Тік мәтінді бұл таңдаумен жылжытуға болмайды.
 	Zoom in ({key})	Үлкейту ({key})
