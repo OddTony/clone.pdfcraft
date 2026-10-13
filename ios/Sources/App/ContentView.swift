@@ -40,9 +40,9 @@ struct ContentView: View {
                 }
                 pageControls
             } else if let message = viewModel.errorMessage {
-                ContentUnavailableView("Couldn't Open PDF", systemImage: "exclamationmark.triangle", description: Text(message))
+                placeholder(title: "Couldn't Open PDF", systemImage: "exclamationmark.triangle", description: message)
             } else {
-                ContentUnavailableView("No Document", systemImage: "doc.text", description: Text("Open a PDF to get started."))
+                placeholder(title: "No Document", systemImage: "doc.text", description: "Open a PDF to get started.")
             }
         }
     }
@@ -73,6 +73,24 @@ struct ContentView: View {
         }
         .padding(.horizontal)
         .padding(.bottom, 8)
+    }
+
+    /// iOS 16-compatible stand-in for `ContentUnavailableView` (iOS 17+).
+    private func placeholder(title: String, systemImage: String, description: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.title2)
+                .fontWeight(.semibold)
+            Text(description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
