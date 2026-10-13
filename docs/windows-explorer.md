@@ -33,7 +33,7 @@ The current converter does not import Word, Excel or PowerPoint files; those ext
 Windows `.lnk` shortcuts are not registered. There is no modern Windows 11 `IExplorerCommand`
 COM extension in this change. Menu text is a localized executable resource, selected by Windows'
 UI language with neutral English fallback, rather than fixed by the installer language.
-The resources cover all 21 current UI languages, including Greek, Kazakh, Slovenian and Turkish.
+The resources cover all 22 current UI languages, including Greek, Kazakh, Lithuanian, Slovenian and Turkish.
 
 Explorer requests are limited to 100 paths; IPC is bounded to 1 MiB and file reads to 64 MiB per
 source. Explorer conversion/combination checks a 128 MiB aggregate PDF-source budget across the
@@ -42,8 +42,9 @@ visible as failed rows. This limits retained source buffers, not the renderer's 
 Email preparation separately limits converted attachments to 128 MiB total. A mail provider may impose
 a lower attachment limit. No debounce timer decides that a selection is complete: users confirm
 Combine and email lists themselves. A failed IPC handoff starts a separate window, as ordinary
-file opening already does. Requests arriving during a dialog wait in order until that dialog
-finishes, so an existing Rotate/Redact/Export action keeps its original document. The deferred queue
+file opening already does. Requests arriving during a dialog or a background document open wait in order until that work
+finishes, so an existing Rotate/Redact/Export action keeps its original document and a late open
+cannot replace the incoming Combine workspace. The deferred queue
 is separately bounded to 100 paths and 1 MiB of path text; additional requests report an error.
 
 For automation, `doc_create_multiple` supplies conversion/combination and `doc_email_draft`

@@ -123,7 +123,7 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
         ui.add_space(8.0);
         // Update the saved preference immediately, including when the app window itself closes.
         let mut dont_ask = !app.ask_default_pdf;
-        if ui.checkbox(&mut dont_ask, tl!("Do not ask again")).changed() {
+        if ui.add(crate::widgets::checkbox(&mut dont_ask, tl!("Do not ask again"))).changed() {
             app.ask_default_pdf = !dont_ask;
         }
         ui.add_space(12.0);

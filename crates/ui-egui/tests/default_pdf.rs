@@ -279,7 +279,17 @@ fn explorer_email_review_waits_for_an_already_open_password_prompt() {
     assert!(h.state().password_prompt.is_some());
     assert!(h.query_by_label("Save email draft…").is_none());
     h.state_mut().submit_password(Some("synthetic-password".into()));
-    h.run_steps(3);
+    // Password retries now open on a worker. Wait for the observable result rather
+    // than assuming three frames are enough for decryption and document adoption.
+    for _ in 0..1000 {
+        h.run_steps(1);
+        if h.query_by_label("Save email draft…").is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert!(h.state().password_prompt.is_none());
+    assert_eq!(h.state().session.docs().len(), 1);
     h.get_by_label("Save email draft…");
     assert_eq!(h.state().shell_email_paths.len(), 1);
 }

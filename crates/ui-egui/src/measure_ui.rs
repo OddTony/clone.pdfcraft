@@ -1,5 +1,5 @@
 //! Measure objects: page-space clicks, live readings and persistent drawing scales.
-use crate::{LeftPanel, PdfCraftApp, QuickTool, canvas::DocView, theme::Tokens};
+use crate::{LeftPanel, PdfCraftApp, QuickTool, canvas::DocView, theme::Tokens, widgets};
 use egui::{Color32, Pos2, Stroke};
 use pdfcraft_engine::{
     Document, Edit, Style,
@@ -338,15 +338,15 @@ fn panel_body(app: &mut PdfCraftApp, ui: &mut egui::Ui, _t: &Tokens) {
         ui.add(crate::widgets::line(&mut state.label).desired_width(130.0).char_limit(128));
     });
     ui.separator();
-    ui.checkbox(&mut state.snap_enabled, tl!("Snap to drawing"));
+    ui.add(widgets::checkbox(&mut state.snap_enabled, tl!("Snap to drawing")));
     if state.snap_enabled {
         ui.horizontal(|ui| {
-            ui.checkbox(&mut state.snaps.endpoints, tl!("Endpoints"));
-            ui.checkbox(&mut state.snaps.midpoints, tl!("Midpoints"));
+            ui.add(widgets::checkbox(&mut state.snaps.endpoints, tl!("Endpoints")));
+            ui.add(widgets::checkbox(&mut state.snaps.midpoints, tl!("Midpoints")));
         });
         ui.horizontal(|ui| {
-            ui.checkbox(&mut state.snaps.intersections, tl!("Intersections"));
-            ui.checkbox(&mut state.snaps.paths, tl!("Paths"));
+            ui.add(widgets::checkbox(&mut state.snaps.intersections, tl!("Intersections")));
+            ui.add(widgets::checkbox(&mut state.snaps.paths, tl!("Paths")));
         });
         ui.add(egui::Slider::new(&mut state.sensitivity, 1.0..=20.0).text(tl!("Sensitivity")));
     }
@@ -365,7 +365,7 @@ fn panel_body(app: &mut PdfCraftApp, ui: &mut egui::Ui, _t: &Tokens) {
     if ui.button(tl!("Calibrate from two points")).clicked() {
         tool = Some(Tool::Calibrate);
     }
-    ui.checkbox(&mut state.whole_page, tl!("Entire page"));
+    ui.add(widgets::checkbox(&mut state.whole_page, tl!("Entire page")));
     if !state.whole_page {
         ui.label(tl!("Viewport rectangle in page points (x, y, width, height)"));
         for (i, name) in ["X", "Y", "Width", "Height"].iter().enumerate() {

@@ -2,7 +2,7 @@
 //! Labels share the UI catalogs; a neutral English table is the fallback for unsupported locales.
 
 pub const LABELS: [&str; 3] = ["Convert to PDF with PdfCraft", "Convert to PDF and email…", "Combine files in PdfCraft…"];
-const LOCALES: [(&str, u16); 20] = [
+const LOCALES: [(&str, u16); 21] = [
     ("ar", 0x0401),
     ("bg", 0x0402),
     ("cs", 0x0405),
@@ -14,6 +14,7 @@ const LOCALES: [(&str, u16); 20] = [
     ("it", 0x0410),
     ("ja", 0x0411),
     ("kk", 0x043f),
+    ("lt", 0x0427),
     ("pl", 0x0415),
     ("pt-br", 0x0416),
     ("ru", 0x0419),

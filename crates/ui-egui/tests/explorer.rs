@@ -179,3 +179,29 @@ fn incoming_conversion_and_combination_wait_for_rotate_and_keep_arrival_order() 
     }
     assert_eq!(h.state().session.get(h.state().views[2].id).unwrap().name, "later.pdf");
 }
+
+#[test]
+fn explorer_combine_waits_for_an_existing_background_open() {
+    use egui_kittest::Harness;
+
+    let (directory, source) = source("background-open");
+    let existing = directory.join("existing.pdf");
+    let bytes = pdfcraft_engine::Session::new().create_from_text("Existing", "Synthetic existing PDF").unwrap();
+    std::fs::write(&existing, bytes.as_slice()).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(850.0, 620.0)).build_eframe(|_| PdfCraftApp::new());
+    h.run_steps(2);
+    h.state_mut().open_path(&existing.to_string_lossy());
+    h.state_mut().receive_shell(ShellAction::Combine, &[source]);
+    assert!(h.state().combine_draft.is_empty(), "an incoming request waits until opening finishes");
+    for _ in 0..1000 {
+        h.run_steps(1);
+        if !h.state().combine_draft.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert_eq!(h.state().session.docs().len(), 1);
+    assert_eq!(h.state().combine_draft.len(), 1);
+    assert!(h.state().combine_showing(), "the earlier open cannot replace the later Combine workspace");
+    std::fs::remove_dir_all(directory).unwrap();
+}

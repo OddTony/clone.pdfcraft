@@ -12,6 +12,7 @@ use pdfcraft_render::DocInfo;
 
 use crate::canvas::{DocView, PageXform};
 use crate::theme::Tokens;
+use crate::widgets;
 
 const FOCUS_BLUE: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);
 /// Background of the in-place text field editor, the same in every theme.
@@ -217,7 +218,7 @@ fn calendar(ctx: &egui::Context, view: &mut DocView, field: egui::Rect, fmt: &st
                 let len = (days_from_civil(if m == 12 { y + 1 } else { y }, if m == 12 { 1 } else { m + 1 }, 1) - days_from_civil(y, m, 1)) as usize;
                 egui::Grid::new(("date-grid", view.id.0)).spacing([4.0, 2.0]).show(ui, |ui| {
                     for d in ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] {
-                        ui.label(egui::RichText::new(d).small());
+                        ui.label(egui::RichText::new(tl_ctx!("calendar weekday", d)).small());
                     }
                     ui.end_row();
                     for cell in 0..(first + len).div_ceil(7) * 7 {
@@ -425,7 +426,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, f
                                 let on = if multi { fx.picked.contains(export) } else { f.value.first() == Some(export) };
                                 if multi {
                                     let mut c = on;
-                                    if ui.checkbox(&mut c, display).changed() {
+                                    if ui.add(widgets::checkbox(&mut c, display)).changed() {
                                         if c {
                                             fx.picked.push(export.clone());
                                         } else {

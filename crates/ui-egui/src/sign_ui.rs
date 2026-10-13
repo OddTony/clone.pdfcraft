@@ -111,6 +111,8 @@ pub struct SignDraft {
     pub image: Option<SignatureImage>,
     pub new_id: NewIdDraft,
     pub error: Option<String>,
+    /// Sign with a Digital ID ▸ Remove was clicked for this list entry: asking to confirm.
+    pub confirm_remove: Option<usize>,
 }
 
 impl SignDraft {
@@ -132,6 +134,7 @@ impl SignDraft {
             image: None,
             new_id: NewIdDraft::default(),
             error: None,
+            confirm_remove: None,
         }
     }
 }
@@ -325,6 +328,28 @@ impl PdfCraftApp {
         self.digital_ids.len() - 1
     }
 
+    /// Take the digital ID file at `index` off the list (issue #1396). The file itself stays on
+    /// disk. Keychain and Windows store IDs belong to the OS and are listed again on every
+    /// signing, so they can't be removed here. The open dialog's selection follows the list.
+    pub fn remove_digital_id(&mut self, index: usize) -> bool {
+        if self.digital_ids.get(index).is_none_or(|e| e.path.starts_with("keychain:") || e.path.starts_with("windows:")) {
+            return false;
+        }
+        self.digital_ids.remove(index);
+        if let Some(d) = self.sign_draft.as_mut() {
+            d.confirm_remove = None;
+            d.selected = match d.selected {
+                Some(s) if s > index => Some(s - 1),
+                Some(s) if s == index => self.digital_ids.iter().position(|e| e.unusable.is_none()),
+                s => s,
+            };
+            if self.digital_ids.is_empty() {
+                d.step = SignStep::Configure;
+            }
+        }
+        true
+    }
+
     /// Configure New Digital ID ▸ Create: a self-signed ID saved as a .p12 next to the app data
     /// (or in `export_dir_override`). Returns its list index.
     fn create_digital_id(&mut self) -> Result<usize, String> {
@@ -507,6 +532,8 @@ impl PdfCraftApp {
         let Some((_, id)) = self.active_ids() else { return };
         match self.session.open_revision(id, n) {
             Ok(new) => {
+                // The reading-colours preference is app-wide: the newly opened revision starts with it.
+                self.session.set_reading_colors(new, self.reading_colors);
                 let Some(doc) = self.session.get(new) else { return };
                 self.views.push(DocView::new(new, &doc.info, self.view_defaults));
                 self.active = Some(self.views.len() - 1);
@@ -523,6 +550,8 @@ impl PdfCraftApp {
         let name = format!("{} (signed version)", doc.name.trim_end_matches(".pdf"));
         match self.session.open(format!("{name}.pdf"), None, std::sync::Arc::new(bytes), doc.password.clone().as_deref()) {
             Ok(new) => {
+                // The reading-colours preference is app-wide: the newly opened copy starts with it.
+                self.session.set_reading_colors(new, self.reading_colors);
                 let Some(doc) = self.session.get(new) else { return };
                 self.views.push(DocView::new(new, &doc.info, self.view_defaults));
                 self.active = Some(self.views.len() - 1);
@@ -616,6 +645,7 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             }
             if resp.clicked() {
                 d.selected = Some(i);
+                d.confirm_remove = None;
             }
             if resp.double_clicked() {
                 d.step = SignStep::SignAs;
@@ -626,10 +656,28 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         }
     });
     ui.add_space(10.0);
+    // Remove takes a digital ID file off the list after asking (#1396); OS key store IDs stay.
+    let mut remove = None;
+    if let Some(e) = d.confirm_remove.and_then(|i| ids.get(i)) {
+        ui.label(crate::i18n::fmt(tl!("Remove \"{name}\" from this list? The file itself is not deleted."), &[("name", &e.name)]));
+        ui.horizontal(|ui| {
+            if widgets::pill_button(ui, tl!("Remove"), true).clicked() {
+                remove = d.confirm_remove;
+            }
+            if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
+                d.confirm_remove = None;
+            }
+        });
+        ui.add_space(10.0);
+    }
+    let removable = d.selected.filter(|&i| ids.get(i).is_some_and(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:")));
     ui.horizontal(|ui| {
         if widgets::pill_button(ui, tl!("Configure New Digital ID"), false).clicked() {
             d.step = SignStep::Configure;
             d.error = None;
+        }
+        if d.confirm_remove.is_none() && ui.add_enabled_ui(removable.is_some(), |ui| widgets::pill_button(ui, tl!("Remove"), false)).inner.clicked() {
+            d.confirm_remove = removable;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if ui.add_enabled_ui(d.selected.is_some(), |ui| widgets::pill_button(ui, tl!("Continue"), true)).inner.clicked() {
@@ -641,6 +689,9 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             }
         });
     });
+    if let Some(i) = remove {
+        app.remove_digital_id(i);
+    }
     close
 }
 
@@ -652,8 +703,8 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     // Browse… is desktop-only.
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut browse = false;
-    ui.radio_value(&mut d.new_id.create, false, tl!("Use a Digital ID from a file"));
-    ui.radio_value(&mut d.new_id.create, true, tl!("Create a new Digital ID (self-signed, saved to a password-protected file)"));
+    widgets::radio_value(ui, &mut d.new_id.create, false, tl!("Use a Digital ID from a file"));
+    widgets::radio_value(ui, &mut d.new_id.create, true, tl!("Create a new Digital ID (self-signed, saved to a password-protected file)"));
     ui.add_space(8.0);
     let n = &mut d.new_id;
     if n.create {
@@ -831,24 +882,24 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         preview(ui, t, &entry.name, d, graphic.as_ref(), &mut app.sign_graphic_preview);
         ui.horizontal_wrapped(|ui| {
             let a = &mut d.appearance;
-            ui.checkbox(&mut a.name, tl!("Name"));
-            ui.checkbox(&mut a.date, tl!("Date"));
-            ui.checkbox(&mut a.reason, tl!("Reason"));
-            ui.checkbox(&mut a.location, tl!("Location"));
-            ui.checkbox(&mut a.distinguished_name, tl!("Distinguished name"));
-            ui.checkbox(&mut a.labels, tl!("Labels"));
+            ui.add(widgets::checkbox(&mut a.name, tl!("Name")));
+            ui.add(widgets::checkbox(&mut a.date, tl!("Date")));
+            ui.add(widgets::checkbox(&mut a.reason, tl!("Reason")));
+            ui.add(widgets::checkbox(&mut a.location, tl!("Location")));
+            ui.add(widgets::checkbox(&mut a.distinguished_name, tl!("Distinguished name")));
+            ui.add(widgets::checkbox(&mut a.labels, tl!("Labels")));
         });
         // Acrobat: Configure Signature Appearance, Text, Draw or Image.
         ui.horizontal_wrapped(|ui| {
             ui.label(tl!("Graphic"));
-            ui.radio_value(&mut d.graphic, SignGraphic::Name, tl!("Signer's name"));
+            widgets::radio_value(ui, &mut d.graphic, SignGraphic::Name, tl!("Signer's name"));
             ui.add_enabled_ui(app.signature.is_some(), |ui| {
-                if ui.radio(d.graphic == SignGraphic::FillSign, tl!("Fill & Sign signature")).clicked() {
+                if ui.add(widgets::radio(d.graphic == SignGraphic::FillSign, tl!("Fill & Sign signature"))).clicked() {
                     d.graphic = SignGraphic::FillSign;
                 }
             });
             ui.add_enabled_ui(d.image.is_some(), |ui| {
-                if ui.radio(matches!(d.graphic, SignGraphic::Image(_)), tl!("Image")).clicked()
+                if ui.add(widgets::radio(matches!(d.graphic, SignGraphic::Image(_)), tl!("Image"))).clicked()
                     && let Some(image) = &d.image
                 {
                     d.graphic = SignGraphic::Image(image.clone());
@@ -1367,6 +1418,42 @@ mod tests {
         let saved = create_in(&dir).unwrap();
         let mode = std::fs::metadata(&saved).unwrap().permissions().mode();
         assert_eq!(mode & 0o077, 0, "the private key is not readable by others: {mode:o}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn listed(path: &str, name: &str) -> DigitalIdEntry {
+        DigitalIdEntry { path: path.into(), name: name.into(), issuer: String::new(), email: String::new(), expires: String::new(), unusable: None }
+    }
+
+    /// Issue #1396: an imported ID can be taken off the list (its file stays), the dialog's
+    /// selection follows, an OS key store ID or a stale index is refused, and the removal is saved.
+    #[test]
+    fn a_digital_id_file_is_removed_from_the_list_and_stays_removed() {
+        let dir = scratch();
+        let file = dir.join("old.p12");
+        std::fs::write(&file, b"not opened").unwrap();
+        let mut app = PdfCraftApp::new();
+        app.digital_ids = vec![listed("windows:abc", "Store"), listed(&file.to_string_lossy(), "Old"), listed("/ids/new.p12", "New")];
+        let mut draft = SignDraft::new(0, None, None, None, &app.digital_ids);
+        draft.selected = Some(2);
+        draft.confirm_remove = Some(1);
+        app.sign_draft = Some(draft);
+
+        assert!(!app.remove_digital_id(0), "OS key store IDs stay");
+        assert!(!app.remove_digital_id(9), "an index past the list is refused");
+        assert!(app.remove_digital_id(1));
+        assert_eq!(app.digital_ids.iter().map(|e| e.name.as_str()).collect::<Vec<_>>(), ["Store", "New"]);
+        assert!(file.exists(), "the file itself is not deleted");
+        let d = app.sign_draft.as_ref().unwrap();
+        assert_eq!((d.selected, d.confirm_remove, d.step), (Some(1), None, SignStep::Choose), "still New, no pending question");
+
+        // Removing the selected ID selects the first usable one; removing the last file ID
+        // leaves only the store ID, which isn't saved.
+        assert!(app.remove_digital_id(1));
+        assert_eq!(app.sign_draft.as_ref().unwrap().selected, Some(0));
+        let mut fresh = PdfCraftApp::new();
+        fresh.restore(&app.persist());
+        assert!(fresh.digital_ids.is_empty(), "the removal survives a restart: {:?}", fresh.digital_ids);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

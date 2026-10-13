@@ -75,6 +75,7 @@ impl crate::PdfCraftApp {
 
     fn shell_request_blocked(&self, action: ShellAction) -> bool {
         self.dialog_open()
+            || !self.pending_opens.is_empty()
             || self.palette_open
             || self.image_import.is_some()
             || (action != ShellAction::Email && (!self.shell_email_paths.is_empty() || self.shell_email_run.is_some()))
@@ -169,7 +170,9 @@ impl crate::PdfCraftApp {
         })
         .and_then(|result| result);
         match result {
-            Ok((name, bytes)) => self.stage_combine_with(vec![crate::combine_ui::Incoming { name, bytes, modified: None, note: None }]),
+            Ok((name, bytes)) => {
+                self.stage_combine_with(vec![crate::combine_ui::Incoming { name, bytes, modified: None, note: None, open_doc: None }])
+            }
             Err(e) => {
                 let name = std::path::Path::new(path).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| path.into());
                 // Failed sources stay visible, so Combine asks before leaving them out.
