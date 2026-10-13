@@ -3967,6 +3967,7 @@ dependencies = [
  "ripemd",
  "rsa",
  "rustls-cng",
+ "secrecy",
  "security-framework",
  "sha1",
  "sha2",
