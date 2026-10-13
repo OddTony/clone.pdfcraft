@@ -184,8 +184,17 @@ fn a_tool_chosen_with_no_document_asks_for_one_and_runs_on_it() {
     h.run_steps(2);
     h.state_mut().run_command("export.text");
     assert!(h.state().toast.as_ref().is_none_or(|t| t.0 != "Open a document first"));
-    h.run_steps(3);
-    assert!(h.state().active.is_some(), "the picked file is open");
+    // Opening the picked file is prepared off the UI thread, so a few frames may not be enough.
+    let opened = (0..50).any(|_| {
+        h.step();
+        if h.state().active.is_some() {
+            true
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            false
+        }
+    });
+    assert!(opened, "the picked file is open");
     assert!(matches!(h.state().dialog, Some(Dialog::Export(_))), "and the tool runs on it: {:?}", h.state().dialog);
     // Cancelled: nothing opens and nothing runs.
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
