@@ -1,5 +1,7 @@
 //! Headless UI tests (egui_kittest + AccessKit). They drive the real app shell without a window.
 
+mod support;
+
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
 use pdfcraft_ui_egui::PdfCraftApp;
@@ -27,18 +29,6 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
     // Fonts install on frame 1 and apply on frame 2.
     h.run_steps(4);
     h
-}
-
-fn wait_for_open(h: &mut Harness<'static, PdfCraftApp>, ready: impl Fn(&PdfCraftApp) -> bool) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    loop {
-        h.run_steps(1);
-        if ready(h.state()) {
-            return;
-        }
-        assert!(std::time::Instant::now() < deadline, "the document did not finish opening");
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
 }
 
 #[test]
@@ -693,9 +683,13 @@ fn dropping_a_pdf_on_the_window_opens_it() {
     assert!(h.state().views.is_empty());
     let file: egui::DroppedFileHandle = std::sync::Arc::new(Dropped { path: "dropped.pdf".into(), bytes: FIXTURE.to_vec() });
     h.input_mut().dropped_files.push(file);
-    wait_for_open(&mut h, |app| !app.views.is_empty());
+    support::wait_until(&mut h, "dropped document", |app| app.views.len() == 1 && app.password_prompt.is_none());
     assert_eq!(h.state().views.len(), 1, "the dropped PDF opens in a tab");
     h.get_by_label_contains("dropped.pdf");
+    let (_, id) = h.state().active_ids().unwrap();
+    let doc = h.state().session.get(id).unwrap();
+    assert_eq!(doc.name, "dropped.pdf");
+    assert_eq!(doc.bytes.as_slice(), FIXTURE);
 }
 
 #[test]
@@ -794,7 +788,6 @@ fn files_and_quit_from_the_operating_system() {
     let queue = std::rc::Rc::new(std::cell::RefCell::new(vec![OsEvent::Open(vec![path.to_string_lossy().into_owned()])]));
     let q = queue.clone();
     let mut h = harness(move |app| app.os_events = Some(Box::new(move || q.borrow_mut().drain(..).collect())));
-    wait_for_open(&mut h, |app| !app.views.is_empty());
     std::fs::remove_file(&path).ok();
     assert_eq!(h.state().views.len(), 1, "the file opens in a tab");
     h.get_by_label_contains(&name);
