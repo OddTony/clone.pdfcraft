@@ -148,6 +148,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-13 (M12, physical Linux speech validation):** On CachyOS/Plasma Wayland with eSpeak NG 1.52.0 and PipeWire USB speakers, 22 platform tests, all three opt-in native speech tests and three UI regressions passed; strict platform Clippy passed. The listener confirmed English/Italian playback and pause/resume, but reported poor voice naturalness. Native desktop, CLI and persistent compact MCP checks preserved the source PDFs and verified controls and document-close cancellation. Physical macOS playback and packaged/sandboxed Linux output remain unverified. Estimates unchanged.
+
 - **2026-10-13 (M12, Read out loud integration):** Resolved conflicts with current main, retaining upstream text-cache limits, auto-tag Apply, folder batching, title-bar and link-consent translations alongside speech controls. Deferred tools survive asynchronous document opening; startup downloads wait for a pending password/open interaction. Existing UI regressions await background completion without weakening their assertions. Native audio validation scope remains unchanged. Estimates unchanged.
 
 - **2026-10-12 (M12, macOS/Linux Read out loud):** Added local macOS say and Linux espeak-ng synthesis with safe WAV playback, private temporary data, bounded cancellable subprocesses and same-position pause/resume. English and Italian voice selection is independent of UI language; regressions cover UTF-8 input, multiword voice names, controls and cleanup. Native synthesis checks run separately from physical audio checks; macOS/Linux audible desktop validation remains open. FreeBSD/web, semantic ordering and richer reading controls remain open. Estimates unchanged.

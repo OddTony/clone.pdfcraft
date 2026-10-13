@@ -119,5 +119,34 @@ process failures and private-file cleanup without any voice engine or audio devi
 on Windows/macOS/Linux, plus native Italian synthesis on Linux and on macOS when that runner
 has an Italian voice. It runs on contributor-fork pushes or explicit dispatch; upstream's macOS
 release slots are not consumed on ordinary PRs. Runner synthesis and silent sink tests do not
-prove audible output or desktop integration on physical macOS/Linux machines. Record those
-remaining checks explicitly in the pull request; do not label them as tested.
+prove audible output or desktop integration on physical machines. Physical macOS playback remains
+unverified. Linux desktop validation is recorded below; packaged and sandboxed builds still need
+their own playback checks.
+
+### Physical Linux validation (2026-10-13)
+
+The PR source at `50cf2ce8cf6bf0a17311f40e012d8316473e10b5` was built and tested on CachyOS,
+KDE Plasma/Wayland, Rust 1.99.0 and eSpeak NG 1.52.0, with PipeWire 1.6.9 routing playback to
+USB Audio Speakers. Builds used `--locked`, `--profile low-disk` and `-j 2`.
+
+- Platform tests: 22 passed, 4 opt-in tests ignored; strict all-target platform Clippy passed.
+- All three Unix native speech checks passed: non-silent English/Italian WAV synthesis at
+  0.5×, 1× and 2×, and muted playback on the actual audio device with position-preserving
+  pause/resume and stream release on Stop.
+- Both audible `speech_probe` checks completed. The listener confirmed English and Italian
+  playback with correct pause/resume, but reported poor voice naturalness. This validates
+  functionality, not voice quality.
+- Native CLI scripts and persistent compact MCP sessions read synthetic PDFs in both languages,
+  reached completion, and exercised pause/resume/Stop and document-close cancellation. Source
+  PDF SHA-256 hashes stayed unchanged and closing required no discard of unsaved work.
+- The native wgpu desktop window selected English under the Italian interface and Italian under
+  the English interface. Pause/resume/Stop worked, switching or closing the source stopped
+  playback, and neither document became dirty. All three `read_aloud` UI regressions passed.
+
+Reproduce the device checks explicitly (the probes speak aloud):
+
+```text
+cargo test -p pdfcraft-platform --profile low-disk -j 2 --locked native_ -- --ignored --nocapture --test-threads=1
+cargo run -p pdfcraft-platform --example speech_probe --profile low-disk -j 2 --locked -- --speak --language en
+cargo run -p pdfcraft-platform --example speech_probe --profile low-disk -j 2 --locked -- --speak --language it
+```

@@ -1,6 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M12: local Read out loud adds macOS say and Linux espeak-ng, with English/Italian voices and silent control tests; physical macOS/Linux audio validation remains open; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M12: physical Linux English/Italian speech, native device controls, CLI/MCP and desktop checks passed; poor voice naturalness reported; physical macOS playback remains open. Estimates unchanged.) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (gap 6: #1398 stamps read upright on rotated pages; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (gap 6: #1317, #1327, #1302, #1315 and #1340; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (#1316: replacing a line keeps a neighbouring line whose glyph box overlaps; gap 3 remains) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -198,7 +198,7 @@ update the numbers.
 
 - **Missing:** auto-tag mixed text, images, tables, lists, links and fields; connect preview heading
   proposals to Apply; visual Order and Content panels, Reading Order tool, table editor, Make Accessible action,
-  Read Out Loud on FreeBSD/web and physical macOS/Linux audio validation (Windows playback and macOS/Linux candidates are partial); full keyboard operation of PdfCraft itself and a screen-reader audit.
+  Read Out Loud on FreeBSD/web and physical macOS audio validation (Windows playback and physical Linux English/Italian controls are verified; voice naturalness remains limited); full keyboard operation of PdfCraft itself and a screen-reader audit.
 - **Evidence:** all 32 checker rules, figure alt text, tag property and sibling order edits, and
   a bounded auto-tag preview exist. Apply writes valid structure and parent-tree links for
   text-only files; it refuses mixed content and existing tags;
@@ -290,7 +290,7 @@ update the numbers.
 ### 20. Scanners, GPU page rendering, pen pressure, Read Out Loud
 
 - **Missing:** TWAIN/WIA/ICA/SANE scanning; GPU-accelerated page rendering (pages are rasterized on
-  the CPU and uploaded); pressure-sensitive ink; text-to-speech on FreeBSD/web and physical macOS/Linux audio validation. Windows voices, macOS say and Linux espeak-ng support pause/resume and bounded page/range reading; semantic tag-tree ordering and richer reading controls remain open.
+  the CPU and uploaded); pressure-sensitive ink; text-to-speech on FreeBSD/web and physical macOS audio validation. Windows voices, macOS say and Linux espeak-ng support pause/resume and bounded page/range reading; physical Linux English/Italian playback and GUI/CLI/MCP controls are verified, with poor voice naturalness reported. Semantic tag-tree ordering and richer reading controls remain open.
 - **Estimate:** 25–50 h; scanners need hardware. **Doc:** [hardware-parity.md](hardware-parity.md).
 
 ### 21. Compare: no side-by-side view or filters
@@ -325,6 +325,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | M12: physical Linux English/Italian speech, native device controls, CLI/MCP and desktop checks passed; poor voice naturalness reported; physical macOS playback remains open. Estimates unchanged. |
 | 2026-10-12 | minor | Read out loud remains partial: Windows native playback plus macOS say and Linux espeak-ng candidates, with English/Italian voices and same-position pause/resume. Native physical macOS/Linux audio validation, FreeBSD/web and semantic tag-tree ordering remain open. Estimates unchanged. |
 | 2026-10-12 | minor | Gap 6: rubber stamps, explicit image rectangles and PDF-page stamps read upright on rotated pages (#1398). Estimates unchanged. |
 | 2026-10-12 | minor | #1316: replacing a line or paragraph keeps a neighbouring line whose glyph box overlaps. Gap 3 remains. Estimates unchanged. |
