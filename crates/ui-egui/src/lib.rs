@@ -5,6 +5,8 @@
 //! Everything here is presentation: documents, rendering and the tool catalogue live in
 //! `pdfcraft-engine`.
 
+// The settings `json!` block in `persist` has grown past the default limit of 128.
+#![recursion_limit = "256"]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 /// Translate an English UI string into the current language (see [`i18n`]).
