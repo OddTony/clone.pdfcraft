@@ -39,6 +39,11 @@ references are updated to the cleaned copy; unchanged sibling descriptions remai
 Applying redaction removes the entire bookmark tree: bookmark titles can repeat removed text.
 A table of contents drawn on a page still needs its own redaction marks.
 
+A redacted page that inherits `/Resources` from the page tree gets them pinned (by reference;
+a direct inherited dictionary is made one shared object first) before it is rewritten. The parent's
+`/Resources` is then retired unless another page still inherits it, so it cannot keep a removed
+XObject reachable. Pages that aren't redacted are left untouched.
+
 ## Remove hidden information / Sanitize
 
 ```rust
