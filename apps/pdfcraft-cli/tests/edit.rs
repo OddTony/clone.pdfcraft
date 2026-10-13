@@ -224,3 +224,54 @@ fn the_append_destination_and_counts_grown_by_earlier_edits_are_accepted() {
         assert_eq!(sizes, expected, "{name}");
     }
 }
+
+/// Two pages whose catalog points at a page tree object the file does not have (#1656). The
+/// reader finds the pages by scanning, in file order, so `edit` must work on the same pages.
+/// Object 3 is written before object 2, so file order and object numbers disagree.
+fn fixture_without_page_tree() -> Vec<u8> {
+    let stream = |content: &str| format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()).into_bytes();
+    let objs: Vec<(usize, Vec<u8>)> = vec![
+        (1, b"<< /Type /Catalog /Pages 6 0 R >>".to_vec()),
+        (3, b"<< /Type /Page /Parent 6 0 R /MediaBox [0 0 200 300] /Contents 4 0 R >>".to_vec()),
+        (2, b"<< /Type /Page /Parent 6 0 R /MediaBox [0 0 300 200] /Contents 5 0 R >>".to_vec()),
+        (4, stream("0 0 m 10 10 l S")),
+        (5, stream("0 0 m 20 20 l S")),
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = vec![0; objs.len()];
+    for (num, o) in &objs {
+        offsets[num - 1] = out.len();
+        out.extend_from_slice(format!("{num} 0 obj\n").as_bytes());
+        out.extend_from_slice(o);
+        out.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+#[test]
+fn a_document_whose_page_tree_is_missing_edits_the_pages_the_reader_shows() {
+    let input = tmp("no-page-tree", "in.pdf");
+    std::fs::write(&input, fixture_without_page_tree()).unwrap();
+    let before = pdfcraft_render::inspect(std::sync::Arc::new(fixture_without_page_tree()), None).unwrap();
+    assert_eq!(before.pages.iter().map(|p| (p.width, p.height)).collect::<Vec<_>>(), [(200.0, 300.0), (300.0, 200.0)]);
+    for (name, args, expected) in [
+        // Width and height are as displayed: the turned page reads 200 x 300.
+        ("rotate.pdf", ["--rotate", "2:90"], &[(200.0, 300.0, 0), (200.0, 300.0, 90)][..]),
+        ("delete.pdf", ["--delete", "1"], &[(300.0, 200.0, 0)][..]),
+    ] {
+        let output = tmp("no-page-tree", name);
+        let mut all = vec!["edit", input.to_str().unwrap(), "--out", output.to_str().unwrap()];
+        all.extend(args);
+        let out = Command::new(BIN).args(&all).output().unwrap();
+        assert!(out.status.success(), "{name}: {}", String::from_utf8_lossy(&out.stderr));
+        let info = pdfcraft_render::inspect(std::sync::Arc::new(std::fs::read(&output).unwrap()), None).unwrap();
+        let pages: Vec<_> = info.pages.iter().map(|p| (p.width, p.height, p.rotation)).collect();
+        assert_eq!(pages, expected, "{name}");
+    }
+}

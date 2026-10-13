@@ -3084,6 +3084,18 @@ impl Session {
             Ok(Err(e)) => (None, Some(e.to_string())),
             Err(_) => (None, Some("the document structure could not be read for editing".into())),
         };
+        // The catalog leads to no page but the reader found pages by scanning: gather the same
+        // pages into a page tree, or page edits address none of them (#1656). Adopted only when
+        // the counts agree, so page numbers mean the same pages in both.
+        if let Some(e) = &mut editor
+            && !info.pages.is_empty()
+        {
+            let mut work = e.cos.clone();
+            if pdfcraft_organize::recover_page_tree(&mut work).is_ok_and(|n| n == info.pages.len()) {
+                work.note_repair(format!("the page tree is missing; its {} pages were found by scanning the file", info.pages.len()));
+                e.cos = work;
+            }
+        }
         let display = display_bytes(editor.as_mut(), &bytes);
         let renderer = RenderPool::new(display.clone(), render_threads(), config.clone());
         let (form, adopted) = editor
