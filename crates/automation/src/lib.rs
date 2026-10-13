@@ -1450,7 +1450,7 @@ impl Automation {
             recipients,
             algorithm,
             encrypt_metadata: a.opt_bool("encrypt_metadata")?.unwrap_or(true),
-            seed: self.session.new_seed(),
+            seed: self.session.new_seed().map_err(failed)?,
         };
         let mut out = self.apply(a, Edit::ProtectWithCertificates(p))?;
         out["security"] = security(self.doc(a)?);

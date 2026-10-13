@@ -2484,6 +2484,7 @@ animation effects	Off	Desactivados
 	Move tag later	Mover etiqueta después
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	No se pudo cifrar: {e}
 	Encrypt with certificate…	Cifrar con certificado…
 	Encrypt with Certificate	Cifrar con certificado
 	Only the recipients can open the document, each with the private key of their own certificate.	Solo los destinatarios pueden abrir el documento, cada uno con la clave privada de su propio certificado.

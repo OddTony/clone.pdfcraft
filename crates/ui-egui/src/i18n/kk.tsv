@@ -2352,6 +2352,7 @@ animation effects	Off	Өшірулі
 	Move tag later	Тегті кейінірек жылжыту
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Шифрлау мүмкін болмады: {e}
 	Encrypt with certificate…	Сертификатпен шифрлау…
 	Encrypt with Certificate	Сертификатпен шифрлау
 	Only the recipients can open the document, each with the private key of their own certificate.	Құжатты тек алушылар ғана аша алады, әрқайсысы өз сертификатының жеке кілтімен.

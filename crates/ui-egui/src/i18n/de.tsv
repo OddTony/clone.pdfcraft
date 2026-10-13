@@ -2355,6 +2355,7 @@ animation effects	Off	Aus
 	Move tag later	Tag später verschieben
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Verschlüsseln fehlgeschlagen: {e}
 	Encrypt with certificate…	Mit Zertifikat verschlüsseln…
 	Encrypt with Certificate	Mit Zertifikat verschlüsseln
 	Only the recipients can open the document, each with the private key of their own certificate.	Nur die Empfänger können das Dokument öffnen, jeder mit dem privaten Schlüssel seines eigenen Zertifikats.

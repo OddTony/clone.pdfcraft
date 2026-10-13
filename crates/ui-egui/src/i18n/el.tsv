@@ -2364,6 +2364,7 @@ animation effects	Off	Ανενεργά
 	Move tag later	Μετακίνηση ετικέτας αργότερα
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Δεν ήταν δυνατή η κρυπτογράφηση: {e}
 	Encrypt with certificate…	Κρυπτογράφηση με πιστοποιητικό…
 	Encrypt with Certificate	Κρυπτογράφηση με πιστοποιητικό
 	Only the recipients can open the document, each with the private key of their own certificate.	Μόνο οι παραλήπτες μπορούν να ανοίξουν το έγγραφο, ο καθένας με το ιδιωτικό κλειδί του δικού του πιστοποιητικού.

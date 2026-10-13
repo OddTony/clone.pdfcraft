@@ -2317,6 +2317,7 @@ animation effects	Off	Изключени
 	Move tag later	Преместване на етикета по-късно
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Шифроването не бе успешно: {e}
 	Encrypt with certificate…	Шифровай със сертификат…
 	Encrypt with Certificate	Шифроване със сертификат
 	Only the recipients can open the document, each with the private key of their own certificate.	Само получателите могат да отворят документа, всеки с частния ключ на собствения си сертификат.

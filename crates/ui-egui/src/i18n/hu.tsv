@@ -2353,6 +2353,7 @@ animation effects	Off	Ki
 	Move tag later	Címke későbbre helyezése
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	A titkosítás nem sikerült: {e}
 	Encrypt with certificate…	Titkosítás tanúsítvánnyal…
 	Encrypt with Certificate	Titkosítás tanúsítvánnyal
 	Only the recipients can open the document, each with the private key of their own certificate.	Csak a címzettek nyithatják meg a dokumentumot, mindegyikük a saját tanúsítványa titkos kulcsával.

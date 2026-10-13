@@ -2359,6 +2359,7 @@ animation effects	Off	Izklopljeni
 	Move tag later	Premakni oznako pozneje
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Šifriranje ni uspelo: {e}
 	Encrypt with certificate…	Šifriraj s potrdilom…
 	Encrypt with Certificate	Šifriraj s potrdilom
 	Only the recipients can open the document, each with the private key of their own certificate.	Dokument lahko odprejo samo prejemniki, vsak z zasebnim ključem svojega potrdila.

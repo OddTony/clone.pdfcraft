@@ -153,9 +153,17 @@ impl PdfCraftApp {
         Ok(())
     }
 
-    /// Apply the dialog: the document is encrypted for its recipients when it is saved.
+    /// Apply the dialog: the document is encrypted for its recipients when it is saved. With
+    /// no randomness for the file key nothing changes, and the notice says why.
     pub(crate) fn apply_certificate_draft(&mut self) -> bool {
-        let edit = self.certificate_draft.edit(self.session.new_seed());
+        let seed = match self.session.new_seed() {
+            Ok(seed) => seed,
+            Err(e) => {
+                self.notify_fmt("Couldn't encrypt: {e}", &[("e", &e.to_string())]);
+                return false;
+            }
+        };
+        let edit = self.certificate_draft.edit(seed);
         if self.apply_edit(edit) {
             self.certificate_draft = Default::default();
             self.notify_tr("Certificate encryption will be applied when you save");

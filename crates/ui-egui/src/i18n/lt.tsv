@@ -2598,6 +2598,7 @@ key	Space	Tarpas
 	Move tag later	Perkelti žymą vėliau
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Nepavyko užšifruoti: {e}
 	Encrypt with certificate…	Šifruoti sertifikatu…
 	Encrypt with Certificate	Šifruoti sertifikatu
 	Only the recipients can open the document, each with the private key of their own certificate.	Dokumentą gali atverti tik gavėjai, kiekvienas savo sertifikato privačiuoju raktu.

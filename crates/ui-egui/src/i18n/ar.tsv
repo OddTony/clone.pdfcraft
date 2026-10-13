@@ -2375,6 +2375,7 @@ animation effects	Off	معطّلة
 	Move tag later	نقل العلامة للأسفل
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	تعذّر التشفير: {e}
 	Encrypt with certificate…	تشفير بشهادة…
 	Encrypt with Certificate	تشفير بشهادة
 	Only the recipients can open the document, each with the private key of their own certificate.	لا يمكن فتح المستند إلا للمستلمين، كلٌّ بالمفتاح الخاص لشهادته.

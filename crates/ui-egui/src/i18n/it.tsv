@@ -2363,6 +2363,7 @@ animation effects	Off	Disattivati
 	Move tag later	Sposta tag dopo
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Impossibile cifrare: {e}
 	Encrypt with certificate…	Cifra con certificato…
 	Encrypt with Certificate	Cifra con certificato
 	Only the recipients can open the document, each with the private key of their own certificate.	Solo i destinatari possono aprire il documento, ciascuno con la chiave privata del proprio certificato.

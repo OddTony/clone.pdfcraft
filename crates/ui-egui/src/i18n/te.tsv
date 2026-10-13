@@ -2267,6 +2267,7 @@ animation effects	Off	ఆఫ్
 	Move tag later	ట్యాగ్‌ను వెనుకకు తరలించు
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	ఎన్‌క్రిప్ట్ చేయడం సాధ్యం కాలేదు: {e}
 	Encrypt with certificate…	సర్టిఫికెట్‌తో ఎన్‌క్రిప్ట్ చేయి…
 	Encrypt with Certificate	సర్టిఫికెట్‌తో ఎన్‌క్రిప్ట్ చేయి
 	Only the recipients can open the document, each with the private key of their own certificate.	గ్రహీతలు మాత్రమే ఈ పత్రాన్ని తెరవగలరు, ప్రతి ఒక్కరూ తమ సొంత సర్టిఫికెట్ ప్రైవేట్ కీతో.

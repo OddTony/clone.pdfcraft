@@ -4529,17 +4529,11 @@ impl Session {
         &self.identities
     }
 
-    /// A fresh seed for [`CertificateProtection`]: the operating system's random generator,
-    /// or (should it fail) the entropy the edits use for file keys.
-    pub fn new_seed(&self) -> [u8; 20] {
-        if let Ok(seed) = pdfcraft_sign::envelope::new_seed() {
-            return seed;
-        }
-        let mut cx = EditCtx::new(self.now(), self.next_id ^ (self.docs.len() as u64).rotate_left(32));
-        let e = cx.entropy();
-        let mut out = [0u8; 20];
-        out.copy_from_slice(&e[..20]);
-        out
+    /// A fresh seed for [`CertificateProtection`], from the operating system's random
+    /// generator. It is the file key's only secret, so there is no weaker fallback: without
+    /// randomness nothing is encrypted.
+    pub fn new_seed(&self) -> Result<[u8; 20], EditError> {
+        pdfcraft_sign::envelope::new_seed().map_err(|e| EditError::Protection(format!("no file key: {e}")))
     }
 
     pub fn set_trusted_certificates(&mut self, certs: Vec<pdfcraft_sign::Certificate>) {

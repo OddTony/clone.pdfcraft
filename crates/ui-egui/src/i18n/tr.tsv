@@ -2350,6 +2350,7 @@ animation effects	Off	Kapalı
 	Move tag later	Etiketi daha geç taşı
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Şifrelenemedi: {e}
 	Encrypt with certificate…	Sertifika ile şifrele…
 	Encrypt with Certificate	Sertifika ile şifrele
 	Only the recipients can open the document, each with the private key of their own certificate.	Belgeyi yalnızca alıcılar, her biri kendi sertifikasının özel anahtarıyla açabilir.

@@ -2376,6 +2376,7 @@ animation effects	Off	Вимкнено
 	Move tag later	Перемістити тег пізніше
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Не вдалося зашифрувати: {e}
 	Encrypt with certificate…	Зашифрувати сертифікатом…
 	Encrypt with Certificate	Шифрування сертифікатом
 	Only the recipients can open the document, each with the private key of their own certificate.	Відкрити документ можуть лише одержувачі — кожен за допомогою закритого ключа власного сертифіката.

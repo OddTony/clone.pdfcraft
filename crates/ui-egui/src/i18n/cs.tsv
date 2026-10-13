@@ -2428,6 +2428,7 @@ animation effects	Off	Vypnuto
 	Move tag later	Přesunout značku později
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Nelze zašifrovat: {e}
 	Encrypt with certificate…	Šifrovat certifikátem…
 	Encrypt with Certificate	Šifrovat certifikátem
 	Only the recipients can open the document, each with the private key of their own certificate.	Dokument mohou otevřít jen příjemci, každý soukromým klíčem svého certifikátu.

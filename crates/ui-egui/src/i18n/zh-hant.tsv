@@ -2228,6 +2228,7 @@ animation effects	Off	關
 	Move tag later	將標記後移
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	無法加密：{e}
 	Encrypt with certificate…	使用憑證加密…
 	Encrypt with Certificate	使用憑證加密
 	Only the recipients can open the document, each with the private key of their own certificate.	只有收件者可以開啟此文件，每人使用自己憑證的私密金鑰。

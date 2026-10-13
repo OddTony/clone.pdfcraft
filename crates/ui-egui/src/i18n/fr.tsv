@@ -2354,6 +2354,7 @@ animation effects	Off	Désactivés
 	Move tag later	Déplacer la balise plus tard
 
 # Encrypt with certificate.
+	Couldn't encrypt: {e}	Impossible de chiffrer : {e}
 	Encrypt with certificate…	Chiffrer avec un certificat…
 	Encrypt with Certificate	Chiffrer avec un certificat
 	Only the recipients can open the document, each with the private key of their own certificate.	Seuls les destinataires peuvent ouvrir le document, chacun avec la clé privée de son propre certificat.
