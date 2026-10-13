@@ -2363,16 +2363,6 @@ animation effects	Off	Вимкнено
 	The linked PDF opened, but its named destination was not applied.	Пов’язаний PDF відкрито, але його іменоване призначення не застосовано.
 	The linked PDF opened, but its page destination was out of range.	Пов’язаний PDF відкрито, але сторінка призначення поза межами діапазону.
 	Local cross-PDF links require the desktop app	Локальні посилання між PDF працюють лише в настільному застосунку
-	Minimize	Згорнути
-	Maximize	Розгорнути
-	Restore	Відновити
-	Use system title bar	Використовувати системний заголовок вікна
-	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Показувати простий заголовок вікна з кнопками замість панелі вкладок. GNOME не малює заголовки для програм, тому цей заголовок не відповідає його темі.
-
-# Absolute local GoToR confirmation (#1364).
-	Allow	Дозволити
-	Only allow this if you trust the source document.	Дозволяйте це лише тоді, коли довіряєте вихідному документу.
-	Open this local PDF?	Відкрити цей локальний PDF?
-	This document is trying to open a local file:	Цей документ намагається відкрити локальний файл:
-	Move tag earlier	Перемістити тег раніше
-	Move tag later	Перемістити тег пізніше
+	Find untagged content	Знайти нетегований вміст
+	No untagged content was found.	Нетегованого вмісту не знайдено.
+	Found {n} untagged content problems.	Знайдено проблем із нетегованим вмістом: {n}.
