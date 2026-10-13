@@ -2343,3 +2343,5 @@ animation effects	Off	Izklopljeni
 	The linked PDF opened, but its named destination was not applied.	Povezani PDF se je odprl, vendar njegov poimenovani cilj ni bil uporabljen.
 	The linked PDF opened, but its page destination was out of range.	Povezani PDF se je odprl, vendar je ciljna stran zunaj obsega.
 	Local cross-PDF links require the desktop app	Lokalne povezave med PDF-ji zahtevajo namizno aplikacijo
+	Downloading the text recognition models…	Prenašanje modelov za prepoznavanje besedila…
+	Couldn't download the text recognition models: {e}	Modelov za prepoznavanje besedila ni bilo mogoče prenesti: {e}
