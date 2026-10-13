@@ -105,6 +105,9 @@ pub struct Widget {
     pub rotation: i64,
     /// List boxes: where the options are drawn, so a click can pick the one under the pointer.
     pub list: Option<appearance::ListRows>,
+    /// Check boxes and radio buttons: what clicking this widget does besides changing the value
+    /// (its mouse-up action, or else the field's), as Acrobat runs it after the value changes.
+    pub action: Option<af::ButtonAction>,
 }
 
 /// A terminal form field.
@@ -254,7 +257,8 @@ fn name_obj(text: &str) -> Object {
 /// At most this many `/State` entries of a set-layer-visibility action are read.
 const MAX_LAYER_STATE: usize = 1024;
 
-/// A push button's mouse-up action (`/A`, or `/AA /U`, on the field or its widget).
+/// A button's mouse-up action (`/A`, or `/AA /U`, on the field or its widget): a push button's,
+/// or a check box or radio button widget's.
 fn button_action(doc: &Document, d: &Dict, widgets: &[ObjRef]) -> Option<af::ButtonAction> {
     // A button PdfCraft generated for an XFA image field (`/PCXfaImage true`, no PDF action):
     // clicking it picks a picture, as `buttonImportIcon()` does.
@@ -803,6 +807,9 @@ fn walk(
                 hidden: annot_flags & (2 | 32) != 0,
                 rotation: appearance::mk_rotation(doc, wd),
                 list: (kind == FieldKind::List).then(|| appearance::list_rows_of(doc, inh.da.as_deref().unwrap_or("/Helv 0 Tf 0 g"), Some(d), wd)),
+                action: matches!(kind, FieldKind::CheckBox | FieldKind::Radio)
+                    .then(|| button_action(doc, wd, &[]).or_else(|| button_action(doc, d, &[])))
+                    .flatten(),
             })
         })
         .collect();

@@ -162,6 +162,8 @@ pub(crate) fn page_input(
         FormFieldKind::CheckBox => {
             view.forms.focus = None;
             view.pending_edit = Some(Edit::SetFieldValue { name: f.name.clone(), value: FieldValue::Check(f.value.is_empty()) });
+            // Its own action (show or hide fields, a script, …) runs once the value is in.
+            view.forms.button = w.action.clone().map(|a| (f.name.clone(), a));
         }
         FormFieldKind::Radio => {
             view.forms.focus = None;
@@ -171,6 +173,9 @@ pub(crate) fn page_input(
             if value.as_ref() != f.value.first() {
                 view.pending_edit = Some(Edit::SetFieldValue { name: f.name.clone(), value: FieldValue::Radio(value) });
             }
+            // The clicked button's own action runs once the value is in, even when the value
+            // stays (clicking the selected button of a group that can't be turned off).
+            view.forms.button = w.action.clone().map(|a| (f.name.clone(), a));
         }
         // The press already committed the previous field and opened this one (above), unless
         // press and release came in one frame. Committing again would re-run a validation that

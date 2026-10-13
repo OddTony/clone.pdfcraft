@@ -150,3 +150,73 @@ fn hide_actions_hide_and_show_fields() {
     click_field(&mut h, "show");
     assert!(!name_hidden(&h), "the Hide action with /H false showed it again");
 }
+
+/// One page: a hidden text field "name" (object 4) and a radio group "married" whose Yes button
+/// shows it and whose No button hides it, each button with its own action.
+fn radio_show_hide_fixture() -> Vec<u8> {
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [4 0 R 6 0 R 7 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (Ada) /F 6 /Rect [20 340 280 360] /P 3 0 R >>",
+        "<< /FT /Btn /T (married) /Ff 49152 /V /Off /Kids [6 0 R 7 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /Parent 5 0 R /AS /Off /F 4 /Rect [20 290 50 320] /P 3 0 R /AP << /N << /Yes 8 0 R /Off 8 0 R >> >> /A << /S /Hide /T (name) /H false >> >>",
+        "<< /Type /Annot /Subtype /Widget /Parent 5 0 R /AS /Off /F 4 /Rect [80 290 110 320] /P 3 0 R /AP << /N << /No 8 0 R /Off 8 0 R >> >> /A << /S /Hide /T (name) >> >>",
+        "<< /Length 0 >>\nstream\n\nendstream",
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offs = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offs.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let x = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offs {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{x}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+#[test]
+fn radio_buttons_run_their_own_show_hide_actions() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("radio-show-hide.pdf", None, radio_show_hide_fixture()).unwrap();
+        app.set_option("zoom", "150").unwrap();
+        app
+    });
+    h.run_steps(6);
+    assert!(name_hidden(&h));
+    let click_widget = |h: &mut Harness<'static, PdfCraftApp>, widget: usize| {
+        let p = {
+            let s = h.state();
+            let doc = s.session.get(s.views[0].id).unwrap();
+            let f = doc.form.iter().find(|f| f.name == "married").unwrap();
+            pdfcraft_ui_egui::forms_ui::field_screen_rect(&s.views[0], &doc.info, f, widget).expect("on screen").center()
+        };
+        h.hover_at(p);
+        h.run_steps(1);
+        h.drag_at(p);
+        h.run_steps(1);
+        h.drop_at(p);
+        h.run_steps(4);
+    };
+    let married = |h: &Harness<'static, PdfCraftApp>| {
+        let s = h.state();
+        s.session.get(s.views[0].id).unwrap().form.iter().find(|f| f.name == "married").unwrap().value.clone()
+    };
+    click_widget(&mut h, 0);
+    assert_eq!(married(&h), ["Yes"], "the click selected the button");
+    assert!(!name_hidden(&h), "and its action showed the field");
+    click_widget(&mut h, 1);
+    assert_eq!(married(&h), ["No"]);
+    assert!(name_hidden(&h), "the other button's action hid it again");
+    // Undo takes back the action, then the selection.
+    h.state_mut().run_command("edit.undo");
+    h.run_steps(3);
+    assert!(!name_hidden(&h));
+    assert_eq!(married(&h), ["No"]);
+}

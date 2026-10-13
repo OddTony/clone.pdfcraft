@@ -2104,3 +2104,28 @@ fn document_scripts_read_each_name_tree_node_once() {
     ]);
     assert_eq!(document_scripts_named(&doc), [("init".to_string(), "var ready = true;".to_string())]);
 }
+
+#[test]
+fn check_boxes_and_radio_buttons_keep_each_widgets_action() {
+    let doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R 7 0 R 8 0 R 9 0 R] >>".into(),
+        "<< /Fields [5 0 R 8 0 R 9 0 R] >>".into(),
+        "<< /FT /Btn /T (married) /Ff 49152 /V /Off /Kids [6 0 R 7 0 R] >>".into(),
+        "<< /Type /Annot /Subtype /Widget /Parent 5 0 R /AS /Off /Rect [10 10 20 20] /P 3 0 R /AP << /N << /Yes 10 0 R /Off 10 0 R >> >> /A << /S /Hide /T (spouse) /H false >> >>".into(),
+        "<< /Type /Annot /Subtype /Widget /Parent 5 0 R /AS /Off /Rect [30 10 40 20] /P 3 0 R /AP << /N << /No 10 0 R /Off 10 0 R >> >> /AA << /U << /S /Hide /T (spouse) >> >> >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /T (agree) /V /Off /AS /Off /Rect [50 10 60 20] /P 3 0 R /A << /S /JavaScript /JS (var agreed = 1;) >> >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (go) /Rect [70 10 90 20] /P 3 0 R /A << /S /Hide /T (spouse) >> >>".into(),
+        "<< /Length 0 >>\nstream\n\nendstream".into(),
+    ]);
+    let all = fields(&doc);
+    let married = field(&all, "married");
+    let show = af::ButtonAction::ShowHide { fields: vec!["spouse".into()], hide: false };
+    let hide = af::ButtonAction::ShowHide { fields: vec!["spouse".into()], hide: true };
+    assert_eq!(married.widgets.iter().map(|w| w.action.clone()).collect::<Vec<_>>(), [Some(show), Some(hide.clone())]);
+    assert!(field(&all, "agree").widgets[0].action.is_some(), "a check box's own script");
+    // A push button's action stays the field's.
+    let go = field(&all, "go");
+    assert_eq!((go.button.clone(), go.widgets[0].action.clone()), (Some(hide), None));
+}
