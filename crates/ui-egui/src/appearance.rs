@@ -111,7 +111,6 @@ fn card(ui: &mut egui::Ui, t: &Tokens, title: &str, active: bool, themes: &[(The
 
 /// The Appearance section of Preferences.
 pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
-    // Theme/preferences context — plain "Appearance" is object/comment/signature look (Diện mạo).
     ui.label(RichText::new(tl_ctx!("theme", "Appearance")).font(theme::semibold(13.0)));
     ui.horizontal(|ui| {
         ui.label(tl!("Appearance mode"));

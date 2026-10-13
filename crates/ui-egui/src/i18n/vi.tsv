@@ -1,61 +1,12 @@
-# Vietnamese (vi) catalog. Columns, separated by a TAB:  context <TAB> source <TAB> translation
+# Vietnamese (vi) catalog. Columns, separated by a TAB: context <TAB> source <TAB> translation
 #
-#   context  empty                a plain UI string; `source` is the English text in the code
-#            @id                  a command id (e.g. file.saveAs): wins over the English text for
-#                                 that menu item, so one id can read differently from its twin
-#            @plural              `source` is "one|other" (English forms); the translation lists the
-#                                 language's forms separated by "|" (see `plural` in i18n/mod.rs)
-#            anything else        a disambiguating context passed to `tr_ctx`
-#   escapes  \n  \t  \\  inside a column. `{name}` placeholders must appear in both columns.
-#   lines starting with # and blank lines are ignored.
+# Clean-room translations from PdfCraft's English UI labels. Reviewed by a native
+# Vietnamese-speaking contributor. PhotoCraft/VectorCraft Vietnamese catalogs were used only as
+# translation memory when the English source and its meaning in context matched. Product and
+# format names (PdfCraft, PDF, PDF/A, OCR, XFA, Word…) remain names where appropriate.
+# Plural rule: `plural_none` — every @plural row lists exactly one form.
+# Context-sensitive wording and intentional unchanged strings are regression-tested in i18n/mod.rs.
 #
-# Clean-room: every entry was written from the plain meaning of the PdfCraft English source label
-# using ordinary Vietnamese computing and document vocabulary. No proprietary localisation resource,
-# string table or product UI (Acrobat's included) was consulted or copied; add entries the same way.
-# Translation memory came only from PhotoCraft's and VectorCraft's Vietnamese catalogs, and an entry
-# was reused only where the English source and its meaning in context matched. Product and technology
-# names (PdfCraft, ArtCraft, PDF, Acrobat, JavaScript, OCR, XFA, AES, RSA, SHA …) stay as they are;
-# the trailing "…" of dialog commands is kept.
-#
-# Plural rule: Vietnamese does not inflect for number (`plural_none` in i18n/mod.rs), so every
-# @plural row lists exactly ONE form (no "|").
-#
-# Glossary (locked): File Tệp · Edit (menu) Chỉnh sửa, (comment menu) Sửa · Save Lưu · Save as…
-# Lưu thành… · Undo Hoàn tác · Redo Làm lại · Cut Cắt · Copy Sao chép · Paste Dán · Delete Xóa ·
-# Cancel Hủy · Close Đóng · Open… Mở… · Print… In… · Preferences Tùy chọn · Help Trợ giúp · View Xem ·
-# Pages/Page Trang · Document Tài liệu · Bookmark Dấu trang · Comment Bình luận · Signature Chữ ký ·
-# Form Biểu mẫu · Field (form field) Trường · Fill (Fill & Sign section) Điền · Search/Find Tìm · Interface language Ngôn ngữ giao diện ·
-# Redact: Mark for redaction → Đánh dấu để xóa; Apply redactions → Xóa vĩnh viễn nội dung đã đánh dấu;
-# Redact text and images → Xóa nội dung nhạy cảm trong văn bản và hình ảnh (permanent removal, not cover).
-# Clear form → Xóa dữ liệu biểu mẫu (resets values, does not delete the form).
-# Appearance (theme) Giao diện, (object/comment/signature) Diện mạo · Type (signature pad) Nhập chữ,
-# (plain noun) Loại · Start (action wizard) Bắt đầu · Subject (certificate) Chủ thể chứng chỉ,
-# (document topic) Chủ đề · Fill & Sign Điền & Ký · Folder Thư mục · Tools Công cụ.
-# Months: standalone "Tháng 1" … "Tháng 12"; in the "calendar date" context lowercase "tháng 1" …
-# ("{month} {day}, {y}" is reordered to "{day} {month}, {y}", the Vietnamese order).
-# Weekdays (calendar weekday): CN T2 T3 T4 T5 T6 T7 (Sunday … Saturday).
-#
-# VI_KEEP_AS_IS (the translation is deliberately identical to the English source;
-# keep in sync with KEEP_AS_IS in i18n/mod.rs::vietnamese_leaves_no_unapproved_english_fallbacks):
-#   OK                              the universal dialog button
-#   Digital ID                      Acrobat-compatible product term, used as a name
-#   ZIP                             file-format name
-#   JavaScript                      language name
-#   Microsoft Word (.docx)          product + file format
-#   PDF/A…                          standard name (trailing … kept)
-#   PostScript / EPS                format names
-#   Rich Text Format (.rtf)         format name
-#   CheckBox, Combo, PushButton, Radio   PDF form field type identifiers (as in the PDF spec/JS API)
-#   Standard Business               name of a built-in stamp
-#   Home / End                      pair of key names shown together
-#   English                         the language's own name in the language picker
-#   {0}: {1}   {field}: {e}   {month} {y}   {n} {kind}   {rule} - {status}   `{command}` {when}
-#                                   pure placeholder templates with nothing to translate
-#                                   ({month} {day}, {y} is reordered to {day} {month}, {y}, not keep-as-is)
-#   +LOC  −LOC  ΔLOC  +Bin  −Bin    contributor-table column symbols
-#   Keychain  ·                     macOS Keychain prefix (product name)
-#   key context: Ctrl, Shift, Delete, Esc, Home, End, Space
-#                                   Windows-style key caps that are universal
 	Menu	Trình đơn
 	Edit	Chỉnh sửa
 	Pages	Trang

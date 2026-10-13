@@ -2450,7 +2450,7 @@ mod tests {
     #[test]
     fn vietnamese_leaves_no_unapproved_english_fallbacks() {
         let vi = Lang::from_code("vi").expect("vi registered");
-        // Keep in sync with the VI_KEEP_AS_IS comment block in vi.tsv.
+        // Authoritative allowlist for intentional English-identical Vietnamese rows.
         const KEEP_AS_IS: &[&str] = &[
             "OK",
             "Digital ID",

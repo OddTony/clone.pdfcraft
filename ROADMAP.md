@@ -1,6 +1,6 @@
 # PdfCraft roadmap
 
-**Stage: alpha** · next: beta, ~26% (ready for real work 49% → 75%) and ~400–700 h away
+**Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M13: CLI check visits each directory once through aliases and cycles; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M4: Extract and Split preserve shared Type 3 glyph resources; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -46,7 +46,7 @@ and add a line to the [progress log](#progress-log); when a gap closes, remove i
 |---|---|---|
 | **Feature breadth** | **≈ 67%** tier-weighted (56.9% unweighted: 423 shipped + 74 partial of 808; P0 94.2%) | measured, `parity/acrobat-features.toml` |
 | Feature breadth, mainstream practitioner | ≈ 70% tier-weighted (63.2% unweighted; P0 95.3%) | measured ([split](docs/target-app-parity.md#mainstream-practitioner-vs-full-acrobat-pro)) |
-| **Ready for real work**, full Acrobat Pro | **≈ 49%** (45–53%) | estimated, weighted sum over [dimensions](#by-dimension) |
+| **Ready for real work**, full Acrobat Pro | **≈ 50%** (45–53%) | estimated, weighted sum over [dimensions](#by-dimension) |
 | **Ready for real work**, mainstream practitioner | **≈ 55%** (50–60%) | estimated ([split](docs/target-app-parity.md#mainstream-practitioner-vs-full-acrobat-pro)) |
 | **Ready for real work**, essentials user | **≈ 66%** (60–70%) | estimated ([method](docs/target-app-parity.md#essentials-user)) |
 | Remaining to **beta** | ≈ 400–700 Opus 5.5 agent-hours | estimated |
@@ -63,7 +63,7 @@ and 245 open issues keep it far from beta.
 
 | Audience | Ready | Opus 5.5 agent-hours to ≈ 95% | Work that dominates |
 |---|---|---|---|
-| Full Acrobat Pro (ready for real work) | ≈ 49% | ≈ 780–1,400 h (≈ 300–550 h wall clock with 3–5 agents; 60–70% parallelizes) | Own renderer and fidelity harness, editing existing content, OCR and Office conversion, Preflight and PDF/A/X/UA, accessibility tagging, signatures for institutions |
+| Full Acrobat Pro (ready for real work) | ≈ 50% | ≈ 780–1,400 h (≈ 300–550 h wall clock with 3–5 agents; 60–70% parallelizes) | Own renderer and fidelity harness, editing existing content, OCR and Office conversion, Preflight and PDF/A/X/UA, accessibility tagging, signatures for institutions |
 | Mainstream practitioner | ≈ 55% | ≈ 500–900 h (≈ 200–400 h wall clock; ≈ 60% parallelizes) | Rendering fidelity, editing existing text (CJK, RTL, subsets), conversion (Word layout, Excel, PowerPoint, Office→PDF), OCR languages, the bug backlog |
 | Essentials user | ≈ 66% | ≈ 180–330 h (≈ 90–180 h wall clock; ≈ 50% parallelizes) | Rendering fidelity on everyday files, launch and GPU stability, simple text fixes, Word export layout, Chinese UI glyphs |
 
@@ -84,7 +84,7 @@ Hours are calibrated as in [Effort and calibration](docs/target-app-parity.md#ef
 | Platforms | ≈ 70% | 5% | 15–30 | [hardware-parity.md](docs/hardware-parity.md#platforms) |
 | Ecosystem and plug-ins | ≈ 30% | 1% | 10–20 (within features) | [gaps.md](docs/gaps.md) |
 | AI features | ≈ 0% (in scope: local providers) | 1% | 20–40 (within features) | [gaps.md](docs/gaps.md) gap 23 |
-| **Total (weighted sum)** | **≈ 49%** | 100% | **≈ 780–1,400** | |
+| **Total (weighted sum)** | **≈ 50%** | 100% | **≈ 780–1,400** | |
 
 ## Features
 
@@ -148,7 +148,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
-- **2026-10-13 (G14, Vietnamese localization):** Added Vietnamese (`vi`, Tiếng Việt) as an interface and date language with a 2,591-entry catalog (`plural_none`) covering 100% of the current localizable key union (plus `theme`/`Appearance`). Locale tags `vi` / `vi-VN` / `vi_VN.UTF-8` resolve; calendar months use numeric `Tháng 1`…`12` / `tháng 1`…`12`. The twelve-language localization mean moves from ≈59% to ≈68%. Status stays `partial`: engine/OS details, document contents, filenames, CLI/MCP and external help stay outside the catalog by design.
+- **2026-10-13 (G14, Vietnamese localization):** Added Vietnamese (`vi`, Tiếng Việt) as an interface and date language with a 2,591-entry catalog (`plural_none`) covering 100% of the current localizable key union (plus `theme`/`Appearance`). Locale tags `vi` / `vi-VN` / `vi_VN.UTF-8` resolve; calendar months use numeric `Tháng 1`…`12` / `tháng 1`…`12`. Native-speaker community review recorded. The twelve-language localization mean moves from ≈59% to ≈68%; weighted readiness ≈49% → ≈50%. Status stays `partial`: engine/OS details, document contents, filenames, CLI/MCP and external help stay outside the catalog by design.
 
 - **2026-10-12 (M13, CLI robustness scans):** `pdfcraft-cli check` visits a directory once even when input roots overlap or directory symlinks lead back into the tree. PDFs reached through file symlinks remain accepted. Three real CLI regressions cover overlapping roots, a directory cycle and directory/file aliases. Estimates unchanged.
 - **2026-10-12 (M4, Type 3 extraction fidelity):** Extract and Split preserve shared image/resource dictionaries reached through Type 3 glyphs, including nested forms, patterns and soft masks. A bounded object-graph walk protects unknown glyph content; unreadable pages/forms retain their glyph resources, and shared explicit fonts are visited once. Separate page dictionaries still prune unused images. Synthetic save/reopen regressions and an opt-in Poppler pixel oracle cover resource ownership, nested forms, cycles, limits and repeated fonts. Estimates unchanged.
