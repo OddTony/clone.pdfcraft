@@ -28,6 +28,7 @@ pub mod links;
 pub mod ocr;
 pub mod optimizer;
 pub mod printcheck;
+pub mod read_aloud;
 mod scan_colours;
 pub mod signature_image;
 pub mod signature_scan;
@@ -36,6 +37,7 @@ mod text_preview;
 mod upright_image;
 pub mod xfa;
 
+pub use read_aloud::{ReadAloudChunk, ReadAloudKind};
 pub use signature_image::{ImageSignaturePreview, SignatureImage};
 pub use signature_scan::{PhotoRect, ScanError, SignaturePhoto, Turn};
 pub use text_preview::TextEditPreview;
