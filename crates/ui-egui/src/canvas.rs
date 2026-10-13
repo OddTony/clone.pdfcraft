@@ -3761,15 +3761,11 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         }
     }
     if let Some((name, action)) = app.views[index].forms.button.take() {
-        // A check box or radio button's action runs after its click has set the value, as in
-        // Acrobat (and so a show/hide edit doesn't replace the queued value edit). A refused
-        // value runs no action.
-        let toggle = app.session.get(app.views[index].id).is_some_and(|d| {
-            d.form
-                .iter()
-                .any(|f| f.name == name && matches!(f.kind, pdfcraft_engine::FormFieldKind::CheckBox | pdfcraft_engine::FormFieldKind::Radio))
-        });
-        let value_in = !toggle || app.views[index].pending_edit.is_none() || app.apply_queued_edit(index);
+        // The edit the click queued goes in first, as in Acrobat: a check box or radio button's
+        // new value (so a show/hide edit doesn't replace it), or the typing in the field the
+        // click left (so a picker the action opens, such as an image field's, doesn't find the
+        // document changed under it and drop the pick). A refused edit runs no action.
+        let value_in = app.views[index].pending_edit.is_none() || app.apply_queued_edit(index);
         if value_in {
             run_button(app, index, &name, action);
         }

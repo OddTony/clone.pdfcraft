@@ -220,3 +220,119 @@ fn radio_buttons_run_their_own_show_hide_actions() {
     assert!(!name_hidden(&h));
     assert_eq!(married(&h), ["No"]);
 }
+
+/// A PDF of `objs` (numbered from 1) with a proper xref table.
+fn pdf(objs: &[&str]) -> Vec<u8> {
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offs = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offs.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let x = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offs {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{x}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+fn shell(bytes: Vec<u8>) -> Harness<'static, PdfCraftApp> {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("form.pdf", None, bytes).unwrap();
+        app.set_option("zoom", "150").unwrap();
+        app
+    });
+    h.run_steps(6);
+    h
+}
+
+/// Click the centre of `name`'s widget `widget`.
+fn click_widget(h: &mut Harness<'static, PdfCraftApp>, name: &str, widget: usize) {
+    let p = {
+        let s = h.state();
+        let doc = s.session.get(s.views[0].id).unwrap();
+        let f = doc.form.iter().find(|f| f.name == name).unwrap();
+        pdfcraft_ui_egui::forms_ui::field_screen_rect(&s.views[0], &doc.info, f, widget).expect("on screen").center()
+    };
+    h.hover_at(p);
+    h.run_steps(1);
+    h.drag_at(p);
+    h.run_steps(1);
+    h.drop_at(p);
+    h.run_steps(4);
+}
+
+fn value(h: &Harness<'static, PdfCraftApp>, name: &str) -> Vec<String> {
+    let s = h.state();
+    s.session.get(s.views[0].id).unwrap().form.iter().find(|f| f.name == name).unwrap().value.clone()
+}
+
+#[test]
+fn clicks_go_to_the_topmost_field_that_responds() {
+    // Radio button A sits inside a read-only label drawn over it; radio button B sits inside an
+    // editable text field drawn under it; the check box sits under an editable text field drawn
+    // over it. /Annots order is drawing order: [A label note B box top].
+    let h = &mut shell(pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 8 0 R 9 0 R 10 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 420 400] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R 4 0 R 8 0 R 7 0 R 9 0 R 10 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (label) /Ff 1 /V (Married?) /F 4 /Rect [20 300 200 330] /P 3 0 R >>",
+        "<< /FT /Btn /T (pick) /Ff 49152 /V /Off /Kids [6 0 R 7 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /Parent 5 0 R /AS /Off /F 4 /Rect [30 305 50 325] /P 3 0 R /AP << /N << /A 11 0 R /Off 11 0 R >> >> >>",
+        "<< /Type /Annot /Subtype /Widget /Parent 5 0 R /AS /Off /F 4 /Rect [230 305 250 325] /P 3 0 R /AP << /N << /B 11 0 R /Off 11 0 R >> >> >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (note) /F 4 /Rect [220 300 400 330] /P 3 0 R >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /T (box) /V /Off /AS /Off /F 4 /Rect [30 205 50 225] /P 3 0 R /AP << /N << /Yes 11 0 R /Off 11 0 R >> >> >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (top) /F 4 /Rect [20 200 200 230] /P 3 0 R >>",
+        "<< /Length 0 >>\nstream\n\nendstream",
+    ]));
+    click_widget(h, "pick", 0);
+    assert_eq!(value(h, "pick"), ["A"], "a read-only label over the button lets the click through");
+    click_widget(h, "pick", 1);
+    assert_eq!(value(h, "pick"), ["B"], "the button drawn over the text field takes the click");
+    assert!(h.state().views[0].forms.focus.is_none(), "and the text field under it isn't edited");
+    click_widget(h, "box", 0);
+    assert!(value(h, "box").is_empty(), "the text field drawn over the check box takes the click");
+    assert_eq!(h.state().views[0].forms.focus.as_ref().map(|f| f.name.as_str()), Some("top"));
+}
+
+fn png() -> Vec<u8> {
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, 8, 4);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut w = enc.write_header().unwrap();
+        w.write_image_data(&[200u8; 8 * 4 * 3]).unwrap();
+    }
+    out
+}
+
+#[test]
+fn an_image_field_takes_its_picture_after_typing_in_another_field() {
+    let h = &mut shell(pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [4 0 R 5 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /F 4 /Rect [20 340 280 360] /P 3 0 R >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (photo) /F 4 /Rect [20 150 280 320] /P 3 0 R /A << /S /JavaScript /JS (event.target.buttonImportIcon();) >> >>",
+    ]));
+    let dir = std::env::temp_dir().join(format!("pdfcraft-image-field-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let picture = dir.join("photo.png");
+    std::fs::write(&picture, png()).unwrap();
+    // Type in a field, then click the image field while that field is still being edited.
+    click_widget(h, "name", 0);
+    h.state_mut().views[0].forms.focus.as_mut().unwrap().text = "Ada".into();
+    h.state_mut().pick_override = Some(vec![picture.to_string_lossy().into_owned()]);
+    click_widget(h, "photo", 0);
+    h.run_steps(4);
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    assert_eq!(doc.form.iter().find(|f| f.name == "name").unwrap().value, ["Ada"], "the typing was kept");
+    assert_eq!(doc.can_undo(), Some("Set the image of photo"), "and the picture went in: {:?}", s.toast);
+    let _ = std::fs::remove_dir_all(&dir);
+}

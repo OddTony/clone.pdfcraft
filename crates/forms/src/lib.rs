@@ -108,6 +108,9 @@ pub struct Widget {
     /// Check boxes and radio buttons: what clicking this widget does besides changing the value
     /// (its mouse-up action, or else the field's), as Acrobat runs it after the value changes.
     pub action: Option<af::ButtonAction>,
+    /// Its position in its page's `/Annots` (0 when not listed): later widgets are drawn on top,
+    /// and take a click where widgets overlap.
+    pub stack: usize,
 }
 
 /// A terminal form field.
@@ -558,6 +561,9 @@ fn enumerate(doc: &Document) -> (Vec<Field>, usize) {
     adopt_page_fields(doc, &pages, &base, &page_of, &mut seen, &mut out);
     let adopted = out.len() - listed;
     rank_tabs(doc, &pages, &annot_index, &mut out);
+    for w in out.iter_mut().flat_map(|f| f.widgets.iter_mut()) {
+        w.stack = annot_index.get(&w.obj).copied().unwrap_or(0);
+    }
     (out, adopted)
 }
 
@@ -807,6 +813,7 @@ fn walk(
                 hidden: annot_flags & (2 | 32) != 0,
                 rotation: appearance::mk_rotation(doc, wd),
                 list: (kind == FieldKind::List).then(|| appearance::list_rows_of(doc, inh.da.as_deref().unwrap_or("/Helv 0 Tf 0 g"), Some(d), wd)),
+                stack: 0,
                 action: matches!(kind, FieldKind::CheckBox | FieldKind::Radio)
                     .then(|| button_action(doc, wd, &[]).or_else(|| button_action(doc, d, &[])))
                     .flatten(),
