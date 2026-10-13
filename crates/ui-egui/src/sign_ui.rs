@@ -424,7 +424,6 @@ impl PdfCraftApp {
             self.pkcs11_modules.remove(index);
         }
     }
-    }
 
     /// Configure New Digital ID ▸ Create: a self-signed ID saved as a .p12 next to the app data
     /// (or in `export_dir_override`). Returns its list index.
@@ -1509,8 +1508,12 @@ mod tests {
         let file = dir.join("old.p12");
         std::fs::write(&file, b"not opened").unwrap();
         let mut app = PdfCraftApp::new();
-        app.digital_ids =
-            vec![listed("windows:abc", "Store"), listed(&file.to_string_lossy(), "Old"), listed("/ids/new.p12", "New"), listed("pkcs11:token=x", "Token")];
+        app.digital_ids = vec![
+            listed("windows:abc", "Store"),
+            listed(&file.to_string_lossy(), "Old"),
+            listed("/ids/new.p12", "New"),
+            listed("pkcs11:token=x", "Token"),
+        ];
         let mut draft = SignDraft::new(0, None, None, None, &app.digital_ids);
         draft.selected = Some(2);
         draft.confirm_remove = Some(1);

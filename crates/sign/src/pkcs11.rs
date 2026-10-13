@@ -288,6 +288,8 @@ pub enum PinSource {
     Env(String),
     /// Ask through this callback (the UI's PIN dialog) at signing time.
     Ask(std::sync::Arc<dyn Fn() -> Result<secrecy::SecretString, SignError> + Send + Sync>),
+    /// The PIN itself, for one signing (the UI's PIN dialog hands it over; never persisted).
+    Value(secrecy::SecretString),
 }
 
 impl std::fmt::Debug for PinSource {
@@ -296,6 +298,7 @@ impl std::fmt::Debug for PinSource {
             PinSource::None => write!(f, "None"),
             PinSource::Env(name) => write!(f, "Env({name})"),
             PinSource::Ask(_) => write!(f, "Ask(..)"),
+            PinSource::Value(_) => write!(f, "Value(..)"),
         }
     }
 }
@@ -545,8 +548,9 @@ impl ExternalKey for Pkcs11Key {
 #[cfg(not(target_arch = "wasm32"))]
 impl Pkcs11Key {
     /// Log the session in: nothing when the token needs none, an empty login on a pinpad,
-    /// otherwise the PIN from the caller's source. A wrong PIN is the token's error, with
-    /// its remaining-tries flags left for the caller to read from the token info.
+    /// otherwise the PIN from the caller's source. A wrong PIN is the token's error; when the
+    /// token says it may have been the last try, the error says so (tokens report flags, not
+    /// a remaining-tries count).
     fn login(&self, session: &cryptoki::session::Session) -> Result<(), SignError> {
         use cryptoki::session::UserType;
         if !self.token.needs_pin && !self.token.pinpad {
@@ -563,9 +567,19 @@ impl Pkcs11Key {
                 std::env::var(name).map_err(|_| SignError::Crypto(format!("signing needs the token PIN in the {name} environment variable")))?.into(),
             ),
             PinSource::Ask(ask) => ask()?,
+            PinSource::Value(pin) => pin.clone(),
         };
         let auth: cryptoki::types::AuthPin = pin;
-        session.login(UserType::User, Some(&auth)).map_err(|e| SignError::Crypto(format!("the token couldn't be unlocked: {}", describe(&e))))
+        session.login(UserType::User, Some(&auth)).map_err(|e| {
+            let mut message = format!("the token couldn't be unlocked: {}", describe(&e));
+            // Best effort, failure path only: warn when the token flags this as the last try.
+            if matches!(e, cryptoki::error::Error::Pkcs11(cryptoki::error::RvError::PinIncorrect, ..))
+                && self.module.inner.get_token_info(self.slot).is_ok_and(|info| info.user_pin_final_try())
+            {
+                message.push_str(" (this may be the last try before the PIN locks)");
+            }
+            SignError::Crypto(message)
+        })
     }
 }
 
@@ -694,5 +708,7 @@ mod tests {
         assert!(debug.contains("PDFCRAFT_PIN"));
         let ask = super::PinSource::Ask(std::sync::Arc::new(|| Ok(secrecy::SecretString::new("s3cret".to_string().into()))));
         assert_eq!(format!("{ask:?}"), "Ask(..)");
+        let value = super::PinSource::Value(secrecy::SecretString::new("s3cret".to_string().into()));
+        assert_eq!(format!("{value:?}"), "Value(..)");
     }
 }

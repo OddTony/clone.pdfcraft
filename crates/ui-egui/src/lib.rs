@@ -6,6 +6,8 @@
 //! `pdfcraft-engine`.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+// The settings object in `persist` is one big `json!`: past the default macro depth.
+#![recursion_limit = "256"]
 
 /// Translate an English UI string into the current language (see [`i18n`]).
 macro_rules! tl {
