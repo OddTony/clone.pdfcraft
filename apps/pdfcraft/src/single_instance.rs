@@ -45,10 +45,41 @@ pub enum Claim {
     Alone,
 }
 
+/// What a launch asks the running app to do with its files: open them as tabs (Explorer
+/// double-clicks, Open With) or stage them in the Combine files tab (Explorer's
+/// "Combine files in PdfCraft", `--combine`; each selected file arrives as its own launch).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))]
+pub enum Kind {
+    /// `{"open":[…]}`: open as tabs.
+    Open,
+    /// `{"combine":[…]}`: join the Combine files list.
+    Combine,
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+impl Kind {
+    /// The request's JSON key.
+    fn key(self) -> &'static str {
+        match self {
+            Kind::Open => "open",
+            Kind::Combine => "combine",
+        }
+    }
+
+    /// The [`OsEvent`] the running app gets.
+    fn event(self, paths: Vec<String>) -> OsEvent {
+        match self {
+            Kind::Open => OsEvent::Open(paths),
+            Kind::Combine => OsEvent::Combine(paths),
+        }
+    }
+}
+
 /// Files that later launches handed over, and how to wake the UI for them.
 #[derive(Default)]
 struct Inbox {
-    paths: Vec<String>,
+    events: Vec<OsEvent>,
     wake: Option<Box<dyn Fn() + Send>>,
 }
 
@@ -64,52 +95,57 @@ impl Server {
         Self { inbox: Arc::default() }
     }
 
-    /// Queue files from another launch and wake the UI.
+    /// Queue an event from another launch and wake the UI.
     #[cfg_attr(not(windows), allow(dead_code))]
-    fn deliver(&self, paths: Vec<String>) {
+    fn deliver(&self, event: OsEvent) {
         let mut inbox = self.inbox.lock().unwrap_or_else(PoisonError::into_inner);
-        inbox.paths.extend(paths);
+        inbox.events.push(event);
         if let Some(wake) = &inbox.wake {
             wake();
         }
     }
 
-    /// The queue the UI drains every frame (`PdfCraftApp::os_events`). Files that arrived before
-    /// the window existed are in the first batch. A batch also brings the window forward, as the
-    /// new window it replaces would have been.
+    /// The queue the UI drains every frame (`PdfCraftApp::os_events`). Events that arrived
+    /// before the window existed come first. Any event also brings the window forward, as
+    /// the new window it replaces would have been.
     pub fn connect(&self, ctx: &egui::Context) -> OsEventsFn {
         let wake = ctx.clone();
         self.inbox.lock().unwrap_or_else(PoisonError::into_inner).wake = Some(Box::new(move || wake.request_repaint()));
         let inbox = Arc::clone(&self.inbox);
         let ctx = ctx.clone();
         Box::new(move || {
-            let paths = std::mem::take(&mut inbox.lock().unwrap_or_else(PoisonError::into_inner).paths);
-            if paths.is_empty() {
+            let events = std::mem::take(&mut inbox.lock().unwrap_or_else(PoisonError::into_inner).events);
+            if events.is_empty() {
                 return Vec::new();
             }
             ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-            vec![OsEvent::Open(paths)]
+            events
         })
     }
 }
 
-/// The request a launch sends: `{"open":[…]}` and a newline.
+/// The request a launch sends: `{"open":[…]}` or `{"combine":[…]}` and a newline.
 #[cfg_attr(not(windows), allow(dead_code))]
-pub fn request(paths: &[String]) -> String {
-    let mut line = serde_json::json!({ "open": paths }).to_string();
+pub fn request(kind: Kind, paths: &[String]) -> String {
+    let mut line = serde_json::json!({ kind.key(): paths }).to_string();
     line.push('\n');
     line
 }
 
-/// The paths a request names, or `None` when it isn't a request: anything but one JSON object
-/// whose `open` is a non-empty list of non-empty strings.
+/// The request a line holds, or `None` when it isn't one: anything but one JSON object
+/// whose `open` or `combine` (not both) is a non-empty list of non-empty strings.
 #[cfg_attr(not(windows), allow(dead_code))]
-pub fn parse_request(line: &str) -> Option<Vec<String>> {
+pub fn parse_request(line: &str) -> Option<(Kind, Vec<String>)> {
     let value: serde_json::Value = serde_json::from_str(line.trim_end()).ok()?;
-    let open = value.get("open")?.as_array()?;
-    let paths = open.iter().map(|p| p.as_str().filter(|s| !s.is_empty()).map(str::to_string)).collect::<Option<Vec<String>>>()?;
-    (!paths.is_empty()).then_some(paths)
+    let found: Vec<Kind> = [Kind::Open, Kind::Combine].into_iter().filter(|k| value.get(k.key()).is_some()).collect();
+    let kind = match found.as_slice() {
+        [kind] => *kind,
+        _ => return None,
+    };
+    let list = value.get(kind.key())?.as_array()?;
+    let paths = list.iter().map(|p| p.as_str().filter(|s| !s.is_empty()).map(str::to_string)).collect::<Option<Vec<String>>>()?;
+    (!paths.is_empty()).then_some((kind, paths))
 }
 
 /// File arguments made absolute against this launch's working folder, which the running app
@@ -119,18 +155,19 @@ pub fn absolute(paths: &[String]) -> Vec<String> {
 }
 
 /// Decide what this launch does. `files` are absolute ([`absolute`]); `may_hand_off` is false
-/// when the launch asked for anything besides opening files, so it gets its own window.
-pub fn claim(files: &[String], may_hand_off: bool) -> Claim {
+/// when the launch asked for anything besides handing files to the app, so it gets its own
+/// window. `kind` is what the running app does with them.
+pub fn claim(files: &[String], may_hand_off: bool, kind: Kind) -> Claim {
     #[cfg(windows)]
     {
         match socket_path() {
-            Some(path) => claim_at(&path, files, may_hand_off),
+            Some(path) => claim_at(&path, files, may_hand_off, kind),
             None => Claim::Alone,
         }
     }
     #[cfg(not(windows))]
     {
-        let _ = (files, may_hand_off);
+        let _ = (files, may_hand_off, kind);
         Claim::Alone
     }
 }
@@ -184,7 +221,7 @@ fn election(socket: &std::path::Path) -> Option<std::fs::File> {
 
 /// [`claim`] with the socket at `path`.
 #[cfg(windows)]
-fn claim_at(path: &std::path::Path, files: &[String], may_hand_off: bool) -> Claim {
+fn claim_at(path: &std::path::Path, files: &[String], may_hand_off: bool, kind: Kind) -> Claim {
     use uds_windows::{UnixListener, UnixStream};
     // Released when this function returns: by then this launch listens, or has handed over.
     let _election = election(path);
@@ -196,7 +233,7 @@ fn claim_at(path: &std::path::Path, files: &[String], may_hand_off: bool) -> Cla
                 if !may_hand_off {
                     return Claim::Alone;
                 }
-                return match hand_off(&stream, files) {
+                return match hand_off(&stream, files, kind) {
                     Ok(()) => Claim::HandedOff,
                     Err(e) => {
                         log::warn!("couldn't hand the files to the running PdfCraft ({e}); opening a new window");
@@ -242,12 +279,12 @@ fn claim_at(path: &std::path::Path, files: &[String], may_hand_off: bool) -> Cla
 
 /// Send `files` over `stream` and wait for the running app's `ok`.
 #[cfg(windows)]
-fn hand_off(stream: &uds_windows::UnixStream, files: &[String]) -> std::io::Result<()> {
+fn hand_off(stream: &uds_windows::UnixStream, files: &[String], kind: Kind) -> std::io::Result<()> {
     use std::io::{BufRead, Read, Write};
     stream.set_read_timeout(Some(TIMEOUT))?;
     stream.set_write_timeout(Some(TIMEOUT))?;
     let mut writer = stream;
-    writer.write_all(request(files).as_bytes())?;
+    writer.write_all(request(kind, files).as_bytes())?;
     let mut reply = String::new();
     std::io::BufReader::new(stream.take(16)).read_line(&mut reply)?;
     if reply == "ok\n" { Ok(()) } else { Err(std::io::Error::other("the running PdfCraft didn't confirm")) }
@@ -289,8 +326,8 @@ fn receive(stream: &uds_windows::UnixStream, server: &Server) -> std::io::Result
     if line.is_empty() {
         return Ok(());
     }
-    let paths = parse_request(&line).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "not an open request"))?;
-    server.deliver(paths);
+    let (kind, paths) = parse_request(&line).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "not a file request"))?;
+    server.deliver(kind.event(paths));
     let mut writer = stream;
     writer.write_all(b"ok\n")
 }
@@ -302,14 +339,27 @@ mod tests {
     #[test]
     fn a_request_names_the_paths_and_round_trips() {
         let paths = vec![r"C:\Users\me\Documents\Quote.pdf".to_string(), r"D:\Scans\Plan „A“ 1.pdf".to_string()];
-        let line = request(&paths);
-        assert!(line.ends_with('\n') && !line.trim_end().contains('\n'), "one line");
-        assert_eq!(parse_request(&line), Some(paths));
+        for kind in [Kind::Open, Kind::Combine] {
+            let line = request(kind, &paths);
+            assert!(line.ends_with('\n') && !line.trim_end().contains('\n'), "one line");
+            assert_eq!(parse_request(&line), Some((kind, paths.clone())));
+        }
     }
 
     #[test]
     fn anything_but_a_list_of_paths_is_refused() {
-        for line in ["", "ok\n", "{}", r#"{"open":[]}"#, r#"{"open":[""]}"#, r#"{"open":["a.pdf",3]}"#, r#"{"open":"a.pdf"}"#, "[\"a.pdf\"]"] {
+        for line in [
+            "",
+            "ok\n",
+            "{}",
+            r#"{"open":[]}"#,
+            r#"{"open":[""]}"#,
+            r#"{"open":["a.pdf",3]}"#,
+            r#"{"open":"a.pdf"}"#,
+            "[\"a.pdf\"]",
+            r#"{"combine":[]}"#,
+            r#"{"open":["a.pdf"],"combine":["b.pdf"]}"#,
+        ] {
             assert_eq!(parse_request(line), None, "{line:?}");
         }
     }
@@ -336,13 +386,17 @@ mod tests {
     fn delivered_files_reach_the_ui_once_wake_it_and_bring_the_window_forward() {
         let server = Server::new();
         // Before the window exists: queued, nothing to wake yet.
-        server.deliver(vec!["a.pdf".into()]);
+        server.deliver(OsEvent::Open(vec!["a.pdf".into()]));
         let ctx = egui::Context::default();
         let mut poll = server.connect(&ctx);
-        server.deliver(vec!["b.pdf".into()]);
+        server.deliver(OsEvent::Open(vec!["b.pdf".into()]));
+        server.deliver(OsEvent::Combine(vec!["c.pdf".into()]));
         let events = poll();
-        assert!(matches!(events.as_slice(), [OsEvent::Open(p)] if p == &["a.pdf", "b.pdf"]));
-        assert!(poll().is_empty(), "each file is delivered once");
+        assert!(
+            matches!(events.as_slice(), [OsEvent::Open(a), OsEvent::Open(b), OsEvent::Combine(c)] if a == &["a.pdf"] && b == &["b.pdf"] && c == &["c.pdf"]),
+            "each launch keeps its own request kind"
+        );
+        assert!(poll().is_empty(), "each event is delivered once");
     }
 
     #[cfg(windows)]
@@ -356,12 +410,15 @@ mod tests {
     #[test]
     fn a_second_launch_hands_its_files_to_the_first() {
         let path = socket("hand-off");
-        let Claim::Primary(first) = claim_at(&path, &[], true) else { panic!("the first launch listens") };
+        let Claim::Primary(first) = claim_at(&path, &[], true, Kind::Open) else { panic!("the first launch listens") };
         let mut poll = first.connect(&egui::Context::default());
-        assert!(matches!(claim_at(&path, &["C:\\a.pdf".into()], true), Claim::HandedOff));
+        assert!(matches!(claim_at(&path, &["C:\\a.pdf".into()], true, Kind::Open), Claim::HandedOff));
         assert!(matches!(poll().as_slice(), [OsEvent::Open(p)] if p == &["C:\\a.pdf"]));
+        // A combine launch hands its files to the running app's Combine files tab.
+        assert!(matches!(claim_at(&path, &["C:\\b.pdf".into()], true, Kind::Combine), Claim::HandedOff));
+        assert!(matches!(poll().as_slice(), [OsEvent::Combine(p)] if p == &["C:\\b.pdf"]));
         // A launch with options keeps its own window and doesn't take over the socket.
-        assert!(matches!(claim_at(&path, &["C:\\b.pdf".into()], false), Claim::Alone));
+        assert!(matches!(claim_at(&path, &["C:\\c.pdf".into()], false, Kind::Open), Claim::Alone));
         assert!(poll().is_empty());
     }
 
@@ -376,7 +433,7 @@ mod tests {
                 let (path, barrier) = (path.clone(), Arc::clone(&barrier));
                 std::thread::spawn(move || {
                     barrier.wait();
-                    claim_at(&path, &[format!("C:\\{i}.pdf")], true)
+                    claim_at(&path, &[format!("C:\\{i}.pdf")], true, Kind::Open)
                 })
             })
             .collect();
@@ -397,6 +454,6 @@ mod tests {
         }));
         // `symlink_metadata`, not `exists`, which follows the socket's reparse point and can fail.
         assert!(std::fs::symlink_metadata(&path).is_ok(), "the socket file stays behind");
-        assert!(matches!(claim_at(&path, &["C:\\a.pdf".into()], true), Claim::Primary(_)));
+        assert!(matches!(claim_at(&path, &["C:\\a.pdf".into()], true, Kind::Open), Claim::Primary(_)));
     }
 }
