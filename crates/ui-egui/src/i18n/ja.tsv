@@ -2352,3 +2352,6 @@ animation effects	Off	オフ
 	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
 	Move tag earlier	タグを前へ移動
 	Move tag later	タグを後へ移動
+
+# Preferences: the find field docked in the toolbar.
+	Find text in the toolbar	ツールバーにテキスト検索を表示

@@ -431,6 +431,12 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         if icons::button(ui, "printer", 32.0, false, &tip).clicked() {
                             app.run_command("print.dialog");
                         }
+                        // Save as beside Save, worded from the command (its label has the "…").
+                        let label = crate::i18n::menu_label("file.save_as", "Save as…");
+                        let tip = format!("{} ({})", label.trim_end_matches('…'), crate::commands::command_shortcut_label(ui.ctx(), "file.save_as"));
+                        if icons::button(ui, "file-output", 32.0, false, &tip).clicked() {
+                            app.run_command("file.save_as");
+                        }
                         let tip = crate::commands::command_tip(ui.ctx(), tl!("Save ({key})"), "file.save");
                         if icons::button(ui, "save", 32.0, false, &tip).clicked() {
                             app.run_command("file.save");
@@ -443,6 +449,14 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.add_space(8.0);
                     if widgets::search_box(ui, tl!("Find tools and commands"), 260.0).clicked() {
                         app.palette_open = true;
+                    }
+                    // The find field, docked left of the command search (Preferences).
+                    if app.find_in_toolbar
+                        && let Some((index, id)) = app.active_ids()
+                    {
+                        let pages = app.session.get(id).map_or(0, |d| d.info.pages.len());
+                        ui.add_space(8.0);
+                        crate::canvas::find_toolbar(&mut app.views[index], pages, ui, &t);
                     }
                 });
             });

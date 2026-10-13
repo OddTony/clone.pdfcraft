@@ -2316,3 +2316,6 @@ animation effects	Off	关
 	This document is trying to open a local file:	此文档正尝试打开本地文件：
 	Move tag earlier	将标签前移
 	Move tag later	将标签后移
+
+# Preferences: the find field docked in the toolbar.
+	Find text in the toolbar	在工具栏中查找文本

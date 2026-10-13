@@ -2366,3 +2366,6 @@ animation effects	Off	Desativados
 	This document is trying to open a local file:	Este documento está tentando abrir um arquivo local:
 	Move tag earlier	Mover tag para antes
 	Move tag later	Mover tag para depois
+
+# Preferences: the find field docked in the toolbar.
+	Find text in the toolbar	Localizar texto na barra de ferramentas

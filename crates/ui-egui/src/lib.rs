@@ -551,6 +551,9 @@ pub struct PdfCraftApp {
     pub recent: Vec<RecentFile>,
     /// Preferences: reopen the files that were open when PdfCraft last closed (#442).
     pub reopen_last_session: bool,
+    /// The find field (⌘F) sits in the toolbar, left of the command search, instead of floating
+    /// over the pages (Preferences).
+    pub find_in_toolbar: bool,
     /// The files open when PdfCraft last closed, read from the settings for
     /// [`PdfCraftApp::reopen_last_files`].
     pub last_session: last_session::LastSession,
@@ -905,6 +908,7 @@ impl PdfCraftApp {
             all_tools_expanded: false,
             recent: Vec::new(),
             reopen_last_session: false,
+            find_in_toolbar: true,
             last_session: Default::default(),
             quit_session: None,
             reload_changed_files: true,
@@ -2074,7 +2078,7 @@ impl PdfCraftApp {
     /// Serialize the user's persistent state (recent files, theme). Local only.
     pub fn persist(&self) -> String {
         let trusted: Vec<String> = self.session.trusted_certificates().iter().map(pdfcraft_engine::sign::x509::to_pem).collect();
-        serde_json::json!({
+        let mut v = serde_json::json!({
             "docking": self.docking,
             "docking_left_open": self.left_open,
             "docking_right": self.right,
@@ -2133,8 +2137,10 @@ impl PdfCraftApp {
             "combine_zoom": self.combine_zoom,
             "comments_panel_closed": self.comments_panel_closed,
             "right_panel_closed": self.right_panel_closed,
-        })
-        .to_string()
+        });
+        // One more key than `json!` expands within the recursion limit.
+        v["find_in_toolbar"] = serde_json::Value::Bool(self.find_in_toolbar);
+        v.to_string()
     }
 
     /// Restore state written by `persist`. Unknown or malformed data is ignored.
@@ -2164,6 +2170,9 @@ impl PdfCraftApp {
         }
         if let Some(on) = v["reopen_last_session"].as_bool() {
             self.reopen_last_session = on;
+        }
+        if let Some(on) = v["find_in_toolbar"].as_bool() {
+            self.find_in_toolbar = on;
         }
         self.last_session = last_session::LastSession::from_json(&v["last_session"]);
         if let Some(on) = v["system_title_bar"].as_bool() {

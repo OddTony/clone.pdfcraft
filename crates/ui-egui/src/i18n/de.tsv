@@ -2353,3 +2353,6 @@ animation effects	Off	Aus
 	This document is trying to open a local file:	Dieses Dokument versucht, eine lokale Datei zu öffnen:
 	Move tag earlier	Tag früher verschieben
 	Move tag later	Tag später verschieben
+
+# Preferences: the find field docked in the toolbar.
+	Find text in the toolbar	Textsuche in der Symbolleiste
