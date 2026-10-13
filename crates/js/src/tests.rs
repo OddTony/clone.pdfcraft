@@ -258,6 +258,92 @@ fn document_level_functions_are_available() {
 }
 
 #[test]
+fn add_field_creates_a_field_the_script_can_use() {
+    let o = go(
+        "var f = this.addField('notes', 'text', 1, [72, 700, 272, 680]); f.value = 'Hi'; f.readonly = true; \
+         var c = addField({cName: 'ok', cFieldType: 'checkbox', nPageNum: 0, oCoords: [10, 30, 30, 10]}); c.checkThisBox(0, true); \
+         event.value = [numFields, getNthFieldName(6), getField('notes').value, c.type, c.value].join('|');",
+        &Event::doc("Console"),
+    );
+    assert_eq!(o.error, None);
+    assert_eq!(o.value, "8|notes|Hi|checkbox|Yes");
+    assert_eq!(
+        o.requests,
+        [
+            Request::AddField { name: "notes".into(), kind: FieldType::Text, page: 1, rect: [72.0, 680.0, 272.0, 700.0], export: None },
+            Request::AddField { name: "ok".into(), kind: FieldType::CheckBox, page: 0, rect: [10.0, 10.0, 30.0, 30.0], export: None },
+        ]
+    );
+    let notes = o.changed.iter().find(|f| f.name == "notes").expect("the new field's properties are reported");
+    assert_eq!((notes.value.clone(), notes.readonly), (vec!["Hi".to_string()], true));
+}
+
+#[test]
+fn add_field_radio_buttons_share_a_group() {
+    let o = go(
+        "addField('pick', 'radiobutton', 0, [0, 20, 20, 0]); var r = addField('pick', 'radiobutton', 0, [30, 20, 50, 0]); r.checkThisBox(1);",
+        &Event::doc("Console"),
+    );
+    assert_eq!(o.error, None);
+    let exports: Vec<_> = o
+        .requests
+        .iter()
+        .filter_map(|r| match r {
+            Request::AddField { export, .. } => export.clone(),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(exports, ["Choice1", "Choice2"]);
+    assert_eq!(o.changed.iter().find(|f| f.name == "pick").map(|f| f.value.clone()), Some(vec!["Choice2".to_string()]));
+}
+
+#[test]
+fn add_field_refuses_what_it_cannot_create() {
+    let refused = |script: &str| {
+        let o = go(script, &Event::doc("Console"));
+        assert!(o.error.is_some(), "{script}: {o:?}");
+        assert!(!o.requests.iter().any(|r| matches!(r, Request::AddField { .. })), "{script}");
+        o.error.unwrap_or_default()
+    };
+    refused("addField('a', 'slider', 0, [0, 20, 20, 0])");
+    refused("addField('a', 'text', 3, [0, 20, 20, 0])");
+    refused("addField('a', 'text', -1, [0, 20, 20, 0])");
+    refused("addField('a', 'text', 0.5, [0, 20, 20, 0])");
+    refused("addField('a', 'text', 0, [0, 20, 20])");
+    refused("addField('a', 'text', 0, 'nope')");
+    refused("addField('a', 'text', 0, [0, NaN, 20, 0])");
+    refused("addField('a', 'text', 0, [0, 2, 20, 0])");
+    refused("addField('', 'text', 0, [0, 20, 20, 0])");
+    assert!(refused("addField('a.b', 'text', 0, [0, 20, 20, 0])").contains("period"));
+    assert!(refused("addField('price', 'text', 0, [0, 20, 20, 0])").contains("already exists"));
+    refused("addField('agree', 'radiobutton', 0, [0, 20, 20, 0])");
+    // A parent name in use.
+    let mut f = fields();
+    f.push(FieldState::new("row.0", FieldType::Text, vec![]));
+    let o = run("addField('row', 'text', 0, [0, 20, 20, 0])", &Event::doc("Console"), &doc(), &f, &[], Limits::default());
+    assert!(o.error.is_some_and(|e| e.contains("group")));
+    // A loop can't add fields without bound.
+    let o = go("for (var i = 0; i < 5000; i++) addField('f' + i, 'text', 0, [0, 20, 20, 0]);", &Event::doc("Console"));
+    assert!(o.error.is_some_and(|e| e.contains("at most")));
+    assert_eq!(o.requests.len(), MAX_ADDED_FIELDS);
+}
+
+#[test]
+fn remove_field_takes_the_field_out() {
+    let o = go(
+        "getField('total').value = 1; getField('zip').value = '9'; removeField('total'); removeField('nope'); \
+         event.value = [numFields, getField('total'), getField('zip').value].join('|');",
+        &Event::doc("Console"),
+    );
+    assert_eq!(o.error, None);
+    assert_eq!(o.value, "5||9");
+    assert_eq!(o.requests, [Request::RemoveField("total".into())]);
+    // The removed field's change is dropped; the later field's change still names that field.
+    let changed: Vec<_> = o.changed.iter().map(|f| (f.name.as_str(), f.value.clone())).collect();
+    assert_eq!(changed, [("zip", vec!["9".to_string()])]);
+}
+
+#[test]
 fn errors_and_runaway_scripts_are_contained() {
     let o = go("event.value = nosuch.thing;", &Event::field("Calculate", "total", "keep"));
     assert!(o.error.is_some());

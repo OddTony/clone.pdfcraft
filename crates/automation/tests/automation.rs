@@ -4890,6 +4890,17 @@ fn javascript_through_tools() {
     assert_eq!(total["value"], "3750");
     let r = ok(&mut a, "js_run", json!({ "doc": doc, "script": "nope()" }));
     assert!(r["error"].as_str().unwrap().contains("nope"));
+    // Dynamic fields: a script adds one and fills it, and takes another away.
+    let r = ok(
+        &mut a,
+        "js_run",
+        json!({ "doc": doc, "script": "addField('Notes', 'text', 0, [20, 200, 180, 180]).value = 'Rush'; removeField('Price');" }),
+    );
+    assert_eq!(r["error"], Value::Null);
+    let f = ok(&mut a, "form_fields", json!({ "doc": doc }));
+    let fields = f["fields"].as_array().unwrap();
+    assert_eq!(fields.iter().find(|x| x["name"] == "Notes").map(|x| x["value"].clone()), Some(json!("Rush")));
+    assert!(fields.iter().all(|x| x["name"] != "Price"));
     assert_eq!(ok(&mut a, "js_enabled", json!({ "enabled": false }))["enabled"], false);
     assert!(a.call("js_run", &json!({ "doc": doc, "script": "1" })).is_err());
 }

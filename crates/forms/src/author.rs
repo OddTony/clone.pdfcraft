@@ -537,6 +537,11 @@ pub fn add_field(doc: &mut Document, page: usize, rect: [f64; 4], kind: &NewFiel
     if radio_group.is_none() && existing.iter().any(|f| f.name == name) {
         return invalid(format!("a field named {name:?} already exists"));
     }
+    // A top-level field may not share its name with a parent of other fields.
+    let prefix = format!("{name}.");
+    if radio_group.is_none() && existing.iter().any(|f| f.name.starts_with(&prefix)) {
+        return invalid(format!("{name:?} already names a group of fields"));
+    }
     let af = ensure_form(doc)?;
     let mut w = widget_dict(page_ref, rect);
     let field_name = match kind {

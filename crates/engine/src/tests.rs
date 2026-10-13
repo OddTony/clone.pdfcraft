@@ -3036,6 +3036,72 @@ fn form_javascript_validates_calculates_and_formats() {
 }
 
 #[test]
+fn javascript_adds_and_removes_fields() {
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("order.pdf", None, Arc::new(scripted_form()), None).unwrap();
+    let names = |s: &Session, id| s.get(id).unwrap().form.iter().map(|f| f.name.clone()).collect::<Vec<_>>();
+    let before = names(&s, id);
+    // A button adds a field, fills and locks it, and takes another away: one undoable step.
+    let o = s
+        .run_javascript(
+            id,
+            "var f = this.addField('notes', 'text', 0, [20, 140, 180, 120]); f.value = 'Hi'; f.readonly = true; \
+             addField('pick', 'radiobutton', 0, [100, 60, 120, 40]); addField('pick', 'radiobutton', 0, [130, 60, 150, 40]).checkThisBox(1); \
+             removeField('price');",
+            Some("go"),
+        )
+        .unwrap();
+    assert_eq!(o.error, None);
+    assert!(o.requests.is_empty(), "the engine applied them: {:?}", o.requests);
+    let doc = s.get(id).unwrap();
+    let notes = doc.form.iter().find(|f| f.name == "notes").expect("the field was added");
+    assert_eq!(notes.value, ["Hi"]);
+    assert!(notes.read_only());
+    assert_eq!((notes.widgets[0].page, notes.widgets[0].rect), (Some(0), [20.0, 120.0, 180.0, 140.0]));
+    let pick = doc.form.iter().find(|f| f.name == "pick").expect("the radio group was added");
+    assert_eq!(pick.widgets.len(), 2);
+    assert_eq!(pick.value, ["Choice2"]);
+    assert!(!names(&s, id).contains(&"price".to_string()));
+    assert_eq!(s.get(id).unwrap().can_undo(), Some("Run JavaScript"));
+    s.undo(id).unwrap();
+    assert_eq!(names(&s, id), before);
+    s.redo(id).unwrap();
+    // Saved and reopened, the new fields are there.
+    let saved = s.save_bytes(id).unwrap();
+    let id2 = s.open("again.pdf", None, saved, None).unwrap();
+    let again = s.get(id2).unwrap();
+    assert_eq!(again.form.iter().find(|f| f.name == "notes").map(|f| f.value.clone()), Some(vec!["Hi".to_string()]));
+    assert!(again.form.iter().all(|f| f.name != "price"));
+    // A name in use throws, as in Acrobat, and nothing changes.
+    let o = s.run_javascript(id2, "addField('notes', 'text', 0, [20, 40, 180, 20]);", None).unwrap();
+    assert!(o.error.is_some_and(|e| e.contains("already exists")));
+    assert_eq!(s.get(id2).unwrap().can_undo(), None);
+}
+
+#[test]
+fn field_event_scripts_cannot_add_fields() {
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("order.pdf", None, Arc::new(scripted_form()), None).unwrap();
+    s.apply(
+        id,
+        Edit::SetFieldScript {
+            name: "total".into(),
+            event: "calculate".into(),
+            script: Some("addField('extra', 'text', 0, [20, 40, 180, 20]); event.value = 7;".into()),
+        },
+    )
+    .unwrap();
+    s.take_js_output(id);
+    s.apply(id, Edit::SetFieldValue { name: "qty".into(), value: FieldValue::Text("2".into()) }).unwrap();
+    let out = s.take_js_output(id);
+    assert!(out.errors.iter().any(|e| e.contains("addField")), "{out:?}");
+    assert!(out.requests.is_empty(), "{out:?}");
+    let doc = s.get(id).unwrap();
+    assert!(doc.form.iter().all(|f| f.name != "extra"));
+    assert_eq!(doc.form.iter().find(|f| f.name == "total").map(|f| f.value.clone()), Some(vec!["7".to_string()]), "the rest of the script ran");
+}
+
+#[test]
 fn edit_history_does_not_replay_field_script_side_effects() {
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let id = s.open("order.pdf", None, Arc::new(scripted_form()), None).unwrap();

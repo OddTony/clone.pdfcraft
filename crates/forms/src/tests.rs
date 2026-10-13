@@ -2104,3 +2104,13 @@ fn document_scripts_read_each_name_tree_node_once() {
     ]);
     assert_eq!(document_scripts_named(&doc), [("init".to_string(), "var ready = true;".to_string())]);
 }
+
+#[test]
+fn a_new_field_cannot_take_a_parent_fields_name() {
+    let mut doc = fixture();
+    let text = NewField::Text { multiline: false };
+    let err = add_field(&mut doc, 0, [50.0, 50.0, 150.0, 70.0], &text, Some("address")).unwrap_err();
+    assert!(err.to_string().contains("group"), "{err}");
+    // A kid's own partial name is free at the top level: its full name is address.city.
+    assert_eq!(add_field(&mut doc, 0, [50.0, 80.0, 150.0, 100.0], &text, Some("city")).unwrap(), "city");
+}
