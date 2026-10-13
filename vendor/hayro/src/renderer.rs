@@ -201,6 +201,10 @@ fn zeroed_buffer<T: Copy + Default>(len: usize) -> Option<Vec<T>> {
     Some(out)
 }
 
+/// PdfCraft patch: most samples (width × channels) of one row [`area_average`] sums, as `u64`
+/// column sums: 256 MB. Only absurdly wide strips reach it, and they fall back to the source.
+const MAX_AREA_COLUMNS: usize = 1 << 25;
+
 /// PdfCraft patch: resizes an `N`-channel image to `target` by exact area averaging (a box
 /// filter): each target pixel is the mean of the source area it covers, weighted by coverage.
 /// Images that don't ask for `/Interpolate` use it. Nearest-neighbour kept one sample in N, so a
@@ -208,14 +212,17 @@ fn zeroed_buffer<T: Copy + Default>(len: usize) -> Option<Vec<T>> {
 /// Averaging never blends anything outside a target pixel's own area, so whole-ratio shrinks of
 /// blocks aligned to the target grid stay exact, flat colours (#624).
 ///
-/// `fill_row(y, row)` writes source row `y` (`source.0 × N` samples) into `row`. Rows are read
-/// once each, in order, and memory is bounded by the target: one source row plus two target rows
-/// of sums besides the output. Coordinates are integers in units where a source pixel is
-/// `target` long and a target pixel `source` long, so every overlap is exact.
+/// `add_row(y, weight, columns)` adds `weight ×` source row `y` (`source.0 × N` samples) into
+/// `columns`. Rows are visited in order, each source row once per target row it overlaps. The
+/// source rows of one target row are summed down the columns first (a plain multiply-add over
+/// contiguous samples), and only then walked across once per *target* row: walking every source
+/// row across cost about 4× as much on a 10718 × 13701 scan. Memory is one row of column sums
+/// and one target row of sums besides the output. Coordinates are integers in units where a
+/// source pixel is `target` long and a target pixel `source` long, so every overlap is exact.
 fn area_average<const N: usize>(
     source: (u32, u32),
     target: (u32, u32),
-    mut fill_row: impl FnMut(usize, &mut [u8]) -> Option<()>,
+    mut add_row: impl FnMut(usize, u64, &mut [u64]) -> Option<()>,
 ) -> Option<Vec<u8>> {
     let ((sw, sh), (tw, th)) = (source, target);
     // Each target pixel's weights sum to `sw × sh`, so sums stay below 255 × MAX_IMAGE_PIXELS
@@ -225,35 +232,30 @@ fn area_average<const N: usize>(
         return None;
     }
     let out_len = image_byte_len(tw, th, N, MAX_IMAGE_PIXELS)?;
-    let row_len = source_byte_len(sw, 1, N, MAX_IMAGE_PIXELS)?;
+    let columns_len = (sw as usize).checked_mul(N)?;
+    if columns_len > MAX_AREA_COLUMNS {
+        return None;
+    }
     let sums_len = (tw as usize).checked_mul(N)?;
     let mut out = image_buffer(out_len)?;
-    let mut row = zeroed_buffer::<u8>(row_len)?;
-    let mut row_sums = zeroed_buffer::<u64>(sums_len)?;
+    let mut columns = zeroed_buffer::<u64>(columns_len)?;
     let mut sums = zeroed_buffer::<u64>(sums_len)?;
     let (sh, th) = (u64::from(sh), u64::from(th));
-    let (mut pos, mut sy, mut ty, mut loaded) = (0u64, 0u64, 0u64, None);
+    let (mut pos, mut sy, mut ty) = (0u64, 0u64, 0u64);
     while sy < sh && ty < th {
         let (source_end, target_end) = ((sy + 1) * th, (ty + 1) * sh);
         let end = source_end.min(target_end);
-        if loaded != Some(sy) {
-            // `sy < sh ≤ u32::MAX`, so it fits usize.
-            fill_row(sy as usize, &mut row)?;
-            area_average_row::<N>(&row, sw, tw, &mut row_sums);
-            loaded = Some(sy);
-        }
-        let weight = end - pos;
-        for (sum, row_sum) in sums.iter_mut().zip(&row_sums) {
-            *sum += weight * row_sum;
-        }
+        // `sy < sh ≤ u32::MAX`, so it fits usize.
+        add_row(sy as usize, end - pos, &mut columns)?;
         pos = end;
         if end == target_end {
+            area_average_row::<N>(&columns, sw, tw, &mut sums);
             // A mean of samples, so at most 255.
             out.extend(
                 sums.iter()
                     .map(|sum| ((sum + total / 2) / total).min(255) as u8),
             );
-            sums.fill(0);
+            columns.fill(0);
             ty += 1;
         }
         if end == source_end {
@@ -263,19 +265,19 @@ fn area_average<const N: usize>(
     (out.len() == out_len).then_some(out)
 }
 
-/// PdfCraft patch: [`area_average`] along one row: `sums` (`tw × N`) receives each target
-/// column's samples weighted by how much of it each source column covers (summing to `sw`).
-fn area_average_row<const N: usize>(row: &[u8], sw: u32, tw: u32, sums: &mut [u64]) {
+/// PdfCraft patch: [`area_average`] across one row: `sums` (`tw × N`) receives each target
+/// column's `columns` weighted by how much of it each source column covers (summing to `sw`).
+fn area_average_row<const N: usize>(columns: &[u64], sw: u32, tw: u32, sums: &mut [u64]) {
     sums.fill(0);
-    let (pixels, sums) = (row.as_chunks::<N>().0, sums.as_chunks_mut::<N>().0);
+    let (columns, sums) = (columns.as_chunks::<N>().0, sums.as_chunks_mut::<N>().0);
     let (sw, tw) = (u64::from(sw), u64::from(tw));
     let (mut pos, mut sx, mut tx) = (0u64, 0usize, 0usize);
-    while let (Some(pixel), Some(sum)) = (pixels.get(sx), sums.get_mut(tx)) {
+    while let (Some(column), Some(sum)) = (columns.get(sx), sums.get_mut(tx)) {
         let (source_end, target_end) = ((sx as u64 + 1) * tw, (tx as u64 + 1) * sw);
         let end = source_end.min(target_end);
         let weight = end - pos;
-        for (sum, sample) in sum.iter_mut().zip(pixel) {
-            *sum += weight * u64::from(*sample);
+        for (sum, column) in sum.iter_mut().zip(column) {
+            *sum += weight * column;
         }
         pos = end;
         if end == source_end {
@@ -294,9 +296,12 @@ fn area_average_slice<const N: usize>(
     target: (u32, u32),
 ) -> Option<Vec<u8>> {
     let row_len = source_byte_len(source.0, 1, N, MAX_IMAGE_PIXELS)?;
-    area_average::<N>(source, target, |y, row| {
+    area_average::<N>(source, target, |y, weight, columns| {
         let start = y.checked_mul(row_len)?;
-        row.copy_from_slice(data.get(start..start.checked_add(row_len)?)?);
+        let row = data.get(start..start.checked_add(row_len)?)?;
+        for (column, sample) in columns.iter_mut().zip(row) {
+            *column += weight * u64::from(*sample);
+        }
         Some(())
     })
 }
@@ -315,27 +320,30 @@ fn area_premultiplied_rgba(
         ImageData::Rgb(rgb) => (rgb.data.as_slice(), 3),
     };
     let width = source.0 as usize;
-    area_average::<4>(source, target, |y, row| {
+    area_average::<4>(source, target, |y, weight, columns| {
         let start = y.checked_mul(width)?;
         let end = start.checked_add(width)?;
         let colors = samples.get(start.checked_mul(channels)?..end.checked_mul(channels)?)?;
         let alphas = alpha.get(start..end)?;
-        let pixels = row.as_chunks_mut::<4>().0.iter_mut();
-        for ((pixel, color), a) in pixels.zip(colors.chunks_exact(channels)).zip(alphas) {
+        let pixels = columns.as_chunks_mut::<4>().0.iter_mut();
+        for ((column, color), a) in pixels.zip(colors.chunks_exact(channels)).zip(alphas) {
             let [r, g, b] = match color {
                 [v] => [*v; 3],
                 [r, g, b] => [*r, *g, *b],
                 _ => return None,
             };
             // Stencil masks and most soft masks are fully opaque or fully clear.
-            *pixel = match a {
+            let pixel = match a {
                 255 => [r, g, b, 255],
-                0 => [0; 4],
+                0 => continue,
                 a => AlphaColor::from_rgba8(r, g, b, *a)
                     .premultiply()
                     .to_rgba8()
                     .to_u8_array(),
             };
+            for (column, sample) in column.iter_mut().zip(pixel) {
+                *column += weight * u64::from(sample);
+            }
         }
         Some(())
     })
