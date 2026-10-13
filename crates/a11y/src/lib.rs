@@ -21,6 +21,7 @@ mod structure;
 mod tags;
 
 pub use alt::{AltError, ArtifactError, Figure, figures, mark_decorative, mark_tag_artifact, set_alt};
+pub use autotag::{AutoTagError, AutoTagResult, autotag_text};
 pub use headings::{Heading, headings};
 pub use report::{REPORT_WORDS, report_html};
 pub use tags::{TagError, TagInfo, TagPlacement, TagProperty, move_tag, set_tag_property, tags};
