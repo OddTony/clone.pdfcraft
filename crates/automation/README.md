@@ -120,7 +120,7 @@ resizes one `path` reference by scaling its displayed rectangle onto `rect`, lin
 a stroked path is then listed only roughly at `rect` (strokes thinner than 1 pt and paths under a
 point across are listed a point wide, and a stroke resized unevenly at its average thickness).
 `object_recolour {doc, page, objects, fill?, stroke?, generation?}` paints `path` references in new
-`#RRGGBB` colours, written as DeviceRGB, where they fill and where they stroke.
+colours (`#RRGGBB` or a colour name), written as DeviceRGB, where they fill and where they stroke.
 `object_delete {doc, page, objects, generation?}` deletes `image` and `path` references together;
 text and added content are refused. `object_arrange {doc, page, object, order, generation?}` moves
 one `path` or `image` reference in the painting order among the objects it overlaps: `front` or
