@@ -8,6 +8,11 @@ add a language: [localization.md](localization.md). Summary in [ROADMAP.md](../R
 
 ## How this was measured
 
+The percentage tables below preserve the **2026-10-10 historical snapshot**; they are
+not current catalog counts. As of 2026-10-13, Arabic has **2,552 distinct translated
+keys**, including the newer window captions. Current entry counts do not use the
+historical 2,143-key denominator.
+
 - **Strings translated** is measured: the catalogs in `crates/ui-egui/src/i18n/<code>.tsv`, counted
   as distinct `(context, English)` keys with a non-empty translation. The **current** denominator is
   the union of keys across all catalogs (**2,590** plain keys as of 2026-10-13, plus language-specific
