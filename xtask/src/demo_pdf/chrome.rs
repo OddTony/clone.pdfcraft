@@ -73,7 +73,6 @@ pub fn find(explicit: Option<&Path>) -> Result<PathBuf> {
 /// Some Chrome builds finish writing the PDF but linger afterwards, so rather
 /// than only waiting for exit we poll for a complete file and then stop Chrome.
 
-
 /// Convierte un Path a una URL file:// válida para Chromium en Windows.
 fn clean_file_url(path: &Path) -> Result<String> {
     let absolute = path.canonicalize()?;
@@ -91,13 +90,10 @@ pub fn print_to_pdf(chrome: &Path, html: &Path, pdf: &Path, log: &Path) -> Resul
     print_arg.push(pdf);
     let log_file = fs::File::create(log).with_context(|| format!("creating {}", log.display()))?;
 
-    // Generar la URL file:// limpia para Windows
+    // Generar la URL file:// limpia para Windows (sin duplicados)
     let target_url = clean_file_url(html)?;
 
-    // Generar la URL file:// limpia para Windows
-    let target_url = clean_file_url(html)?;
-
-    let profile = TempProfile::new();
+    let _profile = TempProfile::new();
     let mut child = Command::new(chrome)
         .arg("--headless=new")
         .arg("--disable-gpu")
@@ -107,7 +103,7 @@ pub fn print_to_pdf(chrome: &Path, html: &Path, pdf: &Path, log: &Path) -> Resul
         .arg("--no-pdf-header-footer")
         .arg("--generate-pdf-document-outline")
         .arg(print_arg)
-        .arg(&target_url) // <--- Pasamos la URL saneada
+        .arg(&target_url)
         .stdout(Stdio::null())
         .stderr(log_file)
         .spawn()
@@ -148,6 +144,7 @@ pub fn print_to_pdf(chrome: &Path, html: &Path, pdf: &Path, log: &Path) -> Resul
 /// Command-line arguments for a headless print. `MacAppCodeSignClone` is disabled because on macOS
 /// every launch otherwise makes a code-sign clone of the app under `/private/var/folders`, and a
 /// browser that is killed never removes it. The profile is a throwaway directory.
+#[allow(dead_code)]
 fn chrome_args(profile: &Path, print_arg: OsString, url: impl Into<OsString>) -> Vec<OsString> {
     let mut user_data = OsString::from("--user-data-dir=");
     user_data.push(profile);
@@ -195,7 +192,6 @@ impl Drop for TempProfile {
         let _ = fs::remove_dir_all(&self.0);
     }
 }
-
 
 /// A PDF is complete once its trailer's `%%EOF` marker has been written.
 fn is_complete(pdf: &Path) -> bool {

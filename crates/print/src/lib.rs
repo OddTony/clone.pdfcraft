@@ -264,7 +264,6 @@ pub fn matching_paper(size: (f64, f64)) -> Option<usize> {
     let size = (size.0.min(size.1), size.0.max(size.1));
     PAPERS.iter().position(|(_, p)| (p.0 - size.0).abs() <= 0.5 && (p.1 - size.1).abs() <= 0.5)
 }
-];
 
 /// The index in [`PAPERS`] of the paper that measures `width_mm × height_mm`, in either
 /// orientation and within 2 mm; `None` when none matches.

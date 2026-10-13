@@ -68,7 +68,7 @@ use windows::{
                 DM_COPIES, DM_DUPLEX, DM_ORIENTATION, DM_PAPERLENGTH, DM_PAPERSIZE, DM_PAPERWIDTH, HALFTONE,
                 HDC, LOGPIXELSX, PHYSICALHEIGHT, PHYSICALOFFSETX, PHYSICALOFFSETY, PHYSICALWIDTH, SRCCOPY,
             },
-            Printing::{ClosePrinter, DocumentPropertiesW, EnumPrintersW, OpenPrinterW, PRINTER_INFO_4W},
+            Printing::{ClosePrinter, DocumentPropertiesW, EnumPrintersW, OpenPrinterW, PRINTER_INFO_2W, PRINTER_INFO_4W},
         },
         Storage::Xps::{AbortDoc, EndDoc, EndPage, StartDocW, StartPage, DOCINFOW},
     },
@@ -84,6 +84,9 @@ const MAX_SIDE_PX: f32 = 9000.0;
 /// `DMDUP_VERTICAL` / `DMDUP_HORIZONTAL` se definen respecto de la hoja en vertical. Si en una
 /// hoja apaisada el dúplex sale al revés, poner esto en `false`.
 const SWAP_DUPLEX_ON_LANDSCAPE: bool = true;
+/// Si la impresora figura sin conexión en Windows, no se manda el trabajo y se avisa enseguida.
+/// En `false` el trabajo queda en la cola y sale cuando la impresora vuelva (como en otros programas).
+const REFUSE_WHEN_OFFLINE: bool = true;
 
 #[link(name = "winspool")]
 unsafe extern "system" {
@@ -185,6 +188,37 @@ pub fn printers() -> Vec<Printer> {
             .filter(|n| !n.is_empty())
             .map(|name| Printer { default: default.as_deref() == Some(name.as_str()), name })
             .collect()
+    }
+}
+
+/// Si Windows da la impresora por sin conexión. Se lee el estado que ya tiene el spooler: no se
+/// le pregunta a la impresora, así que responde enseguida aunque esté apagada.
+fn printer_offline(printer: &str) -> bool {
+    const ATTRIBUTE_WORK_OFFLINE: u32 = 0x400;
+    const STATUS_OFFLINE: u32 = 0x80;
+    const STATUS_NOT_AVAILABLE: u32 = 0x1000;
+    const STATUS_PORT_UNAVAILABLE: u32 = 0x20_0000;
+    let (mut needed, mut returned) = (0u32, 0u32);
+    unsafe {
+        let _ = EnumPrintersW(ENUM_LOCAL_AND_CONNECTIONS, PCWSTR::null(), 2, None, &mut needed, &mut returned);
+        if needed == 0 {
+            return false;
+        }
+        let mut buf = Aligned::new(needed as usize);
+        needed = (buf.0.len() * 8) as u32;
+        if EnumPrintersW(ENUM_LOCAL_AND_CONNECTIONS, PCWSTR::null(), 2, Some(buf.bytes()), &mut needed, &mut returned)
+            .is_err()
+        {
+            return false;
+        }
+        let infos = std::slice::from_raw_parts(buf.ptr::<PRINTER_INFO_2W>() as *const PRINTER_INFO_2W, returned as usize);
+        infos
+            .iter()
+            .find(|i| i.pPrinterName.to_string().ok().as_deref() == Some(printer))
+            .is_some_and(|i| {
+                i.Attributes & ATTRIBUTE_WORK_OFFLINE != 0
+                    || i.Status & (STATUS_OFFLINE | STATUS_NOT_AVAILABLE | STATUS_PORT_UNAVAILABLE) != 0
+            })
     }
 }
 
@@ -554,6 +588,11 @@ pub fn submit(pdf: &[u8], job: &Job) -> Result<String, Error> {
             .or_else(|| printers().into_iter().next().map(|p| p.name))
             .ok_or_else(|| Error::Spool("no hay ninguna impresora disponible".into()))?,
     };
+    if REFUSE_WHEN_OFFLINE && printer_offline(&printer) {
+        return Err(Error::Spool(format!(
+            "La impresora «{printer}» está sin conexión. Encendela y revisá que esté conectada, o elegí otra."
+        )));
+    }
     let pages = std::thread::scope(|s| {
         std::thread::Builder::new()
             .name("print job".into())

@@ -1,9 +1,11 @@
 //! System print spooler supplied by craft-print. PDF composition and permission checks
 //! stay in PdfCraft; these adapters retain the application's print-error surface.
 
+use crate::PrintError;
+
 pub use craft_print::{
-    Duplex, HANDLED_OPTIONS, HAS_PRINTER_PREFERENCES, Job, Printer, PrinterOption, Scaling, lp_args, lpstat_command, parse_lpoptions, parse_lpstat,
-    parse_lpstat_e, parse_ppd, parse_windows_printers, ppd_text, printers, printers_parsed,
+    Duplex, HANDLED_OPTIONS, Job, Printer, PrinterOption, Scaling, lp_args, parse_lpoptions, parse_lpstat,
+    parse_lpstat_e, parse_ppd, parse_windows_printers, ppd_text, printers_parsed, 
 };
 
 /// The driver's job options for a printer (CUPS: its PPD, with the queue's current defaults);
@@ -55,44 +57,6 @@ pub(crate) fn printer_options_via(printer: &str, ppd_dir: &std::path::Path, mut 
     options
 }
 
-pub fn submit(pdf: &[u8], job: &Job) -> Result<String, crate::PrintError> {
-    craft_print::submit(pdf, job).map_err(|e| crate::PrintError::Spool(e.to_string()))
-}
-
-pub fn open_printer_preferences(printer: &str) -> Result<(), crate::PrintError> {
-    craft_print::open_printer_preferences(printer).map_err(|e| crate::PrintError::Spool(e.to_string()))
-        // Queue names never contain `/`; anything else is not a queue and not a path to follow.
-        if !is_ppd_keyword(printer) {
-            return Vec::new();
-        }
-        const PPD_CAP: u64 = 16 << 20;
-        let ppd = std::fs::File::open(format!("/etc/cups/ppd/{printer}.ppd")).ok().and_then(|f| {
-            use std::io::Read as _;
-            let mut bytes = Vec::new();
-            f.take(PPD_CAP).read_to_end(&mut bytes).ok().map(|_| bytes)
-        });
-        let mut options = ppd.map(|b| parse_ppd(&ppd_text(&b))).unwrap_or_default();
-        let current = std::process::Command::new("lpoptions")
-            .args(["-p", printer, "-l"])
-            .output()
-            .map(|o| parse_lpoptions(&String::from_utf8_lossy(&o.stdout)))
-            .unwrap_or_default();
-        for (key, value) in current {
-            if let Some(o) = options.iter_mut().find(|o| o.key == key)
-                && o.choices.iter().any(|(c, _)| *c == value)
-            {
-                o.default = value;
-            }
-        }
-        options
-    }
-    #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
-    {
-        let _ = printer;
-        Vec::new()
-    }
-}
-
 /// Whether [`open_printer_preferences`] can show the driver's own settings window (Windows).
 pub const HAS_PRINTER_PREFERENCES: bool = cfg!(windows);
 
@@ -142,7 +106,11 @@ mod win {
     use pdfcraft_print_win as native;
 
     pub fn printers() -> Vec<Printer> {
-        native::printers().into_iter().map(|p| Printer { name: p.name, default: p.default }).collect()
+        native::printers().into_iter().map(|p| Printer { 
+            name: p.name, 
+            default: p.default,
+            two_sided: Some(false),
+        }).collect()
     }
 
     pub fn default_paper_mm(printer: &str) -> Option<(f32, f32)> {
@@ -155,9 +123,10 @@ mod win {
             copies: job.copies,
             collate: job.collate,
             duplex: match job.duplex {
-                Duplex::Off => native::Duplex::Off,
-                Duplex::LongEdge => native::Duplex::LongEdge,
-                Duplex::ShortEdge => native::Duplex::ShortEdge,
+                Some(Duplex::Off) => native::Duplex::Off,
+                Some(Duplex::LongEdge) => native::Duplex::LongEdge,
+                Some(Duplex::ShortEdge) => native::Duplex::ShortEdge,
+                None => native::Duplex::Off, // Valor por defecto si es None
             },
             grayscale: job.grayscale,
             title: job.title.clone(),
