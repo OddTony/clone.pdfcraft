@@ -799,7 +799,7 @@ fn ukrainian_preferences_and_search_keep_command_ids() {
         ok(&mut h, &c, "ui.key", json!({ "key": "Escape" }));
         h.state_mut().palette_query.clear();
     }
-    for (dialog, label) in [("properties", "Властивості документа"), ("protect", "Захистити паролем"), ("about", "Учасники")]
+    for (dialog, label) in [("properties", "Властивості документа"), ("protect", "Захистити PDF паролем"), ("about", "Учасники")]
     {
         ok(&mut h, &c, "ui.set", json!({ "key": "dialog", "value": dialog }));
         let found = ok(&mut h, &c, "ui.inspect", json!({ "query": label }));
