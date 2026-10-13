@@ -20,19 +20,11 @@ on:
         default: ""
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: release-${{ github.ref }}
-  # Never cancel a run mid-notarization or mid-upload; a newer push waits its turn.
   cancel-in-progress: false
-
-env:
-  CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
-  RUST_BACKTRACE: 1
-  PDFCRAFT_BUILD_SHA: ${{ github.sha }}
-  INPUT_VERSION: ${{ inputs.version }}
 
 jobs:
   version:
