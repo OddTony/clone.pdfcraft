@@ -123,13 +123,15 @@ impl PdfCraftApp {
                     };
                     crate::i18n::fmt(tl!("This document has no {kind} to change"), &[("kind", kind)])
                 }
+                // Restricted documents ask for their permissions password instead, so only an
+                // unprotected or a read-only document gets here.
                 commands::Needs::Security | commands::Needs::ProtectedSecurity if self.active.is_some() => {
-                    if self.active_ids().and_then(|(_, id)| self.session.get(id)).is_some_and(|d| d.allows_security_change()) {
-                        tl!("This document isn't password-protected").to_string()
-                    } else {
-                        tl!("Only the document's owner can change its security (open it with the permissions password)").to_string()
+                    match self.active_ids().and_then(|(_, id)| self.session.get(id)) {
+                        Some(d) if !d.allows_security_change() => crate::i18n::fmt(tl!("{name} is read-only"), &[("name", &d.name)]),
+                        _ => tl!("This document isn't password-protected").to_string(),
                     }
                 }
+                commands::Needs::Unlock if self.active.is_some() => tl!("This document has no restrictions to lift").to_string(),
                 commands::Needs::Assembly | commands::Needs::Modification | commands::Needs::Annotate if self.active.is_some() => {
                     tl!("The document's security settings don't allow this change").to_string()
                 }
@@ -173,6 +175,12 @@ impl PdfCraftApp {
             "file.revert" => self.dialog = Some(Dialog::Revert),
             "file.properties" => self.dialog = Some(Dialog::Properties(PropsTab::Description)),
             "protect.properties" => self.dialog = Some(Dialog::Properties(PropsTab::Security)),
+            // A restricted document's security changes once its permissions password is entered.
+            "protect.password" | "protect.remove" if self.active_ids().and_then(|(_, id)| self.session.get(id)).is_some_and(|d| d.can_unlock()) => {
+                let then = if id == "protect.password" { "protect.password" } else { "protect.remove" };
+                self.request_unlock(Some(then));
+            }
+            "protect.unlock" => self.request_unlock(None),
             "protect.password" => {
                 self.protect_draft = Default::default();
                 self.dialog = Some(Dialog::Protect);
@@ -385,7 +393,13 @@ impl PdfCraftApp {
                 }
             }
             "a11y.report" => self.show_accessibility_report(),
+            "a11y.autotag" => {
+                if self.apply_edit(pdfcraft_engine::Edit::AutoTagText) {
+                    self.choose_right_panel(Some(RightPanel::Tags));
+                }
+            }
             "a11y.alt_text" => self.start_alt_text(),
+            "a11y.tags" => self.choose_right_panel(Some(RightPanel::Tags)),
             "a11y.reading_options" => self.dialog = Some(Dialog::Properties(crate::PropsTab::Advanced)),
             "export.all_images" => self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::AllImages)),
             "edit.text" => {
@@ -399,9 +413,7 @@ impl PdfCraftApp {
                 self.notify_tr("Drag a rectangle to create a link; double-click a link to edit it");
             }
             "edit.links_from_urls" => self.links_from_urls(),
-            "edit.remove_links" => {
-                self.apply_edit(Edit::RemoveLinks { pages: None });
-            }
+            "edit.remove_links" => self.remove_all_links(),
             "redact.mark" => {
                 self.quick_tool = crate::QuickTool::Redact;
                 self.left = crate::LeftPanel::Tool("redact");
@@ -504,6 +516,7 @@ impl PdfCraftApp {
             "form.export_data" => self.export_data_dialog(false, true),
             "form.merge_data" => self.merge_data_dialog(),
             "export.docx" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Docx),
+            "export.pptx" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Pptx),
             "export.html" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Html),
             "export.rtf" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Rtf),
             "form.prepare" => {
@@ -573,6 +586,7 @@ impl PdfCraftApp {
             "create.blank" => self.create_blank(),
             "create.file" => self.open_dialog(),
             "create.multiple" => self.create_multiple_dialog(),
+            "create.multiple_separate" => self.create_multiple_separate_dialog(),
             "create.images" => self.create_from_images_dialog(),
             "create.clipboard" => self.create_from_clipboard(),
             "optimize.reduce" => self.reduce_file_size(),

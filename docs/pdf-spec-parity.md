@@ -44,7 +44,7 @@ are borrowed; PDF 2.0 additions and most subset standards are missing. **150–2
 | §12.9 | Measurement and geospatial | full | 2D measuring with viewports and calibration; no geospatial | `comment.geospatial` planned |
 | §12.10 | Document requirements | yes | none | |
 | §13 | Multimedia: sound, movies, screen, rich media, 3D (U3D, PRC) | yes | preserved untouched; not played or shown | `misc.rich-media-*`, `misc.3d-view` planned (P3) |
-| §14.3 | Metadata: info dictionary, XMP | full, XMP editor | info dictionary edited; XMP kept in step for PDF/A; no XMP editor or custom properties | `organize.xmp-editor` planned |
+| §14.3 | Metadata: info dictionary, XMP | full, XMP editor | info dictionary edited, with its XMP counterparts (title, author, subject, keywords, creator tool, producer) kept in step; XMP written for PDF/A; no XMP editor or custom properties | `organize.xmp-editor` planned |
 | §14.6–14.8 | Marked content, logical structure, tagged PDF | full, with editing tools | read (checker, bookmarks from structure, redaction of tags); no tag editing or autotag | gap 11 |
 | §14.9 | Accessibility support: alt text, ActualText, language | full | alt text figure by figure, language, title | `a11y.alt-text-workflow` |
 | §14.10 | Web capture | yes | none | |
@@ -64,7 +64,7 @@ are borrowed; PDF 2.0 additions and most subset standards are missing. **150–2
 | FreeText (text box, typewriter, callout) | create, rich text | create; rich text written but no per-run formatting | `comment.text-box` partial |
 | Line, Square, Circle, Polygon, PolyLine | create | create, all ten line endings | |
 | Highlight, Underline, Squiggly, StrikeOut | create | create | |
-| Caret (insert/replace text) | create | create; not snapped to text | `comment.insert-text` partial |
+| Caret (insert/replace text) | create | create; snapped to the text in the UI (upright horizontal text, unrotated pages) | `comment.insert-text` partial |
 | Stamp | create, custom, dynamic | create, custom, dynamic, Sign Here | stamp management planned |
 | Ink | create, erase | create, erase | no pressure |
 | FileAttachment | create | create | |
@@ -81,7 +81,8 @@ are borrowed; PDF 2.0 additions and most subset standards are missing. **150–2
 | Action | Acrobat | PdfCraft |
 |---|---|---|
 | GoTo | yes | yes (page with Fit; named destinations and zoom partial) |
-| GoToR, GoToE | yes | none (preserved; the Optimizer can remove invalid ones) |
+| GoToR | yes | partial: local PDF paths open in a PdfCraft tab; `/F` strings and file-spec dictionaries (`/UF`, then `/F`), source-relative paths, and explicit numeric-page destinations are supported. Automation uses the same resolver and `--root` confinement. Named destinations open at the target's default view with a warning; `/NewWindow` is a tab hint. Network/URL file systems are refused. |
+| GoToE | yes | none (preserved; the Optimizer can remove invalid ones) |
 | Launch | yes (restricted) | none |
 | Thread | yes | none |
 | URI | yes | yes |

@@ -147,6 +147,52 @@ fn system_fallback_fills_missing_scripts() {
     assert!(layout_widths(&mut fonts, ARABIC).iter().all(|w| w.is_finite() && *w > 0.0));
 }
 
+/// On a machine with a suitable installed Devanagari font, the installed definitions include
+/// it and Hindi text has glyphs; the embedded-only definitions never name it.
+#[test]
+fn system_fallback_covers_devanagari() {
+    assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_DEVANAGARI_FALLBACK));
+    let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
+    if !defs.font_data.contains_key(theme::SYSTEM_DEVANAGARI_FALLBACK) {
+        eprintln!("skipping system_fallback_covers_devanagari: no installed Devanagari fallback font (or PDFCRAFT_SYSTEM_FONTS=0)");
+        assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == theme::SYSTEM_DEVANAGARI_FALLBACK)));
+        return;
+    }
+    for (family, stack) in &defs.families {
+        assert!(stack.iter().any(|n| n == theme::SYSTEM_DEVANAGARI_FALLBACK), "{family:?}: {stack:?}");
+        assert_eq!(stack.iter().filter(|n| *n == theme::SYSTEM_DEVANAGARI_FALLBACK).count(), 1, "{family:?}");
+    }
+    let mut fonts = Fonts::new(TextOptions::default(), defs);
+    const DEVANAGARI: &str = "हिंदी पाठ सम्पादन";
+    for id in families() {
+        assert!(fonts.has_glyphs(&id, DEVANAGARI), "{id:?} lacks {DEVANAGARI}");
+    }
+    assert!(layout_widths(&mut fonts, DEVANAGARI).iter().all(|w| w.is_finite() && *w > 0.0));
+}
+
+/// On a machine with an installed Telugu font, the installed definitions include it and Telugu
+/// text has glyphs, so the language's own name in Preferences is not boxes (#1531). macOS always
+/// ships Kohinoor Telugu, so there the test never skips.
+#[test]
+fn system_fallback_covers_telugu() {
+    assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_TELUGU_FALLBACK));
+    let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
+    let off = std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0");
+    if !defs.font_data.contains_key(theme::SYSTEM_TELUGU_FALLBACK) && (off || !cfg!(target_os = "macos")) {
+        eprintln!("skipping system_fallback_covers_telugu: no installed Telugu fallback font (or PDFCRAFT_SYSTEM_FONTS=0)");
+        assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == theme::SYSTEM_TELUGU_FALLBACK)));
+        return;
+    }
+    for (family, stack) in &defs.families {
+        assert_eq!(stack.iter().filter(|n| *n == theme::SYSTEM_TELUGU_FALLBACK).count(), 1, "{family:?}: {stack:?}");
+    }
+    let mut fonts = Fonts::new(TextOptions::default(), defs);
+    for id in families() {
+        assert!(fonts.has_glyphs(&id, TELUGU), "{id:?} lacks {TELUGU}");
+    }
+    assert!(layout_widths(&mut fonts, TELUGU).iter().all(|w| w.is_finite() && *w > 0.0));
+}
+
 /// The Han characters of a catalog's translations.
 fn catalog_han(catalog: &str) -> String {
     let mut han: Vec<char> = catalog
@@ -218,7 +264,7 @@ fn ui_fonts_work_without_craft_fonts() {
     theme::install_fonts(&ctx);
 }
 
-/// Latin- and Cyrillic-script catalogs (Czech, Brazilian Portuguese, German, Spanish, French, Russian, Bulgarian, Hungarian, Ukrainian, Italian) are drawn entirely by the app's own faces
+/// Latin- and Cyrillic-script catalogs (Czech, Brazilian Portuguese, German, Spanish, French, Russian, Bulgarian, Hungarian, Ukrainian, Italian, Slovene) are drawn entirely by the app's own faces
 /// (Inter, JetBrains Mono): no letter falls through to egui's defaults or a CJK fallback. (egui's
 /// `has_glyphs` can't answer this: with only the primary face it is also the replacement face.)
 #[test]
@@ -227,17 +273,22 @@ fn primary_ui_fonts_cover_latin_and_cyrillic_catalogs() {
     let defs = theme::font_definitions();
     for (code, catalog) in [
         ("cs", include_str!("../src/i18n/cs.tsv")),
+        ("el", include_str!("../src/i18n/el.tsv")),
         ("pt-br", include_str!("../src/i18n/pt-br.tsv")),
         ("de", include_str!("../src/i18n/de.tsv")),
         ("es", include_str!("../src/i18n/es.tsv")),
         ("fr", include_str!("../src/i18n/fr.tsv")),
         ("ru", include_str!("../src/i18n/ru.tsv")),
+        ("kk", include_str!("../src/i18n/kk.tsv")),
         ("bg", include_str!("../src/i18n/bg.tsv")),
         ("hu", include_str!("../src/i18n/hu.tsv")),
         ("uk", include_str!("../src/i18n/uk.tsv")),
         ("it", include_str!("../src/i18n/it.tsv")),
+        ("tr", include_str!("../src/i18n/tr.tsv")),
+        ("sl", include_str!("../src/i18n/sl.tsv")),
+        ("lt", include_str!("../src/i18n/lt.tsv")),
     ] {
-        let mut text = String::from("áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽãõçâêôàÃÕÇÂÊÔÀñÑüÜäÄöÖőűß„“¿¡«»…ґҐєЄіІїЇ");
+        let mut text = String::from("áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽãõçâêôàÃÕÇÂÊÔÀñÑüÜäÄöÖőűß„“¿¡«»…ґҐєЄіІїЇәғқңөұүһӘҒҚҢӨҰҮҺ");
         for line in catalog.lines().filter(|l| !l.starts_with('#')) {
             if let Some(translation) = line.split('\t').nth(2) {
                 text.extend(translation.chars().filter(|c| !c.is_whitespace()));
