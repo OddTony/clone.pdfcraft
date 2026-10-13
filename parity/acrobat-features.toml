@@ -806,8 +806,8 @@ milestone = "M2"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/render/src/raster.rs::widget_appearance_states", "crates/render/src/raster.rs::highlights_without_an_appearance_are_drawn", "crates/engine/src/tests.rs::comments_without_appearances_are_drawn_but_not_saved", "crates/engine/src/tests.rs::cli_display_adds_missing_appearances_without_changing_the_source"]
-notes = "comments without /AP (FreeText, Ink, notes, stamps, shapes, markup) are drawn from their dictionaries in the page view, page_render and page images, including the CLI render command, never saved (a read-only document still gets the renderer's Highlight fallback only); Link borders without /AP and printing are not covered yet"
+evidence = ["crates/render/src/raster.rs::widget_appearance_states", "crates/render/src/raster.rs::highlights_without_an_appearance_are_drawn", "crates/engine/src/tests.rs::comments_without_appearances_are_drawn_but_not_saved", "crates/engine/src/tests.rs::cli_display_adds_missing_appearances_without_changing_the_source", "crates/annot/src/tests.rs::display_copies_get_indirect_fallback_fonts"]
+notes = "comments without /AP (FreeText, Ink, notes, stamps, shapes, markup) are drawn from their dictionaries in the page view, page_render and page images, including the CLI render command, never saved (a read-only document still gets the renderer's Highlight fallback only); FreeText text outside WinAnsi is drawn with craft-fonts Type 3 glyphs (Japanese faces) instead of ?; Link borders without /AP and printing are not covered yet"
 
 [[feature]]
 id = "view.render-error-isolation"
@@ -3656,8 +3656,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["sign.fill.text"]
 tools = ["fill_sign_add"]
-evidence = ["crates/annot/src/tests.rs::fill_and_sign_items_are_drawn", "crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/ui-egui/tests/fill_sign.rs::fill_text_size_controls_new_text_and_survives_settings_restore", "crates/automation/tests/automation.rs::fill_sign_text_font_size_is_saved_and_validated"]
-notes = "Fill & Sign text and dates have a 4–300 pt size control in the active toolbar; new items use the chosen size, which persists across launches. fill_sign_add accepts font_size for text and dates."
+evidence = ["crates/annot/src/tests.rs::fill_and_sign_items_are_drawn", "crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/ui-egui/tests/fill_sign.rs::fill_text_size_controls_new_text_and_survives_settings_restore", "crates/automation/tests/automation.rs::fill_sign_text_font_size_is_saved_and_validated", "crates/automation/tests/automation.rs::fill_sign_text_outside_winansi_saves_flattens_and_reads_back"]
+notes = "Fill & Sign text and dates have a 4–300 pt size control in the active toolbar; new items use the chosen size, which persists across launches. fill_sign_add accepts font_size for text and dates. Text outside WinAnsi (Japanese, Greek, Cyrillic, Central European) is drawn with craft-fonts Type 3 glyphs and reads back as typed; scripts that need shaping (Arabic, Hebrew, Indic, Thai) and every such character in a build without craft-fonts are still drawn as ? and reported; dates outside WinAnsi are still refused."
 
 [[feature]]
 id = "comment.text-box"
@@ -3668,8 +3668,8 @@ milestone = "M5"
 status = "partial"
 commands = ["comment.freetext"]
 tools = ["comment_add"]
-evidence = ["crates/ui-egui/tests/comments.rs::sticky_note_composer_posts_and_returns_to_select", "crates/annot/src/tests.rs::text_box_text_and_colour_changes_are_drawn"]
-notes = "Helvetica text with colour, size and alignment; /RC (XHTML) and /DS are written and kept in step with edits; per-run formatting (bold/italic spans) is not yet"
+evidence = ["crates/ui-egui/tests/comments.rs::sticky_note_composer_posts_and_returns_to_select", "crates/annot/src/tests.rs::text_box_text_and_colour_changes_are_drawn", "crates/annot/src/tests.rs::text_outside_winansi_is_drawn_with_type3_fonts_and_reads_back", "crates/annot/src/tests.rs::text_outside_winansi_is_measured_as_drawn"]
+notes = "Helvetica text with colour, size and alignment; text outside WinAnsi is drawn with craft-fonts Type 3 glyphs (Japanese faces, sans only) with a ToUnicode map, and boxes are sized to match; scripts that need shaping still show ?; lines break only at spaces (a CJK run after Latin text starts a new line, no kinsoku); /RC (XHTML) and /DS are written and kept in step with edits; per-run formatting (bold/italic spans) is not yet"
 
 [[feature]]
 id = "comment.callout"
@@ -5268,8 +5268,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["sign.fill.text"]
 tools = ["fill_sign_add"]
-evidence = ["crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/annot/src/tests.rs::fill_and_sign_items_are_drawn", "crates/automation/tests/automation.rs::fill_and_sign_through_tools", "crates/engine/src/tests.rs::typed_text_reads_across_as_displayed_on_rotated_pages"]
-notes = "typewriter FreeText, 10 pt Helvetica. Reads across as displayed on pages with /Rotate (sideways-stored scans): the box follows the displayed axes and the appearance is turned back (PdfCraft key /PCTextRotate); other apps that regenerate the appearance from /DA draw it unturned. A later page rotation does not re-turn it. Field detection does not work on scanned (image-only) forms yet"
+evidence = ["crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/annot/src/tests.rs::fill_and_sign_items_are_drawn", "crates/automation/tests/automation.rs::fill_and_sign_through_tools", "crates/engine/src/tests.rs::typed_text_reads_across_as_displayed_on_rotated_pages", "crates/automation/tests/automation.rs::fill_sign_text_outside_winansi_saves_flattens_and_reads_back"]
+notes = "typewriter FreeText, 10 pt Helvetica; text outside WinAnsi is drawn with craft-fonts Type 3 glyphs (Japanese faces) and saves, flattens and extracts as typed; scripts that need shaping, and everything without craft-fonts, still show ? and are reported. Reads across as displayed on pages with /Rotate (sideways-stored scans): the box follows the displayed axes and the appearance is turned back (PdfCraft key /PCTextRotate); other apps that regenerate the appearance from /DA draw it unturned. A later page rotation does not re-turn it. Field detection does not work on scanned (image-only) forms yet"
 
 [[feature]]
 id = "form.fill-sign-marks"

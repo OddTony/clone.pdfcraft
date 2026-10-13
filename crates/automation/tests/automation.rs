@@ -6495,3 +6495,27 @@ fn a_root_less_write_output_is_atomic_too() {
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Fill & Sign text outside WinAnsi (#506) is drawn with craft-fonts glyphs, not `?`: no warning,
+/// and it reads back as typed from the saved file, kept as a comment or flattened into the page.
+#[test]
+fn fill_sign_text_outside_winansi_saves_flattens_and_reads_back() {
+    if pdfcraft_fonts::document_japanese_font().is_none() {
+        eprintln!("skipping fill_sign_text_outside_winansi_saves_flattens_and_reads_back: built without craft-fonts");
+        return;
+    }
+    let dir = workdir("fill-sign-japanese");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let typed = "山田太郎　東京都江東区1-2-3";
+    let added = ok(&mut a, "fill_sign_add", json!({ "doc": doc, "page": 1, "type": "text", "at": [40.0, 80.0], "text": typed }));
+    assert!(added["warnings"].as_array().is_none_or(Vec::is_empty), "nothing is drawn as ?: {added}");
+    for (name, flatten) in [("kept.pdf", false), ("flat.pdf", true)] {
+        ok(&mut a, "doc_save", json!({ "doc": doc, "path": name, "flatten_fill_sign": flatten }));
+        let saved = ok(&mut a, "doc_open", json!({ "path": name }))["doc"].as_u64().unwrap();
+        let comments = ok(&mut a, "comment_list", json!({ "doc": saved }))["comments"].as_array().unwrap().clone();
+        assert_eq!(comments.iter().any(|c| c["contents"] == typed), !flatten, "{name}: the text stays a comment unless flattened");
+        let page = page_text(&mut a, saved).remove(0);
+        assert!(page.contains(typed), "{name}: the typed text reads back, got {page:?}");
+    }
+}

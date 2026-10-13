@@ -461,7 +461,7 @@ pub(super) fn rewrite_styled_block(
                     if fallback_names.len() >= MAX_TYPE3_GLYPHS {
                         return Err(EditError::Invalid("the replacement has too many fallback glyphs".into()));
                     }
-                    let fallback = type3_font(doc, &mut fonts, &s, family, source.bold, MAX_TYPE3_GLYPHS)?;
+                    let fallback = type3_fallback(doc, &mut fonts, &s, family, source.bold, MAX_TYPE3_GLYPHS)?;
                     let name = fallback.names.first().cloned().ok_or_else(no_japanese_font)?;
                     let dict = fonts
                         .get(name.as_bytes())

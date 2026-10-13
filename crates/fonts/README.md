@@ -60,6 +60,15 @@ set). Without that variable `CRAFT_FONTS` is empty and everything below copes:
   Sara Am; cluster ToUnicode entries preserve the original text. The shared Type 3 writer
   embeds outlines, so reopening does not depend on installed fonts.
 - `SHIPPORI_MINCHO`: Shippori Mincho's bytes, or `None`.
+- `type3_glyph` / `type3_font` / `type3_plan` (`type3.rs`): the Type 3 fonts generated text is
+  written in when the standard fonts can't encode it, one glyph per character with a ToUnicode
+  map (in blocks of at most 100 entries) and nothing embedded. The editor builds its fonts from
+  `type3_glyph` and `type3_font`; generated comment appearances use `type3_plan`, which picks
+  the first of the given faces that draws every character (else the first) and decides once which
+  characters are drawn, so measuring, reporting and drawing agree. Characters that
+  `needs_shaping` (combining marks, right-to-left and Indic scripts, Thai, ...) are never planned.
+  Greek and Cyrillic are respaced to their ink width. `type3_font` hands each glyph stream, the
+  ToUnicode stream and the descriptor to a callback (`doc.add`), as they must be indirect.
 
 Generated Japanese Type 3 fonts record the fallback face's family and style in an indirect
 `FontDescriptor`. `pdf::Metrics::base_font` uses its `FontName` when the Type 3 dictionary has
