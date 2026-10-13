@@ -912,8 +912,10 @@ impl Writer<'_, '_> {
         for cg in &t.cg_transforms {
             if cg.code_count == cg.glyph_count && cg.glyphs.len() == cg.glyph_count as usize {
                 for (k, g) in cg.glyphs.iter().enumerate() {
-                    if let Ok(g) = u16::try_from(*g) {
-                        glyph_of.insert(cg.code_position as usize + k, g);
+                    // CodePosition comes from the file: on a 32-bit target it may not fit with k.
+                    let at = usize::try_from(cg.code_position).ok().and_then(|p| p.checked_add(k));
+                    if let (Ok(g), Some(at)) = (u16::try_from(*g), at) {
+                        glyph_of.insert(at, g);
                     }
                 }
             }

@@ -603,3 +603,12 @@ fn standard_font_text_advances_by_the_faces_own_widths() {
     assert!(ops.contains("/Courier 1 Tf\n10 0 0 -10 6 5 Tm\n<69> Tj"), "{ops}");
     assert_eq!(font_names(&doc, &pages[0].0), ["Courier", "Times-Roman"]);
 }
+
+#[test]
+fn glyph_positions_at_the_end_of_the_index_range_do_not_overflow() {
+    // A CGTransform at the largest CodePosition: on a 32-bit target (wasm32) position + index
+    // used to overflow. The glyphs that can't be placed are ignored; the text still converts.
+    let body = r#"<ofd:TextObject ID="11" Boundary="0 0 50 10" Font="5" Size="4"><ofd:CGTransform CodePosition="4294967295" CodeCount="2" GlyphCount="2"><ofd:Glyphs>3 4</ofd:Glyphs></ofd:CGTransform><ofd:TextCode X="1" Y="4">Hi</ofd:TextCode></ofd:TextObject>"#;
+    let (pages, _, _) = convert(&package_with_font(&[&page(body)], false, pdfcraft_fonts::INTER_REGULAR));
+    assert!(pages[0].1.contains("/F5 1 Tf"), "{}", pages[0].1);
+}
