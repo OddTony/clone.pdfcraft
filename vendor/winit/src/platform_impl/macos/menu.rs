@@ -4,6 +4,8 @@ use objc2::sel;
 use objc2_app_kit::{NSApplication, NSEventModifierFlags, NSMenu, NSMenuItem};
 use objc2_foundation::{ns_string, MainThreadMarker, NSProcessInfo, NSString};
 
+use crate::platform::macos::AppMenuTitles;
+
 struct KeyEquivalent<'a> {
     key: &'a NSString,
     masks: Option<NSEventModifierFlags>,
@@ -84,6 +86,50 @@ pub fn initialize(app: &NSApplication) {
 
     unsafe { app.setServicesMenu(Some(&services_menu)) };
     app.setMainMenu(Some(&menubar));
+}
+
+// PdfCraft patch: retitle the standard application menu built by `initialize` (see
+// `platform::macos::set_app_menu_titles`). Each item is found by its action, the Services item by
+// its submenu, so the order of the items does not matter; a main menu the app replaced is left
+// alone, as is an item whose new title is empty.
+pub(crate) fn relabel(titles: &AppMenuTitles) -> usize {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return 0;
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    // SAFETY: AppKit calls on the main thread, on the menu objects `initialize` created.
+    let app_menu = unsafe { app.mainMenu().and_then(|bar| bar.itemAtIndex(0)).and_then(|item| item.submenu()) };
+    let Some(app_menu) = app_menu else {
+        return 0;
+    };
+    let services = unsafe { app.servicesMenu() };
+    let mut relabeled = 0;
+    for item in unsafe { app_menu.itemArray() }.iter() {
+        // The Services item first: setting its submenu gave it AppKit's `submenuAction:`.
+        let submenu = unsafe { item.submenu() };
+        let is_services = match (&submenu, &services) {
+            (Some(submenu), Some(services)) => Retained::as_ptr(submenu) == Retained::as_ptr(services),
+            _ => false,
+        };
+        let title = if is_services {
+            &titles.services
+        } else {
+            match unsafe { item.action() } {
+                Some(action) if action == sel!(orderFrontStandardAboutPanel:) => &titles.about,
+                Some(action) if action == sel!(hide:) => &titles.hide,
+                Some(action) if action == sel!(hideOtherApplications:) => &titles.hide_others,
+                Some(action) if action == sel!(unhideAllApplications:) => &titles.show_all,
+                Some(action) if action == sel!(terminate:) => &titles.quit,
+                _ => continue,
+            }
+        };
+        if title.is_empty() {
+            continue;
+        }
+        unsafe { item.setTitle(&NSString::from_str(title)) };
+        relabeled += 1;
+    }
+    relabeled
 }
 
 fn menu_item(

@@ -2596,3 +2596,11 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+
+# The macOS application menu (apps/pdfcraft/src/mac_menu.rs); `{app}` is the process name.
+	About {app}	Apie „{app}“
+	Services	Paslaugos
+	Hide {app}	Slėpti „{app}“
+	Hide Others	Slėpti kitas
+	Show All	Rodyti visas
+	Quit {app}	Baigti „{app}“

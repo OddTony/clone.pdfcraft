@@ -2361,3 +2361,12 @@ animation effects	Off	Disattivati
 	This document is trying to open a local file:	Questo documento sta tentando di aprire un file locale:
 	Move tag earlier	Sposta tag prima
 	Move tag later	Sposta tag dopo
+
+# The macOS application menu (the first menu in the menu bar, which AppKit builds in English for
+# apps without a nib; apps/pdfcraft/src/mac_menu.rs). `{app}` is the process name.
+	About {app}	Informazioni su {app}
+	Services	Servizi
+	Hide {app}	Nascondi {app}
+	Hide Others	Nascondi altre
+	Show All	Mostra tutte
+	Quit {app}	Esci da {app}

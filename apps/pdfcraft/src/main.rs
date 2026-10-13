@@ -34,6 +34,8 @@ mod apple_events;
 mod compositor_gpu;
 mod decorations;
 mod logging;
+#[cfg(target_os = "macos")]
+mod mac_menu;
 #[cfg(target_os = "windows")]
 mod motion;
 mod reopen;
@@ -366,6 +368,9 @@ fn app_creator<'a>(
         #[cfg(target_os = "macos")]
         {
             app.os_events = Some(apple_events.connect(&cc.egui_ctx));
+            // The application menu (About, Services, Hide, Quit) follows the interface language;
+            // AppKit builds it in English for apps without a nib.
+            app.on_language = Some(Box::new(mac_menu::apply));
         }
         if let Some(server) = instance {
             app.os_events = Some(server.connect(&cc.egui_ctx));

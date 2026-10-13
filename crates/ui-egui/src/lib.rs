@@ -394,6 +394,11 @@ pub type HostSaveFn = Box<dyn Fn(&str, &[u8], bool) -> Result<(), String>>;
 /// Told every frame whether any tab has unsaved work, so a host page can warn before leaving.
 pub type HostDirtyFn = Box<dyn FnMut(bool)>;
 
+/// Told the interface language when the app starts and whenever the preference changes, so the
+/// desktop app can relabel what egui does not draw (the macOS application menu).
+/// Returns whether it is done; `false` (what it relabels is not there yet) asks again next frame.
+pub type LanguageFn = Box<dyn FnMut(i18n::Lang) -> bool>;
+
 pub struct PasswordPrompt {
     pub name: String,
     pub path: Option<String>,
@@ -602,6 +607,10 @@ pub struct PdfCraftApp {
     pub host_save: Option<HostSaveFn>,
     /// Reports unsaved work to the embedding page (web, see [`HostDirtyFn`]).
     pub host_dirty: Option<HostDirtyFn>,
+    /// Told the interface language at start and on every change (desktop, see [`LanguageFn`]).
+    pub on_language: Option<LanguageFn>,
+    /// The language `on_language` was last told, so it hears each change once.
+    applied_language: Option<i18n::Lang>,
     /// A pending "save changes?" question (closing a dirty tab or quitting).
     pub close_request: Option<CloseRequest>,
     /// Save to this path instead of asking (tests and automation).
@@ -935,6 +944,8 @@ impl PdfCraftApp {
             os_events: None,
             host_save: None,
             host_dirty: None,
+            on_language: None,
+            applied_language: None,
             close_request: None,
             save_override: None,
             props_draft: None,
@@ -2297,6 +2308,18 @@ impl PdfCraftApp {
     /// Apply a named view option (`--page 3`, `--panel bookmarks`, `--theme dark`, …).
     ///
     /// This is the seed of the UI control channel (M3.9): the same verbs become `ui.set` calls.
+    /// Tell `on_language` the interface language when it differs from the one it last heard:
+    /// once at start, then on every change of the preference (Preferences, `ui.set`, restore).
+    /// Without a listener the language counts as applied.
+    pub fn notify_language(&mut self, lang: i18n::Lang) {
+        if self.applied_language == Some(lang) {
+            return;
+        }
+        if self.on_language.as_mut().is_none_or(|f| f(lang)) {
+            self.applied_language = Some(lang);
+        }
+    }
+
     pub fn set_option(&mut self, key: &str, value: &str) -> Result<(), String> {
         let view = self.active.and_then(|i| self.views.get_mut(i));
         match (key, view) {
@@ -2744,6 +2767,7 @@ impl eframe::App for PdfCraftApp {
         // Notices raised outside `ui` (opened files, OS events, the control channel) translate too.
         let lang = i18n::Lang::from_pref(&self.language);
         i18n::set_current(lang);
+        self.notify_language(lang);
         #[cfg(not(target_arch = "wasm32"))]
         {
             if let Some(worker) = &self.open_worker {

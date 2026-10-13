@@ -476,6 +476,36 @@ impl MonitorHandleExtMacOS for MonitorHandle {
     }
 }
 
+/// PdfCraft patch: the titles of the standard application menu winit builds when
+/// `with_default_menu` is on, so an application can show them in its interface language (AppKit
+/// localises them only for apps with a nib). Each field is the whole title ("Hide PdfCraft"); an
+/// empty one leaves that item as it is.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AppMenuTitles {
+    /// The "About <app>" item.
+    pub about: String,
+    /// The "Services" submenu.
+    pub services: String,
+    /// The "Hide <app>" item.
+    pub hide: String,
+    /// The "Hide Others" item.
+    pub hide_others: String,
+    /// The "Show All" item.
+    pub show_all: String,
+    /// The "Quit <app>" item.
+    pub quit: String,
+}
+
+/// PdfCraft patch: retitle the standard application menu. The items are found by their actions
+/// (`orderFrontStandardAboutPanel:`, `hide:`, `hideOtherApplications:`, `unhideAllApplications:`,
+/// `terminate:`) and the Services item by its submenu, so a main menu the application replaced
+/// is left alone. Call it on the main thread once the event loop runs (the menu is built just
+/// before the first `NewEvents`); it returns how many items were retitled, 0 off the main thread
+/// or before the menu exists. Safe to call again whenever the language changes.
+pub fn set_app_menu_titles(titles: &AppMenuTitles) -> usize {
+    crate::platform_impl::menu::relabel(titles)
+}
+
 /// Additional methods on [`ActiveEventLoop`] that are specific to macOS.
 pub trait ActiveEventLoopExtMacOS {
     /// Hide the entire application. In most applications this is typically triggered with
