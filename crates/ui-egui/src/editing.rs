@@ -680,12 +680,36 @@ fn write_atomically_with(path: &str, bytes: &[u8], suffixes: impl IntoIterator<I
             f.write_all(bytes)?;
             f.sync_all()?;
         }
-        std::fs::rename(&tmp, target)
+        rename_into_place(&tmp, target)
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
     result
+}
+
+/// Move the finished staging file onto `target`, falling back to a copy where the filesystem
+/// cannot rename.
+///
+/// Both files live in the same folder, so a plain `rename` normally succeeds and stays atomic.
+/// A mounted or network volume — a Cryptomator FUSE mount, a share, some container overlay
+/// mounts — answers `EXDEV` or "not supported" for a rename its own filesystem could have done,
+/// which used to fail the whole save with an error the user could only act on by saving
+/// elsewhere (#981). Copying the bytes across lands the save there instead; the cost is that the
+/// replacement is no longer atomic, which is the best such a filesystem allows.
+fn rename_into_place(tmp: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
+    use std::io::ErrorKind;
+    match std::fs::rename(tmp, target) {
+        Ok(()) => Ok(()),
+        Err(e) if matches!(e.kind(), ErrorKind::CrossesDevices | ErrorKind::Unsupported) => {
+            std::fs::copy(tmp, target)?;
+            // The bytes are on the target's filesystem now, so the staging file is litter. A
+            // failure here is not the user's problem and must not fail a save that worked.
+            let _ = std::fs::remove_file(tmp);
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -928,6 +952,41 @@ mod tests {
         #[allow(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
         std::fs::set_permissions(&target, perms).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The ordinary case: the rename moves the staging file, and nothing is copied.
+    #[test]
+    fn the_ordinary_rename_moves_the_staging_file_onto_the_target() {
+        let dir = staging_dir("rename-ok");
+        let tmp = staged(&dir, 1);
+        let target = dir.join("out.pdf");
+        std::fs::write(&tmp, "NEW").unwrap();
+        super::rename_into_place(&tmp, &target).unwrap();
+        assert_eq!(read(&target), "NEW");
+        assert!(!tmp.exists(), "the staging file was renamed, not copied");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A failure the copy cannot stand in for is reported, not swallowed.
+    ///
+    /// A real cross-device rename needs a second filesystem, which a test may not have, and
+    /// `std::fs` offers no hook to fake one. What can be checked on every filesystem is that the
+    /// fallback stays narrow: only a rename the filesystem refused as cross-device or unsupported
+    /// is retried as a copy, and everything else still reaches the user.
+    #[test]
+    fn a_rename_the_copy_cannot_replace_is_reported_rather_than_faked() {
+        let dir = staging_dir("not-a-rename");
+        let target = dir.join("out.pdf");
+        // A folder where the file should go: the rename fails, and so would the copy, so the
+        // error the user sees has to be the filesystem's own.
+        std::fs::create_dir_all(&target).unwrap();
+        let e = write_atomically_with(&target.to_string_lossy(), b"NEW", [5]).unwrap_err();
+        assert!(
+            !matches!(e.kind(), std::io::ErrorKind::CrossesDevices | std::io::ErrorKind::Unsupported),
+            "not a rename the copy stands in for, so the copy must not have been tried: {e}"
+        );
+        assert_eq!(listing(&dir), ["out.pdf"], "the staging file is cleaned up after the failure");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
