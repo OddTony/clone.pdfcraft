@@ -1138,3 +1138,323 @@
 	{verb} Background	{verb} nền
 	{verb} Header and Footer	{verb} đầu trang và chân trang
 	{verb} Watermark	{verb} hình mờ
+	Name on new comments	Tên trên bình luận mới
+	Comments	Bình luận
+	Comment	Bình luận
+	Add comment	Thêm bình luận
+	Delete comment	Xóa bình luận
+	Reply	Trả lời
+	Highlight	Tô sáng
+	Underline	Gạch chân
+	Strikethrough	Gạch ngang
+	Comment and review	Bình luận và duyệt
+	Redact	Che nội dung
+	Add a comment	Thêm bình luận
+	Add a reply	Thêm câu trả lời
+	Add a sticky note here	Thêm ghi chú dán tại đây
+	Added 1 comment	Đã thêm 1 bình luận
+	Added {n} comments	Đã thêm {n} bình luận
+	Apply redactions	Áp dụng việc che nội dung
+	Auto-size text to fit redaction region	Tự động chỉnh cỡ chữ vừa vùng che
+	Comments only	Chỉ bình luận
+	Create Custom Stamp	Tạo con dấu tùy chỉnh
+	Create custom stamp…	Tạo con dấu tùy chỉnh…
+	Delete stamp	Xóa con dấu
+	Document and markups	Tài liệu và chú thích đánh dấu
+	Document and stamps	Tài liệu và con dấu
+	Filter comments	Lọc bình luận
+	Highlight Style:	Kiểu tô sáng:
+	Mark as comments	Đánh dấu là bình luận
+	No comments match.	Không có bình luận nào khớp.
+	No comments yet.	Chưa có bình luận.
+	Redact all	Che tất cả
+	Redaction Tool Properties	Thuộc tính công cụ che nội dung
+	Redaction code:	Mã che nội dung:
+	Search comments	Tìm bình luận
+	Show all comments	Hiện tất cả bình luận
+	Sort comments by:	Sắp xếp bình luận theo:
+	This comment's appearance can't be changed yet.	Chưa thể thay đổi diện mạo của bình luận này.
+	This document has no comments to flatten	Tài liệu này không có bình luận nào để làm phẳng
+	e.g. My stamps	ví dụ: Con dấu của tôi
+	Add a stamp	Thêm một con dấu
+	Add a sticky note	Thêm một ghi chú dán
+	Add comments	Thêm bình luận
+	Apply redactions…	Áp dụng việc che nội dung…
+	Clear redaction marks	Xóa các dấu che
+	Comment list	Danh sách bình luận
+	Comments panel	Bảng bình luận
+	Find text and redact	Tìm văn bản và che
+	Find text and redact…	Tìm văn bản và che…
+	Flatten comments	Làm phẳng bình luận
+	Hide all comments	Ẩn tất cả bình luận
+	Highlight text	Tô sáng văn bản
+	Import comments…	Nhập bình luận…
+	Markup	Chú thích đánh dấu
+	Redact a PDF	Che nội dung một PDF
+	Redact text and images	Che văn bản và hình ảnh
+	Redaction properties…	Thuộc tính che nội dung…
+	Squiggly underline	Gạch chân lượn sóng
+	Squiggly underline text	Gạch chân lượn sóng cho văn bản
+	Stamp	Con dấu
+	Stamp palette	Bảng chọn con dấu
+	Stamps	Con dấu
+	Sticky note	Ghi chú dán
+	Strikethrough text	Gạch ngang văn bản
+	Summarize comments	Tóm tắt bình luận
+	Timestamp	Dấu thời gian
+	Underline text	Gạch chân văn bản
+	A {} annotation has additional actions	Chú thích {} có các hành động bổ sung
+	A {} annotation has no appearance stream	Chú thích {} không có luồng diện mạo
+	The document has been altered or corrupted since the timestamp was applied.	Tài liệu đã bị thay đổi hoặc hỏng kể từ khi dấu thời gian được áp dụng.
+	The document has been altered since this timestamp was applied in ways it does not permit ({}).	Tài liệu đã bị thay đổi kể từ khi dấu thời gian này được áp dụng theo những cách mà nó không cho phép ({}).
+	The document has been modified since this timestamp was applied, but the changes are permitted ({}).	Tài liệu đã được sửa đổi kể từ khi dấu thời gian này được áp dụng, nhưng các thay đổi được phép ({}).
+	The embedded timestamp token is valid and its authority is trusted; trusted time is {}.	Mã thông báo dấu thời gian được nhúng hợp lệ và cơ quan cấp nó được tin cậy; thời gian tin cậy là {}.
+	The timestamp contents are not hexadecimal.	Nội dung dấu thời gian không phải là thập lục phân.
+	The timestamp has no valid byte range.	Dấu thời gian không có dải byte hợp lệ.
+	The timestamp token could not be read ({}).	Không thể đọc mã thông báo dấu thời gian ({}).
+	The timestamp token is valid and its authority is trusted.	Mã thông báo dấu thời gian hợp lệ và cơ quan cấp nó được tin cậy.
+	The timestamp's byte range does not exclude exactly its contents.	Dải byte của dấu thời gian không loại trừ chính xác nội dung của nó.
+	This document has not been modified since this timestamp was applied.	Tài liệu này chưa bị sửa đổi kể từ khi dấu thời gian này được áp dụng.
+	alternate text hides an annotation inside it	văn bản thay thế che khuất một chú thích bên trong nó
+	comments	bình luận
+	{} annotations aren't allowed	Chú thích {} không được phép
+	Add highlight	Thêm tô sáng
+	Add redaction mark	Thêm dấu che
+	Add squiggly underline	Thêm gạch chân lượn sóng
+	Add stamp	Thêm con dấu
+	Add sticky note	Thêm ghi chú dán
+	Add strikethrough	Thêm gạch ngang
+	Add underline	Thêm gạch chân
+	All annotations are tagged	Tất cả chú thích đã được gắn thẻ
+	Alternate text should not hide annotation	Văn bản thay thế không nên che chú thích
+	Change comment properties	Thay đổi thuộc tính bình luận
+	Commenting	Bình luận
+	Comments and markups	Bình luận và chú thích đánh dấu
+	Couldn't summarize comments: {e}	Không thể tóm tắt bình luận: {e}
+	Created a comment summary	Đã tạo bản tóm tắt bình luận
+	Hides annotation	Che chú thích
+	Lock comment	Khóa bình luận
+	Mark for redaction	Đánh dấu để che
+	Move comment	Di chuyển bình luận
+	New {tool} comments will look like this one	Các bình luận {tool} mới sẽ trông giống bình luận này
+	Note	Ghi chú
+	Remove redaction marks	Gỡ các dấu che
+	Resize comment	Đổi kích thước bình luận
+	Tagged annotations	Chú thích có gắn thẻ
+	There are no redaction marks to apply	Không có dấu che nào để áp dụng
+	Unlock comment	Mở khóa bình luận
+	Video, sound and rich media must be tagged to be announced. Tag the multimedia annotations.	Video, âm thanh và đa phương tiện phong phú phải được gắn thẻ để được đọc to. Hãy gắn thẻ cho các chú thích đa phương tiện.
+	there are no redaction marks to apply	không có dấu che nào để áp dụng
+	{n} match(es) marked for redaction.	Đã đánh dấu {n} kết quả khớp để che.
+	Zoom	Thu phóng
+	Fit to width	Vừa chiều rộng
+	Display theme	Chủ đề hiển thị
+	Side panels	Bảng bên
+	Interface language	Ngôn ngữ giao diện
+	Interface size	Kích thước giao diện
+	Identity	Danh tính
+	Continuous scrolling	Cuộn liên tục
+	Default zoom	Thu phóng mặc định
+	Full screen mode	Chế độ toàn màn hình
+	Read mode	Chế độ đọc
+	Language	Ngôn ngữ
+	Theme	Chủ đề
+	Dark theme	Chủ đề tối
+	Document language	Ngôn ngữ tài liệu
+	Fit	Vừa khớp
+	Fit Height	Vừa chiều cao
+	Fit Visible	Vừa vùng hiển thị
+	Fit Width	Vừa chiều rộng
+	Fit to height	Vừa chiều cao
+	Hide toolbars	Ẩn thanh công cụ
+	Keep tool selected	Giữ công cụ được chọn
+	Keep tool selected: on	Giữ công cụ được chọn: bật
+	Light theme	Chủ đề sáng
+	Mouse wheel scroll speed	Tốc độ cuộn bánh xe chuột
+	Pick a tool in the quick bar, or type above.	Chọn một công cụ trên thanh nhanh, hoặc nhập ở phía trên.
+	Preview unavailable: {e}	Không có bản xem trước: {e}
+	Review History	Lịch sử duyệt
+	Same as interface ({language})	Giống giao diện ({language})
+	Scroll long text	Cuộn văn bản dài
+	Scroll tabs left	Cuộn các thẻ sang trái
+	Scroll tabs right	Cuộn các thẻ sang phải
+	Tool	Công cụ
+	Tooltip:	Chú giải công cụ:
+	User Interface Options	Tùy chọn giao diện người dùng
+	View revision {n}	Xem bản sửa đổi {n}
+	Zoom in	Phóng to
+	Zoom in ({key})	Phóng to ({key})
+	Zoom in / out (also pinch or {key}-scroll)	Phóng to / thu nhỏ (cũng có thể chụm ngón tay hoặc {key}-cuộn)
+	Zoom out	Thu nhỏ
+	Zoom out ({key})	Thu nhỏ ({key})
+	Fit to width scrolling	Cuộn vừa chiều rộng
+	Fit visible	Vừa vùng hiển thị
+	Marquee zoom	Thu phóng theo vùng chọn
+	Reset panel layout	Đặt lại bố cục bảng
+	Switch light / dark theme	Chuyển chủ đề sáng / tối
+	Tags panel	Bảng thẻ
+	No document language is set	Chưa đặt ngôn ngữ cho tài liệu
+	Panel layout could not be restored: {error}	Không thể khôi phục bố cục bảng: {error}
+	Panel move was not applied: {error}	Việc di chuyển bảng chưa được áp dụng: {error}
+	Zoom in (⌘+)	Phóng to (⌘+)
+	Zoom in / out (also pinch or ⌘-scroll)	Phóng to / thu nhỏ (cũng có thể chụm ngón tay hoặc ⌘-cuộn)
+	Zoom out (⌘−)	Thu nhỏ (⌘−)
+	Check that the tags read in the order a sighted reader would. Use the Reading Order tool or the Tags panel to correct it.	Hãy kiểm tra rằng các thẻ được đọc theo thứ tự mà người đọc nhìn thấy được sẽ đọc. Dùng công cụ Thứ tự đọc hoặc bảng Thẻ để sửa.
+	Couldn't fit the visible content: {e}	Không thể làm vừa nội dung hiển thị: {e}
+	Dark gray theme	Chủ đề xám đậm
+	Measuring tool	Công cụ đo
+	Primary language	Ngôn ngữ chính
+	Scripted content must be usable with a keyboard and assistive technology. Check the document's scripts.	Nội dung có script phải dùng được bằng bàn phím và công nghệ hỗ trợ. Hãy kiểm tra các script của tài liệu.
+	Text language is specified	Đã chỉ định ngôn ngữ văn bản
+	View more	Xem thêm
+	View less	Xem ít hơn
+	Float panel	Cho bảng nổi
+	Panels	Bảng
+	Resize panel window	Đổi kích thước cửa sổ bảng
+	Resize panels	Đổi kích thước các bảng
+	Display name	Tên hiển thị
+	Accessibility	Trợ năng
+	Accessibility Checker	Trình kiểm tra trợ năng
+	Accessibility Checker Options	Tùy chọn trình kiểm tra trợ năng
+	Collapse tag	Thu gọn thẻ
+	Create accessibility report	Tạo báo cáo trợ năng
+	Discard document tags	Loại bỏ thẻ tài liệu
+	Enable Acrobat JavaScript	Bật Acrobat JavaScript
+	Enable text access for screen reader devices for the visually impaired	Cho phép truy cập văn bản cho thiết bị đọc màn hình dành cho người khiếm thị
+	Expand tag	Mở rộng thẻ
+	Find a tag	Tìm một thẻ
+	Has JavaScript actions (run in M6)	Có các hành động JavaScript (chạy ở M6)
+	JavaScript Console	Bảng điều khiển JavaScript
+	Output intent: {list}	Mục đích đầu ra: {list}
+	Percentage	Phần trăm
+	Recognize Text	Nhận dạng văn bản
+	Recognized 1 word	Đã nhận dạng 1 từ
+	Recognized {n} words	Đã nhận dạng {n} từ
+	Scan	Quét
+	Show the accessibility report	Hiện báo cáo trợ năng
+	Tag type	Loại thẻ
+	Tags	Thẻ
+	Text in images isn't found; recognise text (OCR) first.	Văn bản trong hình ảnh không được tìm thấy; hãy nhận dạng văn bản (OCR) trước.
+	The checker found 1 problem which may prevent the document from being fully accessible.	Trình kiểm tra tìm thấy 1 vấn đề có thể khiến tài liệu không thể tiếp cận đầy đủ.
+	The checker found {n} problems which may prevent the document from being fully accessible.	Trình kiểm tra tìm thấy {n} vấn đề có thể khiến tài liệu không thể tiếp cận đầy đủ.
+	This document has no tagged figures.	Tài liệu này không có hình nào được gắn thẻ.
+	Verify	Xác minh
+	Verify to see what the document needs.	Hãy xác minh để biết tài liệu cần gì.
+	Automatically tag PDF	Tự động gắn thẻ PDF
+	Check for accessibility	Kiểm tra trợ năng
+	Check for accessibility…	Kiểm tra trợ năng…
+	Correct recognized text	Sửa văn bản đã nhận dạng
+	Document JavaScripts	JavaScript của tài liệu
+	Document JavaScripts…	JavaScript của tài liệu…
+	Fix reading order	Sửa thứ tự đọc
+	JavaScript	JavaScript
+	JavaScript console…	Bảng điều khiển JavaScript…
+	Make accessible	Làm cho dễ tiếp cận
+	Optimize scanned documents	Tối ưu hóa tài liệu quét
+	Optimize scanned documents…	Tối ưu hóa tài liệu quét…
+	PDF/A…	PDF/A…
+	Preflight	Kiểm tra trước in
+	Prepare for accessibility	Chuẩn bị cho trợ năng
+	Recognize text	Nhận dạng văn bản
+	Recognize text…	Nhận dạng văn bản…
+	Scan & OCR	Quét & OCR
+	Use JavaScript	Dùng JavaScript
+	Accessibility Report	Báo cáo trợ năng
+	The checker found problems which may prevent the document from being fully accessible.	Trình kiểm tra tìm thấy các vấn đề có thể khiến tài liệu không thể tiếp cận đầy đủ.
+	The document has no tags (structure tree)	Tài liệu không có thẻ (cây cấu trúc)
+	The document isn't marked as tagged (MarkInfo Marked)	Tài liệu không được đánh dấu là có gắn thẻ (MarkInfo Marked)
+	The document isn't tagged, so none of its content is	Tài liệu chưa được gắn thẻ, nên không nội dung nào của nó được gắn thẻ
+	Accessibility permission flag	Cờ quyền trợ năng
+	Accessibility permission flag is set	Cờ quyền trợ năng đã được đặt
+	All multimedia objects are tagged	Tất cả đối tượng đa phương tiện đã được gắn thẻ
+	Change tag properties	Thay đổi thuộc tính thẻ
+	Delete document JavaScript	Xóa JavaScript của tài liệu
+	Device colour is used, but there is no PDF/A output intent	Màu thiết bị được dùng, nhưng không có mục đích đầu ra PDF/A
+	DeviceCMYK is used: it needs a CMYK output intent (not added automatically)	DeviceCMYK được dùng: cần có mục đích đầu ra CMYK (không được thêm tự động)
+	Document is tagged PDF	Tài liệu là PDF có gắn thẻ
+	Document structure provides a logical reading order	Cấu trúc tài liệu cung cấp thứ tự đọc hợp lý
+	Heading levels shouldn't skip (an H1 followed by an H3). Retag the headings.	Cấp đề mục không nên bị bỏ qua (H1 theo sau là H3). Hãy gắn thẻ lại các đề mục.
+	List items belong in a list. Fix the list's tags.	Các mục danh sách phải nằm trong một danh sách. Hãy sửa thẻ của danh sách.
+	List labels and bodies belong in a list item. Fix the list's tags.	Nhãn và nội dung danh sách phải nằm trong một mục danh sách. Hãy sửa thẻ của danh sách.
+	Logical Reading Order	Thứ tự đọc hợp lý
+	Make scans searchable, then make them smaller.	Làm cho bản quét có thể tìm kiếm được, rồi làm cho chúng nhỏ hơn.
+	No inaccessible scripts	Không có script không thể tiếp cận
+	Optimize Scanned Documents	Tối ưu hóa tài liệu quét
+	Run JavaScript	Chạy JavaScript
+	Run a JavaScript	Chạy một JavaScript
+	Security settings must allow assistive technology to read the content ("Enable text access for screen reader devices"). Change the document's security to allow it.	Cài đặt bảo mật phải cho phép công nghệ hỗ trợ đọc nội dung ("Cho phép truy cập văn bản cho thiết bị đọc màn hình"). Hãy thay đổi bảo mật của tài liệu để cho phép.
+	Table cells belong in a row. Fix the table's tags.	Các ô bảng phải nằm trong một hàng. Hãy sửa thẻ của bảng.
+	Table rows belong directly in a table or its head, body or foot. Fix the table's tags.	Các hàng bảng phải nằm trực tiếp trong bảng hoặc phần đầu, thân hay chân của nó. Hãy sửa thẻ của bảng.
+	Tagged PDF	PDF có gắn thẻ
+	Tagged content	Nội dung có gắn thẻ
+	Tagged multimedia	Đa phương tiện có gắn thẻ
+	Tags give the document a logical structure that assistive technology follows. Tag the document (Automatically tag PDF).	Thẻ cung cấp cho tài liệu một cấu trúc hợp lý mà công nghệ hỗ trợ dựa theo. Hãy gắn thẻ cho tài liệu (Tự động gắn thẻ PDF).
+	The document has document-level JavaScript	Tài liệu có JavaScript cấp tài liệu
+	the document has no tags	tài liệu không có thẻ
+	{n} tags	{n} thẻ
+	Move tag earlier	Chuyển thẻ lên trước
+	Move tag later	Chuyển thẻ ra sau
+@plural	Delete {n} field|Delete {n} fields	Xóa {n} ô
+@plural	{n} byte|{n} bytes	{n} byte
+@plural	{n} image optimized|{n} images optimized	Đã tối ưu hóa {n} hình ảnh
+@plural	{n} item discarded|{n} items discarded	Đã loại bỏ {n} mục
+@plural	{n} pixel|{n} pixels	{n} điểm ảnh
+action wizard	Start	Bắt đầu
+comment menu	Edit	Sửa
+animation effects	Off	Tắt
+animation effects	On	Bật
+calendar date	January	tháng Một
+calendar date	February	tháng Hai
+calendar date	March	tháng Ba
+calendar date	April	tháng Tư
+calendar date	May	tháng Năm
+calendar date	June	tháng Sáu
+calendar date	July	tháng Bảy
+calendar date	August	tháng Tám
+calendar date	September	tháng Chín
+calendar date	October	tháng Mười
+calendar date	November	tháng Mười Một
+calendar date	December	tháng Mười Hai
+calendar weekday	Su	CN
+calendar weekday	Mo	T2
+calendar weekday	Tu	T3
+calendar weekday	We	T4
+calendar weekday	Th	T5
+calendar weekday	Fr	T6
+calendar weekday	Sa	T7
+signature pad	Type	Nhập chữ
+scroll speed	Slow	Chậm
+scroll speed	Normal	Bình thường
+scroll speed	Fast	Nhanh
+certificate	Subject	Chủ thể chứng chỉ
+certificate	Issued to	Cấp cho
+certificate	Issued by	Cấp bởi
+certificate	Valid from	Có hiệu lực từ
+certificate	Valid to	Có hiệu lực đến
+certificate	Intended usage	Mục đích sử dụng
+certificate	Version	Phiên bản
+certificate	Serial number	Số sê-ri
+certificate	Issuer	Tổ chức cấp
+certificate	Validity starts	Hiệu lực bắt đầu
+certificate	Validity ends	Hiệu lực kết thúc
+certificate	Public key	Khóa công khai
+certificate	Basic constraints	Ràng buộc cơ bản
+certificate	Key usage	Mục đích sử dụng khóa
+certificate	Self-signed	Tự ký
+certificate	SHA-1 digest	Giá trị băm SHA-1
+certificate	SHA-256 digest	Giá trị băm SHA-256
+@plural	{n} page|{n} pages	{n} trang
+@plural	{n} file|{n} files	{n} tệp
+@plural	{n} field|{n} fields	{n} ô
+@plural	{n} comment|{n} comments	{n} bình luận
+@plural	{n} result|{n} results	{n} kết quả
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} tên ô trùng với các tệp trước và sẽ được đổi tên: {list}
+@plural	{n} object selected|{n} objects selected	Đã chọn {n} đối tượng
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	Đã tải xuống {n} PDF
+key	Ctrl	Ctrl
+key	Shift	Shift
+key	Delete	Delete
+key	Esc	Esc
+key	Home	Home
+key	End	End
+key	Space	Space
