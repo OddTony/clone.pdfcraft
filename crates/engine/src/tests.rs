@@ -4353,6 +4353,7 @@ fn content_refresh_lists_match_the_storages_an_edit_touches() {
     }
     let plain = [
         Edit::MoveObjects { page: 0, objects: vec![target(crate::ObjectKind::Text)], offset: [1.0, 0.0] },
+        Edit::MoveObjects { page: 0, objects: vec![target(crate::ObjectKind::Path)], offset: [1.0, 0.0] },
         Edit::EditTextBlock { page: 0, block: 0, text: String::new(), style: pdfcraft_edit::BlockStyle::default() },
     ];
     for edit in &plain {
@@ -4522,4 +4523,24 @@ fn copy_image_finds_a_picture_inside_form_artwork_under_text() {
     // The largest picture in the group, as the JPEG stored in the PDF.
     assert_eq!(d.page_image_copy_file(0, 0).unwrap(), ("jpg", jpeg));
     assert!(d.page_image_copy_file(0, 1).is_err());
+}
+
+#[test]
+fn vector_paths_are_listed_and_hit_tested_topmost_first() {
+    use pdfcraft_cos::{Dict, Object, Stream};
+    let mut cos = pdfcraft_cos::Document::open(Arc::new(fixture(1))).unwrap();
+    let page = pdfcraft_model::pages(&cos)[0].obj;
+    let content = cos.add(Object::Stream(Stream::flate(Dict::new(), b"0 0 1 rg 20 40 100 50 re f 1 0 0 rg 60 60 100 50 re f")));
+    cos.update_dict(page, |d| d.set(b"Contents".to_vec(), Object::Ref(content))).unwrap();
+    let bytes = Arc::new(pdfcraft_cos::write_incremental(&cos, &pdfcraft_cos::SaveOptions::default()).unwrap());
+    let mut s = Session::new();
+    let id = s.open("paths.pdf", None, bytes, None).unwrap();
+    let doc = s.get(id).unwrap();
+    assert_eq!(doc.page_paths(0).unwrap().len(), 2);
+    assert!(doc.page_paths(5).is_err(), "errors are reported, not an empty list");
+    assert_eq!(doc.path_at(0, [80.0, 70.0], 0.0), Some(1), "the later path is painted on top");
+    assert_eq!(doc.path_at(0, [30.0, 50.0], 0.0), Some(0));
+    assert_eq!(doc.path_at(0, [190.0, 290.0], 0.0), None);
+    let targets: Vec<_> = doc.editable_objects(0).unwrap().iter().map(|o| o.target).collect();
+    assert_eq!(targets, [0, 1].map(|index| ObjectTarget { kind: ObjectKind::Path, index }));
 }

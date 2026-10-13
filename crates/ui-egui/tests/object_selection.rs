@@ -6,10 +6,10 @@ use pdfcraft_engine::{AddedText, Edit, EditableObject};
 use pdfcraft_ui_egui::PdfCraftApp;
 
 fn fixture(clipping: bool) -> Vec<u8> {
-    fixture_with_background(clipping, false)
+    fixture_with_background(clipping, false, "")
 }
 
-fn fixture_with_background(clipping: bool, background: bool) -> Vec<u8> {
+fn fixture_with_background(clipping: bool, background: bool, artwork: &str) -> Vec<u8> {
     let stream = |body: &str, dict: &str| format!("<< {dict} /Length {} >>\nstream\n{body}\nendstream", body.len());
     let mut objects = vec![
         "<< /Type /Catalog /Pages 2 0 R >>".into(),
@@ -18,9 +18,10 @@ fn fixture_with_background(clipping: bool, background: bool) -> Vec<u8> {
             .into(),
         stream(
             &format!(
-                "{}q BT {} Tr /F1 18 Tf 40 430 Td (Group headline) Tj ET Q q 1 0 0 1 40 340 cm /Figure Do Q BT /F1 12 Tf 240 90 Td (Keep here) Tj ET",
+                "{}q BT {} Tr /F1 18 Tf 40 430 Td (Group headline) Tj ET Q q 1 0 0 1 40 340 cm /Figure Do Q BT /F1 12 Tf 240 90 Td (Keep here) Tj ET{}",
                 if background { "q /Background Do Q " } else { "" },
-                if clipping { 4 } else { 0 }
+                if clipping { 4 } else { 0 },
+                artwork
             ),
             "",
         ),
@@ -51,15 +52,15 @@ fn harness() -> Harness<'static, PdfCraftApp> {
 }
 
 fn harness_with(clipping: bool) -> Harness<'static, PdfCraftApp> {
-    harness_document(clipping, false)
+    harness_document(clipping, false, "")
 }
 
-fn harness_document(clipping: bool, background: bool) -> Harness<'static, PdfCraftApp> {
+fn harness_document(clipping: bool, background: bool, artwork: &'static str) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.session = pdfcraft_engine::Session::new().with_clock(|| 1_700_000_000);
         app.set_option("language", "en").unwrap();
-        app.open_bytes("group.pdf", None, fixture_with_background(clipping, background)).unwrap();
+        app.open_bytes("group.pdf", None, fixture_with_background(clipping, background, artwork)).unwrap();
         let id = app.views[0].id;
         app.session
             .apply(
@@ -115,6 +116,19 @@ fn drag(h: &mut Harness<'static, PdfCraftApp>, a: Pos2, b: Pos2) {
     h.hover_at(a);
     h.run_steps(2);
     h.drag_at(a);
+    h.run_steps(2);
+    h.hover_at(b);
+    h.run_steps(2);
+    h.drop_at(b);
+    h.run_steps(4);
+}
+fn shift_drag(h: &mut Harness<'static, PdfCraftApp>, a: Pos2, b: Pos2) {
+    h.hover_at(a);
+    h.run_steps(2);
+    h.event_modifiers(
+        egui::Event::PointerButton { pos: a, button: egui::PointerButton::Primary, pressed: true, modifiers: Modifiers::SHIFT },
+        Modifiers::SHIFT,
+    );
     h.run_steps(2);
     h.hover_at(b);
     h.run_steps(2);
@@ -363,7 +377,7 @@ fn group_drags_cancel_on_focus_loss_tab_switch_home_and_modal_dialogs() {
 
 #[test]
 fn modifier_selection_picks_foreground_text_and_added_items_over_background_artwork() {
-    let mut h = harness_document(false, true);
+    let mut h = harness_document(false, true, "");
     let before = objects(&h);
     assert_eq!(before.len(), 5);
     for (x, y) in [(55.0, 70.0), (150.0, 135.0), (60.0, 145.0)] {
@@ -380,4 +394,87 @@ fn modifier_selection_picks_foreground_text_and_added_items_over_background_artw
         let shift = if stationary { [0.0, 0.0] } else { [25.0, -30.0] };
         assert!(new.rect.iter().enumerate().all(|(i, value)| (value - old.rect[i] - shift[i % 2]).abs() < 0.01), "{old:?} -> {new:?}");
     }
+}
+
+#[test]
+fn vector_paths_join_a_selection_on_their_painted_shape() {
+    // A diagonal stroke from (300, 100) to (380, 180): its box is mostly empty page.
+    let mut h = harness_document(false, false, " 0 0 1 RG 3 w 300 100 m 380 180 l S");
+    let before = objects(&h);
+    assert_eq!(before.len(), 5);
+    let line = before.last().unwrap();
+    assert_eq!((line.target.kind, line.content_type), (pdfcraft_engine::ObjectKind::Path, "path"));
+    let hint = "Shift-click to select several objects. Drag empty space to select an area.";
+    // A plain click on artwork still starts a marquee rather than picking the path.
+    let on_line = at(&h, 340.0, 360.0);
+    click(&mut h, on_line, Modifiers::NONE);
+    h.get_by_label(hint);
+    // Inside the line's box, away from its stroke.
+    let p = at(&h, 370.0, 390.0);
+    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label(hint);
+    click(&mut h, on_line, Modifiers::SHIFT);
+    h.get_by_label("1 object selected");
+    click(&mut h, on_line, Modifiers::COMMAND);
+    h.get_by_label(hint);
+    let (a, b) = (at(&h, 320.0, 300.0), at(&h, 395.0, 380.0));
+    drag(&mut h, a, b);
+    h.get_by_label("1 object selected");
+    assert_eq!(objects(&h), before);
+    assert!(!h.state().session.get(h.state().views[0].id).unwrap().dirty);
+}
+
+#[test]
+fn a_vector_path_over_background_artwork_can_be_shift_clicked() {
+    let mut h = harness_document(false, true, " 0 0 1 RG 3 w 300 100 m 380 180 l S");
+    let on_line = at(&h, 340.0, 360.0);
+    click(&mut h, on_line, Modifiers::SHIFT);
+    h.get_by_label("1 object selected");
+    // Off the stroke the press reaches the background Form, so the first one took the line.
+    let p = at(&h, 370.0, 390.0);
+    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label("2 objects selected");
+}
+
+#[test]
+fn an_image_over_a_vector_panel_keeps_modifier_clicks() {
+    // A panel (30..110 across, 120..170 down) under a second copy of the figure.
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 30 330 80 50 re f q 1 0 0 1 40 340 cm /Figure Do Q");
+    assert_eq!(objects(&h).len(), 6);
+    let p = at(&h, 60.0, 145.0);
+    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label("1 object selected");
+    // Had the first click taken the panel, this one would take it out again.
+    let p = at(&h, 35.0, 125.0);
+    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label("2 objects selected");
+}
+
+#[test]
+fn a_page_covering_vector_background_stays_out_of_clicks_and_small_marquees() {
+    // Painted last here; it is a background by its size, not its paint order.
+    let mut h = harness_document(false, false, " 0.9 0.9 0.9 rg 0 0 400 500 re f");
+    let before = objects(&h);
+    assert_eq!(before.len(), 5);
+    assert_eq!(before.last().unwrap().target.kind, pdfcraft_engine::ObjectKind::Path);
+    // Around the figure only (40..100 across, 130..160 down).
+    let (a, b) = (at(&h, 30.0, 120.0), at(&h, 110.0, 170.0));
+    drag(&mut h, a, b);
+    h.get_by_label("1 object selected");
+    // A shift-press on empty page doesn't toggle the background...
+    let p = at(&h, 300.0, 250.0);
+    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label("1 object selected");
+    // ...and an additive marquee picks it up only when drawn over most of the page.
+    let (a, b) = (at(&h, 120.0, 120.0), at(&h, 240.0, 175.0));
+    shift_drag(&mut h, a, b);
+    h.get_by_label("2 objects selected");
+    let (a, b) = (at(&h, 10.0, 10.0), at(&h, 395.0, 495.0));
+    shift_drag(&mut h, a, b);
+    h.get_by_label("5 objects selected");
+    // Once selected, a shift-click on it takes it out again.
+    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label("4 objects selected");
+    assert_eq!(objects(&h), before);
+    assert!(!h.state().session.get(h.state().views[0].id).unwrap().dirty);
 }

@@ -1,5 +1,7 @@
 //! Mixed-object inventory and atomic translation in Edit a PDF. Source indexes are resolved
 //! together before mutation. Added content appears once, not again as a paragraph/image.
+//! Vector paths come last, by their [`crate::page_paths`] index. A page whose paths can't all
+//! be listed still lists its other objects.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -19,6 +21,7 @@ pub enum ObjectKind {
     Added,
     Text,
     Image,
+    Path,
 }
 
 impl ObjectKind {
@@ -27,6 +30,7 @@ impl ObjectKind {
             Self::Added => "added",
             Self::Text => "text",
             Self::Image => "image",
+            Self::Path => "path",
         }
     }
 }
@@ -95,6 +99,17 @@ pub fn editable_objects(doc: &Document, page: usize) -> Result<Vec<EditableObjec
     if objects.iter().any(|o| !valid_rect(o.rect)) {
         return Err(EditError::Invalid("an object has invalid geometry".into()));
     }
+    // page_paths leaves out paths with invalid geometry rather than refusing the page.
+    if let Ok(paths) = crate::paths::page_paths(doc, page)
+        && objects.len().saturating_add(paths.len()) <= MAX_PAGE_OBJECTS
+    {
+        objects.extend(paths.into_iter().enumerate().map(|(index, path)| EditableObject {
+            target: ObjectTarget { kind: ObjectKind::Path, index },
+            rect: path.rect,
+            content_type: "path",
+            text: None,
+        }));
+    }
     Ok(objects)
 }
 
@@ -125,6 +140,10 @@ pub fn move_objects(doc: &mut Document, page: usize, targets: &[ObjectTarget], o
     crate::text::translate_blocks(&mut work, page, &indexes(ObjectKind::Text), offset)?;
     crate::images::translate_images(&mut work, page, &indexes(ObjectKind::Image), offset)?;
     translate_added(&mut work, page, &indexes(ObjectKind::Added), offset)?;
+    let paths: Vec<_> = indexes(ObjectKind::Path).into_iter().map(|index| (index, offset)).collect();
+    if !paths.is_empty() {
+        crate::path_edit::translate_paths(&mut work, page, &paths)?;
+    }
     // Placement operators add to size/depth/work budgets, and moving paragraphs can change
     // their grouping. Keep the resulting inventory usable; refuse before swapping otherwise.
     editable_objects(&work, page)?;

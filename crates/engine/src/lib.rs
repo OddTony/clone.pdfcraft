@@ -63,7 +63,7 @@ pub use pdfcraft_edit::{BlockStyle, PageImage, RangeStyle, TextBlock, TextLine, 
 pub use pdfcraft_measure as measure;
 pub use pdfcraft_xfa::Report as XfaLayout;
 
-pub use pdfcraft_edit::{EditableObject, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget};
+pub use pdfcraft_edit::{EditableObject, FillRule, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget, PagePath, Paint};
 
 /// A change to an existing page image.
 #[derive(Clone, Debug, PartialEq)]
@@ -454,6 +454,19 @@ impl Document {
     pub fn editable_objects(&self, page: usize) -> Result<Vec<EditableObject>, String> {
         let editor = self.editor.as_ref().ok_or("the document can't be read")?;
         pdfcraft_edit::editable_objects(&editor.cos, page).map_err(|e| e.to_string())
+    }
+
+    /// Edit a PDF: the vector paths `page` paints (0-based), in painting order. Their indexes
+    /// are the [`ObjectKind::Path`] references of [`Self::editable_objects`].
+    pub fn page_paths(&self, page: usize) -> Result<Vec<PagePath>, String> {
+        let editor = self.editor.as_ref().ok_or("the document can't be read")?;
+        pdfcraft_edit::page_paths(&editor.cos, page).map_err(|e| e.to_string())
+    }
+
+    /// The topmost (last painted) vector path on `page` at a user-space point, within
+    /// `tolerance` points: its index in [`Self::page_paths`].
+    pub fn path_at(&self, page: usize, point: [f64; 2], tolerance: f64) -> Option<usize> {
+        self.page_paths(page).ok()?.iter().rposition(|p| p.contains(point, tolerance))
     }
 
     /// Displayed top-left-origin motion to a user-space vector. Use the linear map only,

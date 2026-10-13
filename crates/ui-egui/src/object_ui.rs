@@ -123,6 +123,44 @@ fn screen(xf: &PageXform, info: &DocInfo, page: usize, object: &EditableObject) 
     xf.user_rect(info, page, object.rect.map(|v| v as f32))
 }
 
+/// An object painting at least 90% of the crop box is the page's background.
+fn covers_page(info: &DocInfo, page: usize, object: &EditableObject) -> bool {
+    let Some(crop) = info.pages.get(page).map(|p| p.crop.map(f64::from)) else {
+        return false;
+    };
+    let r = object.rect;
+    let area = |x0: f64, y0: f64, x1: f64, y1: f64| (x1 - x0).max(0.0) * (y1 - y0).max(0.0);
+    let page_area = area(crop[0], crop[1], crop[2], crop[3]);
+    page_area > 0.0 && area(r[0].max(crop[0]), r[1].max(crop[1]), r[2].min(crop[2]), r[3].min(crop[3])) >= 0.9 * page_area
+}
+
+/// The topmost listed vector path painted under `p` (not just its box, which a diagonal line
+/// mostly leaves empty), within 2 screen pixels. A page background only counts once it is
+/// `selected`, so a modifier click can take it out again.
+fn path_hit<'a>(
+    xf: &PageXform,
+    page: usize,
+    doc: &Document,
+    objects: &'a [EditableObject],
+    selected: &[EditableObject],
+    p: Pos2,
+) -> Option<&'a EditableObject> {
+    let candidate =
+        |o: &EditableObject| o.target.kind == ObjectKind::Path && (!covers_page(&doc.info, page, o) || selected.iter().any(|s| s.target == o.target));
+    // The precise test parses the whole page: skip it unless the press is on a path's box.
+    if !objects.iter().any(|o| candidate(o) && screen(xf, &doc.info, page, o).expand(2.0).contains(p)) {
+        return None;
+    }
+    let info = doc.info.pages.get(page)?;
+    let user = |q: Pos2| {
+        let (x, y) = xf.screen_to_view(q);
+        info.view_to_user(x, y).map(f64::from)
+    };
+    let (a, b) = (user(p), user(p + egui::vec2(2.0, 0.0)));
+    let index = doc.path_at(page, a, (b[0] - a[0]).hypot(b[1] - a[1]))?;
+    objects.iter().find(|o| o.target == ObjectTarget { kind: ObjectKind::Path, index }).filter(|o| candidate(o))
+}
+
 fn modified(ui: &egui::Ui) -> bool {
     ui.input(|i| {
         let modifiers = i
@@ -206,7 +244,15 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
                     && area.height() > 3.0
                     && let Ok(objects) = s.inventory(doc, page)
                 {
-                    let candidates: Vec<_> = objects.into_iter().filter(|o| area.intersects(screen(xf, info, page, o))).collect();
+                    // A vector page background joins only an additive marquee over most of the page.
+                    let whole_page = gesture.additive && area.width() * area.height() >= 0.9 * xf.rect.width() * xf.rect.height();
+                    let candidates: Vec<_> = objects
+                        .into_iter()
+                        .filter(|o| {
+                            area.intersects(screen(xf, info, page, o))
+                                && (whole_page || o.target.kind != ObjectKind::Path || !covers_page(info, page, o))
+                        })
+                        .collect();
                     let mut selected = s.selected.clone();
                     for object in candidates {
                         if !selected.iter().any(|o| o.target == object.target) {
@@ -259,11 +305,19 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         }
     };
     let additive = modified(ui);
-    // A page-sized background image must not hide editable labels or added notes.
-    // Within each kind, prefer the last object as the ordinary single-item tools do.
-    let hit = [ObjectKind::Added, ObjectKind::Text, ObjectKind::Image]
-        .into_iter()
-        .find_map(|kind| objects.iter().rev().find(|o| o.target.kind == kind && screen(xf, info, page, o).expand(2.0).contains(p)));
+    // A page-sized background image must not hide editable labels, added notes or the vector
+    // paths drawn over it. Within each kind, prefer the last object as the ordinary single-item
+    // tools do. Vector paths only join a selection: a plain press on artwork starts a marquee.
+    // Any other image still wins over a path without comparing paint order; the inventory
+    // doesn't carry image op indices yet.
+    let boxed = |kind: ObjectKind| objects.iter().rev().find(|o| o.target.kind == kind && screen(xf, info, page, o).expand(2.0).contains(p));
+    let image = boxed(ObjectKind::Image);
+    let selected: &[EditableObject] = if s.page == Some(page) { &s.selected } else { &[] };
+    let hit = boxed(ObjectKind::Added)
+        .or_else(|| boxed(ObjectKind::Text))
+        .or_else(|| image.filter(|o| !covers_page(info, page, o)))
+        .or_else(|| additive.then(|| path_hit(xf, page, doc, &objects, selected, p)).flatten())
+        .or(image);
     if additive {
         if s.page != Some(page) {
             s.clear();

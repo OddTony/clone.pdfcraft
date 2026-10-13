@@ -3443,3 +3443,36 @@ fn an_items_measured_face_is_the_face_it_is_written_as() {
     let courier = |italic| Family::Courier.width("Anna", 12.0, false, italic);
     assert_eq!(courier(false), courier(true));
 }
+
+#[test]
+fn the_object_inventory_lists_vector_paths_after_images() {
+    let mut doc = image_page_with(concat!(
+        "1 0 0 rg 10 20 100 50 re f q 200 0 0 100 100 100 cm /Im0 Do Q BT /F1 12 Tf 72 700 Td (Caption) Tj ET ",
+        "4 w 50 300 m 250 300 l S q 0 0 5 5 re W n Q",
+    ));
+    let objects = editable_objects(&doc, 0).unwrap();
+    let target = |kind, index| ObjectTarget { kind, index };
+    let targets: Vec<_> = objects.iter().map(|o| o.target).collect();
+    assert_eq!(targets, [target(ObjectKind::Text, 0), target(ObjectKind::Image, 0), target(ObjectKind::Path, 0), target(ObjectKind::Path, 1)]);
+    assert_eq!(ObjectKind::Path.as_str(), "path");
+    for (object, rect) in objects[2..].iter().zip([[10.0, 20.0, 110.0, 70.0], [48.0, 298.0, 252.0, 302.0]]) {
+        assert!(close(object.rect, rect), "{object:?}");
+        assert_eq!((object.content_type, object.text.as_deref()), ("path", None));
+    }
+    let original = pdfcraft_cos::write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(move_objects(&mut doc, 0, &[target(ObjectKind::Path, 2)], [5.0, 5.0]).is_err(), "the clip is not a path");
+    assert_eq!(pdfcraft_cos::write_full(&doc, &SaveOptions::default()).unwrap(), original);
+    // Moving the other kinds leaves the paths where they are.
+    move_objects(&mut doc, 0, &[target(ObjectKind::Text, 0)], [5.0, 5.0]).unwrap();
+    assert_eq!(editable_objects(&doc, 0).unwrap()[2..], objects[2..]);
+}
+
+#[test]
+fn a_page_with_too_many_vector_paths_still_lists_its_other_objects() {
+    // One more path than page_paths lists.
+    let doc =
+        image_page_with(&format!("{}q 200 0 0 100 100 100 cm /Im0 Do Q BT /F1 12 Tf 72 700 Td (Caption) Tj ET", "10 10 1 1 re f\n".repeat(5_001)));
+    assert!(page_paths(&doc, 0).is_err());
+    let kinds: Vec<_> = editable_objects(&doc, 0).unwrap().iter().map(|o| o.target.kind).collect();
+    assert_eq!(kinds, [ObjectKind::Text, ObjectKind::Image]);
+}

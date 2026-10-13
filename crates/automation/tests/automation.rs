@@ -5164,7 +5164,8 @@ fn object_move_rejects_invalid_nested_references_without_any_change() {
     for objects in [
         json!([]),
         json!([{"kind":"text","index":0}]),
-        json!([{"kind":"path","index":1}]),
+        json!([{"kind":"bogus","index":1}]),
+        json!([{"kind":"text","index":1},{"kind":"path","index":1}]),
         json!([{"kind":"text","index":1,"extra":true}]),
         json!([{"kind":"text","index":1.5}]),
         json!([{"kind":"text","index":1},{"kind":"text","index":1}]),
@@ -5178,6 +5179,45 @@ fn object_move_rejects_invalid_nested_references_without_any_change() {
         assert!(a.call("object_move", &json!({"doc":doc,"page":1,"objects":[{"kind":"text","index":1}],"offset":offset})).is_err());
         assert_eq!(ok(&mut a, "object_list", json!({"doc":doc,"page":1})), before);
     }
+}
+
+#[test]
+fn object_list_reports_vector_paths_with_their_paint() {
+    use pdfcraft_cos::{Dict, Document, Object, Stream, write_incremental};
+    let dir = workdir("object-list-paths");
+    let mut cos = Document::open(std::sync::Arc::new(fixture(1))).unwrap();
+    let page = pdfcraft_model::pages(&cos)[0].obj;
+    let contents = cos.add(Object::Stream(Stream::flate(
+        Dict::new(),
+        b"BT /F1 24 Tf 20 150 Td (Page 1) Tj ET 1 0 0 rg 20 40 100 50 re f 0 0 1 RG 4 w 30 200 m 170 200 l S q 0 0 10 10 re W n Q \
+          /CS0 cs 0.5 sc 20 100 30 20 re f 0 1 1 0 k 60 100 30 20 re f",
+    )));
+    cos.update_dict(page, |d| d.set(b"Contents".to_vec(), Object::Ref(contents))).unwrap();
+    std::fs::write(dir.join("paths.pdf"), write_incremental(&cos, &Default::default()).unwrap()).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"paths.pdf"}))["doc"].as_u64().unwrap();
+    let listed = ok(&mut a, "object_list", json!({"doc":doc,"page":1}));
+    assert_eq!(listed["count"], 5, "the clip is not a path");
+    let objects = listed["objects"].as_array().unwrap();
+    assert_eq!(objects[0]["kind"], "text");
+    assert!(objects[0].get("fill").is_none(), "only path rows carry paint");
+    assert_eq!(
+        objects[1],
+        json!({"kind":"path","index":1,"type":"path","rect":[20.0,210.0,120.0,260.0],"text":null,"fill":"#FF0000","stroke":null,"line_width":null})
+    );
+    assert_eq!(
+        objects[2],
+        json!({"kind":"path","index":2,"type":"path","rect":[28.0,98.0,172.0,102.0],"text":null,"fill":null,"stroke":"#0000FF","line_width":4.0})
+    );
+    // A colour space other than DeviceGray/RGB/CMYK has no colour to report; `k` sets one again.
+    assert_eq!(
+        objects[3],
+        json!({"kind":"path","index":3,"type":"path","rect":[20.0,180.0,50.0,200.0],"text":null,"fill":null,"stroke":null,"line_width":null})
+    );
+    assert_eq!(
+        objects[4],
+        json!({"kind":"path","index":4,"type":"path","rect":[60.0,180.0,90.0,200.0],"text":null,"fill":"#FF0000","stroke":null,"line_width":null})
+    );
 }
 
 #[test]

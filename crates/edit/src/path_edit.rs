@@ -64,8 +64,6 @@ pub fn delete_paths(doc: &mut Document, page: usize, indexes: &[usize]) -> Resul
 }
 
 /// Moves several paths, each by its own user-space offset, in one splice.
-// Group moves (`move_objects`) call this once they take paths.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn translate_paths(doc: &mut Document, page: usize, moves: &[(usize, [f64; 2])]) -> Result<(), EditError> {
     // Like the other kinds' group moves: a selection without paths has nothing to do here.
     if moves.is_empty() {
