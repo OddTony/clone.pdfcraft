@@ -262,9 +262,69 @@ pub struct TextBlock {
     pub invisible: bool,
 }
 
+/// The most characters a draft's changes may insert and delete in all before [`kept_chars`] gives
+/// up, and the most work (characters compared × that count) it may spend.
+const KEPT_CHARS_MAX_EDITS: usize = 1024;
+const KEPT_CHARS_WORK: usize = 8_000_000;
+
+/// The positions `(in a, in b)` of the characters a shortest edit from `a` to `b` keeps, in order
+/// (Myers' O(ND) difference algorithm). `None` past the bounds above.
+fn kept_chars(a: &[char], b: &[char]) -> Option<Vec<(usize, usize)>> {
+    let total = a.len().saturating_add(b.len());
+    let max_d = isize::try_from((KEPT_CHARS_WORK / total.max(1)).min(KEPT_CHARS_MAX_EDITS).min(total)).ok()?;
+    let (n, m) = (isize::try_from(a.len()).ok()?, isize::try_from(b.len()).ok()?);
+    let same = |x: isize, y: isize| {
+        let (Ok(x), Ok(y)) = (usize::try_from(x), usize::try_from(y)) else { return false };
+        a.get(x).is_some_and(|c| b.get(y) == Some(c))
+    };
+    // `v[k + max_d + 1]`: the furthest `x` reached on diagonal `k = x - y`. `trace[d]` keeps the
+    // diagonals `-d..=d` as they were before step `d`, for the walk back.
+    let mut v = vec![0_isize; usize::try_from(2 * max_d + 3).ok()?];
+    let slot = |k: isize| usize::try_from(k + max_d + 1).ok();
+    let mut trace: Vec<Vec<isize>> = Vec::new();
+    for d in 0..=max_d {
+        trace.push(v.get(slot(-d)?..=slot(d)?)?.to_vec());
+        for k in (-d..=d).step_by(2) {
+            let (left, right) = (v.get(slot(k - 1)?).copied()?, v.get(slot(k + 1)?).copied()?);
+            let mut x = if k == -d || (k != d && left < right) { right } else { left + 1 };
+            let mut y = x - k;
+            while x < n && y < m && same(x, y) {
+                x += 1;
+                y += 1;
+            }
+            *v.get_mut(slot(k)?)? = x;
+            if x >= n && y >= m {
+                let mut kept = Vec::new();
+                let (mut x, mut y) = (n, m);
+                for d in (0..=d).rev() {
+                    let before = trace.get(usize::try_from(d).ok()?)?;
+                    let at = |k: isize| usize::try_from(k + d).ok().and_then(|i| before.get(i)).copied().unwrap_or(0);
+                    let k = x - y;
+                    let previous = if k == -d || (k != d && at(k - 1) < at(k + 1)) { k + 1 } else { k - 1 };
+                    let (px, py) = (at(previous), at(previous) - previous);
+                    while x > px && y > py {
+                        x -= 1;
+                        y -= 1;
+                        kept.push((usize::try_from(x).ok()?, usize::try_from(y).ok()?));
+                    }
+                    if d > 0 {
+                        (x, y) = (px, py);
+                    }
+                }
+                kept.reverse();
+                return Some(kept);
+            }
+        }
+    }
+    None
+}
+
 impl TextBlock {
-    /// Preserve styles outside the changed range; inserted characters inherit the surrounding
-    /// source run. Byte ranges are always UTF-8 boundaries. Linear time, including large edits.
+    /// Preserve styles outside the changed ranges: each unchanged character keeps its source run,
+    /// and an inserted one takes the run of the character before it. Separate edits in one draft
+    /// (a letter added to a heading and another to the line under it) leave the text between them
+    /// in its own run. Past [`kept_chars`]'s bounds, the text between the first and last change
+    /// takes the run before it. Byte ranges are always UTF-8 boundaries.
     pub fn edited_spans(&self, draft: &str) -> Vec<(std::ops::Range<usize>, usize)> {
         if self.editor_text.len() > 4_000_000 || draft.len() > 4_000_000 {
             return vec![(0..draft.len(), self.lines.first().copied().unwrap_or(0))];
@@ -283,6 +343,16 @@ impl TextBlock {
             original.push(self.spans.get(span).or_else(|| self.spans.last()).map_or(0, |(_, i)| *i));
         }
         let inherited = original.get(prefix.saturating_sub(1)).or_else(|| original.get(prefix)).copied().unwrap_or(0);
+        // Between the first and the last change: the source run of each character the edit kept.
+        let changed_new: Vec<char> = new.get(prefix..new.len().saturating_sub(suffix)).unwrap_or_default().iter().map(|(_, c)| *c).collect();
+        let changed_old = old.get(prefix..old.len().saturating_sub(suffix)).unwrap_or_default();
+        let mut kept: Vec<Option<usize>> = vec![None; changed_new.len()];
+        for (o, n) in kept_chars(changed_old, &changed_new).unwrap_or_default() {
+            if let Some(slot) = kept.get_mut(n) {
+                *slot = original.get(prefix.saturating_add(o)).copied();
+            }
+        }
+        let mut before = inherited;
         let mut result: Vec<(std::ops::Range<usize>, usize)> = Vec::new();
         for (i, (byte, ch)) in new.iter().enumerate() {
             let source = if i < prefix {
@@ -290,7 +360,9 @@ impl TextBlock {
             } else if i >= new.len().saturating_sub(suffix) {
                 original.get(old.len().saturating_sub(new.len() - i)).copied()
             } else {
-                Some(inherited)
+                // Kept, or inserted after the character before it.
+                before = kept.get(i - prefix).copied().flatten().unwrap_or(before);
+                Some(before)
             }
             .unwrap_or(inherited);
             let end = byte.saturating_add(ch.len_utf8());

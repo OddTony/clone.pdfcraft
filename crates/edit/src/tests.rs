@@ -3047,6 +3047,65 @@ fn explicit_editor_rows_survive_single_run_edit_and_reopen() {
 }
 
 #[test]
+fn separate_edits_in_one_draft_keep_the_text_between_them_in_its_own_run() {
+    // A letter added to a heading and another to the line under it, in one editing session: the
+    // text between the two took the heading's run, so the body line turned into the heading's
+    // colour and weight.
+    let original = mixed_region_page();
+    let block = text::text_blocks(&original, 0).unwrap()[1].clone();
+    let lines = text::text_lines(&original, 0).unwrap();
+    let run = |text: &str| lines.iter().position(|l| l.text == text).unwrap();
+    let draft = "Aboutx\nPlain boldy text.\nItalic footer";
+    let spans = block.edited_spans(draft);
+    let at = |needle: &str| {
+        let byte = draft.find(needle).unwrap();
+        spans.iter().find(|(range, _)| range.contains(&byte)).map(|(_, source)| *source).unwrap()
+    };
+    assert_eq!(at("x\n"), run("About"), "an insertion takes the run before it");
+    assert_eq!(at("Plain"), run("Plain "), "unchanged text between two edits keeps its own run");
+    assert_eq!(at("y "), run("bold"));
+    assert_eq!(at(" text."), run(" text."));
+
+    let mut doc = original.clone();
+    text::rewrite_block(&mut doc, 0, 1, Some(draft), &BlockStyle::default()).unwrap();
+    let after = text::text_lines(&reopen(&doc), 0).unwrap();
+    let style = |text: &str| {
+        let l = after.iter().find(|l| l.text.trim() == text).unwrap_or_else(|| panic!("{text:?} in {after:?}"));
+        (l.base_font.clone(), l.color)
+    };
+    let blue = [0.0, 0.2, 0.5];
+    assert_eq!(style("Aboutx"), ("Courier-Bold".to_owned(), blue));
+    assert_eq!(style("Plain"), ("Courier".to_owned(), [0.0; 3]));
+    assert_eq!(style("boldy"), ("Courier-Bold".to_owned(), blue));
+}
+
+#[test]
+fn edited_spans_cover_any_draft_at_char_boundaries() {
+    // Including drafts past the diff's bounds, which fall back to the run before the change.
+    let block = text::text_blocks(&mixed_region_page(), 0).unwrap()[1].clone();
+    let long = "é".repeat(3000);
+    let drafts = [
+        String::new(),
+        block.editor_text.chars().rev().collect(),
+        "completely different".to_owned(),
+        block.editor_text.chars().flat_map(|c| [c, 'ß']).collect(),
+        format!("{long}{}{long}", block.editor_text),
+        format!("About{long}\nPlain bold{long} text.\nItalic footer"),
+    ];
+    for draft in &drafts {
+        let spans = block.edited_spans(draft);
+        let mut end = 0;
+        for (range, source) in &spans {
+            assert_eq!(range.start, end, "contiguous");
+            assert!(draft.is_char_boundary(range.start) && draft.is_char_boundary(range.end) && range.start < range.end);
+            assert!(block.lines.contains(source), "a source run of the block");
+            end = range.end;
+        }
+        assert_eq!(end, draft.len(), "the whole draft");
+    }
+}
+
+#[test]
 fn rich_region_edits_preserve_styles_positions_and_delete_all_runs_after_reopen() {
     let original = mixed_region_page();
     let before = text::text_lines(&original, 0).unwrap();
