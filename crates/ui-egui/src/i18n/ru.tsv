@@ -2194,6 +2194,24 @@ animation effects	Off	Выкл
 	Original	Оригинал
 	Greyscale	Оттенки серого
 	Black and white	Чёрно-белый
+	Convert to PDF with PdfCraft	Преобразовать в PDF с помощью PdfCraft
+	Convert to PDF and email…	Преобразовать в PDF и отправить по почте…
+	Combine files in PdfCraft…	Объединить файлы в PdfCraft…
+	Prepare email draft	Подготовить черновик письма
+	PDF attachments	Вложения PDF
+	Save email draft…	Сохранить черновик письма…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Черновик содержит вложения PDF. Откройте его в почтовом приложении с поддержкой черновиков .eml; в Outlook.com создайте письмо и самостоятельно прикрепите сохранённые PDF.
+	Email draft saved to {path}	Черновик письма сохранён в {path}
+	Couldn't open the email draft: {e}	Не удалось открыть черновик письма: {e}
+	Couldn't prepare the email draft: {e}	Не удалось подготовить черновик письма: {e}
+	Explorer selection is limited to {count} files.	В Проводнике можно выбрать не более {count} файлов.
+	Explorer selection exceeds the {size} MiB memory limit.	Выбор в Проводнике превышает ограничение памяти в {size} МиБ.
+	Make PdfCraft your default PDF app?	Сделать PdfCraft приложением для PDF по умолчанию?
+	Choose PdfCraft for .pdf files in Windows Settings.	Выберите PdfCraft для файлов .pdf в параметрах Windows.
+	Do not ask again	Больше не спрашивать
+	Ask to make PdfCraft the default PDF app	Спрашивать о назначении PdfCraft приложением для PDF по умолчанию
+	Open default app settings	Открыть параметры приложений по умолчанию
+	Couldn't open Windows default app settings: {error}	Не удалось открыть параметры приложений Windows по умолчанию: {error}
 	Reading colours	Цвета для чтения
 	Replace document colours	Заменить цвета документа
 	Black on white	Чёрный на белом

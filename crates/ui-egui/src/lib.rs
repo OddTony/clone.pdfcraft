@@ -5,6 +5,8 @@
 //! Everything here is presentation: documents, rendering and the tool catalogue live in
 //! `pdfcraft-engine`.
 
+// The persisted settings object exceeds serde_json's default macro expansion depth.
+#![recursion_limit = "256"]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 /// Translate an English UI string into the current language (see [`i18n`]).
@@ -71,7 +73,9 @@ pub use sign_ui::{DigitalIdEntry, SignDraft, SignGraphic, SignStep};
 mod autoscroll;
 mod bidi;
 pub mod bulk_fields;
+mod default_pdf;
 mod dialogs;
+pub use default_pdf::DefaultPdfIntegration;
 mod edit_text_ui;
 mod editing;
 #[cfg(not(target_arch = "wasm32"))]
@@ -93,10 +97,12 @@ mod panels;
 mod pickers;
 pub mod prepare;
 mod print_ui;
+mod shell_ui;
 mod signature_drag;
 pub mod units;
 mod web_print;
 pub use print_ui::{Handling as PrintHandling, PrintDraft, PrinterSource, Which as PrintWhich, system_printers};
+pub use shell_ui::ShellAction;
 mod redact_ui;
 pub use redact_ui::{HiddenDraft, PagesDraft as RedactPagesDraft, RedactPrefs, SearchDraft as RedactSearchDraft, SearchMode as RedactSearchMode};
 pub mod i18n;
@@ -379,6 +385,8 @@ pub type FailedInbox = std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>;
 pub enum OsEvent {
     /// Open these files.
     Open(Vec<String>),
+    /// A typed Explorer conversion, email preparation or Combine request.
+    Shell(ShellAction, Vec<String>),
     /// Quit (the Dock's Quit, logging out), asking about unsaved changes first.
     Quit,
 }
@@ -539,6 +547,11 @@ pub struct PdfCraftApp {
     /// How to ask for the latest release (the desktop app sets it; see `updates`).
     pub update_source: Option<updates::UpdateSource>,
     pub(crate) updates: updates::Updates,
+    /// Windows-only host callbacks; absent on other frontends.
+    pub default_pdf_integration: Option<DefaultPdfIntegration>,
+    /// Ask after opening a PDF; the preference survives a restart.
+    pub ask_default_pdf: bool,
+    pub(crate) default_pdf: default_pdf::Prompt,
     /// Lists the Print dialog's printers in the background (the desktop app sets it; see
     /// [`PrinterSource`]).
     pub printer_source: Option<PrinterSource>,
@@ -598,6 +611,16 @@ pub struct PdfCraftApp {
     pub unsaved_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Requests from the operating system, polled every frame (macOS Apple events).
     pub os_events: Option<OsEventsFn>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub open_email_draft: Option<shell_ui::OpenDraftFn>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub shell_email_paths: Vec<String>,
+    #[cfg(not(target_arch = "wasm32"))]
+    shell_email_generation: u64,
+    #[cfg(not(target_arch = "wasm32"))]
+    shell_email_run: Option<shell_ui::EmailRun>,
+    #[cfg(not(target_arch = "wasm32"))]
+    shell_requests: std::collections::VecDeque<(ShellAction, Vec<String>)>,
     /// Save delivers to the embedding page instead of downloading (web, see [`HostSaveFn`]).
     pub host_save: Option<HostSaveFn>,
     /// Reports unsaved work to the embedding page (web, see [`HostDirtyFn`]).
@@ -898,6 +921,9 @@ impl PdfCraftApp {
             dialog: None,
             update_source: None,
             updates: updates::Updates::default(),
+            default_pdf_integration: None,
+            ask_default_pdf: true,
+            default_pdf: default_pdf::Prompt::default(),
             printer_source: None,
             print_tasks: print_ui::PrintTasks::default(),
             palette_open: false,
@@ -933,6 +959,16 @@ impl PdfCraftApp {
             failed_inbox: Default::default(),
             unsaved_flag: Default::default(),
             os_events: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            open_email_draft: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            shell_email_paths: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            shell_email_generation: 0,
+            #[cfg(not(target_arch = "wasm32"))]
+            shell_email_run: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            shell_requests: Default::default(),
             host_save: None,
             host_dirty: None,
             close_request: None,
@@ -1326,6 +1362,7 @@ impl PdfCraftApp {
             let out = self.session.take_js_output(id);
             self.handle_js(id, out);
         }
+        self.pdf_opened_for_default_prompt();
         Ok(id)
     }
 
@@ -1807,6 +1844,15 @@ impl PdfCraftApp {
     /// A dialog or prompt is open over the window: the keyboard is its own, and nothing may act
     /// on the document underneath it.
     pub(crate) fn modal_open(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        if !self.shell_email_paths.is_empty() || self.shell_email_run.is_some() {
+            return true;
+        }
+        self.dialog_open()
+    }
+
+    /// Existing dialogs take precedence over an incoming Explorer attachment review.
+    pub(crate) fn dialog_open(&self) -> bool {
         self.dialog.is_some()
             || self.close_request.is_some()
             || self.password_prompt.is_some()
@@ -1814,6 +1860,7 @@ impl PdfCraftApp {
             || self.pending_link.is_some()
             || self.pending_remote_link.is_some()
             || self.updates.open
+            || self.default_pdf.open
     }
 
     /// Enable the UI control channel on `ctx` (opt-in; see [`control`]). Returns a client that
@@ -2088,6 +2135,7 @@ impl PdfCraftApp {
             "docking_right": self.right,
             "recent": self.recent,
             "reopen_last_session": self.reopen_last_session,
+            "ask_default_pdf": self.ask_default_pdf,
             // Kept only while the preference is on.
             "last_session": self.reopen_last_session.then(|| self.session_to_save()),
             "reload_changed_files": self.reload_changed_files,
@@ -2172,6 +2220,9 @@ impl PdfCraftApp {
         }
         if let Some(on) = v["reopen_last_session"].as_bool() {
             self.reopen_last_session = on;
+        }
+        if let Some(on) = v["ask_default_pdf"].as_bool() {
+            self.ask_default_pdf = on;
         }
         self.last_session = last_session::LastSession::from_json(&v["last_session"]);
         if let Some(on) = v["system_title_bar"].as_bool() {
@@ -2354,6 +2405,13 @@ impl PdfCraftApp {
             }
             ("default-mode", _) => {
                 self.default_mode = Mode::parse(value).ok_or("default-mode must be all, read, edit, convert or sign")?;
+            }
+            ("ask-default-pdf", _) => {
+                self.ask_default_pdf = match value {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err("ask-default-pdf must be on or off".into()),
+                }
             }
             ("date-format", _) => self.session.set_date_format(value)?,
             ("date-language", _) => self.session.set_date_language(Some(value).filter(|v| *v != "auto"))?,
@@ -2845,6 +2903,10 @@ impl eframe::App for PdfCraftApp {
                 OsEvent::Open(paths) => paths.iter().for_each(|p| self.open_path(p)),
                 #[cfg(target_arch = "wasm32")]
                 OsEvent::Open(_) => {}
+                #[cfg(not(target_arch = "wasm32"))]
+                OsEvent::Shell(action, paths) => self.receive_shell(action, &paths),
+                #[cfg(target_arch = "wasm32")]
+                OsEvent::Shell(_, _) => {}
                 // Like closing the window: `guard_quit` asks about unsaved changes.
                 OsEvent::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             }
@@ -2870,6 +2932,9 @@ impl eframe::App for PdfCraftApp {
             }
         }
         self.poll_updates();
+        self.poll_default_pdf();
+        #[cfg(not(target_arch = "wasm32"))]
+        self.poll_shell_requests();
         self.poll_print();
         // Shortcuts deferred last frame: the text field has taken that frame's typing since.
         let deferred = std::mem::take(&mut self.deferred_commands);
@@ -2977,6 +3042,8 @@ impl eframe::App for PdfCraftApp {
         self.process_pending_edits();
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);
+        #[cfg(not(target_arch = "wasm32"))]
+        self.shell_email_window(&ctx);
         self.show_progress(&ctx);
         widgets::toast(self, &ctx);
         self.finish_render_frame(&ctx);

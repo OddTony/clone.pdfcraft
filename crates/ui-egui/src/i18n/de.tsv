@@ -2282,6 +2282,24 @@ animation effects	Off	Aus
 	Original	Original
 	Greyscale	Graustufen
 	Black and white	Schwarzweiß
+	Convert to PDF with PdfCraft	Mit PdfCraft in PDF umwandeln
+	Convert to PDF and email…	In PDF umwandeln und per E-Mail senden…
+	Combine files in PdfCraft…	Dateien in PdfCraft zusammenführen…
+	Prepare email draft	E-Mail-Entwurf vorbereiten
+	PDF attachments	PDF-Anhänge
+	Save email draft…	E-Mail-Entwurf speichern…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Der Entwurf enthält PDF-Anhänge. Öffne ihn mit einem E-Mail-Programm, das .eml-Entwürfe unterstützt. Erstelle in Outlook.com eine Nachricht und füge die gespeicherten PDFs selbst als Anhänge hinzu.
+	Email draft saved to {path}	E-Mail-Entwurf unter {path} gespeichert
+	Couldn't open the email draft: {e}	E-Mail-Entwurf konnte nicht geöffnet werden: {e}
+	Couldn't prepare the email draft: {e}	E-Mail-Entwurf konnte nicht vorbereitet werden: {e}
+	Explorer selection is limited to {count} files.	Die Explorer-Auswahl ist auf {count} Dateien begrenzt.
+	Explorer selection exceeds the {size} MiB memory limit.	Die Explorer-Auswahl überschreitet die Speichergrenze von {size} MiB.
+	Make PdfCraft your default PDF app?	PdfCraft als Standardprogramm für PDFs verwenden?
+	Choose PdfCraft for .pdf files in Windows Settings.	Wählen Sie in den Windows-Einstellungen PdfCraft für .pdf-Dateien aus.
+	Do not ask again	Nicht erneut fragen
+	Ask to make PdfCraft the default PDF app	Nachfragen, ob PdfCraft das Standardprogramm für PDFs werden soll
+	Open default app settings	Einstellungen für Standard-Apps öffnen
+	Couldn't open Windows default app settings: {error}	Die Windows-Einstellungen für Standard-Apps konnten nicht geöffnet werden: {error}
 	Reading colours	Lesefarben
 	Replace document colours	Dokumentfarben ersetzen
 	Black on white	Schwarz auf weiß

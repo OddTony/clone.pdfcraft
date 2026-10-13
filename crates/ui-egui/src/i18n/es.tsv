@@ -2410,6 +2410,24 @@ animation effects	Off	Desactivados
 	Original	Original
 	Greyscale	Escala de grises
 	Black and white	Blanco y negro
+	Convert to PDF with PdfCraft	Convertir a PDF con PdfCraft
+	Convert to PDF and email…	Convertir a PDF y enviar por correo…
+	Combine files in PdfCraft…	Combinar archivos en PdfCraft…
+	Prepare email draft	Preparar borrador de correo
+	PDF attachments	Archivos PDF adjuntos
+	Save email draft…	Guardar borrador de correo…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	El borrador contiene archivos PDF adjuntos. Ábrelo con una aplicación de correo que admita borradores .eml; en Outlook.com, crea un mensaje y adjunta tú mismo los PDF guardados.
+	Email draft saved to {path}	Borrador de correo guardado en {path}
+	Couldn't open the email draft: {e}	No se pudo abrir el borrador de correo: {e}
+	Couldn't prepare the email draft: {e}	No se pudo preparar el borrador de correo: {e}
+	Explorer selection is limited to {count} files.	La selección del Explorador está limitada a {count} archivos.
+	Explorer selection exceeds the {size} MiB memory limit.	La selección del Explorador supera el límite de memoria de {size} MiB.
+	Make PdfCraft your default PDF app?	¿Usar PdfCraft como aplicación predeterminada para PDF?
+	Choose PdfCraft for .pdf files in Windows Settings.	Elija PdfCraft para los archivos .pdf en la configuración de Windows.
+	Do not ask again	No volver a preguntar
+	Ask to make PdfCraft the default PDF app	Preguntar si se desea usar PdfCraft como aplicación predeterminada para PDF
+	Open default app settings	Abrir la configuración de aplicaciones predeterminadas
+	Couldn't open Windows default app settings: {error}	No se pudo abrir la configuración de aplicaciones predeterminadas de Windows: {error}
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	El controlador de esta impresora no acepta los ajustes de doble cara de otros programas, así que se aplica su propio ajuste. Cámbielo en Propiedades…
 	Browser's print dialog	Diálogo de impresión del navegador
 	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Las copias, la impresión a doble cara y el color se eligen en el diálogo de impresión del navegador.

@@ -2259,6 +2259,24 @@ animation effects	Off	Wyłączone
 	Original	Oryginał
 	Greyscale	Skala szarości
 	Black and white	Czarno-biały
+	Convert to PDF with PdfCraft	Konwertuj do PDF za pomocą PdfCraft
+	Convert to PDF and email…	Konwertuj do PDF i wyślij e-mailem…
+	Combine files in PdfCraft…	Połącz pliki w PdfCraft…
+	Prepare email draft	Przygotuj wersję roboczą e-maila
+	PDF attachments	Załączniki PDF
+	Save email draft…	Zapisz wersję roboczą e-maila…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Wersja robocza zawiera załączniki PDF. Otwórz ją w aplikacji pocztowej obsługującej wersje robocze .eml; w Outlook.com utwórz wiadomość i samodzielnie dołącz zapisane pliki PDF.
+	Email draft saved to {path}	Wersja robocza e-maila zapisana w {path}
+	Couldn't open the email draft: {e}	Nie można otworzyć wersji roboczej e-maila: {e}
+	Couldn't prepare the email draft: {e}	Nie można przygotować wersji roboczej e-maila: {e}
+	Explorer selection is limited to {count} files.	W Eksploratorze można wybrać maksymalnie {count} plików.
+	Explorer selection exceeds the {size} MiB memory limit.	Zaznaczenie w Eksploratorze przekracza limit pamięci {size} MiB.
+	Make PdfCraft your default PDF app?	Ustawić PdfCraft jako domyślną aplikację do plików PDF?
+	Choose PdfCraft for .pdf files in Windows Settings.	Wybierz PdfCraft dla plików .pdf w ustawieniach systemu Windows.
+	Do not ask again	Nie pytaj ponownie
+	Ask to make PdfCraft the default PDF app	Pytaj o ustawienie PdfCraft jako domyślnej aplikacji do plików PDF
+	Open default app settings	Otwórz ustawienia aplikacji domyślnych
+	Couldn't open Windows default app settings: {error}	Nie udało się otworzyć ustawień aplikacji domyślnych systemu Windows: {error}
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Sterownik tej drukarki nie przyjmuje ustawień druku dwustronnego z innych programów, więc obowiązuje jego własne ustawienie. Zmień je w oknie Właściwości…
 	Browser's print dialog	Okno drukowania przeglądarki
 	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Liczbę kopii, druk dwustronny i kolor wybiera się w oknie drukowania przeglądarki.

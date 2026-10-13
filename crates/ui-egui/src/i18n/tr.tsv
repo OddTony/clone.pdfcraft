@@ -2274,6 +2274,26 @@ animation effects	Off	Kapalı
 	Original	Orijinal
 	Greyscale	Gri tonlamalı
 	Black and white	Siyah beyaz
+
+# Windows Explorer and default-PDF integration.
+	Convert to PDF with PdfCraft	PdfCraft ile PDF'ye dönüştür
+	Convert to PDF and email…	PDF'ye dönüştür ve e-postayla gönder…
+	Combine files in PdfCraft…	Dosyaları PdfCraft'ta birleştir…
+	Prepare email draft	E-posta taslağı hazırla
+	PDF attachments	PDF ekleri
+	Save email draft…	E-posta taslağını kaydet…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Taslak PDF ekleri içerir. .eml taslaklarını destekleyen bir posta uygulamasıyla açın; Outlook.com'da bir ileti oluşturup kaydedilen PDF'leri kendiniz ekleyin.
+	Email draft saved to {path}	E-posta taslağı {path} konumuna kaydedildi
+	Couldn't open the email draft: {e}	E-posta taslağı açılamadı: {e}
+	Couldn't prepare the email draft: {e}	E-posta taslağı hazırlanamadı: {e}
+	Explorer selection is limited to {count} files.	Gezgin'de en fazla {count} dosya seçilebilir.
+	Explorer selection exceeds the {size} MiB memory limit.	Dosya Gezgini seçimi {size} MiB bellek sınırını aşıyor.
+	Make PdfCraft your default PDF app?	PdfCraft varsayılan PDF uygulamanız yapılsın mı?
+	Choose PdfCraft for .pdf files in Windows Settings.	Windows Ayarları'nda .pdf dosyaları için PdfCraft'ı seçin.
+	Do not ask again	Bir daha sorma
+	Ask to make PdfCraft the default PDF app	PdfCraft'ı varsayılan PDF uygulaması yapmayı sor
+	Open default app settings	Varsayılan uygulama ayarlarını aç
+	Couldn't open Windows default app settings: {error}	Windows varsayılan uygulama ayarları açılamadı: {error}
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Bu yazıcının sürücüsü diğer programlardan gelen çift taraflı yazdırma ayarlarını kabul etmez, bu yüzden kendi ayarı geçerlidir. Değiştirmek için: Özellikler…
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Bu alanın yazı tipi “{c}” ({code}) karakterini çizemiyor, bu yüzden PdfCraft yerine ? gösteriyor. Değer kaydedilir ve diğer PDF görüntüleyiciler alanı ondan yeniden çizer.
 	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	PdfCraft'ın yazdığı yazı tipleri “{c}” ({code}) karakterini çizemiyor, bu yüzden her PDF görüntüleyicide ? olarak görünür. Metin kaydedilir.

@@ -2334,6 +2334,24 @@ animation effects	Off	Vypnuto
 	Rotate page {label} counterclockwise	Otočit stránku {label} proti směru hodinových ručiček
 	Rotate page {label} clockwise	Otočit stránku {label} po směru hodinových ručiček
 	Delete page {label}	Odstranit stránku {label}
+	Convert to PDF with PdfCraft	Převést do PDF pomocí PdfCraft
+	Convert to PDF and email…	Převést do PDF a odeslat e-mailem…
+	Combine files in PdfCraft…	Sloučit soubory v PdfCraft…
+	Prepare email draft	Připravit koncept e-mailu
+	PDF attachments	Přílohy PDF
+	Save email draft…	Uložit koncept e-mailu…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Koncept obsahuje přílohy PDF. Otevřete jej v poštovní aplikaci podporující koncepty .eml; v Outlook.com vytvořte zprávu a uložené soubory PDF přiložte sami.
+	Email draft saved to {path}	Koncept e-mailu uložen do {path}
+	Couldn't open the email draft: {e}	Koncept e-mailu se nepodařilo otevřít: {e}
+	Couldn't prepare the email draft: {e}	Koncept e-mailu se nepodařilo připravit: {e}
+	Explorer selection is limited to {count} files.	V Průzkumníku lze vybrat nejvýše {count} souborů.
+	Explorer selection exceeds the {size} MiB memory limit.	Výběr v Průzkumníku překračuje limit paměti {size} MiB.
+	Make PdfCraft your default PDF app?	Nastavit PdfCraft jako výchozí aplikaci pro PDF?
+	Choose PdfCraft for .pdf files in Windows Settings.	V nastavení Windows vyberte PdfCraft pro soubory .pdf.
+	Do not ask again	Znovu se neptat
+	Ask to make PdfCraft the default PDF app	Ptát se na nastavení PdfCraft jako výchozí aplikace pro PDF
+	Open default app settings	Otevřít nastavení výchozích aplikací
+	Couldn't open Windows default app settings: {error}	Nastavení výchozích aplikací Windows se nepodařilo otevřít: {error}
 
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	Stránka PDF: {size}

@@ -2286,6 +2286,26 @@ animation effects	Off	Ανενεργά
 	Original	Πρωτότυπο
 	Greyscale	Κλίμακα του γκρι
 	Black and white	Ασπρόμαυρο
+
+# Windows Explorer and default-PDF integration.
+	Convert to PDF with PdfCraft	Μετατροπή σε PDF με το PdfCraft
+	Convert to PDF and email…	Μετατροπή σε PDF και αποστολή με email…
+	Combine files in PdfCraft…	Συνδυασμός αρχείων στο PdfCraft…
+	Prepare email draft	Προετοιμασία προσχεδίου email
+	PDF attachments	Συνημμένα PDF
+	Save email draft…	Αποθήκευση προσχεδίου email…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Το προσχέδιο περιέχει συνημμένα PDF. Ανοίξτε το με μια εφαρμογή αλληλογραφίας που υποστηρίζει προσχέδια .eml. Στο Outlook.com, δημιουργήστε ένα μήνυμα και επισυνάψτε μόνοι σας τα αποθηκευμένα PDF.
+	Email draft saved to {path}	Το προσχέδιο email αποθηκεύτηκε στο {path}
+	Couldn't open the email draft: {e}	Δεν ήταν δυνατό το άνοιγμα του προσχεδίου email: {e}
+	Couldn't prepare the email draft: {e}	Δεν ήταν δυνατή η προετοιμασία του προσχεδίου email: {e}
+	Explorer selection is limited to {count} files.	Η επιλογή στην Εξερεύνηση περιορίζεται σε {count} αρχεία.
+	Explorer selection exceeds the {size} MiB memory limit.	Η επιλογή στην Εξερεύνηση υπερβαίνει το όριο μνήμης των {size} MiB.
+	Make PdfCraft your default PDF app?	Να γίνει το PdfCraft η προεπιλεγμένη εφαρμογή PDF;
+	Choose PdfCraft for .pdf files in Windows Settings.	Επιλέξτε το PdfCraft για αρχεία .pdf στις Ρυθμίσεις των Windows.
+	Do not ask again	Να μην ερωτηθώ ξανά
+	Ask to make PdfCraft the default PDF app	Ερώτηση για ορισμό του PdfCraft ως προεπιλεγμένης εφαρμογής PDF
+	Open default app settings	Άνοιγμα ρυθμίσεων προεπιλεγμένων εφαρμογών
+	Couldn't open Windows default app settings: {error}	Δεν ήταν δυνατό το άνοιγμα των ρυθμίσεων προεπιλεγμένων εφαρμογών των Windows: {error}
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Το πρόγραμμα οδήγησης αυτού του εκτυπωτή δεν δέχεται ρυθμίσεις εκτύπωσης διπλής όψης από άλλα προγράμματα, οπότε ισχύει η δική του ρύθμιση. Αλλάξτε τη στις Ιδιότητες…
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Η γραμματοσειρά αυτού του πεδίου δεν μπορεί να σχεδιάσει το «{c}» ({code}), γι' αυτό το PdfCraft δείχνει ? στη θέση του. Η τιμή αποθηκεύεται και άλλα προγράμματα προβολής PDF επανασχεδιάζουν το πεδίο από αυτήν.
 	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	Οι γραμματοσειρές με τις οποίες γράφει το PdfCraft δεν μπορούν να σχεδιάσουν το «{c}» ({code}), γι' αυτό εμφανίζεται ως ? σε κάθε πρόγραμμα προβολής PDF. Το κείμενο αποθηκεύεται.

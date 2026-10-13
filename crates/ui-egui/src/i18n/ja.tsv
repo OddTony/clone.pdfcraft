@@ -2281,6 +2281,24 @@ animation effects	Off	オフ
 	Original	オリジナル
 	Greyscale	グレースケール
 	Black and white	白黒
+	Convert to PDF with PdfCraft	PdfCraft で PDF に変換
+	Convert to PDF and email…	PDF に変換してメールで送信…
+	Combine files in PdfCraft…	PdfCraft でファイルを結合…
+	Prepare email draft	メールの下書きを準備
+	PDF attachments	PDF の添付ファイル
+	Save email draft…	メールの下書きを保存…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	下書きには PDF が添付されています。.eml の下書きに対応したメールアプリで開いてください。Outlook.com ではメッセージを作成し、保存した PDF を手動で添付してください。
+	Email draft saved to {path}	メールの下書きを {path} に保存しました
+	Couldn't open the email draft: {e}	メールの下書きを開けませんでした: {e}
+	Couldn't prepare the email draft: {e}	メールの下書きを準備できませんでした: {e}
+	Explorer selection is limited to {count} files.	エクスプローラーで選択できるファイルは {count} 個までです。
+	Explorer selection exceeds the {size} MiB memory limit.	エクスプローラーの選択がメモリ上限の {size} MiB を超えています。
+	Make PdfCraft your default PDF app?	PdfCraft を既定の PDF アプリにしますか？
+	Choose PdfCraft for .pdf files in Windows Settings.	Windows の設定で .pdf ファイルに PdfCraft を選択してください。
+	Do not ask again	今後確認しない
+	Ask to make PdfCraft the default PDF app	PdfCraft を既定の PDF アプリにするか確認する
+	Open default app settings	既定のアプリの設定を開く
+	Couldn't open Windows default app settings: {error}	Windows の既定のアプリの設定を開けませんでした: {error}
 	Reading colours	読書用の色
 	Replace document colours	文書の色を置き換える
 	Black on white	白地に黒

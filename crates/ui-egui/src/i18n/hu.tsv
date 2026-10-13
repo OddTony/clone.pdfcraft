@@ -2280,6 +2280,24 @@ animation effects	Off	Ki
 	Original	Eredeti
 	Greyscale	Szürkeárnyalatos
 	Black and white	Fekete-fehér
+	Convert to PDF with PdfCraft	Átalakítás PDF-fé a PdfCrafttal
+	Convert to PDF and email…	Átalakítás PDF-fé és küldés e-mailben…
+	Combine files in PdfCraft…	Fájlok egyesítése a PdfCraftban…
+	Prepare email draft	E-mail-piszkozat előkészítése
+	PDF attachments	PDF-mellékletek
+	Save email draft…	E-mail-piszkozat mentése…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	A piszkozat PDF-mellékleteket tartalmaz. Nyisd meg egy .eml-piszkozatokat támogató levelezőprogrammal; az Outlook.com oldalon hozz létre egy üzenetet, és csatold a mentett PDF-eket.
+	Email draft saved to {path}	E-mail-piszkozat mentve ide: {path}
+	Couldn't open the email draft: {e}	Nem sikerült megnyitni az e-mail-piszkozatot: {e}
+	Couldn't prepare the email draft: {e}	Nem sikerült előkészíteni az e-mail-piszkozatot: {e}
+	Explorer selection is limited to {count} files.	Az Intézőben legfeljebb {count} fájl jelölhető ki.
+	Explorer selection exceeds the {size} MiB memory limit.	Az Intézőben kijelölt fájlok túllépik a(z) {size} MiB memóriakorlátot.
+	Make PdfCraft your default PDF app?	Legyen a PdfCraft az alapértelmezett PDF-alkalmazás?
+	Choose PdfCraft for .pdf files in Windows Settings.	Válassza a PdfCraft alkalmazást a .pdf fájlokhoz a Windows Gépházban.
+	Do not ask again	Ne kérdezze újra
+	Ask to make PdfCraft the default PDF app	Kérdezzen rá a PdfCraft alapértelmezett PDF-alkalmazásként való beállítására
+	Open default app settings	Alapértelmezett alkalmazások beállításainak megnyitása
+	Couldn't open Windows default app settings: {error}	Nem sikerült megnyitni a Windows alapértelmezett alkalmazásainak beállításait: {error}
 	Reading colours	Olvasási színek
 	Replace document colours	Dokumentumszínek cseréje
 	Black on white	Fekete fehéren

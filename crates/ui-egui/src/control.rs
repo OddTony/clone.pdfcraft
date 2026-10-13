@@ -29,6 +29,8 @@
 //! - `ui.type {text}`, `ui.key {key, modifiers?}`: keyboard input to the focused widget / app.
 //! - `ui.command {id}`: run a registry command (as the menu would). `ui.commands` lists them.
 //! - `ui.set {key, value}`: view options (`--page`, `--zoom`, …), plus persistent preferences.
+//!   `ask-default-pdf` is `on` or `off`; `ui.state` reports it and `default_pdf_prompt`.
+//!   `ui.command app.default_pdf_settings` explicitly opens Windows Settings when supported.
 //!   `select` accepts physical page numbers and ranges such as `1,12,16-18`; blank clears the
 //!   explicit selection. This is the same bounded parser as the Organize Pages field; invalid
 //!   input leaves the previous selection unchanged. `ui.state.active.selected_pages` reports it.
@@ -715,6 +717,8 @@ impl Host for crate::PdfCraftApp {
             "home": self.active.is_none(),
             "mode": format!("{:?}", self.mode),
             "default_mode": self.default_mode,
+            "ask_default_pdf": self.ask_default_pdf,
+            "default_pdf_prompt": self.default_pdf.open,
             "left_panel": if self.left_open { json!(format!("{:?}", self.left)) } else { Value::Null },
             "tools_side": if self.docking.tools_on_right() { "right" } else { "left" },
             "right_panel": self.right.map(|r| format!("{r:?}")),

@@ -2283,6 +2283,26 @@ animation effects	Off	Izklopljeni
 	Original	Izvirnik
 	Greyscale	Sivine
 	Black and white	Črno-belo
+
+# Windows Explorer and default-PDF integration.
+	Convert to PDF with PdfCraft	Pretvori v PDF s programom PdfCraft
+	Convert to PDF and email…	Pretvori v PDF in pošlji po e-pošti…
+	Combine files in PdfCraft…	Združi datoteke v programu PdfCraft…
+	Prepare email draft	Pripravi osnutek e-pošte
+	PDF attachments	Priloge PDF
+	Save email draft…	Shrani osnutek e-pošte…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Osnutek vsebuje priloge PDF. Odprite ga v poštnem programu, ki podpira osnutke .eml; v Outlook.com ustvarite sporočilo in sami pripnite shranjene datoteke PDF.
+	Email draft saved to {path}	Osnutek e-pošte je shranjen v {path}
+	Couldn't open the email draft: {e}	Osnutka e-pošte ni bilo mogoče odpreti: {e}
+	Couldn't prepare the email draft: {e}	Osnutka e-pošte ni bilo mogoče pripraviti: {e}
+	Explorer selection is limited to {count} files.	Izbira v Raziskovalcu je omejena na {count} datotek.
+	Explorer selection exceeds the {size} MiB memory limit.	Izbira v Raziskovalcu presega pomnilniško omejitev {size} MiB.
+	Make PdfCraft your default PDF app?	Želite nastaviti PdfCraft kot privzeti program za PDF?
+	Choose PdfCraft for .pdf files in Windows Settings.	V nastavitvah sistema Windows za datoteke .pdf izberite PdfCraft.
+	Do not ask again	Ne sprašuj več
+	Ask to make PdfCraft the default PDF app	Vprašaj za nastavitev programa PdfCraft kot privzetega programa za PDF
+	Open default app settings	Odpri nastavitve privzetih programov
+	Couldn't open Windows default app settings: {error}	Nastavitev privzetih programov sistema Windows ni bilo mogoče odpreti: {error}
 	Reading colours	Barve za branje
 	Replace document colours	Zamenjaj barve dokumenta
 	Black on white	Črno na belem

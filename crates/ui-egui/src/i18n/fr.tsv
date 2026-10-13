@@ -2281,6 +2281,24 @@ animation effects	Off	Désactivés
 	Original	Original
 	Greyscale	Niveaux de gris
 	Black and white	Noir et blanc
+	Convert to PDF with PdfCraft	Convertir en PDF avec PdfCraft
+	Convert to PDF and email…	Convertir en PDF et envoyer par e-mail…
+	Combine files in PdfCraft…	Combiner des fichiers dans PdfCraft…
+	Prepare email draft	Préparer un brouillon d’e-mail
+	PDF attachments	Pièces jointes PDF
+	Save email draft…	Enregistrer le brouillon d’e-mail…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Le brouillon contient des pièces jointes PDF. Ouvrez-le avec une application de messagerie prenant en charge les brouillons .eml ; dans Outlook.com, créez un message et joignez vous-même les PDF enregistrés.
+	Email draft saved to {path}	Brouillon d’e-mail enregistré dans {path}
+	Couldn't open the email draft: {e}	Impossible d’ouvrir le brouillon d’e-mail : {e}
+	Couldn't prepare the email draft: {e}	Impossible de préparer le brouillon d’e-mail : {e}
+	Explorer selection is limited to {count} files.	La sélection dans l’Explorateur est limitée à {count} fichiers.
+	Explorer selection exceeds the {size} MiB memory limit.	La sélection de l’Explorateur dépasse la limite de mémoire de {size} Mio.
+	Make PdfCraft your default PDF app?	Utiliser PdfCraft par défaut pour les PDF ?
+	Choose PdfCraft for .pdf files in Windows Settings.	Choisissez PdfCraft pour les fichiers .pdf dans les paramètres Windows.
+	Do not ask again	Ne plus demander
+	Ask to make PdfCraft the default PDF app	Proposer de définir PdfCraft comme application PDF par défaut
+	Open default app settings	Ouvrir les paramètres des applications par défaut
+	Couldn't open Windows default app settings: {error}	Impossible d’ouvrir les paramètres Windows des applications par défaut : {error}
 	Reading colours	Couleurs de lecture
 	Replace document colours	Remplacer les couleurs du document
 	Black on white	Noir sur blanc

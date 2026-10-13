@@ -2303,6 +2303,24 @@ animation effects	Off	Вимкнено
 	Original	Оригінал
 	Greyscale	Відтінки сірого
 	Black and white	Чорно-білий
+	Convert to PDF with PdfCraft	Перетворити на PDF за допомогою PdfCraft
+	Convert to PDF and email…	Перетворити на PDF і надіслати поштою…
+	Combine files in PdfCraft…	Об’єднати файли в PdfCraft…
+	Prepare email draft	Підготувати чернетку листа
+	PDF attachments	Вкладення PDF
+	Save email draft…	Зберегти чернетку листа…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Чернетка містить вкладення PDF. Відкрийте її в поштовій програмі з підтримкою чернеток .eml; в Outlook.com створіть лист і самостійно прикріпіть збережені PDF.
+	Email draft saved to {path}	Чернетку листа збережено в {path}
+	Couldn't open the email draft: {e}	Не вдалося відкрити чернетку листа: {e}
+	Couldn't prepare the email draft: {e}	Не вдалося підготувати чернетку листа: {e}
+	Explorer selection is limited to {count} files.	У Провіднику можна вибрати щонайбільше {count} файлів.
+	Explorer selection exceeds the {size} MiB memory limit.	Вибір у Провіднику перевищує обмеження пам’яті в {size} МіБ.
+	Make PdfCraft your default PDF app?	Зробити PdfCraft типовою програмою для PDF?
+	Choose PdfCraft for .pdf files in Windows Settings.	Виберіть PdfCraft для файлів .pdf у параметрах Windows.
+	Do not ask again	Більше не запитувати
+	Ask to make PdfCraft the default PDF app	Запитувати про призначення PdfCraft типовою програмою для PDF
+	Open default app settings	Відкрити параметри типових програм
+	Couldn't open Windows default app settings: {error}	Не вдалося відкрити параметри типових програм Windows: {error}
 	Reading colours	Кольори для читання
 	Replace document colours	Замінити кольори документа
 	Black on white	Чорний на білому

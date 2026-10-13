@@ -2302,6 +2302,24 @@ animation effects	Off	معطّلة
 	Original	الأصل
 	Greyscale	تدرج رمادي
 	Black and white	أبيض وأسود
+	Convert to PDF with PdfCraft	تحويل إلى PDF باستخدام PdfCraft
+	Convert to PDF and email…	تحويل إلى PDF وإرسال بالبريد الإلكتروني…
+	Combine files in PdfCraft…	دمج الملفات في PdfCraft…
+	Prepare email draft	إعداد مسودة بريد إلكتروني
+	PDF attachments	مرفقات PDF
+	Save email draft…	حفظ مسودة البريد الإلكتروني…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	تحتوي المسودة على مرفقات PDF. افتحها بتطبيق بريد يدعم مسودات .eml؛ في Outlook.com، أنشئ رسالة وأرفق ملفات PDF المحفوظة بنفسك.
+	Email draft saved to {path}	تم حفظ مسودة البريد الإلكتروني في {path}
+	Couldn't open the email draft: {e}	تعذر فتح مسودة البريد الإلكتروني: {e}
+	Couldn't prepare the email draft: {e}	تعذر إعداد مسودة البريد الإلكتروني: {e}
+	Explorer selection is limited to {count} files.	يقتصر التحديد في مستكشف الملفات على {count} ملفًا.
+	Explorer selection exceeds the {size} MiB memory limit.	يتجاوز التحديد في مستكشف الملفات حد الذاكرة البالغ {size} ميبيبايت.
+	Make PdfCraft your default PDF app?	هل تريد جعل PdfCraft تطبيق PDF الافتراضي؟
+	Choose PdfCraft for .pdf files in Windows Settings.	اختر PdfCraft لملفات .pdf في إعدادات Windows.
+	Do not ask again	عدم السؤال مرة أخرى
+	Ask to make PdfCraft the default PDF app	السؤال عن جعل PdfCraft تطبيق PDF الافتراضي
+	Open default app settings	فتح إعدادات التطبيقات الافتراضية
+	Couldn't open Windows default app settings: {error}	تعذر فتح إعدادات التطبيقات الافتراضية في Windows: {error}
 	Reading colours	ألوان القراءة
 	Replace document colours	استبدال ألوان المستند
 	Black on white	أسود على أبيض

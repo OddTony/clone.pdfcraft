@@ -2,6 +2,7 @@
 //!
 //! Usage: `pdfcraft [options] [files…]`
 //! `--create-images [images…]` stages the images in one PDF and asks for the page DPI.
+//! `--shell-convert|--shell-email|--shell-combine -- files…` receives Explorer actions; the latter two open review lists.
 //!
 //! View options (applied after the files open; also the seed of the UI control channel):
 //! `--page N  --zoom 150  --layout single|continuous|two-up|two-page  --continuous on|off  --panel comments|bookmarks|pages|fields|layers|attachments|none
@@ -27,16 +28,22 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use pdfcraft_ui_egui::PdfCraftApp;
+use pdfcraft_ui_egui::{PdfCraftApp, ShellAction};
 
 #[cfg(target_os = "macos")]
 mod apple_events;
 mod compositor_gpu;
 mod decorations;
+#[cfg(any(windows, test))]
+mod default_pdf;
 mod logging;
 #[cfg(target_os = "windows")]
 mod motion;
 mod reopen;
+#[cfg(windows)]
+mod shell;
+#[cfg(test)]
+mod shell_resources;
 mod single_instance;
 mod text_scale;
 mod updates;
@@ -180,10 +187,18 @@ fn main() -> eframe::Result {
     let mut options: Vec<(String, String)> = Vec::new();
     let mut control_file: Option<String> = None;
     let mut create_images = false;
+    let mut shell_action = None;
     let mut new_window = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
+            "--" => {
+                files.extend(args.map(path_from_arg));
+                break;
+            }
+            "--shell-convert" => shell_action = Some(ShellAction::Convert),
+            "--shell-email" => shell_action = Some(ShellAction::Email),
+            "--shell-combine" => shell_action = Some(ShellAction::Combine),
             "--version" => {
                 println!("pdfcraft {}", pdfcraft_engine::build_info::version());
                 return Ok(());
@@ -217,13 +232,13 @@ fn main() -> eframe::Result {
     // hands them to the PdfCraft already running and exits (#282, #317). Any option means the
     // caller wants this launch's own window.
     let may_hand_off = !new_window && !files.is_empty() && options.is_empty() && control_file.is_none() && !create_images;
-    let instance = match single_instance::claim(&single_instance::absolute(&files), may_hand_off) {
+    let instance = match single_instance::claim(&single_instance::absolute(&files), may_hand_off, shell_action) {
         single_instance::Claim::HandedOff => return Ok(()),
         single_instance::Claim::Primary(server) => Some(server),
         single_instance::Claim::Alone => None,
     };
     let choice = renderer_choice(std::env::var("PDFCRAFT_RENDERER").ok().as_deref());
-    let launch = Launch { files, options, control_file, create_images, integrated, window_controls };
+    let launch = Launch { files, options, control_file, create_images, shell_action, integrated, window_controls };
     // Finder, Open With and the Dock deliver files as Apple events, not arguments; catch the one
     // that launched us as well as later ones. Lives until the event loop returns.
     #[cfg(target_os = "macos")]
@@ -327,6 +342,7 @@ struct Launch {
     options: Vec<(String, String)>,
     control_file: Option<String>,
     create_images: bool,
+    shell_action: Option<ShellAction>,
     integrated: bool,
     /// The window buttons the app draws, when the desktop leaves the frame to it.
     window_controls: Option<pdfcraft_ui_egui::window_controls::Layout>,
@@ -338,7 +354,7 @@ fn app_creator<'a>(
     instance: Option<&'a single_instance::Server>,
     #[cfg(target_os = "macos")] apple_events: &'a apple_events::AppleEvents,
 ) -> eframe::AppCreator<'a> {
-    let Launch { files, options, control_file, create_images, integrated, window_controls } = launch;
+    let Launch { files, options, control_file, create_images, shell_action, integrated, window_controls } = launch;
     Box::new(move |cc| {
         started.set(true);
         let mut app = PdfCraftApp::new();
@@ -361,8 +377,16 @@ fn app_creator<'a>(
             app.motion.source = Some(motion::source());
         }
         app.update_source = Some(std::sync::Arc::new(updates::latest_release));
+        #[cfg(windows)]
+        {
+            app.default_pdf_integration = Some(default_pdf::integration(control_file.is_none()));
+        }
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
+        #[cfg(windows)]
+        {
+            app.open_email_draft = Some(Box::new(shell::open_draft));
+        }
         #[cfg(target_os = "macos")]
         {
             app.os_events = Some(apple_events.connect(&cc.egui_ctx));
@@ -398,7 +422,9 @@ fn app_creator<'a>(
                 &[("folder", &w.folder.display().to_string()), ("error", &w.error)],
             );
         }
-        if create_images {
+        if let Some(action) = shell_action {
+            app.receive_shell(action, &single_instance::absolute(&files));
+        } else if create_images {
             if let Err(e) = app.begin_image_import_paths(&files) {
                 app.notify(e);
             }

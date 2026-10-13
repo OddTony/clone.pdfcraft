@@ -128,18 +128,21 @@ Assert-Equal $app[0] 'PdfcraftExe' 'Shortcut executable key path'
 $scope = Read-Row 'SELECT `Value` FROM `Property` WHERE `Property` = ''ALLUSERS''' 1
 Assert-Equal $scope[0] '1' 'Per-machine shortcut scope'
 
-# Image context menu opens the DPI chooser; the app component owns every registry row so
-# uninstall removes it. No image default association is changed.
-foreach ($ext in @('png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx')) {
-  $key = 'Software\Classes\SystemFileAssociations\.' + $ext + '\shell\PdfCraft.CreatePdf'
-  $menu = Read-Row ('SELECT `Value`, `Component_`, `Root` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` IS NULL') 3
-  Assert-Equal $menu[0] 'Create PDF with PdfCraft…' "$ext context menu label"
-  Assert-Equal $menu[1] 'PdfcraftApp' "$ext context menu component"
-  Assert-Equal $menu[2] '2' "$ext context menu HKLM root"
-  $command = Read-Row ('SELECT `Value` FROM `Registry` WHERE `Key` = ''' + $key + '\command''') 1
-  Assert-Equal $command[0] '"[#PdfcraftExe]" --create-images "%1"' "$ext context menu command"
-  $selection = Read-Row ('SELECT `Value` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` = ''MultiSelectModel''') 1
-  Assert-Equal $selection[0] 'Single' "$ext context menu selection"
+# Classic Explorer verbs are removed with the app. MUIVerb resolves localized resources.
+foreach ($ext in @('png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx', 'txt', 'text', 'pdf')) {
+  $verbs = @(@('EmailPdf', 'email', '1002'), @('Combine', 'combine', '1003'))
+  if ($ext -ne 'pdf') { $verbs += ,@('CreatePdf', 'convert', '1001') }
+  foreach ($verb in $verbs) {
+    $key = 'Software\Classes\SystemFileAssociations\.' + $ext + '\shell\PdfCraft.' + $verb[0]
+    $menu = Read-Row ('SELECT `Value`, `Component_`, `Root` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` = ''MUIVerb''') 3
+    Assert-Equal $menu[0] ('@[#PdfcraftExe],-' + $verb[2]) "$ext localized menu resource"
+    Assert-Equal $menu[1] 'PdfcraftApp' "$ext context menu component"
+    Assert-Equal $menu[2] '2' "$ext context menu HKLM root"
+    $command = Read-Row ('SELECT `Value` FROM `Registry` WHERE `Key` = ''' + $key + '\command''') 1
+    Assert-Equal $command[0] ('"[#PdfcraftExe]" --shell-' + $verb[1] + ' -- "%1"') "$ext context menu command"
+    $selection = Read-Row ('SELECT `Value` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` = ''MultiSelectModel''') 1
+    Assert-Equal $selection[0] 'Player' "$ext context menu selection"
+  }
 }
 
 # PDF context menu (#682): "Edit with PdfCraft" opens the file in PdfCraft. Its own component, gated

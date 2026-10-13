@@ -2276,6 +2276,26 @@ animation effects	Off	Өшірулі
 	Original	Түпнұсқа
 	Greyscale	Сұр реңктер
 	Black and white	Ақ-қара
+
+# Windows Explorer and default-PDF integration.
+	Convert to PDF with PdfCraft	PdfCraft арқылы PDF пішіміне түрлендіру
+	Convert to PDF and email…	PDF пішіміне түрлендіріп, электрондық пошта арқылы жіберу…
+	Combine files in PdfCraft…	Файлдарды PdfCraft ішінде біріктіру…
+	Prepare email draft	Электрондық хат нобайын дайындау
+	PDF attachments	PDF тіркемелері
+	Save email draft…	Электрондық хат нобайын сақтау…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Нобайда PDF тіркемелері бар. Оны .eml нобайларын қолдайтын пошта қолданбасымен ашыңыз; Outlook.com сайтында хат жасап, сақталған PDF файлдарын өзіңіз тіркеңіз.
+	Email draft saved to {path}	Электрондық хат нобайы {path} орнына сақталды
+	Couldn't open the email draft: {e}	Электрондық хат нобайын ашу мүмкін болмады: {e}
+	Couldn't prepare the email draft: {e}	Электрондық хат нобайын дайындау мүмкін болмады: {e}
+	Explorer selection is limited to {count} files.	Жетектеушіде ең көбі {count} файл таңдауға болады.
+	Explorer selection exceeds the {size} MiB memory limit.	Жетектеушідегі таңдау {size} MiB жад шегінен асады.
+	Make PdfCraft your default PDF app?	PdfCraft қолданбасын әдепкі PDF қолданбасы ету керек пе?
+	Choose PdfCraft for .pdf files in Windows Settings.	Windows параметрлерінде .pdf файлдары үшін PdfCraft қолданбасын таңдаңыз.
+	Do not ask again	Қайта сұрамау
+	Ask to make PdfCraft the default PDF app	PdfCraft қолданбасын әдепкі PDF қолданбасы ету туралы сұрау
+	Open default app settings	Әдепкі қолданба параметрлерін ашу
+	Couldn't open Windows default app settings: {error}	Windows жүйесінің әдепкі қолданба параметрлерін ашу мүмкін болмады: {error}
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Бұл принтердің драйвері басқа бағдарламалардан екі жақты басып шығару баптауларын қабылдамайды, сондықтан өз баптауы қолданылады. Оны мына жерден өзгертіңіз: Сипаттар…
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Бұл өрістің қаріпі «{c}» ({code}) таңбасын сала алмайды, сондықтан PdfCraft оның орнына ? көрсетеді. Мән сақталады, ал басқа PDF қарау құралдары өрісті соған қарап қайта салады.
 	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	PdfCraft жазатын қаріптер «{c}» ({code}) таңбасын сала алмайды, сондықтан ол барлық PDF қарау құралдарында ? болып көрінеді. Мәтін сақталады.

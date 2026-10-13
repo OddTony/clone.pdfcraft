@@ -2244,6 +2244,24 @@ animation effects	Off	Изключени
 	Original	Оригинал
 	Greyscale	Нива на сивото
 	Black and white	Черно-бяло
+	Convert to PDF with PdfCraft	Преобразуване в PDF с PdfCraft
+	Convert to PDF and email…	Преобразуване в PDF и изпращане по имейл…
+	Combine files in PdfCraft…	Обединяване на файлове в PdfCraft…
+	Prepare email draft	Подготовка на чернова на имейл
+	PDF attachments	PDF прикачени файлове
+	Save email draft…	Запазване на черновата на имейла…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Черновата съдържа PDF прикачени файлове. Отворете я с пощенско приложение, поддържащо .eml чернови; в Outlook.com създайте съобщение и прикачете запазените PDF файлове ръчно.
+	Email draft saved to {path}	Черновата на имейла е запазена в {path}
+	Couldn't open the email draft: {e}	Черновата на имейла не може да се отвори: {e}
+	Couldn't prepare the email draft: {e}	Черновата на имейла не може да се подготви: {e}
+	Explorer selection is limited to {count} files.	Изборът в Explorer е ограничен до {count} файла.
+	Explorer selection exceeds the {size} MiB memory limit.	Изборът в Explorer надвишава ограничението от {size} MiB памет.
+	Make PdfCraft your default PDF app?	Задаване на PdfCraft като приложение по подразбиране за PDF?
+	Choose PdfCraft for .pdf files in Windows Settings.	Изберете PdfCraft за файловете .pdf в настройките на Windows.
+	Do not ask again	Да не се пита отново
+	Ask to make PdfCraft the default PDF app	Питане дали PdfCraft да бъде приложението по подразбиране за PDF
+	Open default app settings	Отваряне на настройките за приложения по подразбиране
+	Couldn't open Windows default app settings: {error}	Настройките на Windows за приложения по подразбиране не могат да бъдат отворени: {error}
 	Reading colours	Цветове за четене
 	Replace document colours	Замяна на цветовете на документа
 	Black on white	Черно на бяло

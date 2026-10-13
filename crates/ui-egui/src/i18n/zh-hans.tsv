@@ -2245,6 +2245,24 @@ animation effects	Off	关
 	Original	原始
 	Greyscale	灰度
 	Black and white	黑白
+	Convert to PDF with PdfCraft	使用 PdfCraft 转换为 PDF
+	Convert to PDF and email…	转换为 PDF 并通过电子邮件发送…
+	Combine files in PdfCraft…	在 PdfCraft 中合并文件…
+	Prepare email draft	准备电子邮件草稿
+	PDF attachments	PDF 附件
+	Save email draft…	保存电子邮件草稿…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	草稿包含 PDF 附件。请用支持 .eml 草稿的邮件应用打开；在 Outlook.com 中，请创建邮件并手动附加已保存的 PDF。
+	Email draft saved to {path}	电子邮件草稿已保存到 {path}
+	Couldn't open the email draft: {e}	无法打开电子邮件草稿：{e}
+	Couldn't prepare the email draft: {e}	无法准备电子邮件草稿：{e}
+	Explorer selection is limited to {count} files.	资源管理器中最多可选择 {count} 个文件。
+	Explorer selection exceeds the {size} MiB memory limit.	资源管理器中的所选文件超出 {size} MiB 内存限制。
+	Make PdfCraft your default PDF app?	将 PdfCraft 设为默认 PDF 应用？
+	Choose PdfCraft for .pdf files in Windows Settings.	请在 Windows 设置中为 .pdf 文件选择 PdfCraft。
+	Do not ask again	不再询问
+	Ask to make PdfCraft the default PDF app	询问是否将 PdfCraft 设为默认 PDF 应用
+	Open default app settings	打开默认应用设置
+	Couldn't open Windows default app settings: {error}	无法打开 Windows 默认应用设置：{error}
 	Reading colours	阅读配色
 	Replace document colours	替换文档颜色
 	Black on white	白底黑字

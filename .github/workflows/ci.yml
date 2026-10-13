@@ -63,7 +63,9 @@ jobs:
 
       - name: Require Windows executable resources
         if: runner.os == 'Windows'
-        run: Add-Content -Path $env:GITHUB_ENV -Value 'PDFCRAFT_REQUIRE_WINRES=1'
+        run: |
+          Add-Content -Path $env:GITHUB_ENV -Value 'PDFCRAFT_REQUIRE_WINRES=1'
+          Add-Content -Path $env:GITHUB_ENV -Value 'PDFCRAFT_REQUIRE_SYMLINK_TESTS=1'
         shell: pwsh
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -86,6 +88,15 @@ jobs:
       - name: Layering
         if: runner.os == 'Linux'
         run: cargo xtask layers
+
+      - name: Compile and inspect Explorer installer registrations (never install)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          dotnet tool install --tool-path "$env:RUNNER_TEMP/wix-shell" wix --version 5.0.2
+          if ($LASTEXITCODE -ne 0) { throw 'WiX installation failed' }
+          $env:PATH = "$env:RUNNER_TEMP/wix-shell;$env:PATH"
+          ./packaging/windows/test-shell-build.ps1 -OutDir "$env:RUNNER_TEMP/pdfcraft-shell-metadata"
 
       - name: Assets (licences and attribution)
         if: runner.os == 'Linux'

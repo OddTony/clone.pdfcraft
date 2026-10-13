@@ -2193,6 +2193,24 @@ animation effects	Off	ఆఫ్
 	Original	అసలు
 	Greyscale	గ్రేస్కేల్
 	Black and white	నలుపు తెలుపు
+	Convert to PDF with PdfCraft	PdfCraftతో PDFగా మార్చు
+	Convert to PDF and email…	PDFగా మార్చి ఇమెయిల్ ద్వారా పంపు…
+	Combine files in PdfCraft…	PdfCraftలో ఫైళ్లను కలుపు…
+	Prepare email draft	ఇమెయిల్ చిత్తుప్రతిని సిద్ధం చేయి
+	PDF attachments	PDF జోడింపులు
+	Save email draft…	ఇమెయిల్ చిత్తుప్రతిని సేవ్ చేయి…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	చిత్తుప్రతిలో PDF జోడింపులు ఉన్నాయి. .eml చిత్తుప్రతులకు మద్దతిచ్చే ఇమెయిల్ యాప్‌తో తెరవండి; Outlook.comలో సందేశాన్ని సృష్టించి, సేవ్ చేసిన PDFలను మీరే జోడించండి.
+	Email draft saved to {path}	ఇమెయిల్ చిత్తుప్రతి {path}లో సేవ్ చేయబడింది
+	Couldn't open the email draft: {e}	ఇమెయిల్ చిత్తుప్రతిని తెరవలేకపోయాం: {e}
+	Couldn't prepare the email draft: {e}	ఇమెయిల్ చిత్తుప్రతిని సిద్ధం చేయలేకపోయాం: {e}
+	Explorer selection is limited to {count} files.	ఎక్స్‌ప్లోరర్‌లో గరిష్ఠంగా {count} ఫైళ్లను ఎంచుకోవచ్చు.
+	Explorer selection exceeds the {size} MiB memory limit.	ఫైల్ ఎక్స్‌ప్లోరర్‌లో ఎంచుకున్న ఫైల్‌లు {size} MiB మెమరీ పరిమితిని మించాయి.
+	Make PdfCraft your default PDF app?	PDF ఫైళ్లకు PdfCraftను డిఫాల్ట్ యాప్‌గా చేయాలా?
+	Choose PdfCraft for .pdf files in Windows Settings.	Windows సెట్టింగ్‌లలో .pdf ఫైళ్ల కోసం PdfCraftను ఎంచుకోండి.
+	Do not ask again	మళ్లీ అడగవద్దు
+	Ask to make PdfCraft the default PDF app	PDF ఫైళ్లకు PdfCraftను డిఫాల్ట్ యాప్‌గా చేయాలా అని అడగండి
+	Open default app settings	డిఫాల్ట్ యాప్‌ల సెట్టింగ్‌లను తెరవండి
+	Couldn't open Windows default app settings: {error}	Windows డిఫాల్ట్ యాప్‌ల సెట్టింగ్‌లను తెరవలేకపోయాము: {error}
 	Browser's print dialog	బ్రౌజర్ ముద్రణ డైలాగ్
 	Copies, two-sided printing and colour are chosen in the browser's print dialog.	కాపీలు, రెండు వైపుల ముద్రణ మరియు రంగును బ్రౌజర్ ముద్రణ డైలాగ్‌లో ఎంచుకుంటారు.
 	Preparing {n} sheets for printing…	ముద్రణ కోసం {n} షీట్‌లను సిద్ధం చేస్తోంది…

@@ -2596,3 +2596,21 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+	Convert to PDF with PdfCraft	Konvertuoti į PDF naudojant „PdfCraft“
+	Convert to PDF and email…	Konvertuoti į PDF ir siųsti el. paštu…
+	Combine files in PdfCraft…	Sujungti failus naudojant „PdfCraft“…
+	Ask to make PdfCraft the default PDF app	Siūlyti nustatyti „PdfCraft“ kaip numatytąją PDF programą
+	Choose PdfCraft for .pdf files in Windows Settings.	„Windows“ parametruose pasirinkite „PdfCraft“ .pdf failams.
+	Couldn't open Windows default app settings: {error}	Nepavyko atverti „Windows“ numatytųjų programų parametrų: {error}
+	Couldn't open the email draft: {e}	Nepavyko atverti el. laiško juodraščio: {e}
+	Couldn't prepare the email draft: {e}	Nepavyko parengti el. laiško juodraščio: {e}
+	Do not ask again	Daugiau neklausti
+	Email draft saved to {path}	El. laiško juodraštis išsaugotas: {path}
+	Explorer selection exceeds the {size} MiB memory limit.	Failų naršyklėje pasirinkti failai viršija {size} MiB atminties ribą.
+	Explorer selection is limited to {count} files.	Failų naršyklėje galima pasirinkti ne daugiau kaip {count} failų.
+	Make PdfCraft your default PDF app?	Nustatyti „PdfCraft“ kaip numatytąją PDF programą?
+	Open default app settings	Atverti numatytųjų programų parametrus
+	PDF attachments	PDF priedai
+	Prepare email draft	Parengti el. laiško juodraštį
+	Save email draft…	Išsaugoti el. laiško juodraštį…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	Juodraštyje yra PDF priedų. Atverkite jį pašto programa, palaikančia .eml juodraščius; „Outlook.com“ sukurkite laišką ir patys pridėkite išsaugotus PDF failus.

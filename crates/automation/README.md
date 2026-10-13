@@ -28,6 +28,9 @@ mcp::McpServer::new(a).serve(stdin, stdout)?             // newline-delimited JS
 - `doc_close` refuses to drop unsaved changes unless `discard_changes: true`. `doc_save` writes atomically, incrementally in place, and in full for a new path.
 - With a root set, every read and write path must resolve inside it (symlinks and `..` included). Relative paths resolve inside the root, and `..` is resolved by name before the check. Every path outside the root gets the same refusal (`<path> is outside the allowed directory <root>`), whether or not it exists, so a confined agent can't probe the rest of the disk; on Windows another network share or device path (`\\host\share`, `\\?\UNC\…`, `\\.\…`) is refused without being contacted. "Not found" and other filesystem errors are reported only for paths inside the root. Tools that write several files into a folder name them after the document or input file, with separators, colons and control characters replaced by `_`, so a name can't lead them out of the folder. The root itself must be a folder.
 
+## Local email drafts
+
+`doc_email_draft` accepts `paths` (1–100 supported sources) and an existing `out_dir`. It converts all sources before saving a new unique subfolder with an unsent `draft.eml` and the PDF attachments. The result contains `path`, `attachments` and `sent: false`. Sources and outputs obey `--root`; existing files are never overwritten. The tool never launches a mail client or sends mail.
 ## Text search and cache limits
 
 Extracted page text is reused in a session-wide LRU cache: at most **64 MiB** of estimated owned

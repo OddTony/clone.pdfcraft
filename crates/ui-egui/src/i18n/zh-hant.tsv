@@ -2154,6 +2154,24 @@ animation effects	Off	關
 	Original	原始
 	Greyscale	灰階
 	Black and white	黑白
+	Convert to PDF with PdfCraft	使用 PdfCraft 轉換為 PDF
+	Convert to PDF and email…	轉換為 PDF 並透過電子郵件傳送…
+	Combine files in PdfCraft…	在 PdfCraft 中合併檔案…
+	Prepare email draft	準備電子郵件草稿
+	PDF attachments	PDF 附件
+	Save email draft…	儲存電子郵件草稿…
+	The draft contains PDF attachments. Open it with a mail app that supports .eml drafts; in Outlook.com, create a message and attach the saved PDFs yourself.	草稿包含 PDF 附件。請用支援 .eml 草稿的郵件應用程式開啟；在 Outlook.com 中，請建立郵件並手動附加已儲存的 PDF。
+	Email draft saved to {path}	電子郵件草稿已儲存至 {path}
+	Couldn't open the email draft: {e}	無法開啟電子郵件草稿：{e}
+	Couldn't prepare the email draft: {e}	無法準備電子郵件草稿：{e}
+	Explorer selection is limited to {count} files.	檔案總管中最多可選取 {count} 個檔案。
+	Explorer selection exceeds the {size} MiB memory limit.	檔案總管中選取的檔案超出 {size} MiB 記憶體限制。
+	Make PdfCraft your default PDF app?	將 PdfCraft 設為預設 PDF 應用程式？
+	Choose PdfCraft for .pdf files in Windows Settings.	請在 Windows 設定中為 .pdf 檔案選擇 PdfCraft。
+	Do not ask again	不再詢問
+	Ask to make PdfCraft the default PDF app	詢問是否將 PdfCraft 設為預設 PDF 應用程式
+	Open default app settings	開啟預設應用程式設定
+	Couldn't open Windows default app settings: {error}	無法開啟 Windows 預設應用程式設定：{error}
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	此印表機的驅動程式不接受其他程式的雙面列印設定，因此使用其自身設定。變更位置：屬性…
 	Browser's print dialog	瀏覽器的列印對話框
 	Copies, two-sided printing and colour are chosen in the browser's print dialog.	份數、雙面列印和色彩在瀏覽器的列印對話框中選擇。

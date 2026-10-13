@@ -6,14 +6,19 @@
 //! cross-compile from macOS or Linux still links, unless `PDFCRAFT_REQUIRE_WINRES=1` turns it
 //! into an error (for release builds).
 
+#[path = "src/shell_resources.rs"]
+mod shell_resources;
 #[path = "src/windows_manifest.rs"]
 mod windows_manifest;
 
 fn main() {
+    println!("cargo::rustc-check-cfg=cfg(pdfcraft_shell_resources)");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../../assets/app-icon/pdfcraft.ico");
     println!("cargo:rerun-if-changed=../../assets/app-icon/pdfcraft-document.ico");
     println!("cargo:rerun-if-changed=src/windows_manifest.rs");
+    println!("cargo:rerun-if-changed=src/shell_resources.rs");
+    println!("cargo:rerun-if-changed=../../crates/ui-egui/src/i18n");
     println!("cargo:rerun-if-env-changed=PDFCRAFT_REQUIRE_WINRES");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
@@ -27,11 +32,22 @@ fn main() {
         .set("LegalCopyright", "Copyright (c) the PdfCraft contributors. MIT OR Apache-2.0.")
         .set("OriginalFilename", "pdfcraft.exe")
         .set("InternalName", "pdfcraft");
+    match shell_resources::string_tables() {
+        Ok(tables) => {
+            res.append_rc_content(&tables);
+        }
+        Err(error) => {
+            println!("cargo::error=embedding Explorer labels failed: {error}");
+            return;
+        }
+    }
     if let Err(e) = res.compile() {
         if std::env::var_os("PDFCRAFT_REQUIRE_WINRES").is_some() {
             println!("cargo::error=embedding Windows resources failed: {e}");
             return;
         }
         println!("cargo:warning=pdfcraft.exe built without icon/version resources: {e}");
+    } else {
+        println!("cargo::rustc-cfg=pdfcraft_shell_resources");
     }
 }
