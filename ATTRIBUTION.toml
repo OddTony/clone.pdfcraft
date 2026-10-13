@@ -240,7 +240,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Vietnamese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "0c60ab68518bea24a17ea27c62995f74a3f309a7c8cb389ad3e919c846bd7a5a"
+sha256 = "2253511ddf022342d5b671198dfd99752d45c2e7ce5de410ed31e7a19c2363ee"
 
 [[asset]]
 path = "assets/icons/accessibility.svg"

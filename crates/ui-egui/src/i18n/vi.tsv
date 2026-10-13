@@ -648,3 +648,493 @@
 	{words} on {pages}	{words} trên {pages}
 	— (protection is applied when you save)	— (việc bảo vệ được áp dụng khi bạn lưu)
 	“{name}” is protected. Enter a password to open it.	“{name}” được bảo vệ. Hãy nhập mật khẩu để mở.
+	Forms	Biểu mẫu
+	Form fields	Ô biểu mẫu
+	Signatures	Chữ ký
+	Sign	Ký
+	Information	Thông tin
+	Prepare a form	Chuẩn bị biểu mẫu
+	Add to Trusted Certificates	Thêm vào Chứng chỉ tin cậy
+	Add to trusted certificates	Thêm vào chứng chỉ tin cậy
+	Allow Rich Text Formatting	Cho phép định dạng văn bản phong phú
+	Annotations, form fill-in, and digital signatures	Chú thích, điền biểu mẫu và chữ ký số
+	Choose the digital ID that you want to use for signing:	Chọn Digital ID mà bạn muốn dùng để ký:
+	Comment and form data	Dữ liệu bình luận và biểu mẫu
+	Commenting, filling in form fields, and signing existing signature fields	Bình luận, điền các ô biểu mẫu và ký vào các ô chữ ký có sẵn
+	Comments & Forms	Bình luận & Biểu mẫu
+	Configure New Digital ID	Cấu hình Digital ID mới
+	Conformance level:	Mức tuân thủ:
+	Create Link	Tạo liên kết
+	Date format	Định dạng ngày
+	Declared conformance: {shown}	Tuân thủ đã khai báo: {shown}
+	Digital ID	Digital ID
+	Digital ID password	Mật khẩu Digital ID
+	Duplicate Field	Nhân bản ô
+	Field names (comma-separated)	Tên ô (phân tách bằng dấu phẩy)
+	Field names with + - * / and parentheses; put \\ before spaces in names.	Tên ô với + - * / và dấu ngoặc đơn; đặt \\ trước dấu cách trong tên.
+	Field value is in range:	Giá trị ô nằm trong phạm vi:
+	Field value is not validated	Giá trị ô không được kiểm tra hợp lệ
+	Field: {field} on page {p}	Ô: {field} trên trang {p}
+	Fields to reset (comma-separated; empty: all)	Các ô cần đặt lại (phân tách bằng dấu phẩy; để trống: tất cả)
+	Fill Color:	Màu tô:
+	Fill colour	Màu tô
+	Fill colour: none	Màu tô: không có
+	Filling in form fields and signing existing signature fields	Điền các ô biểu mẫu và ký vào các ô chữ ký có sẵn
+	Form data and PDF forms	Dữ liệu biểu mẫu và biểu mẫu PDF
+	Form fields only	Chỉ các ô biểu mẫu
+	Form fill-in and digital signatures	Điền biểu mẫu và chữ ký số
+	Format	Định dạng
+	Format text	Định dạng văn bản
+	Format:	Định dạng:
+	Hide field highlights	Ẩn tô sáng ô
+	Highlight fields	Tô sáng các ô
+	Initial View	Chế độ xem ban đầu
+	Ink sensitivity	Độ nhạy nét mực
+	JavaScript, e.g. getField("total").value	JavaScript, ví dụ getField("total").value
+	Link Action	Hành động liên kết
+	Link Appearance	Diện mạo liên kết
+	Link Properties	Thuộc tính liên kết
+	Link Type:	Loại liên kết:
+	No digital IDs yet.	Chưa có Digital ID nào.
+	No fill	Không tô
+	No problems found: the document conforms to {level}.	Không tìm thấy vấn đề: tài liệu tuân thủ {level}.
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	Không tìm thấy chữ ký trong khung. Hãy di chuyển khung lên chữ ký hoặc tăng độ nhạy nét mực.
+	Only checked properties will change. Mixed means the selected fields have different values.	Chỉ các thuộc tính được đánh dấu mới thay đổi. Hỗn hợp nghĩa là các ô đã chọn có giá trị khác nhau.
+	Redacted area fill colour:	Màu tô vùng bị che:
+	Resize window to initial page	Đổi kích thước cửa sổ theo trang ban đầu
+	Select format category:	Chọn danh mục định dạng:
+	Set Fields to Same Size	Đặt các ô về cùng kích thước
+	Shared Field Properties	Thuộc tính ô dùng chung
+	Shift- or Ctrl/Command-click to select several fields.	Nhấn Shift hoặc Ctrl/Command khi bấm để chọn nhiều ô.
+	Show certificate…	Hiện chứng chỉ…
+	Sign Here	Ký tại đây
+	Sign this field…	Ký vào ô này…
+	Sign yourself	Tự ký
+	Signature Details	Chi tiết chữ ký
+	Signature is INVALID:	Chữ ký KHÔNG HỢP LỆ:
+	Signature is valid:	Chữ ký hợp lệ:
+	Signature panel	Bảng chữ ký
+	Signature validity is UNKNOWN:	Tính hợp lệ của chữ ký KHÔNG RÕ:
+	Signer's name	Tên người ký
+	Simplified field notation:	Ký hiệu ô rút gọn:
+	Tab order: move a field with its arrows.	Thứ tự tab: di chuyển một ô bằng các mũi tên của nó.
+	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	Khóa nằm trong kho chứng chỉ Windows, nơi có thể yêu cầu cho phép PdfCraft sử dụng nó.
+	The signature will be invisible.	Chữ ký sẽ không hiển thị.
+	This certificate is in your list of trusted certificates.	Chứng chỉ này nằm trong danh sách chứng chỉ tin cậy của bạn.
+	This certificate is not trusted. Signatures made with it show an unknown identity.	Chứng chỉ này không được tin cậy. Các chữ ký tạo bằng nó hiển thị danh tính không rõ.
+	This certificate is trusted through a certificate above it in the chain.	Chứng chỉ này được tin cậy thông qua một chứng chỉ ở cấp trên trong chuỗi.
+	This dialog shows the details of a certificate and its chain.	Hộp thoại này hiển thị chi tiết của một chứng chỉ và chuỗi chứng chỉ của nó.
+	This document contains {n} interactive form fields.	Tài liệu này chứa {n} ô biểu mẫu tương tác.
+	This document has no form fields to flatten	Tài liệu này không có ô biểu mẫu nào để làm phẳng
+	This document has no form fields you can fill in	Tài liệu này không có ô biểu mẫu nào bạn có thể điền
+	This document has no signatures.	Tài liệu này không có chữ ký.
+	This field is locked. Unlock it to change its properties.	Ô này đã bị khóa. Hãy mở khóa để thay đổi thuộc tính của nó.
+	To change locked fields, also set Locked to No.	Để thay đổi các ô đã khóa, hãy đặt thêm Đã khóa thành Không.
+	Try the form as people filling it in will see it	Dùng thử biểu mẫu như người điền sẽ thấy
+	Valid for 5 years, for digital signatures. Self-signed IDs are usually not trusted by others.	Có hiệu lực trong 5 năm, dùng cho chữ ký số. Các ID tự ký thường không được người khác tin cậy.
+	View signed version	Xem phiên bản đã ký
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	Biểu mẫu XFA: các ô và dữ liệu XFA của nó được giữ đồng bộ, nên các trình xem khác hiển thị những gì bạn điền.
+	You are about to apply 1 redaction mark. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Bạn sắp áp dụng 1 dấu che. Văn bản, hình ảnh và bản vẽ nằm dưới các dấu, cũng như bình luận và ô biểu mẫu chồng lên chúng, sẽ bị xóa vĩnh viễn.
+	You are about to apply {n} redaction marks. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Bạn sắp áp dụng {n} dấu che. Văn bản, hình ảnh và bản vẽ nằm dưới các dấu, cũng như bình luận và ô biểu mẫu chồng lên chúng, sẽ bị xóa vĩnh viễn.
+	initials	chữ viết tắt
+	of the following fields:	trong các ô sau:
+	Add a checkbox	Thêm một hộp kiểm
+	Add a date field	Thêm một ô ngày
+	Add a digital signature field	Thêm một ô chữ ký số
+	Add a radio button	Thêm một nút radio
+	Add a text field	Thêm một ô văn bản
+	Add an image field	Thêm một ô hình ảnh
+	Add form components	Thêm thành phần biểu mẫu
+	Certificates	Chứng chỉ
+	Certify (invisible signature)	Chứng nhận (chữ ký ẩn)
+	Certify (visible signature)	Chứng nhận (chữ ký hiển thị)
+	Change initials	Đổi chữ viết tắt
+	Change signature	Đổi chữ ký
+	Checkbox	Hộp kiểm
+	Clear form	Xóa biểu mẫu
+	Create links from URLs	Tạo liên kết từ URL
+	Date field	Ô ngày
+	Detect form fields	Phát hiện ô biểu mẫu
+	Digital signature	Chữ ký số
+	Digitally sign	Ký số
+	Encrypt with certificate	Mã hóa bằng chứng chỉ
+	Field list	Danh sách ô
+	Field properties	Thuộc tính ô
+	Field properties…	Thuộc tính ô…
+	Fields	Ô
+	Fill	Tô
+	Flatten form fields	Làm phẳng ô biểu mẫu
+	Form fields panel	Bảng ô biểu mẫu
+	Image field	Ô hình ảnh
+	Import form data…	Nhập dữ liệu biểu mẫu…
+	Initials	Chữ viết tắt
+	Link	Liên kết
+	Measurement information	Thông tin phép đo
+	Radio button	Nút radio
+	Remove all links	Gỡ tất cả liên kết
+	Remove hidden information	Gỡ thông tin ẩn
+	Remove hidden information…	Gỡ thông tin ẩn…
+	Rich Text Format (.rtf)	Rich Text Format (.rtf)
+	Signature	Chữ ký
+	Signatures panel	Bảng chữ ký
+	Text field	Ô văn bản
+	Use a certificate	Dùng chứng chỉ
+	Validate all signatures	Xác thực tất cả chữ ký
+	E-Sign	Ký điện tử
+	CRL Signing	Ký CRL
+	Certificate Signing	Ký chứng chỉ
+	Choose a digital ID.	Chọn một Digital ID.
+	Create links	Tạo liên kết
+	Digital Signature	Chữ ký số
+	Enter the field names	Nhập tên các ô
+	Field "{}" on page {p} has no description (tooltip)	Ô "{}" trên trang {p} không có mô tả (chú giải công cụ)
+	Form field on page {p} isn't tagged	Ô biểu mẫu trên trang {p} chưa được gắn thẻ
+	PdfCraft can't check this signature yet: {}.	PdfCraft chưa thể kiểm tra chữ ký này: {}.
+	Rev. {rev}: Certified by an unknown signer	Bản sửa đổi {rev}: Được chứng nhận bởi người ký không rõ
+	Rev. {rev}: Signed by an unknown signer	Bản sửa đổi {rev}: Được ký bởi người ký không rõ
+	Rev. {rev}: Signed by {name}	Bản sửa đổi {rev}: Được ký bởi {name}
+	Signature is invalid	Chữ ký không hợp lệ
+	Signature is valid	Chữ ký hợp lệ
+	Signature validity is unknown	Không rõ tính hợp lệ của chữ ký
+	Signing time is from the clock on the signer's computer.	Thời gian ký lấy từ đồng hồ trên máy tính của người ký.
+	The ECDSA signature is not in canonical DER (trailing bytes, padding or a missing sign byte); it was read anyway.	Chữ ký ECDSA không ở dạng DER chuẩn (có byte thừa ở cuối, phần đệm hoặc thiếu byte dấu); nó vẫn được đọc.
+	The ECDSA signature is the raw r and s values instead of a DER sequence; it was read anyway.	Chữ ký ECDSA là các giá trị r và s thô thay vì một chuỗi DER; nó vẫn được đọc.
+	The RSA signature value does not have the length of the key's modulus (leading zero bytes dropped or added); it was read anyway.	Giá trị chữ ký RSA không có độ dài bằng môđun của khóa (các byte không ở đầu bị bỏ hoặc thêm); nó vẫn được đọc.
+	The RSA signature's DigestInfo has no NULL parameter (older signers write it so); it was read anyway.	DigestInfo của chữ ký RSA không có tham số NULL (các trình ký cũ ghi như vậy); nó vẫn được đọc.
+	The certificate of {} does not allow this many CA certificates below it (path length), so it is not used to vouch for {}.	Chứng chỉ của {} không cho phép có nhiều chứng chỉ CA ở dưới nó như vậy (độ dài đường dẫn), nên nó không được dùng để bảo chứng cho {}.
+	The certificate of {} is not a CA certificate that may issue certificates, so it is not used to vouch for {}.	Chứng chỉ của {} không phải là chứng chỉ CA được phép cấp chứng chỉ, nên nó không được dùng để bảo chứng cho {}.
+	The certificate of {} was not valid at the time of signing, so it is not used to vouch for {}.	Chứng chỉ của {} không hợp lệ tại thời điểm ký, nên nó không được dùng để bảo chứng cho {}.
+	The document has been altered or corrupted since the signature was applied.	Tài liệu đã bị thay đổi hoặc hỏng kể từ khi chữ ký được áp dụng.
+	The document has been altered since this signature was applied in ways it does not permit ({}).	Tài liệu đã bị thay đổi kể từ khi chữ ký này được áp dụng theo những cách mà nó không cho phép ({}).
+	The document has been modified since this signature was applied, but the changes are permitted ({}).	Tài liệu đã được sửa đổi kể từ khi chữ ký này được áp dụng, nhưng các thay đổi được phép ({}).
+	The document's embedded revocation information shows that the signer's certificate has not been revoked.	Thông tin thu hồi được nhúng trong tài liệu cho thấy chứng chỉ của người ký chưa bị thu hồi.
+	The signature algorithm and the SignerInfo's digest algorithm name different hashes; the signature was made with the SignerInfo's.	Thuật toán chữ ký và thuật toán băm của SignerInfo chỉ định các hàm băm khác nhau; chữ ký được tạo bằng hàm băm của SignerInfo.
+	The signature carries an unverified timestamp ({}): the timestamp authority is not in your list of trusted certificates, so the signing time claimed by the signer is used instead.	Chữ ký mang một dấu thời gian chưa được xác minh ({}): cơ quan cấp dấu thời gian không nằm trong danh sách chứng chỉ tin cậy của bạn, nên thời gian ký do người ký tuyên bố được dùng thay thế.
+	The signature contents are not hexadecimal.	Nội dung chữ ký không phải là thập lục phân.
+	The signature could not be checked ({}).	Không thể kiểm tra chữ ký ({}).
+	The signature could not be read ({}).	Không thể đọc chữ ký ({}).
+	The signature could not be verified ({}).	Không thể xác minh chữ ký ({}).
+	The signature has no valid byte range.	Chữ ký không có dải byte hợp lệ.
+	The signature includes an embedded timestamp.	Chữ ký bao gồm một dấu thời gian được nhúng.
+	The signature is BER-encoded (indefinite lengths) rather than DER; it was read leniently.	Chữ ký được mã hóa BER (độ dài không xác định) thay vì DER; nó được đọc một cách khoan dung.
+	The signature uses the legacy adbe.x509.rsa_sha1 format.	Chữ ký dùng định dạng cũ adbe.x509.rsa_sha1.
+	The signature value does not match the signer's certificate: the signature is corrupt.	Giá trị chữ ký không khớp với chứng chỉ của người ký: chữ ký bị hỏng.
+	The signature's byte range does not exclude exactly its contents.	Dải byte của chữ ký không loại trừ chính xác nội dung của nó.
+	The signature's timestamp token could not be verified ({}).	Không thể xác minh mã thông báo dấu thời gian của chữ ký ({}).
+	The signature's timestamp token does not cover the signature value.	Mã thông báo dấu thời gian của chữ ký không bao phủ giá trị chữ ký.
+	The signed content is a constructed (segmented) OCTET STRING, as BER allows; it was read anyway.	Nội dung được ký là một OCTET STRING dạng cấu trúc (phân đoạn), như BER cho phép; nó vẫn được đọc.
+	The signer's certificate does not allow digital signatures (its key usage has neither digital signature nor non-repudiation).	Chứng chỉ của người ký không cho phép chữ ký số (mục đích sử dụng khóa của nó không có chữ ký số cũng không có chống chối bỏ).
+	The signer's certificate has been revoked ({}).	Chứng chỉ của người ký đã bị thu hồi ({}).
+	The signer's certificate has critical extensions PdfCraft does not recognize ({}).	Chứng chỉ của người ký có các phần mở rộng quan trọng mà PdfCraft không nhận ra ({}).
+	The signer's certificate is not in the signature.	Chứng chỉ của người ký không có trong chữ ký.
+	The signer's certificate is not issued for signing documents (its extended key usage has no document-signing purpose).	Chứng chỉ của người ký không được cấp để ký tài liệu (mục đích sử dụng khóa mở rộng của nó không có mục đích ký tài liệu).
+	The signer's certificate was not valid at the time of signing.	Chứng chỉ của người ký không hợp lệ tại thời điểm ký.
+	The signer's identity is unknown because it has not been included in your list of trusted certificates and none of its parent certificates are trusted certificates.	Danh tính của người ký không rõ vì nó chưa được đưa vào danh sách chứng chỉ tin cậy của bạn và không chứng chỉ cấp trên nào của nó là chứng chỉ tin cậy.
+	The signer's identity is valid.	Danh tính của người ký hợp lệ.
+	The timestamp authority's certificate was not valid at the time of timestamping.	Chứng chỉ của cơ quan cấp dấu thời gian không hợp lệ tại thời điểm đóng dấu thời gian.
+	The timestamp token is valid, but the timestamp authority is not in your list of trusted certificates.	Mã thông báo dấu thời gian hợp lệ, nhưng cơ quan cấp dấu thời gian không nằm trong danh sách chứng chỉ tin cậy của bạn.
+	This document has not been modified since this signature was applied.	Tài liệu này chưa bị sửa đổi kể từ khi chữ ký này được áp dụng.
+	This signature uses RIPEMD-160, a legacy 160-bit hash algorithm that is no longer recommended for signatures. It still validates, but it should not be relied on.	Chữ ký này dùng RIPEMD-160, một thuật toán băm 160 bit cũ không còn được khuyến nghị cho chữ ký. Nó vẫn xác thực được, nhưng không nên dựa vào nó.
+	This signature uses SHA-1, a weak hash algorithm: collisions in it have been demonstrated. It still validates because many documents signed years ago use it, but it should not be relied on.	Chữ ký này dùng SHA-1, một thuật toán băm yếu: các va chạm trong nó đã được chứng minh. Nó vẫn xác thực được vì nhiều tài liệu được ký từ nhiều năm trước dùng nó, nhưng không nên dựa vào nó.
+	Unsigned signature field	Ô chữ ký chưa ký
+	Unsigned signature field: {name}	Ô chữ ký chưa ký: {name}
+	form fill	điền biểu mẫu
+	links	liên kết
+	the signed version could not be read	không thể đọc phiên bản đã ký
+	{who}, certificate issued by an unknown issuer.	{who}, chứng chỉ do tổ chức không rõ cấp.
+	{who}, certificate issued by {issuer}.	{who}, chứng chỉ do {issuer} cấp.
+	A form field has additional actions	Một ô biểu mẫu có các hành động bổ sung
+	A link	Một liên kết
+	Add field	Thêm ô
+	Add link	Thêm liên kết
+	Add signature	Thêm chữ ký
+	Align fields	Căn chỉnh các ô
+	All form fields are tagged	Tất cả ô biểu mẫu đã được gắn thẻ
+	All form fields have description	Tất cả ô biểu mẫu đều có mô tả
+	Alternate text on an element that contains a link or field hides that annotation from assistive technology. Move the alternate text.	Văn bản thay thế trên phần tử chứa liên kết hoặc ô sẽ che chú thích đó khỏi công nghệ hỗ trợ. Hãy di chuyển văn bản thay thế.
+	An image has alternates or OPI information	Một hình ảnh có bản thay thế hoặc thông tin OPI
+	At least one signature has problems.	Ít nhất một chữ ký có vấn đề.
+	At least one signature is invalid.	Ít nhất một chữ ký không hợp lệ.
+	Certificate Viewer	Trình xem chứng chỉ
+	Change field properties	Thay đổi thuộc tính ô
+	Change initial view	Thay đổi chế độ xem ban đầu
+	Change link properties	Thay đổi thuộc tính liên kết
+	CheckBox	CheckBox
+	Combo	Combo
+	Comments, links and fields must be in the tag tree to be announced. Tag the annotations.	Bình luận, liên kết và ô phải nằm trong cây thẻ để được đọc to. Hãy gắn thẻ cho các chú thích.
+	Configure a Digital ID for Signing	Cấu hình Digital ID để ký
+	Couldn't follow linked PDF: {reason}	Không thể theo liên kết đến PDF: {reason}
+	Couldn't import the signature image: {e}	Không thể nhập hình ảnh chữ ký: {e}
+	Create link	Tạo liên kết
+	Created 1 link	Đã tạo 1 liên kết
+	Created {n} links	Đã tạo {n} liên kết
+	Delete field	Xóa ô
+	Delete link	Xóa liên kết
+	Delete selected fields	Xóa các ô đã chọn
+	Detected 1 form field	Đã phát hiện 1 ô biểu mẫu
+	Detected {n} form fields	Đã phát hiện {n} ô biểu mẫu
+	Digital Signature Properties	Thuộc tính chữ ký số
+	Discard all comments, forms and multimedia	Loại bỏ tất cả bình luận, biểu mẫu và đa phương tiện
+	Discard all links, actions and JavaScript	Loại bỏ tất cả liên kết, hành động và JavaScript
+	Discard document information and metadata	Loại bỏ thông tin tài liệu và siêu dữ liệu
+	Distribute fields	Phân bố các ô
+	Drag to draw the area where the signature should appear.	Kéo để vẽ vùng nơi chữ ký sẽ xuất hiện.
+	Duplicate field	Nhân bản ô
+	Each field needs a tooltip that says what to enter. Add one in Field Properties > General > Tooltip.	Mỗi ô cần có chú giải công cụ nói rõ cần nhập gì. Hãy thêm trong Thuộc tính ô > Chung > Chú giải công cụ.
+	Field	Ô
+	Field descriptions	Mô tả ô
+	Fill in {name}	Điền {name}
+	Filling of form fields	Điền ô biểu mẫu
+	Form fields must be in the tag tree (Form tags) to be announced. Tag the form fields.	Ô biểu mẫu phải nằm trong cây thẻ (thẻ Form) để được đọc to. Hãy gắn thẻ cho các ô biểu mẫu.
+	Formulas and similar non-text elements need alternate text. Add alternate text to them.	Công thức và các phần tử không phải văn bản tương tự cần có văn bản thay thế. Hãy thêm văn bản thay thế cho chúng.
+	Hide a field	Ẩn một ô
+	Links, actions and JavaScripts	Liên kết, hành động và JavaScript
+	Local cross-PDF links require the desktop app	Liên kết PDF cục bộ giữa các tệp yêu cầu ứng dụng máy tính
+	Match field sizes	Khớp kích thước ô
+	Navigation links	Liên kết điều hướng
+	Navigation links are not repetitive	Liên kết điều hướng không lặp lại
+	No form fields were detected	Không phát hiện ô biểu mẫu nào
+	No links to remove	Không có liên kết nào để gỡ
+	No unlinked web addresses were found in the text	Không tìm thấy địa chỉ web nào chưa được liên kết trong văn bản
+	Pink	Hồng
+	PushButton	PushButton
+	Radio	Radio
+	Radio Button Properties	Thuộc tính nút radio
+	Removed 1 link	Đã gỡ 1 liên kết
+	Removed {n} links	Đã gỡ {n} liên kết
+	Repeated navigation links should be skippable. Check links that appear on every page.	Các liên kết điều hướng lặp lại nên có thể bỏ qua được. Hãy kiểm tra các liên kết xuất hiện trên mọi trang.
+	Reset a form	Đặt lại một biểu mẫu
+	Run form script	Chạy script biểu mẫu
+	Self-signed	Tự ký
+	Show a field	Hiện một ô
+	Sign with a Digital ID	Ký bằng Digital ID
+	Signed and all signatures are valid.	Đã ký và tất cả chữ ký đều hợp lệ.
+	Signer	Người ký
+	Signing time	Thời gian ký
+	Submit a form	Gửi một biểu mẫu
+	Tagged form fields	Ô biểu mẫu có gắn thẻ
+	Text Field Properties	Thuộc tính ô văn bản
+	The Keychain's digital IDs couldn't be listed: {e}	Không thể liệt kê các Digital ID của Keychain: {e}
+	The Windows store's digital IDs couldn't be listed: {e}	Không thể liệt kê các Digital ID của kho Windows: {e}
+	The document's security settings don't allow filling in form fields	Cài đặt bảo mật của tài liệu không cho phép điền các ô biểu mẫu
+	The field properties could not be changed.	Không thể thay đổi thuộc tính của ô.
+	The form asks viewers to make appearances (NeedAppearances)	Biểu mẫu yêu cầu trình xem tạo diện mạo (NeedAppearances)
+	The selected fields could not be found. Select them again.	Không tìm thấy các ô đã chọn. Hãy chọn lại.
+	The title in the metadata and the document information differ	Tiêu đề trong siêu dữ liệu và trong thông tin tài liệu khác nhau
+	This document has no form fields.	Tài liệu này không có ô biểu mẫu.
+	This form also contains XFA data, which PdfCraft doesn't read yet. You can fill its fields, but Acrobat may show the XFA values instead.	Biểu mẫu này còn chứa dữ liệu XFA mà PdfCraft chưa đọc được. Bạn có thể điền các ô của nó, nhưng Acrobat có thể hiển thị các giá trị XFA thay thế.
+	X Object Forms	Đối tượng biểu mẫu X
+	the document has no form fields	tài liệu không có ô biểu mẫu
+	{field}: {e}	{field}: {e}
+	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	Chỉ tiếp tục nếu bạn tin cậy tài liệu này. Một địa chỉ có thể mang thông tin từ tài liệu, chẳng hạn những gì bạn đã nhập vào biểu mẫu của nó.
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Hãy ký lên một tờ giấy trắng và chụp ảnh dưới ánh sáng sáng, đều (dùng đèn flash). Chọn ảnh hoặc thả vào đây: PdfCraft sẽ tìm chữ ký và loại bỏ phần giấy.
+	Certificate authority	Tổ chức chứng thực
+	The field {name} no longer exists.	Ô {name} không còn tồn tại.
+	signature	chữ ký
+	{kind} field	Ô {kind}
+	{n} fields selected	Đã chọn {n} ô
+	{n} measurements use an unsupported format and are left out.	{n} phép đo dùng định dạng không được hỗ trợ và bị bỏ qua.
+	Zoom to page level	Thu phóng vừa trang
+	Page	Trang
+	Page {n}	Trang {n}
+	Fit one full page	Vừa một trang đầy đủ
+	Single page	Một trang
+	Two-page view	Chế độ hai trang
+	Page display	Hiển thị trang
+	Default page display	Hiển thị trang mặc định
+	Insert blank page	Chèn trang trống
+	Split document…	Tách tài liệu…
+	Organize	Sắp xếp
+	Page {n} of {total}	Trang {n} trên {total}
+	 (page {p})	 (trang {p})
+	 on page {p}	 trên trang {p}
+	1 page	1 trang
+	1 page selected	Đã chọn 1 trang
+	1 page selected.	Đã chọn 1 trang.
+	; 1 page already had text	; 1 trang đã có văn bản
+	Adds invisible text over each word; the page image is not changed	Thêm văn bản ẩn lên từng từ; hình ảnh trang không bị thay đổi
+	Appear behind page	Hiện phía sau trang
+	Appear on top of page	Hiện phía trên trang
+	Applies to 1 page	Áp dụng cho 1 trang
+	Attachments Panel and Page	Bảng Tệp đính kèm và trang
+	Choose a stamp, then click on the page to place it.	Chọn một con dấu, sau đó bấm vào trang để đặt.
+	Crop (% trimmed from each side)	Cắt xén (% bị cắt từ mỗi cạnh)
+	Current page	Trang hiện tại
+	Current page ({n})	Trang hiện tại ({n})
+	Current page — type a page number or label (such as iv) and press Enter	Trang hiện tại — nhập số trang hoặc nhãn (như iv) rồi nhấn Enter
+	Delete page {label}	Xóa trang {label}
+	Discard embedded page thumbnails	Loại bỏ hình thu nhỏ trang nhúng
+	Enhance page	Nâng cao chất lượng trang
+	Entire page	Toàn bộ trang
+	Extracted 1 page	Đã trích xuất 1 trang
+	Figure {i} of {n}{page}	Hình {i} trên {n}{page}
+	First / last page	Trang đầu / cuối
+	Fit Page	Vừa trang
+	Fit to page	Vừa trang
+	For page sizes and margins.	Dành cho kích thước trang và lề.
+	From a PDF page or an image	Từ một trang PDF hoặc một hình ảnh
+	Go to a page view	Đi tới một chế độ xem trang
+	Go to page {p}	Đi tới trang {p}
+	Go to the page	Đi tới trang
+	Insert Date	Chèn ngày
+	Insert Page Number	Chèn số trang
+	Insert a blank page after the selection	Chèn một trang trống sau vùng chọn
+	Layers Panel and Page	Bảng Các lớp và trang
+	Mark Page Range	Đánh dấu phạm vi trang
+	Match page at 100%	Khớp trang ở mức 100%
+	Next page	Trang tiếp theo
+	PDF page: {size}	Trang PDF: {size}
+	Page Only	Chỉ trang
+	Page Range Options	Tùy chọn phạm vi trang
+	Page Sizing & Handling	Định cỡ & xử lý trang
+	Page background	Nền trang
+	Page display: {layout}	Hiển thị trang: {layout}
+	Page layout	Bố cục trang
+	Page navigation	Điều hướng trang
+	Page number	Số trang
+	Page order:	Thứ tự trang:
+	Page size	Khổ trang
+	Page {label}	Trang {label}
+	Page {p} of {n}	Trang {p} trên {n}
+	Points from the page's bottom-left corner.	Điểm tính từ góc dưới bên trái của trang.
+	Preview: page {p} of {n}	Xem trước: trang {p} trên {n}
+	Previous / next page	Trang trước / tiếp theo
+	Previous page	Trang trước
+	Recognizing text… page {d} of {t}	Đang nhận dạng văn bản… trang {d} trên {t}
+	Remove page	Gỡ trang
+	Reset page size	Đặt lại khổ trang
+	Rotate Clockwise	Xoay theo chiều kim đồng hồ
+	Rotate Counterclockwise	Xoay ngược chiều kim đồng hồ
+	Rotate clockwise	Xoay theo chiều kim đồng hồ
+	Rotate counterclockwise	Xoay ngược chiều kim đồng hồ
+	Rotate view	Xoay chế độ xem
+	Rotate view clockwise	Xoay chế độ xem theo chiều kim đồng hồ
+	Rotate view clockwise ({key})	Xoay chế độ xem theo chiều kim đồng hồ ({key})
+	Rotate view counterclockwise	Xoay chế độ xem ngược chiều kim đồng hồ
+	Rotate:	Xoay:
+	The page has changed; select the image again	Trang đã thay đổi; hãy chọn lại hình ảnh
+	Scale relative to target page	Tỷ lệ so với trang đích
+	Select page {label}	Chọn trang {label}
+	Set Page Boxes	Đặt các hộp trang
+	Set to current page ({n})	Đặt thành trang hiện tại ({n})
+	Single Page	Một trang
+	Single Page Continuous	Một trang liên tục
+	Some page content couldn't be read; snapping uses the rest.	Một số nội dung trang không đọc được; việc bắt dính dùng phần còn lại.
+	Split document	Tách tài liệu
+	Start page number	Số trang bắt đầu
+	Switch to two-page view first to show the cover page	Hãy chuyển sang chế độ hai trang trước để hiển thị trang bìa
+	Text to insert	Văn bản cần chèn
+	This page contains objects that cannot be selected together.	Trang này chứa các đối tượng không thể chọn cùng nhau.
+	This page couldn't be displayed.\n{e}	Không thể hiển thị trang này.\n{e}
+	Toggle fit page / fit width	Chuyển đổi vừa trang / vừa chiều rộng
+	Two-Up (Cover Page)	Hai trang (Có trang bìa)
+	Two-Up Continuous (Cover Page)	Hai trang liên tục (Có trang bìa)
+	Viewport rectangle in page points (x, y, width, height)	Hình chữ nhật khung nhìn theo điểm trang (x, y, chiều rộng, chiều cao)
+	You have version {c}. All releases are listed at {page}.	Bạn đang dùng phiên bản {c}. Tất cả các bản phát hành được liệt kê tại {page}.
+	You have version {c}. Download the new version from its release page.	Bạn đang dùng phiên bản {c}. Hãy tải phiên bản mới từ trang phát hành của nó.
+	background	nền
+	header or footer	đầu trang hoặc chân trang
+	Add Bates numbering…	Thêm đánh số Bates…
+	Add background…	Thêm nền…
+	Add header & footer…	Thêm đầu trang & chân trang…
+	Add watermark…	Thêm hình mờ…
+	Background	Nền
+	Bates numbering	Đánh số Bates
+	Blank page	Trang trống
+	Extract	Trích xuất
+	Go to page…	Đi tới trang…
+	HTML web page	Trang web HTML
+	Header and footer	Đầu trang và chân trang
+	Insert	Chèn
+	Insert text	Chèn văn bản
+	Modify page	Sửa đổi trang
+	Page grid	Lưới trang
+	Page labels	Nhãn trang
+	Page options	Tùy chọn trang
+	Page transitions	Hiệu ứng chuyển trang
+	PdfCraft web page	Trang web PdfCraft
+	Remove background	Gỡ nền
+	Remove header & footer	Gỡ đầu trang & chân trang
+	Remove watermark	Gỡ hình mờ
+	Rotate	Xoay
+	Set page boxes	Đặt các hộp trang
+	Set page boxes…	Đặt các hộp trang…
+	Show cover page in two-page view	Hiện trang bìa ở chế độ hai trang
+	Split	Tách
+	Update background…	Cập nhật nền…
+	Update header & footer…	Cập nhật đầu trang & chân trang…
+	Update watermark…	Cập nhật hình mờ…
+	Watermark	Hình mờ
+	 on page {label}	 trên trang {label}
+	Enter a page number	Nhập một số trang
+	Font (unnamed) on page {p} doesn't map its characters to Unicode	Phông chữ (không tên) trên trang {p} không ánh xạ các ký tự của nó sang Unicode
+	Font {} on page {p} doesn't map its characters to Unicode	Phông chữ {} trên trang {p} không ánh xạ các ký tự của nó sang Unicode
+	Inserted text	Văn bản được chèn
+	Page {p} doesn't tab in structure order	Trang {p} không chuyển tab theo thứ tự cấu trúc
+	Page {p}: {n} untagged content item	Trang {p}: {n} mục nội dung chưa gắn thẻ
+	Page {p}: {n} untagged content items	Trang {p}: {n} mục nội dung chưa gắn thẻ
+	Page {} has additional actions	Trang {} có các hành động bổ sung
+	Rotate view clockwise (⇧⌘+)	Xoay chế độ xem theo chiều kim đồng hồ (⇧⌘+)
+	Still rendering — this page is unusually complex…	Vẫn đang kết xuất — trang này phức tạp bất thường…
+	alternate text on an element with no page content	văn bản thay thế trên phần tử không có nội dung trang
+	no header cells (TH)	không có ô tiêu đề (TH)
+	page content	nội dung trang
+	page {n} is out of range (1–{count})	trang {n} nằm ngoài phạm vi (1–{count})
+	{page} is not a page number or label	{page} không phải là số trang hoặc nhãn
+	{ty} element on page {p}: {what}	Phần tử {ty} trên trang {p}: {what}
+	{} annotation on page {p} isn't tagged	Chú thích {} trên trang {p} chưa được gắn thẻ
+	A diagonal CONFIDENTIAL watermark on every page.	Hình mờ CONFIDENTIAL nằm chéo trên mọi trang.
+	Add Page Numbers	Thêm số trang
+	Add background	Thêm nền
+	Add footer	Thêm chân trang
+	Add header	Thêm đầu trang
+	Add header & footer	Thêm đầu trang & chân trang
+	Add inserted text	Thêm văn bản được chèn
+	Add watermark	Thêm hình mờ
+	All page content is tagged	Tất cả nội dung trang đã được gắn thẻ
+	Alternate text on an element without page content is never reached. Remove it or attach the element to content.	Văn bản thay thế trên phần tử không có nội dung trang sẽ không bao giờ được truy cập tới. Hãy gỡ nó hoặc gắn phần tử vào nội dung.
+	Center Footer Text	Văn bản chân trang giữa
+	Center Header Text	Văn bản đầu trang giữa
+	Click on the page to add a {tool}, or drag to set its size	Bấm vào trang để thêm {tool}, hoặc kéo để đặt kích thước
+	Couldn't split: {e}	Không thể tách: {e}
+	Crop page	Cắt xén trang
+	Delete page	Xóa trang
+	Drag a rectangle on a page to crop it; double-click a page for Set Page Boxes	Kéo một hình chữ nhật trên trang để cắt xén; bấm đúp vào trang để mở Đặt các hộp trang
+	Drag the corners onto the document's edges, then choose Enhance page.	Kéo các góc vào cạnh của tài liệu, rồi chọn Nâng cao chất lượng trang.
+	Duplicate page	Nhân bản trang
+	Everything on a page must be tagged or marked as an artifact (decoration, headers, footers). Tag the untagged content.	Mọi thứ trên trang phải được gắn thẻ hoặc đánh dấu là phần trang trí (trang trí, đầu trang, chân trang). Hãy gắn thẻ cho nội dung chưa gắn thẻ.
+	Header cells (TH) tell listeners what each column or row holds. Mark the header cells.	Ô tiêu đề (TH) cho người nghe biết mỗi cột hoặc hàng chứa gì. Hãy đánh dấu các ô tiêu đề.
+	Headers	Tiêu đề đầu mục
+	Inserted	Đã chèn
+	Left Footer Text	Văn bản chân trang trái
+	Left Header Text	Văn bản đầu trang trái
+	Move page	Di chuyển trang
+	Number every page in the footer.	Đánh số mọi trang ở chân trang.
+	Page Content	Nội dung trang
+	Page Range	Phạm vi trang
+	Page does not require timed responses	Trang không yêu cầu phản hồi có giới hạn thời gian
+	Page thumbnails	Hình thu nhỏ trang
+	Page will not cause screen flicker	Trang sẽ không gây nhấp nháy màn hình
+	Replace page	Thay thế trang
+	Replacing images on page {p} arrives on the web with image pickers ({i})	Việc thay thế hình ảnh trên trang {p} sẽ có trên web cùng với bộ chọn hình ảnh ({i})
+	Right Footer Text	Văn bản chân trang phải
+	Right Header Text	Văn bản đầu trang phải
+	Rotate image	Xoay hình ảnh
+	Rotate page	Xoay trang
+	Rotate page {label} clockwise	Xoay trang {label} theo chiều kim đồng hồ
+	Rotate page {label} counterclockwise	Xoay trang {label} ngược chiều kim đồng hồ
+	Tables should have headers	Bảng nên có ô tiêu đề
+	Text must contrast enough with its background for people with low vision. Check the colours by eye or with a contrast tool.	Văn bản phải đủ tương phản với nền để người kém thị lực nhìn được. Hãy kiểm tra màu bằng mắt hoặc bằng công cụ đo độ tương phản.
+	Thumbnails	Hình thu nhỏ
+	Update background	Cập nhật nền
+	Update header & footer	Cập nhật đầu trang & chân trang
+	Update watermark	Cập nhật hình mờ
+	a document must keep at least one page	tài liệu phải giữ ít nhất một trang
+	the document has no page tree	tài liệu không có cây trang
+	on page {label}	trên trang {label}
+	watermark	hình mờ
+	{kind} · page {p}	{kind} · trang {p}
+	{kind} — click to show it on the page	{kind} — bấm để hiển thị nó trên trang
+	{verb} Background	{verb} nền
+	{verb} Header and Footer	{verb} đầu trang và chân trang
+	{verb} Watermark	{verb} hình mờ
