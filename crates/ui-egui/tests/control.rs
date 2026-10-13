@@ -1671,3 +1671,35 @@ fn input_requests_take_a_window_and_refuse_one_that_does_not_exist() {
         }
     }
 }
+
+#[test]
+fn closing_a_window_over_the_control_channel_asks_about_unsaved_work() {
+    let (mut h, c) = harness_pages(3);
+    h.state_mut().open_bytes("b.pdf", None, fixture(2)).unwrap();
+    h.run_steps(2);
+    call(&mut h, &c, "ui.window_move_tab", json!({ "doc_index": 1 })).unwrap();
+    h.run_steps(4);
+    let child = call(&mut h, &c, "ui.windows", json!({})).unwrap()["windows"][1]["id"].as_u64().unwrap();
+    let id = pdfcraft_ui_egui::WindowId(child as u32);
+    assert!(h.state_mut().with_window(id, |a| a.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 })).unwrap());
+    let dir = std::env::temp_dir().join(format!("pdfcraft-winclose-ctl-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = pdfcraft_ui_egui::RecoveryStore::new(dir.clone());
+    h.state_mut().enable_recovery(store.clone());
+    h.state_mut().autosave_now();
+    assert_eq!(store.list().len(), 1);
+    let r = ok(&mut h, &c, "ui.window_close", json!({ "window": child }));
+    assert_eq!(r["asking"].as_u64(), Some(child), "{r}");
+    h.run_steps(4);
+    assert_eq!(h.state().window_count(), 2, "the window is still there");
+    assert!(h.state().session.docs().iter().any(|d| d.dirty), "the edit is kept");
+    let ctx = h.ctx.clone();
+    h.state_mut().with_window(id, |a| a.resolve_close(&ctx, None));
+    h.run_steps(3);
+    assert_eq!(h.state().window_count(), 2);
+    h.state_mut().autosave_now();
+    assert_eq!(store.list().len(), 1, "the recovery entry stays");
+    // A clean window closes at once.
+    h.state_mut().with_window(id, |a| a.close_request = None);
+    let _ = std::fs::remove_dir_all(&dir);
+}

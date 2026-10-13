@@ -857,7 +857,7 @@ impl PdfCraftApp {
         let had = self.window_had_focus.insert(id, focused).unwrap_or(false);
         if had && !focused {
             if let Some(i) = self.active {
-                self.commit_view_inputs(i);
+                let _ = self.commit_view_inputs(i); // a refused field keeps its text in the editor
             }
         } else if focused && !had {
             self.focused_window = id;

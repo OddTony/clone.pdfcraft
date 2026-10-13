@@ -177,7 +177,10 @@ impl PdfCraftApp {
                 }
             }
             "window.merge_all" => self.pending_window_ops.push(crate::WindowOp::MergeAll),
-            "window.close" => self.pending_window_ops.push(crate::WindowOp::Close(self.current_window)),
+            "window.close" if self.current_window == crate::WindowId::ROOT => {
+                self.pending_window_ops.push(crate::WindowOp::Close(self.current_window)) // refused: the main window closes with the app
+            }
+            "window.close" => self.request_close_window(self.current_window),
             "file.open" => self.open_dialog(),
             "file.open_recent" => match self.recent.first().map(|r| r.path.clone()) {
                 // The palette runs commands without a submenu: open the most recent file.

@@ -576,18 +576,23 @@ impl PdfCraftApp {
 
     /// Take over what is half typed or half dragged in view `index` (a field's text, a comment's
     /// note), as when the user leaves the field; open drags are dropped as by Escape. Used when
-    /// the window loses the focus, so another window sees the document as it is.
-    pub fn commit_view_inputs(&mut self, index: usize) {
+    /// the window loses the focus, so another window sees the document as it is. Returns `false`
+    /// when a field refused its typing (#166): the editor is open again with the text, the user
+    /// has been told why, and the comment draft is left alone, so a caller about to close the
+    /// view must keep it.
+    pub fn commit_view_inputs(&mut self, index: usize) -> bool {
         if index >= self.views.len() {
-            return;
+            return true;
         }
         let was_active = self.active;
         self.active = Some(index);
-        if self.commit_form_typing()
-            && let Some((page, comment, text)) = self.views.get_mut(index).and_then(|v| v.comments.editing.take())
-        {
-            let id = self.views[index].id;
-            if !text.trim().is_empty() && self.session.get(id).is_some() {
+        let taken = self.commit_form_typing();
+        if taken && let Some((page, comment, text)) = self.views.get_mut(index).and_then(|v| v.comments.editing.take()) {
+            let id = self.views.get(index).map(|v| v.id);
+            if let Some(id) = id
+                && !text.trim().is_empty()
+                && self.session.get(id).is_some()
+            {
                 self.apply_edit(Edit::SetAnnotationContents { page, index: comment, text });
             }
         }
@@ -599,6 +604,7 @@ impl PdfCraftApp {
             v.crop_drag = Default::default();
         }
         self.active = was_active;
+        taken
     }
 
     /// Save the active document. Returns `true` if it was written.
@@ -751,7 +757,10 @@ impl PdfCraftApp {
         if let Some(id) = self.views.get(index).map(|v| v.id)
             && self.view_count(id) > 1
         {
-            self.commit_view_inputs(index);
+            if !self.commit_view_inputs(index) {
+                self.active = Some(index); // the field kept its typing: show it
+                return;
+            }
             self.close_tab(index);
             return;
         }
@@ -1006,9 +1015,22 @@ impl PdfCraftApp {
         }
     }
 
-    /// A child window was asked to close: ask about the documents only it shows, then close it.
+    /// A child window was asked to close by its close button.
     pub(crate) fn guard_close_window(&mut self, ctx: &egui::Context, id: crate::WindowId) {
         ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        self.request_close_window(id);
+    }
+
+    /// Window `id` was asked to close (a command, the control channel or its close button): ask
+    /// about the documents only it shows, then close it. Call with the window's state swapped in.
+    /// Typing that a field refuses in a document shown elsewhere keeps the window open.
+    pub(crate) fn request_close_window(&mut self, id: crate::WindowId) {
+        for i in 0..self.views.len() {
+            if self.views.get(i).is_some_and(|v| self.view_count(v.id) > 1) && !self.commit_view_inputs(i) {
+                self.active = Some(i);
+                return;
+            }
+        }
         // What is half typed counts as unsaved work.
         if self.first_dirty_exclusive().is_some() {
             self.close_request = Some(CloseRequest::Window(id));

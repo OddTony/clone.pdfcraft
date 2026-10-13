@@ -50,7 +50,7 @@
 //! - `ui.windows`: every window with its `id`, `title`, `focused` and `tabs` (`name`, `view_no`, `dirty`).
 //! - `ui.window_new_view {window?}`: show the window's document in a new window.
 //! - `ui.window_move_tab {window?, doc_index, to?}`: move tab `doc_index` to window `to` (a new one without it).
-//! - `ui.window_close {window}` and `ui.window_focus {window?}`.
+//! - `ui.window_close {window}`: `closing` the window, `asking` when a save question is shown first (an error when a field refused its typing and the window stays); and `ui.window_focus {window?}`.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -954,8 +954,14 @@ impl Host for crate::PdfCraftApp {
             if id == crate::WindowId::ROOT {
                 return Err("the main window closes with the app (use the file ▸ close commands for its tabs)".into());
             }
-            a.pending_window_ops.push(crate::WindowOp::Close(id));
-            Ok(json!({ "closing": id.0 }))
+            a.request_close_window(id);
+            if a.close_request.is_some() {
+                Ok(json!({ "asking": id.0 }))
+            } else if a.pending_window_ops.contains(&crate::WindowOp::Close(id)) {
+                Ok(json!({ "closing": id.0 }))
+            } else {
+                Err("the window stays open: a field refused what was typed into it".into())
+            }
         })
     }
 

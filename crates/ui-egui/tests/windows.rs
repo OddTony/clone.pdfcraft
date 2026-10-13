@@ -1022,3 +1022,122 @@ fn files_dragged_over_a_window_of_its_own_use_the_pointer_the_system_reported() 
     pdfcraft_ui_egui::test_set_drop_pointer(None);
     assert!(gap.is_some(), "the gap under that position is the drop target");
 }
+
+// --- closes that must not lose work ---
+
+/// One text field, `qty`, whose validation script refuses values over 100.
+fn validated_form() -> Vec<u8> {
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (qty) /V (4) /Rect [20 350 280 372] /P 3 0 R /F 4 /AA << /V << /S /JavaScript /JS (if (event.value > 100) { app.alert('At most 100'); event.rc = false; }) >> >> >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+/// The validated form with `500` typed into `qty` (refused when committed), and a second window
+/// showing the same document.
+fn refused_typing_with_another_view() -> (Harness<'static, PdfCraftApp>, pdfcraft_engine::DocId, WindowId) {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new_for_test();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("order.pdf", None, validated_form()).unwrap();
+        app.set_option("left", "closed").unwrap();
+        app.set_option("zoom", "150").unwrap();
+        app
+    });
+    h.run_steps(6);
+    let p = {
+        let s = h.state();
+        let doc = s.session.get(s.views[0].id).unwrap();
+        let f = doc.form.iter().find(|f| f.name == "qty").unwrap();
+        pdfcraft_ui_egui::forms_ui::field_screen_rect(&s.views[0], &doc.info, f, 0).expect("on screen").center()
+    };
+    h.hover_at(p);
+    h.run_steps(1);
+    h.drag_at(p);
+    h.run_steps(1);
+    h.drop_at(p);
+    h.run_steps(3);
+    h.event(egui::Event::Text("500".into()));
+    h.run_steps(2);
+    let doc = h.state().views[0].id;
+    let other = h.state_mut().test_add_parked_view(doc).unwrap();
+    (h, doc, other)
+}
+
+#[test]
+fn closing_a_shared_view_keeps_typing_the_field_refused() {
+    let (mut h, doc, other) = refused_typing_with_another_view();
+    h.state_mut().request_close_tab(0);
+    assert_eq!(h.state().views.len(), 1, "the view stays");
+    assert_eq!(h.state().views[0].forms.focus.as_ref().map(|f| f.text.as_str()), Some("4500"), "with the text");
+    assert!(h.state().has_unsaved_work(0), "and the document isn't reported clean");
+    let q = h.state().session.get(doc).unwrap().form.iter().find(|f| f.name == "qty").map(|f| f.value.clone());
+    assert_eq!(q, Some(vec!["4".to_string()]));
+    assert_eq!(h.state().view_count(doc), 2);
+    let _ = other;
+    assert_windows_ok(h.state());
+}
+
+#[test]
+fn closing_a_window_keeps_typing_the_field_refused() {
+    let (mut h, doc, other) = refused_typing_with_another_view();
+    // A window of its own shows the document too, and the refused text sits in its editor.
+    let typing = h.state_mut().views[0].forms.focus.take();
+    assert!(typing.is_some());
+    assert!(h.state_mut().execute("window.new_view"));
+    h.run_steps(4);
+    let child = h.state().window_ids().into_iter().find(|w| *w != WindowId::ROOT && *w != other).unwrap();
+    h.state_mut().with_window(child, |a| a.views[0].forms.focus = typing);
+    assert_eq!(h.state_mut().with_window(child, |a| a.execute("window.close")), Some(true));
+    h.run_steps(4);
+    assert!(h.state().window_ids().contains(&child), "the window stays open");
+    let kept = h.state_mut().with_window(child, |a| a.views.first().and_then(|v| v.forms.focus.as_ref().map(|f| f.text.clone()))).unwrap();
+    assert_eq!(kept.as_deref(), Some("4500"), "with the refused text still in the editor");
+    assert!(h.state_mut().with_window(child, |a| a.has_unsaved_work(0)).unwrap());
+    assert_eq!(h.state().view_count(doc), 3);
+    assert_windows_ok(h.state());
+}
+
+#[test]
+fn the_window_close_command_asks_before_dropping_unsaved_work() {
+    let (mut h, child) = root_and_child();
+    rotate_in(&mut h, child);
+    let dir = std::env::temp_dir().join(format!("pdfcraft-winclose-cmd-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = pdfcraft_ui_egui::RecoveryStore::new(dir.clone());
+    h.state_mut().enable_recovery(store.clone());
+    h.state_mut().autosave_now();
+    assert_eq!(store.list().len(), 1);
+    let ctx = h.ctx.clone();
+    assert_eq!(h.state_mut().with_window(child, |a| a.execute("window.close")), Some(true));
+    h.run_steps(4);
+    assert_eq!(h.state().window_count(), 2, "the window is still there");
+    assert_eq!(h.state().session.docs().len(), 2);
+    assert!(h.state_mut().with_window(child, |a| a.close_request.is_some()).unwrap(), "the question is shown");
+    assert!(h.state().session.docs().iter().any(|d| d.dirty), "the edit is kept");
+    // Cancel keeps the bytes and the autosave entry.
+    h.state_mut().with_window(child, |a| a.resolve_close(&ctx, None));
+    h.run_steps(3);
+    assert_eq!(h.state().window_count(), 2);
+    assert!(h.state().session.docs().iter().any(|d| d.dirty));
+    h.state_mut().autosave_now();
+    assert_eq!(store.list().len(), 1, "the recovery entry stays");
+    assert_windows_ok(h.state());
+    let _ = std::fs::remove_dir_all(&dir);
+}
