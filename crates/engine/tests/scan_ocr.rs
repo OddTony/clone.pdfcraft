@@ -327,3 +327,41 @@ fn scan_rotation_and_deskew_keep_searchable_text_aligned() {
         assert!(glyph.direction[0] > 0.99 && glyph.direction[1].abs() < 0.01, "{glyph:?}");
     }
 }
+
+/// #1012 + #1028: existing invisible words are still duplicates when recognition
+/// crops scanner padding, turns the page and deskews before reading it.
+#[test]
+fn corrected_scans_do_not_duplicate_existing_ocr() {
+    if !ocr::available() {
+        eprintln!("skipped: run cargo xtask models");
+        return;
+    }
+    let sentence =
+        (0..8).map(|_| "Document orientation and searchable text. The quick brown fox jumps over the lazy dog.").collect::<Vec<_>>().join("\n");
+    let (mut s, scan_id) = scan(&sentence, 90, 2.0);
+    let image = image::load_from_memory(&render(&s, scan_id)).unwrap().to_rgb8();
+    let mut framed = image::RgbImage::from_pixel(image.width() + 140, image.height() + 140, image::Rgb([25, 25, 25]));
+    image::imageops::overlay(&mut framed, &image, 70, 70);
+    let mut png = std::io::Cursor::new(Vec::new());
+    framed.write_to(&mut png, image::ImageFormat::Png).unwrap();
+    let bytes = s.create_from_images(&[("framed.png".into(), png.into_inner())]).unwrap();
+    let id = s.open("framed.pdf", None, bytes, None).unwrap();
+    let settings = OcrSettings { skip_text_pages: false, auto_crop: true, crop_margin: 0.0, ..Default::default() };
+    let initial = s.ocr_job(id, &[], settings.clone()).unwrap().run(&ocr::engine().unwrap(), |_, _| true);
+    assert!(initial[0].crop.is_some(), "{initial:?}");
+    assert_ne!(initial[0].correction.rotation, 0, "{initial:?}");
+    assert!(initial[0].correction.deskew.abs() > 0.5, "{initial:?}");
+    assert!(!initial[0].words.is_empty());
+    // Seed just the invisible layer in source coordinates, leaving the crooked scan intact.
+    s.apply(id, Edit::AddOcrText { page: 0, words: initial[0].words.clone() }).unwrap();
+    let before = s.get(id).unwrap().bytes.clone();
+    let found = s.recognize_text(id, &[], settings).unwrap();
+    assert!(found[0].words.is_empty(), "{found:?}");
+    assert_eq!(found[0].already_on_page, initial[0].words.len());
+    let extracted = text(&s, id);
+    let saved = s.save_bytes(id).unwrap();
+    let reopened = s.open("corrected.pdf", None, saved, None).unwrap();
+    assert_eq!(text(&s, reopened), extracted);
+    s.undo(id).unwrap();
+    assert_eq!(s.get(id).unwrap().bytes, before);
+}

@@ -29,7 +29,10 @@ and `recognize`, plus `auto_crop` and `crop_margin`; `ocr_enhance` corrects scan
 adding text and enables cropping by default, including pages with existing OCR text.
 Rotation/deskew are enabled by default. Disable all three corrections for exact-image
 output. Ordinary recognition leaves cropping off and skips existing text pages by
-default. Per-page `crop_box` results are in original PDF user space, before corrections.
+default. With `skip_text_pages: false`, recognition also reads pictures on pages
+that already contain text. Words overlapping existing text are counted as
+`already_on_page` and omitted; this comparison maps all four word-box corners
+back through crop, rotation and deskew into the original page view. Per-page `crop_box` results are in original PDF user space, before corrections.
 Corrections and OCR form one undo step; stale worker results and
 cancelled UI runs do not modify the document.
 
@@ -38,7 +41,8 @@ translation. Regional locales such as `de-AT`, `nl-BE` and `pt-BR` use `de`, `nl
 `pt`; unavailable or unsupported locales fall back to English. Users can select a
 different document language. CLI/MCP calls retain English as their deterministic default.
 
-Limits: no perspective correction/dewarping, no guarantee on photos or ambiguous text,
+Limits: this scan pipeline does not correct perspective or dewarp pages. Camera photos
+use the separate Enhance camera image command. No guarantee on photos or ambiguous text,
 no vertical Japanese claim, and deskew refuses annotated pages rather than separating
 annotations from their targets. Supported OCR languages are deliberately limited to
 those exposed and tested, despite the model's larger vocabulary.
