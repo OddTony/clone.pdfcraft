@@ -107,7 +107,7 @@ fn summary(r: &OptimizeReport) -> String {
 fn image_row(ui: &mut egui::Ui, id: &str, title: &str, s: &mut ImageSettings) {
     ui.label(egui::RichText::new(tl!(title)).font(theme::semibold(13.0)));
     ui.horizontal(|ui| {
-        ui.checkbox(&mut s.downsample, tl!("Bicubic downsampling to"));
+        ui.add(widgets::checkbox(&mut s.downsample, tl!("Bicubic downsampling to")));
         ui.add_enabled(s.downsample, egui::DragValue::new(&mut s.target_ppi).range(9.0..=2400.0).suffix(" ppi"));
         ui.label(tl!("for images above"));
         ui.add_enabled(s.downsample, egui::DragValue::new(&mut s.above_ppi).range(9.0..=2400.0).suffix(" ppi"));
@@ -144,7 +144,7 @@ fn image_row(ui: &mut egui::Ui, id: &str, title: &str, s: &mut ImageSettings) {
 
 fn discard_box(ui: &mut egui::Ui, list: &mut Vec<Hidden>, h: Hidden, label: &str) {
     let mut on = list.contains(&h);
-    if ui.checkbox(&mut on, tl!(label)).changed() {
+    if ui.add(widgets::checkbox(&mut on, tl!(label))).changed() {
         if on {
             list.push(h);
         } else {
@@ -184,10 +184,10 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut OptimizeDraft, t: &Tokens) -> (boo
         }
         OptimizeTab::DiscardObjects => {
             discard_box(ui, &mut d.discard, Hidden::LinksActionsScripts, "Discard all links, actions and JavaScript");
-            ui.checkbox(&mut s.discard_alternate_images, tl!("Discard alternate images"));
-            ui.checkbox(&mut s.discard_thumbnails, tl!("Discard embedded page thumbnails"));
-            ui.checkbox(&mut s.discard_tags, tl!("Discard document tags"));
-            ui.checkbox(&mut s.discard_print_settings, tl!("Discard embedded print settings"));
+            ui.add(widgets::checkbox(&mut s.discard_alternate_images, tl!("Discard alternate images")));
+            ui.add(widgets::checkbox(&mut s.discard_thumbnails, tl!("Discard embedded page thumbnails")));
+            ui.add(widgets::checkbox(&mut s.discard_tags, tl!("Discard document tags")));
+            ui.add(widgets::checkbox(&mut s.discard_print_settings, tl!("Discard embedded print settings")));
             discard_box(ui, &mut d.discard, Hidden::Bookmarks, "Discard bookmarks");
             discard_box(ui, &mut d.discard, Hidden::FormFields, "Flatten form fields");
             discard_box(ui, &mut d.discard, Hidden::HiddenLayers, "Discard hidden layer content");
@@ -200,11 +200,11 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut OptimizeDraft, t: &Tokens) -> (boo
             discard_box(ui, &mut d.discard, Hidden::HiddenText, "Discard hidden text");
         }
         OptimizeTab::CleanUp => {
-            ui.checkbox(&mut s.flate_unencoded, tl!("Use Flate to encode streams that are not encoded"));
-            ui.checkbox(&mut s.remove_invalid_links, tl!("Remove invalid links and bookmarks"));
-            ui.checkbox(&mut s.remove_unreferenced_dests, tl!("Remove unreferenced named destinations"));
-            ui.add_enabled(false, egui::Checkbox::new(&mut true, tl!("Compress document structure (object streams)")));
-            ui.add_enabled(false, egui::Checkbox::new(&mut true, tl!("Remove unused objects and merge identical ones")));
+            ui.add(widgets::checkbox(&mut s.flate_unencoded, tl!("Use Flate to encode streams that are not encoded")));
+            ui.add(widgets::checkbox(&mut s.remove_invalid_links, tl!("Remove invalid links and bookmarks")));
+            ui.add(widgets::checkbox(&mut s.remove_unreferenced_dests, tl!("Remove unreferenced named destinations")));
+            ui.add_enabled(false, widgets::checkbox(&mut true, tl!("Compress document structure (object streams)")));
+            ui.add_enabled(false, widgets::checkbox(&mut true, tl!("Remove unused objects and merge identical ones")));
         }
     }
     ui.add_space(12.0);

@@ -358,6 +358,7 @@ mod tests {
                     bold: row == 0,
                     italic: false,
                     color: [0.0; 3],
+                    rotation: 0.0,
                 });
             }
         }
@@ -382,7 +383,7 @@ mod tests {
         std::io::Write::write_all(&mut z, &[0, 30, 90, 170]).unwrap();
         chunk(&mut png, b"IDAT", &z.finish().unwrap());
         chunk(&mut png, b"IEND", &[]);
-        page.images.push(Image { ext: "png", bytes: png, rect: [40.0, 400.0, 140.0, 500.0] });
+        page.images.push(Image { ext: "png", bytes: png, rect: [40.0, 400.0, 140.0, 500.0], size: [100.0, 100.0], rotation: 0.0 });
         page
     }
 

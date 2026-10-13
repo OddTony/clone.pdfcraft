@@ -1,3 +1,6 @@
+# Hot Folder still needs local release jobs: the shared release workflow does not
+# forward the PKG installer signing certificate or install the Linux D-Bus headers
+# required by service credential storage. Keep these until that shared contract supports them.
 # Release pipeline: every push to `release` builds signed installers for every platform and
 # creates or updates the draft GitHub Release "PdfCraft v<version>". See docs/releasing.md.
 #
@@ -77,7 +80,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
           path: craft-fonts
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -138,7 +141,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
           path: craft-fonts
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -204,7 +207,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
           path: craft-fonts
       - name: Install build and packaging tools
         run: |
@@ -279,7 +282,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
           path: craft-fonts
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -401,7 +404,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
           path: craft-fonts
       - name: Build and package in a FreeBSD VM (tar.gz)
         # vmactions/freebsd-vm v1.5.9, pinned by commit (it runs our build).
@@ -447,7 +450,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: storytold/craft-fonts
-          ref: 8dcdacd5153e64560d109541a47d806f26f048c0
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
           path: craft-fonts
       - uses: dtolnay/rust-toolchain@stable
         with:

@@ -54,6 +54,7 @@
 	Create PDF from file…	Vytvořit PDF ze souboru…
 	Create PDF from images…	Vytvořit PDF z obrázků…
 	Create PDF from multiple files…	Vytvořit PDF z více souborů…
+	Create separate PDFs…	Vytvořit samostatná PDF…
 	Create PDF from clipboard	Vytvořit PDF ze schránky
 	Combine files…	Sloučit soubory…
 	Save	Uložit
@@ -70,6 +71,7 @@
 	Optimize PDF…	Optimalizovat PDF…
 	Export to text…	Exportovat jako text…
 	Export to Word…	Exportovat do formátu Word…
+	Export to PowerPoint…	Exportovat do formátu PowerPoint…
 	Export to HTML…	Exportovat do formátu HTML…
 	Export to RTF…	Exportovat do formátu RTF…
 	Export all images…	Exportovat všechny obrázky…
@@ -171,6 +173,7 @@
 
 # Multi-object selection and movement (#844)
 @plural	{n} object selected|{n} objects selected	Vybrán {n} objekt|Vybrány {n} objekty|Vybráno {n} objektů
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} název pole koliduje s dřívějšími soubory a bude přejmenován: {list}|Názvy {n} polí kolidují s dřívějšími soubory a budou přejmenovány: {list}|{n} názvů polí koliduje s dřívějšími soubory a bude přejmenováno: {list}
 	Drag the selection to move it. Esc clears the selection.	Přetažením výběr přesunete. Esc zruší výběr.
 	Shift-click to select several objects. Drag empty space to select an area.	Kliknutím se Shiftem vyberete více objektů. Tažením v prázdném místě vyberete oblast.
 	Select at most 1000 objects at a time.	Vyberte nejvýše 1000 objektů najednou.
@@ -339,6 +342,9 @@ key	Space	Mezerník
 	Add or edit links	Přidat nebo upravit odkazy
 	Create links from URLs	Vytvořit odkazy z adres URL
 	Remove all links	Odebrat všechny odkazy
+	No links to remove	Nejsou žádné odkazy k odebrání
+	Removed 1 link	Odebrán 1 odkaz
+	Removed {n} links	Odebrané odkazy: {n}
 	Add Bates numbering…	Přidat Batesovo číslování…
 	Add image…	Přidat obrázek…
 	Redact text and images	Začernit text a obrázky
@@ -426,6 +432,7 @@ key	Space	Mezerník
 	Create from	Vytvořit z
 	Single file	Jeden soubor
 	Multiple files	Více souborů
+	Separate PDFs	Samostatná PDF
 	Images	Obrázky
 	Clipboard	Schránka
 	Blank page	Prázdná stránka
@@ -775,6 +782,11 @@ key	Space	Mezerník
 	of the following fields:	následujících polí:
 	Simplified field notation:	Zjednodušený zápis polí:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	Názvy polí s + - * / a závorkami; mezery v názvech uvozujte znakem \\.
+	Finding document fonts…	Hledání písem dokumentu…
+	Installed fonts…	Nainstalovaná písma…
+	Keep source fonts	Zachovat zdrojová písma
+	Load font…	Načíst písmo…
+	No openly licensed document fonts found. Load a font file.	Nebyla nalezena žádná otevřeně licencovaná písma dokumentu. Načtěte soubor písma.
 	Format text	Formát textu
 	Bold	Tučné
 	Italic	Kurzíva
@@ -782,7 +794,7 @@ key	Space	Mezerník
 	Centre	Na střed
 	Align right	Zarovnat doprava
 	Justify	Do bloku
-	Standard fonts; text outside Windows-1252 isn't supported yet.	Standardní písma; text mimo Windows-1252 zatím není podporován.
+	Thai and Arabic use regular fallback fonts when available.	Thajština a arabština používají běžná náhradní písma, pokud jsou k dispozici.
 	Edit image	Upravit obrázek
 	Rotate counterclockwise	Otočit proti směru hodinových ručiček
 	Rotate clockwise	Otočit po směru hodinových ručiček
@@ -823,6 +835,12 @@ key	Space	Mezerník
 	Flip Vertical	Převrátit svisle
 	Replace Image…	Nahradit obrázek…
 	Save Image As…	Uložit obrázek jako…
+	Copy Image	Kopírovat obrázek
+	The image has been copied ({w} × {h} pixels)	Obrázek byl zkopírován ({w} × {h} pixelů)
+	Couldn't copy the image: {e}	Obrázek nelze zkopírovat: {e}
+	Copy Image in Original Format	Kopírovat obrázek v původním formátu
+	The image has been copied as a {ext} file	Obrázek byl zkopírován jako soubor {ext}
+	The page has changed; select the image again	Stránka se změnila; vyberte obrázek znovu
 	Check for updates	Zkontrolovat aktualizace
 	No check has run yet.	Kontrola zatím neproběhla.
 	Checking for a newer version…	Hledání novější verze…
@@ -911,6 +929,7 @@ key	Space	Mezerník
 	, Expires: 	, platnost do: 
 	No digital IDs yet.	Zatím žádná digitální ID.
 	Configure New Digital ID	Nastavit nové digitální ID
+	Remove "{name}" from this list? The file itself is not deleted.	Odebrat „{name}“ z tohoto seznamu? Samotný soubor se nesmaže.
 	Continue	Pokračovat
 	Configure a Digital ID for Signing	Nastavení digitálního ID pro podepisování
 	Use a Digital ID from a file	Použít digitální ID ze souboru
@@ -929,6 +948,7 @@ key	Space	Mezerník
 	{verb} as "{name}"	{verb} jako „{name}“
 	Certify	Certifikovat
 	The signature will be invisible.	Podpis bude neviditelný.
+	The existing action will be preserved.	Stávající akce bude zachována.
 	Distinguished name	Rozlišující jméno
 	Labels	Popisky
 	Graphic	Grafika
@@ -1291,6 +1311,8 @@ key	Space	Mezerník
 	Searchable Image (Exact)	Prohledávatelný obraz (přesný)
 	Adds invisible text over each word; the page image is not changed	Přidá nad každé slovo neviditelný text; obraz stránky se nezmění
 	Downsample to	Převzorkovat na
+	Also recognize pages that already have text	Rozpoznat i stránky, které už obsahují text
+	Pictures on those pages are recognized too; words already in the page's text are not added again	Rozpoznají se i obrázky na těchto stránkách; slova, která už jsou v textu stránky, se znovu nepřidají
 	Text recognition isn't installed: its model files are missing. Reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them.	Rozpoznávání textu není nainstalováno: chybí soubory jeho modelů. Přeinstalujte PdfCraft nebo nastavte PDFCRAFT_MODELS na složku, ve které jsou.
 	Settings	Nastavení
 	Optional	Volitelné
@@ -1592,7 +1614,7 @@ key	Space	Mezerník
 	Couldn't optimize the file: {e}	Soubor nelze optimalizovat: {e}
 	Couldn't write {path}: {e}	Nelze zapsat {path}: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	Formulář žádá o odeslání na {u}; PdfCraft data formulářů neodesílá. Své údaje zachováte uložením dokumentu.
-	{s} actions run in the JavaScript engine (M6)	Akce {s} se spouštějí v JavaScriptovém stroji (M6)
+	This PDF uses the unsupported {s} action.	Tento PDF používá nepodporovanou akci {s}.
 	{name}: the {other} action isn't supported yet	{name}: akce {other} zatím není podporována
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} odesílá formulář na {url}; PdfCraft data formulářů neodesílá. Své údaje zachováte uložením dokumentu.
 	Export stopped: {e}	Export byl zastaven: {e}
@@ -1909,6 +1931,8 @@ key	Space	Mezerník
 	{month} {y}	{month} {y}
 	Change {key}	Změnit: {key}
 	Insert pages from {name}	Vložit stránky ze souboru {name}
+	Insert pages from {name} — 1 field renamed	Vložit stránky ze souboru {name} — 1 pole přejmenováno
+	Insert pages from {name} — fields renamed	Vložit stránky ze souboru {name} — pole přejmenována
 	Fill in {name}	Vyplnit {name}
 	Set the image of {name}	Nastavit obrázek pole {name}
 	Edit script of {name}	Upravit skript {name}
@@ -1939,6 +1963,7 @@ key	Space	Mezerník
 	Delete document JavaScript	Odstranit JavaScript dokumentu
 	Edit document JavaScript	Upravit JavaScript dokumentu
 	Edit text	Upravit text
+	Load document font	Načíst písmo dokumentu
 	Move image	Přesunout obrázek
 	Rotate image	Otočit obrázek
 	Flip image	Převrátit obrázek
@@ -2062,6 +2087,7 @@ key	Space	Mezerník
 	DPI sets the printed page size without resampling the image.	DPI určuje velikost tištěné stránky bez převzorkování obrázku.
 	Create	Vytvořit
 	Dynamic XFA form laid out from its template: {pages}, {fields}.	Dynamický formulář XFA rozvržený podle šablony: {pages}, {fields}.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Skripty tohoto formuláře jsou vypnuté, protože jeden z nich běžel příliš dlouho. Chcete-li je znovu spustit, otevřete dokument znovu.
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	Formulář XFA: jeho pole a data XFA se udržují ve shodě, takže ostatní prohlížeče zobrazí, co vyplníte.
 	Switch to two-page view first to show the cover page	Titulní stránku zobrazíte, až přepnete na dvoustránkové zobrazení
 @plural	{n} page|{n} pages	{n} stránka|{n} stránky|{n} stránek
@@ -2178,7 +2204,7 @@ calendar date	December	prosince
 	Home / End	Home / End
 	H / Space (hold)	H / mezerník (podržet)
 	Line ending	Zakončení čáry
-	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Standardní písma neumí vykreslit „{c}“ ({code}). Jako text lze zatím přidávat jen západoevropské znaky.
+	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	Písma pro text v PDF neumí vykreslit „{c}“ ({code}). Zvolte podporovaný text.
 	Larger pages	Větší stránky
 	Smaller pages	Menší stránky
 	Reset page size	Obnovit velikost stránek
@@ -2294,6 +2320,9 @@ certificate	Subject	Subjekt
 scroll speed	Slow	Pomalá
 scroll speed	Normal	Normální
 scroll speed	Fast	Rychlá
+	Animation effects	Animační efekty
+animation effects	On	Zapnuto
+animation effects	Off	Vypnuto
 
 # Counts that take plural forms: optimized images, discarded items, bytes, pixels and deleted fields.
 @plural	{n} image optimized|{n} images optimized	{n} obrázek optimalizován|{n} obrázky optimalizovány|{n} obrázků optimalizováno
@@ -2340,3 +2369,76 @@ scroll speed	Fast	Rychlá
 	Searchable Image	Prohledávatelný obrázek
 	Straighten skewed scans	Narovnat šikmé skeny
 	Uncertain orientations are left unchanged. Deskew fits the full image inside the page.	Nejistá orientace zůstane beze změny. Narovnání zachová celý obrázek uvnitř stránky.
+	Reading colours	Barvy pro čtení
+	Replace document colours	Nahradit barvy dokumentu
+	Black on white	Černá na bílém
+	White on black	Bílá na černém
+	Yellow on black	Žlutá na černém
+	Green on black	Zelená na černém
+	Page background	Pozadí stránky
+	Only change the colour of black text or line art	Změnit jen barvu černého textu a čar
+	Change the colour of line art as well as text	Změnit barvu i čar, ne jen textu
+	Colours are remapped while rendering; the document itself never changes.	Barvy se mění při vykreslování; samotný dokument se nikdy nemění.
+	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Ovladač této tiskárny nepřijímá nastavení oboustranného tisku z jiných programů, proto platí jeho vlastní nastavení. Změňte ho ve Vlastnosti…
+	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Písmo tohoto pole neumí zobrazit „{c}“ ({code}), proto PdfCraft místo něj ukazuje ?. Hodnota se uloží a jiné prohlížeče PDF pole podle ní překreslí.
+	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	Písma, kterými PdfCraft píše, neumí zobrazit „{c}“ ({code}), proto se ve všech prohlížečích PDF zobrazí jako ?. Text se uloží.
+	Browser's print dialog	Dialog tisku prohlížeče
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Počet kopií, oboustranný tisk a barva se volí v dialogu tisku prohlížeče.
+	Preparing {n} sheets for printing…	Příprava {n} listů k tisku…
+	Preparing sheet {done} of {total} for printing…	Příprava listu {done} z {total} k tisku…
+	Opening the browser's print dialog…	Otevírá se dialog tisku prohlížeče…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	Z prohlížeče nelze tisknout ({e}); místo toho byl k tisku stažen soubor {name}
+	Tools panel side	Strana panelu nástrojů
+	Add comment	Přidat komentář
+	Change tag properties	Změnit vlastnosti značky
+# Accessibility structure tags.
+	Tags panel	Panel značek
+	Tags	Značky
+	Tag type	Typ značky
+	Actual text	Skutečný text
+	Find a tag	Najít značku
+	Collapse tag	Sbalit značku
+	Expand tag	Rozbalit značku
+	Revert changes	Vrátit změny
+	Save tag properties	Uložit vlastnosti značky
+	This document has no editable structure tags.	Tento dokument nemá upravitelné značky struktury.
+	{n} tags	{n} značek
+	Save or revert changes before selecting another tag.	Před výběrem jiné značky změny uložte nebo vraťte.
+	Left out: {names}	Vynecháno: {names}
+	already a PDF	již je PDF
+	no unused output name	žádný volný název výstupního souboru
+	no output folder was chosen	nebyla vybrána výstupní složka
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	Stažen {n} soubor PDF|Staženy {n} soubory PDF|Staženo {n} souborů PDF
+	Scan	Skenovat
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Podepište se na bílý list papíru a vyfoťte ho při jasném, rovnoměrném světle (použijte blesk). Vyberte fotografii nebo ji sem přetáhněte: PdfCraft najde podpis a odstraní papír.
+	Choose photo…	Vybrat fotografii…
+	No photo chosen	Není vybrána žádná fotografie
+	Photo	Fotografie
+	Ink sensitivity	Citlivost na inkoust
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	V rámečku nebyl nalezen žádný podpis. Přesuňte rámeček na podpis nebo zvyšte citlivost na inkoust.
+	Couldn't use the photo: {e}	Fotografii nelze použít: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	Zavřít kartu
+	Reopen Closed Tab	Znovu otevřít zavřenou kartu
+	Reveal in Finder	Zobrazit ve Finderu
+	Reveal in File Explorer	Zobrazit v Průzkumníku souborů
+	Other colour…	Jiná barva…
+	Recent colours	Nedávné barvy
+	Couldn't follow linked PDF: {reason}	Odkazovaný PDF nelze otevřít: {reason}
+	The linked PDF opened, but its named destination was not applied.	Odkazovaný PDF se otevřel, ale jeho pojmenovaný cíl nebyl použit.
+	The linked PDF opened, but its page destination was out of range.	Odkazovaný PDF se otevřel, ale cílová stránka je mimo rozsah.
+	Local cross-PDF links require the desktop app	Místní odkazy mezi soubory PDF vyžadují desktopovou aplikaci
+	Minimize	Minimalizovat
+	Maximize	Maximalizovat
+	Restore	Obnovit
+	Use system title bar	Použít systémové záhlaví okna
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Zobrazit jednoduché záhlaví s tlačítky okna místo pruhu karet. GNOME aplikacím záhlaví nekreslí, proto toto záhlaví nesleduje jeho motiv.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	Povolit
+	Only allow this if you trust the source document.	Povolte tuto akci pouze v případě, že důvěřujete zdrojovému dokumentu.
+	Open this local PDF?	Otevřít tento místní soubor PDF?
+	This document is trying to open a local file:	Tento dokument se pokouší otevřít místní soubor:
+	Move tag earlier	Přesunout značku dříve
+	Move tag later	Přesunout značku později

@@ -88,6 +88,7 @@
 	Create PDF from file…	Създай PDF от файл…
 	Create PDF from images…	Създай PDF от изображения…
 	Create PDF from multiple files…	Създай PDF от няколко файла…
+	Create separate PDFs…	Създаване на отделни PDF файлове…
 	Create PDF from clipboard	Създай PDF от клипборда
 	Combine files…	Обедини файлове…
 	Save	Запиши
@@ -378,6 +379,14 @@
 	of the following fields:	на следните полета:
 	Simplified field notation:	Опростен запис с полета:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	Имена на полета с + - * / и скоби; поставете \\ пред интервалите в имената.
+
+# Document font selection
+	Finding document fonts…	Търсене на шрифтове за документа…
+	Installed fonts…	Инсталирани шрифтове…
+	Keep source fonts	Запазване на оригиналните шрифтове
+	Load font…	Зареждане на шрифт…
+	No openly licensed document fonts found. Load a font file.	Не са открити шрифтове с отворен лиценз. Заредете файл с шрифт.
+
 	Format text	Форматирай текст
 	Bold	Удебелен
 	Italic	Курсив
@@ -385,7 +394,7 @@
 	Centre	Центрирай
 	Align right	Подравни вдясно
 	Justify	Двустранно подравняване
-	Standard fonts; text outside Windows-1252 isn't supported yet.	Стандартни шрифтове; текст извън Windows-1252 все още не се поддържа.
+	Thai and Arabic use regular fallback fonts when available.	Тайландският и арабският използват резервни шрифтове с нормален стил, когато са налични.
 	Edit image	Редактирай изображение
 	Rotate counterclockwise	Завърти обратно на часовниковата стрелка
 	Rotate clockwise	Завърти по часовниковата стрелка
@@ -427,6 +436,12 @@
 	Flip Vertical	Обърни вертикално
 	Replace Image…	Замени изображението…
 	Save Image As…	Запиши изображението като…
+	Copy Image	Копирай изображението
+	The image has been copied ({w} × {h} pixels)	Изображението е копирано ({w} × {h} пиксела)
+	Couldn't copy the image: {e}	Изображението не можа да бъде копирано: {e}
+	Copy Image in Original Format	Копирай изображението в оригиналния формат
+	The image has been copied as a {ext} file	Изображението е копирано като файл {ext}
+	The page has changed; select the image again	Страницата е променена; изберете изображението отново
 	Check for updates	Провери за актуализации
 	No check has run yet.	Още не е извършвана проверка.
 	Checking for a newer version…	Проверка за по-нова версия…
@@ -515,6 +530,7 @@
 	, Expires: 	, валиден до: 
 	No digital IDs yet.	Все още няма цифрови идентификатори.
 	Configure New Digital ID	Конфигурирай нов цифров идентификатор
+	Remove "{name}" from this list? The file itself is not deleted.	Да се премахне ли „{name}“ от този списък? Самият файл няма да бъде изтрит.
 	Continue	Продължи
 	Configure a Digital ID for Signing	Конфигуриране на цифров идентификатор за подписване
 	Use a Digital ID from a file	Използвай цифров идентификатор от файл
@@ -533,6 +549,7 @@
 	{verb} as "{name}"	{verb} като „{name}“
 	Certify	Сертифицирай
 	The signature will be invisible.	Подписът ще бъде невидим.
+	The existing action will be preserved.	Съществуващото действие ще бъде запазено.
 	Distinguished name	Отличително име
 	Labels	Етикети
 	Graphic	Графика
@@ -921,6 +938,8 @@
 	Searchable Image (Exact)	Изображение с възможност за търсене (точно)
 	Adds invisible text over each word; the page image is not changed	Добавя невидим текст върху всяка дума; изображението на страницата не се променя
 	Downsample to	Намали разделителната способност до
+	Also recognize pages that already have text	Разпознай и страници, които вече съдържат текст
+	Pictures on those pages are recognized too; words already in the page's text are not added again	Изображенията на тези страници също се разпознават; думите, които вече са в текста на страницата, не се добавят отново
 	Text recognition isn't installed: its model files are missing. Reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them.	Разпознаването на текст не е инсталирано: файловете на моделите му липсват. Инсталирайте PdfCraft отново или задайте в PDFCRAFT_MODELS папката, която ги съдържа.
 	Settings	Настройки
 	Protect	Защита
@@ -941,6 +960,7 @@
 	Bring your own model (off by default)	Използвайте собствен модел (изключено по подразбиране)
 	Single file	Един файл
 	Multiple files	Няколко файла
+	Separate PDFs	Отделни PDF файлове
 	Images	Изображения
 	Clipboard	Клипборд
 	Blank page	Празна страница
@@ -1159,6 +1179,9 @@
 	Redact pages…	Заличи страници…
 	Redaction properties…	Свойства на заличаването…
 	Remove all links	Премахни всички връзки
+	No links to remove	Няма връзки за премахване
+	Removed 1 link	Премахната е 1 връзка
+	Removed {n} links	Премахнати връзки: {n}
 	Remove background	Премахни фона
 	Remove header & footer	Премахни горния и долния колонтитул
 	Remove hidden information…	Премахни скритата информация…
@@ -1477,7 +1500,7 @@
 	Couldn't optimize the file: {e}	Файлът не можа да бъде оптимизиран: {e}
 	Couldn't write {path}: {e}	Не можа да се запише {path}: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	Формулярът изисква да бъде изпратен до {u}; PdfCraft не изпраща данни от формуляри. Запишете документа, за да запазите въведеното.
-	{s} actions run in the JavaScript engine (M6)	Действията {s} се изпълняват в JavaScript машината (M6)
+	This PDF uses the unsupported {s} action.	Този PDF използва неподдържаното действие {s}.
 	{name}: the {other} action isn't supported yet	{name}: действието {other} все още не се поддържа
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} изпраща формуляра до {url}; PdfCraft не изпраща данни от формуляри. Запишете документа, за да запазите въведеното.
 	Export stopped: {e}	Експортирането е спряно: {e}
@@ -1766,6 +1789,7 @@
 	Optimize PDF…	Оптимизирай PDF…
 	Export to text…	Експортирай като текст…
 	Export to Word…	Експортирай в Word…
+	Export to PowerPoint…	Експортирай в PowerPoint…
 	Export to HTML…	Експортирай в HTML…
 	Export to RTF…	Експортирай в RTF…
 	Export all images…	Експортирай всички изображения…
@@ -1934,6 +1958,7 @@
 	Edit document JavaScript	Редактирай JavaScript на документа
 	Edit script of {name}	Редактирай скрипта на {name}
 	Edit text	Редактирай текста
+	Load document font	Зареждане на шрифт на документа
 	Embedded files must be PDF/A files themselves (use PDF/A-3 for others)	Вградените файлове трябва също да са PDF/A файлове (за други използвайте PDF/A-3)
 	Erase	Изтриване
 	Fill & Sign: change initials	Попълни и подпиши: промяна на инициалите
@@ -1949,6 +1974,8 @@
 	Images and text (converted to PDF)	Изображения и текст (конвертирани в PDF)
 	Import {name}	Импортирай {name}
 	Insert pages from {name}	Вмъкни страници от {name}
+	Insert pages from {name} — 1 field renamed	Вмъкни страници от {name} — 1 поле е преименувано
+	Insert pages from {name} — fields renamed	Вмъкни страници от {name} — полета са преименувани
 	Items marked Ready work today.	Елементите, отбелязани като „Готово“, работят още сега.
 	JavaScript	JavaScript
 	JavaScript, e.g. getField("total").value	JavaScript, напр. getField("total").value
@@ -2066,9 +2093,11 @@
 	DPI sets the printed page size without resampling the image.	DPI определя размера на отпечатаната страница без преизчисляване на изображението.
 	Create	Създай
 	Dynamic XFA form laid out from its template: {pages}, {fields}.	Динамичен XFA формуляр, оформен по своя шаблон: {pages}, {fields}.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Скриптовете на този формуляр са изключени, защото един от тях се изпълняваше твърде дълго. Отворете документа отново, за да се изпълнят пак.
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA формуляр: полетата и XFA данните му се поддържат синхронизирани, така че другите програми за преглед показват попълненото от вас.
 @plural	{n} page|{n} pages	{n} страница|{n} страници
 @plural	{n} field|{n} fields	{n} поле|{n} полета
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	Име на {n} поле се разминава с по-ранните файлове и ще бъде преименувано: {list}|Имена на {n} полета се разминават с по-ранните файлове и ще бъдат преименувани: {list}
 	Created a PDF from {n} files	Създаден е PDF от {n} файла
 	PDF, images and text	PDF, изображения и текст
 	Insert a file before page {label}	Вмъкни файл преди страница {label}
@@ -2093,7 +2122,10 @@ action wizard	Start	Старт
 	Clear Recent Files	Изчисти последно отваряните файлове
 	Remove from Recent	Премахни от последно отваряните
 	Remove {name} from Recent	Премахни {name} от последно отваряните
+	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	Шрифтовете за PDF текст не могат да изобразят „{c}“ ({code}). Изберете поддържан текст.
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Стандартните шрифтове не могат да покажат „{c}“ ({code}). Засега като текст могат да се добавят само западноевропейски символи.
+	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Шрифтът на това поле не може да покаже „{c}“ ({code}), затова PdfCraft показва ? на негово място. Стойността е запазена и другите програми за PDF преначертават полето по нея.
+	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	Шрифтовете, с които PdfCraft пише, не могат да покажат „{c}“ ({code}), затова във всяка програма за PDF то се показва като ?. Текстът е запазен.
 	Larger pages	По-големи страници
 	Smaller pages	По-малки страници
 	Reset page size	Възстанови размера на страниците
@@ -2200,6 +2232,9 @@ key	Space	Интервал
 scroll speed	Slow	Ниска
 scroll speed	Normal	Нормална
 scroll speed	Fast	Висока
+	Animation effects	Анимационни ефекти
+animation effects	On	Включени
+animation effects	Off	Изключени
 	Enhance camera image	Подобри снимка от камера
 	Drag the corners onto the document's edges, then choose Enhance page.	Плъзнете ъглите до краищата на документа, след това изберете „Подобри страницата“.
 	Enhance page	Подобри страницата
@@ -2233,3 +2268,74 @@ scroll speed	Fast	Висока
 	Searchable Image	Изображение с търсене
 	Straighten skewed scans	Изправяне на наклонени сканирани страници
 	Uncertain orientations are left unchanged. Deskew fits the full image inside the page.	Несигурната ориентация остава непроменена. Изправянето побира цялото изображение в страницата.
+	Reading colours	Цветове за четене
+	Replace document colours	Замяна на цветовете на документа
+	Black on white	Черно на бяло
+	White on black	Бяло на черно
+	Yellow on black	Жълто на черно
+	Green on black	Зелено на черно
+	Page background	Фон на страницата
+	Only change the colour of black text or line art	Да се променя само цветът на черния текст и линиите
+	Change the colour of line art as well as text	Да се променя цветът и на линиите, не само на текста
+	Colours are remapped while rendering; the document itself never changes.	Цветовете се променят при изчертаването; самият документ никога не се променя.
+	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Драйверът на този принтер не приема настройки за двустранен печат от други програми и прилага собствената си настройка. Променете я от Свойства…
+	Browser's print dialog	Диалог за печат на браузъра
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Броят копия, двустранният печат и цветът се избират в диалога за печат на браузъра.
+	Preparing {n} sheets for printing…	Подготовка на листове за печат: {n}…
+	Preparing sheet {done} of {total} for printing…	Подготовка за печат на лист {done} от {total}…
+	Opening the browser's print dialog…	Отваряне на диалога за печат на браузъра…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	Не може да се печата от браузъра ({e}); вместо това за печат е изтеглен {name}
+	Tools panel side	Страна на панела с инструменти
+	Add comment	Добавяне на коментар
+	Change tag properties	Промяна на свойствата на етикета
+# Accessibility structure tags.
+	Tags panel	Панел с тагове
+	Tags	Тагове
+	Tag type	Тип на тага
+	Actual text	Действителен текст
+	Find a tag	Намери таг
+	Collapse tag	Свий тага
+	Expand tag	Разгъни тага
+	Revert changes	Отмени промените
+	Save tag properties	Запази свойствата на тага
+	This document has no editable structure tags.	Този документ няма структурни тагове за редактиране.
+	{n} tags	{n} тага
+	Save or revert changes before selecting another tag.	Запазете или отменете промените, преди да изберете друг таг.
+	Left out: {names}	Пропуснати: {names}
+	already a PDF	вече е PDF
+	no unused output name	няма свободно име за изходния файл
+	no output folder was chosen	не е избрана папка за изхода
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	Изтеглен е {n} PDF|Изтеглени са {n} PDF файла
+	Scan	Сканиране
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Подпишете се на лист бяла хартия и го снимайте на ярка, равномерна светлина (със светкавица). Изберете снимката или я пуснете тук: PdfCraft открива подписа и премахва хартията.
+	Choose photo…	Избор на снимка…
+	No photo chosen	Няма избрана снимка
+	Photo	Снимка
+	Ink sensitivity	Чувствителност към мастило
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	В рамката не е открит подпис. Преместете рамката върху подписа или увеличете чувствителността към мастило.
+	Couldn't use the photo: {e}	Снимката не може да се използва: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	Затваряне на раздела
+	Reopen Closed Tab	Отваряне на затворения раздел
+	Reveal in Finder	Показване във Finder
+	Reveal in File Explorer	Показване във файловия мениджър
+	Other colour…	Друг цвят…
+	Recent colours	Последни цветове
+	Couldn't follow linked PDF: {reason}	Свързаният PDF не можа да бъде отворен: {reason}
+	The linked PDF opened, but its named destination was not applied.	Свързаният PDF се отвори, но именуваната му цел не беше приложена.
+	The linked PDF opened, but its page destination was out of range.	Свързаният PDF се отвори, но целевата му страница е извън обхвата.
+	Local cross-PDF links require the desktop app	Локалните връзки между PDF файлове изискват настолното приложение
+	Minimize	Минимизиране
+	Maximize	Максимизиране
+	Restore	Възстановяване
+	Use system title bar	Използване на системната заглавна лента
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Показване на обикновена заглавна лента за бутоните на прозореца вместо лентата с раздели. GNOME не рисува заглавни ленти за приложенията, затова тази не следва темата му.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	Разреши
+	Only allow this if you trust the source document.	Разрешете това само ако имате доверие на изходния документ.
+	Open this local PDF?	Да се отвори ли този локален PDF?
+	This document is trying to open a local file:	Този документ се опитва да отвори локален файл:
+	Move tag earlier	Преместване на етикета по-рано
+	Move tag later	Преместване на етикета по-късно

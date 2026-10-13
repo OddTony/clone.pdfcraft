@@ -72,8 +72,11 @@ pub(crate) fn add_text(doc: &mut Document, page: usize, words: &[PlacedWord]) ->
             continue;
         }
         let [a, b] = word.across.map(|v| v / len);
-        let [c, d] = word.up.map(|v| v / 0.93);
-        let (x, y) = (word.origin[0] + c * 0.21, word.origin[1] + d * 0.21);
+        // Match the OCR writer's shared ink-to-baseline estimate. A full-em box shifts
+        // words without descenders away from their neighbours and splits editable phrases.
+        let (top, bottom) = pdfcraft_ocr::ink_extent(&word.text);
+        let [c, d] = word.up.map(|v| v / (top - bottom));
+        let (x, y) = (word.origin[0] - c * bottom, word.origin[1] - d * bottom);
         out.push_str(&format!("{a:.6} {b:.6} {c:.6} {d:.6} {x:.6} {y:.6} Tm\n"));
         for ch in word.text.chars() {
             if let Some((name, code)) = codes.get(&ch) {

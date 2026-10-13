@@ -8,9 +8,15 @@ from [#1143](https://github.com/storytold/pdfcraft/pull/1143) is backported here
 The additional `hot_folder_optimization_never_revives_stale_page_content` automation regression
 exercises Off/Lossless/Reduce/Custom publication, preserving the original and live extension data
 while preventing stale page references from acquiring replacement content.
-Combined runtime validation is still pending: the local Windows environment has Rust but no
-MSVC linker (`link.exe`), so tests cannot build. The backport is not release qualification;
-run the COS suite, Hot Folder automation tests and workspace gates, then repeat package acceptance.
+The MSVC linker is installed. All seven Hot Folder automation tests pass on the integration
+with main `b5467d93`, with the pinned OCR models present. A real CLI run preserves the original
+and identical rendered pixels across all four modes: Off retains 66,104 bytes, while each
+optimization profile publishes 832 bytes for the synthetic stale-reference fixture. This is a
+regression check, not a general compression benchmark. Final package acceptance remains separate.
+The strict Windows symlink test cannot create its fixture locally (OS error 1314); GitHub's
+Windows job requires this test rather than silently treating an unavailable fixture as coverage.
+
+Local Windows integration gates pass: `cargo test --workspace --locked -j 2 --no-fail-fast -- --test-threads=2` (3,173 passed, 15 ignored, 0 failed), strict workspace/all-target Clippy, formatting, assets, layering, parity and all 32 WASM package checks. OCR models are present; optional craft-fonts-dependent cases remain unexercised.
 
 The optional standalone application processes folders without keeping the PdfCraft editor open.
 It shares OCR, orientation correction, deskew and paper-edge detection with the engine. Its

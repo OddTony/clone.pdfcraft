@@ -5,6 +5,7 @@ use egui::{Rect, RichText, pos2, vec2};
 
 use crate::PdfCraftApp;
 use crate::theme::{self, ThemeKind, ThemePreference, Tokens};
+use crate::widgets;
 
 /// The themes each card offers. One of each today; a new theme is one more row here.
 pub const LIGHT_THEMES: &[(ThemeKind, &str)] = &[(ThemeKind::Light, "Light gray")];
@@ -103,7 +104,7 @@ fn card(ui: &mut egui::Ui, t: &Tokens, title: &str, active: bool, themes: &[(The
             ui.add_space(4.0);
             for (kind, label) in themes {
                 // One theme per card today, so it is always the chosen one.
-                let _ = ui.radio(*kind == shown, tl!(label));
+                let _ = ui.add(widgets::radio(*kind == shown, tl!(label)));
             }
         });
 }

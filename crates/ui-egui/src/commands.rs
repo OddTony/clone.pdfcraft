@@ -401,7 +401,13 @@ impl PdfCraftApp {
                 }
             }
             "a11y.report" => self.show_accessibility_report(),
+            "a11y.autotag" => {
+                if self.apply_edit(pdfcraft_engine::Edit::AutoTagText) {
+                    self.choose_right_panel(Some(RightPanel::Tags));
+                }
+            }
             "a11y.alt_text" => self.start_alt_text(),
+            "a11y.tags" => self.choose_right_panel(Some(RightPanel::Tags)),
             "a11y.reading_options" => self.dialog = Some(Dialog::Properties(crate::PropsTab::Advanced)),
             "export.all_images" => self.dialog = Some(Dialog::Export(crate::export_ui::ExportKind::AllImages)),
             "edit.text" => {
@@ -415,9 +421,7 @@ impl PdfCraftApp {
                 self.notify_tr("Drag a rectangle to create a link; double-click a link to edit it");
             }
             "edit.links_from_urls" => self.links_from_urls(),
-            "edit.remove_links" => {
-                self.apply_edit(Edit::RemoveLinks { pages: None });
-            }
+            "edit.remove_links" => self.remove_all_links(),
             "redact.mark" => {
                 self.quick_tool = crate::QuickTool::Redact;
                 self.left = crate::LeftPanel::Tool("redact");
@@ -520,6 +524,7 @@ impl PdfCraftApp {
             "form.export_data" => self.export_data_dialog(false, true),
             "form.merge_data" => self.merge_data_dialog(),
             "export.docx" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Docx),
+            "export.pptx" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Pptx),
             "export.html" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Html),
             "export.rtf" => self.export_office_dialog(pdfcraft_engine::compare::OfficeFormat::Rtf),
             "form.prepare" => {
@@ -589,6 +594,7 @@ impl PdfCraftApp {
             "create.blank" => self.create_blank(),
             "create.file" => self.open_dialog(),
             "create.multiple" => self.create_multiple_dialog(),
+            "create.multiple_separate" => self.create_multiple_separate_dialog(),
             "create.images" => self.create_from_images_dialog(),
             "create.clipboard" => self.create_from_clipboard(),
             "optimize.reduce" => self.reduce_file_size(),

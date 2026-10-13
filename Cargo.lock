@@ -1207,6 +1207,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-print"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=d991bf6792f8ade99c51358bf3c1d902c8cd96b5#d991bf6792f8ade99c51358bf3c1d902c8cd96b5"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "craft-ui"
 version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=5c874d51eeb3de70e735c8ce87a59a7dedd47675#5c874d51eeb3de70e735c8ce87a59a7dedd47675"
@@ -1938,7 +1946,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2580,6 +2588,7 @@ dependencies = [
  "memchr",
  "rustc-hash 2.1.3",
  "smallvec",
+ "stringprep",
  "zune-jpeg",
 ]
 
@@ -3968,12 +3977,13 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "eframe",
  "egui",
  "fmv-macos-events",
  "log",
+ "pdfcraft-engine",
  "pdfcraft-ui-egui",
  "pollster 1.0.1",
  "rustls-native-certs",
@@ -3982,16 +3992,18 @@ dependencies = [
  "ureq",
  "wayland-client",
  "wayland-protocols",
+ "windows 0.62.2",
  "winresource",
  "winsafe",
 ]
 
 [[package]]
 name = "pdfcraft-a11y"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
+ "pdfcraft-filters",
  "pdfcraft-fonts",
  "pdfcraft-model",
  "thiserror 2.0.21",
@@ -3999,7 +4011,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-annot"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "hayro-syntax",
  "pdfcraft-cos",
@@ -4010,7 +4022,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-audit"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
@@ -4021,12 +4033,14 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-automation"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "base64 0.22.1",
+ "flate2",
  "image",
  "pdfcraft-cos",
  "pdfcraft-engine",
+ "pdfcraft-fonts",
  "pdfcraft-hot-folder-service",
  "pdfcraft-model",
  "pdfcraft-organize",
@@ -4035,13 +4049,14 @@ dependencies = [
  "pdfcraft-xfa",
  "png 0.18.1",
  "serde_json",
+ "sha2 0.11.0",
  "tempfile",
  "zeroize",
 ]
 
 [[package]]
 name = "pdfcraft-cli"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "base64 0.22.1",
  "pdfcraft-audit",
@@ -4056,18 +4071,18 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-compare"
-version = "0.6.0"
+version = "0.7.1"
 
 [[package]]
 name = "pdfcraft-content"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "pdfcraft-cos",
 ]
 
 [[package]]
 name = "pdfcraft-cos"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "hayro-syntax",
  "pdfcraft-crypt",
@@ -4079,7 +4094,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-create"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "encoding_rs",
  "hayro-syntax",
@@ -4090,11 +4105,12 @@ dependencies = [
  "png 0.18.1",
  "thiserror 2.0.21",
  "tiff",
+ "zune-jpeg",
 ]
 
 [[package]]
 name = "pdfcraft-crypt"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "aes 0.9.3",
  "md-5",
@@ -4106,9 +4122,10 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-edit"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "hayro-syntax",
+ "kurbo 0.13.1",
  "pdfcraft-annot",
  "pdfcraft-content",
  "pdfcraft-cos",
@@ -4120,7 +4137,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-engine"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "chrono",
  "icu_properties",
@@ -4172,14 +4189,14 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-export"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "flate2",
 ]
 
 [[package]]
 name = "pdfcraft-filters"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "flate2",
  "proptest",
@@ -4189,16 +4206,17 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-fonts"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "harfrust",
  "pdfcraft-cos",
  "skrifa 0.44.0",
+ "unicode-bidi",
 ]
 
 [[package]]
 name = "pdfcraft-forms"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "hayro-syntax",
  "pdfcraft-content",
@@ -4210,11 +4228,11 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-geom"
-version = "0.6.0"
+version = "0.7.1"
 
 [[package]]
 name = "pdfcraft-hot-folder"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "chrono",
  "eframe",
@@ -4237,7 +4255,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-hot-folder-service"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "ctrlc",
  "serde",
@@ -4247,14 +4265,14 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-js"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "boa_engine",
 ]
 
 [[package]]
 name = "pdfcraft-measure"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "pdfcraft-annot",
  "pdfcraft-content",
@@ -4266,14 +4284,14 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-model"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "pdfcraft-cos",
 ]
 
 [[package]]
 name = "pdfcraft-ocr"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "image",
  "ocrs",
@@ -4286,7 +4304,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-optimize"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "image",
  "pdfcraft-annot",
@@ -4299,7 +4317,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-organize"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "hayro-syntax",
  "pdfcraft-content",
@@ -4309,7 +4327,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-platform"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "async-channel",
  "futures-lite",
@@ -4318,7 +4336,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-preflight"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "pdfcraft-cos",
  "pdfcraft-model",
@@ -4326,8 +4344,9 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-print"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
+ "craft-print",
  "pdfcraft-content",
  "pdfcraft-cos",
  "pdfcraft-model",
@@ -4336,7 +4355,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-redact"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "pdfcraft-annot",
  "pdfcraft-content",
@@ -4350,7 +4369,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-render"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "bytemuck",
  "flate2",
@@ -4362,13 +4381,14 @@ dependencies = [
  "lopdf",
  "pdfcraft-cos",
  "pdfcraft-fonts",
+ "serde",
  "skrifa 0.44.0",
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "pdfcraft-sign"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "aes 0.9.3",
  "aws-lc-rs",
@@ -4402,7 +4422,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-ui-egui"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -4429,6 +4449,7 @@ dependencies = [
  "png 0.18.1",
  "pollster 1.0.1",
  "rfd",
+ "rustix 1.1.5",
  "serde",
  "serde_json",
  "skrifa 0.44.0",
@@ -4438,11 +4459,12 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "winsafe",
 ]
 
 [[package]]
 name = "pdfcraft-web"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "eframe",
  "egui",
@@ -4454,7 +4476,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-xfa"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "base64 0.22.1",
  "image",
@@ -4468,7 +4490,7 @@ dependencies = [
 
 [[package]]
 name = "pdfcraft-xfdf"
-version = "0.6.0"
+version = "0.7.1"
 dependencies = [
  "pdfcraft-annot",
  "pdfcraft-cos",
@@ -5444,7 +5466,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6162,7 +6184,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6473,7 +6495,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7187,7 +7209,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

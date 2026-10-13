@@ -318,7 +318,7 @@ impl HotFolderApp {
                     *self = Self::new(self.path.clone());
                     self.language = language;
                 }
-                ui.checkbox(&mut self.errors_only, t("Show errors only"));
+                ui.add(crate::widgets::checkbox(&mut self.errors_only, t("Show errors only")));
                 let mut selected = self.selected;
                 for (index, task) in self.config.tasks.iter().enumerate() {
                     let status = self.state.tasks.get(&task.id);
@@ -375,7 +375,7 @@ impl HotFolderApp {
                     }
                     let mut action = None;
                     let mut enabled = self.startup_enabled;
-                    if ui.add_enabled(installed, egui::Checkbox::new(&mut enabled, t("Start with the system"))).changed() {
+                    if ui.add_enabled(installed, crate::widgets::checkbox(&mut enabled, t("Start with the system"))).changed() {
                         action = Some(if enabled { "enable" } else { "disable" });
                     }
                     if ui.add_enabled(installed && !running, egui::Button::new(t("Start service"))).clicked() {
@@ -444,13 +444,16 @@ impl HotFolderApp {
                         folder(ui, &mut task.input, t(if local { "Input folder" } else { "Staging folder" }), lang);
                         folder(ui, &mut task.output, t("Output folder"), lang);
                         if local {
-                            ui.checkbox(&mut task.recursive, t("Include subfolders"));
+                            ui.add(crate::widgets::checkbox(&mut task.recursive, t("Include subfolders")));
                         }
                         ui.horizontal(|ui| {
-                            ui.checkbox(&mut task.pdf, "PDF");
-                            ui.checkbox(&mut task.images, t(if local { "Images (PNG, JPEG, TIFF, BMP)" } else { "Images (PNG, JPEG, TIFF)" }));
+                            ui.add(crate::widgets::checkbox(&mut task.pdf, "PDF"));
+                            ui.add(crate::widgets::checkbox(
+                                &mut task.images,
+                                t(if local { "Images (PNG, JPEG, TIFF, BMP)" } else { "Images (PNG, JPEG, TIFF)" }),
+                            ));
                         });
-                        ui.checkbox(&mut task.analysis_only, t("Analyze without OCR"));
+                        ui.add(crate::widgets::checkbox(&mut task.analysis_only, t("Analyze without OCR")));
                         if task.analysis_only {
                             ui.weak(t("Creates JSON layout reports. OCR, image changes and blank-page removal are disabled."));
                         }
@@ -458,8 +461,8 @@ impl HotFolderApp {
                         ui.separator();
                         ui.heading(t("Schedule"));
                         ui.horizontal(|ui| {
-                            ui.radio_value(&mut task.once, true, t("Run once"));
-                            ui.radio_value(&mut task.once, false, t("Recurring"));
+                            crate::widgets::radio_value(ui, &mut task.once, true, t("Run once"));
+                            crate::widgets::radio_value(ui, &mut task.once, false, t("Recurring"));
                         });
                         if !task.once {
                             calendar(ui, &mut task.schedule, lang);
@@ -479,9 +482,9 @@ impl HotFolderApp {
                         if local {
                             ui.heading(t("Original files"));
                             ui.horizontal_wrapped(|ui| {
-                                ui.radio_value(&mut task.originals, hf::Originals::Keep, t("Keep"));
-                                ui.radio_value(&mut task.originals, hf::Originals::Move, t("Move after success"));
-                                ui.radio_value(&mut task.originals, hf::Originals::Delete, t("Delete after success"));
+                                crate::widgets::radio_value(ui, &mut task.originals, hf::Originals::Keep, t("Keep"));
+                                crate::widgets::radio_value(ui, &mut task.originals, hf::Originals::Move, t("Move after success"));
+                                crate::widgets::radio_value(ui, &mut task.originals, hf::Originals::Delete, t("Delete after success"));
                             });
                             if task.originals == hf::Originals::Move {
                                 folder(ui, &mut task.archive, t("Archive folder"), lang);
@@ -507,11 +510,11 @@ impl HotFolderApp {
                                 ui.label(t("Resolution (dpi)"));
                                 ui.add(egui::DragValue::new(&mut task.settings.dpi).range(72.0..=600.0));
                             });
-                            ui.checkbox(&mut task.settings.recognize, t("Add searchable text"));
-                            ui.checkbox(&mut task.settings.skip_text_pages, t("Skip pages that already contain text"));
-                            ui.checkbox(&mut task.settings.auto_rotate, t("Automatically correct page orientation"));
-                            ui.checkbox(&mut task.settings.deskew, t("Straighten skewed scans"));
-                            ui.checkbox(&mut task.settings.auto_crop, t("Crop to detected paper edges"));
+                            ui.add(crate::widgets::checkbox(&mut task.settings.recognize, t("Add searchable text")));
+                            ui.add(crate::widgets::checkbox(&mut task.settings.skip_text_pages, t("Skip pages that already contain text")));
+                            ui.add(crate::widgets::checkbox(&mut task.settings.auto_rotate, t("Automatically correct page orientation")));
+                            ui.add(crate::widgets::checkbox(&mut task.settings.deskew, t("Straighten skewed scans")));
+                            ui.add(crate::widgets::checkbox(&mut task.settings.auto_crop, t("Crop to detected paper edges")));
                             ui.add_enabled_ui(task.settings.auto_crop, |ui| {
                                 ui.horizontal(|ui| {
                                     ui.label(t("Safety margin (pt)"));
@@ -520,10 +523,10 @@ impl HotFolderApp {
                             });
                             ui.weak(t("Uncertain orientations and paper edges are kept unchanged."));
                             image_preparation(ui, &mut task.preprocessing, lang);
-                            ui.checkbox(&mut task.remove_blank_pages, t("Remove completely white pages"));
+                            ui.add(crate::widgets::checkbox(&mut task.remove_blank_pages, t("Remove completely white pages")));
                             if task.remove_blank_pages {
                                 let mut archive = task.blank_archive.is_some();
-                                if ui.checkbox(&mut archive, t("Save removed blank pages separately")).changed() {
+                                if ui.add(crate::widgets::checkbox(&mut archive, t("Save removed blank pages separately"))).changed() {
                                     task.blank_archive = archive.then(PathBuf::new);
                                 }
                                 if let Some(path) = &mut task.blank_archive {
@@ -657,10 +660,10 @@ fn image_preparation(ui: &mut egui::Ui, settings: &mut pdfcraft_engine::hot_fold
         ui.label(t("Pages to process (empty = all; example: 1-3,5)"));
         ui.text_edit_singleline(&mut settings.pages);
         ui.weak(t("Only selected pages are included in the output."));
-        ui.checkbox(&mut settings.grayscale, t("Convert to grayscale"));
-        ui.checkbox(&mut settings.invert, t("Invert colors"));
-        ui.checkbox(&mut settings.median_filter, t("Reduce noise (median filter)"));
-        ui.checkbox(&mut settings.split_spreads, t("Split spreads into left and right pages"));
+        ui.add(crate::widgets::checkbox(&mut settings.grayscale, t("Convert to grayscale")));
+        ui.add(crate::widgets::checkbox(&mut settings.invert, t("Invert colors")));
+        ui.add(crate::widgets::checkbox(&mut settings.median_filter, t("Reduce noise (median filter)")));
+        ui.add(crate::widgets::checkbox(&mut settings.split_spreads, t("Split spreads into left and right pages")));
         ui.horizontal(|ui| {
             ui.label(t("Brightness"));
             ui.add(egui::DragValue::new(&mut settings.brightness).range(-100..=100));
@@ -668,7 +671,7 @@ fn image_preparation(ui: &mut egui::Ui, settings: &mut pdfcraft_engine::hot_fold
             ui.add(egui::DragValue::new(&mut settings.contrast).range(-100.0..=100.0));
         });
         let mut binary = settings.threshold.is_some();
-        if ui.checkbox(&mut binary, t("Convert to black and white")).changed() {
+        if ui.add(crate::widgets::checkbox(&mut binary, t("Convert to black and white"))).changed() {
             settings.threshold = binary.then_some(128);
         }
         if let Some(threshold) = &mut settings.threshold {
@@ -689,7 +692,7 @@ fn image_preparation(ui: &mut egui::Ui, settings: &mut pdfcraft_engine::hot_fold
                 ui.horizontal_wrapped(|ui| {
                     ui.label(t("Page"));
                     ui.add(egui::DragValue::new(&mut region.page).range(0..=10000));
-                    ui.checkbox(&mut region.exclude, t("Exclude this area"));
+                    ui.add(crate::widgets::checkbox(&mut region.exclude, t("Exclude this area")));
                     if ui.button(t("Remove area")).clicked() {
                         remove = Some(index);
                     }
@@ -751,7 +754,7 @@ fn output_steps(ui: &mut egui::Ui, plan: &mut output::OutputPlan, language: Lang
                     }
                 });
                 let mut custom = step.folder.is_some();
-                if ui.checkbox(&mut custom, t("Use another output folder")).changed() {
+                if ui.add(crate::widgets::checkbox(&mut custom, t("Use another output folder"))).changed() {
                     step.folder = custom.then(PathBuf::new);
                 }
                 if let Some(path) = &mut step.folder {
@@ -825,7 +828,7 @@ fn optimization_images(ui: &mut egui::Ui, settings: &mut output::optimization::I
     let t = |key| language.t(key);
     ui.push_id(id, |ui| {
         ui.label(title);
-        ui.checkbox(&mut settings.downsample, t("Downsample images"));
+        ui.add(crate::widgets::checkbox(&mut settings.downsample, t("Downsample images")));
         ui.add_enabled_ui(settings.downsample, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(t("Target resolution (ppi)"));
@@ -1143,8 +1146,13 @@ mod tests {
         let task = h.state_mut().config.tasks.first_mut().unwrap();
         task.input = input;
         task.output = output;
+        h.run_steps(3);
+        h.get_by_label("Save").scroll_to_me();
+        h.run_steps(20);
+        assert!(h.ctx.content_rect().contains_rect(h.get_by_label("Save").rect()), "Save must be visible before clicking");
         h.get_by_label("Save").click();
         h.run_steps(2);
+        assert!(h.state().error.is_none(), "{:?}", h.state().error);
         let config = hf::load_config(&path).unwrap();
         assert_eq!(config.tasks.len(), 1);
         assert!(!config.tasks[0].enabled);

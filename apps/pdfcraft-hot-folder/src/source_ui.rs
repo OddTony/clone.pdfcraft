@@ -161,12 +161,12 @@ impl SourceUi {
                     ui.add(egui::DragValue::new(&mut settings.port).range(1..=65535));
                 });
                 ui.horizontal_wrapped(|ui| {
-                    ui.radio_value(&mut settings.security, source::FtpSecurity::ExplicitTls, t("FTP with TLS"));
-                    ui.radio_value(&mut settings.security, source::FtpSecurity::Plain, t("Unencrypted FTP"));
+                    crate::widgets::radio_value(ui, &mut settings.security, source::FtpSecurity::ExplicitTls, t("FTP with TLS"));
+                    crate::widgets::radio_value(ui, &mut settings.security, source::FtpSecurity::Plain, t("Unencrypted FTP"));
                 });
                 line(ui, t("Username"), &mut settings.username);
                 line(ui, t("Server folder"), &mut settings.folder);
-                ui.checkbox(&mut settings.recursive, t("Include subfolders"));
+                ui.add(crate::widgets::checkbox(&mut settings.recursive, t("Include subfolders")));
                 line(ui, t("Credential ID"), &mut settings.credential_id);
                 ui.label(t("Password"));
                 ui.add(egui::TextEdit::singleline(&mut self.password).password(true));
@@ -270,7 +270,7 @@ fn action(ui: &mut egui::Ui, value: &mut source::SourceAction, destination_label
     let old = kind;
     ui.horizontal_wrapped(|ui| {
         for (index, name) in ["Keep", "Move after success", "Delete after success"].iter().enumerate() {
-            ui.radio_value(&mut kind, index, t(name));
+            crate::widgets::radio_value(ui, &mut kind, index, t(name));
         }
     });
     if old != kind {
