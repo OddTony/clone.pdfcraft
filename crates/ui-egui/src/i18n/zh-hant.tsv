@@ -2226,3 +2226,6 @@ animation effects	Off	關
 	This document is trying to open a local file:	此文件正嘗試開啟本機檔案：
 	Move tag earlier	將標記前移
 	Move tag later	將標記後移
+
+# Preferences: the find field docked in the toolbar.
+	Find text in the toolbar	在工具列中尋找文字

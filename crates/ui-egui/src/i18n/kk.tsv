@@ -2350,3 +2350,6 @@ animation effects	Off	Өшірулі
 	This document is trying to open a local file:	Бұл құжат жергілікті файлды ашуға әрекеттеніп жатыр:
 	Move tag earlier	Тегті ертерек жылжыту
 	Move tag later	Тегті кейінірек жылжыту
+
+# Preferences: the find field docked in the toolbar.
+	Find text in the toolbar	Құралдар тақтасында мәтін іздеу

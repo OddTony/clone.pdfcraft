@@ -2312,6 +2312,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         | QuickTool::Snapshot => false,
     };
     let prefs = &app.comment_prefs;
+    let docked_find = app.find_in_toolbar;
     let units = app.units;
     let allowed = doc.allows_annotation();
     let comments_hidden = doc.comments_hidden();
@@ -3257,7 +3258,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             });
         });
     }
-    find_bar(view, info.pages.len(), avail, ui, &t);
+    find_bar(view, info.pages.len(), avail, ui, &t, docked_find);
     if tool == QuickTool::EnhanceCamera {
         crate::camera_ui::bar(ui.ctx(), view, avail, &t, can_modify);
     }
@@ -3606,16 +3607,19 @@ fn set_layers(app: &mut PdfCraftApp, index: usize, changes: &[(LayerOp, (u32, u1
     }
 }
 
-/// Acrobat-style floating find bar at the top-right of the document area.
-fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: &Tokens) {
+/// Acrobat-style floating find bar at the top-right of the document area. With the find field in
+/// the toolbar (`PdfCraftApp::find_in_toolbar`, [`find_toolbar`]) nothing floats.
+fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: &Tokens, docked: bool) {
+    if docked {
+        return;
+    }
     let Some(find) = view.find.as_mut() else { return };
     // The Search panel shows this search.
     if find.in_panel {
         return;
     }
-    let mut close = false;
-    let mut step: Option<bool> = None;
     let searched = view.texts.len() + view.text_failed.len();
+    let mut outcome = FindOutcome::default();
     egui::Area::new(egui::Id::new("find-bar"))
         .order(egui::Order::Middle)
         .pivot(Align2::RIGHT_TOP)
@@ -3628,76 +3632,128 @@ fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: 
                 .shadow(egui::Shadow { offset: [0, 4], blur: 16, spread: 0, color: Color32::from_black_alpha(if t.dark() { 90 } else { 30 }) })
                 .inner_margin(egui::Margin::symmetric(10, 6))
                 .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.add(icons::image("search", 16.0, t.text_muted));
-                        let edit = egui::TextEdit::singleline(&mut find.query)
-                            .id(egui::Id::new("find-input"))
-                            .hint_text(tl!("Find text"))
-                            .desired_width(220.0)
-                            .frame(egui::Frame::NONE);
-                        let r = ui.add(edit);
-                        if find.focus {
-                            r.request_focus();
-                            find.focus = false;
-                        }
-                        if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                            step = Some(!ui.input(|i| i.modifiers.shift));
-                            r.request_focus();
-                        }
-                        if r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                            close = true;
-                        }
-                        let status = if find.query.trim().is_empty() {
-                            String::new()
-                        } else if find.matches.is_empty() {
-                            if searched < pages {
-                                crate::i18n::fmt(tl!("Searching… {s}/{p}"), &[("s", &searched.to_string()), ("p", &pages.to_string())])
-                            } else {
-                                tl!("No matches").to_string()
-                            }
-                        } else {
-                            let more = if searched < pages { "+" } else { "" };
-                            crate::i18n::fmt(
-                                tl!("{c} of {n}{more}"),
-                                &[
-                                    ("c", &find.current.map(|c| c + 1).unwrap_or(0).to_string()),
-                                    ("n", &find.matches.len().to_string()),
-                                    ("more", more),
-                                ],
-                            )
-                        };
-                        ui.label(egui::RichText::new(status).font(theme::regular(12.0)).color(t.text_muted));
-                        let tip = crate::commands::key_tip(ui.ctx(), tl!("Previous ({key})"), crate::commands::FIND_PREV);
-                        if icons::button(ui, "chevron-up", 26.0, false, &tip).clicked() {
-                            step = Some(false);
-                        }
-                        let tip = crate::commands::key_tip(ui.ctx(), tl!("Next ({key})"), crate::commands::FIND_NEXT);
-                        if icons::button(ui, "chevron-down", 26.0, false, &tip).clicked() {
-                            step = Some(true);
-                        }
-                        let opts = icons::button(ui, "settings-2", 26.0, find.case_sensitive || find.whole_words, tl!("Find options"));
-                        egui::Popup::menu(&opts).show(|ui| {
-                            let a = ui.add(widgets::checkbox(&mut find.whole_words, tl!("Whole words only"))).changed();
-                            let b = ui.add(widgets::checkbox(&mut find.case_sensitive, tl!("Case-sensitive"))).changed();
-                            if a || b {
-                                // Search again with the new options.
-                                find.case_query.clear();
-                            }
-                        });
-                        if icons::button(ui, "x", 26.0, false, tl!("Close (Esc)")).clicked() {
-                            close = true;
-                        }
-                    });
+                    outcome = find_row(find, pages, searched, 220.0, ui, t);
                 });
         });
-    if close {
+    find_apply(view, outcome);
+}
+
+/// The find field docked in the toolbar, left of the command search: the same controls as the
+/// floating bar, always there. Typing into the empty field starts a search; Esc or the close
+/// button ends it and leaves the field empty.
+pub(crate) fn find_toolbar(view: &mut DocView, pages: usize, ui: &mut egui::Ui, t: &Tokens) {
+    let searched = view.texts.len() + view.text_failed.len();
+    let mut outcome = FindOutcome::default();
+    let mut started: Option<String> = None;
+    egui::Frame::NONE
+        .fill(t.field)
+        .stroke(Stroke::new(1.0, t.border))
+        .corner_radius(CornerRadius::same(16))
+        .inner_margin(egui::Margin::symmetric(8, 0))
+        .show(ui, |ui| {
+            ui.set_height(30.0);
+            // Left to right inside the toolbar's right-to-left row: icon, field, count, buttons.
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| match view.find.as_mut().filter(|find| !find.in_panel) {
+                Some(find) => outcome = find_row(find, pages, searched, 170.0, ui, t),
+                None => {
+                    // No search yet: a draft field; the first character opens the search with it.
+                    let mut draft = String::new();
+                    ui.horizontal_centered(|ui| {
+                        ui.add(icons::image("search", 16.0, t.text_muted));
+                        let r = ui.add(find_input(&mut draft, 170.0));
+                        if r.changed() && !draft.is_empty() {
+                            started = Some(draft.clone());
+                        }
+                    });
+                }
+            });
+        });
+    if let Some(query) = started {
+        view.find = Some(Find { query, focus: true, ..Default::default() });
+    }
+    find_apply(view, outcome);
+}
+
+/// What the user asked of the find controls in one frame.
+#[derive(Default)]
+pub(crate) struct FindOutcome {
+    close: bool,
+    /// `Some(forward)`: go to the next (true) or previous match.
+    step: Option<bool>,
+}
+
+fn find_input(query: &mut String, width: f32) -> egui::TextEdit<'_> {
+    egui::TextEdit::singleline(query).id(egui::Id::new("find-input")).hint_text(tl!("Find text")).desired_width(width).frame(egui::Frame::NONE)
+}
+
+/// The find controls, floating or docked: the field, the match count, previous, next, options and
+/// close. `searched` is how many pages have their text extracted so far.
+fn find_row(find: &mut Find, pages: usize, searched: usize, input_width: f32, ui: &mut egui::Ui, t: &Tokens) -> FindOutcome {
+    let mut outcome = FindOutcome::default();
+    ui.horizontal_centered(|ui| {
+        ui.add(icons::image("search", 16.0, t.text_muted));
+        let r = ui.add(find_input(&mut find.query, input_width));
+        if find.focus {
+            r.request_focus();
+            find.focus = false;
+        }
+        if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            outcome.step = Some(!ui.input(|i| i.modifiers.shift));
+            r.request_focus();
+        }
+        if r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            outcome.close = true;
+        }
+        let status = if find.query.trim().is_empty() {
+            String::new()
+        } else if find.matches.is_empty() {
+            if searched < pages {
+                crate::i18n::fmt(tl!("Searching… {s}/{p}"), &[("s", &searched.to_string()), ("p", &pages.to_string())])
+            } else {
+                tl!("No matches").to_string()
+            }
+        } else {
+            let more = if searched < pages { "+" } else { "" };
+            crate::i18n::fmt(
+                tl!("{c} of {n}{more}"),
+                &[("c", &find.current.map(|c| c + 1).unwrap_or(0).to_string()), ("n", &find.matches.len().to_string()), ("more", more)],
+            )
+        };
+        ui.label(egui::RichText::new(status).font(theme::regular(12.0)).color(t.text_muted));
+        let tip = crate::commands::key_tip(ui.ctx(), tl!("Previous ({key})"), crate::commands::FIND_PREV);
+        if icons::button(ui, "chevron-up", 26.0, false, &tip).clicked() {
+            outcome.step = Some(false);
+        }
+        let tip = crate::commands::key_tip(ui.ctx(), tl!("Next ({key})"), crate::commands::FIND_NEXT);
+        if icons::button(ui, "chevron-down", 26.0, false, &tip).clicked() {
+            outcome.step = Some(true);
+        }
+        let opts = icons::button(ui, "settings-2", 26.0, find.case_sensitive || find.whole_words, tl!("Find options"));
+        egui::Popup::menu(&opts).show(|ui| {
+            let a = ui.add(widgets::checkbox(&mut find.whole_words, tl!("Whole words only"))).changed();
+            let b = ui.add(widgets::checkbox(&mut find.case_sensitive, tl!("Case-sensitive"))).changed();
+            if a || b {
+                // Search again with the new options.
+                find.case_query.clear();
+            }
+        });
+        if icons::button(ui, "x", 26.0, false, tl!("Close (Esc)")).clicked() {
+            outcome.close = true;
+        }
+    });
+    outcome
+}
+
+/// Act on the find controls: close, search again after the query changed, step between matches.
+fn find_apply(view: &mut DocView, outcome: FindOutcome) {
+    if outcome.close {
         view.find = None;
         return;
     }
-    if find.query != find.case_query {
+    if view.find.as_ref().is_some_and(|f| f.query != f.case_query) {
         view.rerun_find();
     }
-    if let Some(forward) = step {
+    if let Some(forward) = outcome.step {
         view.find_step(forward);
     }
 }

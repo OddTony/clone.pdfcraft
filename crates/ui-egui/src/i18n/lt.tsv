@@ -2596,3 +2596,6 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+
+# Preferences: the find field docked in the toolbar.
+	Find text in the toolbar	Teksto paieška įrankių juostoje
