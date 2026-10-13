@@ -275,3 +275,48 @@ fn a_document_whose_page_tree_is_missing_edits_the_pages_the_reader_shows() {
         assert_eq!(pages, expected, "{name}");
     }
 }
+
+/// Like [`fixture_without_page_tree`], but the scanning reader shows different pages from the
+/// page objects: it skips the blank 200 x 200 page (no `/Contents`) and shows the Text
+/// annotation (which has `/Contents`) as a page. No page tree may be rebuilt from such a file.
+fn fixture_whose_scan_disagrees() -> Vec<u8> {
+    let stream = |content: &str| format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()).into_bytes();
+    let objs: Vec<Vec<u8>> = vec![
+        b"<< /Type /Catalog /Pages 9 0 R >>".to_vec(),
+        b"<< /Type /Page /Parent 9 0 R /MediaBox [0 0 100 100] /Contents 5 0 R >>".to_vec(),
+        b"<< /Type /Page /Parent 9 0 R /MediaBox [0 0 200 200] >>".to_vec(),
+        b"<< /Type /Page /Parent 9 0 R /MediaBox [0 0 300 300] /Contents 6 0 R /Annots [7 0 R] >>".to_vec(),
+        stream("0 0 m 10 10 l S"),
+        stream("0 0 m 20 20 l S"),
+        b"<< /Type /Annot /Subtype /Text /Rect [10 10 30 30] /Contents (hello) >>".to_vec(),
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(o);
+        out.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+#[test]
+fn a_page_tree_is_not_rebuilt_when_the_reader_shows_other_pages() {
+    let input = tmp("scan-disagrees", "in.pdf");
+    std::fs::write(&input, fixture_whose_scan_disagrees()).unwrap();
+    let shown = pdfcraft_render::inspect(std::sync::Arc::new(fixture_whose_scan_disagrees()), None).unwrap();
+    assert_eq!(shown.pages.len(), 3);
+    assert!(shown.pages.iter().all(|p| p.width != 200.0), "the reader must not show the blank page");
+    let output = tmp("scan-disagrees", "out.pdf");
+    let out = Command::new(BIN).args(["edit", input.to_str().unwrap(), "--out", output.to_str().unwrap(), "--delete", "2"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(String::from_utf8_lossy(&out.stderr), "pdfcraft-cli: the document's page tree lists no pages: the file is damaged\n");
+    assert!(!output.exists(), "no page may be deleted");
+}

@@ -179,6 +179,9 @@ pub fn recover_page_tree(doc: &mut Document) -> Result<usize, OrganizeError> {
 
 fn check(indices: &[usize], n: usize) -> Result<(), OrganizeError> {
     match indices.iter().find(|i| **i >= n) {
+        // A viewer still shows pages a lost page tree leaves out (#1656): "page 1 does not
+        // exist" would contradict it.
+        Some(_) if n == 0 => Err(OrganizeError::Invalid("the document's page tree lists no pages: the file is damaged".into())),
         Some(i) => Err(OrganizeError::NoSuchPage(*i)),
         None => Ok(()),
     }
