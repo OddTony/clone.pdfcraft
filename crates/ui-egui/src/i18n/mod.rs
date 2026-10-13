@@ -2281,7 +2281,7 @@ mod tests {
         assert_eq!((0..=3).map(|n| (vi.0.plural)(n)).collect::<Vec<_>>(), [0, 0, 0, 0]);
         for n in [0, 1, 2, 5] {
             assert_eq!(trn(vi, n, "{n} page", "{n} pages"), format!("{n} trang"));
-            assert_eq!(trn(vi, n, "{n} field", "{n} fields"), format!("{n} ô"));
+            assert_eq!(trn(vi, n, "{n} field", "{n} fields"), format!("{n} trường"));
         }
         let mut app = crate::PdfCraftApp::default();
         app.set_option("language", "vi").unwrap();
@@ -2341,18 +2341,18 @@ mod tests {
         assert_eq!(tr_ctx(vi, "action wizard", "Start"), "Bắt đầu");
         assert_eq!(["Slow", "Normal", "Fast"].map(|label| tr_ctx(vi, "scroll speed", label)), ["Chậm", "Bình thường", "Nhanh"]);
         let months = [
-            ("January", "Tháng Một", "tháng Một"),
-            ("February", "Tháng Hai", "tháng Hai"),
-            ("March", "Tháng Ba", "tháng Ba"),
-            ("April", "Tháng Tư", "tháng Tư"),
-            ("May", "Tháng Năm", "tháng Năm"),
-            ("June", "Tháng Sáu", "tháng Sáu"),
-            ("July", "Tháng Bảy", "tháng Bảy"),
-            ("August", "Tháng Tám", "tháng Tám"),
-            ("September", "Tháng Chín", "tháng Chín"),
-            ("October", "Tháng Mười", "tháng Mười"),
-            ("November", "Tháng Mười Một", "tháng Mười Một"),
-            ("December", "Tháng Mười Hai", "tháng Mười Hai"),
+            ("January", "Tháng 1", "tháng 1"),
+            ("February", "Tháng 2", "tháng 2"),
+            ("March", "Tháng 3", "tháng 3"),
+            ("April", "Tháng 4", "tháng 4"),
+            ("May", "Tháng 5", "tháng 5"),
+            ("June", "Tháng 6", "tháng 6"),
+            ("July", "Tháng 7", "tháng 7"),
+            ("August", "Tháng 8", "tháng 8"),
+            ("September", "Tháng 9", "tháng 9"),
+            ("October", "Tháng 10", "tháng 10"),
+            ("November", "Tháng 11", "tháng 11"),
+            ("December", "Tháng 12", "tháng 12"),
         ];
         for (source, standalone, in_date) in months {
             assert_eq!(tr(vi, source), standalone);
@@ -2364,6 +2364,31 @@ mod tests {
         );
         assert_eq!(tr_ctx(vi, "certificate", "Subject"), "Chủ thể chứng chỉ");
         assert_eq!(tr(vi, "Subject"), "Chủ đề");
+        // Appearance: object/comment/signature look vs Preferences theme section.
+        assert_eq!(tr(vi, "Appearance"), "Diện mạo");
+        assert_eq!(tr_ctx(vi, "theme", "Appearance"), "Giao diện");
+        // PDF form Field — never the visual-box sense "ô".
+        assert_eq!(tr(vi, "Field"), "Trường");
+        assert_eq!(tr(vi, "Fields"), "Các trường");
+        assert_eq!(tr(vi, "Form fields"), "Các trường biểu mẫu");
+        assert_eq!(tr(vi, "Text field"), "Trường văn bản");
+        assert_eq!(tr(vi, "Date field"), "Trường ngày");
+        assert_eq!(tr(vi, "Image field"), "Trường hình ảnh");
+        assert_eq!(tr(vi, "Field properties"), "Thuộc tính trường");
+        assert_eq!(tr(vi, "Field list"), "Danh sách trường");
+        assert_eq!(tr(vi, "{kind} field"), "Trường {kind}");
+        // Redaction: permanent removal, not temporary cover.
+        assert_eq!(tr(vi, "Mark for redaction"), "Đánh dấu để xóa");
+        assert_eq!(tr(vi, "Apply redactions"), "Xóa vĩnh viễn nội dung đã đánh dấu");
+        assert_eq!(tr(vi, "Redact text and images"), "Xóa nội dung nhạy cảm trong văn bản và hình ảnh");
+        assert_eq!(tr(vi, "Clear form"), "Xóa dữ liệu biểu mẫu");
+        // Fill & Sign tool section title — fill-in, not paint fill.
+        assert_eq!(tr(vi, "Fill"), "Điền");
+        assert_eq!(tr(vi, "Fill & Sign"), "Điền & Ký");
+        assert_eq!(
+            tr(vi, "Remove \"{name}\" from this list? The file itself is not deleted."),
+            "Gỡ \"{name}\" khỏi danh sách này? Bản thân tệp không bị xóa."
+        );
         for field in [
             "Issued to",
             "Issued by",
@@ -2425,6 +2450,7 @@ mod tests {
     #[test]
     fn vietnamese_leaves_no_unapproved_english_fallbacks() {
         let vi = Lang::from_code("vi").expect("vi registered");
+        // Keep in sync with the VI_KEEP_AS_IS comment block in vi.tsv.
         const KEEP_AS_IS: &[&str] = &[
             "OK",
             "Digital ID",
@@ -2443,7 +2469,6 @@ mod tests {
             "Keychain  ·  ",
             "{0}: {1}",
             "{field}: {e}",
-            "{month} {day}, {y}",
             "{month} {y}",
             "{n} {kind}",
             "{rule} - {status}",
@@ -2454,15 +2479,6 @@ mod tests {
             "−Bin",
             "`{command}` {when}",
             "English",
-            "Discord",
-            "Bitmap",
-            "Gamma",
-            "Cmd",
-            "Shift",
-            "Sumi-e",
-            "Mezzotint",
-            "Mezzotint…",
-            "Script:",
         ];
         const KEY_CAPS: &[&str] = &["Ctrl", "Shift", "Delete", "Esc", "Home", "End", "Space"];
         let (entries, errors) = catalog::parse_entries(vi.0.source, vi.0.plural_forms());

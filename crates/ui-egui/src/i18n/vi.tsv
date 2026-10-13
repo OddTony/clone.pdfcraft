@@ -24,15 +24,19 @@
 # Lưu thành… · Undo Hoàn tác · Redo Làm lại · Cut Cắt · Copy Sao chép · Paste Dán · Delete Xóa ·
 # Cancel Hủy · Close Đóng · Open… Mở… · Print… In… · Preferences Tùy chọn · Help Trợ giúp · View Xem ·
 # Pages/Page Trang · Document Tài liệu · Bookmark Dấu trang · Comment Bình luận · Signature Chữ ký ·
-# Form Biểu mẫu · Field (form field) Ô · Search/Find Tìm · Interface language Ngôn ngữ giao diện ·
-# Appearance (theme) Giao diện, (object/field visuals) Diện mạo · Type (signature pad) Nhập chữ,
+# Form Biểu mẫu · Field (form field) Trường · Fill (Fill & Sign section) Điền · Search/Find Tìm · Interface language Ngôn ngữ giao diện ·
+# Redact: Mark for redaction → Đánh dấu để xóa; Apply redactions → Xóa vĩnh viễn nội dung đã đánh dấu;
+# Redact text and images → Xóa nội dung nhạy cảm trong văn bản và hình ảnh (permanent removal, not cover).
+# Clear form → Xóa dữ liệu biểu mẫu (resets values, does not delete the form).
+# Appearance (theme) Giao diện, (object/comment/signature) Diện mạo · Type (signature pad) Nhập chữ,
 # (plain noun) Loại · Start (action wizard) Bắt đầu · Subject (certificate) Chủ thể chứng chỉ,
 # (document topic) Chủ đề · Fill & Sign Điền & Ký · Folder Thư mục · Tools Công cụ.
-# Months: standalone "Tháng Một" …; in the "calendar date" context lowercase "tháng Một" …
+# Months: standalone "Tháng 1" … "Tháng 12"; in the "calendar date" context lowercase "tháng 1" …
 # ("{month} {day}, {y}" is reordered to "{day} {month}, {y}", the Vietnamese order).
 # Weekdays (calendar weekday): CN T2 T3 T4 T5 T6 T7 (Sunday … Saturday).
 #
-# VI_KEEP_AS_IS (the translation is deliberately identical to the English source):
+# VI_KEEP_AS_IS (the translation is deliberately identical to the English source;
+# keep in sync with KEEP_AS_IS in i18n/mod.rs::vietnamese_leaves_no_unapproved_english_fallbacks):
 #   OK                              the universal dialog button
 #   Digital ID                      Acrobat-compatible product term, used as a name
 #   ZIP                             file-format name
@@ -47,6 +51,7 @@
 #   English                         the language's own name in the language picker
 #   {0}: {1}   {field}: {e}   {month} {y}   {n} {kind}   {rule} - {status}   `{command}` {when}
 #                                   pure placeholder templates with nothing to translate
+#                                   ({month} {day}, {y} is reordered to {day} {month}, {y}, not keep-as-is)
 #   +LOC  −LOC  ΔLOC  +Bin  −Bin    contributor-table column symbols
 #   Keychain  ·                     macOS Keychain prefix (product name)
 #   key context: Ctrl, Shift, Delete, Esc, Home, End, Space
@@ -146,6 +151,7 @@
 	General	Chung
 	Language	Ngôn ngữ
 	Appearance	Diện mạo
+theme	Appearance	Giao diện
 	Theme	Chủ đề
 	Light	Sáng
 	Dark	Tối
@@ -176,7 +182,7 @@
 	Bookmarks	Dấu trang
 	New bookmark	Dấu trang mới
 	Forms	Biểu mẫu
-	Form fields	Ô biểu mẫu
+	Form fields	Các trường biểu mẫu
 	Signatures	Chữ ký
 	Sign	Ký
 	Fill & Sign	Điền & Ký
@@ -228,7 +234,7 @@
 	Convert	Chuyển đổi
 	Optimize	Tối ưu hóa
 	Measure	Đo
-	Redact	Che nội dung
+	Redact	Xóa nội dung nhạy cảm
 	Search results	Kết quả tìm
 	No results	Không có kết quả
 	Page {n} of {total}	Trang {n} trên {total}
@@ -269,7 +275,7 @@
 	Actions	Hành động
 	Active	Đang dùng
 	Actual Size	Kích thước thực
-	Actual text	Văn bản thực
+	Actual text	Văn bản thực tế
 	Add	Thêm
 	Add Step	Thêm bước
 	Add a comment	Thêm bình luận
@@ -305,6 +311,7 @@
 	All pages	Tất cả các trang
 	All pages in document	Tất cả các trang trong tài liệu
 	All pages in range	Tất cả các trang trong phạm vi
+	Allow	Cho phép
 	Allow Rich Text Formatting	Cho phép định dạng văn bản phong phú
 	Allow user to enter custom text	Cho phép người dùng nhập văn bản tùy ý
 	Also recognize pages that already have text	Nhận dạng cả các trang đã có văn bản
@@ -323,7 +330,7 @@
 	Appearance settings…	Cài đặt giao diện…
 	Applies to 1 page	Áp dụng cho 1 trang
 	Applies to {n} pages	Áp dụng cho {n} trang
-	Apply redactions	Áp dụng việc che nội dung
+	Apply redactions	Xóa vĩnh viễn nội dung đã đánh dấu
 	Apply scale	Áp dụng tỷ lệ
 	Asks GitHub for the latest release. Nothing is downloaded or installed automatically.	Hỏi GitHub về bản phát hành mới nhất. Không có gì được tải xuống hoặc cài đặt tự động.
 	At most	Tối đa
@@ -335,7 +342,7 @@
 	Auto follows the system's text size. Pages always render at the display's full resolution.	Chế độ Tự động theo kích thước chữ của hệ thống. Các trang luôn được hiển thị ở độ phân giải đầy đủ của màn hình.
 	Auto portrait/landscape	Tự động dọc/ngang
 	Auto-rotate pages	Tự động xoay trang
-	Auto-size text to fit redaction region	Tự động chỉnh cỡ chữ vừa vùng che
+	Auto-size text to fit redaction region	Tự động chỉnh cỡ chữ vừa vùng xóa
 	Available	Có sẵn
 	Back side only	Chỉ mặt sau
 	Back to all tools	Quay lại tất cả công cụ
@@ -426,7 +433,7 @@
 	Combined {n} files	Đã kết hợp {n} tệp
 	Coming in milestone	Sẽ có ở cột mốc
 	Comment and form data	Dữ liệu bình luận và biểu mẫu
-	Commenting, filling in form fields, and signing existing signature fields	Bình luận, điền các ô biểu mẫu và ký vào các ô chữ ký có sẵn
+	Commenting, filling in form fields, and signing existing signature fields	Bình luận, điền các trường biểu mẫu và ký vào các trường chữ ký có sẵn
 	Comments & Forms	Bình luận & Biểu mẫu
 	Comments only	Chỉ bình luận
 	Commit selected value immediately	Lưu giá trị đã chọn ngay lập tức
@@ -527,7 +534,7 @@
 	Drawing scale changes. Use Actual size for full-scale plans.	Tỷ lệ bản vẽ thay đổi. Dùng Kích thước thực cho các bản vẽ tỷ lệ đầy đủ.
 	Drop PDFs, images, text files or folders here, or choose them.	Thả PDF, hình ảnh, tệp văn bản hoặc thư mục vào đây, hoặc chọn chúng.
 	Duplicate "{name}" onto:	Nhân bản "{name}" sang:
-	Duplicate Field	Nhân bản ô
+	Duplicate Field	Nhân bản trường
 	Duplicate…	Nhân bản…
 	Dynamic	Động
 	Dynamic XFA form laid out from its template: {pages}, {fields}.	Biểu mẫu XFA động được bố trí từ mẫu của nó: {pages}, {fields}.
@@ -581,13 +588,14 @@
 	Extract pages to a new document	Trích xuất trang sang tài liệu mới
 	Extracted 1 page	Đã trích xuất 1 trang
 	Extracted {n} pages	Đã trích xuất {n} trang
-	Field is used for file selection	Ô được dùng để chọn tệp
-	Field names (comma-separated)	Tên ô (phân tách bằng dấu phẩy)
-	Field names with + - * / and parentheses; put \\ before spaces in names.	Tên ô với + - * / và dấu ngoặc đơn; đặt \\ trước dấu cách trong tên.
-	Field value is in range:	Giá trị ô nằm trong phạm vi:
-	Field value is not validated	Giá trị ô không được kiểm tra hợp lệ
-	Field: {field} on page {p}	Ô: {field} trên trang {p}
-	Fields to reset (comma-separated; empty: all)	Các ô cần đặt lại (phân tách bằng dấu phẩy; để trống: tất cả)
+	Field is used for file selection	Trường được dùng để chọn tệp
+	Field names (comma-separated)	Tên trường (phân tách bằng dấu phẩy)
+	Field names with + - * / and parentheses; put \\ before spaces in names.	Tên trường với + - * / và dấu ngoặc đơn; đặt \\ trước dấu cách trong tên.
+
+	Field value is in range:	Giá trị trường nằm trong phạm vi:
+	Field value is not validated	Giá trị trường không được kiểm tra hợp lệ
+	Field: {field} on page {p}	Trường: {field} trên trang {p}
+	Fields to reset (comma-separated; empty: all)	Các trường cần đặt lại (phân tách bằng dấu phẩy; để trống: tất cả)
 	Figure {i} of {n}{page}	Hình {i} trên {n}{page}
 	File (.p12, .pfx)	Tệp (.p12, .pfx)
 	File Name	Tên tệp
@@ -601,7 +609,7 @@
 	Fill Color:	Màu tô:
 	Fill colour	Màu tô
 	Fill colour: none	Màu tô: không có
-	Filling in form fields and signing existing signature fields	Điền các ô biểu mẫu và ký vào các ô chữ ký có sẵn
+	Filling in form fields and signing existing signature fields	Điền các trường biểu mẫu và ký vào các trường chữ ký có sẵn
 	Filter comments	Lọc bình luận
 	Find a tag	Tìm một thẻ
 	Find options	Tùy chọn tìm
@@ -637,8 +645,8 @@
 	Fonts	Phông chữ
 	For page sizes and margins.	Dành cho kích thước trang và lề.
 	Form data and PDF forms	Dữ liệu biểu mẫu và biểu mẫu PDF
-	Form fields are flattened: their values stay visible. Saving rewrites the whole file.	Các ô biểu mẫu được làm phẳng: giá trị của chúng vẫn hiển thị. Việc lưu sẽ ghi lại toàn bộ tệp.
-	Form fields only	Chỉ các ô biểu mẫu
+	Form fields are flattened: their values stay visible. Saving rewrites the whole file.	Các trường biểu mẫu được làm phẳng: giá trị của chúng vẫn hiển thị. Việc lưu sẽ ghi lại toàn bộ tệp.
+	Form fields only	Chỉ các trường biểu mẫu
 	Form fill-in and digital signatures	Điền biểu mẫu và chữ ký số
 	Format	Định dạng
 	Format text	Định dạng văn bản
@@ -660,7 +668,7 @@
 	Hand (H)	Bàn tay (H)
 	Has JavaScript actions (run in M6)	Có các hành động JavaScript (chạy ở M6)
 	Height:	Chiều cao:
-	Hide field highlights	Ẩn tô sáng ô
+	Hide field highlights	Ẩn tô sáng trường
 	Hide layer	Ẩn lớp
 	Hide menu bar	Ẩn thanh trình đơn
 	Hide password	Ẩn mật khẩu
@@ -669,7 +677,7 @@
 	High Resolution	Độ phân giải cao
 	High resolution	Độ phân giải cao
 	Highlight Style:	Kiểu tô sáng:
-	Highlight fields	Tô sáng các ô
+	Highlight fields	Tô sáng các trường
 	Home	Trang chủ
 	Horizontal	Ngang
 	Horizontal reversed	Ngang đảo ngược
@@ -809,7 +817,7 @@
 	No photo chosen	Chưa chọn ảnh
 	No preview	Không có bản xem trước
 	No problems found: the document conforms to {level}.	Không tìm thấy vấn đề: tài liệu tuân thủ {level}.
-	No security	Không bảo mật
+	No security	Không có bảo mật
 	No sheets	Không có tờ
 	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	Không tìm thấy chữ ký trong khung. Hãy di chuyển khung lên chữ ký hoặc tăng độ nhạy nét mực.
 	No status has been set.	Chưa đặt trạng thái.
@@ -830,8 +838,8 @@
 	One word or phrase per line	Mỗi dòng một từ hoặc cụm từ
 	One {f} file per page, named after the document.	Mỗi trang một tệp {f}, đặt tên theo tài liệu.
 	Only change the colour of black text or line art	Chỉ đổi màu văn bản hoặc nét vẽ đường màu đen
-	Only checked properties will change. Mixed means the selected fields have different values.	Chỉ các thuộc tính được đánh dấu mới thay đổi. Hỗn hợp nghĩa là các ô đã chọn có giá trị khác nhau.
-	Only the page content changes: links, comments, form fields and bookmarks on the original pages stay.	Chỉ nội dung trang thay đổi: liên kết, bình luận, ô biểu mẫu và dấu trang trên các trang gốc được giữ nguyên.
+	Only checked properties will change. Mixed means the selected fields have different values.	Chỉ các thuộc tính được đánh dấu mới thay đổi. Hỗn hợp nghĩa là các trường đã chọn có giá trị khác nhau.
+	Only the page content changes: links, comments, form fields and bookmarks on the original pages stay.	Chỉ nội dung trang thay đổi: liên kết, bình luận, trường biểu mẫu và dấu trang trên các trang gốc được giữ nguyên.
 	Open	Mở
 	Open a PDF ({key})	Mở một PDF ({key})
 	Open a PDF to measure it.	Mở một PDF để đo.
@@ -904,7 +912,7 @@
 	Patterns	Họa tiết
 	Patterns (graphics objects)	Họa tiết (đối tượng đồ họa)
 	PdfCraft didn't shut down normally. These documents had changes that were autosaved:	PdfCraft không đóng bình thường. Các tài liệu này có thay đổi đã được tự động lưu:
-	PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider.	PdfCraft hoạt động ngoại tuyến. Không có đo từ xa, không cần tài khoản và không xử lý trên đám mây trừ khi bạn thêm nhà cung cấp.
+	PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider.	PdfCraft hoạt động ngoại tuyến. Không thu thập dữ liệu sử dụng, không cần tài khoản, và không xử lý đám mây trừ khi bạn thêm nhà cung cấp.
 	PdfCraft {c} is up to date.	PdfCraft {c} đã là bản mới nhất.
 	PdfCraft {v} is available.	PdfCraft {v} đã có sẵn.
 	Percentage	Phần trăm
@@ -964,10 +972,10 @@
 	Recommended tools	Công cụ được đề xuất
 	Recover	Khôi phục
 	Recover unsaved documents?	Khôi phục các tài liệu chưa lưu?
-	Redact all	Che tất cả
-	Redacted area fill colour:	Màu tô vùng bị che:
-	Redaction Tool Properties	Thuộc tính công cụ che nội dung
-	Redaction code:	Mã che nội dung:
+	Redact all	Xóa tất cả nội dung đã đánh dấu
+	Redacted area fill colour:	Màu tô vùng đã xóa:
+	Redaction Tool Properties	Thuộc tính công cụ xóa nội dung nhạy cảm
+	Redaction code:	Mã xóa nội dung nhạy cảm:
 	Reload	Tải lại
 	Reload documents when their files change on disk	Tải lại tài liệu khi tệp của chúng thay đổi trên đĩa
 	Remove checkmark	Bỏ dấu kiểm
@@ -1023,7 +1031,7 @@
 	Rotation:	Xoay:
 	Running action… file {d} of {t}	Đang chạy hành động… tệp {d} trên {t}
 	Same as interface ({language})	Giống giao diện ({language})
-	Sanitizing removes hidden information from the document: metadata, file attachments, comments, form fields (flattened), hidden text and layers, bookmarks, links, actions and scripts, and private application data.	Làm sạch sẽ loại bỏ thông tin ẩn khỏi tài liệu: siêu dữ liệu, tệp đính kèm, bình luận, ô biểu mẫu (được làm phẳng), văn bản và lớp ẩn, dấu trang, liên kết, hành động và script, cùng dữ liệu riêng của ứng dụng.
+	Sanitizing removes hidden information from the document: metadata, file attachments, comments, form fields (flattened), hidden text and layers, bookmarks, links, actions and scripts, and private application data.	Làm sạch sẽ loại bỏ thông tin ẩn khỏi tài liệu: siêu dữ liệu, tệp đính kèm, bình luận, trường biểu mẫu (được làm phẳng), văn bản và lớp ẩn, dấu trang, liên kết, hành động và script, cùng dữ liệu riêng của ứng dụng.
 	Save & Close	Lưu & Đóng
 	Save ({key})	Lưu ({key})
 	Save Image As…	Lưu hình ảnh thành…
@@ -1085,16 +1093,16 @@
 	Sent to {printer}: {msg}	Đã gửi đến {printer}: {msg}
 	Separator style:	Kiểu dấu phân cách:
 	Set Alternate Text	Đặt văn bản thay thế
-	Set Fields to Same Size	Đặt các ô về cùng kích thước
+	Set Fields to Same Size	Đặt các trường về cùng kích thước
 	Set Page Boxes	Đặt các hộp trang
 	Set layer visibility	Đặt chế độ hiển thị lớp
 	Set status	Đặt trạng thái
 	Set to current page ({n})	Đặt thành trang hiện tại ({n})
 	Set to zero	Đặt về 0
-	Shared Field Properties	Thuộc tính ô dùng chung
+	Shared Field Properties	Thuộc tính trường dùng chung
 	Sheet {s} of {n}	Tờ {s} trên {n}
 	Shift constrains to 45 degrees. Backspace removes a vertex. Escape cancels.	Shift giới hạn ở góc 45 độ. Backspace xóa một đỉnh. Escape để hủy.
-	Shift- or Ctrl/Command-click to select several fields.	Nhấn Shift hoặc Ctrl/Command khi bấm để chọn nhiều ô.
+	Shift- or Ctrl/Command-click to select several fields.	Nhấn Shift hoặc Ctrl/Command khi bấm để chọn nhiều trường.
 	Shift-click to select several objects. Drag empty space to select an area.	Nhấn Shift khi bấm để chọn nhiều đối tượng. Kéo vùng trống để chọn một khu vực.
 	Show Report	Hiện báo cáo
 	Show all	Hiện tất cả
@@ -1109,7 +1117,7 @@
 	Show:	Hiện:
 	Shrink oversized pages	Thu nhỏ các trang quá khổ
 	Sign Here	Ký tại đây
-	Sign this field…	Ký vào ô này…
+	Sign this field…	Ký vào trường này…
 	Sign yourself	Tự ký
 	Signature Details	Chi tiết chữ ký
 	Signature is INVALID:	Chữ ký KHÔNG HỢP LỆ:
@@ -1117,7 +1125,7 @@
 	Signature panel	Bảng chữ ký
 	Signature validity is UNKNOWN:	Tính hợp lệ của chữ ký KHÔNG RÕ:
 	Signer's name	Tên người ký
-	Simplified field notation:	Ký hiệu ô rút gọn:
+	Simplified field notation:	Ký hiệu trường rút gọn:
 	Single Page	Một trang
 	Single Page Continuous	Một trang liên tục
 	Single word or phrase	Một từ hoặc cụm từ
@@ -1151,7 +1159,7 @@
 	Summary	Tóm tắt
 	Switch to List view to change the pages it takes.	Chuyển sang dạng danh sách để thay đổi các trang mà nó lấy.
 	Switch to two-page view first to show the cover page	Hãy chuyển sang chế độ hai trang trước để hiển thị trang bìa
-	Tab order: move a field with its arrows.	Thứ tự tab: di chuyển một ô bằng các mũi tên của nó.
+	Tab order: move a field with its arrows.	Thứ tự tab: di chuyển một trường bằng các mũi tên của nó.
 	Tag type	Loại thẻ
 	Tags	Thẻ
 	Text Color:	Màu văn bản:
@@ -1184,7 +1192,7 @@
 	The signature will be invisible.	Chữ ký sẽ không hiển thị.
 	The text is the same	Văn bản giống nhau
 	The value is shown as typed.	Giá trị được hiển thị như đã nhập.
-	There are no redaction marks (mark text, areas or pages first)	Không có dấu che nào (hãy đánh dấu văn bản, vùng hoặc trang trước)
+	There are no redaction marks (mark text, areas or pages first)	Không có dấu đánh dấu xóa nào (hãy đánh dấu văn bản, vùng hoặc trang trước)
 	These files can't be read, so they won't be in the combined PDF:	Không đọc được các tệp này, nên chúng sẽ không có trong PDF kết hợp:
 	These objects could not be moved. Select them again and try a smaller move.	Không thể di chuyển các đối tượng này. Hãy chọn lại chúng và thử di chuyển ít hơn.
 	Thick	Dày
@@ -1196,12 +1204,12 @@
 	This certificate is trusted through a certificate above it in the chain.	Chứng chỉ này được tin cậy thông qua một chứng chỉ ở cấp trên trong chuỗi.
 	This comment's appearance can't be changed yet.	Chưa thể thay đổi diện mạo của bình luận này.
 	This dialog shows the details of a certificate and its chain.	Hộp thoại này hiển thị chi tiết của một chứng chỉ và chuỗi chứng chỉ của nó.
-	This document contains {n} interactive form fields.	Tài liệu này chứa {n} ô biểu mẫu tương tác.
+	This document contains {n} interactive form fields.	Tài liệu này chứa {n} trường biểu mẫu tương tác.
 	This document has no comments to flatten	Tài liệu này không có bình luận nào để làm phẳng
 	This document has no document-level scripts.	Tài liệu này không có script cấp tài liệu.
 	This document has no editable structure tags.	Tài liệu này không có thẻ cấu trúc có thể chỉnh sửa.
-	This document has no form fields to flatten	Tài liệu này không có ô biểu mẫu nào để làm phẳng
-	This document has no form fields you can fill in	Tài liệu này không có ô biểu mẫu nào bạn có thể điền
+	This document has no form fields to flatten	Tài liệu này không có trường biểu mẫu nào để làm phẳng
+	This document has no form fields you can fill in	Tài liệu này không có trường biểu mẫu nào bạn có thể điền
 	This document has no pages.	Tài liệu này không có trang nào.
 	This document has no restrictions to lift	Tài liệu này không có hạn chế nào để gỡ bỏ
 	This document has no signatures.	Tài liệu này không có chữ ký.
@@ -1211,7 +1219,7 @@
 	This document is secured. Some changes are restricted by its security settings.	Tài liệu này được bảo mật. Một số thay đổi bị hạn chế bởi cài đặt bảo mật của nó.
 	This document isn't password-protected	Tài liệu này không được bảo vệ bằng mật khẩu
 	This drawing exceeds the snapping limit; only the first paths are used.	Bản vẽ này vượt quá giới hạn bắt dính; chỉ các đường đầu tiên được sử dụng.
-	This field is locked. Unlock it to change its properties.	Ô này đã bị khóa. Hãy mở khóa để thay đổi thuộc tính của nó.
+	This field is locked. Unlock it to change its properties.	Trường này đã bị khóa. Hãy mở khóa để thay đổi thuộc tính của nó.
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Tệp này đã thay đổi trên đĩa. Hãy tải lại để xem phiên bản mới; các thay đổi chưa lưu của bạn sẽ bị mất.
 	This file was damaged and has been repaired. Saving keeps the repaired version.	Tệp này bị hỏng và đã được sửa chữa. Việc lưu sẽ giữ phiên bản đã sửa.
 	This folder isn't available right now. It may have moved, or its drive or cloud sync is offline.	Thư mục này hiện không khả dụng. Nó có thể đã bị di chuyển, hoặc ổ đĩa hay đồng bộ đám mây của nó đang ngoại tuyến.
@@ -1227,7 +1235,7 @@
 	Tile scale:	Tỷ lệ lát:
 	Time	Thời gian
 	Title	Tiêu đề
-	To change locked fields, also set Locked to No.	Để thay đổi các ô đã khóa, hãy đặt thêm Đã khóa thành Không.
+	To change locked fields, also set Locked to No.	Để thay đổi các trường đã khóa, hãy đặt thêm Đã khóa thành Không.
 	To:	Đến:
 	Today: {date}	Hôm nay: {date}
 	Toggle fit page / fit width	Chuyển đổi vừa trang / vừa chiều rộng
@@ -1301,9 +1309,9 @@
 	Windows store  ·  	Kho Windows  ·  
 	Write this email?	Soạn email này?
 	Wrong password	Sai mật khẩu
-	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	Biểu mẫu XFA: các ô và dữ liệu XFA của nó được giữ đồng bộ, nên các trình xem khác hiển thị những gì bạn điền.
-	You are about to apply 1 redaction mark. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Bạn sắp áp dụng 1 dấu che. Văn bản, hình ảnh và bản vẽ nằm dưới các dấu, cũng như bình luận và ô biểu mẫu chồng lên chúng, sẽ bị xóa vĩnh viễn.
-	You are about to apply {n} redaction marks. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Bạn sắp áp dụng {n} dấu che. Văn bản, hình ảnh và bản vẽ nằm dưới các dấu, cũng như bình luận và ô biểu mẫu chồng lên chúng, sẽ bị xóa vĩnh viễn.
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	Biểu mẫu XFA: các trường và dữ liệu XFA của nó được giữ đồng bộ, nên các trình xem khác hiển thị những gì bạn điền.
+	You are about to apply 1 redaction mark. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Bạn sắp áp dụng 1 dấu xóa. Văn bản, hình ảnh và bản vẽ nằm dưới các dấu, cũng như bình luận và trường biểu mẫu chồng lên chúng, sẽ bị xóa vĩnh viễn.
+	You are about to apply {n} redaction marks. Text, images and drawings under the marks, and comments and form fields that overlap them, are removed permanently.	Bạn sắp áp dụng {n} dấu xóa. Văn bản, hình ảnh và bản vẽ nằm dưới các dấu, cũng như bình luận và trường biểu mẫu chồng lên chúng, sẽ bị xóa vĩnh viễn.
 	You have version {c}. All releases are listed at {page}.	Bạn đang dùng phiên bản {c}. Tất cả các bản phát hành được liệt kê tại {page}.
 	You have version {c}. Download the new version from its release page.	Bạn đang dùng phiên bản {c}. Hãy tải phiên bản mới từ trang phát hành của nó.
 	Your changes will be lost if you don't save them.	Các thay đổi của bạn sẽ bị mất nếu bạn không lưu.
@@ -1330,7 +1338,7 @@
 	no output folder was chosen	chưa chọn thư mục đầu ra
 	no unused output name	không có tên đầu ra chưa dùng
 	none	không có
-	of the following fields:	trong các ô sau:
+	of the following fields:	trong các trường sau:
 	AI assistant	Trợ lý AI
 	Action Wizard	Trình hướng dẫn hành động
 	Action Wizard…	Trình hướng dẫn hành động…
@@ -1339,18 +1347,18 @@
 	Add a button	Thêm một nút
 	Add a callout	Thêm một khung chú thích
 	Add a checkbox	Thêm một hộp kiểm
-	Add a date field	Thêm một ô ngày
-	Add a digital signature field	Thêm một ô chữ ký số
+	Add a date field	Thêm một trường ngày
+	Add a digital signature field	Thêm một trường chữ ký số
 	Add a drop-down list	Thêm một danh sách thả xuống
 	Add a list box	Thêm một hộp danh sách
 	Add a radio button	Thêm một nút radio
 	Add a stamp	Thêm một con dấu
 	Add a sticky note	Thêm một ghi chú dán
 	Add a text box	Thêm một khung văn bản
-	Add a text field	Thêm một ô văn bản
+	Add a text field	Thêm một trường văn bản
 	Add alternate text	Thêm văn bản thay thế
 	Add alternate text…	Thêm văn bản thay thế…
-	Add an image field	Thêm một ô hình ảnh
+	Add an image field	Thêm một trường hình ảnh
 	Add background…	Thêm nền…
 	Add comments	Thêm bình luận
 	Add content	Thêm nội dung
@@ -1366,7 +1374,7 @@
 	Advanced optimization	Tối ưu hóa nâng cao
 	Advanced options	Tùy chọn nâng cao
 	Apply PDF standards	Áp dụng chuẩn PDF
-	Apply redactions…	Áp dụng việc che nội dung…
+	Apply redactions…	Xóa vĩnh viễn nội dung đã đánh dấu…
 	Archive documents	Lưu trữ tài liệu
 	Area	Diện tích
 	Arrow	Mũi tên
@@ -1392,8 +1400,8 @@
 	Check for accessibility…	Kiểm tra trợ năng…
 	Checkbox	Hộp kiểm
 	Checkmark	Dấu kiểm
-	Clear form	Xóa biểu mẫu
-	Clear redaction marks	Xóa các dấu che
+	Clear form	Xóa dữ liệu biểu mẫu
+	Clear redaction marks	Xóa các dấu đánh dấu
 	Clipboard	Bảng tạm
 	Cloud	Đám mây
 	Column select	Chọn cột
@@ -1417,8 +1425,8 @@
 	Cut pages	Cắt trang
 	Dark gray	Xám đậm
 	Date	Ngày
-	Date field	Ô ngày
-	Detect form fields	Phát hiện ô biểu mẫu
+	Date field	Trường ngày
+	Detect form fields	Phát hiện trường biểu mẫu
 	Digital signature	Chữ ký số
 	Digitally sign	Ký số
 	Distance	Khoảng cách
@@ -1457,11 +1465,11 @@
 	Export to PowerPoint…	Xuất ra PowerPoint…
 	Extract	Trích xuất
 	Extract pages	Trích xuất trang
-	Field list	Danh sách ô
-	Field properties	Thuộc tính ô
-	Field properties…	Thuộc tính ô…
-	Fields	Ô
-	Fill	Tô
+	Field list	Danh sách trường
+	Field properties	Thuộc tính trường
+	Field properties…	Thuộc tính trường…
+	Fields	Các trường
+	Fill	Điền
 	Fill & Sign: add text	Điền & Ký: thêm văn bản
 	Fill & Sign: change initials	Điền & Ký: đổi chữ viết tắt
 	Fill & Sign: change signature	Điền & Ký: đổi chữ ký
@@ -1474,15 +1482,15 @@
 	Fill & Sign: remove saved initials	Điền & Ký: xóa chữ viết tắt đã lưu
 	Fill & Sign: remove saved signature	Điền & Ký: xóa chữ ký đã lưu
 	Fill & Sign: sign	Điền & Ký: ký
-	Find text and redact	Tìm văn bản và che
-	Find text and redact…	Tìm văn bản và che…
+	Find text and redact	Tìm văn bản và đánh dấu xóa
+	Find text and redact…	Tìm văn bản và đánh dấu xóa…
 	Fit to width scrolling	Cuộn vừa chiều rộng
 	Fit visible	Vừa vùng hiển thị
 	Fix hairlines	Sửa các đường siêu mảnh
 	Fix reading order	Sửa thứ tự đọc
 	Flatten comments	Làm phẳng bình luận
-	Flatten form fields	Làm phẳng ô biểu mẫu
-	Form fields panel	Bảng ô biểu mẫu
+	Flatten form fields	Làm phẳng trường biểu mẫu
+	Form fields panel	Bảng trường biểu mẫu
 	Geospatial location	Vị trí địa lý
 	Go to page…	Đi tới trang…
 	HTML web page	Trang web HTML
@@ -1491,7 +1499,7 @@
 	Highlight text	Tô sáng văn bản
 	Image	Hình ảnh
 	Image (PNG)	Hình ảnh (PNG)
-	Image field	Ô hình ảnh
+	Image field	Trường hình ảnh
 	Images	Hình ảnh
 	Import comments…	Nhập bình luận…
 	Import data	Nhập dữ liệu
@@ -1510,7 +1518,7 @@
 	Line	Đường thẳng
 	Link	Liên kết
 	List box	Hộp danh sách
-	Make accessible	Làm cho dễ tiếp cận
+	Make accessible	Cải thiện khả năng tiếp cận
 	Manage embedded index	Quản lý chỉ mục nhúng
 	Markup	Chú thích đánh dấu
 	Marquee zoom	Thu phóng theo vùng chọn
@@ -1554,11 +1562,11 @@
 	Recognize text in multiple files…	Nhận dạng văn bản trong nhiều tệp…
 	Recognize text…	Nhận dạng văn bản…
 	Rectangle	Hình chữ nhật
-	Redact a PDF	Che nội dung một PDF
-	Redact pages	Che nội dung trang
-	Redact pages…	Che nội dung trang…
-	Redact text and images	Che văn bản và hình ảnh
-	Redaction properties…	Thuộc tính che nội dung…
+	Redact a PDF	Xóa nội dung nhạy cảm trong PDF
+	Redact pages	Xóa nội dung nhạy cảm trên trang
+	Redact pages…	Xóa nội dung nhạy cảm trên trang…
+	Redact text and images	Xóa nội dung nhạy cảm trong văn bản và hình ảnh
+	Redaction properties…	Thuộc tính xóa nội dung nhạy cảm…
 	Reduce file size	Giảm kích thước tệp
 	Remove all links	Gỡ tất cả liên kết
 	Remove background	Gỡ nền
@@ -1614,7 +1622,7 @@
 	Tags panel	Bảng thẻ
 	Text (plain)	Văn bản (thuần)
 	Text box	Khung văn bản
-	Text field	Ô văn bản
+	Text field	Trường văn bản
 	Timestamp	Dấu thời gian
 	Translate	Dịch
 	Underline text	Gạch chân văn bản
@@ -1667,15 +1675,15 @@
 	Enter a URL	Nhập một URL
 	Enter a name.	Nhập một tên.
 	Enter a page number	Nhập một số trang
-	Enter the field names	Nhập tên các ô
+	Enter the field names	Nhập tên các trường
 	Every PDF in the folder	Mọi PDF trong thư mục
 	Every PDF in the folder and the folders inside it	Mọi PDF trong thư mục và các thư mục con của nó
-	Field "{}" on page {p} has no description (tooltip)	Ô "{}" trên trang {p} không có mô tả (chú giải công cụ)
+	Field "{}" on page {p} has no description (tooltip)	Trường "{}" trên trang {p} không có mô tả (chú giải công cụ)
 	Filename	Tên tệp
 	Flatten Fill & Sign	Làm phẳng Điền & Ký
 	Font (unnamed) on page {p} doesn't map its characters to Unicode	Phông chữ (không tên) trên trang {p} không ánh xạ các ký tự của nó sang Unicode
 	Font {} on page {p} doesn't map its characters to Unicode	Phông chữ {} trên trang {p} không ánh xạ các ký tự của nó sang Unicode
-	Form field on page {p} isn't tagged	Ô biểu mẫu trên trang {p} chưa được gắn thẻ
+	Form field on page {p} isn't tagged	Trường biểu mẫu trên trang {p} chưa được gắn thẻ
 	H{n} follows an H{d}; headings should not skip levels	H{n} theo sau H{d}; các đề mục không nên bỏ qua cấp
 	Inserted text	Văn bản được chèn
 	Key Agreement	Thỏa thuận khóa
@@ -1780,8 +1788,8 @@
 	This signature uses RIPEMD-160, a legacy 160-bit hash algorithm that is no longer recommended for signatures. It still validates, but it should not be relied on.	Chữ ký này dùng RIPEMD-160, một thuật toán băm 160 bit cũ không còn được khuyến nghị cho chữ ký. Nó vẫn xác thực được, nhưng không nên dựa vào nó.
 	This signature uses SHA-1, a weak hash algorithm: collisions in it have been demonstrated. It still validates because many documents signed years ago use it, but it should not be relied on.	Chữ ký này dùng SHA-1, một thuật toán băm yếu: các va chạm trong nó đã được chứng minh. Nó vẫn xác thực được vì nhiều tài liệu được ký từ nhiều năm trước dùng nó, nhưng không nên dựa vào nó.
 	Undo {action}	Hoàn tác {action}
-	Unsigned signature field	Ô chữ ký chưa ký
-	Unsigned signature field: {name}	Ô chữ ký chưa ký: {name}
+	Unsigned signature field	Trường chữ ký chưa ký
+	Unsigned signature field: {name}	Trường chữ ký chưa ký: {name}
 	Zoom in (⌘+)	Phóng to (⌘+)
 	Zoom in / out (also pinch or ⌘-scroll)	Phóng to / thu nhỏ (cũng có thể chụm ngón tay hoặc ⌘-cuộn)
 	Zoom out (⌘−)	Thu nhỏ (⌘−)
@@ -1817,7 +1825,7 @@
 	{} annotation on page {p} isn't tagged	Chú thích {} trên trang {p} chưa được gắn thẻ
 	{} annotations aren't allowed	Chú thích {} không được phép
 	… and {n} more	… và {n} mục nữa
-@plural	Delete {n} field|Delete {n} fields	Xóa {n} ô
+@plural	Delete {n} field|Delete {n} fields	Xóa {n} trường
 @plural	{n} byte|{n} bytes	{n} byte
 @plural	{n} image optimized|{n} images optimized	Đã tối ưu hóa {n} hình ảnh
 @plural	{n} item discarded|{n} items discarded	Đã loại bỏ {n} mục
@@ -1827,10 +1835,10 @@ comment menu	Edit	Sửa
 	A button	Một nút
 	A diagonal CONFIDENTIAL watermark on every page.	Hình mờ CONFIDENTIAL nằm chéo trên mọi trang.
 	A document needs at least one page: copy instead	Một tài liệu cần ít nhất một trang: hãy sao chép thay vào đó
-	A form field has additional actions	Một ô biểu mẫu có các hành động bổ sung
+	A form field has additional actions	Một trường biểu mẫu có các hành động bổ sung
 	A link	Một liên kết
 	A script	Một script
-	A selected field has no widget on any page, so the fields can't be edited together.	Một ô đã chọn không có widget trên trang nào, nên các ô không thể được chỉnh sửa cùng nhau.
+	A selected field has no widget on any page, so the fields can't be edited together.	Một trường đã chọn không có widget trên trang nào, nên các trường không thể được chỉnh sửa cùng nhau.
 	A stream refers to an external file	Một luồng tham chiếu đến tệp bên ngoài
 	A stream uses LZW compression	Một luồng dùng nén LZW
 	A summary describes the table's purpose and layout. Add a Summary attribute to each table.	Phần tóm tắt mô tả mục đích và bố cục của bảng. Hãy thêm thuộc tính Summary cho mỗi bảng.
@@ -1849,7 +1857,7 @@ comment menu	Edit	Sửa
 	Add cross	Thêm dấu chéo
 	Add dot	Thêm dấu chấm
 	Add drawing	Thêm bản vẽ
-	Add field	Thêm ô
+	Add field	Thêm trường
 	Add file attachment	Thêm tệp đính kèm
 	Add footer	Thêm chân trang
 	Add header	Thêm đầu trang
@@ -1862,7 +1870,7 @@ comment menu	Edit	Sửa
 	Add oval	Thêm hình bầu dục
 	Add polygon	Thêm đa giác
 	Add rectangle	Thêm hình chữ nhật
-	Add redaction mark	Thêm dấu che
+	Add redaction mark	Thêm dấu đánh dấu xóa
 	Add signature	Thêm chữ ký
 	Add squiggly underline	Thêm gạch chân lượn sóng
 	Add stamp	Thêm con dấu
@@ -1875,17 +1883,17 @@ comment menu	Edit	Sửa
 	Added the first {n} files in {folder}	Đã thêm {n} tệp đầu tiên trong {folder}
 	Adding images arrives on the web with file pickers for images	Việc thêm hình ảnh sẽ có trên web cùng với bộ chọn tệp hình ảnh
 	Algorithm	Thuật toán
-	Align fields	Căn chỉnh các ô
+	Align fields	Căn chỉnh các trường
 	All annotations are tagged	Tất cả chú thích đã được gắn thẻ
-	All form fields are tagged	Tất cả ô biểu mẫu đã được gắn thẻ
-	All form fields have description	Tất cả ô biểu mẫu đều có mô tả
+	All form fields are tagged	Tất cả trường biểu mẫu đã được gắn thẻ
+	All form fields have description	Tất cả trường biểu mẫu đều có mô tả
 	All multimedia objects are tagged	Tất cả đối tượng đa phương tiện đã được gắn thẻ
 	All page content is tagged	Tất cả nội dung trang đã được gắn thẻ
 	Allowed	Được phép
 	Alternate Text	Văn bản thay thế
 	Alternate text inside an element that already has alternate text is never read. Remove the inner alternate text.	Văn bản thay thế bên trong phần tử đã có văn bản thay thế sẽ không bao giờ được đọc. Hãy gỡ văn bản thay thế bên trong.
 	Alternate text must be associated with some content	Văn bản thay thế phải được liên kết với một nội dung nào đó
-	Alternate text on an element that contains a link or field hides that annotation from assistive technology. Move the alternate text.	Văn bản thay thế trên phần tử chứa liên kết hoặc ô sẽ che chú thích đó khỏi công nghệ hỗ trợ. Hãy di chuyển văn bản thay thế.
+	Alternate text on an element that contains a link or field hides that annotation from assistive technology. Move the alternate text.	Văn bản thay thế trên phần tử chứa liên kết hoặc trường sẽ che chú thích đó khỏi công nghệ hỗ trợ. Hãy chuyển văn bản thay thế.
 	Alternate text on an element without page content is never reached. Remove it or attach the element to content.	Văn bản thay thế trên phần tử không có nội dung trang sẽ không bao giờ được truy cập tới. Hãy gỡ nó hoặc gắn phần tử vào nội dung.
 	Alternate text should not hide annotation	Văn bản thay thế không nên che chú thích
 	Alternate text that will never be read	Văn bản thay thế sẽ không bao giờ được đọc
@@ -1896,8 +1904,8 @@ comment menu	Edit	Sửa
 	Animation that flashes can cause seizures. Check scripts and media for flicker.	Hoạt ảnh nhấp nháy có thể gây co giật. Hãy kiểm tra script và phương tiện xem có nhấp nháy không.
 	Another file dialog is still open. Finish with it first.	Một hộp thoại tệp khác vẫn đang mở. Hãy hoàn tất nó trước.
 	Application	Ứng dụng
-	Applied 1 redaction mark. Save to remove the content from the file.	Đã áp dụng 1 dấu che. Hãy lưu để xóa nội dung khỏi tệp.
-	Applied {n} redaction marks. Save to remove the content from the file.	Đã áp dụng {n} dấu che. Hãy lưu để xóa nội dung khỏi tệp.
+	Applied 1 redaction mark. Save to remove the content from the file.	Đã áp dụng 1 dấu xóa. Hãy lưu để loại bỏ nội dung khỏi tệp.
+	Applied {n} redaction marks. Save to remove the content from the file.	Đã áp dụng {n} dấu xóa. Hãy lưu để loại bỏ nội dung khỏi tệp.
 	Appropriate nesting	Lồng ghép phù hợp
 	Arbitrary Mask	Mặt nạ tùy ý
 	Associated with content	Được liên kết với nội dung
@@ -1924,7 +1932,7 @@ comment menu	Edit	Sửa
 	Certified by {by}	Được chứng nhận bởi {by}
 	Change comment properties	Thay đổi thuộc tính bình luận
 	Change document properties	Thay đổi thuộc tính tài liệu
-	Change field properties	Thay đổi thuộc tính ô
+	Change field properties	Thay đổi thuộc tính trường
 	Change initial view	Thay đổi chế độ xem ban đầu
 	Change link properties	Thay đổi thuộc tính liên kết
 	Change tag properties	Thay đổi thuộc tính thẻ
@@ -1951,7 +1959,7 @@ comment menu	Edit	Sửa
 	Command	Lệnh
 	Commenting	Bình luận
 	Comments and markups	Bình luận và chú thích đánh dấu
-	Comments, links and fields must be in the tag tree to be announced. Tag the annotations.	Bình luận, liên kết và ô phải nằm trong cây thẻ để được đọc to. Hãy gắn thẻ cho các chú thích.
+	Comments, links and fields must be in the tag tree to be announced. Tag the annotations.	Bình luận, liên kết và trường phải nằm trong cây thẻ để được đọc to. Hãy gắn thẻ cho các chú thích.
 	Completed	Đã hoàn thành
 	Configure a Digital ID for Signing	Cấu hình Digital ID để ký
 	Connected lines	Các đường nối liền
@@ -2008,14 +2016,14 @@ comment menu	Edit	Sửa
 	Delete bookmark	Xóa dấu trang
 	Delete content	Xóa nội dung
 	Delete document JavaScript	Xóa JavaScript của tài liệu
-	Delete field	Xóa ô
+	Delete field	Xóa trường
 	Delete image	Xóa hình ảnh
 	Delete link	Xóa liên kết
 	Delete page	Xóa trang
-	Delete selected fields	Xóa các ô đã chọn
+	Delete selected fields	Xóa các trường đã chọn
 	Deleted	Đã xóa
-	Detected 1 form field	Đã phát hiện 1 ô biểu mẫu
-	Detected {n} form fields	Đã phát hiện {n} ô biểu mẫu
+	Detected 1 form field	Đã phát hiện 1 trường biểu mẫu
+	Detected {n} form fields	Đã phát hiện {n} trường biểu mẫu
 	Device colour is used, but there is no PDF/A output intent	Màu thiết bị được dùng, nhưng không có mục đích đầu ra PDF/A
 	DeviceCMYK is used: it needs a CMYK output intent (not added automatically)	DeviceCMYK được dùng: cần có mục đích đầu ra CMYK (không được thêm tự động)
 	Diagnostic details	Chi tiết chẩn đoán
@@ -2028,7 +2036,7 @@ comment menu	Edit	Sửa
 	Discard hidden layer content	Loại bỏ nội dung lớp ẩn
 	Discard hidden text	Loại bỏ văn bản ẩn
 	Discard private data of other applications	Loại bỏ dữ liệu riêng của các ứng dụng khác
-	Distribute fields	Phân bố các ô
+	Distribute fields	Phân bố các trường
 	Document Overhead	Chi phí cấu trúc tài liệu
 	Document assembly	Lắp ráp tài liệu
 	Document has appropriate color contrast	Tài liệu có độ tương phản màu phù hợp
@@ -2047,13 +2055,13 @@ comment menu	Edit	Sửa
 	Drag the corners onto the document's edges, then choose Enhance page.	Kéo các góc vào cạnh của tài liệu, rồi chọn Nâng cao chất lượng trang.
 	Drag to draw the area where the signature should appear.	Kéo để vẽ vùng nơi chữ ký sẽ xuất hiện.
 	Dropdown Properties	Thuộc tính danh sách thả xuống
-	Duplicate field	Nhân bản ô
+	Duplicate field	Nhân bản trường
 	Duplicate page	Nhân bản trang
-	Each field needs a tooltip that says what to enter. Add one in Field Properties > General > Tooltip.	Mỗi ô cần có chú giải công cụ nói rõ cần nhập gì. Hãy thêm trong Thuộc tính ô > Chung > Chú giải công cụ.
+	Each field needs a tooltip that says what to enter. Add one in Field Properties > General > Tooltip.	Mỗi trường cần có chú giải công cụ nói rõ cần nhập gì. Hãy thêm trong Thuộc tính trường > Chung > Chú giải công cụ.
 	Edit comment	Chỉnh sửa bình luận
 	Edit content	Chỉnh sửa nội dung
 	Edit document JavaScript	Chỉnh sửa JavaScript của tài liệu
-	Edit fields	Chỉnh sửa các ô
+	Edit fields	Chỉnh sửa các trường
 	Edit script of {name}	Chỉnh sửa script của {name}
 	Edit text	Chỉnh sửa văn bản
 	Editing	Chỉnh sửa
@@ -2070,18 +2078,18 @@ comment menu	Edit	Sửa
 	Export certificate	Xuất chứng chỉ
 	Exported to {path}	Đã xuất ra {path}
 	Extended Graphics States	Trạng thái đồ họa mở rộng
-	Field	Ô
-	Field descriptions	Mô tả ô
+	Field	Trường
+	Field descriptions	Mô tả trường
 	Figures alternate text	Văn bản thay thế của hình
 	Figures require alternate text	Hình yêu cầu văn bản thay thế
 	File attachments	Tệp đính kèm
 	Files are combined in this order. Leave Pages empty to take every page.	Các tệp được kết hợp theo thứ tự này. Để trống mục Trang để lấy mọi trang.
 	Fill in {name}	Điền {name}
-	Filling of form fields	Điền ô biểu mẫu
+	Filling of form fields	Điền trường biểu mẫu
 	Flatten	Làm phẳng
 	Flip image	Lật hình ảnh
 	Fonts must map their characters to Unicode so text can be read and copied. Fix the fonts or recreate the PDF.	Phông chữ phải ánh xạ ký tự của chúng sang Unicode để văn bản có thể được đọc và sao chép. Hãy sửa phông chữ hoặc tạo lại PDF.
-	Form fields must be in the tag tree (Form tags) to be announced. Tag the form fields.	Ô biểu mẫu phải nằm trong cây thẻ (thẻ Form) để được đọc to. Hãy gắn thẻ cho các ô biểu mẫu.
+	Form fields must be in the tag tree (Form tags) to be announced. Tag the form fields.	Trường biểu mẫu phải nằm trong cây thẻ (thẻ Form) để được đọc to. Hãy gắn thẻ cho các trường biểu mẫu.
 	Formulas and similar non-text elements need alternate text. Add alternate text to them.	Công thức và các phần tử không phải văn bản tương tự cần có văn bản thay thế. Hãy thêm văn bản thay thế cho chúng.
 	Gray	Xám
 	Grayscale Images	Ảnh thang xám
@@ -2094,7 +2102,7 @@ comment menu	Edit	Sửa
 	Headings	Đề mục
 	Hidden layers	Lớp ẩn
 	Hidden text	Văn bản ẩn
-	Hide a field	Ẩn một ô
+	Hide a field	Ẩn một trường
 	Hides annotation	Che chú thích
 	High	Cao
 	Home / End	Home / End
@@ -2104,8 +2112,8 @@ comment menu	Edit	Sửa
 	Importing data arrives on the web with file pickers for data files	Việc nhập dữ liệu sẽ có trên web cùng với bộ chọn tệp dữ liệu
 	Incorrect password. Try again.	Mật khẩu không đúng. Hãy thử lại.
 	Insert pages from {name}	Chèn trang từ {name}
-	Insert pages from {name} — 1 field renamed	Chèn trang từ {name} — 1 ô được đổi tên
-	Insert pages from {name} — fields renamed	Chèn trang từ {name} — các ô được đổi tên
+	Insert pages from {name} — 1 field renamed	Chèn trang từ {name} — 1 trường được đổi tên
+	Insert pages from {name} — fields renamed	Chèn trang từ {name} — các trường được đổi tên
 	Inserted	Đã chèn
 	Inset	Lõm
 	Intended usage	Mục đích sử dụng
@@ -2141,9 +2149,9 @@ comment menu	Edit	Sửa
 	Mark as Confidential	Đánh dấu là Bí mật
 	Mark differences	Đánh dấu khác biệt
 	Mark figure as decorative	Đánh dấu hình là trang trí
-	Mark for redaction	Đánh dấu để che
-	Mark pages for redaction	Đánh dấu trang để che
-	Match field sizes	Khớp kích thước ô
+	Mark for redaction	Đánh dấu để xóa
+	Mark pages for redaction	Đánh dấu trang để xóa
+	Match field sizes	Khớp kích thước trường
 	Maximum	Tối đa
 	Measuring tool	Công cụ đo
 	Merged 1 file into {path}	Đã gộp 1 tệp vào {path}
@@ -2168,7 +2176,7 @@ comment menu	Edit	Sửa
 	Nested alternate text	Văn bản thay thế lồng nhau
 	New {tool} comments will look like this one	Các bình luận {tool} mới sẽ trông giống bình luận này
 	No PDFs, images or text files found in {folder}	Không tìm thấy PDF, hình ảnh hoặc tệp văn bản nào trong {folder}
-	No form fields were detected	Không phát hiện ô biểu mẫu nào
+	No form fields were detected	Không phát hiện trường biểu mẫu nào
 	No inaccessible scripts	Không có script không thể tiếp cận
 	No links to remove	Không có liên kết nào để gỡ
 	No pages match those choices	Không có trang nào khớp với các lựa chọn đó
@@ -2199,7 +2207,7 @@ comment menu	Edit	Sửa
 	Page thumbnails	Hình thu nhỏ trang
 	Page will not cause screen flicker	Trang sẽ không gây nhấp nháy màn hình
 	Pages that are only pictures of text can't be read aloud or searched. Recognize text (OCR) to add a text layer.	Các trang chỉ là hình chụp của văn bản không thể được đọc to hoặc tìm kiếm. Hãy nhận dạng văn bản (OCR) để thêm lớp văn bản.
-	Pages with links, comments or fields should tab in structure order. The fix sets each page's tab order to Use Document Structure.	Các trang có liên kết, bình luận hoặc ô nên chuyển tab theo thứ tự cấu trúc. Cách sửa đặt thứ tự tab của mỗi trang thành Dùng cấu trúc tài liệu.
+	Pages with links, comments or fields should tab in structure order. The fix sets each page's tab order to Use Document Structure.	Các trang có liên kết, bình luận hoặc trường nên chuyển tab theo thứ tự cấu trúc. Cách sửa đặt thứ tự tab của mỗi trang thành Dùng cấu trúc tài liệu.
 	Passed	Đạt
 	Password protection will be applied when you save	Bảo vệ bằng mật khẩu sẽ được áp dụng khi bạn lưu
 	Path	Đường dẫn
@@ -2237,9 +2245,9 @@ comment menu	Edit	Sửa
 	Regularity	Tính đều đặn
 	Rejected	Đã từ chối
 	Reliable character encoding is provided	Có mã hóa ký tự đáng tin cậy
-	Remove hidden information and flatten comments and form fields, so recipients see only the pages.	Gỡ thông tin ẩn và làm phẳng bình luận cùng ô biểu mẫu, để người nhận chỉ thấy các trang.
+	Remove hidden information and flatten comments and form fields, so recipients see only the pages.	Gỡ thông tin ẩn và làm phẳng bình luận cùng trường biểu mẫu, để người nhận chỉ thấy các trang.
 	Remove hidden information, metadata, scripts and embedded content, and rewrite the files.	Gỡ thông tin ẩn, siêu dữ liệu, script và nội dung nhúng, rồi ghi lại các tệp.
-	Remove redaction marks	Gỡ các dấu che
+	Remove redaction marks	Gỡ các dấu đánh dấu
 	Remove saved {what}	Xóa {what} đã lưu
 	Removed 1 hidden item. Save to remove them from the file.	Đã gỡ 1 mục ẩn. Hãy lưu để xóa chúng khỏi tệp.
 	Removed 1 link	Đã gỡ 1 liên kết
@@ -2307,7 +2315,7 @@ comment menu	Edit	Sửa
 	Set tab order	Đặt thứ tự tab
 	Set the image of {name}	Đặt hình ảnh của {name}
 	Shadings	Chuyển sắc
-	Show a field	Hiện một ô
+	Show a field	Hiện một trường
 	Sign with a Digital ID	Ký bằng Digital ID
 	Signed and all signatures are valid.	Đã ký và tất cả chữ ký đều hợp lệ.
 	Signed and saved to {path}	Đã ký và lưu vào {path}
@@ -2335,10 +2343,10 @@ comment menu	Edit	Sửa
 	Tagged PDF	PDF có gắn thẻ
 	Tagged annotations	Chú thích có gắn thẻ
 	Tagged content	Nội dung có gắn thẻ
-	Tagged form fields	Ô biểu mẫu có gắn thẻ
+	Tagged form fields	Trường biểu mẫu có gắn thẻ
 	Tagged multimedia	Đa phương tiện có gắn thẻ
 	Tags give the document a logical structure that assistive technology follows. Tag the document (Automatically tag PDF).	Thẻ cung cấp cho tài liệu một cấu trúc hợp lý mà công nghệ hỗ trợ dựa theo. Hãy gắn thẻ cho tài liệu (Tự động gắn thẻ PDF).
-	Text Field Properties	Thuộc tính ô văn bản
+	Text Field Properties	Thuộc tính trường văn bản
 	Text language is specified	Đã chỉ định ngôn ngữ văn bản
 	Text must contrast enough with its background for people with low vision. Check the colours by eye or with a contrast tool.	Văn bản phải đủ tương phản với nền để người kém thị lực nhìn được. Hãy kiểm tra màu bằng mắt hoặc bằng công cụ đo độ tương phản.
 	Text recognition is already running	Việc nhận dạng văn bản đang chạy
@@ -2349,16 +2357,16 @@ comment menu	Edit	Sửa
 	The Windows store's digital IDs couldn't be listed: {e}	Không thể liệt kê các Digital ID của kho Windows: {e}
 	The clipboard has no image or text	Bảng tạm không có hình ảnh hoặc văn bản
 	The document changed while you were choosing a file, so nothing was changed.	Tài liệu đã thay đổi trong lúc bạn chọn tệp, nên không có gì bị thay đổi.
-	The document changed while you were editing field properties.	Tài liệu đã thay đổi trong lúc bạn chỉnh sửa thuộc tính ô.
+	The document changed while you were editing field properties.	Tài liệu đã thay đổi trong lúc bạn chỉnh sửa thuộc tính trường.
 	The document has additional actions (/AA)	Tài liệu có các hành động bổ sung (/AA)
 	The document has document-level JavaScript	Tài liệu có JavaScript cấp tài liệu
 	The document has no XMP metadata	Tài liệu không có siêu dữ liệu XMP
 	The document is encrypted	Tài liệu đã được mã hóa
 	The document is no longer open.	Tài liệu không còn được mở.
 	The document was closed before it could be saved.	Tài liệu đã bị đóng trước khi kịp lưu.
-	The document's security settings don't allow filling in form fields	Cài đặt bảo mật của tài liệu không cho phép điền các ô biểu mẫu
-	The field properties could not be changed.	Không thể thay đổi thuộc tính của ô.
-	The field properties dialog is no longer open.	Hộp thoại thuộc tính ô không còn được mở.
+	The document's security settings don't allow filling in form fields	Cài đặt bảo mật của tài liệu không cho phép điền các trường biểu mẫu
+	The field properties could not be changed.	Không thể thay đổi thuộc tính của trường.
+	The field properties dialog is no longer open.	Hộp thoại thuộc tính trường không còn được mở.
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	Biểu mẫu yêu cầu được gửi đến {u}; PdfCraft không gửi dữ liệu biểu mẫu. Hãy lưu tài liệu để giữ các mục bạn đã nhập.
 	The form asks viewers to make appearances (NeedAppearances)	Biểu mẫu yêu cầu trình xem tạo diện mạo (NeedAppearances)
 	The linked PDF opened, but its named destination was not applied.	PDF được liên kết đã mở, nhưng đích đến có tên của nó chưa được áp dụng.
@@ -2367,20 +2375,20 @@ comment menu	Edit	Sửa
 	The pages were extracted but not deleted, because the document changed while you were choosing a folder.	Các trang đã được trích xuất nhưng chưa bị xóa, vì tài liệu đã thay đổi trong lúc bạn chọn thư mục.
 	The passwords don't match.	Các mật khẩu không khớp.
 	The selected area has been copied ({w} × {h} pixels)	Đã sao chép vùng đã chọn ({w} × {h} điểm ảnh)
-	The selected fields could not be found. Select them again.	Không tìm thấy các ô đã chọn. Hãy chọn lại.
+	The selected fields could not be found. Select them again.	Không tìm thấy các trường đã chọn. Hãy chọn lại.
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Phông chữ chuẩn không thể vẽ “{c}” ({code}). Hiện chỉ có thể thêm các ký tự Tây Âu làm văn bản.
 	The title in the metadata and the document information differ	Tiêu đề trong siêu dữ liệu và trong thông tin tài liệu khác nhau
 	The window should show a meaningful title rather than the file name. Set a title and Initial View > Show: Document Title.	Cửa sổ nên hiển thị một tiêu đề có ý nghĩa thay vì tên tệp. Hãy đặt tiêu đề và Chế độ xem ban đầu > Hiện: Tiêu đề tài liệu.
-	There are no redaction marks to apply	Không có dấu che nào để áp dụng
+	There are no redaction marks to apply	Không có dấu đánh dấu xóa nào để áp dụng
 	This PDF uses the unsupported {s} action.	PDF này dùng hành động {s} chưa được hỗ trợ.
 	This compatibility level supports only plain ASCII passwords.	Mức tương thích này chỉ hỗ trợ mật khẩu ASCII thuần.
 	This document can't be checked: it couldn't be read for editing	Không thể kiểm tra tài liệu này: không đọc được để chỉnh sửa
 	This document has no attachments.	Tài liệu này không có tệp đính kèm.
 	This document has no bookmarks.	Tài liệu này không có dấu trang.
-	This document has no form fields.	Tài liệu này không có ô biểu mẫu.
+	This document has no form fields.	Tài liệu này không có trường biểu mẫu.
 	This document has no layers.	Tài liệu này không có lớp.
 	This file is already as small as it can be made ({size}). No copy was saved.	Tệp này đã nhỏ hết mức có thể ({size}). Không có bản sao nào được lưu.
-	This form also contains XFA data, which PdfCraft doesn't read yet. You can fill its fields, but Acrobat may show the XFA values instead.	Biểu mẫu này còn chứa dữ liệu XFA mà PdfCraft chưa đọc được. Bạn có thể điền các ô của nó, nhưng Acrobat có thể hiển thị các giá trị XFA thay thế.
+	This form also contains XFA data, which PdfCraft doesn't read yet. You can fill its fields, but Acrobat may show the XFA values instead.	Biểu mẫu này còn chứa dữ liệu XFA mà PdfCraft chưa đọc được. Bạn có thể điền các trường của nó, nhưng Acrobat có thể hiển thị giá trị XFA thay thế.
 	Thumbnails	Hình thu nhỏ
 	Timed responses	Phản hồi có giới hạn thời gian
 	Type Password	Nhập mật khẩu
@@ -2427,7 +2435,7 @@ comment menu	Edit	Sửa
 	pages	trang
 	product (x)	tích (x)
 	sum (+)	tổng (+)
-	the document has no form fields	tài liệu không có ô biểu mẫu
+	the document has no form fields	tài liệu không có trường biểu mẫu
 	the document has no page tree	tài liệu không có cây trang
 	the document has no tags	tài liệu không có thẻ
 	the document is protected by a password	tài liệu được bảo vệ bằng mật khẩu
@@ -2436,7 +2444,7 @@ comment menu	Edit	Sửa
 	the text recognition models are not installed (reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them)	các mô hình nhận dạng văn bản chưa được cài đặt (hãy cài đặt lại PdfCraft, hoặc đặt PDFCRAFT_MODELS thành thư mục chứa chúng)
 	the title must not be empty	tiêu đề không được để trống
 	there are no pages to print	không có trang nào để in
-	there are no redaction marks to apply	không có dấu che nào để áp dụng
+	there are no redaction marks to apply	không có dấu đánh dấu xóa nào để áp dụng
 	this document is signed: rewriting it would invalidate its signatures (save it incrementally instead)	tài liệu này đã được ký: việc ghi lại nó sẽ làm mất hiệu lực các chữ ký của nó (hãy lưu tăng dần thay vào đó)
 	this file isn't XFDF, FDF, XML or text form data	tệp này không phải dữ liệu biểu mẫu XFDF, FDF, XML hoặc văn bản
 	{0}: {1}	{0}: {1}
@@ -2458,32 +2466,32 @@ animation effects	On	Bật
 	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	Chỉ tiếp tục nếu bạn tin cậy tài liệu này. Một địa chỉ có thể mang thông tin từ tài liệu, chẳng hạn những gì bạn đã nhập vào biểu mẫu của nó.
 	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	In một mặt. Giữ các tờ theo thứ tự, cắt theo các dấu, rồi xếp các chồng từ trái sang phải, từ trên xuống dưới.
 	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Hãy ký lên một tờ giấy trắng và chụp ảnh dưới ánh sáng sáng, đều (dùng đèn flash). Chọn ảnh hoặc thả vào đây: PdfCraft sẽ tìm chữ ký và loại bỏ phần giấy.
-	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Phông chữ của ô này không thể vẽ “{c}” ({code}), nên PdfCraft hiển thị ? thay thế. Giá trị vẫn được lưu, và các trình xem PDF khác sẽ vẽ lại ô từ giá trị đó.
+	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Phông chữ của trường này không thể vẽ “{c}” ({code}), nên PdfCraft hiển thị ? thay thế. Giá trị vẫn được lưu, và các trình xem PDF khác vẽ lại trường từ giá trị đó.
 	{chars} can't be written into the PDF yet: Fill & Sign text is Western European only. Pick a numeric format such as dd.mm.yyyy.	Chưa thể ghi {chars} vào PDF: văn bản của Điền & Ký chỉ hỗ trợ ký tự Tây Âu. Hãy chọn định dạng số như dd.mm.yyyy.
-	January	Tháng Một
-	February	Tháng Hai
-	March	Tháng Ba
-	April	Tháng Tư
-	May	Tháng Năm
-	June	Tháng Sáu
-	July	Tháng Bảy
-	August	Tháng Tám
-	September	Tháng Chín
-	October	Tháng Mười
-	November	Tháng Mười Một
-	December	Tháng Mười Hai
-calendar date	January	tháng Một
-calendar date	February	tháng Hai
-calendar date	March	tháng Ba
-calendar date	April	tháng Tư
-calendar date	May	tháng Năm
-calendar date	June	tháng Sáu
-calendar date	July	tháng Bảy
-calendar date	August	tháng Tám
-calendar date	September	tháng Chín
-calendar date	October	tháng Mười
-calendar date	November	tháng Mười Một
-calendar date	December	tháng Mười Hai
+	January	Tháng 1
+	February	Tháng 2
+	March	Tháng 3
+	April	Tháng 4
+	May	Tháng 5
+	June	Tháng 6
+	July	Tháng 7
+	August	Tháng 8
+	September	Tháng 9
+	October	Tháng 10
+	November	Tháng 11
+	December	Tháng 12
+calendar date	January	tháng 1
+calendar date	February	tháng 2
+calendar date	March	tháng 3
+calendar date	April	tháng 4
+calendar date	May	tháng 5
+calendar date	June	tháng 6
+calendar date	July	tháng 7
+calendar date	August	tháng 8
+calendar date	September	tháng 9
+calendar date	October	tháng 10
+calendar date	November	tháng 11
+calendar date	December	tháng 12
 calendar weekday	Su	CN
 calendar weekday	Mo	T2
 calendar weekday	Tu	T3
@@ -2526,7 +2534,7 @@ certificate	SHA-256 digest	Giá trị băm SHA-256
 	Show	Hiện
 	Sort	Sắp xếp
 	Table	Bảng
-	The field {name} no longer exists.	Ô {name} không còn tồn tại.
+	The field {name} no longer exists.	Trường {name} không còn tồn tại.
 	{n} contributors · {c} commits	{n} người đóng góp · {c} commit
 	Username	Tên người dùng
 	Display name	Tên hiển thị
@@ -2570,7 +2578,7 @@ certificate	SHA-256 digest	Giá trị băm SHA-256
 	{c} of {n}{more}	{c} trên {n}{more}
 	{dpi} pixels/inch	{dpi} điểm ảnh/inch
 	{kind} Properties	Thuộc tính {kind}
-	{kind} field	Ô {kind}
+	{kind} field	Trường {kind}
 	{kind} · page {p}	{kind} · trang {p}
 	{kind} — click to show it on the page	{kind} — bấm để hiển thị nó trên trang
 	{k} of {n}	{k} trên {n}
@@ -2585,7 +2593,7 @@ certificate	SHA-256 digest	Giá trị băm SHA-256
 	{name} — unsaved changes	{name} — có thay đổi chưa lưu
 	{n} days ago	{n} ngày trước
 	{n} differences found	Tìm thấy {n} điểm khác biệt
-	{n} fields selected	Đã chọn {n} ô
+	{n} fields selected	Đã chọn {n} trường
 	{n} files	{n} tệp
 	{n} files done	{n} tệp đã xong
 	{n} files need attention	{n} tệp cần chú ý
@@ -2593,7 +2601,7 @@ certificate	SHA-256 digest	Giá trị băm SHA-256
 	{n} instances	{n} lần xuất hiện
 	{n} issues	{n} vấn đề
 	{n} marks	{n} dấu
-	{n} match(es) marked for redaction.	Đã đánh dấu {n} kết quả khớp để che.
+	{n} match(es) marked for redaction.	Đã đánh dấu {n} kết quả khớp để xóa.
 	{n} measurements use an unsupported format and are left out.	{n} phép đo dùng định dạng không được hỗ trợ và bị bỏ qua.
 	{n} min ago	{n} phút trước
 	{n} pages	{n} trang
@@ -2616,10 +2624,10 @@ certificate	SHA-256 digest	Giá trị băm SHA-256
 	“{name}” is protected. Enter a password to open it.	“{name}” được bảo vệ. Hãy nhập mật khẩu để mở.
 @plural	{n} page|{n} pages	{n} trang
 @plural	{n} file|{n} files	{n} tệp
-@plural	{n} field|{n} fields	{n} ô
+@plural	{n} field|{n} fields	{n} trường
 @plural	{n} comment|{n} comments	{n} bình luận
 @plural	{n} result|{n} results	{n} kết quả
-@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} tên ô trùng với các tệp trước và sẽ được đổi tên: {list}
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} tên trường trùng với các tệp trước và sẽ được đổi tên: {list}
 @plural	{n} object selected|{n} objects selected	Đã chọn {n} đối tượng
 @plural	Downloaded {n} PDF|Downloaded {n} PDFs	Đã tải xuống {n} PDF
 key	Ctrl	Ctrl
@@ -2631,3 +2639,7 @@ key	End	End
 key	Space	Space
 	Move tag earlier	Chuyển thẻ lên trước
 	Move tag later	Chuyển thẻ ra sau
+	Only allow this if you trust the source document.	Chỉ cho phép nếu bạn tin tưởng tài liệu nguồn.
+	Open this local PDF?	Mở PDF cục bộ này?
+	This document is trying to open a local file:	Tài liệu này đang cố mở một tệp cục bộ:
+	Remove "{name}" from this list? The file itself is not deleted.	Gỡ "{name}" khỏi danh sách này? Bản thân tệp không bị xóa.
