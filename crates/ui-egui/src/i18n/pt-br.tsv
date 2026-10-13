@@ -2353,5 +2353,5 @@ animation effects	Off	Desativados
 	Couldn't follow linked PDF: {reason}	Não foi possível abrir o PDF vinculado: {reason}
 	The linked PDF opened, but its named destination was not applied.	O PDF vinculado foi aberto, mas seu destino nomeado não foi aplicado.
 	The linked PDF opened, but its page destination was out of range.	O PDF vinculado foi aberto, mas sua página de destino está fora do intervalo.
-	Local cross-PDF links require the desktop app	Links locais entre PDFs exigem o aplicativo para desktop	Move tag earlier	Mover tag para antes
-	Move tag later	Mover tag para depoi	Tag form fields	Marcar campos de formulário151bee53 (i18n: translate form tag command)
+	Local cross-PDF links require the desktop app	Links locais entre PDFs exigem o aplicativo para desktop
+	Tag form fields	Marcar campos de formulário
