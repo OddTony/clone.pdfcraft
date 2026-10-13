@@ -2328,8 +2328,8 @@ milestone = "M6"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/ui-egui/tests/buttons.rs::hide_actions_hide_and_show_fields", "crates/forms/src/tests.rs::push_buttons_read_hide_actions", "crates/ui-egui/tests/buttons.rs::radio_buttons_run_their_own_show_hide_actions", "crates/forms/src/tests.rs::check_boxes_and_radio_buttons_keep_each_widgets_action"]
-notes = "A push button's, check box's or radio button's Hide action (each radio button its own, run after the click sets the value, as in Acrobat) (/T names, field or widget references, arrays; /H) hides or shows the fields and their kids; hidden widgets take no clicks, tab stops or highlights. A widget reference acts on its whole field, and only form fields are hidden, not other annotations."
+evidence = ["crates/ui-egui/tests/buttons.rs::hide_actions_hide_and_show_fields", "crates/forms/src/tests.rs::push_buttons_read_hide_actions", "crates/ui-egui/tests/buttons.rs::radio_buttons_run_their_own_show_hide_actions", "crates/forms/src/tests.rs::check_boxes_and_radio_buttons_keep_each_widgets_action", "crates/ui-egui/tests/buttons.rs::a_radio_buttons_chained_actions_all_run", "crates/forms/src/tests.rs::action_chains_are_read_in_order_and_end_on_a_cycle"]
+notes = "A push button's, check box's or radio button's Hide action (each radio button its own, run after the click sets the value, as in Acrobat), including /Next chains (show/hide steps applied together as one undo step, other steps after them; at most 256 actions, each once) (/T names, field or widget references, arrays; /H) hides or shows the fields and their kids; hidden widgets take no clicks, tab stops or highlights. A widget reference acts on its whole field, and only form fields are hidden, not other annotations."
 
 [[feature]]
 id = "edit.action-javascript"

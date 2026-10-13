@@ -336,3 +336,31 @@ fn an_image_field_takes_its_picture_after_typing_in_another_field() {
     assert_eq!(doc.can_undo(), Some("Set the image of photo"), "and the picture went in: {:?}", s.toast);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_radio_buttons_chained_actions_all_run() {
+    // Yes hides the photo box and, through /Next, shows its caption; No does the opposite.
+    let h = &mut shell(pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 6 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [4 0 R 5 0 R 7 0 R 8 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (caption) /Ff 1 /V (Declaration) /F 6 /Rect [20 340 280 360] /P 3 0 R >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (photo) /F 4 /Rect [20 200 280 320] /P 3 0 R >>",
+        "<< /FT /Btn /T (scan) /Ff 49152 /V /Off /Kids [7 0 R 8 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /Parent 6 0 R /AS /Off /F 4 /Rect [20 150 40 170] /P 3 0 R /AP << /N << /Yes 9 0 R /Off 9 0 R >> >> /A << /S /Hide /T (photo) /Next << /S /Hide /T (caption) /H false >> >> >>",
+        "<< /Type /Annot /Subtype /Widget /Parent 6 0 R /AS /Off /F 4 /Rect [60 150 80 170] /P 3 0 R /AP << /N << /No 9 0 R /Off 9 0 R >> >> /A << /S /Hide /T (photo) /H false /Next << /S /Hide /T (caption) >> >> >>",
+        "<< /Length 0 >>\nstream\n\nendstream",
+    ]));
+    let hidden = |h: &Harness<'static, PdfCraftApp>, name: &str| {
+        let s = h.state();
+        s.session.get(s.views[0].id).unwrap().form.iter().find(|f| f.name == name).unwrap().widgets[0].hidden
+    };
+    assert!(hidden(h, "caption") && !hidden(h, "photo"));
+    click_widget(h, "scan", 0);
+    assert_eq!(value(h, "scan"), ["Yes"]);
+    assert!(hidden(h, "photo"), "the first action hid the photo box");
+    assert!(!hidden(h, "caption"), "and the chained one showed the caption");
+    click_widget(h, "scan", 1);
+    assert_eq!(value(h, "scan"), ["No"]);
+    assert!(!hidden(h, "photo") && hidden(h, "caption"));
+}

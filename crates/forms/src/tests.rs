@@ -2129,3 +2129,24 @@ fn check_boxes_and_radio_buttons_keep_each_widgets_action() {
     let go = field(&all, "go");
     assert_eq!((go.button.clone(), go.widgets[0].action.clone()), (Some(hide), None));
 }
+
+#[test]
+fn action_chains_are_read_in_order_and_end_on_a_cycle() {
+    // go: hide a, then (/Next array) show b and hide c; c's /Next points back at the first action.
+    let doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Annots [5 0 R 9 0 R] >>".into(),
+        "<< /Fields [5 0 R 9 0 R] >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (go) /Rect [10 10 50 30] /P 3 0 R /A 6 0 R >>".into(),
+        "<< /S /Hide /T (a) /Next [7 0 R 8 0 R] >>".into(),
+        "<< /S /Hide /T (b) /H false >>".into(),
+        "<< /S /Hide /T (c) /Next 6 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 65536 /T (one) /Rect [60 10 90 30] /P 3 0 R /A << /S /Hide /T (a) /Next << /S /Unknown >> >> >>".into(),
+    ]);
+    let all = fields(&doc);
+    let hide = |f: &str, hide: bool| af::ButtonAction::ShowHide { fields: vec![f.into()], hide };
+    assert_eq!(field(&all, "go").button, Some(af::ButtonAction::Chain(vec![hide("a", true), hide("b", false), hide("c", true)])));
+    // A chain with one action PdfCraft can run is that action.
+    assert_eq!(field(&all, "one").button, Some(hide("a", true)));
+}

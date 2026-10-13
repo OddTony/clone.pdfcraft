@@ -272,7 +272,50 @@ fn button_action(doc: &Document, d: &Dict, widgets: &[ObjRef]) -> Option<af::But
         dict.get(b"A").cloned().or_else(|| dict.get(b"AA").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().and_then(|aa| aa.get(b"U").cloned())))
     };
     let action = pick(d).or_else(|| widgets.iter().find_map(|w| doc.get(*w).as_dict().and_then(pick)))?;
-    let a = doc.resolve(&action);
+    action_chain(doc, &action)
+}
+
+/// At most this many actions of a `/Next` chain are read.
+const MAX_ACTION_CHAIN: usize = 256;
+
+/// An action and the actions its `/Next` runs after it (ISO 32000-2 §12.6.2: one action or an
+/// array of them, each with its own `/Next`), in order. Actions PdfCraft can't run are left
+/// out; each action object is read once, so a cycle ends.
+fn action_chain(doc: &Document, first: &Object) -> Option<af::ButtonAction> {
+    let mut steps = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut stack = vec![first.clone()];
+    let mut read = 0;
+    while let Some(o) = stack.pop() {
+        if read >= MAX_ACTION_CHAIN {
+            break;
+        }
+        read += 1;
+        if let Some(r) = o.as_ref()
+            && !seen.insert(r)
+        {
+            continue;
+        }
+        let resolved = doc.resolve(&o);
+        let Some(d) = resolved.as_dict() else { continue };
+        steps.extend(one_action(doc, &o));
+        if let Some(next) = d.get(b"Next") {
+            match doc.resolve(next).as_array() {
+                // The stack runs last-in first: the array's first action goes on top.
+                Some(items) => stack.extend(items.iter().take(MAX_ACTION_CHAIN).rev().cloned()),
+                None => stack.push(next.clone()),
+            }
+        }
+    }
+    match steps.len() {
+        0 | 1 => steps.pop(),
+        _ => Some(af::ButtonAction::Chain(steps)),
+    }
+}
+
+/// One action dictionary (or a reference to one), without its `/Next`.
+fn one_action(doc: &Document, action: &Object) -> Option<af::ButtonAction> {
+    let a = doc.resolve(action);
     let a = a.as_dict()?;
     let s = |k: &[u8]| a.get(k).and_then(|v| text_of(&doc.resolve(v)));
     Some(match a.name(b"S")? {
@@ -343,7 +386,7 @@ fn button_action(doc: &Document, d: &Dict, widgets: &[ObjRef]) -> Option<af::But
             let preserve_rb = !a.get(b"PreserveRB").is_some_and(|p| matches!(&*doc.resolve(p), Object::Bool(false)));
             af::ButtonAction::SetLayers { changes, preserve_rb }
         }
-        b"JavaScript" => af::button_script(&script(doc, &action)?),
+        b"JavaScript" => af::button_script(&script(doc, action)?),
         _ => return None,
     })
 }
