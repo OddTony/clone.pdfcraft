@@ -35,16 +35,32 @@ The Brazilian Portuguese catalog has 2,000 entries: the ~1,826-entry gist André
 
 The Arabic catalog has 2,137 entries in Modern Standard Arabic with Western digits. Counts use the six [CLDR Arabic forms](https://www.unicode.org/cldr/charts/48/supplemental/language_plural_rules.html#ar) (`0`, `1`, `2`, `3–10`, `11–99`, the rest), and dates use the Arabic names of the Gregorian months.
 
-egui joins the letters of an Arabic word and runs them right to left, but it places the words of a line left to right in the order they are written. So catalog entries are written in logical (typing) order, and `i18n` puts each one into display order when the catalog loads (`bidi::display_rtl`): the line reads right to left, Latin words and numbers inside it read left to right, `{name}` placeholders and keyboard shortcuts stay whole, spaces at either end stay where the code concatenates, and a short caption keeps its colon on the right, beside the widget it captions. Lookups (`tl!`, `tr`, `trn`) therefore return display-order text for Arabic; `i18n::fmt` inserts values as they are. The command search matches a query of several Arabic words word by word.
+egui joins the letters of an Arabic word and runs them right to left, but it places the words of a line left to right in the order they are written. So catalog entries are written in logical (typing) order, and `i18n` puts each one into display order when the catalog loads (`bidi::display_rtl`): the line reads right to left, Latin words and numbers inside it read left to right, `{name}` placeholders and keyboard shortcuts stay whole, spaces at either end stay where the code concatenates, and a short caption that the code appends a value to (`"Issued by: "`) keeps its colon on the right, beside that value. A caption that stands beside its widget ends at its colon, on the left. Lookups (`tl!`, `tr`, `trn`) therefore return display-order text for Arabic; `i18n::fmt` inserts values as they are. The command search matches a query of several Arabic words word by word.
+
+### Mirrored layout
+
+In Arabic the window is laid out from the right (`crates/ui-egui/src/rtl.rs`). The tool panel is on the right and the navigation rail and its panels on the left; the tab strip, the mode bar, toolbars, panel headers, dialog rows and their buttons, menus, the command search, Home and Combine Files run right to left; check boxes and radio buttons have their box on the right of their label, and combo boxes their arrow on the left; a submenu opens to the left of its menu; list rows (tools, bookmarks, fields, recent files, search results) put their icon on the right and their badge or shortcut on the left; chevrons that mean "back", "next" or "expand" point the other way. Switching language mirrors the window at once, and every other language is laid out exactly as before.
+
+The docked panels (Tools, Document, Inspector) are shown mirrored: the arrangement that is saved is the same in every language, so a workspace arranged in English appears with its sides swapped in Arabic, and a panel moved or resized in Arabic is saved as its mirror image. **Preferences > Tools panel side** names the side the panel is on screen. The `tools-side` option and `ui.state`'s `tools_side` report the saved side. Floating panels stay where they are, and the tab bar of a docked group keeps its tabs at the left.
+
+Where the tab strip carries the window buttons (GNOME on Wayland), they stay on the side the desktop names and in its order; the macOS traffic lights stay on the left.
+
+**The document is never mirrored.** The page, its comments and form fields, text being edited on the page, and the grid of pages in Organize keep the document's own order: which side a document reads from is a property of the document (**Document Properties > Advanced > Binding**), not of the interface language. The bars drawn over the document area (notices, Find, the quick tools, the Organize toolbar) follow the interface.
+
+egui has no layout direction, so direction is inherited: each panel, dialog, floating bar and menu starts a right-aligned column, and a row opened in one runs right to left. A widget that is laid out from the left inside itself (a check box, a menu item, a combo box, a hand-painted list row) is painted as usual and its parts are then moved to the mirrored place; nothing is flipped. Two things egui can only lay out from the left as a whole are drawn as left-to-right blocks set against the right edge:
+
+- **Grids** (the label-and-field tables in dialogs such as Document Properties or Print) and the Combine Files table: the table sits on the right, but its columns keep their order, label column first from the left.
+- **Sideways-scrolling strips** (the document tabs when they overflow): the tabs are in right-to-left order, and the strip scrolls from its left end.
+
+Icons are not flipped: only the chevrons above change. Tooltips are not mirrored.
 
 What Arabic does not have yet:
 
-- **The layout is not mirrored.** Panels, menus, toolbars and alignment are as in the left-to-right languages, with Arabic labels in them.
 - **A wrapped paragraph breaks at the wrong end.** A label too long for its line continues on the next line with its *first* words, so wrapped descriptions and tooltips read from the last line up. Single-line labels are right.
-- **Text you type into a field** (search, comments, form values) has joined letters but its words run left to right while you edit it. What is stored is correct.
+- **Text you type into a field** (search, comments, form values) starts at the left of the field, and has joined letters but its words run left to right while you edit it. What is stored is correct.
 - Labels built by joining translated pieces in code (a list such as `A · B · C`) keep the code's left-to-right order.
 
-These need bidirectional support in the text layout itself, not in the catalog.
+These need bidirectional support in the text layout itself, not in the catalog or the layout.
 
 Arabic glyphs come from the craft-fonts `Arab` face (Noto Sans Arabic, kept in the web build too). A build without craft-fonts shows Arabic as replacement boxes on the web; on desktop it falls back to one installed font (below). The craft-fonts revision pinned for CI and releases (`.github/workflows/`) has the Arabic face. That revision also holds Noto Sans CJK SC, which `crates/fonts/build.rs` never embeds: `AGENTS.md` §1.1 bars it, so Chinese still has no embedded face of its own (desktop builds fall back to an installed Chinese face, above).
 

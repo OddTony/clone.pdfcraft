@@ -38,7 +38,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
                         widgets::artcraft_mark(ui, 28.0);
-                        ui.vertical(|ui| {
+                        crate::rtl::vertical(ui, |ui| {
                             ui.label(egui::RichText::new(tl!("Join the ArtCraft community")).font(theme::semibold(15.0)));
                             ui.label(egui::RichText::new(tl!("Get help, share feedback and follow development on Discord.")).color(t.text_muted));
                         });
@@ -64,6 +64,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         for id in RECOMMENDED {
                             let Some(g) = catalog::group(id) else { continue };
                             let (rect, resp) = ui.allocate_exact_size(vec2(190.0, 104.0), Sense::click());
+                            let _mirror = crate::rtl::mirror_scope(ui, rect);
                             resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!(g.label)));
                             let press = theme::Press::track(ui, &resp);
                             card_lift(ui, &t, rect, press);
@@ -102,6 +103,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             }
                         }
                         let (rect, resp) = ui.allocate_exact_size(vec2(170.0, 104.0), Sense::click());
+                        let _mirror = crate::rtl::mirror_scope(ui, rect);
                         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Open file")));
                         let press = theme::Press::track(ui, &resp);
                         card_lift(ui, &t, rect, press);
@@ -132,7 +134,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(tl!("Recent")).font(theme::semibold(17.0)));
                 if !app.recent.is_empty() {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
                         let resp = widgets::ghost_button(ui, "trash-2", tl!("Clear"));
                         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Clear Recent Files")));
                         clear = resp.on_hover_text(tl!("Clear Recent Files")).clicked();
@@ -147,6 +149,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             let mut remove = None;
             for r in &app.recent {
                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 46.0), Sense::click());
+                let _mirror = crate::rtl::mirror_scope(ui, rect);
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &r.name));
                 let press = theme::Press::track(ui, &resp);
                 // The row, not its response: the pointer stays "in" the row over its remove button.
@@ -160,7 +163,8 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 if hovered {
                     // Remove just this file from the list (#430); the file itself is untouched.
                     let x_rect = Rect::from_center_size(rect.right_center() - vec2(26.0, 0.0), vec2(28.0, 28.0));
-                    let x = ui.interact(x_rect, ui.id().with(("remove-recent", &r.path)), Sense::click());
+                    let x =
+                        ui.interact(crate::rtl::mirrored(crate::rtl::on(), rect, x_rect), ui.id().with(("remove-recent", &r.path)), Sense::click());
                     let label = crate::i18n::fmt(tl!("Remove {name} from Recent"), &[("name", &r.name)]);
                     x.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
                     if x.hovered() {

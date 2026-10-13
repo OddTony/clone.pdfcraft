@@ -5,7 +5,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use egui::{Align, Layout};
+use egui::Align;
 use pdfcraft_engine::export::{ExportSource, Exporter, ImageFormat};
 
 use crate::marks_ui::PageRange;
@@ -53,13 +53,15 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: E
     if kind == ExportKind::Image {
         ui.horizontal(|ui| {
             ui.label(tl!("Resolution"));
-            egui::ComboBox::from_id_salt("export-dpi")
-                .selected_text(crate::i18n::fmt(tl!("{dpi} pixels/inch"), &[("dpi", &d.dpi.to_string())]))
-                .show_ui(ui, |ui| {
+            crate::rtl::combo(
+                ui,
+                egui::ComboBox::from_id_salt("export-dpi").selected_text(crate::i18n::fmt(tl!("{dpi} pixels/inch"), &[("dpi", &d.dpi.to_string())])),
+                |ui| {
                     for dpi in [72.0, 96.0, 150.0, 300.0, 600.0] {
                         ui.selectable_value(&mut d.dpi, dpi, crate::i18n::fmt(tl!("{dpi} pixels/inch"), &[("dpi", &dpi.to_string())]));
                     }
-                });
+                },
+            );
         });
         ui.horizontal(|ui| {
             ui.label(tl!("Format"));
@@ -67,7 +69,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: E
                 ImageFormat::Jpeg { quality } => quality,
                 _ => 85,
             };
-            egui::ComboBox::from_id_salt("export-format").selected_text(d.format.label()).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt("export-format").selected_text(d.format.label()), |ui| {
                 for f in [ImageFormat::Png, ImageFormat::Jpeg { quality }, ImageFormat::Tiff] {
                     let on = std::mem::discriminant(&d.format) == std::mem::discriminant(&f);
                     if ui.selectable_label(on, f.label()).clicked() {
@@ -93,7 +95,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: E
             let label = move |n: u32| {
                 if n == 0 { tl!("No limit").to_string() } else { crate::i18n::trn(crate::i18n::current(), u64::from(n), "{n} pixel", "{n} pixels") }
             };
-            egui::ComboBox::from_id_salt("export-min").selected_text(label(d.min_side)).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt("export-min").selected_text(label(d.min_side)), |ui| {
                 for n in [0, 16, 32, 64, 128, 256] {
                     ui.selectable_value(&mut d.min_side, n, label(n));
                 }
@@ -112,7 +114,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: E
     d.range.ui(ui, count);
     ui.add_space(12.0);
     let (mut apply, mut cancel) = (false, false);
-    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+    ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
         let ok = !d.range.pages(count).is_empty();
         if ui.add_enabled_ui(ok, |ui| widgets::pill_button(ui, tl!("Export"), true)).inner.clicked() {
             apply = true;

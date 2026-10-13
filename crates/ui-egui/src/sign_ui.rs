@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use egui::{Align, Color32, CornerRadius, Layout, Pos2, Rect, Stroke, vec2};
+use egui::{Align, Color32, CornerRadius, Pos2, Rect, Stroke, vec2};
 use pdfcraft_engine::sign::{self, Appearance, Certificate, DigitalId, Modification, Name, PrivateKey};
 use pdfcraft_engine::{SignOptions, SignatureImage, SignatureInfo, SignatureStatus};
 
@@ -597,6 +597,7 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             let selected = d.selected == Some(i);
             let usable = e.unusable.is_none();
             let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), egui::Sense::click());
+            let _mirror = crate::rtl::mirror_scope(ui, rect);
             resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::RadioButton, usable, selected, &e.name));
             let fill = if selected {
                 t.accent_soft
@@ -679,7 +680,7 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         if d.confirm_remove.is_none() && ui.add_enabled_ui(removable.is_some(), |ui| widgets::pill_button(ui, tl!("Remove"), false)).inner.clicked() {
             d.confirm_remove = removable;
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if ui.add_enabled_ui(d.selected.is_some(), |ui| widgets::pill_button(ui, tl!("Continue"), true)).inner.clicked() {
                 d.step = SignStep::SignAs;
                 d.error = None;
@@ -708,7 +709,7 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     ui.add_space(8.0);
     let n = &mut d.new_id;
     if n.create {
-        egui::Grid::new("new-id").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+        crate::rtl::grid(ui, egui::Grid::new("new-id").num_columns(2).spacing([12.0, 8.0]), |ui| {
             for (label, value) in [
                 (tl!("Name"), &mut n.name),
                 (tl!("Organizational Unit"), &mut n.unit),
@@ -723,7 +724,7 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             ui.add(crate::widgets::line(&mut n.country).hint_text("US").char_limit(2).desired_width(60.0)).labelled_by(l.id);
             ui.end_row();
             ui.label(tl!("Key Algorithm"));
-            egui::ComboBox::from_id_salt("key-alg").selected_text(KEY_ALGORITHMS[n.key].0).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt("key-alg").selected_text(KEY_ALGORITHMS[n.key].0), |ui| {
                 for (i, (label, _)) in KEY_ALGORITHMS.iter().enumerate() {
                     ui.selectable_value(&mut n.key, i, *label);
                 }
@@ -742,7 +743,7 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 .color(t.text_muted),
         );
     } else {
-        egui::Grid::new("id-file").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+        crate::rtl::grid(ui, egui::Grid::new("id-file").num_columns(2).spacing([12.0, 8.0]), |ui| {
             let l = ui.label(tl!("File (.p12, .pfx)"));
             ui.horizontal(|ui| {
                 ui.add(crate::widgets::line(&mut n.file).desired_width(220.0)).labelled_by(l.id);
@@ -764,7 +765,7 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             d.step = SignStep::Choose;
             d.error = None;
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if widgets::pill_button(ui, if d.new_id.create { tl!("Save") } else { tl!("Continue") }, true).clicked() {
                 go = true;
             }
@@ -914,7 +915,7 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     } else {
         ui.label(egui::RichText::new(tl!("The signature will be invisible.")).color(t.text_muted));
     }
-    egui::Grid::new("sign-as").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("sign-as").num_columns(2).spacing([12.0, 8.0]), |ui| {
         if d.certify.is_some() {
             ui.label(tl!("Permitted actions after certifying"));
             let mut p = d.certify.unwrap_or(2);
@@ -923,7 +924,7 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 3 => tl!("Annotations, form fill-in, and digital signatures"),
                 _ => tl!("Form fill-in and digital signatures"),
             };
-            egui::ComboBox::from_id_salt("certify-p").selected_text(label(p)).width(300.0).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt("certify-p").selected_text(label(p)).width(300.0), |ui| {
                 for v in [1u8, 2, 3] {
                     ui.selectable_value(&mut p, v, label(v));
                 }
@@ -964,7 +965,7 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             d.step = SignStep::Choose;
             d.error = None;
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if widgets::pill_button(ui, tl!("Sign"), true).clicked() {
                 go = true;
             }
@@ -1082,7 +1083,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, sigs: &[SignatureInfo], expan
         let head = crate::i18n::fmt(tl!(template), &[("rev", &s.revision.to_string()), ("name", name)]);
         let resp = ui
             .horizontal(|ui| {
-                let chevron = if open { "chevron-down" } else { "chevron-right" };
+                let chevron = if open { "chevron-down" } else { crate::rtl::forward_chevron() };
                 let toggle = icons::button(ui, chevron, 20.0, false, if open { "Collapse" } else { "Expand" }).clicked();
                 ui.add(icons::image(icon, 16.0, color));
                 let l = ui.add(egui::Label::new(egui::RichText::new(&head).font(theme::semibold(12.5)).color(t.text)).sense(egui::Sense::click()));
@@ -1245,7 +1246,7 @@ pub(crate) fn cert_viewer(ui: &mut egui::Ui, v: &mut CertViewer, trusted: &[Cert
     v.selected = v.selected.min(v.chain.len().saturating_sub(1));
     ui.horizontal_top(|ui| {
         // The chain, root at the top (as Acrobat shows it).
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.set_width(200.0);
             for (depth, i) in (0..v.chain.len()).rev().enumerate() {
                 let c = &v.chain[i];
@@ -1258,7 +1259,7 @@ pub(crate) fn cert_viewer(ui: &mut egui::Ui, v: &mut CertViewer, trusted: &[Cert
             }
         });
         ui.add_space(16.0);
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.set_width(440.0);
             let Some(c) = v.chain.get(v.selected).cloned() else { return };
             ui.horizontal(|ui| {
@@ -1270,7 +1271,7 @@ pub(crate) fn cert_viewer(ui: &mut egui::Ui, v: &mut CertViewer, trusted: &[Cert
             });
             ui.add_space(8.0);
             let grid = |ui: &mut egui::Ui, rows: Vec<(&str, String)>| {
-                egui::Grid::new(("cert-rows", v.tab as u8)).num_columns(2).spacing([12.0, 5.0]).show(ui, |ui| {
+                crate::rtl::grid(ui, egui::Grid::new(("cert-rows", v.tab as u8)).num_columns(2).spacing([12.0, 5.0]), |ui| {
                     for (k, val) in rows {
                         ui.label(egui::RichText::new(tl_ctx!("certificate", k)).color(t.text_muted));
                         ui.add(egui::Label::new(val).wrap());
@@ -1330,7 +1331,7 @@ pub(crate) fn cert_viewer(ui: &mut egui::Ui, v: &mut CertViewer, trusted: &[Cert
     });
     ui.add_space(10.0);
     let mut close = false;
-    ui.horizontal(|ui| ui.with_layout(Layout::right_to_left(Align::Center), |ui| close = widgets::pill_button(ui, tl!("OK"), true).clicked()));
+    ui.horizontal(|ui| ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| close = widgets::pill_button(ui, tl!("OK"), true).clicked()));
     (close, action)
 }
 

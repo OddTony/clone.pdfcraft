@@ -582,7 +582,7 @@ fn driver_options_panel(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens) {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(tl!("Printer properties")).font(theme::semibold(13.0)));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
                 if ui.button(tl!("Done")).clicked() {
                     *show = false;
                 }
@@ -603,17 +603,21 @@ fn driver_options_panel(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens) {
                     // Option and group names are the driver's own text.
                     ui.label(egui::RichText::new(group).small().color(t.text_muted));
                 }
-                egui::Grid::new(("driver-group", n)).num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                crate::rtl::grid(ui, egui::Grid::new(("driver-group", n)).num_columns(2).spacing([10.0, 4.0]), |ui| {
                     for o in chunk {
                         ui.label(&o.label);
                         let current = choices.get(&o.key).cloned().unwrap_or_else(|| o.default.clone());
                         let label_of = |c: &str| o.choices.iter().find(|(k, _)| k == c).map_or_else(|| c.to_string(), |(_, l)| l.clone());
                         let mut pick = current.clone();
-                        egui::ComboBox::from_id_salt(("driver-option", &o.key)).selected_text(label_of(&current)).width(200.0).show_ui(ui, |ui| {
-                            for (k, l) in &o.choices {
-                                ui.selectable_value(&mut pick, k.clone(), l.as_str());
-                            }
-                        });
+                        crate::rtl::combo(
+                            ui,
+                            egui::ComboBox::from_id_salt(("driver-option", &o.key)).selected_text(label_of(&current)).width(200.0),
+                            |ui| {
+                                for (k, l) in &o.choices {
+                                    ui.selectable_value(&mut pick, k.clone(), l.as_str());
+                                }
+                            },
+                        );
                         if pick != current {
                             if pick == o.default {
                                 choices.remove(&o.key);
@@ -631,7 +635,7 @@ fn driver_options_panel(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens) {
 
 fn combo<T: PartialEq + Copy>(ui: &mut egui::Ui, id: &str, value: &mut T, choices: &[(T, &str)], width: f32) {
     let shown = choices.iter().find(|c| c.0 == *value).map_or("", |c| c.1);
-    egui::ComboBox::from_id_salt(id).selected_text(shown).width(width).show_ui(ui, |ui| {
+    crate::rtl::combo(ui, egui::ComboBox::from_id_salt(id).selected_text(shown).width(width), |ui| {
         for (v, label) in choices {
             ui.selectable_value(value, *v, *label);
         }
@@ -656,16 +660,16 @@ pub(crate) fn body(
     d.sheet = d.sheet.min(sheets.len().saturating_sub(1));
     ui.horizontal_top(|ui| {
         // Settings.
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.set_width(470.0);
-            egui::Grid::new("print-top").num_columns(2).spacing([10.0, 8.0]).show(ui, |ui| {
+            crate::rtl::grid(ui, egui::Grid::new("print-top").num_columns(2).spacing([10.0, 8.0]), |ui| {
                 ui.label(tl!("Printer:"));
                 let before = d.printer.clone();
                 // The browser's print dialog sets copies, two-sided printing and colour itself.
                 let browser = d.printer.as_deref() == Some(crate::web_print::BROWSER_PRINTER);
                 ui.horizontal(|ui| {
                     let shown = d.printer.as_deref().map_or_else(|| tl!("Save as PDF").to_string(), printer_label);
-                    egui::ComboBox::from_id_salt("printer").selected_text(shown).width(260.0).show_ui(ui, |ui| {
+                    crate::rtl::combo(ui, egui::ComboBox::from_id_salt("printer").selected_text(shown).width(260.0), |ui| {
                         if d.printers_loading {
                             ui.add_enabled(false, egui::Label::new(tl!("Looking for printers…")));
                         }
@@ -732,7 +736,7 @@ pub(crate) fn body(
                 ui.end_row();
                 ui.label(tl!("Paper:"));
                 let paper_name = PAPERS.get(d.paper).map_or("US Letter", |p| p.0);
-                egui::ComboBox::from_id_salt("paper").selected_text(paper_name).width(260.0).show_ui(ui, |ui| {
+                crate::rtl::combo(ui, egui::ComboBox::from_id_salt("paper").selected_text(paper_name).width(260.0), |ui| {
                     for (i, (name, _)) in PAPERS.iter().enumerate() {
                         ui.selectable_value(&mut d.paper, i, *name);
                     }
@@ -912,7 +916,7 @@ pub(crate) fn body(
         });
         ui.add_space(12.0);
         // Preview.
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             ui.set_width(PREVIEW_W);
             let (area, _) = ui.allocate_exact_size(vec2(PREVIEW_W, PREVIEW_H), egui::Sense::hover());
             ui.painter().rect_filled(area, 6.0, t.hover);
@@ -1012,7 +1016,7 @@ pub(crate) fn body(
     });
     ui.add_space(12.0);
     let (mut go, mut cancel) = (false, false);
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+    ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
         let label = if d.printer.is_some() { "Print" } else { "Save as PDF" };
         if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty(), |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
             go = true;

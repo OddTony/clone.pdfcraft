@@ -7,7 +7,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use egui::{Align, Layout};
+use egui::Align;
 use pdfcraft_engine::optimize::{Compression, ImageSettings, QUALITIES, Settings};
 use pdfcraft_engine::optimizer::{OptimizeStage, Optimized};
 use pdfcraft_engine::{DocId, EditError, Hidden, OptimizeReport};
@@ -120,7 +120,7 @@ fn image_row(ui: &mut egui::Ui, id: &str, title: &str, s: &mut ImageSettings) {
             Compression::Flate => tl!("ZIP"),
             Compression::Retain => tl!("Retain existing"),
         };
-        egui::ComboBox::from_id_salt((id, "compression")).selected_text(label).show_ui(ui, |ui| {
+        crate::rtl::combo(ui, egui::ComboBox::from_id_salt((id, "compression")).selected_text(label), |ui| {
             let q = match s.compression {
                 Compression::Jpeg(q) => q,
                 _ => 60,
@@ -132,7 +132,7 @@ fn image_row(ui: &mut egui::Ui, id: &str, title: &str, s: &mut ImageSettings) {
         if let Compression::Jpeg(q) = &mut s.compression {
             ui.label(tl!("Quality"));
             let name = QUALITIES.iter().min_by_key(|(_, v)| (*v as i32 - *q as i32).abs()).map_or(tl!("Medium"), |(n, _)| tl!(n));
-            egui::ComboBox::from_id_salt((id, "quality")).selected_text(name).show_ui(ui, |ui| {
+            crate::rtl::combo(ui, egui::ComboBox::from_id_salt((id, "quality")).selected_text(name), |ui| {
                 for (n, v) in QUALITIES {
                     ui.selectable_value(q, v, tl!(n));
                 }
@@ -213,7 +213,7 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut OptimizeDraft, t: &Tokens) -> (boo
         if widgets::pill_button(ui, tl!("Audit space usage…"), false).clicked() {
             d.audit = true;
         }
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if widgets::pill_button(ui, tl!("OK"), true).clicked() {
                 ok = true;
             }
@@ -229,7 +229,7 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut OptimizeDraft, t: &Tokens) -> (boo
 pub(crate) fn audit_body(ui: &mut egui::Ui, rows: &[pdfcraft_engine::optimize::SpaceUse], t: &Tokens) -> bool {
     ui.label(egui::RichText::new(tl!("Space Audit")).font(crate::theme::semibold(18.0)));
     ui.add_space(8.0);
-    egui::Grid::new("space-audit").num_columns(3).striped(true).spacing([24.0, 4.0]).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new("space-audit").num_columns(3).striped(true).spacing([24.0, 4.0]), |ui| {
         for h in [tl!("Description"), tl!("Bytes"), tl!("Percentage")] {
             ui.label(egui::RichText::new(h).color(t.text_muted));
         }
@@ -244,18 +244,18 @@ pub(crate) fn audit_body(ui: &mut egui::Ui, rows: &[pdfcraft_engine::optimize::S
                 tl!(r.category.label()).to_string()
             };
             ui.label(category);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| ui.label(r.bytes.to_string()));
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| ui.label(format!("{:.2}%", r.percent)));
+            ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| ui.label(r.bytes.to_string()));
+            ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| ui.label(format!("{:.2}%", r.percent)));
             ui.end_row();
         }
         ui.label(egui::RichText::new(tl!("Total")).strong());
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| ui.label(egui::RichText::new(total.to_string()).strong()));
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| ui.label(egui::RichText::new("100.00%").strong()));
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| ui.label(egui::RichText::new(total.to_string()).strong()));
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| ui.label(egui::RichText::new("100.00%").strong()));
         ui.end_row();
     });
     ui.add_space(12.0);
     let mut ok = false;
-    ui.horizontal(|ui| ui.with_layout(Layout::right_to_left(Align::Center), |ui| ok = widgets::pill_button(ui, tl!("OK"), true).clicked()));
+    ui.horizontal(|ui| ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| ok = widgets::pill_button(ui, tl!("OK"), true).clicked()));
     ok
 }
 

@@ -10053,11 +10053,11 @@ title = "Right-to-left user interface"
 area = "N"
 tier = "P2"
 milestone = "M14"
-status = "planned"
+status = "partial"
 commands = []
 tools = []
-evidence = []
-notes = "Only a first step exists: Arabic and Hebrew file names and paths in the tab strip, the recent-files list and Properties have glyphs (a craft-fonts Arab face, or an installed font on desktop) and are shown in display order (crates/ui-egui/src/bidi.rs). Missing: multi-line text (bookmarks, comments, search results), text input, a mirrored layout and a right-to-left interface language."
+evidence = ["crates/ui-egui/tests/rtl.rs::the_window_reads_from_the_right_in_arabic_and_from_the_left_otherwise", "crates/ui-egui/tests/rtl.rs::side_panels_swap_sides", "crates/ui-egui/tests/rtl.rs::the_page_is_never_mirrored", "crates/ui-egui/tests/rtl.rs::dialog_buttons_end_on_the_left_in_arabic", "crates/ui-egui/tests/rtl.rs::the_main_menu_opens_under_its_button_and_reads_from_the_right", "crates/ui-egui/tests/rtl.rs::a_check_box_has_its_box_on_the_right_and_is_still_one_widget", "crates/ui-egui/tests/rtl.rs::every_panel_dialog_and_tool_draws_in_arabic", "crates/ui-egui/src/rtl.rs::a_right_to_left_language_mirrors_what_a_widget_painted", "crates/ui-egui/src/bidi.rs::rtl_labels_read_right_to_left"]
+notes = "Arabic is a right-to-left interface language: its catalog is shown in display order (crates/ui-egui/src/bidi.rs) and the window is mirrored (crates/ui-egui/src/rtl.rs): side panels swap sides; the tab strip, mode bar, toolbars, panel headers, dialog rows and buttons, menus, command search, Home and Combine Files run right to left; check boxes, radio buttons, combo boxes and list rows lead from the right; submenus open to the left; back/next/expand chevrons turn. The page, its annotations and fields, and the Organize page grid are never mirrored. Arabic and Hebrew file names and paths in the tab strip, the recent-files list and Properties are shown in display order. Missing: grids (label-and-field tables in dialogs) and the Combine Files table keep their left-to-right column order (egui lays them out from the left only); icons other than chevrons and tooltips are not mirrored; a wrapped Arabic paragraph breaks at the wrong end; text typed into a field starts at the left and its words run left to right while editing; multi-line right-to-left text in bookmarks, comments and search results may be ordered wrongly; Hebrew, Persian and Urdu have no catalog. Not compared against Acrobat's Arabic interface."
 
 [[feature]]
 id = "misc.installers"

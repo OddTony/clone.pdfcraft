@@ -144,6 +144,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     let mut chosen: Option<(Option<&'static str>, Option<&'static str>)> = None;
     let area_response = egui::Area::new(egui::Id::new("palette"))
+        .layout(crate::rtl::area_layout())
         .order(egui::Order::Foreground)
         .pivot(Align2::CENTER_TOP)
         .fixed_pos(egui::pos2(screen.center().x, screen.top() + 96.0))
@@ -174,6 +175,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 ui.separator();
                 for (index, (_, h)) in hits.iter().enumerate() {
                     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::click());
+                    let _mirror = crate::rtl::mirror_scope(ui, rect);
                     let press = theme::Press::track(ui, &resp);
                     press.wash(ui, rect, 6, index == selected);
                     let body = rect.translate(press.offset());

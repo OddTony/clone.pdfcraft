@@ -4,7 +4,7 @@
 //! current page; cards grouped by page. Selecting a card selects the comment on the page and
 //! opens its reply box and "…" menu (Edit, Set status, Delete). Status replies show as a badge.
 
-use egui::{Align, Color32, CornerRadius, Layout, Sense, Stroke, vec2};
+use egui::{Align, Color32, CornerRadius, Sense, Stroke, vec2};
 use pdfcraft_engine::{Edit, NoteIcon, ReviewState, Shape};
 use pdfcraft_render::{Annotation, DocInfo};
 
@@ -223,7 +223,9 @@ pub(crate) fn show(
                         .font(theme::semibold(12.5))
                         .color(t.text_muted),
                 );
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| ui.label(egui::RichText::new(n.to_string()).color(t.text_faint).small()));
+                ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
+                    ui.label(egui::RichText::new(n.to_string()).color(t.text_faint).small())
+                });
             });
             ui.add_space(2.0);
         }
@@ -271,7 +273,7 @@ fn card(
                 if let Some(m) = &a.modified {
                     ui.add(egui::Label::new(egui::RichText::new(m).font(theme::regular(11.0)).color(t.text_faint)).truncate());
                 }
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
                     if selected && allowed {
                         let more = icons::button(ui, "ellipsis", 22.0, false, tl!("More"));
                         open_menu = more.clicked();
@@ -337,7 +339,7 @@ fn card(
                 ui.add_space(8.0);
                 let resp = ui.horizontal(|ui| {
                     avatar(ui, t, None, Some(&initials(r.author.as_deref().unwrap_or("?"))), t.text_faint);
-                    ui.vertical(|ui| {
+                    crate::rtl::vertical(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
                         ui.horizontal(|ui| {
                             let author = r.author.as_deref().map_or_else(|| tl!("Reply").into(), crate::bidi::visual_auto);
@@ -366,8 +368,8 @@ fn card(
                     );
                     let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                     let ok = !view.comments.reply.trim().is_empty();
-                    let post =
-                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| ui.add_enabled(ok, egui::Button::new(tl!("Post")).corner_radius(12)));
+                    let post = ui
+                        .with_layout(crate::rtl::far_side(ui, Align::Min), |ui| ui.add_enabled(ok, egui::Button::new(tl!("Post")).corner_radius(12)));
                     if (post.inner.clicked() || enter) && ok {
                         let text = std::mem::take(&mut view.comments.reply).trim().to_string();
                         edit = Some(Edit::ReplyToAnnotation { page: a.page, index: a.index, text, author: prefs.author.clone() });
@@ -413,14 +415,14 @@ fn card(
     egui::Popup::new(menu_id, ui.ctx().clone(), anchor, ui.layer_id())
         .open_memory(None)
         .kind(egui::PopupKind::Menu)
-        .layout(Layout::top_down_justified(Align::Min))
+        .layout(crate::rtl::menu_layout())
         .show(|ui| {
             ui.set_min_width(160.0);
             if ui.button(tl_ctx!("comment menu", "Edit")).clicked() {
                 view.comments.editing = Some((a.page, a.index, a.contents.clone().unwrap_or_default()));
                 ui.close();
             }
-            ui.menu_button(tl!("Set status"), |ui| {
+            crate::rtl::menu_button(ui, tl!("Set status"), |ui| {
                 for s in [ReviewState::None, ReviewState::Accepted, ReviewState::Cancelled, ReviewState::Completed, ReviewState::Rejected] {
                     if ui.button(tl!(s.name())).clicked() {
                         edit = Some(Edit::SetAnnotationStatus { page: a.page, index: a.index, state: s, author: prefs.author.clone() });
@@ -500,7 +502,7 @@ pub(crate) fn header_controls(ui: &mut egui::Ui, info: &DocInfo, view: &mut DocV
         && cv.hidden_colors.is_empty()
         && cv.hidden_checks.is_empty());
     let more = icons::button(ui, "ellipsis", 26.0, false, tl!("More options"));
-    egui::Popup::menu(&more).show(|ui| {
+    crate::rtl::menu(&more).show(|ui| {
         ui.set_min_width(220.0);
         ui.label(egui::RichText::new(tl!("Sort by")).small());
         for (s, label) in [
@@ -529,7 +531,7 @@ pub(crate) fn header_controls(ui: &mut egui::Ui, info: &DocInfo, view: &mut DocV
         }
     });
     let filter = icons::button(ui, "filter", 26.0, active, tl!("Filter comments"));
-    egui::Popup::menu(&filter).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+    crate::rtl::menu(&filter).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
         ui.set_min_width(200.0);
         let toggle = |ui: &mut egui::Ui, list: &mut Vec<String>, value: &str, label: &str| {
             let mut shown = !list.iter().any(|x| x == value);

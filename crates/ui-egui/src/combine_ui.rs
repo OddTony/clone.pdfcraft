@@ -708,7 +708,7 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         // Title and Combine.
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(tl!("Combine files")).font(theme::semibold(20.0)));
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
                 let response = ui.add_enabled_ui(blocker.is_none(), |ui| widgets::icon_pill(ui, "files", tl!("Combine"), true)).inner;
                 if let Some(why) = &blocker {
                     response.clone().on_disabled_hover_text(why);
@@ -736,7 +736,7 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 app.views.iter().enumerate().filter_map(|(i, v)| app.session.get(v.id).map(|d| (i, d.display_name()))).collect();
             let response = ui.add_enabled_ui(!open_docs.is_empty(), |ui| widgets::icon_pill(ui, "file-plus", tl!("Add open documents"), false)).inner;
             response.clone().on_disabled_hover_text(tl!("No documents are open"));
-            egui::Popup::menu(&response).show(|ui| {
+            crate::rtl::menu(&response).show(|ui| {
                 if open_docs.len() > 1 && ui.button(tl!("All open documents")).clicked() {
                     app.add_open_documents(&open_docs.iter().map(|(i, _)| *i).collect::<Vec<_>>());
                     ui.close();
@@ -870,7 +870,7 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     .collect::<BTreeSet<u64>>()
                     .len();
                 if bad > 0 {
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
                         let text = if bad == 1 {
                             tl!("1 file needs attention").to_string()
                         } else {
@@ -921,7 +921,7 @@ fn skip_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
         left_out.push((f.name.as_str(), f.problem.as_deref().unwrap_or_default()));
     }
     let mut choice: Option<bool> = None;
-    let modal = egui::Modal::new(egui::Id::new("combine-skip")).show(ctx, |ui| {
+    let modal = crate::rtl::modal(egui::Id::new("combine-skip")).show(ctx, |ui| {
         ui.set_width(460.0);
         ui.horizontal(|ui| {
             ui.add(icons::image("triangle-alert", 22.0, ERROR));
@@ -941,7 +941,7 @@ fn skip_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
             ui.label(egui::RichText::new(crate::i18n::fmt(tl!("and {n} more"), &[("n", &more)])).color(t.text_muted));
         }
         ui.add_space(14.0);
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
             if widgets::pill_button(ui, tl!("Combine the rest"), true).clicked() {
                 choice = Some(true);
             }
@@ -978,53 +978,58 @@ fn unlock_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     };
     let batch = files.len() > 1;
     let (mut submit, mut cancel) = (false, false);
-    let area = egui::Area::new(egui::Id::new("combine-unlock")).order(egui::Order::Foreground).fixed_pos(prompt.at).show(ctx, |ui| {
-        egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
-            ui.set_width(340.0);
-            ui.horizontal(|ui| {
-                ui.add(icons::image("lock", 16.0, t.icon));
-                ui.add(egui::Label::new(egui::RichText::new(&title).font(theme::semibold(14.0))).truncate());
-            });
-            ui.add_space(4.0);
-            ui.label(egui::RichText::new(explain).color(t.text_muted));
-            if batch {
-                ui.label(egui::RichText::new(tl!("The same password is tried on each file.")).small().color(t.text_faint));
-            }
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                crate::widgets::begin_dialog(ui);
-                let field = ui.add(crate::widgets::line(&mut prompt.input.0).password(!prompt.show).hint_text(tl!("Password")).desired_width(290.0));
-                if !prompt.focused {
-                    field.request_focus();
-                    prompt.focused = true;
+    let area = egui::Area::new(egui::Id::new("combine-unlock"))
+        .layout(crate::rtl::area_layout())
+        .order(egui::Order::Foreground)
+        .fixed_pos(prompt.at)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(14)).show(ui, |ui| {
+                ui.set_width(340.0);
+                ui.horizontal(|ui| {
+                    ui.add(icons::image("lock", 16.0, t.icon));
+                    ui.add(egui::Label::new(egui::RichText::new(&title).font(theme::semibold(14.0))).truncate());
+                });
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(explain).color(t.text_muted));
+                if batch {
+                    ui.label(egui::RichText::new(tl!("The same password is tried on each file.")).small().color(t.text_faint));
                 }
-                if field.changed() {
-                    prompt.error = None;
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    crate::widgets::begin_dialog(ui);
+                    let field =
+                        ui.add(crate::widgets::line(&mut prompt.input.0).password(!prompt.show).hint_text(tl!("Password")).desired_width(290.0));
+                    if !prompt.focused {
+                        field.request_focus();
+                        prompt.focused = true;
+                    }
+                    if field.changed() {
+                        prompt.error = None;
+                    }
+                    if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        submit = true;
+                    }
+                    let (icon, tip) = if prompt.show { ("eye-off", tl!("Hide password")) } else { ("eye", tl!("Show password")) };
+                    if icons::button(ui, icon, 26.0, false, tip).clicked() {
+                        prompt.show = !prompt.show;
+                    }
+                });
+                if let Some(e) = &prompt.error {
+                    ui.label(egui::RichText::new(e).color(ERROR));
                 }
-                if field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    submit = true;
-                }
-                let (icon, tip) = if prompt.show { ("eye-off", tl!("Hide password")) } else { ("eye", tl!("Show password")) };
-                if icons::button(ui, icon, 26.0, false, tip).clicked() {
-                    prompt.show = !prompt.show;
-                }
-            });
-            if let Some(e) = &prompt.error {
-                ui.label(egui::RichText::new(e).color(ERROR));
-            }
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new(tl!("The password is only used to read the file; it isn't saved.")).small().color(t.text_faint));
-            ui.add_space(8.0);
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add_enabled_ui(!prompt.input.0.is_empty(), |ui| widgets::pill_button(ui, tl!("Unlock"), true)).inner.clicked() {
-                    submit = true;
-                }
-                if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
-                    cancel = true;
-                }
+                ui.add_space(6.0);
+                ui.label(egui::RichText::new(tl!("The password is only used to read the file; it isn't saved.")).small().color(t.text_faint));
+                ui.add_space(8.0);
+                ui.with_layout(crate::rtl::far_side(ui, Align::Center), |ui| {
+                    if ui.add_enabled_ui(!prompt.input.0.is_empty(), |ui| widgets::pill_button(ui, tl!("Unlock"), true)).inner.clicked() {
+                        submit = true;
+                    }
+                    if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
+                        cancel = true;
+                    }
+                });
             });
         });
-    });
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) || area.response.clicked_elsewhere() {
         cancel = true;
     }
@@ -1248,7 +1253,7 @@ fn add_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if main.clicked() {
         app.combine_dialog();
     }
-    egui::Popup::menu(&more).show(|ui| {
+    crate::rtl::menu(&more).show(|ui| {
         ui.set_min_width(220.0);
         let item = |ui: &mut egui::Ui, icon: &str, label: &str| {
             ui.add(egui::Button::image_and_text(icons::image(icon, 15.0, ui.visuals().text_color()), label))
@@ -1294,9 +1299,12 @@ fn table(
     let rows = Rows { checks, selected, twice, conflicts, dragging, sort: app.combine_tab.sort };
     let mut heading_event = None;
     let mut shown = None;
-    egui::ScrollArea::horizontal()
-        .id_salt("combine-files-h")
-        .show(ui, |ui| table_body(app, ui, t, &rows, widths, &mut events, &mut heading_event, &mut shown));
+    // egui scrolls sideways from the left only: the table keeps its column order.
+    crate::rtl::island(ui, |ui| {
+        egui::ScrollArea::horizontal()
+            .id_salt("combine-files-h")
+            .show(ui, |ui| table_body(app, ui, t, &rows, widths, &mut events, &mut heading_event, &mut shown));
+    });
     // A column resized by hand keeps its width from now on.
     if let Some(shown) = shown
         && shown.iter().zip(&widths).any(|(a, b)| (a - b).abs() > 0.5)
@@ -1383,7 +1391,7 @@ fn heading(ui: &mut egui::Ui, t: &Tokens, key: SortKey, sort: Option<(SortKey, b
     let response = response
         .on_hover_cursor(if being_dragged { egui::CursorIcon::Grabbing } else { egui::CursorIcon::PointingHand })
         .on_hover_text(tl!("Click to sort, drag to move the column. Drag its edge to resize it."));
-    response.context_menu(|ui| {
+    crate::rtl::context_menu(&response, |ui| {
         if ui.button(tl!("Reset columns")).clicked() {
             event = Some(HeadingEvent::Reset);
             ui.close();
@@ -1562,7 +1570,7 @@ fn table_body(
                     let response = row.response();
                     if f.lock.is_some() {
                         let at = response.rect.left_bottom();
-                        response.context_menu(|ui| {
+                        crate::rtl::context_menu(&response, |ui| {
                             if ui
                                 .add(egui::Button::image_and_text(icons::image("lock-open", 15.0, ui.visuals().text_color()), tl!("Unlock…")))
                                 .clicked()

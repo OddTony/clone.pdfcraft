@@ -1190,51 +1190,56 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
         ComposerKind::Edit(_) => "Edit comment",
     };
     let pos = pos2(anchor.x + 12.0, anchor.y);
-    egui::Area::new(egui::Id::new(("comment-composer", view.id.0))).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
-        egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(12)).corner_radius(CornerRadius::same(8)).show(ui, |ui| {
-            ui.set_width(260.0);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(crate::bidi::visual_auto(&prefs.author)).font(theme::semibold(13.0)));
-                ui.label(egui::RichText::new(tl!(title)).font(theme::regular(11.5)).color(t.text_faint));
-            });
-            ui.add_space(6.0);
-            let hint = match c.kind {
-                ComposerKind::TextBox | ComposerKind::Callout { .. } => tl!("Type text"),
-                ComposerKind::Caret { .. } => tl!("Text to insert"),
-                ComposerKind::Replace => tl!("Replacement text"),
-                _ => tl!("Add a comment"),
-            };
-            let edit =
-                ui.add(egui::TextEdit::multiline(&mut c.text).hint_text(hint).desired_rows(3).desired_width(f32::INFINITY).id_salt("composer-text"));
-            if c.focus {
-                edit.request_focus();
-                c.focus = false;
-            }
-            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
-            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                cancel = true;
-            }
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let can_post = !c.text.trim().is_empty() || matches!(c.kind, ComposerKind::Edit(_));
-                    if ui
-                        .add_enabled(
-                            can_post,
-                            egui::Button::new(egui::RichText::new(tl!("Post")).color(Color32::WHITE)).fill(t.accent).corner_radius(14),
-                        )
-                        .clicked()
-                        || (enter && can_post)
-                    {
-                        post = true;
-                    }
-                    if ui.add(egui::Button::new(tl!("Cancel")).corner_radius(14)).clicked() {
-                        cancel = true;
-                    }
+    egui::Area::new(egui::Id::new(("comment-composer", view.id.0)))
+        .layout(crate::rtl::area_layout())
+        .order(egui::Order::Foreground)
+        .fixed_pos(pos)
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(12)).corner_radius(CornerRadius::same(8)).show(ui, |ui| {
+                ui.set_width(260.0);
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(crate::bidi::visual_auto(&prefs.author)).font(theme::semibold(13.0)));
+                    ui.label(egui::RichText::new(tl!(title)).font(theme::regular(11.5)).color(t.text_faint));
+                });
+                ui.add_space(6.0);
+                let hint = match c.kind {
+                    ComposerKind::TextBox | ComposerKind::Callout { .. } => tl!("Type text"),
+                    ComposerKind::Caret { .. } => tl!("Text to insert"),
+                    ComposerKind::Replace => tl!("Replacement text"),
+                    _ => tl!("Add a comment"),
+                };
+                let edit = ui.add(
+                    egui::TextEdit::multiline(&mut c.text).hint_text(hint).desired_rows(3).desired_width(f32::INFINITY).id_salt("composer-text"),
+                );
+                if c.focus {
+                    edit.request_focus();
+                    c.focus = false;
+                }
+                let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
+                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    cancel = true;
+                }
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
+                        let can_post = !c.text.trim().is_empty() || matches!(c.kind, ComposerKind::Edit(_));
+                        if ui
+                            .add_enabled(
+                                can_post,
+                                egui::Button::new(egui::RichText::new(tl!("Post")).color(Color32::WHITE)).fill(t.accent).corner_radius(14),
+                            )
+                            .clicked()
+                            || (enter && can_post)
+                        {
+                            post = true;
+                        }
+                        if ui.add(egui::Button::new(tl!("Cancel")).corner_radius(14)).clicked() {
+                            cancel = true;
+                        }
+                    });
                 });
             });
         });
-    });
     if cancel {
         view.comments.composer = None;
         return None;
@@ -1398,7 +1403,7 @@ pub(crate) fn context_menu(ui: &mut egui::Ui, view: &mut DocView, info: &DocInfo
                 ui.close();
             }
             ui.add_enabled_ui(allowed, |ui| {
-                ui.menu_button(tl!("Set status"), |ui| {
+                crate::rtl::menu_button(ui, tl!("Set status"), |ui| {
                     for s in [ReviewState::None, ReviewState::Accepted, ReviewState::Cancelled, ReviewState::Completed, ReviewState::Rejected] {
                         if ui.button(tl!(s.name())).clicked() {
                             action =
@@ -1407,7 +1412,7 @@ pub(crate) fn context_menu(ui: &mut egui::Ui, view: &mut DocView, info: &DocInfo
                         }
                     }
                 });
-                ui.menu_button(tl!("Colour"), |ui| {
+                crate::rtl::menu_button(ui, tl!("Colour"), |ui| {
                     if let Some(c) = swatch_grid(ui, a.color.map(|c| c.map(f64::from))) {
                         action = Some(CanvasAction::Edit(Box::new(Edit::StyleAnnotation {
                             page,
@@ -1552,7 +1557,7 @@ pub fn swatch_grid(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Rgb> {
     let open_id = base.with("other-colour");
     let value_id = open_id.with("value");
     let mut open = ui.data(|d| d.get_temp::<bool>(open_id)).unwrap_or(false);
-    egui::Grid::new(base.with("swatches")).spacing(vec2(6.0, 6.0)).show(ui, |ui| {
+    crate::rtl::grid(ui, egui::Grid::new(base.with("swatches")).spacing(vec2(6.0, 6.0)), |ui| {
         for (i, (name, c)) in SWATCHES.iter().enumerate() {
             if swatch(ui, *c, on(c), tl!(name)).clicked() {
                 picked = Some(*c);
@@ -1602,7 +1607,7 @@ pub fn swatch_grid(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Rgb> {
 pub fn fill_picker(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Option<Rgb>> {
     let mut picked = None;
     ui.push_id("fill-picker", |ui| {
-        ui.vertical(|ui| {
+        crate::rtl::vertical(ui, |ui| {
             if ui.selectable_label(current.is_none(), tl!("No fill")).clicked() {
                 picked = Some(None);
             }
@@ -1626,7 +1631,7 @@ pub(crate) fn quick_bar_controls(ui: &mut egui::Ui, tool: CommentTool, prefs: &m
     ui.painter().circle_stroke(r.center(), 9.0, Stroke::new(1.0, Color32::from_black_alpha(50)));
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!("Colour")));
     let resp = resp.on_hover_text(tl!("Colour"));
-    egui::Popup::menu(&resp).align(egui::RectAlign::RIGHT_START).show(|ui| {
+    crate::rtl::menu(&resp).align(egui::RectAlign::RIGHT_START).show(|ui| {
         if let Some(c) = swatch_grid(ui, Some(style.color)) {
             prefs.set_color(tool, c);
             selected_color = Some(c);
@@ -1635,7 +1640,7 @@ pub(crate) fn quick_bar_controls(ui: &mut egui::Ui, tool: CommentTool, prefs: &m
     });
     if tool.has_fill() {
         let resp = fill_button(ui, style.fill);
-        egui::Popup::menu(&resp).align(egui::RectAlign::RIGHT_START).show(|ui| {
+        crate::rtl::menu(&resp).align(egui::RectAlign::RIGHT_START).show(|ui| {
             ui.label(egui::RichText::new(tl!("Fill colour")).font(theme::semibold(12.0)));
             if let Some(f) = fill_picker(ui, style.fill) {
                 prefs.set_fill(tool, f);
@@ -1644,7 +1649,7 @@ pub(crate) fn quick_bar_controls(ui: &mut egui::Ui, tool: CommentTool, prefs: &m
         });
     }
     let resp = icons::button(ui, "blend", 32.0, false, tl!("Opacity"));
-    egui::Popup::menu(&resp).align(egui::RectAlign::RIGHT_START).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+    crate::rtl::menu(&resp).align(egui::RectAlign::RIGHT_START).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
         ui.set_min_width(180.0);
         let mut percent = (style.opacity * 100.0).round();
         ui.label(egui::RichText::new(tl!("Opacity")).font(theme::semibold(12.0)));
@@ -1654,7 +1659,7 @@ pub(crate) fn quick_bar_controls(ui: &mut egui::Ui, tool: CommentTool, prefs: &m
     });
     if tool.has_width() {
         let resp = icons::button(ui, "sliders-horizontal", 32.0, false, tl!("Line thickness"));
-        egui::Popup::menu(&resp).align(egui::RectAlign::RIGHT_START).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        crate::rtl::menu(&resp).align(egui::RectAlign::RIGHT_START).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             ui.set_min_width(180.0);
             let mut w = style.width;
             ui.label(egui::RichText::new(tl!("Line thickness")).font(theme::semibold(12.0)));

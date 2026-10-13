@@ -700,7 +700,7 @@ pub(crate) fn registry_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui, menu: &str
             }
             let mut open: Option<String> = None;
             let mut clear = false;
-            ui.menu_button(label, |ui| {
+            crate::rtl::menu_button(ui, &label, |ui| {
                 for r in &app.recent {
                     if ui.button(&r.name).on_hover_text(&r.path).clicked() {
                         open = Some(r.path.clone());
@@ -725,7 +725,7 @@ pub(crate) fn registry_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui, menu: &str
         }
         let shortcut = spec.shortcut.map(|s| shortcut_label(ui.ctx(), s)).unwrap_or_default();
         let enabled = app.command_enabled(spec);
-        let resp = ui.add_enabled(enabled, egui::Button::new(label).shortcut_text(shortcut));
+        let resp = crate::rtl::menu_item(ui, enabled, &label, &shortcut);
         if resp.clicked() {
             app.execute(spec.id);
             ui.close();

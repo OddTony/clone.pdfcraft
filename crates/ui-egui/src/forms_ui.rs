@@ -187,6 +187,7 @@ fn calendar(ctx: &egui::Context, view: &mut DocView, field: egui::Rect, fmt: &st
     let current = parse_date(&fx.text, fmt);
     let mut picked = None;
     let area = egui::Area::new(egui::Id::new(("date-picker", view.id.0)))
+        .layout(crate::rtl::area_layout())
         .order(egui::Order::Foreground)
         .fixed_pos(field.left_bottom() + vec2(0.0, 2.0))
         .show(ctx, |ui| {
@@ -216,7 +217,7 @@ fn calendar(ctx: &egui::Context, view: &mut DocView, field: egui::Rect, fmt: &st
                 };
                 let first = (days_from_civil(y, m, 1) + 4).rem_euclid(7) as usize;
                 let len = (days_from_civil(if m == 12 { y + 1 } else { y }, if m == 12 { 1 } else { m + 1 }, 1) - days_from_civil(y, m, 1)) as usize;
-                egui::Grid::new(("date-grid", view.id.0)).spacing([4.0, 2.0]).show(ui, |ui| {
+                crate::rtl::grid(ui, egui::Grid::new(("date-grid", view.id.0)).spacing([4.0, 2.0]), |ui| {
                     for d in ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] {
                         ui.label(egui::RichText::new(tl_ctx!("calendar weekday", d)).small());
                     }
