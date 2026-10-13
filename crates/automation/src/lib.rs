@@ -789,6 +789,38 @@ impl Automation {
                 let (ids, unusable): (Vec<Value>, Vec<Value>) = (Vec::new(), Vec::new());
                 json!({ "count": ids.len(), "ids": ids, "unusable": unusable })
             }
+            "sign_token_ids" => {
+                #[cfg(not(target_arch = "wasm32"))]
+                let (ids, unusable): (Vec<Value>, Vec<Value>) = {
+                    let module = a.opt_str("module")?.filter(|m| !m.trim().is_empty()).map(std::path::Path::new);
+                    let listing = pdfcraft_engine::sign::pkcs11::list(module).map_err(failed)?;
+                    let ids = listing
+                        .ids
+                        .iter()
+                        .map(|id| {
+                            json!({
+                                "id": id.reference,
+                                "certificate": signing::cert_json(&id.certificate),
+                                "token": id.token_label,
+                                "login_required": id.login_required,
+                                "protected_authentication_path": id.protected_authentication_path,
+                                "pin_count_low": id.pin_count_low,
+                                "pin_final_try": id.pin_final_try,
+                                "pin_locked": id.pin_locked,
+                            })
+                        })
+                        .collect();
+                    let unusable = listing
+                        .unusable
+                        .iter()
+                        .map(|u| json!({ "subject": u.subject, "sha256": u.fingerprint, "token": u.token_label, "reason": u.reason }))
+                        .collect();
+                    (ids, unusable)
+                };
+                #[cfg(target_arch = "wasm32")]
+                let (ids, unusable): (Vec<Value>, Vec<Value>) = (Vec::new(), Vec::new());
+                json!({ "count": ids.len(), "ids": ids, "unusable": unusable })
+            }
             "sign_trust" => self.sign_trust(&a)?,
             "comment_mark" => self.comment_mark(&a)?,
             "comment_lock" => self.comment_lock(&a)?,
