@@ -80,6 +80,28 @@ impl Default for Workspace {
 }
 
 impl Workspace {
+    /// Side of the Tools panel, including its saved position while closed.
+    pub fn tools_on_right(&self) -> bool {
+        let location = self
+            .layout
+            .location(&Panel::Tools)
+            .ok()
+            .or_else(|| self.hidden.iter().find(|(panel, _)| *panel == Panel::Tools).map(|(_, location)| location.clone()));
+        location.is_some_and(|location| matches!(location.placement, Placement::Split(Zone::Right)))
+    }
+
+    /// Place Tools at the outer left or right edge while preserving its open state.
+    pub fn set_tools_on_right(&mut self, right: bool) -> Result<(), String> {
+        let was_open = self.layout.contains(&Panel::Tools);
+        self.set_visible(Panel::Tools, true)?;
+        let anchor = if right && self.layout.contains(&Panel::Inspector) { Panel::Inspector } else { Panel::Canvas };
+        self.apply(Action::Move { panel: Panel::Tools, anchor, placement: Placement::Split(if right { Zone::Right } else { Zone::Left }) })?;
+        if !was_open {
+            self.set_visible(Panel::Tools, false)?;
+        }
+        Ok(())
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         self.layout.validate().map_err(|error| error.to_string())?;
         if !self.layout.contains(&Panel::Canvas) || self.hidden.len() > Panel::ALL.len() {
@@ -428,6 +450,30 @@ fn panel_limits(panel: &Panel) -> PanelLimits {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lithuanian_translates_every_dynamic_panel_title() {
+        let lang = crate::i18n::Lang::from_code("lt").expect("Lithuanian is registered");
+        for panel in Panel::ALL {
+            assert_ne!(crate::i18n::tr(lang, panel.label()), panel.label(), "{} remains untranslated", panel.id());
+        }
+    }
+
+    #[test]
+    fn tools_side_moves_to_both_edges_and_survives_closed_restore() {
+        let mut workspace = Workspace::default();
+        assert!(!workspace.tools_on_right());
+        workspace.set_tools_on_right(true).unwrap();
+        assert!(workspace.tools_on_right());
+        workspace.set_visible(Panel::Tools, false).unwrap();
+        assert!(workspace.tools_on_right());
+        workspace.set_tools_on_right(false).unwrap();
+        assert!(!workspace.tools_on_right());
+        assert!(!workspace.layout.contains(&Panel::Tools));
+        workspace.set_visible(Panel::Tools, true).unwrap();
+        assert!(!workspace.tools_on_right());
+        workspace.validate().unwrap();
+    }
 
     #[test]
     fn exposed_respects_collapsed_stack_and_inactive_floating_tabs() {

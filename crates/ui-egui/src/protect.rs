@@ -152,10 +152,10 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
             ui.end_row();
             ui.label(tl!("Encrypt"));
             ui.vertical(|ui| {
-                ui.radio_value(&mut p.encrypt_metadata, true, tl!("All document contents"));
+                widgets::radio_value(ui, &mut p.encrypt_metadata, true, tl!("All document contents"));
                 // Unencrypted metadata needs crypt filters (Acrobat 6.0 and later).
                 ui.add_enabled_ui(p.algorithm != A::Rc4_40 && p.algorithm != A::Rc4_128, |ui| {
-                    ui.radio_value(&mut p.encrypt_metadata, false, tl!("All document contents except metadata"));
+                    widgets::radio_value(ui, &mut p.encrypt_metadata, false, tl!("All document contents except metadata"));
                 });
             });
             ui.end_row();
@@ -187,8 +187,8 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
                 ui.end_row();
                 ui.label("");
                 ui.vertical(|ui| {
-                    ui.checkbox(&mut p.copy, tl!("Enable copying of text, images, and other content"));
-                    ui.checkbox(&mut p.accessibility, tl!("Enable text access for screen reader devices for the visually impaired"));
+                    ui.add(widgets::checkbox(&mut p.copy, tl!("Enable copying of text, images, and other content")));
+                    ui.add(widgets::checkbox(&mut p.accessibility, tl!("Enable text access for screen reader devices for the visually impaired")));
                 });
                 ui.end_row();
             }
