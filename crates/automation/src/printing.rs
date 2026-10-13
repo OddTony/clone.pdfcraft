@@ -111,8 +111,11 @@ impl Automation {
             "form-fields-only" => Content::FormFieldsOnly,
             c => return Err(bad(format!("unknown comments_forms {c:?}"))),
         };
+        // "auto": each page on the standard sheet it matches, the rest on US Letter (#1103).
+        let paper_from_page = a.opt_str("paper")?.is_some_and(|p| p.eq_ignore_ascii_case("auto"));
         let paper = match a.opt_str("paper")? {
             None => PAPERS[0].1,
+            Some(_) if paper_from_page => PAPERS[0].1,
             Some(p) => PAPERS
                 .iter()
                 .find(|(n, _)| {
@@ -122,10 +125,10 @@ impl Automation {
                 })
                 .map(|x| x.1)
                 .ok_or_else(|| {
-                    bad(format!("unknown paper {p:?}; choose one of {}", PAPERS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")))
+                    bad(format!("unknown paper {p:?}; choose auto or one of {}", PAPERS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")))
                 })?,
         };
-        let settings = print::Settings { pages, paper, orientation, layout, content };
+        let settings = print::Settings { pages, paper, paper_from_page, orientation, layout, content };
         let sizes: Vec<(f64, f64)> = self.doc(a)?.info.pages.iter().map(|p| (p.width as f64, p.height as f64)).collect();
         let sheets = print::layout(&sizes, &settings).map_err(|e| bad(e.to_string()))?.len();
         let bytes = self.session.print_pdf(id, &settings).map_err(failed)?;

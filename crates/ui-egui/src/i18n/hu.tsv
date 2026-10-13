@@ -2351,3 +2351,5 @@ animation effects	Off	Ki
 	This document is trying to open a local file:	Ez a dokumentum egy helyi fájlt próbál megnyitni:
 	Move tag earlier	Címke korábbra helyezése
 	Move tag later	Címke későbbre helyezése
+	Choose paper by PDF page size	Papír kiválasztása a PDF-oldal mérete szerint
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Minden oldal a hozzá illő szabványos lapra nyomtatódik (A4, US Letter, …); az eltérő méretű oldalak a fenti papírra. Csak a „Méret” beállításnál.

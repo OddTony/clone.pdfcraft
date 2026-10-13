@@ -225,6 +225,10 @@ pub struct Settings {
     pub pages: Vec<usize>,
     /// Paper (width, height) in points, portrait.
     pub paper: (f64, f64),
+    /// Acrobat's "Choose paper source by PDF page size" (#1103): with [`Layout::Size`], each
+    /// page prints on the standard sheet it matches (see [`matching_paper`]) and only pages of
+    /// another size on `paper`. Other layouts put several pages on one sheet and ignore it.
+    pub paper_from_page: bool,
     pub orientation: Orientation,
     pub layout: Layout,
     pub content: Content,
@@ -232,7 +236,14 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { pages: Vec::new(), paper: PAPERS[0].1, orientation: Orientation::Auto, layout: Layout::default(), content: Content::default() }
+        Settings {
+            pages: Vec::new(),
+            paper: PAPERS[0].1,
+            paper_from_page: false,
+            orientation: Orientation::Auto,
+            layout: Layout::default(),
+            content: Content::default(),
+        }
     }
 }
 
@@ -266,6 +277,20 @@ pub fn matching_paper(size: (f64, f64)) -> Option<usize> {
     }
     let size = (size.0.min(size.1), size.0.max(size.1));
     PAPERS.iter().position(|(_, p)| (p.0 - size.0).abs() <= 0.5 && (p.1 - size.1).abs() <= 0.5)
+}
+
+/// The standard sheet most of `sizes` (page sizes in points, any orientation) match, for a
+/// Print dialog that opens on the paper the document was made for (#1103). Pages of a size no
+/// sheet matches don't count; `None` when no page matches one. A tie goes to the sheet of the
+/// earlier page.
+pub fn paper_for_pages(sizes: &[(f64, f64)]) -> Option<usize> {
+    let matched: Vec<usize> = sizes.iter().filter_map(|&size| matching_paper(size)).collect();
+    let mut count = vec![0usize; PAPERS.len()];
+    for &i in &matched {
+        count[i] += 1;
+    }
+    let most = *count.iter().max()?;
+    matched.into_iter().find(|&i| count[i] == most)
 }
 
 /// The unprintable margin assumed around the sheet for Fit, Multiple and Booklet.
@@ -334,7 +359,8 @@ pub fn layout(sizes: &[(f64, f64)], settings: &Settings) -> Result<Vec<Sheet>, P
         Layout::Size(mode) => {
             for &p in &pages {
                 let d = sizes[p];
-                let size = oriented(paper, settings.orientation, d.0 > d.1);
+                let sheet = if settings.paper_from_page { matching_paper(d).map_or(paper, |i| PAPERS[i].1) } else { paper };
+                let size = oriented(sheet, settings.orientation, d.0 > d.1);
                 let fit = fit_scale(d, (size.0 - 2.0 * MARGIN, size.1 - 2.0 * MARGIN));
                 let s = match mode {
                     SizeMode::Fit => fit,
@@ -728,4 +754,42 @@ pub fn impose(src: &Document, settings: &Settings) -> Result<Vec<u8>, PrintError
 /// Which source pages land on each sheet (for previews and the sheet count).
 pub fn sheet_pages(sheets: &[Sheet]) -> Vec<Vec<usize>> {
     sheets.iter().map(|s| s.placed.iter().map(|p| p.page).collect()).collect()
+}
+
+#[cfg(test)]
+mod paper_for_pages_tests {
+    use super::{PAPERS, paper_for_pages};
+
+    fn index(name: &str) -> usize {
+        PAPERS.iter().position(|(n, _)| *n == name).unwrap()
+    }
+
+    #[test]
+    fn the_most_common_standard_size_wins_in_either_orientation() {
+        let a4 = (595.28, 841.89);
+        let a4_landscape = (841.89, 595.28);
+        let letter = (612.0, 792.0);
+        assert_eq!(paper_for_pages(&[a4]), Some(index("A4")));
+        assert_eq!(paper_for_pages(&[a4_landscape]), Some(index("A4")));
+        assert_eq!(paper_for_pages(&[letter, a4, a4_landscape]), Some(index("A4")));
+        assert_eq!(paper_for_pages(&[letter, letter, a4]), Some(index("US Letter")));
+    }
+
+    #[test]
+    fn pages_no_sheet_matches_do_not_count() {
+        let a4 = (595.28, 841.89);
+        let odd = (200.0, 300.0);
+        assert_eq!(paper_for_pages(&[odd, odd, odd, a4]), Some(index("A4")));
+        assert_eq!(paper_for_pages(&[odd]), None);
+        assert_eq!(paper_for_pages(&[]), None);
+        assert_eq!(paper_for_pages(&[(f64::NAN, 100.0), (f64::INFINITY, 100.0)]), None);
+    }
+
+    #[test]
+    fn a_tie_goes_to_the_size_seen_first() {
+        let a4 = (595.28, 841.89);
+        let letter = (612.0, 792.0);
+        assert_eq!(paper_for_pages(&[a4, letter]), Some(index("A4")));
+        assert_eq!(paper_for_pages(&[letter, a4]), Some(index("US Letter")));
+    }
 }

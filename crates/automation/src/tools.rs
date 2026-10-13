@@ -499,7 +499,7 @@ pub fn tools() -> Vec<ToolDef> {
                 "cut_marks": { "type": "boolean" },
                 "orientation": { "type": "string", "enum": ["auto", "portrait", "landscape"] },
                 "comments_forms": { "type": "string", "enum": ["document", "document-and-markups", "document-and-stamps", "form-fields-only"] },
-                "paper": { "type": "string" },
+                "paper": { "type": "string", "description": "A sheet name (A4, US Letter, ARCH D, …; default US Letter), or auto: with a size layout, each page prints on the standard sheet it matches and the rest on US Letter." },
                 "path": { "type": "string" },
                 "printer": { "type": "string" },
                 "copies": { "type": "integer", "minimum": 1, "maximum": 999 },

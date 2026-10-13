@@ -2265,3 +2265,5 @@ animation effects	Off	ఆఫ్
 	This document is trying to open a local file:	ఈ పత్రం ఒక స్థానిక ఫైల్‌ను తెరవడానికి ప్రయత్నిస్తోంది:
 	Move tag earlier	ట్యాగ్‌ను ముందుకు తరలించు
 	Move tag later	ట్యాగ్‌ను వెనుకకు తరలించు
+	Choose paper by PDF page size	PDF పేజీ పరిమాణం ప్రకారం కాగితం ఎంచుకోండి
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	ప్రతి పేజీ తనకు సరిపోయే ప్రామాణిక షీట్‌పై (A4, US Letter, …) ముద్రితమవుతుంది; వేరే పరిమాణం ఉన్న పేజీలు పైన ఉన్న కాగితంపై ముద్రితమవుతాయి. “పరిమాణం”తో మాత్రమే.

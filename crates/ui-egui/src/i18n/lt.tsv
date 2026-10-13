@@ -2596,3 +2596,5 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+	Choose paper by PDF page size	Pasirinkti popierių pagal PDF puslapio dydį
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Kiekvienas puslapis spausdinamas ant jį atitinkančio standartinio lapo (A4, US Letter, …); kito dydžio puslapiai – ant aukščiau nurodyto popieriaus. Tik pasirinkus „Dydis“.

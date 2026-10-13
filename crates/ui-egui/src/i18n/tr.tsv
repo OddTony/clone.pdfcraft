@@ -2348,3 +2348,5 @@ animation effects	Off	Kapalı
 	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
 	Move tag earlier	Etiketi daha erken taşı
 	Move tag later	Etiketi daha geç taşı
+	Choose paper by PDF page size	Kâğıdı PDF sayfa boyutuna göre seç
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Her sayfa, uyduğu standart kâğıda (A4, US Letter, …) yazdırılır; farklı boyuttaki sayfalar yukarıdaki kâğıda yazdırılır. Yalnızca “Boyut” ile.

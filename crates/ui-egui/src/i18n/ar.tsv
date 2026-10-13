@@ -2373,3 +2373,5 @@ animation effects	Off	معطّلة
 	This document is trying to open a local file:	يحاول هذا المستند فتح ملف محلي:
 	Move tag earlier	نقل العلامة للأعلى
 	Move tag later	نقل العلامة للأسفل
+	Choose paper by PDF page size	اختيار الورق حسب حجم صفحة PDF
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	تُطبع كل صفحة على الورق القياسي الذي تطابقه (A4، US Letter، …)؛ أما الصفحات ذات الحجم الآخر فتُطبع على الورق أعلاه. فقط مع «الحجم».

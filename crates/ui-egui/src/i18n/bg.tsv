@@ -2315,3 +2315,5 @@ animation effects	Off	Изключени
 	This document is trying to open a local file:	Този документ се опитва да отвори локален файл:
 	Move tag earlier	Преместване на етикета по-рано
 	Move tag later	Преместване на етикета по-късно
+	Choose paper by PDF page size	Избор на хартия според размера на PDF страницата
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Всяка страница се печата на стандартния лист, на който отговаря (A4, US Letter, …); страниците с друг размер се печатат на хартията по-горе. Само при „Размер“.

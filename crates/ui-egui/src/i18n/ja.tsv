@@ -2352,3 +2352,5 @@ animation effects	Off	オフ
 	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
 	Move tag earlier	タグを前へ移動
 	Move tag later	タグを後へ移動
+	Choose paper by PDF page size	PDF ページのサイズで用紙を選ぶ
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	各ページは一致する標準用紙（A4、US Letter など）に印刷されます。それ以外のサイズのページは上の用紙に印刷されます。「サイズ」のときのみ。

@@ -2482,3 +2482,5 @@ animation effects	Off	Desactivados
 	This document is trying to open a local file:	Este documento intenta abrir un archivo local:
 	Move tag earlier	Mover etiqueta antes
 	Move tag later	Mover etiqueta después
+	Choose paper by PDF page size	Elegir papel según el tamaño de página del PDF
+	Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size.	Cada página se imprime en la hoja estándar con la que coincide (A4, US Letter, …); las páginas de otro tamaño, en el papel de arriba. Solo con «Tamaño».

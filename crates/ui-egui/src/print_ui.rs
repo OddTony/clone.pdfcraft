@@ -68,6 +68,10 @@ pub struct PrintDraft {
     pub orientation: Orientation,
     pub content: Content,
     pub paper: usize,
+    /// Acrobat's "Choose paper source by PDF page size" (#1103): each page on the standard sheet
+    /// it matches, `paper` for the rest; and the dialog opens on the sheet most pages match.
+    /// Kept across restarts.
+    pub paper_from_page: bool,
     /// The sheet shown in the preview (0-based).
     pub sheet: usize,
     pub current_page: usize,
@@ -98,7 +102,9 @@ impl Default for PrintDraft {
             subset: Subset::All,
             reverse: false,
             handling: Handling::Size,
-            size: SizeMode::Fit,
+            // Actual size: with the paper chosen by page size (the default), a page prints 1:1 on
+            // its own sheet; Fit would shrink it by the margin.
+            size: SizeMode::Actual,
             custom_scale: 100.0,
             per_sheet: 2,
             order: PageOrder::Horizontal,
@@ -112,6 +118,7 @@ impl Default for PrintDraft {
             orientation: Orientation::Auto,
             content: Content::DocumentAndMarkups,
             paper: 0,
+            paper_from_page: true,
             sheet: 0,
             current_page: 0,
             driver_options: None,
@@ -156,7 +163,14 @@ impl PrintDraft {
             Handling::Booklet => Layout::Booklet { subset: self.booklet_subset, binding: self.binding },
             Handling::Poster => Layout::Poster { scale: self.poster_scale, overlap: self.overlap, cut_marks: self.cut_marks },
         };
-        Ok(print::Settings { pages, paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1, orientation: self.orientation, layout, content: self.content })
+        Ok(print::Settings {
+            pages,
+            paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1,
+            paper_from_page: self.paper_from_page,
+            orientation: self.orientation,
+            layout,
+            content: self.content,
+        })
     }
 
     pub fn job(&self, title: &str) -> spool::Job {
@@ -253,6 +267,20 @@ impl PdfCraftApp {
             (true, Which::Selected) => Which::All,
             (true, other) => other,
         };
+        // The sheet the pages to print were made for (#1103): the standard size most of them
+        // match, else the paper chosen last. The person can still pick another in the dialog.
+        let paper = match (keep.paper_from_page, self.session.get(self.views[i].id)) {
+            (true, Some(doc)) => {
+                let sizes = doc.info.pages.iter().map(|p| (f64::from(p.width), f64::from(p.height)));
+                let printed: Vec<(f64, f64)> = match which {
+                    Which::Current => sizes.skip(current).take(1).collect(),
+                    Which::Selected => sizes.enumerate().filter(|(i, _)| selected.contains(i)).map(|(_, s)| s).collect(),
+                    Which::All | Which::Range => sizes.collect(),
+                };
+                print::paper_for_pages(&printed).unwrap_or(keep.paper)
+            }
+            _ => keep.paper,
+        };
         self.print_draft = PrintDraft {
             printers,
             printers_loading,
@@ -263,6 +291,7 @@ impl PdfCraftApp {
             sheet: 0,
             selected,
             which,
+            paper,
             ..keep
         };
         self.dialog = Some(crate::Dialog::Print);
@@ -738,6 +767,12 @@ pub(crate) fn body(
                     }
                 });
                 ui.end_row();
+                // Acrobat: "Choose paper source by PDF page size". Here it sizes the sheets; which
+                // tray the driver takes them from is its business.
+                ui.label("");
+                ui.add_enabled(d.handling == Handling::Size, widgets::checkbox(&mut d.paper_from_page, tl!("Choose paper by PDF page size")))
+                    .on_hover_text(tl!("Each page prints on the standard sheet it matches (A4, US Letter, …); pages of another size print on the paper above. Only with Size."));
+                ui.end_row();
             });
             // Windows says which drivers can't print two-sided as they're asked; they keep their
             // own setting, even when Two-sided is Off.
@@ -758,14 +793,23 @@ pub(crate) fn body(
             if let Some(&source) = sizes.get(d.current_page) {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(crate::i18n::fmt(tl!("PDF page: {size}"), &[("size", &d.units.size(source.0, source.1))]));
+                    // Actual size on the sheet the page matches, in its orientation. With the paper
+                    // chosen by page size, that sheet is each page's own one, so the box is always
+                    // on offer; otherwise only when the viewed page matches a sheet, which it picks.
                     let matched = print::matching_paper(source);
-                    if ui.add_enabled(matched.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked()
-                        && let Some(paper) = matched
-                    {
-                        d.paper = paper;
-                        d.handling = Handling::Size;
-                        d.size = SizeMode::Actual;
-                        d.orientation = Orientation::Auto;
+                    let on_own_sheet = d.paper_from_page || matched == Some(d.paper);
+                    let mut at_100 = d.handling == Handling::Size && d.size == SizeMode::Actual && d.orientation == Orientation::Auto && on_own_sheet;
+                    if ui.add_enabled(d.paper_from_page || matched.is_some(), widgets::checkbox(&mut at_100, tl!("Match page at 100%"))).changed() {
+                        if at_100 {
+                            if !d.paper_from_page && let Some(paper) = matched {
+                                d.paper = paper;
+                            }
+                            d.handling = Handling::Size;
+                            d.size = SizeMode::Actual;
+                            d.orientation = Orientation::Auto;
+                        } else {
+                            d.size = SizeMode::Fit;
+                        }
                         d.sheet = 0;
                     }
                 });

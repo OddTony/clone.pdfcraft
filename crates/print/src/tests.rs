@@ -142,6 +142,35 @@ fn size_modes() {
     assert_eq!(land[0].size, (792.0, 612.0));
 }
 
+/// #1103: each page on the standard sheet it matches; the paper setting only for the rest.
+#[test]
+fn paper_from_page_prints_each_page_on_its_own_sheet() {
+    let a4 = (595.28, 841.89);
+    let a4_landscape = (841.89, 595.28);
+    let letter = (612.0, 792.0);
+    let odd = (200.0, 300.0);
+    let sizes = [a4, letter, odd, a4_landscape];
+    let s = Settings { paper_from_page: true, ..settings(vec![0, 1, 2, 3], Layout::Size(SizeMode::Actual)) };
+    let sheets = layout(&sizes, &s).unwrap();
+    let sheet_sizes: Vec<_> = sheets.iter().map(|sh| sh.size).collect();
+    assert_eq!(sheet_sizes, [a4, letter, letter, a4_landscape], "A4, Letter, no match → the Letter setting, A4 turned");
+    // A page on its own sheet at 100% fills it exactly.
+    assert_eq!(sheets[0].placed[0].matrix.0, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    assert_eq!(sheets[3].placed[0].matrix.0, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    // Portrait forced: the sheet stays upright and the landscape page lies on it.
+    let upright = layout(&sizes, &Settings { orientation: Orientation::Portrait, ..s.clone() }).unwrap();
+    assert_eq!(upright[3].size, a4);
+    // Fit still keeps its margin on a sheet of the page's own size.
+    let fit = layout(&sizes, &Settings { layout: Layout::Size(SizeMode::Fit), ..s.clone() }).unwrap();
+    assert_eq!(fit[0].size, a4);
+    assert!(fit[0].placed[0].matrix.0[0] < 1.0);
+    // Off, or a layout that shares sheets: the paper setting for every sheet, as before.
+    let off = layout(&sizes, &settings(vec![0, 1, 2, 3], Layout::Size(SizeMode::Actual))).unwrap();
+    assert!(off.iter().all(|sh| sh.size == letter || sh.size == (792.0, 612.0)));
+    let multiple = layout(&sizes, &Settings { paper_from_page: true, ..settings(vec![0, 1, 2, 3], Layout::multiple(2)) }).unwrap();
+    assert!(multiple.iter().all(|sh| sh.size == (792.0, 612.0)), "{:?}", multiple.iter().map(|sh| sh.size).collect::<Vec<_>>());
+}
+
 #[test]
 fn multiple_pages_per_sheet() {
     let sizes = vec![(200.0, 300.0); 5];
