@@ -168,7 +168,7 @@ fn search_finds_collapsed_bookmarks_and_keeps_original_paths() {
     // A full save stamps /ModDate from the clock: pin it, or two saves a second apart differ.
     let session = std::mem::take(&mut h.state_mut().session);
     h.state_mut().session = session.with_clock(|| 1_700_000_000);
-    let before = h.state().session.save_full_bytes(id).unwrap();
+    let before = h.state_mut().session.save_full_bytes(id).unwrap();
     h.get_by_label("Search").click();
     h.run_steps(1);
     h.get_by_label("Search").type_text("RÉSUMÉ");
@@ -179,7 +179,7 @@ fn search_finds_collapsed_bookmarks_and_keeps_original_paths() {
     assert_eq!(h.state().views[0].current, 2);
     assert!(h.query_by_label("Unrelated").is_none());
     assert!(h.query_by_label("Other chapter").is_none());
-    assert_eq!(h.state().session.save_full_bytes(id).unwrap(), before, "search doesn't edit the PDF");
+    assert_eq!(h.state_mut().session.save_full_bytes(id).unwrap(), before, "search doesn't edit the PDF");
     if let Ok(dir) = std::env::var("PDFCRAFT_BOOKMARK_SHOTS") {
         h.render().unwrap().save(std::path::Path::new(&dir).join("filtered-bookmarks.png")).unwrap();
     }

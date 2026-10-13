@@ -3057,7 +3057,7 @@ fn check_added_text_drag(panel_open: bool) {
             },
         )
         .unwrap();
-    let original = h.state().session.save_bytes(id).unwrap();
+    let original = h.state_mut().session.save_bytes(id).unwrap();
     h = paragraph_drag_harness(original.as_ref().clone(), 0);
     h.state_mut().left_open = panel_open;
     h.run_steps(4);
@@ -3724,7 +3724,7 @@ fn inline_editor_preserves_source_font_and_previews_live_bounds() {
     h.run_steps(3);
     assert!(dirty(&h));
     assert_eq!(h.state().session.get(id).unwrap().text_blocks(0)[0].rect, measured);
-    let bytes = h.state().session.save_bytes(id).unwrap();
+    let bytes = h.state_mut().session.save_bytes(id).unwrap();
     let mut reopened = pdfcraft_engine::Session::new();
     let reopened_id = reopened.open("again.pdf", None, bytes, None).unwrap();
     assert_eq!(reopened.get(reopened_id).unwrap().text_blocks(0)[0].rect, measured);
@@ -3881,7 +3881,7 @@ fn cropped_image_corner_resize_keeps_opposite_corner_and_scales_crop() {
         }
         assert_eq!(text(h.state().session.get(id).unwrap()), original_text, "image resizing leaves captions in place");
     }
-    let saved = h.state().session.save_bytes(id).unwrap();
+    let saved = h.state_mut().session.save_bytes(id).unwrap();
     let mut reopened = pdfcraft_engine::Session::new();
     let re = reopened.open("again.pdf", None, saved, None).unwrap();
     assert_eq!(reopened.get(re).unwrap().page_images(0), h.state().session.get(id).unwrap().page_images(0));
