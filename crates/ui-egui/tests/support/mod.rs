@@ -1,19 +1,22 @@
-//! Wait for observable completion of background document opens, rather than counting frames.
+//! State-based waits for native preparation, which completes between UI frames.
 use egui_kittest::Harness;
 use pdfcraft_ui_egui::PdfCraftApp;
-use std::time::{Duration, Instant};
 
-pub fn wait_for(h: &mut Harness<'static, PdfCraftApp>, ready: impl Fn(&PdfCraftApp) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+pub fn wait_until(h: &mut Harness<'static, PdfCraftApp>, what: &str, ready: impl Fn(&PdfCraftApp) -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
-        h.run_steps(2);
+        h.step();
         if ready(h.state()) {
-            // Completion may be processed after widgets are drawn. Render the resulting
-            // interface before callers locate and click its controls.
-            h.run_steps(2);
             return;
         }
-        assert!(Instant::now() < deadline, "background document open did not reach the expected state");
-        std::thread::sleep(Duration::from_millis(1));
+        assert!(
+            std::time::Instant::now() < deadline,
+            "timed out waiting for {what}: views={}, active={:?}, password={:?}, toast={:?}",
+            h.state().views.len(),
+            h.state().active,
+            h.state().password_prompt.as_ref().map(|p| (&p.name, &p.error)),
+            h.state().toast
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }

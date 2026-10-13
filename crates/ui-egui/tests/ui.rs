@@ -683,9 +683,13 @@ fn dropping_a_pdf_on_the_window_opens_it() {
     assert!(h.state().views.is_empty());
     let file: egui::DroppedFileHandle = std::sync::Arc::new(Dropped { path: "dropped.pdf".into(), bytes: FIXTURE.to_vec() });
     h.input_mut().dropped_files.push(file);
-    support::wait_for(&mut h, |app| app.views.len() == 1);
+    support::wait_until(&mut h, "dropped document", |app| app.views.len() == 1 && app.password_prompt.is_none());
     assert_eq!(h.state().views.len(), 1, "the dropped PDF opens in a tab");
     h.get_by_label_contains("dropped.pdf");
+    let (_, id) = h.state().active_ids().unwrap();
+    let doc = h.state().session.get(id).unwrap();
+    assert_eq!(doc.name, "dropped.pdf");
+    assert_eq!(doc.bytes.as_slice(), FIXTURE);
 }
 
 #[test]
