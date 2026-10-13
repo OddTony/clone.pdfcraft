@@ -19,7 +19,8 @@ use pdfcraft_fonts::{helvetica_width, literal, win_ansi};
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum EditError {
-    #[error("page {0} does not exist")]
+    /// Holds the 0-based index; the message names the 1-based page a user counts (#1550).
+    #[error("page {} does not exist", .0.saturating_add(1))]
     NoSuchPage(usize),
     #[error("{0}")]
     Invalid(String),
@@ -624,6 +625,7 @@ pub use flatten::{flatten, flatten_fill_sign};
 pub mod images;
 pub use images::{ImageChange, PageImage, change_image, page_images, reading_images, rect_to_rect, turn_about_centre};
 pub mod bidi;
+pub mod indic;
 pub mod text;
 pub use text::{
     BlockStyle, LineEdit, RangeStyle, TextBlock, TextLine, clear_block, reading_blocks, replace_block, replace_line, rewrite_block, text_blocks,
