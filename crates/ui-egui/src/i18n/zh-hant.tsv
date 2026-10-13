@@ -521,6 +521,9 @@
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	金鑰位於 macOS 鑰匙串中，系統可能會詢問是否允許 PdfCraft 使用它。
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	金鑰位於 Windows 憑證存放區中，系統可能會詢問是否允許 PdfCraft 使用它。
 	Digital ID password	數位 ID 密碼
+	PKCS #11 token  ·  	PKCS #11 權杖  ·  
+	Token PIN	權杖 PIN
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	無法列出 PKCS #11 權杖的數位 ID：{e}
 	Back	返回
 	Validate all	全部驗證
 	Sign this field…	簽署此欄位…

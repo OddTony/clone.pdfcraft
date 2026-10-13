@@ -1,5 +1,6 @@
 # PdfCraft roadmap: milestones and what's next
 
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (PKCS #11 token signing shipped on Unix; the M9 next row drops PKCS #11; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M13: CLI check visits each directory once through aliases and cycles; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M4: Extract and Split preserve shared Type 3 glyph resources; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (M2: packed TIFF-predictor RGB rows retain their byte boundaries; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -130,7 +131,7 @@ total matches the parity estimate.
 | 3 | Editing existing content (M7) | gap 3 | 100–180 |
 | 4 | Pro conversion: OCR languages and clean-up, Office export/import (M10) | gaps 7, 8 | 95–175 |
 | 5 | Standards: Preflight, PDF/A all parts, PDF/UA, PDF/X (M11) | gap 9 | 65–115 |
-| 6 | Signatures for institutions: PKCS #11, timestamp servers, online LTV (M9) | gap 10 | 40–70 |
+| 6 | Signatures for institutions: timestamp servers, online LTV (M9) | gap 10 | 40–70 |
 | 7 | Accessibility tagging (M12) | gap 11 | 40–70 |
 | 8 | 1.0 polish: performance, RTL, languages, keyboard-only (M14) | gaps 13, 14 | 55–95 |
 
@@ -161,6 +162,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | PKCS #11 token signing shipped on Unix (`sign.pkcs11`); the M9 upcoming row drops PKCS #11. Estimates unchanged |
 | 2026-10-12 | minor | M13: CLI check directory identity, with overlap and symlink regressions; estimates unchanged |
 | 2026-10-12 | minor | M4: shared Type 3 glyph resources survive extraction, with save/reopen and independent raster regressions; estimates unchanged |
 | 2026-10-12 | minor | M2: packed TIFF-predictor RGB row boundaries, with decoding and page-render regressions; estimates unchanged |

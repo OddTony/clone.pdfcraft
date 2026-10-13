@@ -888,6 +888,9 @@
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	المفتاح موجود في سلسلة مفاتيح macOS، وقد تطلب الإذن لـ PdfCraft باستخدامه.
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	المفتاح موجود في مخزن شهادات Windows، وقد يطلب الإذن لـ PdfCraft باستخدامه.
 	Digital ID password	كلمة مرور المعرّف الرقمي
+	PKCS #11 token  ·  	بطاقة PKCS #11  ·  
+	Token PIN	الرقم السري للبطاقة
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	تعذّر سرد المعرّفات الرقمية على رموز PKCS #11: {e}
 	Back	رجوع
 	Validate all	التحقق من الكل
 	Sign this field…	توقيع هذا الحقل…

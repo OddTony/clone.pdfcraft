@@ -570,6 +570,9 @@
 	Diamond	Romb
 	Digital ID	Digitalna identiteta
 	Digital ID password	Geslo digitalne identitete
+	PKCS #11 token  ·  	žeton PKCS #11  ·  
+	Token PIN	PIN žetona
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	Digitalnih identitet iz žetonov PKCS #11 ni bilo mogoče prikazati: {e}
 	Digital Signature Properties	Lastnosti digitalnega podpisa
 	Digital signature	Digitalni podpis
 	Digitally sign	Digitalno podpiši

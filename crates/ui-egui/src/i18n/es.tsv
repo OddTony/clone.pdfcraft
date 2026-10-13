@@ -881,6 +881,9 @@
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	La clave está en el Llavero de macOS, que puede pedirte permiso para que PdfCraft la use.
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	La clave está en el almacén de certificados de Windows, que puede pedirte permiso para que PdfCraft la use.
 	Digital ID password	Contraseña del ID digital
+	PKCS #11 token  ·  	token PKCS #11  ·  
+	Token PIN	PIN del token
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	No se pudieron listar los ID digitales de los tokens PKCS #11: {e}
 	Back	Atrás
 	Validate all	Validar todas
 	Sign this field…	Firmar este campo…

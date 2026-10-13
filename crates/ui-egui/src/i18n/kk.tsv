@@ -840,6 +840,9 @@
 	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	Кілт macOS Keychain ішінде; ол PdfCraft-ге оны пайдалануға рұқсат сұрауы мүмкін.
 	The key is in the Windows certificate store, which may ask to allow PdfCraft to use it.	Кілт Windows сертификаттар қоймасында; ол PdfCraft-ге оны пайдалануға рұқсат сұрауы мүмкін.
 	Digital ID password	Цифрлық ID құпиясөзі
+	PKCS #11 token  ·  	PKCS #11 токені  ·  
+	Token PIN	Токен PIN
+	The PKCS #11 tokens' digital IDs couldn't be listed: {e}	PKCS #11 токендеріндегі цифрлық ID-лерді тізімдеу мүмкін болмады: {e}
 	Back	Артқа
 	Validate all	Барлығын тексеру
 	Sign this field…	Бұл өріске қол қою…
