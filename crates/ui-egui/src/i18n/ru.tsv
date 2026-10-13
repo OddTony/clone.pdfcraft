@@ -2252,5 +2252,5 @@ animation effects	Off	Выкл
 	Couldn't follow linked PDF: {reason}	Не удалось открыть связанный PDF: {reason}
 	The linked PDF opened, but its named destination was not applied.	Связанный PDF открыт, но его именованное назначение не применено.
 	The linked PDF opened, but its page destination was out of range.	Связанный PDF открыт, но страница назначения вне допустимого диапазона.
-	Local cross-PDF links require the desktop app	Локальные ссылки между PDF работают только в настольном приложении	Move tag earlier	Переместить тег раньше
-	Move tag later	Переместить тег позж�	Tag form fields	Пометить поля формы151bee53 (i18n: translate form tag command)
+	Local cross-PDF links require the desktop app	Локальные ссылки между PDF работают только в настольном приложении
+	Tag form fields	Пометить поля формы

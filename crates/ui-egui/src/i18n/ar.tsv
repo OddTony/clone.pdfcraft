@@ -2360,5 +2360,5 @@ animation effects	Off	معطّلة
 	Couldn't follow linked PDF: {reason}	تعذّر فتح ملف PDF المرتبط: {reason}
 	The linked PDF opened, but its named destination was not applied.	فُتح ملف PDF المرتبط، لكن لم تُطبَّق وجهته المسماة.
 	The linked PDF opened, but its page destination was out of range.	فُتح ملف PDF المرتبط، لكن وجهة الصفحة خارج النطاق.
-	Local cross-PDF links require the desktop app	تتطلب الروابط المحلية بين ملفات PDF تطبيق سطح المكتب	Move tag earlier	نقل العلامة للأعلى
-	Move tag later	نقل العلامة للأسف�	Tag form fields	وضع علامات على حقول النموذج151bee53 (i18n: translate form tag command)
+	Local cross-PDF links require the desktop app	تتطلب الروابط المحلية بين ملفات PDF تطبيق سطح المكتب
+	Tag form fields	وضع علامات على حقول النموذج

@@ -2339,5 +2339,5 @@ animation effects	Off	オフ
 	Couldn't follow linked PDF: {reason}	リンク先の PDF を開けませんでした: {reason}
 	The linked PDF opened, but its named destination was not applied.	リンク先の PDF を開きましたが、名前付き移動先は適用されませんでした。
 	The linked PDF opened, but its page destination was out of range.	リンク先の PDF を開きましたが、移動先のページが範囲外です。
-	Local cross-PDF links require the desktop app	PDF 間のローカルリンクにはデスクトップアプリが必要です	Move tag earlier	タグを前へ移動
-	Move tag later	タグを後へ移�	Tag form fields	フォームフィールドにタグを付ける151bee53 (i18n: translate form tag command)
+	Local cross-PDF links require the desktop app	PDF 間のローカルリンクにはデスクトップアプリが必要です
+	Tag form fields	フォームフィールドにタグを付ける

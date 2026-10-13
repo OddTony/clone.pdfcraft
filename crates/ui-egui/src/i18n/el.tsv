@@ -2349,5 +2349,5 @@ animation effects	Off	Ανενεργά
 	The linked PDF opened, but its page destination was out of range.	Το συνδεδεμένο PDF άνοιξε, αλλά ο προορισμός σελίδας του είναι εκτός εύρους.
 	Local cross-PDF links require the desktop app	Οι τοπικοί σύνδεσμοι μεταξύ PDF απαιτούν την εφαρμογή υπολογιστή
 	The existing action will be preserved.	Η υπάρχουσα ενέργεια θα διατηρηθεί.
-	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Τα σενάρια αυτής της φόρμας είναι απενεργοποιημένα, επειδή ένα από αυτά εκτελούνταν για πολύ ώρα. Ανοίξτε ξανά το έγγραφο για να εκτελεστούν ξανά.	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
-	Move tag later	Μετακίνηση ετικέτας αργότερ�	Tag form fields	Επισήμανση πεδίων φόρμας151bee53 (i18n: translate form tag command)
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Τα σενάρια αυτής της φόρμας είναι απενεργοποιημένα, επειδή ένα από αυτά εκτελούνταν για πολύ ώρα. Ανοίξτε ξανά το έγγραφο για να εκτελεστούν ξανά.
+	Tag form fields	Επισήμανση πεδίων φόρμας

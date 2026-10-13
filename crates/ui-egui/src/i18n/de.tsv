@@ -2340,5 +2340,5 @@ animation effects	Off	Aus
 	Couldn't follow linked PDF: {reason}	Verknüpfte PDF konnte nicht geöffnet werden: {reason}
 	The linked PDF opened, but its named destination was not applied.	Die verknüpfte PDF wurde geöffnet, aber ihr benanntes Ziel wurde nicht angewendet.
 	The linked PDF opened, but its page destination was out of range.	Die verknüpfte PDF wurde geöffnet, aber ihr Seitenziel liegt außerhalb des Bereichs.
-	Local cross-PDF links require the desktop app	Lokale Verknüpfungen zwischen PDFs erfordern die Desktop-App	Move tag earlier	Tag früher verschieben
-	Move tag later	Tag später verschiebe	Tag form fields	Formularfelder taggen151bee53 (i18n: translate form tag command)
+	Local cross-PDF links require the desktop app	Lokale Verknüpfungen zwischen PDFs erfordern die Desktop-App
+	Tag form fields	Formularfelder taggen

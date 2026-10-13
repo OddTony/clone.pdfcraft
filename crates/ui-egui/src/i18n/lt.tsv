@@ -2583,5 +2583,5 @@ key	Delete	Delete
 key	Esc	Esc
 key	Home	Home
 key	End	End
-key	Space	Tarpas	Move tag earlier	Perkelti žymą anksčiau
-	Move tag later	Perkelti žymą vėlia	Tag form fields	Žymėti formos laukus151bee53 (i18n: translate form tag command)
+key	Space	Tarpas
+	Tag form fields	Žymėti formos laukus
