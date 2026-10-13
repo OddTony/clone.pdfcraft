@@ -10,13 +10,18 @@ use pdfcraft_ui_egui::{CloseRequest, Dialog, PdfCraftApp};
 
 /// An `n`-page document with a proper xref table; page `i` shows "Page i+1".
 fn fixture(n: usize) -> Vec<u8> {
+    fixture_with(&(0..n).map(|i| format!("BT /F1 24 Tf 20 150 Td (Page {}) Tj ET", i + 1)).collect::<Vec<_>>())
+}
+
+/// 200 x 300 pt pages with the given content streams (Helvetica as /F1).
+fn fixture_with(bodies: &[String]) -> Vec<u8> {
+    let n = bodies.len();
     let mut objs: Vec<String> = vec!["<< /Type /Catalog /Pages 2 0 R >>".into()];
     let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", 4 + 2 * i)).collect();
     objs.push(format!("<< /Type /Pages /Kids [{}] /Count {n} /MediaBox [0 0 200 300] >>", kids.join(" ")));
     objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into());
-    for i in 0..n {
+    for (i, body) in bodies.iter().enumerate() {
         objs.push(format!("<< /Type /Page /Parent 2 0 R /Contents {} 0 R /Resources << /Font << /F1 3 0 R >> >> >>", 5 + 2 * i));
-        let body = format!("BT /F1 24 Tf 20 150 Td (Page {}) Tj ET", i + 1);
         objs.push(format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()));
     }
     let mut out = b"%PDF-1.7\n".to_vec();
@@ -4193,4 +4198,84 @@ fn moving_text_offers_the_four_way_arrow() {
     assert_eq!(cursor_at(&mut h, centre), egui::CursorIcon::Text);
     let frame = screen((moved.rect[0] + moved.rect[2]) / 2.0, moved.rect[3]) - egui::vec2(0.0, 4.0);
     assert_eq!(cursor_at(&mut h, frame), egui::CursorIcon::Move);
+}
+
+/// #1714: a dragged paragraph snaps to another paragraph's edge, with a guide, within a few pixels.
+#[test]
+fn a_dragged_paragraph_snaps_to_another_paragraphs_edge() {
+    let bytes = fixture_with(&["BT /F1 24 Tf 20 250 Td (Alpha) Tj ET BT /F1 24 Tf 70 190 Td (Beta) Tj ET".into()]);
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("snap.pdf", None, bytes.clone()).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let id = h.state().views[0].id;
+    let block = |h: &Harness<'static, PdfCraftApp>, text: &str| {
+        h.state().session.get(id).unwrap().text_blocks(0).into_iter().find(|b| b.text == text).unwrap_or_else(|| panic!("{text}"))
+    };
+    let (alpha, beta) = (block(&h, "Alpha"), block(&h, "Beta"));
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 200.0;
+    let screen = |x: f64, y: f64| egui::pos2(r.left() + x as f32 * k, r.top() + (300.0 - y as f32) * k);
+    let centre = screen((beta.rect[0] + beta.rect[2]) / 2.0, (beta.rect[1] + beta.rect[3]) / 2.0);
+    // Away from everything, a drag lands where it was dropped.
+    drag(&mut h, centre, centre + egui::vec2(20.0 * k, 0.0));
+    let beta = block(&h, "Beta");
+    assert!((beta.rect[0] - 90.0).abs() < 1.5, "a free drag moves it: {:?}", beta.rect);
+    let centre = screen((beta.rect[0] + beta.rect[2]) / 2.0, (beta.rect[1] + beta.rect[3]) / 2.0);
+    // Drag Beta so that its left edge would land half a point right of Alpha's: it snaps onto it.
+    let wanted = (alpha.rect[0] + 0.5 - beta.rect[0]) as f32 * k;
+    assert!(wanted.abs() > 6.0, "the drag itself is a real one ({wanted} px)");
+    drag(&mut h, centre, centre + egui::vec2(wanted, 0.0));
+    let moved = block(&h, "Beta");
+    assert!((moved.rect[0] - alpha.rect[0]).abs() < 0.05, "snapped to Alpha's left edge: {:?} vs {:?}", moved.rect, alpha.rect);
+    assert!((moved.rect[1] - beta.rect[1]).abs() < 0.05, "nothing to snap to vertically: {:?}", moved.rect);
+    assert_eq!(h.state().session.get(id).unwrap().can_undo(), Some("Move object"));
+    // The open paragraph, dragged by its frame (the object selection's move), snaps the same way:
+    // its right edge onto Alpha's, from half a point off.
+    let beta = moved;
+    click_at(&mut h, screen((beta.rect[0] + beta.rect[2]) / 2.0, (beta.rect[1] + beta.rect[3]) / 2.0));
+    assert!(h.state().views[0].line_editor.is_some());
+    let frame = screen((beta.rect[0] + beta.rect[2]) / 2.0, beta.rect[3]) - egui::vec2(0.0, 4.0);
+    let wanted = (alpha.rect[2] + 0.5 - beta.rect[2]) as f32 * k;
+    drag(&mut h, frame, frame + egui::vec2(wanted, 0.0));
+    let moved = block(&h, "Beta");
+    assert!((moved.rect[2] - alpha.rect[2]).abs() < 0.05, "snapped to Alpha's right edge: {:?} vs {:?}", moved.rect, alpha.rect);
+    assert!(h.state().views[0].line_editor.is_none());
+}
+
+/// The right-edge handle widens a narrowed paragraph back: the two lines become one again.
+#[test]
+fn widening_a_narrowed_paragraph_rewraps_it_back() {
+    // Tall enough for the whole 300 pt page: the box's middle must stay on screen as it grows.
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1700.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("doc.pdf", None, fixture(1)).expect("fixture opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let id = h.state().views[0].id;
+    let lines =
+        |h: &Harness<'static, PdfCraftApp>| h.state().session.get(id).unwrap().text_lines(0).iter().map(|l| l.text.clone()).collect::<Vec<_>>();
+    let block = |h: &Harness<'static, PdfCraftApp>| h.state().session.get(id).unwrap().text_blocks(0)[0].clone();
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 200.0;
+    let screen = |x: f64, y: f64| egui::pos2(r.left() + x as f32 * k, r.top() + (300.0 - y as f32) * k);
+    let before = block(&h);
+    let edge = screen(before.rect[2], (before.rect[1] + before.rect[3]) / 2.0) + egui::vec2(2.0, 0.0);
+    let narrower = (before.rect[2] - before.rect[0] - 45.0) as f32 * k;
+    drag(&mut h, edge, edge - egui::vec2(narrower, 0.0));
+    assert_eq!(lines(&h), ["Page", "1"]);
+    let narrow = block(&h);
+    let edge = screen(narrow.rect[2], (narrow.rect[1] + narrow.rect[3]) / 2.0) + egui::vec2(2.0, 0.0);
+    drag(&mut h, edge, edge + egui::vec2(60.0 * k, 0.0));
+    assert_eq!(lines(&h), ["Page 1"], "wider again: one line, {:?}", block(&h).rect);
+    assert_eq!(h.state().session.get(id).unwrap().can_undo(), Some("Edit text"));
 }

@@ -368,6 +368,83 @@ pub struct BlockDrag {
 const EDGE_REACH: f32 = 6.0;
 /// How far outside an open paragraph's frame the pointer still means the frame (screen pixels).
 const FRAME_REACH: f32 = 4.0;
+/// Alignment guides (#1714): within this many screen pixels, a dragged box's edge or centre snaps
+/// to an edge or centre of another paragraph or image on the page, or of the page itself.
+const SNAP: f32 = 6.0;
+/// The guide line drawn where a drag snapped.
+const GUIDE: Color32 = Color32::from_rgb(0xFF, 0x00, 0xC8);
+
+/// A line a drag snapped to, in screen coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Guide {
+    Vertical(f32),
+    Horizontal(f32),
+}
+
+/// Where `moving` lands after snapping to `others` and `page` (screen rects), and the lines it
+/// snapped to. Edges and centres on both axes; the nearest line within [`SNAP`] wins on each.
+pub(crate) fn snap_to(moving: Rect, others: &[Rect], page: Rect) -> (Rect, Vec<Guide>) {
+    let xs = |r: Rect| [r.left(), r.center().x, r.right()];
+    let ys = |r: Rect| [r.top(), r.center().y, r.bottom()];
+    let candidates: Vec<Rect> = others.iter().copied().filter(|r| r.is_positive()).chain(std::iter::once(page)).collect();
+    // The nearest (shift, line) within reach, between the box's own lines and the candidates'.
+    let nearest = |own: [f32; 3], lines: &[f32]| -> Option<(f32, f32)> {
+        let mut best: Option<(f32, f32)> = None;
+        for &line in lines {
+            for o in own {
+                let shift = line - o;
+                if shift.abs() <= SNAP && best.is_none_or(|(b, _)| shift.abs() < b.abs()) {
+                    best = Some((shift, line));
+                }
+            }
+        }
+        best
+    };
+    let vertical: Vec<f32> = candidates.iter().flat_map(|r| xs(*r)).collect();
+    let horizontal: Vec<f32> = candidates.iter().flat_map(|r| ys(*r)).collect();
+    let x = nearest(xs(moving), &vertical);
+    let y = nearest(ys(moving), &horizontal);
+    let snapped = moving.translate(egui::vec2(x.map_or(0.0, |(shift, _)| shift), y.map_or(0.0, |(shift, _)| shift)));
+    let guides = x.map(|(_, line)| Guide::Vertical(line)).into_iter().chain(y.map(|(_, line)| Guide::Horizontal(line))).collect();
+    (snapped, guides)
+}
+
+/// The guides across the page, and beside the snapped box (`moving`) the way out of them.
+pub(crate) fn draw_guides(painter: &egui::Painter, guides: &[Guide], page: Rect, moving: Rect) {
+    let stroke = Stroke::new(1.0, GUIDE);
+    for guide in guides {
+        let line = match *guide {
+            Guide::Vertical(x) => [Pos2::new(x, page.top()), Pos2::new(x, page.bottom())],
+            Guide::Horizontal(y) => [Pos2::new(page.left(), y), Pos2::new(page.right(), y)],
+        };
+        painter.line_segment(line, stroke);
+    }
+    if !guides.is_empty() {
+        let font = egui::FontId::proportional(11.0);
+        let galley = painter.layout_no_wrap(tl!("Shift drags freely").to_string(), font, GUIDE);
+        let at = Pos2::new(moving.right() + 8.0, moving.bottom() + 8.0);
+        let bg = Rect::from_min_size(at, galley.size()).expand(4.0);
+        painter.rect(bg, CornerRadius::same(3), Color32::WHITE, Stroke::new(1.0, GUIDE), egui::StrokeKind::Outside);
+        painter.galley(at, galley, GUIDE);
+    }
+}
+
+/// The screen frames of the page's images (the other kind of box a drag aligns to).
+pub(crate) fn image_frames(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize) -> Vec<Rect> {
+    view.edit_images
+        .get(&page)
+        .map(|(_, images)| images.iter().filter_map(|im| im.visible_rect.map(|r| xf.user_rect(info, page, r.map(|v| v as f32)))).collect())
+        .unwrap_or_default()
+}
+
+/// The screen rects of the page's paragraphs (the text itself, without the 2 px box padding, so
+/// text and images and the object selection all measure alike).
+pub(crate) fn text_frames(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize) -> Vec<Rect> {
+    view.edit_lines
+        .get(&page)
+        .map(|(_, lines)| lines.iter().map(|l| xf.user_rect(info, page, l.rect.map(|v| v as f32))).collect())
+        .unwrap_or_default()
+}
 
 /// The rewrap handles drawn on a paragraph box's left and right edges (screen).
 fn width_handles(b: Rect) -> [Rect; 2] {
@@ -505,6 +582,7 @@ pub(crate) fn image_input(
         if let Some((start, opposite)) = view.image_selection.as_ref().and_then(|s| s.drag)
             && let Some(p) = hover_pos
         {
+            let mut guides = Vec::new();
             let preview = match opposite {
                 // Resize from the opposite corner, keeping the aspect ratio.
                 Some(fixed) => {
@@ -521,7 +599,15 @@ pub(crate) fn image_input(
                     let y = if start.y < fixed.y { fixed.y - h } else { fixed.y };
                     Rect::from_min_size(Pos2::new(x, y), egui::vec2(w, h))
                 }
-                None => b.translate(p - start),
+                // A move snaps to the other images and the paragraphs (#1714); Shift drags freely.
+                None if ui.input(|inp| inp.modifiers.shift) => b.translate(p - start),
+                None => {
+                    let others: Vec<Rect> =
+                        boxes.iter().enumerate().filter(|(k, _)| *k != i).map(|(_, r)| *r).chain(text_frames(view, xf, info, page)).collect();
+                    let (snapped, found) = snap_to(b.translate(p - start), &others, xf.rect);
+                    guides = found;
+                    snapped
+                }
             };
             // Move/resize the full placement by the visible frame's change. The engine
             // transforms an isolated crop together with its image, preserving its contents.
@@ -537,6 +623,7 @@ pub(crate) fn image_input(
                 painter.rect_stroke(visible, CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
                 handles(preview);
             }
+            draw_guides(painter, &guides, xf.rect, preview);
             if resp.drag_stopped() || !ui.input(|i| i.pointer.primary_down()) {
                 if let Some(s) = view.image_selection.as_mut() {
                     s.drag = None;
@@ -668,12 +755,28 @@ pub(crate) fn page_input(
     {
         let p = ui.input(|i| i.pointer.interact_pos()).unwrap_or(d.start);
         let dx = p.x - d.start.x;
+        let mut guides = Vec::new();
         let preview = match d.grip {
-            Grip::Move => b.translate(p - d.start),
+            // A move snaps to the other paragraphs and the images (#1714); Shift drags freely.
+            Grip::Move if ui.input(|i| i.modifiers.shift) => b.translate(p - d.start),
+            Grip::Move => {
+                // Measured on the text, not its padded box, like the other candidates.
+                let others: Vec<Rect> = text_frames(view, xf, info, page)
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(k, _)| *k != d.block)
+                    .map(|(_, r)| r)
+                    .chain(image_frames(view, xf, info, page))
+                    .collect();
+                let (snapped, found) = snap_to(b.translate(p - d.start).shrink(2.0), &others, xf.rect);
+                guides = found;
+                snapped.expand(2.0)
+            }
             Grip::Left => Rect::from_min_max(Pos2::new((b.left() + dx).min(b.right() - 12.0), b.min.y), b.max),
             Grip::Right => Rect::from_min_max(b.min, Pos2::new((b.right() + dx).max(b.left() + 12.0), b.max.y)),
         };
         painter.rect_stroke(preview, CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
+        draw_guides(painter, &guides, xf.rect, preview);
         let resizing = d.grip != Grip::Move;
         if resizing {
             draw_handles(preview);
@@ -1177,6 +1280,32 @@ mod tests {
         small.prepare(&ctx, doc, Some(&ed), 8.0);
         assert_eq!(small.tag, Some(((2048.0 / page.width.max(page.height)) * 1000.0) as u64));
         ctx.end_pass().textures_delta.clear();
+    }
+
+    #[test]
+    fn a_drag_snaps_to_nearby_edges_and_centres_only() {
+        let page = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(600.0, 800.0));
+        let other = Rect::from_min_max(Pos2::new(100.0, 100.0), Pos2::new(300.0, 140.0));
+        // Four pixels right of the other box's left edge, far from anything vertically: x snaps.
+        let moving = Rect::from_min_max(Pos2::new(104.0, 500.0), Pos2::new(184.0, 520.0));
+        let (snapped, guides) = snap_to(moving, &[other], page);
+        assert_eq!(snapped.left(), 100.0);
+        assert_eq!(snapped.top(), 500.0);
+        assert_eq!(guides, [Guide::Vertical(100.0)]);
+        // Centres align too, and the page's own centre counts: 300 = the other's centre x and the page's.
+        let moving = Rect::from_min_max(Pos2::new(265.0, 402.0), Pos2::new(345.0, 422.0));
+        let (snapped, guides) = snap_to(moving, &[other], page);
+        assert_eq!(snapped.min, Pos2::new(260.0, 400.0), "centre x to the shared centre, top to the page's centre line");
+        assert_eq!(guides, [Guide::Vertical(300.0), Guide::Horizontal(400.0)]);
+        // The nearest line wins: 2 px from the other's right edge, 5 px from its centre.
+        let moving = Rect::from_min_max(Pos2::new(298.0, 600.0), Pos2::new(308.0, 620.0));
+        let (snapped, _) = snap_to(moving, &[other], page);
+        assert_eq!(snapped.left(), 300.0);
+        // Beyond reach nothing moves, and nothing is drawn.
+        let moving = Rect::from_min_max(Pos2::new(110.0, 500.0), Pos2::new(190.0, 520.0));
+        assert_eq!(snap_to(moving, &[other], page), (moving, Vec::new()));
+        // Empty candidates are skipped.
+        assert_eq!(snap_to(moving, &[Rect::NOTHING], page), (moving, Vec::new()));
     }
 
     #[test]
