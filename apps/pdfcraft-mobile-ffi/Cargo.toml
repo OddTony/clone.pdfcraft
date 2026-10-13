@@ -1,0 +1,27 @@
+[package]
+name = "pdfcraft-mobile-ffi"
+description = "UniFFI bridge exposing pdfcraft-automation to the iOS companion app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "pdfcraft_mobile_ffi"
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi_bindgen.rs"
+required-features = ["cli"]
+
+[lints]
+workspace = true
+
+[dependencies]
+pdfcraft-automation = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uniffi = { workspace = true }
+
+[features]
+cli = ["uniffi/cli"]

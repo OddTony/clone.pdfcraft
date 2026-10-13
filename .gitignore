@@ -9,3 +9,11 @@ plan/
 /assets/models
 # A craft-fonts checkout used as the optional CRAFT_FONTS_DIR build input (CI and releases put it here).
 /craft-fonts
+
+# iOS companion app: generated UniFFI bindings, assembled XCFramework, and
+# Xcode build products. The project is (re)generated from ios/project.yml.
+/ios/Sources/Generated
+/ios/Frameworks
+/ios/build
+/ios/*.xcodeproj
+/ios/DerivedData

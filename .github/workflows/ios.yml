@@ -1,0 +1,68 @@
+# iOS companion app: build the Rust FFI crate for the Simulator, generate the
+# Xcode project, and build the app. Simulator-only, unsigned — see ios/README.md
+# for scope. There is no local macOS available for this project, so this
+# workflow is the only way to validate iOS changes.
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/pdfcraft-mobile-ffi/**
+      - ios/**
+      - .github/workflows/ios.yml
+  pull_request:
+    paths:
+      - apps/pdfcraft-mobile-ffi/**
+      - ios/**
+      - .github/workflows/ios.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: build (iOS Simulator)
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ios-ffi
+          workspaces: apps/pdfcraft-mobile-ffi
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build Rust staticlib and generate Swift bindings
+        run: ./ios/Scripts/build-ffi.sh
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Select simulator destination
+        id: destination
+        run: |
+          set -euo pipefail
+          name=$(xcrun simctl list devicetypes iPhone -j \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["devicetypes"][-1]["name"])')
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Build
+        working-directory: ios
+        run: |
+          xcodebuild build \
+            -project ArtiPDF.xcodeproj \
+            -scheme ArtiPDF \
+            -destination "platform=iOS Simulator,name=${{ steps.destination.outputs.name }}" \
+            CODE_SIGNING_ALLOWED=NO

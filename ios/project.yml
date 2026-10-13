@@ -1,0 +1,48 @@
+name: ArtiPDF
+options:
+  bundleIdPrefix: com.refinedtech.artipdf
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_BITCODE: false
+
+targets:
+  ArtiPDF:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/App
+      - path: Sources/Generated
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.refinedtech.artipdf
+        PRODUCT_NAME: ArtiPDF
+        OTHER_LDFLAGS: -ObjC
+    info:
+      path: Sources/App/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        LSSupportsOpeningDocumentsInPlace: true
+    dependencies:
+      - framework: Frameworks/pdfcraft_mobile_ffiFFI.xcframework
+        embed: true
+        codeSign: true
+
+schemes:
+  ArtiPDF:
+    build:
+      targets:
+        ArtiPDF: all
+    run:
+      config: Debug
+    archive:
+      config: Release
