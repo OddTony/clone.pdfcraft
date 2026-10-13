@@ -279,12 +279,89 @@ impl Reader<'_, '_> {
                 part: location.clone(),
                 msg: "the page has no size (no <Area> and no document <PageArea>)".into(),
             })?;
-            pages.push(Page { id, location, area, templates, content });
+            pages.push(Page { id, location, area, templates, content, annotations: Vec::new() });
         }
         if pages.is_empty() {
             return Err(part.err("the document has no pages"));
         }
+        if let Some(list) = child(&root, "Annotations").or_else(|| child(&common, "Annotations")) {
+            let loc = resolve(dir, &text(&list))?;
+            self.annotations(&loc, &mut pages)?;
+        }
         Ok((page_area, templates, pages))
+    }
+
+    /// The annotation list (`Annotations`): each page's annotation file, by page ID. A listed
+    /// file that is missing, or a page ID that no page has, is a warning.
+    fn annotations(&mut self, path: &str, pages: &mut [Page]) -> Result<(), OfdError> {
+        let src = match self.read_xml(path) {
+            Err(OfdError::Missing(_)) => {
+                self.warn(format!("{path} is listed but missing from the package; annotations are not read"));
+                return Ok(());
+            }
+            other => other?,
+        };
+        let doc = xml(path, &src, &self.limits)?;
+        let limits = self.limits.clone();
+        let part = Part { name: path.into(), limits: &limits };
+        let root = doc.root_element();
+        if !is(&root, "Annotations") {
+            return Err(part.err(format!("the root element is <{}>, not <Annotations>", root.tag_name().name())));
+        }
+        let dir = dir_of(path);
+        for p in children(&root, "Page") {
+            let id = part.required_id(&p, "PageID")?;
+            let loc = text_opt(&p, "FileLoc").ok_or_else(|| part.at(&p, "there is no <FileLoc>".into()))?;
+            let loc = resolve(dir, &loc)?;
+            let Some(page) = pages.iter_mut().find(|pg| pg.id == id) else {
+                self.warn(format!("{path}: annotations for page {id}, which the document doesn't have, are not read"));
+                continue;
+            };
+            let annots = self.page_annotations(&loc)?;
+            page.annotations.extend(annots);
+        }
+        Ok(())
+    }
+
+    /// One page's annotation file (`PageAnnot`).
+    fn page_annotations(&mut self, path: &str) -> Result<Vec<Annotation>, OfdError> {
+        let src = match self.read_xml(path) {
+            Err(OfdError::Missing(_)) => {
+                self.warn(format!("{path} is listed but missing from the package; its annotations are not read"));
+                return Ok(Vec::new());
+            }
+            other => other?,
+        };
+        let doc = xml(path, &src, &self.limits)?;
+        let limits = self.limits.clone();
+        let part = Part { name: path.into(), limits: &limits };
+        let root = doc.root_element();
+        if !is(&root, "PageAnnot") {
+            return Err(part.err(format!("the root element is <{}>, not <PageAnnot>", root.tag_name().name())));
+        }
+        let mut out = Vec::new();
+        for a in children(&root, "Annot") {
+            let appearance = child(&a, "Appearance");
+            let boundary = match appearance.and_then(|ap| ap.attribute("Boundary")) {
+                Some(b) => Some(values::boundary(b, part.limits).map_err(|e| part.at(&a, e))?.0),
+                None => None,
+            };
+            let objects = match appearance {
+                Some(ap) => self.objects(&part, &ap, 0)?,
+                None => Vec::new(),
+            };
+            self.charge(&part, 1, size_of::<Annotation>(), 0)?;
+            out.push(Annotation {
+                kind: a.attribute("Type").unwrap_or_default().to_string(),
+                subtype: a.attribute("Subtype").map(str::to_string),
+                visible: part.flag(&a, "Visible", true)?,
+                print: part.flag(&a, "Print", true)?,
+                no_view: part.flag(&a, "NoView", false)?,
+                boundary,
+                objects,
+            });
+        }
+        Ok(out)
     }
 
     /// A resource file (`Res`): its `BaseLoc` is where its files live.
@@ -730,6 +807,9 @@ impl Reader<'_, '_> {
         }
         for unit in self.resources.composites.values() {
             walk(&unit.objects, &self.resources, &mut missing);
+        }
+        for a in pages.iter().flat_map(|p| &p.annotations) {
+            walk(&a.objects, &self.resources, &mut missing);
         }
         missing.sort();
         missing.dedup();

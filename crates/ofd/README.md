@@ -26,7 +26,9 @@ if pdfcraft_ofd::is_ofd(&bytes) {                 // a ZIP with OFD.xml at its r
   `Document.xml` (`CommonData/PageArea`, `PublicRes`, `DocumentRes`, `TemplatePage`, `Pages`),
   resource files (`ColorSpaces`, `DrawParams`, `Fonts` with `FontFile`, `MultiMedias` with
   `MediaFile`, all resolved against the file's `BaseLoc`), and each page's `Content.xml`
-  (`Template`, `PageRes`, `Area`, `Content/Layer`).
+  (`Template`, `PageRes`, `Area`, `Content/Layer`), and the annotations (`Annotations` ▸ each
+  page's `PageAnnot` ▸ `Annot`: type, visibility, `Appearance` boundary and objects) into
+  `Page::annotations`.
 - **Objects**: `PathObject` (`AbbreviatedData`: `S`/`M`, `L`, `Q`, `B`, `A`, `C`), `TextObject`
   (`TextCode` with `X`/`Y` and `DeltaX`/`DeltaY` where `g N v` repeats `v` N times;
   `CGTransform` glyph indices), `ImageObject`, `CompositeObject` (its unit, a resource, in

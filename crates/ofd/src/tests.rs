@@ -719,3 +719,31 @@ fn reads_axial_and_radial_shadings() {
     assert!((x - 1.5).abs() < 1e-12 && (y + 2.0).abs() < 1e-12);
     assert!(Matrix { a: 1.0, b: 2.0, c: 2.0, d: 4.0, e: 0.0, f: 0.0 }.inverse().is_none());
 }
+
+#[test]
+fn reads_annotations() {
+    let doc_xml = document_xml(2).replace("</ofd:Pages>", "</ofd:Pages><ofd:Annotations>Annots/Annotations.xml</ofd:Annotations>");
+    let list = r#"<Annotations><Page PageID="101"><FileLoc>Page_1/Annotation.xml</FileLoc></Page><Page PageID="999"><FileLoc>Page_9/Annotation.xml</FileLoc></Page></Annotations>"#;
+    let annots = r#"<PageAnnot><Annot Type="Stamp" Subtype="Seal" ID="1" NoView="true"><Parameters><Parameter Name="x">y</Parameter></Parameters>
+<Appearance Boundary="10 20 30 40"><PathObject Boundary="0 0 1 1"><AbbreviatedData>M 0 0 L 1 1</AbbreviatedData></PathObject></Appearance></Annot>
+<Annot Type="Link" ID="2"/></PageAnnot>"#;
+    let mut files: Vec<(String, String)> =
+        sample_files().into_iter().map(|(n, d)| if n == "Doc_0/Document.xml" { (n, doc_xml.clone()) } else { (n, d) }).collect();
+    files.push(("Doc_0/Annots/Annotations.xml".into(), list.into()));
+    files.push(("Doc_0/Annots/Page_1/Annotation.xml".into(), annots.into()));
+    let doc = parse(&build(&files)).unwrap();
+    assert!(doc.pages[0].annotations.is_empty());
+    let a = &doc.pages[1].annotations;
+    assert_eq!(a.len(), 2);
+    assert_eq!((a[0].kind.as_str(), a[0].subtype.as_deref(), a[0].visible, a[0].print, a[0].no_view), ("Stamp", Some("Seal"), true, true, true));
+    assert_eq!(a[0].boundary, Some(OfdBox { x: 10.0, y: 20.0, w: 30.0, h: 40.0 }));
+    assert_eq!(a[0].objects.len(), 1);
+    assert_eq!((a[1].kind.as_str(), a[1].boundary, a[1].objects.len()), ("Link", None, 0));
+    assert!(doc.warnings.iter().any(|w| w.contains("page 999")), "{:?}", doc.warnings);
+    // A listed annotation file that is missing: a warning, not an error.
+    files.retain(|(n, _)| n != "Doc_0/Annots/Page_1/Annotation.xml");
+    files.push(("Doc_0/Annots/Annotations.xml".into(), list.replace(r#"<Page PageID="999"><FileLoc>Page_9/Annotation.xml</FileLoc></Page>"#, "")));
+    files.retain(|(n, d)| !(n == "Doc_0/Annots/Annotations.xml" && d.contains("999")));
+    let doc = parse(&build(&files)).unwrap();
+    assert!(doc.warnings.iter().any(|w| w.contains("Page_1/Annotation.xml is listed but missing")), "{:?}", doc.warnings);
+}

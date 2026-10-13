@@ -10,6 +10,9 @@
 //!   or a non-embedded Adobe-GB1 font (`STSong-Light`) for Chinese, which readers substitute.
 //!   No font file is added: only fonts the OFD file itself carries are embedded.
 //!
+//! Annotations (stamps, watermarks and other `Annot` appearances) are drawn over the page
+//! content, as content: they don't become PDF annotations.
+//!
 //! Template pages and composite graphic units are written once each, as form XObjects that
 //! every page or object using them draws. A unit is a transparency group, so its object's
 //! `Alpha` fades it as a whole; a unit that contains itself, or units nested more than
@@ -112,6 +115,7 @@ pub fn from_ofd(bytes: &[u8]) -> Result<(Document, OfdReport), CreateError> {
         for tp in template(ZOrder::Foreground) {
             w.template(tp, &mut out);
         }
+        w.annotations(&page.annotations, &mut out);
         let resources = out.resources();
         add_page(&mut w.doc, pw, ph, resources, Some(out.ops.into_bytes()))?;
         w.report.pages += 1;
@@ -252,6 +256,39 @@ impl Writer<'_, '_> {
         let name = format!("Tpl{}", tp.id);
         out.xobjects.insert(name.clone(), r);
         let _ = writeln!(out.ops, "/{name} Do");
+    }
+
+    /// Draw a page's annotations over its content: each visible appearance from its boundary's
+    /// corner. Annotations shown only when printed are not drawn (reported); links are drawn
+    /// as they look but don't become PDF links (noted).
+    fn annotations(&mut self, annots: &[pdfcraft_ofd::Annotation], out: &mut PageOut) {
+        for a in annots {
+            if a.kind == "Link" {
+                self.note("OFD links are drawn as they look but are not clickable links in the PDF");
+            }
+            if !a.visible {
+                continue;
+            }
+            if a.no_view {
+                self.skip("annotations shown only when printed");
+                continue;
+            }
+            if a.objects.is_empty() {
+                continue;
+            }
+            let at = a.boundary.map_or(Matrix::IDENTITY, |b| Matrix::translate(b.x, b.y));
+            out.ops.push_str("q\n");
+            out.ops.push_str(&cm(&at));
+            self.objects(&a.objects, None, out);
+            out.ops.push_str("Q\n");
+        }
+    }
+
+    /// Add a note to the report once.
+    fn note(&mut self, note: &str) {
+        if !self.report.notes.iter().any(|n| n == note) {
+            self.report.notes.push(note.to_string());
+        }
     }
 
     /// A composite graphic unit as a form XObject (a transparency group), written the first

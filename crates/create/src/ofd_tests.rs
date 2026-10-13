@@ -500,3 +500,41 @@ fn shadings_that_cannot_be_drawn_are_reported() {
     );
     assert!(report.notes.iter().any(|n| n.contains("<AxialShd> could not be read")), "{:?}", report.notes);
 }
+
+#[test]
+fn annotations_are_drawn_over_the_page() {
+    // The annotation list sits in Document.xml after Pages; one page's file holds a watermark,
+    // a print-only stamp, a hidden one and a link.
+    let mut bytes_files: Vec<(String, Vec<u8>)> = Vec::new();
+    let annots = r#"<ofd:Annotations xmlns:ofd="http://www.ofdspec.org/2016"><ofd:Page PageID="100"><ofd:FileLoc>Page_0.xml</ofd:FileLoc></ofd:Page></ofd:Annotations>"#;
+    let page_annots = r#"<ofd:PageAnnot xmlns:ofd="http://www.ofdspec.org/2016">
+<ofd:Annot Type="Watermark" ID="70"><ofd:Appearance Boundary="90 8 30 20"><ofd:PathObject ID="71" Boundary="0 0 30 20"><ofd:AbbreviatedData>M 0 0 L 77 0</ofd:AbbreviatedData></ofd:PathObject></ofd:Appearance></ofd:Annot>
+<ofd:Annot Type="Stamp" ID="72" NoView="true"><ofd:Appearance Boundary="0 0 9 9"><ofd:PathObject ID="73" Boundary="0 0 9 9"><ofd:AbbreviatedData>M 0 0 L 88 0</ofd:AbbreviatedData></ofd:PathObject></ofd:Appearance></ofd:Annot>
+<ofd:Annot Type="Stamp" ID="74" Visible="false"><ofd:Appearance Boundary="0 0 9 9"><ofd:PathObject ID="75" Boundary="0 0 9 9"><ofd:AbbreviatedData>M 0 0 L 99 0</ofd:AbbreviatedData></ofd:PathObject></ofd:Appearance></ofd:Annot>
+<ofd:Annot Type="Link" ID="76"><ofd:Appearance Boundary="0 0 9 9"><ofd:PathObject ID="77" Visible="false" Boundary="0 0 9 9"><ofd:AbbreviatedData>M 0 0 L 9 9</ofd:AbbreviatedData></ofd:PathObject></ofd:Appearance></ofd:Annot>
+</ofd:PageAnnot>"#;
+    let base = package(&[&page(PATH)], false);
+    // Rebuild the package with the annotation files and the list in Document.xml.
+    let pkg = pdfcraft_ofd::zip::Package::open(&base, &pdfcraft_ofd::Limits::default()).unwrap();
+    for name in pkg.names() {
+        let mut data = pkg.read(name).unwrap();
+        if name == "Doc_0/Document.xml" {
+            let doc =
+                String::from_utf8(data).unwrap().replace("</ofd:Pages>", "</ofd:Pages><ofd:Annotations>Annots/Annotations.xml</ofd:Annotations>");
+            data = doc.into_bytes();
+        }
+        bytes_files.push((name.to_string(), data));
+    }
+    bytes_files.push(("Doc_0/Annots/Annotations.xml".into(), annots.as_bytes().to_vec()));
+    bytes_files.push(("Doc_0/Annots/Page_0.xml".into(), page_annots.as_bytes().to_vec()));
+    let refs: Vec<(&str, Vec<u8>)> = bytes_files.iter().map(|(n, d)| (n.as_str(), d.clone())).collect();
+    let (pages, report, _) = convert(&zip(&refs));
+    let ops = &pages[0].1;
+    // After the page's own path, from the appearance's corner.
+    let find = |needle: &str| ops.find(needle).unwrap_or_else(|| panic!("{needle:?} not in {ops}"));
+    let (own, watermark) = (find("50 0 l"), find("q\n1 0 0 1 90 8 cm\nq\n1 0 0 1 0 0 cm\n"));
+    assert!(own < watermark && ops.contains("77 0 l"), "{ops}");
+    assert!(!ops.contains("88 0 l") && !ops.contains("99 0 l"), "print-only and hidden annotations are not drawn: {ops}");
+    assert_eq!(report.skipped_by_kind.get("annotations shown only when printed"), Some(&1));
+    assert!(report.notes.iter().any(|n| n.contains("not clickable")), "{:?}", report.notes);
+}

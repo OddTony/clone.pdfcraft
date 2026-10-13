@@ -80,6 +80,25 @@ pub struct Page {
     /// Templates drawn with this page, in order. `z_order` is the page's override, if any.
     pub templates: Vec<TemplateRef>,
     pub content: PageContent,
+    /// The page's annotations (`Annotations` ▸ `PageAnnot`), in order.
+    pub annotations: Vec<Annotation>,
+}
+
+/// `Annot`: an annotation (a stamp, a watermark, a link, …) with its appearance.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Annotation {
+    /// `Type`: "Link", "Path", "Highlight", "Stamp", "Watermark" or another the writer chose.
+    pub kind: String,
+    pub subtype: Option<String>,
+    pub visible: bool,
+    pub print: bool,
+    /// `NoView`: shown only when printed.
+    pub no_view: bool,
+    /// `Appearance/@Boundary`: where the appearance sits on the page. Its objects' own
+    /// coordinates start at this box's corner.
+    pub boundary: Option<OfdBox>,
+    /// The appearance's objects.
+    pub objects: Vec<Object>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
