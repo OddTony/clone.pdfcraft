@@ -80,11 +80,21 @@ pub fn print_to_pdf(chrome: &Path, html: &Path, pdf: &Path, log: &Path) -> Resul
     print_arg.push(pdf);
     let log_file = fs::File::create(log).with_context(|| format!("creating {}", log.display()))?;
 
-    let mut child = Command::new(chrome)
+    let mut command = Command::new(chrome);
+    command
         .arg("--headless=new")
         .arg("--disable-gpu")
         .arg("--no-pdf-header-footer")
-        .arg("--generate-pdf-document-outline")
+        .arg("--generate-pdf-document-outline");
+    // CI runners (and many containers) run as root, where Chrome's setuid
+    // sandbox refuses to start and the process aborts (SIGABRT). This tool
+    // only ever renders our own trusted showcase HTML, so disabling the
+    // sandbox in CI is safe; `--disable-dev-shm-usage` avoids a second crash
+    // class from small /dev/shm mounts in containers.
+    if is_ci() {
+        command.arg("--no-sandbox").arg("--disable-dev-shm-usage");
+    }
+    let mut child = command
         .arg(print_arg)
         .arg(super::file_url(html))
         .stdout(Stdio::null())
@@ -114,6 +124,13 @@ pub fn print_to_pdf(chrome: &Path, html: &Path, pdf: &Path, log: &Path) -> Resul
         }
         thread::sleep(Duration::from_millis(500));
     }
+}
+
+/// Whether we're running in a CI environment, where Chrome typically runs as
+/// root inside a container and needs the sandbox disabled. Recognizes the
+/// generic `CI` variable most CI systems set, plus `GITHUB_ACTIONS`.
+fn is_ci() -> bool {
+    env::var_os("GITHUB_ACTIONS").is_some() || env::var_os("CI").is_some()
 }
 
 /// A PDF is complete once its trailer's `%%EOF` marker has been written.
