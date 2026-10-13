@@ -8,6 +8,10 @@
 //! `"out"` (like `--out`) saves its image there. With `--root DIR`, every path a tool or step
 //! names, `"out"` included, must be inside DIR, and relative paths resolve inside it.
 //!
+//! `sign_document` on a `pkcs11:` identity never takes its PIN from a script or `key=value`
+//! argument — `run` refuses a `"pin"` there and prompts for it on the terminal (hidden input)
+//! instead. PKCS #12 (`.p12`/`.pfx`), macOS Keychain and Windows store signing are unaffected.
+//!
 //! The MCP server never starts on its own: it runs only when this command is launched (normally
 //! by an agent configured to use it), talks only over stdio, and exits when stdin closes.
 //!
@@ -767,6 +771,28 @@ fn print_output(auto: &pdfcraft_automation::Automation, content: Vec<pdfcraft_au
     Ok(())
 }
 
+/// A PKCS #11 token's PIN must never come from a script file or a `key=value` argument (both
+/// land in shell history, process listings, or get committed by mistake): refuse `sign_document`'s
+/// `"pin"` there with a clear error, and prompt on the terminal with hidden input instead, when
+/// its `id` is a `pkcs11:` identity. Other digital ID kinds (`.p12`/`.pfx`, `keychain:`,
+/// `windows:`) are unaffected: their `password` argument stays as it is.
+fn resolve_pkcs11_pin(tool: &str, args: &serde_json::Value) -> Result<serde_json::Value, CliError> {
+    if tool != "sign_document" {
+        return Ok(args.clone());
+    }
+    let is_pkcs11 = args.get("id").and_then(|v| v.as_str()).is_some_and(|id| id.starts_with("pkcs11:"));
+    if !is_pkcs11 {
+        return Ok(args.clone());
+    }
+    if args.get("pin").is_some_and(|v| !v.is_null()) {
+        return Err(format!("{tool}: a PKCS #11 PIN can't be given as a script or key=value argument; omit \"pin\" to be prompted for it").into());
+    }
+    let pin = rpassword::prompt_password("Token PIN: ").map_err(|e| format!("{tool}: couldn't read the PIN from the terminal: {e}"))?;
+    let mut obj = args.as_object().cloned().unwrap_or_default();
+    obj.insert("pin".to_string(), serde_json::Value::String(pin));
+    Ok(serde_json::Value::Object(obj))
+}
+
 fn run(args: &[String]) -> Result<(), CliError> {
     validate_options("run", args, RUN_OPTIONS)?;
     let mut auto = automation(args)?;
@@ -775,7 +801,8 @@ fn run(args: &[String]) -> Result<(), CliError> {
         let steps: Vec<serde_json::Value> = serde_json::from_str(&text).map_err(|e| format!("{script}: {e}"))?;
         for (i, step) in steps.iter().enumerate() {
             let tool = step["tool"].as_str().ok_or(format!("step {}: missing \"tool\"", i + 1))?;
-            let content = auto.call(tool, &step["args"]).map_err(|e| format!("step {} ({tool}): {e}", i + 1))?;
+            let step_args = resolve_pkcs11_pin(tool, &step["args"]).map_err(|e| format!("step {} ({tool}): {e}", i + 1))?;
+            let content = auto.call(tool, &step_args).map_err(|e| format!("step {} ({tool}): {e}", i + 1))?;
             print_output(&auto, content, step["out"].as_str()).map_err(|e| match e {
                 CliError::Message(message) => CliError::Message(format!("step {} ({tool}): {message}", i + 1)),
                 stdout => stdout,
@@ -790,7 +817,8 @@ fn run(args: &[String]) -> Result<(), CliError> {
         let value = serde_json::from_str(v).unwrap_or_else(|_| serde_json::Value::String(v.to_string()));
         obj.insert(k.to_string(), value);
     }
-    let content = auto.call(tool, &serde_json::Value::Object(obj)).map_err(|e| e.to_string())?;
+    let call_args = resolve_pkcs11_pin(tool, &serde_json::Value::Object(obj))?;
+    let content = auto.call(tool, &call_args).map_err(|e| e.to_string())?;
     print_output(&auto, content, flag(args, "--out"))
 }
 

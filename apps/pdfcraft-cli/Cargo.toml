@@ -20,6 +20,8 @@ pdfcraft-audit = { workspace = true }
 pdfcraft-cos = { workspace = true }
 pdfcraft-automation = { workspace = true }
 base64 = "0.22"
+# Hidden-input PIN prompt for PKCS #11 tokens (`run`/`--script`, never argv or a script file).
+rpassword = "7"
 
 [target.'cfg(unix)'.dependencies]
 # `geteuid` for `ui`'s control-file owner check: safe, so no `unsafe` libc call here.
