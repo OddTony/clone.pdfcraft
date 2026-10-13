@@ -2643,3 +2643,8 @@ key	Space	Space
 	Open this local PDF?	Mở PDF cục bộ này?
 	This document is trying to open a local file:	Tài liệu này đang cố mở một tệp cục bộ:
 	Remove "{name}" from this list? The file itself is not deleted.	Gỡ "{name}" khỏi danh sách này? Bản thân tệp không bị xóa.
+	Minimize	Thu nhỏ
+	Maximize	Phóng to
+	Restore	Khôi phục
+	Use system title bar	Dùng thanh tiêu đề hệ thống
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Hiện thanh tiêu đề đơn giản cho các nút cửa sổ thay vì dải tab. GNOME không vẽ thanh tiêu đề cho ứng dụng, nên thanh này không theo chủ đề của nó.
