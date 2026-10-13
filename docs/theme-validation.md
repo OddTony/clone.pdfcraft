@@ -238,3 +238,54 @@ Local WASM validation could not run because `wasm32-unknown-unknown` is not
 installed. `cargo-deny` is unavailable, so the dependency audit is **SKIPPED**.
 The new PR-head hosted checks had not started at this validation snapshot; earlier
 head CI results do not establish the result for this commit.
+
+
+## Current-main integration audit (2026-10-13)
+
+Integrated upstream `7437bde378f43856eada40af25b983812e615e8a` without rewriting
+published theme history. Seven actual conflicts were resolved by retaining both
+sides: CLI batch/theme help, automation modules and documentation, Lithuanian
+strings, roadmap records and recomputed translation hashes. The theme domain,
+primary-button calculations and background theme worker are byte-identical to
+`58deadacecb124185b5fe2577cfecf49f6ed73dc`. All four maintainer corrections, stable
+IDs/names, all 31 palette values, storage compatibility and ten operations remain.
+
+Two necessary compile corrections accompany the integration: import the existing
+`ThemeContext` adapter in upstream's new window-controls module, and increase the
+UI crate's compile-time macro recursion limit to 256 for the expanded settings
+JSON. Neither changes the persisted schema or runtime behavior.
+
+Validation on macOS / Rust 1.99.0:
+
+- Theme-domain suite: 38 passed, zero failed.
+- Theme UI group: 12 passed, zero failed; the visual matrix generated 34 images.
+  The Editorial Appearance dialog and custom-theme menu were inspected.
+- CLI suite: 58 passed, zero failed, including four theme process tests and MCP
+  theme/compact-discovery coverage. Automation theme-schema discovery passed.
+- Desktop suite: 68 passed, zero failed, one existing ignore.
+- Strict all-target Clippy for themes/UI/automation/CLI/desktop, formatting,
+  native desktop/CLI builds, CLI without MCP, layering, assets and parity passed.
+- Exact FreeBSD-failing renderer test passed locally: one passed in 1.28 seconds.
+- Broader UI suite: 1,086 passed, 13 failed, five existing ignores. Twelve failures
+  involve upstream background-open/command/password/recovery tests; the other is
+  the existing mouse-wheel resumption test. These are not a green acceptance
+  result. Current-main CI independently fails the command/open path; its deferred
+  command is lost when `open_path` schedules work without a continuation.
+  Upstream [PR #1764](https://github.com/storytold/pdfcraft/pull/1764) proposes a
+  separate fix for continuation/startup ordering and completion-aware tests.
+- A broader automation run passed 253 tests with one existing ignore before
+  failing the upstream invalid-UTF-8 filename fixture: this macOS filesystem
+  rejects creating the fixture (`Illegal byte sequence`). Two timestamp-only
+  batch fixture comparisons passed on rerun; no test assertions were changed.
+
+No renderer, timing, scrolling or unrelated UI tests were weakened or modified.
+Local WASM cannot run because its target library is absent; Windows/FreeBSD
+runtime and COM tests require their platform CI. Dependency auditing was green on
+the prior published head, but was not rerun locally. Prior hosted checks do not
+establish results for this integration.
+
+The previous FreeBSD run 38316543061 remains failed at unchanged renderer test
+`page_contents_and_nested_forms_share_one_budget` (255 passed, one timeout).
+Both connected-app and local-credential reruns were denied (403 / admin rights
+required). This suggests a FreeBSD VM timing problem but does not prove the
+underlying cause. A maintainer must rerun or investigate if it recurs on fresh CI.
