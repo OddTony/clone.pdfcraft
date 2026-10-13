@@ -1458,3 +1458,1175 @@ key	Esc	Esc
 key	Home	Home
 key	End	End
 key	Space	Space
+	View	Xem
+	Actual size	Kích thước thực
+	Auto ({percent}%)	Tự động ({percent}%)
+	Create separate PDFs…	Tạo các PDF riêng biệt…
+	Advanced search…	Tìm nâng cao…
+	Delete	Xóa
+	Cancel	Hủy
+	OK	OK
+	Apply	Áp dụng
+	Back	Quay lại
+	Next	Tiếp theo
+	Previous	Trước
+	Name	Tên
+	Location	Vị trí
+	Browse…	Duyệt…
+	Choose…	Chọn…
+	Search	Tìm
+	Clear	Xóa
+	Refresh	Làm mới
+	Loading…	Đang tải…
+	of	trên
+	Text	Văn bản
+	Font	Phông chữ
+	Size	Kích thước
+	Color	Màu
+	Opacity	Độ mờ
+	Width	Chiều rộng
+	Height	Chiều cao
+	Rotation	Xoay
+	More	Thêm
+	Settings	Cài đặt
+	General	Chung
+	Appearance	Diện mạo
+	Light	Sáng
+	Dark	Tối
+	System	Hệ thống
+	Import	Nhập
+	Optimize PDF…	Tối ưu hóa PDF…
+	Protect using password…	Bảo vệ bằng mật khẩu…
+	Remove security	Gỡ bảo mật
+	Security properties…	Thuộc tính bảo mật…
+	Check for updates…	Kiểm tra bản cập nhật…
+	About PdfCraft	Giới thiệu PdfCraft
+	Automatically	Tự động
+	Never	Không bao giờ
+	Always	Luôn luôn
+	Yes	Có
+	No	Không
+	On	Bật
+	Off	Tắt
+	Enabled	Đã bật
+	Disabled	Đã tắt
+	Required	Bắt buộc
+	Optional	Không bắt buộc
+	None	Không có
+	Unknown	Không rõ
+	Error	Lỗi
+	Warning	Cảnh báo
+	Success	Thành công
+	Failed	Thất bại
+	Folder	Thư mục
+	Choose a folder…	Chọn một thư mục…
+	Create folder	Tạo thư mục
+	Remove	Gỡ bỏ
+	Rename	Đổi tên
+	Duplicate	Nhân bản
+	Move	Di chuyển
+	Take a snapshot	Chụp ảnh nhanh
+	Protect	Bảo vệ
+	Create	Tạo
+	Convert	Chuyển đổi
+	Optimize	Tối ưu hóa
+	Measure	Đo
+	Search results	Kết quả tìm
+	No results	Không có kết quả
+	  · not fixable here	  · không thể sửa tại đây
+	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} ở {dpi} dpi, kích thước lớn nhất có thể vẽ)
+	 · password-protected	 · được bảo vệ bằng mật khẩu
+	(none)	(không có)
+	, Expires: 	, Hết hạn: 
+	1 difference found	Tìm thấy 1 điểm khác biệt
+	1 instance	1 lần xuất hiện
+	1 issue	1 vấn đề
+	1 mark	1 dấu
+	180 degrees	180 độ
+	9 digit, A letter, O letter or digit, X any character	9 chữ số, A chữ cái, O chữ cái hoặc chữ số, X ký tự bất kỳ
+	; failed: {list}	; thất bại: {list}
+	? of {n}	? trên {n}
+	Acrobat 3.0 and later (40-bit RC4)	Acrobat 3.0 trở lên (RC4 40 bit)
+	Acrobat 5.0 and later (128-bit RC4)	Acrobat 5.0 trở lên (RC4 128 bit)
+	Acrobat 7.0 and later (128-bit AES)	Acrobat 7.0 trở lên (AES 128 bit)
+	Acrobat X and later (256-bit AES)	Acrobat X trở lên (AES 256 bit)
+	Action name:	Tên hành động:
+	Actions	Hành động
+	Active	Đang dùng
+	Actual Size	Kích thước thực
+	Actual text	Văn bản thực
+	Add	Thêm
+	Add Step	Thêm bước
+	Add an Action	Thêm hành động
+	Add folder	Thêm thư mục
+	Add folder and subfolders	Thêm thư mục và thư mục con
+	Add folder and subfolders…	Thêm thư mục và thư mục con…
+	Add folder…	Thêm thư mục…
+	Add the choices people pick from.	Thêm các lựa chọn để người dùng chọn.
+	Add the steps this action runs, in order.	Thêm các bước mà hành động này chạy, theo thứ tự.
+	Added more than once	Đã thêm nhiều lần
+	Advanced	Nâng cao
+	Advanced Options {chevron}	Tùy chọn nâng cao {chevron}
+	Align	Căn chỉnh
+	Align left	Căn trái
+	Align right	Căn phải
+	Alignment:	Căn lề:
+	All	Tất cả
+	All document contents	Toàn bộ nội dung tài liệu
+	All document contents except metadata	Toàn bộ nội dung tài liệu trừ siêu dữ liệu
+	Allow user to enter custom text	Cho phép người dùng nhập văn bản tùy ý
+	Alternate text	Văn bản thay thế
+	An action with this name already exists.	Đã có hành động với tên này.
+	Angle	Góc
+	Animation effects	Hiệu ứng hoạt họa
+	Any	Bất kỳ
+	Appearance mode	Chế độ giao diện
+	Appearance settings…	Cài đặt giao diện…
+	Apply scale	Áp dụng tỷ lệ
+	Asks GitHub for the latest release. Nothing is downloaded or installed automatically.	Hỏi GitHub về bản phát hành mới nhất. Không có gì được tải xuống hoặc cài đặt tự động.
+	At most	Tối đa
+	Attachments	Tệp đính kèm
+	Audit space usage…	Kiểm tra dung lượng sử dụng…
+	Author	Tác giả
+	Auto	Tự động
+	Auto portrait/landscape	Tự động dọc/ngang
+	Available	Có sẵn
+	Back side only	Chỉ mặt sau
+	Back to the document	Quay lại tài liệu
+	Before the number	Trước số
+	Bicubic downsampling to	Giảm mẫu song khối (Bicubic) xuống
+	Binding	Đóng gáy
+	Binding:	Đóng gáy:
+	Black and white	Đen trắng
+	Bold	Đậm
+	Booklet	Sách nhỏ
+	Booklet subset:	Tập con sách nhỏ:
+	Border Color:	Màu viền:
+	Borders and Colors	Viền và màu
+	Both sides	Cả hai mặt
+	Bottom	Dưới cùng
+	Bottom:	Dưới:
+	Box	Hộp
+	Butt	Cụt
+	Button is checked by default	Nút được chọn theo mặc định
+	Buttons with the same name and value are selected in unison	Các nút có cùng tên và giá trị được chọn đồng thời
+	Bytes	Byte
+	Calibrate from two points	Hiệu chuẩn từ hai điểm
+	Can't be read: {e}	Không thể đọc: {e}
+	Cancelling…	Đang hủy…
+	Case-sensitive	Phân biệt chữ hoa/thường
+	Category:	Danh mục:
+	Center	Giữa
+	Center window on screen	Căn giữa cửa sổ trên màn hình
+	Centre	Giữa
+	Certify	Chứng nhận
+	Change settings…	Thay đổi cài đặt…
+	Change the colour of line art as well as text	Đổi màu của nét vẽ đường cũng như văn bản
+	Change {what}	Thay đổi {what}
+	Changes allowed	Các thay đổi được phép
+	Character limit 0 means no limit. A comb of characters needs a limit.	Giới hạn ký tự bằng 0 nghĩa là không giới hạn. Ô dạng lược ký tự cần có giới hạn.
+	Character spacing	Khoảng cách ký tự
+	Check Again	Kiểm tra lại
+	Check again	Kiểm tra lại
+	Check box is checked by default	Hộp kiểm được chọn theo mặc định
+	Check for updates	Kiểm tra bản cập nhật
+	Check spelling	Kiểm tra chính tả
+	Checking Options ({on} of 32 in all categories)	Tùy chọn kiểm tra ({on} trên 32 ở tất cả danh mục)
+	Checking for a newer version…	Đang kiểm tra phiên bản mới hơn…
+	Choose a PNG or JPEG image (up to 4 MiB). Transparency is preserved.	Chọn ảnh PNG hoặc JPEG (tối đa 4 MiB). Độ trong suốt được giữ nguyên.
+	Choose a folder for the results	Chọn thư mục cho kết quả
+	Choose a layout:	Chọn bố cục:
+	Choose an image	Chọn một hình ảnh
+	Choose images	Chọn hình ảnh
+	Choose image…	Chọn hình ảnh…
+	Choose photo…	Chọn ảnh…
+	Circle	Hình tròn
+	Clean Up	Dọn dẹp
+	Clean-up	Dọn dẹp
+	Clear All	Xóa tất cả
+	Clear all	Xóa tất cả
+	Click the first point to begin.	Bấm vào điểm đầu tiên để bắt đầu.
+	Click to sort, drag to move the column. Drag its edge to resize it.	Bấm để sắp xếp, kéo để di chuyển cột. Kéo cạnh cột để đổi kích thước.
+	Clockwise 90 degrees	Theo chiều kim đồng hồ 90 độ
+	Collapse	Thu gọn
+	Collapse all	Thu gọn tất cả
+	Collate	Sắp theo bộ
+	Color:	Màu:
+	Colour	Màu
+	Colours are remapped while rendering; the document itself never changes.	Màu được ánh xạ lại khi hiển thị; bản thân tài liệu không bao giờ thay đổi.
+	Comb of	Dạng lược gồm
+	Coming in milestone	Sẽ có ở cột mốc
+	Commit selected value immediately	Lưu giá trị đã chọn ngay lập tức
+	Common Properties	Thuộc tính chung
+	Compatibility	Tương thích
+	Compress document structure (object streams)	Nén cấu trúc tài liệu (luồng đối tượng)
+	Compression	Nén
+	Confirm Password	Xác nhận mật khẩu
+	Continue	Tiếp tục
+	Copies:	Số bản sao:
+	Couldn't check for updates: {e}	Không thể kiểm tra bản cập nhật: {e}
+	Counterclockwise 90 degrees	Ngược chiều kim đồng hồ 90 độ
+	Country/Region	Quốc gia/Khu vực
+	Create {what}	Tạo {what}
+	Currency symbol:	Ký hiệu tiền tệ:
+	Custom	Tùy chỉnh
+	Custom scale:	Tỷ lệ tùy chỉnh:
+	Custom text:	Văn bản tùy chỉnh:
+	Custom:	Tùy chỉnh:
+	Decimal places:	Số chữ số thập phân:
+	Decimals	Số thập phân
+	Decorative figure	Hình trang trí
+	Default	Mặc định
+	Default Value:	Giá trị mặc định:
+	Default workspace mode	Chế độ không gian làm việc mặc định
+	Default:	Mặc định:
+	Delete {o}	Xóa {o}
+	Describe the figure	Mô tả hình
+	Description	Mô tả
+	Description:	Mô tả:
+	Details	Chi tiết
+	Diamond	Hình thoi
+	Direction:	Hướng:
+	Discard	Loại bỏ
+	Discard Objects	Loại bỏ đối tượng
+	Discard User Data	Loại bỏ dữ liệu người dùng
+	Discard alternate images	Loại bỏ hình ảnh thay thế
+	Discard this text (Esc)	Loại bỏ văn bản này (Esc)
+	Dismiss	Đóng
+	Distinguished name	Tên phân biệt
+	Distribute	Phân bố
+	Document	Tài liệu
+	Document Title	Tiêu đề tài liệu
+	Documents and view	Tài liệu và chế độ xem
+	Done	Xong
+	Done adding text	Đã thêm văn bản xong
+	Download	Tải xuống
+	Downsample to	Giảm mẫu xuống
+	Drag the selection to move it. Esc clears the selection.	Kéo vùng chọn để di chuyển. Esc để bỏ chọn.
+	Drag to reorder	Kéo để sắp xếp lại
+	Draw	Vẽ
+	Draw your {what} below.	Vẽ {what} của bạn bên dưới.
+	Drawing scale changes. Use Actual size for full-scale plans.	Tỷ lệ bản vẽ thay đổi. Dùng Kích thước thực cho các bản vẽ tỷ lệ đầy đủ.
+	Duplicate "{name}" onto:	Nhân bản "{name}" sang:
+	Duplicate…	Nhân bản…
+	Dynamic	Động
+	Earlier in tab order	Sớm hơn theo thứ tự tab
+	Email Address	Địa chỉ email
+	Encrypt	Mã hóa
+	Endpoints	Điểm cuối
+	Enter the permissions password to allow combining	Nhập mật khẩu quyền hạn để cho phép kết hợp
+	Example: {sample}	Ví dụ: {sample}
+	Exclude images smaller than	Loại trừ hình ảnh nhỏ hơn
+	Expand	Mở rộng
+	Expand all	Mở rộng tất cả
+	Explain	Giải thích
+	Find options	Tùy chọn tìm
+	Find text	Tìm văn bản
+	Finding document fonts…	Đang tìm phông chữ của tài liệu…
+	Fix	Sửa lỗi
+	Fixed what could be fixed; 1 problem remains	Đã sửa những gì có thể sửa; còn lại 1 vấn đề
+	Fixed what could be fixed; {n} problems remain	Đã sửa những gì có thể sửa; còn lại {n} vấn đề
+	Flip Horizontal	Lật ngang
+	Flip Vertical	Lật dọc
+	Flip horizontal	Lật ngang
+	Flip on long edge	Lật theo cạnh dài
+	Flip on short edge	Lật theo cạnh ngắn
+	Flip vertical	Lật dọc
+	Folders	Thư mục
+	Font Size:	Cỡ chữ:
+	Font colour:	Màu chữ:
+	Font size 0 uses automatic sizing.	Cỡ chữ 0 sẽ dùng kích thước tự động.
+	Font size:	Cỡ chữ:
+	Font:	Phông chữ:
+	Font: Helvetica	Phông chữ: Helvetica
+	Fonts	Phông chữ
+	From	Từ
+	From colour	Từ màu
+	From:	Từ:
+	Front side only	Chỉ mặt trước
+	Go to this result	Đi tới kết quả này
+	Graphic	Đồ họa
+	Greyscale	Thang xám
+	Grid view	Dạng lưới
+	Hand (H)	Bàn tay (H)
+	Height:	Chiều cao:
+	Hide layer	Ẩn lớp
+	Hide password	Ẩn mật khẩu
+	Hide window controls	Ẩn các nút điều khiển cửa sổ
+	High Resolution	Độ phân giải cao
+	High resolution	Độ phân giải cao
+	Home	Trang chủ
+	Horizontal	Ngang
+	Horizontal reversed	Ngang đảo ngược
+	Horizontal scale	Tỷ lệ ngang
+	Icon	Biểu tượng
+	Images and text	Hình ảnh và văn bản
+	Images and text (converted to PDF)	Hình ảnh và văn bản (đã chuyển thành PDF)
+	Import list…	Nhập danh sách…
+	Indent	Thụt lề
+	Installed fonts…	Phông chữ đã cài đặt…
+	Intersections	Giao điểm
+	Invisible Rectangle	Hình chữ nhật ẩn
+	Issued by: 	Cấp bởi: 
+	Italic	Nghiêng
+	Item List	Danh sách mục
+	Item:	Mục:
+	Items marked Ready work today.	Các mục được đánh dấu Sẵn sàng hoạt động ngay hôm nay.
+	Join our Discord	Tham gia Discord của chúng tôi
+	Join the ArtCraft community	Tham gia cộng đồng ArtCraft
+	Justify	Căn đều
+	Keep source fonts	Giữ phông chữ nguồn
+	Key Algorithm	Thuật toán khóa
+	Keychain  ·  	Keychain  ·  
+	Label	Nhãn
+	Labels	Nhãn
+	Landscape	Ngang
+	Later	Để sau
+	Later in tab order	Muộn hơn theo thứ tự tab
+	Layers	Các lớp
+	Layout and Magnification	Bố cục và độ phóng đại
+	Left	Trái
+	Left Edge	Cạnh trái
+	Left out: {names}	Đã bỏ qua: {names}
+	Left:	Trái:
+	Limit of	Giới hạn
+	Line Style:	Kiểu đường:
+	Line Thickness:	Độ dày đường:
+	Line ending	Kiểu đầu đường
+	Line spacing	Giãn dòng
+	Line thickness	Độ dày đường
+	List view	Dạng danh sách
+	Load font…	Tải phông chữ…
+	Locked	Đã khóa
+	Looking for PDFs…	Đang tìm PDF…
+	Low Resolution (150 dpi)	Độ phân giải thấp (150 dpi)
+	Low resolution	Độ phân giải thấp
+	Magnification	Độ phóng đại
+	Make Current Properties Default	Đặt thuộc tính hiện tại làm mặc định
+	Margins	Lề
+	Mark with checkmark	Đánh dấu bằng dấu kiểm
+	Marked	Đã đánh dấu
+	Mask:	Mặt nạ:
+	Medium	Vừa
+	Midpoints	Điểm giữa
+	Mixed	Hỗn hợp
+	Modified	Đã sửa đổi
+	More options	Thêm tùy chọn
+	More options:	Thêm tùy chọn:
+	Move down	Chuyển xuống
+	Move earlier	Chuyển lên trước
+	Move later	Chuyển ra sau
+	Move up	Chuyển lên
+	Multi-line	Nhiều dòng
+	Multiple	Nhiều
+	Multiple selection	Chọn nhiều
+	Multiple words or phrases	Nhiều từ hoặc cụm từ
+	Name:	Tên:
+	Navigation tab	Thẻ điều hướng
+	Needs manual check	Cần kiểm tra thủ công
+	Negative number style:	Kiểu số âm:
+	New Action	Hành động mới
+	New Action…	Hành động mới…
+	Next ({key})	Tiếp theo ({key})
+	Next / previous match	Kết quả khớp tiếp theo / trước đó
+	Next figure	Hình tiếp theo
+	Next month	Tháng sau
+	Next sheet	Tờ tiếp theo
+	Next view	Chế độ xem tiếp theo
+	No PDFs in this folder yet	Chưa có PDF nào trong thư mục này
+	No actions	Không có hành động
+	No changes allowed	Không cho phép thay đổi
+	No check has run yet.	Chưa chạy lần kiểm tra nào.
+	No color	Không màu
+	No colour	Không màu
+	No differences in the text.	Không có khác biệt trong văn bản.
+	No issues found	Không tìm thấy vấn đề
+	No limit	Không giới hạn
+	No matches	Không có kết quả khớp
+	No matches.	Không có kết quả khớp.
+	No photo chosen	Chưa chọn ảnh
+	No preview	Không có bản xem trước
+	No security	Không bảo mật
+	No sheets	Không có tờ
+	No status has been set.	Chưa đặt trạng thái.
+	None (prefix only)	Không có (chỉ tiền tố)
+	None found	Không tìm thấy
+	None — everything is allowed	Không có — mọi thứ đều được phép
+	Not allowed	Không được phép
+	Not present	Không có mặt
+	Number	Số
+	Offset from centre	Độ lệch so với tâm
+	One word or phrase per line	Mỗi dòng một từ hoặc cụm từ
+	Only change the colour of black text or line art	Chỉ đổi màu văn bản hoặc nét vẽ đường màu đen
+	Optimizing… cleaning up	Đang tối ưu hóa… dọn dẹp
+	Optimizing… image {d} of {t}	Đang tối ưu hóa… hình ảnh {d} trên {t}
+	Optimizing… merging identical objects	Đang tối ưu hóa… gộp các đối tượng giống nhau
+	Optimizing… removing user data	Đang tối ưu hóa… xóa dữ liệu người dùng
+	Optional: needs an AI provider you configure	Không bắt buộc: cần nhà cung cấp AI mà bạn cấu hình
+	Options…	Tùy chọn…
+	Organization Name	Tên tổ chức
+	Organizational Unit	Đơn vị tổ chức
+	Orientation:	Hướng:
+	Original	Bản gốc
+	Other colour…	Màu khác…
+	Outdent	Giảm thụt lề
+	Output	Đầu ra
+	Output appears here.	Đầu ra xuất hiện ở đây.
+	Overlap:	Chồng lấp:
+	Owner password (no restrictions apply)	Mật khẩu chủ sở hữu (không áp dụng hạn chế)
+	PDF Optimizer	Trình tối ưu hóa PDF
+	PDF or image	PDF hoặc hình ảnh
+	PDF scale: {scale}%	Tỷ lệ PDF: {scale}%
+	PDF, images and text	PDF, hình ảnh và văn bản
+	Paper:	Giấy:
+	Part of	Một phần của
+	Password	Mật khẩu
+	Password required	Yêu cầu mật khẩu
+	Password security	Bảo mật bằng mật khẩu
+	Password-protected	Được bảo vệ bằng mật khẩu
+	Paths	Đường dẫn
+	Pattern	Họa tiết
+	Patterns	Họa tiết
+	Patterns (graphics objects)	Họa tiết (đối tượng đồ họa)
+	PdfCraft works offline. No telemetry, no account, and no cloud processing unless you add a provider.	PdfCraft hoạt động ngoại tuyến. Không có đo từ xa, không cần tài khoản và không xử lý trên đám mây trừ khi bạn thêm nhà cung cấp.
+	PdfCraft {c} is up to date.	PdfCraft {c} đã là bản mới nhất.
+	PdfCraft {v} is available.	PdfCraft {v} đã có sẵn.
+	Permissions password	Mật khẩu quyền hạn
+	Permitted actions after certifying	Các hành động được phép sau khi chứng nhận
+	Photo	Ảnh
+	Pin a folder to Home	Ghim một thư mục vào Trang chủ
+	Pin a folder…	Ghim một thư mục…
+	Planned	Đã lên kế hoạch
+	Planned for milestone	Dự kiến ở cột mốc
+	Portrait	Dọc
+	Post	Đăng
+	Poster	Áp phích
+	Prefix	Tiền tố
+	Preview	Xem trước
+	Previous ({key})	Trước ({key})
+	Previous figure	Hình trước
+	Previous month	Tháng trước
+	Previous sheet	Tờ trước
+	Previous view	Chế độ xem trước
+	Privacy	Quyền riêng tư
+	Properties…	Thuộc tính…
+	Protect Using Password	Bảo vệ bằng mật khẩu
+	Quality	Chất lượng
+	Read Only	Chỉ đọc
+	Reading colours	Màu khi đọc
+	Ready	Sẵn sàng
+	Reason	Lý do
+	Recover	Khôi phục
+	Reload	Tải lại
+	Remove checkmark	Bỏ dấu kiểm
+	Remove unreferenced named destinations	Gỡ các đích đến có tên không được tham chiếu
+	Remove unused objects and merge identical ones	Gỡ các đối tượng không dùng và gộp các đối tượng giống nhau
+	Remove {name}	Gỡ {name}
+	Repair log	Nhật ký sửa chữa
+	Repeat overlay text	Lặp lại văn bản phủ
+	Replace Image…	Thay thế hình ảnh…
+	Replace document colours	Thay thế màu của tài liệu
+	Replace image	Thay thế hình ảnh
+	Replacement text	Văn bản được thay vào
+	Report	Báo cáo
+	Report…	Báo cáo…
+	Requires user to enter a password for:	Yêu cầu người dùng nhập mật khẩu cho:
+	Reset columns	Đặt lại các cột
+	Resolution	Độ phân giải
+	Retain existing	Giữ nguyên hiện có
+	Reveal in Finder	Hiện trong Finder
+	Revisions	Các bản sửa đổi
+	Right	Phải
+	Right Edge	Cạnh phải
+	Rotation:	Xoay:
+	The image has been copied ({w} × {h} pixels)	Đã sao chép hình ảnh ({w} × {h} điểm ảnh)
+	Script Name:	Tên script:
+	Script:	Nội dung script:
+	Searchable Image (Exact)	Ảnh có thể tìm kiếm (Chính xác)
+	Searching… {s}/{p}	Đang tìm… {s}/{p}
+	Security	Bảo mật
+	Security settings	Cài đặt bảo mật
+	Select (V)	Chọn (V)
+	Select Action:	Chọn hành động:
+	Select Icon	Chọn biểu tượng
+	Select Trigger:	Chọn trình kích hoạt:
+	Select a word	Chọn một từ
+	Select at most 1000 objects at a time.	Chọn tối đa 1000 đối tượng mỗi lần.
+	Select the items to remove from this document.	Chọn các mục cần gỡ khỏi tài liệu này.
+	Selection	Vùng chọn
+	Sensitivity	Độ nhạy
+	Separator style:	Kiểu dấu phân cách:
+	Set Alternate Text	Đặt văn bản thay thế
+	Set layer visibility	Đặt chế độ hiển thị lớp
+	Set status	Đặt trạng thái
+	Set to zero	Đặt về 0
+	Sheet {s} of {n}	Tờ {s} trên {n}
+	Shift constrains to 45 degrees. Backspace removes a vertex. Escape cancels.	Shift giới hạn ở góc 45 độ. Backspace xóa một đỉnh. Escape để hủy.
+	Shift-click to select several objects. Drag empty space to select an area.	Nhấn Shift khi bấm để chọn nhiều đối tượng. Kéo vùng trống để chọn một khu vực.
+	Show Report	Hiện báo cáo
+	Show all	Hiện tất cả
+	Show layer	Hiện lớp
+	Show less	Hiện ít hơn
+	Show password	Hiện mật khẩu
+	Show this dialog when the Checker starts	Hiện hộp thoại này khi Trình kiểm tra khởi động
+	Show {n} more	Hiện thêm {n}
+	Show:	Hiện:
+	Single word or phrase	Một từ hoặc cụm từ
+	Skip Rule	Bỏ qua quy tắc
+	Skipped	Đã bỏ qua
+	Slash	Dấu gạch chéo
+	Snap to drawing	Bắt dính vào bản vẽ
+	Sort by	Sắp xếp theo
+	Sort items	Sắp xếp các mục
+	Source	Nguồn
+	Space Audit	Kiểm tra dung lượng
+	Special	Đặc biệt
+	Square	Hình vuông
+	Standard Business	Standard Business
+	Start	Bắt đầu
+	Start Checking	Bắt đầu kiểm tra
+	Status	Trạng thái
+	Steps	Các bước
+	Strength: {s}	Độ mạnh: {s}
+	Style	Kiểu
+	Subject	Chủ đề
+	Subset	Tập con
+	Summarize Options	Tùy chọn tóm tắt
+	Summary	Tóm tắt
+	Text Color:	Màu văn bản:
+	Text alignment:	Căn chỉnh văn bản:
+	Text to find	Văn bản cần tìm
+	Text used as a clipping path cannot be moved with this selection.	Văn bản dùng làm đường cắt xén không thể di chuyển cùng vùng chọn này.
+	Thai and Arabic use regular fallback fonts when available.	Tiếng Thái và tiếng Ả Rập dùng phông chữ dự phòng thông thường khi có.
+	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	Phông chữ văn bản PDF không thể vẽ “{c}” ({code}). Hãy chọn văn bản được hỗ trợ.
+	The checker found no problems in this document.	Trình kiểm tra không tìm thấy vấn đề nào trong tài liệu này.
+	The document's security settings don't allow this change	Cài đặt bảo mật của tài liệu không cho phép thay đổi này
+	The existing action will be preserved.	Hành động hiện có sẽ được giữ nguyên.
+	The key is in the macOS Keychain, which may ask to allow PdfCraft to use it.	Khóa nằm trong macOS Keychain, nơi có thể yêu cầu cho phép PdfCraft sử dụng nó.
+	The newest {n} of {total} PDFs	{n} PDF mới nhất trong tổng số {total}
+	The text is the same	Văn bản giống nhau
+	The value is shown as typed.	Giá trị được hiển thị như đã nhập.
+	These objects could not be moved. Select them again and try a smaller move.	Không thể di chuyển các đối tượng này. Hãy chọn lại chúng và thử di chuyển ít hơn.
+	Thick	Dày
+	Thickness	Độ dày
+	Thin	Mỏng
+	This area has too many overlapping paths; intersection snapping is limited.	Vùng này có quá nhiều đường chồng lên nhau; việc bắt dính giao điểm bị giới hạn.
+	This document has no document-level scripts.	Tài liệu này không có script cấp tài liệu.
+	This document has no restrictions to lift	Tài liệu này không có hạn chế nào để gỡ bỏ
+	This document has no {kind} to change	Tài liệu này không có {kind} để thay đổi
+	This document hasn't been checked yet.	Tài liệu này chưa được kiểm tra.
+	This document is secured. Some changes are restricted by its security settings.	Tài liệu này được bảo mật. Một số thay đổi bị hạn chế bởi cài đặt bảo mật của nó.
+	This document isn't password-protected	Tài liệu này không được bảo vệ bằng mật khẩu
+	This drawing exceeds the snapping limit; only the first paths are used.	Bản vẽ này vượt quá giới hạn bắt dính; chỉ các đường đầu tiên được sử dụng.
+	This folder isn't available right now. It may have moved, or its drive or cloud sync is offline.	Thư mục này hiện không khả dụng. Nó có thể đã bị di chuyển, hoặc ổ đĩa hay đồng bộ đám mây của nó đang ngoại tuyến.
+	This measurement needs at least {n} points.	Phép đo này cần ít nhất {n} điểm.
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	Địa chỉ web này trộn lẫn các chữ cái từ nhiều bảng chữ cái khác nhau, một cách phổ biến để giả mạo tên của trang khác.
+	This web address uses letters from another alphabet, which can look like familiar ones.	Địa chỉ web này dùng chữ cái từ một bảng chữ cái khác, có thể trông giống các chữ quen thuộc.
+	Tile scale:	Tỷ lệ lát:
+	Time	Thời gian
+	Title	Tiêu đề
+	To:	Đến:
+	Today: {date}	Hôm nay: {date}
+	Top	Trên
+	Total	Tổng
+	Trust	Tin cậy
+	Two-Up (Facing)	Hai trang (Đối diện)
+	Two-Up Continuous (Facing)	Hai trang liên tục (Đối diện)
+	Two-sided:	Hai mặt:
+	Type	Loại
+	Type text	Nhập văn bản
+	Type the web address.	Nhập địa chỉ web.
+	Type your {what}.	Nhập {what} của bạn.
+	URL to submit to	URL để gửi đến
+	Unit	Đơn vị
+	Units	Đơn vị
+	Unknown author	Tác giả không rõ
+	Unlock	Mở khóa
+	Unlock {name}	Mở khóa {name}
+	Unlock…	Mở khóa…
+	Unpin	Bỏ ghim
+	Unpin {folder}	Bỏ ghim {folder}
+	Unplaced	Chưa đặt
+	Unsupported measurements	Các phép đo không được hỗ trợ
+	Up	Lên
+	Update	Cập nhật
+	Use 72 DPI (one point per pixel)	Dùng 72 DPI (một điểm cho mỗi điểm ảnh)
+	Use Flate to encode streams that are not encoded	Dùng Flate để mã hóa các luồng chưa được mã hóa
+	Use custom DPI	Dùng DPI tùy chỉnh
+	Use each image's embedded DPI; use 72 DPI when it is absent.	Dùng DPI nhúng của từng hình ảnh; dùng 72 DPI khi không có.
+	Use image resolution	Dùng độ phân giải hình ảnh
+	Use now	Dùng ngay
+	Use overlay text	Dùng văn bản phủ
+	User password	Mật khẩu người dùng
+	Validate all	Xác thực tất cả
+	Value is not calculated	Giá trị không được tính toán
+	Value is the	Giá trị là
+	Value:	Giá trị:
+	Version {v}	Phiên bản {v}
+	Vertical	Dọc
+	Vertical reversed	Dọc đảo ngược
+	Vertical text cannot be moved with this selection.	Văn bản dọc không thể di chuyển cùng vùng chọn này.
+	Viewport	Khung nhìn
+	Visible Rectangle	Hình chữ nhật hiển thị
+	Visual	Trực quan
+	Warnings	Cảnh báo
+	Welcome to PdfCraft	Chào mừng đến với PdfCraft
+	What word or phrase would you like to search for?	Bạn muốn tìm từ hoặc cụm từ nào?
+	Whole words only	Chỉ khớp toàn bộ từ
+	Width:	Chiều rộng:
+	Window Options	Tùy chọn cửa sổ
+	Windows store  ·  	Kho Windows  ·  
+	Write this email?	Soạn email này?
+	Wrong password	Sai mật khẩu
+	ZIP	ZIP
+	already a PDF	đã là PDF
+	and {n} more	và {n} mục nữa
+	characters	ký tự
+	e.g. en-US	ví dụ: en-US
+	for images above	cho hình ảnh lớn hơn
+	is available	có sẵn
+	is not available yet	chưa có sẵn
+	just now	vừa xong
+	yesterday	hôm qua
+	needs an AI provider (off by default)	cần nhà cung cấp AI (mặc định tắt)
+	no output folder was chosen	chưa chọn thư mục đầu ra
+	no unused output name	không có tên đầu ra chưa dùng
+	none	không có
+	AI assistant	Trợ lý AI
+	Action Wizard	Trình hướng dẫn hành động
+	Action Wizard…	Trình hướng dẫn hành động…
+	Actions list	Danh sách hành động
+	Add a button	Thêm một nút
+	Add a callout	Thêm một khung chú thích
+	Add a drop-down list	Thêm một danh sách thả xuống
+	Add a list box	Thêm một hộp danh sách
+	Add a text box	Thêm một khung văn bản
+	Add alternate text	Thêm văn bản thay thế
+	Add alternate text…	Thêm văn bản thay thế…
+	Add content	Thêm nội dung
+	Add image…	Thêm hình ảnh…
+	Add search index	Thêm chỉ mục tìm kiếm
+	Add text	Thêm văn bản
+	Advanced optimization	Tối ưu hóa nâng cao
+	Advanced options	Tùy chọn nâng cao
+	Apply PDF standards	Áp dụng chuẩn PDF
+	Archive documents	Lưu trữ tài liệu
+	Area	Diện tích
+	Arrow	Mũi tên
+	ArtCraft website	Trang web ArtCraft
+	Ask about this document	Hỏi về tài liệu này
+	Audit space usage	Kiểm tra dung lượng sử dụng
+	Bring your own model (off by default)	Dùng mô hình của riêng bạn (mặc định tắt)
+	Button	Nút
+	Change reading options	Thay đổi tùy chọn đọc
+	Change reading options…	Thay đổi tùy chọn đọc…
+	Checkmark	Dấu kiểm
+	Cloud	Đám mây
+	Column select	Chọn cột
+	Compare	So sánh
+	Compress a PDF	Nén một PDF
+	Console	Bảng điều khiển
+	Convert colors	Chuyển đổi màu
+	Create a PDF	Tạo một PDF
+	Create from	Tạo từ
+	Cross	Dấu chéo
+	Dark gray	Xám đậm
+	Date	Ngày
+	Distance	Khoảng cách
+	Document actions	Hành động của tài liệu
+	Dot	Dấu chấm
+	Draw a cloud	Vẽ một đám mây
+	Draw a line	Vẽ một đường thẳng
+	Draw a polygon	Vẽ một đa giác
+	Draw a rectangle	Vẽ một hình chữ nhật
+	Draw an arrow	Vẽ một mũi tên
+	Draw an oval	Vẽ một hình bầu dục
+	Draw connected lines	Vẽ các đường nối liền
+	Draw freehand	Vẽ tự do
+	Drawing	Bản vẽ
+	Drawing scale	Tỷ lệ bản vẽ
+	Drop-down list	Danh sách thả xuống
+	Enhance camera image	Nâng cao chất lượng ảnh chụp từ máy ảnh
+	Enter permissions password…	Nhập mật khẩu quyền hạn…
+	Erase drawings	Xóa bản vẽ
+	Fix hairlines	Sửa các đường siêu mảnh
+	Geospatial location	Vị trí địa lý
+	Image	Hình ảnh
+	Image (PNG)	Hình ảnh (PNG)
+	Images	Hình ảnh
+	Import data	Nhập dữ liệu
+	Index	Chỉ mục
+	Join the ArtCraft Discord	Tham gia Discord của ArtCraft
+	Light gray	Xám nhạt
+	Line	Đường thẳng
+	List box	Hộp danh sách
+	Manage embedded index	Quản lý chỉ mục nhúng
+	Measure area	Đo diện tích
+	Measure distance	Đo khoảng cách
+	Measure objects	Đo đối tượng
+	Measure perimeter	Đo chu vi
+	Measurement snapping	Bắt dính phép đo
+	Microsoft Word (.docx)	Microsoft Word (.docx)
+	Output preview	Xem trước đầu ra
+	Oval	Hình bầu dục
+	PdfCraft on GitHub	PdfCraft trên GitHub
+	Perimeter	Chu vi
+	Pin folder to Home…	Ghim thư mục vào Trang chủ…
+	PostScript / EPS	PostScript / EPS
+	Prepare for distribution	Chuẩn bị để phân phối
+	Prepare for distribution…	Chuẩn bị để phân phối…
+	Presentation (.pptx)	Bản trình bày (.pptx)
+	Protect a PDF	Bảo vệ một PDF
+	Protect with password	Bảo vệ bằng mật khẩu
+	Rectangle	Hình chữ nhật
+	Replace	Thay thế
+	Replace text	Thay thế văn bản
+	Review	Duyệt
+	Sanitize document	Làm sạch tài liệu
+	Sanitize document…	Làm sạch tài liệu…
+	Security properties	Thuộc tính bảo mật
+	Separate PDFs	Các PDF riêng biệt
+	Set measurement scale	Đặt tỷ lệ đo
+	Set properties	Đặt thuộc tính
+	Snapping	Bắt dính
+	Spreadsheet (.xlsx)	Bảng tính (.xlsx)
+	Standards	Chuẩn
+	Summarize	Tóm tắt
+	Tab order by columns	Thứ tự tab theo cột
+	Tab order by rows	Thứ tự tab theo hàng
+	Tab order: by columns	Thứ tự tab: theo cột
+	Tab order: by document structure	Thứ tự tab: theo cấu trúc tài liệu
+	Tab order: by rows	Thứ tự tab: theo hàng
+	Text (plain)	Văn bản (thuần)
+	Text box	Khung văn bản
+	Translate	Dịch
+	Use guided actions	Dùng hành động có hướng dẫn
+	Use system setting	Dùng cài đặt hệ thống
+	Move object	Di chuyển đối tượng
+	Move objects	Di chuyển các đối tượng
+	Read	Đọc
+	Inspector	Trình thanh tra
+	A font isn't embedded	Một phông chữ chưa được nhúng
+	A {} action isn't allowed	Hành động {} không được phép
+	Added the first {n} PDFs in {folder}	Đã thêm {n} PDF đầu tiên trong {folder}
+	Change Author	Đổi tác giả
+	Change Keywords	Đổi từ khóa
+	Change Subject	Đổi chủ đề
+	Change Title	Đổi tiêu đề
+	Creator	Ứng dụng tạo
+	Data Encipherment	Mã hóa dữ liệu
+	Decipher Only	Chỉ giải mã
+	Detailed Report	Báo cáo chi tiết
+	Drop PDFs or folders here, or choose them.	Thả PDF hoặc thư mục vào đây, hoặc chọn chúng.
+	Encipher Only	Chỉ mã hóa
+	English	English
+	Enter a URL	Nhập một URL
+	Enter a name.	Nhập một tên.
+	Every PDF in the folder	Mọi PDF trong thư mục
+	Every PDF in the folder and the folders inside it	Mọi PDF trong thư mục và các thư mục con của nó
+	H{n} follows an H{d}; headings should not skip levels	H{n} theo sau H{d}; các đề mục không nên bỏ qua cấp
+	Key Agreement	Thỏa thuận khóa
+	Key Encipherment	Mã hóa khóa
+	Margins (in)	Lề (inch)
+	Next (⌘G)	Tiếp theo (⌘G)
+	No PDFs found in {folder}	Không tìm thấy PDF nào trong {folder}
+	Non-Repudiation	Chống chối bỏ
+	Previous (⇧⌘G)	Trước (⇧⌘G)
+	Producer	Ứng dụng sản xuất
+	Rendering…	Đang kết xuất…
+	Report created	Đã tạo báo cáo
+	Rev. {rev}: Certified by {name}	Bản sửa đổi {rev}: Được chứng nhận bởi {name}
+	Rule Name	Tên quy tắc
+	The document has no title	Tài liệu không có tiêu đề
+	The font {} isn't embedded	Phông chữ {} chưa được nhúng
+	The password is incorrect.	Mật khẩu không đúng.
+	The password must have at least 6 characters.	Mật khẩu phải có ít nhất 6 ký tự.
+	The passwords do not match.	Các mật khẩu không khớp.
+	The security settings don't allow screen readers to read the text	Cài đặt bảo mật không cho phép trình đọc màn hình đọc văn bản
+	document security store	kho bảo mật tài liệu
+	document structure	cấu trúc tài liệu
+	its alternate text is inside another element's and will never be read	văn bản thay thế của nó nằm trong văn bản thay thế của phần tử khác và sẽ không bao giờ được đọc
+	metadata	siêu dữ liệu
+	no alternate text	không có văn bản thay thế
+	no summary	không có tóm tắt
+	not in a TR	không nằm trong TR
+	not in a Table, THead, TBody or TFoot	không nằm trong Table, THead, TBody hoặc TFoot
+	not in an L (list)	không nằm trong L (danh sách)
+	not in an LI (list item)	không nằm trong LI (mục danh sách)
+	other changes	các thay đổi khác
+	rows have between {min} and {max} columns	các hàng có từ {min} đến {max} cột
+	the first heading is an H{n}; headings should not skip levels	đề mục đầu tiên là H{n}; các đề mục không nên bỏ qua cấp
+	{ty} element: {what}	Phần tử {ty}: {what}
+	… and {n} more	… và {n} mục nữa
+	A button	Một nút
+	A script	Một script
+	A stream uses LZW compression	Một luồng dùng nén LZW
+	A summary describes the table's purpose and layout. Add a Summary attribute to each table.	Phần tóm tắt mô tả mục đích và bố cục của bảng. Hãy thêm thuộc tính Summary cho mỗi bảng.
+	About	Giới thiệu
+	Accepted	Đã chấp nhận
+	Add arrow	Thêm mũi tên
+	Add callout	Thêm khung chú thích
+	Add checkmark	Thêm dấu kiểm
+	Add cloud	Thêm đám mây
+	Add connected lines	Thêm các đường nối liền
+	Add cross	Thêm dấu chéo
+	Add dot	Thêm dấu chấm
+	Add drawing	Thêm bản vẽ
+	Add image	Thêm hình ảnh
+	Add line	Thêm đường thẳng
+	Add oval	Thêm hình bầu dục
+	Add polygon	Thêm đa giác
+	Add rectangle	Thêm hình chữ nhật
+	Add text box	Thêm khung văn bản
+	Add {what}	Thêm {what}
+	Algorithm	Thuật toán
+	Allowed	Được phép
+	Alternate Text	Văn bản thay thế
+	Alternate text inside an element that already has alternate text is never read. Remove the inner alternate text.	Văn bản thay thế bên trong phần tử đã có văn bản thay thế sẽ không bao giờ được đọc. Hãy gỡ văn bản thay thế bên trong.
+	Alternate text must be associated with some content	Văn bản thay thế phải được liên kết với một nội dung nào đó
+	Alternate text that will never be read	Văn bản thay thế sẽ không bao giờ được đọc
+	An action is already running	Một hành động đang chạy
+	An image asks to be interpolated	Một hình ảnh yêu cầu được nội suy
+	Animation that flashes can cause seizures. Check scripts and media for flicker.	Hoạt ảnh nhấp nháy có thể gây co giật. Hãy kiểm tra script và phương tiện xem có nhấp nháy không.
+	Application	Ứng dụng
+	Appropriate nesting	Lồng ghép phù hợp
+	Arbitrary Mask	Mặt nạ tùy ý
+	Associated with content	Được liên kết với nội dung
+	Attachment	Tệp đính kèm
+	Basic constraints	Ràng buộc cơ bản
+	Beveled	Vát cạnh
+	Black	Đen
+	Black on white	Đen trên nền trắng
+	Blue	Xanh dương
+	Both	Cả hai
+	Button Properties	Thuộc tính nút
+	Button Style:	Kiểu nút:
+	Calculate	Tính toán
+	Callout	Khung chú thích
+	Cancelled	Đã hủy
+	Center horizontally	Căn giữa theo chiều ngang
+	Center vertically	Căn giữa theo chiều dọc
+	Certified by {by}	Được chứng nhận bởi {by}
+	Change {key}	Thay đổi {key}
+	Changing the document	Thay đổi tài liệu
+	Character encoding	Mã hóa ký tự
+	Character limit:	Giới hạn ký tự:
+	Check	Đánh dấu chọn
+	Check Box Properties	Thuộc tính hộp kiểm
+	Check Box Style:	Kiểu hộp kiểm:
+	Checked	Đã đánh dấu chọn
+	Choose a folder on this computer to pin	Chọn một thư mục trên máy tính này để ghim
+	Color Images	Ảnh màu
+	Color Spaces	Không gian màu
+	Color contrast	Độ tương phản màu
+	Comb of characters	Dạng lược gồm các ký tự
+	Coming in milestone {m}. Items marked Ready work today.	Sẽ có ở cột mốc {m}. Các mục được đánh dấu Sẵn sàng hoạt động ngay hôm nay.
+	Command	Lệnh
+	Completed	Đã hoàn thành
+	Connected lines	Các đường nối liền
+	Content Streams	Luồng nội dung
+	Contributors	Người đóng góp
+	Copied {what}	Đã sao chép {what}
+	Couldn't add {name}: {e}	Không thể thêm {name}: {e}
+	Couldn't create a PDF: {e}	Không thể tạo PDF: {e}
+	Couldn't download {name}: {e}	Không thể tải xuống {name}: {e}
+	Couldn't read {name}: {e}	Không thể đọc {name}: {e}
+	Couldn't recover {name}: {e}	Không thể khôi phục {name}: {e}
+	Couldn't reload {name}: {e}	Không thể tải lại {name}: {e}
+	Couldn't take the snapshot: {e}	Không thể chụp ảnh nhanh: {e}
+	Couldn't unlock {name}: {e}	Không thể mở khóa {name}: {e}
+	Couldn't use the photo: {e}	Không thể dùng ảnh: {e}
+	Couldn't use {name}: {e}	Không thể dùng {name}: {e}
+	Couldn't write {name}: {e}	Không thể ghi {name}: {e}
+	Couldn't write {path}: {e}	Không thể ghi {path}: {e}
+	Custom font	Phông chữ tùy chỉnh
+	Dashed	Nét đứt
+	Dates	Ngày tháng
+	Delete content	Xóa nội dung
+	Delete image	Xóa hình ảnh
+	Deleted	Đã xóa
+	Diagnostic details	Chi tiết chẩn đoán
+	Discard hidden layer content	Loại bỏ nội dung lớp ẩn
+	Discard hidden text	Loại bỏ văn bản ẩn
+	Discard private data of other applications	Loại bỏ dữ liệu riêng của các ứng dụng khác
+	Document Overhead	Chi phí cấu trúc tài liệu
+	Document assembly	Lắp ráp tài liệu
+	Document has appropriate color contrast	Tài liệu có độ tương phản màu phù hợp
+	Document is not image-only PDF	Tài liệu không phải PDF chỉ có hình ảnh
+	Document title is showing in title bar	Tiêu đề tài liệu đang hiển thị trên thanh tiêu đề
+	Double-click	Bấm đúp
+	Downloaded {name}	Đã tải xuống {name}
+	Downloading attachments on the web arrives with M3.10 ({n} bytes ready)	Việc tải tệp đính kèm trên web sẽ có cùng M3.10 (đã sẵn sàng {n} byte)
+	Dropdown Properties	Thuộc tính danh sách thả xuống
+	Email Addresses	Địa chỉ email
+	Encryption	Mã hóa
+	Endpoint	Điểm cuối
+	Erase	Tẩy
+	Eraser	Cục tẩy
+	Extended Graphics States	Trạng thái đồ họa mở rộng
+	Figures alternate text	Văn bản thay thế của hình
+	Figures require alternate text	Hình yêu cầu văn bản thay thế
+	Flatten	Làm phẳng
+	Flip image	Lật hình ảnh
+	Fonts must map their characters to Unicode so text can be read and copied. Fix the fonts or recreate the PDF.	Phông chữ phải ánh xạ ký tự của chúng sang Unicode để văn bản có thể được đọc và sao chép. Hãy sửa phông chữ hoặc tạo lại PDF.
+	Gray	Xám
+	Grayscale Images	Ảnh thang xám
+	Green	Xanh lá
+	Green on black	Xanh lá trên nền đen
+	H / Space (hold)	H / Space (giữ)
+	Headings	Đề mục
+	Hidden layers	Lớp ẩn
+	Hidden text	Văn bản ẩn
+	High	Cao
+	Home / End	Home / End
+	Horizontally	Theo chiều ngang
+	Image-only PDF	PDF chỉ có hình ảnh
+	Import {name}	Nhập {name}
+	Incorrect password. Try again.	Mật khẩu không đúng. Hãy thử lại.
+	Inset	Lõm
+	Intended usage	Mục đích sử dụng
+	Intersection	Giao điểm
+	Invert	Đảo màu
+	Irregular tables confuse cell navigation. Give every row the same number of cells (counting spans).	Các bảng không đều gây khó cho việc điều hướng ô. Hãy cho mọi hàng cùng số ô (tính cả các ô gộp).
+	Issued by	Cấp bởi
+	Issued to	Cấp cho
+	Issuer	Tổ chức cấp
+	Key usage	Mục đích sử dụng khóa
+	Keywords	Từ khóa
+	LI must be a child of L	LI phải là con của L
+	Lbl and LBody	Lbl và LBody
+	Lbl and LBody must be children of LI	Lbl và LBody phải là con của LI
+	Light blue	Xanh lam nhạt
+	List	Danh sách
+	List Box Properties	Thuộc tính hộp danh sách
+	List items	Mục danh sách
+	Lists	Danh sách
+	Load document font	Tải phông chữ của tài liệu
+	Low	Thấp
+	Mark all	Đánh dấu tất cả
+	Mark as Confidential	Đánh dấu là Bí mật
+	Mark differences	Đánh dấu khác biệt
+	Mark figure as decorative	Đánh dấu hình là trang trí
+	Maximum	Tối đa
+	Metadata	Siêu dữ liệu
+	Midpoint	Điểm giữa
+	Minimum	Tối thiểu
+	Models	Mô hình
+	Mouse Down	Nhấn chuột
+	Mouse Enter	Chuột vào
+	Mouse Exit	Chuột ra
+	Mouse Up	Nhả chuột
+	Move image	Di chuyển hình ảnh
+	Named Destinations	Đích đến có tên
+	Nested alternate text	Văn bản thay thế lồng nhau
+	On Blur	Khi mất tiêu điểm
+	On Focus	Khi có tiêu điểm
+	Optimization cancelled	Đã hủy tối ưu hóa
+	Optimization is already running	Việc tối ưu hóa đang chạy
+	Options	Tùy chọn
+	Orange	Cam
+	Other elements alternate text	Văn bản thay thế của các phần tử khác
+	Other elements that require alternate text	Các phần tử khác cần văn bản thay thế
+	Outline	Đường bao
+	PDF producer	Ứng dụng sản xuất PDF
+	PDF version	Phiên bản PDF
+	Passed	Đạt
+	Path	Đường dẫn
+	People may need more time to respond. Check that nothing has a time limit.	Mọi người có thể cần thêm thời gian để phản hồi. Hãy kiểm tra rằng không có gì bị giới hạn thời gian.
+	Phone Number	Số điện thoại
+	Phone Numbers	Số điện thoại
+	Pictures need alternate text that describes them, or must be marked decorative. Add alternate text to each figure.	Hình ảnh cần văn bản thay thế mô tả chúng, hoặc phải được đánh dấu là trang trí. Hãy thêm văn bản thay thế cho mỗi hình.
+	Pinned folders need the desktop app	Thư mục được ghim yêu cầu ứng dụng máy tính
+	Pinned {folder} to Home	Đã ghim {folder} vào Trang chủ
+	Planned · {m}	Đã lên kế hoạch · {m}
+	Polygon	Đa giác
+	Polyline	Đa tuyến
+	Portable mode is off: {folder} can't be written ({error}). Settings are kept in your user folder instead.	Chế độ di động đang tắt: không thể ghi vào {folder} ({error}). Cài đặt được lưu trong thư mục người dùng của bạn thay thế.
+	Position	Vị trí
+	PostScript XObjects aren't allowed	PostScript XObject không được phép
+	Prepare for Distribution	Chuẩn bị để phân phối
+	Private data of other applications	Dữ liệu riêng của các ứng dụng khác
+	Public key	Khóa công khai
+	Purple	Tím
+	Re-type Password	Nhập lại mật khẩu
+	Red	Đỏ
+	Redid {label}	Đã làm lại {label}
+	Regularity	Tính đều đặn
+	Rejected	Đã từ chối
+	Reliable character encoding is provided	Có mã hóa ký tự đáng tin cậy
+	Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)	Kết xuất: hayro (khởi tạo) · Giao diện: egui · Biểu tượng: Lucide (ISC) · Phông chữ: Inter, JetBrains Mono, Dancing Script (OFL)
+	Repairs	Sửa chữa
+	Replaced	Đã thay thế
+	Report Options	Tùy chọn báo cáo
+	Restrictions	Hạn chế
+	Restrictions lifted	Đã gỡ các hạn chế
+	Rows	Hàng
+	Run	Chạy
+	SHA-1 digest	Giá trị băm SHA-1
+	SHA-256 digest	Giá trị băm SHA-256
+	Sanitize	Làm sạch
+	Sanitize Documents	Làm sạch tài liệu
+	Screen flicker	Nhấp nháy màn hình
+	Scripts	Script
+	Security method	Phương thức bảo mật
+	Serial number	Số sê-ri
+	Set alternate text	Đặt văn bản thay thế
+	Set document title	Đặt tiêu đề tài liệu
+	Set status Accepted	Đặt trạng thái Đã chấp nhận
+	Set status Cancelled	Đặt trạng thái Đã hủy
+	Set status Completed	Đặt trạng thái Đã hoàn thành
+	Set status None	Đặt trạng thái Không có
+	Set status Rejected	Đặt trạng thái Đã từ chối
+	Set status Unmarked	Đặt trạng thái Chưa đánh dấu
+	Set tab order	Đặt thứ tự tab
+	Set the image of {name}	Đặt hình ảnh của {name}
+	Shadings	Chuyển sắc
+	Social Security Number	Số an sinh xã hội
+	Social Security Numbers	Số an sinh xã hội
+	Solid	Liền
+	Squiggly	Lượn sóng
+	Star	Ngôi sao
+	Strong	Mạnh
+	Structure Info	Thông tin cấu trúc
+	TH and TD	TH và TD
+	TH and TD must be children of TR	TH và TD phải là con của TR
+	TR must be a child of Table, THead, TBody, or TFoot	TR phải là con của Table, THead, TBody hoặc TFoot
+	Tab order	Thứ tự tab
+	Tab order is consistent with structure order	Thứ tự tab nhất quán với thứ tự cấu trúc
+	Tables	Bảng
+	Tables must contain the same number of columns in each row and rows in each column	Bảng phải có cùng số cột trong mỗi hàng và cùng số hàng trong mỗi cột
+	Tables must have a summary	Bảng phải có phần tóm tắt
+	Text recognition is already running	Việc nhận dạng văn bản đang chạy
+	Text recognition isn't installed: its models are missing (run `cargo xtask models`, or set PDFCRAFT_MODELS).	Tính năng nhận dạng văn bản chưa được cài đặt: thiếu các mô hình (hãy chạy `cargo xtask models`, hoặc đặt PDFCRAFT_MODELS).
+	That didn't work: an internal error stopped it ({m}).	Không thành công: một lỗi nội bộ đã dừng nó ({m}).
+	That didn't work: an internal error stopped it ({m}). Your documents are unchanged.	Không thành công: một lỗi nội bộ đã dừng nó ({m}). Các tài liệu của bạn không thay đổi.
+	The document has additional actions (/AA)	Tài liệu có các hành động bổ sung (/AA)
+	The document has no XMP metadata	Tài liệu không có siêu dữ liệu XMP
+	The document is encrypted	Tài liệu đã được mã hóa
+	The operation failed.	Thao tác thất bại.
+	The passwords don't match.	Các mật khẩu không khớp.
+	The selected area has been copied ({w} × {h} pixels)	Đã sao chép vùng đã chọn ({w} × {h} điểm ảnh)
+	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Phông chữ chuẩn không thể vẽ “{c}” ({code}). Hiện chỉ có thể thêm các ký tự Tây Âu làm văn bản.
+	This PDF uses the unsupported {s} action.	PDF này dùng hành động {s} chưa được hỗ trợ.
+	This compatibility level supports only plain ASCII passwords.	Mức tương thích này chỉ hỗ trợ mật khẩu ASCII thuần.
+	This document has no attachments.	Tài liệu này không có tệp đính kèm.
+	This document has no layers.	Tài liệu này không có lớp.
+	Timed responses	Phản hồi có giới hạn thời gian
+	Type Password	Nhập mật khẩu
+	Type a password.	Nhập một mật khẩu.
+	Typewriter	Máy đánh chữ
+	Unchecked	Chưa đánh dấu chọn
+	Undid {label}	Đã hoàn tác {label}
+	Use {what}	Dùng {what}
+	Valid	Hợp lệ
+	Valid from	Có hiệu lực từ
+	Valid to	Có hiệu lực đến
+	Validate	Xác thực
+	Validity ends	Hiệu lực kết thúc
+	Validity starts	Hiệu lực bắt đầu
+	Vertically	Theo chiều dọc
+	Viewing	Xem
+	Weak	Yếu
+	White on black	Trắng trên nền đen
+	Yellow	Vàng
+	Yellow on black	Vàng trên nền đen
+	You can pin up to {n} folders. Unpin one first.	Bạn có thể ghim tối đa {n} thư mục. Hãy bỏ ghim một thư mục trước.
+	Your name	Tên của bạn
+	Zip Code	Mã bưu chính
+	Zip Code + 4	Mã bưu chính + 4
+	`{command}` {when}	`{command}` {when}
+	average	trung bình
+	maximum	tối đa
+	minimum	tối thiểu
+	no such document	không có tài liệu như vậy
+	product (x)	tích (x)
+	sum (+)	tổng (+)
+	the document is protected by a password	tài liệu được bảo vệ bằng mật khẩu
+	the image is empty	hình ảnh trống
+	the password is incorrect	mật khẩu không đúng
+	the text recognition models are not installed (reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them)	các mô hình nhận dạng văn bản chưa được cài đặt (hãy cài đặt lại PdfCraft, hoặc đặt PDFCRAFT_MODELS thành thư mục chứa chúng)
+	the title must not be empty	tiêu đề không được để trống
+	{0}: {1}	{0}: {1}
+	{folder} is already pinned to Home	{folder} đã được ghim vào Trang chủ
+	{label} failed: {e}	{label} thất bại: {e}
+	{name} has no action	{name} không có hành động
+	{name} is too large for a word list (at most 1 MB).	{name} quá lớn để làm danh sách từ (tối đa 1 MB).
+	{name}: the {other} action isn't supported yet	{name}: hành động {other} chưa được hỗ trợ
+	January	Tháng Một
+	February	Tháng Hai
+	March	Tháng Ba
+	April	Tháng Tư
+	May	Tháng Năm
+	June	Tháng Sáu
+	July	Tháng Bảy
+	August	Tháng Tám
+	September	Tháng Chín
+	October	Tháng Mười
+	November	Tháng Mười Một
+	December	Tháng Mười Hai
+	End entity	Thực thể cuối
+	Move to group	Chuyển vào nhóm
+	Grab bag	Tổng hợp
+	Reverse the order	Đảo thứ tự
+	Show	Hiện
+	Sort	Sắp xếp
+	Table	Bảng
+	{n} contributors · {c} commits	{n} người đóng góp · {c} commit
+	Username	Tên người dùng
+	Real name	Tên thật
+	Name (A–Z)	Tên (A–Z)
+	Merged PRs	PR đã gộp
+	PRs	PR
+	Commits	Commit
+	Lines added	Dòng thêm
+	+LOC	+LOC
+	Lines deleted	Dòng xóa
+	−LOC	−LOC
+	Line delta	Chênh lệch dòng
+	ΔLOC	ΔLOC
+	Binary assets added	Tài nguyên nhị phân đã thêm
+	+Bin	+Bin
+	Binary assets removed	Tài nguyên nhị phân đã xóa
+	−Bin	−Bin
+	First commit	Commit đầu tiên
+	First	Đầu tiên
+	Last commit	Commit cuối cùng
+	Last	Cuối cùng
+	Company	Công ty
+	Model	Mô hình
+	Version	Phiên bản
+	% of all commits	% tổng số commit
+	Lines +/−	Dòng +/−
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}: {prs} PR, {commits} commit, +{added} / −{deleted} dòng (Δ {delta}), +{bin_added} / −{bin_deleted} tài nguyên nhị phân, {first} – {last}
+	of {name}	của {name}
+	ships in milestone {m}	sẽ phát hành ở cột mốc {m}
+	sorted ascending	sắp xếp tăng dần
+	sorted descending	sắp xếp giảm dần
+	to	đến
+	to {n}	đến {n}
+	yyyy or yy year · m or mm month · mmm or mmmm month name · d or dd day · ddd or dddd weekday. H, h, M, s and t are time letters and can't be used on their own: put {escape} before a letter to show it as is.	yyyy hoặc yy năm · m hoặc mm tháng · mmm hoặc mmmm tên tháng · d hoặc dd ngày · ddd hoặc dddd thứ trong tuần. H, h, M, s và t là các chữ cái chỉ thời gian và không thể dùng riêng lẻ: hãy đặt {escape} trước một chữ cái để hiển thị nguyên văn.
+	{c} of {n}{more}	{c} trên {n}{more}
+	{dpi} pixels/inch	{dpi} điểm ảnh/inch
+	{kind} Properties	Thuộc tính {kind}
+	{k} of {n}	{k} trên {n}
+	{label} (1 issue)	{label} (1 vấn đề)
+	{label} ({n} issues)	{label} ({n} vấn đề)
+	{month} {day}, {y}	{day} {month}, {y}
+	{month} {y}	{month} {y}
+	{msg} to {dir}	{msg} vào {dir}
+	{name} (default)	{name} (mặc định)
+	{name} is read-only	{name} chỉ đọc
+	{n} days ago	{n} ngày trước
+	{n} differences found	Tìm thấy {n} điểm khác biệt
+	{n} h ago	{n} giờ trước
+	{n} instances	{n} lần xuất hiện
+	{n} issues	{n} vấn đề
+	{n} marks	{n} dấu
+	{n} min ago	{n} phút trước
+	{n} selected	Đã chọn {n}
+	{n} word(s) or phrase(s)	{n} từ hoặc cụm từ
+	{n} {kind}	{n} {kind}
+	{rule} - {status}	{rule} - {status}
+	{s} action	Hành động {s}
+	{verb} as "{name}"	{verb} thành "{name}"
+	“{name}” has security restrictions. Enter its permissions password to lift them.	“{name}” có các hạn chế bảo mật. Hãy nhập mật khẩu quyền hạn của nó để gỡ bỏ chúng.
