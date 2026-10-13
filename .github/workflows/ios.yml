@@ -44,6 +44,13 @@ jobs:
         with:
           key: ios-ffi
           workspaces: apps/pdfcraft-mobile-ffi
+      - name: Select latest Xcode
+        run: |
+          set -euo pipefail
+          latest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n1)
+          echo "Using $latest"
+          sudo xcode-select -s "$latest"
+          echo "DEVELOPER_DIR=$latest/Contents/Developer" >> "$GITHUB_ENV"
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Build Rust staticlib and generate Swift bindings
