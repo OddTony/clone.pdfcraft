@@ -41,7 +41,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
-use pdfcraft_fonts::{helvetica_width, win_ansi, win_ansi_encodable};
+use pdfcraft_fonts::{Std14, helvetica_width, win_ansi, win_ansi_encodable};
 use pdfcraft_ofd::{
     ClipShape, Color, ColorSpaceKind, FillRule, Graphic, LayerKind, Matrix, Object as Item, PageContent, PathCmd, Resources, Shade, ShadeKind,
     TemplatePage, TextObject, ZOrder, zip::Package,
@@ -1001,8 +1001,9 @@ impl Writer<'_, '_> {
             let text = ch.to_string();
             // Hex, not a literal: WinAnsi bytes above 0x7F must reach the content stream unchanged.
             let _ = writeln!(s, "{} Tj", hex(&win_ansi(&text)));
-            // Courier is fixed width; Helvetica's widths stand in for the other standard faces.
-            return if base == "Courier" { 0.6 * size } else { helvetica_width(&text, size) } * hs;
+            // The exact standard-14 widths of the face the character is drawn in.
+            let width = Std14::from_base_font(base).map_or_else(|| helvetica_width(&text, size), |f| f.text_width(&text, size));
+            return width * hs;
         }
         let r = self.cjk();
         out.fonts.insert("FCJK".into(), r);

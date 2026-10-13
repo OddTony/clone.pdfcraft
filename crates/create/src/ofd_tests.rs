@@ -589,3 +589,17 @@ fn pattern_cells_are_bounded_for_the_whole_document() {
     assert_eq!(pages[0].1.matches(" Do\n").count(), 26 * 3844);
     assert_eq!(report.skipped_by_kind.get("patterns with too many cells"), Some(&4), "{:?}", report.skipped_by_kind);
 }
+
+#[test]
+fn standard_font_text_advances_by_the_faces_own_widths() {
+    // Without DeltaX the next character follows the font's advance: Times-Roman's "f" is 333/1000
+    // em (Helvetica's is 278), Courier's every character 600.
+    let fonts = r#"<ofd:Fonts><ofd:Font ID="8" FontName="SerifFace" Serif="true"/><ofd:Font ID="9" FontName="Mono" FixedWidth="true"/></ofd:Fonts>"#;
+    let body = r#"<ofd:TextObject ID="11" Boundary="0 0 50 10" Font="8" Size="10"><ofd:TextCode X="0" Y="5">fi</ofd:TextCode></ofd:TextObject>
+<ofd:TextObject ID="12" Boundary="0 20 50 10" Font="9" Size="10"><ofd:TextCode X="0" Y="5">fi</ofd:TextCode></ofd:TextObject>"#;
+    let (pages, _, doc) = convert(&package_full(&[&page(body)], false, b"not a font", &[], fonts));
+    let ops = &pages[0].1;
+    assert!(ops.contains("/TimesRoman 1 Tf\n10 0 0 -10 3.33 5 Tm\n<69> Tj"), "{ops}");
+    assert!(ops.contains("/Courier 1 Tf\n10 0 0 -10 6 5 Tm\n<69> Tj"), "{ops}");
+    assert_eq!(font_names(&doc, &pages[0].0), ["Courier", "Times-Roman"]);
+}
