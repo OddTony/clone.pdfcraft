@@ -19,6 +19,10 @@ allow = [
     "Unicode-3.0",
     "BSL-1.0",
     "CC0-1.0",
+    # Weak (file-level) copyleft, not GPL/AGPL/LGPL: only modifications to MPL-covered files
+    # themselves must be shared, not the combined/linked application. Needed for `uniffi` and its
+    # generated bindings, used by the iOS companion app's Rust FFI bridge.
+    "MPL-2.0",
 ]
 
 [licenses.private]
@@ -41,6 +45,12 @@ ignore = [
     # private-key operations use aws-lc-rs on native targets and are refused in the browser
     # (ADR-0009). Revisit when a fixed `rsa` ships.
     { id = "RUSTSEC-2023-0071", reason = "rsa is used for verification only (ADR-0009)" },
+    # bincode 1.3.3, pulled in transitively by `uniffi` (iOS FFI bridge): archived, not a
+    # vulnerability. Revisit when uniffi migrates off bincode 1.x.
+    { id = "RUSTSEC-2025-0141", reason = "transitive dep of uniffi; no vulnerability, just archived" },
+    # paste 1.0.15, pulled in transitively by `uniffi`: archived proc-macro helper, not a
+    # vulnerability.
+    { id = "RUSTSEC-2024-0436", reason = "transitive dep of uniffi; no vulnerability, just archived" },
 ]
 
 # egui's default UI fonts (Ubuntu-Light, Hack, emoji-icon-font): font licences on the AGENTS.md
