@@ -1839,8 +1839,23 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // the precise delta ourselves this frame through the un-animated scroll path, and suppress
     // egui's eased copy while it decays so it neither doubles nor trails the motion. A coarse
     // mouse wheel keeps egui's easing (pleasant for chunky notches).
+    //
+    // The wheel during a drag (#721) is the same bypass for a different reason. `ScrollArea` only
+    // reads the wheel while no widget owns a drag (`is_hovering_outer_rect` requires
+    // `ctx().dragged_id().is_none()`), so holding the button to select text, draw a highlight or
+    // pan with the Hand tool silently swallowed every notch and the document simply sat still
+    // until the button came up. egui's easing cannot fill that gap either: it is the ScrollArea
+    // that applies the eased delta, and the ScrollArea is what has already decided to ignore the
+    // wheel. So a coarse notch under a drag is converted to points here and applied through the
+    // un-animated path, which is what makes a mouse wheel behave like a trackpad mid-selection.
     let now = ui.input(|i| i.time);
     let mut precise_scroll = Vec2::ZERO;
+    let mut drag_scroll = Vec2::ZERO;
+    // egui turns wheel lines and pages into points with these factors; use its own so a notch
+    // moves as far here as it would anywhere else.
+    let line_points = ui.ctx().options(|o| o.input_options.line_scroll_speed);
+    let page_points = avail.height();
+    let dragging = ui.ctx().dragged_id().is_some();
     if ui.rect_contains_pointer(avail) {
         let mut coarse_wheel = false;
         ui.input(|i| {
@@ -1853,7 +1868,18 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                         // Shift scrolls sideways, matching egui's own wheel handling.
                         egui::MouseWheelUnit::Point if modifiers.shift => precise_scroll.x += delta.x + delta.y,
                         egui::MouseWheelUnit::Point => precise_scroll += *delta,
-                        egui::MouseWheelUnit::Line | egui::MouseWheelUnit::Page => coarse_wheel = true,
+                        egui::MouseWheelUnit::Line => {
+                            coarse_wheel = true;
+                            if dragging {
+                                drag_scroll += *delta * line_points;
+                            }
+                        }
+                        egui::MouseWheelUnit::Page => {
+                            coarse_wheel = true;
+                            if dragging {
+                                drag_scroll += *delta * page_points;
+                            }
+                        }
                     }
                 }
             }
@@ -1867,11 +1893,17 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // Paging owns the vertical axis in single-page view; leave it to the pager.
     if single_paging {
         precise_scroll.y = 0.0;
+        drag_scroll.y = 0.0;
     }
     if now < view.precise_scroll_until {
         ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
     } else {
         precise_scroll = Vec2::ZERO;
+    }
+    // A drag's notches were already applied above. Drop the tail egui keeps easing out behind
+    // them, so that releasing the button cannot jump the document by a leftover notch.
+    if drag_scroll != Vec2::ZERO {
+        ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
     }
     let visible_pages: Vec<usize> = match view.layout {
         PageLayout::Single => vec![view.current.min(rects.len() - 1)],
@@ -2003,9 +2035,10 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             // Only interactions pause; the document must keep its original colours.
             ui.set_opacity(opacity);
         }
-        // Middle-button auto-scroll, the keyboard and precise touchpad input (#759); positive y
-        // moves the content down. All three scroll without easing, unlike egui's wheel default.
-        let delta = auto_delta - vec2(0.0, key_scroll) + precise_scroll;
+        // Middle-button auto-scroll, the keyboard, precise touchpad input (#759) and wheel
+        // notches during a drag (#721); positive y moves the content down. All scroll without
+        // easing, unlike egui's wheel default.
+        let delta = auto_delta - vec2(0.0, key_scroll) + precise_scroll + drag_scroll;
         if delta != Vec2::ZERO {
             ui.scroll_with_delta_animation(delta, egui::style::ScrollAnimation::none());
         }
@@ -2017,6 +2050,32 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             } else if resp.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+            }
+        }
+        // Dragging a selection off the top or bottom edge scrolls, so a long selection can be
+        // made without letting go (#721). Only a selection drag does this: the Hand tool pans by
+        // its own drag delta, and a middle-button gesture owns the wheel already.
+        if selects_text
+            && !hand
+            && !middle_gesture
+            && resp.dragged()
+            && let Some(p) = ui.input(|i| i.pointer.hover_pos())
+            && viewport.contains(p)
+        {
+            const EDGE: f32 = 40.0;
+            // Linear in the overshoot, capped at the edge's worth of it, so the scroll does not
+            // jump when the pointer leaves the window entirely.
+            let speed = |over: f32| (over / EDGE).clamp(0.0, 1.0) * 16.0;
+            let delta = if p.y < viewport.top() + EDGE {
+                speed(viewport.top() + EDGE - p.y)
+            } else if p.y > viewport.bottom() - EDGE {
+                -speed(p.y - (viewport.bottom() - EDGE))
+            } else {
+                0.0
+            };
+            if delta != 0.0 {
+                ui.scroll_with_delta_animation(vec2(0.0, delta), egui::style::ScrollAnimation::none());
+                ui.ctx().request_repaint();
             }
         }
         let origin = resp_rect.min - vec2(0.0, y_shift);
@@ -4117,6 +4176,52 @@ trailer << /Root 1 0 R >>
         h.run_steps(2);
         assert_eq!(h.state().views[0].grid_gap, Some(99), "external drops use the document index after virtualized scrolling");
         assert!(h.state().views[0].thumb_demand.len() < 50);
+    }
+
+    /// A coarse wheel notch while a selection drag is held moves the document (#721).
+    ///
+    /// The regression this guards is egui's own: `ScrollArea` only reads the wheel when
+    /// `ctx().dragged_id().is_none()`, so holding the button to select text dropped every notch and
+    /// the page sat still. The test drives a real harness, presses and drags the pointer, turns the
+    /// wheel, and reads the page's position on screen back.
+    #[test]
+    fn the_wheel_scrolls_the_document_while_a_selection_drag_is_held() {
+        let mut h = egui_kittest::Harness::builder().with_size(vec2(900.0, 700.0)).build_eframe(|_cc| {
+            let mut app = PdfCraftApp::new();
+            // Pages tall enough that the viewport really scrolls, so a stuck wheel shows up.
+            let bytes = app.session.create_blank(300.0, 3000.0, 3).unwrap();
+            app.open_bytes("drag-scroll.pdf", None, bytes.as_ref().clone()).unwrap();
+            app.quick_tool = QuickTool::Select;
+            app
+        });
+        h.run_steps(4);
+
+        let viewport = h.state().views[0].viewport_rect();
+        // Press inside the first page, then drag far enough for egui to claim the drag: that is the
+        // state in which `ScrollArea` stops reading the wheel.
+        let start = pos2(viewport.left() + 200.0, viewport.top() + 120.0);
+        let dragged = pos2(start.x, start.y + 150.0);
+        h.event(egui::Event::PointerMoved(start));
+        h.event(egui::Event::PointerButton { pos: start, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.run_steps(2);
+        h.event(egui::Event::PointerMoved(dragged));
+        h.run_steps(2);
+        assert!(h.ctx.dragged_id().is_some(), "the drag has to be under way for this to test anything");
+
+        let page_top = |h: &egui_kittest::Harness<'_, PdfCraftApp>| h.state().views[0].page_screen_rect(0).map(|r| r.top());
+        let before = page_top(&h).expect("page 1 is on screen");
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: vec2(0.0, -3.0),
+            phase: egui::TouchPhase::Move,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(2);
+        let after = page_top(&h).expect("page 1 is on screen");
+        h.event(egui::Event::PointerButton { pos: dragged, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+        h.run_steps(1);
+
+        assert!(after < before, "the wheel scrolled the document while the drag was held: {before} -> {after}");
     }
 
     #[test]
