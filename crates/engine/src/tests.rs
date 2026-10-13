@@ -2466,6 +2466,29 @@ fn signing_saving_trusting_and_commenting_afterwards() {
 }
 
 #[test]
+fn validated_signatures_without_layers_keep_their_appearance() {
+    let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
+    let digital_id = sign::pkcs12::open(&p12, "test").unwrap();
+    // After the test certificate's start date (2026-10-02).
+    let mut s = Session::new().with_clock(|| 1_800_000_000);
+    let id = s.open("fixture.pdf", None, Arc::new(fixture(1)), None).unwrap();
+    let opts = SignOptions { page: 0, rect: Some([20.0, 20.0, 180.0, 60.0]), ..SignOptions::default() };
+    let signed = s.sign(id, &digital_id, opts).unwrap();
+    s.mark_signed(id, signed, None).unwrap();
+    s.set_trusted_certificates(vec![digital_id.certificate.clone()]);
+    let doc = s.get(id).unwrap();
+    let sig = &doc.signatures[0];
+    assert_eq!(sig.status, SignatureStatus::Valid);
+    // Our own flat appearance has no validation layers: nothing is substituted, and
+    // the display copy carries no generated caption.
+    assert!(!sig.verdict_shown);
+    let display = doc.display.clone();
+    assert!(!display.windows(b"Signature valid".len()).any(|w| w == b"Signature valid"));
+    // With nothing to draw, the display copy aliases the file exactly as before.
+    assert!(Arc::ptr_eq(&doc.display, &doc.bytes));
+}
+
+#[test]
 #[ignore = "timing probe"]
 fn probe_edit_latency_on_a_large_signed_document() {
     // ~120 MB: one page whose content stream is large.

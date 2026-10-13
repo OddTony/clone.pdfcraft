@@ -153,8 +153,43 @@ fn drawing_a_signature_creating_an_id_signing_and_trusting() {
     assert_eq!(s.views.len(), 2);
     let v = s.session.get(s.views[1].id).unwrap();
     assert!(v.name.contains("signed version") && v.signatures.iter().any(|x| x.signed));
+    assert!(s.views[0].snapshot.is_none());
+    assert!(s.views[1].snapshot.as_ref().is_some_and(|snap| snap.kind == pdfcraft_ui_egui::canvas::SnapshotKind::SignedVersion));
+    // A repeat click reuses the snapshot tab instead of opening another identical one.
+    h.get_by_label("View signed version").click();
+    h.run_steps(3);
+    let s = h.state();
+    assert_eq!((s.views.len(), s.active), (2, Some(1)));
+    // A repeat from the original tab reuses it too.
+    h.state_mut().active = Some(0);
+    h.run_steps(1);
+    h.get_by_label("View signed version").click();
+    h.run_steps(3);
+    let s = h.state();
+    assert_eq!((s.views.len(), s.active), (2, Some(1)));
+    // The snapshot tab says what it is.
+    h.get_by_label_contains("You are viewing the signed version of");
+    // Closing a clean snapshot closes the tab with no save prompt. (Driven through
+    // the flag: the banner's Close pill shares its label with tab chrome, which the
+    // harness cannot tell apart.)
+    h.state_mut().views[1].close_requested = true;
+    h.run_steps(2);
+    assert_eq!(h.state().views.len(), 1);
+    assert!(h.state().close_request.is_none());
+    // Closing a dirty snapshot asks about saving instead of closing at once.
+    h.get_by_label("View signed version").click();
+    h.run_steps(3);
+    let id = h.state().views[1].id;
+    h.state_mut().session.apply(id, pdfcraft_engine::Edit::SetInfo { key: "Title".into(), value: "Dirty".into() }).unwrap();
+    h.state_mut().views[1].close_requested = true;
+    h.run_steps(2);
+    assert_eq!(h.state().views.len(), 2);
+    h.get_by_label("Save changes to “contract_signed (signed version).pdf” before closing?");
+    h.get_by_label("Don't save").click();
+    h.run_steps(2);
+    assert_eq!(h.state().views.len(), 1);
     // Trusted certificates and the ID list persist.
-    let saved = s.persist();
+    let saved = h.state().persist();
     let mut fresh = PdfCraftApp::new();
     fresh.set_option("language", "en").unwrap();
     fresh.restore(&saved);
