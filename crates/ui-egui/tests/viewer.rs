@@ -1215,6 +1215,9 @@ fn selection_mouse_wheel_resumes_after_point_scrolling() {
         h.run_steps(40);
         let after = h.state().views[view].page_screen_rect(0).unwrap().top();
         eprintln!("Point-to-Line delay={delay}: point={}, line={}", start - before, before - after);
-        assert!(before - after > 50.0, "Line input must resume after Point: {before} -> {after}");
+        // Half a wheel line at Normal speed: a line is 40 points on macOS and 100 elsewhere, so a
+        // fixed 50 could never be reached on macOS.
+        let half_line = pdfcraft_ui_egui::scroll_speed::ScrollSpeed::Normal.line_points() / 2.0;
+        assert!(before - after > half_line, "Line input must resume after Point: {before} -> {after}");
     }
 }
