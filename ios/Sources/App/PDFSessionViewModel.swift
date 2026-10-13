@@ -30,6 +30,16 @@ final class PDFSessionViewModel: ObservableObject {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 
+    /// Opens the sample PDF bundled with the app (`Resources/Sample.pdf`), so a fresh install
+    /// shows real rendered content instead of the empty "No Document" state.
+    func openBundledSample() {
+        guard let url = Bundle.main.url(forResource: "Sample", withExtension: "pdf") else {
+            errorMessage = "Couldn't locate the bundled sample PDF."
+            return
+        }
+        open(url: url)
+    }
+
     /// Copies the picked file into the sandboxed Documents root, then opens it through the
     /// engine and renders the first page.
     func open(url: URL) {

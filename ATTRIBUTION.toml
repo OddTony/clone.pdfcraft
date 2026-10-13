@@ -2941,6 +2941,17 @@ usage = "Form-filling UI tests (crates/ui-egui/tests/forms.rs, commands.rs)"
 sha256 = "c6f8b656e225101129aa36bd5467adc8dba16730915f19caca17f6a546d0b040"
 
 [[asset]]
+path = "ios/Resources/Sample.pdf"
+title = "One-page AcroForm test fixture (text, check box, radio group, combo box)"
+author = "PdfCraft contributors"
+source = "Contributor-original: identical copy of crates/ui-egui/tests/data/form.pdf, bundled as the iOS app's built-in sample document"
+licence = "MIT OR Apache-2.0"
+licence_file = "LICENSE-MIT"
+kind = "document"
+usage = "Bundled sample PDF shown on first launch / via the \"Try Sample\" action in the iOS app (ios/Sources/App)"
+sha256 = "c6f8b656e225101129aa36bd5467adc8dba16730915f19caca17f6a546d0b040"
+
+[[asset]]
 path = "assets/icons/pentagon.svg"
 title = "Lucide icon \"pentagon\""
 author = "Lucide Contributors (portions Cole Bemis, Feather)"

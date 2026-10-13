@@ -87,7 +87,7 @@ jobs:
           xcrun simctl install "$udid" "$app_path"
           bundle_id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app_path/Info.plist")
           xcrun simctl launch "$udid" "$bundle_id"
-          sleep 3
+          sleep 5
           mkdir -p screenshots
           xcrun simctl io "$udid" screenshot screenshots/artipdf-simulator.png
           xcrun simctl shutdown "$udid" || true

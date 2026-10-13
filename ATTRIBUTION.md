@@ -4,7 +4,7 @@
 
 Every asset PdfCraft includes, bundles or uses to build its published material, with its author, source and licence. The policy is in [AGENTS.md](AGENTS.md) §1. The machine-readable list, with SHA-256 hashes, is [ATTRIBUTION.toml](ATTRIBUTION.toml). Licence texts are kept beside the assets and summarised in [NOTICE](NOTICE).
 
-## In this repository (241)
+## In this repository (242)
 
 | Asset | Title | Author | Licence | Source | Used for |
 |---|---|---|---|---|---|
@@ -244,6 +244,7 @@ Every asset PdfCraft includes, bundles or uses to build its published material, 
 | `assets/icons/message-square-plus.svg` | Lucide icon "message-square-plus" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/message-square-plus.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `assets/icons/circle-x.svg` | Lucide icon "circle-x" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/circle-x.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `crates/ui-egui/tests/data/form.pdf` | One-page AcroForm test fixture (text, check box, radio group, combo box) | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: hand-written PDF objects, no third-party content | Form-filling UI tests (crates/ui-egui/tests/forms.rs, commands.rs) |
+| `ios/Resources/Sample.pdf` | One-page AcroForm test fixture (text, check box, radio group, combo box) | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: identical copy of crates/ui-egui/tests/data/form.pdf, bundled as the iOS app's built-in sample document | Bundled sample PDF shown on first launch / via the "Try Sample" action in the iOS app (ios/Sources/App) |
 | `assets/icons/pentagon.svg` | Lucide icon "pentagon" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/pentagon.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `assets/icons/message-square-quote.svg` | Lucide icon "message-square-quote" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/message-square-quote.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `crates/sign/tests/data/openssl-signed.pdf` | One-page PDF signed with OpenSSL CMS (adbe.pkcs7.detached) by the RSA test key | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: hand-written PDF objects; signature made with `openssl cms -sign` over its byte ranges (see crates/sign/tests/data/README.md) | Signature validation tests (crates/sign/tests/pdf.rs): a signature PdfCraft did not make |
