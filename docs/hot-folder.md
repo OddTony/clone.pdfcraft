@@ -16,7 +16,9 @@ regression check, not a general compression benchmark. Final package acceptance 
 The strict Windows symlink test cannot create its fixture locally (OS error 1314); GitHub's
 Windows job requires this test rather than silently treating an unavailable fixture as coverage.
 
-Local Windows integration gates pass: `cargo test --workspace --locked -j 2 --no-fail-fast -- --test-threads=2` (3,173 passed, 15 ignored, 0 failed), strict workspace/all-target Clippy, formatting, assets, layering, parity and all 32 WASM package checks. OCR models are present; optional craft-fonts-dependent cases remain unexercised.
+At integration commit `116cd60c`, local Windows gates pass: `cargo test --workspace --locked -j 2 --no-fail-fast -- --test-threads=2` (3,173 passed, 15 ignored, 0 failed), strict workspace/all-target Clippy, formatting, assets, layering, parity and all 32 WASM package checks. OCR models are present; optional craft-fonts-dependent cases remain unexercised.
+
+The follow-up integration includes main `3f044b62` (native Windows printing) and its resolved dependency lockfile. Targeted Windows tests pass: 22 print tests, 369 editor library tests (one ignored), and all seven Hot Folder automation tests. Strict workspace/all-target Clippy, formatting, assets, layering, parity and all 32 WASM package checks also pass on the follow-up. The full 3,173-test result above belongs to `116cd60c`; it is not a second full-suite run on the printing follow-up.
 
 The optional standalone application processes folders without keeping the PdfCraft editor open.
 It shares OCR, orientation correction, deskew and paper-edge detection with the engine. Its
