@@ -1671,7 +1671,12 @@ fn files_dropped_before_the_pointer_is_known_wait_for_it() {
 fn files_dropped_outside_the_page_grid_still_open_as_documents() {
     let mut h = harness(2, |_| {});
     drop_files(&mut h, vec![Dropped("other.pdf", fixture(1))]);
-    h.run_steps(3);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while h.state().views.len() < 2 {
+        h.run_steps(1);
+        assert!(std::time::Instant::now() < deadline, "the dropped document did not finish opening");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     assert_eq!(h.state().views.len(), 2);
     assert_eq!(texts_of(h.state(), 0), ["Page 1", "Page 2"]);
 }
