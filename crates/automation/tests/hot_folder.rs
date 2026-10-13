@@ -10,6 +10,69 @@ fn call(a: &mut Automation, name: &str, args: Value) -> Value {
 }
 
 #[test]
+fn hot_folder_optimization_never_revives_stale_page_content() {
+    use pdfcraft_cos::{Dict, Document, ObjRef, Object, SaveOptions, Stream, write_incremental};
+    use std::sync::Arc;
+
+    let root = tempfile::tempdir().unwrap();
+    for folder in ["in", "out"] {
+        std::fs::create_dir(root.path().join(folder)).unwrap();
+    }
+    let source = pdfcraft_engine::Session::new().create_blank(100.0, 100.0, 1).unwrap();
+    let mut document = Document::open(source).unwrap();
+    let stale = document.add(Object::Stream(Stream::from_raw(Dict::new(), Vec::new())));
+    let current = ObjRef::new(stale.num, stale.generation + 1);
+    let catalog = document.root().unwrap();
+    let pages = document.get(document.get(catalog).as_dict().unwrap().reference(b"Pages").unwrap());
+    let page = pages.as_dict().unwrap().get(b"Kids").unwrap().as_array().unwrap()[0].as_ref().unwrap();
+    document.update_dict(page, |page| page.set(b"Contents".to_vec(), Object::Ref(stale))).unwrap();
+    document.free(stale);
+    let replacement = b"0 0 0 rg 0 0 100 100 re f";
+    document.set(current, Object::Stream(Stream::from_raw(Dict::new(), replacement.to_vec())));
+    let padding = document.add(Object::Stream(Stream::from_raw(Dict::new(), vec![b'x'; 65_536])));
+    document
+        .update_dict(catalog, |catalog| {
+            catalog.set(b"LiveExtension".to_vec(), Object::Ref(current));
+            catalog.set(b"Padding".to_vec(), Object::Ref(padding));
+        })
+        .unwrap();
+    let source = write_incremental(&document, &SaveOptions::default()).unwrap();
+    std::fs::write(root.path().join("in/source.pdf"), &source).unwrap();
+    let mut a = Automation::new().with_root(root.path()).unwrap();
+    let steps: Vec<_> = ["off", "lossless", "reduce", "custom"]
+        .into_iter()
+        .map(|mode| json!({"format":"pdf","name_template":mode,"optimization":{"mode":mode}}))
+        .collect();
+    let task = json!({
+        "id":"generations", "name":"Generations", "input":"in", "output":"out", "enabled":true,
+        "interval_seconds":1, "settle_seconds":1,
+        "settings":{"recognize":false,"auto_rotate":false,"deskew":false},
+        "output_plan":{"steps":steps}
+    });
+    call(&mut a, "hot_folder_configure", json!({"config":"tasks.json","settings":{"tasks":[task]}}));
+    call(&mut a, "hot_folder_poll", json!({"config":"tasks.json"}));
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let state = call(&mut a, "hot_folder_poll", json!({"config":"tasks.json"}));
+    assert_eq!(state["tasks"]["generations"]["completed"], 1, "{state}");
+    assert_eq!(state["tasks"]["generations"]["last_optimization"]["changed"], 3);
+    for mode in ["lossless", "reduce", "custom"] {
+        let bytes = std::fs::read(root.path().join(format!("out/{mode}.pdf"))).unwrap();
+        assert!(bytes.len() < source.len(), "{mode} must exercise the published optimized candidate");
+        let saved = Document::open(Arc::new(bytes)).unwrap();
+        let catalog = saved.get(saved.root().unwrap());
+        let catalog = catalog.as_dict().unwrap();
+        let pages = saved.get(catalog.reference(b"Pages").unwrap());
+        let page = saved.resolve(&pages.as_dict().unwrap().get(b"Kids").unwrap().as_array().unwrap()[0]);
+        assert_eq!(*saved.resolve(page.as_dict().unwrap().get(b"Contents").unwrap()), Object::Null, "{mode}");
+        let live = saved.resolve(catalog.get(b"LiveExtension").unwrap());
+        let Object::Stream(live) = &*live else { panic!("live extension must remain a stream") };
+        assert_eq!(live.decoded().unwrap().as_slice(), replacement);
+    }
+    assert_eq!(std::fs::read(root.path().join("out/off.pdf")).unwrap(), source);
+    assert_eq!(std::fs::read(root.path().join("in/source.pdf")).unwrap(), source);
+}
+
+#[test]
 fn hot_folder_pdf_optimization_is_optional_reports_real_sizes_and_preserves_sources() {
     use pdfcraft_cos::{Dict, Document, Object, SaveOptions, Stream, write_full};
     let root = tempfile::tempdir().unwrap();

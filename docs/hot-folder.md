@@ -2,11 +2,15 @@
 
 **Status: implemented native workflow, with isolated task workers and durable restart recovery. Platform package acceptance is documented separately. Proprietary ABBYY task/project formats are not compatible.**
 
-**Optimization release dependency:** the new PDF optimization choices use the shared full-save
-writer. Its generation-identity correction is tracked independently in
-[#1143](https://github.com/storytold/pdfcraft/pull/1143), which remains open at this integration
-snapshot. That correction must be integrated and verified before unattended PDF optimization
-is release-qualified. This Hot Folder change does not claim to fix the writer defect.
+**Optimization integration status:** the shared full-save writer's generation-identity correction
+from [#1143](https://github.com/storytold/pdfcraft/pull/1143) is backported here from
+`da54b14f085c930350d9b23839bd404cf4c3a625` (COS implementation and five synthetic regressions only).
+The additional `hot_folder_optimization_never_revives_stale_page_content` automation regression
+exercises Off/Lossless/Reduce/Custom publication, preserving the original and live extension data
+while preventing stale page references from acquiring replacement content.
+Combined runtime validation is still pending: the local Windows environment has Rust but no
+MSVC linker (`link.exe`), so tests cannot build. The backport is not release qualification;
+run the COS suite, Hot Folder automation tests and workspace gates, then repeat package acceptance.
 
 The optional standalone application processes folders without keeping the PdfCraft editor open.
 It shares OCR, orientation correction, deskew and paper-edge detection with the engine. Its

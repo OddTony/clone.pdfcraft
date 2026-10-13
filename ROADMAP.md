@@ -135,6 +135,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-13 (M13, Hot Folder writer integration):** Backported the COS object-generation correction and five regressions from #1143 (`da54b14f085c930350d9b23839bd404cf4c3a625`). Added a Hot Folder automation regression for stale page content across Off/Lossless/Reduce/Custom publication, with source and live-extension preservation. Runtime validation is blocked locally by missing MSVC `link.exe`; combined workspace and installer acceptance remain pending. Estimates unchanged.
+
 - 2026-10-11 — M13: optional PDF optimization per Hot Folder saving step, disabled by default: lossless/reduce/custom profiles, explicit image-resolution/quality choices, smaller-only results, signature refusal before preprocessing, headless configuration and actual size reporting. Source cleanup continues to require every output and durable proof. Synthetic regression coverage prepared; integration gates pending.
 
 - **2026-10-11 (M11, optimizer safety and lossless profile):** Validate image/mask dimensions and decoded lengths before allocation, preserve other users of shared soft masks during resampling, and treat explicitly selected absent hidden information as a no-op. Add shared lossless settings and a headless `doc_optimize` profile retaining images and user data. Full-save reference generations remain tracked separately in #1143; monochrome compression and GUI preset management remain open. Overall estimates unchanged.
