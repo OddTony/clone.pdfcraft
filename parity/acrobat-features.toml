@@ -3424,8 +3424,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["file.properties"]
 tools = ["doc_set_info"]
-evidence = ["crates/organize/src/tests.rs::document_info_edits_round_trip_with_unicode", "crates/ui-egui/tests/editing.rs::document_properties_edit_is_one_undoable_step"]
-notes = ""
+evidence = ["crates/organize/src/tests.rs::document_info_edits_round_trip_with_unicode", "crates/organize/src/tests.rs::document_info_edits_update_the_xmp_packet", "crates/ui-egui/tests/editing.rs::document_properties_edit_is_one_undoable_step"]
+notes = "When the file has an XMP packet, the matching property (dc:title, dc:creator, dc:description, pdf:Keywords, xmp:CreatorTool, pdf:Producer) is changed or removed with the /Info entry; a packet that isn't UTF-8 is left as it was. Not yet: xmp:ModifyDate and xmp:MetadataDate on save, other languages of a title kept apart (the new value replaces them)."
 
 [[feature]]
 id = "organize.fonts-list"
@@ -8826,10 +8826,10 @@ area = "M"
 tier = "P1"
 milestone = "M12"
 status = "partial"
-commands = []
-tools = ["accessibility_autotag_preview"]
-evidence = ["crates/automation/tests/automation.rs::autotag_preview_proposes_text_without_changing_the_pdf"]
-notes = "Preview proposes paragraph or heading roles for bounded visible text blocks on one page and flags them for review. It does not write tags, mark content, build a parent tree or classify images, tables, lists and annotations."
+commands = ["a11y.autotag"]
+tools = ["accessibility_autotag_preview", "accessibility_autotag_apply"]
+evidence = ["crates/automation/tests/automation.rs::autotag_preview_proposes_text_without_changing_the_pdf", "crates/automation/tests/automation.rs::autotag_apply_writes_reviewable_tags_and_survives_save_reopen", "crates/ui-egui/tests/accessibility.rs::automatic_text_tagging_opens_reviewable_tags"]
+notes = "Auto-tag writes real marked content, a Document structure element, P tags and a parent tree for text-only PDFs, with undo and Tags-panel review. It refuses mixed content, forms, annotations and existing tags. The preview separately proposes headings. Images, tables, lists, links, fields and headings are not classified or tagged by Apply."
 
 [[feature]]
 id = "a11y.autotag-fields"
