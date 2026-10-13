@@ -9,7 +9,7 @@ add a language: [localization.md](localization.md). Summary in [ROADMAP.md](../R
 
 - **Strings translated** is measured: the catalogs in `crates/ui-egui/src/i18n/<code>.tsv`, counted
   as distinct `(context, English)` keys with a non-empty translation. The **current** denominator is
-  the union of keys across all catalogs (**2,585** plain keys as of 2026-10-13, plus language-specific
+  the union of keys across all catalogs (**2,590** plain keys as of 2026-10-13, plus language-specific
   context rows such as Vietnamese `theme`/`Appearance`). The twelve-language percentage table below
   still quotes the **historical 2,143-key snapshot** from 2026-10-10 for every language except
   Vietnamese (re-measured against the current union). English is built in.
