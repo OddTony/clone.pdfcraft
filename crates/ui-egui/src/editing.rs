@@ -149,7 +149,8 @@ impl PdfCraftApp {
                 true
             }
             Err(e) => {
-                let message = if matches!(edit, Edit::MoveObjects { .. }) { crate::object_ui::move_error(&e) } else { e.to_string() };
+                let detail = e.to_string();
+                let message = crate::object_ui::move_error(&edit, &detail).unwrap_or(detail);
                 self.notify_fmt("{label} failed: {e}", &[("label", &crate::i18n::edit_label(&label)), ("e", &message)]);
                 false
             }

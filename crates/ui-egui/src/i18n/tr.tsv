@@ -2193,6 +2193,8 @@ key	Space	Boşluk
 	These objects could not be moved. Select them again and try a smaller move.	Bu nesneler taşınamadı. Bunları tekrar seçin ve daha küçük bir taşıma deneyin.
 	This page contains objects that cannot be selected together.	Bu sayfa birlikte seçilemeyen nesneler içeriyor.
 	Text and added items can't be deleted with this selection.	Metin ve eklenen öğeler bu seçimle silinemez.
+	Arrange	Yerleştir
+	Stroke colour	Çizgi rengi
 	Fill colour	Dolgu rengi
 	No fill	Dolgu yok
 	Fill colour: none	Dolgu rengi: yok

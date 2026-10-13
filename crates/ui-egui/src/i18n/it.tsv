@@ -2239,6 +2239,8 @@ signature pad	Type	Digita
 	These objects could not be moved. Select them again and try a smaller move.	Non è stato possibile spostare questi oggetti. Selezionali di nuovo e prova uno spostamento più piccolo.
 	This page contains objects that cannot be selected together.	Questa pagina contiene oggetti che non possono essere selezionati insieme.
 	Text and added items can't be deleted with this selection.	Il testo e gli elementi aggiunti non possono essere eliminati con questa selezione.
+	Arrange	Disponi
+	Stroke colour	Colore tratto
 	Fill colour	Colore riempimento
 	No fill	Nessun riempimento
 	Fill colour: none	Colore riempimento: nessuno

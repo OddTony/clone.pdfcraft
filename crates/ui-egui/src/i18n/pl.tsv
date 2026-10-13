@@ -2248,6 +2248,9 @@ key	Space	Spacja
 	These objects could not be moved. Select them again and try a smaller move.	Nie udało się przenieść tych obiektów. Zaznacz je ponownie i spróbuj mniejszego przesunięcia.
 	This page contains objects that cannot be selected together.	Ta strona zawiera obiekty, których nie można zaznaczyć razem.
 	Text and added items can't be deleted with this selection.	Tekstu i dodanych elementów nie można usunąć razem z tym zaznaczeniem.
+	Arrange	Rozmieść
+	Stroke colour	Kolor obrysu
+	Fill colour	Kolor wypełnienia
 	Reload documents when their files change on disk	Wczytuj ponownie dokumenty, gdy ich pliki zmienią się na dysku
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Ten plik zmienił się na dysku. Wczytaj go ponownie, aby zobaczyć nową wersję; niezapisane zmiany zostaną utracone.
 	Reload	Wczytaj ponownie

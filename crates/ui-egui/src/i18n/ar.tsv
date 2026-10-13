@@ -2251,6 +2251,8 @@ certificate	Subject	صاحب الشهادة
 	These objects could not be moved. Select them again and try a smaller move.	تعذر نقل هذه العناصر. حددها مجددًا وحاول نقلها بمسافة أقل.
 	This page contains objects that cannot be selected together.	تحتوي هذه الصفحة على عناصر لا يمكن تحديدها معًا.
 	Text and added items can't be deleted with this selection.	لا يمكن حذف النص والعناصر المضافة مع هذا التحديد.
+	Arrange	ترتيب
+	Stroke colour	لون الحد
 	Fill colour	لون التعبئة
 	No fill	بلا تعبئة
 	Fill colour: none	لون التعبئة: بلا

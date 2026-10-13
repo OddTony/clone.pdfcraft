@@ -195,6 +195,8 @@
 	These objects could not be moved. Select them again and try a smaller move.	Tyto objekty se nepodařilo přesunout. Vyberte je znovu a zkuste menší posun.
 	This page contains objects that cannot be selected together.	Tato stránka obsahuje objekty, které nelze vybrat společně.
 	Text and added items can't be deleted with this selection.	Text a přidané položky nelze s tímto výběrem odstranit.
+	Arrange	Uspořádat
+	Stroke colour	Barva tahu
 # Keyboard key names, distinct from command labels.
 key	Ctrl	Ctrl
 key	Shift	Shift

@@ -2227,6 +2227,8 @@ action wizard	Start	Indítás
 	These objects could not be moved. Select them again and try a smaller move.	Ezeket az objektumokat nem sikerült áthelyezni. Jelölje ki őket újra, és próbáljon kisebb elmozdítást.
 	This page contains objects that cannot be selected together.	Ez az oldal olyan objektumokat tartalmaz, amelyek nem jelölhetők ki együtt.
 	Text and added items can't be deleted with this selection.	A szöveg és a hozzáadott elemek nem törölhetők ezzel a kijelöléssel.
+	Arrange	Elrendezés
+	Stroke colour	Körvonalszín
 	Fill colour	Kitöltőszín
 	No fill	Nincs kitöltés
 	Fill colour: none	Kitöltőszín: nincs

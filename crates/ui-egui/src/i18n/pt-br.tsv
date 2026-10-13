@@ -2230,6 +2230,8 @@ comment menu	Edit	Editar
 	These objects could not be moved. Select them again and try a smaller move.	Não foi possível mover estes objetos. Selecione-os novamente e tente um deslocamento menor.
 	This page contains objects that cannot be selected together.	Esta página contém objetos que não podem ser selecionados juntos.
 	Text and added items can't be deleted with this selection.	O texto e os itens adicionados não podem ser excluídos com esta seleção.
+	Arrange	Organizar
+	Stroke colour	Cor do traçado
 	Fill colour	Cor de preenchimento
 	No fill	Sem preenchimento
 	Fill colour: none	Cor de preenchimento: nenhuma

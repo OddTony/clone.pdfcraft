@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use egui::{Color32, Pos2, Rect, Stroke};
-use pdfcraft_engine::{Document, Edit, EditableObject, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget, PagePath};
+use pdfcraft_engine::{Document, Edit, EditableObject, MAX_MOVE_OBJECTS, ObjectAlign, ObjectKind, ObjectTarget, PagePath, ZOrder};
 use pdfcraft_render::DocInfo;
 
 use crate::canvas::{DocView, PageXform};
@@ -22,8 +22,11 @@ pub(crate) struct ObjectSelection {
     page: Option<usize>,
     selected: Vec<EditableObject>,
     gesture: Option<Gesture>,
-    /// Expected geometry after our own edit, for remapping indexes that grouping can change.
-    pending: Option<Vec<EditableObject>>,
+    /// Expected geometry after our own edit, for remapping indexes that grouping can change;
+    /// `false` when the boxes are the engine's to work out (an align) or stay (an arrange).
+    pending: Option<(Vec<EditableObject>, bool)>,
+    /// The page menu was opened on the selection's page: it offers the selection's commands.
+    menu: bool,
     pub notice: Option<String>,
     pub hold_editor: bool,
     blocked_page: Option<usize>,
@@ -73,6 +76,10 @@ impl ObjectSelection {
 
     pub fn prepare(&mut self, doc: &Document, enabled: bool, ctx: &egui::Context) {
         self.hold_editor = false;
+        // Set again by the page input when the right-click is on the selection's page.
+        if ctx.input(|i| i.pointer.secondary_clicked()) {
+            self.menu = false;
+        }
         if !enabled {
             self.clear();
             return;
@@ -83,24 +90,37 @@ impl ObjectSelection {
             self.paths = None;
             self.gesture = None;
             let expected = self.pending.take();
-            let remapped = self.page.zip(expected).and_then(|(page, expected)| {
+            let remapped = self.page.zip(expected).and_then(|(page, (expected, placed))| {
                 let inventory = doc.editable_objects(page).ok()?;
+                let size = |r: [f64; 4]| [r[2] - r[0], r[3] - r[1]];
                 let mut out = Vec::new();
                 for old in expected {
-                    let mut matches = inventory.iter().filter(|o| {
-                        o.target.kind == old.target.kind
-                            && o.content_type == old.content_type
-                            && o.text == old.text
-                            // Path edits keep the paint order, and a resized stroke's box lands
-                            // only near the one asked for (its width scales too).
-                            && if old.target.kind == ObjectKind::Path {
-                                o.target == old.target
-                            } else {
-                                o.rect.iter().zip(old.rect).all(|(a, b)| (a - b).abs() < 0.01)
-                            }
-                    });
-                    let object = matches.next()?;
-                    if matches.next().is_some() || out.iter().any(|o: &EditableObject| o.target == object.target) {
+                    let matches: Vec<_> = inventory
+                        .iter()
+                        .filter(|o| {
+                            o.target.kind == old.target.kind
+                                && o.content_type == old.content_type
+                                && o.text == old.text
+                                && match old.target.kind {
+                                    // Path edits keep the paint order, and a resized stroke's box
+                                    // lands only near the one asked for (its width scales too).
+                                    ObjectKind::Path => o.target == old.target,
+                                    _ if placed => o.rect.iter().zip(old.rect).all(|(a, b)| (a - b).abs() < 0.01),
+                                    // Aligns and arranges keep sizes, and images and added items
+                                    // are listed where expected; paragraphs may renumber.
+                                    kind => {
+                                        size(o.rect).iter().zip(size(old.rect)).all(|(a, b)| (a - b).abs() < 0.01)
+                                            && (kind == ObjectKind::Text || o.target == old.target)
+                                    }
+                                }
+                        })
+                        .collect();
+                    // Twins (the same text, size or box) are told apart by an unchanged reference.
+                    let object = match matches.as_slice() {
+                        [only] => *only,
+                        twins => *twins.iter().find(|o| o.target == old.target)?,
+                    };
+                    if out.iter().any(|o: &EditableObject| o.target == object.target) {
                         return None;
                     }
                     out.push(object.clone());
@@ -117,7 +137,8 @@ impl ObjectSelection {
             // A refused edit keeps the generation and the original selection.
             self.pending = None;
         }
-        if self.page.is_some() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        // Escape closes an open menu first; the selection it acts on stays.
+        if self.page.is_some() && !egui::Popup::is_any_open(ctx) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             self.clear();
         }
     }
@@ -128,8 +149,20 @@ impl ObjectSelection {
         for object in &mut expected {
             object.rect = [object.rect[0] + offset[0], object.rect[1] + offset[1], object.rect[2] + offset[0], object.rect[3] + offset[1]];
         }
-        self.pending = Some(expected);
+        self.pending = Some((expected, true));
         Edit::MoveObjects { page, objects: self.selected.iter().map(|o| o.target).collect(), offset }
+    }
+
+    /// The deletion of the selection, which only vector paths and images may be in; the
+    /// selection goes with them.
+    fn delete(&mut self, page: usize) -> Option<Edit> {
+        if self.selected.iter().any(|o| matches!(o.target.kind, ObjectKind::Text | ObjectKind::Added)) {
+            self.notice = Some(tl!("Text and added items can't be deleted with this selection.").into());
+            return None;
+        }
+        let objects = self.selected.iter().map(|o| o.target).collect();
+        self.clear();
+        Some(Edit::DeleteObjects { page, objects })
     }
 
     fn inventory(&mut self, doc: &Document, page: usize) -> Result<Vec<EditableObject>, String> {
@@ -174,11 +207,16 @@ fn path_hit<'a>(
         return None;
     }
     let (a, b) = (user(xf, &doc.info, page, p)?, user(xf, &doc.info, page, p + egui::vec2(2.0, 0.0))?);
-    if paths.as_ref().is_none_or(|(cached, _)| *cached != page) {
-        *paths = Some((page, doc.page_paths(page).unwrap_or_default()));
-    }
-    let index = paths.as_ref()?.1.iter().rposition(|path| path.contains(a, (b[0] - a[0]).hypot(b[1] - a[1])))?;
+    let index = page_paths(paths, doc, page).iter().rposition(|path| path.contains(a, (b[0] - a[0]).hypot(b[1] - a[1])))?;
     objects.iter().find(|o| o.target == ObjectTarget { kind: ObjectKind::Path, index }).filter(|o| candidate(o))
+}
+
+/// `page`'s vector paths from the selection's cache, parsed again only for another page.
+fn page_paths<'a>(cache: &'a mut Option<(usize, Vec<PagePath>)>, doc: &Document, page: usize) -> &'a [PagePath] {
+    if cache.as_ref().is_none_or(|(cached, _)| *cached != page) {
+        *cache = Some((page, doc.page_paths(page).unwrap_or_default()));
+    }
+    cache.as_ref().map_or(&[], |(_, paths)| paths)
 }
 
 /// A screen point in user space.
@@ -349,7 +387,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
                     && let Some(rect) = resized_user(xf, doc, page, &object, corner, gesture.start, gesture.now)
                 {
                     view.pending_edit = Some(Edit::TransformPath { page, index: object.target.index, rect });
-                    s.pending = Some(vec![object]);
+                    s.pending = Some((vec![object], true));
                 }
             } else if gesture.start.distance(gesture.now) > 3.0 && view.pending_edit.is_none() {
                 let (a, b) = (xf.screen_to_view(gesture.start), xf.screen_to_view(gesture.now));
@@ -368,9 +406,16 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         });
         return true;
     }
-    let Some(p) = pointer.filter(|p| xf.rect.contains(*p) && ui.clip_rect().contains(*p) && resp.rect.contains(*p)) else {
+    // A press on a menu or popup over the page is not on the page: it must not clear the
+    // selection the menu acts on.
+    let on_page =
+        |p: &Pos2| xf.rect.contains(*p) && ui.clip_rect().contains(*p) && resp.rect.contains(*p) && ui.ctx().layer_id_at(*p) == Some(ui.layer_id());
+    let Some(p) = pointer.filter(on_page) else {
         return s.page == Some(page) && !s.selected.is_empty();
     };
+    if resp.secondary_clicked() {
+        s.menu = s.page == Some(page);
+    }
     // A handle sits on the box's edge, half outside it: it is looked for before the box.
     let handle = s.single_path().filter(|_| s.page == Some(page)).and_then(|o| handle_at(screen(xf, info, page, o), p));
     if !pressed {
@@ -506,13 +551,7 @@ pub(crate) fn nudge_keys(ctx: &egui::Context, view: &mut DocView, doc: &Document
     if let Some(page) = objects.filter(|_| over_document && view.line_editor.is_none() && view.content.draft.is_none())
         && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Delete) || i.consume_key(Modifiers::NONE, Key::Backspace))
     {
-        let s = &mut view.objects;
-        if s.selected.iter().any(|o| matches!(o.target.kind, ObjectKind::Text | ObjectKind::Added)) {
-            s.notice = Some(tl!("Text and added items can't be deleted with this selection.").into());
-        } else {
-            view.pending_edit = Some(Edit::DeleteObjects { page, objects: s.selected.iter().map(|o| o.target).collect() });
-            s.clear();
-        }
+        view.pending_edit = view.objects.delete(page);
         return;
     }
     let Some(page) = objects.or(image.map(|(page, _)| page)) else { return };
@@ -556,6 +595,136 @@ pub(crate) fn nudge_keys(ctx: &egui::Context, view: &mut DocView, doc: &Document
     }
 }
 
+/// The page menu over a group selection: Arrange, Align, Distribute and Delete. False, with
+/// nothing drawn, unless the menu was opened on the selection's page.
+pub(crate) fn context_menu(ui: &mut egui::Ui, doc: &Document, view: &mut DocView, can_modify: bool) -> bool {
+    let s = &mut view.objects;
+    let Some(page) = s.page.filter(|_| s.menu && !s.selected.is_empty()) else { return false };
+    let mut edit = None;
+    let single = match s.selected.as_slice() {
+        [o] if matches!(o.target.kind, ObjectKind::Path | ObjectKind::Image) => Some(o.clone()),
+        _ => None,
+    };
+    ui.add_enabled_ui(can_modify && single.is_some(), |ui| {
+        ui.menu_button(tl!("Arrange"), |ui| {
+            for (order, label) in [
+                (ZOrder::Front, "Bring to front"),
+                (ZOrder::Forward, "Bring forward"),
+                (ZOrder::Backward, "Send backward"),
+                (ZOrder::Back, "Send to back"),
+            ] {
+                if ui.button(tl!(label)).clicked()
+                    && let Some(object) = &single
+                {
+                    // Where it is listed afterwards comes from a dry run on a copy of the page.
+                    match doc.arranged_target(page, object.target, order) {
+                        Ok(target) => {
+                            s.pending = Some((vec![EditableObject { target, ..object.clone() }], false));
+                            edit = Some(Edit::ArrangeObjects { page, object: object.target, order });
+                        }
+                        Err(e) => s.notice = Some(crate::i18n::fmt(tl!("{label} failed: {e}"), &[("label", tl!(label)), ("e", e.as_str())])),
+                    }
+                    ui.close();
+                }
+            }
+        });
+    });
+    let aligns = [
+        (ObjectAlign::Left, "Left"),
+        (ObjectAlign::CentreHorizontal, "Center horizontally"),
+        (ObjectAlign::Right, "Right"),
+        (ObjectAlign::Top, "Top"),
+        (ObjectAlign::CentreVertical, "Center vertically"),
+        (ObjectAlign::Bottom, "Bottom"),
+    ];
+    let distributes = [(ObjectAlign::DistributeHorizontal, "Horizontally"), (ObjectAlign::DistributeVertical, "Vertically")];
+    for (menu, least, items) in [("Align", 2, &aligns[..]), ("Distribute", 3, &distributes[..])] {
+        ui.add_enabled_ui(can_modify && s.selected.len() >= least, |ui| {
+            ui.menu_button(tl!(menu), |ui| {
+                for &(align, label) in items {
+                    if ui.button(tl!(label)).clicked() {
+                        s.pending = Some((s.selected.clone(), false));
+                        edit = Some(Edit::AlignObjects { page, objects: s.selected.iter().map(|o| o.target).collect(), align });
+                        ui.close();
+                    }
+                }
+            });
+        });
+    }
+    ui.separator();
+    let deletable = s.selected.iter().all(|o| matches!(o.target.kind, ObjectKind::Path | ObjectKind::Image));
+    if ui.add_enabled(can_modify && deletable, egui::Button::new(tl!("Delete"))).clicked() {
+        edit = s.delete(page);
+        ui.close();
+    }
+    if edit.is_some() {
+        view.pending_edit = edit;
+    }
+    true
+}
+
+/// Fill colour and Stroke colour for the selected vector paths, each a swatch of the first such
+/// path's colour that opens the colour grid. A pick recolours the selected paths that paint that
+/// part, in one step, and the selection stays. False when the selection holds no path.
+pub(crate) fn colour_section(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) -> bool {
+    let Some((i, id)) = app.active_ids().filter(|_| app.quick_tool == crate::QuickTool::EditText) else { return false };
+    let mut edit = None;
+    {
+        let (Some(doc), Some(view)) = (app.session.get(id), app.views.get_mut(i)) else { return false };
+        let s = &mut view.objects;
+        let Some(page) = s.page.filter(|_| s.selected.iter().any(|o| o.target.kind == ObjectKind::Path)) else { return false };
+        // Until the view finds its objects again after an edit, their references may name others.
+        let fresh = s.generation == Some(doc.edit_generation()) && doc.allows_modification();
+        let paths = page_paths(&mut s.paths, doc, page);
+        for (label, fill) in [(tl!("Fill colour"), true), (tl!("Stroke colour"), false)] {
+            let (objects, colours): (Vec<ObjectTarget>, Vec<Option<[f64; 3]>>) = s
+                .selected
+                .iter()
+                .filter(|o| o.target.kind == ObjectKind::Path)
+                .filter_map(|o| paths.get(o.target.index).map(|p| (o.target, p)))
+                .filter(|(_, p)| if fill { p.paint.fill.is_some() } else { p.paint.stroke })
+                .map(|(target, p)| (target, if fill { p.fill_rgb } else { p.stroke_rgb }))
+                .unzip();
+            // A colour without an RGB look (a pattern, a separation) shows as grey.
+            let current = colours.first().copied().flatten();
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::hover());
+                ui.painter().circle_filled(r.center(), 7.0, crate::comments::color32(current.unwrap_or([0.5; 3])));
+                ui.painter().circle_stroke(r.center(), 7.0, Stroke::new(1.0, Color32::from_black_alpha(40)));
+                let enabled = fresh && !objects.is_empty();
+                let button = ui.add_enabled(enabled, egui::Button::new(label));
+                // Open until a pick: the full picker commits once, on Apply.
+                if enabled {
+                    // Escape closes the grid only: the page, drawn after this panel, would also
+                    // clear the selection with it.
+                    let popup = egui::Popup::default_response_id(&button);
+                    if egui::Popup::is_id_open(ui.ctx(), popup) && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                        egui::Popup::close_id(ui.ctx(), popup);
+                    }
+                    egui::Popup::menu(&button).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+                        if let Some(c) = crate::comments::swatch_grid(ui, current) {
+                            edit =
+                                Some(Edit::RecolourObjects { page, objects: objects.clone(), fill: fill.then_some(c), stroke: (!fill).then_some(c) });
+                            ui.close();
+                        }
+                    });
+                }
+            });
+        }
+        if edit.is_some() {
+            s.pending = Some((s.selected.clone(), true));
+        }
+    }
+    // Applied now: the panel draws before the page, whose `prepare` would drop the remap of an
+    // edit still queued.
+    if let Some(edit) = edit {
+        app.apply_edit(edit);
+    }
+    ui.add_space(6.0);
+    ui.separator();
+    true
+}
+
 pub(crate) fn paint(painter: &egui::Painter, xf: &PageXform, page: usize, info: &DocInfo, selection: &ObjectSelection) {
     if selection.page != Some(page) {
         return;
@@ -587,14 +756,21 @@ pub(crate) fn paint(painter: &egui::Painter, xf: &PageXform, page: usize, info: 
     }
 }
 
-/// Keep the UI refusal actionable and translated; headless callers retain the detailed error.
-pub(crate) fn move_error(error: &pdfcraft_engine::EditError) -> String {
-    let detail = error.to_string();
-    match detail.as_str() {
+/// Keep a move's or an align's refusal (`detail`) actionable and translated; headless callers
+/// retain the detailed error. None for other edits, and for an align's own refusals ("already
+/// aligned"), which say what to do as they are.
+pub(crate) fn move_error(edit: &Edit, detail: &str) -> Option<String> {
+    let align = match edit {
+        Edit::MoveObjects { .. } => false,
+        Edit::AlignObjects { .. } => true,
+        _ => return None,
+    };
+    Some(match detail {
         "vertical text cannot be moved in a group" => tl!("Vertical text cannot be moved with this selection.").into(),
         "text used as a clipping path cannot be moved in a group" => tl!("Text used as a clipping path cannot be moved with this selection.").into(),
+        _ if align => return None,
         _ => tl!("These objects could not be moved. Select them again and try a smaller move.").into(),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -615,10 +791,31 @@ mod tests {
                 "These objects could not be moved. Select them again and try a smaller move.",
                 "This page contains objects that cannot be selected together.",
                 "Text and added items can't be deleted with this selection.",
+                "Arrange",
+                "Stroke colour",
             ] {
                 assert_ne!(crate::i18n::tr(lang, label), label, "{}: {label}", language.code);
             }
             assert_ne!(crate::i18n::trn(lang, 2, "{n} object selected", "{n} objects selected"), "2 objects selected", "{}", language.code);
         }
+    }
+
+    #[test]
+    fn an_align_refused_as_a_group_move_says_so_as_a_move_does() {
+        use pdfcraft_engine::{Edit, ObjectAlign};
+        let align = Edit::AlignObjects { page: 0, objects: Vec::new(), align: ObjectAlign::Left };
+        let shift = Edit::MoveObjects { page: 0, objects: Vec::new(), offset: [1.0, 0.0] };
+        for edit in [&align, &shift] {
+            assert_eq!(
+                super::move_error(edit, "vertical text cannot be moved in a group").as_deref(),
+                Some("Vertical text cannot be moved with this selection.")
+            );
+        }
+        assert_eq!(super::move_error(&align, "the objects are already aligned"), None);
+        assert_eq!(
+            super::move_error(&shift, "the objects are already aligned").as_deref(),
+            Some("These objects could not be moved. Select them again and try a smaller move.")
+        );
+        assert_eq!(super::move_error(&Edit::DeleteObjects { page: 0, objects: Vec::new() }, "vertical text cannot be moved in a group"), None);
     }
 }

@@ -2252,6 +2252,8 @@ certificate	Subject	Власник сертифіката
 	These objects could not be moved. Select them again and try a smaller move.	Не вдалося перемістити ці об’єкти. Виберіть їх знову та спробуйте менше зміщення.
 	This page contains objects that cannot be selected together.	На цій сторінці є об’єкти, які не можна виділити разом.
 	Text and added items can't be deleted with this selection.	Текст і додані елементи не можна видалити разом із цим виділенням.
+	Arrange	Упорядкувати
+	Stroke colour	Колір обведення
 	Fill colour	Колір заливки
 	No fill	Без заливки
 	Fill colour: none	Колір заливки: немає

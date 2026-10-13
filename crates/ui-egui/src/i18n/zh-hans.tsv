@@ -2196,6 +2196,8 @@
 	These objects could not be moved. Select them again and try a smaller move.	无法移动这些对象。请重新选择并尝试较小的移动距离。
 	This page contains objects that cannot be selected together.	此页面包含无法一起选择的对象。
 	Text and added items can't be deleted with this selection.	无法随此选区删除文本和添加的项目。
+	Arrange	排列
+	Stroke colour	描边颜色
 	Fill colour	填充颜色
 	No fill	无填充
 	Fill colour: none	填充颜色：无

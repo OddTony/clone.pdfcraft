@@ -1,7 +1,7 @@
 //! Multi-object editing through the real shell. Synthetic artwork and standard-font text only.
 use egui::{Key, Modifiers, Pos2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use pdfcraft_engine::{AddedText, Edit, EditableObject, ObjectKind};
 use pdfcraft_ui_egui::PdfCraftApp;
 
@@ -731,4 +731,213 @@ fn delete_in_the_frame_of_an_undo_leaves_the_restored_objects_alone() {
     h.key_press(Key::Delete);
     h.run_steps(4);
     assert_eq!(objects(&h), before);
+}
+
+fn right_click(h: &mut Harness<'static, PdfCraftApp>, p: Pos2) {
+    h.hover_at(p);
+    h.run_steps(1);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: p, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE });
+    }
+    h.run_steps(2);
+}
+fn menu_item(h: &mut Harness<'static, PdfCraftApp>, submenu: &str, item: &str) {
+    h.get_by_label(submenu).hover();
+    h.run_steps(3);
+    h.get_by_label(item).click();
+    h.run_steps(4);
+}
+fn disabled(h: &Harness<'static, PdfCraftApp>, label: &str) -> bool {
+    h.get_by_label(label).accesskit_node().is_disabled()
+}
+fn fills(h: &Harness<'static, PdfCraftApp>) -> Vec<[f64; 3]> {
+    let app = h.state();
+    app.session.get(app.views[0].id).unwrap().page_paths(0).unwrap().iter().map(|p| p.fill_rgb.unwrap()).collect()
+}
+fn undo(h: &mut Harness<'static, PdfCraftApp>) {
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.run_steps(4);
+}
+
+#[test]
+fn bring_to_front_in_the_page_menu_restacks_the_path_and_keeps_it_selected() {
+    // A pale panel (300..360 across, 360..400 down) partly under a blue one (320..380, 350..390).
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f 0 0 1 rg 320 110 60 40 re f");
+    let before = objects(&h);
+    let [pale, blue] = fills(&h).try_into().unwrap();
+    // Beside the blue panel.
+    let p = at(&h, 310.0, 390.0);
+    click(&mut h, p, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    right_click(&mut h, p);
+    assert!(!disabled(&h, "Arrange ⏵"));
+    menu_item(&mut h, "Arrange ⏵", "Bring to front");
+    assert_eq!(fills(&h), [blue, pale]);
+    assert_eq!(undo_label(&h).as_deref(), Some("Bring to front"));
+    h.get_by_label("1 object selected");
+    // The selection followed the pale panel to its new place in the list.
+    h.hover_at(p);
+    h.run_steps(2);
+    h.key_press(Key::Delete);
+    h.run_steps(4);
+    assert_eq!(fills(&h), [blue]);
+    undo(&mut h);
+    undo(&mut h);
+    assert_eq!(objects(&h), before);
+}
+
+#[test]
+fn align_left_in_the_page_menu_lines_up_the_selection_and_keeps_it() {
+    // A panel 300..360 across, 360..400 down; the figure is 40..100 across.
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f");
+    let before = objects(&h);
+    let panel = at(&h, 330.0, 380.0);
+    for p in [at(&h, 60.0, 145.0), panel] {
+        click(&mut h, p, Modifiers::SHIFT);
+    }
+    h.get_by_label("2 objects selected");
+    right_click(&mut h, panel);
+    // Distributing takes three objects, arranging one.
+    assert!(disabled(&h, "Distribute ⏵") && disabled(&h, "Arrange ⏵"));
+    menu_item(&mut h, "Align ⏵", "Left");
+    let after = objects(&h);
+    for old in &before {
+        let new = after.iter().find(|o| o.target == old.target).unwrap();
+        let dx = if old.target.kind == ObjectKind::Path { -260.0 } else { 0.0 };
+        assert!(near(new.rect, [old.rect[0] + dx, old.rect[1], old.rect[2] + dx, old.rect[3]]), "{old:?} -> {new:?}");
+    }
+    assert_eq!(undo_label(&h).as_deref(), Some("Align objects"));
+    // Again: the engine's refusal is said, and the selection stays.
+    right_click(&mut h, panel);
+    menu_item(&mut h, "Align ⏵", "Left");
+    assert!(h.state().toast.as_ref().unwrap().0.contains("Align objects failed: the objects are already aligned"));
+    assert_eq!(objects(&h), after);
+    // The figure is still selected along with the panel: Delete takes both.
+    h.get_by_label("2 objects selected");
+    h.hover_at(panel);
+    h.run_steps(2);
+    h.key_press(Key::Delete);
+    h.run_steps(4);
+    assert!(objects(&h).iter().all(|o| matches!(o.target.kind, ObjectKind::Text | ObjectKind::Added)));
+    undo(&mut h);
+    undo(&mut h);
+    assert_eq!(objects(&h), before);
+}
+
+#[test]
+fn delete_in_the_page_menu_removes_the_selection_in_one_step() {
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f");
+    let before = objects(&h);
+    let panel = at(&h, 330.0, 380.0);
+    for p in [at(&h, 60.0, 145.0), panel] {
+        click(&mut h, p, Modifiers::SHIFT);
+    }
+    h.get_by_label("2 objects selected");
+    right_click(&mut h, panel);
+    h.get_all_by_label("Delete").last().unwrap().click();
+    h.run_steps(4);
+    let after = objects(&h);
+    assert_eq!(after.len(), 3);
+    assert!(after.iter().all(|o| matches!(o.target.kind, ObjectKind::Text | ObjectKind::Added)), "{after:?}");
+    assert_eq!(undo_label(&h).as_deref(), Some("Delete objects"));
+    h.get_by_label("Shift-click to select several objects. Drag empty space to select an area.");
+    undo(&mut h);
+    assert_eq!(objects(&h), before);
+}
+
+#[test]
+fn the_page_menu_leaves_text_out_of_arrange_and_delete() {
+    let mut h = harness();
+    let headline = at(&h, 55.0, 70.0);
+    click(&mut h, headline, Modifiers::SHIFT);
+    h.get_by_label("1 object selected");
+    right_click(&mut h, headline);
+    assert!(disabled(&h, "Arrange ⏵") && disabled(&h, "Align ⏵"));
+    assert!(h.get_all_by_label("Delete").last().unwrap().accesskit_node().is_disabled());
+    assert!(!dirty(&h));
+}
+
+#[test]
+fn the_fill_colour_swatch_recolours_the_selected_path_in_one_step() {
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f");
+    let before = fills(&h);
+    let p = at(&h, 330.0, 380.0);
+    click(&mut h, p, Modifiers::NONE);
+    h.get_by_label("1 object selected");
+    // The panel only fills.
+    assert!(disabled(&h, "Stroke colour"));
+    h.get_by_label("Fill colour").click();
+    h.run_steps(2);
+    h.get_by_label("Red").click();
+    h.run_steps(4);
+    let [fill] = fills(&h).try_into().unwrap();
+    assert!(fill.iter().zip([0.89, 0.13, 0.13]).all(|(a, b)| (a - b).abs() < 0.01), "{fill:?}");
+    assert_eq!(undo_label(&h).as_deref(), Some("Change colour"));
+    h.get_by_label("1 object selected");
+    undo(&mut h);
+    assert_eq!(fills(&h), before);
+}
+
+#[test]
+fn an_arrange_with_nothing_to_pass_explains_and_changes_nothing() {
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f");
+    let p = at(&h, 330.0, 380.0);
+    click(&mut h, p, Modifiers::NONE);
+    right_click(&mut h, p);
+    menu_item(&mut h, "Arrange ⏵", "Bring to front");
+    assert!(h.state().toast.as_ref().unwrap().0.contains("Bring to front failed: nothing above this object overlaps it"));
+    assert!(!dirty(&h));
+    h.get_by_label("1 object selected");
+}
+
+#[test]
+fn escape_closes_the_colour_grid_and_keeps_the_selection() {
+    let mut h = harness_document(false, false, " 0.8 0.9 1 rg 300 100 60 40 re f");
+    let p = at(&h, 330.0, 380.0);
+    click(&mut h, p, Modifiers::NONE);
+    h.get_by_label("Fill colour").click();
+    h.run_steps(2);
+    h.get_by_label("Red");
+    // The panel draws before the page: the grid takes the key, or the page would clear too.
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert!(h.query_by_label("Red").is_none());
+    h.get_by_label("1 object selected");
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    h.get_by_label("Shift-click to select several objects. Drag empty space to select an area.");
+}
+
+#[test]
+fn an_arranged_copy_stacked_on_its_twin_stays_selected() {
+    // The figure drawn twice in the same place, as a duplicated logo is.
+    let mut h = harness_document(false, false, " q 1 0 0 1 40 340 cm /Figure Do Q");
+    let p = at(&h, 60.0, 145.0);
+    // A plain click would hand the image to the single-image tool.
+    click(&mut h, p, Modifiers::SHIFT);
+    h.get_by_label("1 object selected");
+    right_click(&mut h, p);
+    menu_item(&mut h, "Arrange ⏵", "Send to back");
+    assert_eq!(undo_label(&h).as_deref(), Some("Send to back"));
+    h.get_by_label("1 object selected");
+    // The selection followed the copy down: it has its twin to pass again.
+    right_click(&mut h, p);
+    menu_item(&mut h, "Arrange ⏵", "Bring to front");
+    assert_eq!(undo_label(&h).as_deref(), Some("Bring to front"));
+    h.get_by_label("1 object selected");
+}
+
+#[test]
+fn an_aligned_paragraph_with_a_twin_elsewhere_stays_selected() {
+    // A second "Keep here", the same size, at the left (40..95 across, 241..253 down).
+    let mut h = harness_document(false, false, " BT /F1 12 Tf 40 250 Td (Keep here) Tj ET 0.8 0.9 1 rg 300 100 60 40 re f");
+    let panel = at(&h, 330.0, 380.0);
+    for p in [at(&h, 55.0, 247.0), panel] {
+        click(&mut h, p, Modifiers::SHIFT);
+    }
+    h.get_by_label("2 objects selected");
+    right_click(&mut h, panel);
+    menu_item(&mut h, "Align ⏵", "Left");
+    assert_eq!(undo_label(&h).as_deref(), Some("Align objects"));
+    h.get_by_label("2 objects selected");
 }
