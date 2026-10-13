@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use pdfcraft_cos::{Document, SaveOptions, write_incremental};
+use pdfcraft_cos::{Document, SaveOptions, write_full, write_incremental};
 
 use super::*;
 
@@ -1825,6 +1825,52 @@ fn a_line_drawn_twice_is_replaced_everywhere() {
 }
 
 #[test]
+fn replacing_a_line_keeps_a_distinct_nearby_line() {
+    // 12 pt lines 6 pt apart: the glyph boxes overlap by more than half the smaller box,
+    // but the baselines are different lines (#1316).
+    let src = "BT /F1 12 Tf 1 0 0 1 72 700 Tm (Alpha) Tj 0 -6 Td (Beta) Tj ET";
+    let listed = |doc: &Document| text::text_lines(doc, 0).unwrap().into_iter().map(|l| l.text).collect::<Vec<_>>();
+    for paragraph in [false, true] {
+        let mut doc = text_page(src);
+        assert_eq!(listed(&doc), ["Alpha", "Beta"]);
+        assert_eq!(text::text_blocks(&doc, 0).unwrap().len(), 2);
+        if paragraph {
+            text::rewrite_block(&mut doc, 0, 0, Some("ALPHA"), &text::BlockStyle::default()).unwrap();
+        } else {
+            text::replace_line(&mut doc, 0, 0, "ALPHA").unwrap();
+        }
+        assert_eq!(listed(&doc), ["ALPHA", "Beta"]);
+        assert!(String::from_utf8_lossy(&page_content_bytes(&doc, 0)).contains("(Beta)"));
+        for bytes in [write_incremental(&doc, &SaveOptions::default()).unwrap(), write_full(&doc, &SaveOptions::default()).unwrap()] {
+            let back = Document::open(Arc::new(bytes)).unwrap();
+            assert!(back.repair_log().is_empty());
+            assert_eq!(listed(&back), ["ALPHA", "Beta"]);
+        }
+    }
+    // The same word on the next line is still a different line.
+    let mut same = text_page("BT /F1 12 Tf 1 0 0 1 72 700 Tm (Alpha) Tj 0 -6 Td (Alpha) Tj ET");
+    text::replace_line(&mut same, 0, 0, "ALPHA").unwrap();
+    assert_eq!(listed(&same), ["ALPHA", "Alpha"]);
+    // Ordinary leading, and a paragraph far enough to group apart, keep the neighbour.
+    let mut spaced = text_page("BT /F1 12 Tf 1 0 0 1 72 700 Tm (Alpha) Tj 0 -14.4 Td (Beta) Tj ET");
+    text::replace_line(&mut spaced, 0, 0, "ALPHA").unwrap();
+    assert_eq!(listed(&spaced), ["ALPHA", "Beta"]);
+    let mut apart = text_page("BT /F1 12 Tf 1 0 0 1 72 700 Tm (Alpha) Tj 0 -40 Td (Beta) Tj ET");
+    text::rewrite_block(&mut apart, 0, 0, Some("ALPHA"), &text::BlockStyle::default()).unwrap();
+    assert_eq!(listed(&apart), ["ALPHA", "Beta"]);
+    // A second copy at the same position is still one replacement.
+    for paragraph in [false, true] {
+        let mut duplicate = text_page("BT /F1 12 Tf 1 0 0 1 72 700 Tm (Alpha) Tj ET BT /F1 12 Tf 1 0 0 1 72 700 Tm (Alpha) Tj ET");
+        if paragraph {
+            text::rewrite_block(&mut duplicate, 0, 0, Some("ALPHA"), &text::BlockStyle::default()).unwrap();
+        } else {
+            text::replace_line(&mut duplicate, 0, 0, "ALPHA").unwrap();
+        }
+        assert_eq!(listed(&duplicate), ["ALPHA"]);
+    }
+}
+
+#[test]
 fn paragraphs_move_and_rewrap_to_a_new_width() {
     let para = "BT /F1 10 Tf 12 TL 100 700 Td (One two three four five six seven) Tj T* (eight nine ten eleven twelve) Tj ET";
     let close = |a: f64, b: f64| (a - b).abs() < 0.5;
@@ -3237,4 +3283,28 @@ fn subset_indic_font_without_legacy_name_keeps_logical_text() {
     assert_eq!(lines.len(), 1);
     assert!(!lines[0].visual_order);
     assert_eq!(lines[0].text, "\u{092C}\u{0922}\u{093C}\u{093F}\u{092F}\u{093E}");
+}
+
+/// An added item is written out as a specific standard-14 face (`/Times-Italic`, `/Helvetica-Bold`
+/// …), so it has to be *measured* with that same face. Measuring the upright face while writing
+/// the italic one mis-sizes every box: Times-Italic `A` is 611 against Times-Roman's 722.
+#[test]
+fn an_items_measured_face_is_the_face_it_is_written_as() {
+    for family in [Family::Helvetica, Family::Times, Family::Courier] {
+        for bold in [false, true] {
+            for italic in [false, true] {
+                let written = family.base_font(bold, italic);
+                let measured = family.std14(bold, italic);
+                assert_eq!(written, measured.base_font(), "{family:?} bold={bold} italic={italic}");
+                // ... and the public measure reaches that face, rather than an upright stand-in.
+                assert_eq!(family.width("Anna", 12.0, bold, italic), measured.text_width("Anna", 12.0), "{family:?} bold={bold} italic={italic}");
+            }
+        }
+    }
+    // The faces really do differ, so the assertions above are not all comparing the same number.
+    let times = |italic| Family::Times.width("Anna", 12.0, false, italic);
+    assert_ne!(times(false), times(true), "Times-Italic is not Times-Roman");
+    // Courier is monospaced in every style: equal widths here are correct, not a collapsed face.
+    let courier = |italic| Family::Courier.width("Anna", 12.0, false, italic);
+    assert_eq!(courier(false), courier(true));
 }
