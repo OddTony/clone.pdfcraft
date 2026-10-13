@@ -88,15 +88,40 @@ pub struct Motion {
     /// egui's own animation time and scroll animation, kept while they are changed here.
     egui_times: Option<(f32, ScrollAnimation)>,
     wheel: WheelReader,
+    touch_active: bool,
 }
 
 impl Default for Motion {
     fn default() -> Self {
-        Self { reduced: false, source: None, asked_at: f64::NEG_INFINITY, egui_times: None, wheel: WheelReader::default() }
+        Self { reduced: false, source: None, asked_at: f64::NEG_INFINITY, egui_times: None, wheel: WheelReader::default(), touch_active: false }
     }
 }
 
 impl Motion {
+    /// End an interrupted touch gesture before a discrete wheel event or focus loss.
+    /// This runs before egui so animated and immediate scrolling see the same phases.
+    pub(crate) fn normalize_raw_input(&mut self, raw: &mut egui::RawInput) {
+        for event in std::mem::take(&mut raw.events) {
+            let interrupted = matches!(event, Event::WindowFocused(false))
+                || matches!(event, Event::MouseWheel { unit: MouseWheelUnit::Line | MouseWheelUnit::Page, phase: TouchPhase::Move, .. });
+            if self.touch_active && interrupted {
+                raw.events.push(Event::MouseWheel {
+                    unit: MouseWheelUnit::Point,
+                    delta: Vec2::ZERO,
+                    modifiers: Modifiers::NONE,
+                    phase: TouchPhase::Cancel,
+                });
+                self.touch_active = false;
+            }
+            match event {
+                Event::MouseWheel { phase: TouchPhase::Start, .. } => self.touch_active = true,
+                Event::MouseWheel { phase: TouchPhase::End | TouchPhase::Cancel, .. } => self.touch_active = false,
+                _ => {}
+            }
+            raw.events.push(event);
+        }
+    }
+
     /// Call once at the start of every pass, before any ui reads the wheel or draws.
     pub(crate) fn begin_pass(&mut self, ctx: &egui::Context, effects: AnimationEffects) {
         let now = ctx.input(|i| i.time);
@@ -521,6 +546,78 @@ mod tests {
             let eguis = ctx.input(|i| i.zoom_delta());
             assert_eq!(zoom_delta(ctx), eguis);
         });
+    }
+
+    #[test]
+    fn touch_wheel_normalization_and_egui_frame_regression() {
+        for effects in [AnimationEffects::Off, AnimationEffects::On] {
+            let ctx = egui::Context::default();
+            let mut motion = Motion::default();
+            let mut time = 0.0;
+
+            let mut run_frame = |events: Vec<Event>| -> (Vec2, f32) {
+                time += 1.0 / 60.0;
+                let mut raw = egui::RawInput { time: Some(time), events, ..Default::default() };
+                motion.normalize_raw_input(&mut raw);
+                let mut scroll = Vec2::ZERO;
+                let mut zoom = 1.0;
+                ctx.run_ui(raw, |ui| {
+                    motion.begin_pass(ui.ctx(), effects);
+                    scroll = ui.ctx().input(|i| i.smooth_scroll_delta);
+                    zoom = zoom_delta(ui.ctx());
+                })
+                .textures_delta
+                .clear();
+                (scroll, zoom)
+            };
+
+            // A Ctrl touch gesture whose End event never arrived.
+            let _ = run_frame(vec![wheel(MouseWheelUnit::Point, vec2(0.0, 10.0), TouchPhase::Start, Modifiers::COMMAND)]);
+            let _ = run_frame(vec![wheel(MouseWheelUnit::Point, vec2(0.0, 10.0), TouchPhase::Move, Modifiers::NONE)]);
+
+            // Line Move(NONE): should recover normal scrolling and NOT zoom (zoom == 1.0)
+            let (scroll, zoom) = run_frame(vec![wheel(MouseWheelUnit::Line, vec2(0.0, -1.0), TouchPhase::Move, Modifiers::NONE)]);
+            assert_eq!(zoom, 1.0, "effects {effects:?}: Line notch with NONE must not zoom despite unended Ctrl touch");
+            assert!(scroll.y < 0.0, "effects {effects:?}: Line notch should scroll normally: {scroll:?}");
+
+            // Focus loss also terminates an unfinished gesture.
+            let _ = run_frame(vec![wheel(MouseWheelUnit::Point, vec2(0.0, 10.0), TouchPhase::Start, Modifiers::COMMAND)]);
+            let _ = run_frame(vec![Event::WindowFocused(false)]);
+            let (scroll_after_blur, zoom_after_blur) =
+                run_frame(vec![wheel(MouseWheelUnit::Line, vec2(0.0, -1.0), TouchPhase::Move, Modifiers::NONE)]);
+            assert_eq!(zoom_after_blur, 1.0, "effects {effects:?}: after blur, Line notch must not zoom");
+            assert!(scroll_after_blur.y < 0.0, "effects {effects:?}: after blur, Line notch should scroll");
+
+            let _ = run_frame(vec![Event::WindowFocused(true)]);
+            for _ in 0..60 {
+                let _ = run_frame(Vec::new());
+            }
+
+            // Normal Ctrl+wheel still zooms
+            let (scroll_ctrl, zoom_ctrl) = run_frame(vec![wheel(MouseWheelUnit::Line, vec2(0.0, 1.0), TouchPhase::Move, Modifiers::COMMAND)]);
+            assert!(zoom_ctrl > 1.0, "effects {effects:?}: normal Ctrl+wheel must zoom: {zoom_ctrl}");
+            assert_eq!(scroll_ctrl, Vec2::ZERO, "effects {effects:?}: zooming does not scroll");
+
+            // Normal Point touch inertia preserves modifiers.
+            let _ = run_frame(vec![wheel(MouseWheelUnit::Point, vec2(0.0, 5.0), TouchPhase::Start, Modifiers::COMMAND)]);
+            let (scroll_touch, zoom_touch) = run_frame(vec![wheel(MouseWheelUnit::Point, vec2(0.0, 5.0), TouchPhase::Move, Modifiers::NONE)]);
+            assert!(zoom_touch > 1.0, "effects {effects:?}: genuine touch inertia preserves Ctrl modifier: {zoom_touch}");
+            assert_eq!(scroll_touch, Vec2::ZERO);
+            let _ = run_frame(vec![wheel(MouseWheelUnit::Point, Vec2::ZERO, TouchPhase::End, Modifiers::NONE)]);
+        }
+    }
+    #[test]
+    fn touch_wheel_state_belongs_to_one_window() {
+        let mut first = Motion::default();
+        let mut second = Motion::default();
+        let mut start =
+            egui::RawInput { events: vec![wheel(MouseWheelUnit::Point, Vec2::ZERO, TouchPhase::Start, Modifiers::COMMAND)], ..Default::default() };
+        first.normalize_raw_input(&mut start);
+        let mut notch = egui::RawInput { events: vec![notch(-1.0, Modifiers::NONE)], ..Default::default() };
+        second.normalize_raw_input(&mut notch);
+        assert_eq!(notch.events.len(), 1, "another window must not cancel this window's wheel");
+        first.normalize_raw_input(&mut notch);
+        assert!(matches!(notch.events.first(), Some(Event::MouseWheel { phase: TouchPhase::Cancel, .. })));
     }
 
     #[test]

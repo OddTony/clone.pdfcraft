@@ -277,6 +277,39 @@ fn frames_after_a_notch(system_reduced: bool, animation_effects: &str, zooming: 
         .collect()
 }
 
+#[test]
+fn a_mouse_wheel_after_an_interrupted_zoom_gesture_scrolls_the_document() {
+    // kittest's eframe harness does not call raw_input_hook; deliver events through the
+    // same hook that native eframe invokes before egui processes a frame.
+    let send = |h: &mut Harness<'static, PdfCraftApp>, event| {
+        let ctx = h.ctx.clone();
+        let mut raw = egui::RawInput { events: vec![event], ..Default::default() };
+        eframe::App::raw_input_hook(h.state_mut(), &ctx, &mut raw);
+        for event in raw.events {
+            h.event(event);
+        }
+    };
+    for effects in ["on", "off"] {
+        let mut h = harness_stepping(1.0 / 60.0, &[("layout", "continuous"), ("zoom", "100")]);
+        h.state_mut().set_option("animation_effects", effects).unwrap();
+        h.hover_at(h.state().views[0].viewport_rect().center());
+        h.run_steps(2);
+        send(
+            &mut h,
+            egui::Event::MouseWheel { unit: MouseWheelUnit::Point, delta: egui::Vec2::ZERO, phase: TouchPhase::Start, modifiers: Modifiers::COMMAND },
+        );
+        h.step();
+        send(&mut h, wheel(MouseWheelUnit::Point, 5.0, TouchPhase::Move));
+        h.run_steps(3);
+        let zoom = h.state().views[0].zoom;
+        let top = rect(&h, 0).unwrap().min.y;
+        send(&mut h, wheel(MouseWheelUnit::Line, -1.0, TouchPhase::Move));
+        h.run_steps(40);
+        assert_eq!(h.state().views[0].zoom, zoom, "{effects}: ordinary wheel must not zoom");
+        assert!(rect(&h, 0).unwrap().min.y < top - 1.0, "{effects}: wheel must move the page up");
+    }
+}
+
 /// The system's answer and the Animation effects choice, for each way to have them off and
 /// each way to have them on.
 const AT_ONCE: [(bool, &str); 3] = [(true, "system"), (false, "off"), (true, "off")];
