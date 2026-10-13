@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** patch (gap 8: PS/EPS export Layer B — embedded fonts as text: Type 42, CFF/CID Type 0 composites, Type 42/Type 1 subsetting; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** patch (gap 8: PS/EPS export moved from missing to partial — Layer A with the Ghostscript oracle) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** patch (gap 2: hayro patch counts after the native-gradient backport) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (gap 6: #1398 stamps read upright on rotated pages; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -159,11 +160,15 @@ update the numbers.
 - **Missing:** Word export that keeps layout; Excel and PowerPoint export; creating PDFs from Office,
 - **Missing:** Word export that keeps layout; Excel and PowerPoint export; creating PDFs from Office,
   HTML, web pages and PostScript; SVG/XML/JPEG 2000 export. PostScript/EPS *export* is partially
-  done (Layer A + Layer B W1, #1561): geometry, images, shadings, Type 1 text, embedded TrueType
-  as Type 42 text and annotations redraw as a DSC-structured program whose Ghostscript-rasterized
-  output matches PdfCraft's own render within a mean per-channel delta of 2/255 and whose text
-  Ghostscript's txtwrite extracts — transparency is unflattened and CFF/CID fonts vectorized,
-  both recorded as warnings; tiling patterns fall back to flat gray.
+  done (Layer A + Layer B, #1561): geometry, images, shadings, Type 1 text, embedded fonts as text
+  (TrueType as Type 42 with a synthesized cmap, embedded CFF promoted to CIDFontType0 and Type0/CID
+  fonts as PS Type 0 composites, Type 42/Type 1 subsetting with seac programs and whole CFF passing
+  through) and annotations redraw as a DSC-structured program whose Ghostscript-rasterized output
+  matches PdfCraft's own render within a mean per-channel delta of 2/255, with txtwrite extraction
+  where the emitted font carries glyph names (the Type 42 base-font arms; the composite arms prove
+  ink and raster parity, not extraction) — transparency is unflattened (Layer C), CFF subsetting is
+  a Layer D revisit, and true CMYK/Separation emission and tiling patterns fall to a follow-up PR
+  (tiling falls back to flat gray today), each degradation recorded as a warning.
 - **Evidence:** `create.export-docx` partial; the synthetic invoice regression for
   [#773](https://github.com/storytold/pdfcraft/issues/773) now covers absent inferred borders,
   floating watermark text and per-page section sizes. Exact font matching, vector rules and
