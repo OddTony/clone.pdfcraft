@@ -789,7 +789,7 @@ impl Automation {
                 let (ids, unusable): (Vec<Value>, Vec<Value>) = (Vec::new(), Vec::new());
                 json!({ "count": ids.len(), "ids": ids, "unusable": unusable })
             }
-            "sign_pkcs11_ids" => {
+            "sign_token_ids" => {
                 #[cfg(not(target_arch = "wasm32"))]
                 let (ids, unusable): (Vec<Value>, Vec<Value>) = {
                     let module_arg =
