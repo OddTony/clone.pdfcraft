@@ -2190,6 +2190,10 @@ signature pad	Type	Vtipkaj
 	Move objects	Premakni objekte
 	Align objects	Poravnaj objekte
 	Distribute objects	Porazdeli objekte
+	Resize object	Spremeni velikost objekta
+	Change colour	Spremeni barvo
+	Delete object	Izbriši objekt
+	Delete objects	Izbriši objekte
 	No fill	Brez polnila
 	Pages: {k} of {n}	Strani: {k} od {n}
 	Preview unavailable: {e}	Predogled ni na voljo: {e}

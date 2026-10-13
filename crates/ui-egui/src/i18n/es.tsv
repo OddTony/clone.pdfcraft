@@ -2355,6 +2355,10 @@ action wizard	Start	Iniciar
 	Move objects	Mover objetos
 	Align objects	Alinear objetos
 	Distribute objects	Distribuir objetos
+	Resize object	Cambiar tamaño del objeto
+	Change colour	Cambiar color
+	Delete object	Eliminar objeto
+	Delete objects	Eliminar objetos
 	Vertical text cannot be moved with this selection.	El texto vertical no se puede mover con esta selección.
 	Text used as a clipping path cannot be moved with this selection.	El texto usado como trazado de recorte no se puede mover con esta selección.
 	These objects could not be moved. Select them again and try a smaller move.	No se pudieron mover estos objetos. Vuelve a seleccionarlos e intenta un desplazamiento menor.

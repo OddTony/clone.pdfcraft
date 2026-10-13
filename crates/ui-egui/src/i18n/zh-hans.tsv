@@ -2183,6 +2183,10 @@
 	Move objects	移动多个对象
 	Align objects	对齐对象
 	Distribute objects	分布对象
+	Resize object	调整对象大小
+	Change colour	更改颜色
+	Delete object	删除对象
+	Delete objects	删除多个对象
 	Vertical text cannot be moved with this selection.	无法随此选区移动竖排文本。
 	Text used as a clipping path cannot be moved with this selection.	无法随此选区移动用作剪切路径的文本。
 	These objects could not be moved. Select them again and try a smaller move.	无法移动这些对象。请重新选择并尝试较小的移动距离。

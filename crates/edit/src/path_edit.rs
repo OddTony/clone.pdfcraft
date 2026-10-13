@@ -38,7 +38,7 @@ enum Edit {
 /// nothing but the path move with it; clips shared with other content stay.
 pub fn change_path(doc: &mut Document, page: usize, index: usize, change: &PathChange) -> Result<(), EditError> {
     match change {
-        PathChange::Transform(t) => rewrite(doc, page, &[(index, Edit::Transform(Matrix(*t)))]),
+        PathChange::Transform(t) => rewrite(doc, page, &[(index, Edit::Transform(Matrix(*t)))], &[]),
         PathChange::Recolour { fill, stroke } => recolour_paths(doc, page, &[index], *fill, *stroke),
     }
 }
@@ -54,13 +54,19 @@ pub fn recolour_paths(doc: &mut Document, page: usize, indexes: &[usize], fill: 
     }
     let clamp = |c: Option<[f64; 3]>| c.map(|c| c.map(|v| v.clamp(0.0, 1.0)));
     let (fill, stroke) = (clamp(fill), clamp(stroke));
-    rewrite(doc, page, &indexes.iter().map(|&i| (i, Edit::Recolour { fill, stroke })).collect::<Vec<_>>())
+    rewrite(doc, page, &indexes.iter().map(|&i| (i, Edit::Recolour { fill, stroke })).collect::<Vec<_>>(), &[])
 }
 
 /// Delete paths `indexes` (from [`page_paths`]) from `page`. Only their operators go: the
 /// graphics state and marked content around them stay.
 pub fn delete_paths(doc: &mut Document, page: usize, indexes: &[usize]) -> Result<(), EditError> {
-    rewrite(doc, page, &indexes.iter().map(|&i| (i, Edit::Delete)).collect::<Vec<_>>())
+    delete_paths_and_images(doc, page, indexes, &[])
+}
+
+/// [`delete_paths`] that also deletes images `images` (from [`crate::page_images`]): only
+/// their `Do` operators go, in the same splice.
+pub(crate) fn delete_paths_and_images(doc: &mut Document, page: usize, paths: &[usize], images: &[usize]) -> Result<(), EditError> {
+    rewrite(doc, page, &paths.iter().map(|&i| (i, Edit::Delete)).collect::<Vec<_>>(), images)
 }
 
 /// Moves several paths, each by its own user-space offset, in one splice.
@@ -69,16 +75,19 @@ pub(crate) fn translate_paths(doc: &mut Document, page: usize, moves: &[(usize, 
     if moves.is_empty() {
         return Ok(());
     }
-    rewrite(doc, page, &moves.iter().map(|&(i, [x, y])| (i, Edit::Transform(Matrix::translate(x, y)))).collect::<Vec<_>>())
+    rewrite(doc, page, &moves.iter().map(|&(i, [x, y])| (i, Edit::Transform(Matrix::translate(x, y)))).collect::<Vec<_>>(), &[])
 }
 
 /// Plan every edit against one inventory, splice them into the page's content in one pass, and
-/// replace `doc` only when the edited page still reads.
-fn rewrite(doc: &mut Document, page: usize, edits: &[(usize, Edit)]) -> Result<(), EditError> {
-    if edits.is_empty() || edits.len() > MAX_MOVE_OBJECTS {
+/// replace `doc` only when the edited page still reads. `images` (from [`crate::page_images`])
+/// are deleted in the same pass.
+fn rewrite(doc: &mut Document, page: usize, edits: &[(usize, Edit)], images: &[usize]) -> Result<(), EditError> {
+    let count = edits.len().saturating_add(images.len());
+    if count == 0 || count > MAX_MOVE_OBJECTS {
         return Err(EditError::Invalid(format!("select between 1 and {MAX_MOVE_OBJECTS} vector paths")));
     }
-    let paths = page_paths(doc, page)?;
+    // Images can still be deleted from a page with too many paths to list.
+    let paths = if edits.is_empty() { Vec::new() } else { page_paths(doc, page)? };
     let p = pdfcraft_model::pages(doc).into_iter().nth(page).ok_or(EditError::NoSuchPage(page))?;
     let streams = checked_streams(doc, page)?;
     let marked: Vec<bool> = streams.iter().map(|(o, _)| crate::stream_tag(doc, o).is_some()).collect();
@@ -89,6 +98,18 @@ fn rewrite(doc: &mut Document, page: usize, edits: &[(usize, Edit)]) -> Result<(
     let mut before: BTreeMap<usize, Vec<Op>> = BTreeMap::new();
     let mut after: BTreeMap<usize, Vec<Op>> = BTreeMap::new();
     let mut removed = BTreeSet::new();
+    let images_left = if images.is_empty() {
+        None
+    } else {
+        let all = crate::page_images(doc, page)?;
+        let doomed = images
+            .iter()
+            .map(|&i| all.get(i))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| EditError::Invalid("a selected image no longer exists; select it again".into()))?;
+        removed.extend(crate::images::joined_dos(&streams, &ops, &doomed)?);
+        Some(all.len().saturating_sub(images.len()))
+    };
     let mut seen = BTreeSet::new();
     for (index, edit) in edits {
         if !seen.insert(*index) {
@@ -166,8 +187,13 @@ fn rewrite(doc: &mut Document, page: usize, edits: &[(usize, Edit)]) -> Result<(
     // The added operators count towards the page's budgets: keep its paths readable. A path
     // moved out of its clip or off the page would leave the list and shift the indexes after it.
     let deleted = edits.iter().filter(|(_, edit)| matches!(edit, Edit::Delete)).count();
-    if page_paths(&work, page)?.len() != paths.len().saturating_sub(deleted) {
+    if !edits.is_empty() && page_paths(&work, page)?.len() != paths.len().saturating_sub(deleted) {
         return Err(EditError::Invalid("the vector path would be moved off the page or out of its clip".into()));
+    }
+    if let Some(left) = images_left
+        && crate::page_images(&work, page)?.len() != left
+    {
+        return Err(EditError::Invalid("a selected image could not be deleted; select the objects again".into()));
     }
     *doc = work;
     Ok(())

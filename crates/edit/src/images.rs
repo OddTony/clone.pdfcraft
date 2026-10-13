@@ -34,6 +34,8 @@ pub struct PageImage {
     pub height: u32,
     stream: usize,
     op: usize,
+    /// Where its `Do` (operands first) starts in that stream.
+    span: usize,
     /// CTM before `Do`, excluding a Form's own Matrix.
     draw_matrix: [f64; 6],
     clips: Vec<ClipPath>,
@@ -165,6 +167,7 @@ pub fn page_images(doc: &Document, page: usize) -> Result<Vec<PageImage>, EditEr
                     height: if is_form { 0 } else { s.dict.int(b"Height").unwrap_or(0).clamp(0, u32::MAX as i64) as u32 },
                     stream: si,
                     op: i,
+                    span: op.span.start,
                     draw_matrix: ctm.0,
                     clips: state.placement.clips.clone(),
                 });
@@ -238,6 +241,7 @@ pub fn reading_images(doc: &Document, page: usize) -> Result<Vec<PageImage>, Edi
                     height: s.dict.int(b"Height").unwrap_or(0).max(0) as u32,
                     stream,
                     op: i,
+                    span: op.span.start,
                     draw_matrix: ctm.0,
                     clips: st.placement.clips.clone(),
                 });
@@ -474,6 +478,29 @@ pub(crate) fn transform_scope(
     Ok(isolated)
 }
 
+/// The `Do` drawing each of `images` (from [`page_images`] of these `streams`) among `ops`, the
+/// operators of the streams joined ([`pdfcraft_content::Pieces::join`]).
+pub(crate) fn joined_dos(streams: &[(Object, Vec<u8>)], ops: &[Op], images: &[&PageImage]) -> Result<Vec<usize>, EditError> {
+    let too_large = || EditError::Invalid("the image content is too large".into());
+    // Each stream starts after the one before it and the newline that joins them.
+    let mut starts = Vec::with_capacity(streams.len());
+    let mut offset = 0_usize;
+    for (_, data) in streams {
+        starts.push(offset);
+        offset = offset.checked_add(data.len()).and_then(|n| n.checked_add(1)).ok_or_else(too_large)?;
+    }
+    let dos: std::collections::BTreeMap<usize, usize> =
+        ops.iter().enumerate().filter(|(_, op)| op.is("Do")).map(|(i, op)| (op.span.start, i)).collect();
+    images
+        .iter()
+        .map(|image| {
+            let start = starts.get(image.stream).ok_or_else(|| EditError::Invalid("the image stream is missing".into()))?;
+            let at = start.checked_add(image.span).ok_or_else(too_large)?;
+            dos.get(&at).copied().ok_or_else(|| EditError::Invalid("the image operation could not be located".into()))
+        })
+        .collect()
+}
+
 fn transform_image(
     doc: &mut Document,
     page: &pdfcraft_model::Page,
@@ -484,22 +511,10 @@ fn transform_image(
     if !transform.iter().all(|v| v.is_finite() && v.abs() <= 1e12) {
         return Err(EditError::Invalid("the image transform must be finite and no larger than 1e12".into()));
     }
-    let mut offset = 0_usize;
-    for (_, data) in streams.iter().take(image.stream) {
-        offset = offset
-            .checked_add(data.len())
-            .and_then(|n| n.checked_add(1))
-            .ok_or_else(|| EditError::Invalid("the image content is too large".into()))?;
-    }
-    let data = streams.get(image.stream).ok_or_else(|| EditError::Invalid("the image stream is missing".into()))?;
-    let op = parse(&data.1).ops.get(image.op).cloned().ok_or_else(|| EditError::Invalid("the image operation is missing".into()))?;
-    let span = offset.checked_add(op.span.start).ok_or_else(|| EditError::Invalid("the image content is too large".into()))?;
     let pieces = pdfcraft_content::Pieces::join(&streams.iter().map(|(_, data)| data.as_slice()).collect::<Vec<_>>());
     let ops = pieces.parse().ops;
-    let target = ops
-        .iter()
-        .position(|op| op.span.start == span && op.is("Do"))
-        .ok_or_else(|| EditError::Invalid("the image operation could not be located".into()))?;
+    let target =
+        joined_dos(streams, &ops, &[image])?.into_iter().next().ok_or_else(|| EditError::Invalid("the image operation is missing".into()))?;
     // A private path crop moves with its image regardless of intervening state operators.
     // Shared crops retain the existing fixed-clip behavior, preserving neighbouring paint.
     let (start, end, placement) = transform_scope(&ops, target..=target, None)?.unwrap_or((target, target, Matrix(image.draw_matrix)));

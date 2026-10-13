@@ -272,38 +272,82 @@ impl Automation {
         result["aligned"] = json!(count);
         Ok(result)
     }
+
+    pub(crate) fn object_resize(&mut self, a: &Args) -> Result<Value> {
+        let page = self.page(a)?;
+        let target = a.get("object").ok_or_else(|| bad("object must be one path reference from object_list")).and_then(object_target)?;
+        if target.kind != pdfcraft_engine::ObjectKind::Path {
+            return Err(bad("only a vector path (kind path) can be resized"));
+        }
+        let r = a
+            .nums::<4>("rect")?
+            .filter(|r| r.iter().all(|v| v.abs() <= 1e9) && r[2] > r[0] && r[3] > r[1])
+            .ok_or_else(|| bad("rect must be [x0, y0, x1, y1] in displayed points, with x1 > x0 and y1 > y0"))?;
+        let doc = self.doc(a)?;
+        check_generation(a, doc, "resizing")?;
+        let info = doc.info.pages.get(page).ok_or_else(|| bad("the page no longer exists"))?;
+        let rect = crate::comments::rect_to_user(info, r);
+        self.apply(a, Edit::TransformPath { page, index: target.index, rect })
+    }
+
+    pub(crate) fn object_recolour(&mut self, a: &Args) -> Result<Value> {
+        let page = self.page(a)?;
+        let targets = object_targets(a)?;
+        let fill = a.opt_str("fill")?.map(parse_color).transpose()?;
+        let stroke = a.opt_str("stroke")?.map(parse_color).transpose()?;
+        if fill.is_none() && stroke.is_none() {
+            return Err(bad("give fill, stroke or both as #RRGGBB"));
+        }
+        check_generation(a, self.doc(a)?, "recolouring")?;
+        let count = targets.len();
+        let mut result = self.apply(a, Edit::RecolourObjects { page, objects: targets, fill, stroke })?;
+        result["recoloured"] = json!(count);
+        Ok(result)
+    }
+
+    pub(crate) fn object_delete(&mut self, a: &Args) -> Result<Value> {
+        let page = self.page(a)?;
+        let targets = object_targets(a)?;
+        check_generation(a, self.doc(a)?, "deleting")?;
+        let count = targets.len();
+        let mut result = self.apply(a, Edit::DeleteObjects { page, objects: targets })?;
+        result["deleted"] = json!(count);
+        Ok(result)
+    }
 }
 
 /// `objects`: 1–1000 `{kind, index}` references from object_list (1-based indexes).
 pub(crate) fn object_targets(a: &Args) -> Result<Vec<pdfcraft_engine::ObjectTarget>> {
-    use pdfcraft_engine::{MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget};
-    let rows = a
-        .get("objects")
+    a.get("objects")
         .and_then(Value::as_array)
-        .filter(|r| !r.is_empty() && r.len() <= MAX_MOVE_OBJECTS)
-        .ok_or_else(|| bad("objects must contain 1–1000 references from object_list"))?;
-    let mut targets = Vec::with_capacity(rows.len());
-    for row in rows {
-        let row = row.as_object().ok_or_else(|| bad("each object must contain kind and index"))?;
-        if row.keys().any(|k| k != "kind" && k != "index") {
-            return Err(bad("an object reference accepts only kind and index"));
-        }
-        let kind = match row.get("kind").and_then(Value::as_str) {
-            Some("added") => ObjectKind::Added,
-            Some("text") => ObjectKind::Text,
-            Some("image") => ObjectKind::Image,
-            Some("path") => ObjectKind::Path,
-            _ => return Err(bad("object kind must be added, text, image or path (see object_list)")),
-        };
-        let index = row
-            .get("index")
-            .and_then(Value::as_u64)
-            .and_then(|i| i.checked_sub(1))
-            .and_then(|i| usize::try_from(i).ok())
-            .ok_or_else(|| bad("object index must be a positive integer from object_list"))?;
-        targets.push(ObjectTarget { kind, index });
+        .filter(|r| !r.is_empty() && r.len() <= pdfcraft_engine::MAX_MOVE_OBJECTS)
+        .ok_or_else(|| bad("objects must contain 1–1000 references from object_list"))?
+        .iter()
+        .map(object_target)
+        .collect()
+}
+
+/// One `{kind, index}` reference from object_list (1-based index).
+fn object_target(row: &Value) -> Result<pdfcraft_engine::ObjectTarget> {
+    use pdfcraft_engine::{ObjectKind, ObjectTarget};
+    let row = row.as_object().ok_or_else(|| bad("each object must contain kind and index"))?;
+    if row.keys().any(|k| k != "kind" && k != "index") {
+        return Err(bad("an object reference accepts only kind and index"));
     }
-    Ok(targets)
+    let kind = match row.get("kind").and_then(Value::as_str) {
+        Some("added") => ObjectKind::Added,
+        Some("text") => ObjectKind::Text,
+        Some("image") => ObjectKind::Image,
+        Some("path") => ObjectKind::Path,
+        _ => return Err(bad("object kind must be added, text, image or path (see object_list)")),
+    };
+    let index = row
+        .get("index")
+        .and_then(Value::as_u64)
+        .and_then(|i| i.checked_sub(1))
+        .and_then(|i| usize::try_from(i).ok())
+        .ok_or_else(|| bad("object index must be a positive integer from object_list"))?;
+    Ok(ObjectTarget { kind, index })
 }
 
 /// The optional `generation` from object_list: refuse references to an older inventory.

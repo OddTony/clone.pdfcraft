@@ -2226,6 +2226,10 @@ signature pad	Type	Digita
 	Move objects	Sposta oggetti
 	Align objects	Allinea oggetti
 	Distribute objects	Distribuisci oggetti
+	Resize object	Ridimensiona oggetto
+	Change colour	Cambia colore
+	Delete object	Elimina oggetto
+	Delete objects	Elimina oggetti
 	Vertical text cannot be moved with this selection.	Il testo verticale non può essere spostato con questa selezione.
 	Text used as a clipping path cannot be moved with this selection.	Il testo usato come tracciato di ritaglio non può essere spostato con questa selezione.
 	These objects could not be moved. Select them again and try a smaller move.	Non è stato possibile spostare questi oggetti. Selezionali di nuovo e prova uno spostamento più piccolo.

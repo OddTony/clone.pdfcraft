@@ -2215,6 +2215,10 @@ signature pad	Type	入力
 	Move objects	複数のオブジェクトを移動
 	Align objects	オブジェクトを整列
 	Distribute objects	オブジェクトを均等配置
+	Resize object	オブジェクトのサイズを変更
+	Change colour	色を変更
+	Delete object	オブジェクトを削除
+	Delete objects	複数のオブジェクトを削除
 	Vertical text cannot be moved with this selection.	この選択範囲では縦書きのテキストを移動できません。
 	Text used as a clipping path cannot be moved with this selection.	この選択範囲ではクリッピングパスとして使われているテキストを移動できません。
 	These objects could not be moved. Select them again and try a smaller move.	これらのオブジェクトを移動できませんでした。選択し直し、移動量を小さくして試してください。

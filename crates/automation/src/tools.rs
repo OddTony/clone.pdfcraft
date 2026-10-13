@@ -52,10 +52,14 @@ fn measure_schema() -> Value {
     )
 }
 
+/// One `{kind, index}` reference from object_list.
+fn object_ref() -> Value {
+    json!({"type":"object","properties":{"kind":{"type":"string","enum":["added","text","image","path"]},"index":{"type":"integer","minimum":1}},"required":["kind","index"],"additionalProperties":false})
+}
+
 /// 1–1000 `{kind, index}` references from object_list.
 fn object_refs() -> Value {
-    json!({"type":"array","minItems":1,"maxItems":1000,"uniqueItems":true,"items":{
-        "type":"object","properties":{"kind":{"type":"string","enum":["added","text","image","path"]},"index":{"type":"integer","minimum":1}},"required":["kind","index"],"additionalProperties":false}})
+    json!({"type":"array","minItems":1,"maxItems":1000,"uniqueItems":true,"items":object_ref()})
 }
 
 fn generation() -> Value {
@@ -173,7 +177,7 @@ pub fn tools() -> Vec<ToolDef> {
             .with(schema(json!({ "doc": doc(), "page": { "type": "integer", "minimum": 1 }, "dpi": { "type": "number", "minimum": 1, "maximum": 600 },
                 "hide_text_block": { "type": "integer", "minimum": 1, "description": "Render an inline editor background without this paragraph (index from text_paragraphs). Does not modify the document." }
             }), &["doc", "page"])),
-        t("object_list", "List editable objects", "List existing paragraphs, Image/Form artwork, added content and painted vector paths once, with source kind/index references, displayed rectangles and document generation. Path rows (kind path) also give fill and stroke colours (#RRGGBB, null when that part isn't painted or isn't a Gray/RGB/CMYK colour) and the stroke line_width in points (null when not stroked). Paths inside Form artwork, clipping paths and pages with too many paths aren't listed as paths. Indexes change when content changes; use generation in object_move to reject stale references.")
+        t("object_list", "List editable objects", "List existing paragraphs, Image/Form artwork, added content and painted vector paths once, with source kind/index references, displayed rectangles and document generation. Path rows (kind path) also give fill and stroke colours (#RRGGBB, null when that part isn't painted or isn't a Gray/RGB/CMYK colour) and the stroke line_width in points (null when not stroked). Paths inside Form artwork, clipping paths and pages with too many paths aren't listed as paths. Indexes change when content changes; pass generation to the object_* editing tools to reject stale references.")
             .ro().with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1}}), &["doc","page"])),
         t("object_move", "Move objects together", "Atomically translate 1–1000 mixed references (added, text, image or path) from object_list by [dx, dy] in displayed points (right/down). Preserves glyph codes, fonts, image data, path data and relative spacing; success is one undo step. Clipping and vertical text are refused. A bad/stale reference refuses the entire move.")
             .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"objects":object_refs(),
@@ -183,6 +187,16 @@ pub fn tools() -> Vec<ToolDef> {
             .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"objects":object_refs(),
                 "action":{"type":"string","enum":["left","centre","center","right","top","middle","bottom","distribute_horizontal","distribute_vertical"]},
                 "generation":generation()}), &["doc","page","objects","action"])),
+        t("object_resize", "Resize a vector path", "Move and resize one vector path (a kind path reference from object_list) by scaling its displayed rectangle, as object_list reports it, onto rect (top-left-origin points, x1 > x0 and y1 > y0). Its line width scales too, so a stroked path is then listed only roughly at rect: object_list widens strokes thinner than 1 pt and paths under a point across to a point, and gives a stroke resized unevenly its average thickness. Success is one undo step; another kind, a path painted with a pattern, a move off the page or out of its clip, or a bad/stale reference is refused.")
+            .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"object":object_ref(),
+                "rect":{"type":"array","items":{"type":"number"},"minItems":4,"maxItems":4},
+                "generation":generation()}), &["doc","page","object","rect"])),
+        t("object_recolour", "Recolour vector paths", "Paint 1–1000 vector paths (kind path references from object_list) in new colours: fill where a path fills, stroke where it strokes; give one or both. The new colour is DeviceRGB whatever colour space the path used (CMYK, spot and pattern colours are replaced). Success is one undo step; another kind, a path that paints neither part given, or a bad/stale reference refuses the entire edit.")
+            .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"objects":object_refs(),"fill":color(),"stroke":color(),
+                "generation":generation()}), &["doc","page","objects"])),
+        t("object_delete", "Delete objects", "Delete 1–1000 images, Form artwork and vector paths (image or path references from object_list) together; the graphics state and marked content around them stay. Success is one undo step; text, added content (see content_delete) or a bad/stale reference refuses the entire delete.")
+            .destructive()
+            .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},"objects":object_refs(),"generation":generation()}), &["doc","page","objects"])),
         t("text_extract", "Extract text", "Extract the text of some or all pages, in reading order. With rect, only the text inside that rectangle on each page, as Column select takes it: one row per visual line, side-by-side pieces (table cells) separated by a tab.")
             .ro()
             .cmd("edit.column_select")

@@ -4432,6 +4432,9 @@ fn content_refresh_lists_match_the_storages_an_edit_touches() {
             objects: vec![target(crate::ObjectKind::Text), target(crate::ObjectKind::Image)],
             align: ObjectAlign::DistributeVertical,
         },
+        Edit::TransformPath { page: 0, index: 0, rect: [0.0, 0.0, 1.0, 1.0] },
+        Edit::RecolourObjects { page: 0, objects: vec![target(crate::ObjectKind::Path)], fill: Some([0.0; 3]), stroke: None },
+        Edit::DeleteObjects { page: 0, objects: vec![target(crate::ObjectKind::Path), target(crate::ObjectKind::Image)] },
         Edit::EditTextBlock { page: 0, block: 0, text: String::new(), style: pdfcraft_edit::BlockStyle::default() },
     ];
     for edit in &plain {
@@ -4621,4 +4624,184 @@ fn vector_paths_are_listed_and_hit_tested_topmost_first() {
     assert_eq!(doc.path_at(0, [190.0, 290.0], 0.0), None);
     let targets: Vec<_> = doc.editable_objects(0).unwrap().iter().map(|o| o.target).collect();
     assert_eq!(targets, [0, 1].map(|index| ObjectTarget { kind: ObjectKind::Path, index }));
+}
+
+/// A paragraph, the same Form artwork drawn twice (images 0 and 1, at x 120 and x 20) and two
+/// vector paths: a red filled box (path 0) and a blue 4 pt line (path 1).
+fn vector_session() -> (Session, DocId) {
+    use pdfcraft_cos::{Dict, Object, Stream};
+    let mut cos = pdfcraft_cos::Document::open(Arc::new(fixture(1))).unwrap();
+    let page = pdfcraft_model::pages(&cos)[0].obj;
+    let mut form = Dict::new();
+    form.set(b"Subtype".to_vec(), Object::name("Form"));
+    form.set(b"BBox".to_vec(), Object::Array([0, 0, 40, 20].map(Object::Int).to_vec()));
+    let figure = cos.add(Object::Stream(Stream::flate(form, b"0.2 0.5 0.9 rg 0 0 40 20 re f")));
+    let content = cos.add(Object::Stream(Stream::flate(
+        Dict::new(),
+        b"BT /F1 24 Tf 20 150 Td (Page 1) Tj ET q 1 0 0 1 120 240 cm /Figure Do Q q 1 0 0 1 20 240 cm /Figure Do Q \
+          1 0 0 rg 20 40 100 50 re f 0 0 1 RG 4 w 30 200 m 170 200 l S",
+    )));
+    cos.update_dict(page, |d| {
+        d.set(b"Contents".to_vec(), Object::Ref(content));
+        let mut resources = d.get(b"Resources").and_then(Object::as_dict).cloned().unwrap_or_default();
+        let mut xobjects = Dict::new();
+        xobjects.set(b"Figure".to_vec(), Object::Ref(figure));
+        resources.set(b"XObject".to_vec(), Object::Dict(xobjects));
+        d.set(b"Resources".to_vec(), Object::Dict(resources));
+    })
+    .unwrap();
+    let bytes = Arc::new(pdfcraft_cos::write_incremental(&cos, &pdfcraft_cos::SaveOptions::default()).unwrap());
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("vectors.pdf", None, bytes, None).unwrap();
+    (s, id)
+}
+
+#[test]
+fn resizing_a_vector_path_is_one_undo_step() {
+    let (mut s, id) = vector_session();
+    let before = s.get(id).unwrap().editable_objects(0).unwrap();
+    let paths = s.get(id).unwrap().page_paths(0).unwrap();
+    s.apply(id, Edit::TransformPath { page: 0, index: 0, rect: [30.0, 50.0, 80.0, 150.0] }).unwrap();
+    let doc = s.get(id).unwrap();
+    assert!(doc.dirty);
+    assert_eq!(doc.can_undo(), Some("Resize object"));
+    let after = doc.page_paths(0).unwrap();
+    assert!(after[0].rect.iter().zip([30.0, 50.0, 80.0, 150.0]).all(|(a, b)| (a - b).abs() < 1e-6), "{:?}", after[0].rect);
+    assert_eq!((after[0].fill_rgb, after[1].rect), (paths[0].fill_rgb, paths[1].rect), "only the box changed");
+    assert_eq!(s.undo(id).unwrap().as_str(), "Resize object");
+    let doc = s.get(id).unwrap();
+    assert_eq!(doc.page_paths(0).unwrap(), paths);
+    assert_eq!(doc.editable_objects(0).unwrap(), before);
+    assert!(doc.can_undo().is_none(), "one undo step");
+}
+
+#[test]
+fn recolouring_vector_paths_is_one_undo_step() {
+    let (mut s, id) = vector_session();
+    let paths = s.get(id).unwrap().page_paths(0).unwrap();
+    let objects = [0, 1].map(|index| ObjectTarget { kind: ObjectKind::Path, index }).to_vec();
+    s.apply(id, Edit::RecolourObjects { page: 0, objects, fill: Some([0.0, 0.5, 0.0]), stroke: Some([1.0, 0.0, 1.0]) }).unwrap();
+    let doc = s.get(id).unwrap();
+    assert_eq!(doc.can_undo(), Some("Change colour"));
+    let after = doc.page_paths(0).unwrap();
+    // Each path takes the colour of the part it paints, and stays where it is.
+    assert_eq!([after[0].fill_rgb, after[0].stroke_rgb], [Some([0.0, 0.5, 0.0]), None]);
+    assert_eq!([after[1].fill_rgb, after[1].stroke_rgb], [None, Some([1.0, 0.0, 1.0])]);
+    assert_eq!([after[0].rect, after[1].rect], [paths[0].rect, paths[1].rect]);
+    assert_eq!(s.undo(id).unwrap().as_str(), "Change colour");
+    assert_eq!(s.get(id).unwrap().page_paths(0).unwrap(), paths);
+    assert!(s.get(id).unwrap().can_undo().is_none(), "one undo step");
+}
+
+#[test]
+fn deleting_paths_and_images_together_is_one_undo_step() {
+    let (mut s, id) = vector_session();
+    let before = s.get(id).unwrap().editable_objects(0).unwrap();
+    let kinds: Vec<_> = before.iter().map(|o| o.target.kind).collect();
+    assert_eq!(kinds, [ObjectKind::Text, ObjectKind::Image, ObjectKind::Image, ObjectKind::Path, ObjectKind::Path], "{before:?}");
+    // The box and the first drawing of the artwork go; the second drawing and the line are renumbered.
+    s.apply(id, Edit::DeleteObjects { page: 0, objects: vec![before[3].target, before[1].target] }).unwrap();
+    let doc = s.get(id).unwrap();
+    assert_eq!(doc.can_undo(), Some("Delete objects"));
+    let left: Vec<_> = doc.editable_objects(0).unwrap().into_iter().map(|o| (o.target, o.rect, o.text)).collect();
+    let target = |kind, index| ObjectTarget { kind, index };
+    assert_eq!(
+        left,
+        [
+            (before[0].target, before[0].rect, before[0].text.clone()),
+            (target(ObjectKind::Image, 0), before[2].rect, None),
+            (target(ObjectKind::Path, 0), before[4].rect, None),
+        ]
+    );
+    assert_eq!(s.undo(id).unwrap().as_str(), "Delete objects");
+    assert_eq!(s.get(id).unwrap().editable_objects(0).unwrap(), before);
+    assert!(s.get(id).unwrap().can_undo().is_none(), "one undo step");
+    s.apply(id, Edit::DeleteObjects { page: 0, objects: vec![before[4].target] }).unwrap();
+    assert_eq!(s.get(id).unwrap().can_undo(), Some("Delete object"));
+    assert_eq!(s.get(id).unwrap().page_paths(0).unwrap().len(), 1);
+}
+
+#[test]
+fn deleting_both_drawings_of_the_artwork_is_one_undo_step() {
+    let (mut s, id) = vector_session();
+    let before = s.get(id).unwrap().editable_objects(0).unwrap();
+    // Both drawings are in one stream, and no path is selected.
+    s.apply(id, Edit::DeleteObjects { page: 0, objects: vec![before[1].target, before[2].target] }).unwrap();
+    let doc = s.get(id).unwrap();
+    assert_eq!(doc.can_undo(), Some("Delete objects"));
+    let left: Vec<_> = doc.editable_objects(0).unwrap().into_iter().map(|o| o.target).collect();
+    assert_eq!(left, [before[0].target, before[3].target, before[4].target]);
+    assert_eq!(s.undo(id).unwrap().as_str(), "Delete objects");
+    assert_eq!(s.get(id).unwrap().editable_objects(0).unwrap(), before);
+    assert!(s.get(id).unwrap().can_undo().is_none(), "one undo step");
+}
+
+/// The 4 pt line stretched five times across its length stays on y = 200 and keeps its length.
+/// Its line width scales by the average scale (√5), so its listed box isn't the one asked for.
+#[test]
+fn resizing_a_line_across_its_length_scales_its_stroke() {
+    let (mut s, id) = vector_session();
+    let line = s.get(id).unwrap().page_paths(0).unwrap()[1].clone();
+    assert!(line.rect.iter().zip([28.0, 198.0, 172.0, 202.0]).all(|(a, b)| (a - b).abs() < 1e-6), "{:?}", line.rect);
+    s.apply(id, Edit::TransformPath { page: 0, index: 1, rect: [28.0, 190.0, 172.0, 210.0] }).unwrap();
+    let after = s.get(id).unwrap().page_paths(0).unwrap()[1].clone();
+    let half = 2.0 * 5f64.sqrt();
+    assert!((after.line_width_user - 2.0 * half).abs() < 1e-6, "{}", after.line_width_user);
+    let expected = [30.0 - half, 200.0 - half, 170.0 + half, 200.0 + half];
+    assert!(after.rect.iter().zip(expected).all(|(a, b)| (a - b).abs() < 1e-6), "{:?}", after.rect);
+    assert_eq!(s.undo(id).unwrap().as_str(), "Resize object");
+    assert_eq!(s.get(id).unwrap().page_paths(0).unwrap()[1], line);
+}
+
+#[test]
+fn refused_object_edits_change_nothing() {
+    let (mut s, id) = vector_session();
+    let before = s.save_bytes(id).unwrap();
+    let generation = s.get(id).unwrap().edit_generation();
+    let box_rect = s.get(id).unwrap().page_paths(0).unwrap()[0].rect;
+    let t = |kind, index| ObjectTarget { kind, index };
+    let (text, image, path) = (ObjectKind::Text, ObjectKind::Image, ObjectKind::Path);
+    let red = Some([1.0, 0.0, 0.0]);
+    let resize = |index, rect| Edit::TransformPath { page: 0, index, rect };
+    let recolour = |objects, fill, stroke| Edit::RecolourObjects { page: 0, objects, fill, stroke };
+    let delete = |objects| Edit::DeleteObjects { page: 0, objects };
+    let refused = [
+        // Inverted, not a number, too large, off the page, where it already is, no such path.
+        resize(0, [80.0, 50.0, 30.0, 150.0]),
+        resize(0, [30.0, f64::NAN, 80.0, 150.0]),
+        resize(0, [30.0, 50.0, 2e9, 150.0]),
+        resize(0, [500.0, 500.0, 600.0, 550.0]),
+        resize(0, box_rect),
+        resize(7, [30.0, 50.0, 80.0, 150.0]),
+        // Not only paths, no colour, a fill for a line, the same path twice, not a colour.
+        recolour(vec![t(path, 0), t(text, 0)], red, None),
+        recolour(vec![t(image, 0)], red, red),
+        recolour(vec![t(path, 0)], None, None),
+        recolour(vec![t(path, 1)], red, None),
+        recolour(vec![t(path, 0), t(path, 0)], red, None),
+        recolour(vec![t(path, 0)], Some([f64::NAN, 0.0, 0.0]), None),
+        // Text, added content, the same image twice, nothing, an image that doesn't exist.
+        delete(vec![t(path, 0), t(text, 0)]),
+        delete(vec![t(ObjectKind::Added, 0)]),
+        delete(vec![t(image, 1), t(image, 1)]),
+        delete(Vec::new()),
+        delete(vec![t(path, 0), t(image, 5)]),
+    ];
+    for edit in refused {
+        let label = format!("{edit:?}");
+        assert!(s.apply(id, edit).is_err(), "{label}");
+        let doc = s.get(id).unwrap();
+        assert_eq!((doc.edit_generation(), doc.can_undo(), doc.dirty), (generation, None, false), "{label}");
+        assert_eq!(s.save_bytes(id).unwrap(), before, "{label}");
+    }
+    let mut p = protection(None, Some("owner"));
+    p.changes = Changes::None;
+    s.apply(id, Edit::Protect(p)).unwrap();
+    let mut reader = Session::new();
+    let id = reader.open("restricted.pdf", None, s.save_bytes(id).unwrap(), None).unwrap();
+    for edit in [resize(0, [30.0, 50.0, 80.0, 150.0]), recolour(vec![t(path, 0)], red, None), delete(vec![t(path, 0)])] {
+        assert_eq!(reader.apply(id, edit), Err(EditError::NotPermitted("changes to the document")));
+    }
+    let doc = reader.get(id).unwrap();
+    assert!(!doc.dirty && doc.can_undo().is_none());
 }

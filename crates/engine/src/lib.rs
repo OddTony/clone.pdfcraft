@@ -220,6 +220,9 @@ fn scope_of(edit: &Edit) -> Scope {
         // fields, links and document metadata are untouched (see `refresh_content`).
         Edit::MoveObjects { .. }
         | Edit::AlignObjects { .. }
+        | Edit::TransformPath { .. }
+        | Edit::RecolourObjects { .. }
+        | Edit::DeleteObjects { .. }
         | Edit::EditTextLine { .. }
         | Edit::EditTextBlock { .. }
         | Edit::EditPageImage { .. }
@@ -1430,6 +1433,27 @@ pub enum Edit {
         objects: Vec<ObjectTarget>,
         align: ObjectAlign,
     },
+    /// Move and resize vector path `index` (from `Document::page_paths`) by scaling its visible
+    /// box onto `rect` (user space). Its line width scales too, so a stroked path's box then
+    /// lands only roughly on `rect` (see `object_resize` in the automation README).
+    TransformPath {
+        page: usize,
+        index: usize,
+        rect: [f64; 4],
+    },
+    /// Paint vector paths (the only kind accepted) in DeviceRGB: `fill` where they fill,
+    /// `stroke` where they stroke; `None` keeps that part's colour.
+    RecolourObjects {
+        page: usize,
+        objects: Vec<ObjectTarget>,
+        fill: Option<[f64; 3]>,
+        stroke: Option<[f64; 3]>,
+    },
+    /// Delete vector paths, images and Form artwork together. Text and added content are refused.
+    DeleteObjects {
+        page: usize,
+        objects: Vec<ObjectTarget>,
+    },
     /// Edit text in a paragraph box: replace paragraph `block` (from `Document::text_blocks`),
     /// rewrapped to the box's width.
     EditTextBlock {
@@ -1727,6 +1751,10 @@ pub const EDIT_LABELS: &[&str] = &[
     "Move objects",
     "Align objects",
     "Distribute objects",
+    "Resize object",
+    "Change colour",
+    "Delete object",
+    "Delete objects",
     "Move image",
     "Rotate image",
     "Flip image",
@@ -1853,6 +1881,9 @@ impl Edit {
             Edit::RegisterTextFont { .. } => Label::of("Load document font"),
             Edit::MoveObjects { objects, .. } => plural("Move object", "Move objects", objects.len()),
             Edit::AlignObjects { align, .. } => Label::of(if align.is_distribute() { "Distribute objects" } else { "Align objects" }),
+            Edit::TransformPath { .. } => Label::of("Resize object"),
+            Edit::RecolourObjects { .. } => Label::of("Change colour"),
+            Edit::DeleteObjects { objects, .. } => plural("Delete object", "Delete objects", objects.len()),
             Edit::EditPageImage { change, .. } => Label::of(match change {
                 ImageEdit::Move(_) => "Move image",
                 ImageEdit::Rotate(_) => "Rotate image",
@@ -2010,6 +2041,9 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::UpdateContent { .. }
         | Edit::MoveObjects { .. }
         | Edit::AlignObjects { .. }
+        | Edit::TransformPath { .. }
+        | Edit::RecolourObjects { .. }
+        | Edit::DeleteObjects { .. }
         | Edit::DeleteContent { .. }
         | Edit::ReplaceImage { .. }
         | Edit::ClearRedactions
@@ -2362,6 +2396,32 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         }
         Edit::MoveObjects { page, objects, offset } => pdfcraft_edit::move_objects(doc, *page, objects, *offset)?,
         Edit::AlignObjects { page, objects, align } => pdfcraft_edit::align_objects(doc, *page, objects, *align)?,
+        Edit::TransformPath { page, index, rect } => {
+            let invalid = |m: String| EditError::Edit(pdfcraft_edit::EditError::Invalid(m));
+            // An inverted box would flip the path rather than move it.
+            let [x0, y0, x1, y1] = *rect;
+            if !(rect.iter().all(|v| v.is_finite() && v.abs() <= 1e9) && x1 > x0 && y1 > y0) {
+                return Err(invalid("the new box must be finite, no larger than 1e9, and have some width and height".into()));
+            }
+            let path = pdfcraft_edit::page_paths(doc, *page)?
+                .into_iter()
+                .nth(*index)
+                .ok_or_else(|| invalid(format!("page {} has no vector path {}", page.saturating_add(1), index.saturating_add(1))))?;
+            if path.rect == *rect {
+                return Err(invalid("the vector path already has that box".into()));
+            }
+            let change = pdfcraft_edit::PathChange::Transform(pdfcraft_edit::rect_to_rect(path.rect, *rect));
+            pdfcraft_edit::change_path(doc, *page, *index, &change)?;
+        }
+        Edit::RecolourObjects { page, objects, fill, stroke } => {
+            let paths = objects
+                .iter()
+                .map(|o| (o.kind == ObjectKind::Path).then_some(o.index))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| EditError::Edit(pdfcraft_edit::EditError::Invalid("only vector paths can be recoloured".into())))?;
+            pdfcraft_edit::recolour_paths(doc, *page, &paths, *fill, *stroke)?;
+        }
+        Edit::DeleteObjects { page, objects } => pdfcraft_edit::delete_objects(doc, *page, objects)?,
         Edit::EditTextBlock { page, block, text, style } => {
             pdfcraft_edit::rewrite_block(doc, *page, *block, Some(text), style)?;
         }

@@ -182,6 +182,10 @@
 	Move objects	Přesunout objekty
 	Align objects	Zarovnat objekty
 	Distribute objects	Rozmístit objekty
+	Resize object	Změnit velikost objektu
+	Change colour	Změnit barvu
+	Delete object	Odstranit objekt
+	Delete objects	Odstranit objekty
 	Vertical text cannot be moved with this selection.	Svislý text nelze přesunout s tímto výběrem.
 	Text used as a clipping path cannot be moved with this selection.	Text použitý jako ořezová cesta nelze přesunout s tímto výběrem.
 	These objects could not be moved. Select them again and try a smaller move.	Tyto objekty se nepodařilo přesunout. Vyberte je znovu a zkuste menší posun.

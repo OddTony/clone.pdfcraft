@@ -2220,6 +2220,10 @@ action wizard	Start	Starten
 	Move objects	Objekte verschieben
 	Align objects	Objekte ausrichten
 	Distribute objects	Objekte verteilen
+	Resize object	Objektgröße ändern
+	Change colour	Farbe ändern
+	Delete object	Objekt löschen
+	Delete objects	Objekte löschen
 	Vertical text cannot be moved with this selection.	Vertikaler Text kann mit dieser Auswahl nicht verschoben werden.
 	Text used as a clipping path cannot be moved with this selection.	Text, der als Beschneidungspfad dient, kann mit dieser Auswahl nicht verschoben werden.
 	These objects could not be moved. Select them again and try a smaller move.	Diese Objekte konnten nicht verschoben werden. Wählen Sie sie erneut aus und versuchen Sie eine kleinere Verschiebung.
