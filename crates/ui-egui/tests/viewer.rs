@@ -1132,6 +1132,8 @@ fn every_item_of_the_picture_menu_can_be_clicked_outside_the_picture() {
     h.get_by_label("Delete").click();
     h.run_steps(3);
     assert_eq!(picture_count(&h), 0);
+}
+
 #[test]
 fn mouse_wheel_scrolls_while_selecting_text() {
     let mut h = harness();
