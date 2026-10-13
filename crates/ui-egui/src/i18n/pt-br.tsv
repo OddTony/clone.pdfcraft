@@ -262,7 +262,7 @@
 	characters	caracteres
 	Field is used for file selection	O campo é usado para seleção de arquivo
 	Check spelling	Verificar ortografia
-	Comb of	Pente de
+	Comb of	Caixas para
 	Export Value: {on}	Valor de exportação: {on}
 	Check box is checked by default	A caixa de seleção fica marcada por padrão
 	Button is checked by default	O botão fica selecionado por padrão
@@ -2195,9 +2195,9 @@ comment menu	Edit	Editar
 	Shift- or Ctrl/Command-click to select several fields.	Clique com Shift ou Ctrl/Command para selecionar vários campos.
 	Font size 0 uses automatic sizing.	O tamanho de fonte 0 ativa o ajuste automático.
 	Character limit:	Limite de caracteres:
-	Character limit 0 means no limit. A comb of characters needs a limit.	O limite de caracteres 0 significa sem limite. Um pente de caracteres precisa de um limite.
+	Character limit 0 means no limit. A comb of characters needs a limit.	O limite de caracteres 0 significa sem limite. As caixas de caracteres precisam de um limite.
 	To change locked fields, also set Locked to No.	Para alterar campos bloqueados, defina também “Bloqueado” como “Não”.
-	Comb of characters	Pente de caracteres
+	Comb of characters	Caixas de caracteres
 	The document changed while you were editing field properties.	O documento mudou enquanto você editava as propriedades dos campos.
 	The document is no longer open.	O documento não está mais aberto.
 	The field properties dialog is no longer open.	A caixa de propriedades dos campos não está mais aberta.
