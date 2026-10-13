@@ -2475,3 +2475,99 @@ animation effects	Off	Ki
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
 	Pages selected	Kijelölt oldalak
 	Page properties	Oldaltulajdonságok>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))
+	Turn upside down (180°)	Fejjel lefelé fordítás (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 hüvelykes címke (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Minden oldalt a nyomtatott területére vág, függőlegesre fordítja, és torzítás nélkül a laphoz igazítja. Laponként egy címke.
+	Find untagged content	Címkézetlen tartalom keresése
+	No untagged content was found.	Nem található címkézetlen tartalom.
+	Found {n} untagged content problems.	{n} címkézetlen tartalmi probléma található.
+	Tag form fields	Űrlapmezők címkézése
+	Mark as artifact	Megjelölés műtárgyként
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Távolítsa el ezt a levélcímkét az olvasási sorrendből, és jelölje meg a közvetlen tartalmát műtárgyként
+	Mark content as artifact	Tartalom megjelölése műtárgyként
+	Word count	Szavak száma
+	Current page only	Csak az aktuális oldal
+	Exclude tagged tables	Címkézett táblázatok kizárása
+	Exclude tagged code blocks	Címkézett kódblokkok kizárása
+	Exclude image/OCR text	Képek és OCR szövegének kizárása
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	A kizárások PDF-címkéket használnak. A címkézetlen táblázatok és kódok továbbra is beleszámítanak. A képek kizárása a láthatatlan szöveget is eltávolítja.
+	Words	Szavak
+	Characters	Karakterek
+	Characters without spaces	Karakterek szóközök nélkül
+	Pages counted	Megszámolt oldalak
+	Some pages contain no countable text. Scanned images need OCR first.	Egyes oldalakon nincs megszámolható szöveg. A beolvasott képeken először OCR-t kell futtatni.
+	Some content could not be classified safely and was kept in the count.	Egyes tartalmakat nem lehetett megbízhatóan besorolni, ezért beleszámítanak az eredménybe.
+	Counting words… {n} pages read	Szavak számlálása… {n} oldal beolvasva
+	Word counting stopped unexpectedly.	A szavak számlálása váratlanul leállt.
+	Word count…	Szavak száma…
+@id	file.word_count	Szavak száma…
+	Standard	Normál
+	Mobile	Mobil
+	Merge image fragments	Képtöredékek egyesítése
+	Optimizing… merging image fragments	Optimalizálás… képtöredékek egyesítése
+	Side by side	Egymás mellett
+	New file only	Csak az új fájl
+	Old file: {name}	Régi fájl: {name}
+	New file: {name}	Új fájl: {name}
+	Print as image	Nyomtatás képként
+	Resolution:	Felbontás:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Akkor használja, ha a nyomtató kihagy szöveget, árnyékolást vagy átlátszóságot. A nyomat már nem kereshető szöveg; szürkeárnyalatos nyomtatással a képek szürkék.
+	Crop Image	Kép körülvágása
+	Remove Crop	Körülvágás eltávolítása
+	Trim the picture with its handles; Enter or Done applies	Vágja körül a képet a fogantyúival; Enter vagy Kész alkalmazza
+	Redaction mark appearance	Kitakarási jelölés megjelenése
+	Outline colour:	Körvonal színe:
+	Fill colour:	Kitöltés színe:
+	Shown while the pointer is over a mark.	Akkor látszik, amikor a mutató egy jelölés fölött van.
+	Opacity:	Átlátszatlanság:
+	Make properties default	Tulajdonságok beállítása alapértelmezettként
+	Pages selected	Kijelölt oldalak
+	Page properties	Oldaltulajdonságok
+	Turn upside down (180°)	Fejjel lefelé fordítás (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 hüvelykes címke (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Minden oldalt a nyomtatott területére vág, függőlegesre fordítja, és torzítás nélkül a laphoz igazítja. Laponként egy címke.
+	Find untagged content	Címkézetlen tartalom keresése
+	No untagged content was found.	Nem található címkézetlen tartalom.
+	Found {n} untagged content problems.	{n} címkézetlen tartalmi probléma található.
+	Tag form fields	Űrlapmezők címkézése
+	Mark as artifact	Megjelölés műtárgyként
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Távolítsa el ezt a levélcímkét az olvasási sorrendből, és jelölje meg a közvetlen tartalmát műtárgyként
+	Mark content as artifact	Tartalom megjelölése műtárgyként
+	Word count	Szavak száma
+	Current page only	Csak az aktuális oldal
+	Exclude tagged tables	Címkézett táblázatok kizárása
+	Exclude tagged code blocks	Címkézett kódblokkok kizárása
+	Exclude image/OCR text	Képek és OCR szövegének kizárása
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	A kizárások PDF-címkéket használnak. A címkézetlen táblázatok és kódok továbbra is beleszámítanak. A képek kizárása a láthatatlan szöveget is eltávolítja.
+	Words	Szavak
+	Characters	Karakterek
+	Characters without spaces	Karakterek szóközök nélkül
+	Pages counted	Megszámolt oldalak
+	Some pages contain no countable text. Scanned images need OCR first.	Egyes oldalakon nincs megszámolható szöveg. A beolvasott képeken először OCR-t kell futtatni.
+	Some content could not be classified safely and was kept in the count.	Egyes tartalmakat nem lehetett megbízhatóan besorolni, ezért beleszámítanak az eredménybe.
+	Counting words… {n} pages read	Szavak számlálása… {n} oldal beolvasva
+	Word counting stopped unexpectedly.	A szavak számlálása váratlanul leállt.
+	Word count…	Szavak száma…
+@id	file.word_count	Szavak száma…
+	Standard	Normál
+	Mobile	Mobil
+	Merge image fragments	Képtöredékek egyesítése
+	Optimizing… merging image fragments	Optimalizálás… képtöredékek egyesítése
+	Side by side	Egymás mellett
+	New file only	Csak az új fájl
+	Old file: {name}	Régi fájl: {name}
+	New file: {name}	Új fájl: {name}
+	Print as image	Nyomtatás képként
+	Resolution:	Felbontás:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Akkor használja, ha a nyomtató kihagy szöveget, árnyékolást vagy átlátszóságot. A nyomat már nem kereshető szöveg; szürkeárnyalatos nyomtatással a képek szürkék.
+	Crop Image	Kép körülvágása
+	Remove Crop	Körülvágás eltávolítása
+	Trim the picture with its handles; Enter or Done applies	Vágja körül a képet a fogantyúival; Enter vagy Kész alkalmazza
+	Redaction mark appearance	Kitakarási jelölés megjelenése
+	Outline colour:	Körvonal színe:
+	Fill colour:	Kitöltés színe:
+	Shown while the pointer is over a mark.	Akkor látszik, amikor a mutató egy jelölés fölött van.
+	Opacity:	Átlátszatlanság:
+	Make properties default	Tulajdonságok beállítása alapértelmezettként
+	Pages selected	Kijelölt oldalak
+	Page properties	Oldaltulajdonságok>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))>>>>>>> bf291a86 (M6: submit current PDF from form actions)
