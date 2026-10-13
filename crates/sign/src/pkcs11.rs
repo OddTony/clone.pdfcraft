@@ -339,7 +339,7 @@ impl Identity {
 }
 
 /// Every token's signing identities and the certificates that can't sign.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Listing {
     pub ids: Vec<Identity>,
     pub unusable: Vec<Unusable>,
@@ -393,6 +393,12 @@ pub fn list(module: &Module, pin: &PinSource) -> Result<Listing, SignError> {
             pinpad,
             pin_locked: info.user_pin_locked(),
         };
+        // Strict tokens hide private objects until login, so without one their keys would
+        // look missing. Log in when it needs no interaction: a PIN the caller already gave
+        // (never a prompt at listing time, and never a pinpad's reader pad).
+        if login_required && !pinpad && matches!(pin, PinSource::Env(_) | PinSource::Value(_)) {
+            login(&session, true, false, pin, None).map_err(|e| SignError::Crypto(format!("the token couldn't be unlocked for listing: {e}")))?;
+        }
         for handle in handles {
             let attrs = match session.get_attributes(handle, &[AttributeType::Value, AttributeType::Id, AttributeType::Label]) {
                 Ok(attrs) => attrs,
@@ -547,40 +553,52 @@ impl ExternalKey for Pkcs11Key {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Pkcs11Key {
-    /// Log the session in: nothing when the token needs none, an empty login on a pinpad,
-    /// otherwise the PIN from the caller's source. A wrong PIN is the token's error; when the
-    /// token says it may have been the last try, the error says so (tokens report flags, not
-    /// a remaining-tries count).
+    /// Log the session in through [`login`], re-reading the token's flags for the
+    /// last-try warning.
     fn login(&self, session: &cryptoki::session::Session) -> Result<(), SignError> {
-        use cryptoki::session::UserType;
-        if !self.token.needs_pin && !self.token.pinpad {
-            return Ok(());
-        }
-        if self.token.pinpad {
-            return session
-                .login(UserType::User, None)
-                .map_err(|e| SignError::Crypto(format!("the token's reader couldn't log in (was the token removed?): {}", describe(&e))));
-        }
-        let pin: secrecy::SecretString = match &self.pin {
-            PinSource::None => return Err(SignError::Crypto("signing with this token needs its PIN".into())),
-            PinSource::Env(name) => secrecy::SecretString::new(
-                std::env::var(name).map_err(|_| SignError::Crypto(format!("signing needs the token PIN in the {name} environment variable")))?.into(),
-            ),
-            PinSource::Ask(ask) => ask()?,
-            PinSource::Value(pin) => pin.clone(),
-        };
-        let auth: cryptoki::types::AuthPin = pin;
-        session.login(UserType::User, Some(&auth)).map_err(|e| {
-            let mut message = format!("the token couldn't be unlocked: {}", describe(&e));
-            // Best effort, failure path only: warn when the token flags this as the last try.
-            if matches!(e, cryptoki::error::Error::Pkcs11(cryptoki::error::RvError::PinIncorrect, ..))
-                && self.module.inner.get_token_info(self.slot).is_ok_and(|info| info.user_pin_final_try())
-            {
-                message.push_str(" (this may be the last try before the PIN locks)");
-            }
-            SignError::Crypto(message)
-        })
+        login(session, self.token.needs_pin, self.token.pinpad, &self.pin, Some((&self.module.inner, self.slot)))
     }
+}
+
+/// Log a session in: nothing when the token needs none, an empty login on a pinpad,
+/// otherwise the PIN from the caller's source. `reread` (the module and slot) lets a
+/// wrong PIN warn when the token flags it as possibly the last try (tokens report flags,
+/// not a remaining-tries count); without it the token's error stands on its own.
+#[cfg(not(target_arch = "wasm32"))]
+fn login(
+    session: &cryptoki::session::Session,
+    needs_pin: bool,
+    pinpad: bool,
+    pin: &PinSource,
+    reread: Option<(&cryptoki::context::Pkcs11, cryptoki::slot::Slot)>,
+) -> Result<(), SignError> {
+    use cryptoki::session::UserType;
+    if !needs_pin && !pinpad {
+        return Ok(());
+    }
+    if pinpad {
+        return session
+            .login(UserType::User, None)
+            .map_err(|e| SignError::Crypto(format!("the token's reader couldn't log in (was the token removed?): {}", describe(&e))));
+    }
+    let pin: secrecy::SecretString = match pin {
+        PinSource::None => return Err(SignError::Crypto("this token needs its PIN".into())),
+        PinSource::Env(name) => secrecy::SecretString::new(
+            std::env::var(name).map_err(|_| SignError::Crypto(format!("signing needs the token PIN in the {name} environment variable")))?.into(),
+        ),
+        PinSource::Ask(ask) => ask()?,
+        PinSource::Value(pin) => pin.clone(),
+    };
+    let auth: cryptoki::types::AuthPin = pin;
+    session.login(UserType::User, Some(&auth)).map_err(|e| {
+        let mut message = format!("the token couldn't be unlocked: {}", describe(&e));
+        // Best effort, failure path only: warn when the token flags this as the last try.
+        let final_try = reread.is_some_and(|(context, slot)| context.get_token_info(slot).is_ok_and(|info| info.user_pin_final_try()));
+        if matches!(e, cryptoki::error::Error::Pkcs11(cryptoki::error::RvError::PinIncorrect, ..)) && final_try {
+            message.push_str(" (this may be the last try before the PIN locks)");
+        }
+        SignError::Crypto(message)
+    })
 }
 
 /// A PKCS #11 failure as a sentence saying what happened, instead of a bare return code.
@@ -608,6 +626,10 @@ fn describe(error: &cryptoki::error::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(target_arch = "wasm32"))]
+    use cryptoki::object::{Attribute, CertificateType, KeyType, ObjectClass};
+    #[cfg(not(target_arch = "wasm32"))]
+    use cryptoki::session::{Session, UserType};
 
     #[test]
     fn references_round_trip_as_rfc_7512() {
@@ -710,5 +732,209 @@ mod tests {
         assert_eq!(format!("{ask:?}"), "Ask(..)");
         let value = super::PinSource::Value(secrecy::SecretString::new("s3cret".to_string().into()));
         assert_eq!(format!("{value:?}"), "Value(..)");
+    }
+
+    /// Live token test, skipped without a module to run against (like the craft-fonts tests
+    /// without `CRAFT_FONTS_DIR`):
+    ///
+    /// ```sh
+    /// SOFTHSM2_CONF=/tmp/softhsm-test/softhsm2.conf \
+    /// PDFCRAFT_PKCS11_TEST_MODULE=/usr/lib/softhsm/libsofthsm2.so \
+    ///   cargo test -p pdfcraft-sign pkcs11_softhsm
+    /// ```
+    ///
+    /// Point `SOFTHSM2_CONF` at a scratch store: the test initializes its own token there
+    /// (`PdfCraft test`, SO PIN `00000000`, user PIN `12345678`) when none exists, and reuses
+    /// it afterwards, so repeated runs are idempotent. A slot holding someone else's token is
+    /// left alone; with no usable slot the test fails saying how to point at a scratch store.
+    /// The RSA-2048 and P-256 pairs are generated in-test and imported with self-signed
+    /// certificates — no fixture keys, no helper binaries — then listed, found by reference,
+    /// signed with, and CMS-validated. A wrong PIN (one attempt) must report itself as
+    /// incorrect. SoftHSM implements no PIN retry counters, so nothing here can lock: the
+    /// locked-PIN mapping is covered by `failures_say_what_happened`, and a token that
+    /// arrives locked is checked against it when one does.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn pkcs11_softhsm_token_round_trip() {
+        const TOKEN_LABEL: &str = "PdfCraft test";
+        const SO_PIN: &str = "00000000";
+        const USER_PIN: &str = "12345678";
+        const RSA_ID: &[u8] = b"pdfcraft-test-rsa";
+        const EC_ID: &[u8] = b"pdfcraft-test-ec";
+        /// DER of the P-256 OID (1.2.840.10045.3.1.7), the `EcParams` of every P-256 key.
+        const P256_PARAMS: &[u8] = &[0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07];
+
+        fn secret(pin: &str) -> secrecy::SecretString {
+            secrecy::SecretString::new(pin.to_owned().into())
+        }
+
+        let Some(lib) = std::env::var("PDFCRAFT_PKCS11_TEST_MODULE").ok() else {
+            eprintln!("skipping pkcs11_softhsm_token_round_trip: set PDFCRAFT_PKCS11_TEST_MODULE to a PKCS #11 module (e.g. SoftHSM2) to run it");
+            return;
+        };
+        let module = super::load_module(std::path::Path::new(&lib)).expect("the test module loads");
+
+        // The test slot: ours by label, else a fresh one initialized for it.
+        let slot = {
+            let mut ours = None;
+            let mut fresh = None;
+            for slot in module.inner.get_all_slots().expect("slots list") {
+                let Ok(info) = module.inner.get_token_info(slot) else { continue };
+                if info.label().trim_end() == TOKEN_LABEL {
+                    ours = Some(slot);
+                    break;
+                }
+                if fresh.is_none() && !info.token_initialized() {
+                    fresh = Some(slot);
+                }
+            }
+            match (ours, fresh) {
+                (Some(slot), _) => slot,
+                (None, Some(slot)) => {
+                    module.inner.init_token(slot, &secret(SO_PIN), TOKEN_LABEL).expect("a fresh slot initializes the test token");
+                    slot
+                }
+                (None, None) => panic!("no slot for the test token: point SOFTHSM2_CONF at a scratch store"),
+            }
+        };
+
+        // Provision (idempotent): whatever of the two pairs is missing is generated
+        // locally, self-signed, and imported with the same CKA_ID on all three objects.
+        {
+            let session = module.inner.open_rw_session(slot).expect("a read-write session");
+            match session.login(UserType::User, Some(&secret(USER_PIN))) {
+                Ok(()) => {}
+                Err(e) => {
+                    // A fresh token has no user PIN yet: the SO sets it, then steps aside.
+                    session
+                        .login(UserType::So, Some(&secret(SO_PIN)))
+                        .expect("the test token takes the documented PINs; a foreign token lives here: point SOFTHSM2_CONF at a scratch store");
+                    let _ = e;
+                    session.init_pin(&secret(USER_PIN)).expect("the SO sets the user PIN");
+                    session.logout().expect("logout before the user login");
+                    session.login(UserType::User, Some(&secret(USER_PIN))).expect("user login with the new PIN");
+                }
+            }
+            provision_rsa(&session);
+            provision_ec(&session, P256_PARAMS);
+        }
+
+        let pin = PinSource::Value(secret(USER_PIN));
+        let token = super::tokens(&module).expect("tokens list").into_iter().find(|t| t.label == TOKEN_LABEL).expect("the test token lists");
+        assert!(token.needs_pin && !token.pinpad, "a PIN token without a pinpad: {token:?}");
+        if token.pin_locked {
+            let e = super::list(&module, &pin).unwrap_err().to_string();
+            assert!(e.contains("locked"), "a locked token reports itself: {e}");
+            return;
+        }
+        eprintln!("the locked-PIN check needs a locked token (SoftHSM implements no retry counters): mapping covered by failures_say_what_happened");
+
+        let listing = super::list(&module, &pin).expect("the test identities list");
+        for (want, what) in [(RSA_ID, "RSA-2048"), (EC_ID, "P-256")] {
+            let hit = listing.ids.iter().find(|id| id.key_id.as_slice() == want).unwrap_or_else(|| panic!("{what} pairs by CKA_ID"));
+            // The reference resolves to the same identity, which signs verifiably.
+            let found = super::find(&module, &hit.reference(), &pin).expect("find by reference");
+            assert_eq!(found.certificate, hit.id.certificate);
+            let alg = hit.id.key.preferred_digest();
+            let digest = alg.digest(&[b"the token-signed document"]);
+            let sig = crate::cms::sign_detached(&hit.id.key, &hit.id.certificate, &hit.id.chain, alg, &digest).expect("the token signs");
+            let sd = crate::cms::SignedData::parse(&sig).expect("its CMS parses");
+            assert!(sd.verify_signature(&hit.id.certificate, &digest).expect("its CMS verifies"), "{what}");
+        }
+
+        // One wrong attempt: incorrect, and (with no counters here) nothing more.
+        let wrong = super::list(&module, &PinSource::Value(secret("wrong-pin"))).unwrap_err().to_string();
+        assert!(wrong.contains("incorrect"), "a wrong PIN reports itself: {wrong}");
+    }
+
+    fn provision_rsa(session: &Session) {
+        const ID: &[u8] = b"pdfcraft-test-rsa";
+        const LABEL: &[u8] = b"PdfCraft test RSA";
+        if !session.find_objects(&[Attribute::Class(ObjectClass::PRIVATE_KEY), Attribute::Id(ID.to_vec())]).unwrap_or_default().is_empty() {
+            return;
+        }
+        let local = PrivateKey::generate_rsa(2048).unwrap();
+        let name = crate::x509::Name::build("PdfCraft Test", "", "", "", "");
+        let cert =
+            Certificate::self_signed(&name, &local, crate::Time { year: 2026, month: 1, day: 1, hour: 0, minute: 0, second: 0 }, 5, &[0xA1]).unwrap();
+        // The full RSA CRT out of the PKCS#8.
+        let info = crate::der::Tlv::parse_all(local.pkcs8()).unwrap().children().unwrap();
+        let rsa = crate::der::Tlv::parse_all(info[2].value).unwrap().children().unwrap();
+        let u = |i: usize| rsa[i].uint_bytes().to_vec();
+        session
+            .create_object(&[
+                Attribute::Class(ObjectClass::PRIVATE_KEY),
+                Attribute::KeyType(KeyType::RSA),
+                Attribute::Token(true),
+                Attribute::Private(true),
+                Attribute::Label(LABEL.to_vec()),
+                Attribute::Id(ID.to_vec()),
+                Attribute::Sensitive(true),
+                Attribute::Extractable(false),
+                Attribute::Sign(true),
+                Attribute::Modulus(u(1)),
+                Attribute::PublicExponent(u(2)),
+                Attribute::PrivateExponent(u(3)),
+                Attribute::Prime1(u(4)),
+                Attribute::Prime2(u(5)),
+                Attribute::Exponent1(u(6)),
+                Attribute::Exponent2(u(7)),
+                Attribute::Coefficient(u(8)),
+            ])
+            .expect("the RSA key imports");
+        session
+            .create_object(&[
+                Attribute::Class(ObjectClass::CERTIFICATE),
+                Attribute::CertificateType(CertificateType::X_509),
+                Attribute::Token(true),
+                Attribute::Private(false),
+                Attribute::Label(LABEL.to_vec()),
+                Attribute::Id(ID.to_vec()),
+                Attribute::Value(cert.raw.clone()),
+            ])
+            .expect("its certificate imports");
+    }
+
+    fn provision_ec(session: &Session, params: &[u8]) {
+        const ID: &[u8] = b"pdfcraft-test-ec";
+        const LABEL: &[u8] = b"PdfCraft test P-256";
+        if !session.find_objects(&[Attribute::Class(ObjectClass::PRIVATE_KEY), Attribute::Id(ID.to_vec())]).unwrap_or_default().is_empty() {
+            return;
+        }
+        let local = PrivateKey::generate_p256().unwrap();
+        let name = crate::x509::Name::build("PdfCraft Test", "", "", "", "");
+        let cert =
+            Certificate::self_signed(&name, &local, crate::Time { year: 2026, month: 1, day: 1, hour: 0, minute: 0, second: 0 }, 5, &[0xE2]).unwrap();
+        // The scalar out of the ECPrivateKey, the point out of the certificate.
+        let info = crate::der::Tlv::parse_all(local.pkcs8()).unwrap().children().unwrap();
+        let ec = crate::der::Tlv::parse_all(info[2].value).unwrap().children().unwrap();
+        let scalar = ec[1].value.to_vec();
+        assert!(matches!(cert.public_key, PublicKey::P256(_)), "a P-256 certificate holds a P-256 key");
+        session
+            .create_object(&[
+                Attribute::Class(ObjectClass::PRIVATE_KEY),
+                Attribute::KeyType(KeyType::EC),
+                Attribute::Token(true),
+                Attribute::Private(true),
+                Attribute::Label(LABEL.to_vec()),
+                Attribute::Id(ID.to_vec()),
+                Attribute::Sensitive(true),
+                Attribute::Extractable(false),
+                Attribute::Sign(true),
+                Attribute::EcParams(params.to_vec()),
+                Attribute::Value(scalar),
+            ])
+            .expect("the EC key imports");
+        session
+            .create_object(&[
+                Attribute::Class(ObjectClass::CERTIFICATE),
+                Attribute::CertificateType(CertificateType::X_509),
+                Attribute::Token(true),
+                Attribute::Private(false),
+                Attribute::Label(LABEL.to_vec()),
+                Attribute::Id(ID.to_vec()),
+                Attribute::Value(cert.raw.clone()),
+            ])
+            .expect("its certificate imports");
     }
 }
