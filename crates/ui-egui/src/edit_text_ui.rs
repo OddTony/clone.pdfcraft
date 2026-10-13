@@ -50,8 +50,12 @@ impl TextBackground {
         }
         let (Some((_, page, _)), Some(renderer)) = (self.key, self.renderer.as_ref()) else { return };
         let Some(p) = doc.info.pages.get(page) else { return };
+        // One raster stands in for the page's tiles while a paragraph is open, so everything
+        // around the editor is drawn from it: at the tiling threshold it stays sharp on a Retina
+        // display up to about 2.5x on a Letter or A4 page, where the backdrop side (2048) went
+        // soft past 1.2x.
         let max_side = ctx.input(|i| i.max_texture_side) as f32;
-        let scale = scale.min(crate::canvas::BASE_SIDE.min(max_side) / p.width.max(p.height).max(1.0));
+        let scale = scale.min(crate::canvas::TILE_THRESHOLD.min(max_side) / p.width.max(p.height).max(1.0));
         let tag = (scale * 1000.0) as u64;
         if self.tag != Some(tag) {
             renderer.set_queue(vec![pdfcraft_render::RenderRequest { page, scale, tag, ..Default::default() }]);
@@ -362,6 +366,107 @@ pub struct BlockDrag {
 
 /// How far an edge grip reaches either side of a box's edge (screen pixels).
 const EDGE_REACH: f32 = 6.0;
+/// How far outside an open paragraph's frame the pointer still means the frame (screen pixels).
+const FRAME_REACH: f32 = 4.0;
+/// Alignment guides (#1714): within this many screen pixels, a dragged box's edge or centre snaps
+/// to an edge or centre of another paragraph or image on the page, or of the page itself.
+const SNAP: f32 = 6.0;
+/// The guide line drawn where a drag snapped.
+const GUIDE: Color32 = Color32::from_rgb(0xFF, 0x00, 0xC8);
+
+/// A line a drag snapped to, in screen coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Guide {
+    Vertical(f32),
+    Horizontal(f32),
+}
+
+/// Where `moving` lands after snapping to `others` and `page` (screen rects), and the lines it
+/// snapped to. Edges and centres on both axes; the nearest line within [`SNAP`] wins on each.
+pub(crate) fn snap_to(moving: Rect, others: &[Rect], page: Rect) -> (Rect, Vec<Guide>) {
+    let xs = |r: Rect| [r.left(), r.center().x, r.right()];
+    let ys = |r: Rect| [r.top(), r.center().y, r.bottom()];
+    let candidates: Vec<Rect> = others.iter().copied().filter(|r| r.is_positive()).chain(std::iter::once(page)).collect();
+    // The nearest (shift, line) within reach, between the box's own lines and the candidates'.
+    let nearest = |own: [f32; 3], lines: &[f32]| -> Option<(f32, f32)> {
+        let mut best: Option<(f32, f32)> = None;
+        for &line in lines {
+            for o in own {
+                let shift = line - o;
+                if shift.abs() <= SNAP && best.is_none_or(|(b, _)| shift.abs() < b.abs()) {
+                    best = Some((shift, line));
+                }
+            }
+        }
+        best
+    };
+    let vertical: Vec<f32> = candidates.iter().flat_map(|r| xs(*r)).collect();
+    let horizontal: Vec<f32> = candidates.iter().flat_map(|r| ys(*r)).collect();
+    let x = nearest(xs(moving), &vertical);
+    let y = nearest(ys(moving), &horizontal);
+    let snapped = moving.translate(egui::vec2(x.map_or(0.0, |(shift, _)| shift), y.map_or(0.0, |(shift, _)| shift)));
+    let guides = x.map(|(_, line)| Guide::Vertical(line)).into_iter().chain(y.map(|(_, line)| Guide::Horizontal(line))).collect();
+    (snapped, guides)
+}
+
+/// The guides across the page, and beside the snapped box (`moving`) the way out of them.
+pub(crate) fn draw_guides(painter: &egui::Painter, guides: &[Guide], page: Rect, moving: Rect) {
+    let stroke = Stroke::new(1.0, GUIDE);
+    for guide in guides {
+        let line = match *guide {
+            Guide::Vertical(x) => [Pos2::new(x, page.top()), Pos2::new(x, page.bottom())],
+            Guide::Horizontal(y) => [Pos2::new(page.left(), y), Pos2::new(page.right(), y)],
+        };
+        painter.line_segment(line, stroke);
+    }
+    if !guides.is_empty() {
+        let font = egui::FontId::proportional(11.0);
+        let galley = painter.layout_no_wrap(tl!("Shift drags freely").to_string(), font, GUIDE);
+        let at = Pos2::new(moving.right() + 8.0, moving.bottom() + 8.0);
+        let bg = Rect::from_min_size(at, galley.size()).expand(4.0);
+        painter.rect(bg, CornerRadius::same(3), Color32::WHITE, Stroke::new(1.0, GUIDE), egui::StrokeKind::Outside);
+        painter.galley(at, galley, GUIDE);
+    }
+}
+
+/// The pixels follow the box while it is dragged (#1714): the page raster's picture of `from`,
+/// drawn into `to` over a blank where it was. Re-rendering every frame of a drag would lag; the
+/// edit renders it properly on release. Without a raster on screen yet, only the frame moves.
+pub(crate) fn carry_pixels(painter: &egui::Painter, xf: &PageXform, raster: Option<egui::TextureId>, from: Rect, to: Rect) {
+    let Some(tex) = raster.filter(|_| from != to && from.is_positive()) else { return };
+    let clipped = painter.with_clip_rect(painter.clip_rect().intersect(xf.rect));
+    clipped.rect_filled(from, CornerRadius::ZERO, Color32::WHITE);
+    let mut mesh = egui::Mesh::with_texture(tex);
+    for (a, b) in [
+        (from.left_top(), to.left_top()),
+        (from.right_top(), to.right_top()),
+        (from.right_bottom(), to.right_bottom()),
+        (from.left_bottom(), to.left_bottom()),
+    ] {
+        let (u, v) = xf.screen_to_norm(a);
+        mesh.vertices.push(egui::epaint::Vertex { pos: b, uv: Pos2::new(u, v), color: Color32::WHITE });
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    clipped.add(egui::Shape::mesh(mesh));
+}
+
+/// The screen frames of the page's images (the other kind of box a drag aligns to).
+pub(crate) fn image_frames(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize) -> Vec<Rect> {
+    view.edit_images
+        .get(&page)
+        .map(|(_, images)| images.iter().filter_map(|im| im.visible_rect.map(|r| xf.user_rect(info, page, r.map(|v| v as f32)))).collect())
+        .unwrap_or_default()
+}
+
+/// The screen rects of the page's paragraphs (the text itself, without the 2 px box padding, so
+/// text and images and the object selection all measure alike).
+pub(crate) fn text_frames(view: &DocView, xf: &PageXform, info: &DocInfo, page: usize) -> Vec<Rect> {
+    view.edit_lines
+        .get(&page)
+        .map(|(_, lines)| lines.iter().map(|l| xf.user_rect(info, page, l.rect.map(|v| v as f32))).collect())
+        .unwrap_or_default()
+}
 
 /// The rewrap handles drawn on a paragraph box's left and right edges (screen).
 fn width_handles(b: Rect) -> [Rect; 2] {
@@ -499,6 +604,7 @@ pub(crate) fn image_input(
         if let Some((start, opposite)) = view.image_selection.as_ref().and_then(|s| s.drag)
             && let Some(p) = hover_pos
         {
+            let mut guides = Vec::new();
             let preview = match opposite {
                 // Resize from the opposite corner, keeping the aspect ratio.
                 Some(fixed) => {
@@ -515,7 +621,15 @@ pub(crate) fn image_input(
                     let y = if start.y < fixed.y { fixed.y - h } else { fixed.y };
                     Rect::from_min_size(Pos2::new(x, y), egui::vec2(w, h))
                 }
-                None => b.translate(p - start),
+                // A move snaps to the other images and the paragraphs (#1714); Shift drags freely.
+                None if ui.input(|inp| inp.modifiers.shift) => b.translate(p - start),
+                None => {
+                    let others: Vec<Rect> =
+                        boxes.iter().enumerate().filter(|(k, _)| *k != i).map(|(_, r)| *r).chain(text_frames(view, xf, info, page)).collect();
+                    let (snapped, found) = snap_to(b.translate(p - start), &others, xf.rect);
+                    guides = found;
+                    snapped
+                }
             };
             // Move/resize the full placement by the visible frame's change. The engine
             // transforms an isolated crop together with its image, preserving its contents.
@@ -531,6 +645,7 @@ pub(crate) fn image_input(
                 painter.rect_stroke(visible, CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
                 handles(preview);
             }
+            draw_guides(painter, &guides, xf.rect, preview);
             if resp.drag_stopped() || !ui.input(|i| i.pointer.primary_down()) {
                 if let Some(s) = view.image_selection.as_mut() {
                     s.drag = None;
@@ -543,7 +658,7 @@ pub(crate) fn image_input(
             ui.ctx().set_cursor_icon(match opposite {
                 Some(fixed) if (start.x - fixed.x) * (start.y - fixed.y) < 0.0 => egui::CursorIcon::ResizeNeSw,
                 Some(_) => egui::CursorIcon::ResizeNwSe,
-                None => egui::CursorIcon::Grabbing,
+                None => egui::CursorIcon::Move,
             });
             return true;
         }
@@ -662,17 +777,36 @@ pub(crate) fn page_input(
     {
         let p = ui.input(|i| i.pointer.interact_pos()).unwrap_or(d.start);
         let dx = p.x - d.start.x;
+        let mut guides = Vec::new();
         let preview = match d.grip {
-            Grip::Move => b.translate(p - d.start),
+            // A move snaps to the other paragraphs and the images (#1714); Shift drags freely.
+            Grip::Move if ui.input(|i| i.modifiers.shift) => b.translate(p - d.start),
+            Grip::Move => {
+                // Measured on the text, not its padded box, like the other candidates.
+                let others: Vec<Rect> = text_frames(view, xf, info, page)
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(k, _)| *k != d.block)
+                    .map(|(_, r)| r)
+                    .chain(image_frames(view, xf, info, page))
+                    .collect();
+                let (snapped, found) = snap_to(b.translate(p - d.start).shrink(2.0), &others, xf.rect);
+                guides = found;
+                snapped.expand(2.0)
+            }
             Grip::Left => Rect::from_min_max(Pos2::new((b.left() + dx).min(b.right() - 12.0), b.min.y), b.max),
             Grip::Right => Rect::from_min_max(b.min, Pos2::new((b.right() + dx).max(b.left() + 12.0), b.max.y)),
         };
+        if d.grip == Grip::Move {
+            carry_pixels(painter, xf, view.page_raster(page), b, preview);
+        }
         painter.rect_stroke(preview, CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
+        draw_guides(painter, &guides, xf.rect, preview);
         let resizing = d.grip != Grip::Move;
         if resizing {
             draw_handles(preview);
         }
-        ui.ctx().set_cursor_icon(if resizing { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::Grabbing });
+        ui.ctx().set_cursor_icon(if resizing { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::Move });
         if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
             view.block_drag = None;
             let (from, to) = (user_box(xf, info, page, b), user_box(xf, info, page, preview));
@@ -720,7 +854,15 @@ pub(crate) fn page_input(
     if upright && active.is_none() {
         draw_handles(boxes[hit]);
     }
-    ui.ctx().set_cursor_icon(if on_edge { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::Text });
+    // A closed paragraph moves when dragged (the four-way arrow says so; a click still opens it
+    // for typing); an edge rewraps it. The open one takes the text cursor.
+    ui.ctx().set_cursor_icon(if on_edge {
+        egui::CursorIcon::ResizeHorizontal
+    } else if active.is_none() {
+        egui::CursorIcon::Move
+    } else {
+        egui::CursorIcon::Text
+    });
     if resp.clicked() {
         view.image_selection = None;
         let l = &lines[hit];
@@ -999,6 +1141,14 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             // can differ from the PDF's. Keep every visible row inside the growing frame.
             let live = draft_rect.map_or(visible, |bounds| bounds.union(visible));
             ui.painter().rect_stroke(live.expand(2.0), CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
+            // On the frame, a press takes hold of the box (a click selects it, a drag moves it):
+            // the pointer says so there, and reads as text inside.
+            if let Some(p) = ui.input(|i| i.pointer.hover_pos())
+                && live.expand(2.0 + FRAME_REACH).contains(p)
+                && !live.expand(2.0).contains(p)
+            {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+            }
             // White, unless the text is too pale to read on white (white text from a coloured
             // banner, #913): then a dark box, with a caret that shows on it.
             let fill = if background_ready { Color32::TRANSPARENT } else { editor_fill(text_color) };
@@ -1075,15 +1225,13 @@ pub(crate) fn caret_color_on(fill: Color32) -> Color32 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn text_background_is_cached_without_editing_and_released_on_cancel() {
+    /// An app with one text document open, and an editor on its first paragraph.
+    fn preview_app() -> (crate::PdfCraftApp, LineEditor) {
         let mut app = crate::PdfCraftApp::new();
         let bytes = app.session.create_from_text("Preview", "Preview text").unwrap();
         app.open_bytes("preview.pdf", None, bytes.as_ref().clone()).unwrap();
         let doc = app.session.get(app.views[0].id).unwrap();
         let block = doc.text_blocks(0).remove(0);
-        let source = doc.bytes.clone();
-        let generation = doc.edit_generation();
         let ed = LineEditor {
             selection: None,
             font_resource: None,
@@ -1105,6 +1253,15 @@ mod tests {
             extras: Extras::default(),
             extras0: Extras::default(),
         };
+        (app, ed)
+    }
+
+    #[test]
+    fn text_background_is_cached_without_editing_and_released_on_cancel() {
+        let (app, ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        let source = doc.bytes.clone();
+        let generation = doc.edit_generation();
         let ctx = egui::Context::default();
         let mut background = TextBackground::default();
         for _ in 0..100 {
@@ -1124,6 +1281,56 @@ mod tests {
         assert!(!doc.dirty && doc.can_undo().is_none());
         background.prepare(&ctx, doc, None, 1.0);
         assert!(background.texture.is_none() && background.renderer.is_none());
+    }
+
+    #[test]
+    fn the_editing_background_stays_sharp_on_a_zoomed_page() {
+        // While a paragraph is open, the page around it is drawn from this one raster: it is
+        // asked for at the tiling threshold, not the 2048-pixel backdrop side, which went soft
+        // beyond about 1.2x on a Retina display.
+        let (app, ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        let page = &doc.info.pages[0];
+        let ctx = egui::Context::default();
+        ctx.begin_pass(egui::RawInput { max_texture_side: Some(16384), ..Default::default() });
+        let mut background = TextBackground::default();
+        background.prepare(&ctx, doc, Some(&ed), 8.0);
+        let expected = 8.0f32.min(crate::canvas::TILE_THRESHOLD / page.width.max(page.height));
+        assert!(expected > crate::canvas::BASE_SIDE / page.width.max(page.height), "the test page needs the larger side");
+        assert_eq!(background.tag, Some((expected * 1000.0) as u64));
+        // A GPU that can't hold such a texture caps it.
+        ctx.end_pass().textures_delta.clear();
+        ctx.begin_pass(egui::RawInput { max_texture_side: Some(2048), ..Default::default() });
+        let mut small = TextBackground::default();
+        small.prepare(&ctx, doc, Some(&ed), 8.0);
+        assert_eq!(small.tag, Some(((2048.0 / page.width.max(page.height)) * 1000.0) as u64));
+        ctx.end_pass().textures_delta.clear();
+    }
+
+    #[test]
+    fn a_drag_snaps_to_nearby_edges_and_centres_only() {
+        let page = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(600.0, 800.0));
+        let other = Rect::from_min_max(Pos2::new(100.0, 100.0), Pos2::new(300.0, 140.0));
+        // Four pixels right of the other box's left edge, far from anything vertically: x snaps.
+        let moving = Rect::from_min_max(Pos2::new(104.0, 500.0), Pos2::new(184.0, 520.0));
+        let (snapped, guides) = snap_to(moving, &[other], page);
+        assert_eq!(snapped.left(), 100.0);
+        assert_eq!(snapped.top(), 500.0);
+        assert_eq!(guides, [Guide::Vertical(100.0)]);
+        // Centres align too, and the page's own centre counts: 300 = the other's centre x and the page's.
+        let moving = Rect::from_min_max(Pos2::new(265.0, 402.0), Pos2::new(345.0, 422.0));
+        let (snapped, guides) = snap_to(moving, &[other], page);
+        assert_eq!(snapped.min, Pos2::new(260.0, 400.0), "centre x to the shared centre, top to the page's centre line");
+        assert_eq!(guides, [Guide::Vertical(300.0), Guide::Horizontal(400.0)]);
+        // The nearest line wins: 2 px from the other's right edge, 5 px from its centre.
+        let moving = Rect::from_min_max(Pos2::new(298.0, 600.0), Pos2::new(308.0, 620.0));
+        let (snapped, _) = snap_to(moving, &[other], page);
+        assert_eq!(snapped.left(), 300.0);
+        // Beyond reach nothing moves, and nothing is drawn.
+        let moving = Rect::from_min_max(Pos2::new(110.0, 500.0), Pos2::new(190.0, 520.0));
+        assert_eq!(snap_to(moving, &[other], page), (moving, Vec::new()));
+        // Empty candidates are skipped.
+        assert_eq!(snap_to(moving, &[Rect::NOTHING], page), (moving, Vec::new()));
     }
 
     #[test]

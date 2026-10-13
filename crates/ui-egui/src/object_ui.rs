@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 
+use crate::edit_text_ui::Guide;
 use egui::{Color32, Pos2, Rect, Stroke};
 use pdfcraft_engine::{Document, Edit, EditableObject, MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget};
 use pdfcraft_render::DocInfo;
@@ -32,6 +33,21 @@ struct Gesture {
     now: Pos2,
     marquee: bool,
     additive: bool,
+    /// Added to the move so the selection's edges and centre land on the guides (#1714).
+    snap: egui::Vec2,
+    /// The guides the move snapped to, vertical and horizontal.
+    guides: [Option<Guide>; 2],
+}
+
+impl Gesture {
+    fn new(p: Pos2, marquee: bool, additive: bool) -> Self {
+        Gesture { start: p, now: p, marquee, additive, snap: egui::Vec2::ZERO, guides: [None, None] }
+    }
+
+    /// Where the selection moved to, snapped.
+    fn delta(&self) -> egui::Vec2 {
+        if self.marquee { egui::Vec2::ZERO } else { self.now - self.start + self.snap }
+    }
 }
 
 impl ObjectSelection {
@@ -191,6 +207,34 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         if let Some(p) = pointer {
             gesture.now = p;
         }
+        // A move snaps to the page's other paragraphs and images and to the page (#1714); Shift
+        // drags freely. Measured on the selection's union, so a group aligns as one box.
+        if !gesture.marquee {
+            let shift = ui.input(|i| i.modifiers.shift);
+            let union = s.selected.iter().fold(Rect::NOTHING, |r, o| r.union(screen(xf, info, page, o)));
+            (gesture.snap, gesture.guides) = if shift || !union.is_positive() {
+                (egui::Vec2::ZERO, [None, None])
+            } else {
+                let selected = |kind: ObjectKind, index: usize| s.selected.iter().any(|o| o.target.kind == kind && o.target.index == index);
+                let others: Vec<Rect> = crate::edit_text_ui::text_frames(view, xf, info, page)
+                    .into_iter()
+                    .enumerate()
+                    .filter(|(k, _)| !selected(ObjectKind::Text, *k))
+                    .map(|(_, r)| r)
+                    .chain(
+                        crate::edit_text_ui::image_frames(view, xf, info, page)
+                            .into_iter()
+                            .enumerate()
+                            .filter(|(k, _)| !selected(ObjectKind::Image, *k))
+                            .map(|(_, r)| r),
+                    )
+                    .collect();
+                let free = union.translate(gesture.now - gesture.start);
+                let (snapped, guides) = crate::edit_text_ui::snap_to(free, &others, xf.rect);
+                let pick = |vertical: bool| guides.iter().copied().find(|g| matches!(g, Guide::Vertical(_)) == vertical);
+                (snapped.min - free.min, [pick(true), pick(false)])
+            };
+        }
         if !down {
             if !gesture.marquee && gesture.start.distance(gesture.now) <= 3.0 && resp.double_clicked() {
                 s.clear();
@@ -223,7 +267,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
                     s.clear();
                 }
             } else if gesture.start.distance(gesture.now) > 3.0 && view.pending_edit.is_none() {
-                let (a, b) = (xf.screen_to_view(gesture.start), xf.screen_to_view(gesture.now));
+                let (a, b) = (xf.screen_to_view(gesture.start), xf.screen_to_view(gesture.start + gesture.delta()));
                 match doc.object_move_offset(page, [f64::from(b.0 - a.0), f64::from(b.1 - a.1)]) {
                     Ok(offset) => view.pending_edit = Some(s.move_by(page, offset)),
                     Err(_) => s.notice = Some(tl!("These objects could not be moved. Select them again and try a smaller move.").into()),
@@ -232,7 +276,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         } else {
             s.gesture = Some(gesture);
         }
-        ui.ctx().set_cursor_icon(if gesture.marquee { egui::CursorIcon::Crosshair } else { egui::CursorIcon::Grabbing });
+        ui.ctx().set_cursor_icon(if gesture.marquee { egui::CursorIcon::Crosshair } else { egui::CursorIcon::Move });
         return true;
     }
     let Some(p) = pointer.filter(|p| xf.rect.contains(*p) && ui.clip_rect().contains(*p) && resp.rect.contains(*p)) else {
@@ -242,7 +286,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         if s.page == Some(page) && !s.selected.is_empty() {
             let union = s.selected.iter().fold(Rect::NOTHING, |r, o| r.union(screen(xf, info, page, o)));
             if union.contains(p) {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
             }
             return true;
         }
@@ -283,7 +327,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
                 s.notice = Some(tl!("Select at most 1000 objects at a time.").into());
             }
         } else {
-            s.gesture = Some(Gesture { start: p, now: p, marquee: true, additive: true });
+            s.gesture = Some(Gesture::new(p, true, true));
         }
         leave_single(view);
         view.current = page;
@@ -292,7 +336,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
     if s.page == Some(page) && !s.selected.is_empty() {
         let union = s.selected.iter().fold(Rect::NOTHING, |r, o| r.union(screen(xf, info, page, o)));
         if union.contains(p) && !resp.double_clicked() {
-            s.gesture = Some(Gesture { start: p, now: p, marquee: false, additive: false });
+            s.gesture = Some(Gesture::new(p, false, false));
             return true;
         }
     }
@@ -305,7 +349,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         s.clear();
         s.page = Some(page);
         s.selected.push(object.clone());
-        s.gesture = Some(Gesture { start: p, now: p, marquee: false, additive: false });
+        s.gesture = Some(Gesture::new(p, false, false));
         leave_single(view);
         view.current = page;
         return true;
@@ -316,7 +360,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
     }
     leave_single(view);
     s.page = Some(page);
-    s.gesture = Some(Gesture { start: p, now: p, marquee: true, additive: false });
+    s.gesture = Some(Gesture::new(p, true, false));
     view.current = page;
     true
 }
@@ -380,20 +424,34 @@ pub(crate) fn nudge_keys(ctx: &egui::Context, view: &mut DocView, doc: &Document
     }
 }
 
-pub(crate) fn paint(painter: &egui::Painter, xf: &PageXform, page: usize, info: &DocInfo, selection: &ObjectSelection) {
+pub(crate) fn paint(
+    painter: &egui::Painter,
+    xf: &PageXform,
+    page: usize,
+    info: &DocInfo,
+    selection: &ObjectSelection,
+    raster: Option<egui::TextureId>,
+) {
     if selection.page != Some(page) {
         return;
     }
-    let delta = selection.gesture.filter(|g| !g.marquee).map_or(egui::Vec2::ZERO, |g| g.now - g.start);
+    let delta = selection.gesture.map_or(egui::Vec2::ZERO, |g| g.delta());
     let mut union = Rect::NOTHING;
     for object in &selection.selected {
-        let rect = screen(xf, info, page, object).translate(delta);
+        let at = screen(xf, info, page, object);
+        let rect = at.translate(delta);
+        // The pixels follow the selection while it is dragged (#1714).
+        crate::edit_text_ui::carry_pixels(painter, xf, raster, at, rect);
         painter.rect_filled(rect, 0.0, BLUE.gamma_multiply(0.05));
         painter.rect_stroke(rect, 0.0, Stroke::new(1.5, BLUE), egui::StrokeKind::Outside);
         union = union.union(rect);
     }
     if selection.selected.len() > 1 {
         painter.rect_stroke(union.expand(4.0), 0.0, Stroke::new(1.0, BLUE.gamma_multiply(0.7)), egui::StrokeKind::Outside);
+    }
+    if let Some(g) = selection.gesture.filter(|g| !g.marquee) {
+        let guides: Vec<Guide> = g.guides.iter().flatten().copied().collect();
+        crate::edit_text_ui::draw_guides(painter, &guides, xf.rect, union);
     }
     if let Some(g) = selection.gesture.filter(|g| g.marquee) {
         let area = Rect::from_two_pos(g.start, g.now).intersect(xf.rect);

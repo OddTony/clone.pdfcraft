@@ -12,13 +12,18 @@ use pdfcraft_ui_egui::{CloseRequest, Dialog, PdfCraftApp};
 
 /// An `n`-page document with a proper xref table; page `i` shows "Page i+1".
 fn fixture(n: usize) -> Vec<u8> {
+    fixture_with(&(0..n).map(|i| format!("BT /F1 24 Tf 20 150 Td (Page {}) Tj ET", i + 1)).collect::<Vec<_>>())
+}
+
+/// 200 x 300 pt pages with the given content streams (Helvetica as /F1).
+fn fixture_with(bodies: &[String]) -> Vec<u8> {
+    let n = bodies.len();
     let mut objs: Vec<String> = vec!["<< /Type /Catalog /Pages 2 0 R >>".into()];
     let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", 4 + 2 * i)).collect();
     objs.push(format!("<< /Type /Pages /Kids [{}] /Count {n} /MediaBox [0 0 200 300] >>", kids.join(" ")));
     objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into());
-    for i in 0..n {
+    for (i, body) in bodies.iter().enumerate() {
         objs.push(format!("<< /Type /Page /Parent 2 0 R /Contents {} 0 R /Resources << /Font << /F1 3 0 R >> >> >>", 5 + 2 * i));
-        let body = format!("BT /F1 24 Tf 20 150 Td (Page {}) Tj ET", i + 1);
         objs.push(format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()));
     }
     let mut out = b"%PDF-1.7\n".to_vec();
@@ -4159,4 +4164,212 @@ fn private_new_chinese_keyboard_input_preserves_font_layout_and_saved_pixels() {
     }
     assert_eq!(std::fs::read(path).unwrap(), original);
     println!("verified Chinese keyboard insertion/deletion and save/reopen rendering on {pages} pages");
+}
+
+/// Moving text shows the four-way arrow wherever a drag would move it (#1520 follow-up): over a
+/// closed paragraph, on the frame of an open one, and while dragging. Inside the open one the
+/// pointer reads as text; on a closed one's edge, as the rewrap handle.
+#[test]
+fn moving_text_offers_the_four_way_arrow() {
+    let mut h = harness(2, |_| {});
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let id = h.state().views[0].id;
+    let block = h.state().session.get(id).unwrap().text_blocks(0)[0].clone();
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 200.0;
+    let screen = |x: f64, y: f64| egui::pos2(r.left() + x as f32 * k, r.top() + (300.0 - y as f32) * k);
+    let centre = screen((block.rect[0] + block.rect[2]) / 2.0, (block.rect[1] + block.rect[3]) / 2.0);
+    let cursor_at = |h: &mut Harness<'static, PdfCraftApp>, at: egui::Pos2| {
+        h.hover_at(at);
+        h.run_steps(2);
+        h.output().platform_output.cursor_icon
+    };
+    // A closed paragraph: a drag moves it; its left edge rewraps it.
+    assert_eq!(cursor_at(&mut h, centre), egui::CursorIcon::Move);
+    assert_eq!(cursor_at(&mut h, screen(block.rect[0], (block.rect[1] + block.rect[3]) / 2.0)), egui::CursorIcon::ResizeHorizontal);
+    // While it is being dragged.
+    h.hover_at(centre);
+    h.run_steps(1);
+    h.drag_at(centre);
+    h.run_steps(1);
+    let mid = centre + egui::vec2(20.0 * k, 10.0 * k);
+    h.hover_at(mid);
+    h.run_steps(2);
+    assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::Move);
+    h.drop_at(mid);
+    h.run_steps(4);
+    let moved = h.state().session.get(id).unwrap().text_blocks(0)[0].clone();
+    assert!((moved.rect[0] - block.rect[0] - 20.0).abs() < 1.5, "{:?} → {:?}", block.rect, moved.rect);
+    // Open: text inside, the frame moves it.
+    let centre = screen((moved.rect[0] + moved.rect[2]) / 2.0, (moved.rect[1] + moved.rect[3]) / 2.0);
+    click_at(&mut h, centre);
+    assert!(h.state().views[0].line_editor.is_some());
+    assert_eq!(cursor_at(&mut h, centre), egui::CursorIcon::Text);
+    let frame = screen((moved.rect[0] + moved.rect[2]) / 2.0, moved.rect[3]) - egui::vec2(0.0, 4.0);
+    assert_eq!(cursor_at(&mut h, frame), egui::CursorIcon::Move);
+}
+
+/// #1714: a dragged paragraph snaps to another paragraph's edge, with a guide, within a few pixels.
+#[test]
+fn a_dragged_paragraph_snaps_to_another_paragraphs_edge() {
+    let bytes = fixture_with(&["BT /F1 24 Tf 20 250 Td (Alpha) Tj ET BT /F1 24 Tf 70 190 Td (Beta) Tj ET".into()]);
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("snap.pdf", None, bytes.clone()).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let id = h.state().views[0].id;
+    let block = |h: &Harness<'static, PdfCraftApp>, text: &str| {
+        h.state().session.get(id).unwrap().text_blocks(0).into_iter().find(|b| b.text == text).unwrap_or_else(|| panic!("{text}"))
+    };
+    let (alpha, beta) = (block(&h, "Alpha"), block(&h, "Beta"));
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 200.0;
+    let screen = |x: f64, y: f64| egui::pos2(r.left() + x as f32 * k, r.top() + (300.0 - y as f32) * k);
+    let centre = screen((beta.rect[0] + beta.rect[2]) / 2.0, (beta.rect[1] + beta.rect[3]) / 2.0);
+    // Away from everything, a drag lands where it was dropped.
+    drag(&mut h, centre, centre + egui::vec2(20.0 * k, 0.0));
+    let beta = block(&h, "Beta");
+    assert!((beta.rect[0] - 90.0).abs() < 1.5, "a free drag moves it: {:?}", beta.rect);
+    let centre = screen((beta.rect[0] + beta.rect[2]) / 2.0, (beta.rect[1] + beta.rect[3]) / 2.0);
+    // Drag Beta so that its left edge would land half a point right of Alpha's: it snaps onto it.
+    let wanted = (alpha.rect[0] + 0.5 - beta.rect[0]) as f32 * k;
+    assert!(wanted.abs() > 6.0, "the drag itself is a real one ({wanted} px)");
+    drag(&mut h, centre, centre + egui::vec2(wanted, 0.0));
+    let moved = block(&h, "Beta");
+    assert!((moved.rect[0] - alpha.rect[0]).abs() < 0.05, "snapped to Alpha's left edge: {:?} vs {:?}", moved.rect, alpha.rect);
+    assert!((moved.rect[1] - beta.rect[1]).abs() < 0.05, "nothing to snap to vertically: {:?}", moved.rect);
+    assert_eq!(h.state().session.get(id).unwrap().can_undo(), Some("Move object"));
+    // The open paragraph, dragged by its frame (the object selection's move), snaps the same way:
+    // its right edge onto Alpha's, from half a point off.
+    let beta = moved;
+    click_at(&mut h, screen((beta.rect[0] + beta.rect[2]) / 2.0, (beta.rect[1] + beta.rect[3]) / 2.0));
+    assert!(h.state().views[0].line_editor.is_some());
+    let frame = screen((beta.rect[0] + beta.rect[2]) / 2.0, beta.rect[3]) - egui::vec2(0.0, 4.0);
+    let wanted = (alpha.rect[2] + 0.5 - beta.rect[2]) as f32 * k;
+    drag(&mut h, frame, frame + egui::vec2(wanted, 0.0));
+    let moved = block(&h, "Beta");
+    assert!((moved.rect[2] - alpha.rect[2]).abs() < 0.05, "snapped to Alpha's right edge: {:?} vs {:?}", moved.rect, alpha.rect);
+    assert!(h.state().views[0].line_editor.is_none());
+}
+
+/// The right-edge handle widens a narrowed paragraph back: the two lines become one again.
+#[test]
+fn widening_a_narrowed_paragraph_rewraps_it_back() {
+    // Tall enough for the whole 300 pt page: the box's middle must stay on screen as it grows.
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1700.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("doc.pdf", None, fixture(1)).expect("fixture opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let id = h.state().views[0].id;
+    let lines =
+        |h: &Harness<'static, PdfCraftApp>| h.state().session.get(id).unwrap().text_lines(0).iter().map(|l| l.text.clone()).collect::<Vec<_>>();
+    let block = |h: &Harness<'static, PdfCraftApp>| h.state().session.get(id).unwrap().text_blocks(0)[0].clone();
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 200.0;
+    let screen = |x: f64, y: f64| egui::pos2(r.left() + x as f32 * k, r.top() + (300.0 - y as f32) * k);
+    let before = block(&h);
+    let edge = screen(before.rect[2], (before.rect[1] + before.rect[3]) / 2.0) + egui::vec2(2.0, 0.0);
+    let narrower = (before.rect[2] - before.rect[0] - 45.0) as f32 * k;
+    drag(&mut h, edge, edge - egui::vec2(narrower, 0.0));
+    assert_eq!(lines(&h), ["Page", "1"]);
+    let narrow = block(&h);
+    let edge = screen(narrow.rect[2], (narrow.rect[1] + narrow.rect[3]) / 2.0) + egui::vec2(2.0, 0.0);
+    drag(&mut h, edge, edge + egui::vec2(60.0 * k, 0.0));
+    assert_eq!(lines(&h), ["Page 1"], "wider again: one line, {:?}", block(&h).rect);
+    assert_eq!(h.state().session.get(id).unwrap().can_undo(), Some("Edit text"));
+}
+
+/// #1714: while a paragraph is dragged, its pixels travel with the frame (a textured mesh of the
+/// page raster drawn into the preview), closed by its box and open by its frame alike.
+#[test]
+fn a_dragged_paragraphs_pixels_follow_its_frame() {
+    let bytes = fixture_with(&["BT /F1 24 Tf 20 250 Td (Alpha) Tj ET BT /F1 24 Tf 70 190 Td (Beta) Tj ET".into()]);
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("snap.pdf", None, bytes.clone()).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    // The page raster arrives from a worker.
+    for _ in 0..50 {
+        h.run_steps(2);
+        if h.state().views[0].page_raster(0).is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(h.state().views[0].page_raster(0).is_some(), "a page raster is on screen");
+    let id = h.state().views[0].id;
+    let beta = h.state().session.get(id).unwrap().text_blocks(0).into_iter().find(|b| b.text == "Beta").unwrap();
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let page = r;
+    let k = r.width() / 200.0;
+    let screen = |x: f64, y: f64| egui::pos2(r.left() + x as f32 * k, r.top() + (300.0 - y as f32) * k);
+    let box_rect = egui::Rect::from_min_max(screen(beta.rect[0], beta.rect[3]), screen(beta.rect[2], beta.rect[1]));
+    // Textured meshes smaller than the page: the page raster itself always covers the page.
+    let pictures = |h: &Harness<'static, PdfCraftApp>| -> Vec<egui::Rect> {
+        h.output()
+            .shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => Some(m.calc_bounds()),
+                _ => None,
+            })
+            .filter(|b| b.width() < page.width() - 1.0)
+            .collect()
+    };
+    let near = |a: egui::Rect, b: egui::Rect| (a.min - b.min).length() < 3.0 && (a.max - b.max).length() < 3.0;
+    assert!(pictures(&h).is_empty(), "nothing travels before a drag");
+    // Closed: dragged by its box.
+    let centre = box_rect.center();
+    let delta = egui::vec2(-40.0 * k, 20.0 * k);
+    h.hover_at(centre);
+    h.run_steps(1);
+    h.drag_at(centre);
+    h.run_steps(1);
+    h.hover_at(centre + delta);
+    h.run_steps(2);
+    let travelling = pictures(&h);
+    assert!(
+        travelling.iter().any(|b| near(*b, box_rect.translate(delta))),
+        "the picture is in the moved frame: {travelling:?} vs {:?}",
+        box_rect.translate(delta)
+    );
+    h.drop_at(centre + delta);
+    h.run_steps(4);
+    assert!(pictures(&h).is_empty(), "nothing travels after the release");
+    // Open: dragged by its frame, through the object selection.
+    let beta = h.state().session.get(id).unwrap().text_blocks(0).into_iter().find(|b| b.text == "Beta").unwrap();
+    let box_rect = egui::Rect::from_min_max(screen(beta.rect[0], beta.rect[3]), screen(beta.rect[2], beta.rect[1]));
+    click_at(&mut h, box_rect.center());
+    assert!(h.state().views[0].line_editor.is_some());
+    let frame = egui::pos2(box_rect.center().x, box_rect.top() - 4.0);
+    h.hover_at(frame);
+    h.run_steps(1);
+    h.drag_at(frame);
+    h.run_steps(1);
+    let delta = egui::vec2(30.0 * k, -30.0 * k);
+    h.hover_at(frame + delta);
+    h.run_steps(2);
+    let travelling = pictures(&h);
+    assert!(
+        travelling.iter().any(|b| near(*b, box_rect.translate(delta))),
+        "the open paragraph's picture travels too: {travelling:?} vs {:?}",
+        box_rect.translate(delta)
+    );
+    h.drop_at(frame + delta);
+    h.run_steps(4);
 }
