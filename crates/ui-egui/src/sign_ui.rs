@@ -303,19 +303,20 @@ fn pkcs11_id(modules: &[String], reference: &str, pin: &str) -> Result<DigitalId
         }
         let uri = sign::pkcs11::parse_uri(reference).map_err(|e| e.to_string())?;
         let pin = sign::pkcs11::PinSource::Value(secrecy::SecretString::new(pin.to_owned().into()));
+        // Listing never logs in, so the PIN is only tried when the one identity found signs,
+        // on its own token: never on the other cards plugged in.
         let mut hits = Vec::new();
         let mut load_error = None;
         for path in modules {
-            let module = match sign::pkcs11::load_module(std::path::Path::new(path)) {
-                Ok(module) => module,
-                // A module that broke since listing still shouldn't hide the others; when
-                // nothing matches at all, its failure is the error to report.
+            // A module that broke since listing still shouldn't hide the others; when
+            // nothing matches at all, its failure is the error to report.
+            let listing = match sign::pkcs11::load_module(std::path::Path::new(path)).and_then(|module| sign::pkcs11::list(&module, &pin)) {
+                Ok(listing) => listing,
                 Err(e) => {
                     load_error.get_or_insert_with(|| e.to_string());
                     continue;
                 }
             };
-            let Ok(listing) = sign::pkcs11::list(&module, &pin) else { continue };
             hits.extend(listing.ids.into_iter().filter(|id| id.matches(&uri)).map(|id| id.id));
         }
         match hits.len() {

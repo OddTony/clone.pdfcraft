@@ -225,8 +225,9 @@ pub struct Token {
     pub pin_locked: bool,
 }
 
-/// A loaded PKCS #11 module. Lives as long as the app (never finalized); the path is the
-/// one the user chose, kept for error messages.
+/// A loaded PKCS #11 module. Loaded and initialized once per path, then kept for the life of
+/// the process (see [`load_module`]); the path is the one the user chose, kept for error
+/// messages.
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Debug)]
 pub struct Module {
@@ -234,16 +235,40 @@ pub struct Module {
     path: PathBuf,
 }
 
+/// Modules loaded so far, by the path they were loaded from. Most cap at a handful (one per
+/// token driver the user added).
+#[cfg(not(target_arch = "wasm32"))]
+static MODULES: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<PathBuf, Module>>> = std::sync::OnceLock::new();
+
 /// Load the module at `path` — a DLL the user picked explicitly. Modules are never searched
 /// for or loaded on their own: a DLL executes code.
+///
+/// A module is one context per process (`C_Initialize` once; cryptoki's own advice): the
+/// first call loads and initializes it, later calls for the same path share it. It is never
+/// finalized or unloaded, because unloading an initialized vendor library (many run their own
+/// threads) can take the process down with it, and a second context for the same library
+/// fails with `CKR_CRYPTOKI_ALREADY_INITIALIZED`. A failed load is not remembered, so fixing
+/// the module and trying again works.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_module(path: &Path) -> Result<Module, SignError> {
+    let key = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let modules = MODULES.get_or_init(Default::default);
+    // A panic elsewhere while holding the lock leaves the map itself intact: keep using it.
+    let mut modules = modules.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some(module) = modules.get(&key) {
+        return Ok(module.clone());
+    }
     let inner = cryptoki::context::Pkcs11::new(path)
         .map_err(|e| SignError::Crypto(format!("the PKCS #11 module at {} couldn't be loaded: {}", path.display(), describe(&e))))?;
-    inner
-        .initialize(cryptoki::context::CInitializeArgs::new(cryptoki::context::CInitializeFlags::OS_LOCKING_OK))
-        .map_err(|e| SignError::Crypto(format!("the PKCS #11 module at {} couldn't be started: {}", path.display(), describe(&e))))?;
-    Ok(Module { inner, path: path.to_path_buf() })
+    match inner.initialize(cryptoki::context::CInitializeArgs::new(cryptoki::context::CInitializeFlags::OS_LOCKING_OK)) {
+        // Something else in the process (another library using the same module) started it:
+        // the module is usable as it is.
+        Ok(()) | Err(cryptoki::error::Error::Pkcs11(cryptoki::error::RvError::CryptokiAlreadyInitialized, _)) => {}
+        Err(e) => return Err(SignError::Crypto(format!("the PKCS #11 module at {} couldn't be started: {}", path.display(), describe(&e)))),
+    }
+    let module = Module { inner, path: path.to_path_buf() };
+    modules.insert(key, module.clone());
+    Ok(module)
 }
 
 /// Every slot holding a token: its label, serial number, manufacturer, and whether a PIN
@@ -346,9 +371,15 @@ pub struct Listing {
 }
 
 /// The signing identities on every token of `module`: each X.509 certificate paired with
-/// its private key by `CKA_ID`. `pin` is kept in the identities and asked only when one
-/// signs; listing never prompts. Certificates without a key, or with one PdfCraft doesn't
-/// sign with, land in `unusable` with the reason instead of being left out silently.
+/// its private key by `CKA_ID`. `pin` is kept in the identities and used only when one
+/// signs, on that one token. Listing never logs in: trying a PIN on every token would spend
+/// the retries of cards it doesn't belong to, and could lock them.
+///
+/// Tokens keep private keys hidden until login (`CKA_PRIVATE`), so on a token that requires
+/// login a certificate with a `CKA_ID` is listed as an identity even when no key shows yet;
+/// signing finds the key after logging in, and says so if there is none. Certificates
+/// without a key on a token that shows them, or with one PdfCraft doesn't sign with, land in
+/// `unusable` with the reason instead of being left out silently.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn list(module: &Module, pin: &PinSource) -> Result<Listing, SignError> {
     use cryptoki::object::{Attribute, AttributeType, CertificateType, ObjectClass};
@@ -393,12 +424,6 @@ pub fn list(module: &Module, pin: &PinSource) -> Result<Listing, SignError> {
             pinpad,
             pin_locked: info.user_pin_locked(),
         };
-        // Strict tokens hide private objects until login, so without one their keys would
-        // look missing. Log in when it needs no interaction: a PIN the caller already gave
-        // (never a prompt at listing time, and never a pinpad's reader pad).
-        if login_required && !pinpad && matches!(pin, PinSource::Env(_) | PinSource::Value(_)) {
-            login(&session, true, false, pin, None).map_err(|e| SignError::Crypto(format!("the token couldn't be unlocked for listing: {e}")))?;
-        }
         for handle in handles {
             let attrs = match session.get_attributes(handle, &[AttributeType::Value, AttributeType::Id, AttributeType::Label]) {
                 Ok(attrs) => attrs,
@@ -431,7 +456,9 @@ pub fn list(module: &Module, pin: &PinSource) -> Result<Listing, SignError> {
                     continue;
                 }
             };
-            if homeless {
+            // Not logged in, a token requiring login may simply be hiding the key: list the
+            // certificate, and let signing (after login) confirm the key.
+            if homeless && !login_required {
                 skip(subject, "it has no private key on the token".to_string());
                 continue;
             }
@@ -544,7 +571,9 @@ impl ExternalKey for Pkcs11Key {
             .find_objects(&[Attribute::Class(ObjectClass::PRIVATE_KEY), Attribute::Id(self.key_id.clone())])
             .map_err(|e| SignError::Crypto(format!("the token key couldn't be found (was the token changed?): {}", describe(&e))))?;
         let Some(key) = keys.pop() else {
-            return Err(SignError::Crypto("the token key is gone (was the token changed?)".into()));
+            return Err(SignError::Crypto(
+                "the token has no private key for this certificate (was the token changed, or is the certificate stored without its key?)".into(),
+            ));
         };
         let raw = session.sign(&mechanism, key, &input).map_err(|e| SignError::Crypto(format!("the token didn't sign: {}", describe(&e))))?;
         self.public.store_signature_der(&raw)
@@ -577,9 +606,10 @@ fn login(
         return Ok(());
     }
     if pinpad {
-        return session
-            .login(UserType::User, None)
-            .map_err(|e| SignError::Crypto(format!("the token's reader couldn't log in (was the token removed?): {}", describe(&e))));
+        return match session.login(UserType::User, None) {
+            Ok(()) | Err(cryptoki::error::Error::Pkcs11(cryptoki::error::RvError::UserAlreadyLoggedIn, _)) => Ok(()),
+            Err(e) => Err(SignError::Crypto(format!("the token's reader couldn't log in (was the token removed?): {}", describe(&e)))),
+        };
     }
     let pin: secrecy::SecretString = match pin {
         PinSource::None => return Err(SignError::Crypto("this token needs its PIN".into())),
@@ -590,7 +620,13 @@ fn login(
         PinSource::Value(pin) => pin.clone(),
     };
     let auth: cryptoki::types::AuthPin = pin;
-    session.login(UserType::User, Some(&auth)).map_err(|e| {
+    // Login is per application and token, not per session: another open session of ours
+    // may have logged in already, which is what this call wanted.
+    match session.login(UserType::User, Some(&auth)) {
+        Ok(()) | Err(cryptoki::error::Error::Pkcs11(cryptoki::error::RvError::UserAlreadyLoggedIn, _)) => return Ok(()),
+        Err(e) => Err(e),
+    }
+    .map_err(|e| {
         let mut message = format!("the token couldn't be unlocked: {}", describe(&e));
         // Best effort, failure path only: warn when the token flags this as the last try.
         let final_try = reread.is_some_and(|(context, slot)| context.get_token_info(slot).is_ok_and(|info| info.user_pin_final_try()));
@@ -823,11 +859,25 @@ mod tests {
         let token = super::tokens(&module).expect("tokens list").into_iter().find(|t| t.label == TOKEN_LABEL).expect("the test token lists");
         assert!(token.needs_pin && !token.pinpad, "a PIN token without a pinpad: {token:?}");
         if token.pin_locked {
-            let e = super::list(&module, &pin).unwrap_err().to_string();
-            assert!(e.contains("locked"), "a locked token reports itself: {e}");
+            assert!(token.pin_locked, "a locked token reports itself through its flags");
             return;
         }
         eprintln!("the locked-PIN check needs a locked token (SoftHSM implements no retry counters): mapping covered by failures_say_what_happened");
+
+        // Listing never logs in, yet the keys SoftHSM hides until login (CKA_PRIVATE) still
+        // pair: both identities list with no PIN at all, the way the Sign dialog lists them.
+        let blind = super::list(&module, &PinSource::None).expect("listing needs no PIN");
+        for want in [RSA_ID, EC_ID] {
+            assert!(blind.ids.iter().any(|id| id.key_id.as_slice() == want), "listed without a PIN: {:?}", blind.unusable);
+        }
+        // Signing without a PIN source says the token needs one, and spends no attempt.
+        let no_pin = blind.ids.iter().find(|id| id.key_id.as_slice() == RSA_ID).expect("RSA listed");
+        let e = no_pin.id.key.sign(DigestAlg::Sha256, b"x").unwrap_err().to_string();
+        assert!(e.contains("needs its PIN"), "{e}");
+        // The same module path shares one context: a second load neither re-initializes
+        // (CKR_CRYPTOKI_ALREADY_INITIALIZED) nor unloads the first.
+        let again = super::load_module(std::path::Path::new(&lib)).expect("a second load shares the context");
+        assert!(!super::list(&again, &PinSource::None).expect("still lists").ids.is_empty());
 
         let listing = super::list(&module, &pin).expect("the test identities list");
         for (want, what) in [(RSA_ID, "RSA-2048"), (EC_ID, "P-256")] {
@@ -842,9 +892,12 @@ mod tests {
             assert!(sd.verify_signature(&hit.id.certificate, &digest).expect("its CMS verifies"), "{what}");
         }
 
-        // One wrong attempt: incorrect, and (with no counters here) nothing more.
-        let wrong = super::list(&module, &PinSource::Value(secret("wrong-pin"))).unwrap_err().to_string();
-        assert!(wrong.contains("incorrect"), "a wrong PIN reports itself: {wrong}");
+        // One wrong attempt, at signing (listing never tries a PIN): incorrect, and (with no
+        // counters here) nothing more.
+        let wrong = super::list(&module, &PinSource::Value(secret("wrong-pin"))).expect("listing ignores the PIN");
+        let id = wrong.ids.iter().find(|id| id.key_id.as_slice() == RSA_ID).expect("RSA listed");
+        let e = id.id.key.sign(DigestAlg::Sha256, b"x").unwrap_err().to_string();
+        assert!(e.contains("incorrect"), "a wrong PIN reports itself: {e}");
     }
 
     fn provision_rsa(session: &Session) {
