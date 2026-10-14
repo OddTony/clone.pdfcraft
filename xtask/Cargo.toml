@@ -16,3 +16,4 @@ serde = { version = "1", features = ["derive"] }
 sha2 = "0.11"
 toml = "1"
 roxmltree = "0.20"
+base64 = "0.22"
