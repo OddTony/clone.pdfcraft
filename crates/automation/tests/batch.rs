@@ -10,8 +10,11 @@ fn result(auto: &mut Automation, args: Value) -> Value {
 }
 
 // Fresh fixtures include the current timestamp; retain their bytes for output comparisons.
+/// A one-page fixture. The clock is fixed because the creation date goes into the file: with the
+/// system clock, two calls a second apart differ by a byte in the compressed object stream, and
+/// the tests that compare a batch output with a fresh `pdf()` failed on the slower CI runners.
 fn pdf() -> Vec<u8> {
-    Session::new().create_from_text("Original", "Original text").unwrap().as_ref().clone()
+    Session::new().with_clock(|| 1_700_000_000).create_from_text("Original", "Original text").unwrap().as_ref().clone()
 }
 
 #[test]
