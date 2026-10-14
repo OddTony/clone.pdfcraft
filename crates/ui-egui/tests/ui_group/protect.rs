@@ -74,7 +74,7 @@ fn a_password_made_only_of_ignored_characters_is_named_under_its_field() {
         type_into(&mut h, "Confirm password", "\u{ad}");
         h.get_by_label("Apply protection").click();
         h.run_steps(3);
-        h.get_by_label("Passwords can't be made only of characters that passwords ignore, such as soft hyphens.");
+        h.get_by_label("Add at least one letter, number, or punctuation mark to your password.");
         assert_eq!(h.state().dialog, Some(Dialog::Protect));
         assert_eq!(h.state().protect_draft.password, "\u{ad}");
         assert_eq!(h.state().protect_draft.confirm, "\u{ad}");

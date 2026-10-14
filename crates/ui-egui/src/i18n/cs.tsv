@@ -1474,7 +1474,7 @@ key	Space	Mezerník
 	Type a password.	Zadejte heslo.
 	The passwords don't match.	Hesla se neshodují.
 	This compatibility level supports only plain ASCII passwords.	Tato úroveň kompatibility podporuje jen hesla z prostých znaků ASCII.
-	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	Heslo nemůže obsahovat jen znaky, které hesla ignorují, například měkké spojovníky.
+	Add at least one letter, number, or punctuation mark to your password.	Přidejte do hesla alespoň jedno písmeno, číslici nebo interpunkční znaménko.
 	Anyone opening the document will need this password. It's applied when you save.	Každý, kdo dokument otevře, bude potřebovat toto heslo. Použije se při uložení.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	Dokument se otevře bez hesla; toto heslo je potřeba ke změně omezení. Použije se při uložení.
 	Recover unsaved documents?	Obnovit neuložené dokumenty?

@@ -1402,7 +1402,7 @@
 	Type a password.	Digita una password.
 	The passwords don't match.	Le password non corrispondono.
 	This compatibility level supports only plain ASCII passwords.	Questo livello di compatibilità supporta solo password in ASCII semplice.
-	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	Le password non possono essere composte solo da caratteri ignorati, come i trattini morbidi.
+	Add at least one letter, number, or punctuation mark to your password.	Aggiungi almeno una lettera, un numero o un segno di punteggiatura alla password.
 	Anyone opening the document will need this password. It's applied when you save.	Chiunque apra il documento avrà bisogno di questa password. Viene applicata al salvataggio.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	Il documento si apre senza password; questa password serve per modificare le restrizioni. Viene applicata al salvataggio.
 	Recover unsaved documents?	Recuperare i documenti non salvati?

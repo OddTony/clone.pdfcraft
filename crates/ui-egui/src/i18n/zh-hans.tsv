@@ -1355,7 +1355,7 @@
 	Type a password.	请输入密码。
 	The passwords don't match.	两次输入的密码不一致。
 	This compatibility level supports only plain ASCII passwords.	此兼容性级别仅支持纯 ASCII 密码。
-	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	密码不能只由会被忽略的字符组成，例如软连字符。
+	Add at least one letter, number, or punctuation mark to your password.	请在密码中至少添加一个字母、数字或标点符号。
 	Anyone opening the document will need this password. It's applied when you save.	打开文档的任何人都需要此密码。保存时应用。
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	打开文档无需密码；更改限制需要此密码。保存时应用。
 	Recover unsaved documents?	要恢复未保存的文档吗？

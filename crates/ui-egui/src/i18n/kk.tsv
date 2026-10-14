@@ -1347,7 +1347,7 @@
 	Type a password.	Құпиясөзді енгізіңіз.
 	The passwords don't match.	Құпиясөздер сәйкес емес.
 	This compatibility level supports only plain ASCII passwords.	Бұл үйлесімділік деңгейі тек қарапайым ASCII құпиясөздерін қолдайды.
-	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	Құпия сөз жұмсақ дефис сияқты еленбейтін таңбалардан ғана тұра алмайды.
+	Add at least one letter, number, or punctuation mark to your password.	Құпия сөзге кемінде бір әріп, сан немесе тыныс белгісін қосыңыз.
 	Anyone opening the document will need this password. It's applied when you save.	Құжатты ашатын кез келген адамға осы құпиясөз қажет болады. Ол сақтау кезінде қолданылады.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	Құжат құпиясөзсіз ашылады; шектеулерді өзгерту үшін осы құпиясөз керек. Ол сақтау кезінде қолданылады.
 	Recover unsaved documents?	Сақталмаған құжаттарды қалпына келтіру керек пе?

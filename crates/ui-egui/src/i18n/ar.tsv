@@ -1406,7 +1406,7 @@
 	Type a password.	اكتب كلمة مرور.
 	The passwords don't match.	كلمتا المرور غير متطابقتين.
 	This compatibility level supports only plain ASCII passwords.	مستوى التوافق هذا يدعم كلمات مرور ASCII البسيطة فقط.
-	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	لا يمكن أن تتكون كلمات المرور من أحرف تتجاهلها كلمات المرور فقط، مثل الواصلات اللينة.
+	Add at least one letter, number, or punctuation mark to your password.	أضف إلى كلمة المرور حرفًا أو رقمًا أو علامة ترقيم واحدة على الأقل.
 	Anyone opening the document will need this password. It's applied when you save.	كل من يفتح المستند سيحتاج إلى كلمة المرور هذه. تُطبَّق عند الحفظ.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	يُفتح المستند دون كلمة مرور؛ كلمة المرور هذه لازمة لتغيير القيود. تُطبَّق عند الحفظ.
 	Recover unsaved documents?	استعادة المستندات غير المحفوظة؟

@@ -1299,7 +1299,7 @@
 	Type a password.	請輸入密碼。
 	The passwords don't match.	兩次輸入的密碼不一致。
 	This compatibility level supports only plain ASCII passwords.	此相容性級別僅支援純 ASCII 密碼。
-	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	密碼不能只由會被忽略的字元組成，例如軟連字號。
+	Add at least one letter, number, or punctuation mark to your password.	請在密碼中至少加入一個字母、數字或標點符號。
 	Anyone opening the document will need this password. It's applied when you save.	開啟文件的任何人都需要此密碼。儲存時應用。
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	開啟文件無需密碼；更改限制需要此密碼。儲存時應用。
 	Recover unsaved documents?	要恢復未儲存的文件嗎？

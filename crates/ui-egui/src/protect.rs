@@ -83,7 +83,7 @@ impl ProtectDraft {
         } else if pdfcraft_cos::effective_password(self.protection.algorithm, &self.password)
             == pdfcraft_cos::effective_password(self.protection.algorithm, "")
         {
-            Some("Passwords can't be made only of characters that passwords ignore, such as soft hyphens.")
+            Some("Add at least one letter, number, or punctuation mark to your password.")
         } else {
             None
         };
@@ -596,7 +596,7 @@ mod tests {
     fn a_password_the_encryption_ignores_is_refused_before_the_engine_is_asked() {
         // A soft hyphen is dropped by AES-256's password preparation, so the key would be the empty password's.
         let d = draft("\u{ad}", "\u{ad}");
-        assert_eq!(d.problems().password, Some("Passwords can't be made only of characters that passwords ignore, such as soft hyphens."));
+        assert_eq!(d.problems().password, Some("Add at least one letter, number, or punctuation mark to your password."));
         assert_eq!(draft("\u{ad}x", "\u{ad}x").problems(), Problems::default());
     }
 
