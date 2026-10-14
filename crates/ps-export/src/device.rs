@@ -34,7 +34,7 @@ use kurbo::{Affine, BezPath, Cap, Join, PathEl, Point, Rect, Shape};
 
 use crate::FidelityNote;
 use crate::color;
-use crate::flatten::{FLATTEN_DPI, ShadowScene, page_matrix};
+use crate::flatten::{FLATTEN_DPI, ShadowScene, page_matrix, re_rooted_paint};
 use crate::fonts::{self, FontTable, TextStrategy};
 use crate::images;
 use crate::pattern;
@@ -355,7 +355,7 @@ impl<'a> PsDevice<'a> {
         let bbox = paint_reach_bbox(path.bounding_box(), transform, stroke_reach(draw_mode));
         let full = self.matrix * transform;
         let path = path.clone();
-        let paint = paint.clone();
+        let paint = re_rooted_paint(paint, self.matrix);
         let mode = draw_mode.clone();
         self.scene.record(move |r| r.draw_path(&path, full, &paint, &mode));
         self.scene.extend(bbox);
@@ -366,7 +366,7 @@ impl<'a> PsDevice<'a> {
         let bbox = paint_reach_bbox(*rect, transform, stroke_reach(draw_mode));
         let full = self.matrix * transform;
         let rect = *rect;
-        let paint = paint.clone();
+        let paint = re_rooted_paint(paint, self.matrix);
         let mode = draw_mode.clone();
         self.scene.record(move |r| r.draw_rect(&rect, full, &paint, &mode));
         self.scene.extend(bbox);
@@ -380,7 +380,7 @@ impl<'a> PsDevice<'a> {
         let path = self.scene.outline_of(outline);
         let bbox = paint_reach_bbox(path.bounding_box(), total, 0.0);
         let full = self.matrix * total;
-        let paint = paint.clone();
+        let paint = re_rooted_paint(paint, self.matrix);
         self.scene.record(move |r| r.draw_path(&path, full, &paint, &PathDrawMode::Fill(FillRule::NonZero)));
         self.scene.extend(bbox);
     }
@@ -395,7 +395,7 @@ impl<'a> PsDevice<'a> {
         let mode = PathDrawMode::Stroke(props.clone());
         let bbox = paint_reach_bbox(stroked.bounding_box(), transform, stroke_reach(&mode));
         let full = self.matrix * transform;
-        let paint = paint.clone();
+        let paint = re_rooted_paint(paint, self.matrix);
         self.scene.record(move |r| r.draw_path(&stroked, full, &paint, &mode));
         self.scene.extend(bbox);
     }
