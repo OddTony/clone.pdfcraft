@@ -249,11 +249,17 @@ fn balanced(text: &str) -> bool {
 /// A line in logical order, in the order it must be drawn (left to right), without the bidi
 /// controls fonts can't draw.
 pub fn to_visual(logical: &str) -> String {
+    to_visual_dir(logical, None)
+}
+
+/// [`to_visual`] in a paragraph of direction `rtl` (`Some(true)` right to left, as Word's
+/// Right-to-left button sets it); `None` takes the direction from the letters.
+pub fn to_visual_dir(logical: &str, rtl: Option<bool>) -> String {
     let text: String = logical.chars().filter(|c| !is_bidi_control(*c)).collect();
-    if !text.chars().any(is_rtl) {
+    if rtl != Some(true) && !text.chars().any(is_rtl) {
         return text;
     }
-    let level = if rtl_base(&text) { Level::rtl() } else { Level::ltr() };
+    let level = if rtl.unwrap_or_else(|| rtl_base(&text)) { Level::rtl() } else { Level::ltr() };
     let info = BidiInfo::new(&text, Some(level));
     let mut out = String::with_capacity(text.len());
     for para in &info.paragraphs {
@@ -277,6 +283,19 @@ pub fn to_visual(logical: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Word's Right-to-left button: in a right-to-left paragraph, a full stop after Latin text and
+    /// a number before Hebrew go where a right-to-left reader expects them.
+    #[test]
+    fn a_chosen_direction_decides_the_line_order() {
+        assert_eq!(to_visual_dir("abc 12!", Some(true)), "!abc 12");
+        assert_eq!(to_visual_dir("abc 12!", Some(false)), "abc 12!");
+        assert_eq!(to_visual_dir("abc 12!", None), "abc 12!", "Latin letters: left to right");
+        // "2 שלום": the number first in reading order. Right to left it sits on the right.
+        assert_eq!(to_visual_dir("2 שלום", Some(true)), "םולש 2");
+        // Left to right the number stays on the left.
+        assert_eq!(to_visual_dir("2 שלום", Some(false)), "2 םולש");
+    }
 
     /// What a producer writes into the content stream for `logical`.
     fn drawn(logical: &str) -> String {

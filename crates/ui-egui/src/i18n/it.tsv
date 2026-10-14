@@ -2217,6 +2217,19 @@ signature pad	Type	Digita
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} a {dpi} dpi, la dimensione massima a cui si possono disegnare)
 	Margins	Margini
 	For page sizes and margins.	Per formati pagina e margini.
+	Show the formatting toolbar when editing text	Mostra la barra di formattazione durante la modifica del testo
+	Drag to move	Trascina per spostare
+	Smaller text	Testo più piccolo
+	Larger text	Testo più grande
+	Text direction	Direzione del testo
+	Right-to-left text	Testo da destra a sinistra
+	Left-to-right text	Testo da sinistra a destra
+	Legacy text encoding	Codifica del testo legacy
+	Auto-detect	Rilevamento automatico
+	As declared in the PDF	Come dichiarato nel PDF
+	Hebrew (ISO 8859-8)	Ebraico (ISO 8859-8)
+	Hebrew (Windows-1255)	Ebraico (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Come Modifica testo legge i vecchi font che non indicano quali lettere disegnano. Il rilevamento automatico riconosce i font ebraici organizzati secondo ISO 8859-8 o Windows-1255.
 
 # Multi-object selection and movement (#844)
 @plural	{n} object selected|{n} objects selected	{n} oggetto selezionato|{n} oggetti selezionati

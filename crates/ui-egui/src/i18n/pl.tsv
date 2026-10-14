@@ -2334,3 +2334,16 @@ animation effects	Off	Wyłączone
 	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
 	Move tag earlier	Przenieś znacznik wcześniej
 	Move tag later	Przenieś znacznik później
+	Show the formatting toolbar when editing text	Pokazuj pasek formatowania podczas edycji tekstu
+	Drag to move	Przeciągnij, aby przenieść
+	Smaller text	Mniejszy tekst
+	Larger text	Większy tekst
+	Text direction	Kierunek tekstu
+	Right-to-left text	Tekst od prawej do lewej
+	Left-to-right text	Tekst od lewej do prawej
+	Legacy text encoding	Starsze kodowanie tekstu
+	Auto-detect	Wykryj automatycznie
+	As declared in the PDF	Zgodnie z deklaracją w pliku PDF
+	Hebrew (ISO 8859-8)	Hebrajski (ISO 8859-8)
+	Hebrew (Windows-1255)	Hebrajski (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Jak narzędzie Edytuj tekst odczytuje stare czcionki, które nie określają, jakie litery rysują. Automatyczne wykrywanie rozpoznaje hebrajskie czcionki ułożone według ISO 8859-8 lub Windows-1255.

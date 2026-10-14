@@ -386,18 +386,12 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
             changed = true;
         }
         changed |= crate::edit_text_ui::extras_panel(ui, &mut ed.extras);
+        ui.horizontal(|ui| {
+            ui.label(tl!("Text direction"));
+            changed |= crate::edit_text_ui::direction_buttons(ui, &mut ed);
+        });
         if changed {
-            let edit = pdfcraft_engine::Edit::EditTextBlock { page: ed.page, block: ed.block, text: ed.text.clone(), style: ed.style() };
-            if app.apply_edit(edit) {
-                ed.applied();
-                if let Some(doc) = app.session.get(app.views[i].id)
-                    && let Some(block) = doc.text_blocks(ed.page).get(ed.block)
-                {
-                    ed.refresh_source(block, doc.text_lines(ed.page));
-                    ed.fonts = crate::edit_text_ui::install_source_fonts(ui.ctx(), doc, ed.page);
-                }
-            }
-            app.views[i].line_editor = Some(ed);
+            app.apply_line_editor(i, ed, ui.ctx());
         }
         ui.add_space(6.0);
         ui.separator();

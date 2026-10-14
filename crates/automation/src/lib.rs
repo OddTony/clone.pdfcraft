@@ -547,6 +547,16 @@ impl Automation {
                 }
                 out
             }
+            "text_encoding" => {
+                if let Some(name) = a.opt_str("encoding")? {
+                    let encoding = pdfcraft_engine::LegacyEncoding::parse(name).ok_or_else(|| {
+                        ToolError::InvalidArgs(format!("encoding must be auto, declared, iso-8859-8 or windows-1255, not {name:?}"))
+                    })?;
+                    pdfcraft_engine::set_legacy_encoding(encoding);
+                }
+                let current = pdfcraft_engine::legacy_encoding();
+                json!({ "encoding": current.name(), "label": current.label() })
+            }
             "text_fonts" => {
                 let page = self.page(&a)?;
                 json!({"fonts": self.doc(&a)?.text_editor_fonts(page).into_iter().map(|f| json!({"resource":f.resource,"font":f.face,"full_face":f.resource.starts_with("PCFull"),"preview_only":f.resource.starts_with("PCApproved")})).collect::<Vec<_>>()})
@@ -625,6 +635,12 @@ impl Automation {
                         other => return Err(ToolError::InvalidArgs(format!("unknown align {other:?}"))),
                     });
                 }
+                style.direction = match a.opt_str("direction")? {
+                    None | Some("auto") => None,
+                    Some("rtl") => Some(true),
+                    Some("ltr") => Some(false),
+                    Some(other) => return Err(ToolError::InvalidArgs(format!("direction must be rtl, ltr or auto, not {other:?}"))),
+                };
                 let mut out = self.apply(&a, Edit::EditTextBlock { page, block: k as usize - 1, text, style })?;
                 if let Some(b) = self.doc(&a)?.text_blocks(page).get(k as usize - 1) {
                     out["paragraph"] = json!({ "text": b.text, "lines": b.lines.len(), "font": b.base_font });

@@ -2146,6 +2146,19 @@ action wizard	Start	Старт
 	This printer offers no settings of its own.	Този принтер няма собствени настройки.
 	Margins	Полета
 	For page sizes and margins.	За размери на страници и полета.
+	Show the formatting toolbar when editing text	Показване на лентата за форматиране при редактиране на текст
+	Drag to move	Плъзнете, за да преместите
+	Smaller text	По-малък текст
+	Larger text	По-голям текст
+	Text direction	Посока на текста
+	Right-to-left text	Текст отдясно наляво
+	Left-to-right text	Текст отляво надясно
+	Legacy text encoding	Наследено кодиране на текста
+	Auto-detect	Автоматично откриване
+	As declared in the PDF	Както е декларирано в PDF файла
+	Hebrew (ISO 8859-8)	Иврит (ISO 8859-8)
+	Hebrew (Windows-1255)	Иврит (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Как „Редактирай текста“ чете стари шрифтове, които не посочват кои букви изобразяват. Автоматичното откриване разпознава шрифтове на иврит, подредени по ISO 8859-8 или Windows-1255.
 	Scroll tabs left	Превърти разделите наляво
 	Scroll tabs right	Превърти разделите надясно
 

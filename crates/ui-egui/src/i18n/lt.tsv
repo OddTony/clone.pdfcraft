@@ -592,6 +592,19 @@
 	Font: Helvetica	Šriftas: „Helvetica“
 	Fonts	Šriftai
 	For page sizes and margins.	Puslapių dydžiams ir paraštėms.
+	Show the formatting toolbar when editing text	Redaguojant tekstą rodyti formatavimo juostą
+	Drag to move	Vilkite, kad perkeltumėte
+	Smaller text	Mažesnis tekstas
+	Larger text	Didesnis tekstas
+	Text direction	Teksto kryptis
+	Right-to-left text	Tekstas iš dešinės į kairę
+	Left-to-right text	Tekstas iš kairės į dešinę
+	Legacy text encoding	Senoji teksto koduotė
+	Auto-detect	Aptikti automatiškai
+	As declared in the PDF	Kaip nurodyta PDF faile
+	Hebrew (ISO 8859-8)	Hebrajų (ISO 8859-8)
+	Hebrew (Windows-1255)	Hebrajų (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Kaip „Redaguoti tekstą“ skaito senus šriftus, kurie nenurodo, kokias raides piešia. Automatinis aptikimas atpažįsta hebrajų šriftus, išdėstytus pagal ISO 8859-8 arba Windows-1255.
 	Form data and PDF forms	Formų duomenys ir PDF formos
 	Form fields are flattened: their values stay visible. Saving rewrites the whole file.	Formos laukai suplokštinami: jų reikšmės lieka matomos. Įrašant perrašomas visas failas.
 	Form fields only	Tik formos laukai

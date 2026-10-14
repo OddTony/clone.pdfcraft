@@ -75,6 +75,153 @@ fn push_for_shaper(out: &mut String, shown: &str) {
     out.extend(stretch.drain(..).rev());
 }
 
+/// One stretch of an editable line as egui must get it (see [`editor_pieces`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Piece {
+    /// The characters, in the order egui's shaper must receive them.
+    pub text: String,
+    /// The index of the format they are drawn with.
+    pub format: usize,
+    /// The line's character indices this piece shows, in screen order (left to right).
+    pub shown: Vec<usize>,
+    /// The piece's characters read right to left (an odd embedding level).
+    pub rtl: bool,
+}
+
+/// An editable line (logical order, one format index per character) as the stretches egui must
+/// lay out, one section each and in this order, so that it shows the Unicode bidirectional
+/// display order (UAX #9), the direction taken from the first strong character.
+///
+/// egui shapes each run of one face in the direction of that run's script and places the runs
+/// left to right. In Edit text one embedded face often draws a whole Hebrew line, digits
+/// included, so the shaper reversed the digits too ("1255" showed as "5521"), and a line drawn by
+/// two faces showed its words in the wrong order. Each piece here holds one face (`face(format,
+/// c)` names it) at one embedding level, already in the order that makes the shaper's reversal
+/// come out right; a bracket is mirrored where the shaper won't.
+///
+/// Every character is kept exactly once and in no other piece (bidi controls stay, undrawn), so
+/// the galley has one glyph per character of the text. `None` for a line without right-to-left
+/// script, which egui already draws right.
+///
+/// `rtl` is the paragraph's direction when one was chosen (Right-to-left / Left-to-right); `None`
+/// takes it from the first strong character.
+pub fn editor_pieces(line: &[(char, usize)], rtl: Option<bool>, mut face: impl FnMut(usize, char) -> usize) -> Option<Vec<Piece>> {
+    if rtl != Some(true) && !line.iter().any(|(c, _)| is_rtl_script(*c)) {
+        return None;
+    }
+    let text: String = line.iter().map(|(c, _)| *c).collect();
+    // The logical index of the character starting at each byte.
+    let mut at_byte = vec![usize::MAX; text.len()];
+    for (i, (byte, _)) in text.char_indices().enumerate() {
+        if let Some(slot) = at_byte.get_mut(byte) {
+            *slot = i;
+        }
+    }
+    let info = BidiInfo::new(&text, rtl.map(|r| if r { Level::rtl() } else { Level::ltr() }));
+    let mut key = |i: usize| line.get(i).map(|&(c, f)| (f, face(f, c)));
+    let mut pieces = Vec::new();
+    for para in &info.paragraphs {
+        // unicode-bidi indexes the first level of a line, so an empty one would panic.
+        if para.range.is_empty() {
+            continue;
+        }
+        let (levels, runs) = info.visual_runs(para, para.range.clone());
+        for run in runs {
+            let odd = levels.get(run.start).is_some_and(Level::is_rtl);
+            let Some(piece) = text.get(run.clone()) else { continue };
+            let mut shown: Vec<usize> = piece.char_indices().filter_map(|(b, _)| at_byte.get(run.start + b).copied()).collect();
+            if odd {
+                shown.reverse();
+            }
+            // Split the run where the format or the face changes: egui starts a new run there.
+            let mut start = 0;
+            while start < shown.len() {
+                let first = shown.get(start).and_then(|&i| key(i));
+                let mut end = start + 1;
+                while end < shown.len() && shown.get(end).and_then(|&i| key(i)) == first {
+                    end += 1;
+                }
+                let chars: Vec<char> = shown.get(start..end).unwrap_or_default().iter().filter_map(|&i| line.get(i).map(|p| p.0)).collect();
+                let format = first.map_or(0, |(f, _)| f);
+                let indices = shown.get(start..end).unwrap_or_default().to_vec();
+                pieces.push(Piece { text: for_shaper(&chars, odd), format, shown: indices, rtl: odd });
+                start = end;
+            }
+        }
+    }
+    Some(pieces)
+}
+
+/// Appends one [`Piece`] to `job` as a section of its own. `LayoutJob::append` merges a section
+/// into the previous one of the same format, which would hand two pieces to the shaper as one
+/// run again.
+pub fn append_piece(job: &mut egui::text::LayoutJob, text: &str, format: egui::TextFormat) {
+    let start = job.text.len();
+    job.text.push_str(text);
+    let range = egui::text::ByteIndex(start)..egui::text::ByteIndex(job.text.len());
+    job.sections.push(egui::text::LayoutSection { leading_space: 0.0, byte_range: range, format });
+}
+
+/// One line of a laid-out text whose glyphs [`to_logical_order`] puts back into reading order:
+/// the line's first character (in the whole text) and, for each glyph on screen from left to
+/// right, the character it shows and whether that character reads right to left.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LineOrder {
+    pub start: usize,
+    pub shown: Vec<(usize, bool)>,
+}
+
+/// Puts the glyphs of each row laid out from [`editor_pieces`] back into reading order, each at
+/// its place on screen and marked right to left where it reads so, so egui's caret and clicks
+/// follow the text (`Glyph::rtl`, PdfCraft's epaint patch): Backspace after a Hebrew word
+/// deletes the space the caret is next to, not one on the other side. `text` is the text being
+/// edited. A line egui wrapped onto several rows keeps drawing order, as before.
+pub fn to_logical_order(galley: &mut std::sync::Arc<egui::Galley>, text: &str, lines: &[LineOrder]) {
+    if lines.is_empty() {
+        return;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let g = std::sync::Arc::make_mut(galley);
+    let mut row_start = 0usize;
+    for placed in &mut g.rows {
+        let count = placed.row.glyphs.len();
+        let this_start = row_start;
+        row_start = row_start.saturating_add(count).saturating_add(usize::from(placed.ends_with_newline));
+        let Some(line) = lines.iter().find(|l| l.start == this_start && l.shown.len() == count) else { continue };
+        let row = std::sync::Arc::make_mut(&mut placed.row);
+        let mut logical: Vec<Option<egui::epaint::text::Glyph>> = vec![None; count];
+        for (glyph, &(index, rtl)) in row.glyphs.iter().zip(&line.shown) {
+            let Some(slot) = index.checked_sub(line.start).and_then(|i| logical.get_mut(i)) else { return };
+            let mut glyph = *glyph;
+            glyph.rtl = rtl;
+            if let Some(&c) = chars.get(index) {
+                glyph.chr = c;
+            }
+            *slot = Some(glyph);
+        }
+        // Only a complete permutation replaces the row; anything else keeps drawing order.
+        if let Some(glyphs) = logical.into_iter().collect::<Option<Vec<_>>>() {
+            row.glyphs = glyphs;
+        }
+    }
+}
+
+/// `shown` (one face, one level, in screen order) as the shaper must get it. The shaper takes a
+/// run's direction from its first character of a strong script and reverses a right-to-left
+/// run, mirroring its brackets; `odd` says whether the characters are right to left.
+fn for_shaper(shown: &[char], odd: bool) -> String {
+    // Arabic-Indic digits are Arabic script to the shaper, though they read left to right.
+    let strong = |c: &char| if is_rtl_script(*c) && (c.is_alphabetic() || c.is_numeric()) { Some(true) } else { c.is_alphabetic().then_some(false) };
+    let first = shown.iter().find_map(strong);
+    let last = shown.iter().rev().find_map(strong);
+    // Given as shown, the run must shape left to right; given reversed, right to left. A piece
+    // starting right to left and ending left to right can't be either; it is left as shown.
+    let reversed = first == Some(true) && last == Some(true);
+    let shaped_rtl = first == Some(true);
+    let mirror = |c: char| if odd != shaped_rtl { mirrored(c) } else { c };
+    if reversed { shown.iter().rev().map(|&c| mirror(c)).collect() } else { shown.iter().map(|&c| mirror(c)).collect() }
+}
+
 /// One line of wrapped text (see [`wrap`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Line {
@@ -82,6 +229,20 @@ pub struct Line {
     pub text: String,
     /// The paragraph reads right to left: the line belongs against the right edge.
     pub rtl: bool,
+}
+
+/// Whether `chars` read right to left as a whole: more right-to-left letters than left-to-right
+/// ones, so the order they come in doesn't change the answer.
+pub fn reads_rtl(chars: impl IntoIterator<Item = char>) -> bool {
+    let (mut rtl, mut ltr) = (0usize, 0usize);
+    for c in chars {
+        if is_rtl_script(c) && c.is_alphabetic() {
+            rtl = rtl.saturating_add(1);
+        } else if c.is_alphabetic() {
+            ltr = ltr.saturating_add(1);
+        }
+    }
+    rtl > ltr
 }
 
 /// Whether `text` holds any right-to-left script, so [`wrap`] or [`visual_auto`] is needed.
@@ -598,6 +759,182 @@ mod tests {
         for s in odd {
             let v = visual(s);
             assert!(v.chars().count() <= s.chars().count(), "{:?}", s.chars().take(12).collect::<String>());
+        }
+    }
+
+    /// What egui shows for `pieces`: each is one run of one face, shaped in the direction of its
+    /// first strong-script character, so a right-to-left one comes out reversed and mirrored.
+    fn shown_by_egui(pieces: &[Piece]) -> String {
+        let strong =
+            |c: char| if is_rtl_script(c) && (c.is_alphabetic() || c.is_numeric()) { Some(true) } else { c.is_alphabetic().then_some(false) };
+        pieces
+            .iter()
+            .map(|p| if p.text.chars().find_map(strong) == Some(true) { p.text.chars().rev().map(mirrored).collect() } else { p.text.clone() })
+            .collect()
+    }
+
+    fn one_format(s: &str) -> Vec<(char, usize)> {
+        s.chars().map(|c| (c, 0)).collect()
+    }
+
+    /// Hebrew in face 1 (an installed fallback), everything else in face 0 (the interface face).
+    fn split_faces(_: usize, c: char) -> usize {
+        usize::from(is_rtl_script(c))
+    }
+
+    #[test]
+    fn editor_lines_show_numbers_and_latin_left_to_right_inside_hebrew() {
+        for (logical, screen) in [
+            // One embedded face draws the whole line: the shaper used to reverse "1255" too.
+            ("קידוד ישן 1255", "1255 ןשי דודיק"),
+            ("שלום עולם", "םלוע םולש"),
+            ("קובץ PDF חדש", "שדח PDF ץבוק"),
+            ("(שלום)", "(םולש)"),
+            ("מחיר: 12.50 ₪", "₪ 12.50 :ריחמ"),
+            // A left-to-right line keeps its order around the Hebrew word.
+            ("File שלום.pdf", "File םולש.pdf"),
+        ] {
+            let pieces = editor_pieces(&one_format(logical), None, |_, _| 0).unwrap();
+            assert_eq!(shown_by_egui(&pieces), screen, "{logical}");
+            let pieces = editor_pieces(&one_format(logical), None, split_faces).unwrap();
+            assert_eq!(shown_by_egui(&pieces), screen, "{logical}, Hebrew from another face");
+        }
+    }
+
+    /// With real egui and one installed face drawing both the Hebrew and the digits, as an
+    /// embedded document face does in Edit text: one section reversed "1255", the pieces don't.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn egui_draws_editor_pieces_in_reading_order() {
+        let Some(hebrew) = crate::system_fonts::hebrew_fallback() else {
+            eprintln!("skipping egui_draws_editor_pieces_in_reading_order: no installed Hebrew face");
+            return;
+        };
+        let mut defs = egui::FontDefinitions::default();
+        defs.font_data.insert("hebrew".into(), hebrew);
+        defs.families.insert(egui::FontFamily::Name("hebrew-only".into()), vec!["hebrew".into()]);
+        let ctx = egui::Context::default();
+        ctx.set_fonts(defs);
+        let format = egui::TextFormat { font_id: egui::FontId::new(13.0, egui::FontFamily::Name("hebrew-only".into())), ..Default::default() };
+        let mut shown = Vec::new();
+        for _ in 0..2 {
+            // Fonts set on the first pass apply from the second.
+            shown.clear();
+            let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let text = "קידוד ישן 1255";
+                let mut whole = egui::text::LayoutJob::default();
+                whole.append(text, 0.0, format.clone());
+                let mut split = egui::text::LayoutJob::default();
+                for piece in editor_pieces(&one_format(text), None, |_, _| 0).unwrap_or_default() {
+                    append_piece(&mut split, &piece.text, format.clone());
+                }
+                for job in [whole, split] {
+                    let galley = ui.painter().layout_job(job);
+                    shown.push(
+                        galley.rows.iter().flat_map(|row| row.glyphs.iter()).filter(|g| g.advance_width > 0.0).map(|g| g.chr).collect::<String>(),
+                    );
+                }
+            });
+            output.drop_without_applying_deltas();
+        }
+        assert_eq!(shown.first().map(String::as_str), Some("5521 ןשי דודיק"), "one section: the bug this fixes");
+        assert_eq!(shown.get(1).map(String::as_str), Some("1255 ןשי דודיק"));
+    }
+
+    #[test]
+    fn rows_read_right_to_left_by_their_letters() {
+        assert!(reads_rtl("# שם הילד/ה ומשפחה".chars()));
+        assert!(reads_rtl("2 קפלן".chars()));
+        assert!(!reads_rtl("Invoice 2026 שלום".chars()));
+        assert!(!reads_rtl("1255 ()".chars()));
+        assert!(!reads_rtl("".chars()));
+    }
+
+    /// The report: deleting the space after a Hebrew word deleted the one on its other side, as
+    /// the caret was placed as if the line ran left to right. With the glyphs back in reading
+    /// order (PdfCraft's epaint patch), the caret before the first letter is at the right edge, the
+    /// caret after "שלום" is on that word's left side, a click there lands after its last letter,
+    /// and the end of the line is at the left edge.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn egui_caret_follows_hebrew_reading_order() {
+        use egui::text::CCursor;
+        let Some(hebrew) = crate::system_fonts::hebrew_fallback() else {
+            eprintln!("skipping egui_caret_follows_hebrew_reading_order: no installed Hebrew face");
+            return;
+        };
+        let mut defs = egui::FontDefinitions::default();
+        defs.font_data.insert("hebrew".into(), hebrew);
+        defs.families.insert(egui::FontFamily::Name("hebrew-only".into()), vec!["hebrew".into()]);
+        let ctx = egui::Context::default();
+        ctx.set_fonts(defs);
+        let format = egui::TextFormat { font_id: egui::FontId::new(13.0, egui::FontFamily::Name("hebrew-only".into())), ..Default::default() };
+        let text = "שלום עולם 2026";
+        let mut galley = None;
+        for _ in 0..2 {
+            // Fonts set on the first pass apply from the second.
+            let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let pieces = editor_pieces(&one_format(text), None, |_, _| 0).unwrap_or_default();
+                let shown = pieces.iter().flat_map(|p| p.shown.iter().map(move |&i| (i, p.rtl))).collect();
+                let mut job = egui::text::LayoutJob::default();
+                for piece in &pieces {
+                    append_piece(&mut job, &piece.text, format.clone());
+                }
+                let mut laid = ui.painter().layout_job(job);
+                to_logical_order(&mut laid, text, &[LineOrder { start: 0, shown }]);
+                galley = Some(laid);
+            });
+            output.drop_without_applying_deltas();
+        }
+        let galley = galley.unwrap();
+        let row = &galley.rows[0].row;
+        assert_eq!(row.glyphs.iter().map(|g| g.chr).collect::<String>(), text, "glyphs in reading order");
+        let x = |i: usize| galley.pos_from_cursor(CCursor::new(i)).min.x;
+        let right = row.glyphs.iter().map(|g| g.max_x()).fold(f32::MIN, f32::max);
+        let left = row.glyphs.iter().map(|g| g.pos.x).fold(f32::MAX, f32::min);
+        assert!((x(0) - right).abs() < 0.5, "before ש: the right edge ({} vs {right})", x(0));
+        // After "שלום" (before the space): the left edge of ם.
+        let mem = row.glyphs[3];
+        assert!((x(4) - mem.pos.x).abs() < 0.5, "after שלום: left of ם ({} vs {})", x(4), mem.pos.x);
+        // "2026" reads left to right inside: the caret before "2" is at its left edge.
+        let two = row.glyphs[10];
+        assert!(!two.rtl && (x(10) - two.pos.x).abs() < 0.5);
+        // The end of the text: after "6", the last character, at its right edge, which is the
+        // left part of the line where the number sits.
+        assert!(x(text.chars().count()) < x(4) && x(text.chars().count()) >= left);
+        // A click just inside ם's left edge puts the caret after it, where Backspace deletes ם.
+        let y = galley.rows[0].pos.y + row.size.y / 2.0;
+        assert_eq!(galley.cursor_from_pos(egui::vec2(mem.pos.x + 1.0, y)).index.0, 4);
+        // And just inside its right edge, before it.
+        assert_eq!(galley.cursor_from_pos(egui::vec2(mem.max_x() - 1.0, y)).index.0, 3);
+    }
+
+    #[test]
+    fn editor_pieces_keep_every_character_and_its_format() {
+        let line: Vec<(char, usize)> = "שלום".chars().map(|c| (c, 0)).chain(" עולם 2026".chars().map(|c| (c, 1))).collect();
+        let pieces = editor_pieces(&line, None, |_, _| 0).unwrap();
+        assert_eq!(shown_by_egui(&pieces), "2026 םלוע םולש");
+        for piece in &pieces {
+            for c in piece.text.chars() {
+                assert!(line.iter().any(|&(l, f)| l == c && f == piece.format), "{c:?} in format {}", piece.format);
+            }
+        }
+        let mut given: Vec<char> = line.iter().map(|p| p.0).collect();
+        let mut laid: Vec<char> = pieces.iter().flat_map(|p| p.text.chars()).collect();
+        given.sort_unstable();
+        laid.sort_unstable();
+        assert_eq!(given, laid, "one glyph per character, so the caret indices still fit");
+    }
+
+    #[test]
+    fn editor_lines_without_rtl_are_left_alone_and_odd_ones_never_panic() {
+        for s in ["", "1255 abc", "\u{200F}", "a (b)"] {
+            assert_eq!(editor_pieces(&one_format(s), None, |_, _| 0), None, "{s:?}");
+        }
+        for s in ["\u{05B0}", "\u{05D0}\u{2029}\u{2029}", "\u{202E}\u{05D0}1", "\u{05D0}\u{200F}\u{200E}\u{2067}x", "\u{0661}\u{0662} abc"] {
+            let line = one_format(s);
+            let pieces = editor_pieces(&line, None, |f, c| f + usize::from(c.is_ascii())).unwrap();
+            assert_eq!(pieces.iter().map(|p| p.text.chars().count()).sum::<usize>(), line.len(), "{s:?}");
         }
     }
 }

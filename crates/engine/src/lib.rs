@@ -82,7 +82,7 @@ pub enum ImageEdit {
     },
     Delete,
 }
-pub use pdfcraft_fonts::{MAX_SIGNATURE_CHARS, ScriptOutline, script_missing, script_outline};
+pub use pdfcraft_fonts::{LegacyEncoding, MAX_SIGNATURE_CHARS, ScriptOutline, legacy_encoding, script_missing, script_outline, set_legacy_encoding};
 
 /// Fill & Sign: `text` in the script font as a typed signature, its left edge at `at` (user
 /// space, vertically centred) and `height` points tall. `None` for text with no outlines.
@@ -261,12 +261,13 @@ struct Editor {
 /// One page's text blocks ([`pdfcraft_edit::text_blocks`]) and the unmodified document state they
 /// were read from. Opening a paragraph and applying its edit both need them, and grouping a long
 /// page is not cheap. Only an unmodified document is cached: its identity changes on every edit,
-/// undo and save (each reopens the working file), so a stale entry never matches.
+/// undo and save (each reopens the working file), so a stale entry never matches. The legacy text
+/// encoding they were decoded with is part of the key, so changing it in Preferences rereads them.
 #[derive(Default)]
 struct TextBlocksCache(std::sync::Mutex<Option<CachedTextBlocks>>);
 
-/// The document state, the page (0-based) and its text blocks.
-type CachedTextBlocks = (pdfcraft_cos::SourceIdentity, usize, Arc<Vec<pdfcraft_edit::TextBlock>>);
+/// The document state, the page (0-based), the legacy encoding and the page's text blocks.
+type CachedTextBlocks = (pdfcraft_cos::SourceIdentity, usize, pdfcraft_fonts::LegacyEncoding, Arc<Vec<pdfcraft_edit::TextBlock>>);
 
 impl Clone for TextBlocksCache {
     fn clone(&self) -> Self {
@@ -279,11 +280,13 @@ impl Editor {
     /// The text blocks on `page` (0-based), from the cache when the document hasn't changed.
     fn text_blocks(&self, page: usize) -> Result<Arc<Vec<pdfcraft_edit::TextBlock>>, EditError> {
         let source = (!self.cos.is_modified()).then(|| self.cos.source_identity());
+        let legacy = pdfcraft_fonts::legacy_encoding();
         if let Some(source) = &source
             && let Ok(cache) = self.text_blocks.0.lock()
-            && let Some((s, p, blocks)) = cache.as_ref()
+            && let Some((s, p, e, blocks)) = cache.as_ref()
             && s == source
             && *p == page
+            && *e == legacy
         {
             return Ok(blocks.clone());
         }
@@ -291,7 +294,7 @@ impl Editor {
         if let Some(source) = source
             && let Ok(mut cache) = self.text_blocks.0.lock()
         {
-            *cache = Some((source, page, blocks.clone()));
+            *cache = Some((source, page, legacy, blocks.clone()));
         }
         Ok(blocks)
     }

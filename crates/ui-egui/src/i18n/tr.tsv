@@ -2251,6 +2251,19 @@ key	Space	Boşluk
 	Added the first {n} files in {folder}	{folder} içindeki ilk {n} dosya eklendi
 	Margins	Kenar boşlukları
 	For page sizes and margins.	Sayfa boyutları ve kenar boşlukları için.
+	Show the formatting toolbar when editing text	Metin düzenlerken biçimlendirme araç çubuğunu göster
+	Drag to move	Taşımak için sürükleyin
+	Smaller text	Daha küçük metin
+	Larger text	Daha büyük metin
+	Text direction	Metin yönü
+	Right-to-left text	Sağdan sola metin
+	Left-to-right text	Soldan sağa metin
+	Legacy text encoding	Eski metin kodlaması
+	Auto-detect	Otomatik algıla
+	As declared in the PDF	PDF'te belirtildiği gibi
+	Hebrew (ISO 8859-8)	İbranice (ISO 8859-8)
+	Hebrew (Windows-1255)	İbranice (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Metni düzenle aracının, hangi harfleri çizdiğini belirtmeyen eski yazı tiplerini nasıl okuduğu. Otomatik algılama, ISO 8859-8 veya Windows-1255'e göre düzenlenmiş İbranice yazı tiplerini tanır.
 	PDF page: {size}	PDF sayfası: {size}
 	Match page at 100%	Sayfayı %100'de eşleştir
 	PDF scale: {scale}%	PDF ölçeği: %{scale}

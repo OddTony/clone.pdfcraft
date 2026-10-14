@@ -2260,6 +2260,19 @@ key	Space	Preslednica
 	Added the first {n} files in {folder}	Dodanih je prvih {n} datotek iz mape {folder}
 	Margins	Robovi
 	For page sizes and margins.	Za velikosti strani in robove.
+	Show the formatting toolbar when editing text	Med urejanjem besedila pokaži orodno vrstico za oblikovanje
+	Drag to move	Povlecite za premik
+	Smaller text	Manjše besedilo
+	Larger text	Večje besedilo
+	Text direction	Smer besedila
+	Right-to-left text	Besedilo od desne proti levi
+	Left-to-right text	Besedilo od leve proti desni
+	Legacy text encoding	Starejše kodiranje besedila
+	Auto-detect	Samodejno zaznaj
+	As declared in the PDF	Kot je navedeno v PDF-ju
+	Hebrew (ISO 8859-8)	Hebrejščina (ISO 8859-8)
+	Hebrew (Windows-1255)	Hebrejščina (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Kako Uredi besedilo bere stare pisave, ki ne povedo, katere črke rišejo. Samodejno zaznavanje prepozna hebrejske pisave, urejene po ISO 8859-8 ali Windows-1255.
 	PDF page: {size}	Stran PDF: {size}
 	Match page at 100%	Prilagodi strani pri 100 %
 	PDF scale: {scale}%	Merilo PDF: {scale} %

@@ -1722,6 +1722,26 @@ fn form_artwork_edits_only_the_selected_placement() {
     assert!(images::page_images(&doc, 0).unwrap().is_empty());
 }
 
+/// Word's Right-to-left button on a paragraph: without an alignment it aligns to the right, so a
+/// single line that grows keeps its right edge; left to right it keeps its left edge.
+#[test]
+fn a_right_to_left_paragraph_keeps_its_right_edge() {
+    let doc = text_page("BT /F1 10 Tf 100 700 Td (Hello) Tj ET");
+    let before = text::text_lines(&doc, 0).unwrap()[0].rect;
+    for (direction, keeps_right) in [(Some(true), true), (Some(false), false), (None, false)] {
+        let mut doc = doc.clone();
+        let style = text::BlockStyle { direction, ..Default::default() };
+        text::rewrite_block(&mut doc, 0, 0, Some("Hello world"), &style).unwrap();
+        let after = text::text_lines(&reopen(&doc), 0).unwrap()[0].rect;
+        if keeps_right {
+            assert!((after[2] - before[2]).abs() < 1.0, "{direction:?}: right edge {} → {}", before[2], after[2]);
+            assert!(after[0] < before[0] - 1.0, "{direction:?}: grows to the left");
+        } else {
+            assert!((after[0] - before[0]).abs() < 1.0, "{direction:?}: left edge {} → {}", before[0], after[0]);
+        }
+    }
+}
+
 #[test]
 fn paragraphs_take_new_formatting() {
     let mut doc = text_page("BT /F1 10 Tf 12 TL 100 700 Td (One two three four five six seven) Tj T* (eight nine ten eleven twelve) Tj ET");
@@ -2074,6 +2094,34 @@ fn hebrew_lines_read_in_typing_order() {
     assert_eq!(lines, ["בדיוק", "שלום בדיוק"]);
     let blocks: Vec<String> = text::text_blocks(&doc, 0).unwrap().into_iter().map(|b| b.text).collect();
     assert_eq!(blocks, ["בדיוק", "שלום בדיוק"]);
+}
+
+/// The report: a Hebrew table row opened for editing put its pieces in left-to-right order, so
+/// the words (and the number cell on the right) read in reverse. Two words drawn as separate
+/// text objects in two sizes side by side, "בדיוק" on the left and "שלום" on the right, read
+/// "שלום בדיוק".
+#[test]
+fn hebrew_pieces_side_by_side_join_from_the_right() {
+    let doc = hebrew_page("BT /F1 12 Tf 300 700 Td (EDCBA) Tj ET BT /F1 11 Tf 340 700 Td (HDGF) Tj ET");
+    // Two sizes, as a table row's cells in two fonts: two source lines on one row.
+    assert_eq!(text::text_lines(&doc, 0).unwrap().len(), 2);
+    let blocks = text::text_blocks(&doc, 0).unwrap();
+    assert_eq!(blocks.len(), 1, "one row");
+    let block = &blocks[0];
+    assert_eq!(block.text, "שלום בדיוק");
+    assert_eq!(block.editor_text, "שלום בדיוק");
+    // The rightmost source line comes first, and each span still names its own source line.
+    let lines = text::text_lines(&doc, 0).unwrap();
+    let right = lines.iter().position(|l| l.text.trim() == "שלום").unwrap();
+    assert_eq!(block.rows, [vec![right, 1 - right]]);
+    for (range, line) in &block.spans {
+        assert_eq!(block.editor_text.get(range.clone()), Some(lines[*line].text.as_str()));
+    }
+    // Editing keeps the order: the row is written back right to left.
+    let mut doc = doc;
+    assert_eq!(text::replace_block(&mut doc, 0, 0, "שלום בדיוק").unwrap().substituted, None);
+    let blocks = text::text_blocks(&reopen(&doc), 0).unwrap();
+    assert_eq!(blocks.first().map(|b| b.text.as_str()), Some("שלום בדיוק"));
 }
 
 /// Text the page's own font can show is written back in drawing order, right-aligned to where

@@ -2048,6 +2048,19 @@
 	Couldn't import the signature image: {e}	署名画像を読み込めませんでした: {e}
 	Go to page…	ページへ移動…
 	For page sizes and margins.	ページサイズと余白に使います。
+	Show the formatting toolbar when editing text	テキスト編集中に書式ツールバーを表示
+	Drag to move	ドラッグして移動
+	Smaller text	文字を小さく
+	Larger text	文字を大きく
+	Text direction	文字の方向
+	Right-to-left text	右から左へのテキスト
+	Left-to-right text	左から右へのテキスト
+	Legacy text encoding	レガシーテキストエンコーディング
+	Auto-detect	自動検出
+	As declared in the PDF	PDF の宣言どおり
+	Hebrew (ISO 8859-8)	ヘブライ語（ISO 8859-8）
+	Hebrew (Windows-1255)	ヘブライ語（Windows-1255）
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	描画する文字を示さない古いフォントを「テキストを編集」がどう読むかを指定します。自動検出では ISO 8859-8 または Windows-1255 に基づくヘブライ語フォントを認識します。
 	Reopen the files that were open when PdfCraft last closed	前回 PdfCraft を閉じたときに開いていたファイルを再度開く
 	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	PDF テキスト用フォントでは「{c}」（{code}）を表示できません。対応している文字を使用してください。
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	標準フォントでは「{c}」（{code}）を表示できません。現在、テキストとして追加できるのは西ヨーロッパの文字のみです。

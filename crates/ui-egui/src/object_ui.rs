@@ -183,6 +183,10 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, p
 
 #[allow(clippy::too_many_arguments)]
 fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, page: usize, doc: &Document, view: &mut DocView) -> bool {
+    // A press on the floating text toolbar belongs to the toolbar, not to the page under it.
+    if crate::edit_text_ui::pointer_on_toolbar(ui.ctx(), view) && s.gesture.is_none() {
+        return false;
+    }
     let (pointer, pressed, down) = ui.input(|i| (i.pointer.interact_pos(), i.pointer.primary_pressed(), i.pointer.primary_down()));
     let info = &doc.info;
     if s.page == Some(page)

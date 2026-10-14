@@ -88,7 +88,17 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
         }
     }
     let mut blocks: Vec<TextBlock> = Vec::new();
-    for row in rows {
+    for mut row in rows {
+        // A right-to-left row reads from its rightmost piece: a Hebrew table row's number cell
+        // comes before the name to its left, and two Hebrew words drawn as separate text
+        // objects read right to left. Joined left to right they came out in reverse order.
+        let rtl = crate::bidi::rtl_base(&row.iter().filter_map(|i| lines.get(*i)).map(|l| l.text.as_str()).collect::<String>());
+        if rtl {
+            row.sort_by(|a, b| {
+                let right = |i: &usize| lines.get(*i).map_or(f64::NEG_INFINITY, |l| l.rect[2]);
+                right(b).total_cmp(&right(a))
+            });
+        }
         let Some(first) = row.first().and_then(|i| lines.get(*i)) else { continue };
         let Some(rect) = row_rect(&row, lines) else { continue };
         let joins = blocks.last().is_some_and(|block| {
@@ -135,7 +145,7 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
             if let Some(prev) = block.lines.last().filter(|i| row.contains(i)).and_then(|i| lines.get(*i))
                 && !row_text.ends_with(char::is_whitespace)
                 && !line.text.starts_with(char::is_whitespace)
-                && line.rect[0] - prev.rect[2] > line.size * 0.12
+                && (if rtl { prev.rect[0] - line.rect[2] } else { line.rect[0] - prev.rect[2] }) > line.size * 0.12
             {
                 row_text.push(' ');
                 block.editor_text.push(' ');
