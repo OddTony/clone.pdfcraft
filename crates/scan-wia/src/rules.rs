@@ -236,6 +236,11 @@ fn restated(error: &ScanError, sentence: &str) -> ScanError {
     error.restated(wia_interrupt_kind(sentence), sentence)
 }
 
+/// The sentence [`after_transfer`] gives a feeder transfer that delivered nothing and named no fault.
+pub fn no_usable_page(error: &ScanError) -> bool {
+    error.to_string().starts_with("The scanner did not deliver a usable page.")
+}
+
 /// A Windows failure that does not name the fault. A later status read can.
 pub fn generic_scan_failure(error: &ScanError) -> bool {
     let text = error.to_string();

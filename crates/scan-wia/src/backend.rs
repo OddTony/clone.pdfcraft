@@ -297,11 +297,16 @@ fn acquire(settings: &ScanSettings) -> Result<Acquired, ScanError> {
     let route = Cell::new(None);
     let mut result = acquire_pages(settings, &route);
     if let (Err(error), Some((resolved, has_glass))) = (&result, route.get())
-        && craft_scan::auto_fallback_to_glass(settings.source, resolved, has_glass, craft_scan::pages_in_error(error), error)
+        && (craft_scan::auto_fallback_to_glass(settings.source, resolved, has_glass, craft_scan::pages_in_error(error), error)
+            || feeder_gave_nothing(settings.source, resolved, has_glass, craft_scan::pages_in_error(error), error))
     {
         // Drivers keep FEED_READY set with an empty tray, so Auto picks the feeder and only the
         // transfer finds it empty (after the printer's own ~10 s timeout). Try the glass once.
-        let reason = if error.interrupt_kind() == craft_scan::InterruptKind::FeederEmpty { "feeder_empty" } else { "busy_or_feeder_empty" };
+        let reason = match error.interrupt_kind() {
+            craft_scan::InterruptKind::FeederEmpty => "feeder_empty",
+            craft_scan::InterruptKind::BusyOrFeederEmpty => "busy_or_feeder_empty",
+            _ => "no_usable_page",
+        };
         log::info!("scan: auto: the feeder had no paper ({reason}); trying the glass");
         let trace = craft_scan::trace::AcquireTrace::from_env();
         if trace.enabled() {
@@ -322,6 +327,13 @@ fn acquire(settings: &ScanSettings) -> Result<Acquired, ScanError> {
         }
     }
     result
+}
+
+/// Auto chose the feeder, no page arrived and the driver named no fault: a feeder that reports
+/// ready with an empty tray (the ready bit stays set) ends like this on some network drivers, so
+/// the glass is tried once, as for the other empty-feeder signs.
+fn feeder_gave_nothing(requested: Source, resolved: Source, has_glass: bool, pages: usize, error: &ScanError) -> bool {
+    requested == Source::Auto && resolved == Source::Feeder && has_glass && pages == 0 && rules::no_usable_page(error)
 }
 
 fn log_acquire_start(settings: &ScanSettings) {

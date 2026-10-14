@@ -97,6 +97,15 @@ mod windows_rules {
     }
 
     #[test]
+    fn a_feeder_transfer_that_delivered_nothing_and_named_no_fault_is_recognised() {
+        let generic = ScanError::Failed("The scanner reported an error.".into());
+        let restated = rules::after_transfer(0, false, Some(generic)).expect_err("no pages");
+        assert!(rules::no_usable_page(&restated), "{restated}");
+        let named = ScanError::Failed("The scanner has a paper jam.".into());
+        assert!(!rules::no_usable_page(&named));
+    }
+
+    #[test]
     fn an_attention_bit_beats_the_empty_tray_inference() {
         // A door interlock sets the attention bit and clears FEED_READY; it is not an empty tray.
         let interlock = HandlingStatus { attention: true, feeder_ready: Some(false), ..HandlingStatus::default() };
