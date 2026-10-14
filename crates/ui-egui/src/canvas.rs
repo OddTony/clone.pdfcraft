@@ -3795,7 +3795,7 @@ fn notices(
             text.push('.');
         }
         let mut extract = false;
-        notice_bar(ui, t, if env.digest_ok { "file-lock" } else { "triangle-alert" }, t.accent_text, text, |ui| {
+        notice_bar(ui, t, if env.digest_ok { "file-lock-2" } else { "triangle-alert" }, t.accent_text, text, |ui| {
             if icons::button(ui, "x", 22.0, false, tl!("Dismiss")).clicked() {
                 view.notice_dismissed = true;
             }
