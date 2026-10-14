@@ -59,6 +59,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut import_words = false;
     let mut print_go = false;
     let mut revert_now = false;
+    let mut overwrite_now = false;
+    let mut overwrite_elsewhere = false;
     let mut summarize_now = false;
     let mut optimize_now = false;
     let mut duplicate_now: Option<Edit> = None;
@@ -778,6 +780,30 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 });
                 return;
             }
+            Dialog::OverwriteChanged => {
+                let name = app.pending_overwrite.as_ref().and_then(|p| app.session.get(p.id)).map(|d| d.name.clone()).unwrap_or_default();
+                ui.label(egui::RichText::new(tl!("Save over the changed file?")).font(theme::semibold(18.0)));
+                ui.add_space(8.0);
+                ui.label(crate::i18n::fmt(
+                    tl!("“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one."),
+                    &[("name", &name)],
+                ));
+                ui.add_space(12.0);
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if widgets::pill_button(ui, tl!("Save anyway"), true).clicked() {
+                        overwrite_now = true;
+                        close = true;
+                    }
+                    if widgets::pill_button(ui, tl!("Save as…"), false).clicked() {
+                        overwrite_elsewhere = true;
+                        close = true;
+                    }
+                    if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
+                        close = true;
+                    }
+                });
+                return;
+            }
             Dialog::Print => {
                 let Some((i, id)) = app.active_ids() else {
                     close = true;
@@ -1192,6 +1218,21 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     if revert_now {
         app.revert_active();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if overwrite_now {
+            app.overwrite_changed_file();
+        }
+        if overwrite_elsewhere {
+            app.save_changed_file_elsewhere();
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    let _ = (overwrite_now, overwrite_elsewhere);
+    // Cancelled or dismissed: the save is dropped.
+    if dialog == Dialog::OverwriteChanged && (modal.should_close() || close) {
+        app.pending_overwrite = None;
     }
     if summarize_now {
         app.summarize_comments();
