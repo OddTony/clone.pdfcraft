@@ -42,6 +42,8 @@ pub struct TextLine {
     /// Whether new text in this font can only be shown by substituting another font (no
     /// Unicode mapping for the line, so nothing could be reused).
     pub decodable: bool,
+    /// Whether the font requires visual-order Indic text.
+    pub visual_order: bool,
     /// The Japanese or Hebrew fallback face the font subsets, when the line is in one (see [`same_font`]).
     face: Option<String>,
     /// The content stream piece the line starts in, and its operators (indices into the page's
@@ -52,6 +54,12 @@ pub struct TextLine {
     origin: Origin,
     /// Explicit marked-content scope (when present); distinct scopes must not be guessed into one paragraph.
     scope: Option<usize>,
+    /// Right-to-left `/ActualText` already supplies typing order; glyph text still needs bidi
+    /// recovery. Left-to-right ActualText (e.g. a Latin ligature) joins its line as usual.
+    logical_order: bool,
+    /// Some of the line's text is `/ActualText`, which is already in logical order: visual-order
+    /// Indic recovery would scramble it.
+    actual_text: bool,
 }
 
 impl TextLine {
@@ -174,6 +182,8 @@ struct TextState {
     leading: f64,
     rise: f64,
     fill: Vec<Op>,
+    /// The text rendering mode (`Tr`); 3 is invisible text, as in an OCR layer over a scan.
+    render_mode: i64,
 }
 
 impl TextState {
@@ -186,6 +196,7 @@ impl TextState {
             leading: ts.leading,
             rise: ts.rise,
             fill: ts.fill.clone(),
+            render_mode: ts.render_mode,
         }
     }
 
@@ -246,6 +257,9 @@ pub struct TextBlock {
     pub editor_text: String,
     /// Byte ranges in `editor_text` and their source line indexes.
     pub spans: Vec<(std::ops::Range<usize>, usize)>,
+    /// Every line is invisible text (rendering mode 3): an OCR layer over a scanned image, whose
+    /// pixels show the words. A rewrite draws the new text visibly (see [`BlockStyle::cover`]).
+    pub invisible: bool,
 }
 
 impl TextBlock {
@@ -444,6 +458,8 @@ fn fill_color(fill: &[Op]) -> [f64; 3] {
 struct Shown {
     op: usize,
     extra_ops: Vec<usize>,
+    /// Encoded glyphs, not bytes or Unicode characters (a ligature can represent several).
+    glyph_count: usize,
     /// Advance in text space, including spacing and TJ adjustments.
     advance: f64,
     /// The text matrix where it starts (text space), and the state there and at its `BT`.
@@ -464,8 +480,11 @@ struct Shown {
     size: f64,
     bold: bool,
     italic: bool,
+    visual_order: bool,
     decodable: bool,
     scope: Option<usize>,
+    logical_order: bool,
+    actual_text: bool,
 }
 
 /// The graphics state carried from one of a page's content streams to the next: the streams
@@ -518,18 +537,16 @@ fn interpret(
     let mut actual: Vec<Option<(usize, usize, String)>> = Vec::new();
     for (i, op) in ops.iter().enumerate() {
         match op.op.as_slice() {
-            b"BMC" | b"BDC" => {
-                if marked.len() < 256 {
-                    // Marked text paragraphs/headings are authoritative boundaries. Ignore
-                    // artifacts and inner spans, which inherit their enclosing region.
-                    let region = matches!(op.name(0), Some(b"P" | b"H" | b"H1" | b"H2" | b"H3" | b"H4" | b"H5" | b"H6" | b"LI" | b"TD" | b"TH"));
-                    marked.push(if region { Some(i) } else { marked.last().copied().flatten() });
-                    let logical = op.operands.get(1).and_then(Object::as_dict).and_then(|d| d.get(b"ActualText")).and_then(|s| match s {
-                        Object::String(s) if s.bytes.len() <= 4_000_000 => Some(s.to_text()),
-                        _ => None,
-                    });
-                    actual.push(if logical_text { logical.map(|s| (out.len(), i, s)) } else { None });
-                }
+            b"BMC" | b"BDC" if marked.len() < 256 => {
+                // Marked text paragraphs/headings are authoritative boundaries. Ignore
+                // artifacts and inner spans, which inherit their enclosing region.
+                let region = matches!(op.name(0), Some(b"P" | b"H" | b"H1" | b"H2" | b"H3" | b"H4" | b"H5" | b"H6" | b"LI" | b"TD" | b"TH"));
+                marked.push(if region { Some(i) } else { marked.last().copied().flatten() });
+                let logical = op.operands.get(1).and_then(Object::as_dict).and_then(|d| d.get(b"ActualText")).and_then(|s| match s {
+                    Object::String(s) if s.bytes.len() <= 4_000_000 => Some(s.to_text()),
+                    _ => None,
+                });
+                actual.push(if logical_text { logical.map(|s| (out.len(), i, s)) } else { None });
             }
             b"EMC" => {
                 marked.pop();
@@ -538,6 +555,7 @@ fn interpret(
                     let mut items = tail.into_iter();
                     if let Some(mut first) = items.next() {
                         for shown in items {
+                            first.glyph_count = first.glyph_count.saturating_add(shown.glyph_count);
                             first.extra_ops.push(shown.op);
                             first.extra_ops.extend(shown.extra_ops);
                             first.rect = [
@@ -548,6 +566,11 @@ fn interpret(
                             ];
                         }
                         first.extra_ops.extend([open, i]);
+                        // Only right-to-left ActualText is already in typing order and must stay
+                        // out of the line's bidi recovery. Word and Chrome wrap Latin ligatures
+                        // (`fi`, `fl`) in ActualText spans mid-word; those keep joining their line.
+                        first.logical_order = logical.chars().any(crate::bidi::is_rtl);
+                        first.actual_text = true;
                         first.text = logical;
                         first.start_x = first.rect[0];
                         first.end_x = first.rect[2];
@@ -641,10 +664,12 @@ fn interpret(
                 let mut text = String::new();
                 let mut decodable = true;
                 let mut x_text = 0.0;
+                let mut glyph_count = 0_usize;
                 for p in &pieces {
                     match p {
                         Object::String(s) => {
                             for (code, len) in m.codes(&s.bytes) {
+                                glyph_count = glyph_count.saturating_add(1);
                                 match m.text_of(code) {
                                     Some(t) => text.push_str(&t),
                                     None => decodable = false,
@@ -686,6 +711,7 @@ fn interpret(
                 out.push(Shown {
                     op: i,
                     extra_ops: Vec::new(),
+                    glyph_count,
                     advance: x_text,
                     tm: Matrix([tm.0[0], tm.0[1], tm.0[2], tm.0[3], tm.0[4] - x_text * tm.0[0], tm.0[5] - x_text * tm.0[1]]),
                     state: ts.clone(),
@@ -704,8 +730,11 @@ fn interpret(
                     size: if size_user > 0.0 { size_user } else { ts.size },
                     bold: m.bold,
                     italic: m.italic,
+                    visual_order: m.visual_order,
                     decodable,
                     scope: marked.last().copied().flatten(),
+                    logical_order: false,
+                    actual_text: false,
                 });
             }
             _ => {}
@@ -731,13 +760,21 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
     let ops = pieces.parse().ops;
     let shown = interpret(doc, &ops, &fonts_res, &mut cache, &mut carry, None, true);
     let mut last: Option<(usize, usize, f64, f64, f64)> = None; // (piece, bt, baseline, end_x, size)
-    for s in shown {
+    for mut s in shown {
+        // A single RTL glyph's ActualText (e.g. lam-alef) is an inline ligature, not a
+        // separate logical line. Put its letters into visual order before joining the
+        // surrounding glyphs; the completed line is recovered to typing order below.
+        // Multi-glyph and mixed-direction replacements keep their authoritative order.
+        if s.logical_order && s.glyph_count == 1 && s.text.chars().all(crate::bidi::is_rtl) {
+            s.text = crate::bidi::to_visual(&s.text);
+            s.logical_order = false;
+        }
         // A line belongs to one stream piece. Within it, PDF producers often put every word
         // in its own BT/ET: geometry and text state, not object boundaries, define a line.
         let si = ops.get(s.op).map_or(0, |op| pieces.pieces_of(op).0);
         let joins = last.is_some_and(|(piece, bt, base, end, size)| {
             piece == si
-                && lines.last().is_some_and(|l| l.scope == s.scope)
+                && lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order)
                 && (bt == s.bt || lines.last().is_some_and(|l| compatible_word(l, &s)))
                 && (s.text.trim().is_empty() || lines.last().is_some_and(|l| same_font(l, &s.font, s.face.as_deref())))
                 && (s.text.trim().is_empty()
@@ -747,6 +784,9 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
                 && (s.baseline - base).abs() < size * 0.3
                 && s.start_x > end - size
                 && s.start_x - end < size * if bt == s.bt { 3.0 } else { 1.5 }
+                // An OCR layer is one text object over the whole scan: its words continue a line
+                // only across a word space, not across a table cell or a tab stop.
+                && (s.state.render_mode != 3 || s.start_x - end < size * 0.6)
         });
         if joins && let Some(l) = lines.last_mut() {
             let gap = s.start_x - last.map_or(s.start_x, |x| x.3);
@@ -758,6 +798,8 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
             l.ops.push(s.op);
             l.ops.extend(s.extra_ops.iter().copied());
             l.decodable &= s.decodable;
+            l.visual_order |= s.visual_order;
+            l.actual_text |= s.actual_text;
             // Spaces may use a separate subset font; they do not change the visible style.
         } else {
             lines.push(TextLine {
@@ -770,9 +812,12 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
                 italic: s.italic,
                 color: fill_color(&s.state.fill),
                 decodable: s.decodable,
+                visual_order: s.visual_order,
                 face: s.face.clone(),
                 stream: si,
                 scope: s.scope,
+                logical_order: s.logical_order,
+                actual_text: s.actual_text,
                 ops: std::iter::once(s.op).chain(s.extra_ops.iter().copied()).collect(),
                 origin: Origin {
                     tm: s.tm.0,
@@ -790,7 +835,11 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
         last = Some((si, s.bt, s.baseline, s.end_x, s.size.max(1.0)));
     }
     // Content streams draw right-to-left lines in visual order; the editor works in typing order.
-    for l in &mut lines {
+    for l in lines.iter_mut().filter(|l| !l.logical_order) {
+        // A visual-order Indic font draws pre-base vowel signs before their consonant.
+        if l.visual_order && !l.actual_text {
+            l.text = crate::indic::to_logical(&l.text);
+        }
         l.text = crate::bidi::to_logical(&l.text);
     }
     // Lines of only spaces aren't editable text.
@@ -815,7 +864,7 @@ fn compatible_word(line: &TextLine, shown: &Shown) -> bool {
 /// (`bt`, baseline, end x, size).
 fn add_shown(lines: &mut Vec<TextLine>, last: &mut Option<(usize, f64, f64, f64)>, s: Shown, stream: usize) {
     let joins = last.is_some_and(|(bt, base, end, size)| {
-        lines.last().is_some_and(|l| l.scope == s.scope)
+        lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order)
             && (bt == s.bt || lines.last().is_some_and(|l| compatible_word(l, &s)))
             && (s.text.trim().is_empty() || lines.last().is_some_and(|l| same_font(l, &s.font, s.face.as_deref())))
             && (s.text.trim().is_empty()
@@ -836,6 +885,8 @@ fn add_shown(lines: &mut Vec<TextLine>, last: &mut Option<(usize, f64, f64, f64)
         l.ops.push(s.op);
         l.ops.extend(s.extra_ops.iter().copied());
         l.decodable &= s.decodable;
+        l.visual_order |= s.visual_order;
+        l.actual_text |= s.actual_text;
     } else {
         lines.push(TextLine {
             text: s.text.clone(),
@@ -847,9 +898,12 @@ fn add_shown(lines: &mut Vec<TextLine>, last: &mut Option<(usize, f64, f64, f64)
             italic: s.italic,
             color: fill_color(&s.state.fill),
             decodable: s.decodable,
+            visual_order: s.visual_order,
             face: s.face.clone(),
             stream,
             scope: s.scope,
+            logical_order: s.logical_order,
+            actual_text: s.actual_text,
             ops: std::iter::once(s.op).chain(s.extra_ops.iter().copied()).collect(),
             origin: Origin {
                 tm: s.tm.0,
@@ -978,6 +1032,10 @@ fn reading_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError
         walk(&mut w, &parse(&data).ops, &res, &mut carry, si);
     }
     let mut lines = w.lines;
+    // A visual-order Indic font draws pre-base vowel signs before their consonant.
+    for l in lines.iter_mut().filter(|l| l.visual_order && !l.actual_text) {
+        l.text = crate::indic::to_logical(&l.text);
+    }
     lines.retain(|l| !l.text.trim().is_empty());
     Ok(lines)
 }
@@ -1362,8 +1420,10 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
     let first = target.ops.first().copied().filter(|i| *i < ops.len()).ok_or_else(|| EditError::Invalid("the page's content changed".into()))?;
     // The line's own font, when it can show every character.
     let font = fonts_res.get(target.font.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned()).map(|d| Metrics::from_dict(doc, &d));
+    let visual_indic = font.as_ref().is_some_and(|m| m.visual_order) || target.visual_order;
+    let indic_text = if visual_indic { crate::indic::to_visual(&text) } else { text.clone() };
     // Typed in logical order; drawn left to right (right-to-left runs reversed).
-    let shown = crate::bidi::to_visual(&text);
+    let shown = crate::bidi::to_visual(&indic_text);
     let reused = font.as_ref().filter(|m| source_encodes(m, &shown));
     let mut substituted = None;
     let mut replacement: Vec<Op> = Vec::new();
@@ -1387,9 +1447,10 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
             target.origin.state.word_spacing,
         )?),
         None => {
+            let fallback_shown = crate::bidi::to_visual(&text);
             if needs_type3(&text) {
                 let fallback = type3_font(doc, &mut fonts_res, &text, source_family(&target.base_font), target.bold, max_glyphs)?;
-                let runs = type3_encode(&fallback, &shown)
+                let runs = type3_encode(&fallback, &fallback_shown)
                     .ok_or_else(|| EditError::Invalid(format!("\"{text}\" can't be shown by the {} fallback", fallback.family)))?;
                 let size = font_size_before(&ops, first).unwrap_or(target.size);
                 for (name, bytes) in runs {
@@ -1399,10 +1460,10 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
                 replacement.push(Op::new("Tf", vec![Object::name(&target.font), pdfcraft_content::num(size)]));
                 substituted = Some(format!("{} Type3", fallback.family));
             } else {
-                let win = pdfcraft_fonts::win_ansi(&shown);
+                let win = pdfcraft_fonts::win_ansi(&fallback_shown);
                 // WinAnsi turns what it can't show into '?'; refuse rather than print the wrong thing.
                 let back: String = win.iter().map(|b| char::from_u32(u32::from(*b)).unwrap_or('?')).collect();
-                if shown.chars().zip(back.chars()).any(|(a, b)| b == '?' && a != '?') {
+                if fallback_shown.chars().zip(back.chars()).any(|(a, b)| b == '?' && a != '?') {
                     return Err(EditError::Invalid(format!("\"{text}\" has characters neither {} nor Helvetica can show", target.base_font)));
                 }
                 // The size in text space: the current Tf's size.
@@ -1424,8 +1485,8 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
         }
     }
     // Rebuild: the line's first operator becomes the replacement, its others go. Copies of the
-    // line drawn in the same area go too, so the replacement is all that shows.
-    let drops = coincident_ops(&lines, std::slice::from_ref(&target.rect));
+    // line drawn on the same baseline go too, so the replacement is all that shows.
+    let drops = coincident_ops(&lines, &[&target]);
     let new_data = splice(&pieces, &ops, |i| if i == first { (std::mem::take(&mut replacement), false) } else { (Vec::new(), !drops.contains(&i)) });
     let contents = rewritten_contents(doc, &streams, new_data);
     let page_ref = p.obj;
@@ -1446,25 +1507,42 @@ fn font_size_before(ops: &[Op], at: usize) -> Option<f64> {
     ops[..at].iter().rev().find(|o| o.is("Tf")).and_then(|o| o.num(1))
 }
 
-/// The operators of every line drawn in the same area as one of `rects`. Documents sometimes
-/// draw a line more than once (fake bold, an invisible text layer), and a surviving copy would
-/// show the old text under the replaced line. Copies overlap a member's rect by more than half of
-/// the smaller rect; neighbouring lines share no area.
-fn coincident_ops(lines: &[TextLine], rects: &[[f64; 4]]) -> std::collections::HashSet<usize> {
+/// Operators of every line that is another drawing of one of `targets` (fake bold, an invisible
+/// text layer). A surviving copy would show the old text under the replacement.
+///
+/// A copy overlaps a target by more than half the smaller box and sits on the same baseline
+/// (within the tolerance that joins showing operators onto one line). A neighbouring line can
+/// share box area when the leading is tighter than the font's ascent plus descent; its baseline
+/// is farther away, so it stays.
+fn coincident_ops(lines: &[TextLine], targets: &[&TextLine]) -> std::collections::HashSet<usize> {
     let area = |r: [f64; 4]| ((r[2] - r[0]) * (r[3] - r[1])).max(0.0);
     let mut drop = std::collections::HashSet::new();
-    for l in lines {
-        let covered = rects.iter().any(|m| {
-            let ix = (m[2].min(l.rect[2]) - m[0].max(l.rect[0])).max(0.0);
-            let iy = (m[3].min(l.rect[3]) - m[1].max(l.rect[1])).max(0.0);
-            let small = area(*m).min(area(l.rect));
-            small > 0.0 && ix * iy / small > 0.5
-        });
-        if covered {
-            drop.extend(l.ops.iter().copied());
+    for line in lines {
+        let copy = targets.iter().any(|target| overlaps_half(line.rect, target.rect, area) && on_same_baseline(line, target));
+        if copy {
+            drop.extend(line.ops.iter().copied());
         }
     }
     drop
+}
+
+fn overlaps_half(a: [f64; 4], b: [f64; 4], area: impl Fn([f64; 4]) -> f64) -> bool {
+    let ix = (b[2].min(a[2]) - b[0].max(a[0])).max(0.0);
+    let iy = (b[3].min(a[3]) - b[1].max(a[1])).max(0.0);
+    let small = area(b).min(area(a));
+    small > 0.0 && ix * iy / small > 0.5
+}
+
+/// Perpendicular distance between baselines, in user space. Horizontal text compares height;
+/// turned text compares the distance across the writing direction.
+fn on_same_baseline(line: &TextLine, target: &TextLine) -> bool {
+    let angle = target.rotation().to_radians();
+    let (sin, cos) = if angle.is_finite() { angle.sin_cos() } else { (0.0, 1.0) };
+    let dx = line.origin.x - target.origin.x;
+    let dy = line.origin.baseline - target.origin.baseline;
+    let offset = dx.mul_add(-sin, dy * cos).abs();
+    let size = line.size.min(target.size).max(1.0);
+    offset.is_finite() && offset < size * 0.3
 }
 
 /// The paragraphs on a page (0-based).
@@ -1480,8 +1558,8 @@ pub fn clear_block(doc: &mut Document, page: usize, block: usize) -> Result<(), 
     let lines = text_lines(doc, page)?;
     let blocks = group_blocks(&lines);
     let target = blocks.get(block).ok_or_else(|| EditError::Invalid("the paragraph no longer exists".into()))?;
-    let rects: Vec<_> = target.lines.iter().filter_map(|i| lines.get(*i)).map(|l| l.rect).collect();
-    let mut drops = coincident_ops(&lines, &rects);
+    let targets: Vec<&TextLine> = target.lines.iter().filter_map(|i| lines.get(*i)).collect();
+    let mut drops = coincident_ops(&lines, &targets);
     drops.extend(target.lines.iter().filter_map(|i| lines.get(*i)).flat_map(|l| l.ops.iter().copied()));
     let p = page_dict(doc, page)?;
     let res = p.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
@@ -1586,6 +1664,9 @@ pub struct BlockStyle {
     pub offset: Option<[f64; 2]>,
     /// Rewrap to this width in user space (dragging the box's edge).
     pub width: Option<f64>,
+    /// For an invisible paragraph ([`TextBlock::invisible`]): fill its old area with this colour
+    /// (RGB 0–1) before the new text, hiding the scanned word beneath it.
+    pub cover: Option<[f64; 3]>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1631,7 +1712,9 @@ pub(crate) fn rewrite_block_with_limit(
             "formatting part of right-to-left (Hebrew) text, or choosing a document font for it, isn't supported yet".into(),
         ));
     }
+    let visual_indic = members.iter().any(|line| line.visual_order);
     if !hebrew
+        && !visual_indic
         && (!style.ranges.is_empty()
             || style.resource.is_some()
             || (text.is_some_and(|draft| {
@@ -1665,18 +1748,16 @@ pub(crate) fn rewrite_block_with_limit(
     }
     let o_state = ts_state.clone();
     let metrics = fonts_res.get(font_name.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned()).map(|d| Metrics::from_dict(doc, &d));
-    let reuse = style.family.is_none() && style.bold.is_none() && metrics.as_ref().is_some_and(|m| source_encodes(m, &text));
+    let visual_indic = metrics.as_ref().is_some_and(|m| m.visual_order) || first.visual_order;
+    let indic_text = if visual_indic { crate::indic::to_visual(&text) } else { text.clone() };
+    let reuse = style.family.is_none() && style.bold.is_none() && metrics.as_ref().is_some_and(|m| source_encodes(m, &indic_text));
     let space = metrics.as_ref().map_or(0.33, |m| source_space(doc, &fonts_res, m));
     // The chosen style also determines the real Japanese fallback outlines and advances.
     let (family, bold, italic) = style.family.unwrap_or((source_family(&b.base_font), b.bold, b.italic));
     let bold = style.bold.unwrap_or(bold);
-    let std_width = move |s: &str, size: f64| -> f64 {
-        match family {
-            crate::added::Family::Courier => s.chars().count() as f64 * 0.6 * size,
-            crate::added::Family::Times => pdfcraft_fonts::helvetica_width(s, size) * 0.92,
-            crate::added::Family::Helvetica => pdfcraft_fonts::helvetica_width(s, size) * if bold { 1.05 } else { 1.0 },
-        }
-    };
+    // The face is chosen after `bold` settles, so a bold request measures with the bold metrics.
+    let face = family.std14(bold, italic);
+    let std_width = move |s: &str, size: f64| -> f64 { face.text_width(s, size) };
     let [dx, dy] = style.offset.unwrap_or([0.0, 0.0]);
     if !(dx.is_finite() && dy.is_finite()) {
         return Err(EditError::Invalid("the paragraph can't be moved that far".into()));
@@ -1716,7 +1797,10 @@ pub(crate) fn rewrite_block_with_limit(
     let type3 = if !reuse && needs_type3(&text) { Some(type3_font(doc, &mut fonts_res, &text, family, bold, max_glyphs)?) } else { None };
     let advance = |s: &str| -> f64 {
         let t = match (&metrics, reuse) {
-            (Some(m), true) => source_width(m, s, size, space, o_state.char_spacing, o_state.word_spacing),
+            (Some(m), true) => {
+                let visual_s = if m.visual_order { crate::indic::to_visual(s) } else { s.to_owned() };
+                source_width(m, &visual_s, size, space, o_state.char_spacing, o_state.word_spacing)
+            }
             _ if let Some(fallback) = &type3 => {
                 // Each character's count in `s`, from one pass over `s`.
                 let mut counts: HashMap<char, usize> = HashMap::new();
@@ -1771,6 +1855,7 @@ pub(crate) fn rewrite_block_with_limit(
     let n = pdfcraft_content::num;
     // In its own graphics state, so a new colour (or anything else) stops at the paragraph.
     let mut block_ops = vec![Op::new("q", vec![])];
+    block_ops.extend(reveal_ops(&b, &lines, style, o.ctm)?);
     // Moved: a translation inside that state.
     if let Some((ax, ay)) = movement {
         block_ops.push(Op::new("cm", vec![n(1.0), n(0.0), n(0.0), n(1.0), n(ax), n(ay)]));
@@ -1822,7 +1907,8 @@ pub(crate) fn rewrite_block_with_limit(
         // Each wrapped line in typing order; drawn left to right (right-to-left runs reversed).
         let visual = crate::bidi::to_visual(line);
         if let Some(metrics) = metrics.as_ref().filter(|_| reuse) {
-            block_ops.extend(source_show(metrics, &visual, size, space, o_state.char_spacing, tw)?);
+            let indic_line = if metrics.visual_order { crate::indic::to_visual(&visual) } else { visual };
+            block_ops.extend(source_show(metrics, &indic_line, size, space, o_state.char_spacing, tw)?);
         } else {
             for (font, bytes) in encode(&visual).ok_or_else(|| EditError::Invalid(format!("\"{line}\" can't be shown")))? {
                 if font != shown_font {
@@ -1862,10 +1948,9 @@ pub(crate) fn rewrite_block_with_limit(
         block_ops.push(Op::new("Q", vec![]));
     }
     block_ops.push(Op::new("Q", vec![]));
-    // The paragraph's operators go, and so does anything drawn in the same area (a fake-bold
+    // The paragraph's operators go, and so does another drawing on the same baseline (a fake-bold
     // second copy, an invisible text layer): the new text is all that may show.
-    let member_rects: Vec<[f64; 4]> = members.iter().map(|l| l.rect).collect();
-    let mut drop = coincident_ops(&lines, &member_rects);
+    let mut drop = coincident_ops(&lines, &members);
     drop.extend(members.iter().flat_map(|l| l.ops.iter().copied()));
     // Text shown earlier in the same text object stays first: the paragraph then goes where it
     // was, between two halves of the text object, so it keeps its place in reading order.
@@ -1901,6 +1986,43 @@ pub(crate) fn rewrite_block_with_limit(
         }
     })?;
     Ok(LineEdit { substituted })
+}
+
+/// The cover (when [`BlockStyle::cover`] asks for one) and visible rendering that start a
+/// rewritten invisible paragraph, drawn in the space whose CTM is `ctm`. Nothing for visible text.
+/// The paragraph's `q`/`Q` restores the rendering mode for the invisible text after it.
+pub(crate) fn reveal_ops(block: &TextBlock, lines: &[TextLine], style: &BlockStyle, ctm: [f64; 6]) -> Result<Vec<Op>, EditError> {
+    if !block.invisible {
+        return Ok(Vec::new());
+    }
+    let n = pdfcraft_content::num;
+    let mut ops = Vec::new();
+    if let Some(colour) = style.cover {
+        if colour.iter().any(|c| !c.is_finite() || !(0.0..=1.0).contains(c)) {
+            return Err(EditError::Invalid("the cover colour must be RGB values from 0 to 1".into()));
+        }
+        let back = Matrix(ctm).invert().ok_or_else(|| EditError::Invalid("the paragraph is drawn in a space it can't be covered in".into()))?;
+        ops.push(Op::new("q", vec![]));
+        ops.push(Op::new("rg", colour.map(n).to_vec()));
+        for rect in block.lines.iter().filter_map(|i| lines.get(*i)).map(|l| l.rect) {
+            // Scanned ink reaches a little past the recognised box.
+            let pad = ((rect[3] - rect[1]).abs() * 0.1).clamp(0.5, 2.0);
+            let corners =
+                [[rect[0] - pad, rect[1] - pad], [rect[2] + pad, rect[1] - pad], [rect[2] + pad, rect[3] + pad], [rect[0] - pad, rect[3] + pad]];
+            for (i, [x, y]) in corners.into_iter().enumerate() {
+                let (x, y) = back.apply(x, y);
+                if !(x.is_finite() && y.is_finite()) {
+                    return Err(EditError::Invalid("the paragraph's area can't be covered".into()));
+                }
+                ops.push(Op::new(if i == 0 { "m" } else { "l" }, vec![n(x), n(y)]));
+            }
+            ops.push(Op::new("h", vec![]));
+        }
+        ops.push(Op::new("f", vec![]));
+        ops.push(Op::new("Q", vec![]));
+    }
+    ops.push(Op::new("Tr", vec![Object::Int(0)]));
+    Ok(ops)
 }
 
 /// Existing paragraph indexes, excluding streams owned by an added-content item.

@@ -491,6 +491,12 @@ impl Field {
     fn signature(&self, doc: &Document) -> Option<Dict> {
         self.dict.get(b"V").map(|v| doc.resolve(v)).and_then(|v| v.as_dict().cloned())
     }
+
+    /// True when /V holds something that is neither null nor a signature dictionary: signing the
+    /// field would overwrite a value we can't read as a signature.
+    fn has_foreign_value(&self, doc: &Document) -> bool {
+        self.dict.get(b"V").map(|v| doc.resolve(v)).is_some_and(|v| !matches!(*v, Object::Null) && v.as_dict().is_none())
+    }
 }
 
 /// Every signature field, depth first in `/Fields` order.
@@ -1214,6 +1220,18 @@ fn classify_changes(doc: &Document, old: Option<Document>, p: Option<u8>) -> Mod
             _ => false,
         }
     };
+    // A later cross-reference section may carry an entry this reader sets aside (an in-use entry
+    // at offset 0, a second entry for one object, a reserved entry type). The renderer may follow
+    // it and draw another object than the one compared below, so the page could show new content
+    // while every comparison here finds the signed object untouched. No writer has a reason to
+    // add such an entry after signing: it is never a permitted change.
+    for (_, num) in doc.xref_oddities().iter().filter(|o| !old.xref_oddities().contains(o)) {
+        let r = ObjRef { num: *num, generation: doc.generation(*num) };
+        let what = if old_content.contains(&r) || signed_pages.contains(&r) { kind::PAGE_CONTENT } else { kind::OTHER };
+        if !disallowed.contains(&what) {
+            disallowed.push(what);
+        }
+    }
     for num in doc.object_numbers() {
         if same_place(num) {
             continue;
@@ -1222,6 +1240,12 @@ fn classify_changes(doc: &Document, old: Option<Document>, p: Option<u8>) -> Mod
         let new = doc.get(r);
         let before = old.try_get(num).ok().filter(|o| !matches!(**o, Object::Null));
         if before.as_deref() == Some(&*new) {
+            // The same content at a new place. That is true for the renderer as well only when
+            // the entry locates the object itself: where this reader had to search for the
+            // object, another reader may arrive at a different one.
+            if !doc.is_edited(num) && !doc.xref_entry_is_exact(num) && !disallowed.contains(&kind::OTHER) {
+                disallowed.push(kind::OTHER);
+            }
             continue;
         }
         let what = match &*new {
@@ -1721,6 +1745,9 @@ fn sign_inner(
             let f = f?;
             if f.signature(&doc).is_some() {
                 return Err(SignError::Pdf(format!("the field {:?} is already signed", f.name)));
+            }
+            if f.has_foreign_value(&doc) {
+                return Err(SignError::Pdf(format!("the value of the field {:?} is not a signature", f.name)));
             }
             let fr = f.r.ok_or_else(|| SignError::Pdf("the field is not an indirect object".into()))?;
             doc.update_dict(fr, |d| d.set(b"V".to_vec(), Object::Ref(sig)))?;
