@@ -11,7 +11,9 @@
 use std::collections::{HashMap, HashSet};
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};
-use pdfcraft_fonts::{GlyphError, GlyphOutline, ShapedCluster, ShapedScript, Std14, literal, shape_arabic, shape_thai, shaped_glyph, win_ansi};
+use pdfcraft_fonts::{
+    GlyphError, GlyphOutline, ShapedCluster, ShapedScript, Std14, greek_has, literal, shape_arabic, shape_greek, shape_thai, shaped_glyph, win_ansi,
+};
 use unicode_bidi::{Level, ParagraphBidiInfo};
 
 use crate::{EditError, MarkKind, check, contents, n, page_list, place_tagged};
@@ -313,6 +315,12 @@ fn is_arabic(c: char) -> bool {
     matches!(u32::from(c), 0x0600..=0x06FF | 0x0750..=0x077F | 0x0870..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFC)
 }
 
+/// Greek letters, marks, digits and punctuation: an item with any of them is shaped with Inter,
+/// the bundled interface face (#1835).
+fn is_greek(c: char) -> bool {
+    matches!(u32::from(c), 0x0370..=0x03FF | 0x1F00..=0x1FFF)
+}
+
 /// The first character of `t` that would be drawn as `?`: outside WinAnsiEncoding and not drawn
 /// with the craft-fonts Arabic face (#125), or Arabic that the face can't draw (or that has no
 /// face to draw it). Page-content tools refuse such text; the Add-text editor keeps it open.
@@ -323,6 +331,10 @@ pub fn first_undrawable(t: &AddedText) -> Option<char> {
         }
         let rest = AddedText { text: t.text.chars().filter(|c| !is_thai(*c)).collect(), ..t.clone() };
         return first_undrawable(&rest);
+    }
+    // Greek that the bundled Inter face can't draw: don't fall through to a WinAnsi `?` (#1835).
+    if let Some(c) = t.text.chars().find(|c| is_greek(*c) && !greek_has(*c)) {
+        return Some(c);
     }
     // Arabic that nothing can draw: there's no face, or the face lacks it.
     if let Some(c) = t.text.chars().find(|c| shaped_arabic(*c) && !pdfcraft_fonts::arabic_has(*c)) {
@@ -397,6 +409,8 @@ fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec<Piece>, f6
         for c in text.chars().filter(|c| !is_bidi_control(*c)) {
             let script = if is_thai(c) {
                 Some(ShapedScript::Thai)
+            } else if is_greek(c) {
+                Some(ShapedScript::Greek)
             } else if is_arabic(c) || (run_rtl && !c.is_alphanumeric() && pdfcraft_fonts::arabic_has(c)) {
                 Some(ShapedScript::Arabic)
             } else {
@@ -415,6 +429,7 @@ fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec<Piece>, f6
                 let shaped = match script {
                     ShapedScript::Arabic => shape_arabic(&s, run_rtl).map_err(|e| arabic_error(e, &s))?,
                     ShapedScript::Thai => shape_thai(&s).map_err(|e| thai_error(e, &s))?,
+                    ShapedScript::Greek => shape_greek(&s).map_err(|e| greek_error(e, &s))?,
                 };
                 Piece::Shaped(shaped)
             } else if run_rtl {
@@ -457,6 +472,14 @@ fn thai_error(e: GlyphError, text: &str) -> EditError {
         }
         GlyphError::Missing => format!("the Thai font can't show \"{text}\""),
         GlyphError::TooComplex => "the Thai glyphs are too complex; use a shorter text box".into(),
+    })
+}
+
+fn greek_error(e: GlyphError, text: &str) -> EditError {
+    EditError::Invalid(match e {
+        GlyphError::NoFont => "Greek text needs the bundled Inter face, which this build can't load".into(),
+        GlyphError::Missing => format!("Inter can't show \"{text}\""),
+        GlyphError::TooComplex => format!("Inter's glyphs for \"{text}\" are too complex"),
     })
 }
 
@@ -525,6 +548,7 @@ fn draw_laid_shaped(
                 entry.insert(outline(c.script, *id).map_err(|e| match c.script {
                     ShapedScript::Arabic => arabic_error(e, &c.text),
                     ShapedScript::Thai => thai_error(e, &c.text),
+                    ShapedScript::Greek => greek_error(e, &c.text),
                 })?);
             }
         }
@@ -664,6 +688,7 @@ fn type3_shaped(doc: &mut Document, clusters: &[&ShapedCluster], outlines: &Hash
             match script {
                 ShapedScript::Arabic => "Arabic",
                 ShapedScript::Thai => "Thai",
+                ShapedScript::Greek => "Inter",
             },
             |f| f.family,
         ),
@@ -715,7 +740,10 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
             }
             let mut fonts = Dict::new();
             fonts.set(name.clone().into_bytes(), Object::Dict(font));
-            if t.text.chars().any(is_thai) || (t.text.chars().any(is_arabic) && (pdfcraft_fonts::document_arabic_font().is_some() || !existing)) {
+            if t.text.chars().any(is_greek)
+                || t.text.chars().any(is_thai)
+                || (t.text.chars().any(is_arabic) && (pdfcraft_fonts::document_arabic_font().is_some() || !existing))
+            {
                 draw_shaped(doc, t, taken, &mut fonts, &mut out)?;
                 res.set(b"Font".to_vec(), Object::Dict(fonts));
                 out.extend_from_slice(b"Q\n");
@@ -944,6 +972,7 @@ fn validate(c: &Content) -> Result<(), EditError> {
             if (r[2] - r[0]).abs() < 1.0 {
                 return Err(EditError::Invalid("the text box is too narrow".into()));
             }
+            // Inter is bundled, so Greek has no separate build gate (unlike Arabic and Thai).
             if t.text.chars().any(is_thai) && pdfcraft_fonts::document_thai_font().is_none() {
                 return Err(thai_error(GlyphError::NoFont, &t.text));
             }

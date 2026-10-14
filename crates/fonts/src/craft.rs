@@ -4,6 +4,10 @@
 //! `CRAFT_FONTS_DIR=<checkout>`; otherwise [`CRAFT_FONTS`] is empty and everything here returns
 //! nothing. Callers must work either way.
 
+/// The packaged Latin/Greek/Cyrillic interface face. It stays separate from `CRAFT_FONTS`, whose
+/// entries are optional build inputs selected by the craft-fonts manifest.
+pub static INTER_FONT: CraftFont = CraftFont { family: "Inter", style: "Regular", scripts: &["Latn", "Grek", "Cyrl"], bytes: crate::INTER_REGULAR };
+
 /// A font from the optional craft-fonts build input (empty unless built with `CRAFT_FONTS_DIR`).
 pub struct CraftFont {
     pub family: &'static str,
