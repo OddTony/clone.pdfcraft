@@ -312,7 +312,7 @@ fn edit_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static 
         widgets::section_title(ui, tl!("Modify page"));
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
-            for i in EDIT_PAGE_BUTTONS.iter().filter_map(|c| item(*c)) {
+            for i in EDIT_PAGE_BUTTONS.iter().filter_map(|c| item(c)) {
                 let resp = ui.add_enabled_ui(i.availability == Availability::Ready, |ui| icons::button(ui, i.icon, 34.0, false, tl!(i.label))).inner;
                 if resp.clicked() {
                     run = Some(i.command);
@@ -354,7 +354,7 @@ fn edit_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static 
         }
 
         widgets::section_title(ui, tl!("Other options"));
-        for other in EDIT_OTHER_TOOLS.iter().filter_map(|id| catalog::group(*id)) {
+        for other in EDIT_OTHER_TOOLS.iter().filter_map(|id| catalog::group(id)) {
             if edit_row(ui, t, other.icon, tl!(other.label), other.availability).clicked() {
                 tool = Some(other.id);
             }
