@@ -148,7 +148,7 @@ update the numbers.
   Clear paper edges can now define an automatic crop with safety padding; ambiguous white borders
   stay unchanged, and original image pixels remain in the PDF.
 - **Missing:** additional language choices, vertical Japanese, reliable reading order and word spacing
-  across complex layouts, editable-text output, deskew on pages with annotations, despeckle, MRC
+  across complex layouts, replacement-font proportions when editing Unicode OCR (the visible fallback can look compressed), editable-text output, deskew on pages with annotations, despeckle, MRC
   compression, browser OCR and scanner input. Camera perspective
   and colour cleanup use the separate Enhance camera image command; broader photo fidelity remains open.
 - **Evidence:** `crates/engine/tests/scan_ocr.rs` and the OCR automation/UI tests; model tests require
