@@ -49,7 +49,6 @@ fn batch_recurses_preserves_paths_continues_errors_and_never_replaces_outputs() 
 fn batch_is_nonrecursive_by_default_and_stop_reports_unprocessed_files() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join("input/sub")).unwrap();
-    let source = pdf();
     std::fs::write(dir.path().join("input/0.pdf"), b"broken").unwrap();
     let original = pdf();
     std::fs::write(dir.path().join("input/1.pdf"), &original).unwrap();
