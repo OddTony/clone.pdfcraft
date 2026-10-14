@@ -289,3 +289,34 @@ The previous FreeBSD run 38316543061 remains failed at unchanged renderer test
 Both connected-app and local-credential reruns were denied (403 / admin rights
 required). This suggests a FreeBSD VM timing problem but does not prove the
 underlying cause. A maintainer must rerun or investigate if it recurs on fresh CI.
+
+
+## Renewed current-main validation (2026-10-13)
+
+Integrated upstream `5e12f5fd6d5dcf86bb332ca5940c622059168fea`, including the
+already-landed `b5467d93` native-opening correction, without duplicating that fix
+or rewriting published history. Retained both roadmap histories and combined
+M3 milestone descriptions. Translation-only checksum conflicts were resolved by
+hashing the combined catalogs and regenerating attribution; all 270 repository
+asset hashes verify. No theme-domain, button-state or background-worker logic
+changed. All four maintainer corrections and existing palette/storage/API
+contracts remain intact.
+
+Local macOS validation at this upstream revision:
+
+- Theme core: 38 passed, zero failed.
+- Full UI package: 1,116 passed, zero failed, five existing ignores. Both previously
+  failing command/open-recent tests now pass, as do password/recovery/startup,
+  theme GUI and tab-navigation coverage.
+- Automation: 192 passed, zero failed.
+- CLI: 58 passed, zero failed, including theme process and MCP discovery tests.
+- Desktop: 68 passed, zero failed, one existing ignore.
+- Formatting, strict all-target Clippy, layers, assets, parity, native desktop/CLI
+  builds and CLI without MCP passed. Tests and builds were run serially, bounded
+  by timeouts, using at most two compilation workers.
+
+The earlier failed UI and batch results above are historical and superseded by
+this passing integrated validation. No tests were independently weakened,
+skipped or altered to obtain these results; upstream's correction and tests are
+included as part of its normal merge. Local WASM/Windows/FreeBSD runtime checks
+remain unavailable on this macOS host; fresh hosted CI must validate this HEAD.
