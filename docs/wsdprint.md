@@ -19,6 +19,7 @@ Where things live:
   sends through the registry: a `SubmitRequest` with a `Document`, a `Job` (copies, sides, title) and
   `JobOptions` (paper, orientation, quality including `photo`, resolution, colour, the document's
   page count), and follows the typed `JobId` it gets back; no WS-Print id is built by hand.
+* **`craft_ui::printing::network`** (craft-libs#112) is the dialog's model and widgets.
 * **This repository** keeps the app side: `pdfcraft_print::network` (one `Printer` over a private
   registry, shared by the tools and the command line), the tools `wsd_printer_info` and `print_wsd`,
   `pdfcraft-cli print --wsd`, the paper-name to media-size mapping, and `PdfToRaster`, the
@@ -134,12 +135,70 @@ when the picture is made.
   command refuse, and the build contains no WS-Print code and no HTTP client. It is never built for
   wasm32.
 
+## Print dialog
+
+Print offers a "Network printer (WS-Print)" destination. The person types the printer address
+(a numeric local address, the same policy as above), presses "Query printer", and the dialog shows
+what the printer reports and offers only the copies, sides, orientation and quality it lists; the
+paper is the dialog's own paper, mapped to the media size the printer lists (A3, A4, A5, Letter,
+Legal, Tabloid) when it lists it. A job needs its own confirmation tick ("I confirm sending this
+document to this printer"); it is cleared after every job and never stored. The Print button is
+disabled until the address was queried, the printer takes PDF or PWG raster, and the box is ticked.
+
+The destination, its rules and its widgets are `craft_ui::printing::network` (craft-libs#112). The
+app supplies the wording (the interface-language catalogs), the address check, the worker that
+asks the printer (`pdfcraft_print::network::Printer::info`) and the worker that sends a job and
+follows it (`submit`, then craft-print's `JobWatch`), and maps craft-print's `Submitted`,
+`JobStatus` and `WatchOutcome` onto craft-ui's `Accepted`, `Status` and `Report`.
+
+The job has the same two phases as the tools, and the dialog shows both. While the document is
+being sent it says "Sending to ..."; when the printer has it the line becomes "Accepted by ..."
+and then follows what the printer says (waiting, held, printing, paused, sheets printed) until
+the job ends; "Sent. The printer can't say whether it printed." is a printer that cannot report. A
+send whose outcome is unknown is shown with "Check the printer before sending again", and the
+confirmation is spent, so sending again takes a new tick: nothing is retried automatically.
+Nothing blocks the UI thread: the workers run on their own threads and the dialog drains their
+channels once per frame. Cancel works in both phases (it cancels the job on the printer once; the
+worker then keeps following it to its end state). When the dialog is closed while a job runs, the
+result arrives as a notice.
+
+**Sheet totals.** WS-Print reports sheets completed, not a total. The dialog passes the number of
+sheets it sends to the worker (`Request::expected_pages`, which the worker gives craft-print as
+`JobOptions::expected_pages`), and craft-ui turns it into an estimated total (halved for a
+two-sided job, times the copies): "Sheets printed: 1 of 4" with a progress bar. A total the
+printer reports always wins; with no page count the dialog shows only "Sheets printed: N", with no
+bar that could never fill.
+
+**Settings the printer leaves out.** Each setting follows craft-ui's three-state capability
+(`craft_ui::capability`). A list or range the printer published is offered as it is. A setting
+the printer published as not available (a printer that is not colour: Black and white only) is shown
+disabled with a reason. A setting the printer did not state at all (WS-Print cannot say "an empty
+list", so an empty list means "not stated") stays enabled with the note "Not confirmed by the
+printer", and its value is sent as a hint. Colour and resolution are offered the same way and go
+into the job options (`JobOptions::with_colour`, `with_resolution`).
+
+**Quality and formats.** The Photo choice is craft-print's `Quality::Photo`: it is offered when the
+printer lists it, goes into the ticket like the other choices, and a printer that lists no matching
+value gets the job with a warning instead. The dialog sends the print-ready PDF; a printer that
+lists PDF gets it as it is, and one that lists only PWG raster gets the pages rendered by
+`PdfToRaster` (the registry converts, at the resolution the printer lists nearest 300 dpi). The
+`DocumentConverter` is registered once when the destination is created, and the printer's details
+that "Query printer" read are handed to the job, so the job costs no read before the registry
+decides (the backend still reads the capabilities once to plan the ticket).
+
+The destination is the `network-print` cargo feature of `pdfcraft-ui-egui`, on by default and
+never built for the web. A packager who wants no network client in the app builds with
+`--no-default-features`: the destination, its code and craft-print's `wsd` backend are then absent
+and the Print dialog is unchanged.
+
 ## Testing
 
 * `cargo test -p pdfcraft-automation --test wsd_print` and `cargo test -p pdfcraft-cli --test print`
   run the tools against the in-process fake printer (`craft_print::wsd::testing`: `FakePrinter`,
   `MemTransport`, `printer_server`) and, for the command line, a loopback server around it.
   craft-print's `testing` feature is enabled in dev-dependencies only; no shipped build has it.
+* `cargo test -p pdfcraft-ui-egui --lib network_glue` runs the dialog's workers (query, send, accepted,
+  follow, cancel, a lost reply) against the same fake printer.
 * `cargo test -p pdfcraft-automation --no-default-features --test wsd_print_off` and
   `cargo test -p pdfcraft-cli --no-default-features --test print_off` check the build with network
   printing left out.
@@ -150,6 +209,7 @@ What is not done: finding printers (WS-Discovery), event subscription, PDF to XP
 output (the one converter makes PWG raster only), a raster page larger than the renderer's limits (it
 is refused, asking for a lower resolution, rather than printed at the wrong size), imposed sheets on
 the raster path, and checking the PWG raster writer against a third-party reader and real devices.
+The dialog has been exercised in tests, not looked at on a real device.
 
 Remaining limit of the craft-print API (reported to its authors): the ticket shape, strict mode and
 the transfer encoding are backend-wide, so each print opens its own printer with the settings it was
