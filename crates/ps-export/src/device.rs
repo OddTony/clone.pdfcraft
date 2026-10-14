@@ -791,7 +791,7 @@ impl<'a> Device<'a> for PsDevice<'a> {
         if has_mask {
             self.saw_transparency = true;
         }
-        self.scene.record(move |r| r.set_soft_mask(mask.clone()));
+        self.scene.record_soft_mask(mask);
         if has_mask && !self.inside_real_group() {
             self.emit.note_once("transparency ignored (soft mask)");
         }
@@ -1643,6 +1643,64 @@ mod tests {
             "nothing was skipped or dropped silently: {notes:?}"
         );
         assert_eq!(s.matches("gsave").count(), s.matches("grestore").count(), "balanced: {s}");
+    }
+
+    /// A soft mask over a group draw flattens with the mask *placed*: the recorded
+    /// mask carries the interpreter's root transform (device page points, y up),
+    /// while the replay renders in 300-dpi pixel space (y down) — so the scene
+    /// re-roots every recorded mask onto that space (`SoftMask::re_rooted`, the
+    /// vendor patch), exactly as every recorded path bakes in the page matrix.
+    /// Before the re-root the mask's ink landed unscaled and unflipped in the
+    /// renderer's top-left corner (a 100 pt-wide band read as 100 *pixels*), so the
+    /// whole draw was masked out of the raster — the oracle gate measured a mean
+    /// delta of 44.9 on its soft-mask fixture until this re-root.
+    #[test]
+    fn soft_mask_flatten_keeps_the_mask_placed() {
+        let bytes = color_page(
+            "<< /ExtGState << /GS1 5 0 R >> /XObject << /Fm1 6 0 R >> >>",
+            b"1 1 0 rg 20 20 160 260 re f\nq /GS1 gs /Fm1 Do Q",
+            vec![
+                b"<< /Type /ExtGState /SMask << /S /Alpha /G 7 0 R >> >>".to_vec(),
+                stream_obj(
+                    "/Type /XObject /Subtype /Form /BBox [0 0 200 300] /Group << /S /Transparency /CS /DeviceRGB >>",
+                    b"0 0 1 rg 20 40 160 220 re f",
+                ),
+                // The mask form: opaque black over the page's left half (x < 100),
+                // so exactly the left half of the blue fill shows.
+                stream_obj("/Type /XObject /Subtype /Form /BBox [0 0 200 300] /Group << /S /Transparency /CS /DeviceRGB >>", b"0 g 0 0 100 300 re f"),
+            ],
+        );
+        let pdf = Pdf::new(bytes).expect("fixture parses");
+        let page = pdf.pages().first().expect("fixture has a page");
+        let cache = InterpreterCache::new();
+        let mut state = Context::new(Affine::IDENTITY, Rect::new(0.0, 0.0, 200.0, 300.0), &cache, page.xref(), InterpreterSettings::default());
+        let mut dev = PsDevice::new(None);
+        interpret_page(page, &mut state, &mut dev);
+        let out = output(&dev);
+        assert_eq!(out.matches(">> image").count(), 1, "the group's pop flattened one raster: {out}");
+        assert!(dev.emit.notes.iter().any(|n| n.text == "transparency flattened to raster"), "the flattening is disclosed: {:?}", dev.emit.notes);
+        // The scene's log survives its first flatten (the drive's pop): flatten the
+        // same region again and sample its pixels — the exported raster and this
+        // one replay the identical log.
+        let raster = dev.scene.flatten().expect("the page is far under every cap");
+        assert!(raster.width > 0 && raster.height > 0, "the region is the blue fill's box");
+        let inverse = raster.place.inverse();
+        let sample = |pt: kurbo::Point| -> [u8; 3] {
+            let px = inverse * pt;
+            let (x, y) = (px.x.round() as u32, px.y.round() as u32);
+            assert!(x < raster.width && y < raster.height, "the sample {pt:?} falls inside the region");
+            let at = ((y * raster.width + x) * 3) as usize;
+            [raster.rgb[at], raster.rgb[at + 1], raster.rgb[at + 2]]
+        };
+        // The masked fill's left half (mask alpha 1) is full-strength blue; its
+        // right half carries no ink, so the region shows the yellow backdrop the
+        // replay repaints beneath the group.
+        for got in [sample(kurbo::Point::new(60.0, 150.0)), sample(kurbo::Point::new(30.0, 250.0))] {
+            assert!(got[0] <= 2 && got[1] <= 2 && got[2] >= 253, "the visible half is blue: {got:?}");
+        }
+        for got in [sample(kurbo::Point::new(140.0, 150.0)), sample(kurbo::Point::new(170.0, 50.0))] {
+            assert!(got[0] >= 253 && got[1] >= 253 && got[2] <= 2, "the masked half shows the backdrop, not ink: {got:?}");
+        }
     }
 
     // ---------------------------------------------- `Color::source()` (vendor patch)
