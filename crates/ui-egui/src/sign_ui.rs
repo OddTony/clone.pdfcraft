@@ -534,7 +534,8 @@ impl PdfCraftApp {
 
     /// Open saved revision `n` (1 = the oldest) of the active document as a new document.
     /// A repeat reuses the tab: every click used to open another identical one.
-    pub fn open_revision(&mut self, n: usize) {        let Some((_, id)) = self.active_ids() else { return };
+    pub fn open_revision(&mut self, n: usize) {
+        let Some((_, id)) = self.active_ids() else { return };
         let Some(doc) = self.session.get(id) else { return };
         // The revision's byte range, as `Session::open_revision` reads it. An unknown `n`
         // skips the lookup: the whole file could otherwise match the latest revision's tab

@@ -512,17 +512,19 @@ fn an_earlier_revision_opens_from_document_properties() {
     h.run_steps(1);
     let s = h.state();
     assert_eq!(s.views.len(), views);
-    assert!(s.views[s.active.unwrap()].snapshot.as_ref().is_some_and(|snap| snap.kind == pdfcraft_ui_egui::canvas::SnapshotKind::Revision && snap.revision == 1));
+    assert!(
+        s.views[s.active.unwrap()]
+            .snapshot
+            .as_ref()
+            .is_some_and(|snap| snap.kind == pdfcraft_ui_egui::canvas::SnapshotKind::Revision && snap.revision == 1)
+    );
     // An unknown revision errors without opening a tab.
     h.state_mut().active = Some(original);
     h.state_mut().open_revision(99);
     h.run_steps(1);
     let s = h.state();
     assert_eq!(s.views.len(), views);
-    assert!(
-        h.state().toast.as_ref().is_some_and(|t| t.0.starts_with("Couldn't open revision 99")),
-        "unknown revisions error without opening a tab"
-    );
+    assert!(h.state().toast.as_ref().is_some_and(|t| t.0.starts_with("Couldn't open revision 99")), "unknown revisions error without opening a tab");
     // Another tab over the same original shares the snapshot: b.pdf's first revision is
     // byte-identical to updated.pdf's (incremental saves append), so it reuses the tab.
     let ids: Vec<_> = h.state().views.iter().map(|v| v.id).collect();
@@ -535,7 +537,12 @@ fn an_earlier_revision_opens_from_document_properties() {
     h.run_steps(1);
     let s = h.state();
     assert_eq!(s.views.len(), views);
-    assert!(s.views[s.active.unwrap()].snapshot.as_ref().is_some_and(|snap| snap.kind == pdfcraft_ui_egui::canvas::SnapshotKind::Revision && snap.revision == 1));
+    assert!(
+        s.views[s.active.unwrap()]
+            .snapshot
+            .as_ref()
+            .is_some_and(|snap| snap.kind == pdfcraft_ui_egui::canvas::SnapshotKind::Revision && snap.revision == 1)
+    );
 }
 
 #[test]
@@ -1242,6 +1249,9 @@ fn selection_mouse_wheel_resumes_after_point_scrolling() {
         });
         h.run_steps(delay);
         let before = h.state().views[view].page_screen_rect(0).unwrap().top();
+        // One Line notch follows this platform's configured speed. A Point tail can
+        // still add travel in the one-frame case, so require at least the whole notch.
+        let expected = h.ctx.options(|o| o.input_options.line_scroll_speed);
         h.event(egui::Event::MouseWheel {
             unit: egui::MouseWheelUnit::Line,
             delta: egui::vec2(0.0, -1.0),
@@ -1251,6 +1261,10 @@ fn selection_mouse_wheel_resumes_after_point_scrolling() {
         h.run_steps(40);
         let after = h.state().views[view].page_screen_rect(0).unwrap().top();
         eprintln!("Point-to-Line delay={delay}: point={}, line={}", start - before, before - after);
-        assert!(before - after > 50.0, "Line input must resume after Point: {before} -> {after}");
+        let travelled = before - after;
+        assert!(travelled >= expected - 1.0, "Line input must resume after Point at the configured speed: {travelled} vs {expected}");
+        if delay >= 16 {
+            assert!((travelled - expected).abs() < 1.0, "settled Line travel must match its configured speed: {travelled} vs {expected}");
+        }
     }
 }
