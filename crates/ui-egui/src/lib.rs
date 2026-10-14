@@ -2130,6 +2130,9 @@ impl PdfCraftApp {
                 view.organize = false;
             }
         }
+        if id == "measure" {
+            measure_ui::default_tool(self);
+        }
     }
 
     /// Select the workspace and its matching tool panel, just like the mode bar. Edit turns on
