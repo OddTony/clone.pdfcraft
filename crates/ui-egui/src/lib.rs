@@ -2696,9 +2696,27 @@ impl PdfCraftApp {
 
     /// ⌘C copies the selected text, unless a text field has the keyboard (it copies its own).
     fn copy_key(&mut self, i: usize, ctx: &egui::Context) {
-        // ⌘C arrives as a Copy event on most platforms.
-        let copy = ctx.input(|input| input.events.iter().any(|e| matches!(e, egui::Event::Copy)));
-        if !copy || ctx.egui_wants_keyboard_input() {
+        // ⌘C arrives as a Copy event on most platforms, ⌘X as Cut.
+        let (copy, cut) = ctx.input(|input| {
+            let any = |f: &dyn Fn(&egui::Event) -> bool| input.events.iter().any(f);
+            (any(&|e| matches!(e, egui::Event::Copy)), any(&|e| matches!(e, egui::Event::Cut)))
+        });
+        if !(copy || cut) || ctx.egui_wants_keyboard_input() {
+            return;
+        }
+        // A page image selected in Edit text & images: Copy and Cut take the image, as its menu does.
+        if self.quick_tool == QuickTool::EditText
+            && let Some((page, index)) = self.views.get(i).and_then(|v| v.image_selection.as_ref()).map(|s| (s.page, s.index))
+        {
+            if self.copy_page_image(page, index) && cut {
+                if let Some(view) = self.views.get_mut(i) {
+                    view.image_selection = None;
+                }
+                self.apply_edit(pdfcraft_engine::Edit::EditPageImage { page, index, change: pdfcraft_engine::ImageEdit::Delete });
+            }
+            return;
+        }
+        if !copy {
             return;
         }
         let Some((id, text)) = self.views.get(i).and_then(|v| Some((v.id, v.selected_text()?))) else { return };

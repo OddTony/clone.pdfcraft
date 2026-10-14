@@ -393,13 +393,31 @@ fn grab_at(boxes: &[Rect], p: Pos2, upright: bool) -> Option<(usize, Grip)> {
     })
 }
 
-/// What a right-click on a selected image asks for.
+/// What the image menu (or a key on a selected image) asks the app for.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum ImageAction {
     Replace(usize, usize),
     Save(usize, usize),
     Copy(usize, usize),
     CopyFile(usize, usize),
+    /// Copy the image, then delete it.
+    Cut(usize, usize),
+    /// Draw freehand: the ink comment tool.
+    Draw,
+    /// Recognize text on the page.
+    Recognize,
+}
+
+/// The image menu, open on an image: which one, and where it was asked for. It is the view's own
+/// popup, not the page's context menu, so it opens on the first right-click, stays open while the
+/// pointer moves onto it, and the page's menu (Add a sticky note here…) doesn't open over it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ImageMenu {
+    pub page: usize,
+    pub index: usize,
+    pub at: Pos2,
+    /// The frame it opened in: that frame's press is the right-click itself, not a click away.
+    pub pass: u64,
 }
 
 fn user_box(xf: &PageXform, info: &DocInfo, page: usize, r: Rect) -> [f64; 4] {
@@ -419,7 +437,6 @@ pub(crate) fn image_input(
     info: &DocInfo,
     images: &[pdfcraft_engine::PageImage],
     view: &mut DocView,
-    action: &mut Option<ImageAction>,
     allow_interaction: bool,
 ) -> bool {
     let boxes: Vec<Rect> = images.iter().map(|im| im.visible_rect.map_or(Rect::NOTHING, |r| xf.user_rect(info, page, r.map(|v| v as f32)))).collect();
@@ -575,48 +592,125 @@ pub(crate) fn image_input(
     if resp.clicked() || resp.secondary_clicked() {
         view.image_selection = Some(ImageSelection { page, index: hit, drag: None });
     }
-    if selected == Some(hit) {
-        resp.context_menu(|ui| {
-            use pdfcraft_engine::ImageEdit as E;
-            let items: [(&str, Option<E>); 4] = [
-                (tl!("Rotate Clockwise"), Some(E::Rotate(1))),
-                (tl!("Rotate Counterclockwise"), Some(E::Rotate(3))),
-                (tl!("Flip Horizontal"), Some(E::Flip { horizontal: true })),
-                (tl!("Flip Vertical"), Some(E::Flip { horizontal: false })),
-            ];
-            for (label, change) in items {
-                if ui.button(label).clicked() {
-                    view.pending_edit = change.map(|c| Edit::EditPageImage { page, index: hit, change: c });
-                    ui.close();
-                }
-            }
-            let raster = images.get(hit).is_some_and(|image| !image.is_form);
-            if ui.add_enabled(raster, egui::Button::new(tl!("Replace Image…"))).clicked() {
-                *action = Some(ImageAction::Replace(page, hit));
-                ui.close();
-            }
-            if ui.add_enabled(raster, egui::Button::new(tl!("Save Image As…"))).clicked() {
-                *action = Some(ImageAction::Save(page, hit));
-                ui.close();
-            }
-            // Copying also finds the picture inside grouped Form artwork.
-            if ui.button(tl!("Copy Image")).clicked() {
-                *action = Some(ImageAction::Copy(page, hit));
-                ui.close();
-            }
-            if ui.button(tl!("Copy Image in Original Format")).clicked() {
-                *action = Some(ImageAction::CopyFile(page, hit));
-                ui.close();
-            }
-            ui.separator();
-            if ui.button(tl!("Delete")).clicked() {
-                view.image_selection = None;
-                view.pending_edit = Some(Edit::EditPageImage { page, index: hit, change: E::Delete });
-                ui.close();
-            }
-        });
+    if resp.secondary_clicked() {
+        let at = ui.input(|i| i.pointer.interact_pos()).unwrap_or(p);
+        view.image_menu = Some(ImageMenu { page, index: hit, at, pass: ui.ctx().cumulative_pass_nr() });
     }
     true
+}
+
+/// The image menu, laid out as Acrobat's: comment, crop, rotate both ways and delete as icons;
+/// Cut, Copy and Paste; Remove crop, flips, Arrange and Replace; Draw freehand, Redact and Export;
+/// Create link, Edit image using and Recognize text. What PdfCraft can't do yet is disabled. Shown
+/// on its page until an item is chosen, Escape, or a press outside it.
+pub(crate) fn image_menu(ui: &egui::Ui, page: usize, images: &[pdfcraft_engine::PageImage], view: &mut DocView, action: &mut Option<ImageAction>) {
+    use pdfcraft_engine::ImageEdit as E;
+    let Some(menu) = view.image_menu.filter(|m| m.page == page) else { return };
+    let Some(image) = images.get(menu.index) else {
+        view.image_menu = None;
+        return;
+    };
+    let index = menu.index;
+    let raster = !image.is_form;
+    let rect = image.visible_rect.unwrap_or(image.rect);
+    let ctx = ui.ctx().clone();
+    let key = |k: egui::Key| ctx.format_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, k));
+    let mut close = false;
+    let mut edit: Option<E> = None;
+    let area =
+        egui::Area::new(egui::Id::new(("image-menu", page))).order(egui::Order::Foreground).fixed_pos(menu.at).constrain(true).show(&ctx, |ui| {
+            egui::Frame::menu(ui.style()).show(ui, |ui| {
+                ui.set_min_width(220.0);
+                ui.horizontal(|ui| {
+                    if crate::icons::button(ui, "message-square", 30.0, false, tl!("Add comment")).clicked() {
+                        view.comments.composer = Some(crate::comments::Composer {
+                            page,
+                            at: [rect[0], rect[3]],
+                            kind: crate::comments::ComposerKind::Note,
+                            text: String::new(),
+                            focus: true,
+                        });
+                        close = true;
+                    }
+                    let _ = ui
+                        .add_enabled_ui(false, |ui| crate::icons::button(ui, "crop", 30.0, false, tl!("Crop image")))
+                        .inner
+                        .on_disabled_hover_text(format!("{} — {}", tl!("Crop image"), tl!("Planned")));
+                    if crate::icons::button(ui, "rotate-ccw", 30.0, false, tl!("Rotate counterclockwise")).clicked() {
+                        edit = Some(E::Rotate(3));
+                    }
+                    if crate::icons::button(ui, "rotate-cw", 30.0, false, tl!("Rotate clockwise")).clicked() {
+                        edit = Some(E::Rotate(1));
+                    }
+                    if crate::icons::button(ui, "trash-2", 30.0, false, tl!("Delete")).clicked() {
+                        edit = Some(E::Delete);
+                    }
+                });
+                ui.separator();
+                if ui.add(egui::Button::new(tl!("Cut")).shortcut_text(key(egui::Key::X))).clicked() {
+                    *action = Some(ImageAction::Cut(page, index));
+                    close = true;
+                }
+                if ui.add(egui::Button::new(tl!("Copy")).shortcut_text(key(egui::Key::C))).clicked() {
+                    *action = Some(ImageAction::Copy(page, index));
+                    close = true;
+                }
+                if ui.button(tl!("Copy Image in Original Format")).clicked() {
+                    *action = Some(ImageAction::CopyFile(page, index));
+                    close = true;
+                }
+                ui.add_enabled(false, egui::Button::new(tl!("Paste")).shortcut_text(key(egui::Key::V)));
+                ui.separator();
+                ui.add_enabled(false, egui::Button::new(tl!("Remove crop")));
+                if ui.button(tl!("Flip horizontal")).clicked() {
+                    edit = Some(E::Flip { horizontal: true });
+                }
+                if ui.button(tl!("Flip vertical")).clicked() {
+                    edit = Some(E::Flip { horizontal: false });
+                }
+                ui.add_enabled(false, egui::Button::new(tl!("Arrange image")).right_text("›"));
+                if ui.add_enabled(raster, egui::Button::new(tl!("Replace image"))).clicked() {
+                    *action = Some(ImageAction::Replace(page, index));
+                    close = true;
+                }
+                ui.separator();
+                if ui.button(tl!("Draw freehand")).clicked() {
+                    *action = Some(ImageAction::Draw);
+                    close = true;
+                }
+                if ui.button(tl!("Redact image")).clicked() {
+                    view.pending_redaction = Some((page, vec![pdfcraft_engine::rect_quad(rect)]));
+                    close = true;
+                }
+                if ui.add_enabled(raster, egui::Button::new(tl!("Export image"))).clicked() {
+                    *action = Some(ImageAction::Save(page, index));
+                    close = true;
+                }
+                ui.separator();
+                if ui.button(tl!("Create link")).clicked() {
+                    view.links.open_new = Some((page, rect));
+                    close = true;
+                }
+                ui.add_enabled(false, egui::Button::new(tl!("Edit image using")).right_text("›"));
+                if ui.button(tl!("Recognize text")).clicked() {
+                    *action = Some(ImageAction::Recognize);
+                    close = true;
+                }
+            });
+        });
+    if let Some(change) = edit {
+        if change == E::Delete {
+            view.image_selection = None;
+        }
+        view.pending_edit = Some(Edit::EditPageImage { page, index, change });
+        close = true;
+    }
+    // A press anywhere else, or Escape, closes it; the right-click that opened it doesn't.
+    let away = ctx.cumulative_pass_nr() > menu.pass
+        && ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p)));
+    if close || away || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        view.image_menu = None;
+    }
 }
 
 /// Lines and their screen boxes for a page; hover outlines, click opens the editor. Returns

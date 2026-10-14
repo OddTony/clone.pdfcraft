@@ -2354,3 +2354,10 @@ animation effects	Off	オフ
 	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
 	Move tag earlier	タグを前へ移動
 	Move tag later	タグを後へ移動
+	Paste	貼り付け
+	Crop image	画像をトリミング
+	Remove crop	トリミングを解除
+	Arrange image	画像の重なり順
+	Redact image	画像を墨消し
+	Export image	画像を書き出し
+	Edit image using	次のアプリで画像を編集

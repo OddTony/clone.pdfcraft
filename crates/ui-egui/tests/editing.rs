@@ -4160,3 +4160,47 @@ fn private_new_chinese_keyboard_input_preserves_font_layout_and_saved_pixels() {
     assert_eq!(std::fs::read(path).unwrap(), original);
     println!("verified Chinese keyboard insertion/deletion and save/reopen rendering on {pages} pages");
 }
+
+/// Right-click on a page image in Edit text & images opens the image menu on the first click,
+/// laid out as Acrobat's, without the page's own menu (Add a sticky note here…) over it; its
+/// items act on the image, and a click elsewhere closes it.
+#[test]
+fn right_clicking_an_image_opens_its_menu_alone() {
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(80, 40, image::Rgb([200, 40, 40])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let c = h.state().views[0].page_screen_rect(0).expect("on screen").center();
+    h.hover_at(c);
+    h.run_steps(1);
+    h.event(egui::Event::PointerButton { pos: c, button: egui::PointerButton::Secondary, pressed: true, modifiers: Default::default() });
+    h.event(egui::Event::PointerButton { pos: c, button: egui::PointerButton::Secondary, pressed: false, modifiers: Default::default() });
+    h.run_steps(3);
+    assert!(h.state().views[0].image_selection.is_some(), "the first right-click selects the image");
+    // Items with a shortcut are named with it ("Cut Ctrl+X").
+    for item in ["Cut", "Copy"] {
+        assert!(h.query_all_by_label_contains(item).next().is_some(), "{item}");
+    }
+    for item in ["Flip horizontal", "Replace image", "Draw freehand", "Redact image", "Export image", "Create link", "Recognize text"] {
+        h.get_by_label(item);
+    }
+    for page_item in ["Add a sticky note here", "Comments panel"] {
+        assert!(h.query_by_label(page_item).is_none(), "the page's menu doesn't open over it ({page_item})");
+    }
+    // Moving onto the menu keeps it open.
+    let flip = h.get_by_label("Flip horizontal").rect().center();
+    h.hover_at(flip);
+    h.run_steps(2);
+    h.get_by_label("Flip horizontal").click();
+    h.run_steps(4);
+    let id = h.state().views[0].id;
+    assert_eq!(h.state().session.get(id).unwrap().can_undo(), Some("Flip image"));
+    assert!(h.query_by_label("Redact image").is_none(), "an item closes the menu");
+}

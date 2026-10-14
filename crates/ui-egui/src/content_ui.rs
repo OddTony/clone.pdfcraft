@@ -671,13 +671,14 @@ impl crate::PdfCraftApp {
         }
     }
 
-    /// Copy Image: image `index` on `page`, at its own resolution, to the clipboard.
-    pub(crate) fn copy_page_image(&mut self, page: usize, index: usize) {
-        let Some((_, id)) = self.active_ids() else { return };
+    /// Copy Image: image `index` on `page`, at its own resolution, to the clipboard. Returns
+    /// whether it was copied (Cut deletes the image only then).
+    pub(crate) fn copy_page_image(&mut self, page: usize, index: usize) -> bool {
+        let Some((_, id)) = self.active_ids() else { return false };
         if !self.may_copy(id) {
-            return;
+            return false;
         }
-        let Some(pixels) = self.session.get(id).map(|d| d.page_image_rgba(page, index)) else { return };
+        let Some(pixels) = self.session.get(id).map(|d| d.page_image_rgba(page, index)) else { return false };
         let copied = pixels.and_then(|(w, h, rgba)| {
             #[cfg(not(target_arch = "wasm32"))]
             if self.system_clipboard {
@@ -692,8 +693,14 @@ impl crate::PdfCraftApp {
             Ok((w, h))
         });
         match copied {
-            Ok((w, h)) => self.notify_fmt("The image has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())]),
-            Err(e) => self.notify_fmt("Couldn't copy the image: {e}", &[("e", &e)]),
+            Ok((w, h)) => {
+                self.notify_fmt("The image has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())]);
+                true
+            }
+            Err(e) => {
+                self.notify_fmt("Couldn't copy the image: {e}", &[("e", &e)]);
+                false
+            }
         }
     }
 

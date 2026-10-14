@@ -402,6 +402,8 @@ pub struct DocView {
     pub(crate) edit_images: HashMap<usize, (u64, Vec<pdfcraft_engine::PageImage>)>,
     pub(crate) objects: crate::object_ui::ObjectSelection,
     pub image_selection: Option<crate::edit_text_ui::ImageSelection>,
+    /// The image menu, while it is open (Edit text & images, right-click on an image).
+    pub(crate) image_menu: Option<crate::edit_text_ui::ImageMenu>,
     /// Select tool: the picture clicked, to copy in its original format.
     pub picked_image: Option<crate::image_pick::PickedImage>,
     /// A paragraph box being dragged (moved, or resized from its right edge) in Edit text.
@@ -644,6 +646,7 @@ impl DocView {
             edit_images: HashMap::new(),
             objects: Default::default(),
             image_selection: None,
+            image_menu: None,
             picked_image: None,
             block_drag: None,
             pending_action: None,
@@ -2726,10 +2729,16 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 // Editable text takes precedence over background/overlapping artwork. Both
                 // inventories are painted every frame, even when text owns the pointer.
                 let text_used = crate::edit_text_ui::page_input(ui, &resp, &xf, i, doc, &lines, view, !image_owns_pointer);
-                let image_used =
-                    crate::edit_text_ui::image_input(ui, &resp, &xf, i, info, &images, view, &mut image_action, image_owns_pointer || !text_used);
+                let image_used = crate::edit_text_ui::image_input(ui, &resp, &xf, i, info, &images, view, image_owns_pointer || !text_used);
                 text_used || image_used
             };
+            // The image menu stays up whoever owns the pointer, until an item, Escape or a click away.
+            if tool == QuickTool::EditText
+                && view.image_menu.is_some_and(|m| m.page == i)
+                && let Some(images) = view.edit_images.get(&i).map(|(_, l)| l.clone())
+            {
+                crate::edit_text_ui::image_menu(ui, i, &images, view, &mut image_action);
+            }
             let on_link = tool == QuickTool::Link && can_modify && crate::link_ui::page_input(ui, &resp, &xf, i, info, &doc_links, view);
             if tool == QuickTool::Select
                 && resp.secondary_clicked()
@@ -3041,104 +3050,108 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 view.page_input = (current + 1).to_string();
             }
         }
-        resp.context_menu(|ui| {
-            // Preparing a form: the selected field's menu.
-            if preparing && let Some((name, wi)) = view.prepare.selected.clone() {
-                // Several fields: Align, Center, Distribute, Set Fields to Same Size.
-                if !view.prepare.also.is_empty() {
-                    use crate::prepare::Arrange as A;
-                    let others = view.prepare.also.clone();
-                    let anchor = (name.clone(), wi);
-                    let mut pick = |ui: &mut egui::Ui, op: A, label: &str| {
-                        if ui.add_enabled(can_modify, egui::Button::new(tl!(label))).clicked() {
-                            view.pending_edit = crate::prepare::arrange(&form, &anchor, &others, op);
-                            ui.close();
+        // The image menu replaces the page's own while it is open, so the two never stack.
+        let page_menu = view.image_menu.is_none();
+        let _ = page_menu.then(|| {
+            resp.context_menu(|ui| {
+                // Preparing a form: the selected field's menu.
+                if preparing && let Some((name, wi)) = view.prepare.selected.clone() {
+                    // Several fields: Align, Center, Distribute, Set Fields to Same Size.
+                    if !view.prepare.also.is_empty() {
+                        use crate::prepare::Arrange as A;
+                        let others = view.prepare.also.clone();
+                        let anchor = (name.clone(), wi);
+                        let mut pick = |ui: &mut egui::Ui, op: A, label: &str| {
+                            if ui.add_enabled(can_modify, egui::Button::new(tl!(label))).clicked() {
+                                view.pending_edit = crate::prepare::arrange(&form, &anchor, &others, op);
+                                ui.close();
+                            }
+                        };
+                        ui.menu_button(tl!("Align"), |ui| {
+                            pick(ui, A::AlignLeft, "Left");
+                            pick(ui, A::AlignRight, "Right");
+                            pick(ui, A::AlignTop, "Top");
+                            pick(ui, A::AlignBottom, "Bottom");
+                            pick(ui, A::AlignCenterV, "Center vertically");
+                            pick(ui, A::AlignCenterH, "Center horizontally");
+                        });
+                        ui.menu_button(tl!("Distribute"), |ui| {
+                            pick(ui, A::DistributeH, "Horizontally");
+                            pick(ui, A::DistributeV, "Vertically");
+                        });
+                        ui.menu_button(tl!("Set Fields to Same Size"), |ui| {
+                            pick(ui, A::SameHeight, "Height");
+                            pick(ui, A::SameWidth, "Width");
+                            pick(ui, A::SameSize, "Both");
+                        });
+                        ui.separator();
+                    }
+                    if ui.button(tl!("Properties…")).clicked() {
+                        field_menu = Some(FieldMenu::Properties);
+                        ui.close();
+                    }
+                    if ui.add_enabled(can_modify, egui::Button::new(tl!("Duplicate…"))).clicked() {
+                        field_menu = Some(FieldMenu::Duplicate(name.clone()));
+                        ui.close();
+                    }
+                    ui.separator();
+                    let delete = if view.prepare.also.is_empty() { "Delete" } else { "Delete selected fields" };
+                    if ui.add_enabled(can_modify, egui::Button::new(tl!(delete))).clicked() {
+                        view.pending_edit = crate::prepare::delete_selected(view);
+                        ui.close();
+                    }
+                    return;
+                }
+                if let Some((page, index)) = view.links.context {
+                    if ui.button(tl!("Properties…")).clicked() {
+                        view.links.open_existing = Some((page, index));
+                        ui.close();
+                    }
+                    if ui.add_enabled(can_modify, egui::Button::new(tl!("Delete"))).clicked() {
+                        view.pending_edit = Some(Edit::DeleteLink { page, index });
+                        view.links.selected = None;
+                        view.links.context = None;
+                        ui.close();
+                    }
+                    ui.separator();
+                    if ui.add_enabled(can_modify, egui::Button::new(tl!("Remove all links"))).clicked() {
+                        view.pending_edit = Some(Edit::RemoveLinks { pages: None });
+                        view.links.selected = None;
+                        view.links.context = None;
+                        ui.close();
+                    }
+                    return;
+                }
+                // Over a picture (and no comment): Copy Image, as in Acrobat's page menu.
+                let mut copy_image = None;
+                if view.comments.selected.is_none()
+                    && let Some((page, at)) = view.comments.context_at
+                {
+                    // The page's content is parsed once per right-click, not on every frame the menu is open.
+                    let key = egui::Id::new("copy-image-under-menu");
+                    let cached = ui.data(|d| d.get_temp::<(usize, [f64; 2], Option<usize>)>(key)).filter(|c| c.0 == page && c.1 == at);
+                    let hit = match cached {
+                        Some(c) => c.2,
+                        None => {
+                            let hit = doc.page_image_at(page, at);
+                            ui.data_mut(|d| d.insert_temp(key, (page, at, hit)));
+                            hit
                         }
                     };
-                    ui.menu_button(tl!("Align"), |ui| {
-                        pick(ui, A::AlignLeft, "Left");
-                        pick(ui, A::AlignRight, "Right");
-                        pick(ui, A::AlignTop, "Top");
-                        pick(ui, A::AlignBottom, "Bottom");
-                        pick(ui, A::AlignCenterV, "Center vertically");
-                        pick(ui, A::AlignCenterH, "Center horizontally");
-                    });
-                    ui.menu_button(tl!("Distribute"), |ui| {
-                        pick(ui, A::DistributeH, "Horizontally");
-                        pick(ui, A::DistributeV, "Vertically");
-                    });
-                    ui.menu_button(tl!("Set Fields to Same Size"), |ui| {
-                        pick(ui, A::SameHeight, "Height");
-                        pick(ui, A::SameWidth, "Width");
-                        pick(ui, A::SameSize, "Both");
-                    });
-                    ui.separator();
-                }
-                if ui.button(tl!("Properties…")).clicked() {
-                    field_menu = Some(FieldMenu::Properties);
-                    ui.close();
-                }
-                if ui.add_enabled(can_modify, egui::Button::new(tl!("Duplicate…"))).clicked() {
-                    field_menu = Some(FieldMenu::Duplicate(name.clone()));
-                    ui.close();
-                }
-                ui.separator();
-                let delete = if view.prepare.also.is_empty() { "Delete" } else { "Delete selected fields" };
-                if ui.add_enabled(can_modify, egui::Button::new(tl!(delete))).clicked() {
-                    view.pending_edit = crate::prepare::delete_selected(view);
-                    ui.close();
-                }
-                return;
-            }
-            if let Some((page, index)) = view.links.context {
-                if ui.button(tl!("Properties…")).clicked() {
-                    view.links.open_existing = Some((page, index));
-                    ui.close();
-                }
-                if ui.add_enabled(can_modify, egui::Button::new(tl!("Delete"))).clicked() {
-                    view.pending_edit = Some(Edit::DeleteLink { page, index });
-                    view.links.selected = None;
-                    view.links.context = None;
-                    ui.close();
-                }
-                ui.separator();
-                if ui.add_enabled(can_modify, egui::Button::new(tl!("Remove all links"))).clicked() {
-                    view.pending_edit = Some(Edit::RemoveLinks { pages: None });
-                    view.links.selected = None;
-                    view.links.context = None;
-                    ui.close();
-                }
-                return;
-            }
-            // Over a picture (and no comment): Copy Image, as in Acrobat's page menu.
-            let mut copy_image = None;
-            if view.comments.selected.is_none()
-                && let Some((page, at)) = view.comments.context_at
-            {
-                // The page's content is parsed once per right-click, not on every frame the menu is open.
-                let key = egui::Id::new("copy-image-under-menu");
-                let cached = ui.data(|d| d.get_temp::<(usize, [f64; 2], Option<usize>)>(key)).filter(|c| c.0 == page && c.1 == at);
-                let hit = match cached {
-                    Some(c) => c.2,
-                    None => {
-                        let hit = doc.page_image_at(page, at);
-                        ui.data_mut(|d| d.insert_temp(key, (page, at, hit)));
-                        hit
+                    if let Some(image) = hit {
+                        if ui.button(tl!("Copy Image")).clicked() {
+                            copy_image = Some(comments::CanvasAction::CopyImage(page, image));
+                            ui.close();
+                        }
+                        if ui.button(tl!("Copy Image in Original Format")).clicked() {
+                            copy_image = Some(comments::CanvasAction::CopyImageFile(page, image));
+                            ui.close();
+                        }
+                        ui.separator();
                     }
-                };
-                if let Some(image) = hit {
-                    if ui.button(tl!("Copy Image")).clicked() {
-                        copy_image = Some(comments::CanvasAction::CopyImage(page, image));
-                        ui.close();
-                    }
-                    if ui.button(tl!("Copy Image in Original Format")).clicked() {
-                        copy_image = Some(comments::CanvasAction::CopyImageFile(page, image));
-                        ui.close();
-                    }
-                    ui.separator();
                 }
-            }
-            canvas_action = comments::context_menu(ui, view, info, prefs, allowed).or(copy_image);
+                canvas_action = comments::context_menu(ui, view, info, prefs, allowed).or(copy_image);
+            })
         });
         (wanted, visible_now)
     });
@@ -3399,8 +3412,19 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     match image_action {
         Some(crate::edit_text_ui::ImageAction::Replace(page, index)) => app.replace_page_image_dialog(page, index),
         Some(crate::edit_text_ui::ImageAction::Save(page, index)) => app.save_page_image(page, index),
-        Some(crate::edit_text_ui::ImageAction::Copy(page, index)) => app.copy_page_image(page, index),
+        Some(crate::edit_text_ui::ImageAction::Copy(page, index)) => {
+            app.copy_page_image(page, index);
+        }
         Some(crate::edit_text_ui::ImageAction::CopyFile(page, index)) => app.copy_page_image_file(page, index),
+        Some(crate::edit_text_ui::ImageAction::Cut(page, index)) => {
+            if app.copy_page_image(page, index) {
+                app.apply_edit(pdfcraft_engine::Edit::EditPageImage { page, index, change: pdfcraft_engine::ImageEdit::Delete });
+            }
+        }
+        Some(crate::edit_text_ui::ImageAction::Draw) => {
+            app.execute("comment.ink");
+        }
+        Some(crate::edit_text_ui::ImageAction::Recognize) => app.run_command("ocr.recognize"),
         None => {}
     }
     if let Some(why) = refused {
