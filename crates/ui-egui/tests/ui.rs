@@ -192,13 +192,28 @@ fn read_mode_rail_buttons_open_their_panels() {
     h.get_by_label("Alpha section");
 }
 
+/// The mode bar matches Acrobat's: All tools, Edit, Convert and E-Sign, with no Read tab. Read
+/// mode is still a View command.
+#[test]
+fn the_mode_bar_has_no_read_tab() {
+    use pdfcraft_ui_egui::Mode;
+    let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
+    for label in ["All tools", "Edit", "Convert", "E-Sign"] {
+        assert!(h.query_all_by_label(label).next().is_some(), "the {label} tab is there");
+    }
+    assert!(h.query_all_by_label("Read").next().is_none(), "no Read tab");
+    h.state_mut().run_command("view.read_mode");
+    h.run_steps(2);
+    assert_eq!(h.state().mode, Mode::Read);
+}
+
 /// Switching to Read mode closes the open pane, and switching back reopens it.
 #[test]
 fn read_mode_closes_the_panes_and_leaving_it_brings_them_back() {
     use pdfcraft_ui_egui::{Mode, RightPanel};
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
     assert_eq!(h.state().right, Some(RightPanel::Comments));
-    h.get_by_label("Read").click();
+    h.state_mut().run_command("view.read_mode");
     h.run_steps(3);
     assert_eq!(h.state().mode, Mode::Read);
     assert_eq!(h.state().right, None);
@@ -224,7 +239,7 @@ fn a_pane_closed_in_read_mode_stays_closed_when_leaving_it() {
     use pdfcraft_ui_egui::{Mode, RightPanel};
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
     assert_eq!(h.state().right, Some(RightPanel::Comments));
-    h.get_by_label("Read").click();
+    h.state_mut().run_command("view.read_mode");
     h.run_steps(3);
     assert_eq!(h.state().right, None);
     // Open Comments from the rail, then close it again.
