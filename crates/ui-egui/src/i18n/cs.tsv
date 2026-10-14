@@ -2442,3 +2442,4 @@ animation effects	Off	Vypnuto
 	Signers	Podepsali
 	{signers} signers; details of the first are shown	Podepsali: {signers}; zobrazují se podrobnosti prvního
 	Quirks	Zvláštnosti
+	Couldn't extract the original PDF: {e}	Původní PDF nelze extrahovat: {e}
