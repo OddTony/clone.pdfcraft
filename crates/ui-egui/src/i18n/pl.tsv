@@ -2334,3 +2334,12 @@ animation effects	Off	Wyłączone
 	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
 	Move tag earlier	Przenieś znacznik wcześniej
 	Move tag later	Przenieś znacznik później
+
+# Search across open documents; contributor-original translations.
+	Current document	Bieżący dokument
+	Open tabs and edits update the search automatically.	Otwarte karty i zmiany automatycznie aktualizują wyszukiwanie.
+	Selecting a result applies this query to the destination’s Find.	Wybranie wyniku stosuje to zapytanie do wyszukiwania w dokumencie docelowym.
+	Results shown: {n} · Documents: {d}	Wyświetlone wyniki: {n} · Dokumenty: {d}
+	Showing the first 2,000 results — more matches may exist.	Wyświetlono pierwsze 2000 wyników — mogą istnieć dalsze dopasowania.
+	Search complete.	Wyszukiwanie zakończone.
+	{n} pages could not be searched; results are incomplete.	Nie można było przeszukać {n} stron; wyniki są niepełne.

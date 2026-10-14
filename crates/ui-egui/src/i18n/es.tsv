@@ -2484,3 +2484,12 @@ animation effects	Off	Desactivados
 	This document is trying to open a local file:	Este documento intenta abrir un archivo local:
 	Move tag earlier	Mover etiqueta antes
 	Move tag later	Mover etiqueta después
+
+# Search across open documents; contributor-original translations.
+	Current document	Documento actual
+	Open tabs and edits update the search automatically.	Las pestañas abiertas y las ediciones actualizan la búsqueda automáticamente.
+	Selecting a result applies this query to the destination’s Find.	Seleccionar un resultado aplica esta consulta a Buscar en el documento de destino.
+	Results shown: {n} · Documents: {d}	Resultados mostrados: {n} · Documentos: {d}
+	Showing the first 2,000 results — more matches may exist.	Se muestran los primeros 2000 resultados — puede haber más coincidencias.
+	Search complete.	Búsqueda completada.
+	{n} pages could not be searched; results are incomplete.	No se pudo buscar en {n} páginas; los resultados están incompletos.

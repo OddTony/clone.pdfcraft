@@ -102,6 +102,19 @@ impl PageText {
 
     /// Search with Acrobat's find options, returning at most `limit` glyph ranges.
     pub fn find_opts_limited(&self, needle: &str, case_sensitive: bool, whole_words: bool, limit: usize) -> Vec<std::ops::Range<usize>> {
+        self.find_opts_skipping(needle, case_sensitive, whole_words, limit, 0)
+    }
+
+    /// Bounded continuation: skip matches without retaining them. Matching semantics are
+    /// identical to `find_opts_limited`, including multiple matches within one glyph.
+    pub fn find_opts_skipping(
+        &self,
+        needle: &str,
+        case_sensitive: bool,
+        whole_words: bool,
+        limit: usize,
+        mut skip: usize,
+    ) -> Vec<std::ops::Range<usize>> {
         if limit == 0 {
             return Vec::new();
         }
@@ -133,7 +146,11 @@ impl PageText {
             if bounded && chars[i..i + needle.len()].iter().map(|c| c.0).eq(needle.iter().copied()) {
                 let start = chars[i].1;
                 let end = chars[i + needle.len() - 1].1 + 1;
-                out.push(start..end);
+                if skip > 0 {
+                    skip = skip.saturating_sub(1);
+                } else {
+                    out.push(start..end);
+                }
                 if out.len() == limit {
                     break;
                 }
@@ -1507,6 +1524,34 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bounded_find_continuations_preserve_existing_unicode_and_word_semantics() {
+        let text = super::PageText {
+            glyphs: vec![super::TextGlyph {
+                text: "caffè Caffè category caffè".into(),
+                rect: [0., 0., 1., 1.],
+                quad: [[0., 0.]; 4],
+                direction: [1., 0.],
+            }],
+            line_of: vec![0],
+            space_before: vec![false],
+        };
+        for query in ["caffè", "CAFFÈ", "cat", "category", "caffè Caffè", ""] {
+            for sensitive in [false, true] {
+                for whole in [false, true] {
+                    let all = text.find_opts(query, sensitive, whole);
+                    for skip in 0..=all.len() + 1 {
+                        for limit in [0, 1, 2, 100] {
+                            let expected = all.iter().skip(skip).take(limit).cloned().collect::<Vec<_>>();
+                            assert_eq!(text.find_opts_skipping(query, sensitive, whole, limit, skip), expected);
+                        }
+                    }
+                    assert!(text.find_opts_skipping(query, sensitive, whole, 1, usize::MAX).is_empty());
+                }
+            }
+        }
+    }
+
     use super::*;
 
     #[test]

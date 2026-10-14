@@ -2375,3 +2375,12 @@ animation effects	Off	معطّلة
 	This document is trying to open a local file:	يحاول هذا المستند فتح ملف محلي:
 	Move tag earlier	نقل العلامة للأعلى
 	Move tag later	نقل العلامة للأسفل
+
+# Search across open documents; contributor-original translations.
+	Current document	المستند الحالي
+	Open tabs and edits update the search automatically.	تُحدّث علامات التبويب المفتوحة والتعديلات البحث تلقائيًا.
+	Selecting a result applies this query to the destination’s Find.	يطبّق اختيار نتيجة هذا الاستعلام على البحث في المستند الهدف.
+	Results shown: {n} · Documents: {d}	النتائج المعروضة: {n} · المستندات: {d}
+	Showing the first 2,000 results — more matches may exist.	تُعرض أول 2,000 نتيجة — قد توجد مطابقات أخرى.
+	Search complete.	اكتمل البحث.
+	{n} pages could not be searched; results are incomplete.	تعذّر البحث في {n} صفحات؛ النتائج غير مكتملة.

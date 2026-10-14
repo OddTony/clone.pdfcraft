@@ -70,23 +70,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, view: &mut DocView, pages: us
         let before = text.text_of(range.start.saturating_sub(CONTEXT)..range.start.min(n));
         let hit = text.text_of(range.start.min(n)..range.end.min(n));
         let after = text.text_of(range.end.min(n)..(range.end + CONTEXT).min(n));
-        let flat = |s: String| s.split_whitespace().collect::<Vec<_>>().join(" ");
-        let mut job = LayoutJob::default();
-        let font = FontId::new(12.5, egui::FontFamily::Proportional);
-        let plain = TextFormat { font_id: font.clone(), color: t.text_muted, ..Default::default() };
-        job.append(&format!("…{} ", flat(before)), 0.0, plain.clone());
-        job.append(
-            &flat(hit),
-            0.0,
-            TextFormat {
-                font_id: theme::semibold(12.5),
-                color: t.text,
-                background: Color32::from_rgba_unmultiplied(255, 214, 0, 90),
-                ..Default::default()
-            },
-        );
-        job.append(&format!(" {}…", flat(after)), 0.0, plain);
-        job.wrap.max_width = ui.available_width();
+        let job = snippet(t, &before, &hit, &after, ui.available_width());
         let selected = find.current == Some(i);
         let resp = ui.add(egui::Button::selectable(selected, job).wrap()).on_hover_text(tl!("Go to this result"));
         if resp.clicked() {
@@ -96,4 +80,25 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, view: &mut DocView, pages: us
     if let Some(i) = go {
         view.go_to_match(i);
     }
+}
+
+/// Shared Advanced Search snippet styling, including the existing find highlight colour.
+pub(crate) fn snippet(t: &Tokens, before: &str, hit: &str, after: &str, width: f32) -> LayoutJob {
+    let flat = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut job = LayoutJob::default();
+    let plain = TextFormat { font_id: FontId::new(12.5, egui::FontFamily::Proportional), color: t.text_muted, ..Default::default() };
+    job.append(&format!("…{} ", flat(before)), 0.0, plain.clone());
+    job.append(
+        &flat(hit),
+        0.0,
+        TextFormat {
+            font_id: theme::semibold(12.5),
+            color: t.text,
+            background: Color32::from_rgba_unmultiplied(255, 214, 0, 90),
+            ..Default::default()
+        },
+    );
+    job.append(&format!(" {}…", flat(after)), 0.0, plain);
+    job.wrap.max_width = width;
+    job
 }

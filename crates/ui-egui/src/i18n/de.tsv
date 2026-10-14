@@ -2355,3 +2355,12 @@ animation effects	Off	Aus
 	This document is trying to open a local file:	Dieses Dokument versucht, eine lokale Datei zu öffnen:
 	Move tag earlier	Tag früher verschieben
 	Move tag later	Tag später verschieben
+
+# Search across open documents; contributor-original translations.
+	Current document	Aktuelles Dokument
+	Open tabs and edits update the search automatically.	Offene Tabs und Änderungen aktualisieren die Suche automatisch.
+	Selecting a result applies this query to the destination’s Find.	Die Auswahl eines Ergebnisses übernimmt diese Abfrage in die Suche des Zieldokuments.
+	Results shown: {n} · Documents: {d}	Angezeigte Ergebnisse: {n} · Dokumente: {d}
+	Showing the first 2,000 results — more matches may exist.	Die ersten 2.000 Ergebnisse werden angezeigt — weitere Treffer sind möglich.
+	Search complete.	Suche abgeschlossen.
+	{n} pages could not be searched; results are incomplete.	{n} Seiten konnten nicht durchsucht werden; die Ergebnisse sind unvollständig.

@@ -2350,3 +2350,12 @@ animation effects	Off	Kapalı
 	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
 	Move tag earlier	Etiketi daha erken taşı
 	Move tag later	Etiketi daha geç taşı
+
+# Search across open documents; contributor-original translations.
+	Current document	Geçerli belge
+	Open tabs and edits update the search automatically.	Açık sekmeler ve düzenlemeler aramayı otomatik olarak günceller.
+	Selecting a result applies this query to the destination’s Find.	Bir sonuç seçmek bu sorguyu hedef belgenin Bul özelliğine uygular.
+	Results shown: {n} · Documents: {d}	Gösterilen sonuçlar: {n} · Belgeler: {d}
+	Showing the first 2,000 results — more matches may exist.	İlk 2.000 sonuç gösteriliyor — daha fazla eşleşme olabilir.
+	Search complete.	Arama tamamlandı.
+	{n} pages could not be searched; results are incomplete.	{n} sayfada arama yapılamadı; sonuçlar eksik.

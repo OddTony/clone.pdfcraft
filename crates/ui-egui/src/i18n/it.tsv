@@ -2363,3 +2363,12 @@ animation effects	Off	Disattivati
 	This document is trying to open a local file:	Questo documento sta tentando di aprire un file locale:
 	Move tag earlier	Sposta tag prima
 	Move tag later	Sposta tag dopo
+
+# Search across open documents; contributor-original translations.
+	Current document	Documento corrente
+	Open tabs and edits update the search automatically.	Le schede aperte e le modifiche aggiornano automaticamente la ricerca.
+	Selecting a result applies this query to the destination’s Find.	Selezionando un risultato, questa query viene applicata a Trova nel documento di destinazione.
+	Results shown: {n} · Documents: {d}	Risultati mostrati: {n} · Documenti: {d}
+	Showing the first 2,000 results — more matches may exist.	Sono visualizzati i primi 2.000 risultati — potrebbero esserci altre corrispondenze.
+	Search complete.	Ricerca completata.
+	{n} pages could not be searched; results are incomplete.	Impossibile cercare in {n} pagine; i risultati sono incompleti.

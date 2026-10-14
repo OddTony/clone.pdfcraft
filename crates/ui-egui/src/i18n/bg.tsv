@@ -2317,3 +2317,12 @@ animation effects	Off	Изключени
 	This document is trying to open a local file:	Този документ се опитва да отвори локален файл:
 	Move tag earlier	Преместване на етикета по-рано
 	Move tag later	Преместване на етикета по-късно
+
+# Search across open documents; contributor-original translations.
+	Current document	Текущ документ
+	Open tabs and edits update the search automatically.	Отворените раздели и редакциите обновяват търсенето автоматично.
+	Selecting a result applies this query to the destination’s Find.	Изборът на резултат прилага тази заявка към търсенето в целевия документ.
+	Results shown: {n} · Documents: {d}	Показани резултати: {n} · Документи: {d}
+	Showing the first 2,000 results — more matches may exist.	Показани са първите 2 000 резултата — може да има още съвпадения.
+	Search complete.	Търсенето приключи.
+	{n} pages could not be searched; results are incomplete.	Търсенето в {n} страници не беше възможно; резултатите са непълни.

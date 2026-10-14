@@ -2353,3 +2353,12 @@ animation effects	Off	Ki
 	This document is trying to open a local file:	Ez a dokumentum egy helyi fájlt próbál megnyitni:
 	Move tag earlier	Címke korábbra helyezése
 	Move tag later	Címke későbbre helyezése
+
+# Search across open documents; contributor-original translations.
+	Current document	Aktuális dokumentum
+	Open tabs and edits update the search automatically.	A nyitott lapok és módosítások automatikusan frissítik a keresést.
+	Selecting a result applies this query to the destination’s Find.	Egy találat kiválasztása ezt a lekérdezést alkalmazza a céldokumentum keresésében.
+	Results shown: {n} · Documents: {d}	Megjelenített találatok: {n} · Dokumentumok: {d}
+	Showing the first 2,000 results — more matches may exist.	Az első 2000 találat látható — további egyezések is lehetnek.
+	Search complete.	A keresés befejeződött.
+	{n} pages could not be searched; results are incomplete.	{n} oldal nem volt kereshető; az eredmények hiányosak.

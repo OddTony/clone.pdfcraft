@@ -30,6 +30,7 @@ pub mod ocr;
 pub mod optimizer;
 pub mod printcheck;
 mod scan_colours;
+pub mod search;
 pub mod signature_image;
 pub mod signature_scan;
 pub mod text_fonts;
