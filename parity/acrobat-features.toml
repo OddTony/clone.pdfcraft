@@ -930,6 +930,18 @@ evidence = ["crates/ui-egui/tests/ui.rs::zoom_keeps_the_point_under_the_cursor_s
 notes = "A trackpad pinch zooms the PDF beneath the pointer in either direction, keeping the same page point in place. The viewer handles the platform's zoom gesture where it is available."
 
 [[feature]]
+id = "view.outline"
+title = "Outline view: the page's vector paths as hairlines (Ctrl+Y)"
+area = "B"
+tier = "P2"
+milestone = "M3"
+status = "shipped"
+commands = ["view.outline", "view.outline_overlay"]
+tools = []
+evidence = ["crates/ui-egui/src/outline_view.rs::a_command_turns_its_own_mode_off_and_switches_from_the_other", "crates/ui-egui/tests/control.rs::outline_view_toggles_by_command_and_option_and_rejects_unknown_modes"]
+notes = "Illustrator-style, not an Acrobat feature: Ctrl+Y draws the page's paths as 1 px hairlines on a blank page, and View > Outline over page draws them over the faded page, so linework under fills, hatches or images can be seen. It uses the measurement-snapping path extraction, so what is drawn is what snaps. Missing: only paths (no text outlines, images or clip paths); curves are drawn as the flattened segments snapping uses; very large drawings stop at the snapping limit and say so; the mode is per tab and not saved; no headless automation tool (the control channel has `set outline off|paths|overlay`); drawing speed on huge pages is not measured."
+
+[[feature]]
 id = "view.zoom-to-percent"
 title = "Zoom to a chosen percentage"
 area = "B"
