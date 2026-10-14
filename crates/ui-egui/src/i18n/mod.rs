@@ -147,7 +147,7 @@ fn plural_sl(n: u64) -> usize {
 }
 
 /// The registry. English first: it is the fallback and the source language.
-pub static LANGUAGES: [LangInfo; 26] = [
+pub static LANGUAGES: [LangInfo; 30] = [
     LangInfo { code: "en", name: "English", source: "", plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
     LangInfo { code: "ja", name: "日本語", source: include_str!("ja.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new() },
     // Simplified Chinese; `zh`, `zh-CN`, `zh-SG` and `zh-Hans-*` locales resolve here (see `candidates`).
@@ -220,6 +220,14 @@ pub static LANGUAGES: [LangInfo; 26] = [
     // Korean; every `ko-*` locale (`ko-KR`, `ko_KR.UTF-8`) resolves here. CLDR `ko` counts have
     // one form ("other"), so `@plural` entries list a single form.
     LangInfo { code: "ko", name: "한국어", source: include_str!("ko.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new() },
+    // Dutch; every `nl-*` locale (`nl-NL`, `nl-BE`) resolves here.
+    LangInfo { code: "nl", name: "Nederlands", source: include_str!("nl.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
+    // Danish; every `da-*` locale (`da-DK`, `da_DK.UTF-8`) resolves here.
+    LangInfo { code: "da", name: "Dansk", source: include_str!("da.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
+    // Swedish; every `sv-*` locale (`sv-SE`, `sv-FI`) resolves here.
+    LangInfo { code: "sv", name: "Svenska", source: include_str!("sv.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
+    // Finnish; every `fi-*` locale (`fi-FI`, `fi_FI.UTF-8`) resolves here.
+    LangInfo { code: "fi", name: "Suomi", source: include_str!("fi.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
 ];
 
 impl LangInfo {
@@ -2651,6 +2659,148 @@ mod tests {
         }
         assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
         for lang in [Lang::from_code("hi").expect("hi registered"), Lang::from_code("ko").expect("ko registered")] {
+            let missing: Vec<_> = literals.iter().filter(|label| !has(lang, label)).collect();
+            assert!(missing.is_empty(), "untranslated {} UI literals: {missing:#?}", lang.code());
+        }
+    }
+
+    #[test]
+    fn dutch_danish_swedish_and_finnish_are_registered_and_persist() {
+        let nl = Lang::from_code("nl").expect("nl registered");
+        let da = Lang::from_code("da").expect("da registered");
+        let sv = Lang::from_code("sv").expect("sv registered");
+        let fi = Lang::from_code("fi").expect("fi registered");
+        assert_eq!(nl.name(), "Nederlands");
+        assert_eq!(da.name(), "Dansk");
+        assert_eq!(sv.name(), "Svenska");
+        assert_eq!(fi.name(), "Suomi");
+        assert_eq!(normalize_pref("NL"), Some("nl"));
+        assert_eq!(normalize_pref("DA"), Some("da"));
+        assert_eq!(normalize_pref("SV"), Some("sv"));
+        assert_eq!(normalize_pref("FI"), Some("fi"));
+        for tag in ["nl", "nl-NL", "nl_BE.UTF-8", "NL-nl"] {
+            assert_eq!(lang_from_tag(tag), Some(nl), "{tag}");
+        }
+        for tag in ["da", "da-DK", "da_DK.UTF-8", "DA-dk"] {
+            assert_eq!(lang_from_tag(tag), Some(da), "{tag}");
+        }
+        for tag in ["sv", "sv-SE", "sv_FI.UTF-8", "SV-se"] {
+            assert_eq!(lang_from_tag(tag), Some(sv), "{tag}");
+        }
+        for tag in ["fi", "fi-FI", "fi_FI.UTF-8", "FI-fi"] {
+            assert_eq!(lang_from_tag(tag), Some(fi), "{tag}");
+        }
+        assert_eq!(first_supported("nl-NL\r\nen-US"), Some(nl));
+        assert_eq!(first_supported("da-DK\r\nen-US"), Some(da));
+        assert_eq!(first_supported("sv-SE\r\nen-US"), Some(sv));
+        assert_eq!(first_supported("fi-FI\r\nen-US"), Some(fi));
+        assert_eq!(tr(nl, "Save"), "Opslaan");
+        assert_eq!(tr(nl, "Save as…"), "Opslaan als…");
+        assert_eq!(tr(nl, "Bookmarks"), "Bladwijzers");
+        assert_eq!(tr(nl, "Interface language"), "Interfacetaal");
+        assert_eq!(tr(da, "Save"), "Gem");
+        assert_eq!(tr(da, "Save as…"), "Gem som…");
+        assert_eq!(tr(da, "Bookmarks"), "Bogmærker");
+        assert_eq!(tr(da, "Interface language"), "Grænsefladesprog");
+        assert_eq!(tr(sv, "Save"), "Spara");
+        assert_eq!(tr(sv, "Save as…"), "Spara som…");
+        assert_eq!(tr(sv, "Bookmarks"), "Bokmärken");
+        assert_eq!(tr(sv, "Interface language"), "Gränssnittsspråk");
+        assert_eq!(tr(fi, "Save"), "Tallenna");
+        assert_eq!(tr(fi, "Save as…"), "Tallenna nimellä…");
+        assert_eq!(tr(fi, "Bookmarks"), "Kirjanmerkit");
+        assert_eq!(tr(fi, "Interface language"), "Käyttöliittymän kieli");
+        // Two plural forms (one, other) as in English: only 1 takes the first.
+        for lang in [&nl, &da, &sv, &fi] {
+            assert_eq!((0..=3).map(|n| (lang.0.plural)(n)).collect::<Vec<_>>(), [1, 0, 1, 1]);
+        }
+        for n in [0, 1, 2, 5] {
+            assert_eq!(trn(nl, n, "{n} page", "{n} pages"), if n == 1 { format!("{n} pagina") } else { format!("{n} pagina's") });
+            assert_eq!(trn(da, n, "{n} page", "{n} pages"), if n == 1 { format!("{n} side") } else { format!("{n} sider") });
+            assert_eq!(trn(sv, n, "{n} page", "{n} pages"), if n == 1 { format!("{n} sida") } else { format!("{n} sidor") });
+            assert_eq!(trn(fi, n, "{n} page", "{n} pages"), if n == 1 { format!("{n} sivu") } else { format!("{n} sivua") });
+            assert_eq!(trn(fi, n, "{n} field", "{n} fields"), if n == 1 { format!("{n} kenttä") } else { format!("{n} kenttää") });
+        }
+        // The broken-line regression: a `\n` escape stays one catalog line.
+        assert_eq!(tr(nl, "This page couldn't be displayed.\n{e}"), "Deze pagina kon niet worden weergegeven.\n{e}");
+        assert_eq!(tr(da, "This page couldn't be displayed.\n{e}"), "Denne side kunne ikke vises.\n{e}");
+        assert_eq!(tr(sv, "This page couldn't be displayed.\n{e}"), "Den här sidan kunde inte visas.\n{e}");
+        assert_eq!(tr(fi, "This page couldn't be displayed.\n{e}"), "Tätä sivua ei voitu näyttää.\n{e}");
+        for code in ["nl", "da", "sv", "fi"] {
+            let mut app = crate::PdfCraftApp::default();
+            app.set_option("language", &code.to_uppercase()).unwrap();
+            assert_eq!(app.language, code);
+            let mut restored = crate::PdfCraftApp::default();
+            restored.restore(&app.persist());
+            assert_eq!(restored.language, code);
+            assert!(restored.set_option("language", "xx").is_err());
+            assert_eq!(restored.language, code);
+        }
+    }
+
+    /// Dutch, Danish, Swedish and Finnish translate every registered command and every All tools
+    /// group, section and item.
+    #[test]
+    fn dutch_danish_swedish_and_finnish_cover_commands_and_catalogue() {
+        for lang in ["nl", "da", "sv", "fi"].map(|code| Lang::from_code(code).expect("registered")) {
+            for command in pdfcraft_engine::commands::COMMANDS {
+                assert!(has(lang, command.label), "{} missing command: {}", lang.code(), command.label);
+                if let Some(menu) = command.menu {
+                    assert!(has(lang, menu), "{} missing menu: {menu}", lang.code());
+                }
+            }
+            for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+                assert!(has(lang, group.label), "{} missing group: {}", lang.code(), group.label);
+                for section in group.sections {
+                    assert!(has(lang, section.title), "{} missing section: {}", lang.code(), section.title);
+                    for item in section.items {
+                        assert!(has(lang, item.label), "{} missing item: {}", lang.code(), item.label);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Every `tl!("…")` literal in the UI source is translated in Dutch, Danish, Swedish and
+    /// Finnish, so a new label cannot silently fall back to English in any of them.
+    #[test]
+    fn dutch_danish_swedish_and_finnish_cover_ui_literals() {
+        let mut stack = vec![std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        let mut literals = std::collections::BTreeSet::new();
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(dir).expect("UI source directory") {
+                let path = entry.expect("UI source entry").path();
+                if path.is_dir() {
+                    if path.file_name().is_some_and(|name| name != "i18n") {
+                        stack.push(path);
+                    }
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    let source = std::fs::read_to_string(path).expect("UI source file").replace("\r\n", "\n");
+                    let mut rest = source.split("#[cfg(test)]\nmod ").next().unwrap_or_default();
+                    while let Some((_, after)) = rest.split_once("tl!(\"") {
+                        let mut escaped = false;
+                        let end = after
+                            .char_indices()
+                            .find_map(|(i, c)| {
+                                if c == '"' && !escaped {
+                                    return Some(i);
+                                }
+                                escaped = c == '\\' && !escaped;
+                                None
+                            })
+                            .expect("closed tl! literal");
+                        let (raw, tail) = after.split_at(end);
+                        if tail.starts_with("\")") {
+                            let label: String = serde_json::from_str(&format!("\"{raw}\"")).expect("UI literal escapes");
+                            literals.insert(label);
+                        }
+                        rest = tail.strip_prefix('"').expect("closing quote");
+                    }
+                }
+            }
+        }
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        for lang in ["nl", "da", "sv", "fi"].map(|code| Lang::from_code(code).expect("registered")) {
             let missing: Vec<_> = literals.iter().filter(|label| !has(lang, label)).collect();
             assert!(missing.is_empty(), "untranslated {} UI literals: {missing:#?}", lang.code());
         }

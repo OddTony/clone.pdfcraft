@@ -4,7 +4,7 @@
 
 Every asset PdfCraft includes, bundles or uses to build its published material, with its author, source and licence. The policy is in [AGENTS.md](AGENTS.md) §1. The machine-readable list, with SHA-256 hashes, is [ATTRIBUTION.toml](ATTRIBUTION.toml). Licence texts are kept beside the assets and summarised in [NOTICE](NOTICE).
 
-## In this repository (273)
+## In this repository (277)
 
 | Asset | Title | Author | Licence | Source | Used for |
 |---|---|---|---|---|---|
@@ -32,6 +32,10 @@ Every asset PdfCraft includes, bundles or uses to build its published material, 
 | `crates/ui-egui/src/i18n/vi.tsv` | Vietnamese interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Vietnamese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
 | `crates/ui-egui/src/i18n/hi.tsv` | Hindi interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Hindi UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
 | `crates/ui-egui/src/i18n/ko.tsv` | Korean interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Korean UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
+| `crates/ui-egui/src/i18n/nl.tsv` | Dutch interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Dutch UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
+| `crates/ui-egui/src/i18n/da.tsv` | Danish interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Danish UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
+| `crates/ui-egui/src/i18n/sv.tsv` | Swedish interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Swedish UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
+| `crates/ui-egui/src/i18n/fi.tsv` | Finnish interface translation catalog | PdfCraft contributors | MIT OR Apache-2.0 | Contributor-original: clean-room translations of PdfCraft's English UI labels, no proprietary localisation resources | Finnish UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs |
 | `assets/icons/accessibility.svg` | Lucide icon "accessibility" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/accessibility.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `assets/icons/align-left.svg` | Lucide icon "align-left" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/align-left.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |
 | `assets/icons/align-center.svg` | Lucide icon "align-center" | Lucide Contributors (portions Cole Bemis, Feather) | ISC | https://github.com/lucide-icons/lucide (npm lucide-static 1.49.0, icons/align-center.svg) | UI icon, embedded via crates/ui-egui/src/icon_data.rs |

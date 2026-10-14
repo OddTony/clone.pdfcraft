@@ -56,7 +56,7 @@ const AR_DAYS: [&str; 7] = ["الأحد", "الاثنين", "الثلاثاء", 
 
 /// The languages month and weekday names can be written in (Preferences ▸ Date format ▸ Language):
 /// the interface languages, in the same order and with the same names.
-pub static DATE_LANGUAGES: [DateLanguage; 26] = [
+pub static DATE_LANGUAGES: [DateLanguage; 30] = [
     DateLanguage {
         code: "en",
         name: "English",
@@ -428,6 +428,76 @@ pub static DATE_LANGUAGES: [DateLanguage; 26] = [
         days: ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"],
         days_short: ["일", "월", "화", "수", "목", "금", "토"],
     },
+    // Dutch. Month names are lowercase in a date (`13 januari 2026`) and the same with and after
+    // a day number, so `months_with_day` is `None`.
+    DateLanguage {
+        code: "nl",
+        name: "Nederlands",
+        months: ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"],
+        months_with_day: None,
+        months_short: ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"],
+        days: ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"],
+        days_short: ["zo", "ma", "di", "wo", "do", "vr", "za"],
+    },
+    // Danish. Month names are the same with and after a day number (`13. januar 2026`), so
+    // `months_with_day` is `None`.
+    DateLanguage {
+        code: "da",
+        name: "Dansk",
+        months: ["januar", "februar", "marts", "april", "maj", "juni", "juli", "august", "september", "oktober", "november", "december"],
+        months_with_day: None,
+        months_short: ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"],
+        days: ["søndag", "mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag"],
+        days_short: ["sø", "ma", "ti", "on", "to", "fr", "lø"],
+    },
+    // Swedish. Month names are the same with and after a day number (`13 januari 2026`), so
+    // `months_with_day` is `None`.
+    DateLanguage {
+        code: "sv",
+        name: "Svenska",
+        months: ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"],
+        months_with_day: None,
+        months_short: ["jan", "feb", "mars", "apr", "maj", "juni", "juli", "aug", "sep", "okt", "nov", "dec"],
+        days: ["söndag", "måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag"],
+        days_short: ["sö", "må", "ti", "on", "to", "fr", "lö"],
+    },
+    // Finnish: a month after a day number takes the partitive (`7. tammikuuta 2026`) while
+    // standing alone it is nominative (`tammikuu 2026`).
+    DateLanguage {
+        code: "fi",
+        name: "Suomi",
+        months: [
+            "tammikuu",
+            "helmikuu",
+            "maaliskuu",
+            "huhtikuu",
+            "toukokuu",
+            "kesäkuu",
+            "heinäkuu",
+            "elokuu",
+            "syyskuu",
+            "lokakuu",
+            "marraskuu",
+            "joulukuu",
+        ],
+        months_with_day: Some([
+            "tammikuuta",
+            "helmikuuta",
+            "maaliskuuta",
+            "huhtikuuta",
+            "toukokuuta",
+            "kesäkuuta",
+            "heinäkuuta",
+            "elokuuta",
+            "syyskuuta",
+            "lokakuuta",
+            "marraskuuta",
+            "joulukuuta",
+        ]),
+        months_short: ["tammi", "helmi", "maalis", "huhti", "touko", "kesä", "heinä", "elo", "syys", "loka", "marras", "joulu"],
+        days: ["sunnuntai", "maanantai", "tiistai", "keskiviikko", "torstai", "perjantai", "lauantai"],
+        days_short: ["su", "ma", "ti", "ke", "to", "pe", "la"],
+    },
 ];
 
 /// The date language for `code` (any case), or `None` when there's none.
@@ -761,6 +831,31 @@ mod tests {
             s.set_date_language(Some(code)).unwrap();
             assert!(s.today_text_for_pdf(Some("d mmmm yyyy"), None).unwrap_err().contains("dd.mm.yyyy"), "{code}");
         }
+    }
+
+    /// Dutch, Danish and Swedish month names are the same with and after a day number; a Finnish
+    /// month after a day number takes the partitive. All four are Western European, so their
+    /// names reach a PDF.
+    #[test]
+    fn dutch_danish_swedish_and_finnish_month_and_weekday_names() {
+        assert_eq!(in_lang("dddd d mmmm yyyy", "nl"), "zaterdag 7 maart 2026");
+        assert_eq!(in_lang("ddd d mmm", "nl"), "za 7 mrt");
+        assert_eq!(in_lang("d. mmmm yyyy", "da"), "7. marts 2026");
+        assert_eq!(in_lang("mmmm yyyy", "da"), "marts 2026");
+        assert_eq!(in_lang("dddd d mmmm yyyy", "sv"), "lördag 7 mars 2026");
+        assert_eq!(in_lang("mmmm yyyy", "sv"), "mars 2026");
+        assert_eq!(in_lang("d. mmmm yyyy", "fi"), "7. maaliskuuta 2026");
+        assert_eq!(in_lang("mmmm yyyy", "fi"), "maaliskuu 2026");
+        assert_eq!(in_lang("dddd", "fi"), "lauantai");
+        // A weekday (dddd) is not a day number, so the Finnish month stays nominative.
+        assert_eq!(in_lang("dddd, mmmm", "fi"), "lauantai, maaliskuu");
+        let mut s = Session::new().with_clock(|| 1_700_000_000);
+        for code in ["nl", "da", "sv"] {
+            s.set_date_language(Some(code)).unwrap();
+            assert_eq!(s.today_text_for_pdf(Some("d mmmm yyyy"), None).as_deref(), Ok("14 november 2023"), "{code}");
+        }
+        s.set_date_language(Some("fi")).unwrap();
+        assert_eq!(s.today_text_for_pdf(Some("d mmmm yyyy"), None).as_deref(), Ok("14 marraskuuta 2023"));
     }
 
     #[test]

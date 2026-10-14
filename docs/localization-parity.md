@@ -1,5 +1,6 @@
 # Localization parity
 
+> **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (Dutch, Danish, Swedish and Finnish ship as full 2,590-key catalogs; the key union moves to 2,590 with strings added since; the Acrobat languages still lacking are Norwegian and Hebrew; the localization dimension is estimated at ≈ 96%)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (Hindi and Korean ship as full 2,578-key catalogs, after Indonesian and Vietnamese; all twelve key languages now have one; the localization dimension is estimated at ≈ 93%) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Per-language status of PdfCraft's interface against Acrobat Pro's. How translations work and how to
@@ -9,10 +10,10 @@ add a language: [localization.md](localization.md). Summary in [ROADMAP.md](../R
 
 - **Strings translated** is measured: the catalogs in `crates/ui-egui/src/i18n/<code>.tsv`, counted
   as distinct `(context, English)` keys with a non-empty translation. The denominator is the union
-  of keys across all catalogs, **2,578** (it was 2,143 until the Lithuanian catalog arrived; the
+  of keys across all catalogs, **2,590** (it was 2,578 until new interface strings arrived, and 2,143 until the Lithuanian catalog arrived; the
   percentages in the table below for the languages measured on 2026-10-10 are that older
   snapshot's). Cross-check: of the `tl!("…")` literals in `crates/ui-egui/src`, Indonesian,
-  Vietnamese, Hindi and Korean translate every one of them (required by
+  Vietnamese, Hindi, Korean, Dutch, Danish, Swedish and Finnish translate every one of them (required by
   `indonesian_and_vietnamese_cover_ui_literals` and `hindi_and_korean_cover_ui_literals`),
   and two literals are in no catalog yet.
   English is built in.
@@ -71,15 +72,20 @@ none has translated help.
 | Greek | `el` | 2,341 entries | partial | no |
 | Turkish | `tr` | 2,313 entries | partial | yes |
 | Lithuanian | `lt` | 2,578 entries | partial; community native-speaker review ([#1401](https://github.com/storytold/pdfcraft/pull/1401)) | no |
+| Dutch | `nl` | 2,590 (100%) | partial | no |
+| Danish | `da` | 2,590 (100%) | partial | no |
+| Swedish | `sv` | 2,590 (100%) | partial | no |
+| Finnish | `fi` | 2,590 (100%) | partial | no |
 
-**14 other languages** ship (23 catalogs plus English, 24 interface languages in Preferences).
+**18 other languages** ship (29 catalogs plus English, 30 interface languages in Preferences).
 The entry counts without percentages were measured on 2026-10-12; they are not percentages of the older 2,143-key snapshot above. Their presence does not imply a detailed linguistic or runtime review.
-Acrobat languages PdfCraft lacks: Danish, Dutch, Finnish, Norwegian, Swedish, Hebrew.
+Acrobat languages PdfCraft lacks: Norwegian, Hebrew.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Dutch, Danish, Swedish and Finnish ship as full 2,590-key catalogs with month and weekday names (Finnish takes the partitive after a day number); the key union moves to 2,590; the Acrobat languages still lacking are Norwegian and Hebrew |
 | 2026-10-13 | minor | Hindi and Korean ship as full 2,578-key catalogs with month and weekday names; Korean draws with an installed Hangul face (no craft-fonts face yet); the dimension is now estimated at ≈ 93% and all twelve key languages have a catalog |
 | 2026-10-13 | minor | Indonesian and Vietnamese ship as full 2,578-key catalogs with month and weekday names; the key union is 2,578 and the dimension re-measures at ≈ 76% (Hindi and Korean are the two languages still missing) |
 | 2026-10-12 | minor | Added current counts for Kazakh, Polish, Slovenian, Greek, Turkish and Lithuanian; retained existing language assessments and the original percentage snapshot |

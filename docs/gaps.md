@@ -242,7 +242,8 @@ update the numbers.
   layout itself (wrapping, typed text); a Hangul face in craft-fonts (Korean now draws with one
   installed system face, so the web build and machines without one show boxes). Acrobat ships
   Korean; it ships Arabic in its Middle East edition; it ships neither Hindi nor Indonesian nor
-  Vietnamese. Indonesian, Vietnamese, Hindi and Korean catalogs ship as of 2026-10-13.
+  Vietnamese. Indonesian, Vietnamese, Hindi and Korean catalogs ship as of 2026-10-13; Dutch,
+  Danish, Swedish and Finnish as of 2026-10-14.
 - **Evidence:** [localization.md](localization.md) §Arabic; `misc.rtl-ui` planned.
 - **Estimate:** 25–45 h (Arabic RTL 20–35, a Hangul face and native review 5–10). **Doc:**
   [localization-parity.md](localization-parity.md).
