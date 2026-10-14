@@ -2028,6 +2028,8 @@ fn extract_still_prunes_separate_resources_when_many_pages_share_a_type3_font() 
 // Stays ignored until CI installs Poppler: the pixel comparison has never run on a runner, so
 // un-ignoring it here would turn an unverified test loose on everyone. See crates/oracle.
 #[test]
+// Stays ignored until CI installs Poppler: the pixel comparison has never run on a runner, so
+// un-ignoring it here would turn an unverified test loose on everyone. See crates/oracle.
 #[ignore = "requires the external Poppler pdftoppm oracle"]
 fn extract_type3_shared_xobjects_matches_poppler_pixels() {
     let pdftoppm = pdfcraft_oracle::or_skip!(pdfcraft_oracle::pdftoppm());
