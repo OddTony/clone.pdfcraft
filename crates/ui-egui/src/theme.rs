@@ -220,6 +220,8 @@ pub const SYSTEM_FALLBACK: &str = "system-fallback";
 pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
 /// The name of the installed Telugu face [`installed_font_definitions`] may add.
 pub const SYSTEM_TELUGU_FALLBACK: &str = "system-telugu-fallback";
+/// The name of the installed Hebrew face [`installed_font_definitions`] may add.
+pub const SYSTEM_HEBREW_FALLBACK: &str = "system-hebrew-fallback";
 
 /// What [`install_fonts_for`] installs: [`font_definitions_for`], then, on desktop, one face
 /// already installed on this machine. It only draws characters no embedded face has.
@@ -234,6 +236,8 @@ pub const SYSTEM_TELUGU_FALLBACK: &str = "system-telugu-fallback";
 ///
 /// An installed Devanagari face and an installed Telugu face, when there are, end every family
 /// just before that one, so Hindi and Telugu text draw in a build without such faces (#1531).
+/// So does an installed Hebrew face when no embedded face and not that one has Hebrew: Edit text
+/// on a Hebrew PDF otherwise showed replacement boxes on macOS and Linux.
 ///
 /// `PDFCRAFT_SYSTEM_FONTS=0` leaves them out.
 pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
@@ -242,10 +246,23 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
     #[cfg(not(target_arch = "wasm32"))]
     {
         use crate::system_fonts::{Need, fallback};
+        let need = match cjk {
+            _ if !pdfcraft_fonts::ui_chinese_fonts().is_empty() => Need::Other,
+            CjkPreference::SimplifiedChinese => Need::Hans,
+            CjkPreference::TraditionalChinese => Need::Hant,
+            CjkPreference::Default => Need::Other,
+        };
+        let general = fallback(need);
+        // Hebrew (text being edited in a Hebrew PDF) needs its own face only when neither a
+        // craft-fonts `Hebr` face nor the general one has it.
+        let hebrew = (pdfcraft_fonts::ui_hebrew_fonts().is_empty() && !general.as_deref().is_some_and(crate::system_fonts::covers_hebrew))
+            .then(crate::system_fonts::hebrew_fallback)
+            .flatten();
         // Before the general installed face, which stays the last fallback outside Chinese.
         for (name, data) in [
             (SYSTEM_DEVANAGARI_FALLBACK, crate::system_fonts::devanagari_fallback()),
             (SYSTEM_TELUGU_FALLBACK, crate::system_fonts::telugu_fallback()),
+            (SYSTEM_HEBREW_FALLBACK, hebrew),
         ] {
             let Some(data) = data else { continue };
             fonts.font_data.insert(name.to_owned(), data);
@@ -253,13 +270,7 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                 stack.push(name.to_owned());
             }
         }
-        let need = match cjk {
-            _ if !pdfcraft_fonts::ui_chinese_fonts().is_empty() => Need::Other,
-            CjkPreference::SimplifiedChinese => Need::Hans,
-            CjkPreference::TraditionalChinese => Need::Hant,
-            CjkPreference::Default => Need::Other,
-        };
-        if let Some(data) = fallback(need) {
+        if let Some(data) = general {
             fonts.font_data.insert(SYSTEM_FALLBACK.to_owned(), data);
             let japanese: Vec<String> = pdfcraft_fonts::ui_japanese_fonts().iter().map(|f| f.name()).collect();
             for stack in fonts.families.values_mut() {

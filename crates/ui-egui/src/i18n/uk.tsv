@@ -2206,6 +2206,19 @@ calendar date	December	грудня
 	This printer offers no settings of its own.	Цей принтер не має власних налаштувань.
 	Margins	Поля
 	For page sizes and margins.	Для розмірів сторінок і полів.
+	Show the formatting toolbar when editing text	Показувати панель форматування під час редагування тексту
+	Drag to move	Перетягніть, щоб перемістити
+	Smaller text	Менший текст
+	Larger text	Більший текст
+	Text direction	Напрямок тексту
+	Right-to-left text	Текст справа наліво
+	Left-to-right text	Текст зліва направо
+	Legacy text encoding	Застаріле кодування тексту
+	Auto-detect	Визначати автоматично
+	As declared in the PDF	Як зазначено в PDF
+	Hebrew (ISO 8859-8)	Іврит (ISO 8859-8)
+	Hebrew (Windows-1255)	Іврит (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Як «Редагувати текст» читає старі шрифти, які не вказують, які літери вони малюють. Автовизначення розпізнає шрифти для івриту, побудовані за ISO 8859-8 або Windows-1255.
 certificate	Subject	Власник сертифіката
 	Scroll tabs left	Прокрутити вкладки ліворуч
 	Scroll tabs right	Прокрутити вкладки праворуч

@@ -2229,6 +2229,19 @@ certificate	Subject	صاحب الشهادة
 	 ({n} at {dpi} dpi, the largest size they can be drawn at)	 ({n} بدقة {dpi} dpi، وهي أكبر دقة يمكن رسمها بها)
 	Margins	الهوامش
 	For page sizes and margins.	لأحجام الصفحات والهوامش.
+	Show the formatting toolbar when editing text	إظهار شريط التنسيق عند تحرير النص
+	Drag to move	اسحب للنقل
+	Smaller text	نص أصغر
+	Larger text	نص أكبر
+	Text direction	اتجاه النص
+	Right-to-left text	نص من اليمين إلى اليسار
+	Left-to-right text	نص من اليسار إلى اليمين
+	Legacy text encoding	ترميز النص القديم
+	Auto-detect	اكتشاف تلقائي
+	As declared in the PDF	كما هو مصرّح به في ملف PDF
+	Hebrew (ISO 8859-8)	العبرية (ISO 8859-8)
+	Hebrew (Windows-1255)	العبرية (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	كيف تقرأ أداة تحرير النص الخطوط القديمة التي لا تحدد الحروف التي ترسمها. يتعرّف الاكتشاف التلقائي على الخطوط العبرية المرتّبة وفق ISO 8859-8 أو Windows-1255.
 
 # Multi-object selection and movement (#844)
 @plural	{n} object selected|{n} objects selected	تم تحديد {n} عنصر|تم تحديد {n} عنصر|تم تحديد {n} عنصرين|تم تحديد {n} عناصر|تم تحديد {n} عنصرًا|تم تحديد {n} عنصر

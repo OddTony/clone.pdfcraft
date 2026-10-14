@@ -33,6 +33,57 @@ a second bidi reversal; adjacent visual glyph runs still recover their own readi
 Only right-to-left ActualText is kept apart this way: left-to-right spans, such as the Latin
 ligatures (`fi`, `fl`) Word and Chrome wrap in ActualText mid-word, join their line as before.
 
+Old Hebrew PDFs often use a font laid out for a Hebrew code page, with no `/ToUnicode`: code
+`0xE0` draws alef, `0xE1` bet, and so on, while the PDF still declares a Latin encoding. Reading
+the declared encoding gave Latin letters or replacement boxes in the editor. **Preferences ▸
+Legacy text encoding** decides how codes `0x80`–`0xFF` of such fonts are read:
+
+- **Auto-detect** (the default) applies ISO 8859-8, or Windows-1255 when the font also draws
+  Hebrew points, only where the embedded TrueType/OpenType program itself shows Hebrew at those
+  codes: its symbol or Macintosh cmap leads to the glyphs its Unicode cmap names alef…tav, or its
+  OS/2 table declares the Hebrew code page and not Latin 1. Ordinary Latin fonts are untouched.
+- **As declared in the PDF** always reads the PDF's encoding.
+- **Hebrew (ISO 8859-8)** and **Hebrew (Windows-1255)** apply that code page to every simple font
+  without `/ToUnicode`, for files Auto-detect can't recognise (Type 1 or non-embedded fonts).
+
+A `/ToUnicode` CMap always wins, Symbol and ZapfDingbats are never reinterpreted, and a code the
+code page leaves undefined keeps its declared meaning. The editor's in-memory copy of a
+symbol-cmap font gets a Unicode cmap for the decoded letters, so they draw in the document's own
+face; typing Hebrew writes the same codes back. When no embedded face can draw a Hebrew letter,
+the interface falls back to an installed Hebrew face (never exported). The choice is app-wide,
+saved with the other preferences, and applies the next time a paragraph is opened; `text_encoding`
+reads or sets it headlessly. Search and copy (`text_extract`, `text_find`) use the renderer's own
+text extraction and do not follow it yet.
+
+The editing box lays out each line that holds right-to-left script in Unicode bidirectional
+display order (UAX #9). egui shapes a run of one face in a single direction, so when one embedded
+face drew a whole Hebrew line, its numbers and Latin words came out reversed ("1255" as "5521");
+the box now hands egui one piece per face and direction instead.
+
+Pieces of one row that are drawn as separate text (a Hebrew table row's cells, words set in
+two fonts) join in reading order: a right-to-left row starts from its rightmost piece, so a
+row number or heading on the right of a Hebrew row comes first, as on the page.
+
+The caret follows the reading order too. egui placed the caret as if every line ran left to right,
+and gave right-to-left runs a wrong glyph count, so Backspace after a Hebrew word could delete the
+space on its other side. PdfCraft's vendored `epaint` fixes the glyph count and places and hits the
+caret by screen position in a right-to-left row; the box hands it each Hebrew row in reading order.
+A Hebrew line that wraps inside the box keeps the old drawing-order caret until it is unwrapped.
+
+**Text direction.** As in Word, the Format text panel and the floating toolbar have
+Right-to-left (←¶) and Left-to-right (¶→) buttons. Until one is chosen, a paragraph's direction
+comes from its letters. A chosen direction decides each line's bidirectional order (where numbers
+and punctuation go) and, without an alignment, the side the paragraph aligns to, in the box and in
+the rewritten PDF; it goes with every later edit of the paragraph. In a right-to-left paragraph the
+Left and Right arrow keys move the caret the way they point. Headless: `text_edit.direction`
+(`rtl`, `ltr`, `auto`).
+
+**Floating toolbar.** While a paragraph is open, a small toolbar floats above it, like Word's mini
+toolbar: smaller and larger text, bold, italic, underline, text direction, alignment and four
+colours. Drag it anywhere by its handle. Each change is the same undoable edit as in the Format text
+panel, and the caret returns to the text. Preferences ▸ Show the formatting toolbar when editing
+text turns it off (it is on by default).
+
 For headless editing, use `text_font_files` → `text_font_import` → `text_fonts` and pass a
 resource to `text_edit.font_resource`. `text_edit.ranges` holds selected range formatting.
 `text_edit_layout` accepts resource/ranges too and measures a draft without applying it.

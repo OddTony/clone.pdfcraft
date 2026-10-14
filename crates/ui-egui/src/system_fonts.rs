@@ -4,7 +4,8 @@
 //! only draws characters none of them has, such as an Arabic file name in a build without
 //! craft-fonts, or the Simplified Chinese interface in a build without a `Hans` face (#826). A
 //! second and a third installed face, [`devanagari_fallback`] and [`telugu_fallback`], draw Hindi
-//! and Telugu when one is installed. It is
+//! and Telugu when one is installed, and [`hebrew_fallback`] draws Hebrew (Edit text on a Hebrew
+//! PDF) when neither craft-fonts nor the general face has it. It is
 //! read at runtime and never embedded or shipped (AGENTS.md §1.4), and `PDFCRAFT_SYSTEM_FONTS=0`
 //! turns it off (published screenshots do).
 
@@ -25,6 +26,8 @@ const PROBE: char = '\u{0627}';
 const DEVANAGARI_PROBE: char = '\u{0915}';
 /// Telugu letter ka: the face must have it to cover Telugu.
 const TELUGU_PROBE: char = '\u{0C15}';
+/// Hebrew letter alef: the face must have it to cover Hebrew.
+const HEBREW_PROBE: char = '\u{05D0}';
 /// 欢 (U+6B22): Simplified only, absent from the Japanese craft-fonts faces.
 const HANS_PROBE: char = '\u{6B22}';
 /// 說 (U+8AAA): Traditional only, absent from the Japanese craft-fonts faces.
@@ -80,6 +83,20 @@ pub fn devanagari_fallback() -> Option<Arc<FontData>> {
 pub fn telugu_fallback() -> Option<Arc<FontData>> {
     static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
     CACHE.get_or_init(|| script_fallback(&telugu_candidates(), TELUGU_PROBE)).clone()
+}
+
+/// The installed fallback face for Hebrew, read once. `None` when it is turned off or no candidate
+/// is installed. The general face covers Hebrew on Windows (Segoe UI) but not on macOS (SF
+/// Arabic) or where Noto Sans Arabic is the first Linux candidate, so Hebrew drew boxes there.
+pub fn hebrew_fallback() -> Option<Arc<FontData>> {
+    static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
+    CACHE.get_or_init(|| script_fallback(&hebrew_candidates(), HEBREW_PROBE)).clone()
+}
+
+/// Whether the face `data` selects maps Hebrew letters, so no separate Hebrew face is needed.
+pub fn covers_hebrew(data: &FontData) -> bool {
+    use skrifa::MetadataProvider as _;
+    skrifa::FontRef::from_index(&data.font, data.index).is_ok_and(|font| font.charmap().map(HEBREW_PROBE).is_some())
 }
 
 fn script_fallback(candidates: &[PathBuf], probe: char) -> Option<Arc<FontData>> {
@@ -151,6 +168,37 @@ fn telugu_candidates() -> Vec<PathBuf> {
             "lohit-telugu-fonts/Lohit-Telugu.ttf",
             "truetype/lohit-telugu/Lohit-Telugu.ttf",
             "truetype/fonts-telu-extra/Pothana2000.ttf",
+        ])
+    }
+}
+
+/// Well-known locations of Hebrew faces, best first.
+fn hebrew_candidates() -> Vec<PathBuf> {
+    if cfg!(windows) {
+        ["segoeui.ttf", "arial.ttf", "tahoma.ttf", "david.ttf"].iter().map(|f| windows_fonts().join(f)).collect()
+    } else if cfg!(target_os = "macos") {
+        [
+            "/System/Library/Fonts/SFHebrew.ttf",
+            "/System/Library/Fonts/ArialHB.ttc",
+            "/System/Library/Fonts/LucidaGrande.ttc",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/Library/Fonts/Arial Unicode.ttf",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect()
+    } else {
+        unix_fonts(&[
+            "truetype/noto/NotoSansHebrew-Regular.ttf",
+            "noto/NotoSansHebrew-Regular.ttf",
+            "google-noto/NotoSansHebrew-Regular.ttf",
+            "google-noto-vf/NotoSansHebrew[wght].ttf",
+            "truetype/dejavu/DejaVuSans.ttf",
+            "TTF/DejaVuSans.ttf",
+            "dejavu/DejaVuSans.ttf",
+            "dejavu-sans-fonts/DejaVuSans.ttf",
+            "truetype/freefont/FreeSans.ttf",
+            "gnu-free/FreeSans.ttf",
         ])
     }
 }
@@ -292,11 +340,23 @@ mod tests {
         assert!(script_fallback(&candidates, 'A').is_some());
         assert!(script_fallback(&candidates, TELUGU_PROBE).is_none());
         assert!(script_fallback(&candidates, DEVANAGARI_PROBE).is_none());
+        assert!(script_fallback(&candidates, HEBREW_PROBE).is_none(), "Inter has no Hebrew");
+    }
+
+    #[test]
+    fn hebrew_coverage_is_read_from_the_face_in_use() {
+        let inter = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+        assert!(!covers_hebrew(&FontData::from_static(inter)));
+        assert!(!covers_hebrew(&FontData::from_static(b"not a font")));
+        // On this machine, whichever Hebrew face is found really has Hebrew.
+        if let Some(face) = script_fallback(&hebrew_candidates(), HEBREW_PROBE) {
+            assert!(covers_hebrew(&face));
+        }
     }
 
     #[test]
     fn script_candidates_are_absolute_font_files() {
-        for list in [devanagari_candidates(), telugu_candidates()] {
+        for list in [devanagari_candidates(), telugu_candidates(), hebrew_candidates()] {
             assert!(!list.is_empty());
             assert!(list.iter().all(|p| p.is_absolute() || cfg!(windows)), "{list:?}");
             assert!(list.iter().all(|p| p.extension().is_some_and(|e| e == "ttf" || e == "ttc")), "{list:?}");

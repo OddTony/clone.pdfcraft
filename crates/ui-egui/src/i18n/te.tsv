@@ -2090,6 +2090,19 @@ action wizard	Start	ప్రారంభించు
 	No recent files	ఇటీవలి ఫైళ్లు లేవు
 	Go to page…	పేజీకి వెళ్లు…
 	For page sizes and margins.	పేజీ పరిమాణాలు మరియు మార్జిన్‌ల కోసం.
+	Show the formatting toolbar when editing text	టెక్స్ట్‌ను సవరించేటప్పుడు ఫార్మాటింగ్ టూల్‌బార్‌ను చూపించు
+	Drag to move	తరలించడానికి లాగండి
+	Smaller text	చిన్న టెక్స్ట్
+	Larger text	పెద్ద టెక్స్ట్
+	Text direction	టెక్స్ట్ దిశ
+	Right-to-left text	కుడి నుండి ఎడమకు టెక్స్ట్
+	Left-to-right text	ఎడమ నుండి కుడికి టెక్స్ట్
+	Legacy text encoding	పాత టెక్స్ట్ ఎన్‌కోడింగ్
+	Auto-detect	స్వయంచాలకంగా గుర్తించు
+	As declared in the PDF	PDFలో ప్రకటించినట్లు
+	Hebrew (ISO 8859-8)	హీబ్రూ (ISO 8859-8)
+	Hebrew (Windows-1255)	హీబ్రూ (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	ఏ అక్షరాలను గీస్తాయో చెప్పని పాత ఫాంట్‌లను "టెక్స్ట్‌ను సవరించు" ఎలా చదువుతుందో. స్వయంచాలక గుర్తింపు ISO 8859-8 లేదా Windows-1255 ప్రకారం అమర్చిన హీబ్రూ ఫాంట్‌లను గుర్తిస్తుంది.
 	Open arrow	తెరిచిన బాణం
 	Closed arrow	మూసిన బాణం
 	Butt	మొండి చివర

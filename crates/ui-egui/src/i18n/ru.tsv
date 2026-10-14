@@ -2080,6 +2080,19 @@
 	Created a PDF from the first {n} files	PDF создан из первых файлов: {n}
 	Go to page…	Перейти на страницу…
 	For page sizes and margins.	Для размеров страниц и полей.
+	Show the formatting toolbar when editing text	Показывать панель форматирования при редактировании текста
+	Drag to move	Перетащите, чтобы переместить
+	Smaller text	Меньший текст
+	Larger text	Больший текст
+	Text direction	Направление текста
+	Right-to-left text	Текст справа налево
+	Left-to-right text	Текст слева направо
+	Legacy text encoding	Устаревшая кодировка текста
+	Auto-detect	Определять автоматически
+	As declared in the PDF	Как указано в PDF
+	Hebrew (ISO 8859-8)	Иврит (ISO 8859-8)
+	Hebrew (Windows-1255)	Иврит (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Как «Редактировать текст» читает старые шрифты, которые не сообщают, какие буквы они рисуют. Автоопределение распознаёт шрифты для иврита, построенные по ISO 8859-8 или Windows-1255.
 	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	Шрифты текста PDF не могут отобразить «{c}» ({code}). Выберите поддерживаемый текст.
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Стандартные шрифты не могут отобразить «{c}» ({code}). Пока в виде текста можно добавлять только западноевропейские символы.
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Шрифт этого поля не может отобразить «{c}» ({code}), поэтому PdfCraft показывает на его месте ?. Значение сохранено, и другие программы просмотра PDF перерисуют поле по нему.

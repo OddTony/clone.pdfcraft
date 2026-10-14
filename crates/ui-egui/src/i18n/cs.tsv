@@ -147,6 +147,19 @@
 	Go to page…	Přejít na stránku…
 	Margins	Okraje
 	For page sizes and margins.	Pro velikosti stránek a okraje.
+	Show the formatting toolbar when editing text	Při úpravě textu zobrazit panel formátování
+	Drag to move	Přetažením přesunete
+	Smaller text	Menší text
+	Larger text	Větší text
+	Text direction	Směr textu
+	Right-to-left text	Text zprava doleva
+	Left-to-right text	Text zleva doprava
+	Legacy text encoding	Starší kódování textu
+	Auto-detect	Automaticky rozpoznat
+	As declared in the PDF	Podle deklarace v PDF
+	Hebrew (ISO 8859-8)	Hebrejština (ISO 8859-8)
+	Hebrew (Windows-1255)	Hebrejština (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Jak nástroj Upravit text čte stará písma, která neuvádějí, jaká písmena kreslí. Automatické rozpoznání pozná hebrejská písma uspořádaná podle ISO 8859-8 nebo Windows-1255.
 	Open arrow	Otevřená šipka
 	Closed arrow	Uzavřená šipka
 	Butt	Tupý konec

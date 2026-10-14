@@ -2120,6 +2120,19 @@
 	No recent files	Aucun fichier récent
 	Go to page…	Aller à la page…
 	For page sizes and margins.	Pour les tailles de page et les marges.
+	Show the formatting toolbar when editing text	Afficher la barre de mise en forme lors de la modification du texte
+	Drag to move	Faire glisser pour déplacer
+	Smaller text	Texte plus petit
+	Larger text	Texte plus grand
+	Text direction	Orientation du texte
+	Right-to-left text	Texte de droite à gauche
+	Left-to-right text	Texte de gauche à droite
+	Legacy text encoding	Encodage de texte hérité
+	Auto-detect	Détection automatique
+	As declared in the PDF	Tel que déclaré dans le PDF
+	Hebrew (ISO 8859-8)	Hébreu (ISO 8859-8)
+	Hebrew (Windows-1255)	Hébreu (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Comment Modifier le texte lit les anciennes polices qui n'indiquent pas quelles lettres elles dessinent. La détection automatique reconnaît les polices hébraïques organisées selon ISO 8859-8 ou Windows-1255.
 	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	Les polices de texte PDF ne peuvent pas afficher « {c} » ({code}). Choisissez un texte pris en charge.
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Les polices standard ne peuvent pas afficher « {c} » ({code}). Pour l'instant, seuls les caractères d'Europe occidentale peuvent être ajoutés comme texte.
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	La police de ce champ ne peut pas afficher « {c} » ({code}) : PdfCraft affiche ? à sa place. La valeur est enregistrée, et les autres lecteurs PDF redessinent le champ à partir de celle-ci.

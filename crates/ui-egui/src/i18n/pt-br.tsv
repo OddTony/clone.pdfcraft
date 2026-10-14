@@ -82,6 +82,19 @@
 	Reopen the files that were open when PdfCraft last closed	Reabrir os arquivos que estavam abertos quando o PdfCraft foi fechado pela última vez
 	Margins	Margens
 	For page sizes and margins.	Para tamanhos de página e margens.
+	Show the formatting toolbar when editing text	Mostrar a barra de formatação ao editar texto
+	Drag to move	Arraste para mover
+	Smaller text	Texto menor
+	Larger text	Texto maior
+	Text direction	Direção do texto
+	Right-to-left text	Texto da direita para a esquerda
+	Left-to-right text	Texto da esquerda para a direita
+	Legacy text encoding	Codificação de texto legada
+	Auto-detect	Detectar automaticamente
+	As declared in the PDF	Conforme declarado no PDF
+	Hebrew (ISO 8859-8)	Hebraico (ISO 8859-8)
+	Hebrew (Windows-1255)	Hebraico (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Como Editar texto lê fontes antigas que não informam quais letras desenham. A detecção automática reconhece fontes hebraicas organizadas segundo ISO 8859-8 ou Windows-1255.
 	Open	Abrir
 	Open file	Abrir arquivo
 	Home	Início

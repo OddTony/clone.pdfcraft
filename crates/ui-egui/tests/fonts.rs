@@ -193,6 +193,31 @@ fn system_fallback_covers_telugu() {
     assert!(layout_widths(&mut fonts, TELUGU).iter().all(|w| w.is_finite() && *w > 0.0));
 }
 
+/// Hebrew text opened in Edit text draws in every family whenever the machine has a Hebrew face:
+/// the general installed face covers it (Segoe UI on Windows), or a Hebrew face is added (macOS,
+/// whose general face is SF Arabic, drew replacement boxes). macOS always ships one, so there the
+/// test never skips.
+#[test]
+fn system_fallback_covers_hebrew() {
+    const HEBREW: &str = "שלום עולם";
+    assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_HEBREW_FALLBACK));
+    let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
+    for (family, stack) in &defs.families {
+        assert!(stack.iter().filter(|n| *n == theme::SYSTEM_HEBREW_FALLBACK).count() <= 1, "{family:?}: {stack:?}");
+    }
+    let added = defs.font_data.contains_key(theme::SYSTEM_HEBREW_FALLBACK);
+    let mut fonts = Fonts::new(TextOptions::default(), defs);
+    let covered = families().iter().all(|id| fonts.has_glyphs(id, HEBREW));
+    let off = std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0");
+    if !covered && pdfcraft_fonts::ui_hebrew_fonts().is_empty() && (off || !cfg!(target_os = "macos")) {
+        eprintln!("skipping system_fallback_covers_hebrew: no installed Hebrew font (or PDFCRAFT_SYSTEM_FONTS=0)");
+        assert!(!added);
+        return;
+    }
+    assert!(covered, "every family draws {HEBREW}");
+    assert!(layout_widths(&mut fonts, HEBREW).iter().all(|w| w.is_finite() && *w > 0.0));
+}
+
 /// The Han characters of a catalog's translations.
 fn catalog_han(catalog: &str) -> String {
     let mut han: Vec<char> = catalog

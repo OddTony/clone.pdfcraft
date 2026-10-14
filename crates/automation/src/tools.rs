@@ -1191,6 +1191,9 @@ pub fn tools() -> Vec<ToolDef> {
         t("text_fonts", "List document fonts", "List validated embedded source faces and approved full preview faces for a page. Full registered resources can be selected by text_edit.font_resource; preview_only faces are not PDF resource names.")
             .ro().cmd("edit.edit_text")
             .with(schema(json!({"doc":doc(), "page":{"type":"integer","minimum":1}}), &["doc","page"])),
+        t("text_encoding", "Legacy text encoding", "Get or set how text_lines, text_paragraphs, text_edit and the other content readers decode codes 0x80-0xFF of simple fonts that have no ToUnicode (Preferences ▸ Legacy text encoding). auto (the default) reads a Hebrew code page only where the embedded font program draws Hebrew letters at those codes; declared always uses the PDF's encoding; iso-8859-8 and windows-1255 apply that Hebrew code page to every such font. A ToUnicode CMap always wins. Omit encoding to read the current choice. It holds for the rest of this session; text_extract and text_find use the renderer's own extraction and are unaffected.")
+            .cmd("app.preferences")
+            .with(schema(json!({"encoding":{"type":"string","enum":["auto","declared","iso-8859-8","windows-1255"]}}), &[])),
         t("text_paragraphs", "List paragraphs", "The paragraphs on a page (adjacent source runs grouped into aligned visual rows, including mixed fonts, sizes and colours): number, text, editor_text (visual rows separated by newlines), rows and source line numbers, box (top-left-origin points), font and size. Use the number with text_edit's paragraph.")
             .ro()
             .cmd("edit.edit_text")
@@ -1213,6 +1216,7 @@ pub fn tools() -> Vec<ToolDef> {
                     "size": { "type": "number", "exclusiveMinimum": 0 },
                     "color": { "type": "string", "description": "#rrggbb" },
                     "align": { "type": "string", "enum": ["left", "center", "right", "justify"] },
+                    "direction": { "type": "string", "enum": ["rtl", "ltr", "auto"], "description": "Paragraph only: text direction, as Word's Right-to-left / Left-to-right buttons set it. It decides where numbers and punctuation go in each line and, without align, the side the paragraph aligns to. auto (the default) takes it from the letters." },
                     "underline": { "type": "boolean" },
                     "line_spacing": { "type": "number", "description": "Multiple of the font size (1.2 is ordinary)." },
                     "dx": { "type": "number", "description": "Paragraph only: move right by this many points (negative: left)." },

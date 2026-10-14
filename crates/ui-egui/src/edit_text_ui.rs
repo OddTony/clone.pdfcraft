@@ -127,6 +127,9 @@ pub struct LineEditor {
     /// horizontal scale (%), and what they were.
     pub extras: Extras,
     extras0: Extras,
+    /// The floating toolbar was used this frame (a click there, or the pointer on it): the text
+    /// field's loss of focus doesn't finish the paragraph, and the caret returns to it.
+    toolbar_hold: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -135,12 +138,32 @@ pub struct Extras {
     pub line_spacing: f64,
     pub char_spacing: f64,
     pub scale: f64,
+    /// The text direction chosen with Right-to-left / Left-to-right (`Some(true)` right to
+    /// left); `None` until one is chosen, when the letters decide ([`LineEditor::rtl`]). Once
+    /// chosen it goes with every edit of the paragraph.
+    pub direction: Option<bool>,
 }
 
 impl Default for Extras {
     fn default() -> Self {
-        Extras { underline: false, line_spacing: 0.0, char_spacing: 0.0, scale: 100.0 }
+        Extras { underline: false, line_spacing: 0.0, char_spacing: 0.0, scale: 100.0, direction: None }
     }
+}
+
+/// Word's paragraph-direction buttons for the paragraph being edited: Right-to-left and
+/// Left-to-right. Returns whether the direction changed.
+pub(crate) fn direction_buttons(ui: &mut egui::Ui, ed: &mut LineEditor) -> bool {
+    let rtl = ed.rtl();
+    let mut changed = false;
+    if ui.selectable_label(rtl, "←¶").on_hover_text(tl!("Right-to-left text")).clicked() && !(rtl && ed.extras.direction.is_some()) {
+        ed.extras.direction = Some(true);
+        changed = true;
+    }
+    if ui.selectable_label(!rtl, "¶→").on_hover_text(tl!("Left-to-right text")).clicked() && !(!rtl && ed.extras.direction.is_some()) {
+        ed.extras.direction = Some(false);
+        changed = true;
+    }
+    changed
 }
 
 /// Underline, line spacing, character spacing and horizontal scale for the paragraph being
@@ -171,7 +194,13 @@ pub(crate) fn extras_panel(ui: &mut egui::Ui, e: &mut Extras) -> bool {
 }
 
 impl LineEditor {
-    pub(crate) fn has_changes(&self) -> bool {
+    /// Whether the paragraph reads right to left: the direction chosen for it, else its letters
+    /// (more Hebrew or Arabic than Latin).
+    pub(crate) fn rtl(&self) -> bool {
+        self.extras.direction.unwrap_or_else(|| crate::bidi::reads_rtl(self.text.chars()))
+    }
+
+    pub fn has_changes(&self) -> bool {
         self.text != self.original || self.look != self.look0 || self.extras != self.extras0
     }
 
@@ -199,6 +228,9 @@ impl LineEditor {
                 .then_some(self.extras.line_spacing),
             char_spacing: (self.extras.char_spacing != self.extras0.char_spacing).then_some(self.extras.char_spacing),
             scale: (self.extras.scale != self.extras0.scale).then_some(self.extras.scale),
+            // A chosen direction is sent with every edit: the PDF doesn't record it, and the
+            // letters alone would decide again.
+            direction: self.extras.direction,
             ..Default::default()
         };
         if let Some(range) = &self.selection
@@ -266,7 +298,13 @@ fn source_look(base_font: &str, size: f64, color: [f64; 3], detected_bold: bool,
 }
 
 fn look_of(b: &pdfcraft_engine::TextBlock) -> pdfcraft_engine::AddedText {
-    source_look(&b.base_font, b.size, b.color, b.bold, b.italic)
+    let mut look = source_look(&b.base_font, b.size, b.color, b.bold, b.italic);
+    // A paragraph reading right to left is laid out against its right edge, as the rewrite does
+    // without an alignment: the panel and the toolbar show Align right, as Word does.
+    if crate::bidi::reads_rtl(b.text.chars()) {
+        look.align = pdfcraft_engine::TextAlign::Right;
+    }
+    look
 }
 
 fn editor_font(look: &pdfcraft_engine::AddedText, size: f32) -> FontId {
@@ -752,6 +790,7 @@ pub(crate) fn page_input(
             look0: look_of(l),
             extras: Extras::default(),
             extras0: Extras::default(),
+            toolbar_hold: false,
         });
     }
     true
@@ -796,13 +835,17 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
     families
 }
 
-fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> egui::text::LayoutJob {
+/// The layout job for `text`, and the screen order of its right-to-left lines for
+/// [`crate::bidi::to_logical_order`].
+fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> (egui::text::LayoutJob, Vec<crate::bidi::LineOrder>) {
     let mut job = egui::text::LayoutJob::default();
+    let mut sections: Vec<(&str, egui::TextFormat)> = Vec::new();
     // An unchanged PDF row already has an authoritative line break. Do not rewrap it
     // because font rounding or a fallback face measures a fraction of a pixel wider.
     job.wrap.max_width = if text == ed.original && ed.look == ed.look0 && ed.extras == ed.extras0 { f32::INFINITY } else { width };
     if let Some((block, lines)) = &ed.source {
-        let lefts: Vec<_> = block.rows.iter().filter_map(|r| r.first().and_then(|i| lines.get(*i)).map(|l| l.rect[0])).collect();
+        // A right-to-left row lists its rightmost piece first, so take the row's left edge.
+        let lefts: Vec<_> = block.rows.iter().filter_map(|r| r.iter().filter_map(|i| lines.get(*i)).map(|l| l.rect[0]).reduce(f64::min)).collect();
         let left_span = lefts.iter().copied().fold(f64::NEG_INFINITY, f64::max) - lefts.iter().copied().fold(f64::INFINITY, f64::min);
         let centered = block.rows.len() > 1
             && left_span > block.size * 0.5
@@ -845,9 +888,8 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             let native_width = ui.fonts_mut(|f| f.layout_no_wrap(line.text.clone(), font.clone(), Color32::BLACK).size().x);
             let target_width = ((line.rect[2] - line.rect[0]) * look.size / line.size.max(0.01)) as f32 * scale;
             let spacing = if original_face { (target_width - native_width) / line.text.chars().count().saturating_sub(1).max(1) as f32 } else { 0.0 };
-            job.append(
+            sections.push((
                 text.get(range).unwrap_or_default(),
-                0.0,
                 egui::TextFormat {
                     font_id: font,
                     extra_letter_spacing: spacing + ed.extras.char_spacing as f32 * scale,
@@ -855,30 +897,127 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
                     italics: look.italic && !embedded,
                     ..Default::default()
                 },
-            );
+            ));
         }
     } else {
-        job.append(
+        sections.push((
             text,
-            0.0,
             egui::TextFormat {
                 font_id: editor_font(&ed.look, ed.size),
                 color: color32(ed.look.color),
                 italics: ed.look.italic,
                 ..Default::default()
             },
-        );
+        ));
     }
-    job
+    let orders = append_in_display_order(ui, &mut job, &sections, ed.extras.direction);
+    (job, orders)
+}
+
+/// Appends `sections` (logical order) to `job`. A line holding right-to-left script goes in its
+/// bidirectional display order, split where egui would otherwise shape one face's run in a single
+/// direction (Hebrew digits drawn by the same embedded face came out reversed); see
+/// [`crate::bidi::editor_pieces`]. Every character is appended once, so the galley still has one
+/// glyph per character of the text being edited. Other lines are appended as they are. Returns
+/// the screen order of each right-to-left line. `direction` is the paragraph's chosen direction
+/// (`None`: each line's first strong character decides).
+fn append_in_display_order(
+    ui: &egui::Ui,
+    job: &mut egui::text::LayoutJob,
+    sections: &[(&str, egui::TextFormat)],
+    direction: Option<bool>,
+) -> Vec<crate::bidi::LineOrder> {
+    let push = |job: &mut egui::text::LayoutJob, s: &str, format: usize| {
+        if let Some((_, f)) = sections.get(format) {
+            job.append(s, 0.0, f.clone());
+        }
+    };
+    if direction != Some(true) && !sections.iter().any(|(s, _)| crate::bidi::has_rtl(s)) {
+        for (i, (s, _)) in sections.iter().enumerate() {
+            push(job, s, i);
+        }
+        return Vec::new();
+    }
+    let chars: Vec<(char, usize)> = sections.iter().enumerate().flat_map(|(i, (s, _))| s.chars().map(move |c| (c, i))).collect();
+    let faces = faces_of(ui, sections, &chars);
+    let mut orders = Vec::new();
+    let mut offset = 0usize;
+    for line in chars.split_inclusive(|(c, _)| *c == '\n') {
+        let start = offset;
+        offset = offset.saturating_add(line.len());
+        let (body, newline) = match line.split_last() {
+            Some((last, body)) if last.0 == '\n' => (body, Some(last.1)),
+            _ => (line, None),
+        };
+        match crate::bidi::editor_pieces(body, direction, |f, c| faces.get(&(f, c)).copied().unwrap_or(usize::MAX)) {
+            Some(pieces) => {
+                let shown = pieces.iter().flat_map(|p| p.shown.iter().map(move |&i| (start.saturating_add(i), p.rtl))).collect();
+                orders.push(crate::bidi::LineOrder { start, shown });
+                for piece in pieces {
+                    if let Some((_, format)) = sections.get(piece.format) {
+                        crate::bidi::append_piece(job, &piece.text, format.clone());
+                    }
+                }
+            }
+            None => {
+                // Unchanged: consecutive characters of one format stay one section.
+                for group in body.chunk_by(|a, b| a.1 == b.1) {
+                    let s: String = group.iter().map(|p| p.0).collect();
+                    push(job, &s, group.first().map_or(0, |p| p.1));
+                }
+            }
+        }
+        if let Some(format) = newline {
+            push(job, "\n", format);
+        }
+    }
+    orders
+}
+
+/// Which face of its format's font family egui draws each of `chars` with (the family's first
+/// font that maps it, as egui picks it; `usize::MAX` for none), keyed by format and character.
+fn faces_of(ui: &egui::Ui, sections: &[(&str, egui::TextFormat)], chars: &[(char, usize)]) -> std::collections::HashMap<(usize, char), usize> {
+    use skrifa::MetadataProvider as _;
+    ui.ctx().fonts(|fonts| {
+        let defs = fonts.definitions();
+        let families: Vec<Vec<Option<skrifa::FontRef<'_>>>> = sections
+            .iter()
+            .map(|(_, format)| {
+                defs.families.get(&format.font_id.family).map_or_else(Vec::new, |names| {
+                    names
+                        .iter()
+                        .map(|name| defs.font_data.get(name).and_then(|data| skrifa::FontRef::from_index(&data.font, data.index).ok()))
+                        .collect()
+                })
+            })
+            .collect();
+        let mut out = std::collections::HashMap::new();
+        for &(c, format) in chars {
+            // egui draws a tab and thin spaces with the space glyph.
+            let probe = if matches!(c, '\t' | '\u{2009}' | '\u{202F}') { ' ' } else { c };
+            out.entry((format, c)).or_insert_with(|| {
+                families
+                    .get(format)
+                    .and_then(|faces| {
+                        faces.iter().position(|face| face.as_ref().is_some_and(|f| f.charmap().map(probe).is_some_and(|g| g.to_u32() != 0)))
+                    })
+                    .unwrap_or(usize::MAX)
+            });
+        }
+        out
+    })
 }
 
 /// Align the editable galley's baselines to the source rows instead of egui's interface
 /// leading. Glyphs, meshes, caret and selection receive the same transform.
 fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> Arc<egui::Galley> {
-    let mut job = editor_job(ui, ed, text, scale, width);
+    let (mut job, orders) = editor_job(ui, ed, text, scale, width);
     let centered = job.halign == egui::Align::Center;
     job.halign = egui::Align::LEFT;
     let mut galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
+    // Hebrew rows go back into reading order at their screen positions, so the caret, clicks,
+    // Backspace and Delete follow the text the user sees.
+    crate::bidi::to_logical_order(&mut galley, text, &orders);
     let Some((block, lines)) = &ed.source else { return galley };
     let sources: Vec<_> = block
         .rows
@@ -920,7 +1059,23 @@ fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: 
         let base_y = (block.rect[3] - baseline) as f32 * scale;
         let row = Arc::make_mut(&mut placed.row);
         placed.pos.y = base_y - ascent;
-        placed.pos.x = if centered { (width - row.size.x) / 2.0 } else { (source_rect[0] - block.rect[0]) as f32 * scale };
+        // A right-to-left row keeps the right edge it has on the page (where the PDF's own
+        // layout ends it), as the applied edit does; one that no longer fits grows to the right.
+        // An alignment chosen in the panel or the toolbar shows at once; otherwise a paragraph
+        // reading right to left (its chosen direction, else its letters) keeps its right edge.
+        use pdfcraft_engine::TextAlign;
+        let chosen = (ed.look.align != ed.look0.align).then_some(ed.look.align);
+        let left_x = (source_rect[0] - block.rect[0]) as f32 * scale;
+        let right_x = ((source_rect[2] - block.rect[0]) as f32 * scale - row.size.x).max(0.0);
+        let row_rtl = ed.extras.direction.unwrap_or_else(|| crate::bidi::reads_rtl(row.glyphs.iter().map(|g| g.chr)));
+        placed.pos.x = match chosen {
+            Some(TextAlign::Center) => (width - row.size.x) / 2.0,
+            None if centered => (width - row.size.x) / 2.0,
+            Some(TextAlign::Right) => (width - row.size.x).max(0.0),
+            Some(TextAlign::Left) => 0.0,
+            _ if row_rtl => right_x,
+            _ => left_x,
+        };
         for glyph in &mut row.glyphs {
             let dy = ascent - glyph.pos.y;
             glyph.pos.y = ascent;
@@ -945,11 +1100,15 @@ fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: 
 
 /// The inline editor; returns the edit once the text is applied.
 pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -> Option<Edit> {
-    // Clicks outside the document (the Format text panel) keep the paragraph open.
-    let outside = ctx.input(|i| i.pointer.latest_pos()).is_some_and(|p| !view.viewport_rect().contains(p));
+    // Clicks outside the document (the Format text panel) keep the paragraph open, and so do
+    // clicks on the floating formatting toolbar, which sits over the page.
+    let pointer = ctx.input(|i| i.pointer.latest_pos());
+    let on_toolbar =
+        view.line_editor.as_ref().and_then(|ed| ctx.memory(|m| m.area_rect(toolbar_id(ed)))).zip(pointer).is_some_and(|(r, p)| r.contains(p));
+    let outside = on_toolbar || pointer.is_some_and(|p| !view.viewport_rect().contains(p));
     let page = view.line_editor.as_ref()?.page;
     let xf = view.page_xform(page)?;
-    let hold = view.objects.hold_editor;
+    let hold = view.objects.hold_editor || view.line_editor.as_mut().is_some_and(|ed| std::mem::take(&mut ed.toolbar_hold));
     // An OCR word is invisible text over a scan: the textless background still shows the scanned
     // word, so the editor covers it, as the applied edit will.
     let background_ready = view
@@ -985,7 +1144,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             // An OCR phrase (several stretched words on one scanned line) also grows rightwards.
             let single_run = ed.source.as_ref().is_some_and(|(block, _)| block.lines.len() == 1 || block.invisible);
             let width = if !ed.multiline && single_run && !ed.text.contains('\n') && ed.has_changes() {
-                let job = editor_job(ui, ed, &ed.text, scale, f32::INFINITY);
+                let (job, _) = editor_job(ui, ed, &ed.text, scale, f32::INFINITY);
                 let natural = ui.fonts_mut(|f| f.layout_job(job)).size().x;
                 natural.max(ed.size * 0.4).min((xf.rect.right() - ed.rect.left() - 36.0 * scale).max(ed.rect.width()))
             } else {
@@ -1013,6 +1172,12 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                 ui.visuals_mut().text_cursor.stroke.color =
                     if background_ready { if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE } } else { caret_color_on(fill) };
                 let rows = 1;
+                // In a paragraph that reads right to left the arrow keys move the caret the way
+                // they point, as in Word: Left goes on through the text, Right back.
+                let input_id = egui::Id::new("edit-text-line-input");
+                if ed.rtl() && ctx.memory(|m| m.has_focus(input_id)) {
+                    ctx.input_mut(|i| swap_arrows(&mut i.events));
+                }
                 let snapshot = ed.clone();
                 let mut layouter =
                     |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| editor_galley(ui, &snapshot, text.as_str(), scale, wrap_width);
@@ -1065,6 +1230,157 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     }
 }
 
+/// Swaps the Left and Right arrow keys (with any modifiers) in `events`: in a right-to-left
+/// paragraph egui's logical caret movement then goes the way the arrow points.
+pub(crate) fn swap_arrows(events: &mut [egui::Event]) {
+    for event in events {
+        if let egui::Event::Key { key, .. } = event {
+            *key = match *key {
+                egui::Key::ArrowLeft => egui::Key::ArrowRight,
+                egui::Key::ArrowRight => egui::Key::ArrowLeft,
+                other => other,
+            };
+        }
+    }
+}
+
+/// The floating formatting toolbar's area: one per paragraph, so it opens above each new
+/// paragraph and keeps where it was dragged while that paragraph stays open.
+fn toolbar_id(ed: &LineEditor) -> egui::Id {
+    egui::Id::new("edit-text-mini-toolbar").with((ed.page, ed.block))
+}
+
+/// Whether the pointer is on the floating toolbar of the paragraph being edited in `view`. The
+/// page's own pointer handling reads raw presses, which egui doesn't stop at a floating area, so
+/// it skips these: a click on the toolbar is not a click on the page under it.
+pub(crate) fn pointer_on_toolbar(ctx: &egui::Context, view: &crate::canvas::DocView) -> bool {
+    let Some(ed) = view.line_editor.as_ref() else { return false };
+    let pointer = ctx.input(|i| i.pointer.interact_pos().or(i.pointer.latest_pos()));
+    ctx.memory(|m| m.area_rect(toolbar_id(ed))).zip(pointer).is_some_and(|(r, p)| r.contains(p))
+}
+
+/// Font sizes the toolbar's smaller/larger buttons step through (the Format text list).
+const TOOLBAR_SIZES: [f64; 14] = [8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 36.0, 48.0, 72.0];
+
+/// The size after `size` in [`TOOLBAR_SIZES`] (`up`) or before it, staying within the list.
+fn step_size(size: f64, up: bool) -> f64 {
+    if up {
+        TOOLBAR_SIZES.iter().copied().find(|s| *s > size + 0.01).unwrap_or(size.max(72.0))
+    } else {
+        TOOLBAR_SIZES.iter().rev().copied().find(|s| *s < size - 0.01).unwrap_or(size.min(8.0))
+    }
+}
+
+/// The floating formatting toolbar shown above the paragraph being edited (Preferences ▸ Show
+/// the formatting toolbar when editing text), like Word's mini toolbar: smaller/larger text,
+/// bold, italic, underline, alignment and colour. It can be dragged anywhere; each change is the
+/// same undoable edit as in the Format text panel, and the caret returns to the text.
+pub(crate) fn mini_toolbar(app: &mut crate::PdfCraftApp, ctx: &egui::Context) {
+    if !app.text_toolbar {
+        return;
+    }
+    let Some((i, _)) = app.active_ids() else { return };
+    let Some(ed) = app.views.get(i).and_then(|v| v.line_editor.clone()) else { return };
+    if ed.rect.width() <= 0.0 {
+        return;
+    }
+    let t = crate::theme::Tokens::get(ctx);
+    let mut next = ed.clone();
+    let area = egui::Area::new(toolbar_id(&ed))
+        .order(egui::Order::Foreground)
+        .movable(true)
+        .constrain(true)
+        .default_pos(ed.rect.left_top() - egui::vec2(0.0, 42.0))
+        .show(ctx, |ui| {
+            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    // The handle: two columns of three dots, drawn (no interface font has a grip glyph).
+                    let (grip, r) = ui.allocate_exact_size(egui::vec2(10.0, 18.0), egui::Sense::hover());
+                    for (dx, dy) in [(3.0, 5.0), (7.0, 5.0), (3.0, 9.0), (7.0, 9.0), (3.0, 13.0), (7.0, 13.0)] {
+                        ui.painter().circle_filled(grip.min + egui::vec2(dx, dy), 1.2, t.text_faint);
+                    }
+                    r.on_hover_text(tl!("Drag to move"));
+                    if ui.small_button("A−").on_hover_text(tl!("Smaller text")).clicked() {
+                        next.look.size = step_size(next.look.size, false);
+                    }
+                    ui.label(egui::RichText::new(format!("{} pt", (next.look.size * 10.0).round() / 10.0)).small());
+                    if ui.small_button("A+").on_hover_text(tl!("Larger text")).clicked() {
+                        next.look.size = step_size(next.look.size, true);
+                    }
+                    ui.separator();
+                    if ui.selectable_label(next.look.bold, egui::RichText::new("B").strong()).on_hover_text(tl!("Bold")).clicked() {
+                        next.look.bold = !next.look.bold;
+                    }
+                    if ui.selectable_label(next.look.italic, egui::RichText::new("I").italics()).on_hover_text(tl!("Italic")).clicked() {
+                        next.look.italic = !next.look.italic;
+                    }
+                    if ui.selectable_label(next.extras.underline, egui::RichText::new("U").underline()).on_hover_text(tl!("Underline")).clicked() {
+                        next.extras.underline = !next.extras.underline;
+                    }
+                    ui.separator();
+                    direction_buttons(ui, &mut next);
+                    ui.separator();
+                    use pdfcraft_engine::TextAlign;
+                    for (a, icon, tip) in [
+                        (TextAlign::Right, "align-right", tl!("Align right")),
+                        (TextAlign::Center, "align-center", tl!("Centre")),
+                        (TextAlign::Left, "align-left", tl!("Align left")),
+                        (TextAlign::Justify, "align-justify", tl!("Justify")),
+                    ] {
+                        if crate::icons::button(ui, icon, 22.0, next.look.align == a, tip).clicked() {
+                            next.look.align = a;
+                        }
+                    }
+                    ui.separator();
+                    for (rgb, name) in [
+                        ([0.0, 0.0, 0.0], tl!("Black")),
+                        ([0.8, 0.0, 0.0], tl!("Red")),
+                        ([0.0, 0.2, 0.6], tl!("Blue")),
+                        ([0.0, 0.45, 0.2], tl!("Green")),
+                    ] {
+                        let (rect, r) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
+                        let fill = color32(rgb);
+                        ui.painter().rect_filled(rect.shrink(2.0), CornerRadius::same(3), fill);
+                        if next.look.color == rgb {
+                            ui.painter().rect_stroke(rect, CornerRadius::same(3), Stroke::new(1.5, ACCENT), egui::StrokeKind::Inside);
+                        }
+                        if r.on_hover_text(name).clicked() {
+                            next.look.color = rgb;
+                        }
+                    }
+                });
+            });
+        });
+    // Clicked through the pointer or through accessibility (no pointer move), or merely under the
+    // pointer: the paragraph stays open.
+    let used = area.response.contains_pointer() || area.response.clicked() || next != ed;
+    if next.look != ed.look || next.extras != ed.extras {
+        next.focus = true;
+        next.toolbar_hold = true;
+        app.apply_line_editor(i, next, ctx);
+    } else if used && let Some(open) = app.views.get_mut(i).and_then(|v| v.line_editor.as_mut()) {
+        open.toolbar_hold = true;
+    }
+}
+
+impl crate::PdfCraftApp {
+    /// Applies the formatting of the paragraph being edited in view `i` (Format text panel or
+    /// floating toolbar): one undoable edit, after which the paragraph stays open on the result.
+    pub(crate) fn apply_line_editor(&mut self, i: usize, mut ed: LineEditor, ctx: &egui::Context) {
+        let edit = pdfcraft_engine::Edit::EditTextBlock { page: ed.page, block: ed.block, text: ed.text.clone(), style: ed.style() };
+        if self.apply_edit(edit) {
+            ed.applied();
+            if let Some(doc) = self.session.get(self.views[i].id)
+                && let Some(block) = doc.text_blocks(ed.page).get(ed.block)
+            {
+                ed.refresh_source(block, doc.text_lines(ed.page));
+                ed.fonts = install_source_fonts(ctx, doc, ed.page);
+            }
+        }
+        self.views[i].line_editor = Some(ed);
+    }
+}
+
 /// Caret colour that stays visible on a field filled with `fill`: black on light fills, white on dark ones.
 pub(crate) fn caret_color_on(fill: Color32) -> Color32 {
     let luma = 299 * u32::from(fill.r()) + 587 * u32::from(fill.g()) + 114 * u32::from(fill.b());
@@ -1074,6 +1390,25 @@ pub(crate) fn caret_color_on(fill: Color32) -> Color32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arrows_swap_in_a_right_to_left_paragraph_and_nothing_else_changes() {
+        let key = |key| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::SHIFT };
+        let mut events = vec![key(egui::Key::ArrowLeft), key(egui::Key::ArrowRight), key(egui::Key::Backspace), egui::Event::Text("א".into())];
+        swap_arrows(&mut events);
+        assert_eq!(events, vec![key(egui::Key::ArrowRight), key(egui::Key::ArrowLeft), key(egui::Key::Backspace), egui::Event::Text("א".into())]);
+    }
+
+    #[test]
+    fn toolbar_sizes_step_through_the_list_and_stay_within_it() {
+        assert_eq!(step_size(12.0, true), 14.0);
+        assert_eq!(step_size(12.0, false), 11.0);
+        assert_eq!(step_size(13.0, true), 14.0, "an off-list size goes to the next one");
+        assert_eq!(step_size(13.0, false), 12.0);
+        assert_eq!(step_size(72.0, true), 72.0);
+        assert_eq!(step_size(8.0, false), 8.0);
+        assert_eq!(step_size(100.0, true), 100.0, "a size past the list is kept");
+    }
 
     #[test]
     fn text_background_is_cached_without_editing_and_released_on_cancel() {
@@ -1104,6 +1439,7 @@ mod tests {
             look0: look_of(&block),
             extras: Extras::default(),
             extras0: Extras::default(),
+            toolbar_hold: false,
         };
         let ctx = egui::Context::default();
         let mut background = TextBackground::default();

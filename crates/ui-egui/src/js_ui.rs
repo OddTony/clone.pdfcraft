@@ -260,7 +260,8 @@ fn reading_mode_label(mode: &str) -> &'static str {
     }
 }
 
-/// Preferences: interface language and size, appearance, identity and JavaScript. Returns `true` to close.
+/// Preferences: interface language and size, appearance, documents and view (legacy text encoding
+/// included), identity and JavaScript. Returns `true` to close.
 pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     ui.label(egui::RichText::new(tl!("Preferences")).font(theme::semibold(18.0)));
     ui.horizontal(|ui| {
@@ -375,6 +376,25 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         }
     });
     ui.label(egui::RichText::new(tl!("For page sizes and margins.")).small().color(t.text_muted));
+    ui.add(widgets::checkbox(&mut app.text_toolbar, tl!("Show the formatting toolbar when editing text")));
+    // Process-wide: the engine reads it whenever it decodes a page's text (see `legacy_encoding`).
+    ui.horizontal(|ui| {
+        ui.label(tl!("Legacy text encoding"));
+        egui::ComboBox::from_id_salt("legacy-encoding").selected_text(tl!(app.legacy_encoding.label())).show_ui(ui, |ui| {
+            for encoding in pdfcraft_fonts::LegacyEncoding::ALL {
+                if ui.selectable_value(&mut app.legacy_encoding, encoding, tl!(encoding.label())).clicked() {
+                    ui.close();
+                }
+            }
+        });
+    });
+    ui.label(
+        egui::RichText::new(tl!(
+            "How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255."
+        ))
+        .small()
+        .color(t.text_muted),
+    );
     // The web build has no file paths to reopen.
     #[cfg(not(target_arch = "wasm32"))]
     ui.add(widgets::checkbox(&mut app.reopen_last_session, tl!("Reopen the files that were open when PdfCraft last closed")));

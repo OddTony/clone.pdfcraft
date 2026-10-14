@@ -72,6 +72,14 @@ committed here (`AGENTS.md` §1.4; team members: [craftrules `standards/fonts.md
 The full font subsystem (parsing, shaping, subsetting and embedding) arrives with M2.2/M7.
 
 
+`legacy` holds the ISO 8859-8 and Windows-1255 tables, the process-wide `LegacyEncoding` choice
+(`legacy_encoding` / `set_legacy_encoding`, Auto-detect by default) and `detect_hebrew`, which
+reads an embedded TrueType/OpenType program's cmap and OS/2 code pages to tell whether it draws
+Hebrew letters at code-page codes. `pdf::Metrics::from_dict` applies the choice to simple fonts
+without `/ToUnicode` (`from_dict_with` takes it explicitly), and `pdf::embedded_sfnt` gives the
+editor's copy of a symbol-cmap font a Unicode cmap for the letters it decodes. See
+[existing-text editing](../../docs/editing-existing-text.md).
+
 Document font inputs use `embedding`: bounded static TrueType/OpenType-CFF validation,
 exact program preservation, Unicode/CID/GID mapping and full-face subset completion.
 `shaping` uses the same program with harfrust and UAX #9; source UI fallback fonts are

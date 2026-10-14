@@ -2550,7 +2550,8 @@ fn check_existing_artwork(name: &'static str, bytes: Vec<u8>) {
 
 #[test]
 fn the_format_panel_restyles_the_paragraph_being_edited() {
-    let mut h = harness(1, |_| {});
+    let mut h = harness(1, |app| app.text_toolbar = false);
+    // The Format text panel alone (the floating toolbar has its own B; see text_toolbar.rs).
     assert!(h.state_mut().execute("edit.edit_text"));
     h.run_steps(2);
     let r = h.state().views[0].page_screen_rect(0).expect("on screen");
@@ -2582,7 +2583,8 @@ fn the_format_panel_restyles_the_paragraph_being_edited() {
 
 #[test]
 fn selected_text_formatting_keeps_the_rest_of_the_paragraph_and_reopens() {
-    let mut h = harness(1, |_| {});
+    let mut h = harness(1, |app| app.text_toolbar = false);
+    // The Format text panel alone (the floating toolbar has its own B; see text_toolbar.rs).
     assert!(h.state_mut().execute("edit.edit_text"));
     h.run_steps(2);
     let r = h.state().views[0].page_screen_rect(0).unwrap();

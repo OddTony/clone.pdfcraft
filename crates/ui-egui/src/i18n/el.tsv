@@ -2255,6 +2255,19 @@ comment menu	Edit	Επεξεργασία
 	Added the first {n} files in {folder}	Προστέθηκαν τα πρώτα {n} αρχεία από το {folder}
 	Margins	Περιθώρια
 	For page sizes and margins.	Για μεγέθη σελίδων και περιθώρια.
+	Show the formatting toolbar when editing text	Εμφάνιση της γραμμής μορφοποίησης κατά την επεξεργασία κειμένου
+	Drag to move	Σύρετε για μετακίνηση
+	Smaller text	Μικρότερο κείμενο
+	Larger text	Μεγαλύτερο κείμενο
+	Text direction	Κατεύθυνση κειμένου
+	Right-to-left text	Κείμενο από δεξιά προς αριστερά
+	Left-to-right text	Κείμενο από αριστερά προς δεξιά
+	Legacy text encoding	Παλαιά κωδικοποίηση κειμένου
+	Auto-detect	Αυτόματος εντοπισμός
+	As declared in the PDF	Όπως δηλώνεται στο PDF
+	Hebrew (ISO 8859-8)	Εβραϊκά (ISO 8859-8)
+	Hebrew (Windows-1255)	Εβραϊκά (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Πώς η «Επεξεργασία κειμένου» διαβάζει παλιές γραμματοσειρές που δεν δηλώνουν ποια γράμματα σχεδιάζουν. Ο αυτόματος εντοπισμός αναγνωρίζει εβραϊκές γραμματοσειρές κατά ISO 8859-8 ή Windows-1255.
 	Reset panel layout	Επαναφορά διάταξης πλαισίων
 	Float panel	Αποσύνδεση πλαισίου
 	Move to group	Μετακίνηση σε ομάδα

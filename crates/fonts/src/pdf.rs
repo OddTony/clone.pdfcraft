@@ -85,6 +85,12 @@ fn legacy_indic_font(base_font: &str) -> bool {
 
 /// A source PDF's sfnt program for an in-memory editor. Never a bundled font or an export
 /// fallback. Type 1/Type 3 programs cannot be consumed by an sfnt text renderer.
+///
+/// The editor looks characters up by Unicode, so a simple font's copy gets a Unicode cmap built
+/// from the PDF's meaning of each code and the glyph that code selects whenever the program's own
+/// Unicode table can't find some of those characters: a symbol-cmap font (legacy Hebrew fonts
+/// read through [`crate::LegacyEncoding`] among them), or a Mac code-keyed one. Only this
+/// in-memory copy changes, never the working PDF or a font asset.
 pub fn embedded_sfnt(doc: &Document, font: &Dict) -> Option<Vec<u8>> {
     use skrifa::{MetadataProvider as _, raw::TableProvider as _};
     let descendant = dict(doc, font.get(b"DescendantFonts").and_then(|o| doc.resolve(o).as_array().and_then(|a| a.first()).cloned()).as_ref());
@@ -93,40 +99,88 @@ pub fn embedded_sfnt(doc: &Document, font: &Dict) -> Option<Vec<u8>> {
         let Some(object) = descriptor.get(key) else { continue };
         let object = doc.resolve(object);
         let Object::Stream(stream) = object.as_ref() else { continue };
-        let Ok(mut bytes) = stream.decoded_within(16 << 20) else { continue };
+        let Ok(bytes) = stream.decoded_within(16 << 20) else { continue };
         let Ok(face) = skrifa::FontRef::from_index(&bytes, 0) else { continue };
         if face.metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default()).units_per_em == 0 {
             continue;
         }
-        if face.charmap().mappings().next().is_some() {
-            return Some(bytes);
-        }
-        // Some PDF generators keep a Mac format-6 code→glyph cmap. egui accepts Unicode
-        // format-4/12 cmaps. Combine the PDF's Unicode meanings with the source glyph IDs;
-        // only this in-memory copy gets a new cmap, never the working PDF or a font asset.
-        let Ok(cmap) = face.cmap() else { continue };
+        let charmap = face.charmap();
+        let has_unicode = charmap.mappings().next().is_some();
         let metrics = Metrics::from_dict(doc, font);
         if metrics.composite {
+            if has_unicode {
+                return Some(bytes);
+            }
             continue;
         }
+        let Ok(cmap) = face.cmap() else {
+            if has_unicode {
+                return Some(bytes);
+            }
+            continue;
+        };
         let mut mappings = std::collections::BTreeMap::new();
+        let mut missing = false;
         for code in 0..=255 {
             let Some(text) = metrics.unicode.text(code) else { continue };
             let Some(ch) = only_char(&text) else { continue };
-            let Some(glyph) = cmap.map_codepoint(code).or_else(|| cmap.map_codepoint(code + 0xf000)) else { continue };
-            let glyph = glyph.to_u32();
-            if glyph > 0 {
+            if let Some(glyph) = charmap.map(ch).map(|g| g.to_u32()).filter(|g| *g > 0) {
                 mappings.entry(u32::from(ch)).or_insert(glyph);
+                continue;
             }
+            // Without a Unicode table any subtable may key the glyph (as before); with one, only
+            // the code-keyed ones, so a Unicode font never draws code 0xE0's Latin glyph for
+            // another meaning of that code.
+            let Some(glyph) = code_glyph(&cmap, code, !has_unicode) else { continue };
+            mappings.entry(u32::from(ch)).or_insert(glyph);
+            missing = true;
         }
-        if !mappings.is_empty()
-            && append_editor_cmap(&mut bytes, &mappings).is_some()
-            && skrifa::FontRef::new(&bytes).is_ok_and(|font| font.charmap().mappings().next().is_some())
+        if !missing {
+            if has_unicode {
+                return Some(bytes);
+            }
+            continue;
+        }
+        // Keep everything the program's own table already maps, within the editor table's cap.
+        let room = MAX_EDITOR_MAPPINGS.saturating_sub(mappings.len());
+        for (cp, glyph) in charmap.mappings().take(room) {
+            mappings.entry(cp).or_insert(glyph.to_u32());
+        }
+        let mut edited = bytes.clone();
+        if append_editor_cmap(&mut edited, &mappings).is_some()
+            && skrifa::FontRef::new(&edited).is_ok_and(|font| font.charmap().mappings().next().is_some())
         {
+            return Some(edited);
+        }
+        if has_unicode {
             return Some(bytes);
         }
     }
     None
+}
+
+/// Most mappings an editor cmap holds ([`append_editor_cmap`] refuses more).
+const MAX_EDITOR_MAPPINGS: usize = 65536;
+
+/// The glyph `code` selects through `cmap`'s code-keyed subtables, or with `any`, then through
+/// whichever subtable maps it. A Windows symbol subtable (which keys `0xF000 + code`) always
+/// counts; a Macintosh one only in a font without a Unicode subtable, since a font with one draws
+/// through it (ISO 32000-2 9.6.5.4), so its Mac Roman glyph at a code is not what the page shows.
+fn code_glyph(cmap: &skrifa::raw::tables::cmap::Cmap, code: u32, any: bool) -> Option<u32> {
+    use skrifa::raw::tables::cmap::PlatformId;
+    let data = cmap.offset_data();
+    let records = || cmap.encoding_records().iter().take(32);
+    let unicode = records().any(|r| matches!((r.platform_id(), r.encoding_id()), (PlatformId::Unicode, _) | (PlatformId::Windows, 1 | 10)));
+    let keyed = records()
+        .filter(|r| match (r.platform_id(), r.encoding_id()) {
+            (PlatformId::Windows, 0) => true,
+            (PlatformId::Macintosh, _) => !unicode,
+            _ => false,
+        })
+        .filter_map(|r| r.subtable(data).ok())
+        .find_map(|s| s.map_codepoint(code).or_else(|| s.map_codepoint(code + 0xf000)));
+    let glyph = if any { keyed.or_else(|| cmap.map_codepoint(code).or_else(|| cmap.map_codepoint(code + 0xf000))) } else { keyed };
+    glyph.map(|g| g.to_u32()).filter(|g| *g > 0)
 }
 
 /// Replace an existing cmap directory entry with a bounded Unicode format-12 table.
@@ -541,7 +595,14 @@ impl Metrics {
         }
     }
 
+    /// The font's metrics and meanings, reading legacy 8-bit codes as the process-wide
+    /// [`crate::legacy_encoding`] says.
     pub fn from_dict(doc: &Document, font: &Dict) -> Self {
+        Self::from_dict_with(doc, font, crate::legacy_encoding())
+    }
+
+    /// [`Self::from_dict`] with an explicit legacy-encoding choice.
+    pub fn from_dict_with(doc: &Document, font: &Dict, legacy: crate::LegacyEncoding) -> Self {
         let mut m = Self::read_metrics(doc, font);
         let base = font
             .name(b"BaseFont")
@@ -563,7 +624,7 @@ impl Metrics {
             Codes::Two => 2,
             Codes::Ranges(r) => r.last().map_or(2, |x| x.0),
         };
-        m.unicode = unicode_map(doc, font, m.composite);
+        m.unicode = unicode_map(doc, font, m.composite, legacy);
         let mut reverse = HashMap::new();
         for (&code, text) in m.unicode.explicit.iter().map(|(c, (_, t))| (c, t)).chain(m.unicode.encoding.iter()) {
             if let Some(ch) = only_char(text)
@@ -1043,9 +1104,36 @@ pub fn glyph_unicode(name: &str) -> Option<char> {
     chars.next().filter(|_| chars.len() == 0)
 }
 
-/// Code → Unicode for a font: its ToUnicode CMap, else (simple fonts) its encoding.
-fn unicode_map(doc: &Document, font: &Dict, composite: bool) -> Unicode {
+/// Largest embedded program opened to look for a legacy Hebrew layout. Fonts laid out for an 8-bit
+/// code page are small; a bigger program is a modern Unicode face and is not decompressed for this.
+const MAX_LEGACY_PROGRAM: usize = 4 << 20;
+
+/// The Hebrew code page a simple font's embedded TrueType/OpenType program is laid out for
+/// ([`crate::detect_hebrew`]), when the font draws anything at the Hebrew letter codes.
+fn detect_font_hebrew(doc: &Document, font: &Dict) -> Option<crate::LegacyEncoding> {
+    let first =
+        font.get(b"FirstChar").and_then(|f| doc.resolve(f).as_f64()).filter(|f| f.is_finite() && (0.0..=255.0).contains(f)).unwrap_or(0.0) as u32;
+    let widths = nums(doc, font.get(b"Widths"));
+    let draws =
+        widths.is_empty() || (0xE0..=0xFAu32).any(|code| code.checked_sub(first).and_then(|i| widths.get(i as usize)).is_some_and(|w| *w > 0.0));
+    if !draws {
+        return None;
+    }
+    let descriptor = dict(doc, font.get(b"FontDescriptor"))?;
+    [b"FontFile2".as_slice(), b"FontFile3".as_slice()].into_iter().find_map(|key| {
+        let object = doc.resolve(descriptor.get(key)?);
+        let Object::Stream(stream) = object.as_ref() else { return None };
+        crate::detect_hebrew(&stream.decoded_within(MAX_LEGACY_PROGRAM).ok()?)
+    })
+}
+
+/// Code → Unicode for a font: its ToUnicode CMap, else (simple fonts) its encoding, with codes
+/// `0x80`–`0xFF` read through a Hebrew code page when `legacy` asks for one (see
+/// [`crate::legacy`]).
+fn unicode_map(doc: &Document, font: &Dict, composite: bool, legacy: crate::LegacyEncoding) -> Unicode {
     let mut out = Unicode::default();
+    let to_unicode = font.get(b"ToUnicode").map(|t| doc.resolve(t));
+    let has_to_unicode = matches!(to_unicode.as_deref(), Some(Object::Stream(_)));
     if !composite {
         let enc = font.get(b"Encoding").map(|e| doc.resolve(e));
         let base_name = match enc.as_deref() {
@@ -1105,8 +1193,24 @@ fn unicode_map(doc: &Document, font: &Dict, composite: bool) -> Unicode {
                 }
             }
         }
+        // A ToUnicode CMap states the meanings outright, and Symbol/ZapfDingbats are not text in
+        // any code page. Otherwise the Hebrew code page replaces what the encoding (Differences
+        // included) said at the codes it defines; the codes it leaves undefined keep their meaning.
+        let hebrew = match legacy {
+            _ if has_to_unicode || symbolic_builtin => None,
+            crate::LegacyEncoding::Auto => detect_font_hebrew(doc, font),
+            crate::LegacyEncoding::Declared => None,
+            forced => Some(forced),
+        };
+        if let Some(table) = hebrew.and_then(crate::LegacyEncoding::upper_half) {
+            for (code, u) in (0x80u32..).zip(table) {
+                if let Some(c) = char::from_u32(*u).filter(|_| *u != 0) {
+                    out.encoding.insert(code, c.to_string());
+                }
+            }
+        }
     }
-    if let Some(Object::Stream(s)) = font.get(b"ToUnicode").map(|t| doc.resolve(t)).as_deref()
+    if let Some(Object::Stream(s)) = to_unicode.as_deref()
         && let Ok(data) = s.decoded()
     {
         parse_to_unicode(&data, &mut out);
@@ -1198,6 +1302,199 @@ mod tests {
         assert_eq!(source.decoded().unwrap(), subset, "only an in-memory editor copy is adapted");
         let mut broken = vec![0; 16];
         assert!(append_editor_cmap(&mut broken, &std::collections::BTreeMap::from([(65, 1)])).is_none());
+    }
+
+    /// Inter's outlines behind a replacement `cmap` (and, with `pages`, its OS/2 first code page
+    /// range set to that): a stand-in for a legacy Hebrew TrueType program. Returns the program
+    /// and the glyph each Hebrew letter code 0xE0 + k draws.
+    fn legacy_program(subtables: impl Fn(&[u16]) -> Vec<crate::legacy::tests::Subtable>, pages: Option<u32>) -> (Vec<u8>, Vec<u16>) {
+        use skrifa::MetadataProvider as _;
+        let original = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+        let face = skrifa::FontRef::new(original).unwrap();
+        // Any 27 distinct drawn glyphs stand in for alef … tav.
+        let glyphs: Vec<u16> = ('a'..='z').chain(['A']).map(|c| u16::try_from(face.charmap().map(c).unwrap().to_u32()).unwrap()).collect();
+        let mut program = original.to_vec();
+        let count = u16::from_be_bytes(program[4..6].try_into().unwrap()) as usize;
+        let entry = |tag: &[u8]| (0..count).map(|i| 12 + i * 16).find(|i| &program[*i..*i + 4] == tag).unwrap();
+        let cmap_entry = entry(b"cmap");
+        if let Some(pages) = pages {
+            let os2 = entry(b"OS/2");
+            let at = u32::from_be_bytes(program[os2 + 8..os2 + 12].try_into().unwrap()) as usize;
+            program[at + 78..at + 82].copy_from_slice(&pages.to_be_bytes());
+        }
+        let cmap = crate::legacy::tests::cmap_table(&subtables(&glyphs));
+        while !program.len().is_multiple_of(4) {
+            program.push(0);
+        }
+        let offset = program.len() as u32;
+        program[cmap_entry + 8..cmap_entry + 12].copy_from_slice(&offset.to_be_bytes());
+        program[cmap_entry + 12..cmap_entry + 16].copy_from_slice(&(cmap.len() as u32).to_be_bytes());
+        program.extend_from_slice(&cmap);
+        (program, glyphs)
+    }
+
+    /// A simple TrueType font embedding `program`, with `/WinAnsiEncoding` and widths for every code.
+    fn embedded_simple_font(doc: &mut Document, program: &[u8], extra: Vec<(&str, Object)>) -> Dict {
+        let file = doc.add(Object::Stream(Stream::flate(Dict::new(), program)));
+        let mut descriptor = Dict::new();
+        descriptor.set(b"FontFile2".to_vec(), Object::Ref(file));
+        descriptor.set(b"Flags".to_vec(), Object::Int(4));
+        let mut entries = vec![
+            ("Subtype", Object::name("TrueType")),
+            ("BaseFont", Object::name("ABCDEF+OldHebrew")),
+            ("FirstChar", Object::Int(32)),
+            ("Widths", Object::Array(vec![Object::Int(500); 224])),
+            ("Encoding", Object::name("WinAnsiEncoding")),
+            ("FontDescriptor", Object::Dict(descriptor)),
+        ];
+        entries.extend(extra);
+        font(doc, entries)
+    }
+
+    /// "שלום" in ISO 8859-8 / Windows-1255, in logical order.
+    const SHALOM: &[u8] = b"\xF9\xEC\xE5\xED";
+
+    /// A symbol-cmap program whose Unicode table names the glyph at 0xE0 + k as alef + k.
+    fn symbol_with_hebrew_names(glyphs: &[u16]) -> Vec<crate::legacy::tests::Subtable> {
+        let by_code = (0..27u32).map(|k| (0xF0E0 + k, glyphs[k as usize])).collect();
+        let unicode = (0..27u32).map(|k| (0x05D0 + k, glyphs[k as usize])).collect();
+        vec![(3, 0, by_code), (3, 1, unicode)]
+    }
+
+    #[test]
+    fn legacy_hebrew_fonts_read_as_hebrew_when_detected_or_chosen() {
+        use crate::LegacyEncoding::*;
+        let (program, _) = legacy_program(symbol_with_hebrew_names, None);
+        let mut doc = Document::new_empty();
+        let f = embedded_simple_font(&mut doc, &program, vec![]);
+        let read = |mode, bytes: &[u8]| Metrics::from_dict_with(&doc, &f, mode).decode(bytes);
+        assert_eq!(read(Auto, SHALOM), "שלום", "the program draws Hebrew at these codes");
+        assert_eq!(read(Auto, b"Shalom 1"), "Shalom 1", "ASCII keeps its declared meaning");
+        assert_eq!(read(Declared, SHALOM), "ùìåí", "WinAnsi, as the PDF declares");
+        assert_eq!(read(Iso8859_8, SHALOM), "שלום");
+        assert_eq!(read(Windows1255, SHALOM), "שלום");
+        // Typing Hebrew back writes the same codes.
+        assert_eq!(Metrics::from_dict_with(&doc, &f, Auto).encode("שלום"), Some(SHALOM.to_vec()));
+        assert_eq!(Metrics::from_dict_with(&doc, &f, Declared).encode("שלום"), None);
+    }
+
+    #[test]
+    fn auto_never_reads_an_ordinary_latin_font_as_hebrew() {
+        use crate::LegacyEncoding::*;
+        // Inter as is: a Unicode font, so code 0xE0 draws à.
+        let mut doc = Document::new_empty();
+        let f = embedded_simple_font(&mut doc, include_bytes!("../../../assets/fonts/Inter-Regular.ttf"), vec![]);
+        assert_eq!(Metrics::from_dict_with(&doc, &f, Auto).decode(b"caf\xE9 \xE0"), "café à");
+        // A standard-14 font has no program to show anything.
+        let helvetica = font(
+            &mut doc,
+            vec![("Subtype", Object::name("Type1")), ("BaseFont", Object::name("Helvetica")), ("Encoding", Object::name("WinAnsiEncoding"))],
+        );
+        assert_eq!(Metrics::from_dict_with(&doc, &helvetica, Auto).decode(b"caf\xE9"), "café");
+        // …but a user who chooses a Hebrew code page gets it for every font without ToUnicode.
+        assert_eq!(Metrics::from_dict_with(&doc, &helvetica, Iso8859_8).decode(b"caf\xE9"), "cafי");
+    }
+
+    #[test]
+    fn a_chosen_code_page_only_replaces_the_codes_it_defines() {
+        use crate::LegacyEncoding::*;
+        let mut doc = Document::new_empty();
+        let helvetica = font(
+            &mut doc,
+            vec![("Subtype", Object::name("Type1")), ("BaseFont", Object::name("Helvetica")), ("Encoding", Object::name("WinAnsiEncoding"))],
+        );
+        let read = |mode, bytes: &[u8]| Metrics::from_dict_with(&doc, &helvetica, mode).decode(bytes);
+        // 0xC0 is a Hebrew point in Windows-1255 and undefined in ISO 8859-8, which keeps À.
+        assert_eq!(read(Windows1255, b"\xC0"), "\u{05B0}");
+        assert_eq!(read(Iso8859_8, b"\xC0"), "À");
+        // 0xA4: new sheqel sign in Windows-1255, currency sign in ISO 8859-8.
+        assert_eq!((read(Windows1255, b"\xA4").as_str(), read(Iso8859_8, b"\xA4").as_str()), ("₪", "¤"));
+        // 0x93 is a C1 control in ISO 8859-8, so WinAnsi's quotation mark stays.
+        assert_eq!(read(Iso8859_8, b"\x93"), "\u{201C}");
+    }
+
+    #[test]
+    fn to_unicode_and_symbol_fonts_are_never_overridden() {
+        use crate::LegacyEncoding::*;
+        let (program, _) = legacy_program(symbol_with_hebrew_names, None);
+        let mut doc = Document::new_empty();
+        let unicode = doc.add(Object::Stream(Stream::flate(Dict::new(), b"1 beginbfchar <E0> <0041> endbfchar")));
+        let f = embedded_simple_font(&mut doc, &program, vec![("ToUnicode", Object::Ref(unicode))]);
+        for mode in crate::LegacyEncoding::ALL {
+            let m = Metrics::from_dict_with(&doc, &f, mode);
+            assert_eq!(m.decode(b"\xE0"), "A", "{mode:?}: ToUnicode states the meaning");
+            // The codes ToUnicode leaves out keep the declared encoding too.
+            assert_eq!(m.decode(b"\xE1"), "á", "{mode:?}");
+        }
+        let symbol = font(&mut doc, vec![("Subtype", Object::name("Type1")), ("BaseFont", Object::name("Symbol"))]);
+        for mode in [Iso8859_8, Windows1255] {
+            assert_eq!(Metrics::from_dict_with(&doc, &symbol, mode).decode(b"\xE0"), "", "{mode:?}: Symbol is not text in a code page");
+        }
+    }
+
+    #[test]
+    fn detection_skips_fonts_that_draw_nothing_at_the_letter_codes() {
+        let (program, _) = legacy_program(symbol_with_hebrew_names, None);
+        let mut doc = Document::new_empty();
+        // Widths stop at 0x7E: the font draws only ASCII, so its program is not even opened.
+        let f = embedded_simple_font(&mut doc, &program, vec![("Widths", Object::Array(vec![Object::Int(500); 95]))]);
+        assert_eq!(detect_font_hebrew(&doc, &f), None);
+        let f = embedded_simple_font(&mut doc, &program, vec![]);
+        assert_eq!(detect_font_hebrew(&doc, &f), Some(crate::LegacyEncoding::Iso8859_8));
+        // Hostile FirstChar values never index out of range.
+        for first in [Object::Int(-5), Object::Real(f64::NAN), Object::Int(i64::MAX), Object::Real(1e300)] {
+            let f = embedded_simple_font(&mut doc, &program, vec![("FirstChar", first)]);
+            let _ = detect_font_hebrew(&doc, &f);
+        }
+    }
+
+    #[test]
+    fn the_editor_copy_of_a_symbol_cmap_hebrew_font_maps_its_letters() {
+        use skrifa::MetadataProvider as _;
+        // A Hebrew-only face (OS/2 code page 1255, not 1252) with nothing but a symbol cmap: the
+        // case where egui found no glyph for the decoded letters and drew boxes.
+        let symbol_only = |glyphs: &[u16]| {
+            let mut by_code: Vec<_> = (0..27u32).map(|k| (0xF0E0 + k, glyphs[k as usize])).collect();
+            by_code.push((0xF041, glyphs[0]));
+            vec![(3, 0, by_code)]
+        };
+        let (program, glyphs) = legacy_program(symbol_only, Some(1 << 5));
+        let mut doc = Document::new_empty();
+        let f = embedded_simple_font(&mut doc, &program, vec![]);
+        assert_eq!(Metrics::from_dict(&doc, &f).decode(SHALOM), "שלום", "detected from OS/2");
+        let editor = embedded_sfnt(&doc, &f).unwrap();
+        let face = skrifa::FontRef::new(&editor).unwrap();
+        for (k, letter) in ('א'..='ת').enumerate() {
+            assert_eq!(face.charmap().map(letter).map(|g| g.to_u32()), Some(u32::from(glyphs[k])), "{letter}");
+        }
+        // What the program already mapped stays mapped.
+        assert_eq!(face.charmap().map('\u{F041}').map(|g| g.to_u32()), Some(u32::from(glyphs[0])));
+        assert_eq!(face.charmap().map('A').map(|g| g.to_u32()), Some(u32::from(glyphs[0])));
+        // The PDF's own program is untouched.
+        let Object::Stream(file) = doc.resolve(dict(&doc, f.get(b"FontDescriptor")).unwrap().get(b"FontFile2").unwrap()).as_ref().clone() else {
+            panic!("font file");
+        };
+        assert_eq!(file.decoded().unwrap(), program);
+        // An ordinary Unicode program is handed over unchanged.
+        let inter = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+        let latin = embedded_simple_font(&mut doc, inter, vec![]);
+        assert_eq!(embedded_sfnt(&doc, &latin).as_deref(), Some(&inter[..]));
+    }
+
+    #[test]
+    fn a_unicode_font_never_borrows_its_mac_roman_glyph_for_a_missing_character() {
+        use skrifa::MetadataProvider as _;
+        // A Latin font with a Unicode table that lacks the Euro sign, and a Mac Roman table whose
+        // code 0x80 (WinAnsi's €) is Ä. The page draws € through the Unicode table, i.e. nothing,
+        // so the editor must not show Ä for it.
+        let (program, glyphs) = legacy_program(|g: &[u16]| vec![(1, 0, vec![(0x80, g[0]), (0x41, g[1])]), (3, 1, vec![(0x41, g[1])])], None);
+        let mut doc = Document::new_empty();
+        let f = embedded_simple_font(&mut doc, &program, vec![]);
+        assert_eq!(Metrics::from_dict(&doc, &f).decode(b"\x80"), "€");
+        let editor = embedded_sfnt(&doc, &f).unwrap();
+        let face = skrifa::FontRef::new(&editor).unwrap();
+        assert_eq!(face.charmap().map('€'), None);
+        assert_eq!(face.charmap().map('A').map(|g| g.to_u32()), Some(u32::from(glyphs[1])));
     }
 
     fn metrics_with_flags(flags: Option<Object>) -> Metrics {
@@ -1415,7 +1712,7 @@ mod tests {
         let mut enc = Dict::new();
         enc.set(b"Differences".to_vec(), Object::Array(vec![Object::Int(i64::MAX), Object::name("A"), Object::name("B")]));
         let f = font(&mut doc, vec![("Subtype", Object::name("Type1")), ("Encoding", Object::Dict(enc))]);
-        assert_eq!(unicode_map(&doc, &f, false).text(u32::MAX).as_deref(), Some("B"));
+        assert_eq!(unicode_map(&doc, &f, false, crate::LegacyEncoding::Declared).text(u32::MAX).as_deref(), Some("B"));
     }
 
     #[test]

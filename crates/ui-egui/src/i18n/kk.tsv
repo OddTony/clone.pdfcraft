@@ -2245,6 +2245,19 @@ key	Space	Бос орын
 	Added the first {n} files in {folder}	{folder} қалтасынан алғашқы {n} файл қосылды
 	Margins	Шеттер
 	For page sizes and margins.	Бет өлшемдері мен шеттері үшін.
+	Show the formatting toolbar when editing text	Мәтінді түзеткенде пішімдеу құралдар тақтасын көрсету
+	Drag to move	Жылжыту үшін сүйреңіз
+	Smaller text	Кішірек мәтін
+	Larger text	Үлкенірек мәтін
+	Text direction	Мәтін бағыты
+	Right-to-left text	Оңнан солға мәтін
+	Left-to-right text	Солдан оңға мәтін
+	Legacy text encoding	Ескі мәтін кодтауы
+	Auto-detect	Автоматты түрде анықтау
+	As declared in the PDF	PDF-те көрсетілгендей
+	Hebrew (ISO 8859-8)	Иврит (ISO 8859-8)
+	Hebrew (Windows-1255)	Иврит (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	«Мәтінді түзету» қандай әріптер салатынын көрсетпейтін ескі қаріптерді қалай оқиды. Автоматты анықтау ISO 8859-8 немесе Windows-1255 бойынша жасалған иврит қаріптерін таниды.
 	Reset panel layout	Панельдер орналасуын қалпына келтіру
 	Float panel	Панельді бөлек терезеге шығару
 	Move to group	Топқа жылжыту

@@ -2182,6 +2182,19 @@ action wizard	Start	Indítás
 	This printer offers no settings of its own.	Ennek a nyomtatónak nincsenek saját beállításai.
 	Margins	Margók
 	For page sizes and margins.	Oldalméretekhez és margókhoz.
+	Show the formatting toolbar when editing text	Formázási eszköztár megjelenítése szövegszerkesztéskor
+	Drag to move	Húzza az áthelyezéshez
+	Smaller text	Kisebb szöveg
+	Larger text	Nagyobb szöveg
+	Text direction	Szövegirány
+	Right-to-left text	Jobbról balra írt szöveg
+	Left-to-right text	Balról jobbra írt szöveg
+	Legacy text encoding	Régi szövegkódolás
+	Auto-detect	Automatikus felismerés
+	As declared in the PDF	A PDF-ben megadott módon
+	Hebrew (ISO 8859-8)	Héber (ISO 8859-8)
+	Hebrew (Windows-1255)	Héber (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Hogyan olvassa a Szöveg szerkesztése a régi betűtípusokat, amelyek nem adják meg, milyen betűket rajzolnak. Az automatikus felismerés az ISO 8859-8 vagy Windows-1255 szerint felépített héber betűtípusokat ismeri fel.
 	Scroll tabs left	Lapok görgetése balra
 	Scroll tabs right	Lapok görgetése jobbra
 

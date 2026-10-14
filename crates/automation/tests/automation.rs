@@ -2193,6 +2193,35 @@ fn editing_existing_text_through_tools() {
     assert_eq!(p["lines"].as_array().map(Vec::len), Some(2), "{p}");
 }
 
+/// `text_edit`'s direction, as Word's Right-to-left / Left-to-right buttons set it: right to left
+/// a shorter line keeps its right edge (it aligns right), left to right its left edge; a bad
+/// value is refused and changes nothing.
+#[test]
+fn text_edit_takes_a_paragraph_direction() {
+    let dir = workdir("edit-text-direction");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let rect = |a: &mut Automation, page: u64| -> Vec<f64> {
+        ok(a, "text_paragraphs", json!({ "doc": doc, "page": page }))["paragraphs"][0]["rect"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_f64().unwrap())
+            .collect()
+    };
+    let before = rect(&mut a, 1);
+    ok(&mut a, "text_edit", json!({ "doc": doc, "page": 1, "paragraph": 1, "text": "Pg 1", "direction": "rtl" }));
+    let after = rect(&mut a, 1);
+    assert!((after[2] - before[2]).abs() < 1.0 && after[0] > before[0] + 1.0, "right to left keeps the right edge: {before:?} → {after:?}");
+    let before = rect(&mut a, 2);
+    ok(&mut a, "text_edit", json!({ "doc": doc, "page": 2, "paragraph": 1, "text": "Pg 2", "direction": "ltr" }));
+    let after = rect(&mut a, 2);
+    assert!((after[0] - before[0]).abs() < 1.0 && after[2] < before[2] - 1.0, "left to right keeps the left edge: {before:?} → {after:?}");
+    let err = a.call("text_edit", &json!({ "doc": doc, "page": 3, "paragraph": 1, "text": "x", "direction": "up" }));
+    assert!(err.is_err());
+    assert_eq!(ok(&mut a, "text_paragraphs", json!({ "doc": doc, "page": 3 }))["paragraphs"][0]["text"], "Page 3");
+}
+
 /// One page whose content is one stream in three pieces (#155): a `TJ` array ends the middle
 /// piece and its operator starts the last one.
 fn split_streams_pdf() -> Vec<u8> {

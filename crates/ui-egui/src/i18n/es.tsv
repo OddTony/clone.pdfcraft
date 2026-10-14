@@ -2157,6 +2157,19 @@ action wizard	Start	Iniciar
 	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	Continúa solo si confías en este documento. Una dirección puede llevar información del documento, como lo que escribiste en su formulario.
 	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	Imprime a una cara. Mantén las hojas en orden, corta por las marcas y apila los montones de izquierda a derecha y de arriba abajo.
 	For page sizes and margins.	Para tamaños de página y márgenes.
+	Show the formatting toolbar when editing text	Mostrar la barra de formato al editar texto
+	Drag to move	Arrastrar para mover
+	Smaller text	Texto más pequeño
+	Larger text	Texto más grande
+	Text direction	Dirección del texto
+	Right-to-left text	Texto de derecha a izquierda
+	Left-to-right text	Texto de izquierda a derecha
+	Legacy text encoding	Codificación de texto heredada
+	Auto-detect	Detectar automáticamente
+	As declared in the PDF	Según lo declarado en el PDF
+	Hebrew (ISO 8859-8)	Hebreo (ISO 8859-8)
+	Hebrew (Windows-1255)	Hebreo (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Cómo lee Editar texto las fuentes antiguas que no indican qué letras dibujan. La detección automática reconoce las fuentes hebreas organizadas según ISO 8859-8 o Windows-1255.
 	The PDF text fonts can't draw “{c}” ({code}). Choose supported text.	Las fuentes de texto PDF no pueden mostrar «{c}» ({code}). Elija texto compatible.
 	The standard fonts can't draw “{c}” ({code}). Only Western European characters can be added as text for now.	Las fuentes estándar no pueden mostrar «{c}» ({code}). Por ahora solo se pueden añadir como texto caracteres de Europa occidental.
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	La fuente de este campo no puede mostrar «{c}» ({code}), así que PdfCraft muestra ? en su lugar. El valor se guarda y los demás visores de PDF vuelven a dibujar el campo a partir de él.

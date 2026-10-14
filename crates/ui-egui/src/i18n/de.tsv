@@ -2188,6 +2188,19 @@ action wizard	Start	Starten
 	This printer offers no settings of its own.	Dieser Drucker bietet keine eigenen Einstellungen.
 	Margins	Ränder
 	For page sizes and margins.	Für Seitengrößen und Ränder.
+	Show the formatting toolbar when editing text	Formatierungsleiste beim Bearbeiten von Text anzeigen
+	Drag to move	Zum Verschieben ziehen
+	Smaller text	Kleinerer Text
+	Larger text	Größerer Text
+	Text direction	Textrichtung
+	Right-to-left text	Text von rechts nach links
+	Left-to-right text	Text von links nach rechts
+	Legacy text encoding	Alte Textkodierung
+	Auto-detect	Automatisch erkennen
+	As declared in the PDF	Wie im PDF angegeben
+	Hebrew (ISO 8859-8)	Hebräisch (ISO 8859-8)
+	Hebrew (Windows-1255)	Hebräisch (Windows-1255)
+	How Edit text reads old fonts that don't say which letters they draw. Auto-detect recognises Hebrew fonts laid out for ISO 8859-8 or Windows-1255.	Wie „Text bearbeiten“ alte Schriften liest, die nicht angeben, welche Buchstaben sie zeichnen. Die automatische Erkennung findet hebräische Schriften nach ISO 8859-8 oder Windows-1255.
 	Scroll tabs left	Tabs nach links scrollen
 	Scroll tabs right	Tabs nach rechts scrollen
 
