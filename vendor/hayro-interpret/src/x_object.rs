@@ -1081,7 +1081,11 @@ const MAX_LOOKUP_BITS: usize = 16;
 /// height `fix_image_length` gives. `None` when the table would not pay off (the image has no
 /// more pixels than it has entries) or does not apply; the caller then converts every pixel.
 ///
-/// The colour of a pixel depends only on its own samples, so the result is the per-pixel one.
+/// The colour of a pixel depends only on its own samples, so the result is the per-pixel one,
+/// except where a tint transform gives the wrong number of components. The per-pixel batch then
+/// shifts the colours after that pixel. The table converts each entry on its own
+/// ([`convert_each`]), so a wrong-sized entry changes only itself, and a value the image never
+/// uses cannot change the colour of one it does.
 /// A Separation or DeviceN tint transform is a PDF function, often a PostScript calculator
 /// program: run once per pixel, an 8-bit spot-colour background of 3304 × 4105 took four
 /// seconds and 430 MB to draw; looked up from 256 entries it takes milliseconds.
@@ -1130,8 +1134,7 @@ fn rgb_via_lookup(
         }
     }
     let mut table = vec![0; entries * 3];
-    // As `get_rgb_data`: a failed conversion leaves black.
-    let _ = cs.convert_f32(&table_input, &mut table, false);
+    convert_each(cs, &table_input, n, &mut table);
 
     let mut data = vec![0; pixels.checked_mul(3)?];
     let whole = used / n;
@@ -1160,6 +1163,20 @@ fn rgb_via_lookup(
         interpolate,
         scale_factors,
     })
+}
+
+/// PdfCraft patch (28): `input`, `n` decoded samples a pixel, converted into `output` (RGB) one
+/// pixel at a time. A Separation or DeviceN tint transform may give more or fewer components
+/// than its alternate space takes (a Type 4 program's count is only warned about): converted as
+/// one batch, such a result shifts every pixel after it; converted alone, it affects only its
+/// own. A failed conversion leaves black, as in `get_rgb_data`.
+fn convert_each(cs: &ColorSpace, input: &[f32], n: usize, output: &mut [u8]) {
+    if n == 0 {
+        return;
+    }
+    for (pixel, rgb) in input.chunks_exact(n).zip(output.chunks_exact_mut(3)) {
+        let _ = cs.convert_f32(pixel, rgb, false);
+    }
 }
 
 /// PdfCraft patch: whether an image or mask of `width` × `height` may be decoded (at most

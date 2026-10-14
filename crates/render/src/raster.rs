@@ -5704,6 +5704,29 @@ endstream endobj
         }
     }
 
+    /// Patch 28's table converts each entry on its own: a tint transform that gives the wrong
+    /// number of components for a sample value the image never uses leaves the colours of the
+    /// values it does use alone. Converted as one batch, the one component tint 0 gives here
+    /// shifted every later entry, and tint 1's red came out black (PR #1691 review).
+    #[test]
+    fn a_malformed_tint_for_an_unused_sample_keeps_the_used_colours() {
+        // Tint 0 gives one component instead of the three `/Range` declares; any other tint red.
+        let program = b"{ dup 0 eq { pop 0 } { pop 1 0 0 } ifelse }";
+        // 32 × 32 = 1,024 pixels, more than the table's 256 entries, all sample 255 (tint 1).
+        let data = [255u8; 32 * 32];
+        let centre = |space: &str| {
+            let image = format!(
+                "<< /Type /XObject /Subtype /Image /Width 32 /Height 32 /ColorSpace [{space} /DeviceRGB 6 0 R] /BitsPerComponent 8 /Length {} >>",
+                data.len()
+            );
+            let function = format!("<< /FunctionType 4 /Domain [0 1] /Range [0 1 0 1 0 1] /Length {} >>", program.len());
+            let pdf = image_cache_pdf("q 130 0 0 70 0 0 cm /A Do Q", "<< /XObject << /A 5 0 R >> >>", &[(&image, &data), (&function, program)]);
+            let out = render_first_page(pdf);
+            rgb_at(&out.rgba, out.width as usize, 65, 35)
+        };
+        assert_eq!([centre("/Separation /Spot"), centre("/DeviceN [/Spot]")], [[255, 0, 0]; 2], "Separation, then one-ink DeviceN");
+    }
+
     /// A Japanese CID font that isn't embedded (Adobe-Japan1, as `HeiseiMin-W3` with
     /// `UniJIS-UCS2-H` in #260's test file) drew nothing: hayro's substitutes for fonts that
     /// aren't embedded are Latin-only. With craft-fonts (the build input release builds embed),
