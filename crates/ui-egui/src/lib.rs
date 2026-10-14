@@ -79,6 +79,7 @@ pub mod file_watch;
 mod files;
 pub mod fill_sign;
 pub mod folders_ui;
+mod format_text_ui;
 pub mod forms_ui;
 mod home;
 mod icon_data;

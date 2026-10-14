@@ -121,7 +121,7 @@ fn typing_moving_styling_and_deleting_added_content() {
     h.run_steps(2);
     assert_eq!(h.state().views[0].content.selected, Some((0, 0)), "the new text is selected");
     // Bold from the Format panel: one undoable change.
-    h.get_by_label("B").click();
+    h.get_by_label("Bold").click();
     h.run_steps(3);
 
     let pdfcraft_engine::AddedContent::Text(t) = &added(&h)[0].content else { panic!() };
@@ -359,4 +359,26 @@ fn released_text_does_not_jump_back_before_the_page_is_redrawn() {
     h.run_steps(2);
     let (old, new) = ink_at(&mut h, from, to);
     assert!(new > 20 && old == 0, "the redrawn page has the text in its new place ({old} old, {new} new)");
+}
+
+/// Format text is laid out as Acrobat's: alignment from its flyout, style buttons by name, and
+/// the controls PdfCraft can't apply yet present but disabled.
+#[test]
+fn format_text_panel_sets_alignment_and_lists_planned_controls_disabled() {
+    use egui_kittest::kittest::NodeT;
+    let mut h = harness();
+    assert!(h.state_mut().execute("edit.text"));
+    h.run_steps(3);
+    h.get_by_label("FORMAT TEXT");
+    for planned in ["Bulleted list", "Numbered list", "Superscript", "Subscript"] {
+        assert!(h.get_by_label(planned).accesskit_node().is_disabled(), "{planned} is shown but disabled");
+    }
+    h.get_by_label("Alignment").click();
+    h.run_steps(2);
+    h.get_by_label("Centre").click();
+    h.run_steps(2);
+    assert_eq!(h.state().text_style.align, pdfcraft_engine::TextAlign::Center);
+    h.get_by_label("Bold").click();
+    h.run_steps(2);
+    assert!(h.state().text_style.bold);
 }
