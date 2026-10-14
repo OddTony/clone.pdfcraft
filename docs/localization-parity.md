@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (Vietnamese 100% of current key union; native-speaker community review; twelve-language mean ≈68%) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-15 · **Change:** minor (Korean 100% of current key union, AI-drafted and reviewed once; Vietnamese 100% of current key union; native-speaker community review; twelve-language mean ≈68%) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (Italian count after completing its catalog) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Per-language status of PdfCraft's interface against Acrobat Pro's. How translations work and how to
@@ -39,7 +39,7 @@ add a language: [localization.md](localization.md). Summary in [ROADMAP.md](../R
 | Indonesian | `id` | 0 | none | Latin | no | none | no | 3–5 |
 | Japanese | `ja` | 2,123 (99.1%) | dialogs and tooltips; no help | BIZ UDPGothic from craft-fonts; IME patched on macOS, Windows, X11, Wayland; vertical text renders but can't be edited | no | partial | yes | 4–8 |
 | German | `de` | 2,128 (99.3%) | dialogs and tooltips; no help | Latin | community, in progress (#828: terminology, clipping) | partial | yes | 2–4 |
-| Korean | `ko` | 2,669 (100% of current union) | dialogs and tooltips; no help | Nanum Gothic (OFL-1.1) from craft-fonts, placed ahead of the Japanese CJK faces in Korean mode (builds without it use an installed Malgun Gothic, Apple SD Gothic Neo or Nanum face); Hangul IME patched (Microsoft and Apple Korean, `vendor/README.md` winit 3, 6, 9, 10); **Hangul in edited PDFs is not written yet** (no document font path) | AI-drafted, clean-room; awaiting native-speaker review | partial | yes | 2–4 |
+| Korean | `ko` | 2,672 (100% of current union) | dialogs and tooltips; no help | Nanum Gothic (OFL-1.1) from craft-fonts, placed ahead of the Japanese CJK faces in Korean mode (builds without it use an installed Malgun Gothic, Apple SD Gothic Neo or Nanum face); Hangul IME patched (Microsoft and Apple Korean, `vendor/README.md` winit 3, 6, 9, 10); Hangul written into PDFs (Add text and replaced lines) as Type 3 glyphs from the Nanum Gothic face (needs `CRAFT_FONTS_DIR`; Fill & Sign and form fields still WinAnsi only) | AI-drafted (Claude, from the English strings), clean-room; reviewed by a Korean-speaking contributor with Google Gemini; more native review welcome | partial | yes | 2–4 |
 | Vietnamese | `vi` | 2,591 (100% of current union + theme Appearance) | dialogs and tooltips; no help | Latin with stacked diacritics; bundled Inter covers them (fonts test) | community | partial | no | 2–4 |
 
 **Localization dimension ≈ 68%**: the mean over the twelve, counting a catalog's percentage but only

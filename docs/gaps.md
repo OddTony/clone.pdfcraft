@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gap 14: Korean catalog and Hangul in edited PDFs added; Arabic RTL, Hindi and Indonesian remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (gap 6: #1910 Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -295,8 +296,9 @@ update the numbers.
   layout itself (wrapping, typed text); catalogs for Hindi and Indonesian (Acrobat ships Arabic in
   its Middle East edition; it ships none of the other two). Vietnamese ships as a catalog (`vi`,
   100% of the current localizable union) but stays `partial` like other non-English languages (no
-  translated help; engine/OS details stay English). Korean now has a catalog and a Nanum Gothic UI
-  face; it still needs a native-speaker review and a Hangul document font for edited PDFs.
+  translated help; engine/OS details stay English). Korean now has a catalog (reviewed by a
+  Korean-speaking contributor), a Nanum Gothic UI face and Hangul text in edited PDFs (Add text and
+  replaced lines; Fill & Sign and form fields are still WinAnsi only).
 - **Evidence:** [localization.md](localization.md) §Arabic; `misc.rtl-ui` planned.
 - **Estimate:** 25–43 h (Arabic RTL 20–35, two catalogs 5–8 plus review). **Doc:**
   [localization-parity.md](localization-parity.md).

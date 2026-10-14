@@ -2814,6 +2814,78 @@ fn added_thai_text_wraps_clusters_and_survives_reopen() {
 }
 
 #[test]
+fn added_korean_text_wraps_at_spaces_and_survives_reopen() {
+    let mut doc = fixture();
+    let t = AddedText {
+        rect: [20.0, 100.0, 250.0, 300.0], text: "안녕하세요 PdfCraft 한국어 텍스트 123".into(), size: 16.0, ..AddedText::default()
+    };
+    if pdfcraft_fonts::document_korean_font(false).is_none() {
+        assert_eq!(first_undrawable(&t), Some('안'));
+        let before = list_added(&doc);
+        let err = add_content(&mut doc, 0, &Content::Text(t)).unwrap_err().to_string();
+        assert!(err.contains("Korean") && err.contains("CRAFT_FONTS_DIR"), "{err}");
+        assert_eq!(list_added(&doc), before);
+        return;
+    }
+    assert_eq!(first_undrawable(&t), None);
+    add_content(&mut doc, 0, &Content::Text(t.clone())).unwrap();
+    let reopened = reopen(&doc);
+    assert_eq!(list_added(&reopened)[0].content, Content::Text(AddedText { rect: super::added::text_rect(&t), ..t.clone() }));
+    // Wrapping keeps every word whole and loses no character.
+    let lines = super::added::lines(&AddedText { rect: [0.0, 0.0, 120.0, 200.0], ..t.clone() });
+    assert!(lines.len() > 1, "{lines:?}");
+    assert_eq!(lines.join(" "), t.text);
+    // The saved page text reads back as typed (ActualText and ToUnicode).
+    let content = String::from_utf8_lossy(&stream_bytes(&reopened, &Object::Ref(list_added(&reopened)[0].obj)).unwrap()).into_owned();
+    assert!(content.contains("/ActualText"), "{content}");
+    update_content(&mut doc, 0, 0, &Content::Text(AddedText { text: "수정한 글 한 줄".into(), ..t.clone() })).unwrap();
+    // A character the face lacks is refused and leaves the item as it was.
+    let bad = Content::Text(AddedText { text: "한국어 \u{1F600}".into(), ..t });
+    let before = list_added(&doc);
+    assert!(update_content(&mut doc, 0, 0, &bad).is_err());
+    assert_eq!(list_added(&doc), before);
+    delete_content(&mut doc, 0, 0).unwrap();
+    assert!(list_added(&doc).is_empty());
+}
+
+#[test]
+fn replacing_a_line_with_korean_text_uses_the_hangul_face() {
+    let mut doc = text_page("BT /F1 12 Tf 50 600 Td (Hello) Tj ET");
+    let before = page_content_bytes(&doc, 0);
+    let typed = "안녕하세요 PDF 문서 한글 123";
+    let line = text::replace_line(&mut doc, 0, 0, typed);
+    if pdfcraft_fonts::document_korean_font(false).is_none() {
+        let Err(EditError::Invalid(msg)) = line else { panic!("expected a clear error, got {line:?}") };
+        assert!(msg.contains("Korean fallback font") && msg.contains("CRAFT_FONTS_DIR"), "{msg}");
+        assert_eq!(page_content_bytes(&doc, 0), before);
+        eprintln!("built without a craft-fonts Hangul face: the Type 3 path is checked with CRAFT_FONTS_DIR");
+        return;
+    }
+    line.unwrap();
+    let content = String::from_utf8_lossy(&page_content_bytes(&doc, 0)).into_owned();
+    assert!(content.contains("/PCKo"), "{content}");
+    let reopened = reopen(&doc);
+    assert_eq!(text::text_lines(&reopened, 0).unwrap()[0].text, typed);
+    // Every distinct character has an outline procedure, so nothing is drawn as a box.
+    let p = pdfcraft_model::pages(&reopened).swap_remove(0);
+    let res = reopened.resolve(p.dict.get(b"Resources").unwrap());
+    let fonts = reopened.resolve(res.as_dict().unwrap().get(b"Font").unwrap());
+    let font = reopened.resolve(fonts.as_dict().unwrap().get(b"PCKo").unwrap());
+    let procs = reopened.resolve(font.as_dict().unwrap().get(b"CharProcs").unwrap());
+    let procs = procs.as_dict().unwrap();
+    assert_eq!(procs.iter().count(), typed.chars().collect::<std::collections::HashSet<_>>().len());
+    for (_, glyph) in procs.iter() {
+        let pdfcraft_cos::Object::Stream(s) = &*reopened.resolve(glyph) else { panic!("glyph stream") };
+        let path = String::from_utf8(s.decoded().unwrap()).unwrap();
+        assert!(path.contains(" d1"), "{path}");
+    }
+    // A second edit of the same line keeps working and still reads back.
+    let mut doc = reopened;
+    text::replace_line(&mut doc, 0, 0, "다시 수정 한글").unwrap();
+    assert_eq!(text::text_lines(&reopen(&doc), 0).unwrap()[0].text, "다시 수정 한글");
+}
+
+#[test]
 fn group_moves_preserve_glyph_bytes_and_unselected_text_state() {
     for content in [
         "BT /F1 12 Tf 1.3 Tc 2 Tw 80 Tz 14 TL 1 0.2 -0.1 1 50 600 Tm (A\\101) Tj 1 0 0 rg (Neighbour) Tj T* (Next) Tj ET",

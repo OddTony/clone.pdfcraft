@@ -12,7 +12,8 @@ use std::collections::{HashMap, HashSet};
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};
 use pdfcraft_fonts::{
-    GlyphError, GlyphOutline, ShapedCluster, ShapedScript, Std14, literal, shape_arabic, shape_hebrew, shape_thai, shaped_glyph, win_ansi,
+    GlyphError, GlyphOutline, ShapedCluster, ShapedScript, Std14, literal, shape_arabic, shape_hangul, shape_hebrew, shape_thai, shaped_glyph,
+    win_ansi,
 };
 use unicode_bidi::{Level, ParagraphBidiInfo};
 
@@ -244,6 +245,7 @@ fn wrapped(t: &AddedText) -> Vec<(String, bool)> {
         // Arabic or Hebrew: laid out with the bidirectional algorithm and shaped.
         let rtl_script = para.chars().any(|c| is_arabic(c) || is_hebrew(c));
         let thai = para.chars().any(is_thai);
+        let hangul = para.chars().any(is_hangul);
         if thai
             && !rtl_script
             && let Ok(lines) = thai_lines(t, para, width)
@@ -256,13 +258,16 @@ fn wrapped(t: &AddedText) -> Vec<(String, bool)> {
         // sum of its words' and shaping stays linear in the paragraph's length. The space is the
         // paragraph's; a space between Latin words is drawn in the item's font, a few hundredths
         // of an em apart.
-        let measure = |s: &str| if rtl_script || thai { shaped_width(t, s, rtl) } else { t.family.width(s, t.size, t.bold, t.italic) };
+        let measure = |s: &str| if rtl_script || thai || hangul { shaped_width(t, s, rtl) } else { t.family.width(s, t.size, t.bold, t.italic) };
         let space = measure(" ");
         let (mut line, mut line_w) = (String::new(), 0.0);
         for word in para.split(' ') {
             let candidate = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
-            let candidate_w =
-                if rtl_script || thai { if line.is_empty() { measure(word) } else { line_w + space + measure(word) } } else { measure(&candidate) };
+            let candidate_w = if rtl_script || thai || hangul {
+                if line.is_empty() { measure(word) } else { line_w + space + measure(word) }
+            } else {
+                measure(&candidate)
+            };
             if !line.is_empty() && candidate_w > width {
                 out.push((std::mem::take(&mut line), rtl));
                 line = word.to_string();
@@ -310,6 +315,13 @@ fn is_thai(c: char) -> bool {
     matches!(u32::from(c), 0x0E00..=0x0E7F)
 }
 
+/// Hangul syllables, conjoining jamo (and their extensions), compatibility jamo and half-width
+/// jamo: an item with any of them is shaped with the craft-fonts Hangul face. Hanja and Korean
+/// punctuation outside WinAnsiEncoding are not included.
+pub(crate) fn is_hangul(c: char) -> bool {
+    matches!(u32::from(c), 0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xAC00..=0xD7FF | 0xFFA0..=0xFFDC)
+}
+
 /// Arabic letters, marks, digits and punctuation: an item with any of them is shaped with the
 /// craft-fonts Arabic face.
 fn is_arabic(c: char) -> bool {
@@ -332,6 +344,13 @@ pub fn first_undrawable(t: &AddedText) -> Option<char> {
             return Some(c);
         }
         let rest = AddedText { text: t.text.chars().filter(|c| !is_thai(*c)).collect(), ..t.clone() };
+        return first_undrawable(&rest);
+    }
+    if t.text.chars().any(is_hangul) {
+        if let Some(c) = t.text.chars().find(|c| is_hangul(*c) && !pdfcraft_fonts::hangul_has(*c)) {
+            return Some(c);
+        }
+        let rest = AddedText { text: t.text.chars().filter(|c| !is_hangul(*c)).collect(), ..t.clone() };
         return first_undrawable(&rest);
     }
     // Arabic or Hebrew that nothing can draw: there's no face, or the face lacks it.
@@ -418,6 +437,8 @@ fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec<Piece>, f6
             let after_hebrew = segments.last().is_some_and(|(kind, _)| *kind == Some(ShapedScript::Hebrew));
             let script = if is_thai(c) {
                 Some(ShapedScript::Thai)
+            } else if is_hangul(c) {
+                Some(ShapedScript::Hangul)
             } else if is_hebrew(c) || (run_rtl && after_hebrew && !c.is_alphanumeric() && pdfcraft_fonts::hebrew_has(c)) {
                 Some(ShapedScript::Hebrew)
             } else if is_arabic(c) || (run_rtl && !c.is_alphanumeric() && pdfcraft_fonts::arabic_has(c)) {
@@ -439,6 +460,7 @@ fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec<Piece>, f6
                     ShapedScript::Arabic => shape_arabic(&s, run_rtl).map_err(|e| arabic_error(e, &s))?,
                     ShapedScript::Hebrew => shape_hebrew(&s, run_rtl).map_err(|e| hebrew_error(e, &s))?,
                     ShapedScript::Thai => shape_thai(&s).map_err(|e| thai_error(e, &s))?,
+                    ShapedScript::Hangul => shape_hangul(&s).map_err(|e| hangul_error(e, &s))?,
                 };
                 Piece::Shaped(shaped)
             } else if run_rtl {
@@ -491,6 +513,16 @@ fn thai_error(e: GlyphError, text: &str) -> EditError {
         }
         GlyphError::Missing => format!("the Thai font can't show \"{text}\""),
         GlyphError::TooComplex => "the Thai glyphs are too complex; use a shorter text box".into(),
+    })
+}
+
+fn hangul_error(e: GlyphError, text: &str) -> EditError {
+    EditError::Invalid(match e {
+        GlyphError::NoFont => "Korean text needs PdfCraft's Hangul font (Nanum Gothic), which this build doesn't include \
+                               (to build it in, set CRAFT_FONTS_DIR to a craft-fonts checkout that has a Hang face)"
+            .into(),
+        GlyphError::Missing => format!("the Hangul font can't show \"{text}\""),
+        GlyphError::TooComplex => "the Hangul glyphs are too complex; use a shorter text box".into(),
     })
 }
 
@@ -565,6 +597,7 @@ fn draw_laid_shaped(
                     ShapedScript::Arabic => arabic_error(e, &c.text),
                     ShapedScript::Hebrew => hebrew_error(e, &c.text),
                     ShapedScript::Thai => thai_error(e, &c.text),
+                    ShapedScript::Hangul => hangul_error(e, &c.text),
                 })?);
             }
         }
@@ -705,6 +738,7 @@ fn type3_shaped(doc: &mut Document, clusters: &[&ShapedCluster], outlines: &Hash
                 ShapedScript::Arabic => "Arabic",
                 ShapedScript::Hebrew => "Hebrew",
                 ShapedScript::Thai => "Thai",
+                ShapedScript::Hangul => "Hangul",
             },
             |f| f.family,
         ),
@@ -768,6 +802,7 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
             fonts.set(name.clone().into_bytes(), Object::Dict(font));
             let face_or_new = |has: fn(char) -> bool, face: bool| t.text.chars().any(has) && (face || !existing);
             if t.text.chars().any(is_thai)
+                || t.text.chars().any(is_hangul)
                 || face_or_new(is_arabic, pdfcraft_fonts::document_arabic_font().is_some())
                 || face_or_new(is_hebrew, pdfcraft_fonts::document_hebrew_font(false).is_some())
             {
@@ -1002,13 +1037,20 @@ fn validate(c: &Content) -> Result<(), EditError> {
             if t.text.chars().any(is_thai) && pdfcraft_fonts::document_thai_font().is_none() {
                 return Err(thai_error(GlyphError::NoFont, &t.text));
             }
+            if t.text.chars().any(is_hangul) && pdfcraft_fonts::document_korean_font(false).is_none() {
+                return Err(hangul_error(GlyphError::NoFont, &t.text));
+            }
             // Without the Arabic face, `draw` decides for the Arabic letters themselves (#403): a new
             // item is refused with what's missing, and one that already holds Arabic stays movable.
             // Everything else in it is drawn in the standard font, so it still has to fit.
             let undrawable = if t.text.chars().any(shaped_arabic) && pdfcraft_fonts::document_arabic_font().is_none() {
                 t.text.split('\n').find_map(|line| {
-                    line.chars()
-                        .find(|c| !(shaped_arabic(*c) || is_thai(*c) && pdfcraft_fonts::thai_has(*c) || pdfcraft_fonts::win_ansi_encodable(*c)))
+                    line.chars().find(|c| {
+                        !(shaped_arabic(*c)
+                            || is_thai(*c) && pdfcraft_fonts::thai_has(*c)
+                            || is_hangul(*c) && pdfcraft_fonts::hangul_has(*c)
+                            || pdfcraft_fonts::win_ansi_encodable(*c))
+                    })
                 })
             } else {
                 first_undrawable(t)

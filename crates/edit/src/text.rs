@@ -1303,12 +1303,26 @@ fn needs_type3(text: &str) -> bool {
 const JAPANESE_FONT_NAME: &str = "PCJapanese";
 /// The `/Name` of the Type 3 fonts generated for Hebrew text.
 const HEBREW_FONT_NAME: &str = "PCHebrew";
+/// The `/Name` of the Type 3 fonts generated for Korean text.
+const KOREAN_FONT_NAME: &str = "PCKorean";
+
+/// Which face leads a replacement's generated fonts. Japanese text takes the best Japanese face that
+/// has every character; Hebrew and Korean text keep their own face and take each character it lacks
+/// from the next face that has it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Lead {
+    Japanese,
+    Hebrew,
+    Korean,
+}
 
 /// Whether `font` is one of those generated fonts (Japanese or Hebrew): a replacement longer than
 /// one of them is split across several, which read back as one line (see [`same_font`]).
 fn is_type3_fallback(font: &Dict) -> bool {
     font.name(b"Subtype") == Some(b"Type3")
-        && font.name(b"Name").is_some_and(|n| n == JAPANESE_FONT_NAME.as_bytes() || n == HEBREW_FONT_NAME.as_bytes())
+        && font
+            .name(b"Name")
+            .is_some_and(|n| n == JAPANESE_FONT_NAME.as_bytes() || n == HEBREW_FONT_NAME.as_bytes() || n == KOREAN_FONT_NAME.as_bytes())
 }
 
 /// Whether a run shown in `font` (a resource name, and the Japanese or Hebrew fallback face it subsets, if
@@ -1340,7 +1354,7 @@ const MAX_TYPE3_GLYPHS: usize = 240;
 struct Type3Fallback {
     /// The family its glyphs come from ("Shippori Mincho").
     family: &'static str,
-    /// The fonts' resource names in order; the first is `PCJp` (`PCHe` for Hebrew text).
+    /// The fonts' resource names in order; the first is `PCJp` (`PCHe` for Hebrew text, `PCKo` for Korean).
     names: Vec<String>,
     /// Every unique character with its advance (em), in order of first appearance.
     widths: Vec<(char, f64)>,
@@ -1444,6 +1458,15 @@ fn fallback_face<'a>(faces: &[&'a CraftFont], chars: &[char], has_glyph: impl Fn
     faces.iter().copied().find(|face| chars.iter().all(|ch| has_glyph(face, *ch))).or_else(|| faces.first().copied())
 }
 
+/// This build has no Hangul face to draw replacement text with.
+fn no_korean_font() -> EditError {
+    EditError::Invalid(
+        "this text needs PdfCraft's Korean fallback font (Nanum Gothic), which this build doesn't include \
+         (to build it in, set CRAFT_FONTS_DIR to a craft-fonts checkout that has a Hang face)"
+            .into(),
+    )
+}
+
 /// This build has no Hebrew face to draw replacement text with.
 fn no_hebrew_font() -> EditError {
     EditError::Invalid(
@@ -1453,13 +1476,19 @@ fn no_hebrew_font() -> EditError {
     )
 }
 
-/// The faces a Type 3 replacement may draw `text` with, best first. Text with Hebrew takes the
-/// Hebrew face first (its Latin and digits too, so a line keeps one look), then the Japanese
-/// faces for anything it lacks; other text takes the Japanese faces, as before.
-fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
+/// The faces a Type 3 replacement may draw `text` with, best first, and which one leads. Text with
+/// Hebrew takes the Hebrew face first (its Latin and digits too, so a line keeps one look), then the
+/// Hangul face if the text has Hangul, then the Japanese faces for anything they lack. Text with only
+/// Hangul takes the Hangul face, then the Japanese faces; other text takes the Japanese faces.
+fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(Vec<&'static CraftFont>, Lead), EditError> {
     let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
+    let korean =
+        if text.chars().any(crate::added::is_hangul) { Some(pdfcraft_fonts::document_korean_font(bold).ok_or_else(no_korean_font)?) } else { None };
     if !text.chars().any(crate::bidi::is_hebrew) {
-        return Ok((japanese, false));
+        return Ok(match korean {
+            Some(korean) => (std::iter::once(korean).chain(japanese).collect(), Lead::Korean),
+            None => (japanese, Lead::Japanese),
+        });
     }
     // Points are drawn on their letter with the font's positioning, which a one-glyph-per-
     // character Type 3 font can't do; refuse rather than print them beside the letter.
@@ -1467,7 +1496,7 @@ fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(
         return Err(EditError::Invalid("Hebrew points (niqqud) can't be written into a PDF yet; type the text without them".into()));
     }
     let hebrew = pdfcraft_fonts::document_hebrew_font(bold).ok_or_else(no_hebrew_font)?;
-    Ok((std::iter::once(hebrew).chain(japanese).collect(), true))
+    Ok((std::iter::once(hebrew).chain(korean).chain(japanese).collect(), Lead::Hebrew))
 }
 
 fn type3_font(
@@ -1478,7 +1507,7 @@ fn type3_font(
     bold: bool,
     max_glyphs: usize,
 ) -> Result<Type3Fallback, EditError> {
-    let (faces, hebrew) = type3_faces(text, family, bold)?;
+    let (faces, lead) = type3_faces(text, family, bold)?;
     // Each unique character once, in order of first appearance.
     let mut chars = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -1492,16 +1521,18 @@ fn type3_font(
     }
     // The faces differ in coverage (e.g. of Cyrillic), so use the best face that has every
     // character. When none has them all, the best face reports the character it lacks. Hebrew
-    // text keeps the Hebrew face and takes each character it lacks from the next face that has it.
-    let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
-        .ok_or_else(|| no_fallback_font(text))?;
-    let others: &[&CraftFont] = if hebrew { faces.get(1..).unwrap_or_default() } else { &[] };
+    // or Hangul text keeps its leading face and takes each character it lacks from the next face
+    // that has it.
+    let face =
+        if lead != Lead::Japanese { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
+            .ok_or_else(|| no_fallback_font(text))?;
+    let others: &[&CraftFont] = if lead != Lead::Japanese { faces.get(1..).unwrap_or_default() } else { &[] };
     // Every outline is read before the document is touched, so a character that fails leaves it
     // as it was. Each font takes the next `per_font` characters; codes restart at 1 in each.
     let per_font = max_glyphs.clamp(1, MAX_TYPE3_GLYPHS);
     let mut glyphs = Vec::with_capacity(chars.len());
     for (i, ch) in chars.into_iter().enumerate() {
-        // Hebrew text: the first face with the glyph, else the Hebrew face's error.
+        // Hebrew or Korean text: the first face with the glyph, else the leading face's error.
         let (path, width) = others.iter().fold(type3_path(face, ch), |found, f| found.or_else(|e| type3_path(f, ch).map_err(|_| e)))?;
         let code = u8::try_from((i % per_font).saturating_add(1))
             .map_err(|_| EditError::Invalid("replacement text has too many unique characters".into()))?;
@@ -1520,15 +1551,15 @@ fn type3_font(
             codes.insert(glyph.ch, (names.len(), glyph.code));
             widths.push((glyph.ch, glyph.width));
         }
-        names.push(add_type3_font(doc, fonts_res, face, hebrew, group));
+        names.push(add_type3_font(doc, fonts_res, face, lead, group));
     }
     Ok(Type3Fallback { family: face.family, names, widths, codes })
 }
 
 /// Adds one generated font whose codes 1 to `glyphs.len()` show `glyphs`, and returns its resource
-/// name (`PCJp`, then `PCJp1`, ...; `PCHe`, ... for Hebrew text). Nothing here can fail: the
+/// name (`PCJp`, then `PCJp1`, ...; `PCHe`, ... for Hebrew text, `PCKo`, ... for Korean text). Nothing here can fail: the
 /// outlines were read already.
-fn add_type3_font(doc: &mut Document, fonts_res: &mut Dict, face: &CraftFont, hebrew: bool, glyphs: Vec<Type3Glyph>) -> String {
+fn add_type3_font(doc: &mut Document, fonts_res: &mut Dict, face: &CraftFont, lead: Lead, glyphs: Vec<Type3Glyph>) -> String {
     let last_char = glyphs.len();
     let mut charprocs = Dict::new();
     let mut widths = Vec::with_capacity(last_char);
@@ -1557,7 +1588,14 @@ fn add_type3_font(doc: &mut Document, fonts_res: &mut Dict, face: &CraftFont, he
     let mut font = Dict::new();
     font.set(b"Type".to_vec(), Object::name("Font"));
     font.set(b"Subtype".to_vec(), Object::name("Type3"));
-    font.set(b"Name".to_vec(), Object::name(if hebrew { HEBREW_FONT_NAME } else { JAPANESE_FONT_NAME }));
+    font.set(
+        b"Name".to_vec(),
+        Object::name(match lead {
+            Lead::Japanese => JAPANESE_FONT_NAME,
+            Lead::Hebrew => HEBREW_FONT_NAME,
+            Lead::Korean => KOREAN_FONT_NAME,
+        }),
+    );
     let mut descriptor = Dict::new();
     descriptor.set(b"Type".to_vec(), Object::name("FontDescriptor"));
     descriptor.set(b"FontName".to_vec(), Object::name(&format!("{}-{}", face.family, face.style).replace(' ', "")));
@@ -1577,7 +1615,11 @@ fn add_type3_font(doc: &mut Document, fonts_res: &mut Dict, face: &CraftFont, he
     font.set(b"Encoding".to_vec(), Object::Dict(encoding));
     font.set(b"CharProcs".to_vec(), Object::Dict(charprocs));
     font.set(b"ToUnicode".to_vec(), Object::Ref(cmap_ref));
-    let prefix = if hebrew { "PCHe" } else { "PCJp" };
+    let prefix = match lead {
+        Lead::Japanese => "PCJp",
+        Lead::Hebrew => "PCHe",
+        Lead::Korean => "PCKo",
+    };
     let mut name = String::from(prefix);
     let mut suffix = 0usize;
     while fonts_res.contains(name.as_bytes()) {
@@ -2606,11 +2648,12 @@ mod tests {
         let mut doc = Document::new_empty();
         let mut fonts = Dict::new();
         // A replacement split across two Hebrew fonts, then one Japanese font.
-        let he = add_type3_font(&mut doc, &mut fonts, &face, true, vec![glyph(1, 'א')]);
-        let he1 = add_type3_font(&mut doc, &mut fonts, &face, true, vec![glyph(1, 'ב')]);
-        let jp = add_type3_font(&mut doc, &mut fonts, &face, false, vec![glyph(1, 'あ')]);
-        assert_eq!([he.as_str(), he1.as_str(), jp.as_str()], ["PCHe", "PCHe1", "PCJp"]);
-        for name in [&he, &he1, &jp] {
+        let he = add_type3_font(&mut doc, &mut fonts, &face, Lead::Hebrew, vec![glyph(1, 'א')]);
+        let he1 = add_type3_font(&mut doc, &mut fonts, &face, Lead::Hebrew, vec![glyph(1, 'ב')]);
+        let jp = add_type3_font(&mut doc, &mut fonts, &face, Lead::Japanese, vec![glyph(1, 'あ')]);
+        let ko = add_type3_font(&mut doc, &mut fonts, &face, Lead::Korean, vec![glyph(1, '한')]);
+        assert_eq!([he.as_str(), he1.as_str(), jp.as_str(), ko.as_str()], ["PCHe", "PCHe1", "PCJp", "PCKo"]);
+        for name in [&he, &he1, &jp, &ko] {
             let font = fonts.get(name.as_bytes()).and_then(Object::as_dict).cloned().unwrap_or_default();
             assert!(is_type3_fallback(&font), "{name} isn't recognized as a generated fallback font");
         }

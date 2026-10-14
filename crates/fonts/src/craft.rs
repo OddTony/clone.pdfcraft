@@ -73,6 +73,18 @@ pub fn ui_korean_fonts() -> Vec<&'static CraftFont> {
     CRAFT_FONTS.iter().filter(|f| f.covers("Hang")).collect()
 }
 
+/// The face for Korean text written into PDFs: the `Hang` face of the asked weight, else its
+/// Regular, else any `Hang` face. `None` without craft-fonts or without a Hangul face.
+pub fn document_korean_font(bold: bool) -> Option<&'static CraftFont> {
+    hangul_face(CRAFT_FONTS, bold)
+}
+
+fn hangul_face(faces: &[CraftFont], bold: bool) -> Option<&CraftFont> {
+    let hang = || faces.iter().filter(|f| f.covers("Hang"));
+    let style = if bold { "Bold" } else { "Regular" };
+    hang().find(|f| f.style == style).or_else(|| hang().find(|f| f.style == "Regular")).or_else(|| hang().next())
+}
+
 /// Thai faces shared by the interface and PDF text writer.
 pub fn ui_thai_fonts() -> Vec<&'static CraftFont> {
     CRAFT_FONTS.iter().filter(|f| f.covers("Thai")).collect()
