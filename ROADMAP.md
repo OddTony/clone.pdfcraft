@@ -149,6 +149,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-14 (M13, deterministic print fixture):** Reproduced the Windows CI printer-properties failure by gating discovery until after the synthetic queue selection. The fixture now sets `printer_picked`, matching the real combo interaction, so late discovery cannot reset its queue. Assertions are unchanged and the delayed response is consumed before checking driver options. No product behavior or readiness estimate changed.
+
 - **2026-10-14 (M13, Hot Folder packaging follow-up):** Integrated main `dc4d86ba` and regenerated hashes for the merged translation catalogs. Fixed server-test path confinement to use native separators and case rules while preserving root, sibling and traversal checks. The old helper fails the Linux harness; the corrected harness passes on Linux and Windows without running an installer or service. Print-dialog tests now inject synthetic printer lists: concurrent native printer enumeration crashed locally, whereas the same eleven assertions pass with the injected lists. This isolates UI tests; it does not certify native printer drivers. The selected automation/font/content/editor suite passes (1,385 passed, five ignored), as do 271 renderer tests. Release/package qualification remains separate; estimates unchanged.
 
 - **2026-10-13 (M13, Windows printing integration follow-up):** Resolved the Hot Folder dependency lockfile against main `3f044b62`. The targeted Windows checks pass: 22 print tests, 369 editor library tests (one ignored), and seven Hot Folder automation tests. The full 3,173-test workspace result below belongs to integration commit `116cd60c`. Final package acceptance remains separate; estimates unchanged.

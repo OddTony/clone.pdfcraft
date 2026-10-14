@@ -226,6 +226,15 @@ fn a_failed_save_as_pdf_keeps_the_dialog_open() {
 fn print_dialog_shows_the_printer_driver_options() {
     use pdfcraft_engine::print::spool;
     let mut h = harness();
+    // Deliver discovery only after the synthetic user has selected a queue.
+    // This reproduces the CI race without depending on scheduler timing.
+    let gate = std::sync::Arc::new(std::sync::Mutex::new(()));
+    let hold = gate.lock().unwrap();
+    let wait = gate.clone();
+    h.state_mut().printer_source = Some(std::sync::Arc::new(move || {
+        let _open = wait.lock().unwrap();
+        Vec::new()
+    }));
     assert!(h.state_mut().execute("print.dialog"));
     h.run_steps(3);
     h.state_mut().print_draft.printer = None;
@@ -241,10 +250,20 @@ fn print_dialog_shows_the_printer_driver_options() {
     {
         let d = &mut h.state_mut().print_draft;
         d.printer = Some("Test_Queue".into());
+        // Match a real selection in the printer combo: late discovery must not
+        // replace the chosen queue with its default (or Save as PDF).
+        d.printer_picked = true;
         d.driver_options = Some(("Test_Queue".into(), vec![tray]));
         d.driver_choices.insert("InputSlot".into(), "Tray2".into());
         d.show_driver_options = true;
     }
+    drop(hold);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while h.state().print_draft.printers_loading && std::time::Instant::now() < deadline {
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(!h.state().print_draft.printers_loading, "the delayed discovery result was consumed");
     h.run_steps(2);
     h.get_by_label("Printer properties");
     h.get_by_label("Media");
