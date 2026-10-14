@@ -1482,6 +1482,11 @@ mod tests {
         Paint::Color(Color::from_rgba(AlphaColor::new([1.0, 1.0, 1.0, 1.0])))
     }
 
+    /// Opaque blue.
+    fn blue() -> Paint<'static> {
+        Paint::Color(Color::from_rgba(AlphaColor::new([0.0, 0.0, 1.0, 1.0])))
+    }
+
     /// A white backdrop, then a real-transparency group holding one red rect: the pop
     /// flattens the group into one 300-dpi raster through the shadow scene. The
     /// backdrop's vector ops survive, the group's own vector ops were withheld and
@@ -1701,6 +1706,81 @@ mod tests {
         for got in [sample(kurbo::Point::new(140.0, 150.0)), sample(kurbo::Point::new(170.0, 50.0))] {
             assert!(got[0] >= 253 && got[1] >= 253 && got[2] <= 2, "the masked half shows the backdrop, not ink: {got:?}");
         }
+    }
+
+    /// The edge rule (Task 12): a blend mode announced with **no open
+    /// real-transparency group** keeps today's note-only policy — the draw's vector
+    /// operators emit (PostScript has no blend), the note names the mode, and no
+    /// raster appears. The announcement is still recorded into the shadow scene
+    /// (`set_blend_mode` always records), so a **later** real group whose region
+    /// covers the blended draw composites it through its blend inside the flattened
+    /// raster: sampled at the draws' centre, multiply(red, blue) is black beneath the
+    /// group's half-opacity white — measured [128, 128, 128], half of white over
+    /// black — where an unrecorded blend leaves red at [255, 128, 128] (the probe
+    /// measurement). That pixel check is the observable
+    /// half of the always-record claim; the structural half is `set_blend_mode`'s
+    /// unconditional `scene.record` call, which no behaviour can turn off without
+    /// editing it.
+    #[test]
+    fn blend_outside_group_keeps_note() {
+        let mut dev = device();
+        dev.draw_rect(&Rect::new(10.0, 10.0, 100.0, 80.0), Affine::IDENTITY, &blue(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.set_blend_mode(BlendMode::Multiply);
+        dev.draw_rect(&Rect::new(10.0, 10.0, 100.0, 80.0), Affine::IDENTITY, &red(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.set_blend_mode(BlendMode::Normal);
+        let out = output(&dev);
+        assert!(out.contains("0 0 1 setrgbcolor\n") && out.contains("1 0 0 setrgbcolor\n"), "both draws' vector ops emit: {out}");
+        assert!(!out.contains(">> image"), "no raster while no real group is open: {out}");
+        assert_eq!(
+            dev.emit.notes,
+            vec![FidelityNote { page: None, text: "transparency ignored (blend Multiply)".into() }],
+            "today's note, once: {:?}",
+            dev.emit.notes
+        );
+        // The later real group over the same area: its pop flattens, and the raster
+        // repaints the Multiply-composited draw beneath the group's own content
+        // (the scene's log survives its flatten, so re-flattening replays it).
+        dev.push_transparency_group(0.5, None, BlendMode::Normal);
+        dev.draw_rect(&Rect::new(10.0, 10.0, 100.0, 80.0), Affine::IDENTITY, &white(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.pop_transparency_group();
+        let out = output(&dev);
+        assert_eq!(out.matches(">> image").count(), 1, "the later group's pop flattened: {out}");
+        assert!(dev.emit.notes.iter().any(|n| n.text == "transparency flattened to raster"), "the flattening is disclosed: {:?}", dev.emit.notes);
+        let raster = dev.scene.flatten().expect("the page is far under every cap");
+        assert!(raster.width > 0 && raster.height > 0, "the region is the draws' box");
+        let px = raster.place.inverse() * kurbo::Point::new(55.0, 45.0);
+        let (x, y) = (px.x.round() as u32, px.y.round() as u32);
+        assert!(x < raster.width && y < raster.height, "the sample falls inside the region");
+        let at = ((y * raster.width + x) * 3) as usize;
+        let got = [raster.rgb[at], raster.rgb[at + 1], raster.rgb[at + 2]];
+        assert!(
+            got.iter().all(|c| (118..=138).contains(c)) && got[0].saturating_sub(got[1]) <= 8 && got[0].saturating_sub(got[2]) <= 8,
+            "the raster composited the blended draw (grey 128, not red over blue): {got:?}"
+        );
+    }
+
+    /// The edge rule's other side: the same `Multiply` announced while a real group
+    /// is open notes nothing — the group's raster carries the blend at its pop (the
+    /// oracle's blend gate proves that raster end to end against gs; this pins the
+    /// note policy itself). Reachable in real content: a group made real by its
+    /// entry state (`/ca 0.5` on the page) whose own content then sets `/BM`, so
+    /// the interpreter announces the blend with the group open.
+    #[test]
+    fn blend_inside_real_group_notes_nothing() {
+        let mut dev = device();
+        dev.push_transparency_group(0.5, None, BlendMode::Normal);
+        dev.set_blend_mode(BlendMode::Multiply);
+        dev.draw_rect(&Rect::new(10.0, 10.0, 100.0, 80.0), Affine::IDENTITY, &red(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.set_blend_mode(BlendMode::Normal);
+        dev.pop_transparency_group();
+        let out = output(&dev);
+        assert_eq!(out.matches(">> image").count(), 1, "the group flattened: {out}");
+        assert_eq!(
+            dev.emit.notes,
+            vec![FidelityNote { page: None, text: "transparency flattened to raster".into() }],
+            "the flattening disclosure alone — no blend note inside the group: {:?}",
+            dev.emit.notes
+        );
     }
 
     // ---------------------------------------------- `Color::source()` (vendor patch)
