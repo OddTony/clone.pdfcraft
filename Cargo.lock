@@ -1145,8 +1145,10 @@ dependencies = [
 [[package]]
 name = "craft-print"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=f03ec27ab2c405969428512178f746183cd55ca0#f03ec27ab2c405969428512178f746183cd55ca0"
+source = "git+https://github.com/storytold/craft-libs?rev=refs%2Fpull%2F118%2Fhead#384004bdeeebe9937a9fbd3b179d2ae213a5cd67"
 dependencies = [
+ "craft-winprint-gdi",
+ "craft-wsd",
  "miniz_oxide 0.8.9",
  "roxmltree",
  "tempfile",
@@ -1161,6 +1163,24 @@ source = "git+https://github.com/storytold/craft-libs?rev=5c874d51eeb3de70e735c8
 dependencies = [
  "egui",
  "serde",
+]
+
+[[package]]
+name = "craft-winprint-gdi"
+version = "0.1.0"
+source = "git+https://github.com/storytold/winprint.rs?rev=417ac3c4d14d3da5485a99c7d5ce8f05664ec312#417ac3c4d14d3da5485a99c7d5ce8f05664ec312"
+dependencies = [
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "craft-wsd"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=refs%2Fpull%2F113%2Fhead#e06d454bdbce221cc8c0257c12c20b2959446b8d"
+dependencies = [
+ "roxmltree",
+ "thiserror 2.0.21",
+ "ureq",
 ]
 
 [[package]]
@@ -1861,7 +1881,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3934,6 +3954,7 @@ name = "pdfcraft-automation"
 version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
+ "craft-print",
  "flate2",
  "image",
  "pdfcraft-cos",
@@ -3942,6 +3963,7 @@ dependencies = [
  "pdfcraft-model",
  "pdfcraft-organize",
  "pdfcraft-platform",
+ "pdfcraft-print",
  "pdfcraft-render",
  "pdfcraft-xfa",
  "png 0.18.1",
@@ -3955,10 +3977,12 @@ name = "pdfcraft-cli"
 version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
+ "craft-print",
  "pdfcraft-audit",
  "pdfcraft-automation",
  "pdfcraft-cos",
  "pdfcraft-engine",
+ "pdfcraft-print",
  "pdfcraft-render",
  "rustix 1.1.5",
  "serde_json",
@@ -4195,6 +4219,7 @@ dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
  "pdfcraft-model",
+ "pdfcraft-render",
  "thiserror 2.0.21",
 ]
 
@@ -4843,7 +4868,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5393,7 +5418,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5463,7 +5488,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6340,7 +6365,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7425,7 +7450,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
