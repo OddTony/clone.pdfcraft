@@ -1088,20 +1088,27 @@ impl DocView {
     /// page of the spread is already on screen, so stepping to it wouldn't move the view (#70).
     pub fn step_page(&mut self, forward: bool) {
         let c = self.current;
-        let target = match self.layout {
+        let last = self.page_count.saturating_sub(1);
+        let (target, first) = match self.layout {
             PageLayout::TwoUp => {
                 // Spreads are [0, 1], [2, 3], … or, with a cover page, [0], [1, 2], [3, 4], ….
                 let first = if self.cover { c.saturating_sub((c + 1) % 2) } else { c - c % 2 };
-                match (forward, self.cover && c == 0) {
+                let target = match (forward, self.cover && c == 0) {
                     (true, true) => 1,
                     (true, false) => first.saturating_add(2),
                     (false, _) if self.cover && first <= 1 => 0,
                     (false, _) => first.saturating_sub(2),
-                }
+                };
+                (target, first)
             }
-            PageLayout::Single if forward => c + 1,
-            PageLayout::Single => c.saturating_sub(1),
+            PageLayout::Single if forward => (c + 1, c),
+            PageLayout::Single => (c.saturating_sub(1), c),
         };
+        // Past either end there is nowhere to go: stay put rather than re-align the view, which
+        // would scroll the page back to its top.
+        if if forward { target > last } else { first == 0 } {
+            return;
+        }
         self.go_to_page(target);
     }
 
@@ -2265,7 +2272,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         view.precise_scroll_until = now + 0.25;
     }
     // Paging owns the vertical axis in single-page view; leave it to the pager.
-    if single_paging {
+    // The rest of a gesture that turned the page is swallowed too, or it would pan the new page
+    // away from the edge it was shown at.
+    if single_paging || (!view.continuous && view.wheel.gesture_turned()) {
         precise_scroll.y = 0.0;
     }
     if now < view.precise_scroll_until {
@@ -2296,6 +2305,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     });
     // Each document keeps its own scroll position when switching tabs (#189).
     scroll = scroll.id_salt(("page-view", view.id));
+    // Every scroll here asks for no animation. An animated area would still queue a zero-length
+    // offset target for the next frame, which overwrites the jump a page turn just set.
+    scroll = scroll.animated(false);
     // A newly opened document starts at the top. eframe saves egui's memory with the settings
     // and document ids start again at 1 every launch, so the offset stored under this id can be
     // where an earlier session left another document.

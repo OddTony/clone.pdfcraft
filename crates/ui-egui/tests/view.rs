@@ -258,6 +258,33 @@ fn single_page_swipe_that_reaches_the_edge_does_not_turn_but_a_fresh_one_does() 
     send(&mut h, TouchPhase::End, 0.0);
     h.run_steps(30);
     assert_eq!(h.state().views[0].current, 1, "a fresh swipe at the edge turns one page");
+    let top = rect(&h, 1).expect("page 2 on screen").min.y;
+    assert!(
+        top >= h.state().views[0].viewport_rect().min.y,
+        "page 2 starts at its top after the swipe: {top} in {:?}",
+        h.state().views[0].viewport_rect()
+    );
+}
+
+#[test]
+fn stepping_past_either_end_leaves_the_view_alone() {
+    // Paging on past the first or last page must not jump the page back to its top.
+    for (page, forward) in [(2, true), (0, false)] {
+        let mut h = harness_stepping(1.0 / 60.0, &[("layout", "single"), ("zoom", "200")]);
+        h.state_mut().views[0].go_to_page(page);
+        h.run_steps(20);
+        let at = h.state().views[0].viewport_rect().center();
+        h.hover_at(at);
+        h.run_steps(4);
+        // Pan the page off its edge so a jump would show.
+        h.event(wheel(MouseWheelUnit::Line, -1.0, TouchPhase::Move));
+        h.run_steps(30);
+        let before = rect(&h, page).expect("page on screen");
+        h.state_mut().views[0].step_page(forward);
+        h.run_steps(30);
+        assert_eq!(h.state().views[0].current, page);
+        assert_eq!(rect(&h, page), Some(before), "stepping past the end (forward={forward}) moved the page");
+    }
 }
 
 #[test]

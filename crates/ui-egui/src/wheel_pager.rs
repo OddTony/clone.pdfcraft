@@ -73,6 +73,12 @@ impl WheelPager {
         self.accum = 0.0;
     }
 
+    /// Whether the current gesture already turned a page: the rest of it must not pan the page
+    /// just shown away from its top (or bottom).
+    pub(crate) fn gesture_turned(&self) -> bool {
+        self.turned.is_some()
+    }
+
     /// Feed one `Event::MouseWheel`: `dy` is its vertical delta (negative scrolls forward) and
     /// `now` is egui time. With `can_turn` false (the page doesn't fit, a dialog is open…) the
     /// gesture is followed but never turns. Returns the way to turn (`true` = forward).
