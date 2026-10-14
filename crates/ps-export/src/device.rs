@@ -945,13 +945,24 @@ impl<'a> Device<'a> for PsDevice<'a> {
 
     /// The retained-image entry (the vendor's ps-export patch): XObject images,
     /// whose streams borrow the document, record by value — cloned inside the
-    /// closure once per replay — exactly what the raster renderer draws.
+    /// closure once per replay — exactly what the raster renderer draws. A
+    /// stencil's embedded paint can be a pattern (the interpreter paints
+    /// `/ImageMask` through the current colour, patterns included), and the
+    /// renderer paints stencils through the same pattern algebra as any other
+    /// draw, so the logged clone re-roots that paint onto the scene's pixel
+    /// space like every other recorded paint (the review fix: this fifth
+    /// record site once cloned verbatim, and a pattern-painted stencil inside a
+    /// real group replayed at point density — the exact bug class the tiling
+    /// gate caught at fills).
     fn draw_retained_image(&mut self, image: Image<'a, 'a>, transform: Affine) {
         let bbox = image_bbox(&image, transform);
         let full = self.matrix * transform;
         // One clone buys the log its own value (cloned again inside the closure,
         // once per replay); the emission below borrows the original.
-        let logged = image.clone();
+        let logged = match image.clone() {
+            Image::Stencil(stencil) => Image::Stencil(stencil.re_rooted_paint(self.matrix)),
+            raster => raster,
+        };
         self.scene.record(move |r| r.draw_image(logged.clone(), full));
         self.scene.extend(bbox);
         self.emit_image(&image, transform);
@@ -1706,6 +1717,144 @@ mod tests {
         for got in [sample(kurbo::Point::new(140.0, 150.0)), sample(kurbo::Point::new(170.0, 50.0))] {
             assert!(got[0] >= 253 && got[1] >= 253 && got[2] <= 2, "the masked half shows the backdrop, not ink: {got:?}");
         }
+    }
+
+    /// A shading pattern with **both** a non-identity `/Matrix` and a shading
+    /// `/BBox` (the `/BBox` is what becomes the paint's clip — without either
+    /// the test below passes vacuously, the review's warning) recorded inside a
+    /// real group and replayed through the flatten: the clip must land rebased
+    /// through the page matrix alone. Before the review fix, `re_rooted` routed
+    /// the shading's clip through `pre_concat_transform`, which re-derives it
+    /// from the *new full* matrix — but the stored clip was already mapped once
+    /// by `get_paint` (through `root ∘ matrix`), so the captured matrix applied
+    /// twice: the clip box doubled and shifted (here x 20–140, y 40–300 became
+    /// x 60–300, y 120–640), the gradient's left band vanished and its blue
+    /// tail painted past the true clip edge. The samples pin both edges.
+    #[test]
+    fn shading_pattern_clip_flatten_keeps_the_bbox_placed() {
+        let bytes = color_page(
+            "<< /ExtGState << /GS1 5 0 R >> /XObject << /Fm1 6 0 R >> >>",
+            b"q /GS1 gs /Fm1 Do Q",
+            vec![
+                b"<< /Type /ExtGState /ca 0.5 >>".to_vec(),
+                stream_obj(
+                    "/Type /XObject /Subtype /Form /BBox [0 0 200 300] /Group << /S /Transparency /CS /DeviceRGB >> /Resources << /Pattern << /P1 7 0 R >> >>",
+                    b"/Pattern cs /P1 scn 20 20 160 260 re f",
+                ),
+                // /Matrix doubles and translates: the shading's gradient (red at
+                // page x 20, blue at x 140) and its /BBox clip (x 20-140, y 40-300)
+                // both map through it; the fill rect runs to x 180, so the clip's
+                // right edge at x 140 is what stops the extended blue tail.
+                b"<< /PatternType 2 /Matrix [2 0 0 2 20 40] /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 60 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> /BBox [0 0 60 130] /Extend [true true] >> >>".to_vec(),
+            ],
+        );
+        let pdf = Pdf::new(bytes).expect("fixture parses");
+        let page = pdf.pages().first().expect("fixture has a page");
+        let cache = InterpreterCache::new();
+        let mut state = Context::new(Affine::IDENTITY, Rect::new(0.0, 0.0, 200.0, 300.0), &cache, page.xref(), InterpreterSettings::default());
+        let mut dev = PsDevice::new(None);
+        interpret_page(page, &mut state, &mut dev);
+        let out = output(&dev);
+        assert_eq!(out.matches(">> image").count(), 1, "the group's pop flattened one raster: {out}");
+        assert!(dev.emit.notes.iter().any(|n| n.text == "transparency flattened to raster"), "the flattening is disclosed: {:?}", dev.emit.notes);
+        let raster = dev.scene.flatten().expect("the page is far under every cap");
+        assert!(raster.width > 0 && raster.height > 0, "the region is the fill rect's box");
+        let inverse = raster.place.inverse();
+        let sample = |pt: kurbo::Point| -> [u8; 3] {
+            let px = inverse * pt;
+            let (x, y) = (px.x.round() as u32, px.y.round() as u32);
+            assert!(x < raster.width && y < raster.height, "the sample {pt:?} falls inside the region");
+            let at = ((y * raster.width + x) * 3) as usize;
+            [raster.rgb[at], raster.rgb[at + 1], raster.rgb[at + 2]]
+        };
+        // The gradient's middle (param 0.5) at half opacity over the white base:
+        // magenta-ish, neither white nor a flat colour.
+        let mid = sample(kurbo::Point::new(80.0, 160.0));
+        assert!(mid[0] > 150 && mid[2] > 150 && mid[1] < 160, "the gradient's middle composites through: {mid:?}");
+        // Red-dominant near the gradient's start — the left band the double
+        // transform clipped away (the buggy clip began at x 60).
+        let left = sample(kurbo::Point::new(40.0, 160.0));
+        assert!(i32::from(left[0]) - i32::from(left[2]) > 40, "the gradient's left band survives: {left:?}");
+        // Right of the clip edge (x 140) but inside the fill rect: the extended
+        // blue tail must NOT paint — the double transform let it run to x 180.
+        let tail = sample(kurbo::Point::new(160.0, 160.0));
+        assert!(tail[0] >= 245 && tail[1] >= 245 && tail[2] >= 245, "the clip's right edge holds: {tail:?}");
+        // Below the clip's y0 (40) but inside the fill rect: nothing paints.
+        let below = sample(kurbo::Point::new(80.0, 30.0));
+        assert!(below[0] >= 245 && below[1] >= 245 && below[2] >= 245, "the clip's bottom edge holds: {below:?}");
+    }
+
+    /// A stencil painted through a **pattern** colorspace (`/Pattern cs /P1 scn`
+    /// before the `/ImageMask` draw — the interpreter hands the stencil the
+    /// current pattern as its paint) recorded inside a real group: the fifth
+    /// record site (`draw_retained_image`) must re-root that embedded paint like
+    /// every other one, or the replay tiles the mask's cells at one pixel per
+    /// *point* — the exact bug class the tiling gate caught at fills. The
+    /// samples pin the true 20-pt tile grid inside the mask's painted left
+    /// column (the `cm` maps the 2x2 mask to x 20–60, y 20–60; its left column
+    /// x 20–40 paints): blue at the tile centre (28.8, 28.8) is a pixel the
+    /// point-density replay leaves white, and the gap at (22, 30) is one it
+    /// paints. Chosen at unit level deliberately: the PS side of a
+    /// pattern-painted stencil degrades to the flat stand-in (the W1 policy,
+    /// `paint_ops`), so the flattener's own raster is the honest place to pin
+    /// the record site; the downstream renderer arm is proven end to end by the
+    /// tiling-inside-group oracle gate.
+    #[test]
+    fn pattern_painted_stencil_flatten_keeps_tiles_placed() {
+        let bytes = color_page(
+            "<< /ExtGState << /GS1 5 0 R >> /XObject << /Fm1 6 0 R >> >>",
+            b"q /GS1 gs /Fm1 Do Q",
+            vec![
+                b"<< /Type /ExtGState /ca 0.5 >>".to_vec(),
+                stream_obj(
+                    "/Type /XObject /Subtype /Form /BBox [0 0 200 300] /Group << /S /Transparency /CS /DeviceRGB >> /Resources << /Pattern << /P1 7 0 R >> /XObject << /Msk1 8 0 R >> >>",
+                    b"/Pattern cs /P1 scn q 40 0 0 40 20 20 cm /Msk1 Do Q",
+                ),
+                // 20-unit cells anchored at the page origin, a blue square at
+                // 5..15 of each cell; the pattern is selected before the mask's
+                // own q/cm, so the tile grid stays page-anchored.
+                stream_obj(
+                    "/PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 20 20] /XStep 20 /YStep 20 /Resources << >>",
+                    b"0 0 1 rg 5 5 10 10 re f",
+                ),
+                // 2x2 mask, sample 0 paints: the left column of each row.
+                stream_obj("/Type /XObject /Subtype /Image /Width 2 /Height 2 /ImageMask true /BitsPerComponent 1", &[0x40, 0x40]),
+            ],
+        );
+        let pdf = Pdf::new(bytes).expect("fixture parses");
+        let page = pdf.pages().first().expect("fixture has a page");
+        let cache = InterpreterCache::new();
+        let mut state = Context::new(Affine::IDENTITY, Rect::new(0.0, 0.0, 200.0, 300.0), &cache, page.xref(), InterpreterSettings::default());
+        let mut dev = PsDevice::new(None);
+        interpret_page(page, &mut state, &mut dev);
+        let out = output(&dev);
+        assert_eq!(out.matches(">> image").count(), 1, "the group's pop flattened one raster: {out}");
+        assert!(dev.emit.notes.iter().any(|n| n.text == "transparency flattened to raster"), "the flattening is disclosed: {:?}", dev.emit.notes);
+        let raster = dev.scene.flatten().expect("the page is far under every cap");
+        assert!(raster.width > 0 && raster.height > 0, "the region is the mask draw's box");
+        let inverse = raster.place.inverse();
+        let sample = |pt: kurbo::Point| -> [u8; 3] {
+            let px = inverse * pt;
+            let (x, y) = (px.x.round() as u32, px.y.round() as u32);
+            assert!(x < raster.width && y < raster.height, "the sample {pt:?} falls inside the region");
+            let at = ((y * raster.width + x) * 3) as usize;
+            [raster.rgb[at], raster.rgb[at + 1], raster.rgb[at + 2]]
+        };
+        // Half-opacity blue over the white base. The mask's box (the `cm` maps
+        // its 2x2 samples to x 20-60, y 20-60) paints its left column x 20-40
+        // only; the page-anchored 20-pt tiles show blue squares at 25-35 of
+        // every cell inside that column.
+        let tile = |got: [u8; 3]| i32::from(got[2]) > 200 && i32::from(got[0]) < 180 && i32::from(got[1]) < 180;
+        let white = |got: [u8; 3]| got[0] >= 245 && got[1] >= 245 && got[2] >= 245;
+        assert!(
+            tile(sample(kurbo::Point::new(28.8, 28.8))),
+            "a tile centre carries ink (28.8 pt = raster px 120, which the point-density replay leaves white)"
+        );
+        assert!(tile(sample(kurbo::Point::new(30.0, 30.0))), "the first tile's centre: blue");
+        assert!(tile(sample(kurbo::Point::new(30.0, 50.0))), "the second tile row's centre: blue");
+        assert!(white(sample(kurbo::Point::new(22.0, 30.0))), "the gap between tiles stays clean (the point-density replay paints it)");
+        assert!(white(sample(kurbo::Point::new(50.0, 30.0))), "the mask's unpainted right column stays clean");
+        assert!(white(sample(kurbo::Point::new(65.0, 65.0))), "outside the mask's box (but inside the region) nothing paints");
     }
 
     /// The edge rule (Task 12): a blend mode announced with **no open
