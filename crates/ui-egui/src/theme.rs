@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use craft_ui::theme::SuiteDarkPalette;
+use craft_ui::theme::SuitePalette;
 use egui::epaint::text::{FontTweak, HintingTarget, SmoothHinting};
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Rect, Response, Stroke, Vec2, Visuals};
 
@@ -71,11 +71,11 @@ pub struct Tokens {
 impl Tokens {
     /// Foreground for a filled accent control in the standard dark palette.
     pub fn on_accent(&self) -> Color32 {
-        if self.dark() { SuiteDarkPalette::ARTCRAFT.on_accent } else { Color32::WHITE }
+        if self.dark() { SuitePalette::ARTCRAFT_DARK.on_accent } else { Color32::WHITE }
     }
 
     pub fn for_kind(kind: ThemeKind) -> Self {
-        let suite = SuiteDarkPalette::ARTCRAFT;
+        let suite = SuitePalette::ARTCRAFT_DARK;
         match kind {
             ThemeKind::Light => Self {
                 kind,
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn shared_dark_adapter_maps_ui_roles_and_preserves_document_and_light_styles() {
-        let suite = SuiteDarkPalette::ARTCRAFT;
+        let suite = SuitePalette::ARTCRAFT_DARK;
         let dark = Tokens::for_kind(ThemeKind::Dark);
         for (actual, expected) in [
             (dark.titlebar, suite.chrome),
