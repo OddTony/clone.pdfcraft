@@ -1348,6 +1348,7 @@
 	Type a password.	Въведете парола.
 	The passwords don't match.	Паролите не съвпадат.
 	This compatibility level supports only plain ASCII passwords.	Това ниво на съвместимост поддържа само пароли с обикновени ASCII знаци.
+	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	Паролите не могат да се състоят само от знаци, които паролите игнорират, като меки тирета.
 	Anyone opening the document will need this password. It's applied when you save.	Всеки, който отваря документа, ще се нуждае от тази парола. Тя се прилага при записване.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	Документът се отваря без парола; тази парола е нужна за промяна на ограниченията. Тя се прилага при записване.
 	Recover unsaved documents?	Да се възстановят ли незаписаните документи?

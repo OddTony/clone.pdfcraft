@@ -1291,6 +1291,7 @@
 	Type a password.	Digite uma senha.
 	The passwords don't match.	As senhas não coincidem.
 	This compatibility level supports only plain ASCII passwords.	Este nível de compatibilidade suporta apenas senhas em ASCII simples.
+	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	As senhas não podem ser formadas apenas por caracteres ignorados, como hifens condicionais.
 	Anyone opening the document will need this password. It's applied when you save.	Qualquer pessoa que abrir o documento precisará desta senha. Ela será aplicada ao salvar.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	O documento é aberto sem senha; esta senha é necessária para alterar as restrições. Ela será aplicada ao salvar.
 	Recover unsaved documents?	Recuperar documentos não salvos?

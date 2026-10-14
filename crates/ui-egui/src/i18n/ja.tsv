@@ -1407,6 +1407,7 @@
 	Type a password.	パスワードを入力してください。
 	The passwords don't match.	パスワードが一致しません。
 	This compatibility level supports only plain ASCII passwords.	この互換性レベルでは ASCII 文字のパスワードのみ使用できます。
+	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	パスワードを、ソフトハイフンなど無視される文字だけで構成することはできません。
 	Anyone opening the document will need this password. It's applied when you save.	文書を開く際にこのパスワードが必要になります。保存時に適用されます。
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	文書はパスワードなしで開けます。制限を変更する際にこのパスワードが必要になります。保存時に適用されます。
 	Recover unsaved documents?	未保存の文書を復元しますか？

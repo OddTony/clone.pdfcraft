@@ -80,6 +80,10 @@ impl ProtectDraft {
             Some("Enter a password.")
         } else if self.protection.algorithm != Algorithm::Aes256 && !self.password.chars().all(|c| (' '..='~').contains(&c)) {
             Some("This compatibility level supports only plain ASCII passwords.")
+        } else if pdfcraft_cos::effective_password(self.protection.algorithm, &self.password)
+            == pdfcraft_cos::effective_password(self.protection.algorithm, "")
+        {
+            Some("Passwords can't be made only of characters that passwords ignore, such as soft hyphens.")
         } else {
             None
         };
@@ -586,6 +590,14 @@ mod tests {
         assert_eq!(older.problems().password, Some("This compatibility level supports only plain ASCII passwords."));
         older.protection.algorithm = Algorithm::Aes256;
         assert_eq!(older.problems(), Problems::default());
+    }
+
+    #[test]
+    fn a_password_the_encryption_ignores_is_refused_before_the_engine_is_asked() {
+        // A soft hyphen is dropped by AES-256's password preparation, so the key would be the empty password's.
+        let d = draft("\u{ad}", "\u{ad}");
+        assert_eq!(d.problems().password, Some("Passwords can't be made only of characters that passwords ignore, such as soft hyphens."));
+        assert_eq!(draft("\u{ad}x", "\u{ad}x").problems(), Problems::default());
     }
 
     #[test]

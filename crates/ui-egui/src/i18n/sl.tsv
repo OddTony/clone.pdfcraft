@@ -1840,6 +1840,7 @@
 	This certificate is trusted through a certificate above it in the chain.	Temu potrdilu se zaupa prek potrdila nad njim v verigi.
 	This comment's appearance can't be changed yet.	Videza tega komentarja še ni mogoče spremeniti.
 	This compatibility level supports only plain ASCII passwords.	Ta raven združljivosti podpira samo navadna gesla ASCII.
+	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	Geslo ne sme biti sestavljeno samo iz znakov, ki jih gesla prezrejo, na primer mehkih vezajev.
 	This dialog shows the details of a certificate and its chain.	To okno prikazuje podrobnosti potrdila in njegove verige.
 	This document can't be checked: it couldn't be read for editing	Tega dokumenta ni mogoče preveriti: ni bilo mogoče prebrati za urejanje
 	This document contains {n} interactive form fields.	Ta dokument vsebuje interaktivna polja obrazca: {n}.

@@ -1376,6 +1376,7 @@
 	Type a password.	Adj meg egy jelszót.
 	The passwords don't match.	A jelszavak nem egyeznek.
 	This compatibility level supports only plain ASCII passwords.	Ez a kompatibilitási szint csak sima ASCII-jelszót fogad el.
+	Passwords can't be made only of characters that passwords ignore, such as soft hyphens.	A jelszó nem állhat csak olyan karakterekből, amelyeket a jelszavak figyelmen kívül hagynak, például lágy kötőjelekből.
 	Anyone opening the document will need this password. It's applied when you save.	A dokumentumot megnyitóknak erre a jelszóra lesz szükségük. Mentéskor lép életbe.
 	The document opens without a password; this password is needed to change the restrictions. It's applied when you save.	A dokumentum jelszó nélkül nyílik meg; ez a jelszó a korlátozások módosításához kell. Mentéskor lép életbe.
 	Recover unsaved documents?	Visszaállítod a nem mentett dokumentumokat?

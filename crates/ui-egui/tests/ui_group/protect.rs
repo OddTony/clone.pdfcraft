@@ -63,6 +63,35 @@ fn protecting_for_viewing_requires_matching_passwords_and_saves_encrypted() {
 }
 
 #[test]
+fn a_password_made_only_of_ignored_characters_is_named_under_its_field() {
+    for purpose in ["Open the document", "Restrict editing"] {
+        let mut h = open_dialog();
+        h.get_by_role_and_label(Role::RadioButton, purpose).click();
+        h.run_steps(2);
+        let id = h.state().views[0].id;
+        let before = h.state().session.get(id).unwrap().bytes.clone();
+        type_into(&mut h, "Password", "\u{ad}");
+        type_into(&mut h, "Confirm password", "\u{ad}");
+        h.get_by_label("Apply protection").click();
+        h.run_steps(3);
+        h.get_by_label("Passwords can't be made only of characters that passwords ignore, such as soft hyphens.");
+        assert_eq!(h.state().dialog, Some(Dialog::Protect));
+        assert_eq!(h.state().protect_draft.password, "\u{ad}");
+        assert_eq!(h.state().protect_draft.confirm, "\u{ad}");
+        let doc = h.state().session.get(id).unwrap();
+        assert_eq!(doc.bytes, before);
+        assert!(!doc.dirty && !doc.info.encrypted);
+        // Correct the existing input without losing it or reopening the dialog.
+        type_into(&mut h, "Password", "x");
+        type_into(&mut h, "Confirm password", "x");
+        h.get_by_label("Apply protection").click();
+        h.run_steps(3);
+        assert_eq!(h.state().dialog, None);
+        assert!(h.state().session.get(id).unwrap().info.encrypted);
+    }
+}
+
+#[test]
 fn editing_restrictions_via_advanced_options() {
     let mut h = open_dialog();
     h.get_by_role_and_label(Role::RadioButton, "Restrict editing").click();
