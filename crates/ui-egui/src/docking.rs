@@ -368,7 +368,9 @@ fn saved_split_path(saved: &Layout<Panel>, rendered: &Layout<Panel>, path: &[boo
 
 pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
     let t = crate::theme::Tokens::get(ui.ctx());
-    let mut workspace = std::mem::take(&mut app.docking);
+    // A copy, not `mem::take`: the panes read the layout while they draw (the document area
+    // puts its quick-action bar on the Tools panel's side). It is stored back below.
+    let mut workspace = app.docking.clone();
     if let Err(error) = workspace.validate().and_then(|()| sync(&mut workspace, app)) {
         app.notify_fmt("Panel layout could not be restored: {error}", &[("error", &error)]);
         workspace = Workspace::default();
