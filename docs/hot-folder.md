@@ -20,6 +20,8 @@ At integration commit `116cd60c`, local Windows gates pass: `cargo test --worksp
 
 The follow-up integration includes main `3f044b62` (native Windows printing) and its resolved dependency lockfile. Targeted Windows tests pass: 22 print tests, 369 editor library tests (one ignored), and all seven Hot Folder automation tests. Strict workspace/all-target Clippy, formatting, assets, layering, parity and all 32 WASM package checks also pass on the follow-up. The full 3,173-test result above belongs to `116cd60c`; it is not a second full-suite run on the printing follow-up.
 
+The 2026-10-14 follow-up integrates main `dc4d86ba`. Its safe server-test harness passes on Windows and Linux after correcting native path separators and case comparison; the previous helper fails the same Linux run. Selected automation, font, content and editor tests pass (1,385 passed, five ignored), plus 271 renderer tests. Print-dialog tests use synthetic printer sources after reproducing a crash during concurrent native printer enumeration; all eleven assertions pass in parallel with those fixtures. This does not certify native printer drivers.
+
 The optional standalone application processes folders without keeping the PdfCraft editor open.
 It shares OCR, orientation correction, deskew and paper-edge detection with the engine. Its
 interface follows the primary system language when English, German, French, Dutch, Spanish,

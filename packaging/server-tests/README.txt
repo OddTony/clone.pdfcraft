@@ -117,3 +117,11 @@ SMB encryption-required share:
   https://learn.microsoft.com/en-us/powershell/module/smbshare/new-smbshare
 Reusable workflow event context:
   https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations
+
+Portable harness checks
+-----------------------
+Run `pwsh -NoProfile -File packaging/server-tests/check.ps1` on Windows or Linux.
+It checks path confinement using native separators and case rules, including
+trailing separators, filesystem roots, sibling prefixes and parent traversal.
+It does not run an installer or start a service. Unix checks also reject
+different-case roots and backslash sibling names.
