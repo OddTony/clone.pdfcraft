@@ -1341,6 +1341,7 @@ mod revert_draft_tests {
             picked: Vec::new(),
             request_focus: false,
             select_all: false,
+            press: None,
             calendar: None,
             calendar_rect: None,
         }
