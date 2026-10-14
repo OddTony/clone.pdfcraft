@@ -5,20 +5,21 @@
 #   $DIST/pdfcraft-<version>-linux-<arch>.AppImage.zsync  delta updates (needs zsyncmake)
 #   $DIST/pdfcraft-<version>-linux-<arch>.deb       Debian, Ubuntu, Mint, Pop!_OS, ...
 #   $DIST/pdfcraft-<version>-linux-<arch>.rpm       Fedora, openSUSE, RHEL, ...
+#   $DIST/pdfcraft-<version>-linux-<arch>.pkg.tar.zst  Arch, Manjaro, EndeavourOS, ...
 #   $DIST/pdfcraft-<version>-linux-<arch>.tar.gz    plain FHS-style tree (bin/, share/)
 #   $DIST/pdfcraft-cli-<version>-linux-<arch>.tar.gz  the headless CLI alone (servers, CI, agents)
 #
 # A local or patched build: set PDFCRAFT_BUILD_LABEL (e.g. `titlebar`). `--version` and About then
-# show `0.7.1 (titlebar)`, file names carry `-titlebar`, and the .rpm/.deb release becomes
+# show `0.7.1 (titlebar)`, file names carry `-titlebar`, and the .rpm/.deb/Arch release becomes
 # `1.titlebar`, which upgrades over the release of the same version (and the next release over it).
 #
 # Cross-compiling (CI: riscv64, tar only): set CROSS_ARCH (riscv64), CROSS_TARGET (the Rust target),
 # CROSS_COMPILE (binutils prefix, for strip) and optionally EMULATOR (e.g. qemu-riscv64) to
 # smoke-test the CLI.
 #
-# Usage: packaging/linux/package.sh [--skip-build] [--formats "appimage deb rpm tar cli"]
+# Usage: packaging/linux/package.sh [--skip-build] [--formats "appimage deb rpm arch tar cli"]
 #
-# Needs: cargo, curl and the network (the OCR models: cargo xtask models); nfpm for deb/rpm (https://nfpm.goreleaser.com); appimagetool for the AppImage
+# Needs: cargo, curl and the network (the OCR models: cargo xtask models); nfpm for deb/rpm/arch (https://nfpm.goreleaser.com); appimagetool for the AppImage
 # (downloaded into $CARGO_TARGET_DIR if missing). Build on an old distro (CI: Ubuntu 22.04,
 # glibc 2.35) so the binaries run on newer ones. Optional: desktop-file-validate, appstreamcli,
 # zsyncmake (the zsync package) for the AppImage's .zsync.
@@ -29,12 +30,12 @@ HERE="$ROOT/packaging/linux"
 APP_ID=ai.storyteller.pdfcraft
 
 SKIP_BUILD=0
-FORMATS="appimage deb rpm tar cli"
+FORMATS="appimage deb rpm arch tar cli"
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-build) SKIP_BUILD=1; shift ;;
     --formats) FORMATS="$2"; shift 2 ;;
-    -h | --help) sed -n '2,24p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -110,8 +111,8 @@ if has cli; then
   echo "wrote $DIST/$CLI_NAME.tar.gz"
 fi
 
-# ---- .deb / .rpm --------------------------------------------------------------------------------
-if has deb || has rpm; then
+# ---- .deb / .rpm / .pkg.tar.zst -----------------------------------------------------------------
+if has deb || has rpm || has arch; then
   command -v nfpm >/dev/null || { echo "error: nfpm not found (https://nfpm.goreleaser.com/install/)" >&2; exit 1; }
   export VERSION
   export RELEASE="1${PDFCRAFT_BUILD_LABEL:+.$PDFCRAFT_BUILD_LABEL}"
@@ -121,6 +122,14 @@ if has deb || has rpm; then
   for fmt in deb rpm; do
     if has "$fmt"; then (cd "$ROOT" && nfpm package -f "$WORK/nfpm.yaml" -p "$fmt" -t "$DIST/$BASENAME.$fmt"); fi
   done
+  # The Arch package is named by the bundle id (see `archlinux` in nfpm.yaml), which nfpm can't
+  # override per format, and `archlinux.packager` isn't env-expanded, so both are written here.
+  if has arch; then
+    sed "s|^name: pdfcraft\$|name: $APP_ID|" "$WORK/nfpm.yaml" >"$WORK/nfpm-arch.yaml"
+    grep -qx "name: $APP_ID" "$WORK/nfpm-arch.yaml" || { echo "error: couldn't rename the Arch package" >&2; exit 1; }
+    printf 'archlinux:\n  packager: "%s"\n' "$PDFCRAFT_MAINTAINER" >>"$WORK/nfpm-arch.yaml"
+    (cd "$ROOT" && nfpm package -f "$WORK/nfpm-arch.yaml" -p archlinux -t "$DIST/$BASENAME.pkg.tar.zst")
+  fi
 fi
 
 # ---- AppImage -----------------------------------------------------------------------------------
