@@ -150,6 +150,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-14 (M3):** Integrated upstream `9931329b` and its 0.8.0 release. Resolved the workspace dependency version conflict while retaining the themes crate and all maintainer corrections. Estimates unchanged.
+
 - **2026-10-13 (M3, current-main integration):** Integrated main `5e12f5fd`, including the `b5467d93` async-opening fix, native printing, font and tab improvements. Retained all theme corrections and both roadmap histories; translation hashes describe the combined catalogs. Local focused suites, full UI and repository gates pass; see `docs/theme-validation.md`. Estimates unchanged.
 - **2026-10-13 (M3, theme integration):** Integrated upstream `7437bde3` without rewriting theme history; retained all four maintainer corrections and upstream CLI, localization and viewer changes. Focused theme validation passes; broader UI failures inherited from current main are documented in `docs/theme-validation.md`. Estimates unchanged.
 - **2026-10-12 (M3, theme follow-up):** Theme contrast now diagnoses real control and surface states while leaving user palettes unchanged; imported base-theme chains are validated atomically. Native GUI reloads use a bounded worker and cached active palette; a synthetic 10,000-theme store parses once across 63 unchanged polls. Six regression checks were verified to fail with their fixes removed. No readiness estimate change.
@@ -443,6 +445,7 @@ Newest first: the date, what moved, and the new overall estimate.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | M3: merged upstream 9931329b (0.8.0); retained the theme dependency and all four maintainer corrections. Estimates unchanged. |
 | 2026-10-12 | minor | M3/#1364 candidate: absolute local GoToR links require desktop consent or headless allow_absolute; existing relative navigation and validation retained. Estimates unchanged. |
 | 2026-10-12 | minor | M8: redaction retires inherited `/Resources` so a parent `/Pages` can't keep a removed XObject reachable; only redacted pages that inherit are pinned (one shared reference), unredacted pages are untouched; estimates unchanged |
 | 2026-10-12 | minor | M7/#1200 candidate: bounded local GoToR opening, root-confined automation, and action-preserving appearance edits; named destinations and window behavior remain partial; estimates unchanged. |

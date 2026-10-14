@@ -162,6 +162,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | M3: merged upstream 9931329b (0.8.0); retained the theme dependency and all four maintainer corrections. Estimates unchanged. |
 | 2026-10-13 | minor | M3: integrate current main 5e12f5fd, including async-opening correction b5467d93; preserve theme functionality and all upstream roadmap records. Estimates unchanged. |
 | 2026-10-13 | minor | M3: integrate upstream 7437bde3 while retaining theme contrast, storage caching, import validation and CLI/MCP operations. Focused checks pass; current-main UI blockers are recorded in theme-validation.md. Estimates unchanged. |
 | 2026-10-12 | minor | M3 theme follow-up: advisory state-aware contrast, safe base-theme imports, and background caching for large libraries; 2,903 tests pass, zero fail. Estimates unchanged. |
