@@ -2432,3 +2432,13 @@ animation effects	Off	オフ
 	Make properties default	プロパティをデフォルトに設定
 	Pages selected	選択したページ
 	Page properties	ページのプロパティ
+	Screen resolution	画面の解像度
+	Standard (96 ppi)	標準 (96 ppi)
+	Calibrate…	キャリブレーション…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	画面の実際の 1 インチあたりのピクセル数です。定規でキャリブレーションすると、実際のサイズ (100%) でページが実寸で表示されます。
+	Calibrate screen	画面のキャリブレーション
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	下の線のどれかを定規で端の印から端の印まで測り、その横に長さを入力してください。測れる線が長いほど正確です。複数測ると平均を使います。
+	These measurements differ by more than 2%: check them.	測定値が 2% 以上ずれています。確認してください。
+	At the current {ppi} ppi this line should measure {length} {unit}.	現在の {ppi} ppi では、この線は {length} {unit} になるはずです。
+	Measured length	測定した長さ
+	That length can't be right for this line: check the unit.	この線の長さとしては正しくありません。単位を確認してください。

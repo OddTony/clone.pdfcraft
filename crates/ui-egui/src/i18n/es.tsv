@@ -2572,3 +2572,13 @@ animation effects	Off	Desactivados
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Estás viendo la versión firmada de «{from}» (revisión {rev}). Es una instantánea: los cambios aquí no afectarán al original.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Estás viendo la revisión {rev} de «{from}». Es una instantánea: los cambios aquí no afectarán al original.
+	Screen resolution	Resolución de pantalla
+	Standard (96 ppi)	Estándar (96 ppp)
+	Calibrate…	Calibrar…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Los píxeles por pulgada reales de la pantalla. Calibre con una regla para que el tamaño real (100 %) muestre las páginas a su tamaño verdadero.
+	Calibrate screen	Calibrar pantalla
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Mida una de las líneas de abajo con una regla, de una marca final a la otra, y escriba su longitud al lado. La línea más larga que pueda medir es la más precisa; si mide varias, se promedian.
+	These measurements differ by more than 2%: check them.	Estas medidas difieren en más de un 2 %: revíselas.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Con la resolución actual de {ppi} ppp, esta línea debería medir {length} {unit}.
+	Measured length	Longitud medida
+	That length can't be right for this line: check the unit.	Esa longitud no puede ser correcta para esta línea: compruebe la unidad.

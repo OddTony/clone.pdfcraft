@@ -2431,3 +2431,13 @@ animation effects	Off	Ki
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
 	Pages selected	Kijelölt oldalak
 	Page properties	Oldaltulajdonságok
+	Screen resolution	Képernyőfelbontás
+	Standard (96 ppi)	Szabványos (96 ppi)
+	Calibrate…	Kalibrálás…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	A képernyő valódi képpont/hüvelyk értéke. Kalibráljon vonalzóval, hogy a tényleges méret (100%) valódi méretükben mutassa az oldalakat.
+	Calibrate screen	Képernyő kalibrálása
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Mérje meg vonalzóval az alábbi vonalak egyikét az egyik végjeltől a másikig, és írja be mellé a hosszát. A leghosszabb mérhető vonal a legpontosabb; több mérés átlagolódik.
+	These measurements differ by more than 2%: check them.	Ezek a mérések több mint 2%-kal eltérnek: ellenőrizze őket.
+	At the current {ppi} ppi this line should measure {length} {unit}.	A jelenlegi {ppi} ppi felbontás mellett ennek a vonalnak {length} {unit} hosszúnak kell lennie.
+	Measured length	Mért hossz
+	That length can't be right for this line: check the unit.	Ez a hossz nem lehet helyes ehhez a vonalhoz: ellenőrizze a mértékegységet.

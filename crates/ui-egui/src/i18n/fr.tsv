@@ -2432,3 +2432,13 @@ animation effects	Off	Désactivés
 	Make properties default	Définir comme propriétés par défaut
 	Pages selected	Pages sélectionnées
 	Page properties	Propriétés de la page
+	Screen resolution	Résolution de l’écran
+	Standard (96 ppi)	Standard (96 ppp)
+	Calibrate…	Calibrer…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Le nombre réel de pixels par pouce de l’écran. Calibrez avec une règle pour que la taille réelle (100 %) affiche les pages à leur vraie taille.
+	Calibrate screen	Calibrer l’écran
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Mesurez une des lignes ci-dessous avec une règle, d’un trait d’extrémité à l’autre, et saisissez sa longueur à côté. Plus la ligne est longue, plus le résultat est précis ; si vous en mesurez plusieurs, la moyenne est utilisée.
+	These measurements differ by more than 2%: check them.	Ces mesures diffèrent de plus de 2 % : vérifiez-les.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Avec la résolution actuelle de {ppi} ppp, cette ligne devrait mesurer {length} {unit}.
+	Measured length	Longueur mesurée
+	That length can't be right for this line: check the unit.	Cette longueur ne peut pas correspondre à cette ligne : vérifiez l’unité.

@@ -2644,3 +2644,13 @@ certificate	Key usage	Utilizzo chiave
 certificate	Self-signed	Autofirmato
 certificate	SHA-1 digest	Impronta SHA-1
 certificate	SHA-256 digest	Impronta SHA-256
+	Screen resolution	Risoluzione dello schermo
+	Standard (96 ppi)	Standard (96 ppi)
+	Calibrate…	Calibra…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	I pixel per pollice reali dello schermo. Calibra con un righello perché la dimensione effettiva (100%) mostri le pagine alla loro vera dimensione.
+	Calibrate screen	Calibra lo schermo
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Misura una delle linee qui sotto con un righello, da un segno finale all'altro, e inserisci la sua lunghezza accanto. La linea più lunga che puoi misurare è la più precisa; misurandone diverse si usa la media.
+	These measurements differ by more than 2%: check them.	Queste misure differiscono di oltre il 2%: controllale.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Con la risoluzione attuale di {ppi} ppi questa linea dovrebbe misurare {length} {unit}.
+	Measured length	Lunghezza misurata
+	That length can't be right for this line: check the unit.	Questa lunghezza non può essere corretta per questa linea: controlla l'unità.

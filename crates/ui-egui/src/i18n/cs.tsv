@@ -2506,3 +2506,13 @@ animation effects	Off	Vypnuto
 	Make properties default	Nastavit vlastnosti jako výchozí
 	Pages selected	Vybrané stránky
 	Page properties	Vlastnosti stránky
+	Screen resolution	Rozlišení obrazovky
+	Standard (96 ppi)	Standardní (96 ppi)
+	Calibrate…	Kalibrovat…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Skutečný počet pixelů na palec obrazovky. Zkalibrujte pravítkem, aby skutečná velikost (100 %) zobrazovala stránky v jejich opravdové velikosti.
+	Calibrate screen	Kalibrovat obrazovku
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Změřte pravítkem jednu z čar níže od jedné koncové značky ke druhé a vedle ní zadejte její délku. Nejdelší čára, kterou dokážete změřit, je nejpřesnější; více měření se zprůměruje.
+	These measurements differ by more than 2%: check them.	Tato měření se liší o více než 2 %: zkontrolujte je.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Při současném rozlišení {ppi} ppi by tato čára měla měřit {length} {unit}.
+	Measured length	Naměřená délka
+	That length can't be right for this line: check the unit.	Tato délka nemůže pro tuto čáru platit: zkontrolujte jednotku.

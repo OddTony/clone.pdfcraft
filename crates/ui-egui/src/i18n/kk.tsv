@@ -2430,3 +2430,13 @@ animation effects	Off	Өшірулі
 	Make properties default	Қасиеттерді әдепкі ету
 	Pages selected	Таңдалған беттер
 	Page properties	Бет қасиеттері
+	Screen resolution	Экран ажыратымдылығы
+	Standard (96 ppi)	Стандартты (96 ppi)
+	Calibrate…	Калибрлеу…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Экранның бір дюймдегі нақты пиксель саны. Нақты өлшем (100%) беттерді шын өлшемінде көрсетуі үшін сызғышпен калибрлеңіз.
+	Calibrate screen	Экранды калибрлеу
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Төмендегі сызықтардың бірін сызғышпен бір шеткі белгіден екіншісіне дейін өлшеп, ұзындығын жанына енгізіңіз. Өлшей алатын ең ұзын сызық ең дәл; бірнеше өлшемнің орташасы алынады.
+	These measurements differ by more than 2%: check them.	Бұл өлшемдер 2%-дан артық ерекшеленеді: оларды тексеріңіз.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Қазіргі {ppi} ppi ажыратымдылығында бұл сызық {length} {unit} болуы керек.
+	Measured length	Өлшенген ұзындық
+	That length can't be right for this line: check the unit.	Бұл ұзындық осы сызыққа сай келмейді: өлшем бірлігін тексеріңіз.

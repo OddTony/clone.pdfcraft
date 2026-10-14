@@ -2395,3 +2395,13 @@ animation effects	Off	Изключени
 	Make properties default	Задаване като свойства по подразбиране
 	Pages selected	Избрани страници
 	Page properties	Свойства на страницата
+	Screen resolution	Резолюция на екрана
+	Standard (96 ppi)	Стандартна (96 ppi)
+	Calibrate…	Калибриране…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Действителният брой пиксели на инч на екрана. Калибрирайте с линийка, за да може действителният размер (100%) да показва страниците в истинския им размер.
+	Calibrate screen	Калибриране на екрана
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Измерете с линийка една от линиите по-долу от единия краен знак до другия и въведете дължината ѝ до нея. Най-дългата линия, която можете да измерите, е най-точна; при няколко измервания се взема средната стойност.
+	These measurements differ by more than 2%: check them.	Тези измервания се различават с повече от 2%: проверете ги.
+	At the current {ppi} ppi this line should measure {length} {unit}.	При текущата резолюция от {ppi} ppi тази линия трябва да е {length} {unit}.
+	Measured length	Измерена дължина
+	That length can't be right for this line: check the unit.	Тази дължина не може да е вярна за тази линия: проверете мерната единица.

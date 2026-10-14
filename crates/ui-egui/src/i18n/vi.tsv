@@ -2685,3 +2685,13 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+	Screen resolution	Độ phân giải màn hình
+	Standard (96 ppi)	Tiêu chuẩn (96 ppi)
+	Calibrate…	Hiệu chỉnh…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Số điểm ảnh thực trên mỗi inch của màn hình. Hiệu chỉnh bằng thước để Kích thước thực (100%) hiển thị trang đúng kích thước thật.
+	Calibrate screen	Hiệu chỉnh màn hình
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Dùng thước đo một trong các đường bên dưới, từ vạch đầu này đến vạch đầu kia, rồi nhập độ dài bên cạnh. Đường dài nhất bạn đo được là chính xác nhất; đo nhiều đường sẽ lấy trung bình.
+	These measurements differ by more than 2%: check them.	Các số đo này chênh nhau hơn 2%: hãy kiểm tra lại.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Với độ phân giải hiện tại {ppi} ppi, đường này phải dài {length} {unit}.
+	Measured length	Độ dài đo được
+	That length can't be right for this line: check the unit.	Độ dài này không thể đúng với đường này: hãy kiểm tra đơn vị.

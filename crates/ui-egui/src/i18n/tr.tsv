@@ -2428,3 +2428,13 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+	Screen resolution	Ekran çözünürlüğü
+	Standard (96 ppi)	Standart (96 ppi)
+	Calibrate…	Kalibre et…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Ekranın inç başına gerçek piksel sayısı. Gerçek boyutun (%100) sayfaları gerçek büyüklüklerinde göstermesi için bir cetvelle kalibre edin.
+	Calibrate screen	Ekranı kalibre et
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Aşağıdaki çizgilerden birini bir cetvelle bir uç işaretinden diğerine ölçün ve uzunluğunu yanına yazın. Ölçebildiğiniz en uzun çizgi en doğrusudur; birkaç ölçümün ortalaması alınır.
+	These measurements differ by more than 2%: check them.	Bu ölçümler %2'den fazla farklı: kontrol edin.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Geçerli {ppi} ppi çözünürlükte bu çizgi {length} {unit} olmalıdır.
+	Measured length	Ölçülen uzunluk
+	That length can't be right for this line: check the unit.	Bu uzunluk bu çizgi için doğru olamaz: birimi kontrol edin.
