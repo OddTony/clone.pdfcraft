@@ -47,6 +47,8 @@
 	Take a snapshot	მომენტალური ასლის შექმნა
 	Full screen mode	სრულეკრანიანი რეჟიმი
 	Read mode	კითხვის რეჟიმი
+	Next tab	შემდეგი ჩანართი
+	Previous tab	წინა ჩანართი
 	Switch light / dark theme	ღია / ბნელი თემის გადართვა
 	Comments panel	კომენტარების პანელი
 	Form fields panel	ფორმის ველების პანელი
@@ -2432,6 +2434,7 @@ calendar date	May	მაისი
 calendar date	November	ნოემბერი
 calendar date	October	ოქტომბერი
 calendar date	September	სექტემბერი
+# Sync 2026-10-13: strings added upstream
 	 on page {label}	 {label} გვერდზე
 	Actual text	ფაქტობრივი ტექსტი
 	Add comment	კომენტარის დამატება
@@ -2598,6 +2601,7 @@ certificate	Validity ends	მოქმედების დასასრუ�
 certificate	Validity starts	მოქმედების დასაწყისი
 certificate	Version	ვერსია
 
+# Added upstream (sync 2026-10-13).
 	Remove "{name}" from this list? The file itself is not deleted.	ამოიშალოს „{name}“ ამ სიიდან? თავად ფაილი არ წაიშლება.
 	Minimize	ჩაკეცვა
 	Maximize	გაშლა
