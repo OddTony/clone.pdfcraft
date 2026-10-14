@@ -181,6 +181,11 @@ impl Automation {
             "doc_save" => self.doc_save(&a)?,
             "doc_extract_original" => {
                 let id = self.doc(&a)?.id;
+                // A detached signature carries nothing: its document is the file beside it,
+                // which opens on its own. Refused before any `out` is written (#2129).
+                if self.doc(&a)?.envelope.as_ref().is_some_and(|e| e.detached) {
+                    return Err(failed("a detached signature has nothing to extract; open the PDF itself to edit it."));
+                }
                 let copy = self.session.extract_original(id).map_err(failed)?;
                 let mut out = summary(self.session.get(copy).ok_or_else(|| failed("the document vanished"))?);
                 if let Some(p) = a.opt_str("out")? {
@@ -2135,10 +2140,12 @@ fn security(d: &Document) -> Value {
     }
 }
 
-/// The CAdES envelope a document was opened from (issue #1449), if so.
+/// The CAdES envelope a document was opened from (issue #1449), if so. `detached` says a
+/// `.p7s` whose document was read from beside it (issue #2129), not carried inside.
 fn envelope(d: &Document) -> Option<Value> {
     d.envelope.as_ref().map(|e| {
         json!({
+            "detached": e.detached,
             "signer": e.signer,
             "signing_time": e.signing_time,
             "digest_ok": e.digest_ok,

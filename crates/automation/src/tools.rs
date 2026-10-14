@@ -156,7 +156,7 @@ pub fn tools() -> Vec<ToolDef> {
             }),
             &["doc"],
         )),
-        t("doc_extract_original", "Extract the original PDF", "Take the PDF out of a CAdES signature envelope (.p7m): it opens as a new, editable, unsaved document. With out, the PDF is also written there, atomically. The envelope itself is never changed. Refuses plain documents.")
+        t("doc_extract_original", "Extract the original PDF", "Take the PDF out of a CAdES signature envelope (.p7m): it opens as a new, editable, unsaved document. With out, the PDF is also written there, atomically. The envelope itself is never changed. Refuses plain documents, and detached signatures (.p7s), which have nothing inside to extract.")
             .destructive()
             .cmd("file.extract_original")
             .with(schema(json!({ "doc": doc(), "out": { "type": "string", "description": "Also write the PDF to this file (relative to --root when set)." } }), &["doc"])),
