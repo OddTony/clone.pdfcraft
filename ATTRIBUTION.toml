@@ -162,7 +162,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Bulgarian UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "d48b78af566e485d6fa46d0530dc7ceda761ec0392a9ca9c29a066f1fef86d61"
+sha256 = "fc3bdf448892772f2c3dc0da55a7a219e2e27ffbdeba8470c181f8475d08d676"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/kk.tsv"
