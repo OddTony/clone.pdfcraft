@@ -150,6 +150,30 @@ mod tests {
         assert_eq!(toast, "OFD (early alpha): converted to PDF. Objects not shown: 1. Signatures and seals are not carried over or checked.");
     }
 
+    /// The live app reads and prepares files on the open worker; an OFD file must come back
+    /// from it as a conversion, not as a PDF that fails to parse.
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn an_ofd_file_opened_in_the_running_app_converts_after_background_preparation() {
+        let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(800.0, 600.0)).build_eframe(|_| app());
+        harness.run_steps(2);
+        let (gate, started, release, finished) = crate::open_worker::prepare_gate();
+        harness.state_mut().open_prepare_gate = Some(gate);
+        let path = std::env::temp_dir().join(format!("pdfcraft-ofd-worker-{}.ofd", std::process::id()));
+        let shape = r#"<ofd:PathObject ID="3" Boundary="10 10 20 20"><ofd:AbbreviatedData>M 0 0 L 20 20</ofd:AbbreviatedData></ofd:PathObject>"#;
+        std::fs::write(&path, ofd(shape, false)).expect("write the synthetic OFD file");
+        harness.state_mut().open_path(&path.to_string_lossy());
+        let timeout = std::time::Duration::from_secs(5);
+        started.recv_timeout(timeout).expect("the OFD file reached the open worker");
+        release.send(()).expect("release the open worker");
+        finished.recv_timeout(timeout).expect("the open worker finished");
+        harness.run_steps(2);
+        let _ = std::fs::remove_file(&path);
+        let app = harness.state();
+        assert_eq!(app.views.len(), 1, "the OFD file opens as one new PDF tab");
+        assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("OFD (early alpha): converted to PDF. Compare it with the original."));
+    }
+
     #[test]
     fn other_files_are_not_taken_for_ofd() {
         let mut app = app();
