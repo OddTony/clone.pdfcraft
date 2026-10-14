@@ -464,17 +464,22 @@ fn image_bbox(image: &Image<'_, '_>, transform: Affine) -> Rect {
 /// never compare equal: their equality is not observable through the public API.
 /// Colours compare as *sources* when both sides name one ([`Color::source`] +
 /// `PartialEq`): the same space with the same raw components — never merging two
-/// different sources, which would silently repaint a run's glyphs. When either
-/// side has no nameable source the 8-bit RGBA rendering view decides, exactly
-/// as before. The comparison is conservative by construction: sources that
-/// render identically but are named differently stay unmerged (a redundant
-/// flush re-emits colour operators; that is safe), and two separately parsed
-/// `/Separation` spaces compare unequal through the tint-transform identity
-/// rule — again only ever a redundant flush.
+/// different sources, which would silently repaint a run's glyphs. The source
+/// does not carry alpha, so the Some/Some arm requires equal [`Color::opacity`]
+/// too: constant alpha (`/ca`) rides folded into each paint's `Color` with no
+/// separate device announcement, and merging a `/ca 1.0` run with a `/ca 0.5`
+/// run of one source would repaint the second run opaque and silently drop its
+/// `transparency ignored (paint alpha)` disclosure. When either side has no
+/// nameable source the 8-bit RGBA rendering view decides — alpha included in
+/// the fourth component — exactly as before. The comparison is conservative by
+/// construction: sources that render identically but are named differently stay
+/// unmerged (a redundant flush re-emits colour operators; that is safe), and
+/// two separately parsed `/Separation` spaces compare unequal through the
+/// tint-transform identity rule — again only ever a redundant flush.
 fn same_paint(a: &Paint<'_>, b: &Paint<'_>) -> bool {
     match (a, b) {
         (Paint::Color(x), Paint::Color(y)) => match (x.source(), y.source()) {
-            (Some(source_x), Some(source_y)) => source_x == source_y,
+            (Some(source_x), Some(source_y)) => source_x == source_y && x.opacity() == y.opacity(),
             _ => Color::to_rgba(x).components() == Color::to_rgba(y).components(),
         },
         _ => false,
@@ -1057,6 +1062,7 @@ mod tests {
 
     use super::{PsDevice, same_paint};
     use crate::FidelityNote;
+    use crate::fonts::tests::{T1_DESC, T1_FONT, t1_program};
 
     /// A fresh device over an empty emitter, page tag unset.
     fn device() -> PsDevice<'static> {
@@ -1308,6 +1314,39 @@ mod tests {
         assert!(
             !same_paint(&Paint::Color(gray.clone()), &Paint::Color(triple.clone())),
             "different sources stay unmerged even when the RGBA views match"
+        );
+    }
+
+    /// The source comparison alone must not merge two runs whose constant
+    /// alpha differs: `/ca` rides folded into each glyph paint's `Color`
+    /// (the interpreter's `graphics_state.non_stroke_alpha`, no separate
+    /// device announcement), `ColorSource` does not carry it, and the merged
+    /// run would repaint the second run's glyphs with the *first* run's paint
+    /// — opaque, and without the `transparency ignored (paint alpha)` note its
+    /// own flush would have recorded (the watermark idiom: one font, one
+    /// colour, `/ca 1.0` then `/ca 0.5`). The runs must split and the
+    /// half-alpha run must disclose.
+    #[test]
+    fn ca_change_between_text_runs_splits_them_and_discloses_alpha() {
+        let objs: Vec<Vec<u8>> = vec![
+            b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+            b"<< /Type /Pages /Kids [8 0 R] /Count 1 /MediaBox [0 0 200 300] >>".to_vec(),
+            T1_FONT.as_bytes().to_vec(),
+            stream_obj("", b"0 0 1 rg BT /F1 24 Tf 20 100 Td (A) Tj ET /GS1 gs BT /F1 24 Tf 20 150 Td (B) Tj ET"),
+            T1_DESC.as_bytes().to_vec(),
+            stream_obj("", &t1_program()),
+            b"<< /Type /ExtGState /ca 0.5 >>".to_vec(),
+            b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /F1 3 0 R >> /ExtGState << /GS1 7 0 R >> >> >>".to_vec(),
+        ];
+        let (s, notes) = exported(assemble(objs));
+        // (a) The runs do not merge: two single-glyph `show`s, no `xyshow`.
+        assert_eq!(s.matches(" show\n").count(), 2, "one show per run (a merged pair would be one xyshow): {s}");
+        assert!(!s.contains("xyshow"), "the /ca change is a run boundary: {s}");
+        // (b) The half-alpha run's own flush sees its paint and discloses.
+        assert_eq!(
+            notes.iter().map(|n| n.text.clone()).collect::<Vec<_>>(),
+            vec!["transparency ignored (paint alpha)".to_string()],
+            "the second run's alpha drop is recorded once: {notes:?}"
         );
     }
 
