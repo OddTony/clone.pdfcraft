@@ -77,6 +77,8 @@ fn harness(path: &str) -> Harness<'static, PdfCraftApp> {
     let path = path.to_owned();
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
+        // The labels below are English whatever the developer's system language is.
+        app.set_option("language", "en").unwrap();
         app.run_inline = true;
         app.open_path(&path);
         app
