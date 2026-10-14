@@ -41,6 +41,9 @@ jobs:
         run: bash packaging/service-tests/unix.sh
       - if: runner.os == 'Windows'
         shell: pwsh
+        run: packaging/service-tests/check-stop-wait.ps1
+      - if: runner.os == 'Windows'
+        shell: pwsh
         run: packaging/service-tests/windows.ps1
       - if: runner.os == 'Windows'
         run: dotnet tool install --global wix --version 5.0.2
