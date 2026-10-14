@@ -286,6 +286,16 @@ impl PdfCraftApp {
         self.dialog = Some(crate::Dialog::Sign);
     }
 
+    /// Validate signatures against the roots Windows trusts too (Acrobat: Windows Integration),
+    /// so a DSC issued under a CA installed in Windows shows as valid. Elsewhere: nothing.
+    pub fn trust_os_roots(&mut self) {
+        #[cfg(target_os = "windows")]
+        match sign::windows::trusted_roots() {
+            Ok(roots) => self.session.set_system_trust(roots),
+            Err(e) => self.notify_fmt("The Windows trusted root certificates couldn't be read: {e}", &[("e", &e.to_string())]),
+        }
+    }
+
     /// List OS key store signing identities (after the file-based IDs).
     fn refresh_os_key_store_ids(&mut self) {
         self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:"));
