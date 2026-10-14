@@ -481,7 +481,8 @@ fn form(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     }
     ui.add_space(SECTION_GAP);
     egui::Frame::new()
-        .fill(if d.advanced { t.hover } else { Color32::TRANSPARENT })
+        .fill(if d.advanced { if t.dark() { t.pressed } else { t.hover } } else { Color32::TRANSPARENT })
+        .stroke(if d.advanced { Stroke::new(1.0, t.border) } else { Stroke::NONE })
         .corner_radius(CornerRadius::same(8))
         .inner_margin(if d.advanced { 16 } else { 0 })
         .show(ui, |ui| {
