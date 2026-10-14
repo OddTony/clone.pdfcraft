@@ -2598,3 +2598,16 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+
+# PKCS #11 signing (M9).
+	Signing	Pasirašymas
+	List PKCS #11 token (smart card, HSM) signing identities	Rodyti PKCS #11 leksenų (lustinių kortelių, HSM) pasirašymo tapatybes
+	PKCS #11 module	PKCS #11 modulis
+	Default (p11-kit, then OpenSC)	Numatytasis (p11-kit, tada OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	Reikia įdiegto modulio, pvz., OpenSC arba p11-kit. Jei leksenas turi savo PIN kodo klaviatūrą, naudojama ji.
+	PKCS #11 token  ·  	PKCS #11 leksenas  ·  
+	Token PIN	Leksenos PIN kodas
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	Leksenas turi savo PIN kodo klaviatūrą arba biometrinį skaitytuvą; jis pats paprašys PIN kodo.
+	This token's PIN is low on tries remaining.	Šio leksenos PIN kodo liko nedaug bandymų.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	Tai paskutinis bandymas prieš leksenos PIN kodo užblokavimą. Neteisingas PIN kodas gali jį visam laikui užblokuoti.
+	This token's PIN is locked. Signing will not work until it is unlocked.	Šio leksenos PIN kodas užblokuotas. Pasirašymas nebus galimas, kol jis nebus atblokuotas.

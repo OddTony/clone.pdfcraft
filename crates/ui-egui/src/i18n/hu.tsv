@@ -824,6 +824,19 @@
 	Choose the digital ID that you want to use for signing:	Válaszd ki az aláíráshoz használandó digitális azonosítót:
 	Keychain  ·  	Kulcskarika  ·  
 	Windows store  ·  	Windows-tároló  ·  
+
+# PKCS #11 signing (M9).
+	Signing	Aláírás
+	List PKCS #11 token (smart card, HSM) signing identities	PKCS #11 tokenek (intelligens kártyák, HSM-ek) aláírási azonosítóinak listázása
+	PKCS #11 module	PKCS #11 modul
+	Default (p11-kit, then OpenSC)	Alapértelmezett (p11-kit, majd OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	Telepített modult igényel, például OpenSC-t vagy p11-kit-et. Ha a tokennek saját PIN-billentyűzete van, azt használja.
+	PKCS #11 token  ·  	PKCS #11 token  ·  
+	Token PIN	Token PIN-kódja
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	A tokennek saját PIN-billentyűzete vagy biometrikus olvasója van; maga kéri be a PIN-kódot.
+	This token's PIN is low on tries remaining.	Ennek a tokennek a PIN-kódjából már csak kevés próbálkozás van hátra.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	Ez az utolsó próbálkozás a token PIN-kódjának zárolása előtt. Egy hibás PIN itt véglegesen zárolhatja.
+	This token's PIN is locked. Signing will not work until it is unlocked.	Ennek a tokennek a PIN-kódja zárolva van. Az aláírás a feloldásáig nem fog működni.
 	Issued by: 	Kiállította: 
 	, Expires: 	, lejár: 
 	No digital IDs yet.	Még nincs digitális azonosító.

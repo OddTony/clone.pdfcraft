@@ -853,6 +853,19 @@
 	Choose the digital ID that you want to use for signing:	اختر المعرّف الرقمي الذي تريد استخدامه للتوقيع:
 	Keychain  ·  	سلسلة المفاتيح  ·  
 	Windows store  ·  	مخزن Windows  ·  
+
+# PKCS #11 signing (M9).
+	Signing	التوقيع
+	List PKCS #11 token (smart card, HSM) signing identities	سرد هويات التوقيع من رموز PKCS #11 (البطاقات الذكية، وحدات HSM)
+	PKCS #11 module	وحدة PKCS #11
+	Default (p11-kit, then OpenSC)	الافتراضي (p11-kit، ثم OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	يتطلب تثبيت وحدة مثل OpenSC أو p11-kit. إذا كان للرمز لوحة رقم تعريف شخصي خاصة به، يتم استخدامها.
+	PKCS #11 token  ·  	رمز PKCS #11  ·  
+	Token PIN	رقم التعريف الشخصي للرمز
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	يملك الرمز لوحة رقم تعريف شخصي أو قارئًا بيومتريًا خاصًا به؛ سيطلب رقم التعريف الشخصي بنفسه.
+	This token's PIN is low on tries remaining.	تبقّت محاولات قليلة لرقم التعريف الشخصي لهذا الرمز.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	هذه المحاولة الأخيرة قبل قفل رقم التعريف الشخصي للرمز. قد يؤدي إدخال رقم خاطئ هنا إلى قفله نهائيًا.
+	This token's PIN is locked. Signing will not work until it is unlocked.	رقم التعريف الشخصي لهذا الرمز مقفل. لن يعمل التوقيع حتى يتم إلغاء القفل.
 	Issued by: 	صادرة عن: 
 	, Expires: 	، تنتهي: 
 	No digital IDs yet.	لا توجد معرّفات رقمية بعد.

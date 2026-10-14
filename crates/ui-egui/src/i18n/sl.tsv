@@ -2359,3 +2359,16 @@ animation effects	Off	Izklopljeni
 	This document is trying to open a local file:	Ta dokument poskuša odpreti lokalno datoteko:
 	Move tag earlier	Premakni oznako prej
 	Move tag later	Premakni oznako pozneje
+
+# PKCS #11 signing (M9).
+	Signing	Podpisovanje
+	List PKCS #11 token (smart card, HSM) signing identities	Prikaz identitet za podpisovanje iz žetonov PKCS #11 (pametne kartice, HSM)
+	PKCS #11 module	Modul PKCS #11
+	Default (p11-kit, then OpenSC)	Privzeto (p11-kit, nato OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	Potreben je nameščen modul, na primer OpenSC ali p11-kit. Če ima žeton svojo tipkovnico za PIN, se uporabi ta.
+	PKCS #11 token  ·  	Žeton PKCS #11  ·  
+	Token PIN	PIN žetona
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	Žeton ima svojo tipkovnico za PIN ali biometrični bralnik; za PIN bo vprašal sam.
+	This token's PIN is low on tries remaining.	PIN tega žetona ima le še nekaj poskusov.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	To je zadnji poskus, preden se PIN žetona zaklene. Napačen PIN lahko žeton trajno zaklene.
+	This token's PIN is locked. Signing will not work until it is unlocked.	PIN tega žetona je zaklenjen. Podpisovanje ne bo delovalo, dokler ni odklenjen.

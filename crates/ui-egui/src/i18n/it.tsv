@@ -850,6 +850,19 @@
 	Choose the digital ID that you want to use for signing:	Scegli l'ID digitale da usare per firmare:
 	Keychain  ·  	Portachiavi  ·  
 	Windows store  ·  	Archivio Windows  ·  
+
+# PKCS #11 signing (M9).
+	Signing	Firma
+	List PKCS #11 token (smart card, HSM) signing identities	Elenca le identità di firma dei token PKCS #11 (smart card, HSM)
+	PKCS #11 module	Modulo PKCS #11
+	Default (p11-kit, then OpenSC)	Predefinito (p11-kit, poi OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	Richiede un modulo installato come OpenSC o p11-kit. Se il token dispone di un proprio tastierino PIN, viene usato quello.
+	PKCS #11 token  ·  	Token PKCS #11  ·  
+	Token PIN	PIN del token
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	Il token dispone di un proprio tastierino PIN o lettore biometrico; chiederà il PIN autonomamente.
+	This token's PIN is low on tries remaining.	Il PIN di questo token ha pochi tentativi rimasti.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	Questo è l'ultimo tentativo prima del blocco del PIN del token. Un PIN errato qui potrebbe bloccarlo definitivamente.
+	This token's PIN is locked. Signing will not work until it is unlocked.	Il PIN di questo token è bloccato. La firma non funzionerà finché non viene sbloccato.
 	Issued by: 	Rilasciato da: 
 	, Expires: 	, Scadenza: 
 	No digital IDs yet.	Ancora nessun ID digitale.

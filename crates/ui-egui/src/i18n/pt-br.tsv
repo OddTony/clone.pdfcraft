@@ -2368,3 +2368,16 @@ animation effects	Off	Desativados
 	This document is trying to open a local file:	Este documento está tentando abrir um arquivo local:
 	Move tag earlier	Mover tag para antes
 	Move tag later	Mover tag para depois
+
+# PKCS #11 signing (M9).
+	Signing	Assinatura
+	List PKCS #11 token (smart card, HSM) signing identities	Listar identidades de assinatura de tokens PKCS #11 (cartões inteligentes, HSMs)
+	PKCS #11 module	Módulo PKCS #11
+	Default (p11-kit, then OpenSC)	Padrão (p11-kit, depois OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	Requer um módulo instalado, como o OpenSC ou o p11-kit. O teclado PIN próprio do token é usado quando ele tiver um.
+	PKCS #11 token  ·  	Token PKCS #11  ·  
+	Token PIN	PIN do token
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	O token tem seu próprio teclado PIN ou leitor biométrico; ele mesmo solicitará o PIN.
+	This token's PIN is low on tries remaining.	O PIN deste token está com poucas tentativas restantes.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	Esta é a última tentativa antes de o PIN do token ser bloqueado. Um PIN incorreto aqui pode bloqueá-lo permanentemente.
+	This token's PIN is locked. Signing will not work until it is unlocked.	O PIN deste token está bloqueado. A assinatura não funcionará até que seja desbloqueado.

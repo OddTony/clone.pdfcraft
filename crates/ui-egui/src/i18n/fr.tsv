@@ -827,6 +827,19 @@
 	Choose the digital ID that you want to use for signing:	Choisissez l'ID numérique à utiliser pour signer :
 	Keychain  ·  	Trousseau  ·  
 	Windows store  ·  	Magasin Windows  ·  
+
+# PKCS #11 signing (M9).
+	Signing	Signature
+	List PKCS #11 token (smart card, HSM) signing identities	Lister les identités de signature des jetons PKCS #11 (cartes à puce, HSM)
+	PKCS #11 module	Module PKCS #11
+	Default (p11-kit, then OpenSC)	Par défaut (p11-kit, puis OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	Nécessite un module tel qu'OpenSC ou p11-kit installé. Le clavier PIN propre au jeton est utilisé lorsqu'il en possède un.
+	PKCS #11 token  ·  	Jeton PKCS #11  ·  
+	Token PIN	Code PIN du jeton
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	Le jeton possède son propre clavier PIN ou lecteur biométrique ; il demandera lui-même le code PIN.
+	This token's PIN is low on tries remaining.	Il reste peu de tentatives pour le code PIN de ce jeton.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	C'est la dernière tentative avant le verrouillage du code PIN du jeton. Un code PIN erroné ici peut le verrouiller définitivement.
+	This token's PIN is locked. Signing will not work until it is unlocked.	Le code PIN de ce jeton est verrouillé. La signature ne fonctionnera pas jusqu'à son déverrouillage.
 	Issued by: 	Émis par : 
 	, Expires: 	, expire : 
 	No digital IDs yet.	Aucun ID numérique pour l'instant.

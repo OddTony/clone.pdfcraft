@@ -851,6 +851,19 @@
 	Choose the digital ID that you want to use for signing:	Виберіть цифрове посвідчення для підписування:
 	Keychain  ·  	В’язка ключів  ·  
 	Windows store  ·  	Сховище Windows  ·  
+
+# PKCS #11 signing (M9).
+	Signing	Підпис
+	List PKCS #11 token (smart card, HSM) signing identities	Список ідентифікаторів підпису з токенів PKCS #11 (смарт-карти, HSM)
+	PKCS #11 module	Модуль PKCS #11
+	Default (p11-kit, then OpenSC)	За умовчанням (p11-kit, потім OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	Потрібен установлений модуль, наприклад OpenSC або p11-kit. Якщо в токена є власна PIN-клавіатура, використовується вона.
+	PKCS #11 token  ·  	Токен PKCS #11  ·  
+	Token PIN	PIN-код токена
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	У токена є власна PIN-клавіатура або біометричний зчитувач; він запитає PIN-код самостійно.
+	This token's PIN is low on tries remaining.	У PIN-коду цього токена залишилося мало спроб.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	Це остання спроба перед блокуванням PIN-коду токена. Неправильний PIN-код тут може заблокувати його назавжди.
+	This token's PIN is locked. Signing will not work until it is unlocked.	PIN-код цього токена заблоковано. Підписання не працюватиме, доки його не розблокують.
 	Issued by: 	Видавець: 
 	, Expires: 	, Дійсний до: 
 	No digital IDs yet.	Ще немає цифрових посвідчень.

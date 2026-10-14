@@ -927,6 +927,19 @@ key	Space	Mezerník
 	Choose the digital ID that you want to use for signing:	Vyberte digitální ID, kterým chcete podepisovat:
 	Keychain  ·  	Klíčenka  ·  
 	Windows store  ·  	Úložiště Windows  ·  
+
+# PKCS #11 signing (M9).
+	Signing	Podepisování
+	List PKCS #11 token (smart card, HSM) signing identities	Zobrazit podpisové identity tokenů PKCS #11 (čipové karty, HSM)
+	PKCS #11 module	Modul PKCS #11
+	Default (p11-kit, then OpenSC)	Výchozí (p11-kit, poté OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	Vyžaduje nainstalovaný modul, například OpenSC nebo p11-kit. Pokud má token vlastní PIN klávesnici, použije se ta.
+	PKCS #11 token  ·  	Token PKCS #11  ·  
+	Token PIN	PIN tokenu
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	Token má vlastní PIN klávesnici nebo biometrickou čtečku; o PIN si požádá sám.
+	This token's PIN is low on tries remaining.	PIN tohoto tokenu má jen málo zbývajících pokusů.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	Toto je poslední pokus před zablokováním PIN tokenu. Nesprávný PIN jej může trvale zablokovat.
+	This token's PIN is locked. Signing will not work until it is unlocked.	PIN tohoto tokenu je zablokován. Podepisování nebude fungovat, dokud nebude odblokován.
 	Issued by: 	Vydal: 
 	, Expires: 	, platnost do: 
 	No digital IDs yet.	Zatím žádná digitální ID.
