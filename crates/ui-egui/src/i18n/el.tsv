@@ -2368,15 +2368,18 @@ animation effects	Off	Ανενεργά
 # CAdES signature envelopes (issue #1449).
 	Extract the original PDF…	Εξαγωγή του αρχικού PDF…
 	Opened from a CAdES signature envelope — read-only.	Άνοιξε από φάκελο υπογραφής CAdES — μόνο για ανάγνωση.
+	Opened from a detached CAdES signature — read-only.	Άνοιξε από ξεχωριστή υπογραφή CAdES — μόνο για ανάγνωση.
 	Signed by {signer} on {time}; the content matches what was signed; the signer's trust was not checked.	Υπογράφηκε από {signer} στις {time}· το περιεχόμενο αντιστοιχεί σε αυτό που υπογράφηκε· η εμπιστοσύνη του υπογράφοντος δεν ελέγχθηκε.
 	Signed by {signer} on {time}; the content does not match what was signed; the signer's trust was not checked.	Υπογράφηκε από {signer} στις {time}· το περιεχόμενο δεν αντιστοιχεί σε αυτό που υπογράφηκε· η εμπιστοσύνη του υπογράφοντος δεν ελέγχθηκε.
 	Signed by {signer}; the content matches what was signed; the signer's trust was not checked.	Υπογράφηκε από {signer}· το περιεχόμενο αντιστοιχεί σε αυτό που υπογράφηκε· η εμπιστοσύνη του υπογράφοντος δεν ελέγχθηκε.
 	Signed by {signer}; the content does not match what was signed; the signer's trust was not checked.	Υπογράφηκε από {signer}· το περιεχόμενο δεν αντιστοιχεί σε αυτό που υπογράφηκε· η εμπιστοσύνη του υπογράφοντος δεν ελέγχθηκε.
 	CAdES signature envelope	Φάκελος υπογραφής CAdES
+	CAdES signature (.p7m, .p7s)	Υπογραφή CAdES (.p7m, .p7s)
 	Integrity	Ακεραιότητα
 	Matches what was signed	Αντιστοιχεί σε αυτό που υπογράφηκε
 	Does not match what was signed	Δεν αντιστοιχεί σε αυτό που υπογράφηκε
 	Signers	Υπογράφοντες
 	{signers} signers; details of the first are shown	{signers} υπογράφοντες· εμφανίζονται οι λεπτομέρειες του πρώτου
 	Quirks	Ιδιαιτερότητες
+	Detached signature file	Αρχείο ξεχωριστής υπογραφής
 	Couldn't extract the original PDF: {e}	Δεν ήταν δυνατή η εξαγωγή του αρχικού PDF: {e}
