@@ -180,15 +180,18 @@ fn is_dct(s: &Stream) -> Option<bool> {
 
 /// 8-bit samples of an image (`n` components), decoded.
 fn pixels(s: &Stream, n: usize) -> Option<Vec<u8>> {
-    let (w, h) = (s.dict.int(b"Width")? as usize, s.dict.int(b"Height")? as usize);
+    // The size is file-controlled: take it as sizes and multiply with checked arithmetic, so a
+    // wrapped product can never index the data.
+    let (w, h) = (usize::try_from(s.dict.int(b"Width")?).ok()?, usize::try_from(s.dict.int(b"Height")?).ok()?);
+    let bytes = w.checked_mul(h)?.checked_mul(n)?;
     if is_dct(s)? {
         let img = image::load_from_memory_with_format(&s.raw, image::ImageFormat::Jpeg).ok()?;
         // Adobe CMYK/YCCK JPEGs aren't handled (the colour space check excludes them).
         let v = if n == 1 { img.into_luma8().into_raw() } else { img.into_rgb8().into_raw() };
-        (v.len() == w * h * n).then_some(v)
+        (v.len() == bytes).then_some(v)
     } else {
         let v = s.decoded().ok()?;
-        (v.len() >= w * h * n).then(|| v[..w * h * n].to_vec())
+        (v.len() >= bytes).then(|| v[..bytes].to_vec())
     }
 }
 
@@ -259,7 +262,7 @@ fn process(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: us
         return None;
     }
     let was_dct = is_dct(s)?;
-    let (w, h) = (d.int(b"Width")? as u32, d.int(b"Height")? as u32);
+    let (w, h) = (u32::try_from(d.int(b"Width")?).ok()?, u32::try_from(d.int(b"Height")?).ok()?);
     if w == 0 || h == 0 || (w as u64) * (h as u64) > MAX_PIXELS {
         return None;
     }
@@ -290,7 +293,7 @@ fn process(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: us
             if m.dict.int(b"BitsPerComponent") != Some(8) || m.dict.contains(b"Matte") || m.dict.contains(b"Decode") {
                 return None;
             }
-            let (mw, mh) = (m.dict.int(b"Width")? as u32, m.dict.int(b"Height")? as u32);
+            let (mw, mh) = (u32::try_from(m.dict.int(b"Width")?).ok()?, u32::try_from(m.dict.int(b"Height")?).ok()?);
             let mpx = pixels(m, 1)?;
             let mpx = resample(&mpx, 1, mw, mh, nw, nh)?;
             smask = Some((mr, image_stream(&m.dict, &mpx, 1, nw, nh, Compression::Flate, false)?));

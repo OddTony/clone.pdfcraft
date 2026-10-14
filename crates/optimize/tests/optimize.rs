@@ -687,3 +687,23 @@ fn a_second_run_leaves_the_stripped_stream_alone() {
     assert_eq!(r.streams_compressed, 0);
     assert_eq!(stream(&doc, c), once);
 }
+
+#[test]
+fn a_hostile_image_size_is_left_alone_not_multiplied_into_overflow() {
+    // /Width and /Height are file-controlled: 2^32 + 100 wraps to 100 when read as u32, while the
+    // real values overflow `w * h * n`. The image must be skipped, not sized by a wrapped product.
+    let mut doc = Document::new_empty();
+    let side = i64::from(u32::MAX) + 101;
+    let mut d = Dict::new();
+    d.set(b"Type".to_vec(), Object::name("XObject"));
+    d.set(b"Subtype".to_vec(), Object::name("Image"));
+    d.set(b"Width".to_vec(), Object::Int(side));
+    d.set(b"Height".to_vec(), Object::Int(side));
+    d.set(b"BitsPerComponent".to_vec(), Object::Int(8));
+    d.set(b"ColorSpace".to_vec(), Object::name("DeviceGray"));
+    let hostile = doc.add(Object::Stream(Stream::flate(d, &[7u8; 256])));
+    page(&mut doc, &[("Im", hostile)], "q 1 0 0 1 10 10 cm /Im Do Q");
+    let report = optimize(&mut doc, &Settings::default()).unwrap();
+    assert_eq!(report.images_resampled, 0, "{report:?}");
+    assert_eq!(stream(&doc, hostile).dict.int(b"Width"), Some(side), "the image is left as it was");
+}
