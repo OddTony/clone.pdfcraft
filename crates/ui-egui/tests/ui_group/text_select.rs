@@ -267,3 +267,49 @@ fn a_selection_drag_keeps_scrolling_over_the_gap_and_the_next_page() {
     h.run_steps(2);
     assert_eq!(h.state().views[0].selected_text(), Some(held), "releasing keeps the selection");
 }
+
+/// Coalesced down/up keeps the same word/line selection as separate press and release passes.
+#[test]
+fn coalesced_primary_clicks_select_line_then_spaced_click_clears() {
+    for coalesced in [true, false] {
+        let (mut h, at) = harness(|_| {});
+        h.ctx.options_mut(|o| o.max_passes = 1.try_into().unwrap());
+        let id = h.state().views[0].id;
+        let saved = h.state().session.get(id).unwrap().saved_bytes();
+        assert!(h.state().views[0].selected_text().is_none());
+        assert!(!h.state().session.get(id).unwrap().dirty);
+        for want in [None, Some("quick"), Some("The quick brown fox")] {
+            if coalesced {
+                // Harness::event steps each queued event separately; RawInput keeps this pair together.
+                h.input_mut().events.extend([true, false].map(|pressed| Event::PointerButton {
+                    pos: at,
+                    button: PointerButton::Primary,
+                    pressed,
+                    modifiers: Modifiers::NONE,
+                }));
+                h.step();
+            } else {
+                click(&mut h, at);
+            }
+            assert_eq!(h.state().views[0].selected_text().as_deref(), want, "coalesced={coalesced}");
+        }
+        h.run_steps(60);
+        if coalesced {
+            h.input_mut().events.extend([true, false].map(|pressed| Event::PointerButton {
+                pos: at,
+                button: PointerButton::Primary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            }));
+            h.step();
+        } else {
+            click(&mut h, at);
+        }
+        assert_eq!(h.state().views[0].selected_text(), None, "a spaced click clears either gesture path");
+        assert_eq!(h.state().views[0].id, id);
+        let doc = h.state().session.get(id).unwrap();
+        assert!(!doc.dirty);
+        assert_eq!((doc.can_undo(), doc.can_redo()), (None, None));
+        assert_eq!(doc.saved_bytes(), saved);
+    }
+}
