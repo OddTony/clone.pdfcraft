@@ -323,10 +323,11 @@ fn edit_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static 
             }
         });
         ui.add_space(2.0);
+        // Organize pages is a workspace of its own: its panel replaces this one, with the grid.
         if let Some(i) = item("page.organize")
             && edit_row(ui, t, i.icon, tl!(i.label), i.availability).clicked()
         {
-            run = Some(i.command);
+            tool = Some("organize");
         }
 
         widgets::section_title(ui, tl!("Add content"));

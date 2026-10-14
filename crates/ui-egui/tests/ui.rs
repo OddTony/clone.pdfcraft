@@ -1281,3 +1281,18 @@ fn the_edit_tab_turns_on_edit_text_and_images() {
     h.run_steps(3);
     assert_eq!(h.state().quick_tool, QuickTool::Hand);
 }
+
+/// Organize pages in the Edit panel opens the Organize workspace: its own panel and the page grid,
+/// not the grid behind the Edit panel.
+#[test]
+fn organize_pages_from_the_edit_panel_opens_its_panel() {
+    use pdfcraft_ui_egui::LeftPanel;
+    let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
+    h.get_by_label("Edit").click();
+    h.run_steps(3);
+    assert_eq!(h.state().left, LeftPanel::Tool("edit"));
+    h.get_by_label("Organize pages").click();
+    h.run_steps(3);
+    assert_eq!(h.state().left, LeftPanel::Tool("organize"));
+    assert!(h.state().views[0].organize, "the page grid is showing");
+}
