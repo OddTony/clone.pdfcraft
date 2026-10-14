@@ -1,6 +1,6 @@
 # Localization parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (list all registered interface languages; preserve the original coverage snapshot) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (Italian count after completing its catalog) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Per-language status of PdfCraft's interface against Acrobat Pro's. How translations work and how to
 add a language: [localization.md](localization.md). Summary in [ROADMAP.md](../ROADMAP.md).
@@ -59,7 +59,7 @@ none has translated help.
 | Telugu | `te` | 2,058 (96.0%) | partial (the release-pinned craft-fonts has no Telugu face yet) | no |
 | Hungarian | `hu` | 2,126 (99.2%) | partial | yes |
 | Ukrainian | `uk` | 2,142 (100%) | partial | yes |
-| Italian | `it` | 2,130 (99.4%) | partial | yes |
+| Italian | `it` | 2,528 entries (every key of the other catalogs that the code looks up) | partial | yes |
 | Kazakh | `kk` | 2,327 entries | partial | no |
 | Polish | `pl` | 2,287 entries | partial | yes |
 | Slovenian | `sl` | 2,324 entries | partial | no |
@@ -68,12 +68,13 @@ none has translated help.
 | Lithuanian | `lt` | 2,578 entries | partial; community native-speaker review ([#1401](https://github.com/storytold/pdfcraft/pull/1401)) | no |
 
 **14 other languages** ship (21 catalogs plus English, 22 interface languages in Preferences).
-The entry counts without percentages were measured on 2026-10-12; they are not percentages of the older 2,143-key snapshot above. Their presence does not imply a detailed linguistic or runtime review.
+The entry counts without percentages were measured on 2026-10-12 (Italian on 2026-10-14); they are not percentages of the older 2,143-key snapshot above. Their presence does not imply a detailed linguistic or runtime review.
 Acrobat languages PdfCraft lacks: Danish, Dutch, Finnish, Norwegian, Swedish, Hebrew.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Italian: 2,528 entries after adding the 201 keys the other catalogs had and the code looks up |
 | 2026-10-12 | minor | Added current counts for Kazakh, Polish, Slovenian, Greek, Turkish and Lithuanian; retained existing language assessments and the original percentage snapshot |
 | 2026-10-10 | major | Created. Catalog counts measured from `crates/ui-egui/src/i18n/*.tsv` against the 2,143-key union; Acrobat's localizations from its bundle's `.lproj` and Sequences folder names |
