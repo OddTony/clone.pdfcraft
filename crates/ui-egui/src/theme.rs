@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use craft_ui::theme::SuiteDarkPalette;
 use egui::epaint::text::{FontTweak, HintingTarget, SmoothHinting};
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Rect, Response, Stroke, Vec2, Visuals};
 
@@ -70,10 +71,11 @@ pub struct Tokens {
 impl Tokens {
     /// Foreground for a filled accent control in the standard dark palette.
     pub fn on_accent(&self) -> Color32 {
-        if self.dark() { Color32::from_rgb(0x06, 0x06, 0x07) } else { Color32::WHITE }
+        if self.dark() { SuiteDarkPalette::ARTCRAFT.on_accent } else { Color32::WHITE }
     }
 
     pub fn for_kind(kind: ThemeKind) -> Self {
+        let suite = SuiteDarkPalette::ARTCRAFT;
         match kind {
             ThemeKind::Light => Self {
                 kind,
@@ -102,27 +104,27 @@ impl Tokens {
             ThemeKind::Dark => Self {
                 kind,
                 // ArtCraft standard dark UI. Pasteboard and page pixels remain document roles.
-                titlebar: Color32::from_rgb(0x0A, 0x0A, 0x0C),
-                chrome: Color32::from_rgb(0x12, 0x13, 0x16),
-                panel: Color32::from_rgb(0x10, 0x10, 0x14),
+                titlebar: suite.chrome,
+                chrome: suite.window,
+                panel: suite.panel,
                 pasteboard: Color32::from_rgb(0x19, 0x19, 0x1C),
-                card: Color32::from_rgb(0x1E, 0x1F, 0x22),
-                border: Color32::from_rgb(0x36, 0x37, 0x3A),
-                divider: Color32::from_rgb(0x36, 0x37, 0x3A),
-                text: Color32::from_rgb(0xF2, 0xF1, 0xEE),
-                text_muted: Color32::from_rgb(0xA6, 0xA6, 0xA8),
+                card: suite.raised,
+                border: suite.border,
+                divider: suite.border,
+                text: suite.text,
+                text_muted: suite.text_secondary,
                 // This token labels hints and page details, so keep it AA-readable
                 // on raised cards instead of using the suite's disabled-text gray.
                 text_faint: Color32::from_rgb(0x88, 0x88, 0x8C),
-                icon: Color32::from_rgb(0xA6, 0xA6, 0xA8),
-                hover: Color32::from_rgb(0x32, 0x33, 0x37),
-                pressed: Color32::from_rgb(0x41, 0x42, 0x46),
-                selected: Color32::from_rgb(0x20, 0x3B, 0x65),
-                accent: Color32::from_rgb(0x2D, 0x81, 0xFF),
-                accent_text: Color32::from_rgb(0x59, 0xA7, 0xFF),
-                accent_soft: Color32::from_rgb(0x20, 0x3B, 0x65),
-                field: Color32::from_rgb(0x06, 0x06, 0x07),
-                badge_new: Color32::from_rgb(0x2D, 0x81, 0xFF),
+                icon: suite.text_secondary,
+                hover: suite.hover,
+                pressed: suite.pressed,
+                selected: suite.selection,
+                accent: suite.accent,
+                accent_text: suite.accent_hover,
+                accent_soft: suite.selection,
+                field: suite.input,
+                badge_new: suite.accent,
                 page_shadow: Color32::from_black_alpha(120),
                 radius: 6,
             },
@@ -454,6 +456,59 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
 mod tests {
     use super::*;
     use egui::epaint::text::{Fonts, TextOptions};
+
+    #[test]
+    fn shared_dark_adapter_maps_ui_roles_and_preserves_document_and_light_styles() {
+        let suite = SuiteDarkPalette::ARTCRAFT;
+        let dark = Tokens::for_kind(ThemeKind::Dark);
+        for (actual, expected) in [
+            (dark.titlebar, suite.chrome),
+            (dark.chrome, suite.window),
+            (dark.panel, suite.panel),
+            (dark.card, suite.raised),
+            (dark.border, suite.border),
+            (dark.divider, suite.border),
+            (dark.text, suite.text),
+            (dark.text_muted, suite.text_secondary),
+            (dark.icon, suite.text_secondary),
+            (dark.hover, suite.hover),
+            (dark.pressed, suite.pressed),
+            (dark.selected, suite.selection),
+            (dark.accent, suite.accent),
+            (dark.accent_text, suite.accent_hover),
+            (dark.accent_soft, suite.selection),
+            (dark.field, suite.input),
+            (dark.badge_new, suite.accent),
+            (dark.on_accent(), suite.on_accent),
+        ] {
+            assert_eq!(actual, expected);
+        }
+        // Readable hints and document rendering remain local contracts.
+        assert_eq!(dark.text_faint, Color32::from_rgb(0x88, 0x88, 0x8c));
+        assert_eq!(dark.pasteboard, Color32::from_rgb(0x19, 0x19, 0x1c));
+        assert_eq!(dark.page_shadow, Color32::from_black_alpha(120));
+        let dark_ctx = egui::Context::default();
+        apply(&dark_ctx, ThemeKind::Dark);
+        let dark_visuals = dark_ctx.style_of(dark_ctx.theme()).visuals.clone();
+        assert_eq!(dark_visuals.selection.bg_fill, suite.selection);
+        assert_eq!(dark_visuals.selection.stroke.color, suite.selection_text);
+        assert_eq!(dark_visuals.widgets.inactive.bg_fill, suite.input);
+        assert_eq!(dark_visuals.widgets.inactive.bg_stroke, Stroke::NONE);
+        assert_eq!(dark_visuals.widgets.active.bg_fill, suite.pressed);
+        let light = Tokens::for_kind(ThemeKind::Light);
+        assert_eq!(light.chrome, Color32::WHITE);
+        assert_eq!(light.titlebar, Color32::from_rgb(0xe9, 0xe9, 0xeb));
+        assert_eq!(light.text, Color32::from_rgb(0x22, 0x22, 0x26));
+        assert_eq!(light.accent, Color32::from_rgb(0x1b, 0x63, 0xe0));
+        assert_eq!(light.pasteboard, Color32::from_rgb(0xf1, 0xf1, 0xf3));
+        assert_eq!(light.page_shadow, Color32::from_black_alpha(34));
+        let light_ctx = egui::Context::default();
+        apply(&light_ctx, ThemeKind::Light);
+        let light_visuals = light_ctx.style_of(light_ctx.theme()).visuals.clone();
+        assert_eq!(light_visuals.selection.bg_fill, light.accent_soft);
+        assert_eq!(light_visuals.selection.stroke.color, light.accent);
+        assert_eq!(light_visuals.widgets.inactive.bg_fill, light.field);
+    }
 
     #[test]
     fn dark_chrome_uses_standard_roles_and_keeps_light_and_pages() {
