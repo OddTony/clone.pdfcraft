@@ -2640,3 +2640,18 @@ certificate	Key usage	Utilizzo chiave
 certificate	Self-signed	Autofirmato
 certificate	SHA-1 digest	Impronta SHA-1
 certificate	SHA-256 digest	Impronta SHA-256
+
+# Plugins panel and menu.
+	Disabled	Disattivato
+	Enabled	Attivato
+	Incompatible	Incompatibile
+	Install a plugin	Installa un plug-in
+	Install a plugin…	Installa un plug-in…
+	Manage plugins…	Gestisci plug-in…
+	No commands available	Nessun comando disponibile
+	No plugins installed	Nessun plug-in installato
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Nessun plug-in ancora installato. Installa un plug-in .wasm per estendere PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Nessun plug-in installato. Un plug-in è un singolo file .wasm; installane uno sopra.
+	Plugins	Plug-in
+	Refresh	Aggiorna
+	Refresh plugins	Aggiorna plug-in

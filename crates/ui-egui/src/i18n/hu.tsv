@@ -2427,3 +2427,18 @@ animation effects	Off	Ki
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
 	Pages selected	Kijelölt oldalak
 	Page properties	Oldaltulajdonságok
+
+# Plugins panel and menu.
+	Disabled	Letiltva
+	Enabled	Engedélyezve
+	Incompatible	Nem kompatibilis
+	Install a plugin	Bővítmény telepítése
+	Install a plugin…	Bővítmény telepítése…
+	Manage plugins…	Bővítmények kezelése…
+	No commands available	Nincs elérhető parancs
+	No plugins installed	Nincs telepített bővítmény
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Még nincs telepített bővítmény. Telepítsen egy .wasm bővítményt a PdfCraft kibővítéséhez.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Nincs telepített bővítmény. A bővítmény egyetlen .wasm fájl; telepítsen egyet fent.
+	Plugins	Bővítmények
+	Refresh	Frissítés
+	Refresh plugins	Bővítmények frissítése

@@ -2442,3 +2442,19 @@ animation effects	Off	Desativados
 	Make properties default	Tornar propriedades padrão
 	Pages selected	Páginas selecionadas
 	Page properties	Propriedades da página
+
+# Plugins panel and menu.
+	Disabled	Desativado
+	Enabled	Ativado
+	Incompatible	Incompatível
+	Install a plugin	Instalar um plug-in
+	Install a plugin…	Instalar um plug-in…
+	Manage plugins…	Gerenciar plug-ins…
+	No commands available	Nenhum comando disponível
+	No plugins installed	Nenhum plug-in instalado
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Nenhum plug-in instalado ainda. Instale um plug-in .wasm para estender o PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Nenhum plug-in instalado. Um plug-in é um único arquivo .wasm; instale um acima.
+	Plugins	Plug-ins
+	Refresh	Atualizar
+	Refresh plugins	Atualizar plug-ins
+	Plugins are sandboxed WebAssembly packages. They survive PdfCraft updates as long as their API version is supported.	Os plug-ins são pacotes WebAssembly em sandbox. Eles sobrevivem às atualizações do PdfCraft enquanto sua versão de API for compatível.

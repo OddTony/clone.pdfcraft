@@ -2341,3 +2341,18 @@ animation effects	Off	Выкл
 	Make properties default	Сделать свойства стандартными
 	Pages selected	Выделенные страницы
 	Page properties	Свойства страницы
+
+# Plugins panel and menu.
+	Disabled	Отключено
+	Enabled	Включено
+	Incompatible	Несовместимо
+	Install a plugin	Установить плагин
+	Install a plugin…	Установить плагин…
+	Manage plugins…	Управление плагинами…
+	No commands available	Нет доступных команд
+	No plugins installed	Плагины не установлены
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Плагины ещё не установлены. Установите .wasm-плагин, чтобы расширить PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Плагины не установлены. Плагин — это один файл .wasm; установите его выше.
+	Plugins	Плагины
+	Refresh	Обновить
+	Refresh plugins	Обновить плагины

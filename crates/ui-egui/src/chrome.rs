@@ -606,12 +606,47 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     (RightPanel::Tags, tl!("Tags")),
                     (RightPanel::Search, tl!("Search")),
                     (RightPanel::Compare, tl!("Compare")),
+                    (RightPanel::Plugins, tl!("Plugins")),
                 ] {
                     if ui.add(widgets::radio(app.right == Some(p), tl!(label))).clicked() {
                         app.choose_right_panel(Some(p));
                     }
                 }
             });
+        });
+        ui.menu_button(tl!("Plugins"), |ui| {
+            if widgets::menu_item(ui, tl!("Manage plugins…"), "").clicked() {
+                app.dialog = Some(Dialog::Plugins);
+                ui.close();
+            }
+            if widgets::menu_item(ui, tl!("Install a plugin…"), "").clicked() {
+                app.install_plugin_dialog();
+                ui.close();
+            }
+            if widgets::menu_item(ui, tl!("Refresh plugins"), "").clicked() {
+                app.plugins.refresh();
+                ui.close();
+            }
+            ui.separator();
+            let entries = app.plugins.menu_entries();
+            if entries.is_empty() {
+                ui.add_enabled(false, egui::Button::new(tl!("No plugins installed")));
+            }
+            let has_doc = app.active.is_some();
+            for entry in entries {
+                ui.menu_button(entry.name.clone(), |ui| {
+                    if entry.commands.is_empty() {
+                        ui.add_enabled(false, egui::Button::new(tl!("No commands available")));
+                    }
+                    for command in &entry.commands {
+                        let tip = if command.description.is_empty() { command.label.clone() } else { command.description.clone() };
+                        if ui.add_enabled(entry.runnable && has_doc, egui::Button::new(&command.label)).on_hover_text(tip).clicked() {
+                            app.run_plugin_command(entry.index, &command.id);
+                            ui.close();
+                        }
+                    }
+                });
+            }
         });
         ui.menu_button(tl!("Help"), |ui| crate::commands::registry_menu(app, ui, "Help"));
     });
@@ -660,6 +695,7 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 rail_button(ui, RightPanel::Accessibility, "accessibility", "Accessibility Checker", false);
             }
             rail_button(ui, RightPanel::Tags, "tag", "Tags", false);
+            rail_button(ui, RightPanel::Plugins, "layout-grid", "Plugins", false);
 
             // Page navigation cluster at the bottom (as in Acrobat's rail).
             let view = &mut app.views[index];

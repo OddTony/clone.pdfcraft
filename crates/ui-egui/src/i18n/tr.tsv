@@ -2424,3 +2424,18 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+
+# Plugins panel and menu.
+	Disabled	Devre dışı
+	Enabled	Etkin
+	Incompatible	Uyumsuz
+	Install a plugin	Eklenti yükle
+	Install a plugin…	Eklenti yükle…
+	Manage plugins…	Eklentileri yönet…
+	No commands available	Kullanılabilir komut yok
+	No plugins installed	Yüklü eklenti yok
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Henüz yüklü eklenti yok. PdfCraft'ı genişletmek için bir .wasm eklentisi yükleyin.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Yüklü eklenti yok. Eklenti tek bir .wasm dosyasıdır; yukarıdan bir tane yükleyin.
+	Plugins	Eklentiler
+	Refresh	Yenile
+	Refresh plugins	Eklentileri yenile

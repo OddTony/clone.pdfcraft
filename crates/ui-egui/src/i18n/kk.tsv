@@ -2426,3 +2426,19 @@ animation effects	Off	Өшірулі
 	Make properties default	Қасиеттерді әдепкі ету
 	Pages selected	Таңдалған беттер
 	Page properties	Бет қасиеттері
+
+# Plugins panel and menu.
+	Disabled	Өшірілген
+	Enabled	Қосылған
+	Incompatible	Үйлесімсіз
+	Install a plugin	Плагин орнату
+	Install a plugin…	Плагин орнату…
+	Manage plugins…	Плагиндерді басқару…
+	No commands available	Қолжетімді командалар жоқ
+	No plugins installed	Орнатылған плагиндер жоқ
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Әлі орнатылған плагиндер жоқ. PdfCraft мүмкіндіктерін кеңейту үшін .wasm плагинін орнатыңыз.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Орнатылған плагиндер жоқ. Плагин — бір .wasm файлы; жоғарыдан орнатыңыз.
+	Plugins	Плагиндер
+	Refresh	Жаңарту
+	Refresh plugins	Плагиндерді жаңарту
+	Plugins are sandboxed WebAssembly packages. They survive PdfCraft updates as long as their API version is supported.	Плагиндер — құмсалғыштағы WebAssembly пакеттері. Олар API нұсқасы қолдау тапқанша PdfCraft жаңартуларынан кейін де сақталады.

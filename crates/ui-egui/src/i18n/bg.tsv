@@ -2391,3 +2391,18 @@ animation effects	Off	Изключени
 	Make properties default	Задаване като свойства по подразбиране
 	Pages selected	Избрани страници
 	Page properties	Свойства на страницата
+
+# Plugins panel and menu.
+	Disabled	Деактивирано
+	Enabled	Активирано
+	Incompatible	Несъвместимо
+	Install a plugin	Инсталиране на плъгин
+	Install a plugin…	Инсталиране на плъгин…
+	Manage plugins…	Управление на плъгини…
+	No commands available	Няма налични команди
+	No plugins installed	Няма инсталирани плъгини
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Все още няма инсталирани плъгини. Инсталирайте .wasm плъгин, за да разширите PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Няма инсталирани плъгини. Плъгинът е един .wasm файл; инсталирайте един отгоре.
+	Plugins	Плъгини
+	Refresh	Обновяване
+	Refresh plugins	Обновяване на плъгините

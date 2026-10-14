@@ -2433,3 +2433,18 @@ animation effects	Off	Izklopljeni
 	Make properties default	Nastavi lastnosti kot privzete
 	Pages selected	Izbrane strani
 	Page properties	Lastnosti strani
+
+# Plugins panel and menu.
+	Disabled	Onemogočeno
+	Enabled	Omogočeno
+	Incompatible	Nezdružljivo
+	Install a plugin	Namesti vtičnik
+	Install a plugin…	Namesti vtičnik…
+	Manage plugins…	Upravljaj vtičnike…
+	No commands available	Ni razpoložljivih ukazov
+	No plugins installed	Ni nameščenih vtičnikov
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Vtičniki še niso nameščeni. Namestite vtičnik .wasm, da razširite PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Ni nameščenih vtičnikov. Vtičnik je ena datoteka .wasm; namestite ga zgoraj.
+	Plugins	Vtičniki
+	Refresh	Osveži
+	Refresh plugins	Osveži vtičnike

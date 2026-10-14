@@ -58,6 +58,7 @@ mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
 mod optimize_ui;
+mod plugins_ui;
 mod search_ui;
 mod sign_ui;
 mod stamps_ui;
@@ -204,6 +205,8 @@ pub enum RightPanel {
     Search,
     /// Compare files: the differences.
     Compare,
+    /// Installed WebAssembly plugins (generic extension panel).
+    Plugins,
 }
 
 /// Quick-action bar tools (the vertical floating strip).
@@ -274,6 +277,8 @@ struct GridDrop {
 pub enum Dialog {
     WordCount,
     CreateImages,
+    /// Plugins menu ▸ Manage plugins… (works with no document open).
+    Plugins,
     Properties(PropsTab),
     About,
     Shortcuts,
@@ -673,6 +678,8 @@ pub struct PdfCraftApp {
     pub js_console: js_ui::JsConsole,
     pub doc_js: js_ui::DocJsDraft,
     pub a11y: a11y_ui::A11yState,
+    /// Installed WebAssembly plugins and their runtime state (Plugins panel).
+    pub plugins: plugins_ui::PluginManager,
     pub(crate) tags_state: tags_ui::State,
     /// Rules skipped by hand, for the document they were skipped in.
     pub a11y_skipped: std::collections::HashSet<(DocId, pdfcraft_engine::a11y::Rule)>,
@@ -995,6 +1002,7 @@ impl PdfCraftApp {
             js_console: Default::default(),
             doc_js: Default::default(),
             a11y: a11y_ui::A11yState::default(),
+            plugins: plugins_ui::PluginManager::new(),
             tags_state: Default::default(),
             a11y_skipped: Default::default(),
             alt_draft: Default::default(),
@@ -2487,6 +2495,7 @@ impl PdfCraftApp {
                     "tags" => Some(RightPanel::Tags),
                     "search" => Some(RightPanel::Search),
                     "compare" => Some(RightPanel::Compare),
+                    "plugins" => Some(RightPanel::Plugins),
                     "none" => None,
                     other => return Err(format!("unknown panel {other}")),
                 }

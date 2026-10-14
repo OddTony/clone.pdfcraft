@@ -85,6 +85,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
             Dialog::Print => 820.0,
             Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
             Dialog::About => 780.0,
+            Dialog::Plugins => 640.0,
             _ => 520.0,
         });
         match dialog {
@@ -1081,6 +1082,9 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         ui.end_row();
                     }
                 });
+            }
+            Dialog::Plugins => {
+                crate::plugins_ui::admin_body(ui, app);
             }
             Dialog::Shortcuts => {
                 ui.label(egui::RichText::new(tl!("Keyboard shortcuts")).font(theme::semibold(18.0)));

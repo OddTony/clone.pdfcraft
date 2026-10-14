@@ -2392,3 +2392,19 @@ animation effects	Off	关
 	Make properties default	将属性设为默认
 	Pages selected	选定的页面
 	Page properties	页面属性
+
+# Plugins panel and menu.
+	Disabled	已禁用
+	Enabled	已启用
+	Incompatible	不兼容
+	Install a plugin	安装插件
+	Install a plugin…	安装插件…
+	Manage plugins…	管理插件…
+	No commands available	没有可用的命令
+	No plugins installed	未安装插件
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	尚未安装插件。安装 .wasm 插件以扩展 PdfCraft。
+	No plugins installed. A plugin is a single .wasm file; install one above.	未安装插件。插件是单个 .wasm 文件；请在上方安装一个。
+	Plugins	插件
+	Refresh	刷新
+	Refresh plugins	刷新插件
+	Plugins are sandboxed WebAssembly packages. They survive PdfCraft updates as long as their API version is supported.	插件是沙盒化的 WebAssembly 包。只要其 API 版本受支持，它们就能在 PdfCraft 更新后继续使用。

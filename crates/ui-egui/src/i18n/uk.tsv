@@ -2450,3 +2450,19 @@ animation effects	Off	Вимкнено
 	Make properties default	Зробити властивості типовими
 	Pages selected	Вибрані сторінки
 	Page properties	Властивості сторінки
+
+# Plugins panel and menu.
+	Disabled	Вимкнено
+	Enabled	Увімкнено
+	Incompatible	Несумісно
+	Install a plugin	Встановити плагін
+	Install a plugin…	Встановити плагін…
+	Manage plugins…	Керування плагінами…
+	No commands available	Немає доступних команд
+	No plugins installed	Плагіни не встановлено
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Плагіни ще не встановлено. Встановіть .wasm-плагін, щоб розширити PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Плагіни не встановлено. Плагін — це один файл .wasm; встановіть його вище.
+	Plugins	Плагіни
+	Refresh	Оновити
+	Refresh plugins	Оновити плагіни
+	Plugins are sandboxed WebAssembly packages. They survive PdfCraft updates as long as their API version is supported.	Плагіни — це ізольовані пакети WebAssembly. Вони зберігаються після оновлень PdfCraft, доки підтримується їхня версія API.
