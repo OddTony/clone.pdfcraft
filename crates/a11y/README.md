@@ -18,6 +18,11 @@ let html = report_html(&report, "file.pdf", "2026-10-02", "en", &in_english);  /
   content: painting outside MCID-marked or `/Artifact` content is untagged.
 - **Structure checks** read the structure tree through the role map; table regularity counts
   `ColSpan`/`RowSpan` attributes.
+- **Heading titles** used by bookmarks honor inline and named marked-content `/ActualText`
+  once per occurrence, including empty replacements. An outer replacement takes precedence
+  over nested replacements. A span crossing multiple MCIDs contributes only to the first
+  owner where text is shown. Replacements over image or vector content alone and text inside
+  Form XObjects are not extracted for these titles.
 - The report is a self-contained HTML page. Fixes that edit the document (language, title, tab
   order) live in the engine (`Document::accessibility_fix`).
 

@@ -4,6 +4,9 @@ use pdfcraft_cos::{Document, Object};
 
 use super::*;
 
+#[path = "headings_tests.rs"]
+mod headings_tests;
+
 /// A PDF from object bodies (object n = bodies[n - 1]) and extra trailer entries.
 fn pdf(bodies: &[String], trailer: &str) -> Document {
     let mut out = b"%PDF-1.7\n".to_vec();

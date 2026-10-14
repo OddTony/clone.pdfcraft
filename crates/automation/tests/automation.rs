@@ -1449,6 +1449,33 @@ trailer << /Root 1 0 R >>
 }
 
 #[test]
+fn bookmarks_from_structure_use_marked_actualtext_through_save_and_undo() {
+    let dir = workdir("bookmarks-actualtext");
+    let content = "BT /H1 << /MCID 0 >> BDC /Span << /ActualText (Accessible heading) >> BDC (bad) Tj [(also) (bad)] TJ EMC EMC /H2 /Named BDC (bad) Tj (bad) Tj EMC ET";
+    let fixture = format!(
+        "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R /StructTreeRoot 5 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /Resources << /Properties << /Named 6 0 R >> >> >> endobj\n4 0 obj << /Length {} >> stream\n{content}\nendstream endobj\n5 0 obj << /Type /StructTreeRoot /K [<< /S /H1 /Pg 3 0 R /K 0 >> << /S /H2 /Pg 3 0 R /K 1 >>] >> endobj\n6 0 obj << /MCID 1 /ActualText (Named heading) >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF",
+        content.len()
+    );
+    std::fs::write(dir.join("tagged.pdf"), fixture.as_bytes()).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "tagged.pdf" }))["doc"].as_u64().unwrap();
+    let result = ok(&mut a, "bookmark_from_structure", json!({ "doc": doc }));
+    assert_eq!(result["bookmarks"][0]["children"][0]["title"], "Accessible heading");
+    assert_eq!(result["bookmarks"][0]["children"][0]["children"][0]["title"], "Named heading");
+    assert_eq!(result["bookmarks"][0]["children"][0]["page"], 1);
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "bookmarked.pdf" }));
+    let reopened = ok(&mut a, "doc_open", json!({ "path": "bookmarked.pdf" }))["doc"].as_u64().unwrap();
+    let listed = ok(&mut a, "bookmark_list", json!({ "doc": reopened }));
+    assert_eq!(listed["bookmarks"][0]["title"], "Untitled");
+    assert_eq!(listed["bookmarks"][0]["children"][0]["title"], "Accessible heading");
+    assert_eq!(listed["bookmarks"][0]["children"][0]["children"][0]["title"], "Named heading");
+    assert_eq!(listed["bookmarks"][0]["children"][0]["children"][0]["page"], 1);
+    assert_eq!(std::fs::read(dir.join("tagged.pdf")).unwrap(), fixture.as_bytes());
+    assert_eq!(ok(&mut a, "edit_undo", json!({ "doc": doc }))["undone"], "New bookmarks from structure");
+    assert!(ok(&mut a, "bookmark_list", json!({ "doc": doc }))["bookmarks"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn numbering_pages_through_tools() {
     let dir = workdir("labels");
     let mut a = auto(&dir);
