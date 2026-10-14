@@ -480,10 +480,17 @@ fn form(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         d.confirm_touched = true;
     }
     ui.add_space(SECTION_GAP);
-    disclosure(ui, t, &mut d.advanced);
-    if d.advanced {
-        advanced(ui, t, d);
-    }
+    egui::Frame::new()
+        .fill(if d.advanced { t.hover } else { Color32::TRANSPARENT })
+        .corner_radius(CornerRadius::same(8))
+        .inner_margin(if d.advanced { 16 } else { 0 })
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            disclosure(ui, t, &mut d.advanced);
+            if d.advanced {
+                advanced(ui, t, d);
+            }
+        });
     let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
     enter && (password.lost_focus() || confirm.lost_focus())
 }

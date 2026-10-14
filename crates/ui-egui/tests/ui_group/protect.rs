@@ -202,10 +202,15 @@ fn a_click_beside_the_dialog_keeps_a_typed_password_but_not_an_empty_form() {
 
 #[test]
 fn the_dialog_fits_narrow_and_short_windows() {
-    for size in [egui::vec2(1400.0, 900.0), egui::vec2(560.0, 700.0), egui::vec2(420.0, 600.0), egui::vec2(900.0, 420.0)] {
-        let mut h = Harness::builder().with_size(size).build_eframe(|_cc| {
+    for (theme, size) in ["light", "dark"].into_iter().flat_map(|theme| {
+        [egui::vec2(1400.0, 900.0), egui::vec2(560.0, 700.0), egui::vec2(420.0, 600.0), egui::vec2(900.0, 420.0)]
+            .into_iter()
+            .map(move |size| (theme, size))
+    }) {
+        let mut h = Harness::builder().with_size(size).build_eframe(move |_cc| {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
+            app.set_option("theme", theme).unwrap();
             app.open_bytes("doc.pdf", None, FIXTURE.to_vec()).unwrap();
             app.protect_draft.advanced = true;
             app.protect_draft.mode = pdfcraft_ui_egui::protect::ProtectionMode::RestrictEditing;
