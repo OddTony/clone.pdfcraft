@@ -16,6 +16,9 @@ pdfcraft-model = { workspace = true }
 pdfcraft-forms = { workspace = true }
 pdfcraft-edit = { workspace = true }
 pdfcraft-annot = { workspace = true }
+# JPEG decoding (zune-jpeg) and encoding for clearing a /DCTDecode image's pixels in place;
+# already in the tree through the engine and the optimizer.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
