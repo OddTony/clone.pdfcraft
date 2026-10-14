@@ -1348,6 +1348,8 @@ mod tests {
         // Spelled the same in Czech: product and format names, abbreviations, key caps, words
         // Czech shares with English, and templates with no English words.
         const KEEP_AS_IS: &[&str] = &[
+            "RGB",
+            "CMYK",
             "OK",
             "PDF/A…",
             "Microsoft Word (.docx)",
@@ -1458,6 +1460,8 @@ mod tests {
             assert!(has(tr_lang, spec.label), "Turkish lacks the {menu} menu label {:?} ({})", spec.label, spec.id);
         }
         const KEEP_AS_IS: &[&str] = &[
+            "RGB",
+            "CMYK",
             "OK",
             "PDF/A…",
             "Microsoft Word (.docx)",
