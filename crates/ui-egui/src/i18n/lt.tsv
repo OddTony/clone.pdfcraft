@@ -268,6 +268,8 @@
 	An open-source PDF workbench — local, private, and scriptable.	Atvirojo kodo PDF aplinka — vietinė, privati ir valdoma scenarijais.
 	Angle	Kampas
 	Animation effects	Animacijos efektai
+	Graphics	Grafika
+	Applies the next time PdfCraft starts. Choose OpenGL if the window flickers on a display with G-SYNC, FreeSync or another variable refresh rate.	Įsigalioja kitą kartą paleidus PdfCraft. Pasirinkite OpenGL, jei langas mirga ekrane su G-SYNC, FreeSync ar kitu kintamu atnaujinimo dažniu.
 	Annotations, form fill-in, and digital signatures	Anotacijos, formų pildymas ir skaitmeniniai parašai
 	Any	Bet kuris
 	Any except extracting pages	Bet kas, išskyrus puslapių išskyrimą

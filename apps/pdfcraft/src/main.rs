@@ -28,6 +28,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use pdfcraft_ui_egui::PdfCraftApp;
+use pdfcraft_ui_egui::renderer::RendererPreference;
 
 #[cfg(target_os = "macos")]
 mod apple_events;
@@ -222,7 +223,7 @@ fn main() -> eframe::Result {
         single_instance::Claim::Primary(server) => Some(server),
         single_instance::Claim::Alone => None,
     };
-    let choice = renderer_choice(std::env::var("PDFCRAFT_RENDERER").ok().as_deref());
+    let choice = renderer_choice(std::env::var("PDFCRAFT_RENDERER").ok().as_deref(), saved_renderer());
     let launch = Launch { files, options, control_file, create_images, integrated, window_controls };
     // Finder, Open With and the Dock deliver files as Apple events, not arguments; catch the one
     // that launched us as well as later ones. Lives until the event loop returns.
@@ -265,23 +266,42 @@ fn main() -> eframe::Result {
     }
 }
 
-/// Which renderer to start with, from `PDFCRAFT_RENDERER`.
+/// Which renderer to start with, from `PDFCRAFT_RENDERER` or Preferences ▸ Graphics.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RendererChoice {
     /// wgpu, then OpenGL if wgpu can't start (unset, or anything unrecognised).
     Auto,
     /// wgpu only (`wgpu`): a failure is reported, not worked around.
     Wgpu,
-    /// OpenGL only (`gl`, `opengl` or `glow`): for drivers where wgpu starts but misbehaves.
+    /// OpenGL only (`gl`, `opengl` or `glow`, or the OpenGL preference): for drivers where wgpu
+    /// starts but misbehaves, and for displays with a variable refresh rate, where a window drawn
+    /// through Direct3D 12 flickers (`pdfcraft_ui_egui::renderer`).
     Gl,
 }
 
-fn renderer_choice(value: Option<&str>) -> RendererChoice {
+/// `PDFCRAFT_RENDERER` when it names a renderer, else the saved preference.
+fn renderer_choice(value: Option<&str>, saved: Option<RendererPreference>) -> RendererChoice {
     match value.map(|v| v.trim().to_ascii_lowercase()).as_deref() {
         Some("wgpu") => RendererChoice::Wgpu,
         Some("gl" | "opengl" | "glow") => RendererChoice::Gl,
+        _ if saved == Some(RendererPreference::Gl) => RendererChoice::Gl,
         _ => RendererChoice::Auto,
     }
+}
+
+/// Preferences ▸ Graphics as last saved. The renderer is chosen before eframe opens the settings,
+/// so this reads them itself; `None` when there are none or they can't be read (eframe logs that
+/// when it opens them).
+fn saved_renderer() -> Option<RendererPreference> {
+    let settings = std::fs::read_to_string(settings_dir()?.join("app.ron")).ok()?;
+    renderer_in_settings(&settings)
+}
+
+/// The preference in the text of `app.ron`: eframe's RON map from key to string, where the app's
+/// settings are the JSON under its storage key ([`PdfCraftApp::persist`]).
+fn renderer_in_settings(app_ron: &str) -> Option<RendererPreference> {
+    let entries: std::collections::HashMap<String, String> = ron::from_str(app_ron).ok()?;
+    RendererPreference::saved(entries.get("pdfcraft").or_else(|| entries.get(LEGACY_STORAGE_KEY))?)
 }
 
 /// Whether a failed run should be retried with OpenGL: only when wgpu was tried first by choice of
@@ -802,12 +822,12 @@ mod tests {
     #[test]
     fn opengl_is_the_fallback_unless_a_renderer_was_chosen() {
         use super::{RendererChoice, native_options, renderer_choice, retry_with_gl};
-        assert_eq!(renderer_choice(None), RendererChoice::Auto);
-        assert_eq!(renderer_choice(Some("")), RendererChoice::Auto);
-        assert_eq!(renderer_choice(Some("vulkan")), RendererChoice::Auto);
-        assert_eq!(renderer_choice(Some(" WGPU ")), RendererChoice::Wgpu);
+        assert_eq!(renderer_choice(None, None), RendererChoice::Auto);
+        assert_eq!(renderer_choice(Some(""), None), RendererChoice::Auto);
+        assert_eq!(renderer_choice(Some("vulkan"), None), RendererChoice::Auto);
+        assert_eq!(renderer_choice(Some(" WGPU "), None), RendererChoice::Wgpu);
         for gl in ["gl", "OpenGL", "glow"] {
-            assert_eq!(renderer_choice(Some(gl)), RendererChoice::Gl);
+            assert_eq!(renderer_choice(Some(gl), None), RendererChoice::Gl);
         }
         // Retried with OpenGL only when wgpu failed to start by default, never after the app ran.
         assert!(retry_with_gl(RendererChoice::Auto, false));
@@ -817,6 +837,41 @@ mod tests {
         // Each run states its renderer rather than relying on eframe's default.
         assert_eq!(native_options(false, false, eframe::Renderer::Wgpu).renderer, eframe::Renderer::Wgpu);
         assert_eq!(native_options(false, false, eframe::Renderer::Glow).renderer, eframe::Renderer::Glow);
+    }
+
+    #[test]
+    fn the_saved_renderer_applies_unless_the_environment_names_one() {
+        use super::{RendererChoice, RendererPreference, renderer_choice};
+        let gl = Some(RendererPreference::Gl);
+        assert_eq!(renderer_choice(None, gl), RendererChoice::Gl);
+        // A value that names no renderer leaves the preference in charge.
+        assert_eq!(renderer_choice(Some("vulkan"), gl), RendererChoice::Gl);
+        assert_eq!(renderer_choice(Some("wgpu"), gl), RendererChoice::Wgpu);
+        assert_eq!(renderer_choice(None, Some(RendererPreference::Auto)), RendererChoice::Auto);
+        assert_eq!(renderer_choice(Some("gl"), Some(RendererPreference::Auto)), RendererChoice::Gl);
+    }
+
+    #[test]
+    fn the_renderer_is_read_from_settings_as_eframe_writes_them() {
+        use super::{LEGACY_STORAGE_KEY, RendererPreference, renderer_in_settings};
+        // eframe's own format: a pretty RON map from key to string (`FileStorage`).
+        let app_ron = |key: &str, json: &str| {
+            let entries = std::collections::HashMap::from([(key.to_string(), json.to_string()), ("egui".to_string(), "(zoom: 1.0)".to_string())]);
+            ron::ser::to_string_pretty(&entries, ron::ser::PrettyConfig::default()).unwrap_or_default()
+        };
+        assert_eq!(renderer_in_settings(&app_ron("pdfcraft", r#"{"theme":"dark","renderer":"gl"}"#)), Some(RendererPreference::Gl));
+        assert_eq!(renderer_in_settings(&app_ron(LEGACY_STORAGE_KEY, r#"{"renderer":"gl"}"#)), Some(RendererPreference::Gl));
+        assert_eq!(renderer_in_settings(&app_ron("pdfcraft", r#"{"renderer":"auto"}"#)), Some(RendererPreference::Auto));
+        // Settings from before the preference, other apps' keys, broken JSON or RON: no preference.
+        for settings in [
+            app_ron("pdfcraft", r#"{"theme":"dark"}"#),
+            app_ron("other", r#"{"renderer":"gl"}"#),
+            app_ron("pdfcraft", "{"),
+            "{".to_string(),
+            String::new(),
+        ] {
+            assert_eq!(renderer_in_settings(&settings), None, "{settings}");
+        }
     }
 
     #[test]

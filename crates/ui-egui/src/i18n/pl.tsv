@@ -2252,6 +2252,8 @@ scroll speed	Slow	Wolna
 scroll speed	Normal	Normalna
 scroll speed	Fast	Szybka
 	Animation effects	Efekty animacji
+	Graphics	Grafika
+	Applies the next time PdfCraft starts. Choose OpenGL if the window flickers on a display with G-SYNC, FreeSync or another variable refresh rate.	Zostanie zastosowane przy następnym uruchomieniu PdfCraft. Wybierz OpenGL, jeśli okno migocze na ekranie z G-SYNC, FreeSync lub inną zmienną częstotliwością odświeżania.
 animation effects	On	Włączone
 animation effects	Off	Wyłączone
 	Enhance camera image	Popraw zdjęcie z aparatu

@@ -2146,6 +2146,8 @@ scroll speed	Slow	慢
 scroll speed	Normal	正常
 scroll speed	Fast	快
 	Animation effects	動畫效果
+	Graphics	圖形
+	Applies the next time PdfCraft starts. Choose OpenGL if the window flickers on a display with G-SYNC, FreeSync or another variable refresh rate.	下次啟動 PdfCraft 時生效。如果視窗在支援 G-SYNC、FreeSync 或其他可變更新率的顯示器上閃爍，請選擇 OpenGL。
 animation effects	On	開
 animation effects	Off	關
 	Table rows belong directly in a table or its head, body or foot. Fix the table's tags.	表格列應直接位於表格或其表頭、主體、表尾內。請修正表格標記。

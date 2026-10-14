@@ -122,6 +122,7 @@ mod open_worker;
 pub mod portable;
 mod protect;
 mod recovery;
+pub mod renderer;
 pub mod scroll_speed;
 #[cfg(not(target_arch = "wasm32"))]
 mod system_fonts;
@@ -520,6 +521,8 @@ pub struct PdfCraftApp {
     pub scroll_speed: scroll_speed::ScrollSpeed,
     /// Preferences ▸ Animation effects: on, off, or as the system's animation setting says.
     pub animation_effects: motion::AnimationEffects,
+    /// Preferences ▸ Graphics: the renderer the desktop app starts with next time.
+    pub renderer: renderer::RendererPreference,
     /// Whether the system asked for no animations, and how the desktop app asks it.
     pub motion: motion::Motion,
     /// Interface language preference: `auto` (follow the system) or a code from [`i18n::LANGUAGES`].
@@ -888,6 +891,7 @@ impl PdfCraftApp {
             desktop_theme_enabled: false,
             scroll_speed: scroll_speed::ScrollSpeed::default(),
             animation_effects: motion::AnimationEffects::default(),
+            renderer: renderer::RendererPreference::default(),
             motion: motion::Motion::default(),
             language: i18n::AUTO.to_string(),
             ui_scale: None,
@@ -2096,7 +2100,7 @@ impl PdfCraftApp {
     /// Serialize the user's persistent state (recent files, theme). Local only.
     pub fn persist(&self) -> String {
         let trusted: Vec<String> = self.session.trusted_certificates().iter().map(pdfcraft_engine::sign::x509::to_pem).collect();
-        serde_json::json!({
+        let mut settings = serde_json::json!({
             "docking": self.docking,
             "docking_left_open": self.left_open,
             "docking_right": self.right,
@@ -2155,8 +2159,13 @@ impl PdfCraftApp {
             "combine_zoom": self.combine_zoom,
             "comments_panel_closed": self.comments_panel_closed,
             "right_panel_closed": self.right_panel_closed,
-        })
-        .to_string()
+        });
+        // Outside the macro, which has reached the compiler's recursion limit. Read before the
+        // window exists, by the desktop app (`renderer::RendererPreference::saved`).
+        if let Some(map) = settings.as_object_mut() {
+            map.insert(renderer::KEY.to_string(), serde_json::Value::from(self.renderer.name()));
+        }
+        settings.to_string()
     }
 
     /// Restore state written by `persist`. Unknown or malformed data is ignored.
@@ -2203,6 +2212,9 @@ impl PdfCraftApp {
         }
         if let Ok(effects) = serde_json::from_value::<motion::AnimationEffects>(v["animation_effects"].clone()) {
             self.animation_effects = effects;
+        }
+        if let Some(choice) = renderer::RendererPreference::in_settings(&v) {
+            self.renderer = choice;
         }
         if let Ok(mode) = serde_json::from_value::<Mode>(v["default_mode"].clone()) {
             self.default_mode = mode;
@@ -2343,6 +2355,10 @@ impl PdfCraftApp {
             }
             ("animation_effects", _) => {
                 self.animation_effects = motion::AnimationEffects::parse(value).ok_or("animation_effects must be system, on, or off")?;
+            }
+            // Applies at the next start, like the Preferences choice.
+            ("renderer", _) => {
+                self.renderer = renderer::RendererPreference::parse(value).ok_or("renderer must be auto or gl")?;
             }
             ("panel", _) => {
                 self.right = match value {
