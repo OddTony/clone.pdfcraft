@@ -1,4 +1,5 @@
-//! The PostScript `Device`: geometry, colour and clip emission (Layer A, Task 3).
+//! The PostScript `Device`: geometry, colour and clip emission (Layer A, Task 3),
+//! with transparency flattened to 300-dpi rasters (Wave 2, Task 10).
 //!
 //! Emission model: PDF user space *is* PostScript user space (the initial transform is the
 //! identity handoff — see the findings file), so nothing outside a draw ever changes the CTM.
@@ -7,22 +8,33 @@
 //! already transformed into that space, so they are emitted raw inside their own `gsave` and
 //! released by the matching `grestore`. Shadings go through `shading.rs`, tiling patterns
 //! through `pattern.rs` (as `makepattern` pattern resources); text and
-//! images through `fonts.rs`/`images.rs`. Transparency has no Level 3-agnostic operator form,
-//! so it degrades to fidelity notes (Task 7 policy: one note per page, first occurrence
-//! only — normal pages stay note-free).
+//! images through `fonts.rs`/`images.rs`.
+//!
+//! Transparency (Wave 2): every draw is also recorded into the page's shadow scene
+//! ([`crate::flatten::ShadowScene`]). A real-transparency group (`opacity < 1`, a
+//! soft mask, or a non-Normal blend — exactly what yesterday's note condition was)
+//! withholds its PostScript bytes into a side buffer; the matching pop replays the
+//! scene through hayro's own `Device` implementation and emits the region as one
+//! opaque 300-dpi raster (`images::opaque_raster`), disclosing
+//! "transparency flattened to raster" once per page. When the flattener declines —
+//! the caps, a poisoned replay, or a region touching an un-recordable image — the
+//! withheld vector bytes return to the program unchanged and today's
+//! "transparency ignored (transparency group)" note stands: the worst case equals
+//! yesterday's behaviour.
 
 use std::collections::HashSet;
 use std::marker::PhantomData;
 
 use hayro::hayro_interpret::color::{Color, ColorSource};
-use hayro::hayro_interpret::font::Glyph;
+use hayro::hayro_interpret::font::{Glyph, OutlineGlyph};
 use hayro::hayro_interpret::hayro_syntax::page::Resources;
 use hayro::hayro_interpret::pattern::Pattern;
 use hayro::hayro_interpret::{BlendMode, ClipPath, Device, FillRule, GlyphDrawMode, Image, Paint, PathDrawMode, SoftMask, StrokeProps};
-use kurbo::{Affine, BezPath, Cap, Join, PathEl, Point, Rect};
+use kurbo::{Affine, BezPath, Cap, Join, PathEl, Point, Rect, Shape};
 
 use crate::FidelityNote;
 use crate::color;
+use crate::flatten::{FLATTEN_DPI, ShadowScene, page_matrix};
 use crate::fonts::{self, FontTable, TextStrategy};
 use crate::images;
 use crate::pattern;
@@ -106,11 +118,44 @@ pub(crate) struct PsDevice<'a> {
     /// (`pattern.rs`): a transparent cell cannot ride a PostScript pattern
     /// colour, so the draw declines to the flat stand-in instead.
     pub(crate) saw_transparency: bool,
+    /// The page's shadow scene (`flatten.rs`): every draw records here, and each
+    /// pop of a real-transparency group replays it into a 300-dpi raster.
+    scene: ShadowScene<'a>,
+    /// The scene's page matrix (device page space → 300-dpi pixels, y down),
+    /// baked into every recorded transform ([`flatten::page_matrix`]).
+    matrix: Affine,
+    /// The transparency groups currently open, in push order. A real-transparency
+    /// group withholds the parent program into a side buffer until its pop; the
+    /// interpreter's non-real wrappers (the page group, and the full-state group
+    /// around every image draw) hold nothing but must still match their pops, so
+    /// they ride the same stack.
+    group_stack: Vec<OpenGroup>,
     /// A text run waiting for its `show`: glyphs batch here until a font,
     /// strategy, transform-basis or paint change flushes them.
     run: Option<TextRun<'a>>,
     /// Later tasks consume `&'a` PDF data (font programs, image streams); nothing is stored yet.
     _marker: PhantomData<&'a ()>,
+}
+
+/// One group currently open: a real-transparency group's side buffer, or the
+/// marker of a non-real wrapper (nothing withheld, nothing to flatten).
+enum OpenGroup {
+    Real(GroupBuffer),
+    Wrapper,
+}
+
+/// One open real-transparency group: the operator bytes emitted before its push,
+/// withheld until the pop decides between the raster (discard them) and the
+/// fallback (append them back — never lose output).
+struct GroupBuffer {
+    parent_out: Vec<u8>,
+}
+
+/// The page the unit-test device draws over: the 200×300 `MediaBox` the crate's
+/// fixtures use (the tests' coordinates live in it).
+#[cfg(test)]
+fn test_page() -> Rect {
+    Rect::new(0.0, 0.0, 200.0, 300.0)
 }
 
 /// One pending `show`: consecutive glyphs of one font, one linear transform
@@ -141,22 +186,48 @@ struct TextRun<'a> {
 }
 
 impl<'a> PsDevice<'a> {
-    /// A device emitting into a fresh buffer, tagging notes with `page` (1-based, if known).
-    /// The unit-test constructor: `export()` always supplies the page's font resources
-    /// (and the document's running font table) via [`Self::from_table`].
+    /// The shared constructor: a fresh emitter, the font table, and a shadow scene
+    /// over `page_rect` (the device-space page box `export()` computes — the same
+    /// rect the DSC page bounding box uses).
+    fn with_tables(page: Option<usize>, fonts: FontTable, page_rect: Rect) -> Self {
+        Self {
+            emit: fresh_emit(page),
+            fonts,
+            saw_transparency: false,
+            scene: ShadowScene::new(page_rect),
+            matrix: page_matrix(page_rect),
+            group_stack: Vec::new(),
+            run: None,
+            _marker: PhantomData,
+        }
+    }
+
+    /// A device emitting into a fresh buffer, tagging notes with `page` (1-based, if known),
+    /// over the default 200×300 test page. The unit-test constructor: `export()` always
+    /// supplies the page's real box (and the document's running font table) via
+    /// [`Self::from_table`].
     #[cfg(test)]
     pub(crate) fn new(page: Option<usize>) -> Self {
-        Self { emit: fresh_emit(page), fonts: FontTable::default(), saw_transparency: false, run: None, _marker: PhantomData }
+        Self::with_tables(page, FontTable::default(), test_page())
+    }
+
+    /// A test device over an explicit page box (the default page cannot express a
+    /// fixture like the flattener's area-cap decline, which needs an oversized page).
+    #[cfg(test)]
+    pub(crate) fn new_over(page: Option<usize>, page_rect: Rect) -> Self {
+        Self::with_tables(page, FontTable::default(), page_rect)
     }
 
     /// A device whose text strategies come from `resources` (the page's own —
     /// the same dicts the interpreter resolves fonts through, so the glyph font
     /// cache keys index the table) plus the document's running `FontTable`, so
     /// font decisions and slice names carry across the pages of one export.
-    pub(crate) fn from_table(page: Option<usize>, resources: &Resources<'_>, fonts: FontTable) -> Self {
+    /// `page_rect` is the page's device-space box: the shadow scene's regions and
+    /// the 300-dpi page matrix come from it.
+    pub(crate) fn from_table(page: Option<usize>, resources: &Resources<'_>, fonts: FontTable, page_rect: Rect) -> Self {
         let mut fonts = fonts;
         fonts.add_resources(resources);
-        Self { emit: fresh_emit(page), fonts, saw_transparency: false, run: None, _marker: PhantomData }
+        Self::with_tables(page, fonts, page_rect)
     }
 
     /// A device collecting one tiling-pattern cell (`pattern.rs`): a fresh
@@ -164,15 +235,34 @@ impl<'a> PsDevice<'a> {
     /// document's font table, which the caller takes out of the parent device
     /// and takes back afterwards — the cells' own font resources never join
     /// the table, so their text vectorizes (unknown font keys, faithful
-    /// outlines). A runtime constructor, not test-only.
+    /// outlines). The scene is a degenerate page on purpose: a cell's space is
+    /// pattern space, not page space, and a transparent cell declines the whole
+    /// pattern anyway (`pattern.rs`), so its rasters must never come from here —
+    /// recording stays uniform, every flatten declines. A runtime constructor,
+    /// not test-only.
     pub(crate) fn cell(page: Option<usize>, fonts: FontTable) -> Self {
-        Self { emit: fresh_emit(page), fonts, saw_transparency: false, run: None, _marker: PhantomData }
+        Self::with_tables(page, fonts, Rect::ZERO)
     }
 
-    /// Emit any pending text run. Called before every other operator (program
-    /// order), and once when the page is done; safe to call again.
+    /// Emit any pending text run, then unwind any group still open at `finish`
+    /// (hostile unbalance): each open real group's withheld bytes return to the
+    /// program, innermost first — never lose output — and its scene frame closes.
     pub(crate) fn finish(&mut self) {
         self.flush_text();
+        while let Some(open) = self.group_stack.pop() {
+            if let OpenGroup::Real(buffer) = open {
+                self.scene.pop_frame();
+                let withheld = std::mem::take(&mut self.emit.out);
+                self.emit.out = buffer.parent_out;
+                self.emit.out.extend_from_slice(&withheld);
+            }
+        }
+    }
+
+    /// Whether a real-transparency group is open (the raster carries any
+    /// transparency announced inside one; wrappers do not count).
+    fn inside_real_group(&self) -> bool {
+        self.group_stack.iter().any(|open| matches!(open, OpenGroup::Real(_)))
     }
 
     /// Emit the pending run as one `show`/`xyshow` inside the usual
@@ -255,6 +345,119 @@ impl<'a> PsDevice<'a> {
         self.run =
             Some(TextRun { font_key, slice, wide, basis, paint: paint.clone(), origin: user, codes: vec![code], offsets: Vec::new(), last: user });
     }
+
+    // ---------------------------------------------- scene recording (Wave 2)
+
+    /// Record one path draw into the scene and widen the open frames: the closure
+    /// bakes the page matrix into the transform and clones its by-reference
+    /// arguments once, at record time (the log replays them any number of times).
+    fn record_path(&mut self, path: &BezPath, transform: Affine, paint: &Paint<'a>, draw_mode: &PathDrawMode) {
+        let bbox = paint_reach_bbox(path.bounding_box(), transform, stroke_reach(draw_mode));
+        let full = self.matrix * transform;
+        let path = path.clone();
+        let paint = paint.clone();
+        let mode = draw_mode.clone();
+        self.scene.record(move |r| r.draw_path(&path, full, &paint, &mode));
+        self.scene.extend(bbox);
+    }
+
+    /// Record one rect draw (the interpreter's axis-aligned shortcut) the same way.
+    fn record_rect(&mut self, rect: &Rect, transform: Affine, paint: &Paint<'a>, draw_mode: &PathDrawMode) {
+        let bbox = paint_reach_bbox(*rect, transform, stroke_reach(draw_mode));
+        let full = self.matrix * transform;
+        let rect = *rect;
+        let paint = paint.clone();
+        let mode = draw_mode.clone();
+        self.scene.record(move |r| r.draw_rect(&rect, full, &paint, &mode));
+        self.scene.extend(bbox);
+    }
+
+    /// Record one filled outline glyph exactly as the raster renderer paints it
+    /// (`fill_glyph`: the cached outline under the total transform), and widen the
+    /// frames by its box. Recorded at `draw_glyph` time whatever strategy the PS
+    /// side takes — run batching or vectorization paint the same outline.
+    fn record_glyph_fill(&mut self, outline: &OutlineGlyph, total: Affine, paint: &Paint<'a>) {
+        let path = self.scene.outline_of(outline);
+        let bbox = paint_reach_bbox(path.bounding_box(), total, 0.0);
+        let full = self.matrix * total;
+        let paint = paint.clone();
+        self.scene.record(move |r| r.draw_path(&path, full, &paint, &PathDrawMode::Fill(FillRule::NonZero)));
+        self.scene.extend(bbox);
+    }
+
+    /// Record one stroked outline glyph the way the raster renderer paints it
+    /// (`stroke_glyph`: the outline under the *glyph* transform, stroked with
+    /// `transform` as the CTM — the stroke width lives in text space, not the
+    /// 1000-unit glyph space).
+    fn record_glyph_stroke(&mut self, outline: &OutlineGlyph, transform: Affine, glyph_transform: Affine, props: &StrokeProps, paint: &Paint<'a>) {
+        let path = self.scene.outline_of(outline);
+        let stroked = glyph_transform * path.as_ref().clone();
+        let mode = PathDrawMode::Stroke(props.clone());
+        let bbox = paint_reach_bbox(stroked.bounding_box(), transform, stroke_reach(&mode));
+        let full = self.matrix * transform;
+        let paint = paint.clone();
+        self.scene.record(move |r| r.draw_path(&stroked, full, &paint, &mode));
+        self.scene.extend(bbox);
+    }
+
+    /// The PS emission of one path/rect draw (the Task 3 flow), shared by
+    /// `draw_path`, `draw_rect` and the glyph vectorize arms: `gsave`, the total
+    /// CTM baked in, the stroke properties, the paint machinery, `grestore`.
+    fn emit_shape(&mut self, transform: Affine, paint: &Paint<'a>, draw_mode: &PathDrawMode, build: impl FnOnce(&mut Emitter)) {
+        self.emit.op("gsave");
+        concat(&mut self.emit, transform);
+        if let PathDrawMode::Stroke(props) = draw_mode {
+            stroke_ops(&mut self.emit, props);
+        }
+        paint_draw(&mut self.emit, &mut self.fonts, transform, paint, draw_mode, build);
+        self.emit.op("grestore");
+    }
+
+    /// The PS emission of one image draw (inside the usual `gsave`…`grestore`;
+    /// `/ImageMatrix` identity — see `images.rs`).
+    fn emit_image(&mut self, image: &Image<'_, '_>, transform: Affine) {
+        self.flush_text();
+        self.emit.op("gsave");
+        concat(&mut self.emit, transform);
+        images::image_ops(image, &mut self.emit);
+        self.emit.op("grestore");
+    }
+}
+
+/// The stroke's reach beyond its path, in user units — the rasterizer's own
+/// `may_paint_canvas` formula: half the line width times the larger of the miter
+/// limit and √2 (negative widths render thinner than anything, so 0 reach). A
+/// non-finite miter limit leaves miters mathematically unbounded (the rasterizer
+/// treats the reach as infinite); the scene's frames want a finite box, so the
+/// reach clamps to 10 000 × the width — far beyond any page, and `flatten` clips
+/// regions to the page anyway.
+fn stroke_reach(draw_mode: &PathDrawMode) -> f64 {
+    let PathDrawMode::Stroke(props) = draw_mode else {
+        return 0.0;
+    };
+    let width = f64::from(props.line_width).max(0.0);
+    let miter = f64::from(props.miter_limit).abs();
+    if !miter.is_finite() {
+        return width * 1.0e4;
+    }
+    width / 2.0 * miter.max(std::f64::consts::SQRT_2)
+}
+
+/// What one draw can paint, in device page space: the draw's user-space box grown
+/// by the stroke's `reach` and 0.5 user units of flattening slack, through the
+/// transform, plus 2 pixels of antialiasing at 300 dpi (0.48 pt) — the
+/// `may_paint_canvas` recipe with the pixel slack mapped into page points.
+fn paint_reach_bbox(user: Rect, transform: Affine, reach: f64) -> Rect {
+    const AA_PT: f64 = 2.0 * 72.0 / FLATTEN_DPI;
+    let grow = reach + 0.5;
+    transform.transform_rect_bbox(user.inflate(grow, grow)).inflate(AA_PT, AA_PT)
+}
+
+/// An image draw's device-space box: the pixel rect ([0,w]×[0,h], row 0 first —
+/// the interpreter's transform already maps image pixel space onto the page)
+/// through the transform, with the usual flattening slack.
+fn image_bbox(image: &Image<'_, '_>, transform: Affine) -> Rect {
+    paint_reach_bbox(Rect::new(0.0, 0.0, f64::from(image.width()), f64::from(image.height())), transform, 0.0)
 }
 
 /// Whether two paints render identically (the run batching test). Patterns
@@ -280,8 +483,10 @@ fn same_paint(a: &Paint<'_>, b: &Paint<'_>) -> bool {
 
 impl Drop for PsDevice<'_> {
     fn drop(&mut self) {
-        // A pending run must reach the program even if nobody called `finish`.
-        self.flush_text();
+        // A pending run must reach the program even if nobody called `finish`, and a
+        // group still open at drop unwinds the same way (`finish` is idempotent):
+        // withheld bytes are never lost.
+        self.finish();
     }
 }
 
@@ -577,19 +782,31 @@ fn ascii_safe(bytes: &[u8]) -> String {
 }
 
 impl<'a> Device<'a> for PsDevice<'a> {
-    /// No PostScript operator form: a soft mask degrades to one note per page.
+    /// Recorded into the scene (a flattened region composites under the mask exactly
+    /// as `page_render` does); the PS degradation note fires only outside a
+    /// real-transparency group — inside one the raster carries the effect and the
+    /// flattening note (or, on decline, the group note) discloses it.
     fn set_soft_mask(&mut self, mask: Option<SoftMask<'a>>) {
-        if mask.is_some() {
+        let has_mask = mask.is_some();
+        if has_mask {
             self.saw_transparency = true;
+        }
+        self.scene.record(move |r| r.set_soft_mask(mask.clone()));
+        if has_mask && !self.inside_real_group() {
             self.emit.note_once("transparency ignored (soft mask)");
         }
     }
 
-    /// `Normal` (the default everywhere) is not a degradation; anything else records one
-    /// note per page naming the mode.
+    /// Recorded into the scene; `Normal` (the default everywhere) is not a
+    /// degradation, and outside a real-transparency group anything else records one
+    /// note per page naming the mode (inside a group the raster carries it).
     fn set_blend_mode(&mut self, blend_mode: BlendMode) {
-        if !matches!(blend_mode, BlendMode::Normal) {
+        let normal = matches!(blend_mode, BlendMode::Normal);
+        if !normal {
             self.saw_transparency = true;
+        }
+        self.scene.record(move |r| r.set_blend_mode(blend_mode));
+        if !normal && !self.inside_real_group() {
             self.emit.note_once(&format!("transparency ignored (blend {blend_mode:?})"));
         }
     }
@@ -602,18 +819,15 @@ impl<'a> Device<'a> for PsDevice<'a> {
         if paint_invisible(paint) {
             return;
         }
-        self.emit.op("gsave");
-        concat(&mut self.emit, transform);
-        if let PathDrawMode::Stroke(props) = draw_mode {
-            stroke_ops(&mut self.emit, props);
-        }
-        paint_draw(&mut self.emit, &mut self.fonts, transform, paint, draw_mode, |emit| path_ops(emit, path));
-        self.emit.op("grestore");
+        self.record_path(path, transform, paint, draw_mode);
+        self.emit_shape(transform, paint, draw_mode, |emit| path_ops(emit, path));
     }
 
     fn push_clip_path(&mut self, clip_path: &ClipPath) {
         // The interpreter delivers clip paths already transformed; emit them raw.
+        // The scene records the path cloned in (flatten.rs applies the page matrix).
         self.flush_text();
+        self.scene.record_push_clip(clip_path);
         self.emit.op("gsave");
         path_ops(&mut self.emit, &clip_path.path);
         match clip_path.fill {
@@ -622,13 +836,22 @@ impl<'a> Device<'a> for PsDevice<'a> {
         }
     }
 
-    /// Transparency groups composite; Level 3 PostScript has no portable equivalent, so the
-    /// group's contents draw as if at full opacity, with one note per page when the group
-    /// actually carried opacity, a mask or a non-Normal blend.
+    /// A real-transparency group (`opacity < 1`, a mask, or a non-Normal blend — the
+    /// interpreter's page wrapper and image wrappers at full state are not real)
+    /// withholds the parent program into a side buffer: the group's own PostScript
+    /// accumulates fresh, to be replaced by the flattened raster at the pop — or
+    /// appended back, when the flattener declines. Every push records into the
+    /// scene, real or not, so the replay log's wrapper stack stays balanced.
     fn push_transparency_group(&mut self, opacity: f32, mask: Option<SoftMask<'a>>, blend_mode: BlendMode) {
-        if opacity < 1.0 || mask.is_some() || !matches!(blend_mode, BlendMode::Normal) {
+        let real = opacity < 1.0 || mask.is_some() || !matches!(blend_mode, BlendMode::Normal);
+        self.flush_text();
+        self.scene.record_push_group(opacity, mask, blend_mode);
+        if real {
             self.saw_transparency = true;
-            self.emit.note_once("transparency ignored (transparency group)");
+            self.scene.push_frame();
+            self.group_stack.push(OpenGroup::Real(GroupBuffer { parent_out: std::mem::take(&mut self.emit.out) }));
+        } else {
+            self.group_stack.push(OpenGroup::Wrapper);
         }
     }
 
@@ -642,7 +865,8 @@ impl<'a> Device<'a> for PsDevice<'a> {
         let total = transform * glyph_transform;
         match glyph {
             // Type 3 glyphs re-interpret their PDF drawing instructions through
-            // this device as ordinary path calls — faithful, no font machinery.
+            // this device as ordinary path calls — faithful, no font machinery,
+            // and each sub-draw records itself into the scene.
             Glyph::Type3(g) => {
                 self.flush_text();
                 g.interpret(self, transform, glyph_transform, paint);
@@ -651,6 +875,10 @@ impl<'a> Device<'a> for PsDevice<'a> {
                 // Invisible text renders nothing (as in the raster renderer).
                 GlyphDrawMode::Invisible => {}
                 GlyphDrawMode::Fill => {
+                    // The scene records the outline fill once, whatever strategy
+                    // the PS side chooses — batched `show` or vectorized paths
+                    // paint the same outline (exactly what the raster draws).
+                    self.record_glyph_fill(outline, total, paint);
                     let strategy = self.fonts.strategy(glyph);
                     for note in self.fonts.drain_notes() {
                         self.emit.note(&note);
@@ -665,7 +893,7 @@ impl<'a> Device<'a> for PsDevice<'a> {
                             // synthesized cmap the strategy arm proved writable.
                             if strategy == TextStrategy::Type1Passthrough && self.fonts.type1_glyph_name(key, gid).is_none() {
                                 self.emit.note("text vectorized (glyph missing from font program)");
-                                self.draw_path(&outline.outline(), total, paint, &PathDrawMode::Fill(FillRule::NonZero));
+                                self.emit_shape(total, paint, &PathDrawMode::Fill(FillRule::NonZero), |emit| path_ops(emit, &outline.outline()));
                                 return;
                             }
                             let code = u16::from(self.fonts.char_code(key, gid));
@@ -681,59 +909,113 @@ impl<'a> Device<'a> for PsDevice<'a> {
                             // pattern.
                             if gid > 0xFFFE {
                                 self.emit.note("text vectorized (glyph missing from font program)");
-                                self.draw_path(&outline.outline(), total, paint, &PathDrawMode::Fill(FillRule::NonZero));
+                                self.emit_shape(total, paint, &PathDrawMode::Fill(FillRule::NonZero), |emit| path_ops(emit, &outline.outline()));
                                 return;
                             }
                             let code = self.fonts.cid_code(key, gid);
                             self.push_run_glyph(key, 0, code, true, total, paint);
                         }
                         TextStrategy::Vectorize => {
-                            self.draw_path(&outline.outline(), total, paint, &PathDrawMode::Fill(FillRule::NonZero));
+                            self.emit_shape(total, paint, &PathDrawMode::Fill(FillRule::NonZero), |emit| path_ops(emit, &outline.outline()));
                         }
                     }
                 }
                 // Stroked (and fill-then-stroke) text becomes outline paths:
-                // `show` fills, so text-as-text cannot express these modes.
+                // `show` fills, so text-as-text cannot express these modes. The
+                // scene records the stroke the way the raster paints it (the
+                // outline under the glyph transform, stroked in text space).
                 GlyphDrawMode::Stroke(props) => {
-                    self.draw_path(&outline.outline(), total, paint, &PathDrawMode::Stroke(props.clone()));
+                    self.record_glyph_stroke(outline, transform, glyph_transform, props, paint);
+                    self.emit_shape(total, paint, &PathDrawMode::Stroke(props.clone()), |emit| path_ops(emit, &outline.outline()));
                 }
             },
         }
     }
 
+    /// The plain image entry: transient-stream images (inline images, whose bytes
+    /// borrow the content window) cannot be captured in the scene's replay log, so
+    /// the draw records as a hole and any flatten whose region touches it declines
+    /// (the vector output — emitted below — is what those regions keep).
     fn draw_image(&mut self, image: Image<'a, '_>, transform: Affine) {
-        // Images keep the Task 3 discipline: `gsave`, the total CTM baked in via `concat`,
-        // the image machinery, `grestore`. The interpreter's `transform` already maps
-        // image pixel space (row 0 first, y-flipped) onto the page, which is why the
-        // PostScript ImageMatrix inside `images.rs` is the identity.
-        self.flush_text();
-        self.emit.op("gsave");
-        concat(&mut self.emit, transform);
-        images::image_ops(&image, &mut self.emit);
-        self.emit.op("grestore");
+        let bbox = image_bbox(&image, transform);
+        self.scene.record_image_hole(bbox);
+        self.scene.extend(bbox);
+        self.emit_image(&image, transform);
+    }
+
+    /// The retained-image entry (the vendor's ps-export patch): XObject images,
+    /// whose streams borrow the document, record by value — cloned inside the
+    /// closure once per replay — exactly what the raster renderer draws.
+    fn draw_retained_image(&mut self, image: Image<'a, 'a>, transform: Affine) {
+        let bbox = image_bbox(&image, transform);
+        let full = self.matrix * transform;
+        // One clone buys the log its own value (cloned again inside the closure,
+        // once per replay); the emission below borrows the original.
+        let logged = image.clone();
+        self.scene.record(move |r| r.draw_image(logged.clone(), full));
+        self.scene.extend(bbox);
+        self.emit_image(&image, transform);
     }
 
     fn pop_clip_path(&mut self) {
         self.flush_text();
+        self.scene.record_pop_clip();
         self.emit.op("grestore");
     }
 
-    /// The matching pop of [`Self::push_transparency_group`]: nothing to undo, since the
-    /// push emitted nothing (any degradation was noted there, once per page).
-    fn pop_transparency_group(&mut self) {}
+    /// The matching pop of [`Self::push_transparency_group`]: flush the pending
+    /// text into the group's buffer, then flatten the scene's frame. A raster with
+    /// pixels replaces the withheld group bytes (disclosed once per page); an empty
+    /// raster (nothing painted on the page) discards them, still disclosing the
+    /// flattening — nothing was ignored; a decline appends them back and keeps
+    /// today's note. A pop with no open buffer (the non-real page/image wrappers,
+    /// or hostile unbalance) records into the scene and does nothing else.
+    fn pop_transparency_group(&mut self) {
+        self.flush_text();
+        self.scene.record_pop_group();
+        // The pop matches the innermost push whatever its kind: a wrapper's pop
+        // (the interpreter wraps every image draw in a full-state group, even
+        // inside a real one) closes nothing, an unbalanced pop is a no-op.
+        let Some(OpenGroup::Real(buffer)) = self.group_stack.pop() else {
+            return;
+        };
+        // The frame of the matching real push is consumed — `flatten` reads the
+        // last-popped one.
+        self.scene.pop_frame();
+        let withheld = std::mem::take(&mut self.emit.out);
+        self.emit.out = buffer.parent_out;
+        match self.scene.flatten() {
+            Some(raster) if raster.width > 0 && raster.height > 0 => {
+                // The raster maps pixel space (row 0 first) back onto the page
+                // (`place`), which is exactly the `draw_image` convention: concat
+                // it and ride the opaque-Flate image pipeline.
+                self.emit.op("gsave");
+                concat(&mut self.emit, raster.place);
+                images::opaque_raster(&mut self.emit, raster.width, raster.height, &raster.rgb);
+                self.emit.op("grestore");
+                self.emit.note_once("transparency flattened to raster");
+            }
+            Some(_) => {
+                // The group painted nothing on the page (an empty region): nothing
+                // was ignored, the flattening still discloses itself.
+                self.emit.note_once("transparency flattened to raster");
+            }
+            None => {
+                // Declined (caps, poison, or a hole in the region): the withheld
+                // vector bytes return — never lose output — and today's note stands.
+                self.emit.out.extend_from_slice(&withheld);
+                self.emit.note_once("transparency ignored (transparency group)");
+            }
+        }
+    }
 
     fn draw_rect(&mut self, rect: &Rect, transform: Affine, paint: &Paint<'a>, draw_mode: &PathDrawMode) {
         self.flush_text();
         if paint_invisible(paint) {
             return;
         }
-        self.emit.op("gsave");
-        concat(&mut self.emit, transform);
-        if let PathDrawMode::Stroke(props) = draw_mode {
-            stroke_ops(&mut self.emit, props);
-        }
-        paint_draw(&mut self.emit, &mut self.fonts, transform, paint, draw_mode, |emit| rect_ops(emit, rect));
-        self.emit.op("grestore");
+        self.record_rect(rect, transform, paint, draw_mode);
+        self.emit_shape(transform, paint, draw_mode, |emit| rect_ops(emit, rect));
     }
 
     fn begin_marked_content(&mut self, tag: &[u8], mcid: Option<i32>) {
@@ -1177,11 +1459,190 @@ mod tests {
         assert_eq!(output(&dev), "", "defaults emit nothing: {}", output(&dev));
         assert_eq!(dev.emit.notes, vec![FidelityNote { page: None, text: "transparency ignored (blend Multiply)".into() }]);
 
+        // Two real groups: each pop flattens (Task 10), and the flattening disclosure
+        // is still once per page, first occurrence only.
         let mut dev = device();
         dev.push_transparency_group(0.5, None, BlendMode::Normal);
+        dev.pop_transparency_group();
         dev.push_transparency_group(0.5, None, BlendMode::Normal);
-        let group_notes = dev.emit.notes.iter().filter(|n| n.text.contains("transparency group")).count();
-        assert_eq!(group_notes, 1, "one group note per page, first occurrence only: {:?}", dev.emit.notes);
+        dev.pop_transparency_group();
+        let group_notes = dev.emit.notes.iter().filter(|n| n.text.contains("transparency")).count();
+        assert_eq!(group_notes, 1, "one transparency note per page, first occurrence only: {:?}", dev.emit.notes);
+        assert_eq!(
+            dev.emit.notes,
+            vec![FidelityNote { page: None, text: "transparency flattened to raster".into() }],
+            "the empty group discloses its flattening"
+        );
+    }
+
+    // ------------------------------------------- transparency flattening (Wave 2)
+
+    /// Opaque white.
+    fn white() -> Paint<'static> {
+        Paint::Color(Color::from_rgba(AlphaColor::new([1.0, 1.0, 1.0, 1.0])))
+    }
+
+    /// A white backdrop, then a real-transparency group holding one red rect: the pop
+    /// flattens the group into one 300-dpi raster through the shadow scene. The
+    /// backdrop's vector ops survive, the group's own vector ops were withheld and
+    /// discarded (the raster replaces them), the flattening is disclosed once, and
+    /// the `gsave`/`grestore` pairs stay balanced.
+    #[test]
+    fn opacity_group_flattens_to_raster() {
+        let mut dev = device();
+        dev.draw_rect(&Rect::new(10.0, 10.0, 100.0, 80.0), Affine::IDENTITY, &white(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.push_transparency_group(0.5, None, BlendMode::Normal);
+        dev.draw_rect(&Rect::new(20.0, 20.0, 90.0, 70.0), Affine::IDENTITY, &red(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.pop_transparency_group();
+        let out = output(&dev);
+        assert!(out.contains("1 setgray\n"), "the backdrop's vector ops survive: {out}");
+        assert_eq!(out.matches(">> image").count(), 1, "exactly one image invocation, the raster: {out}");
+        assert!(out.contains("/Width"), "the dictionary image form: {out}");
+        assert!(!out.contains("1 0 0 setrgbcolor"), "the group's vector bytes were withheld and discarded: {out}");
+        assert_eq!(out.matches("gsave\n").count(), out.matches("grestore\n").count(), "gsave/grestore balanced: {out}");
+        assert_eq!(
+            dev.emit.notes.iter().filter(|n| n.text == "transparency flattened to raster").count(),
+            1,
+            "the flattening is disclosed once: {:?}",
+            dev.emit.notes
+        );
+    }
+
+    /// A real group with no draws flattens to an empty region: nothing was ignored, so
+    /// no raster is emitted and the flattening note (not the ignore note) stands.
+    #[test]
+    fn empty_group_emits_no_raster() {
+        let mut dev = device();
+        dev.push_transparency_group(0.5, None, BlendMode::Normal);
+        dev.pop_transparency_group();
+        let out = output(&dev);
+        assert!(!out.contains(">> image"), "an empty group emits no image: {out}");
+        assert_eq!(output(&dev), "", "and no operators at all: {out}");
+        assert_eq!(
+            dev.emit.notes,
+            vec![FidelityNote { page: None, text: "transparency flattened to raster".into() }],
+            "the disclosure still fires: {:?}",
+            dev.emit.notes
+        );
+    }
+
+    /// A pop with no matching push (hostile unbalance) is a no-op: no operators, no
+    /// notes, and the device stays usable afterwards.
+    #[test]
+    fn unbalanced_group_pop_is_noop() {
+        let mut dev = device();
+        dev.pop_transparency_group();
+        assert_eq!(output(&dev), "", "nothing emitted: {}", output(&dev));
+        assert_eq!(dev.emit.notes, vec![], "nothing noted: {:?}", dev.emit.notes);
+        dev.draw_rect(&Rect::new(0.0, 0.0, 10.0, 10.0), Affine::IDENTITY, &red(), &PathDrawMode::Fill(FillRule::NonZero));
+        assert!(output(&dev).contains("fill\n"), "the device still draws: {}", output(&dev));
+    }
+
+    /// A page whose 300-dpi rasterization exceeds the flattener's area cap (2500×2500 pt
+    /// → 10417² px ≈ 108.5 Mpx, over the 100 Mpx cap): the group's vector bytes flush
+    /// back into the program and today's note stands — the worst case equals yesterday.
+    #[test]
+    fn flatten_decline_flushes_vector() {
+        let mut dev = PsDevice::new_over(None, Rect::new(0.0, 0.0, 2500.0, 2500.0));
+        dev.push_transparency_group(0.5, None, BlendMode::Normal);
+        dev.draw_rect(&Rect::new(100.0, 100.0, 2400.0, 2400.0), Affine::IDENTITY, &red(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.pop_transparency_group();
+        let out = output(&dev);
+        assert!(out.contains("1 0 0 setrgbcolor\n"), "the group's vector ops are back in the program: {out}");
+        assert!(!out.contains(">> image"), "no raster was emitted: {out}");
+        assert_eq!(
+            dev.emit.notes,
+            vec![FidelityNote { page: None, text: "transparency ignored (transparency group)".into() }],
+            "today's wording: {:?}",
+            dev.emit.notes
+        );
+    }
+
+    /// The interpreter wraps every image draw in a full-state (non-real) group — even
+    /// inside a real one. The wrapper's push/pop pair must not touch the real group's
+    /// side buffer: only the real group's own pop flattens.
+    #[test]
+    fn wrapper_group_pop_inside_real_group_changes_nothing() {
+        let mut dev = device();
+        dev.push_transparency_group(0.5, None, BlendMode::Normal);
+        dev.push_transparency_group(1.0, None, BlendMode::Normal);
+        dev.draw_rect(&Rect::new(20.0, 20.0, 90.0, 70.0), Affine::IDENTITY, &red(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.pop_transparency_group();
+        assert!(matches!(dev.group_stack.last(), Some(super::OpenGroup::Real(_))), "the real group is still open: {:?}", dev.emit.notes);
+        assert_eq!(dev.emit.notes, vec![], "the wrapper's pop noted nothing: {:?}", dev.emit.notes);
+        dev.pop_transparency_group();
+        let out = output(&dev);
+        assert_eq!(out.matches(">> image").count(), 1, "the real group's pop flattens: {out}");
+        assert!(!out.contains("1 0 0 setrgbcolor"), "the group's vector bytes stayed withheld: {out}");
+    }
+
+    /// A still-open group at `finish` (hostile unbalance) unwinds without losing output:
+    /// the withheld bytes return to the program, innermost first.
+    #[test]
+    fn open_group_at_finish_flushes_withheld_bytes() {
+        let mut dev = device();
+        dev.draw_rect(&Rect::new(0.0, 0.0, 20.0, 20.0), Affine::IDENTITY, &white(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.push_transparency_group(0.5, None, BlendMode::Normal);
+        dev.draw_rect(&Rect::new(10.0, 10.0, 30.0, 30.0), Affine::IDENTITY, &red(), &PathDrawMode::Fill(FillRule::NonZero));
+        dev.finish();
+        let out = output(&dev);
+        assert!(out.contains("1 setgray\n") && out.contains("1 0 0 setrgbcolor\n"), "the group's bytes were never lost: {out}");
+        assert!(!out.contains(">> image"), "no raster on the unwind path: {out}");
+        assert_eq!(dev.emit.notes, vec![], "the unwind path notes nothing: {:?}", dev.emit.notes);
+        assert_eq!(out.matches("gsave\n").count(), out.matches("grestore\n").count(), "balanced: {out}");
+    }
+
+    /// A one-page PDF drawing an image XObject under an ExtGState with `/ca 0.5`: the
+    /// interpreter wraps every image draw in a transparency group, real here, so the
+    /// image (captured by value through the retained-image entry) flattens into the
+    /// raster and its own vector emission is withheld and discarded.
+    #[test]
+    fn image_under_alpha_flattens_to_raster() {
+        let samples: [u8; 12] = [255, 0, 0, 255, 0, 0, 0, 255, 0, 0, 255, 0];
+        let bytes = color_page(
+            "<< /ExtGState << /GS1 5 0 R >> /XObject << /Im1 6 0 R >> >>",
+            b"q /GS1 gs 20 0 0 20 10 10 cm /Im1 Do Q",
+            vec![
+                b"<< /Type /ExtGState /ca 0.5 >>".to_vec(),
+                stream_obj("/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8", &samples),
+            ],
+        );
+        let (s, notes) = exported(bytes);
+        assert_eq!(s.matches(">> image").count(), 1, "one raster, not two images: {s}");
+        assert!(s.contains("/DeviceRGB setcolorspace\n"), "the opaque-raster pipeline: {s}");
+        assert!(notes.iter().any(|n| n.text == "transparency flattened to raster"), "the flattening is disclosed: {notes:?}");
+        assert!(!notes.iter().any(|n| n.text.contains("skipped")), "nothing was skipped: {notes:?}");
+        assert_eq!(s.matches("gsave").count(), s.matches("grestore").count(), "balanced: {s}");
+    }
+
+    /// An image inside a `/Group` form under `/ca 0.5`: the form's group is real
+    /// (withheld, flattened), the interpreter's own full-state wrapper group around
+    /// the image draw is not, and the image — retained by value — rides *inside* the
+    /// raster, its vector emission discarded. One raster, one disclosure, balanced.
+    #[test]
+    fn image_inside_alpha_form_flattens_as_one_raster() {
+        let samples: [u8; 12] = [255, 0, 0, 255, 0, 0, 0, 255, 0, 0, 255, 0];
+        let bytes = color_page(
+            "<< /ExtGState << /GS1 5 0 R >> /XObject << /Fm1 6 0 R >> >>",
+            b"1 0 0 rg 10 250 180 40 re f\nq /GS1 gs /Fm1 Do Q",
+            vec![
+                b"<< /Type /ExtGState /ca 0.5 >>".to_vec(),
+                stream_obj(
+                    "/Type /XObject /Subtype /Form /BBox [0 0 200 300] /Group << /S /Transparency >> /Resources << /XObject << /Im1 7 0 R >> >>",
+                    b"q 20 0 0 20 10 10 cm /Im1 Do Q",
+                ),
+                stream_obj("/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8", &samples),
+            ],
+        );
+        let (s, notes) = exported(bytes);
+        assert!(s.contains("1 0 0 setrgbcolor\n") && s.contains("fill\n"), "the backdrop vector ops survive: {s}");
+        assert_eq!(s.matches(">> image").count(), 1, "one raster: the image rides inside it: {s}");
+        assert!(notes.iter().any(|n| n.text == "transparency flattened to raster"), "the flattening is disclosed: {notes:?}");
+        assert!(
+            !notes.iter().any(|n| n.text.contains("skipped") || n.text.contains("ignored")),
+            "nothing was skipped or dropped silently: {notes:?}"
+        );
+        assert_eq!(s.matches("gsave").count(), s.matches("grestore").count(), "balanced: {s}");
     }
 
     // ---------------------------------------------- `Color::source()` (vendor patch)
