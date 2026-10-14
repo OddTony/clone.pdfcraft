@@ -177,6 +177,37 @@ impl Automation {
 mod tests {
     use super::*;
     #[test]
+    fn truncated_extraction_is_incomplete_and_never_cached_as_success() {
+        let mut a = Automation::new();
+        let bytes = a.session.create_blank(200.0, 300.0, 1).unwrap();
+        a.session.open("truncated.pdf", None, bytes, None).unwrap();
+        let bytes = a.session.create_from_text("readable", "invoice").unwrap();
+        let good = a.session.open("readable.pdf", None, bytes, None).unwrap();
+        let mut failures = 0;
+        let mut extract = |doc: &Snapshot, pages: &[usize]| {
+            pages
+                .iter()
+                .map(|p| {
+                    let mut r = PageRenderer::new(doc.bytes.clone(), Default::default());
+                    let mut result = r.render(RenderRequest { page: *p, kind: RequestKind::Text, ..Default::default() });
+                    if doc.id != good {
+                        failures += 1;
+                        result.warnings.push(pdfcraft_render::RenderWarning::ContentTruncated);
+                    }
+                    (*p, search::extracted_text(result))
+                })
+                .collect()
+        };
+        for _ in 0..2 {
+            let out = a.text_find_all_with(&Args(&json!({"query": "invoice"})), &mut extract).unwrap();
+            assert_eq!(out["count"], 1);
+            assert_eq!(out["matches"][0]["doc"], good.0);
+            assert_eq!(out["complete"], false);
+            assert_eq!(out["warning_count"], 1);
+        }
+        assert_eq!(failures, 2, "incomplete page text must not enter the shared success cache");
+    }
+    #[test]
     fn failed_pages_preserve_other_matches_and_incomplete_status_through_continuation() {
         let mut a = Automation::new();
         let bytes = a.session.create_blank(200.0, 300.0, 3).unwrap();

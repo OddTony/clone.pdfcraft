@@ -219,3 +219,5 @@ per call; errors are capped at 1024 UTF-8 bytes. `warning_count` counts this cal
 prior batches in this continuation. A last batch can therefore remain incomplete without `next`.
 Clients must inspect warnings as well as follow continuations. Empty/whitespace queries are a
 complete empty search. Search never changes document content or unsaved state.
+If the renderer cuts off page content at its safety limit, that page is reported as failed,
+and its partial text is not cached as a successful extraction. Other pages remain searchable.

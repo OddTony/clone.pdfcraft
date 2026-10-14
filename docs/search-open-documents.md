@@ -20,7 +20,8 @@ Native extraction and matching run off the frame thread, with one coordinator, o
 RenderPool worker and one page request at a time. Cancelled workers must exit before another
 search is started. A bounded channel holds at most one page of capped results.
 The renderer's cancellation/watchdog behavior is
-preserved; an expensive individual operator may delay cancellation. On WebAssembly, RenderPool
+preserved; parser initialization or an expensive individual operator may delay cancellation
+and the next search while retired workers exit. On WebAssembly, RenderPool
 uses its existing inline, one-page-per-poll fallback; web extraction can pause a frame, as existing
 per-document extraction does. A web worker implementation is not introduced here.
 
@@ -34,6 +35,8 @@ Fixed-height virtual result rows limit widgets to
 what is visible. Search shows progress, completion and failed-page counts separately; unreadable
 pages do not discard other results. These are retention/concurrency limits, not a whole-process
 RSS or per-page extraction allocation guarantee. Renderer extraction limits remain renderer-owned.
+Pages whose extraction reaches the renderer's content safety limit are reported as incomplete;
+their partial text is excluded from results and from the headless success cache.
 
 The headless equivalent is `text_find_all`; see `crates/automation/README.md` for limits,
 continuation and structured warning semantics. Folder/index/Boolean searches remain separate,

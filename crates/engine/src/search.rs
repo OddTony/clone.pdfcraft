@@ -9,6 +9,17 @@ pub const MAX_RESULTS: usize = 2_000;
 pub const MAX_QUERY_BYTES: usize = 4_096;
 pub const MAX_WARNINGS: usize = 100;
 
+/// Extraction safety limits must not turn an incomplete page into an empty success.
+pub fn extracted_text(result: pdfcraft_render::RenderedPage) -> Result<Arc<PageText>, String> {
+    if let Some(error) = result.error {
+        return Err(error);
+    }
+    if result.warnings.contains(&pdfcraft_render::RenderWarning::ContentTruncated) {
+        return Err("text extraction exceeded the page content safety limit; results are incomplete".into());
+    }
+    result.text.ok_or_else(|| "text extraction returned no result".into())
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Options {
     pub query: String,
@@ -278,13 +289,14 @@ impl Scan {
                 self.pending = true;
             }
             let Some(result) = pool.try_recv() else { return };
-            if let Some(error) = result.error {
+            let text = extracted_text(result);
+            if let Err(error) = &text {
                 self.warning_count = self.warning_count.saturating_add(1);
                 if self.warnings.len() < MAX_WARNINGS {
-                    self.warnings.push(warning(doc.id, self.page, error));
+                    self.warnings.push(warning(doc.id, self.page, error.clone()));
                 }
             }
-            result.text
+            text.ok()
         };
         if let Some(text) = text {
             let remaining = MAX_RESULTS.saturating_sub(self.results.len());
@@ -422,10 +434,8 @@ fn run(documents: Vec<Snapshot>, options: Options, cancel: &std::sync::atomic::A
             };
             let remaining = MAX_RESULTS.saturating_sub(retained);
             // Matching is untrusted-document work too; a failure preserves earlier results.
-            let matched = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match (result.error, result.text) {
-                (Some(error), _) => Err(error),
-                (_, Some(text)) => Ok(hits(&text, &doc, page, &options, remaining.saturating_add(1))),
-                _ => Err("text extraction returned no result".into()),
+            let matched = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                extracted_text(result).map(|text| hits(&text, &doc, page, &options, remaining.saturating_add(1)))
             }))
             .unwrap_or_else(|_| Err("text matching failed".into()));
             let (found, warning) = match matched {

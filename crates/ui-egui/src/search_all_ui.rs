@@ -111,8 +111,7 @@ fn navigate(app: &mut PdfCraftApp, hit: Hit) {
         ..Default::default()
     });
     // A page cached by a prior revision must not supply geometry for this result.
-    view.texts.remove(&hit.page);
-    view.text_failed.remove(&hit.page);
+    view.retry_text(hit.page);
     view.go_to_match(0);
     app.active = Some(index);
     state.selected = Some(hit);

@@ -2259,10 +2259,7 @@ fn encode_png(width: u32, height: u32, premultiplied: &[u8]) -> Result<Vec<u8>> 
 
 fn extract_text_page(r: &mut PageRenderer, p: usize) -> std::result::Result<Arc<PageText>, String> {
     let out = r.render(RenderRequest { page: p, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, preview: false });
-    match out.error {
-        Some(e) => Err(e),
-        None => Ok(out.text.unwrap_or_default()),
-    }
+    pdfcraft_engine::search::extracted_text(out)
 }
 
 /// Extract the text of `pages` (0-based) with one renderer per worker thread.
