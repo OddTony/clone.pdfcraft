@@ -686,13 +686,20 @@ pub fn tools() -> Vec<ToolDef> {
             .ro()
             .cmd("sign.digital")
             .with(schema(json!({}), &[])),
-        t("sign_document", "Sign a document", "Sign with a digital ID (a .p12/.pfx path, or on macOS a Keychain identity: \"keychain:<common name or fingerprint>\" from sign_keychain_ids, or on Windows a store identity: \"windows:<common name or fingerprint>\" from sign_windows_ids) and save the signed file to `out` (signing always saves, as in Acrobat; the document then shows the signed file). Sign an existing empty signature field (`field`), or a new one on `page` at `rect` (omit rect for an invisible signature). certify: no_changes, form_fill or comments makes a certification signature. graphic shows a picture where the signer's name would be large (Acrobat: Configure Signature Appearance): {\"image\": path} (PNG or JPEG), {\"text\": name} (typed in the Fill & Sign script font) or {\"strokes\": [[[x, y], …], …]} (y up, the drawing pad 1 wide); it needs a visible signature. PAdES B-B, SHA-256 (SHA-384 for P-384 keys).")
+        t("sign_token_ids", "List PKCS #11 digital IDs", "The signing identities on PKCS #11 tokens (smart cards, HSMs): certificate details, the pkcs11: reference sign_document takes, and the token's PIN state. Check pin_locked / pin_final_try / pin_count_low and warn before signing — a wrong PIN can permanently lock the token. No PIN is needed to list. `unusable` lists the token's other certificates with why they can't sign.")
+            .ro()
+            .cmd("sign.digital")
+            .with(schema(json!({ "module": { "type": "string", "description": "An explicit module path; omit for the default search order (p11-kit proxy, then OpenSC)." } }), &[])),
+        t("sign_document", "Sign a document", "Sign with a digital ID (a .p12/.pfx path, on macOS a Keychain identity: \"keychain:<common name or fingerprint>\" from sign_keychain_ids, on Windows a store identity: \"windows:<common name or fingerprint>\" from sign_windows_ids, or a PKCS #11 token identity: \"pkcs11:<slot>:<id>\" from sign_token_ids, plus `pin` and optionally `module`/`chain`) and save the signed file to `out` (signing always saves, as in Acrobat; the document then shows the signed file). Sign an existing empty signature field (`field`), or a new one on `page` at `rect` (omit rect for an invisible signature). certify: no_changes, form_fill or comments makes a certification signature. graphic shows a picture where the signer's name would be large (Acrobat: Configure Signature Appearance): {\"image\": path} (PNG or JPEG), {\"text\": name} (typed in the Fill & Sign script font) or {\"strokes\": [[[x, y], …], …]} (y up, the drawing pad 1 wide); it needs a visible signature. PAdES B-B, SHA-256 (SHA-384 for P-384 keys).")
             .cmd("sign.digital")
             .with(schema(
                 json!({
                     "doc": doc(),
-                    "id": { "type": "string", "description": "Digital ID file (.p12 / .pfx), keychain: reference on macOS, or windows: reference on Windows." },
+                    "id": { "type": "string", "description": "Digital ID file (.p12 / .pfx), keychain: reference on macOS, windows: reference on Windows, or pkcs11: reference." },
                     "password": { "type": "string" },
+                    "pin": { "type": "string", "description": "PKCS #11 token PIN (ignored for other kinds of digital ID)." },
+                    "module": { "type": "string", "description": "An explicit PKCS #11 module path; omit for the default search order." },
+                    "chain": { "type": "array", "items": { "type": "string" }, "description": "PKCS #11 only: extra certificate files (PEM or DER) completing the chain, e.g. an issuing CA certificate the token doesn't carry itself." },
                     "field": { "type": "string" },
                     "page": { "type": "integer", "minimum": 1 },
                     "rect": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },

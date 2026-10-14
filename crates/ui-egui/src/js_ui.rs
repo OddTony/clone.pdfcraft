@@ -461,6 +461,23 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     }
     ui.label(egui::RichText::new(tl!("Colours are remapped while rendering; the document itself never changes.")).small().color(t.text_muted));
     ui.add_space(8.0);
+    // PKCS #11 tokens (smart cards, HSMs): off by default, since listing probes for hardware.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        ui.label(egui::RichText::new(tl!("Signing")).font(theme::semibold(13.0)));
+        ui.add(widgets::checkbox(&mut app.pkcs11_enabled, tl!("List PKCS #11 token (smart card, HSM) signing identities")));
+        ui.horizontal(|ui| {
+            let l = ui.label(tl!("PKCS #11 module"));
+            ui.add(crate::widgets::line(&mut app.pkcs11_module).hint_text(tl!("Default (p11-kit, then OpenSC)")).desired_width(280.0))
+                .labelled_by(l.id);
+        });
+        ui.label(
+            egui::RichText::new(tl!("Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one."))
+                .small()
+                .color(t.text_muted),
+        );
+        ui.add_space(8.0);
+    }
     // Identity: the author of new comments (Acrobat: Preferences ▸ Identity).
     ui.label(egui::RichText::new(tl!("Identity")).font(theme::semibold(13.0)));
     ui.horizontal(|ui| {

@@ -535,6 +535,19 @@
 	Choose the digital ID that you want to use for signing:	选择要用于签名的数字 ID：
 	Keychain  ·  	钥匙串 · 
 	Windows store  ·  	Windows 证书存储 · 
+
+# PKCS #11 signing (M9).
+	Signing	签名
+	List PKCS #11 token (smart card, HSM) signing identities	列出 PKCS #11 令牌(智能卡、HSM)上的签名身份
+	PKCS #11 module	PKCS #11 模块
+	Default (p11-kit, then OpenSC)	默认(先 p11-kit,再 OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	需要安装 OpenSC 或 p11-kit 等模块。如果令牌自带 PIN 键盘,将使用该键盘。
+	PKCS #11 token  ·  	PKCS #11 令牌 · 
+	Token PIN	令牌 PIN
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	该令牌自带 PIN 键盘或生物识别读取器,会自行要求输入 PIN。
+	This token's PIN is low on tries remaining.	此令牌的 PIN 剩余尝试次数不多。
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	这是令牌 PIN 锁定前的最后一次尝试。此处输入错误的 PIN 可能会使其永久锁定。
+	This token's PIN is locked. Signing will not work until it is unlocked.	此令牌的 PIN 已锁定。解锁前无法进行签名。
 	Issued by: 	颁发者：
 	, Expires: 	，有效期至：
 	No digital IDs yet.	尚无数字 ID。

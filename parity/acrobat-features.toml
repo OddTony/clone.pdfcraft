@@ -5909,11 +5909,11 @@ title = "Sign with PKCS#11 tokens and smart cards"
 area = "H"
 tier = "P1"
 milestone = "M9"
-status = "planned"
-commands = []
-tools = []
-evidence = []
-notes = ""
+status = "shipped"
+commands = ["sign.digital", "sign.certify"]
+tools = ["sign_token_ids", "sign_document"]
+evidence = ["crates/sign/tests/pkcs11.rs::pkcs11_signing_roundtrip", "crates/sign/src/pkcs11.rs::a_module_path_with_an_embedded_nul_is_rejected_cleanly", "apps/pdfcraft-cli/tests/pkcs11_pin.rs::a_pin_in_a_script_is_refused"]
+notes = "cryptoki, module discovery (p11-kit proxy, then OpenSC, or an explicit path); RSA (software DigestInfo + CKM_RSA_PKCS) and ECDSA (CKM_ECDSA, raw r‖s to DER) through the keys::ExternalKey extension point Keychain and the Windows store also use; CKA_ALWAYS_AUTHENTICATE re-login (Init/ContextSpecific-login/Update/Final, PKCS #11 §5.6.4); eligibility via Certificate::signing_problem (keyUsage/EKU/critical extensions, the same rule signature validation uses); chain building from the token's other certificates plus a caller-supplied bundle; PIN only through the app's own dialog or a CLI terminal prompt, never argv/script/env/disk, zeroized after use; PIN-state warnings (low/final try/locked) before signing. Tested against SoftHSM2 (RSA-2048, P-256, one key with CKA_ALWAYS_AUTHENTICATE); real PIV hardware confirmed end to end against an earlier revision of this code before a large upstream rebase, pending re-confirmation on this one. Not yet: a settings UI for named module profiles, biometric-only tokens beyond CKF_PROTECTED_AUTHENTICATION_PATH"
 
 [[feature]]
 id = "sign.self-signed-id"

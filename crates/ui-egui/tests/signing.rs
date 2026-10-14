@@ -327,6 +327,8 @@ fn os_store_identities_are_not_persisted() {
             email: String::new(),
             expires: "2030.01.01".into(),
             unusable: None,
+            own_pin_entry: false,
+            pin_warning: None,
         });
     }
     let saved = app.persist();
@@ -352,6 +354,8 @@ fn windows_store_identity_does_not_ask_for_a_file_password() {
         email: String::new(),
         expires: "2030.01.01".into(),
         unusable: None,
+        own_pin_entry: false,
+        pin_warning: None,
     });
     let draft = h.state_mut().sign_draft.as_mut().unwrap();
     draft.step = SignStep::Choose;
@@ -382,6 +386,8 @@ fn long_digital_id_names_stay_inside_the_picker() {
         email: String::new(),
         expires: "2030.01.01".into(),
         unusable: None,
+        own_pin_entry: false,
+        pin_warning: None,
     });
     h.state_mut().sign_draft.as_mut().unwrap().step = SignStep::Choose;
     h.run_steps(3);
@@ -419,6 +425,8 @@ fn an_unusable_id_is_shown_with_its_reason_and_cannot_be_chosen() {
         email: String::new(),
         expires: String::new(),
         unusable: Some("its private key can't be opened: the key is missing from its key store (Windows error 0x80090016)".into()),
+        own_pin_entry: false,
+        pin_warning: None,
     });
     h.state_mut().start_signing(0, None, None, None);
     h.run_steps(3);
@@ -439,6 +447,8 @@ fn an_unusable_id_is_shown_with_its_reason_and_cannot_be_chosen() {
         email: String::new(),
         expires: "2030.01.01".into(),
         unusable: None,
+        own_pin_entry: false,
+        pin_warning: None,
     });
     h.state_mut().start_signing(0, None, None, None);
     h.run_steps(3);

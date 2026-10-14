@@ -808,6 +808,19 @@
 	Choose the digital ID that you want to use for signing:	İmzalamak için kullanmak istediğiniz dijital kimliği seçin:
 	Keychain  ·  	Anahtar Zinciri  ·  
 	Windows store  ·  	Windows depolama alanı  ·  
+
+# PKCS #11 signing (M9).
+	Signing	İmzalama
+	List PKCS #11 token (smart card, HSM) signing identities	PKCS #11 belirteçlerindeki (akıllı kart, HSM) imza kimliklerini listele
+	PKCS #11 module	PKCS #11 modülü
+	Default (p11-kit, then OpenSC)	Varsayılan (p11-kit, ardından OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	OpenSC veya p11-kit gibi bir modülün kurulu olması gerekir. Belirtecin kendi PIN tuş takımı varsa o kullanılır.
+	PKCS #11 token  ·  	PKCS #11 belirteci  ·  
+	Token PIN	Belirteç PIN'i
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	Belirtecin kendi PIN tuş takımı veya biyometrik okuyucusu var; PIN'i kendisi soracaktır.
+	This token's PIN is low on tries remaining.	Bu belirtecin PIN'i için kalan deneme sayısı az.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	Bu, belirtecin PIN'i kilitlenmeden önceki son deneme. Buradaki yanlış bir PIN, kalıcı olarak kilitleyebilir.
+	This token's PIN is locked. Signing will not work until it is unlocked.	Bu belirtecin PIN'i kilitli. Kilit açılana kadar imzalama çalışmaz.
 	Issued by: 	Veren: 
 	, Expires: 	, Son kullanma tarihi: 
 	No digital IDs yet.	Henüz dijital kimlik yok.

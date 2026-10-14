@@ -854,6 +854,19 @@
 	Choose the digital ID that you want to use for signing:	署名に使用するデジタル ID を選択してください:
 	Keychain  ·  	キーチェーン · 
 	Windows store  ·  	Windows 証明書ストア · 
+
+# PKCS #11 signing (M9).
+	Signing	署名
+	List PKCS #11 token (smart card, HSM) signing identities	PKCS #11 トークン(IC カード、HSM)の署名用アイデンティティを一覧表示
+	PKCS #11 module	PKCS #11 モジュール
+	Default (p11-kit, then OpenSC)	デフォルト(p11-kit、次に OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	OpenSC や p11-kit などのモジュールのインストールが必要です。トークン自体に PIN パッドがある場合はそれが使われます。
+	PKCS #11 token  ·  	PKCS #11 トークン · 
+	Token PIN	トークンの PIN
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	トークンに専用の PIN パッドや生体認証リーダーがある場合、トークン自体が PIN の入力を求めます。
+	This token's PIN is low on tries remaining.	このトークンの PIN は残り試行回数が少なくなっています。
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	これはトークンの PIN がロックされる前の最後の試行です。ここで PIN を誤るとロックが解除できなくなる場合があります。
+	This token's PIN is locked. Signing will not work until it is unlocked.	このトークンの PIN はロックされています。ロックが解除されるまで署名はできません。
 	Issued by: 	発行者: 
 	, Expires: 	、有効期限: 
 	No digital IDs yet.	デジタル ID はまだありません。

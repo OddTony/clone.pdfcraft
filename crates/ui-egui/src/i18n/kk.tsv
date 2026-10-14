@@ -809,6 +809,19 @@
 	Choose the digital ID that you want to use for signing:	Қол қою үшін пайдаланғыңыз келетін цифрлық ID-ді таңдаңыз:
 	Keychain  ·  	Кілттер бауы  ·  
 	Windows store  ·  	Windows қоймасы  ·  
+
+# PKCS #11 signing (M9).
+	Signing	Қол қою
+	List PKCS #11 token (smart card, HSM) signing identities	PKCS #11 токендеріндегі (смарт-карталар, HSM) қол қою жеке куәліктерін тізу
+	PKCS #11 module	PKCS #11 модулі
+	Default (p11-kit, then OpenSC)	Әдепкі (p11-kit, содан кейін OpenSC)
+	Needs a module such as OpenSC or p11-kit installed. The token's own PIN pad is used when it has one.	OpenSC немесе p11-kit сияқты орнатылған модуль қажет. Токенде өз PIN тақтасы болса, сол пайдаланылады.
+	PKCS #11 token  ·  	PKCS #11 токені  ·  
+	Token PIN	Токен PIN коды
+	The token has its own PIN pad or biometric reader; it will ask for the PIN itself.	Токенде өз PIN тақтасы немесе биометриялық оқу құрылғысы бар; ол PIN кодты өзі сұрайды.
+	This token's PIN is low on tries remaining.	Бұл токеннің PIN кодының қалған талпыныстары аз.
+	This is the last try before the token's PIN locks. A wrong PIN here may lock it permanently.	Бұл токеннің PIN коды құлыптаудан бұрынғы соңғы талпыныс. Мұнда қате PIN оны мүлдем құлыптап тастауы мүмкін.
+	This token's PIN is locked. Signing will not work until it is unlocked.	Бұл токеннің PIN коды құлыпталған. Құлып ашылғанша қол қою жұмыс істемейді.
 	Issued by: 	Шығарушы: 
 	, Expires: 	, Жарамдылық мерзімі: 
 	No digital IDs yet.	Әзірге цифрлық ID жоқ.

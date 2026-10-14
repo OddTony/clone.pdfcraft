@@ -421,12 +421,14 @@ Newest first: the date, what moved, and the new overall estimate.
 - **2026-09-30 (session 1):** planning complete; viewer vertical slice.
 
 - M13: common command, batch, inspection and bounded preview tools share the existing confined automation path. MCP tools carry complete hints and reject unknown top-level keys as invalid parameters.
+- **2026-10-13 (M9, PKCS #11):** Signing identities from PKCS #11 tokens (PIV smart cards, HSMs): module discovery (p11-kit proxy, then OpenSC, or an explicit path, set in Preferences), RSA and ECDSA signing through the `keys::ExternalKey` extension point the Windows store and Keychain backends also use, `CKA_ALWAYS_AUTHENTICATE` context-specific re-login, chain building from the token plus a caller-supplied bundle, eligibility via `Certificate::signing_problem`. PIN handling: the app's own password field (hidden token PIN pad detected and skipped), or a CLI terminal prompt with hidden input — never a script argument, `key=value`, env or disk. Sign dialog, CLI (`sign_token_ids`, `sign_document`) and MCP tools. Tested against SoftHSM2 (RSA-2048, P-256, one `CKA_ALWAYS_AUTHENTICATE` key); confirmed on real PIV hardware before the rebase, pending re-confirmation. Fixed a found-in-the-process `never panic` bug: a hostile module path with an embedded NUL crashed inside `cryptoki`'s FFI bindings rather than erroring.
 - **2026-10-10 (UI docking):** Tools and Inspector can be regrouped, split beside the PDF, or floated inside the app window. Existing toggles reopen panels at their saved locations; UI commands arrange/reset panels, and preferences retain their layout. Read/full-screen modes preserve the focused document view. No milestone percentage change.
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-13 | minor | M9: sign.pkcs11 shipped (PIV smart cards, HSMs via cryptoki, module discovery, RSA/ECDSA, CKA_ALWAYS_AUTHENTICATE re-login, chain building, hidden-TTY CLI PIN); ported onto the post-rebase ExternalKey/#934 graphic design after a 596-commit rebase onto origin/main. Estimates unchanged. |
 | 2026-10-12 | minor | M3/#1364 candidate: absolute local GoToR links require desktop consent or headless allow_absolute; existing relative navigation and validation retained. Estimates unchanged. |
 | 2026-10-12 | minor | M8: redaction retires inherited `/Resources` so a parent `/Pages` can't keep a removed XObject reachable; only redacted pages that inherit are pinned (one shared reference), unredacted pages are untouched; estimates unchanged |
 | 2026-10-12 | minor | M7/#1200 candidate: bounded local GoToR opening, root-confined automation, and action-preserving appearance edits; named destinations and window behavior remain partial; estimates unchanged. |

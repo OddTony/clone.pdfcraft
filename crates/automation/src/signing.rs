@@ -132,6 +132,31 @@ impl Automation {
             #[cfg(not(target_os = "windows"))]
             return Err(failed(format!("windows:{r}: Windows certificate store identities are only available on Windows")));
         }
+        // A PKCS #11 identity: "pkcs11:<slot>:<id>" (from sign_token_ids), plus a "pin" argument,
+        // an optional "module" path (defaults to the p11-kit proxy, then OpenSC), and optional
+        // "chain" certificate files completing the chain when the token doesn't carry them.
+        if a.str("id")?.starts_with("pkcs11:") {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let module = a.opt_str("module")?.filter(|m| !m.trim().is_empty()).map(std::path::Path::new);
+                let pin = a.opt_str("pin")?.map(str::to_string);
+                let mut extra_certs = Vec::new();
+                if let Some(v) = a.get("chain") {
+                    for p in v.as_array().ok_or_else(|| bad("chain must be an array of file paths"))? {
+                        let p = p.as_str().ok_or_else(|| bad("chain must be an array of file paths"))?;
+                        let path = self.resolve(p, false)?;
+                        let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+                        extra_certs.extend(sign::x509::load_certificates(&bytes).map_err(failed)?);
+                    }
+                }
+                return sign::pkcs11::open(module, a.str("id")?, pin, &extra_certs).map_err(|e| match e {
+                    sign::SignError::WrongPassword => bad("the token PIN is incorrect"),
+                    e => failed(e),
+                });
+            }
+            #[cfg(target_arch = "wasm32")]
+            return Err(failed("PKCS #11 identities are not available in the browser"));
+        }
         let path = self.resolve(a.str("id")?, false)?;
         let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         sign::pkcs12::open(&bytes, a.opt_str("password")?.unwrap_or("")).map_err(|e| match e {
