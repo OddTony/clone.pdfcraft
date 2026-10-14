@@ -272,3 +272,451 @@ fn expanding_and_collapsing_all_bookmarks() {
     h.run_steps(3);
     assert!(shown(&h, "Chapter") && !shown(&h, "Section"));
 }
+
+/// Synthetic three-level outline, duplicate titles and distinct page destinations. No PDF
+/// binaries or fonts are needed; fixtures are built through the existing engine operations.
+fn tree() -> Harness<'static, PdfCraftApp> {
+    use pdfcraft_engine::Edit;
+    let mut h = harness();
+    for (parent, index, title, page) in [
+        (vec![], 0, "A", 0),
+        (vec![], 1, "B", 1),
+        (vec![], 2, "C", 2),
+        (vec![], 3, "D", 0),
+        (vec![1], 0, "B0", 2),
+        (vec![1], 1, "B1", 0),
+        (vec![1], 2, "Duplicate", 1),
+        (vec![1, 0], 0, "Grandchild", 1),
+        (vec![2], 0, "Duplicate", 2),
+    ] {
+        h.state_mut().apply_edit(Edit::AddBookmark { parent, index, title: title.into(), page });
+    }
+    h.run_steps(3);
+    h
+}
+
+fn drag(h: &mut Harness<'static, PdfCraftApp>, from: egui::Pos2, to: egui::Pos2) {
+    start_drag(h, from, to);
+    h.drop_at(to);
+    h.run_steps(4);
+}
+
+fn start_drag(h: &mut Harness<'static, PdfCraftApp>, from: egui::Pos2, to: egui::Pos2) {
+    h.hover_at(from);
+    h.run_steps(1);
+    h.drag_at(from);
+    h.run_steps(1);
+    for k in 1..=6 {
+        h.hover_at(from.lerp(to, k as f32 / 6.0));
+        h.run_steps(1);
+    }
+}
+
+fn row(h: &Harness<'static, PdfCraftApp>, name: &str) -> egui::Rect {
+    h.get_by_label(name).rect()
+}
+
+fn roots(h: &Harness<'static, PdfCraftApp>) -> Vec<String> {
+    outline(h).into_iter().filter(|(_, _, d)| *d == 0).map(|(t, _, _)| t).collect()
+}
+
+#[test]
+fn real_drag_reorders_siblings_once_and_undo_redo_restore_the_tree() {
+    for (source, target, below, expected) in [
+        ("D", "A", false, vec!["D", "A", "B", "C"]),
+        ("A", "D", true, vec!["B", "C", "D", "A"]),
+        ("A", "B", true, vec!["B", "A", "C", "D"]),
+        ("D", "B", false, vec!["A", "D", "B", "C"]),
+    ] {
+        let mut h = tree();
+        let before = outline(&h);
+        let id = h.state().views[0].id;
+        let generation = h.state().session.get(id).unwrap().edit_generation();
+        let a = row(&h, source).center();
+        let r = row(&h, target);
+        let b = egui::pos2(r.center().x, if below { r.bottom() - 2.0 } else { r.top() + 2.0 });
+        start_drag(&mut h, a, b);
+        assert_eq!(outline(&h), before, "pointer movement must never edit");
+        h.drop_at(b);
+        h.run_steps(4);
+        assert_eq!(roots(&h), expected);
+        assert_eq!(h.state().session.get(id).unwrap().edit_generation(), generation + 1, "one drop = one edit");
+        h.state_mut().undo();
+        h.run_steps(2);
+        assert_eq!(outline(&h), before);
+        h.state_mut().redo();
+        h.run_steps(2);
+        assert_eq!(roots(&h), expected);
+    }
+}
+
+#[test]
+fn real_drag_moves_a_subtree_into_a_later_parent_and_back_to_root() {
+    let mut h = tree();
+    let from = row(&h, "B").center();
+    let to = row(&h, "C").center();
+    drag(&mut h, from, to);
+    assert_eq!(roots(&h), ["A", "C", "D"]);
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![1, 1]));
+    assert!(outline(&h).contains(&("B0".into(), Some(2), 2)));
+    // B0 is now three levels down; expand its ancestors with the existing menu.
+    h.get_by_label("Bookmark options").click();
+    h.run_steps(2);
+    h.get_by_label("Expand all bookmarks").click();
+    h.run_steps(2);
+    assert!(outline(&h).contains(&("Grandchild".into(), Some(1), 3)));
+    let from = row(&h, "B").center();
+    let r = row(&h, "A");
+    drag(&mut h, from, egui::pos2(r.center().x, r.top() + 2.0));
+    assert_eq!(roots(&h), ["B", "A", "C", "D"]);
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![0]));
+    assert!(outline(&h).contains(&("Grandchild".into(), Some(1), 2)));
+}
+
+#[test]
+fn invalid_noop_and_cancelled_ui_drags_never_edit() {
+    for mode in ["self", "descendant", "noop", "outside", "escape", "filter", "panel", "tab", "close", "mutation", "readonly"] {
+        let mut h = tree();
+        if mode == "readonly" {
+            h.state_mut().apply_edit(pdfcraft_engine::Edit::Protect(pdfcraft_engine::Protection {
+                permissions_password: Some("owner".into()),
+                changes: pdfcraft_engine::Changes::None,
+                ..Default::default()
+            }));
+            let id = h.state().views[0].id;
+            let bytes = h.state().session.save_bytes(id).unwrap();
+            h.state_mut().close_tab(0);
+            h.state_mut().open_bytes("protected.pdf", None, bytes.as_ref().clone()).unwrap();
+            h.run_steps(2);
+        }
+        let id = h.state().views[0].id;
+        let before = outline(&h);
+        let generation = h.state().session.get(id).unwrap().edit_generation();
+        let source = if mode == "noop" { "A" } else { "B" };
+        let a = row(&h, source).center();
+        let b = match mode {
+            "self" => a + egui::vec2(6.0, 0.0),
+            "descendant" => row(&h, "B0").center(),
+            "noop" => {
+                let r = row(&h, "B");
+                egui::pos2(r.center().x, r.top() + 2.0)
+            }
+            "outside" => egui::pos2(400.0, 200.0),
+            _ => row(&h, "C").center(),
+        };
+        start_drag(&mut h, a, b);
+        match mode {
+            "escape" => {
+                h.key_press(Key::Escape);
+                h.run_steps(2);
+            }
+            "filter" => {
+                // Programmatic query change models a filter activated during a held drag.
+                h.ctx.data_mut(|d| d.insert_temp(egui::Id::new(("bookmark_search", id.0)), "C".to_string()));
+                h.run_steps(2);
+            }
+            "panel" => {
+                h.state_mut().set_option("panel", "pages").unwrap();
+                h.run_steps(2);
+            }
+            "tab" | "close" => {
+                h.state_mut().open_bytes("other.pdf", None, PAGES.to_vec()).unwrap();
+                h.run_steps(2);
+                if mode == "close" {
+                    h.state_mut().close_tab(0);
+                } else {
+                    h.state_mut().active = Some(0);
+                }
+                h.run_steps(2);
+            }
+            "mutation" => {
+                h.state_mut().session.apply(id, pdfcraft_engine::Edit::DeleteBookmark { path: vec![0] }).unwrap();
+                h.run_steps(2);
+            }
+            _ => {}
+        }
+        h.drop_at(b);
+        h.run_steps(3);
+        if mode == "readonly" {
+            h.key_press_modifiers(Modifiers::COMMAND, Key::B);
+            h.run_steps(2);
+        }
+        if mode == "close" {
+            assert!(h.state().session.get(id).is_none());
+        } else if mode == "mutation" {
+            assert_eq!(h.state().session.get(id).unwrap().edit_generation(), generation + 1);
+            assert_eq!(roots(&h), ["B", "C", "D"]);
+        } else {
+            assert_eq!(h.state().session.get(id).unwrap().edit_generation(), generation, "{mode}");
+            assert_eq!(outline(&h), before, "{mode}");
+        }
+    }
+}
+
+#[test]
+fn creation_uses_selected_sibling_page_and_rename_focus_for_toolbar_and_shortcut() {
+    let mut h = tree();
+    h.get_by_label("B0").click();
+    h.run_steps(2);
+    h.state_mut().set_option("page", "2").unwrap();
+    h.run_steps(2);
+    add(&mut h, "Inserted child");
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![1, 1]));
+    assert!(outline(&h).contains(&("Inserted child".into(), Some(1), 1)));
+    add(&mut h, "Next child");
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![1, 2]));
+    let names: Vec<_> = outline(&h).into_iter().map(|(t, _, _)| t).collect();
+    assert!(names.windows(4).any(|w| w == ["B0", "Grandchild", "Inserted child", "Next child"]));
+    h.get_by_label("A").click();
+    h.run_steps(2);
+    h.get_by_label("New bookmark (Ctrl+B)").click();
+    h.run_steps(3);
+    field(&h, "Untitled");
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![1]));
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    assert_eq!(roots(&h), ["A", "Untitled", "B", "C", "D"]);
+    h.state_mut().undo();
+    h.run_steps(2);
+    assert_eq!(roots(&h), ["A", "B", "C", "D"]);
+    h.state_mut().redo();
+    h.run_steps(2);
+    assert_eq!(roots(&h), ["A", "Untitled", "B", "C", "D"]);
+}
+
+#[test]
+fn selection_and_rename_are_per_document_and_follow_moves_and_deletions() {
+    let mut h = tree();
+    h.get_by_label("B0").click();
+    h.run_steps(2);
+    h.state_mut().open_bytes("other.pdf", None, PAGES.to_vec()).unwrap();
+    h.run_steps(2);
+    add(&mut h, "Other first");
+    assert_eq!(h.state().views[1].bookmarks.selected, Some(vec![0]));
+    h.state_mut().active = Some(0);
+    h.run_steps(2);
+    add(&mut h, "Child after switching");
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![1, 1]));
+    menu(&mut h, "Child after switching", "Outdent");
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![2]));
+    add(&mut h, "Root after moving");
+    assert_eq!(roots(&h), ["A", "B", "Child after switching", "Root after moving", "C", "D"]);
+    menu(&mut h, "Root after moving", "Delete");
+    assert!(h.state().views[0].bookmarks.selected.is_none());
+    add(&mut h, "Appended after deleting");
+    assert_eq!(roots(&h).last().unwrap(), "Appended after deleting");
+    // A rename on A must never appear over a bookmark at the same path in the other PDF.
+    menu(&mut h, "A", "Rename");
+    h.state_mut().active = Some(1);
+    h.run_steps(2);
+    assert!(h.query_all_by_value("A").next().is_none());
+    h.state_mut().active = Some(0);
+    h.run_steps(2);
+    field(&h, "A");
+}
+
+#[test]
+fn collapsed_destination_expands_on_hover_and_new_nested_bookmark_is_visible() {
+    let mut h = tree();
+    h.get_by_label("Bookmark options").click();
+    h.run_steps(2);
+    h.get_by_label("Collapse all bookmarks").click();
+    h.run_steps(2);
+    assert!(h.query_by_label("B0").is_none());
+    let from = row(&h, "A").center();
+    let to = row(&h, "B").center();
+    start_drag(&mut h, from, to);
+    h.run_steps(60);
+    h.get_by_label("B0");
+    h.drop_at(to);
+    h.run_steps(3);
+    assert_eq!(roots(&h), ["B", "C", "D"]);
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![0, 3]));
+    add(&mut h, "After dropped child");
+    h.get_by_label("After dropped child");
+    assert_eq!(h.state().views[0].bookmarks.selected, Some(vec![0, 4]));
+}
+
+#[test]
+fn ui_bookmark_changes_save_reopen_with_order_hierarchy_and_destinations() {
+    let mut h = tree();
+    let a = row(&h, "A").center();
+    let b = row(&h, "B0").center();
+    drag(&mut h, a, b);
+    h.state_mut().set_option("page", "3").unwrap();
+    h.run_steps(2);
+    add(&mut h, "Inserted at depth three");
+    let from = row(&h, "D").center();
+    let r = row(&h, "B");
+    drag(&mut h, from, egui::pos2(r.center().x, r.top() + 2.0));
+    let expected = outline(&h);
+    let id = h.state().views[0].id;
+    let bytes = h.state().session.save_bytes(id).unwrap();
+    let parsed = pdfcraft_cos::Document::open(bytes.clone()).unwrap();
+    assert!(parsed.root().is_some());
+    h.state_mut().close_tab(0);
+    h.state_mut().open_bytes("reopened.pdf", None, bytes.as_ref().clone()).unwrap();
+    h.run_steps(3);
+    assert_eq!(outline(&h), expected);
+    assert!(h.state().views[0].bookmarks.selected.is_none());
+}
+
+#[test]
+fn dragging_near_the_edge_scrolls_and_reorders_a_large_synthetic_tree() {
+    let mut h = harness();
+    for root in 0..40 {
+        h.state_mut().apply_edit(pdfcraft_engine::Edit::AddBookmark {
+            parent: vec![],
+            index: root,
+            title: format!("Root {root:03}"),
+            page: root % 3,
+        });
+        for child in 0..2 {
+            h.state_mut().apply_edit(pdfcraft_engine::Edit::AddBookmark {
+                parent: vec![root],
+                index: child,
+                title: format!("Child {root:03}/{child}"),
+                page: child,
+            });
+        }
+    }
+    h.run_steps(3);
+    let before = outline(&h);
+    assert_eq!(before.len(), 120);
+    let from = row(&h, "Root 000").center();
+    // Find the final fully visible row and hold near the bottom of the scroll viewport.
+    let to = egui::pos2(from.x, 875.0);
+    start_drag(&mut h, from, to);
+    let frames_started = std::time::Instant::now();
+    h.run_steps(80);
+    eprintln!("120-bookmark held drag: 80 frames in {:?}", frames_started.elapsed());
+    assert_eq!(outline(&h), before);
+    assert!(row(&h, "Root 000").bottom() < 100.0, "the first row scrolls out of view");
+    // Settle egui's animated scroll away from the edge before choosing a precise gap.
+    h.hover_at(egui::pos2(from.x, 400.0));
+    h.run_steps(40);
+    let target = (1..40)
+        .rev()
+        .find_map(|i| {
+            let rect = row(&h, &format!("Root {i:03}"));
+            (rect.top() > 150.0 && rect.bottom() < 830.0).then_some((i, rect))
+        })
+        .expect("a distant root is visible after scrolling");
+    assert!(target.0 > 8);
+    let drop = egui::pos2(target.1.center().x, target.1.bottom() - 2.0);
+    h.drop_at(drop);
+    h.run_steps(3);
+    let expected: Vec<_> = (1..=target.0).chain(std::iter::once(0)).chain(target.0 + 1..40).map(|i| format!("Root {i:03}")).collect();
+    assert_eq!(roots(&h), expected);
+    h.state_mut().undo();
+    h.run_steps(2);
+    assert_eq!(outline(&h), before);
+    h.state_mut().redo();
+    h.run_steps(2);
+    assert_eq!(roots(&h), expected);
+}
+
+#[test]
+fn long_multiline_bookmark_rows_accept_before_after_and_inside_drops() {
+    for (fraction, selected) in [(0.05, vec![1]), (0.5, vec![1, 1]), (0.95, vec![2])] {
+        let mut h = tree();
+        let title = "Long bookmark title with repeated sections — ".repeat(8).trim().to_string();
+        h.state_mut().apply_edit(pdfcraft_engine::Edit::RenameBookmark { path: vec![2], title: title.clone() });
+        h.run_steps(3);
+        let source = row(&h, "A").center();
+        let destination = row(&h, &title);
+        assert!(destination.height() > 56.0);
+        drag(&mut h, source, egui::pos2(destination.center().x, destination.top() + destination.height() * fraction));
+        assert_eq!(h.state().views[0].bookmarks.selected, Some(selected));
+        assert!(outline(&h).contains(&(title, Some(2), 0)));
+    }
+}
+
+#[test]
+fn expansion_state_follows_a_moved_parent_instead_of_its_old_path() {
+    let mut h = tree();
+    // The collapse-all operation is UI state only; move the closed B subtree before A.
+    h.get_by_label("Bookmark options").click();
+    h.run_steps(2);
+    h.get_by_label("Collapse all bookmarks").click();
+    h.run_steps(2);
+    let from = row(&h, "B").center();
+    let r = row(&h, "A");
+    drag(&mut h, from, egui::pos2(r.center().x, r.top() + 2.0));
+    assert_eq!(roots(&h), ["B", "A", "C", "D"]);
+    assert!(h.query_by_label("B0").is_none());
+}
+
+#[test]
+fn baseline_selected_root_inserts_after_selection() {
+    let mut h = tree();
+    h.get_by_label("A").click();
+    h.run_steps(2);
+    add(&mut h, "Inserted");
+    assert_eq!(roots(&h), ["A", "Inserted", "B", "C", "D"]);
+}
+
+#[test]
+fn real_drag_handles_nested_sibling_gaps_and_different_parents() {
+    for (source, target, fraction, parent, expected) in [
+        ("B1", "B0", 0.05, vec![1], vec!["B1", "B0", "Duplicate"]),
+        ("B0", "B1", 0.95, vec![1], vec!["B1", "B0", "Duplicate"]),
+        ("B1", "C", 0.5, vec![2], vec!["Duplicate", "B1"]),
+        ("B0", "A", 0.5, vec![0], vec!["B0"]),
+    ] {
+        let mut h = tree();
+        let from = row(&h, source).center();
+        let r = row(&h, target);
+        drag(&mut h, from, egui::pos2(r.center().x, r.top() + r.height() * fraction));
+        let info = &h.state().session.get(h.state().views[0].id).unwrap().info;
+        let mut items = &info.outline;
+        for i in parent {
+            items = &items[i].children;
+        }
+        assert_eq!(items.iter().map(|i| i.title.as_str()).collect::<Vec<_>>(), expected);
+        assert!(outline(&h).iter().any(|(title, page, _)| title == "Grandchild" && *page == Some(1)));
+    }
+}
+
+#[test]
+fn filtering_disables_reordering_before_a_drag_begins() {
+    let mut h = tree();
+    h.get_by_label("Search").click();
+    h.run_steps(1);
+    h.get_by_label("Search").type_text("B");
+    h.run_steps(2);
+    let before = outline(&h);
+    let from = row(&h, "B1").center();
+    let to = row(&h, "B0").center();
+    drag(&mut h, from, to);
+    assert_eq!(outline(&h), before);
+}
+
+#[test]
+fn a_truncated_outline_disables_reordering_without_using_incomplete_child_counts() {
+    let mut pdf = String::from_utf8(PAGES.to_vec()).unwrap().replace("/Pages 2 0 R >>", "/Pages 2 0 R /Outlines 6 0 R >>");
+    pdf.push_str("\n6 0 obj << /Type /Outlines /First 7 0 R /Last 41 0 R /Count 35 >> endobj\n");
+    for level in 0..34 {
+        let object = level + 7;
+        let parent = if level == 0 { 6 } else { object - 1 };
+        let child = if level < 33 { format!("/First {} 0 R /Last {} 0 R /Count {}", object + 1, object + 1, 33 - level) } else { String::new() };
+        let next = if level == 0 { "/Next 41 0 R" } else { "" };
+        pdf.push_str(&format!("{object} 0 obj << /Title (Level {level}) /Parent {parent} 0 R /Dest [3 0 R /Fit] {child} {next} >> endobj\n"));
+    }
+    pdf.push_str("41 0 obj << /Title (Other root) /Parent 6 0 R /Prev 7 0 R /Dest [5 0 R /Fit] >> endobj\n");
+    let mut h = harness();
+    h.state_mut().close_tab(0);
+    h.state_mut().open_bytes("deep.pdf", None, pdf.into_bytes()).unwrap();
+    h.run_steps(3);
+    assert!(h.state().session.get(h.state().views[0].id).unwrap().info.outline_more);
+    // Collapse makes both root rows visible. This would be a valid drop in a complete tree.
+    h.get_by_label("Bookmark options").click();
+    h.run_steps(2);
+    h.get_by_label("Collapse all bookmarks").click();
+    h.run_steps(2);
+    let before = outline(&h);
+    let from = row(&h, "Other root").center();
+    let to = row(&h, "Level 0").center();
+    drag(&mut h, from, to);
+    assert_eq!(outline(&h), before);
+}
