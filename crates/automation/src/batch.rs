@@ -176,6 +176,10 @@ impl Discovery {
 
 impl Automation {
     pub(crate) fn doc_batch(&self, args: &Args) -> Result<Value> {
+        // The batch walks real folders; on the in-memory disk each file is its own call.
+        if crate::vfs::IN_MEMORY {
+            return Err(failed("batch over folders is not available on the in-memory disk: call the tool file by file"));
+        }
         let recipe = Recipe::parse(self, args)?;
         let recursive = args.opt_bool("recursive")?.unwrap_or(false);
         let stop = args.opt_bool("stop_on_error")?.unwrap_or(false);

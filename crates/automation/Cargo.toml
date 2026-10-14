@@ -25,6 +25,9 @@ base64 = { version = "0.22", optional = true }
 default = ["mcp"]
 # The MCP server module. Opt-in at run time either way; disable to leave it out of the build.
 mcp = ["dep:base64"]
+# An in-memory disk (path -> bytes) in place of `std::fs`. It is always on for `wasm32`; this
+# feature turns it on for a native build too, so the layer itself can be tested.
+memfs = []
 
 [dev-dependencies]
 pdfcraft-fonts = { workspace = true }

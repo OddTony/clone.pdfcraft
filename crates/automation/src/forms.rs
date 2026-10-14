@@ -1,6 +1,7 @@
 //! Form tools: list fields, fill them (several at once, one undo step), clear the form, and
 //! prepare a form (add, change and delete fields).
 
+use crate::vfs;
 use pdfcraft_engine::form_scripts::{CalcOp, Calculate, Format, Validate};
 use pdfcraft_engine::{Edit, FieldProps, FieldValue, FormField, FormFieldKind, NewField, field_flags};
 use serde_json::{Value, json};
@@ -538,7 +539,7 @@ impl Automation {
 
     pub(crate) fn doc_import_data(&mut self, a: &Args) -> Result<Value> {
         let path = self.resolve(a.str("path")?, false)?;
-        let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+        let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let before = (self.doc(a)?.info.annotations.len(), self.doc(a)?.form.iter().filter(|f| !f.value.is_empty()).count());
         let mut out = self.apply(a, Edit::ImportData { name, bytes: std::sync::Arc::new(bytes) })?;

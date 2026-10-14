@@ -1,5 +1,6 @@
 //! Accessibility tools: the full check, the accessibility report, and the automatic fixes.
 
+use crate::vfs;
 use pdfcraft_engine::DocId;
 use pdfcraft_engine::a11y::{Category, Options, Report, Rule, Status};
 use serde_json::{Value, json};
@@ -114,7 +115,7 @@ const MAX_REVIEW_SIDECAR_BYTES: u64 = 1 << 20;
 fn read_review_sidecar(path: &std::path::Path) -> Result<Vec<u8>> {
     use std::io::Read;
     let mut bytes = Vec::new();
-    std::fs::File::open(path).and_then(|file| file.take(MAX_REVIEW_SIDECAR_BYTES.saturating_add(1)).read_to_end(&mut bytes)).map_err(failed)?;
+    vfs::open(path).and_then(|file| file.take(MAX_REVIEW_SIDECAR_BYTES.saturating_add(1)).read_to_end(&mut bytes)).map_err(failed)?;
     if bytes.len() as u64 > MAX_REVIEW_SIDECAR_BYTES {
         return Err(failed("file is not an accessibility review sidecar"));
     }
@@ -366,7 +367,7 @@ impl Automation {
         let decisions = review_decisions(a.get("decisions").ok_or_else(|| Args::missing("decisions"))?, doc.info.pages.len())?;
         let hash = review_hash(doc.bytes.as_slice());
         let path = self.resolve(a.str("path")?, true)?;
-        if path.exists() {
+        if vfs::exists(&path) {
             let prior = read_review_sidecar(&path)?;
             let prior = parse_review_sidecar(&prior)?;
             if prior["sha256"] != hash && !a.opt_bool("replace")?.unwrap_or(false) {
@@ -526,13 +527,13 @@ impl Automation {
         for p in &paths {
             self.resolve(p, true)?;
         }
-        std::fs::create_dir_all(&folder).map_err(|e| failed(e.to_string()))?;
+        vfs::create_dir_all(&folder).map_err(|e| failed(e.to_string()))?;
         let ocr = pdfcraft_engine::ocr::engine().map_err(failed)?;
         let mut out = Vec::new();
         for p in paths {
             let name = std::path::Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "document.pdf".into());
             let result =
-                self.resolve(p, false).map_err(|e| e.to_string()).and_then(|src| std::fs::read(&src).map_err(|e| e.to_string())).and_then(|bytes| {
+                self.resolve(p, false).map_err(|e| e.to_string()).and_then(|src| vfs::read(&src).map_err(|e| e.to_string())).and_then(|bytes| {
                     pdfcraft_engine::ocr::recognize_file(&name, std::sync::Arc::new(bytes), None, settings.clone(), &ocr, |_, _| true)
                 });
             out.push(match result {
@@ -621,7 +622,7 @@ impl Automation {
         let mut files = Vec::new();
         for p in a.strs("paths")? {
             let path = self.resolve(p, false)?;
-            files.push((p.to_string(), std::fs::read(&path).map_err(|e| failed(format!("{p}: {e}")))?));
+            files.push((p.to_string(), vfs::read(&path).map_err(|e| failed(format!("{p}: {e}")))?));
         }
         let csv = pdfcraft_engine::merge_data_files(&files).map_err(failed)?;
         let target = self.resolve(a.str("path")?, true)?;
@@ -749,26 +750,26 @@ impl Automation {
             Action { name: "Custom".into(), description: String::new(), steps, builtin: false }
         };
         let folder = self.resolve(a.str("folder")?, true)?;
-        std::fs::create_dir_all(&folder).map_err(|e| failed(e.to_string()))?;
+        vfs::create_dir_all(&folder).map_err(|e| failed(e.to_string()))?;
         let mut out = Vec::new();
         for p in a.strs("paths")? {
             let name = std::path::Path::new(p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "document.pdf".into());
             let result = self
                 .resolve(p, false)
                 .map_err(|e| e.to_string())
-                .and_then(|src| std::fs::read(&src).map_err(|e| e.to_string()))
+                .and_then(|src| vfs::read(&src).map_err(|e| e.to_string()))
                 .and_then(|bytes| run_on(&action, &name, std::sync::Arc::new(bytes), |_, _| {}));
             out.push(match result {
                 Ok(r) => {
                     let target = child(&folder, &name);
-                    let target = if target.exists() {
+                    let target = if vfs::exists(&target) {
                         let stem =
                             std::path::Path::new(&name).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "document".into());
                         unused(&folder, &stem)
                     } else {
                         target
                     };
-                    if target.exists() {
+                    if vfs::exists(&target) {
                         return Err(failed(format!("{}: no unused output name available", target.display())));
                     }
                     write_atomic(&target, &r.bytes)?;
