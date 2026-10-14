@@ -230,7 +230,6 @@ fn scope_of(edit: &Edit) -> Scope {
         | Edit::DeleteContent { .. }
         | Edit::ReplaceImage { .. }
         | Edit::AddHeaderFooter { .. }
-        | Edit::AddPrinterMarks { .. }
         | Edit::AddWatermark { .. }
         | Edit::AddBackground { .. }
         | Edit::RemoveMarks { .. } => Scope::Content,
