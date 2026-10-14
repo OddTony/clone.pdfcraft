@@ -64,6 +64,35 @@ pub(crate) fn image_ops(image: &Image<'_, '_>, emit: &mut Emitter) {
     }
 }
 
+/// Emit one opaque RGB raster through the ASCII85/Flate pipeline (`/DeviceRGB
+/// setcolorspace` + the dictionary-form `image` invocation + payload). The caller
+/// wraps it in the gsave/[placement] concat/grestore that maps pixel space onto the
+/// page (the `draw_image` convention: `/ImageMatrix` identity) — this is the sink for
+/// a flattened transparency region (`flatten.rs`), which arrives as raw rows rather
+/// than a PDF XObject.
+///
+/// Declines without emitting any operator — but never silently — when the pixel count
+/// exceeds [`MAX_PIXELS`] (note "image skipped (exceeds 100 megapixel cap)") or when
+/// the buffer is not exactly `width × height × 3` bytes long (note
+/// "image skipped (undecodable)", the module's wording for malformed image data).
+// Task 10 (`device.rs` owning a `ShadowScene`) is the only production caller this
+// Wave has — until it lands, only the tests below drive this. Drop the attribute then.
+#[allow(dead_code)]
+pub(crate) fn opaque_raster(emit: &mut Emitter, width: u32, height: u32, rgb: &[u8]) {
+    let pixels = u64::from(width).checked_mul(u64::from(height));
+    if !pixels.is_some_and(|p| p <= MAX_PIXELS) {
+        emit.note("image skipped (exceeds 100 megapixel cap)");
+        return;
+    }
+    if !samples_complete(pixel_bytes(width, height, 3), rgb) {
+        emit.note("image skipped (undecodable)");
+        return;
+    }
+    emit.op("/DeviceRGB setcolorspace");
+    let line = image_invocation(width, height, 8, "[0 1 0 1 0 1]", A85_FLATE_SOURCE);
+    emit_ascii85(emit, &line, rgb);
+}
+
 /// A raster image: passthrough when PostScript can consume the PDF's own encoded bytes,
 /// decode + re-encode otherwise.
 fn raster_ops(raster: &RasterImage<'_>, emit: &mut Emitter) {
@@ -585,6 +614,51 @@ mod tests {
         assert!(out.contains("0 setgray\n"), "1-component space: {out}");
         assert!(contains_bytes(&raw, &CCITT_PAYLOAD), "fax bytes verbatim: {out:?}");
         assert_eq!(notes, "", "no degradations");
+    }
+
+    /// An opaque RGB raster straight from the flattener (no PDF, no interpreter behind
+    /// it) emits the colorspace line, the dictionary-form invocation with the
+    /// ASCII85/Flate chain, and a payload that decodes back to the exact samples.
+    #[test]
+    fn opaque_raster_emits_flate_image() {
+        let mut emit = Emitter::default();
+        opaque_raster(&mut emit, 2, 2, &RGB_SAMPLES);
+        let out = String::from_utf8_lossy(&emit.out).into_owned();
+        assert!(out.contains("/DeviceRGB setcolorspace\n"), "colorspace line: {out}");
+        let invocation = "<< /ImageType 1 /Width 2 /Height 2 /BitsPerComponent 8 /Decode [0 1 0 1 0 1] \
+             /ImageMatrix [1 0 0 1 0 0] /DataSource currentfile /ASCII85Decode filter /FlateDecode filter >> image";
+        assert!(out.contains(invocation), "re-encode invocation: {out}");
+        assert_eq!(out.lines().count(), 3, "colorspace + invocation + payload lines: {out}");
+        // The payload is the last line; run it back through the filters crate.
+        let payload = out.lines().next_back().unwrap_or("");
+        let chain = [(PsFilter::Ascii85, Params::default()), (PsFilter::Flate, Params::default())];
+        let decoded = pdfcraft_filters::decode(&chain, payload.as_bytes(), 1 << 20).expect("payload decodes");
+        assert_eq!(decoded, RGB_SAMPLES, "samples survive the Flate/ASCII85 round trip");
+        assert!(emit.notes.is_empty(), "a clean raster degrades nothing");
+    }
+
+    /// Both declines are never silent and emit no operator at all — not even the
+    /// colorspace line: a buffer whose length is not `width × height × 3`, and a
+    /// pixel count over the cap (which fires first, whatever the buffer holds).
+    #[test]
+    fn opaque_raster_declines_never_silent() {
+        let mut emit = Emitter::default();
+        opaque_raster(&mut emit, 2, 2, &RGB_SAMPLES[..9]);
+        assert!(emit.out.is_empty(), "short buffer emits nothing: {:?}", String::from_utf8_lossy(&emit.out));
+        assert_eq!(
+            emit.notes.iter().map(|n| n.text.as_str()).collect::<Vec<_>>(),
+            ["image skipped (undecodable)"],
+            "the length mismatch is recorded"
+        );
+
+        let mut emit = Emitter::default();
+        opaque_raster(&mut emit, 20000, 20000, &RGB_SAMPLES);
+        assert!(emit.out.is_empty(), "capped raster emits nothing");
+        assert_eq!(
+            emit.notes.iter().map(|n| n.text.as_str()).collect::<Vec<_>>(),
+            ["image skipped (exceeds 100 megapixel cap)"],
+            "the cap is recorded"
+        );
     }
 
     /// An image whose declared dimensions exceed the 100-megapixel cap is skipped with a
