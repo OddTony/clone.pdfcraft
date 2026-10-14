@@ -8,6 +8,7 @@ const JAPANESE: &str = "日本語の文字";
 const CHINESE: &str = "简体中文欢迎";
 const ARABIC: &str = "واحد اثنين";
 const TELUGU: &str = "తెలుగు ఫైల్";
+const KOREAN: &str = "한국어 파일 열기";
 
 fn families() -> Vec<FontId> {
     vec![FontId::proportional(13.0), FontId::monospace(13.0), theme::medium(13.0), theme::semibold(17.0)]
@@ -93,6 +94,34 @@ fn arabic_ui_text_uses_craft_fonts() {
     let mut fonts = Fonts::new(TextOptions::default(), defs);
     for id in families() {
         assert!(fonts.has_glyphs(&id, ARABIC), "{id:?} lacks {ARABIC}");
+    }
+}
+
+/// Built with a craft-fonts Hangul face, Korean text has real glyphs in every family, and in
+/// Korean mode the Hangul face leads the Japanese CJK faces so one line never mixes their metrics.
+#[test]
+fn korean_ui_text_uses_craft_fonts() {
+    let hangul: Vec<String> = pdfcraft_fonts::ui_korean_fonts().iter().map(|f| f.name()).collect();
+    if hangul.is_empty() {
+        eprintln!("skipping korean_ui_text_uses_craft_fonts: no Hang face bundled (set CRAFT_FONTS_DIR with a Hangul face to run it)");
+        return;
+    }
+    let defs = theme::installed_font_definitions(theme::CjkPreference::Korean);
+    for family in [FontFamily::Proportional, FontFamily::Monospace] {
+        let stack = &defs.families[&family];
+        let first_ko = stack.iter().position(|n| hangul.contains(n)).expect("a Hang face is a fallback");
+        let own = stack.iter().position(|n| n == "Inter" || n == "JetBrainsMono").expect("the app's own font");
+        assert!(own < first_ko, "{family:?}: {stack:?}");
+        if let Some(first_ja) = stack.iter().position(|n| n.starts_with("BIZ UDPGothic")) {
+            assert!(first_ko < first_ja, "{family:?}: {stack:?}");
+        }
+    }
+    let mut fonts = Fonts::new(TextOptions::default(), defs);
+    for id in families() {
+        assert!(fonts.has_glyphs(&id, KOREAN), "{id:?} lacks {KOREAN}");
+    }
+    for w in layout_widths(&mut fonts, KOREAN.replace(' ', "").as_str()) {
+        assert!(w > 13.0 * 0.8 * KOREAN.replace(' ', "").chars().count() as f32, "{w}");
     }
 }
 

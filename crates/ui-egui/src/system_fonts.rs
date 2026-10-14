@@ -4,7 +4,9 @@
 //! only draws characters none of them has, such as an Arabic file name in a build without
 //! craft-fonts, or the Simplified Chinese interface in a build without a `Hans` face (#826). A
 //! few more installed faces, [`devanagari_fallback`], [`telugu_fallback`], [`sinhala_fallback`]
-//! and [`tamil_fallback`], draw Hindi, Telugu, Sinhala and Tamil when one is installed. It is
+//! and [`tamil_fallback`], draw Hindi, Telugu, Sinhala and Tamil when one is installed, and Korean
+//! uses an installed Hangul face when the build has no `Hang` craft-fonts face ([`Need::Hang`]).
+//! It is
 //! read at runtime and never embedded or shipped (AGENTS.md §1.4), and `PDFCRAFT_SYSTEM_FONTS=0`
 //! turns it off (published screenshots do).
 
@@ -36,6 +38,8 @@ const TAMIL_PROBE: char = '\u{0B95}';
 const HANS_PROBE: char = '\u{6B22}';
 /// 說 (U+8AAA): Traditional only, absent from the Japanese craft-fonts faces.
 const HANT_PROBE: char = '\u{8AAA}';
+/// 한 (U+D55C): a syllable the Japanese craft-fonts faces do not have; the face must map it.
+const HANG_PROBE: char = '\u{D55C}';
 
 /// What the installed face is wanted for, from the interface language.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -47,6 +51,8 @@ pub enum Need {
     Hans,
     /// Traditional Chinese interface text.
     Hant,
+    /// Korean interface text, in a build without a Hangul craft-fonts face.
+    Hang,
 }
 
 /// The installed fallback face for `need`, read once per need. `None` when it is turned off or no
@@ -55,10 +61,12 @@ pub fn fallback(need: Need) -> Option<Arc<FontData>> {
     static OTHER: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
     static HANS: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
     static HANT: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
+    static HANG: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
     let cache = match need {
         Need::Other => &OTHER,
         Need::Hans => &HANS,
         Need::Hant => &HANT,
+        Need::Hang => &HANG,
     };
     cache.get_or_init(|| load(need)).clone()
 }
@@ -71,6 +79,7 @@ fn load(need: Need) -> Option<Arc<FontData>> {
         Need::Other => (PROBE, MAX_BYTES),
         Need::Hans => (HANS_PROBE, MAX_HAN_BYTES),
         Need::Hant => (HANT_PROBE, MAX_HAN_BYTES),
+        Need::Hang => (HANG_PROBE, MAX_HAN_BYTES),
     };
     candidates(need).iter().find_map(|path| read(path, probe, max))
 }
@@ -232,6 +241,7 @@ fn candidates(need: Need) -> Vec<PathBuf> {
     match need {
         Need::Other => other_candidates(),
         Need::Hans | Need::Hant => han_candidates(need == Need::Hant),
+        Need::Hang => hangul_candidates(),
     }
 }
 
@@ -284,6 +294,32 @@ fn han_candidates(traditional: bool) -> Vec<PathBuf> {
             "droid/DroidSansFallbackFull.ttf",
             "truetype/arphic/uming.ttc",
             "arphic-uming/uming.ttc",
+        ])
+    }
+}
+
+/// Korean sans faces the operating system ships or the common free packages install. Noto CJK and
+/// Source Han are left out on purpose (AGENTS.md §1.1).
+fn hangul_candidates() -> Vec<PathBuf> {
+    if cfg!(windows) {
+        // Malgun Gothic, then the older Gulim / Batang / Dotum collections.
+        ["malgun.ttf", "gulim.ttc", "batang.ttc", "dotum.ttc"].iter().map(|f| windows_fonts().join(f)).collect()
+    } else if cfg!(target_os = "macos") {
+        ["/System/Library/Fonts/AppleSDGothicNeo.ttc", "/System/Library/Fonts/Supplemental/AppleGothic.ttf", "/Library/Fonts/Arial Unicode.ttf"]
+            .iter()
+            .map(PathBuf::from)
+            .collect()
+    } else {
+        unix_fonts(&[
+            "truetype/nanum/NanumGothic.ttf",
+            "nanum/NanumGothic.ttf",
+            "naver-nanum/NanumGothic.ttf",
+            "truetype/nanum/NanumBarunGothic.ttf",
+            "truetype/baekmuk/gulim.ttf",
+            "baekmuk-ttf/gulim.ttf",
+            "truetype/unfonts-core/UnDotum.ttf",
+            "unfonts-core/UnDotum.ttf",
+            "truetype/droid/DroidSansFallbackFull.ttf",
         ])
     }
 }
@@ -379,6 +415,7 @@ mod tests {
         assert_eq!(face_with(inter, PROBE), None);
         assert_eq!(face_with(inter, HANS_PROBE), None);
         assert_eq!(face_with(inter, HANT_PROBE), None);
+        assert_eq!(face_with(inter, HANG_PROBE), None);
         assert_eq!(face_with(inter, 'A'), Some(0));
     }
 
@@ -391,7 +428,7 @@ mod tests {
 
     #[test]
     fn candidates_are_absolute_font_files() {
-        for need in [Need::Other, Need::Hans, Need::Hant] {
+        for need in [Need::Other, Need::Hans, Need::Hant, Need::Hang] {
             let list = candidates(need);
             assert!(!list.is_empty(), "{need:?}");
             assert!(list.iter().all(|p| p.extension().is_some_and(|e| e == "ttf" || e == "ttc")), "{need:?}");
@@ -420,7 +457,7 @@ mod tests {
 
     #[test]
     fn han_candidates_skip_adobe_designs() {
-        for need in [Need::Hans, Need::Hant] {
+        for need in [Need::Hans, Need::Hant, Need::Hang] {
             for path in candidates(need) {
                 let name = path.to_string_lossy().to_lowercase();
                 assert!(!["notosanscjk", "notoserifcjk", "sourcehan", "source-han"].iter().any(|b| name.contains(b)), "{name}");

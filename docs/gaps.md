@@ -41,7 +41,7 @@ update the numbers.
 | 11 | Accessibility: checker only, no tagging tools | feature | 40–70 | [target-app-parity.md](target-app-parity.md) |
 | 12 | No measured fidelity harness against Acrobat | quality | (in 2) | [target-app-parity.md](target-app-parity.md) |
 | 13 | Performance budgets and lazy loading of very large files | performance | 25–45 | this file |
-| 14 | Arabic not mirrored; no Hindi, Indonesian, Korean | localization | 25–45 | [localization-parity.md](localization-parity.md) |
+| 14 | Arabic not mirrored; no Hindi, Indonesian | localization | 25–43 | [localization-parity.md](localization-parity.md) |
 | 15 | Forms: JavaScript object model, actions, submit, XFA depth | feature | 40–75 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 16 | UI precision gaps (multi-select move, rulers, accelerators, windows) | UI/UX | 30–60 | [ui-parity.md](ui-parity.md) |
 | 17 | Certificate security and other protect gaps | feature, spec | 15–30 | [pdf-spec-parity.md](pdf-spec-parity.md) |
@@ -289,15 +289,16 @@ update the numbers.
   to edit.
 - **Estimate:** 25–45 h. **Doc:** this file.
 
-### 14. Arabic not mirrored; no Hindi, Indonesian, Korean
+### 14. Arabic not mirrored; no Hindi, Indonesian
 
 - **Missing:** a right-to-left layout (panels, menus, alignment), bidirectional text in the text
-  layout itself (wrapping, typed text); catalogs for Hindi, Indonesian and Korean (Acrobat ships
-  Korean; it ships Arabic in its Middle East edition; it ships none of Hindi or Indonesian).
-  Vietnamese ships as a catalog (`vi`, 100% of the current localizable union) but stays `partial`
-  like other non-English languages (no translated help; engine/OS details stay English).
+  layout itself (wrapping, typed text); catalogs for Hindi and Indonesian (Acrobat ships Arabic in
+  its Middle East edition; it ships none of the other two). Vietnamese ships as a catalog (`vi`,
+  100% of the current localizable union) but stays `partial` like other non-English languages (no
+  translated help; engine/OS details stay English). Korean now has a catalog and a Nanum Gothic UI
+  face; it still needs a native-speaker review and a Hangul document font for edited PDFs.
 - **Evidence:** [localization.md](localization.md) §Arabic; `misc.rtl-ui` planned.
-- **Estimate:** 25–45 h (Arabic RTL 20–35, three catalogs 8–12 plus review). **Doc:**
+- **Estimate:** 25–43 h (Arabic RTL 20–35, two catalogs 5–8 plus review). **Doc:**
   [localization-parity.md](localization-parity.md).
 
 ### 15. Forms: JavaScript object model, actions, submit, XFA depth

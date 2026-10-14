@@ -194,14 +194,17 @@ pub enum CjkPreference {
     Default,
     SimplifiedChinese,
     TraditionalChinese,
+    /// The Hangul face leads the CJK faces, so a Korean line keeps one face and one baseline.
+    Korean,
 }
 
 impl CjkPreference {
-    /// The preference for a UI language code (`zh-hans`, `zh-hant`, anything else).
+    /// The preference for a UI language code (`zh-hans`, `zh-hant`, `ko`, anything else).
     pub fn for_language(code: &str) -> Self {
         match code {
             "zh-hans" => Self::SimplifiedChinese,
             "zh-hant" => Self::TraditionalChinese,
+            "ko" => Self::Korean,
             _ => Self::Default,
         }
     }
@@ -244,6 +247,11 @@ pub const SYSTEM_TAMIL_FALLBACK: &str = "system-tamil-fallback";
 pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
     #[cfg_attr(target_arch = "wasm32", expect(unused_mut))]
     let mut fonts = font_definitions_for(cjk == CjkPreference::SimplifiedChinese);
+    if cjk == CjkPreference::Korean {
+        let hang: Vec<String> = pdfcraft_fonts::ui_korean_fonts().iter().map(|f| f.name()).collect();
+        let cjk_faces: Vec<String> = pdfcraft_fonts::ui_cjk_fonts(false).iter().map(|f| f.name()).collect();
+        korean_first(&mut fonts, &hang, &cjk_faces);
+    }
     #[cfg(not(target_arch = "wasm32"))]
     {
         use crate::system_fonts::{Need, fallback};
@@ -261,10 +269,11 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
             }
         }
         let need = match cjk {
+            CjkPreference::Korean if pdfcraft_fonts::ui_korean_fonts().is_empty() => Need::Hang,
             _ if !pdfcraft_fonts::ui_chinese_fonts().is_empty() => Need::Other,
             CjkPreference::SimplifiedChinese => Need::Hans,
             CjkPreference::TraditionalChinese => Need::Hant,
-            CjkPreference::Default => Need::Other,
+            CjkPreference::Default | CjkPreference::Korean => Need::Other,
         };
         if let Some(data) = fallback(need) {
             fonts.font_data.insert(SYSTEM_FALLBACK.to_owned(), data);
@@ -272,13 +281,30 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
             for stack in fonts.families.values_mut() {
                 let at = match need {
                     Need::Other => None,
-                    Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
+                    Need::Hans | Need::Hant | Need::Hang => stack.iter().position(|n| japanese.contains(n)),
                 };
                 stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
             }
         }
     }
     fonts
+}
+
+/// Moves the `hang` faces in front of the first of the `cjk` faces in every family (Hangul faces
+/// at the end of a family stay there when it has no CJK face). A Korean line then draws shared
+/// punctuation and Hanja in the Hangul face too, so it keeps one baseline (the reason Simplified
+/// Chinese puts its own faces first). Does nothing without Hangul faces.
+fn korean_first(fonts: &mut FontDefinitions, hang: &[String], cjk: &[String]) {
+    if hang.is_empty() {
+        return;
+    }
+    for stack in fonts.families.values_mut() {
+        stack.retain(|name| !hang.contains(name));
+        let at = stack.iter().position(|name| cjk.contains(name)).unwrap_or(stack.len());
+        for (offset, name) in hang.iter().enumerate() {
+            stack.insert(at.saturating_add(offset).min(stack.len()), name.clone());
+        }
+    }
 }
 
 /// The interface fonts: Inter (and JetBrains Mono for code) first, then egui's defaults, then
@@ -382,11 +408,12 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
         }
     }
     // Arabic-script faces (file names, document titles), Telugu faces (the Telugu interface,
-    // file names), Hebrew faces (file names, text being edited) and Thai faces after the CJK ones; the
+    // file names), Hangul faces (the Korean interface, file names), Hebrew faces (file names, text being edited) and Thai faces after the CJK ones; the
     // ranges don't overlap.
     for face in pdfcraft_fonts::ui_arabic_fonts()
         .into_iter()
         .chain(pdfcraft_fonts::ui_telugu_fonts())
+        .chain(pdfcraft_fonts::ui_korean_fonts())
         .chain(pdfcraft_fonts::ui_hebrew_fonts())
         .chain(pdfcraft_fonts::ui_thai_fonts())
     {
@@ -494,6 +521,29 @@ mod tests {
     const HINTING_CORPUS: [&str; 4] = ["Il1MWmw", "Hamburgefonts", "0123456789 .,;:!?()[]{}+-=/\\", "Café Ångström déjà-vu Ωμέγα Ελληνικά Журнал"];
     const HINTING_SIZES: [f32; 6] = [10.0, 11.0, 12.0, 13.0, 14.0, 16.0];
     const HINTING_PPPS: [f32; 4] = [1.0, 1.25, 1.5, 2.0];
+
+    #[test]
+    fn korean_faces_lead_the_cjk_faces_only_in_korean_mode() {
+        let names = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let mut fonts = FontDefinitions::default();
+        fonts.families.insert(FontFamily::Proportional, names(&["Inter", "BIZ UDPGothic Regular", "NanumGothic Regular", "Thai"]));
+        fonts.families.insert(FontFamily::Monospace, names(&["JetBrainsMono", "Thai"]));
+        let hang = names(&["NanumGothic Regular"]);
+        let cjk = names(&["BIZ UDPGothic Regular"]);
+        korean_first(&mut fonts, &hang, &cjk);
+        // Ahead of the Japanese face, once, and nothing else moves.
+        assert_eq!(fonts.families[&FontFamily::Proportional], names(&["Inter", "NanumGothic Regular", "BIZ UDPGothic Regular", "Thai"]));
+        // A family with no CJK face gets the Hangul face at the end.
+        assert_eq!(fonts.families[&FontFamily::Monospace], names(&["JetBrainsMono", "Thai", "NanumGothic Regular"]));
+        // Idempotent, and a no-op without Hangul faces.
+        let before = fonts.families.clone();
+        korean_first(&mut fonts, &hang, &cjk);
+        assert_eq!(fonts.families, before);
+        korean_first(&mut fonts, &[], &cjk);
+        assert_eq!(fonts.families, before);
+        assert_eq!(CjkPreference::for_language("ko"), CjkPreference::Korean);
+        assert_eq!(CjkPreference::for_language("ja"), CjkPreference::Default);
+    }
 
     fn primary_families() -> [(FontFamily, &'static str); 4] {
         [

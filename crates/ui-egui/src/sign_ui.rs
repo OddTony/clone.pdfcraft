@@ -1610,7 +1610,7 @@ mod tests {
         }
         let (de, _) = appearance_labels(Lang::from_code("de").unwrap());
         assert_eq!((de.signed_by.as_str(), de.reason.as_str()), ("Digital signiert von", "Grund: "));
-        for code in ["zh-hans", "zh-hant", "ja", "ru", "uk", "bg", "kk", "el", "te", "cs", "lt", "ar"] {
+        for code in ["zh-hans", "zh-hant", "ja", "ko", "ru", "uk", "bg", "kk", "el", "te", "cs", "lt", "ar"] {
             assert_eq!(appearance_labels(Lang::from_code(code).unwrap()), (english.clone(), true), "{code}");
         }
         for lang in Lang::all() {

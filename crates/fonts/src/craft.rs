@@ -66,6 +66,13 @@ pub fn ui_telugu_fonts() -> Vec<&'static CraftFont> {
     CRAFT_FONTS.iter().filter(|f| f.covers("Telu")).collect()
 }
 
+/// The `Hang` craft-fonts faces for Korean interface text (the Korean catalog, Hangul file names,
+/// document titles), in manifest order. Empty when built without craft-fonts or when it has no
+/// Hangul face.
+pub fn ui_korean_fonts() -> Vec<&'static CraftFont> {
+    CRAFT_FONTS.iter().filter(|f| f.covers("Hang")).collect()
+}
+
 /// Thai faces shared by the interface and PDF text writer.
 pub fn ui_thai_fonts() -> Vec<&'static CraftFont> {
     CRAFT_FONTS.iter().filter(|f| f.covers("Thai")).collect()
@@ -305,9 +312,10 @@ mod tests {
         assert_eq!(ui.len(), CRAFT_FONTS.iter().filter(|f| f.covers("Jpan")).count());
         let ui_zh = ui_chinese_fonts();
         assert_eq!(ui_zh.len(), CRAFT_FONTS.iter().filter(|f| f.covers("Hans")).count());
+        assert_eq!(ui_korean_fonts().len(), CRAFT_FONTS.iter().filter(|f| f.covers("Hang")).count());
         if CRAFT_FONTS.is_empty() {
             eprintln!("built without craft-fonts (CRAFT_FONTS_DIR unset): no Japanese faces, as expected");
-            assert!(SHIPPORI_MINCHO.is_none() && ui.is_empty() && ui_zh.is_empty());
+            assert!(SHIPPORI_MINCHO.is_none() && ui.is_empty() && ui_zh.is_empty() && ui_korean_fonts().is_empty());
             return;
         }
         assert!(CRAFT_FONTS.iter().all(|f| !f.bytes.is_empty()));

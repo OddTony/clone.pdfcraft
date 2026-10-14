@@ -133,7 +133,7 @@ union). Detail and script notes: [localization-parity.md](docs/localization-pari
 | Indonesian | `id` | 0% | none |
 | Japanese | `ja` | 99.1% | partial |
 | German | `de` | 99.3% | partial |
-| Korean | `ko` | 0% | none |
+| Korean | `ko` | 100% of current union | partial (draft; native review pending) |
 | Vietnamese | `vi` | 100% of current union | partial (dialogs / tooltips; no help) |
 
 Also shipped: Traditional Chinese, Russian, Bulgarian, Telugu, Hungarian, Ukrainian, Italian,
@@ -205,6 +205,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 - **2026-10-14 (M3, control-click candidate):** Coordinate clicks retain hover warmup and pair press/release in one input pass so slow frames do not turn a click into a hold. Text multi-click selection accepts the actual press event when egui has already cleared its origin. Regression cases cover slow-frame button activation, disabled controls and coalesced text selection; estimates unchanged.
 - **2026-10-14 (community, M7, #128 Hebrew in Add text):** Add text and `page_add_text` draw Hebrew with the craft-fonts Hebr face (Noto Sans Hebrew), through the same shaped path as Arabic and Thai: right-to-left display order with numbers and Latin in place, points and cantillation kept on their letter as one Type 3 glyph, ToUnicode and per-line ActualText so extraction, search and the editor get typing order. Builds without the face refuse Hebrew rather than write `?`. Regular style only. Estimates unchanged.
 - **2026-10-14 (M9, #1787):** Changes after signing are judged by the role an object held when signed for a page's resources too: a rewritten font, XObject, graphics state or resources dictionary is page content however its new version is labelled, so a `/FT` or `/Subtype /Widget` added by the attacker no longer reads as a permitted form fill. A category dictionary that only gained a name is judged as before.
+- **2026-10-14 (gap 14, Korean interface):** `ko` catalog (2,592 entries, clean-room, 합니다체) registered with Korean date names; Nanum Gothic (OFL-1.1) added to craft-fonts as the `Hang` UI face and placed ahead of the Japanese CJK faces in Korean mode. Draft awaiting native-speaker review; writing Hangul into edited PDFs is not covered. Estimates unchanged.
 - **2026-10-13 (M3, native-opening candidate):** Chosen tools survive preparation, conversion and password retries; startup intake waits for pending preparation. Regression tests cover completion, cancellation and document identity. Estimates unchanged.
 - **2026-10-13 (community, M3, #531 touchpad momentum):** On Wayland a two-finger swipe keeps gliding after the fingers lift and slows to a stop, measured from the gesture's last 0.1 s and decaying with a 0.35 s time constant through the #759 1:1 path. Any wheel input, click, key, zoom or edge ends it (fingers resting on the touchpad don't yet: the vendored winit binds no Wayland hold gestures); single-page paging, macOS (which sends its own momentum), the web, and Animation effects Off never glide. Unit tests for the physics and two headless view tests. Estimates unchanged.
 - **2026-10-13 (M3, native-open admission):** Later prepared replies stay queued while a modal or native picker owns the foreground. Picker completion, cancellation and abandonment wake retained opens. Regressions cover recipient ownership, exactly-once admission, source/history preservation and one-shot repaint requests. Estimates unchanged.
@@ -490,6 +491,7 @@ Newest first: the date, what moved, and the new overall estimate.
 
 - M13: common command, batch, inspection and bounded preview tools share the existing confined automation path. MCP tools carry complete hints and reject unknown top-level keys as invalid parameters.
 - **2026-10-10 (UI docking):** Tools and Inspector can be regrouped, split beside the PDF, or floated inside the app window. Existing toggles reopen panels at their saved locations; UI commands arrange/reset panels, and preferences retain their layout. Read/full-screen modes preserve the focused document view. No milestone percentage change.
+- **2026-10-15 (Korean):** Korean interface catalog, Nanum Gothic UI font, installed-font fallback and Hangul text written into PDFs (Add text, replaced lines; Type 3 from craft-fonts). Native review applied (55 edits: Redact→민감 정보 지우기, Sanitize→보안 정리, Flatten→병합, Output intent→출력 조건). No milestone percentage change.
 
 ## Revision history
 
