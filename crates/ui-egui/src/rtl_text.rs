@@ -452,7 +452,7 @@ mod tests {
     #[test]
     fn carets_follow_right_to_left_rows() {
         let ctx = egui::Context::default();
-        ctx.set_fonts(crate::theme::installed_font_definitions(false));
+        ctx.set_fonts(crate::theme::installed_font_definitions(crate::theme::CjkPreference::Default));
         let text = "الى مصرف ئيش التركي المحترم";
         let mut galley = None;
         // Two frames: the fonts are installed during the first.

@@ -33,7 +33,15 @@ delete_field(&mut doc, "email")?;
   field tree; the form's `/DA` and `/Q` are the last fallback.
 - Text and choice fields get new appearance streams (`/Tx BMC … EMC`): auto-size (`0 Tf`), comb,
   multiline wrapping, password masking, quadding, `/MK` background and border, list-box selection.
-  The `/DA` font is used when `/DR` has it as a simple font; otherwise Helvetica (WinAnsi).
+  The `/DA` font is used when `/DR` has it as a simple font or a composite font with a predefined
+  Unicode CMap; otherwise Helvetica (WinAnsi). A value or button caption the font can't hold
+  (Chinese in a Helvetica field, a character beyond U+FFFF in a UCS-2 CMap) is kept, as Acrobat
+  keeps it: `/V` is stored as typed, the appearance draws `?` for those characters, the widget is
+  marked with the first one (`pdfcraft_fonts::UNDRAWN_MARK`, cleared once all of it can be drawn)
+  and the form sets `/NeedAppearances`, so other viewers draw the field from its value with fonts
+  that have them. Not in a document that declares PDF/A, which forbids that flag (`declares_pdfa`).
+  `undrawn_fields` lists the marked fields; the engine reports each edit that draws one, and
+  flattening refuses to make that `?` permanent.
 - Check boxes and radio buttons switch `/V` and each widget's `/AS`. Widgets with no appearances
   get PdfCraft's own (a drawn check mark or dot; no symbol font needed).
 - Values are validated (options, `MaxLen`, single vs multi-select, NoToggleToOff, read-only) and a

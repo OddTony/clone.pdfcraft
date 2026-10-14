@@ -19,7 +19,8 @@ use pdfcraft_fonts::{helvetica_width, literal, win_ansi};
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum EditError {
-    #[error("page {0} does not exist")]
+    /// Holds the 0-based index; the message names the 1-based page a user counts (#1550).
+    #[error("page {} does not exist", .0.saturating_add(1))]
     NoSuchPage(usize),
     #[error("{0}")]
     Invalid(String),
@@ -395,12 +396,6 @@ pub fn undrawable_message(c: char) -> String {
     format!("the standard fonts can't draw \"{c}\" (U+{:04X}); only Western European characters can be added as text for now", u32::from(c))
 }
 
-/// The first character of plain `text` that Helvetica/WinAnsi can't draw (line and page breaks
-/// and tabs are layout, not glyphs).
-pub fn first_undrawable_plain(text: &str) -> Option<char> {
-    text.chars().find(|c| !matches!(c, '\r' | '\n' | '\t' | '\u{c}') && !pdfcraft_fonts::win_ansi_encodable(*c))
-}
-
 fn text_op(x: f64, y: f64, text: &str) -> Vec<u8> {
     let mut v = format!("1 0 0 1 {} {} Tm ", n(x), n(y)).into_bytes();
     v.extend(literal(&win_ansi(text)));
@@ -619,24 +614,7 @@ pub fn remove_marks(doc: &mut Document, pages: &[usize], kind: MarkKind) -> Resu
 
 /// Which kinds of marks the document has (for enabling Update/Remove).
 pub fn marks_present(doc: &Document) -> Vec<MarkKind> {
-    let mut found = Vec::new();
-    for page in page_list(doc) {
-        let obj = doc.get(page.obj);
-        let Some(c) = obj.as_dict().and_then(|d| d.get(b"Contents").cloned()) else { continue };
-        let list = match &*doc.resolve(&c) {
-            Object::Array(a) => a.clone(),
-            _ => vec![c.clone()],
-        };
-        for o in list {
-            if let Some(t) = stream_tag(doc, &o)
-                && let Some(kind) = [MarkKind::HeaderFooter, MarkKind::Watermark, MarkKind::Background].into_iter().find(|m| m.tag() == t)
-                && !found.contains(&kind)
-            {
-                found.push(kind);
-            }
-        }
-    }
-    found
+    added::scan_markers(doc).marks
 }
 
 pub mod objects;
@@ -646,11 +624,19 @@ mod flatten;
 pub use flatten::{flatten, flatten_fill_sign};
 pub mod images;
 pub use images::{ImageChange, PageImage, change_image, page_images, reading_images, rect_to_rect, turn_about_centre};
+pub mod bidi;
+pub mod indic;
 pub mod text;
-pub use text::{BlockStyle, LineEdit, TextBlock, TextLine, reading_blocks, replace_block, replace_line, rewrite_block, text_blocks, text_lines};
+pub use text::{
+    BlockStyle, LineEdit, RangeStyle, TextBlock, TextLine, clear_block, reading_blocks, replace_block, replace_line, rewrite_block, text_blocks,
+    text_lines,
+};
 pub mod added;
 mod arabic_font;
-pub use added::{Added, AddedImage, AddedText, Align, Content, Family, add_content, delete_content, first_undrawable, list_added, update_content};
+pub use added::{
+    Added, AddedImage, AddedText, Align, Content, Family, MarkerScan, add_content, delete_content, first_undrawable, list_added, scan_markers,
+    update_content,
+};
 
 #[cfg(test)]
 mod tests;
