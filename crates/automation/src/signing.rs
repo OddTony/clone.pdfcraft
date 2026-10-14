@@ -2,6 +2,7 @@
 //! document, and manage trusted certificates. Rectangles are points from the top-left of the
 //! displayed page.
 
+use crate::vfs;
 use pdfcraft_engine::sign::{self, Certificate, DigitalId, Modification, Name, PrivateKey};
 use pdfcraft_engine::{SignOptions, SignatureInfo, SignatureStatus};
 use serde_json::{Value, json};
@@ -133,7 +134,7 @@ impl Automation {
             return Err(failed(format!("windows:{r}: Windows certificate store identities are only available on Windows")));
         }
         let path = self.resolve(a.str("id")?, false)?;
-        let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+        let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         sign::pkcs12::open(&bytes, a.opt_str("password")?.unwrap_or("")).map_err(|e| match e {
             sign::SignError::WrongPassword => bad("the digital ID password is incorrect"),
             e => failed(e),
@@ -209,7 +210,7 @@ impl Automation {
         let Some(o) = g.as_object().filter(|o| o.len() == 1) else { return Err(bad(kinds)) };
         if let Some(path) = o.get("image") {
             let path = self.resolve(path.as_str().ok_or_else(|| bad("graphic.image must be a path"))?, false)?;
-            let file = std::fs::File::open(&path).map_err(|e| bad(format!("graphic.image {}: {e}", path.display())))?;
+            let file = vfs::open(&path).map_err(|e| bad(format!("graphic.image {}: {e}", path.display())))?;
             return Ok(pdfcraft_engine::SignatureImage::read(file).map_err(|e| bad(e.to_string()))?.graphic());
         }
         if let Some(text) = o.get("text") {
@@ -251,7 +252,7 @@ impl Automation {
         };
         for p in paths {
             let path = self.resolve(&p, false)?;
-            let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+            let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
             let lower = p.to_ascii_lowercase();
             let found = if lower.ends_with(".p12") || lower.ends_with(".pfx") {
                 let id = sign::pkcs12::open(&bytes, a.opt_str("password")?.unwrap_or("")).map_err(failed)?;

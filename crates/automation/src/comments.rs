@@ -3,6 +3,7 @@
 //! Geometry follows the automation convention: points from the top-left of the displayed page,
 //! y down. It is converted to PDF user space (crop box, `/Rotate`) here.
 
+use crate::vfs;
 use pdfcraft_engine::{
     Edit, LineEnding, Markup, NOTE_SIZE, NewAnnotation, NoteIcon, ReviewState, Rgb, Shape, StampGroup, StampKind, Style, SummarySort,
 };
@@ -375,7 +376,7 @@ impl Automation {
                 "attachment" => {
                     let [x, y] = a.need::<2>("at", "an attachment (its icon's top-left)")?;
                     let path = self.resolve(a.str("path")?, false)?;
-                    let data = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+                    let data = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
                     let file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                     let icon = match a.opt_str("icon")? {
                         Some(n) => pdfcraft_engine::AttachIcon::from_name(n)
@@ -490,7 +491,7 @@ impl Automation {
                 return Err(ToolError::InvalidArgs("path is only for an image signature or initials; pass either path or text".into()));
             }
             let path = self.resolve(path, false)?;
-            let file = std::fs::File::open(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+            let file = vfs::open(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
             let image = if scan {
                 let sensitivity = match sensitivity {
                     None => pdfcraft_engine::signature_scan::DEFAULT_SENSITIVITY,
@@ -645,7 +646,7 @@ impl Automation {
         let page = self.page(a)?;
         let info = self.doc(a)?.info.pages[page].clone();
         let path = self.resolve(a.str("path")?, false)?;
-        let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+        let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         let file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let name = a.opt_str("name")?.map(str::to_owned).unwrap_or_else(|| file.rsplit_once('.').map_or(file.clone(), |(s, _)| s.to_owned()));
         let [x, y] = a.need::<2>("at", "a stamp (its centre)")?;

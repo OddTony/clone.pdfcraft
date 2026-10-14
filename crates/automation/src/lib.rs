@@ -27,6 +27,7 @@ mod redact;
 mod signing;
 mod text_cache;
 mod tools;
+pub mod vfs;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -126,6 +127,10 @@ impl Automation {
 
     /// Confine every path the tools read or write to `root` (relative paths resolve inside it).
     pub fn with_root(mut self, root: impl Into<PathBuf>) -> std::io::Result<Self> {
+        // There is no root to confine to, or canonicalize, on the in-memory disk.
+        if vfs::IN_MEMORY {
+            return Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "confining to a root is not available on the in-memory disk"));
+        }
         let root = root.into().canonicalize()?;
         if !root.is_dir() {
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "the root must be a folder"));
@@ -153,7 +158,7 @@ impl Automation {
         if self.root.is_some() {
             write_atomic(&target, bytes)?;
         } else {
-            std::fs::write(&target, bytes).map_err(|e| failed(format!("{path}: {e}")))?;
+            vfs::write(&target, bytes).map_err(|e| failed(format!("{path}: {e}")))?;
         }
         Ok(target)
     }
@@ -339,7 +344,7 @@ impl Automation {
             "page_replace" => {
                 let pages = self.pages(&a, "pages")?;
                 let path = self.resolve(a.str("path")?, false)?;
-                let bytes = Arc::new(std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?);
+                let bytes = Arc::new(vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?);
                 let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 let src_pages = match a.opt_ints("from_pages")? {
                     Some(p) => one_based(&p)?,
@@ -443,7 +448,7 @@ impl Automation {
                 if name == "image_save" {
                     let (ext, bytes) = self.doc(&a)?.page_image_file(page, index).map_err(failed)?;
                     let mut path = self.resolve(a.str("path")?, true)?;
-                    if path.is_dir() {
+                    if vfs::is_dir(&path) {
                         // Adding the extension to a folder's name would write beside it: "." is the
                         // root, so that would land outside it.
                         return Err(failed(format!("{}: is a folder, not a file", path.display())));
@@ -471,7 +476,7 @@ impl Automation {
                         "delete" => ImageEdit::Delete,
                         "replace" => {
                             let path = self.resolve(a.str("path")?, false)?;
-                            let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+                            let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
                             ImageEdit::Replace {
                                 name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
                                 bytes: Arc::new(bytes),
@@ -527,7 +532,7 @@ impl Automation {
             "text_font_import" => {
                 let page = self.page(&a)?;
                 let path = self.resolve(a.str("path")?, false)?;
-                let file = std::fs::File::open(&path).map_err(failed)?;
+                let file = vfs::open(&path).map_err(failed)?;
                 use std::io::Read;
                 let mut bytes = Vec::new();
                 file.take((16 << 20) + 1).read_to_end(&mut bytes).map_err(failed)?;
@@ -672,7 +677,7 @@ impl Automation {
             "form_fill" => self.form_fill(&a)?,
             "form_set_image" => {
                 let path = self.resolve(a.str("path")?, false)?;
-                let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+                let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
                 self.apply(&a, Edit::SetFieldImage { name: a.str("field")?.to_owned(), image: Arc::new(bytes) })?
             }
             "form_reset" => self.form_reset(&a)?,
@@ -837,7 +842,7 @@ impl Automation {
 
     fn doc_open(&mut self, a: &Args) -> Result<Value> {
         let path = self.resolve(a.str("path")?, false)?;
-        let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+        let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let id = self.session.open(name, Some(path.to_string_lossy().into_owned()), Arc::new(bytes), a.opt_str("password")?).map_err(failed)?;
         let doc = self.session.get(id).ok_or_else(|| failed("the document vanished"))?;
@@ -1079,7 +1084,7 @@ impl Automation {
     fn mark_file(&self, a: &Args) -> Result<Option<pdfcraft_engine::MarkFile>> {
         let Some(p) = a.opt_str("file")? else { return Ok(None) };
         let path = self.resolve(p, false)?;
-        let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+        let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         let page = a.opt_int("file_page")?.unwrap_or(1).max(1) as usize - 1;
         Ok(Some(pdfcraft_engine::MarkFile {
             name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
@@ -1191,7 +1196,7 @@ impl Automation {
             return Ok(json!({ "path": path.to_string_lossy(), "pages": pages.len(), "bytes": text.len() }));
         }
         let folder = self.resolve(a.str("folder")?, true)?;
-        std::fs::create_dir_all(&folder).map_err(|e| failed(format!("{}: {e}", folder.display())))?;
+        vfs::create_dir_all(&folder).map_err(|e| failed(format!("{}: {e}", folder.display())))?;
         if tool == "doc_export_all_images" {
             let min = u32::try_from(a.opt_int("min_size")?.unwrap_or(0).max(0)).unwrap_or(u32::MAX);
             let out = pdfcraft_engine::export::extract_images(&doc.export_source(), &pages, min).map_err(failed)?;
@@ -1244,7 +1249,7 @@ impl Automation {
                 let mut images = Vec::new();
                 for p in a.strs("paths")? {
                     let path = self.resolve(p, false)?;
-                    let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+                    let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
                     images.push((path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), bytes));
                 }
                 let name = if images.len() == 1 {
@@ -1259,7 +1264,7 @@ impl Automation {
                     (Some(t), _) => ("Text".to_string(), t.to_string()),
                     (None, Some(p)) => {
                         let path = self.resolve(p, false)?;
-                        let t = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+                        let t = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
                         (path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(), pdfcraft_engine::decode_text(&t))
                     }
                     (None, None) => return Err(ToolError::InvalidArgs("text needs `text` or `path`".into())),
@@ -1382,7 +1387,7 @@ impl Automation {
     fn insert_file(&mut self, a: &Args) -> Result<Value> {
         let at = self.position(a, "at")?;
         let path = self.resolve(a.str("path")?, false)?;
-        let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+        let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         let pages = a.opt_ints("pages")?.map(|p| one_based(&p)).transpose()?;
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         self.apply(a, Edit::InsertPagesFrom { name, bytes: Arc::new(bytes), pages, at, field_conflicts: pdfcraft_organize::FieldConflicts::Rename })
@@ -1425,7 +1430,7 @@ impl Automation {
         // Each file is read, converted and copied in turn, so a long list holds one file at a time.
         let sources = paths.into_iter().zip(ranges).map(|(p, range)| -> std::result::Result<pdfcraft_engine::CombineSource, ToolError> {
             let path = self.resolve(p, false)?;
-            let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+            let bytes = vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
             let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let (_, pdf) = self.session.convert_to_pdf(&name, &Arc::new(bytes)).map_err(failed)?;
             let title = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -1438,11 +1443,11 @@ impl Automation {
     /// One PDF per file, written into `out_dir`; a file that fails doesn't stop the others.
     fn create_separate(&mut self, a: &Args, paths: &[&str]) -> Result<Value> {
         let dir = self.resolve(a.str("out_dir").map_err(|_| ToolError::InvalidArgs("mode \"separate\" needs out_dir".into()))?, true)?;
-        std::fs::create_dir_all(&dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
+        vfs::create_dir_all(&dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
         let mut out = Vec::new();
         for &p in paths {
             let converted = self.resolve(p, false).map_err(|e| e.to_string()).and_then(|src| {
-                let bytes = std::fs::read(&src).map_err(|e| format!("{}: {e}", src.display()))?;
+                let bytes = vfs::read(&src).map_err(|e| format!("{}: {e}", src.display()))?;
                 let name = src.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 let stem = src.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "document".into());
                 let (kind, pdf) = self.session.convert_to_pdf(&name, &Arc::new(bytes)).map_err(|e| e.to_string())?;
@@ -1469,7 +1474,7 @@ impl Automation {
         let mut out = if a.opt_bool("separate")?.unwrap_or(false) {
             // Each page as its own file.
             let dir = self.resolve(a.str("out_dir").map_err(|_| ToolError::InvalidArgs("separate files need out_dir".into()))?, true)?;
-            std::fs::create_dir_all(&dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
+            vfs::create_dir_all(&dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
             let mut files = Vec::new();
             for &p in &pages {
                 let bytes = self.session.extract(id, &[p]).map_err(failed)?;
@@ -1546,7 +1551,7 @@ impl Automation {
                     if let Some(g) = group {
                         firsts.push((g, path.clone(), sources.len()));
                     }
-                    let bytes = Arc::new(std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?);
+                    let bytes = Arc::new(vfs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?);
                     // Images and text files are made into PDFs first (#569), as in the Combine files tab.
                     let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                     self.session.as_pdf(&file_name, &bytes).map_err(failed)?
@@ -1617,7 +1622,7 @@ impl Automation {
             self.session.split(id, &by).map_err(failed)?
         };
         let dir = self.resolve(a.str("out_dir")?, true)?;
-        std::fs::create_dir_all(&dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
+        vfs::create_dir_all(&dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
         let mut files = Vec::new();
         let mut used = std::collections::HashSet::new();
         for (i, (first, last, bytes)) in parts.iter().enumerate() {
@@ -2305,16 +2310,20 @@ fn child(dir: &Path, name: &str) -> PathBuf {
 /// `<stem>.pdf` in `dir`, or `<stem> (2).pdf` and so on when that name is taken.
 fn unused(dir: &Path, stem: &str) -> PathBuf {
     let first = child(dir, &format!("{stem}.pdf"));
-    if !first.exists() {
+    if !vfs::exists(&first) {
         return first;
     }
-    (2..10_000u32).map(|n| child(dir, &format!("{stem} ({n}).pdf"))).find(|p| !p.exists()).unwrap_or(first)
+    (2..10_000u32).map(|n| child(dir, &format!("{stem} ({n}).pdf"))).find(|p| !vfs::exists(p)).unwrap_or(first)
 }
 
 /// Write and sync a temporary file in the same directory, then rename over the target.
 /// This flushes staged contents; it does not promise parent-directory durability after a
 /// power loss. Filesystems that refuse sync cause the save to fail before publication.
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    // On the in-memory disk a write is a single step, so there is no half-written file to avoid.
+    if vfs::IN_MEMORY {
+        return vfs::write(path, bytes).map_err(|e| failed(format!("{}: {e}", path.display())));
+    }
     write_atomic_with(path, bytes, staging_suffixes())
 }
 
@@ -2332,12 +2341,12 @@ fn write_atomic_synced(
     use std::io::Write;
     // A folder can't be replaced, and staging beside it could land outside the root: "." names
     // the root itself, whose parent isn't ours to write in.
-    if path.is_dir() {
+    if vfs::is_dir(path) {
         return Err(failed(format!("{}: is a folder, not a file", path.display())));
     }
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let name = path.file_name().ok_or_else(|| failed(format!("{}: not a file path", path.display())))?;
-    std::fs::create_dir_all(dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
+    vfs::create_dir_all(dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
     let (tmp, file) =
         create_staging(dir, &name.to_string_lossy(), StagingName::SuffixThenTag, suffixes).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
     // Closed at the end of the block, before the rename.
