@@ -34,7 +34,7 @@ pub(crate) fn workspace_panel(mode: crate::Mode) -> LeftPanel {
 
 /// What a row does once clicked.
 enum Act {
-    Edit(Edit),
+    Edit(Box<Edit>),
     View(ViewAction),
     Command(&'static str),
 }
@@ -99,15 +99,15 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 if icons::button(ui, "rotate-ccw", 34.0, false, tl!("Rotate counterclockwise")).clicked() {
-                    act = Some(Act::Edit(Edit::RotatePages { pages: targets.clone(), degrees: -90 }));
+                    act = Some(Act::Edit(Box::new(Edit::RotatePages { pages: targets.clone(), degrees: -90 })));
                 }
                 if icons::button(ui, "rotate-cw", 34.0, false, tl!("Rotate clockwise")).clicked() {
-                    act = Some(Act::Edit(Edit::RotatePages { pages: targets.clone(), degrees: 90 }));
+                    act = Some(Act::Edit(Box::new(Edit::RotatePages { pages: targets.clone(), degrees: 90 })));
                 }
                 // A document keeps at least one page.
                 let can_delete = targets.len() < n;
                 if ui.add_enabled_ui(can_delete, |ui| icons::button(ui, "trash-2", 34.0, false, tl!("Delete pages (Delete)"))).inner.clicked() {
-                    act = Some(Act::Edit(Edit::DeletePages { pages: targets.clone() }));
+                    act = Some(Act::Edit(Box::new(Edit::DeletePages { pages: targets.clone() })));
                 }
                 if icons::button(ui, "file-output", 34.0, false, tl!("Extract pages to a new document")).clicked() {
                     act = Some(Act::View(ViewAction::Extract));
@@ -120,7 +120,7 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                 if ui.button(tl!("Insert a blank page after the selection")).clicked() {
                     let crop = info.pages.get(last).map_or([0.0, 0.0, 612.0, 792.0], |p| p.crop);
                     let (w, h) = ((crop[2] - crop[0]).abs().max(1.0) as f64, (crop[3] - crop[1]).abs().max(1.0) as f64);
-                    act = Some(Act::Edit(Edit::InsertBlankPage { at: last.saturating_add(1), width: w, height: h }));
+                    act = Some(Act::Edit(Box::new(Edit::InsertBlankPage { at: last.saturating_add(1), width: w, height: h })));
                 }
                 if ui.button(tl!("Insert pages from a file…")).clicked() {
                     act = Some(Act::View(ViewAction::InsertFromFile));
@@ -169,7 +169,7 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         app.mode = crate::Mode::AllTools;
     }
     match act {
-        Some(Act::Edit(edit)) => view.pending_edit = Some(edit),
+        Some(Act::Edit(edit)) => view.pending_edit = Some(*edit),
         Some(Act::View(action)) => view.pending_action = Some(action),
         Some(Act::Command(command)) => app.run_command(command),
         None => {}
