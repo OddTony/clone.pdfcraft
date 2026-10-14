@@ -1715,7 +1715,8 @@ pub(crate) fn rewrite_block_with_limit(
     let visual_indic = members.iter().any(|line| line.visual_order);
     if !hebrew
         && !visual_indic
-        && (!style.ranges.is_empty()
+        && (b.invisible
+            || !style.ranges.is_empty()
             || style.resource.is_some()
             || (text.is_some_and(|draft| {
                 draft.contains('\n')

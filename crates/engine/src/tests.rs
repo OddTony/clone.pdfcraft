@@ -3645,18 +3645,28 @@ f(1)</script>",
 
 #[test]
 fn a_formcalc_calculate_result_is_cut_before_it_is_saved() {
-    let tpl = pdfcraft_xfa::fixtures::formcalc_template()
-        .replace("<script>WordNum(total)</script>", "<script>Replace(Space(100000), \" \", \"x\")</script>");
-    let bytes = Arc::new(pdfcraft_xfa::fixtures::shell(&tpl));
+    // Only the calculation under test: unrelated initialize/total/table scripts in the
+    // full demo form can spend the opening budget on a contended/virtualized CI runner.
+    // Keep production time limits, exact clipping and persisted-content checks unchanged.
+    let tpl = r#"<template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">
+      <subform name="form">
+        <field name="words" w="4in" h="0.3in" access="readOnly">
+          <ui><textEdit/></ui>
+          <calculate><script contentType="application/x-formcalc">Replace(Space(100000), " ", "x")</script></calculate>
+        </field>
+      </subform>
+    </template>"#;
+    let bytes = Arc::new(pdfcraft_xfa::fixtures::shell(tpl));
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let id = s.open("long.pdf", None, bytes, None).expect("opens");
     let words = |s: &Session, id| s.get(id).unwrap().form.iter().find(|f| f.name == "words").unwrap().value.concat();
-    assert_eq!(words(&s, id).chars().count(), 65_536);
     let out = s.take_js_output(id);
+    assert_eq!(words(&s, id), "x".repeat(65_536), "{out:?}");
     assert!(out.errors.iter().any(|e| e.contains("cut")), "{out:?}");
     let saved = s.save_bytes(id).unwrap();
+    s.set_javascript(false); // Read persisted data without calculating it again.
     let id2 = s.open("again.pdf", None, saved, None).unwrap();
-    assert!(words(&s, id2).chars().count() <= 65_536);
+    assert_eq!(words(&s, id2), "x".repeat(65_536));
 }
 
 #[test]

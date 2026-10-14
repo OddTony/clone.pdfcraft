@@ -152,6 +152,26 @@ fn a_rewritten_ocr_phrase_keeps_its_word_widths() {
     assert_saved_text_and_undo(&mut s, id, &["John Smith Exam"], &before);
 }
 
+/// Switching from empty, fixed-width OCR glyphs to a visible face must not squeeze it.
+#[test]
+fn unicode_ocr_replacement_keeps_the_source_word_width() {
+    for (old, new) in [("MMMM", "NNNN"), ("iiii", "llll"), ("café", "cafe")] {
+        let (mut s, id) = scanned_with(vec![word(old, 20.0, 60.0, 50.0)]);
+        let before = s.get(id).unwrap().bytes.clone();
+        s.apply(id, Edit::EditTextBlock { page: 0, block: 0, text: new.into(), style: Default::default() }).unwrap();
+        let blocks = s.get(id).unwrap().text_blocks(0);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].text, new);
+        assert!(!blocks[0].invisible);
+        assert_eq!(blocks[0].base_font, "Helvetica", "visible glyphs replace empty OCR procedures");
+        // Equal-metric letters retain the old width; removing an accent does too.
+        let width = blocks[0].rect[2] - blocks[0].rect[0];
+        let ratio = pdfcraft_fonts::Std14::Helvetica.text_width(new, 1.0) / pdfcraft_fonts::Std14::Helvetica.text_width(old, 1.0);
+        assert!((width - 40.0 * ratio).abs() < 0.5, "{old} -> {new}: width {width}");
+        assert_saved_text_and_undo(&mut s, id, &[new], &before);
+    }
+}
+
 fn assert_saved_text_and_undo(s: &mut Session, id: pdfcraft_engine::DocId, expected: &[&str], before: &[u8]) {
     let saved = s.save_bytes(id).unwrap();
     let mut reopened = Session::new();
