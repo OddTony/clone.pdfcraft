@@ -781,7 +781,10 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::OverwriteChanged => {
+                #[cfg(not(target_arch = "wasm32"))]
                 let name = app.pending_overwrite.as_ref().and_then(|p| app.session.get(p.id)).map(|d| d.name.clone()).unwrap_or_default();
+                #[cfg(target_arch = "wasm32")]
+                let name = String::new();
                 ui.label(egui::RichText::new(tl!("Save over the changed file?")).font(theme::semibold(18.0)));
                 ui.add_space(8.0);
                 ui.label(crate::i18n::fmt(
@@ -1231,6 +1234,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     #[cfg(target_arch = "wasm32")]
     let _ = (overwrite_now, overwrite_elsewhere);
     // Cancelled or dismissed: the save is dropped.
+    #[cfg(not(target_arch = "wasm32"))]
     if dialog == Dialog::OverwriteChanged && (modal.should_close() || close) {
         app.pending_overwrite = None;
     }

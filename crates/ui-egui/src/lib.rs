@@ -612,7 +612,8 @@ pub struct PdfCraftApp {
     pub host_dirty: Option<HostDirtyFn>,
     /// A pending "save changes?" question (closing a dirty tab or quitting).
     pub close_request: Option<CloseRequest>,
-    /// A save waiting behind [`Dialog::OverwriteChanged`].
+    /// A save waiting behind [`Dialog::OverwriteChanged`] (the web build has no files to check).
+    #[cfg(not(target_arch = "wasm32"))]
     pub pending_overwrite: Option<editing::PendingOverwrite>,
     /// Save to this path instead of asking (tests and automation).
     pub save_override: Option<String>,
@@ -946,6 +947,7 @@ impl PdfCraftApp {
             host_save: None,
             host_dirty: None,
             close_request: None,
+            #[cfg(not(target_arch = "wasm32"))]
             pending_overwrite: None,
             save_override: None,
             props_draft: None,
