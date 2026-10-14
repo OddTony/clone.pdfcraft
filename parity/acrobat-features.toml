@@ -2058,8 +2058,8 @@ milestone = "M7"
 status = "shipped"
 commands = ["edit.edit_text", "edit.image"]
 tools = ["image_edit"]
-evidence = ["crates/edit/src/tests.rs::page_images_move_turn_replace_and_delete", "crates/ui-egui/tests/editing.rs::editing_existing_images_on_the_page", "crates/automation/tests/automation.rs::editing_page_images_through_tools"]
-notes = "existing page images (right-click ▸ Replace Image) and added images: the new picture is drawn in the same place"
+evidence = ["crates/edit/src/tests.rs::page_images_move_turn_replace_and_delete", "crates/ui-egui/tests/editing.rs::editing_existing_images_on_the_page", "crates/automation/tests/automation.rs::editing_page_images_through_tools", "crates/ui-egui/tests/editing.rs::right_clicking_an_image_opens_its_menu_alone"]
+notes = "existing page images (right-click ▸ Replace image) and added images: the new picture is drawn in the same place. The right-click menu is laid out as Acrobat's image menu and opens alone, on the first right-click: Add comment, rotate, Delete, Cut, Copy, Copy Image in Original Format, Flip horizontal and vertical, Replace image, Draw freehand, Redact image, Export image, Create link and Recognize text; Crop image, Paste, Remove crop, Arrange image and Edit image using are shown disabled until they exist."
 
 [[feature]]
 id = "edit.image-crop"
@@ -2107,7 +2107,7 @@ status = "shipped"
 commands = ["edit.edit_text"]
 tools = ["image_save"]
 evidence = ["crates/edit/src/tests.rs::page_images_move_turn_replace_and_delete", "crates/ui-egui/tests/editing.rs::editing_existing_images_on_the_page", "crates/automation/tests/automation.rs::editing_page_images_through_tools", "crates/create/src/tests.rs::images_export_as_jpeg_unchanged_and_others_as_png"]
-notes = "right-click an image ▸ Save Image As: JPEG unchanged, others PNG"
+notes = "right-click an image ▸ Export image: JPEG unchanged, others PNG"
 
 [[feature]]
 id = "edit.image-external-editor"
