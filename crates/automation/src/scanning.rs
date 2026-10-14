@@ -25,6 +25,25 @@ impl Automation {
     }
 }
 
+impl Automation {
+    /// `scan_jobs`: list or show the journals under a folder. Read-only; honours the root like any path.
+    pub(crate) fn scan_jobs(&self, args: &Args) -> Result<Value> {
+        use crate::scan_jobs as jobs;
+        let dir = args.opt_str("dir")?.unwrap_or(".");
+        let folder = self.resolve(dir, false)?;
+        if args.opt_bool("show")?.unwrap_or(false) {
+            let record = jobs::read_record(&folder).map_err(failed)?;
+            return Ok(json!({ "job": jobs::job_json(&folder, &record), "text": jobs::detail_text(&folder, &record) }));
+        }
+        // The folder and its immediate subfolders; a subfolder that resolves outside the folder (a link) is left out.
+        let real = folder.canonicalize().map_err(|error| failed(format!("{dir}: {error}")))?;
+        let mut candidates = jobs::candidate_dirs(&[], &folder);
+        candidates.retain(|candidate| candidate == &folder || candidate.canonicalize().is_ok_and(|path| path.starts_with(&real)));
+        let (lines, rows) = jobs::jobs_listing(&candidates, &folder);
+        Ok(json!({ "count": rows.len(), "jobs": rows, "lines": lines }))
+    }
+}
+
 /// `{kind, phase, hresult, code_name, retryable, resumable, message}` for a failed scan: the
 /// identity the engine settled on, so a caller reads fields and never the sentence. `hresult` is
 /// hex text (`0x80210006`); absent values are `null`. The vocabulary is `craft-scan`'s; `hresult` and
@@ -242,23 +261,29 @@ fn ref_row(item: &scan::ScannerRef, details: scan::ListDetails) -> Value {
 }
 
 fn opened_row(item: &scan::ScannerRef, open: &mut OpenScanner<'_>) -> Value {
+    opened_pair(item, open).0
+}
+
+/// The row for one opened device, and the scanner itself when it opened.
+fn opened_pair(item: &scan::ScannerRef, open: &mut OpenScanner<'_>) -> (Value, Option<scan::Scanner>) {
     match open(&item.id) {
         Ok(scanner) => {
             let mut row = scanner_json(&scanner);
             if let Some(map) = row.as_object_mut() {
                 map.insert("details".into(), json!(scan::ListDetails::Loaded.as_str()));
             }
-            row
+            (row, Some(scanner))
         }
         Err(error) => {
             let mut row = ref_row(item, scan::ListDetails::Error);
             if let Some(map) = row.as_object_mut() {
                 map.insert("error".into(), json!(error.to_string()));
             }
-            row
+            (row, None)
         }
     }
 }
+
 fn scanner_json(scanner: &scan::Scanner) -> Value {
     let status = scanner.handling_status;
     json!({
@@ -319,6 +344,302 @@ fn area_json(area: Option<(u32, u32)>) -> Value {
 
 fn span_json(span: Option<scan::ValueSpan>) -> Value {
     span.map(|span| json!({ "min": span.min, "max": span.max, "step": span.step })).unwrap_or(Value::Null)
+}
+
+/// What `scan check` was asked. Nothing is opened unless `details` or `device` says so, and nothing
+/// moves unless `acquire` is set.
+#[derive(Clone, Debug, Default)]
+pub struct ScanCheckOptions {
+    /// Open the matching device (id, name or port text) and read its capabilities. Exactly one must match.
+    pub device: Option<String>,
+    /// Open every device that is not denied.
+    pub details: bool,
+    /// Make one low-resolution acquire from `device`. The scanner moves.
+    pub acquire: bool,
+    /// Keep the acquired pixels in this folder. Without it the pixels are dropped after counting.
+    pub out: Option<std::path::PathBuf>,
+}
+
+/// The report of a check, and whether it found nothing wrong (the CLI exits non-zero when not).
+#[derive(Clone, Debug)]
+pub struct ScanCheck {
+    pub report: Value,
+    pub ok: bool,
+}
+
+/// The resolution a check acquire asks for.
+pub const CHECK_ACQUIRE_DPI: u32 = 100;
+
+/// The line shown just before a check acquire moves the scanner.
+pub const CHECK_ACQUIRE_WARNING: &str = "scan check --acquire makes the scanner move: it will scan one page at 100 dpi";
+
+type AcquireScanner<'a> = dyn FnMut(&scan::ScanSettings) -> std::result::Result<scan::Acquired, scan::ScanError> + 'a;
+
+/// Report what the scan stack sees (`pdfcraft-cli scan check`), through the real backend and the
+/// deny list (`CRAFT_SCAN_DENY`). `notice` receives [`CHECK_ACQUIRE_WARNING`] right before an acquire.
+pub fn scan_check(options: &ScanCheckOptions, notice: &mut dyn FnMut(&str)) -> Result<ScanCheck> {
+    let denied = scan::deny_list();
+    run_check(
+        options,
+        scan::supported(),
+        &denied,
+        &mut scan::scanner_list,
+        &mut |id| scan::scanner_details(id),
+        &mut |settings| scan::acquire(settings),
+        notice,
+    )
+}
+
+fn run_check(
+    options: &ScanCheckOptions,
+    supported: bool,
+    denied: &[String],
+    list: &mut dyn FnMut() -> std::result::Result<scan::Listing<scan::ScannerRef>, scan::ScanError>,
+    open: &mut OpenScanner<'_>,
+    acquire: &mut AcquireScanner<'_>,
+    notice: &mut dyn FnMut(&str),
+) -> Result<ScanCheck> {
+    // Guards first: they hold on every platform and before any device is touched.
+    if options.acquire && options.device.is_none() {
+        return Err(ToolError::InvalidArgs("--acquire needs --device ID: it makes the scanner move, so it never picks a device by itself".into()));
+    }
+    if options.out.is_some() && !options.acquire {
+        return Err(ToolError::InvalidArgs("--out only applies together with --acquire".into()));
+    }
+    check_filter(options.device.as_deref(), denied)?;
+    if !supported {
+        return Err(failed(scan::ScanError::Unsupported.to_string()));
+    }
+    let (listed, backend_errors) = refs_from(list().map_err(failed)?)?;
+    let mut problems: Vec<String> = Vec::new();
+    for failure in &backend_errors {
+        problems.push(format!("{}: {}", failure["backend"].as_str().unwrap_or("?"), failure["error"].as_str().unwrap_or("it did not list")));
+    }
+    let mut opened: Option<scan::Scanner> = None;
+    let rows: Vec<Value> = if let Some(text) = options.device.as_deref() {
+        let exact: Vec<&scan::ScannerRef> = listed.iter().filter(|item| item.id == text).collect();
+        let matched: Vec<&scan::ScannerRef> = if exact.len() == 1 { exact } else { listed.iter().filter(|item| item.matches(text)).collect() };
+        let item = match matched.as_slice() {
+            [] => return Err(failed(format!("no scanner matches {text:?} (pdfcraft-cli scan check lists them)"))),
+            [item] => *item,
+            many => {
+                let ids: Vec<&str> = many.iter().map(|item| item.id.as_str()).collect();
+                return Err(failed(format!("{text:?} matches {} scanners; pass one id: {}", many.len(), ids.join(", "))));
+            }
+        };
+        if item.is_denied(denied) {
+            return Err(denied_error());
+        }
+        let (row, scanner) = opened_pair(item, open);
+        opened = scanner;
+        vec![row]
+    } else {
+        listed
+            .iter()
+            .map(|item| {
+                if !options.details {
+                    ref_row(item, scan::ListDetails::Skipped)
+                } else if item.is_denied(denied) {
+                    ref_row(item, scan::ListDetails::Denied)
+                } else {
+                    opened_row(item, open)
+                }
+            })
+            .collect()
+    };
+    for row in &rows {
+        if row["details"] == scan::ListDetails::Error.as_str() {
+            let name = row["name"].as_str().unwrap_or("?");
+            let reason = row["error"].as_str().unwrap_or("it did not open");
+            problems.push(format!("{name}: {reason}"));
+        }
+    }
+    let mut acquire_report = Value::Null;
+    if options.acquire {
+        acquire_report = match &opened {
+            None => {
+                problems.push("acquire skipped: the device did not open".into());
+                json!({ "ok": false, "error": "the device did not open" })
+            }
+            Some(scanner) => check_acquire(scanner, options.out.as_deref(), acquire, notice, &mut problems),
+        };
+    }
+    let mode = if options.device.is_some() {
+        "device"
+    } else if options.details {
+        "details"
+    } else {
+        "list"
+    };
+    let ok = problems.is_empty();
+    let mut report = json!({
+        "supported": true,
+        "mode": mode,
+        "count": rows.len(),
+        "scanners": rows,
+        "acquire": acquire_report,
+        "ok": ok,
+        "problems": problems,
+    });
+    if !backend_errors.is_empty() {
+        report["errors"] = Value::Array(backend_errors);
+    }
+    Ok(ScanCheck { report, ok })
+}
+
+/// One 100 dpi grey page from `scanner`: the glass when it has one (so no paper is pulled), else the feeder.
+fn check_acquire(
+    scanner: &scan::Scanner,
+    out: Option<&Path>,
+    acquire: &mut AcquireScanner<'_>,
+    notice: &mut dyn FnMut(&str),
+    problems: &mut Vec<String>,
+) -> Value {
+    let source = if scanner.flatbed {
+        scan::Source::Glass
+    } else if scanner.feeder {
+        scan::Source::Feeder
+    } else {
+        scan::Source::Auto
+    };
+    let choices = if source == scan::Source::Feeder { scanner.feeder_choices.as_ref() } else { scanner.glass.as_ref() };
+    let dpi = choices.and_then(|choices| choices.dpi.iter().copied().filter(|dpi| *dpi >= CHECK_ACQUIRE_DPI).min()).unwrap_or(CHECK_ACQUIRE_DPI);
+    let settings =
+        scan::ScanSettings { device: scanner.id.clone(), source, dpi, color: scan::Color::Gray, pages: 1, ..scan::ScanSettings::default() };
+    if let Err(error) = settings.checked() {
+        problems.push(format!("acquire: {error}"));
+        return json!({ "ok": false, "error": error.to_string() });
+    }
+    notice(CHECK_ACQUIRE_WARNING);
+    match acquire(&settings) {
+        Ok(acquired) => {
+            let paths: Vec<Value> = match out {
+                Some(folder) => match scan::write_pages(folder, &acquired.pages) {
+                    Ok(paths) => paths.iter().map(|path| Value::String(path.display().to_string())).collect(),
+                    Err(error) => {
+                        problems.push(format!("acquire: could not save the pixels: {error}"));
+                        Vec::new()
+                    }
+                },
+                None => Vec::new(),
+            };
+            let pages: Vec<Value> = acquired
+                .pages
+                .iter()
+                .enumerate()
+                .map(|(index, page)| {
+                    json!({
+                        "format": page.format,
+                        "width": page.width,
+                        "height": page.height,
+                        "dpi": page.dpi,
+                        "bytes": page.bytes.len(),
+                        "path": paths.get(index).cloned().unwrap_or(Value::Null),
+                    })
+                })
+                .collect();
+            if pages.is_empty() {
+                problems.push("acquire: the scanner returned no page".into());
+            }
+            json!({
+                "ok": !pages.is_empty(),
+                "source": acquired.source.as_str(),
+                "requested_dpi": dpi,
+                "count": pages.len(),
+                "pages": pages,
+            })
+        }
+        Err(error) => {
+            let info = scan::ScanErrorInfo::from_acquire(&error, &settings);
+            problems.push(format!("acquire: {error}"));
+            json!({ "ok": false, "error": error.to_string(), "error_info": scan_error_info_json(&info) })
+        }
+    }
+}
+
+/// The report as plain lines for a person (`--json` prints the report itself).
+pub fn render_check_text(report: &Value) -> String {
+    let mut out = String::new();
+    let count = report["count"].as_u64().unwrap_or(0);
+    out.push_str(&format!("scanners: {count}\n"));
+    for row in report["scanners"].as_array().map(Vec::as_slice).unwrap_or_default() {
+        let text = |key: &str| row[key].as_str().unwrap_or("-").to_string();
+        out.push_str(&format!(
+            "- {} [{}] port {}\n  id {}\n  details: {}\n",
+            text("name"),
+            text("connection"),
+            text("port"),
+            text("id"),
+            text("details")
+        ));
+        if let Some(error) = row["error"].as_str() {
+            out.push_str(&format!("  error: {error}\n"));
+        }
+        if row["details"] != scan::ListDetails::Loaded.as_str() {
+            continue;
+        }
+        let yes = |key: &str| if row[key] == true { "yes" } else { "no" };
+        out.push_str(&format!(
+            "  sources: glass {}, feeder {}, duplex {}; feeder ready {}\n",
+            yes("flatbed"),
+            yes("feeder"),
+            yes("duplex"),
+            yes("feeder_ready")
+        ));
+        let conditions =
+            row["conditions"].as_array().map(|list| list.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+        out.push_str(&format!("  document handling: {}\n", if conditions.is_empty() { "no fault set" } else { &conditions }));
+        for label in ["bed", "sheet"] {
+            if let (Some(w), Some(h)) = (row[label]["width"].as_f64(), row[label]["height"].as_f64()) {
+                out.push_str(&format!("  {label} size: {:.2} x {:.2} in\n", w / 1000.0, h / 1000.0));
+            }
+        }
+        for (label, key) in [("glass", "glass"), ("feeder", "feeder_choices")] {
+            let choices = &row[key];
+            if choices.is_null() {
+                continue;
+            }
+            let list = |name: &str| {
+                let items = choices[name]
+                    .as_array()
+                    .map(|list| list.iter().map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string)).collect::<Vec<_>>());
+                match items {
+                    Some(items) if !items.is_empty() => items.join(","),
+                    _ => "-".to_string(),
+                }
+            };
+            out.push_str(&format!("  {label}: dpi {}; colors {}; formats {}\n", list("dpi"), list("colors"), list("formats")));
+        }
+    }
+    if !report["acquire"].is_null() {
+        let acquire = &report["acquire"];
+        if acquire["ok"] == true {
+            out.push_str(&format!("acquire: ok, {} page(s) from the {}\n", acquire["count"], acquire["source"].as_str().unwrap_or("?")));
+            for page in acquire["pages"].as_array().map(Vec::as_slice).unwrap_or_default() {
+                out.push_str(&format!(
+                    "  {} {}x{} at {} dpi, {} bytes{}\n",
+                    page["format"].as_str().unwrap_or("?"),
+                    page["width"],
+                    page["height"],
+                    page["dpi"],
+                    page["bytes"],
+                    page["path"].as_str().map(|path| format!(", saved to {path}")).unwrap_or_default()
+                ));
+            }
+        } else {
+            out.push_str(&format!("acquire: failed: {}\n", acquire["error"].as_str().unwrap_or("?")));
+        }
+    }
+    let problems: Vec<&str> = report["problems"].as_array().map(|list| list.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    if problems.is_empty() {
+        out.push_str("result: ok\n");
+    } else {
+        out.push_str(&format!("result: {} problem(s)\n", problems.len()));
+        for problem in problems {
+            out.push_str(&format!("  - {problem}\n"));
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -561,5 +882,243 @@ mod tests {
         assert!(detail_row_for("{zz}", &[], &fixture(), &mut |id| open_fake(&mut opened, id)).is_err());
         assert!(detail_row_for("{b}", &scan::parse_deny_list("office"), &fixture(), &mut |id| open_fake(&mut opened, id)).is_err());
         assert_eq!(opened, ["{a}", "{c}"]);
+    }
+
+    // ---- scan check ----
+
+    fn check_with(
+        options: &ScanCheckOptions,
+        supported: bool,
+        denied: &[String],
+        log: &mut Vec<String>,
+        notices: &mut Vec<String>,
+        acquire_result: std::result::Result<scan::Acquired, scan::ScanError>,
+    ) -> Result<ScanCheck> {
+        let mut result = Some(acquire_result);
+        let cell = std::cell::RefCell::new(log);
+        run_check(
+            options,
+            supported,
+            denied,
+            &mut || {
+                cell.borrow_mut().push("list".into());
+                Ok(scan::Listing { items: fixture(), errors: Vec::new() })
+            },
+            &mut |id| {
+                cell.borrow_mut().push(format!("open {id}"));
+                if id == "{c}" { Err(scan::ScanError::Failed("The device is busy.".into())) } else { Ok(scanner_for(id)) }
+            },
+            &mut |settings| {
+                cell.borrow_mut().push(format!("acquire {} {} {}", settings.device, settings.dpi, settings.pages));
+                result.take().unwrap_or(Err(scan::ScanError::Failed("second acquire".into())))
+            },
+            &mut |text| notices.push(text.to_string()),
+        )
+    }
+
+    #[test]
+    fn a_backend_that_failed_to_list_is_a_problem_of_the_check() {
+        let check = run_check(
+            &ScanCheckOptions::default(),
+            true,
+            &[],
+            &mut || {
+                let failure = scan::BackendError { backend: "wia", error: scan::ScanError::Failed("The scanner is offline.".into()) };
+                Ok(scan::Listing { items: fixture(), errors: vec![failure] })
+            },
+            &mut |id| open_fake(&mut Vec::new(), id),
+            &mut |_| Err(scan::ScanError::Failed("no acquire".into())),
+            &mut |_| {},
+        )
+        .unwrap();
+        assert!(!check.ok, "{}", check.report);
+        assert_eq!(check.report["problems"], json!(["wia: The scanner is offline."]));
+        assert_eq!(check.report["errors"], json!([{ "backend": "wia", "error": "The scanner is offline." }]));
+        assert_eq!(check.report["count"], 3);
+    }
+
+    fn one_page() -> scan::Acquired {
+        let page = scan::Page { bytes: b"BM0123456789".to_vec(), format: "bmp", width: 85, height: 117, dpi: 100, thresholded: false };
+        scan::Acquired { source: scan::Source::Glass, pages: vec![page] }
+    }
+
+    fn run(options: &ScanCheckOptions) -> (Result<ScanCheck>, Vec<String>, Vec<String>) {
+        let (mut log, mut notices) = (Vec::new(), Vec::new());
+        let result = check_with(options, true, &[], &mut log, &mut notices, Ok(one_page()));
+        (result, log, notices)
+    }
+
+    fn sorted_keys(value: &Value) -> Vec<&str> {
+        let mut keys: Vec<&str> = value.as_object().unwrap().keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        keys
+    }
+
+    #[test]
+    fn check_lists_cheaply_and_opens_nothing_by_default() {
+        let (result, log, notices) = run(&ScanCheckOptions::default());
+        let check = result.unwrap();
+        assert_eq!(log, ["list"]);
+        assert!(notices.is_empty());
+        assert!(check.ok);
+        assert_eq!(check.report["mode"], "list");
+        assert_eq!(check.report["count"], 3);
+        assert_eq!(check.report["scanners"][0]["details"], "skipped");
+        assert!(check.report["acquire"].is_null());
+        let text = render_check_text(&check.report);
+        assert!(text.contains("scanners: 3") && text.contains("Fake Scanner") && text.contains("result: ok"), "{text}");
+    }
+
+    #[test]
+    fn check_details_opens_every_device_and_a_failed_open_is_a_problem() {
+        let options = ScanCheckOptions { details: true, ..ScanCheckOptions::default() };
+        let (result, log, _) = run(&options);
+        let check = result.unwrap();
+        assert_eq!(log, ["list", "open {a}", "open {b}", "open {c}"]);
+        assert!(!check.ok, "a device that will not open fails the check");
+        assert_eq!(check.report["mode"], "details");
+        assert_eq!(check.report["scanners"][2]["details"], "error");
+        assert_eq!(check.report["problems"], json!(["Broken: The device is busy."]));
+        let text = render_check_text(&check.report);
+        assert!(text.contains("error: The device is busy.") && text.contains("1 problem(s)"), "{text}");
+    }
+
+    #[test]
+    fn check_device_opens_exactly_one_and_reports_its_capabilities() {
+        let options = ScanCheckOptions { device: Some("0000f2".into()), ..ScanCheckOptions::default() };
+        let (result, log, _) = run(&options);
+        let check = result.unwrap();
+        assert_eq!(log, ["list", "open {a}"]);
+        assert!(check.ok);
+        assert_eq!(check.report["mode"], "device");
+        assert_eq!(check.report["scanners"][0]["details"], "loaded");
+        let text = render_check_text(&check.report);
+        assert!(text.contains("sources: glass yes, feeder yes, duplex no") && text.contains("document handling: no fault set"), "{text}");
+    }
+
+    #[test]
+    fn check_device_refuses_no_match_many_matches_and_denied_devices() {
+        let (mut log, mut notices) = (Vec::new(), Vec::new());
+        for (text, wanted) in [("nothing like it", "no scanner matches"), ("e", "matches 3 scanners")] {
+            let options = ScanCheckOptions { device: Some(text.into()), ..ScanCheckOptions::default() };
+            let error = check_with(&options, true, &[], &mut log, &mut notices, Ok(one_page())).unwrap_err();
+            assert!(matches!(&error, ToolError::Failed(message) if message.contains(wanted)), "{text}: {error:?}");
+        }
+        let denied = scan::parse_deny_list("office");
+        let options = ScanCheckOptions { device: Some("{b}".into()), acquire: true, ..ScanCheckOptions::default() };
+        let error = check_with(&options, true, &denied, &mut log, &mut notices, Ok(one_page())).unwrap_err();
+        assert!(matches!(error, ToolError::Failed(_) | ToolError::InvalidArgs(_)), "{error:?}");
+        assert!(log.iter().all(|line| line == "list"), "nothing was opened: {log:?}");
+        assert!(notices.is_empty());
+    }
+
+    #[test]
+    fn check_json_schema_is_stable() {
+        let options = ScanCheckOptions { details: true, ..ScanCheckOptions::default() };
+        let (result, _, _) = run(&options);
+        let report = result.unwrap().report;
+        assert_eq!(sorted_keys(&report), ["acquire", "count", "mode", "ok", "problems", "scanners", "supported"]);
+        assert_eq!(
+            sorted_keys(&report["scanners"][0]),
+            [
+                "bed",
+                "conditions",
+                "connection",
+                "details",
+                "duplex",
+                "feeder",
+                "feeder_capacity",
+                "feeder_choices",
+                "feeder_ready",
+                "flatbed",
+                "glass",
+                "handling_status",
+                "id",
+                "name",
+                "optical_x",
+                "optical_y",
+                "pages",
+                "port",
+                "sheet"
+            ]
+        );
+        assert_eq!(report["scanners"][0]["handling_status"].as_object().unwrap().len(), scan::HandlingStatus::FLAG_NAMES.len());
+        let options = ScanCheckOptions { device: Some("{a}".into()), acquire: true, ..ScanCheckOptions::default() };
+        let (result, _, _) = run(&options);
+        let acquire = result.unwrap().report["acquire"].clone();
+        assert_eq!(sorted_keys(&acquire), ["count", "ok", "pages", "requested_dpi", "source"]);
+        assert_eq!(sorted_keys(&acquire["pages"][0]), ["bytes", "dpi", "format", "height", "path", "width"]);
+    }
+
+    #[test]
+    fn check_acquire_needs_a_device_and_touches_nothing_without_one() {
+        let (mut log, mut notices) = (Vec::new(), Vec::new());
+        for options in [
+            ScanCheckOptions { acquire: true, ..ScanCheckOptions::default() },
+            ScanCheckOptions { acquire: true, details: true, ..ScanCheckOptions::default() },
+        ] {
+            let error = check_with(&options, true, &[], &mut log, &mut notices, Ok(one_page())).unwrap_err();
+            assert!(matches!(&error, ToolError::InvalidArgs(message) if message.contains("--acquire needs --device")), "{error:?}");
+        }
+        let options = ScanCheckOptions { out: Some(std::env::temp_dir()), ..ScanCheckOptions::default() };
+        assert!(matches!(check_with(&options, true, &[], &mut log, &mut notices, Ok(one_page())), Err(ToolError::InvalidArgs(_))));
+        assert!(log.is_empty() && notices.is_empty(), "no list, open or acquire happened: {log:?}");
+    }
+
+    #[test]
+    fn check_acquire_warns_then_scans_one_page_at_100_dpi_and_reports_only_facts() {
+        let options = ScanCheckOptions { device: Some("{a}".into()), acquire: true, ..ScanCheckOptions::default() };
+        let (result, log, notices) = run(&options);
+        let check = result.unwrap();
+        assert_eq!(log, ["list", "open {a}", "acquire {a} 100 1"]);
+        assert_eq!(notices, [CHECK_ACQUIRE_WARNING]);
+        assert!(CHECK_ACQUIRE_WARNING.contains("makes the scanner move") && !CHECK_ACQUIRE_WARNING.contains('\n'));
+        assert!(check.ok);
+        let acquire = &check.report["acquire"];
+        assert_eq!((acquire["ok"].clone(), acquire["count"].clone(), acquire["source"].clone()), (json!(true), json!(1), json!("glass")));
+        assert_eq!(acquire["pages"][0]["bytes"], 12);
+        assert_eq!(acquire["pages"][0]["format"], "bmp");
+        assert!(acquire["pages"][0]["path"].is_null(), "pixels are not written without --out");
+        assert!(render_check_text(&check.report).contains("bmp 85x117 at 100 dpi, 12 bytes"));
+    }
+
+    #[test]
+    fn check_acquire_writes_pixels_only_into_out() {
+        let folder = std::env::temp_dir().join(format!("pdfcraft-scan-check-out-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        let options = ScanCheckOptions { device: Some("{a}".into()), acquire: true, out: Some(folder.clone()), ..ScanCheckOptions::default() };
+        let (result, _, _) = run(&options);
+        let check = result.unwrap();
+        let path = check.report["acquire"]["pages"][0]["path"].as_str().unwrap().to_string();
+        assert_eq!(std::fs::read(&path).unwrap(), b"BM0123456789");
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    #[test]
+    fn check_acquire_failure_and_unopenable_device_are_problems_with_data() {
+        let (mut log, mut notices) = (Vec::new(), Vec::new());
+        let options = ScanCheckOptions { device: Some("{a}".into()), acquire: true, ..ScanCheckOptions::default() };
+        let busy = hresult_error(scan::InterruptKind::Busy, 0x8021_0006, "WIA_ERROR_BUSY", "The scanner is busy. Try again in a moment.");
+        let check = check_with(&options, true, &[], &mut log, &mut notices, Err(busy)).unwrap();
+        assert!(!check.ok);
+        assert_eq!(check.report["acquire"]["ok"], false);
+        assert_eq!(check.report["acquire"]["error_info"]["kind"], "busy");
+        let options = ScanCheckOptions { device: Some("{c}".into()), acquire: true, ..ScanCheckOptions::default() };
+        let (mut log, mut notices) = (Vec::new(), Vec::new());
+        let check = check_with(&options, true, &[], &mut log, &mut notices, Ok(one_page())).unwrap();
+        assert!(!check.ok);
+        assert!(log.iter().all(|line| !line.starts_with("acquire")), "{log:?}");
+        assert!(notices.is_empty(), "the warning is only for a scan that really starts");
+    }
+
+    #[test]
+    fn check_without_windows_says_so_after_the_guards_and_touches_nothing() {
+        let (mut log, mut notices) = (Vec::new(), Vec::new());
+        let error = check_with(&ScanCheckOptions::default(), false, &[], &mut log, &mut notices, Ok(one_page())).unwrap_err();
+        assert!(matches!(&error, ToolError::Failed(m) if m == "scanning is only supported on Windows (WIA) in this version"), "{error:?}");
+        let options = ScanCheckOptions { acquire: true, ..ScanCheckOptions::default() };
+        let error = check_with(&options, false, &[], &mut log, &mut notices, Ok(one_page())).unwrap_err();
+        assert!(matches!(error, ToolError::InvalidArgs(_)), "the guard answers the same on every platform");
+        assert!(log.is_empty() && notices.is_empty());
     }
 }

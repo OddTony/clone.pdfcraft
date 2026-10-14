@@ -18,6 +18,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod batch;
+mod scan_cmd;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -64,6 +65,8 @@ pdfcraft-cli batch <files or dirs...> --steps convert,ocr,optimize --out-dir DIR
                       [--ppi 150] [--quality 60] [--dpi 300] [--language en] [--ocr-all-pages]
 pdfcraft-cli scan   devices [--device TEXT | --details | --dump]
                       list scanners without opening them; --device opens matches, --details all; --dump every property the backend publishes (text)
+pdfcraft-cli scan   check [--details | --device TEXT [--acquire [--out DIR]]] [--json]
+                      what the scan stack sees; no paper moves unless --acquire (needs --device: one 100 dpi page; exit 1 on any problem)
 pdfcraft-cli scan   --out DIR --yes [--dpi 200] [--color gray|rgb|bw]
                       [--source auto|feeder|glass] [--pages 1|all] [--device NAME]
                       [--brightness N] [--contrast N] [--threshold N]
@@ -74,6 +77,21 @@ pdfcraft-cli scan   --out DIR --yes [--dpi 200] [--color gray|rgb|bw]
                       [--invert on|off] [--mirror on|off] [--lamp on|off] [--duplex]
                       [--reverse]  # 2nd pass: flip stack, scan backs in reverse, interleave
                       [--left IN] [--top IN] [--width IN] [--height IN]
+                      runs as one job: pages are saved to DIR as they arrive, DIR/scan-job.json records the job,
+                      the result is one JSON line, and the exit status says how it ended:
+                      0 completed, 10 needs attention (interrupted, finished short, or outcome unknown),
+                      11 failed, 12 cancelled; 1 is a usage or file error before any job state.
+                      Terminating the process mid-scan leaves the journal 'acquiring', read later as outcome unknown.
+pdfcraft-cli scan   jobs [DIR...] [--json]
+                      list the scan-job.json journals in each DIR (default: here and the folders directly below); opens no scanner
+pdfcraft-cli scan   job DIR [--json]
+                      one job in detail: state, pages kept and on disk, attempts, last error, next step; opens no scanner
+pdfcraft-cli scan   --continue DIR (--append | --restart) --yes [--i-checked-the-scanner]
+                      go on with a job from its journal and request. --append keeps the kept pages and scans the
+                      missing ones; --restart moves the kept page files to DIR/discarded-N and scans again; one is
+                      required when pages are kept. A job that needs attention (outcome unknown) is refused until you
+                      have looked at the scanner and add --i-checked-the-scanner: a repeated acquire moves the carriage
+                      and pulls paper
 pdfcraft-cli tools                                       automation tools and their JSON Schemas
 pdfcraft-cli run    <tool> [key=value …] [--root DIR] [--out image.png]
 pdfcraft-cli run    --script steps.json [--root DIR]      [{\"tool\": \"doc_open\", \"args\": {…}}, …]
@@ -123,8 +141,11 @@ fn main() -> ExitCode {
         Err(e) => {
             let mut stderr = std::io::stderr().lock();
             let _ = writeln!(stderr, "pdfcraft-cli: {e}");
-            if let CliError::Scan { json, .. } = &e {
-                let _ = writeln!(stderr, "{json}");
+            if let CliError::Exit { code, json, .. } = &e {
+                if let Some(json) = json {
+                    let _ = writeln!(stderr, "{json}");
+                }
+                return ExitCode::from(*code);
             }
             ExitCode::FAILURE
         }
@@ -135,12 +156,15 @@ fn main() -> ExitCode {
 #[derive(Debug)]
 enum CliError {
     Message(String),
-    /// A failed scan: the message, and its identity as one line of JSON for stderr.
-    Scan {
-        message: String,
-        json: String,
-    },
     Stdout(std::io::Error),
+    /// A scan job that did not complete: its exit status by `ExitClass` (see `scan --help` text), the sentence
+    /// for stderr, and the failure's identity as one line of JSON when there is one. The result JSON is
+    /// already on stdout.
+    Exit {
+        code: u8,
+        message: String,
+        json: Option<String>,
+    },
 }
 
 impl From<String> for CliError {
@@ -158,7 +182,7 @@ impl From<&str> for CliError {
 impl std::fmt::Display for CliError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Message(message) | Self::Scan { message, .. } => f.write_str(message),
+            Self::Message(message) | Self::Exit { message, .. } => f.write_str(message),
             Self::Stdout(error) => write!(f, "stdout: {error}"),
         }
     }
@@ -945,11 +969,17 @@ const SCAN_OPTIONS: &[OptionSpec] = &[
     OptionSpec { name: "--top", takes_value: true },
     OptionSpec { name: "--width", takes_value: true },
     OptionSpec { name: "--height", takes_value: true },
+    OptionSpec { name: "--continue", takes_value: true },
+    OptionSpec { name: "--append", takes_value: false },
+    OptionSpec { name: "--restart", takes_value: false },
+    OptionSpec { name: "--i-checked-the-scanner", takes_value: false },
     OptionSpec { name: "--yes", takes_value: false },
     OptionSpec { name: "--duplex", takes_value: false },
     OptionSpec { name: "--reverse", takes_value: false },
     OptionSpec { name: "--dump", takes_value: false },
     OptionSpec { name: "--details", takes_value: false },
+    OptionSpec { name: "--acquire", takes_value: false },
+    OptionSpec { name: "--json", takes_value: false },
 ];
 
 /// `scan devices` lists scanners without opening any (id, name, port, connection, `details:
@@ -971,8 +1001,62 @@ fn ensure_scanning_supported() -> Result<(), CliError> {
     Err(format!("scan: {}", pdfcraft_platform::scan::ScanError::Unsupported).into())
 }
 
+/// `scan check`: report what the scan stack sees, without scanning. The device list is cheap (no
+/// device is opened); `--details` opens every device read-only and `--device TEXT` opens exactly one.
+/// `--acquire` (which needs `--device`) is the only part that moves the scanner: one 100 dpi page,
+/// reported as size, format and byte count, and saved only into `--out`. The report goes to stdout
+/// (`--json` for the machine form); exit status 1 means a device would not open or reported an error.
+fn scan_check(args: &[String]) -> Result<(), CliError> {
+    let mut options = pdfcraft_automation::ScanCheckOptions::default();
+    let mut json = false;
+    let mut index = 1;
+    while let Some(arg) = args.get(index) {
+        index += 1;
+        match arg.as_str() {
+            "--details" => options.details = true,
+            "--acquire" => options.acquire = true,
+            "--json" => json = true,
+            "--device" | "--out" => {
+                let value = args.get(index).filter(|value| !value.starts_with("--")).ok_or_else(|| format!("scan check: {arg} needs a value"))?;
+                index += 1;
+                if arg == "--device" {
+                    options.device = Some(value.clone());
+                } else {
+                    options.out = Some(PathBuf::from(value));
+                }
+            }
+            other => return Err(format!("scan check takes only --details, --device TEXT, --acquire, --out DIR, and --json (got {other})").into()),
+        }
+    }
+    let mut notice = |line: &str| eprintln!("pdfcraft-cli: {line}");
+    let check = pdfcraft_automation::scan_check(&options, &mut notice).map_err(|error| format!("scan check: {error}"))?;
+    if json {
+        let line = serde_json::to_string(&check.report).map_err(|error| format!("scan check: {error}"))?;
+        stdout_line(format_args!("{line}"))?;
+    } else {
+        stdout_line(format_args!("{}", pdfcraft_automation::render_check_text(&check.report).trim_end()))?;
+    }
+    if check.ok {
+        Ok(())
+    } else {
+        let count = check.report["problems"].as_array().map_or(0, Vec::len);
+        Err(format!("scan check: {count} problem(s) found").into())
+    }
+}
+
 fn scan(args: &[String]) -> Result<(), CliError> {
     validate_options("scan", args, SCAN_OPTIONS)?;
+    if args.first().map(String::as_str) == Some("check") {
+        return scan_check(args);
+    }
+    match args.first().map(String::as_str) {
+        Some("jobs") => return scan_cmd::jobs(args),
+        Some("job") => return scan_cmd::job(args),
+        _ => {}
+    }
+    if args.iter().any(|arg| arg == "--continue") {
+        return scan_continue(args);
+    }
     if args.iter().any(|arg| arg == "devices") {
         let dump = args.iter().any(|arg| arg == "--dump");
         let details = args.iter().any(|arg| arg == "--details");
@@ -1091,44 +1175,58 @@ fn scan(args: &[String]) -> Result<(), CliError> {
     };
     settings.checked().map_err(|error| format!("scan: {error}"))?;
     ensure_scanning_supported()?;
-    let acquired = match pdfcraft_platform::scan::acquire(&settings) {
-        Ok(acquired) => acquired,
-        Err(error) => {
-            if let pdfcraft_platform::scan::ScanError::Incomplete { acquired, .. } = &error {
-                let _ = save_scan_pages(&folder, &acquired.pages);
-            }
-            return Err(scan_failure(&error, &settings));
+    refuse_a_folder_that_has_a_job(&folder, reverse)?;
+    scan_cmd::run(scan_cmd::Run { folder, settings, reverse, front_files, resume: None })
+}
+
+/// One job per output folder. A fresh scan does not start in a folder that already holds a journal (it
+/// would overwrite the record of what happened there) or page files (the pages would collide). The one
+/// exception is `--reverse`, which belongs after a completed front pass in the same folder.
+fn refuse_a_folder_that_has_a_job(folder: &Path, reverse: bool) -> Result<(), CliError> {
+    use pdfcraft_automation::scan_jobs;
+    if folder.join(scan_jobs::JOB_FILE).is_file() {
+        let record = scan_jobs::read_record(folder).map_err(|error| format!("scan: {error}"))?;
+        let complete =
+            record.effective_state() == pdfcraft_platform::scan::job::ScanJobState::Terminal(pdfcraft_platform::scan::job::Outcome::Completed);
+        if !(reverse && complete) {
+            return Err(format!(
+                "scan: {} already holds a scan job ({}). One job per folder: look at it with `pdfcraft-cli scan job {}`, go on with `scan --continue {}`, or scan into another folder",
+                folder.display(),
+                record.summary_line(),
+                folder.display(),
+                folder.display()
+            )
+            .into());
         }
-    };
-    let saved = if let Some(front_files) = front_files {
-        save_reverse_pass(&folder, &front_files, &acquired.pages)?
-    } else {
-        save_scan_pages(&folder, &acquired.pages)?
-    };
-    let result = serde_json::json!({
-        "source": acquired.source.name(),
-        "requested_source": settings.source.name(),
-        "reverse": reverse,
-        "count": saved.len(),
-        "pages": saved,
-    });
-    let line = serde_json::to_string(&result).map_err(|error| format!("scan: {error}"))?;
-    stdout_line(format_args!("{line}"))
+    }
+    if !reverse {
+        let files = pdfcraft_platform::scan::listed_page_files(folder).map_err(|error| format!("scan: {error}"))?;
+        if !files.is_empty() {
+            return Err(format!("scan: {} already holds {} page file(s); scan into an empty folder", folder.display(), files.len()).into());
+        }
+    }
+    Ok(())
 }
 
-/// A failed acquire: the same `scan: <sentence>` line as always, plus one JSON line on stderr
-/// (`{"scan_error": {kind, phase, hresult, code_name, retryable, resumable, message}}`) so a caller
-/// reads fields instead of the sentence.
-fn scan_failure(error: &pdfcraft_platform::scan::ScanError, settings: &pdfcraft_platform::scan::ScanSettings) -> CliError {
-    let info = pdfcraft_platform::scan::ScanErrorInfo::from_acquire(error, settings);
-    let json = serde_json::json!({ "scan_error": pdfcraft_automation::scan_error_info_json(&info) }).to_string();
-    CliError::Scan { message: format!("scan: {error}"), json }
-}
-
-fn save_scan_pages(folder: &Path, pages: &[pdfcraft_platform::scan::Page]) -> Result<Vec<serde_json::Value>, CliError> {
-    // Optional disk sink — acquire itself only returned in-memory pages.
-    let paths = pdfcraft_platform::scan::write_pages(folder, pages).map_err(|error| format!("scan: {error}"))?;
-    Ok(paths.iter().zip(pages).map(|(path, page)| page_json(path, page)).collect())
+/// `scan --continue DIR`: the settings come from the job file, so no scan option may be given beside it.
+fn scan_continue(args: &[String]) -> Result<(), CliError> {
+    const ALLOWED: &[&str] = &["--continue", "--append", "--restart", "--yes", "--i-checked-the-scanner"];
+    let dir = option_value(args, "--continue")?.ok_or("scan: --continue needs DIR")?;
+    if let Some(other) = args.iter().filter(|arg| arg.starts_with("--")).find(|arg| !ALLOWED.contains(&arg.as_str())) {
+        return Err(format!(
+            "scan --continue takes only --append or --restart, --yes and --i-checked-the-scanner; the settings come from the job file (got {other})"
+        )
+        .into());
+    }
+    if !args.iter().any(|arg| arg == "--yes") {
+        return Err("scan: --yes is required, because this pulls paper".into());
+    }
+    let flags = scan_cmd::ContinueFlags {
+        append: args.iter().any(|arg| arg == "--append"),
+        restart: args.iter().any(|arg| arg == "--restart"),
+        checked: args.iter().any(|arg| arg == "--i-checked-the-scanner"),
+    };
+    scan_cmd::continue_job(Path::new(dir), &flags)
 }
 
 /// Fronts already on disk; `backs` just scanned after the stack was flipped (last sheet first).
@@ -1270,28 +1368,6 @@ fn current_uid() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::control_file_problem;
-
-    #[test]
-    fn a_failed_scan_adds_its_identity_as_one_json_line_and_keeps_the_sentence() {
-        use pdfcraft_platform::scan::{InterruptKind, NativeCode, ScanError, ScanSettings};
-        let settings = ScanSettings { pages: 2, ..ScanSettings::default() };
-        let error = ScanError::native_error(
-            InterruptKind::MultiFeed,
-            NativeCode::hresult(0x8021_0020, Some("WIA_ERROR_MULTI_FEED")),
-            "The feeder took more than one sheet.",
-        );
-        let super::CliError::Scan { message, json } = super::scan_failure(&error, &settings) else {
-            panic!("a scan failure is a Scan error");
-        };
-        assert_eq!(message, format!("scan: {error}"));
-        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let info = &value["scan_error"];
-        assert_eq!(info["kind"], "multi_feed");
-        assert_eq!(info["phase"], "before_first_page");
-        assert_eq!(info["hresult"], "0x80210020");
-        assert_eq!(info["code_name"], "WIA_ERROR_MULTI_FEED");
-        assert_eq!((info["retryable"].clone(), info["resumable"].clone()), (serde_json::json!(true), serde_json::json!(false)));
-    }
 
     #[test]
     fn a_control_file_must_be_yours_and_private() {

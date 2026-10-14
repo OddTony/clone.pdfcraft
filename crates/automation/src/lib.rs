@@ -24,6 +24,7 @@ mod measure;
 mod printing;
 mod reading;
 mod redact;
+pub mod scan_jobs;
 mod scanning;
 mod signing;
 mod text_cache;
@@ -38,7 +39,9 @@ use pdfcraft_platform::staging::{StagingName, create_staging, staging_suffixes};
 use pdfcraft_render::{PageRenderer, PageText, RenderConfig, RenderRequest, RequestKind};
 use serde_json::{Value, json};
 
-pub use scanning::{list_scan_devices, scan_device_details, scan_error_info_json};
+pub use scanning::{
+    CHECK_ACQUIRE_WARNING, ScanCheck, ScanCheckOptions, list_scan_devices, render_check_text, scan_check, scan_device_details, scan_error_info_json,
+};
 pub use tools::{ToolDef, tools};
 
 /// One piece of a tool's result.
@@ -289,6 +292,7 @@ impl Automation {
             "command_batch" => self.command_batch(&a)?,
             "scan_devices" => self.scan_devices(&a)?,
             "scan_acquire" => self.scan_acquire(&a)?,
+            "scan_jobs" => self.scan_jobs(&a)?,
             "doc_inspect" => self.doc_inspect(&a)?,
             "render_preview" => return self.render_preview(&a).map(|c| vec![c]),
             "page_number" => {
@@ -2516,6 +2520,49 @@ mod tests {
         let warnings = failures["warnings"].as_array().unwrap();
         assert_eq!(warnings.len(), FIND_MAX_WARNINGS);
         assert!(warnings.iter().all(|w| w["error"].as_str().unwrap().len() <= FIND_MAX_WARNING_BYTES && w["error_truncated"] == true));
+    }
+
+    #[test]
+    fn scan_jobs_lists_and_shows_journals_inside_the_root_and_nothing_else() {
+        use crate::scan_jobs::{JOB_FILE, JobRecord, request_json, write_record};
+        use pdfcraft_platform::scan::{
+            ScanSettings,
+            job::{ScanJob, ScanJobConfig},
+        };
+        let base = std::env::temp_dir().join(format!("pdfcraft-automation-scanjobs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("root");
+        let outside = base.join("outside");
+        for dir in [root.join("a"), root.join("b").join("deep"), outside.clone()] {
+            std::fs::create_dir_all(&dir).unwrap();
+        }
+        let settings = ScanSettings { pages: 2, ..ScanSettings::default() };
+        let record = || JobRecord {
+            id: "scan-9".into(),
+            started: 1_760_000_000_000,
+            updated: 1_760_000_001_000,
+            request: request_json(&settings, false),
+            journal: ScanJob::new(settings.clone(), ScanJobConfig::default().with_title("T")).snapshot().into_journal(),
+            view: Value::Null,
+            attempts: Vec::new(),
+        };
+        for dir in [root.join("a"), root.join("b").join("deep"), outside.clone()] {
+            write_record(&dir, &record()).unwrap();
+        }
+        let mut a = Automation::new().with_root(&root).unwrap();
+        let listed = json(&mut a, "scan_jobs", json!({}));
+        assert_eq!(listed["count"], 1, "one level down only: {listed}");
+        assert_eq!(listed["jobs"][0]["id"], "scan-9");
+        assert_eq!(listed["jobs"][0]["state"], "preparing");
+        let shown = json(&mut a, "scan_jobs", json!({ "dir": "a", "show": true }));
+        assert_eq!(shown["job"]["exit_code"], 10);
+        assert!(shown["text"].as_str().unwrap().contains("next:"), "{shown}");
+        for dir in [outside.display().to_string(), "..".to_string()] {
+            let error = a.call("scan_jobs", &json!({ "dir": dir })).unwrap_err();
+            assert!(error.to_string().contains("outside"), "{error}");
+        }
+        assert!(base.join("outside").join(JOB_FILE).is_file());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

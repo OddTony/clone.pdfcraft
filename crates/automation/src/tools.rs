@@ -1108,6 +1108,19 @@ pub fn tools() -> Vec<ToolDef> {
             }),
             &["out"],
         )),
+        t(
+            "scan_jobs",
+            "List or show scan jobs",
+            "Read-only: the journals (scan-job.json) that pdfcraft-cli scan and scan_acquire-style runs leave in a scan output folder. By default lists the jobs found in dir (default: the root) and its immediate subfolders: id, state, pages kept and wanted, attempts, last error kind, updated, folder, and a note when the page files on disk do not match the journal. With show=true, returns the one job in dir in full (request, journal, job view, attempt timeline, exit class). Never opens a scanner and never moves paper. To continue a job use pdfcraft-cli scan --continue DIR.",
+        )
+        .ro()
+        .with(schema(
+            json!({
+                "dir": { "type": "string", "description": "Folder to look in (default: the root). With show=true, the job folder itself." },
+                "show": { "type": "boolean", "description": "Return the one job in dir in detail (default false: list)." },
+            }),
+            &[],
+        )),
         t("doc_export_all_images", "Export all images", "Write the images that pages use into a folder (`<name>_Page_<n>_Image_<k>.jpg|png`), each once: JPEG images unchanged, others as PNG with their soft mask as alpha. min_size skips images with fewer pixels on their shorter side. Images that can't be decoded yet (JPEG 2000, JBIG2, CCITT, separations) are listed under skipped. Includes unsaved edits.")
             .cmd("export.all_images")
             .with(schema(
