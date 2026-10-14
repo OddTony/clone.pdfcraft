@@ -4182,3 +4182,30 @@ fn organize_panel_comes_with_the_grid_and_closes_it() {
     assert_eq!(h.state().left, pdfcraft_ui_egui::LeftPanel::AllTools);
     assert!(h.query_by_label("Page properties").is_none(), "the panel is gone");
 }
+
+/// Leaving Organize (a page opened from the grid, or the grid's Close) goes back to the
+/// workspace's panel: under the Edit tab, the Edit panel, not All tools.
+#[test]
+fn leaving_organize_goes_back_to_the_workspace_panel() {
+    use pdfcraft_ui_egui::{LeftPanel, Mode};
+    let mut h = harness(3, |_| {});
+    h.state_mut().mode = Mode::Edit;
+    h.state_mut().left = LeftPanel::Tool("edit");
+    h.run_steps(2);
+    h.state_mut().left = LeftPanel::Tool("organize");
+    h.state_mut().views[0].organize = true;
+    h.run_steps(3);
+    h.get_by_label("Pages selected".to_uppercase().as_str());
+    // What opening a page from the grid does.
+    h.state_mut().views[0].organize = false;
+    h.run_steps(3);
+    assert_eq!(h.state().left, LeftPanel::Tool("edit"), "back to the Edit panel");
+    // The same from All tools goes back to All tools.
+    h.state_mut().mode = Mode::AllTools;
+    h.state_mut().left = LeftPanel::Tool("organize");
+    h.state_mut().views[0].organize = true;
+    h.run_steps(3);
+    h.state_mut().views[0].organize = false;
+    h.run_steps(3);
+    assert_eq!(h.state().left, LeftPanel::AllTools);
+}

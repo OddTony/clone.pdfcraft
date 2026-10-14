@@ -20,6 +20,18 @@ pub(crate) fn showing(app: &PdfCraftApp) -> bool {
     app.left == LeftPanel::Tool("organize") || app.active.and_then(|i| app.views.get(i)).is_some_and(|v| v.organize)
 }
 
+/// The panel of the workspace Organize was opened from, shown again once Organize closes (by
+/// its Close, the grid's Close, or opening a page from the grid): Edit's panel under the Edit
+/// tab, as Acrobat goes back to the tool you came from, and All tools otherwise.
+pub(crate) fn workspace_panel(mode: crate::Mode) -> LeftPanel {
+    match mode {
+        crate::Mode::Edit => LeftPanel::Tool("edit"),
+        crate::Mode::Convert => LeftPanel::Tool("export"),
+        crate::Mode::Sign => LeftPanel::Tool("fill_sign"),
+        _ => LeftPanel::AllTools,
+    }
+}
+
 /// What a row does once clicked.
 enum Act {
     Edit(Edit),
@@ -150,7 +162,7 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
 
     if close {
         view.organize = false;
-        app.left = LeftPanel::AllTools;
+        app.left = workspace_panel(app.mode);
     } else if back {
         view.organize = false;
         app.left = LeftPanel::AllTools;
