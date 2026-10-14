@@ -795,10 +795,19 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 );
                 let view = &mut app.views[i];
                 view.queue_print_previews(&rasters);
-                let (go, cancel) = crate::print_ui::body(ui, &mut app.print_draft, &t, &sizes, &labels, &mut |p| {
-                    view.need_thumbnail(p, true);
-                    view.page_preview(p)
-                });
+                let (go, cancel) = crate::print_ui::body(
+                    ui,
+                    &mut app.print_draft,
+                    &t,
+                    &sizes,
+                    &labels,
+                    &mut |p| {
+                        view.need_thumbnail(p, true);
+                        view.page_preview(p)
+                    },
+                    #[cfg(network_print)]
+                    &mut app.print_tasks.net,
+                );
                 print_go = go;
                 close = go || cancel;
                 return;

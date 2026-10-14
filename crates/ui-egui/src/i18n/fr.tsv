@@ -2354,3 +2354,44 @@ animation effects	Off	Désactivés
 	This document is trying to open a local file:	Ce document tente d’ouvrir un fichier local :
 	Move tag earlier	Déplacer la balise plus tôt
 	Move tag later	Déplacer la balise plus tard
+# Network printer destination in Print (WS-Print). MACHINE-DRAFTED rows: need review by a native speaker.
+	Network printer (WS-Print)	Imprimante réseau (WS-Print)
+	Printer address:	Adresse de l'imprimante :
+	Query printer	Interroger l'imprimante
+	Asking the printer…	Interrogation de l'imprimante…
+	Printer status: {state}	État de l'imprimante : {state}
+	Reasons: {reasons}	Motifs : {reasons}
+	Quality:	Qualité :
+	Draft	Brouillon
+	Normal	Normale
+	Printer orientation:	Orientation de l'imprimante :
+	Reverse portrait	Portrait inversé
+	Reverse landscape	Paysage inversé
+	I confirm sending this document to this printer	Je confirme l'envoi de ce document à cette imprimante
+	Query the printer first to see what it supports.	Interrogez d'abord l'imprimante pour voir ce qu'elle prend en charge.
+	Only IP addresses on this network are accepted (private, link-local or loopback), not host names.	Seules les adresses IP de ce réseau sont acceptées (privées, de lien local ou de bouclage), pas les noms d'hôte.
+	Canceling…	Annulation…
+	The job was canceled	Le travail a été annulé
+	Printed with warnings	Imprimé avec des avertissements
+	Printed with errors	Imprimé avec des erreurs
+	The printer stopped the job	L'imprimante a arrêté le travail
+	The printer no longer lists the job; it most likely finished	L'imprimante ne liste plus le travail ; il est très probablement terminé
+	Still printing; the job continues on the printer	Impression en cours ; le travail continue sur l'imprimante
+	The printer address was refused	L'adresse de l'imprimante a été refusée
+	Couldn't reach the printer	Impossible de joindre l'imprimante
+	The printer's reply couldn't be understood	La réponse de l'imprimante n'a pas pu être comprise
+	The printer refused the request	L'imprimante a refusé la demande
+	The printer accepts none of the formats this document can be sent in	L'imprimante n'accepte aucun des formats dans lesquels ce document peut être envoyé
+	The printer doesn't support this setting	L'imprimante ne prend pas en charge ce réglage
+	The document couldn't be prepared	Le document n'a pas pu être préparé
+	A setting isn't valid	Un réglage n'est pas valide
+	The print job stopped unexpectedly	Le travail d'impression s'est arrêté de façon inattendue
+	Sheets printed: {n}	Feuilles imprimées : {n}
+	Accepted by {printer}	Accepté par {printer}
+	Waiting in the printer's queue	En attente dans la file de l'imprimante
+	Held by the printer	Retenu par l'imprimante
+	The printer is printing it	L'imprimante est en train de l'imprimer
+	The printer paused the job; it needs attention	L'imprimante a mis le travail en pause ; il demande votre attention
+	Sheets printed: {done} of {total}	Feuilles imprimées : {done} sur {total}
+	Sent. The printer can't say whether it printed.	Envoyé. L'imprimante ne peut pas dire si le document a été imprimé.
+	The printer may have received the document. Check the printer before sending again.	L'imprimante a peut-être reçu le document. Vérifiez l'imprimante avant de l'envoyer à nouveau.

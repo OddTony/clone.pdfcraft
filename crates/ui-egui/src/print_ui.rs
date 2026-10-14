@@ -78,6 +78,9 @@ pub struct PrintDraft {
     pub show_driver_options: bool,
     /// Why the printer's preferences window didn't open (Windows).
     pub driver_error: Option<String>,
+    /// The destination is a network printer (WS-Print) rather than `printer`.
+    #[cfg(network_print)]
+    pub network_dest: bool,
 }
 
 impl Default for PrintDraft {
@@ -118,11 +121,25 @@ impl Default for PrintDraft {
             driver_choices: Default::default(),
             show_driver_options: false,
             driver_error: None,
+            #[cfg(network_print)]
+            network_dest: false,
         }
     }
 }
 
 impl PrintDraft {
+    /// Is the destination a network printer? Never, in a build without network printing.
+    fn to_network(&self) -> bool {
+        #[cfg(network_print)]
+        {
+            self.network_dest
+        }
+        #[cfg(not(network_print))]
+        {
+            false
+        }
+    }
+
     /// The engine settings for this draft (page count and labels from the document).
     pub fn settings(&self, count: usize, labels: &[String]) -> Result<print::Settings, String> {
         if self.handling == Handling::Multiple && self.order == PageOrder::CutStack && self.duplex != spool::Duplex::Off {
@@ -193,6 +210,8 @@ pub fn system_printers() -> PrinterSource {
 pub(crate) struct PrintTasks {
     #[cfg(not(target_arch = "wasm32"))]
     printers: Option<std::sync::mpsc::Receiver<Vec<spool::Printer>>>,
+    #[cfg(network_print)]
+    pub(crate) net: crate::network_glue::NetTasks,
     #[cfg(not(target_arch = "wasm32"))]
     jobs: Vec<(String, std::sync::mpsc::Receiver<Result<String, String>>)>,
     /// The browser print being drawn, a sheet a frame (`web_print`).
@@ -265,6 +284,8 @@ impl PdfCraftApp {
             which,
             ..keep
         };
+        #[cfg(network_print)]
+        self.print_tasks.net.state.dialog_opened();
         self.dialog = Some(crate::Dialog::Print);
     }
 
@@ -324,6 +345,8 @@ impl PdfCraftApp {
             for (printer, result) in finished {
                 self.report_print_job(&printer, result);
             }
+            #[cfg(network_print)]
+            self.poll_network();
         }
     }
 
@@ -354,6 +377,8 @@ impl PdfCraftApp {
             }
         };
         let name = doc.name.clone();
+        #[cfg(network_print)]
+        let page_sizes: Vec<(f64, f64)> = doc.info.pages.iter().map(|p| (f64::from(p.width), f64::from(p.height))).collect();
         let bytes = match self.session.print_pdf(id, &settings) {
             Ok(b) => b,
             Err(e) => {
@@ -361,6 +386,19 @@ impl PdfCraftApp {
                 return false;
             }
         };
+        // A network printer: the job runs in the background and the dialog stays open to show it,
+        // so this answers `false` (the dialog is not closed) whether or not it started.
+        #[cfg(network_print)]
+        if self.print_draft.network_dest {
+            let paper = PAPERS[self.print_draft.paper.min(PAPERS.len() - 1)].0;
+            match print::layout(&page_sizes, &settings) {
+                Ok(sheets) => {
+                    self.network_send(&name, bytes, sheets.iter().map(|s| s.size).collect(), paper);
+                }
+                Err(e) => self.notify_error(e),
+            }
+            return false;
+        }
         match self.print_draft.printer.clone() {
             #[cfg(target_arch = "wasm32")]
             Some(printer) if printer == crate::web_print::BROWSER_PRINTER => {
@@ -647,10 +685,13 @@ pub(crate) fn body(
     sizes: &[(f64, f64)],
     labels: &[String],
     thumb: &mut dyn FnMut(usize) -> Option<egui::TextureId>,
+    #[cfg(network_print)] net: &mut crate::network_glue::NetTasks,
 ) -> (bool, bool) {
     ui.set_width(820.0);
     ui.label(egui::RichText::new(tl!("Print")).font(theme::semibold(18.0)));
     ui.add_space(8.0);
+    #[cfg(network_print)]
+    let mut network_block = None;
     let settings = d.settings(sizes.len(), labels);
     let sheets = settings.as_ref().ok().and_then(|s| print::layout(sizes, s).ok()).unwrap_or_default();
     d.sheet = d.sheet.min(sheets.len().saturating_sub(1));
@@ -663,8 +704,11 @@ pub(crate) fn body(
                 let before = d.printer.clone();
                 // The browser's print dialog sets copies, two-sided printing and colour itself.
                 let browser = d.printer.as_deref() == Some(crate::web_print::BROWSER_PRINTER);
+                let network = d.to_network();
                 ui.horizontal(|ui| {
                     let shown = d.printer.as_deref().map_or_else(|| tl!("Save as PDF").to_string(), printer_label);
+                    #[cfg(network_print)]
+                    let shown = if d.network_dest { tl!("Network printer (WS-Print)").to_string() } else { shown };
                     egui::ComboBox::from_id_salt("printer").selected_text(shown).width(260.0).show_ui(ui, |ui| {
                         if d.printers_loading {
                             ui.add_enabled(false, egui::Label::new(tl!("Looking for printers…")));
@@ -676,8 +720,29 @@ pub(crate) fn body(
                             } else {
                                 name
                             };
+                            #[cfg(network_print)]
+                            {
+                                let picked = ui.selectable_label(!d.network_dest && d.printer.as_deref() == Some(p.name.as_str()), label).clicked();
+                                if picked {
+                                    d.network_dest = false;
+                                    d.printer = Some(p.name.clone());
+                                }
+                            }
+                            #[cfg(not(network_print))]
                             ui.selectable_value(&mut d.printer, Some(p.name.clone()), label);
                         }
+                        #[cfg(network_print)]
+                        {
+                            if ui.selectable_label(d.network_dest, tl!("Network printer (WS-Print)")).clicked() {
+                                d.network_dest = true;
+                                d.printer_picked = true;
+                            }
+                            if ui.selectable_label(!d.network_dest && d.printer.is_none(), tl!("Save as PDF")).clicked() {
+                                d.network_dest = false;
+                                d.printer = None;
+                            }
+                        }
+                        #[cfg(not(network_print))]
                         ui.selectable_value(&mut d.printer, None, tl!("Save as PDF"));
                     });
                     let tip = if spool::HAS_PRINTER_PREFERENCES {
@@ -685,7 +750,7 @@ pub(crate) fn body(
                     } else {
                         tl!("The printer driver's own settings for this print: paper tray, paper type, finishing and more.")
                     };
-                    let properties = ui.add_enabled(d.printer.is_some() && !browser, egui::Button::new(tl!("Properties…"))).on_hover_text(tip);
+                    let properties = ui.add_enabled(d.printer.is_some() && !browser && !network, egui::Button::new(tl!("Properties…"))).on_hover_text(tip);
                     if properties.clicked()
                         && let Some(p) = d.printer.clone()
                     {
@@ -706,30 +771,33 @@ pub(crate) fn body(
                     d.driver_error = None;
                 }
                 ui.end_row();
-                ui.label(tl!("Copies:"));
-                ui.add_enabled_ui(!browser, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.add(egui::DragValue::new(&mut d.copies).range(1..=999));
-                        ui.add(widgets::checkbox(&mut d.collate, tl!("Collate")));
-                        ui.add(widgets::checkbox(&mut d.grayscale, tl!("Print in grayscale")));
+                // A network printer has its own copies and sides, listed after the printer's answer.
+                if !network {
+                    ui.label(tl!("Copies:"));
+                    ui.add_enabled_ui(!browser, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.add(egui::DragValue::new(&mut d.copies).range(1..=999));
+                            ui.add(widgets::checkbox(&mut d.collate, tl!("Collate")));
+                            ui.add(widgets::checkbox(&mut d.grayscale, tl!("Print in grayscale")));
+                        });
                     });
-                });
-                ui.end_row();
-                ui.label(tl!("Two-sided:"));
-                ui.add_enabled_ui(!browser, |ui| {
-                    combo(
-                        ui,
-                        "duplex",
-                        &mut d.duplex,
-                        &[
-                            (spool::Duplex::Off, tl!("Off")),
-                            (spool::Duplex::LongEdge, tl!("Flip on long edge")),
-                            (spool::Duplex::ShortEdge, tl!("Flip on short edge")),
-                        ],
-                        160.0,
-                    );
-                });
-                ui.end_row();
+                    ui.end_row();
+                    ui.label(tl!("Two-sided:"));
+                    ui.add_enabled_ui(!browser, |ui| {
+                        combo(
+                            ui,
+                            "duplex",
+                            &mut d.duplex,
+                            &[
+                                (spool::Duplex::Off, tl!("Off")),
+                                (spool::Duplex::LongEdge, tl!("Flip on long edge")),
+                                (spool::Duplex::ShortEdge, tl!("Flip on short edge")),
+                            ],
+                            160.0,
+                        );
+                    });
+                    ui.end_row();
+                }
                 ui.label(tl!("Paper:"));
                 let paper_name = PAPERS.get(d.paper).map_or("US Letter", |p| p.0);
                 egui::ComboBox::from_id_salt("paper").selected_text(paper_name).width(260.0).show_ui(ui, |ui| {
@@ -754,6 +822,11 @@ pub(crate) fn body(
             }
             if d.show_driver_options {
                 driver_options_panel(ui, d, t);
+            }
+            #[cfg(network_print)]
+            if d.network_dest {
+                // The address, query, listed options, confirmation and job are craft-ui's `printing::network`.
+                network_block = net.show(ui, settings.is_ok() && !sheets.is_empty()).block;
             }
             if let Some(&source) = sizes.get(d.current_page) {
                 ui.horizontal_wrapped(|ui| {
@@ -1013,12 +1086,25 @@ pub(crate) fn body(
     ui.add_space(12.0);
     let (mut go, mut cancel) = (false, false);
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let label = if d.printer.is_some() { "Print" } else { "Save as PDF" };
-        if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty(), |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
+        let label = if d.printer.is_some() || d.to_network() { "Print" } else { "Save as PDF" };
+        let ready = settings.is_ok() && !sheets.is_empty();
+        #[cfg(network_print)]
+        let ready = ready && (!d.network_dest || network_block.is_none());
+        if ui.add_enabled_ui(ready, |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
             go = true;
         }
         if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
-            cancel = true;
+            // While a network job runs, Cancel cancels the job; the dialog stays to show how it ended.
+            #[cfg(network_print)]
+            if d.network_dest && net.state.draft.running() {
+                net.state.cancel_job();
+            } else {
+                cancel = true;
+            }
+            #[cfg(not(network_print))]
+            {
+                cancel = true;
+            }
         }
     });
     (go, cancel)

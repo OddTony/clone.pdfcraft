@@ -13,7 +13,11 @@ repository = "https://github.com/storytold/pdfcraft"
 
 [workspace.dependencies]
 # Shared frontend components; engines remain independent of egui.
-craft-ui = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "5c874d51eeb3de70e735c8ce87a59a7dedd47675", features = ["serde"] }
+# The pin follows craft-libs#117 (`printing::network`, the network-printer destination) until it merges;
+# then pin an immutable revision. It is independent of the `scanning` component of craft-libs#112 that
+# the scan dialog pins: until craft-libs merges both, a tree that wants both needs a craft-libs commit that
+# has both.
+craft-ui = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "refs/pull/117/head", features = ["serde"] }
 # Shared print backends and registry; document composition remains in pdfcraft-print. The pin follows
 # craft-libs#118 (the WS-Print backend, which contains #116 and uses the craft-wsd core of #113) until
 # those merge; then pin an immutable revision. The `wsd` feature is chosen by pdfcraft-print's
