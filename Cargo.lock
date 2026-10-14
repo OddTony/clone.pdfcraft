@@ -1143,6 +1143,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-pdf"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=89dcbb3060377a26c99a6d80caa16084366704c4#89dcbb3060377a26c99a6d80caa16084366704c4"
+dependencies = [
+ "bytemuck",
+ "hayro",
+ "hayro-interpret",
+ "hayro-syntax",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "craft-print"
 version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=f03ec27ab2c405969428512178f746183cd55ca0#f03ec27ab2c405969428512178f746183cd55ca0"
@@ -2495,6 +2507,7 @@ dependencies = [
 [[package]]
 name = "hayro"
 version = "0.7.1"
+source = "git+https://github.com/storytold/craft-libs?rev=89dcbb3060377a26c99a6d80caa16084366704c4#89dcbb3060377a26c99a6d80caa16084366704c4"
 dependencies = [
  "bytemuck",
  "hayro-interpret",
@@ -2524,6 +2537,7 @@ dependencies = [
 [[package]]
 name = "hayro-interpret"
 version = "0.7.0"
+source = "git+https://github.com/storytold/craft-libs?rev=89dcbb3060377a26c99a6d80caa16084366704c4#89dcbb3060377a26c99a6d80caa16084366704c4"
 dependencies = [
  "bitflags 2.13.2",
  "hayro-cmap",
@@ -2541,6 +2555,7 @@ dependencies = [
 [[package]]
 name = "hayro-jbig2"
 version = "0.3.0"
+source = "git+https://github.com/storytold/craft-libs?rev=89dcbb3060377a26c99a6d80caa16084366704c4#89dcbb3060377a26c99a6d80caa16084366704c4"
 dependencies = [
  "fearless_simd",
  "hayro-ccitt",
@@ -2564,6 +2579,7 @@ checksum = "885c5ef0654933139a9b9546fc2c69e18d37f38aa2520f079092b1be18f1fcaa"
 [[package]]
 name = "hayro-syntax"
 version = "0.7.2"
+source = "git+https://github.com/storytold/craft-libs?rev=89dcbb3060377a26c99a6d80caa16084366704c4#89dcbb3060377a26c99a6d80caa16084366704c4"
 dependencies = [
  "flate2",
  "hayro-ccitt",
@@ -4217,6 +4233,7 @@ name = "pdfcraft-render"
 version = "0.7.1"
 dependencies = [
  "bytemuck",
+ "craft-pdf",
  "flate2",
  "getrandom 0.4.3",
  "hayro",

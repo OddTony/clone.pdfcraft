@@ -98,6 +98,7 @@ pub fn ci(_: &[String]) -> anyhow::Result<()> {
     type Step = (&'static str, Box<dyn Fn() -> anyhow::Result<()>>);
     let steps: Vec<Step> = vec![
         ("fmt", Box::new(|| run_args(&["fmt", "--all", "--", "--check"]))),
+        ("pdf-deps", Box::new(|| crate::pdf_deps::run(&root()).map_err(anyhow::Error::msg))),
         ("clippy", Box::new(|| run_args(&["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]))),
         ("test", Box::new(|| run_args(&["test", "--workspace"]))),
         ("layers", Box::new(|| layers(&[]))),

@@ -12,6 +12,8 @@ rust-version = "1.95"
 repository = "https://github.com/storytold/pdfcraft"
 
 [workspace.dependencies]
+# Immutable shared reader source; app-owned viewer policy remains in crates/render.
+craft-pdf = { git = "https://github.com/storytold/craft-libs", rev = "89dcbb3060377a26c99a6d80caa16084366704c4", version = "=0.1.0", default-features = false, features = ["raster"] }
 # Shared frontend components; engines remain independent of egui.
 craft-ui = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "5c874d51eeb3de70e735c8ce87a59a7dedd47675", features = ["serde"] }
 # Shared system spooler; document composition remains in pdfcraft-print.
@@ -101,12 +103,13 @@ incremental = false
 lto = "thin"
 codegen-units = 1
 
-# Vendored, patched third-party crates (see vendor/README.md). Each patch is meant to go upstream.
+# Shared PDF backend patches (Cargo ignores dependency workspace patches), then the
+# independent local application patches documented in vendor/README.md.
 [patch.crates-io]
-hayro-interpret = { path = "vendor/hayro-interpret" }
-hayro = { path = "vendor/hayro" }
-hayro-syntax = { path = "vendor/hayro-syntax" }
-hayro-jbig2 = { path = "vendor/hayro-jbig2" }
+hayro-interpret = { git = "https://github.com/storytold/craft-libs", rev = "89dcbb3060377a26c99a6d80caa16084366704c4" }
+hayro = { git = "https://github.com/storytold/craft-libs", rev = "89dcbb3060377a26c99a6d80caa16084366704c4" }
+hayro-syntax = { git = "https://github.com/storytold/craft-libs", rev = "89dcbb3060377a26c99a6d80caa16084366704c4" }
+hayro-jbig2 = { git = "https://github.com/storytold/craft-libs", rev = "89dcbb3060377a26c99a6d80caa16084366704c4" }
 lopdf = { path = "vendor/lopdf" }
 winit = { path = "vendor/winit" }
 egui-wgpu = { path = "vendor/egui-wgpu" }

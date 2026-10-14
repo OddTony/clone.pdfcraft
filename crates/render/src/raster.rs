@@ -21,13 +21,15 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use work_queue::{ResultReceiver, WorkQueue};
 
-use hayro::hayro_interpret::font::{FontData, FontQuery};
-use hayro::hayro_interpret::hayro_cmap::CidFamily;
-use hayro::hayro_interpret::{InterpreterSettings, InterpreterWarning};
-use hayro::hayro_syntax::Pdf;
-use hayro::vello_cpu::color::AlphaColor;
+use craft_pdf::interpret::font::{FontData, FontQuery};
+use craft_pdf::interpret::hayro_cmap::CidFamily;
+use craft_pdf::interpret::{InterpreterSettings, InterpreterWarning};
+use craft_pdf::raster::{self as shared_raster, Options as RasterOptions, RenderCache};
+use craft_pdf::syntax::Pdf;
+#[cfg(test)]
 use hayro::vello_cpu::color::palette::css::WHITE;
-use hayro::{RenderCache, RenderSettings, render_into, render_size};
+#[cfg(test)]
+use hayro::{RenderSettings, render_into};
 
 use crate::{Pixels, ReadingColors};
 
@@ -280,7 +282,14 @@ pub fn effective_scale(width_pt: f32, height_pt: f32, scale: f32) -> f32 {
     // The caps always win: a floor here once let a 934-million-point-wide page (a fuzzed file)
     // render 9 million pixels wide. Only guard against a zero or non-finite scale.
     let capped = scale.min(by_side).min(by_area);
-    if capped.is_finite() && capped > 0.0 { capped } else { by_side.min(by_area).max(f32::MIN_POSITIVE) }
+    let capped = if capped.is_finite() && capped > 0.0 { capped } else { by_side.min(by_area).max(f32::MIN_POSITIVE) };
+    let (pw, ph) = (device_pixels(w, capped).min(MAX_SIDE as u32), device_pixels(h, capped).min(MAX_SIDE as u32));
+    if u64::from(pw) * u64::from(ph) > MAX_PIXELS as u64 {
+        // Rounding up for edge coverage must still respect the shared pixel budget.
+        capped.min(pw.saturating_sub(1) as f32 / w).min(ph.saturating_sub(1) as f32 / h)
+    } else {
+        capped
+    }
 }
 
 /// Device pixels that cover `pt` points at `scale`: rounded up, as poppler's `pdftoppm` does, so
@@ -307,75 +316,61 @@ fn render_page<'a>(
     if req.kind == RequestKind::Text {
         return match catch_unwind(AssertUnwindSafe(|| crate::text::extract_page(pdf, req.page, settings))) {
             Ok(Some(t)) => Ok((0, 0, Pixels::default(), Some(Arc::new(t)))),
-            Ok(None) => Err((format!("page {} does not exist", req.page + 1), false)),
-            Err(panic) => Err((format!("text extraction crashed on page {}: {}", req.page + 1, panic_message(&panic)), true)),
+            Ok(None) => Err((format!("page {} does not exist", req.page.saturating_add(1)), false)),
+            Err(panic) => Err((format!("text extraction crashed on page {}: {}", req.page.saturating_add(1), panic_message(&panic)), true)),
         };
     }
     let result = catch_unwind(AssertUnwindSafe(|| {
         let pages = pdf.pages();
-        let page = pages.get(req.page).ok_or_else(|| format!("page {} does not exist", req.page + 1))?;
+        let page = pages.get(req.page).ok_or_else(|| (format!("page {} does not exist", req.page.saturating_add(1)), false))?;
         let (w, h) = page.render_dimensions();
         if !(w.is_finite() && h.is_finite()) || w < 0.5 || h < 0.5 {
-            return Err(format!("page {} has an empty or invalid page box ({w}×{h} pt)", req.page + 1));
+            return Err((format!("page {} has an empty or invalid page box ({w}×{h} pt)", req.page.saturating_add(1)), false));
         }
-        // Reading colours: the page clears to the setting's background, and solid text and
-        // line-art paints are remapped (images and patterns never are). Off renders as before.
-        let (bg_color, color_replacement) = match reading.params {
-            Some(p) => (AlphaColor::from_rgb8(p.background[0], p.background[1], p.background[2]), Some(hayro::ColorReplacement::from(p))),
-            None => (WHITE, None),
+        let (background, color_replacement) = match reading.params {
+            Some(p) => ([p.background[0], p.background[1], p.background[2], 255], Some(shared_raster::ColorReplacement::from(p))),
+            None => ([255; 4], None),
         };
-        let rs = match req.tile {
-            // Tiles are bounded by construction, so the page itself may be arbitrarily large.
+        let options = match req.tile {
             Some(t) => {
                 let scale = req.scale.clamp(0.01, 400.0);
-                let (tw, th) = (t.w.clamp(1, 4096), t.h.clamp(1, 4096));
-                RenderSettings {
-                    x_scale: scale,
-                    y_scale: scale,
-                    width: Some(tw as u16),
-                    height: Some(th as u16),
-                    x_offset: t.x as f32,
-                    y_offset: t.y as f32,
-                    bg_color,
+                RasterOptions {
+                    scale: [scale; 2],
+                    size: Some([t.w.clamp(1, 4096), t.h.clamp(1, 4096)]),
+                    offset: [t.x as f32, t.y as f32],
+                    background,
                     color_replacement,
                 }
             }
             None => {
                 let scale = effective_scale(w, h, req.scale);
                 if reject_oversize && (!(req.scale.is_finite() && req.scale > 0.0) || req.scale > scale) {
-                    return Err(format!(
-                        "requested page {} raster scale {req_scale} exceeds renderer limits (maximum scale {scale})",
-                        req.page + 1,
-                        req_scale = req.scale
+                    return Err((
+                        format!(
+                            "requested page {} raster scale {req_scale} exceeds renderer limits (maximum scale {scale})",
+                            req.page.saturating_add(1),
+                            req_scale = req.scale
+                        ),
+                        false,
                     ));
                 }
-                // hayro floors the size when none is given, losing the partial edge pixels. The
-                // scale keeps each side within MAX_SIDE (give or take float noise), so it fits u16.
-                let side = |pt: f32| device_pixels(pt, scale).min(MAX_SIDE as u32) as u16;
-                RenderSettings {
-                    x_scale: scale,
-                    y_scale: scale,
-                    width: Some(side(w)),
-                    height: Some(side(h)),
-                    bg_color,
-                    color_replacement,
-                    ..Default::default()
-                }
+                let side = |pt: f32| device_pixels(pt, scale).min(MAX_SIDE as u32);
+                RasterOptions { scale: [scale; 2], size: Some([side(w), side(h)]), background, color_replacement, ..Default::default() }
             }
         };
-        // Rendered straight into a buffer of whole pixels, which the GUI takes over as is.
-        let (w, h) = render_size(page, &rs);
-        let mut pixels = Pixels::zeroed(w.into(), h.into()).ok_or_else(|| format!("page {} is too large to render", req.page + 1))?;
-        // Previews render at low detail (tiny images are skipped); finals always draw all.
+        let shared_error = |e: shared_raster::Error| (format!("page {}: {e}", req.page.saturating_add(1)), e == shared_raster::Error::BackendPanic);
+        let [w, h] = shared_raster::dimensions(page, &options).map_err(shared_error)?;
+        // Keep the app's aligned buffer: the GUI takes ownership without another copy.
+        let mut pixels =
+            Pixels::zeroed(w as usize, h as usize).ok_or_else(|| (format!("page {} is too large to render", req.page.saturating_add(1)), false))?;
         let mut preview_settings = settings.clone();
         preview_settings.preview = req.preview;
-        render_into(page, cache, &preview_settings, &rs, pixels.bytes_mut());
-        Ok((w.into(), h.into(), pixels, None))
+        shared_raster::render_into(page, cache, &preview_settings, &options, pixels.bytes_mut()).map_err(shared_error)?;
+        Ok((w, h, pixels, None))
     }));
     match result {
-        Ok(Ok(v)) => Ok(v),
-        Ok(Err(e)) => Err((e, false)),
-        Err(panic) => Err((format!("renderer crashed on page {}: {}", req.page + 1, panic_message(&panic)), true)),
+        Ok(result) => result,
+        Err(panic) => Err((format!("renderer crashed on page {}: {}", req.page.saturating_add(1), panic_message(&panic)), true)),
     }
 }
 
@@ -466,7 +461,7 @@ impl PageRenderer {
 }
 
 fn parse(bytes: &Arc<Vec<u8>>, password: Option<&str>) -> Option<Pdf> {
-    catch_unwind(AssertUnwindSafe(|| Pdf::new_with_password(bytes.clone(), password.unwrap_or("")).ok())).ok().flatten()
+    crate::backend::open(bytes.clone(), password).ok()
 }
 
 pub(crate) fn panic_message(p: &Box<dyn std::any::Any + Send>) -> String {
@@ -2225,6 +2220,19 @@ mod tests {
             assert!(w * k * h * k <= super::MAX_PIXELS * 1.01, "{w}×{h} @ {s}: {k}");
         }
         assert_eq!(super::effective_scale(612.0, 792.0, 2.0), 2.0);
+    }
+
+    #[test]
+    fn rounded_edge_coverage_stays_within_the_pixel_budget() {
+        // The continuous area fits at the old scale, but rounding both edges up made
+        // an 8192 x 7813 viewport: 4,096 pixels above the shared renderer's bound.
+        for (w, h) in [(8192.0, 7813.0), (7813.0, 8192.0)] {
+            let scale = super::effective_scale(w, h, 1.0);
+            let width = super::device_pixels(w, scale);
+            let height = super::device_pixels(h, scale);
+            assert!(u64::from(width) * u64::from(height) <= craft_pdf::raster::MAX_PIXELS);
+            assert!(width > 0 && height > 0);
+        }
     }
 
     use super::*;

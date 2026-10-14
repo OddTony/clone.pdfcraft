@@ -10,9 +10,6 @@ use std::sync::Arc;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use hayro::hayro_syntax::DecryptionError;
-use hayro::hayro_syntax::LoadPdfError;
-use hayro::hayro_syntax::Pdf;
 use lopdf::{Dictionary, Document, LoadOptions, Object, ObjectId};
 use pdfcraft_cos::page_labels::{
     MAX_LABEL_BYTES, MAX_LABEL_TOTAL_BYTES, MAX_LABEL_TREE_DEPTH, MAX_LABEL_TREE_WORK, MAX_PREFIX_BYTES, MAX_PREFIX_TOTAL_BYTES, alpha, roman,
@@ -379,19 +376,7 @@ pub struct FontInfo {
 /// but must still catch an edit that produced something the viewer cannot display, so the
 /// caller can roll it back. Never panics: parser crashes are caught and reported.
 pub fn check_pages(bytes: Arc<Vec<u8>>, password: Option<&str>, expected: usize) -> Result<(), OpenError> {
-    let pdf = catch_unwind(AssertUnwindSafe(|| Pdf::new_with_password(bytes, password.unwrap_or(""))))
-        .map_err(|p| OpenError::Invalid(format!("the parser crashed: {}", crate::raster::panic_message(&p))))?
-        .map_err(|e| match e {
-            LoadPdfError::Decryption(DecryptionError::PasswordProtected) => {
-                if password.is_some() {
-                    OpenError::WrongPassword
-                } else {
-                    OpenError::NeedsPassword
-                }
-            }
-            LoadPdfError::Decryption(other) => OpenError::Unsupported(format!("encryption not supported: {other:?}")),
-            LoadPdfError::Invalid => OpenError::Invalid("no readable page tree or cross-reference data was found".into()),
-        })?;
+    let pdf = crate::backend::open(bytes, password)?;
     let pages = catch_unwind(AssertUnwindSafe(|| pdf.pages().len()))
         .map_err(|p| OpenError::Invalid(format!("the page tree could not be read: {}", crate::raster::panic_message(&p))))?;
     if pages != expected {
@@ -403,19 +388,7 @@ pub fn check_pages(bytes: Arc<Vec<u8>>, password: Option<&str>, expected: usize)
 /// Inspect a document. Fails only if the renderer itself cannot open the file (or needs a
 /// password). Never panics: parser crashes are caught and reported.
 pub fn inspect(bytes: Arc<Vec<u8>>, password: Option<&str>) -> Result<DocInfo, OpenError> {
-    let pdf = catch_unwind(AssertUnwindSafe(|| Pdf::new_with_password(bytes.clone(), password.unwrap_or(""))))
-        .map_err(|p| OpenError::Invalid(format!("the parser crashed: {}", crate::raster::panic_message(&p))))?
-        .map_err(|e| match e {
-            LoadPdfError::Decryption(DecryptionError::PasswordProtected) => {
-                if password.is_some() {
-                    OpenError::WrongPassword
-                } else {
-                    OpenError::NeedsPassword
-                }
-            }
-            LoadPdfError::Decryption(other) => OpenError::Unsupported(format!("encryption not supported: {other:?}")),
-            LoadPdfError::Invalid => OpenError::Invalid("no readable page tree or cross-reference data was found".into()),
-        })?;
+    let pdf = crate::backend::open(bytes.clone(), password)?;
     let mut info = DocInfo { file_size: bytes.len(), pdf_version: version_label(&format!("{:?}", pdf.version())), ..Default::default() };
     let pages = catch_unwind(AssertUnwindSafe(|| {
         let mut out = Vec::new();
@@ -423,10 +396,10 @@ pub fn inspect(bytes: Arc<Vec<u8>>, password: Option<&str>) -> Result<DocInfo, O
             let (w, h) = page.render_dimensions();
             let c = page.intersected_crop_box();
             let rotation = match page.rotation() {
-                hayro::hayro_syntax::page::Rotation::None => 0,
-                hayro::hayro_syntax::page::Rotation::Horizontal => 90,
-                hayro::hayro_syntax::page::Rotation::Flipped => 180,
-                hayro::hayro_syntax::page::Rotation::FlippedHorizontal => 270,
+                craft_pdf::syntax::page::Rotation::None => 0,
+                craft_pdf::syntax::page::Rotation::Horizontal => 90,
+                craft_pdf::syntax::page::Rotation::Flipped => 180,
+                craft_pdf::syntax::page::Rotation::FlippedHorizontal => 270,
             };
             let crop = [c.x0 as f32, c.y0 as f32, c.x1 as f32, c.y1 as f32];
             // Degenerate boxes still get a usable placeholder size so layout never divides by zero.

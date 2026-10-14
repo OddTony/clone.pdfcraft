@@ -2,7 +2,7 @@
 <!--
   PdfCraft MSI (WiX Toolset v5: `dotnet tool install -g wix`). Built by package.ps1:
 
-    wix build pdfcraft.wxs installer-ui.wxs -arch x64 -d Version=1.2.3 -d BinDir=... -d ModelsDir=... -d IconPath=... -o out.msi
+    wix build pdfcraft.wxs installer-ui.wxs -arch x64 -d Version=1.2.3 -d BinDir=... -d ModelsDir=... -d DocDir=... -d IconPath=... -o out.msi
 
   Per-machine install into Program Files, a Start Menu shortcut, a desktop shortcut (on by default,
   optional, and an update keeps it only if it is still there), an App Paths entry, PdfCraft registered as a PDF handler (offered under "Open with"
@@ -168,6 +168,7 @@
       <Component Id="PdfcraftCli">
         <File Id="PdfcraftCliExe" Source="$(var.BinDir)\pdfcraft-cli.exe" KeyPath="yes" />
       </Component>
+      <Files Include="$(var.DocDir)\**" Directory="INSTALLFOLDER" Subdirectory="docs" />
       <!-- The embedded PDF icon's ISC notice and project licences travel with the binaries. -->
       <Component Id="PdfcraftDocumentIconLicense">
         <File Id="PdfcraftDocumentIconLicenseFile" Source="$(var.BinDir)\LICENSE-document.txt" KeyPath="yes" />

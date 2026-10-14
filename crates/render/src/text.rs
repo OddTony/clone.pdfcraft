@@ -8,11 +8,11 @@
 //! On top of the glyph list: line grouping (baseline clustering), word gaps, plain-text output,
 //! case-insensitive search and reading-order selection.
 
-use hayro::hayro_interpret::font::Glyph;
-use hayro::hayro_interpret::hayro_syntax::Pdf;
-use hayro::hayro_interpret::{
+use craft_pdf::interpret::font::Glyph;
+use craft_pdf::interpret::{
     BlendMode, ClipPath, Context, Device, GlyphDrawMode, Image, InterpreterCache, InterpreterSettings, Paint, PathDrawMode, SoftMask, interpret_page,
 };
+use craft_pdf::syntax::Pdf;
 use kurbo::{Affine, BezPath, Rect, Shape};
 use std::collections::HashMap;
 
@@ -558,8 +558,8 @@ impl<'a> Device<'a> for TextDevice {
         // Inside an `/ActualText` replacement only the glyph's box matters.
         let replaced = self.actual.is_some();
         let text = match glyph.as_unicode() {
-            Some(hayro::hayro_interpret::hayro_cmap::BfString::Char(c)) => c.to_string(),
-            Some(hayro::hayro_interpret::hayro_cmap::BfString::String(s)) => s,
+            Some(craft_pdf::interpret::hayro_cmap::BfString::Char(c)) => c.to_string(),
+            Some(craft_pdf::interpret::hayro_cmap::BfString::String(s)) => s,
             None if replaced => String::new(),
             None => {
                 if std::env::var_os("PDFCRAFT_TEXT_DEBUG").is_some() {
@@ -874,7 +874,7 @@ fn from_upright(r: [f32; 4], quarter: u8, w: f32, h: f32) -> [f32; 4] {
     }
 }
 
-use hayro::hayro_interpret::TransformExt;
+use craft_pdf::interpret::TransformExt;
 
 fn is_rtl(c: char) -> bool {
     matches!(c as u32, 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF | 0x10800..=0x10FFF | 0x1E800..=0x1EFFF)

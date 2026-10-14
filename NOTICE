@@ -29,23 +29,24 @@ list (author, source, license) is in ATTRIBUTION.md.
   pinned in .github/workflows/ also include Noto Sans Thai (in the web build too), Copyright 2022
   The Noto Project Authors (https://github.com/notofonts/thai), under SIL OFL 1.1; its licence is
   fonts/noto-sans-thai/OFL.txt in the craft-fonts build input.
-- hayro (rendering, via crates.io) — Apache-2.0 OR MIT. Its `embed-fonts` feature bundles the Foxit
+- craft-pdf (shared parsing and raster entrypoints, pinned Git revision) — MIT OR Apache-2.0.
+- hayro (rendering, through craft-pdf) — Apache-2.0 OR MIT. Its `embed-fonts` feature bundles the Foxit
   standard-14 Type 1 fonts under BSD-3-Clause ("Copyright 2014 PDFium Authors"), and hayro-cmap bundles
   Adobe CMap resources under BSD-3-Clause.
-- lopdf (bootstrap document inspection, via crates.io) — MIT.
+- lopdf (bootstrap document inspection, local patched source) — MIT.
 - egui default fonts (epaint_default_fonts, via eframe) — Ubuntu Light (Ubuntu Font Licence 1.0),
   Hack (MIT / Bitstream Vera licence), Noto Emoji (SIL OFL 1.1), emoji-icon-font (MIT).
 - Colour profile in hayro-interpret — CGATS001Compat-v2-micro.icc (CC0-1.0, Clinton Ingram).
 
 Required notices:
 
-  Foxit standard-14 substitute fonts (vendor/hayro-interpret/assets/*.pfb):
+  Foxit standard-14 substitute fonts (shared hayro-interpret assets/*.pfb):
     Copyright 2014 PDFium Authors. All rights reserved. Original code copyright 2014 Foxit Software Inc.
-    Redistributed under the BSD-3-Clause licence in vendor/hayro-interpret/assets/LICENSE_FOXIT.
+    Redistributed under the BSD-3-Clause licence in licenses/pdf-backend/hayro-interpret/assets/LICENSE_FOXIT.
 
   CMap resources (bundled by hayro-cmap; character-mapping data, not visual assets):
     Copyright 1990-2023 Adobe. All rights reserved. Redistributed under the BSD-3-Clause licence
-    (https://github.com/adobe-type-tools/cmap-resources/blob/master/LICENSE.txt). Neither the name of
+    (licenses/pdf-backend/hayro-cmap/LICENSE.txt). Neither the name of
     Adobe nor the names of its contributors are used to endorse or promote this product.
 
 Showcase PDF (built by `cargo xtask demo-pdf`, not committed): fonts are downloaded at build time from
@@ -55,6 +56,13 @@ google/fonts at a pinned commit, verified by SHA-256, all under the SIL Open Fon
 Asset licences are not visible to cargo-deny; keep this file current whenever assets or asset-bundling
 dependencies change (plan/adr/0002, 0006).
 
-Vendored (vendor/, patched; see vendor/README.md):
-- hayro 0.7.1 — Apache-2.0 OR MIT, Copyright the hayro authors (licence files kept in vendor/hayro).
-- hayro-interpret 0.7.0 — Apache-2.0 OR MIT, Copyright the hayro authors (LICENSE-APACHE, LICENSE-MIT kept in vendor/hayro-interpret).
+Shared PDF backend (pinned by Cargo.toml and Cargo.lock; see docs/pdf-backend.md):
+- hayro 0.7.1, hayro-interpret 0.7.0, hayro-syntax 0.7.2 and hayro-jbig2 0.3.0 —
+  Apache-2.0 OR MIT, Copyright the hayro authors. Licence files are retained in
+  licenses/pdf-backend/<crate>/.
+- hayro-cmap 0.1.0 — Apache-2.0 OR MIT, with the BSD-3-Clause CMap notices above.
+- The CGATS colour profile's CC0 notice is retained in
+  licenses/pdf-backend/hayro-interpret/assets/CGATS_LICENSE.txt.
+
+The independently patched lopdf, winit and egui-wgpu crates remain local in vendor/,
+with their original licence files. Their fixes and tests stay in vendor/README.md.

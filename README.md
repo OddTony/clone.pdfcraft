@@ -420,7 +420,7 @@ PdfCraft is young and moving fast. The aim is a workbench where you can view, or
 **Where it stands (October 2026), honestly:** PdfCraft is **alpha**. Most of Acrobat Pro's offline features exist in some form (57% of all tracked features, 94% of the must-haves). For everyday work (viewing, commenting, filling and signing forms, organizing pages) it is about 55% of the way to replacing Acrobat; against all of Acrobat Pro, about 49%; for someone who only needs the essentials, about 66%. Every everyday workflow can be completed, but converting and sharing is weak: no Office-to-PDF, and Word export that loses layout.
 
 - **Good today:** viewing and search; organizing, combining and splitting; most kinds of comment; filling and authoring forms (with sandboxed JavaScript); passwords, redaction and sanitizing; basic digital signatures; printing; the Accessibility Checker; agent control through the CLI and MCP.
-- **Still borrowed:** pages are drawn by the `hayro` crate while our own renderer is built.
+- **Still borrowed:** pages are drawn through the shared `craft-pdf` facade over `hayro` while our own renderer is built ([backend](docs/pdf-backend.md)).
 - **Thin or missing:** reliable editing of existing text (especially CJK and right-to-left), OCR beyond Latin script, Office import/export, signature tokens and online long-term validation, Preflight and PDF/X/UA, printing from the web build, physical printer fidelity, and full XFA forms.
 - **Hardening:** fuzzing still turns up crashes and hangs on hostile files; each one is fixed with a regression test. Quality has not yet been compared with Acrobat side by side.
 
