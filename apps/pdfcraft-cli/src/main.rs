@@ -478,6 +478,9 @@ fn edit(args: &[String]) -> Result<(), CliError> {
         session.apply(id, e).map_err(|e| e.to_string())?;
     }
     let bytes = if full { session.save_full_bytes(id) } else { session.save_bytes(id) }.map_err(|e| e.to_string())?;
+    // Output that doesn't reopen as this document never replaces anything, least of all the
+    // input of an in-place edit (#1698).
+    session.check_save(id, &bytes).map_err(|e| format!("{out}: {e}"))?;
     Ok(write_out(out, &bytes)?)
 }
 
