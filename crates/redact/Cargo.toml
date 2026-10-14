@@ -17,5 +17,9 @@ pdfcraft-forms = { workspace = true }
 pdfcraft-edit = { workspace = true }
 pdfcraft-annot = { workspace = true }
 thiserror = { workspace = true }
+# The JPEG decoder for clearing a DCT (scanned) image in place (#2246).
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 
 [dev-dependencies]
+# Test fixtures: a DCTDecode image is built with the JPEG encoder.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
