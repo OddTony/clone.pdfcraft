@@ -524,7 +524,19 @@ impl PdfCraftApp {
         if !certs.iter().any(|c| c.raw == cert.raw) {
             certs.push(cert);
         }
+        self.apply_trusted_certificates(certs);
+    }
+
+    /// Replace the trust store and redraw from the rebuilt display copy. One helper
+    /// so no caller can revalidate without invalidating: trust changes verdicts,
+    /// verdicts choose what the display copy shows, and the old rasters would
+    /// otherwise linger while the badge already follows the new verdict.
+    /// Trust alone is not an edit: nothing becomes dirty.
+    pub fn apply_trusted_certificates(&mut self, certs: Vec<Certificate>) {
         self.session.set_trusted_certificates(certs);
+        for view in &mut self.views {
+            view.invalidate_content();
+        }
     }
 
     /// A file name without its PDF extension, for snapshot tab names.

@@ -2489,6 +2489,69 @@ fn validated_signatures_without_layers_keep_their_appearance() {
 }
 
 #[test]
+fn signed_pages_render_trust_save_and_reopen() {
+    let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
+    let digital_id = sign::pkcs12::open(&p12, "test").unwrap();
+    // After the test certificate's start date (2026-10-02).
+    let mut s = Session::new().with_clock(|| 1_800_000_000);
+    let id = s.open("fixture.pdf", None, Arc::new(fixture(1)), None).unwrap();
+    let opts = SignOptions { page: 0, rect: Some([20.0, 20.0, 180.0, 60.0]), ..SignOptions::default() };
+    let signed = s.sign(id, &digital_id, opts).unwrap();
+    // The signed bytes open elsewhere too: validity is in the file, not the session.
+    let mut t = Session::new().with_clock(|| 1_800_000_000);
+    let tid = t.open("signed.pdf", None, signed.clone(), None).unwrap();
+    assert!(t.get(tid).unwrap().signatures.iter().any(|x| x.signed && x.status == SignatureStatus::Unknown));
+    s.mark_signed(id, signed, None).unwrap();
+    // The signed page renders, from the file and from the display copy alike.
+    for bytes in [s.get(id).unwrap().bytes.clone(), s.get(id).unwrap().display.clone()] {
+        let mut renderer = pdfcraft_render::PageRenderer::new(bytes, s.get(id).unwrap().config.clone());
+        let rendered = renderer.render(pdfcraft_render::RenderRequest { page: 0, scale: 1.0, ..Default::default() });
+        assert!(rendered.error.is_none(), "{:?}", rendered.error);
+        assert!(rendered.width > 0 && rendered.height > 0);
+    }
+    // Trusting the signer makes it valid; saving keeps it valid across sessions.
+    s.set_trusted_certificates(vec![digital_id.certificate.clone()]);
+    assert_eq!(s.get(id).unwrap().signatures[0].status, SignatureStatus::Valid);
+    let saved = s.save_bytes(id).unwrap();
+    let mut u = Session::new().with_clock(|| 1_800_000_000);
+    u.set_trusted_certificates(vec![digital_id.certificate.clone()]);
+    let uid = u.open("saved.pdf", None, saved.clone(), None).unwrap();
+    assert_eq!(u.get(uid).unwrap().signatures[0].status, SignatureStatus::Valid);
+}
+
+#[test]
+fn signed_documents_round_trip_behind_a_user_password() {
+    let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
+    let digital_id = sign::pkcs12::open(&p12, "test").unwrap();
+    // After the test certificate's start date (2026-10-02).
+    let mut doc = pdfcraft_cos::Document::open(Arc::new(fixture(1))).unwrap();
+    doc.set_encryption(&pdfcraft_cos::NewEncryption {
+        algorithm: pdfcraft_cos::Algorithm::Aes128,
+        user_password: "user",
+        owner_password: "owner",
+        permissions: -1,
+        encrypt_metadata: true,
+        seed: [7; 32],
+    })
+    .unwrap();
+    let encrypted = Arc::new(pdfcraft_cos::write_full(&doc, &pdfcraft_cos::SaveOptions::default()).unwrap());
+    // Wrong passwords refuse; the right one signs, validates, saves and reopens.
+    let mut e = Session::new().with_clock(|| 1_800_000_000);
+    assert!(e.open("enc.pdf", None, encrypted.clone(), Some("wrong")).is_err(), "wrong passwords refuse");
+    let eid = e.open("enc.pdf", None, encrypted, Some("user")).unwrap();
+    let signed = e.sign(eid, &digital_id, SignOptions { page: 0, rect: Some([20.0, 20.0, 180.0, 60.0]), ..SignOptions::default() }).unwrap();
+    e.mark_signed(eid, signed, None).unwrap();
+    e.set_trusted_certificates(vec![digital_id.certificate.clone()]);
+    assert_eq!(e.get(eid).unwrap().signatures[0].status, SignatureStatus::Valid);
+    let saved = e.save_bytes(eid).unwrap();
+    let mut f = Session::new().with_clock(|| 1_800_000_000);
+    f.set_trusted_certificates(vec![digital_id.certificate.clone()]);
+    assert!(f.open("enc-saved.pdf", None, saved.clone(), Some("wrong")).is_err());
+    let fid = f.open("enc-saved.pdf", None, saved.clone(), Some("user")).unwrap();
+    assert_eq!(f.get(fid).unwrap().signatures[0].status, SignatureStatus::Valid);
+}
+
+#[test]
 #[ignore = "timing probe"]
 fn probe_edit_latency_on_a_large_signed_document() {
     // ~120 MB: one page whose content stream is large.

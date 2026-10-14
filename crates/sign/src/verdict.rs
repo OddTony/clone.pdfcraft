@@ -27,12 +27,20 @@ use crate::pdf::{SignatureInfo, Status, fmt, text};
 /// Best-effort and infallible: anything unexpected is left as it is.
 /// Returns whether any appearance changed.
 pub fn show_valid_appearances(doc: &mut Document, signatures: &mut [SignatureInfo]) -> bool {
-    let valid: Vec<String> = signatures.iter().filter(|s| s.signed && s.status == Status::Valid).map(|s| s.field.clone()).collect();
     // Layer references claimed by more than one field are never rewritten: sharing
     // one stream between fields with different verdicts must not paint either wrong.
+    // Every field counts, not just the valid ones: a shared caption with an
+    // unvalidated field would otherwise be rewritten for the valid one alone.
+    // Refs are deduped per field first, so two widgets of one field sharing a
+    // stream still rewrite it once for their shared verdict.
+    let mut seen_fields = HashSet::new();
     let mut owners: HashMap<ObjRef, usize> = HashMap::new();
-    for field in &valid {
-        for r in appearance_layer_refs(doc, field) {
+    for sig in signatures.iter() {
+        if !seen_fields.insert(sig.field.clone()) {
+            continue;
+        }
+        let unique: HashSet<ObjRef> = appearance_layer_refs(doc, &sig.field).into_iter().collect();
+        for r in unique {
             *owners.entry(r).or_default() += 1;
         }
     }
@@ -111,24 +119,26 @@ fn substitute_valid_state(doc: &mut Document, field: &str, shared: &HashMap<ObjR
 
 /// The icon and caption layers of one widget, found by content role: the caption is
 /// the text layer still carrying the unverified template, and the icon is the
-/// largest vector-only form layer. Names are never consulted: signers arrange
+/// one vector layer drawn with lines or curves. Names are never consulted: signers arrange
 /// `n0`–`n4` either way round, and only the content tells which slot is which.
+/// A bare `re` rectangle (background fills, borders) never qualifies as the icon,
+/// however long it is; when either slot is missing or repeated, there is no slot
+/// and the caller falls back to the overlay badge instead of repainting decoration
+/// or leaving a second stale caption behind.
 fn find_slots(doc: &Document, layers: &[Layer]) -> Option<(LayerRef, LayerRef)> {
-    let mut caption = None;
-    let mut icon: Option<(&Layer, usize)> = None;
+    let mut captions: Vec<&Layer> = Vec::new();
+    let mut icons: Vec<&Layer> = Vec::new();
     for layer in layers {
         let (probe, decoded) = probe_layer(doc, layer);
-        if probe.has_text && layer_contains(&decoded, b"Not Verified") && caption.is_none() {
-            caption = Some(layer);
+        if probe.has_text && layer_contains(&decoded, b"Not Verified") {
+            captions.push(layer);
         }
-        if probe.is_form && !probe.has_text && probe.has_path {
-            let size = decoded.len();
-            if icon.is_none_or(|(_, best)| size > best) {
-                icon = Some((layer, size));
-            }
+        if probe.is_form && !probe.has_text && probe.has_draw {
+            icons.push(layer);
         }
     }
-    Some((LayerRef::of(icon?.0), LayerRef::of(caption?)))
+    let ([caption], [icon]) = (captions.as_slice(), icons.as_slice()) else { return None };
+    Some((LayerRef::of(icon), LayerRef::of(caption)))
 }
 
 // A layer reference with its dictionary, for rewriting.
@@ -144,16 +154,17 @@ impl LayerRef {
 }
 
 /// What a layer draws, probed from capped decoded content: whether it shows text,
-/// draws vector paths, and is a form (image and other streams never qualify).
+/// draws a line or curve (a bare `re` rectangle alone does not count), and is
+/// a form (image and other streams never qualify).
 /// Returns the decoded bytes alongside, so callers never decode twice.
 struct Probe {
     is_form: bool,
     has_text: bool,
-    has_path: bool,
+    has_draw: bool,
 }
 
 fn probe_layer(doc: &Document, layer: &Layer) -> (Probe, Vec<u8>) {
-    let empty = Probe { is_form: false, has_text: false, has_path: false };
+    let empty = Probe { is_form: false, has_text: false, has_draw: false };
     let resolved = doc.resolve(&Object::Ref(layer.r));
     let stream = match &*resolved {
         Object::Stream(s) => s,
@@ -161,17 +172,18 @@ fn probe_layer(doc: &Document, layer: &Layer) -> (Probe, Vec<u8>) {
     };
     let Ok(decoded) = stream.decoded_within(MAX_LAYER_DECODED) else { return (empty, Vec::new()) };
     let is_form = stream.dict.get(b"Subtype").map(|s| doc.resolve(s)).is_none_or(|s| s.as_name().is_none_or(|n| n == b"Form"));
-    let (has_text, has_path) = content_kinds(&decoded);
-    (Probe { is_form, has_text, has_path }, decoded)
+    let (has_text, has_draw) = content_kinds(&decoded);
+    (Probe { is_form, has_text, has_draw }, decoded)
 }
 
-/// Whether decoded content ops show text (`Tj TJ ' "`) or draw vector paths
-/// (`m l c v y h re`), tokenised so operator-like bytes inside literal strings
+/// Whether decoded content ops show text (`Tj TJ ' "`) or draw a line or curve
+/// (`m l c v y h`), tokenised so operator-like bytes inside literal strings
 /// never count (hex payloads stay glued to their `<…>` brackets, so they never
-/// exact-match a bare operator).
+/// exact-match a bare operator). A bare `re` rectangle alone (background fills,
+/// borders) counts as neither: it never identifies the status icon on its own.
 fn content_kinds(decoded: &[u8]) -> (bool, bool) {
     const TEXT_OPS: &[&[u8]] = &[b"Tj", b"TJ", b"'", b"\""];
-    const PATH_OPS: &[&[u8]] = &[b"m", b"l", b"c", b"v", b"y", b"h", b"re"];
+    const DRAW_OPS: &[&[u8]] = &[b"m", b"l", b"c", b"v", b"y", b"h"];
     // Blank literal strings first: `(a Tj)` draws an "a", not an operator. The
     // closing delimiter is consumed too, or it would glue onto the next operator
     // (`(a)Tj` is one string followed by `Tj`, since `)` always delimits).
@@ -202,15 +214,15 @@ fn content_kinds(decoded: &[u8]) -> (bool, bool) {
         flat.extend_from_slice(b);
     }
     let mut has_text = false;
-    let mut has_path = false;
+    let mut has_draw = false;
     for tok in flat.split(|c| matches!(c, b' ' | b'\n' | b'\r' | b'\t' | b'\x0c' | b'\0')) {
         if tok.is_empty() {
             continue;
         }
         has_text |= TEXT_OPS.contains(&tok);
-        has_path |= PATH_OPS.contains(&tok);
+        has_draw |= DRAW_OPS.contains(&tok);
     }
-    (has_text, has_path)
+    (has_text, has_draw)
 }
 
 // A form layer: its reference (for rewriting) and stream dictionary.
@@ -607,9 +619,14 @@ mod tests {
     fn content_kinds_read_operators_not_string_contents() {
         assert_eq!(content_kinds(b"BT /F1 10 Tf 5 50 Td (Signed by Test) Tj ET"), (true, false));
         assert_eq!(content_kinds(b"0.8 0.1 0.1 RG 3 w 5 5 m 20 5 l S"), (false, true));
+        // A bare rectangle alone never marks a layer as drawn: backgrounds and
+        // borders must not win the icon slot, however long they are.
+        assert_eq!(content_kinds(b"0 g 0 0 100 100 re f"), (false, false));
+        assert_eq!(content_kinds(b"0 G 3 w 0 0 10 10 re 20 20 30 30 re S"), (false, false));
         // Operator-like bytes inside strings never count, in either direction.
         assert_eq!(content_kinds(b"(a Tj of irony)"), (false, false));
         assert_eq!(content_kinds(b"BT (m) Tj ET"), (true, false));
+        assert_eq!(content_kinds(b"(re)"), (false, false));
         assert_eq!(content_kinds(b""), (false, false));
         // `)` always delimits, so a string glued to its operator still tokenises.
         assert_eq!(content_kinds(b"(a)Tj"), (true, false));
@@ -631,6 +648,10 @@ mod tests {
         let doc = &mut open(layered_fixture());
         let (icon, caption) = slots(doc, "Signature1");
         let icon_before = decoded(doc, icon);
+        // Read the untouched layers before substituting: afterwards the markers
+        // the selection looks for are gone, and re-reading would compare the
+        // rewritten bytes to themselves.
+        let before: Vec<(ObjRef, Vec<u8>)> = all_layers(doc, "Signature1").into_iter().filter(|(r, _)| *r != icon && *r != caption).collect();
         let mut sigs = vec![verdict("Signature1", Status::Valid)];
         assert!(show_valid_appearances(doc, &mut sigs));
         assert!(sigs[0].verdict_shown);
@@ -643,10 +664,8 @@ mod tests {
         assert!(check.starts_with(b"q "), "graphics state stays wrapped");
         assert!(has(&check, b"RG"));
         // Everything else keeps its bytes.
-        for (r, before) in all_layers(doc, "Signature1") {
-            if r != icon && r != caption {
-                assert_eq!(decoded(doc, r), before, "layer {r:?} untouched");
-            }
+        for (r, bytes) in &before {
+            assert_eq!(&decoded(doc, *r), bytes, "layer {r:?} untouched");
         }
     }
 
@@ -755,6 +774,159 @@ mod tests {
         let mut sigs = vec![verdict("Signature1", Status::Valid), verdict("Signature2", Status::Valid)];
         assert!(!show_valid_appearances(doc, &mut sigs));
         assert!(!sigs[0].verdict_shown && !sigs[1].verdict_shown, "shared streams stay untouched");
+        assert_eq!(decoded(doc, caption), caption_before);
+    }
+
+    #[test]
+    fn a_shared_caption_with_a_mixed_verdict_is_left_alone() {
+        let doc = &mut open(layered_fixture());
+        // Same sharing as above, but only the first field validated: rewriting the
+        // shared caption for it would repaint the other field's unverified state.
+        let (icon, caption) = slots(doc, "Signature1");
+        let frm = doc.add(form_with_ops(vec![(b"glyph", icon), (b"cap", caption)], "[0 0 50 30]", "q /glyph Do /cap Do Q"));
+        let top = doc.add(form_with_ops(vec![(b"frame", frm)], "[0 0 50 30]", "q /frame Do Q"));
+        let widget = doc.add(Object::Dict({
+            let mut d = Dict::new();
+            d.set(b"Type".to_vec(), Object::name("Annot"));
+            d.set(b"Subtype".to_vec(), Object::name("Widget"));
+            d.set(b"FT".to_vec(), Object::name("Sig"));
+            d.set(b"T".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"Signature2".to_vec())));
+            d.set(b"Rect".to_vec(), Object::Array(vec![Object::Int(10), Object::Int(70), Object::Int(110), Object::Int(120)]));
+            let mut ap = Dict::new();
+            ap.set(b"N".to_vec(), Object::Ref(top));
+            d.set(b"AP".to_vec(), Object::Dict(ap));
+            d
+        }));
+        let mut fields = doc
+            .get(ObjRef::new(5, 0))
+            .as_dict()
+            .and_then(|d| d.get(b"Fields"))
+            .map(|f| doc.resolve(f))
+            .and_then(|f| f.as_array().cloned())
+            .unwrap_or_default();
+        fields.push(Object::Ref(widget));
+        doc.update_dict(ObjRef::new(5, 0), |d| {
+            d.set(b"Fields".to_vec(), Object::Array(fields));
+        })
+        .unwrap();
+        let caption_before = decoded(doc, caption);
+        let icon_before = decoded(doc, icon);
+        let mut sigs = vec![verdict("Signature1", Status::Valid), verdict("Signature2", Status::Unknown)];
+        assert!(!show_valid_appearances(doc, &mut sigs));
+        assert!(!sigs[0].verdict_shown && !sigs[1].verdict_shown, "a shared stream serves both verdicts");
+        assert_eq!(decoded(doc, caption), caption_before);
+        assert_eq!(decoded(doc, icon), icon_before);
+    }
+
+    #[test]
+    fn a_decorative_border_longer_than_the_icon_is_preserved() {
+        let doc = &mut open(layered_fixture());
+        // Four nested stroked rectangles, deliberately longer than the glyph stream:
+        // length alone must not promote decoration to the icon slot.
+        let border = ObjRef::new(12, 0);
+        let rects = b"0 G 2 w 0 0 100 100 re S 10 10 80 80 re S 20 20 60 60 re S 30 30 40 40 re S".to_vec();
+        let dict = match &*doc.resolve(&Object::Ref(border)) {
+            Object::Stream(s) => s.dict.clone(),
+            _ => panic!("border is a stream"),
+        };
+        doc.set(border, Object::Stream(Stream::from_raw(stripped(&dict), rects)));
+        let border_before = decoded(doc, border);
+        assert!(border_before.len() > decoded(doc, slots(doc, "Signature1").0).len(), "the decoy is longer than the glyph");
+        let (_, caption) = slots(doc, "Signature1");
+        let mut sigs = vec![verdict("Signature1", Status::Valid)];
+        assert!(show_valid_appearances(doc, &mut sigs));
+        assert!(sigs[0].verdict_shown);
+        assert!(has(&decoded(doc, caption), b"Signature valid"));
+        assert_eq!(decoded(doc, border), border_before, "decoration untouched");
+    }
+
+    #[test]
+    fn two_captions_with_the_template_are_left_alone() {
+        let doc = &mut open(layered_fixture());
+        // A second caption still carrying the unverified template: rewriting only the
+        // first would leave the widget showing both states at once, so there is no
+        // slot and the page keeps the file's appearance plus the overlay badge.
+        let (_, caption) = slots(doc, "Signature1");
+        let caption_before = decoded(doc, caption);
+        let extra = doc.add(Object::Stream(Stream::from_raw(
+            {
+                let mut d = Dict::new();
+                d.set(b"BBox".to_vec(), Object::Array(vec![Object::Int(0), Object::Int(21), Object::Int(50), Object::Int(30)]));
+                let mut res = Dict::new();
+                let mut fonts = Dict::new();
+                fonts.set(
+                    b"F1".to_vec(),
+                    Object::Dict({
+                        let mut f = Dict::new();
+                        f.set(b"Type".to_vec(), Object::name("Font"));
+                        f.set(b"Subtype".to_vec(), Object::name("Type1"));
+                        f.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
+                        f
+                    }),
+                );
+                res.set(b"Font".to_vec(), Object::Dict(fonts));
+                d.set(b"Resources".to_vec(), Object::Dict(res));
+                d
+            },
+            b"BT /F1 9 Tf 2 22 Td (Signature Not Verified) Tj ET".to_vec(),
+        )));
+        doc.update_dict(ObjRef::new(7, 0), |d| {
+            let res =
+                d.get_mut(b"Resources").and_then(|r| r.as_dict_mut()).and_then(|r| r.get_mut(b"XObject")).and_then(|x| x.as_dict_mut()).unwrap();
+            res.set(b"second-caption", Object::Ref(extra));
+        })
+        .unwrap();
+        let mut sigs = vec![verdict("Signature1", Status::Valid)];
+        assert!(!show_valid_appearances(doc, &mut sigs));
+        assert!(!sigs[0].verdict_shown, "two templates leave no single caption");
+        assert_eq!(decoded(doc, caption), caption_before);
+        assert!(has(&decoded(doc, extra), b"Not Verified"), "the other caption is untouched too");
+    }
+
+    #[test]
+    fn an_icon_slot_with_no_drawing_is_left_alone() {
+        let doc = &mut open(layered_fixture());
+        // The glyph redrawn as a bare rectangle: with no drawn line or curve left,
+        // no layer qualifies as the icon, so nothing rewrites.
+        let glyph = ObjRef::new(10, 0);
+        let (_, caption) = slots(doc, "Signature1");
+        let caption_before = decoded(doc, caption);
+        let dict = match &*doc.resolve(&Object::Ref(glyph)) {
+            Object::Stream(s) => s.dict.clone(),
+            _ => panic!("glyph is a stream"),
+        };
+        doc.set(glyph, Object::Stream(Stream::from_raw(stripped(&dict), b"0 G 2 w 0 0 50 30 re S".to_vec())));
+        let mut sigs = vec![verdict("Signature1", Status::Valid)];
+        assert!(!show_valid_appearances(doc, &mut sigs));
+        assert!(!sigs[0].verdict_shown, "no drawing leaves no icon slot");
+        assert_eq!(decoded(doc, caption), caption_before);
+    }
+
+    #[test]
+    fn competing_drawn_layers_fall_back_to_the_overlay() {
+        let doc = &mut open(layered_fixture());
+        // A second drawn layer (lines, not rectangles) alongside the glyph: with two
+        // icon candidates neither is unambiguous, so nothing rewrites and the page
+        // keeps the file's appearance plus the overlay badge.
+        let (_, caption) = slots(doc, "Signature1");
+        let caption_before = decoded(doc, caption);
+        let extra = doc.add(Object::Stream(Stream::from_raw(
+            {
+                let mut d = Dict::new();
+                d.set(b"BBox".to_vec(), Object::Array(vec![Object::Int(0), Object::Int(0), Object::Int(50), Object::Int(30)]));
+                d
+            },
+            b"0 G 1 w 0 0 m 50 30 l S 0 30 m 50 0 l S".to_vec(),
+        )));
+        doc.update_dict(ObjRef::new(7, 0), |d| {
+            let res =
+                d.get_mut(b"Resources").and_then(|r| r.as_dict_mut()).and_then(|r| r.get_mut(b"XObject")).and_then(|x| x.as_dict_mut()).unwrap();
+            res.set(b"decoy", Object::Ref(extra));
+        })
+        .unwrap();
+        let mut sigs = vec![verdict("Signature1", Status::Valid)];
+        assert!(!show_valid_appearances(doc, &mut sigs));
+        assert!(!sigs[0].verdict_shown, "ambiguity falls back to the badge");
         assert_eq!(decoded(doc, caption), caption_before);
     }
 

@@ -123,11 +123,16 @@ fn drawing_a_signature_creating_an_id_signing_and_trusting() {
     h.get_by_label_contains("Signed by Grace Hopper").click();
     h.run_steps(2);
     h.get_by_label("Signature validity is UNKNOWN:");
+    // Seed a find so the trust path proves it invalidates the view: trust rebuilds
+    // the display copy, and the next frame must draw from it without any zoom change.
+    h.state_mut().views[0].find = Some(pdfcraft_ui_egui::canvas::Find { matches: vec![(0, 0..5)], ..Default::default() });
     h.get_by_label("Add to trusted certificates").click();
     h.run_steps(3);
     h.get_by_label("Signed and all signatures are valid.");
     let s = h.state();
     assert_eq!(s.session.get(s.views[0].id).unwrap().signatures[0].status, SignatureStatus::Valid);
+    assert!(s.views[0].find.as_ref().is_some_and(|f| f.matches.is_empty()), "trust invalidates the view without zooming");
+    assert!(!s.session.get(s.views[0].id).unwrap().dirty, "trust alone is not an edit");
     // Show certificate: the Certificate Viewer.
     h.get_by_label("Show certificate…").click();
     h.run_steps(3);
