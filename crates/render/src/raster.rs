@@ -5938,6 +5938,56 @@ trailer << /Root 1 0 R >>
         assert_eq!(px(75, 50), vec![255, 255, 255, 255], "outside the mask");
     }
 
+    /// An opaque axial shading pattern must honour the soft mask and the blend mode. vello_cpu
+    /// 0.0.8 paints an all-opaque gradient straight over the backdrop, so the native-gradient
+    /// path in the vendored hayro drew masked fades (PowerPoint slide overlays) as hard opaque
+    /// blocks. Regression test for the vendored hayro patch.
+    #[test]
+    fn opaque_gradient_honours_soft_mask_and_blend_mode() {
+        let render = |content: &str| {
+            let pdf = format!(
+                "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << /ExtGState << /M 5 0 R /B 7 0 R >> /Pattern << /P 8 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
+5 0 obj << /Type /ExtGState /SMask << /Type /Mask /S /Luminosity /G 6 0 R >> >> endobj
+6 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Group << /S /Transparency /CS /DeviceRGB >> /Length 22 >> stream
+0.5 g 0 0 100 100 re f
+endstream endobj
+7 0 obj << /Type /ExtGState /BM /Multiply >> endobj
+8 0 obj << /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 100 0] /Extend [true true] /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >> >> endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+                content.len()
+            );
+            let mut r = PageRenderer::new(Arc::new(pdf.into_bytes()), RenderConfig::default());
+            let p = r.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 4.0, tag: 0, ..Default::default() });
+            assert!(p.error.is_none(), "{content}: {:?}", p.error);
+            p
+        };
+        let px = |p: &RenderedPage, x: u32, y: u32| p.rgba[((y * p.width + x) * 4) as usize..][..4].to_vec();
+        // vello_cpu only takes the opaque shortcut on spans that fill a whole 256-pixel wide
+        // tile, so the page is rendered at 400 × 400 px and sampled at (8, 200).
+
+        // Unmasked, the gradient is opaque: nearly pure red at the left edge.
+        let p = render("/Pattern cs /P scn 0 0 100 100 re f");
+        let left = px(&p, 8, 200);
+        assert!(left[0] > 240 && left[1] == 0, "unmasked: {left:?}");
+
+        // A 50% luminosity mask over white: half red, half white.
+        let p = render("/M gs /Pattern cs /P scn 0 0 100 100 re f");
+        let left = px(&p, 8, 200);
+        assert!(left[0] > 240 && (i32::from(left[1]) - 128).abs() <= 6, "masked: {left:?}");
+
+        // Multiply over green: red × green is black, not the gradient painted over the top.
+        let p = render("0 1 0 rg 0 0 100 100 re f /B gs /Pattern cs /P scn 0 0 100 100 re f");
+        let left = px(&p, 8, 200);
+        assert!(left[0] < 16 && left[1] < 16 && left[2] < 16, "multiplied: {left:?}");
+    }
+
     /// ISO 32000-2 §8.5.4: `W` / `W*` clip with the current path once whichever path-painting
     /// operator ends it has painted it, `S`, `f` or `B` as much as `n`. The vendored interpreter
     /// applied the clip only on `n`: after `re W* S` everything later painted outside the clip,

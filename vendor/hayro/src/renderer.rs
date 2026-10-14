@@ -1075,8 +1075,15 @@ impl Renderer {
                         // become native gradients instead of a texture sampled pixel by pixel.
                         // Upstream also shifts by half a pixel for vello_cpu 0.3; 0.0.8 already
                         // evaluates gradients at pixel centres, like the texture below.
-                        if let Some(native) =
-                            encoded.as_svg_gradient(bbox, NATIVE_GRADIENT_TOLERANCE)
+                        //
+                        // PdfCraft patch: not under a soft mask, a non-Normal blend mode or a
+                        // transparency group. vello_cpu 0.0.8 paints a gradient whose stops are
+                        // all opaque straight over the backdrop, skipping the mask and the blend
+                        // mode, so a masked fade drew as a hard opaque block. The texture below
+                        // can be flagged as possibly transparent, which takes the masked path.
+                        if !self.force_images_may_have_transparency()
+                            && let Some(native) =
+                                encoded.as_svg_gradient(bbox, NATIVE_GRADIENT_TOLERANCE)
                         {
                             self.ctx
                                 .set_paint_transform(path_transform.inverse() * native.transform);
