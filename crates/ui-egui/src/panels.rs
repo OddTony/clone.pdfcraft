@@ -299,14 +299,11 @@ fn edit_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static 
     ui.add_space(2.0);
     ui.separator();
     ui.add_space(4.0);
-    if app.quick_tool == crate::QuickTool::EditText {
-        let count = app.active_ids().map_or(0, |(i, _)| app.views[i].objects.count());
-        if count > 0 {
-            ui.label(crate::i18n::trn(crate::i18n::current(), count as u64, "{n} object selected", "{n} objects selected"));
-            ui.label(tl!("Drag the selection to move it. Esc clears the selection."));
-        } else {
-            ui.label(tl!("Shift-click to select several objects. Drag empty space to select an area."));
-        }
+    // Several objects selected: how many, and how to move them. Acrobat's panel has no idle hint.
+    let count = app.active_ids().filter(|_| app.quick_tool == crate::QuickTool::EditText).map_or(0, |(i, _)| app.views[i].objects.count());
+    if count > 0 {
+        ui.label(crate::i18n::trn(crate::i18n::current(), count as u64, "{n} object selected", "{n} objects selected"));
+        ui.label(tl!("Drag the selection to move it. Esc clears the selection."));
         ui.add_space(6.0);
     }
     // Format text at the top while text is selected or being added.

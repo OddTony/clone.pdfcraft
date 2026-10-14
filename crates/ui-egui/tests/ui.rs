@@ -1291,6 +1291,10 @@ fn organize_pages_from_the_edit_panel_opens_its_panel() {
     h.get_by_label("Edit").click();
     h.run_steps(3);
     assert_eq!(h.state().left, LeftPanel::Tool("edit"));
+    assert!(
+        h.query_by_label("Shift-click to select several objects. Drag empty space to select an area.").is_none(),
+        "no idle hint above Format text, as in Acrobat"
+    );
     h.get_by_label("Organize pages").click();
     h.run_steps(3);
     assert_eq!(h.state().left, LeftPanel::Tool("organize"));
