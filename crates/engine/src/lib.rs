@@ -3897,7 +3897,14 @@ impl Session {
     pub fn check_save(&self, id: DocId, bytes: &Arc<Vec<u8>>) -> Result<(), EditError> {
         let doc = self.get(id).ok_or(EditError::NoDocument)?;
         let Some(editor) = doc.editor.as_ref() else { return Ok(()) };
-        pdfcraft_cos::Document::open_with_password(bytes.clone(), editor.keys.reopen.as_deref()).map_err(|e| EditError::Reopen(e.to_string()))?;
+        // Reopened the way this state of the document opens (a certificate's key, or a password).
+        let reopened = editor.keys.open(bytes.clone()).map_err(|e| EditError::Reopen(e.to_string()))?;
+        // The renderer can't open certificate security on its own: its pages are checked on a
+        // decrypted copy of what was just reopened, as the viewer reads them.
+        if certificate_secured(&reopened) {
+            let plain = plain_copy(&reopened)?;
+            return pdfcraft_render::check_pages(plain, None, doc.info.pages.len()).map_err(|e| EditError::Reopen(e.to_string()));
+        }
         pdfcraft_render::check_pages(bytes.clone(), doc.password.as_deref(), doc.info.pages.len()).map_err(|e| EditError::Reopen(e.to_string()))
     }
 
