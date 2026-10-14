@@ -111,7 +111,9 @@ impl Tokens {
                 divider: Color32::from_rgb(0x36, 0x37, 0x3A),
                 text: Color32::from_rgb(0xF2, 0xF1, 0xEE),
                 text_muted: Color32::from_rgb(0xA6, 0xA6, 0xA8),
-                text_faint: Color32::from_rgb(0x71, 0x71, 0x76),
+                // This token labels hints and page details, so keep it AA-readable
+                // on raised cards instead of using the suite's disabled-text gray.
+                text_faint: Color32::from_rgb(0x88, 0x88, 0x8C),
                 icon: Color32::from_rgb(0xA6, 0xA6, 0xA8),
                 hover: Color32::from_rgb(0x32, 0x33, 0x37),
                 pressed: Color32::from_rgb(0x41, 0x42, 0x46),
@@ -460,6 +462,7 @@ mod tests {
         assert_eq!(dark.chrome, Color32::from_rgb(0x12, 0x13, 0x16));
         assert_eq!(dark.panel, Color32::from_rgb(0x10, 0x10, 0x14));
         assert_eq!(dark.card, Color32::from_rgb(0x1e, 0x1f, 0x22));
+        assert_eq!(dark.text_faint, Color32::from_rgb(0x88, 0x88, 0x8c));
         assert_eq!(dark.selected, Color32::from_rgb(0x20, 0x3b, 0x65));
         assert_eq!(dark.on_accent(), Color32::from_rgb(0x06, 0x06, 0x07));
         assert_eq!(dark.pasteboard, Color32::from_rgb(0x19, 0x19, 0x1c));
