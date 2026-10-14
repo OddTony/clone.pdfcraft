@@ -45,7 +45,7 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 | Fixed zoom percentages match Acrobat's physical size | yes | differ (#739, documented in #736) | gap |
 | Dynamic zoom, loupe, pan-and-zoom window | yes | no | planned |
 | Hand tool, middle-button pan, autoscroll | yes | hand tool; Linux autoscroll | partial |
-| Text selection, column select | yes, Alt-drag columns | reading-order selection; Alt/Option-drag or Edit ▸ Column select (#740) | shipped |
+| Text selection, column select | yes, Alt-drag columns | reading-order selection, a drag or ⇧-click may run across pages (#527); Alt/Option-drag or Edit ▸ Column select (#740) | shipped |
 | Select and move several objects at once | yes | on one page: Shift/Ctrl/⌘-click and marquee, one undo step (#844); not across pages, no group resize | partial |
 | Object handles: corners keep proportion, edges free | yes | yes for added images and signatures | shipped |
 | Arrange, align and distribute page objects | yes | fields only | partial |

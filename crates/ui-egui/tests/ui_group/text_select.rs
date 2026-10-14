@@ -234,8 +234,8 @@ fn page_top(h: &Harness<'static, PdfCraftApp>, page: usize) -> f32 {
 }
 
 /// Issue #721: selecting near the bottom of a page with the button held, the wheel keeps
-/// scrolling while the pointer crosses the gap onto the next page. The selection stays on its
-/// own page (a selection can't span pages yet).
+/// scrolling while the pointer crosses the gap onto the next page — and the selection follows
+/// it there (#527, #2110).
 #[test]
 fn a_selection_drag_keeps_scrolling_over_the_gap_and_the_next_page() {
     let (mut h, _) = harness_with(bottom_lines(3), |app| {
@@ -261,9 +261,106 @@ fn a_selection_drag_keeps_scrolling_over_the_gap_and_the_next_page() {
         }
     }
     assert!(over_gap && over_next, "the pointer crossed the gap ({over_gap}) onto the next page ({over_next})");
-    let held = h.state().views[0].selected_text().expect("still selected");
-    assert!(held.starts_with("ends") && "Page 1 ends with this line".contains(held.as_str()), "the selection stays on page 1: {held:?}");
+    // The head follows the pointer onto the next page, so the run spans both while the drag is
+    // still held; it lands once that page's line is under the pointer.
+    let mut held = h.state().views[0].selected_text().expect("still selected");
+    for _ in 0..200 {
+        if let Some((first, rest)) = held.split_once('\n')
+            && first.starts_with("ends with this line")
+            && rest.contains("Page 2")
+        {
+            break;
+        }
+        wheel(&mut h, MouseWheelUnit::Line, -0.1);
+        held = h.state().views[0].selected_text().expect("still selected");
+    }
+    let (first, rest) = held.split_once('\n').expect("the selection spans both pages");
+    assert!(first.starts_with("ends with this line"), "page 1 runs from the anchor to its end: {first:?}");
+    assert!(rest.contains("Page 2"), "page 2 starts at the head: {rest:?}");
     h.event(Event::PointerButton { pos: to, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
     h.run_steps(2);
     assert_eq!(h.state().views[0].selected_text(), Some(held), "releasing keeps the selection");
+}
+
+/// Issue #527: a drag that walks off the bottom of a page and onto the next one selects both,
+/// and Copy carries the pages in document order.
+#[test]
+fn drag_across_a_gap_selects_text_on_both_pages() {
+    let (mut h, _) = harness_with(bottom_lines(2), |app| {
+        app.set_option("layout", "continuous").unwrap();
+        app.set_option("zoom", "100").unwrap();
+    });
+    let line = |k: usize| format!("Page {} ends with this line", k + 1);
+    let glyph = |h: &Harness<'static, PdfCraftApp>, page: usize, g: usize| h.state().views[0].glyph_screen_pos(page, g).expect("glyph on screen");
+    // Drag from the start of page 1's line to the "h" of "with" on page 2.
+    let (from, to) = (glyph(&h, 0, 0), glyph(&h, 1, 12));
+    drag(&mut h, from, to);
+    let want1 = line(0);
+    let want2: String = line(1).chars().take(13).collect();
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some(format!("{want1}\n{want2}").as_str()), "both pages, in order");
+    // A plain click releases it.
+    h.run_steps(60);
+    click(&mut h, to);
+    assert_eq!(h.state().views[0].selected_text(), None);
+}
+
+/// Issue #527: ⇧-click lands the head on another page, keeping the anchor.
+#[test]
+fn shift_click_extends_the_selection_onto_another_page() {
+    let (mut h, _) = harness_with(bottom_lines(2), |app| {
+        app.set_option("layout", "continuous").unwrap();
+        app.set_option("zoom", "100").unwrap();
+    });
+    let line = |k: usize| format!("Page {} ends with this line", k + 1);
+    let glyph = |h: &Harness<'static, PdfCraftApp>, page: usize, g: usize| h.state().views[0].glyph_screen_pos(page, g).expect("glyph on screen");
+    // Select page 1's line from its start.
+    let (from, to) = (glyph(&h, 0, 0), glyph(&h, 0, 4));
+    drag(&mut h, from, to);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("Page "), "the line's start is selected");
+    h.run_steps(60);
+    // ⇧-click the "2" of page 2's line: the anchor stays put and the head jumps pages.
+    let two = glyph(&h, 1, 5);
+    shift_click(&mut h, two);
+    let want2: String = line(1).chars().take(6).collect();
+    assert_eq!(
+        h.state().views[0].selected_text().as_deref(),
+        Some(format!("{}\n{want2}", line(0)).as_str()),
+        "from page 1's anchor to page 2's head"
+    );
+}
+
+/// Issue #527: a cross-page selection is marked on every page it covers, and one undo takes
+/// the whole marking back.
+#[test]
+fn a_cross_page_selection_marks_both_pages_with_one_undo() {
+    let (mut h, _) = harness_with(bottom_lines(2), |app| {
+        app.set_option("layout", "continuous").unwrap();
+        app.set_option("zoom", "100").unwrap();
+    });
+    h.state_mut().views[0].select_text_range((0, 0), (1, 5));
+    h.run_steps(2);
+    let highlights = |h: &Harness<'static, PdfCraftApp>| {
+        let app = h.state();
+        let doc = app.session.get(app.views[0].id).expect("doc open");
+        doc.info.annotations.iter().filter(|a| a.subtype == "Highlight").count()
+    };
+    assert!(h.state_mut().execute("comment.highlight"), "the highlight command runs");
+    for _ in 0..200 {
+        if highlights(&h) == 2 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        h.run_steps(1);
+    }
+    assert_eq!(highlights(&h), 2, "one highlight per page the selection covers");
+    assert!(h.state().views[0].selected_text().is_none(), "the selection is spent");
+    assert!(h.state_mut().execute("edit.undo"), "undo runs");
+    for _ in 0..200 {
+        if highlights(&h) == 0 {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        h.run_steps(1);
+    }
+    assert_eq!(highlights(&h), 0, "one undo takes back both pages");
 }

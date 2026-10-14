@@ -1095,6 +1095,36 @@ fn drawing_a_comment_by_drag_and_its_context_menu() {
     assert!(call(&mut h, &c, "ui.drag", json!({ "from": [1, 2] })).unwrap_err().contains("to must be"));
 }
 
+/// Issue #527: `ui.drag` from one page's text to the next selects across the gap, and
+/// `ui.state.active.selected_text` reports every page of it.
+#[test]
+fn text_selection_can_span_pages_and_is_readable_headlessly() {
+    let (mut h, c) = harness_pages(2);
+    h.state_mut().set_option("layout", "continuous").unwrap();
+    h.state_mut().set_option("zoom", "100").unwrap();
+    // Wait until both pages have their text layer (needed to aim at glyphs).
+    let (mut from, mut to) = ([0.0; 2], [0.0; 2]);
+    for _ in 0..300 {
+        let v = &h.state().views[0];
+        if let (Some(a), Some(b)) = (v.glyph_screen_pos(0, 0), v.glyph_screen_pos(1, 0)) {
+            from = [a.x, a.y];
+            to = [b.x, b.y];
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        h.run_steps(1);
+    }
+    assert_ne!(from, [0.0; 2], "page 1's text layer loaded");
+    assert_ne!(to, [0.0; 2], "page 2's text layer loaded");
+    ok(&mut h, &c, "ui.drag", json!({ "from": from, "to": to, "steps": 8 }));
+    h.run_steps(2);
+    let st = ok(&mut h, &c, "ui.state", json!({}));
+    let text = st["active"]["selected_text"].as_str().unwrap_or_default();
+    let (first, rest) = text.split_once('\n').unwrap_or_else(|| panic!("the selection spans both pages: {st}"));
+    assert!(first.starts_with("Page 1"), "page 1 from the anchor on: {first:?}");
+    assert!(rest.starts_with('P'), "page 2 starts at the head: {rest:?}");
+}
+
 #[test]
 fn screenshots_of_window_and_region() {
     let (mut h, c) = harness();

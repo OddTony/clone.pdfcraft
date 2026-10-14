@@ -147,7 +147,7 @@ pub(crate) fn page_input(
             let r = Rect::from_two_pos(start, end).intersect(xf.rect);
             if r.width() >= 3.0 && r.height() >= 3.0 {
                 let (a, b) = (to_user(xf, info, page, r.min), to_user(xf, info, page, r.max));
-                view.pending_redaction = Some((page, vec![rect_quad([a[0], a[1], b[0], b[1]])]));
+                view.pending_redaction = Some(vec![(page, vec![rect_quad([a[0], a[1], b[0], b[1]])])]);
             }
         }
         return true;
@@ -166,14 +166,15 @@ pub(crate) fn page_input(
     false
 }
 
-/// A finished text selection with the Redact tool becomes a mark.
-pub(crate) fn after_text(resp: &egui::Response, page: usize, info: &DocInfo, view: &mut DocView) {
+/// A finished text selection with the Redact tool becomes a mark — one per page it covers,
+/// queued together so they land as one edit.
+pub(crate) fn after_text(resp: &egui::Response, info: &DocInfo, view: &mut DocView) {
     if !(resp.drag_stopped() || resp.double_clicked()) || view.redact_drag.is_some() {
         return;
     }
-    if let Some((p, quads)) = view.selection_quads(info).filter(|(p, _)| *p == page) {
+    if let Some(parts) = view.selection_quads(info) {
         view.clear_selection();
-        view.pending_redaction = Some((p, quads));
+        view.pending_redaction = Some(parts);
     }
 }
 
@@ -189,6 +190,20 @@ pub(crate) fn paint(ui: &egui::Ui, painter: &egui::Painter, page: usize, view: &
 }
 
 impl PdfCraftApp {
+    /// A finished text selection marked for redaction: one mark per page it covers, and all of
+    /// them as one undo step when the selection spans several pages (#527). `None` when
+    /// nothing was marked.
+    pub fn mark_selection(&mut self, parts: Vec<(usize, Vec<[f64; 8]>)>) -> Option<Edit> {
+        let author = self.comment_prefs.author.clone();
+        let edits: Vec<Edit> =
+            parts.into_iter().filter(|(_, q)| !q.is_empty()).map(|(page, quads)| self.redact_prefs.mark(page, quads, &author)).collect();
+        match <[Edit; 1]>::try_from(edits) {
+            Ok([one]) => Some(one),
+            Err(edits) if edits.is_empty() => None,
+            Err(edits) => Some(Edit::Batch { label: "Mark for redaction".into(), edits }),
+        }
+    }
+
     /// Mark every match of the search draft on every page; returns how many were marked.
     pub fn redact_search(&mut self) -> usize {
         let Some((_, id)) = self.active_ids() else { return 0 };

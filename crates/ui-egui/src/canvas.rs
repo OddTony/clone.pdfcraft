@@ -5,7 +5,7 @@
 //! stale rasters are shown stretched until the sharp one arrives (tiling comes in M3.3).
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::ops::Range;
+use std::ops::{Range, RangeInclusive};
 use std::sync::Arc;
 
 use egui::{Align2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke, TextureHandle, TextureOptions, Vec2, pos2, vec2};
@@ -224,44 +224,94 @@ pub struct Find {
     pub in_panel: bool,
 }
 
-/// A text selection on one page.
+/// A glyph named by its page and its index in that page's text layer (#527: the two ends of a
+/// selection may sit on different pages).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Caret {
+    page: usize,
+    glyph: usize,
+}
+
+impl Caret {
+    /// The two ends in reading order: start first, whichever end the drag began at.
+    fn order(a: Caret, b: Caret) -> (Caret, Caret) {
+        if (a.page, a.glyph) <= (b.page, b.glyph) { (a, b) } else { (b, a) }
+    }
+}
+
+/// A text selection.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Selection {
-    page: usize,
     span: Span,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Span {
-    /// Reading order, between two glyph indices.
-    Run { anchor: usize, head: usize },
+    /// Reading order, between two glyphs — possibly on different pages (#527).
+    Run { anchor: Caret, head: Caret },
     /// Column select (#740): the glyphs inside a rectangle in page view space, drawn from the
-    /// corner the drag started at (`rect[0..2]`) to the pointer (`rect[2..4]`).
-    Column { rect: [f32; 4] },
+    /// corner the drag started at (`rect[0..2]`) to the pointer (`rect[2..4]`), always on `page`.
+    Column { page: usize, rect: [f32; 4] },
 }
 
 impl Selection {
     fn run(page: usize, anchor: usize, head: usize) -> Self {
-        Self { page, span: Span::Run { anchor, head } }
+        Self::between(Caret { page, glyph: anchor }, Caret { page, glyph: head })
     }
 
-    fn range(anchor: usize, head: usize) -> Range<usize> {
-        anchor.min(head)..anchor.max(head).saturating_add(1)
+    fn between(anchor: Caret, head: Caret) -> Self {
+        Self { span: Span::Run { anchor, head } }
     }
 
-    /// One rectangle per selected piece of a line, in view space (highlighting, markup quads).
-    fn rects(&self, text: &PageText) -> Vec<[f32; 4]> {
+    /// Every page the selection touches, in order.
+    fn pages(&self) -> RangeInclusive<usize> {
         match self.span {
-            Span::Run { anchor, head } => text.line_rects(Self::range(anchor, head)),
-            Span::Column { rect } => text.glyph_rects(&text.glyphs_in(rect)),
+            Span::Run { anchor, head } => {
+                let (a, b) = Caret::order(anchor, head);
+                a.page..=b.page
+            }
+            Span::Column { page, .. } => page..=page,
         }
     }
 
-    /// The selected text, as Copy puts it on the clipboard.
-    fn text(&self, text: &PageText) -> String {
+    /// Whether any part of the selection is on `page`.
+    fn covers(&self, page: usize) -> bool {
+        self.pages().contains(&page)
+    }
+
+    /// The glyphs the run covers on `page`, start first; `None` when the selection is not on
+    /// that page, when it is a column rectangle (which lives on its own page), or when the page
+    /// has no text. A run reaching past `page` takes the whole page, so a selection dragged
+    /// from page 1 to page 3 covers all of page 2.
+    fn glyphs_on(&self, page: usize, glyphs: usize) -> Option<Range<usize>> {
+        let Span::Run { anchor, head } = self.span else { return None };
+        let (a, b) = Caret::order(anchor, head);
+        if page < a.page || page > b.page || glyphs == 0 {
+            return None;
+        }
+        let last = glyphs - 1;
+        let start = if page == a.page { a.glyph.min(last) } else { 0 };
+        let end = if page == b.page { b.glyph.min(last) } else { last };
+        Some(start..end.saturating_add(1))
+    }
+
+    /// One rectangle per selected piece of a line on `page`, in view space (highlighting,
+    /// markup quads); nothing when the selection is not on that page.
+    fn rects(&self, page: usize, text: &PageText) -> Vec<[f32; 4]> {
         match self.span {
-            Span::Run { anchor, head } => text.text_of(Self::range(anchor, head)),
-            Span::Column { rect } => text.column_text(&text.glyphs_in(rect)),
+            Span::Run { .. } => self.glyphs_on(page, text.glyphs.len()).map_or_else(Vec::new, |r| text.line_rects(r)),
+            Span::Column { page: p, rect } if p == page => text.glyph_rects(&text.glyphs_in(rect)),
+            Span::Column { .. } => Vec::new(),
+        }
+    }
+
+    /// The selected text on `page`, as Copy puts it on the clipboard (an empty string when the
+    /// selection is not there).
+    fn text(&self, page: usize, text: &PageText) -> String {
+        match self.span {
+            Span::Run { .. } => self.glyphs_on(page, text.glyphs.len()).map_or_else(String::new, |r| text.text_of(r)),
+            Span::Column { page: p, rect } if p == page => text.column_text(&text.glyphs_in(rect)),
+            Span::Column { .. } => String::new(),
         }
     }
 }
@@ -417,9 +467,10 @@ pub struct DocView {
     pub content: crate::content_ui::ContentView,
     /// Edit a PDF ▸ Link tool state.
     pub links: crate::link_ui::LinkView,
-    /// Redact tool: the box being drawn, and a mark to add (page, quads) for the app to style.
+    /// Redact tool: the box being drawn, and marks to add — one (page, quads) part per page —
+    /// for the app to style.
     pub redact_drag: crate::redact_ui::AreaDrag,
-    pub pending_redaction: Option<(usize, Vec<[f64; 8]>)>,
+    pub pending_redaction: Option<Vec<(usize, Vec<[f64; 8]>)>>,
     /// A crop rectangle being dragged (Crop tool).
     pub crop_drag: crate::crop::CropDrag,
     /// Enhance ▸ Camera image: the quadrilateral being placed.
@@ -847,7 +898,7 @@ impl DocView {
         self.text_failed.remove(&page);
         self.errors.remove(&page);
         self.last_queue.clear();
-        if self.selection.is_some_and(|s| s.page == page) {
+        if self.selection.is_some_and(|s| s.covers(page)) {
             self.selection = None;
         }
     }
@@ -862,13 +913,20 @@ impl DocView {
         self.screen_xforms.iter().find(|(p, _)| *p == page).map(|(_, xf)| *xf)
     }
 
-    /// The text selection as markup quadrilaterals in user space: (page, quads).
-    pub(crate) fn selection_quads(&self, info: &DocInfo) -> Option<(usize, Vec<[f64; 8]>)> {
+    /// The selection as markup quadrilaterals in user space, one part per page it covers (a
+    /// cross-page selection, #527, is one part on each page: annotations are per-page). `None`
+    /// when there is no selection; empty parts are left out.
+    pub(crate) fn selection_quads(&self, info: &DocInfo) -> Option<Vec<(usize, Vec<[f64; 8]>)>> {
         let s = self.selection?;
-        let text = self.texts.get(&s.page)?;
-        let page = info.pages.get(s.page)?;
-        let quads: Vec<[f64; 8]> = s.rects(text).into_iter().map(|r| page.view_rect_to_quad(r)).collect();
-        (!quads.is_empty()).then_some((s.page, quads))
+        let mut out = Vec::new();
+        for page_idx in s.pages() {
+            let (Some(text), Some(page)) = (self.texts.get(&page_idx), info.pages.get(page_idx)) else { continue };
+            let quads: Vec<[f64; 8]> = s.rects(page_idx, text).into_iter().map(|r| page.view_rect_to_quad(r)).collect();
+            if !quads.is_empty() {
+                out.push((page_idx, quads));
+            }
+        }
+        (!out.is_empty()).then_some(out)
     }
 
     /// A page's thumbnail texture, when rendered.
@@ -893,6 +951,12 @@ impl DocView {
     /// Select text on `page` from glyph `from` to glyph `to` (tests and automation).
     pub fn select_text(&mut self, page: usize, from: usize, to: usize) {
         self.selection = Some(Selection::run(page, from, to));
+    }
+
+    /// Select from one glyph to another, the ends possibly on different pages (#527; tests and
+    /// automation).
+    pub fn select_text_range(&mut self, from: (usize, usize), to: (usize, usize)) {
+        self.selection = Some(Selection::between(Caret { page: from.0, glyph: from.1 }, Caret { page: to.0, glyph: to.1 }));
     }
 
     /// Open the find bar (or focus it if already open).
@@ -993,11 +1057,20 @@ impl DocView {
         Some(xf.view_rect(g.rect).center())
     }
 
-    /// Selected text, if any (⌘C).
+    /// Selected text, if any (⌘C): every page of the selection in reading order, one line per
+    /// page break, so a cross-page selection copies as the document reads (#527).
     pub fn selected_text(&self) -> Option<String> {
         let s = self.selection?;
-        let t = self.texts.get(&s.page)?;
-        Some(s.text(t)).filter(|x| !x.is_empty())
+        let mut parts = Vec::new();
+        for page in s.pages() {
+            if let Some(t) = self.texts.get(&page) {
+                let part = s.text(page, t);
+                if !part.is_empty() {
+                    parts.push(part);
+                }
+            }
+        }
+        (!parts.is_empty()).then(|| parts.join("\n"))
     }
 
     pub fn thumb(&self, page: usize) -> Option<&TextureHandle> {
@@ -1511,7 +1584,7 @@ impl DocView {
         }
         let mut keep: HashSet<usize> = self.frame_visible.clone();
         if let Some(s) = self.selection {
-            keep.insert(s.page);
+            keep.extend(s.pages());
         }
         if let Some(f) = self.find.as_ref() {
             keep.extend(f.matches.iter().map(|(p, _)| *p));
@@ -2765,127 +2838,146 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                         }
                     }
                 }
-                if let Some(sel) = view.selection.filter(|s| s.page == i) {
-                    for lr in sel.rects(&text) {
+                if let Some(sel) = view.selection.filter(|s| s.covers(i)) {
+                    for lr in sel.rects(i, &text) {
                         painter.rect_filled(to_screen(lr), CornerRadius::same(1), Color32::from_rgba_unmultiplied(0x3A, 0x7B, 0xF0, 70));
                     }
                     // The rectangle being drawn, as Acrobat shows it while column-selecting.
-                    if let Span::Column { rect } = sel.span
+                    if let Span::Column { rect, .. } = sel.span
                         && resp.dragged()
                     {
                         let outline = Stroke::new(1.0, Color32::from_rgb(0x3A, 0x7B, 0xF0));
                         painter.rect_stroke(to_screen(rect), CornerRadius::ZERO, outline, egui::StrokeKind::Middle);
                     }
                 }
-                if selects_text
-                    && !consumed
-                    && let Some(p) = pointer.filter(|p| r.contains(*p))
-                {
-                    let (vx, vy) = xf.screen_to_view(p);
-                    let over_text = text.glyphs.iter().any(|g| vx >= g.rect[0] && vx <= g.rect[2] && vy >= g.rect[1] && vy <= g.rect[3]);
-                    let over_link = info.links.iter().any(|l| l.page == i && xf.user_rect(info, i, l.rect).contains(p));
-                    // Column select (#740): the Column select tool, or Alt (Option on macOS) held
-                    // while a drag starts, as in Acrobat.
-                    let column = tool == QuickTool::ColumnSelect || ui.input(|inp| inp.modifiers.alt);
-                    if column && !over_link {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
-                    } else if over_text && !over_link {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
-                    }
-                    let press_here = ui.input(|inp| inp.pointer.press_origin()).is_some_and(|o| r.contains(o));
-                    let pressed = ui.input(|inp| inp.pointer.primary_pressed());
-                    if pressed && press_here && !over_link {
-                        let now = ui.input(|inp| inp.time);
-                        // The same limits egui uses to count clicks on release.
-                        let (max_delay, max_dist) = ui.ctx().options(|o| (o.input_options.max_double_click_delay, o.input_options.max_click_dist));
-                        let is_consecutive =
-                            now - view.last_press_time <= max_delay && view.last_press_pos.is_some_and(|pos| pos.distance(p) <= max_dist);
-                        view.clicks = if is_consecutive { view.clicks.saturating_add(1) } else { 1 };
-                        view.last_press_time = now;
-                        view.last_press_pos = Some(p);
-
-                        // Multi-click highlights immediately on pointer press instead of release (#1024).
-                        let clicks = if view.clicks > 2 && tool != QuickTool::Select { 1 } else { view.clicks };
-                        if clicks >= 2 && over_text {
-                            let span = text.nearest(vx, vy).and_then(|a| match clicks {
-                                2 => text.word_at(a),
-                                3 => text.line_at(a),
-                                _ => text.glyphs.len().checked_sub(1).map(|last| (0, last)),
-                            });
-                            if let Some((first, last)) = span {
-                                view.selection = Some(Selection::run(i, first, last));
-                            }
-                        }
-                    }
-                    if resp.drag_started() && press_here && !over_link {
+                if selects_text && !consumed {
+                    // Where the press went down, when it went down on this page.
+                    let origin = ui.input(|inp| inp.pointer.press_origin()).filter(|o| r.contains(*o));
+                    // A press on a link starts a link gesture, not a selection (the link keeps
+                    // the drag wherever the pointer goes).
+                    let origin_over_link =
+                        origin.is_some_and(|o| info.links.iter().any(|l| l.page == i && xf.user_rect(info, i, l.rect).contains(o)));
+                    // The drag starts where the press went down — even when the pointer has
+                    // already crossed onto another page by the frame egui counts it a drag, a
+                    // fast flick crossing the gap in one frame (#527). The start frame then
+                    // lands the head wherever the pointer is now, in the drag below.
+                    if resp.drag_started()
+                        && let Some(origin) = origin
+                        && !origin_over_link
+                    {
                         view.selection_drag = true;
-                        let origin = ui.input(|inp| inp.pointer.press_origin()).unwrap_or(p);
                         let (ox, oy) = xf.screen_to_view(origin);
+                        let column = tool == QuickTool::ColumnSelect || ui.input(|inp| inp.modifiers.alt);
                         if view.clicks < 2 {
                             view.selection = if column {
-                                Some(Selection { page: i, span: Span::Column { rect: [ox, oy, vx, vy] } })
+                                Some(Selection { span: Span::Column { page: i, rect: [ox, oy, ox, oy] } })
                             } else {
                                 text.nearest(ox, oy).map(|a| Selection::run(i, a, a))
                             };
                         }
                     }
-                    if resp.dragged()
-                        && let Some(sel) = view.selection.as_mut().filter(|s| s.page == i)
-                    {
-                        match &mut sel.span {
-                            Span::Run { head, .. } => {
-                                if let Some(h) = text.nearest(vx, vy) {
-                                    *head = h;
+                    if let Some(p) = pointer.filter(|p| r.contains(*p)) {
+                        let (vx, vy) = xf.screen_to_view(p);
+                        let over_text = text.glyphs.iter().any(|g| vx >= g.rect[0] && vx <= g.rect[2] && vy >= g.rect[1] && vy <= g.rect[3]);
+                        let over_link = info.links.iter().any(|l| l.page == i && xf.user_rect(info, i, l.rect).contains(p));
+                        // Column select (#740): the Column select tool, or Alt (Option on macOS) held
+                        // while a drag starts, as in Acrobat.
+                        let column = tool == QuickTool::ColumnSelect || ui.input(|inp| inp.modifiers.alt);
+                        if column && !over_link {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                        } else if over_text && !over_link {
+                            ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+                        }
+                        let press_here = origin.is_some();
+                        let pressed = ui.input(|inp| inp.pointer.primary_pressed());
+                        if pressed && press_here && !over_link {
+                            let now = ui.input(|inp| inp.time);
+                            // The same limits egui uses to count clicks on release.
+                            let (max_delay, max_dist) =
+                                ui.ctx().options(|o| (o.input_options.max_double_click_delay, o.input_options.max_click_dist));
+                            let is_consecutive =
+                                now - view.last_press_time <= max_delay && view.last_press_pos.is_some_and(|pos| pos.distance(p) <= max_dist);
+                            view.clicks = if is_consecutive { view.clicks.saturating_add(1) } else { 1 };
+                            view.last_press_time = now;
+                            view.last_press_pos = Some(p);
+
+                            // Multi-click highlights immediately on pointer press instead of release (#1024).
+                            let clicks = if view.clicks > 2 && tool != QuickTool::Select { 1 } else { view.clicks };
+                            if clicks >= 2 && over_text {
+                                let span = text.nearest(vx, vy).and_then(|a| match clicks {
+                                    2 => text.word_at(a),
+                                    3 => text.line_at(a),
+                                    _ => text.glyphs.len().checked_sub(1).map(|last| (0, last)),
+                                });
+                                if let Some((first, last)) = span {
+                                    view.selection = Some(Selection::run(i, first, last));
                                 }
                             }
-                            Span::Column { rect } => {
-                                rect[2] = vx;
-                                rect[3] = vy;
+                        }
+                        if resp.dragged()
+                            && let Some(sel) = view.selection.as_mut()
+                        {
+                            match &mut sel.span {
+                                // A run follows the pointer over any page while the selection drag
+                                // lasts (#527): the anchor stays where the drag began and the head
+                                // lands on whichever page the pointer is over now.
+                                Span::Run { head, .. } if view.selection_drag => {
+                                    if let Some(h) = text.nearest(vx, vy) {
+                                        *head = Caret { page: i, glyph: h };
+                                    }
+                                }
+                                Span::Column { rect, page } if *page == i => {
+                                    rect[2] = vx;
+                                    rect[3] = vy;
+                                }
+                                _ => {}
                             }
                         }
-                    }
-                    // A rectangle around no text selects nothing.
-                    if resp.drag_stopped()
-                        && view.selection.is_some_and(|s| s.page == i && matches!(s.span, Span::Column { .. }) && s.text(&text).is_empty())
-                    {
-                        view.selection = None;
-                    }
-                    // Quick clicks widen the selection: two a word, three the line, four the page.
-                    // Release-based fallback for platforms or synthetic events that report double_clicked.
-                    let release_clicks = if resp.triple_clicked() {
-                        view.clicks.max(2).saturating_add(1)
-                    } else if resp.double_clicked() {
-                        view.clicks.max(2)
-                    } else {
-                        0
-                    };
-                    if release_clicks > 0 {
-                        view.clicks = release_clicks;
-                    }
-                    let clicks = if view.clicks > 2 && tool != QuickTool::Select { 1 } else { view.clicks };
-                    // Only on the frame egui reports the multi-click: `view.clicks` outlives it, and
-                    // acting on every frame re-selected the word as soon as a selection was cleared
-                    // (a highlight made by the double-click left its word selected).
-                    if release_clicks > 0 && clicks >= 2 && over_text {
-                        if view.selection.is_none() {
-                            let span = text.nearest(vx, vy).and_then(|a| match clicks {
-                                2 => text.word_at(a),
-                                3 => text.line_at(a),
-                                _ => text.glyphs.len().checked_sub(1).map(|last| (0, last)),
-                            });
-                            if let Some((first, last)) = span {
-                                view.selection = Some(Selection::run(i, first, last));
-                            }
+                        // A rectangle around no text selects nothing.
+                        if resp.drag_stopped()
+                            && view.selection.is_some_and(|s| s.covers(i) && matches!(s.span, Span::Column { .. }) && s.text(i, &text).is_empty())
+                        {
+                            view.selection = None;
                         }
-                    } else if resp.clicked() && view.clicks < 2 && !over_link {
-                        // ⇧-click extends a selection on this page to the click, keeping its
-                        // anchor (#527). Otherwise (no shift, no selection on this page, or a
-                        // column selection, which has no anchor glyph; a selection cannot yet
-                        // span pages) a click clears the selection.
-                        let shift = ui.input(|inp| inp.modifiers.shift);
-                        match (view.selection.as_mut().filter(|s| shift && s.page == i).map(|s| &mut s.span), text.nearest(vx, vy)) {
-                            (Some(Span::Run { head, .. }), Some(h)) => *head = h,
-                            _ => view.selection = None,
+                        // Quick clicks widen the selection: two a word, three the line, four the page.
+                        // Release-based fallback for platforms or synthetic events that report double_clicked.
+                        let release_clicks = if resp.triple_clicked() {
+                            view.clicks.max(2).saturating_add(1)
+                        } else if resp.double_clicked() {
+                            view.clicks.max(2)
+                        } else {
+                            0
+                        };
+                        if release_clicks > 0 {
+                            view.clicks = release_clicks;
+                        }
+                        let clicks = if view.clicks > 2 && tool != QuickTool::Select { 1 } else { view.clicks };
+                        // Only on the frame egui reports the multi-click: `view.clicks` outlives it, and
+                        // acting on every frame re-selected the word as soon as a selection was cleared
+                        // (a highlight made by the double-click left its word selected).
+                        if release_clicks > 0 && clicks >= 2 && over_text {
+                            if view.selection.is_none() {
+                                let span = text.nearest(vx, vy).and_then(|a| match clicks {
+                                    2 => text.word_at(a),
+                                    3 => text.line_at(a),
+                                    _ => text.glyphs.len().checked_sub(1).map(|last| (0, last)),
+                                });
+                                if let Some((first, last)) = span {
+                                    view.selection = Some(Selection::run(i, first, last));
+                                }
+                            }
+                        } else if resp.clicked() && view.clicks < 2 && !over_link {
+                            // ⇧-click extends a run to the click from its anchor, which may sit on
+                            // another page (#527). Otherwise (no shift, or a column selection, which
+                            // has no anchor glyph) a click clears the selection.
+                            let shift = ui.input(|inp| inp.modifiers.shift);
+                            match (
+                                view.selection.as_mut().filter(|s| shift && matches!(s.span, Span::Run { .. })).map(|s| &mut s.span),
+                                text.nearest(vx, vy),
+                            ) {
+                                (Some(Span::Run { head, .. }), Some(h)) => *head = Caret { page: i, glyph: h },
+                                _ => view.selection = None,
+                            }
                         }
                     }
                 }
@@ -2897,7 +2989,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             crate::image_pick::paint(painter, &xf, i, info, view);
             comments::page_after_text(&resp, &pcx, view);
             if tool == QuickTool::Redact && can_modify {
-                crate::redact_ui::after_text(&resp, i, info, view);
+                crate::redact_ui::after_text(&resp, info, view);
             }
             if area_tool {
                 crate::redact_ui::paint(ui, painter, i, view);
@@ -3025,6 +3117,22 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             let delta = ui.input_mut(|input| std::mem::take(&mut input.smooth_scroll_delta));
             if delta != Vec2::ZERO {
                 ui.scroll_with_delta_animation(delta, egui::style::ScrollAnimation::none());
+            }
+        }
+        // At the top or bottom edge of the screen, a selection drag pulls the document along
+        // so the selection can run past what is visible without letting go (#527, #2110).
+        if view.selection_drag
+            && navigation_enabled
+            && unobstructed
+            && ui.rect_contains_pointer(avail)
+            && let Some(p) = pointer
+        {
+            let dt = ui.input(|i| i.stable_dt).min(0.05);
+            let delta_y = edge_scroll(p, avail, dt);
+            if delta_y != 0.0 {
+                ui.scroll_with_delta_animation(vec2(0.0, delta_y), egui::style::ScrollAnimation::none());
+                // The pointer is still: repaint to keep the scroll running.
+                ui.ctx().request_repaint();
             }
         }
         // The page navigated to stays current while no page shows more of itself, so the next
@@ -3380,21 +3488,16 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if let Some((page, i)) = app.views[index].links.open_existing.take() {
         app.open_link_props(page, None, Some(i));
     }
-    if let Some((page, quads)) = app.views[index].pending_redaction.take() {
-        let author = app.comment_prefs.author.clone();
-        app.views[index].pending_edit = Some(if app.quick_tool == QuickTool::Comment(comments::CommentTool::Highlight) {
-            // An area highlight: a highlight over the box.
-            let style = app.comment_prefs.style(comments::CommentTool::Highlight);
-            pdfcraft_engine::Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
-                page,
-                shape: pdfcraft_engine::Shape::TextMarkup { kind: pdfcraft_engine::Markup::Highlight, quads },
-                style,
-                contents: String::new(),
-                author,
-            })
+    if let Some(parts) = app.views[index].pending_redaction.take() {
+        // An area highlight is one box; a finished selection is one mark per page it covered.
+        let edit = if app.quick_tool == QuickTool::Comment(comments::CommentTool::Highlight) {
+            comments::markup_selection(parts, comments::CommentTool::Highlight, &app.comment_prefs)
         } else {
-            app.redact_prefs.mark(page, quads, &author)
-        });
+            app.mark_selection(parts)
+        };
+        if let Some(edit) = edit {
+            app.views[index].pending_edit = Some(edit);
+        }
     }
     match image_action {
         Some(crate::edit_text_ui::ImageAction::Replace(page, index)) => app.replace_page_image_dialog(page, index),
@@ -3439,16 +3542,33 @@ enum SelectionAction {
     Copy,
 }
 
+/// How far a selection drag at the edge of the document area scrolls it (`scroll_with_delta`
+/// y: positive up, negative down). Ramps to full speed at the edge and dies one zone in, so
+/// the document follows the pointer only when the pointer asks for more page (#527, #2110).
+fn edge_scroll(pointer: Pos2, viewport: Rect, dt: f32) -> f32 {
+    const ZONE: f32 = 56.0;
+    const SPEED: f32 = 1400.0; // points per second at the very edge
+    if !viewport.contains(pointer) {
+        return 0.0;
+    }
+    let to_top = ((viewport.top() + ZONE - pointer.y) / ZONE).clamp(0.0, 1.0);
+    let to_bottom = ((pointer.y - (viewport.bottom() - ZONE)) / ZONE).clamp(0.0, 1.0);
+    let ramp = (to_bottom - to_top).clamp(-1.0, 1.0);
+    -(ramp * ramp.abs() * SPEED * dt)
+}
+
 /// Actions on an existing text selection, next to the selected words.
 fn selection_actions(ui: &mut egui::Ui, viewport: Rect, view: &mut DocView, info: &DocInfo, prefs: &comments::CommentPrefs, can_comment: bool) {
     if ui.input(|input| input.pointer.is_decidedly_dragging()) {
         return;
     }
     let Some(selection) = view.selection else { return };
-    let Some(text) = view.texts.get(&selection.page) else { return };
-    let Some(xf) = view.page_xform(selection.page) else { return };
-    let Some(last) = selection.rects(text).last().copied() else { return };
-    let selected = selection.text(text);
+    // The bar sits by the selection's last words; over several pages (#527), the far end.
+    let end = *selection.pages().end();
+    let Some(text) = view.texts.get(&end) else { return };
+    let Some(xf) = view.page_xform(end) else { return };
+    let Some(last) = selection.rects(end, text).last().copied() else { return };
+    let selected = view.selected_text().unwrap_or_default();
     if selected.is_empty() {
         return;
     }
@@ -3481,15 +3601,20 @@ fn selection_actions(ui: &mut egui::Ui, viewport: Rect, view: &mut DocView, info
     });
     let Some(action) = chosen else { return };
     if let SelectionAction::Copy = action {
+        // The whole selection, every page of it (#527).
         ui.ctx().copy_text(selected);
         return;
     }
-    let Some((page, quads)) = view.selection_quads(info) else { return };
-    let last = quads.last().copied().unwrap_or_default();
-    let at = [last[2].max(last[6]), last[1].max(last[3])];
+    let Some(parts) = view.selection_quads(info) else { return };
     view.clear_selection();
     match action {
         SelectionAction::Note | SelectionAction::Replace => {
+            // A note is anchored where it is dropped and a replacement is typed per
+            // annotation: both live on the selection's last page (#527), and the composer
+            // shows exactly what they cover.
+            let Some((page, quads)) = parts.into_iter().find(|(p, _)| *p == end) else { return };
+            let last = quads.last().copied().unwrap_or_default();
+            let at = [last[2].max(last[6]), last[1].max(last[3])];
             if matches!(action, SelectionAction::Replace) {
                 view.comments.replace = Some(quads);
             }
@@ -3502,15 +3627,9 @@ fn selection_actions(ui: &mut egui::Ui, viewport: Rect, view: &mut DocView, info
             });
         }
         SelectionAction::Markup(tool) => {
-            // Every markup button carries a markup tool; anything else adds nothing.
-            let Some(kind) = tool.markup() else { return };
-            view.pending_edit = Some(Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
-                page,
-                shape: pdfcraft_engine::Shape::TextMarkup { kind, quads },
-                style: prefs.style(tool),
-                contents: String::new(),
-                author: prefs.author.clone(),
-            }));
+            // Every markup button carries a markup tool; anything else adds nothing. Every
+            // page the selection covers is marked, as one edit (#527).
+            view.pending_edit = comments::markup_selection(parts, tool, prefs);
         }
         // Copied above.
         SelectionAction::Copy => {}
@@ -4677,6 +4796,78 @@ trailer << /Root 1 0 R >>
         v.frame_visible = HashSet::from([90, 91]);
         let _ = v.prepare_render_queue(&info, 1.0);
         assert_eq!(v.selected_text().as_deref(), Some("x"), "stale selections still copy");
+    }
+
+    /// #527: a selection over several pages keeps every one of them, so it still copies after
+    /// scrolling far away.
+    #[test]
+    fn text_layers_keep_every_page_of_a_cross_page_selection() {
+        let info = thumbnail_info(100);
+        let mut v = DocView::new(DocId(1), &info, ViewDefaults::default());
+        let text = PageText {
+            glyphs: vec![pdfcraft_render::TextGlyph { text: "x".into(), rect: [0.0, 0.0, 10.0, 10.0], quad: [[0.0, 0.0]; 4], direction: [1.0, 0.0] }],
+            line_of: vec![0],
+            space_before: vec![false],
+        };
+        for p in 0..100 {
+            v.texts.insert(p, Arc::new(text.clone()));
+        }
+        v.select_text_range((0, 0), (2, 0));
+        v.current = 90;
+        v.frame_visible = HashSet::from([90, 91]);
+        let _ = v.prepare_render_queue(&info, 1.0);
+        for p in [0, 1, 2] {
+            assert!(v.texts.contains_key(&p), "page {p} of the selection is pinned");
+        }
+        assert_eq!(v.selected_text().as_deref(), Some("x\nx\nx"), "stale cross-page selections still copy");
+    }
+
+    /// #527: editing any page under the selection clears it — the glyphs it points at are gone.
+    #[test]
+    fn page_changed_clears_a_selection_that_covers_the_page() {
+        let info = thumbnail_info(100);
+        let mut v = DocView::new(DocId(1), &info, ViewDefaults::default());
+        v.select_text_range((0, 0), (2, 0));
+        v.page_changed(1);
+        assert!(v.selection.is_none(), "a page in the middle of the selection changed");
+        v.select_text_range((4, 0), (4, 0));
+        v.page_changed(7);
+        assert!(v.selection.is_some(), "a page outside the selection changed");
+    }
+
+    /// #527: where a run falls on each page — the middle of a three-page run is taken whole,
+    /// the ends are clamped to their page, and either end may come first.
+    #[test]
+    fn glyphs_on_walks_the_pages_of_a_run() {
+        let run =
+            |from: (usize, usize), to: (usize, usize)| Selection::between(Caret { page: from.0, glyph: from.1 }, Caret { page: to.0, glyph: to.1 });
+        let s = run((1, 5), (3, 7));
+        assert_eq!(s.glyphs_on(0, 40), None, "before the anchor");
+        assert_eq!(s.glyphs_on(1, 40), Some(5..40), "the anchor page runs to its end");
+        assert_eq!(s.glyphs_on(2, 40), Some(0..40), "a page in between is taken whole");
+        assert_eq!(s.glyphs_on(3, 40), Some(0..8), "the head page runs to the head glyph");
+        assert_eq!(s.glyphs_on(4, 40), None, "after the head");
+        assert_eq!(run((3, 7), (1, 5)).glyphs_on(2, 40), Some(0..40), "either end may come first");
+        assert_eq!(run((1, 9), (1, 4)).glyphs_on(1, 40), Some(4..10), "a same-page run, either order");
+        assert_eq!(run((1, 5), (1, 99)).glyphs_on(1, 40), Some(5..40), "a head past the text is clamped");
+        assert_eq!(run((1, 0), (1, 0)).glyphs_on(1, 0), None, "a page with no text yields nothing");
+    }
+
+    /// #527, #2110: at the edge of the screen a held selection drag scrolls the document —
+    /// down at the bottom, up at the top, not in the middle, not outside the area.
+    #[test]
+    fn edge_scroll_pulls_the_document_at_the_edge_only() {
+        let area = Rect::from_min_size(pos2(0.0, 0.0), vec2(400.0, 600.0));
+        let dt = 1.0 / 60.0;
+        let bottom = edge_scroll(pos2(200.0, 599.0), area, dt);
+        assert!(bottom < -10.0, "the bottom edge scrolls down: {bottom}");
+        let top = edge_scroll(pos2(200.0, 1.0), area, dt);
+        assert!(top > 10.0, "the top edge scrolls up: {top}");
+        assert_eq!(edge_scroll(pos2(200.0, 300.0), area, dt), 0.0, "away from both edges");
+        assert_eq!(edge_scroll(pos2(500.0, 599.0), area, dt), 0.0, "outside the area");
+        let near = edge_scroll(pos2(200.0, 570.0), area, dt);
+        assert!(bottom.abs() > near.abs() && near < 0.0, "closer to the edge is faster: {near}");
+        assert!((edge_scroll(pos2(200.0, 599.0), area, dt * 2.0) - bottom * 2.0).abs() < 1e-3, "scrolling scales with time");
     }
 
     #[test]

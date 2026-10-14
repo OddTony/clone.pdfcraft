@@ -1001,7 +1001,9 @@ fn select_input(
 pub(crate) fn page_after_text(resp: &egui::Response, cx: &PageCx<'_>, view: &mut DocView) {
     let QuickTool::Comment(tool) = cx.tool else { return };
     if tool == CommentTool::ReplaceText && cx.allowed && (resp.drag_stopped() || resp.double_clicked()) {
-        if let Some((page, quads)) = view.selection_quads(cx.info).filter(|(p, _)| *p == cx.page) {
+        // Replacement text is typed per annotation, so it lands on the selection's last page —
+        // where the drag ended (#527). The composer shows exactly what will be replaced.
+        if let Some((page, quads)) = view.selection_quads(cx.info).and_then(|mut parts| parts.pop()) {
             view.clear_selection();
             let last = quads.last().copied().unwrap_or_default();
             let at = [last[2].max(last[6]), last[1].max(last[3])];
@@ -1013,12 +1015,10 @@ pub(crate) fn page_after_text(resp: &egui::Response, cx: &PageCx<'_>, view: &mut
     if tool.markup().is_none() || !cx.allowed || !(resp.drag_stopped() || resp.double_clicked()) {
         return;
     }
-    if let Some(kind) = tool.markup()
-        && let Some((page, quads)) = view.selection_quads(cx.info).filter(|(p, _)| *p == cx.page)
-    {
+    // Every page the selection covers is marked, as one edit for the whole selection (#527).
+    if let Some(parts) = view.selection_quads(cx.info) {
         view.clear_selection();
-        view.pending_edit = Some(new_comment(cx, tool, Shape::TextMarkup { kind, quads }, String::new()));
-        let _ = page;
+        view.pending_edit = markup_selection(parts, tool, cx.prefs);
     }
 }
 
@@ -1165,6 +1165,33 @@ fn erase(cx: &PageCx<'_>, path: &[[f64; 2]]) -> Option<Edit> {
 
 fn new_comment(cx: &PageCx<'_>, tool: CommentTool, shape: Shape, contents: String) -> Edit {
     Edit::AddAnnotation(NewAnnotation { page: cx.page, shape, style: cx.prefs.style(tool), contents, author: cx.prefs.author.clone() })
+}
+
+/// One markup annotation per page a selection covers — a cross-page selection (#527) is marked
+/// on every page, as a single edit so one undo takes the whole marking back. The batch carries
+/// the tool's own annotation wording, so the history reads the same for one page or three.
+/// `None` when the tool carries no markup shape or the selection produced no quads.
+pub(crate) fn markup_selection(parts: Vec<(usize, Vec<[f64; 8]>)>, tool: CommentTool, prefs: &CommentPrefs) -> Option<Edit> {
+    let kind = tool.markup()?;
+    let edits: Vec<Edit> = parts
+        .into_iter()
+        .filter(|(_, quads)| !quads.is_empty())
+        .map(|(page, quads)| {
+            Edit::AddAnnotation(NewAnnotation {
+                page,
+                shape: Shape::TextMarkup { kind, quads },
+                style: prefs.style(tool),
+                contents: String::new(),
+                author: prefs.author.clone(),
+            })
+        })
+        .collect();
+    let first = edits.first()?;
+    let label = first.label().wording;
+    match <[Edit; 1]>::try_from(edits) {
+        Ok([one]) => Some(one),
+        Err(edits) => Some(Edit::Batch { label: label.into(), edits }),
+    }
 }
 
 /// The floating composer card (new note, new text box, edit). Returns the edit to apply.

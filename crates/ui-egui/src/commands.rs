@@ -279,17 +279,18 @@ impl PdfCraftApp {
                 if self.right.is_none() && !self.comments_panel_closed {
                     self.choose_right_panel(Some(RightPanel::Comments));
                 }
-                // A text selection made before picking a markup tool is marked right away.
-                if let (Some(kind), Some(i)) = (tool.markup(), active)
+                // A text selection made before picking a markup tool is marked right away —
+                // every page it covers, as one edit (#527).
+                if tool.markup().is_some()
+                    && let Some(i) = active
                     && let Some(doc) = self.session.get(self.views[i].id)
                 {
                     let info = &doc.info;
-                    if let Some((page, quads)) = self.views[i].selection_quads(info) {
+                    if let Some(parts) = self.views[i].selection_quads(info) {
                         self.views[i].clear_selection();
-                        let style = self.comment_prefs.style(tool);
-                        let author = self.comment_prefs.author.clone();
-                        let shape = pdfcraft_engine::Shape::TextMarkup { kind, quads };
-                        self.apply_edit(Edit::AddAnnotation(pdfcraft_engine::NewAnnotation { page, shape, style, contents: String::new(), author }));
+                        if let Some(edit) = crate::comments::markup_selection(parts, tool, &self.comment_prefs) {
+                            self.apply_edit(edit);
+                        }
                     }
                 }
             }
@@ -425,10 +426,11 @@ impl PdfCraftApp {
                     && let Some(doc) = self.session.get(self.views[i].id)
                 {
                     let info = &doc.info;
-                    if let Some((page, quads)) = self.views[i].selection_quads(info) {
+                    if let Some(parts) = self.views[i].selection_quads(info) {
                         self.views[i].clear_selection();
-                        let author = self.comment_prefs.author.clone();
-                        self.apply_edit(self.redact_prefs.mark(page, quads, &author));
+                        if let Some(edit) = self.mark_selection(parts) {
+                            self.apply_edit(edit);
+                        }
                     }
                 }
             }
