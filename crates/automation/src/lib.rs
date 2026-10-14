@@ -179,6 +179,23 @@ impl Automation {
             }
             "doc_close" => self.doc_close(&a)?,
             "doc_save" => self.doc_save(&a)?,
+            "doc_extract_original" => {
+                let id = self.doc(&a)?.id;
+                // A detached signature carries nothing: its document is the file beside it,
+                // which opens on its own. Refused before any `out` is written (#2129).
+                if self.doc(&a)?.envelope.as_ref().is_some_and(|e| e.detached) {
+                    return Err(failed("a detached signature has nothing to extract; open the PDF itself to edit it."));
+                }
+                let copy = self.session.extract_original(id).map_err(failed)?;
+                let mut out = summary(self.session.get(copy).ok_or_else(|| failed("the document vanished"))?);
+                if let Some(p) = a.opt_str("out")? {
+                    let bytes = self.session.get(copy).ok_or_else(|| failed("the document vanished"))?.bytes.clone();
+                    let path = self.resolve(p, true)?;
+                    write_atomic(&path, &bytes)?;
+                    out["written"] = json!(path.to_string_lossy().into_owned());
+                }
+                out
+            }
             "doc_set_info" => {
                 let edit = Edit::SetInfo { key: a.str("key")?.into(), value: a.str("value")?.into() };
                 self.apply(&a, edit)?
@@ -2123,6 +2140,21 @@ fn security(d: &Document) -> Value {
     }
 }
 
+/// The CAdES envelope a document was opened from (issue #1449), if so. `detached` says a
+/// `.p7s` whose document was read from beside it (issue #2129), not carried inside.
+fn envelope(d: &Document) -> Option<Value> {
+    d.envelope.as_ref().map(|e| {
+        json!({
+            "detached": e.detached,
+            "signer": e.signer,
+            "signing_time": e.signing_time,
+            "digest_ok": e.digest_ok,
+            "signers": e.signers,
+            "quirks": e.quirks,
+        })
+    })
+}
+
 /// What every tool that changes a document returns.
 fn summary(d: &Document) -> Value {
     json!({
@@ -2133,6 +2165,7 @@ fn summary(d: &Document) -> Value {
         "dirty": d.dirty,
         "editable": d.read_only_reason.is_none(),
         "read_only_reason": d.read_only_reason,
+        "envelope": envelope(d),
         "encrypted": d.info.encrypted,
         "undo": d.can_undo(),
         "redo": d.can_redo(),
@@ -2220,6 +2253,7 @@ fn info(d: &Document) -> Value {
         })).collect::<Vec<_>>(),
         "warnings": i.warnings,
         "repairs": d.repair_log(),
+        "envelope": envelope(d),
     })
 }
 

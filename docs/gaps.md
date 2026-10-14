@@ -1,5 +1,7 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (gap 10 done since: detached CAdES `.pdf.p7s` signatures open with the sibling PDF beside them, read-only and verified, `sign.cades-detached-open`) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (gap 10 done since: CAdES .pdf.p7m envelopes open read-only with the signer shown and the original extractable, `sign.cades-envelope-open`) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (gap 6: #1398 stamps read upright on rotated pages; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (gap 6: #1317, #1327, #1302, #1315 and #1340; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-12 · **Change:** minor (#1316: replacing a line keeps a neighbouring line whose glyph box overlaps; gap 3 remains) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -191,6 +193,10 @@ update the numbers.
   [#775](https://github.com/storytold/pdfcraft/issues/775),
   [#718](https://github.com/storytold/pdfcraft/issues/718)).
 - **Impact:** government and legal users sign with tokens and need B-LT/B-LTA.
+- **Done since:** CAdES `.pdf.p7m` envelopes (beyond Acrobat parity) open read-only with the
+  signer shown and the original PDF extractable (`sign.cades-envelope-open`); detached CAdES
+  `.pdf.p7s` signatures open with the sibling PDF beside them, read-only and verified
+  (`sign.cades-detached-open`).
 - **Estimate:** 40–70 h; tokens need hardware to test. **Doc:** [pdf-spec-parity.md](pdf-spec-parity.md).
 
 ### 11. Accessibility: only text-only automatic structure creation
@@ -324,6 +330,8 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-14 | minor | Gap 10: detached CAdES pairs open beyond Acrobat parity (`sign.cades-detached-open`): the .p7s opens the sibling PDF beside it, read-only and verified |
+| 2026-10-14 | minor | Gap 10: CAdES envelope open shipped beyond Acrobat parity (`sign.cades-envelope-open`): envelopes open read-only with the signer shown and extraction |
 | 2026-10-12 | minor | Gap 6: rubber stamps, explicit image rectangles and PDF-page stamps read upright on rotated pages (#1398). Estimates unchanged. |
 | 2026-10-12 | minor | #1316: replacing a line or paragraph keeps a neighbouring line whose glyph box overlaps. Gap 3 remains. Estimates unchanged. |
 | 2026-10-12 | minor | Exclusive image crops resize with their pixels across nested states, intervening operators and content streams; shared clips remain fixed. Synthetic engine/tool regressions and private image save/reopen checks; estimates unchanged. |
