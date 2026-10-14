@@ -6,8 +6,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use craft_scan::{
-    Acquired, Backend, CancelToken, Color, Compression, Connection, ImageChoices, ImageFormat, Intent, MAX_PAGES, Page, PageSize, Rotation,
-    ScanError, ScanSettings, Scanner, ScannerRef, Source, ValueSpan, align_to_span, fit_region, listed_values, planned_frame, spanned_values,
+    Acquired, Backend, CancelToken, Color, Compression, Connection, HandlingStatus, ImageChoices, ImageFormat, Intent, MAX_PAGES, Page, PageSize,
+    Rotation, ScanError, ScanSettings, Scanner, ScannerRef, Source, ValueSpan, align_to_span, fit_region, listed_values, planned_frame,
+    spanned_values,
 };
 use windows::Win32::Devices::ImageAcquisition::{
     DUPLEX, FEED_READY, FEEDER, FLATBED, IWiaDataTransfer, IWiaDevMgr, IWiaDevMgr2, IWiaItem, IWiaItem2, IWiaPropertyStorage, IWiaTransfer,
@@ -327,6 +328,14 @@ fn acquire(settings: &ScanSettings) -> Result<Acquired, ScanError> {
         }
     }
     result
+}
+
+/// The status to explain a failed transfer with. The inbox WSD driver's ready bit is a cached
+/// reading that can stay set with an empty tray (or clear with paper), so on a WSD port it says
+/// nothing: with it unknown, a feeder transfer that delivered nothing and named no fault reads as an
+/// empty tray, as it does when the bit is clear.
+fn inferable(status: HandlingStatus, wsd_port: bool) -> HandlingStatus {
+    if wsd_port { HandlingStatus { feeder_ready: None, ..status } } else { status }
 }
 
 /// Auto chose the feeder, no page arrived and the driver named no fault: a feeder that reports
@@ -667,7 +676,7 @@ fn acquire_pages(settings: &ScanSettings, route: &Cell<Option<(Source, bool)>>) 
                         trace.phase("transfer_end", &[("mode", "banded"), ("outcome", "error")]);
                     }
                     let status_after = status_from_bits(read_i4(&root, WIA_DPS_DOCUMENT_HANDLING_STATUS).unwrap_or(0));
-                    let error = rules::explain_transfer_failure(error, status_after, on_feeder, 0, pages_requested);
+                    let error = rules::explain_transfer_failure(error, inferable(status_after, wsd_port), on_feeder, 0, pages_requested);
                     if rules::retry_with_file_transfer(&error) {
                         log::warn!("scan: banded transfer did not return a page ({error}); trying a file transfer");
                         let _ = write_i4(&item, WIA_IPA_TYMED, previous_tymed);
@@ -757,7 +766,7 @@ fn acquire_pages(settings: &ScanSettings, route: &Cell<Option<(Source, bool)>>) 
     let received = pages.len();
     let download_error = download.err().map(failed).map(|error| {
         let pages_requested = usize::try_from(settings.pages).unwrap_or(0);
-        rules::explain_transfer_failure(error, status_after, on_feeder, received, pages_requested)
+        rules::explain_transfer_failure(error, inferable(status_after, wsd_port), on_feeder, received, pages_requested)
     });
     // Hardware duplex counts sides, not sheets, so the page-count check is skipped there.
     let checked_pages = if settings.duplex { 0 } else { usize::try_from(settings.pages).unwrap_or(0) };

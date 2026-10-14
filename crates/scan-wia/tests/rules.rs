@@ -106,6 +106,20 @@ mod windows_rules {
     }
 
     #[test]
+    fn a_feeder_transfer_with_nothing_delivered_reads_as_an_empty_tray_unless_the_ready_bit_says_paper() {
+        let generic = || ScanError::Failed("The scanner reported an error.".into());
+        let unknown = HandlingStatus { feeder_ready: None, ..HandlingStatus::default() };
+        let ready = HandlingStatus { feeder_ready: Some(true), ..HandlingStatus::default() };
+        let empty = rules::explain_transfer_failure(generic(), unknown, true, 0, 0);
+        assert!(empty.to_string().contains("no paper"), "{empty}");
+        // A ready bit that says paper (a driver that reports the tray) keeps the generic sentence.
+        let kept = rules::explain_transfer_failure(generic(), ready, true, 0, 0);
+        assert!(!kept.to_string().contains("no paper"), "{kept}");
+        // The glass has no tray to be empty.
+        assert!(!rules::explain_transfer_failure(generic(), unknown, false, 0, 0).to_string().contains("no paper"));
+    }
+
+    #[test]
     fn an_attention_bit_beats_the_empty_tray_inference() {
         // A door interlock sets the attention bit and clears FEED_READY; it is not an empty tray.
         let interlock = HandlingStatus { attention: true, feeder_ready: Some(false), ..HandlingStatus::default() };
