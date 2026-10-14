@@ -2338,3 +2338,51 @@ animation effects	Off	Өшірулі
 	Local cross-PDF links require the desktop app	PDF файлдары арасындағы жергілікті сілтемелер үшін жұмыс үстелі қолданбасы қажет
 	Move tag earlier	Тегті ертерек жылжыту
 	Move tag later	Тегті кейінірек жылжыту
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	Жергілікті модель — құздық моделі емес: ол қате жіберуі мүмкін, ал ұзақ жауап процессорда уақыт алады. Маңызды нәрсені тексеріңіз және модельді жүктеп алмас бұрын оның өлшемін осы машинаға салыстырыңыз.
+	Ask	Сұрау
+	Ask anything	Кез келген нәрсені сұраңыз
+	Ask in any language	Кез келген тілде сұраңыз
+	Assistant	Көмекші
+	Best for: a step up in quality, still light	Ең жақсы: сапада бір қадам жоғары, әлі де жеңіл
+	Best for: balanced everyday and technical work	Ең жақсы: тепе-тең күнделікті және техникалық жұмыс
+	Best for: everyday help on the lightest machines	Ең жақсы: ең жеңіл машиналарда күнделікті көмек
+	Best for: near-flagship answers at MoE speed	Ең жақсы: MoE жылдамдығымен ең жоғарғы деңгейге жақын жауаптар
+	Best for: the deepest reasoning this family has	Ең жақсы: осы отбасындағы ең терең ойлау
+	Compress and export	Сығу және экспорттау
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	Craft AI осы машинада жергілікті Gemma моделін жүргізеді. Осы жерде жазғаныңыз одан шықпайды: аккаунт жоқ, бұлт қызметі жоқ, телеметрия жоқ — панель 127.0.0.1 мекенжайындағы модель runtime-ымен сөйлеседі.
+	Craft AI runs in the native app — it needs a local model runtime.	Craft AI құрама программада жұмыс істейді — оған жергілікті модель runtime-ы керек.
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	Craft AI осы машинадағы модель runtime-ымен сөйлеседі — Ollama, LM Studio немесе llama.cpp сервері — және ешқашан бұлт қызметімен емес. Бірін жүргізіп, содан кейін Жаңартуға басыңыз.
+	Delete file	Файлды жою
+	Disk {size}	Диск {size}
+	Download with Ollama	Ollama арқылы жүктеу
+	Downloading… {pct}% — {note}	Жүктелуде… {pct}% — {note}
+	Fits this machine	Осы машинаға сәйкес
+	Form field advice	Пішін өрістеріне кеңес
+	Limits	Шектеулер
+	Local and private	Жергілікті және жеке
+	Looking for a local model runtime…	Жергілікті модель runtime-ы ізделуде…
+	Needs {disk} GB of disk	{disk} ГБ диск қажет
+	Needs {ram} GB of RAM	{ram} ГБ жад қажет
+	No local model runtime found.	Жергілікті модель runtime-ы табылмады.
+	No model installed yet — see the Models tab.	Әлі модель орнатылмаған — Модельдер қойындысын қараңыз.
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	Бір жүктеу барлық ArtCraft қолданбасына қызмет етеді: модель барлығы оқитын ортақ қалтаға түседі.
+	Organize pages plan	Беттерді реттеу жоспары
+	PDF/A and standards advice	PDF/A және стандарттарға кеңес
+	RAM {gb} GB	Жад {gb} ГБ
+	Redaction checklist	Жабуға арналған тексеру тізімі
+	Refresh	Жаңарту
+	Runtime	Runtime
+	Save model file	Модель файлын сақтау
+	Saved in the shared folder	Ортақ қалтада сақталды
+	Saving… {pct}%	Сақталуда… {pct}%
+	Task	Тапсырма
+	The form's purpose and its fields (names, types, tab order)	Пішіннің мақсаты және оның өрістері (аты, түрі, Tab реті)
+	The shared folder:	Ортақ қалта:
+	The standard it must meet and where the file goes	Қанағаттандыруы тиіс стандарт және файлдың бағыты
+	Thinking… {s}s	Ойлануда… {s}с
+	This machine: {ram} GB RAM, {disk} GB free	Бұл машина: {ram} ГБ жад, {disk} ГБ бос
+	What must go, and what the document is	Не жойылуы керек және құжат не туралы
+	What you want to end up with (order, extract, split, combine)	Соңында не қалғыңыз келеді (реті, шығару, бөлу, біріктіру)
+	Where the file is going and what matters (size, quality, compatibility)	Файл қайда барады және не маңызды (өлшемі, сапасы, үйлесімділігі)

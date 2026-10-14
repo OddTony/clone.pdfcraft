@@ -464,6 +464,13 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let Some((index, id)) = app.active_ids() else { return };
     let Some(panel) = app.right else { return };
+    // Craft AI is its own panel: the family's local assistant, not a document reader. It takes
+    // the whole `app` (its worker threads hand answers back through the egui context), so it
+    // runs before the document borrows below.
+    if panel == RightPanel::CraftAi {
+        crate::craft_ai::show(app, ui);
+        return;
+    }
     let mut nav: Option<Nav> = None;
     let mut close = false;
     let mut toggle_layer: Option<(usize, bool)> = None;
@@ -509,6 +516,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     RightPanel::Tags => ("Tags", None),
                     RightPanel::Search => ("Search", None),
                     RightPanel::Compare => ("Compare", compare.as_ref().filter(|c| c.new == id).map(|c| c.result.changes.len())),
+                    RightPanel::CraftAi => ("Craft AI", None),
                 };
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new(tl!(title)).font(theme::semibold(15.5)));
@@ -679,6 +687,8 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     }
                     RightPanel::Search => crate::search_ui::panel(ui, &t, view, info.pages.len()),
                     RightPanel::Compare => compare_action = crate::compare_ui::panel(ui, &t, compare, id),
+                    // Reached only if the early return above is ever removed.
+                    RightPanel::CraftAi => {}
                     RightPanel::Attachments => {
                         if info.attachments.is_empty() {
                             empty(ui, &t, "paperclip", "This document has no attachments.");

@@ -2253,3 +2253,51 @@ animation effects	Off	ఆఫ్
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	ఒక స్క్రిప్ట్ చాలా సేపు నడిచినందున ఈ ఫారమ్ స్క్రిప్ట్‌లు ఆపివేయబడ్డాయి. వాటిని మళ్లీ నడపడానికి పత్రాన్ని మళ్లీ తెరవండి.
 	Move tag earlier	ట్యాగ్‌ను ముందుకు తరలించు
 	Move tag later	ట్యాగ్‌ను వెనుకకు తరలించు
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	స్థానిక మోడల్ అగ్రస్థాన క్లౌడ్ మోడల్ కాదు: అది తప్పు చేయగలదు, సుదీర్ఘ సమాధానానికి CPUపై సమయం పడుతుంది. కీలకమైనవి సరిచూసుకోండి, డౌన్‌లోడ్ చేసే ముందు మోడల్ పరిమాణాన్ని ఈ మిషన్‌తో పోల్చుకోండి.
+	Ask	అడగండి
+	Ask anything	ఏదైనా అడగండి
+	Ask in any language	ఏ భాషలోనైనా అడగండి
+	Assistant	సహాయకుడు
+	Best for: a step up in quality, still light	ఇందుకు ఉత్తమం: నాణ్యతలో ఒక మెట్టు పైకి, ఇంకా తేలికగా
+	Best for: balanced everyday and technical work	ఇందుకు ఉత్తమం: సమతుల్యమైన రోజువారీ మరియు సాంకేతిక పని
+	Best for: everyday help on the lightest machines	ఇందుకు ఉత్తమం: అతి తేలికైన మిషన్లలో రోజువారీ సహాయం
+	Best for: near-flagship answers at MoE speed	ఇందుకు ఉత్తమం: MoE వేగంతో అగ్రస్థానానికి దగ్గరగా సమాధానాలు
+	Best for: the deepest reasoning this family has	ఇందుకు ఉత్తమం: ఈ కుటుంబంలో అత్యంత లోతైన తార్కికత
+	Compress and export	కుదించి ఎగుమతి
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	Craft AI ఈ మిషన్‌పై స్థానిక Gemma మోడల్‌ను నడుపుతుంది. మీరు ఇక్కడ రాసింది దీన్ని విడిచి వెళ్ళదు: ఖాతా లేదు, క్లౌడ్ సేవ లేదు, టెలిమెట్రీ లేదు — ప్యానెల్ 127.0.0.1 వద్ద మోడల్ రన్‌టైమ్‌తో మాట్లాడుతుంది.
+	Craft AI runs in the native app — it needs a local model runtime.	Craft AI నేటివ్ యాప్‌లో పనిచేస్తుంది — దీనికి స్థానిక మోడల్ రన్‌టైమ్ కావాలి.
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	Craft AI ఈ మిషన్‌పైన మోడల్ రన్‌టైమ్‌తో మాట్లాడుతుంది — Ollama, LM Studio లేదా llama.cpp సర్వర్ — ఎప్పుడూ క్లౌడ్ సేవతో కాదు. ఒకదాన్ని ప్రారంభించి, రిఫ్రెష్ నొక్కండి.
+	Delete file	ఫైల్ తొలగించు
+	Disk {size}	డిస్క్ {size}
+	Download with Ollama	Ollamaతో డౌన్‌లోడ్
+	Downloading… {pct}% — {note}	డౌన్‌లోడ్ అవుతోంది… {pct}% — {note}
+	Fits this machine	ఈ మిషన్‌కు సరిపోతుంది
+	Form field advice	ఫారం ఫీల్డ్‌లపై సలహా
+	Limits	పరిమితులు
+	Local and private	స్థానికం మరియు ప్రైవేట్
+	Looking for a local model runtime…	స్థానిక మోడల్ రన్‌టైమ్ కోసం వెతుకుతోంది…
+	Needs {disk} GB of disk	{disk} GB డిస్క్ అవసరం
+	Needs {ram} GB of RAM	{ram} GB RAM అవసరం
+	No local model runtime found.	స్థానిక మోడల్ రన్‌టైమ్ కనుగొనబడలేదు.
+	No model installed yet — see the Models tab.	ఇంకా మోడల్ ఇన్‌స్టాల్ కాలేదు — మోడల్స్ ట్యాబ్ చూడండి.
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	ఒకే డౌన్‌లోడ్ ప్రతి ArtCraft యాప్‌కు ఉపయోగపడుతుంది: మోడల్ అందరూ చదివే భాగస్వామ్య ఫోల్డర్‌లో నిలుస్తుంది.
+	Organize pages plan	పేజీల కూర్పు ప్రణాళిక
+	PDF/A and standards advice	PDF/A మరియు ప్రమాణాలపై సలహా
+	RAM {gb} GB	RAM {gb} GB
+	Redaction checklist	రెడాక్షన్ చెక్‌లిస్ట్
+	Refresh	రిఫ్రెష్
+	Runtime	రన్‌టైమ్
+	Save model file	మోడల్ ఫైల్ సేవ్ చేయి
+	Saved in the shared folder	భాగస్వామ్య ఫోల్డర్‌లో సేవ్ అయింది
+	Saving… {pct}%	సేవ్ అవుతోంది… {pct}%
+	Task	పని
+	The form's purpose and its fields (names, types, tab order)	ఫారం ఉద్దేశ్యం మరియు దాని ఫీల్డ్‌లు (పేర్లు, రకాలు, ట్యాబ్ క్రమం)
+	The shared folder:	భాగస్వామ్య ఫోల్డర్:
+	The standard it must meet and where the file goes	అది తప్పనిసరిగా తీరుకోవాల్సిన ప్రమాణం, ఫైల్ ఎక్కడికి వెళుతుంది
+	Thinking… {s}s	ఆలోచిస్తోంది… {s}సె
+	This machine: {ram} GB RAM, {disk} GB free	ఈ మిషన్: {ram} GB RAM, {disk} GB ఖాళీ
+	What must go, and what the document is	ఏమి తప్పనిసరిగా తొలగించాలి, పత్రం ఏమిటి
+	What you want to end up with (order, extract, split, combine)	చివరికి మీకు ఏమి కావాలి (క్రమం, వెలికితీత, విభజన, కలయిక)
+	Where the file is going and what matters (size, quality, compatibility)	ఫైల్ ఎక్కడికి వెళుతుంది, ఏమి ముఖ్యం (పరిమాణం, నాణ్యత, అనుకూలత)

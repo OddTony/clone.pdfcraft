@@ -2584,3 +2584,50 @@ key	End	End
 key	Space	Tarpas
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	Vietinis modelis nėraflagšipinis debesies modelis: jis gali klysti, o ilgas atsakymas procesoriuje užtrunka. Patikrinkite visa, kas svarbu, ir prieš atsisiųsdami atmintokite modelio dydį pagal šį kompiuterį.
+	Ask	Klausti
+	Ask anything	Klauskite bet ko
+	Ask in any language	Klauskite bet kuria kalba
+	Assistant	Padėjėjas
+	Best for: a step up in quality, still light	Geriausia tinka: žingsnis aukščiau kokybe, vis tiek lengvas
+	Best for: balanced everyday and technical work	Geriausia tinka: subalansuotas kasdienis ir techninis darbas
+	Best for: everyday help on the lightest machines	Geriausia tinka: kasdienei pagalbai lengviausiuose kompiuteriuose
+	Best for: near-flagship answers at MoE speed	Geriausia tinka: beveikflagšipiniai atsakymai MoE greičiu
+	Best for: the deepest reasoning this family has	Geriausia tinka: giliausias samprotavimas šioje šeimoje
+	Compress and export	Suspausti ir eksportuoti
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	„Craft AI“ šiame kompiuteriyje paleidžia vietinį „Gemma“ modelį. Viskas, ką čia parašote, jo neaplenkia: jokios paskyros, jokios debesies paslaugos, jokios telemetrijos — skydelis kalbasi su modelių vykdymo aplinka adresu 127.0.0.1.
+	Craft AI runs in the native app — it needs a local model runtime.	„Craft AI“ veikia darbalaukio programoje — jam reikia vietinės modelių vykdymo aplinkos.
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	„Craft AI“ kalbasi su šiame kompiuteryje esančia modelių vykdymo aplinka — „Ollama“, „LM Studio“ ar „llama.cpp“ serveriu — ir niekada su debesies paslauga. Paleiskite vieną iš jų ir spustelėkite Atnaujinti.
+	Delete file	Ištrinti failą
+	Disk {size}	Diskas {size}
+	Download with Ollama	Atsisiųsti su „Ollama“
+	Downloading… {pct}% — {note}	Atsisiunčiama… {pct}% — {note}
+	Fits this machine	Tinka šiam kompiuteriui
+	Form field advice	Patarimai dėl formos laukų
+	Limits	Ribos
+	Local and private	Vietinė ir privati
+	Looking for a local model runtime…	Ieškoma vietinės modelių vykdymo aplinkos…
+	Needs {disk} GB of disk	Reikia {disk} GB disko
+	Needs {ram} GB of RAM	Reikia {ram} GB RAM
+	No local model runtime found.	Vietinė modelių vykdymo aplinka nerasta.
+	No model installed yet — see the Models tab.	Modelis dar neįdiegtas — žiūrėkite skirtuką „Modeliai“.
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	Vienas atsisiuntimas tarnauja visoms „ArtCraft“ programoms: modelis patenka į bendrą aplanką, kurį jos visos skaito.
+	Organize pages plan	Puslapių tvarkymo planas
+	PDF/A and standards advice	Patarimai dėl PDF/A ir standartų
+	RAM {gb} GB	RAM {gb} GB
+	Redaction checklist	Maskavimo patikrinimo sąrašas
+	Runtime	Vykdymo aplinka
+	Save model file	Įrašyti modelio failą
+	Saved in the shared folder	Įrašytas į bendrą aplanką
+	Saving… {pct}%	Įrašoma… {pct}%
+	Task	Užduotis
+	The form's purpose and its fields (names, types, tab order)	Formos paskirtis ir jos laukai (pavadinimai, tipai, tabuliatoriaus seka)
+	The shared folder:	Bendras aplankas:
+	The standard it must meet and where the file goes	Standartas, kurio reikia laikytis, ir kur eina failas
+	Thinking… {s}s	Mąsto… {s}s
+	This machine: {ram} GB RAM, {disk} GB free	Šis kompiuteris: {ram} GB RAM, {disk} GB laisva
+	What must go, and what the document is	Kas turi dingti ir koks yra dokumentas
+	What you want to end up with (order, extract, split, combine)	Ko norite pasiekti (tvarka, išskirti, skaidyti, sujungti)
+	Where the file is going and what matters (size, quality, compatibility)	Kur eina failas ir kas svarbu (dydis, kokybė, suderinamumas)

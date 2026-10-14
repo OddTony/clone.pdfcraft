@@ -88,6 +88,7 @@ pub mod motion;
 mod page_selection_ui;
 mod pageboxes;
 mod palette;
+mod craft_ai;
 mod panels;
 #[cfg(not(target_arch = "wasm32"))]
 mod pickers;
@@ -193,6 +194,8 @@ pub enum RightPanel {
     Search,
     /// Compare files: the differences.
     Compare,
+    /// Craft AI: the ArtCraft family's built-in local assistant (see `craft_ai`).
+    CraftAi,
 }
 
 /// Quick-action bar tools (the vertical floating strip).
@@ -2256,6 +2259,7 @@ impl PdfCraftApp {
                     "tags" => Some(RightPanel::Tags),
                     "search" => Some(RightPanel::Search),
                     "compare" => Some(RightPanel::Compare),
+                    "craftai" => Some(RightPanel::CraftAi),
                     "none" => None,
                     other => return Err(format!("unknown panel {other}")),
                 }
