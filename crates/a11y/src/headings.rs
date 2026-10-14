@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use pdfcraft_cos::{Dict, Document, ObjRef, Object};
+use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString};
 use pdfcraft_fonts::pdf::Metrics;
 use pdfcraft_model::Page;
 
@@ -166,29 +166,61 @@ impl Walker<'_> {
     }
 }
 
-fn sub(doc: &Document, d: &Dict, key: &[u8]) -> Dict {
-    d.get(key).map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned()).unwrap_or_default()
+struct MarkedContent {
+    mcid: Option<i64>,
+    replacement: Option<String>,
+    emitted: bool,
+}
+
+fn replacement_text(doc: &Document, value: &Object) -> Option<String> {
+    let indirect = value.as_ref().map(|r| doc.get(r));
+    let string = indirect.as_deref().unwrap_or(value).as_string()?;
+    let mut prefix = string.bytes.get(..string.bytes.len().min(MAX_TITLE * 16 + 4))?;
+    if prefix.len() < string.bytes.len()
+        && !string.bytes.starts_with(&[0xFE, 0xFF])
+        && !string.bytes.starts_with(&[0xEF, 0xBB, 0xBF])
+        && let Err(error) = std::str::from_utf8(prefix)
+        && error.error_len().is_none()
+    {
+        // A split UTF-8 character must not switch the prefix to PDFDocEncoding.
+        prefix = prefix.get(..error.valid_up_to())?;
+    }
+    Some(PdfString::literal(prefix).to_text().chars().take(MAX_TITLE * 4).collect())
 }
 
 /// The text each marked-content id shows on a page (text drawn directly in the page content).
 fn mcid_texts(doc: &Document, page: &Dict) -> HashMap<i64, String> {
-    let res = sub(doc, page, b"Resources");
-    let (fonts, props) = (sub(doc, &res, b"Font"), sub(doc, &res, b"Properties"));
+    let resources = page.get(b"Resources");
+    let indirect_resources = resources.and_then(Object::as_ref).map(|r| doc.get(r));
+    let res = indirect_resources.as_deref().or(resources).and_then(Object::as_dict);
+    let fonts = res.and_then(|r| r.get(b"Font"));
+    let indirect_fonts = fonts.and_then(Object::as_ref).map(|r| doc.get(r));
+    let fonts = indirect_fonts.as_deref().or(fonts).and_then(Object::as_dict);
+    let props = res.and_then(|r| r.get(b"Properties"));
+    let indirect_props = props.and_then(Object::as_ref).map(|r| doc.get(r));
+    let props = indirect_props.as_deref().or(props).and_then(Object::as_dict);
     let mut metrics: HashMap<Vec<u8>, Metrics> = HashMap::new();
     let mut font: Option<Vec<u8>> = None;
-    let mut stack: Vec<Option<i64>> = Vec::new();
+    let mut stack: Vec<MarkedContent> = Vec::new();
     let mut out: HashMap<i64, String> = HashMap::new();
     for op in pdfcraft_content::parse(&page_content(doc, page)).ops {
-        let id = stack.iter().rev().find_map(|m| *m);
         match op.op.as_slice() {
-            b"BMC" => stack.push(None),
-            b"BDC" => stack.push(match op.operands.get(1) {
-                Some(Object::Dict(d)) => d.get(b"MCID").and_then(Object::as_int),
-                Some(Object::Name(n)) => {
-                    props.get(n).map(|x| doc.resolve(x)).and_then(|x| x.as_dict().and_then(|d| d.get(b"MCID").and_then(Object::as_int)))
-                }
-                _ => None,
-            }),
+            b"BMC" => stack.push(MarkedContent { mcid: None, replacement: None, emitted: false }),
+            b"BDC" => {
+                let property = match op.operands.get(1) {
+                    Some(Object::Name(n)) => props.and_then(|p| p.get(n)),
+                    other => other,
+                };
+                let indirect = property.and_then(Object::as_ref).map(|r| doc.get(r));
+                let dict = indirect.as_deref().or(property).and_then(Object::as_dict);
+                let mcid = dict.and_then(|d| d.get(b"MCID")).and_then(Object::as_int);
+                let replacement = if stack.iter().any(|m| m.replacement.is_some()) {
+                    None
+                } else {
+                    dict.and_then(|d| d.get(b"ActualText")).and_then(|v| replacement_text(doc, v))
+                };
+                stack.push(MarkedContent { mcid, replacement, emitted: false });
+            }
             b"EMC" => {
                 stack.pop();
             }
@@ -196,12 +228,29 @@ fn mcid_texts(doc: &Document, page: &Dict) -> HashMap<i64, String> {
                 font = op.name(0).map(<[u8]>::to_vec);
                 if let Some(name) = op.name(0)
                     && !metrics.contains_key(name)
-                    && let Some(f) = fonts.get(name).map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned())
+                    && let Some(f) = fonts.and_then(|f| f.get(name)).map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned())
                 {
                     metrics.insert(name.to_vec(), Metrics::from_dict(doc, &f));
                 }
             }
             _ => {}
+        }
+        let id = stack.iter().rev().find_map(|m| m.mcid);
+        if let Some(span) = stack.iter_mut().find(|m| m.replacement.is_some()) {
+            if matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"") && !span.emitted {
+                // ISO 32000-2 §14.9.4 replaces the whole occurrence, including nested content.
+                span.emitted = true;
+                if let Some(id) = id {
+                    let text = out.entry(id).or_default();
+                    for c in span.replacement.iter().flat_map(|s| s.chars()) {
+                        if text.len().saturating_add(c.len_utf8()) > MAX_TITLE * 4 {
+                            break;
+                        }
+                        text.push(c);
+                    }
+                }
+            }
+            continue;
         }
         let (Some(id), Some(m)) = (id, font.as_ref().and_then(|f| metrics.get(f))) else { continue };
         let text = out.entry(id).or_default();
