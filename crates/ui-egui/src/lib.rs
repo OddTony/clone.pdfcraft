@@ -119,6 +119,7 @@ pub(crate) const MAX_AUTHOR_CHARS: usize = 200;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod open_worker;
+mod organize_panel;
 pub mod portable;
 mod protect;
 mod recovery;

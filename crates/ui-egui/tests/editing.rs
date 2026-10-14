@@ -56,6 +56,13 @@ fn organize(pages: usize) -> Harness<'static, PdfCraftApp> {
     harness(pages, |app| app.set_option("organize", "on").unwrap())
 }
 
+/// Organize pages ▸ Insert ▸ `item`.
+fn insert_menu(h: &mut Harness<'static, PdfCraftApp>, item: &str) {
+    h.get_by_label("Insert").click();
+    h.run_steps(2);
+    h.get_by_label(item).click();
+}
+
 fn type_selection(h: &mut Harness<'static, PdfCraftApp>, text: &str) {
     use egui::accesskit::Role;
     h.get_by_role_and_label(Role::TextInput, "Selected pages").click();
@@ -114,7 +121,7 @@ fn organize_page_range_rejects_invalid_input_and_escape_cancels_without_clearing
     assert_eq!(h.state().views[0].target_pages(), [1, 2]);
     assert_eq!(h.get_by_role_and_label(Role::TextInput, "Selected pages").value().as_deref(), Some("2-3"));
     type_selection(&mut h, "5, 4, 4");
-    h.get_by_label("Apply").click();
+    h.key_press(Key::Enter);
     h.run_steps(2);
     assert_eq!(h.state().views[0].target_pages(), [3, 4]);
     type_selection(&mut h, " ");
@@ -434,7 +441,7 @@ fn insert_blank_page_after_selection() {
     let mut h = organize(2);
     h.get_by_label("Page 1").click();
     h.run_steps(1);
-    h.get_by_label("Insert a blank page after the selection").click();
+    insert_menu(&mut h, "Insert a blank page after the selection");
     h.run_steps(3);
     assert_eq!(page_texts(h.state()), ["Page 1", "", "Page 2"]);
     let app = h.state();
@@ -1491,7 +1498,7 @@ fn replace_button_replaces_selected_pages_in_organize() {
     h.get_by_label("Page 3").click_modifiers(Modifiers::COMMAND);
     h.run_steps(2);
     h.state_mut().pick_override = Some(vec![other.to_string_lossy().into_owned()]);
-    h.get_by_label("Replace pages…").click();
+    h.get_by_label("Replace").click();
     h.run_steps(3);
     egui_kittest::kittest::Queryable::get_by_label(&h, "Replace Pages");
     assert_eq!(h.state().replace_draft.as_ref().unwrap().from, 2);
@@ -1601,7 +1608,7 @@ fn plus_between_pages_inserts_picked_files_there_in_order() {
     // The toolbar button still inserts after the selection, not at the last "+" used.
     h.get_by_label("Page 2").click();
     h.run_steps(2);
-    h.get_by_label("Insert pages from a file…").click();
+    insert_menu(&mut h, "Insert pages from a file…");
     h.run_steps(4);
     assert_eq!(texts_of(h.state(), 0), ["a note", "Page 1", "a note", "Page 2", "Page 3", "a note"]);
     // A file that can't be converted changes nothing.
@@ -1825,10 +1832,10 @@ fn split_dialog_writes_one_file_per_part() {
     let d = dir.to_string_lossy().into_owned();
     let mut h = organize(3);
     h.state_mut().export_dir_override = Some(d);
-    h.get_by_label("Split into files…").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     h.get_by_label_contains("Creates 3 files from 3 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -1854,7 +1861,7 @@ fn split_at_bookmarks_with_equal_titles_keeps_every_part() {
     h.state_mut().run_command("page.split");
     h.run_steps(3);
     h.get_by_label_contains("Creates 3 files from 3 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -1874,7 +1881,7 @@ fn split_before_selected_pages() {
     h.state_mut().run_command("page.split");
     h.run_steps(3);
     h.get_by_label_contains("Creates 2 files from 4 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -4159,4 +4166,19 @@ fn private_new_chinese_keyboard_input_preserves_font_layout_and_saved_pixels() {
     }
     assert_eq!(std::fs::read(path).unwrap(), original);
     println!("verified Chinese keyboard insertion/deletion and save/reopen rendering on {pages} pages");
+}
+
+/// Organize pages has Acrobat's panel whenever the grid shows, however it was opened, and the
+/// panel's Close ends Organize: the grid closes and All tools comes back.
+#[test]
+fn organize_panel_comes_with_the_grid_and_closes_it() {
+    let mut h = organize(3);
+    h.get_by_label("Insert");
+    h.get_by_label("Bates numbering");
+    h.get_by_label("Page properties");
+    h.get_by_label("Close panel").click();
+    h.run_steps(3);
+    assert!(!h.state().views[0].organize, "Close ends Organize");
+    assert_eq!(h.state().left, pdfcraft_ui_egui::LeftPanel::AllTools);
+    assert!(h.query_by_label("Page properties").is_none(), "the panel is gone");
 }
