@@ -2589,6 +2589,7 @@ certificate	SHA-256 digest	SHA-256 santrauka
 	— (protection is applied when you save)	— (apsauga pritaikoma įrašant)
 	“{name}” has security restrictions. Enter its permissions password to lift them.	„{name}“ taikomi saugos apribojimai. Norėdami juos panaikinti, įveskite teisių slaptažodį.
 	“{name}” is protected. Enter a password to open it.	„{name}“ apsaugotas. Norėdami jį atverti, įveskite slaptažodį.
+	Enter the password to open this PDF.	Norėdami atidaryti šį PDF, įveskite slaptažodį.
 @plural	{n} page|{n} pages	{n} puslapis|{n} puslapiai|{n} puslapių
 @plural	{n} file|{n} files	{n} failas|{n} failai|{n} failų
 @plural	{n} field|{n} fields	{n} laukas|{n} laukai|{n} laukų

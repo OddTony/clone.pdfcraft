@@ -2118,6 +2118,7 @@
 	ΔLOC	ΔLOC
 	— (protection is applied when you save)	— (zaščita se uporabi ob shranjevanju)
 	“{name}” is protected. Enter a password to open it.	„{name}“ je zaščiten. Za odpiranje vnesite geslo.
+	Enter the password to open this PDF.	Vnesite geslo za odpiranje tega PDF-ja.
 	−Bin	−Bin
 	−LOC	−LOC
 action wizard	Start	Začni

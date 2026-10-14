@@ -1824,6 +1824,7 @@
 	Save changes to “{name}” before closing?	Αποθήκευση αλλαγών στο «{name}» πριν από το κλείσιμο;
 	Your changes will be lost if you don't save them.	Οι αλλαγές σας θα χαθούν εάν δεν τις αποθηκεύσετε.
 	“{name}” is protected. Enter a password to open it.	Το «{name}» προστατεύεται. Εισαγάγετε κωδικό πρόσβασης για να το ανοίξετε.
+	Enter the password to open this PDF.	Εισαγάγετε τον κωδικό πρόσβασης για να ανοίξετε αυτό το PDF.
 	Incorrect password. Try again.	Λανθασμένος κωδικός πρόσβασης. Δοκιμάστε ξανά.
 	Recognize Text	Αναγνώριση κειμένου
 	Password protection will be applied when you save	Η προστασία με κωδικό θα εφαρμοστεί κατά την αποθήκευση

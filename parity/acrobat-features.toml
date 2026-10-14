@@ -166,8 +166,8 @@ milestone = "M1"
 status = "shipped"
 commands = ["file.open"]
 tools = ["doc_open"]
-evidence = ["crates/ui-egui/tests/editing.rs::password_prompt_opens_and_security_tab_reports_the_details", "crates/crypt/src/tests.rs::empty_user_password_opens_without_asking", "crates/ui-egui/src/open_worker_tests.rs::a_chosen_tool_survives_wrong_password_retry_and_runs_after_unlock", "crates/ui-egui/src/open_worker_tests.rs::startup_intake_waits_for_local_authentication_and_keeps_its_own_background_password_prompt"]
-notes = ""
+evidence = ["crates/ui-egui/tests/editing.rs::password_prompt_opens_and_security_tab_reports_the_details", "crates/crypt/src/tests.rs::empty_user_password_opens_without_asking", "crates/ui-egui/src/open_worker_tests.rs::a_chosen_tool_survives_wrong_password_retry_and_runs_after_unlock", "crates/ui-egui/src/open_worker_tests.rs::startup_intake_waits_for_local_authentication_and_keeps_its_own_background_password_prompt", "crates/ui-egui/tests/editing.rs::opening_password_can_be_revealed_and_retried_without_losing_the_existing_document", "crates/ui-egui/tests/editing.rs::opening_password_filename_keeps_the_suffix_and_dialog_width_in_both_themes"]
+notes = "Opening prompt has a labelled revealable field and inline errors; long names retain a trailing identifier and extension without widening the dialog. Full names are available on hover and to assistive technology. Permissions-unlock prompt remains unchanged."
 
 [[feature]]
 id = "core.unicode-passwords"

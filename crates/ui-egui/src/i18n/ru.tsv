@@ -501,6 +501,7 @@
 	Your changes will be lost if you don't save them.	Если не сохранить, изменения будут потеряны.
 	Password required	Требуется пароль
 	“{name}” is protected. Enter a password to open it.	«{name}» защищён. Введите пароль для открытия.
+	Enter the password to open this PDF.	Введите пароль, чтобы открыть этот PDF.
 	Password	Пароль
 	Incorrect password. Try again.	Неверный пароль. Попробуйте снова.
 	Recognize Text	Распознать текст

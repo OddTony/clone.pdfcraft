@@ -588,6 +588,7 @@ key	Space	Mezerník
 	Your changes will be lost if you don't save them.	Pokud změny neuložíte, budou ztraceny.
 	Password required	Vyžadováno heslo
 	“{name}” is protected. Enter a password to open it.	Soubor „{name}“ je chráněný. Zadejte heslo pro jeho otevření.
+	Enter the password to open this PDF.	Zadejte heslo pro otevření tohoto PDF.
 	Password	Heslo
 	Incorrect password. Try again.	Nesprávné heslo. Zkuste to znovu.
 	Recognize Text	Rozpoznat text

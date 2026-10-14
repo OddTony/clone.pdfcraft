@@ -485,6 +485,7 @@ comment menu	Edit	సవరించు
 	Your changes will be lost if you don't save them.	మీరు సేవ్ చేయకపోతే మీ మార్పులు పోతాయి.
 	Password required	పాస్‌వర్డ్ అవసరం
 	“{name}” is protected. Enter a password to open it.	“{name}” రక్షించబడింది. దీన్ని తెరవడానికి పాస్‌వర్డ్‌ను నమోదు చేయండి.
+	Enter the password to open this PDF.	ఈ PDFను తెరవడానికి పాస్‌వర్డ్‌ను నమోదు చేయండి.
 	Password	పాస్‌వర్డ్
 	Incorrect password. Try again.	పాస్‌వర్డ్ తప్పు. మళ్లీ ప్రయత్నించండి.
 	Recognize Text	టెక్స్ట్‌ను గుర్తించు

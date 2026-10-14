@@ -239,15 +239,22 @@ fn purpose_cards(ui: &mut egui::Ui, t: &Tokens, mode: &mut ProtectionMode) {
 
 /// What names a password field: its caption, the id that keeps its focus, and what its reveal
 /// button is called while the text is hidden and while it shows.
-struct Secret {
-    label: &'static str,
-    id: &'static str,
-    show: &'static str,
-    hide: &'static str,
+pub(crate) struct Secret {
+    pub(crate) label: &'static str,
+    pub(crate) id: &'static str,
+    pub(crate) show: &'static str,
+    pub(crate) hide: &'static str,
 }
 
 /// A labelled password field with its reveal button inside the field, and its error below.
-fn secret_field(ui: &mut egui::Ui, t: &Tokens, field: &Secret, text: &mut String, visible: &mut bool, error: Option<&str>) -> egui::Response {
+pub(crate) fn secret_field(
+    ui: &mut egui::Ui,
+    t: &Tokens,
+    field: &Secret,
+    text: &mut String,
+    visible: &mut bool,
+    error: Option<&str>,
+) -> egui::Response {
     let (label, id, reveal_names) = (field.label, field.id, (field.show, field.hide));
     let caption = section_label(ui, t, label);
     ui.add_space(LABEL_GAP);
@@ -280,6 +287,8 @@ fn secret_field(ui: &mut egui::Ui, t: &Tokens, field: &Secret, text: &mut String
         }
         if eye.clicked() {
             *visible = !*visible;
+            // Enter on the reveal button toggles visibility, not the dialog's submit action.
+            ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
             // The caret stays in the field it was in.
             ui.memory_mut(|m| m.request_focus(egui::Id::new(id)));
         }

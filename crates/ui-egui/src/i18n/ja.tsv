@@ -508,6 +508,7 @@
 	Your changes will be lost if you don't save them.	保存しないと変更内容は失われます。
 	Password required	パスワードが必要です
 	“{name}” is protected. Enter a password to open it.	「{name}」は保護されています。開くためのパスワードを入力してください。
+	Enter the password to open this PDF.	このPDFを開くためのパスワードを入力してください。
 	Password	パスワード
 	Incorrect password. Try again.	パスワードが正しくありません。もう一度入力してください。
 	Recognize Text	テキストを認識
