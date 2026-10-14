@@ -3,7 +3,7 @@
 //! (images keep their proportions), double-click text to retype it, format it from the panel,
 //! Delete to remove it. Each change is one undoable engine edit.
 
-use egui::{Color32, CornerRadius, Pos2, Rect, Stroke};
+use egui::{Color32, CornerRadius, Pos2, Rect, Stroke, pos2};
 use pdfcraft_engine::{Added, AddedContent, AddedText, Edit, FontFamily, TextAlign};
 use pdfcraft_render::DocInfo;
 
@@ -73,8 +73,8 @@ pub struct TextDraft {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Grab {
     Move,
-    /// Which corner: (left, top) in screen terms.
-    Corner(bool, bool),
+    /// Which corner: (left, top, alt) in screen terms. When `alt` is true, resize from center.
+    Corner(bool, bool, bool),
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -260,11 +260,24 @@ fn handles(r: Rect) -> [(Pos2, bool, bool); 4] {
     [(r.left_top(), true, true), (r.right_top(), false, true), (r.left_bottom(), true, false), (r.right_bottom(), false, false)]
 }
 
-/// The rect while moving or resizing (images keep their proportions).
-fn dragged(r: Rect, grab: Grab, d: egui::Vec2, keep_aspect: bool) -> Rect {
+/// The rect while moving or resizing (images keep their proportions). When `alt` is true,
+/// the corner resize is anchored at the center (both corners move symmetrically).
+fn dragged(r: Rect, grab: Grab, d: egui::Vec2, keep_aspect: bool, alt: bool) -> Rect {
     match grab {
         Grab::Move => r.translate(d),
-        Grab::Corner(left, top) => {
+        Grab::Corner(left, top, _) => {
+            if alt {
+                let cx = r.center();
+                let half_w = r.width() / 2.0;
+                let half_h = r.height() / 2.0;
+                let new_half_w = (half_w + (if left { -d.x } else { d.x })).max(2.0);
+                let new_half_h = (half_h + (if top { -d.y } else { d.y })).max(2.0);
+                let min_x = cx.x - new_half_w;
+                let max_x = cx.x + new_half_w;
+                let min_y = cx.y - new_half_h;
+                let max_y = cx.y + new_half_h;
+                return Rect::from_min_max(pos2(min_x, min_y), pos2(max_x, max_y));
+            }
             let (mut dx, mut dy) = (if left { -d.x } else { d.x }, if top { -d.y } else { d.y });
             if keep_aspect && r.width() > 0.0 && r.height() > 0.0 {
                 let k = ((r.width() + dx) / r.width()).max((r.height() + dy) / r.height()).max(0.05);
@@ -334,7 +347,11 @@ pub(crate) fn page_input(
                 && (end - start).length() >= 1.0
             {
                 let keep = matches!(a.content, AddedContent::Image(_));
-                let r = dragged(screen_rect(xf, info, page, a.content.rect()), grab, end - start, keep);
+                let alt = match grab {
+                    Grab::Corner(_, _, a) => a,
+                    _ => false,
+                };
+                let r = dragged(screen_rect(xf, info, page, a.content.rect()), grab, end - start, keep, alt);
                 let (p0, p1) = (to_display(xf, info, page, r.left_bottom()), to_display(xf, info, page, r.right_top()));
                 let mut rect = [p0[0], p0[1], p1[0], p1[1]];
                 if let AddedContent::Text(t) = &a.content
@@ -390,8 +407,9 @@ pub(crate) fn page_input(
     }
     if resp.drag_started() {
         let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(p);
+        let alt = ui.input(|i| i.modifiers.alt);
         if let Some((_, left, top)) = selected_rect.and_then(|r| handles(r).into_iter().find(|(c, ..)| c.distance(origin) <= 6.0)) {
-            cv.grab = Some((page, Grab::Corner(left, top), origin));
+            cv.grab = Some((page, Grab::Corner(left, top, alt), origin));
             consumed = true;
         } else if let Some((i, _)) = items.iter().rev().find(|(_, a)| screen_rect(xf, info, page, a.content.rect()).expand(2.0).contains(origin)) {
             cv.selected = Some((page, *i));
@@ -445,7 +463,11 @@ pub(crate) fn paint_page(ui: &egui::Ui, painter: &egui::Painter, xf: &PageXform,
             && let (Some((gp, g, start)), Some(p)) = (cv.grab, pointer)
             && gp == page
         {
-            r = dragged(r, g, p - start, matches!(a.content, AddedContent::Image(_)));
+            let alt = match g {
+                Grab::Corner(_, _, a) => a,
+                _ => false,
+            };
+            r = dragged(r, g, p - start, matches!(a.content, AddedContent::Image(_)), alt);
         }
         if selected {
             painter.rect_stroke(r.expand(1.0), CornerRadius::ZERO, Stroke::new(1.5, SELECT_BLUE), egui::StrokeKind::Outside);
