@@ -1622,6 +1622,7 @@ key	Space	Mezerník
 	Exported 1 image	Exportován 1 obrázek
 	Exported {n} images	Exportováno obrázků: {n}
 	 ({s} not exported: {first})	 (neexportováno: {s}, první: {first})
+	 ({s} warnings: {first})	 ({s} upozornění: {first})
 	Exported the text of 1 page	Exportován text 1 stránky
 	Exported the text of {n} pages	Exportován text stránek: {n}
 	{msg} to {dir}	{msg} (složka {dir})
