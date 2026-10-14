@@ -10,6 +10,8 @@ workspace = true
 
 [dependencies]
 craft-scan = { workspace = true }
+# The Windows scan backend. Off Windows the crate holds only its COM-free rules.
+pdfcraft-wia = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Already in the dependency graph through the accessibility integration. The portal watcher
