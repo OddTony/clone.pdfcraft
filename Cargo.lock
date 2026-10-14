@@ -1143,6 +1143,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craft-job"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=refs%2Fpull%2F122%2Fhead#2c5bc4e26be3c57591085cb573f20874b2cbea58"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "craft-print"
 version = "0.1.0"
 source = "git+https://github.com/storytold/craft-libs?rev=f03ec27ab2c405969428512178f746183cd55ca0#f03ec27ab2c405969428512178f746183cd55ca0"
@@ -1152,6 +1160,18 @@ dependencies = [
  "tempfile",
  "winprint",
  "winsafe",
+]
+
+[[package]]
+name = "craft-scan"
+version = "0.1.0"
+source = "git+https://github.com/storytold/craft-libs?rev=refs%2Fpull%2F122%2Fhead#2c5bc4e26be3c57591085cb573f20874b2cbea58"
+dependencies = [
+ "craft-job",
+ "image",
+ "log",
+ "serde",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -3955,6 +3975,7 @@ name = "pdfcraft-cli"
 version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
+ "craft-job",
  "pdfcraft-audit",
  "pdfcraft-automation",
  "pdfcraft-cos",
@@ -4175,6 +4196,7 @@ name = "pdfcraft-platform"
 version = "0.8.0"
 dependencies = [
  "async-channel",
+ "craft-scan",
  "futures-lite",
  "zbus",
 ]
