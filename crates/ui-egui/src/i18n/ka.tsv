@@ -1678,7 +1678,7 @@
 	Cut	ამოჭრა
 	Copy	კოპირება
 	Paste after	ჩასმა შემდეგ
-	Rename	გადარქმევა
+	Rename	სახელის შეცვლა
 	Set to current page ({n})	მიმდინარე გვერდზე დაყენება ({n})
 	Move up	აწევა
 	Move down	ჩამოწევა
@@ -1770,7 +1770,7 @@
 	Edit script of {name}	{name}-ის სკრიპტის რედაქტირება
 	Import {name}	{name}-ის იმპორტი
 	Add bookmark	სანიშნის დამატება
-	Rename bookmark	სანიშნის გადარქმევა
+	Rename bookmark	სანიშნის სახელის შეცვლა
 	Delete bookmark	სანიშნის წაშლა
 	Move bookmark	სანიშნის გადატანა
 	Set bookmark destination	სანიშნის დანიშნულების დაყენება
