@@ -9,6 +9,7 @@ fn result(auto: &mut Automation, args: Value) -> Value {
     }
 }
 
+// Fresh fixtures include the current timestamp; retain their bytes for output comparisons.
 fn pdf() -> Vec<u8> {
     Session::new().create_from_text("Original", "Original text").unwrap().as_ref().clone()
 }
@@ -50,8 +51,9 @@ fn batch_is_nonrecursive_by_default_and_stop_reports_unprocessed_files() {
     std::fs::create_dir_all(dir.path().join("input/sub")).unwrap();
     let source = pdf();
     std::fs::write(dir.path().join("input/0.pdf"), b"broken").unwrap();
-    std::fs::write(dir.path().join("input/1.pdf"), &source).unwrap();
-    std::fs::write(dir.path().join("input/sub/2.pdf"), &source).unwrap();
+    let original = pdf();
+    std::fs::write(dir.path().join("input/1.pdf"), &original).unwrap();
+    std::fs::write(dir.path().join("input/sub/2.pdf"), &original).unwrap();
     let mut auto = Automation::new().with_root(dir.path()).unwrap();
     let report = result(&mut auto, json!({"paths":["input"],"steps":["optimize"],"out_dir":"out","stop_on_error":true}));
     assert_eq!(report["failed"], 1);
@@ -62,7 +64,7 @@ fn batch_is_nonrecursive_by_default_and_stop_reports_unprocessed_files() {
     let report = result(&mut auto, json!({"paths":["input"],"steps":["optimize"],"out_dir":"out"}));
     assert_eq!(report["completed"], 1);
     assert!(!dir.path().join("out/sub").exists());
-    assert!(std::fs::metadata(dir.path().join("out/1.pdf")).unwrap().len() <= source.len() as u64);
+    assert!(std::fs::metadata(dir.path().join("out/1.pdf")).unwrap().len() <= original.len() as u64);
 }
 
 #[test]
@@ -123,7 +125,32 @@ fn non_utf8_discovered_names_are_reported_without_panicking() {
     use std::os::unix::ffi::OsStrExt;
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir(dir.path().join("input")).unwrap();
-    std::fs::write(dir.path().join("input").join(std::ffi::OsStr::from_bytes(b"bad-\xff.pdf")), pdf()).unwrap();
+    let invalid = dir.path().join("input").join(std::ffi::OsStr::from_bytes(b"bad-\xff.pdf"));
+    if let Err(error) = std::fs::write(&invalid, pdf()) {
+        // APFS rejects this filename before batch discovery can see it. Keep the
+        // discovery assertions on filesystems that allow it; no other I/O error
+        // is an unsupported fixture.
+        #[cfg(target_os = "macos")]
+        if error.raw_os_error() == Some(92) {
+            assert!(!invalid.exists());
+            assert_eq!(std::fs::read_dir(dir.path().join("input")).unwrap().count(), 0);
+            assert!(!dir.path().join("out").exists());
+            let valid = dir.path().join("input/valid-λ.pdf");
+            let original = pdf();
+            std::fs::write(&valid, &original).unwrap();
+            assert_eq!(std::fs::read(&valid).unwrap(), original);
+            let mut auto = Automation::new().with_root(dir.path()).unwrap();
+            let report = result(&mut auto, json!({"paths":["input"],"steps":["convert"],"out_dir":"out"}));
+            assert_eq!(report["completed"], 1, "{report}");
+            assert_eq!(report["failed"], 0, "{report}");
+            assert_eq!(std::fs::read(dir.path().join("out/valid-λ.pdf")).unwrap(), original);
+            eprintln!(
+                "non-UTF-8 fixture capability unavailable: macOS filesystem rejected creation with EILSEQ92; valid-Unicode batch companion passed; invalid-name discovery still requires Linux/FreeBSD or a supporting filesystem"
+            );
+            return;
+        }
+        panic!("could not create the non-UTF-8 fixture: {error}");
+    }
     let mut auto = Automation::new().with_root(dir.path()).unwrap();
     let report = result(&mut auto, json!({"paths":["input"],"steps":["convert"],"out_dir":"out"}));
     assert_eq!(report["failed"], 1);
