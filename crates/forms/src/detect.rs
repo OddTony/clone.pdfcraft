@@ -290,14 +290,15 @@ fn label_for(words: &[Word], rect: [f64; 4], right_of: bool) -> String {
 }
 
 /// Rows of two or more touching cells of one size, as (the row's rect, cell count). Two is
-/// enough: dates split into day and month groups of two cells.
+/// enough: dates split into day and month groups of two cells. Cells are square or taller
+/// than wide; an empty table of wider cells is not a comb.
 fn combs(boxes: &[[f64; 4]]) -> Vec<([f64; 4], usize)> {
     let cells: Vec<[f64; 4]> = boxes
         .iter()
         .copied()
         .filter(|r| {
             let (w, h) = (r[2] - r[0], r[3] - r[1]);
-            (5.0..=30.0).contains(&w) && (8.0..=40.0).contains(&h) && w <= h * 1.5
+            (5.0..=30.0).contains(&w) && (8.0..=40.0).contains(&h) && w <= h * 1.2
         })
         .collect();
     // `b` comes right after `a` in a row: same size, its left edge on a's right edge.

@@ -1447,6 +1447,16 @@ fn detection_makes_a_row_of_touching_cells_one_comb_field() {
     };
     let kinds: Vec<Kind> = detect(&[], &apart, &[], &[]).into_iter().map(|c| c.kind).collect();
     assert_eq!(kinds, [Kind::CheckBox, Kind::CheckBox, Kind::CheckBox, Kind::CheckBox]);
+    // An empty table of cells wider than tall (an attendance sheet) is not a comb.
+    let grid = |cw: f64, ch: f64| {
+        (0..3).flat_map(move |r| {
+            (0..3).map(move |c| [100.0 + c as f64 * cw, 300.0 + r as f64 * ch, 100.0 + (c + 1) as f64 * cw, 300.0 + (r + 1) as f64 * ch])
+        })
+    };
+    for (cw, ch) in [(24.0, 18.0), (28.0, 20.0)] {
+        let table = detect(&[], &Shapes { boxes: grid(cw, ch).collect(), rules: Vec::new() }, &[], &[]);
+        assert!(table.is_empty(), "{cw} x {ch}: {table:?}");
+    }
 }
 
 #[test]
