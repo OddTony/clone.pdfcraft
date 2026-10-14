@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let pool = RenderPool::new(bytes, threads, RenderConfig::default());
     for round in 0..rounds {
         let (mut results, first, wall) = run(&pool, &requests)?;
-        results.sort_by_key(|r| (r.request.page, r.request.scale.to_bits(), r.request.tile.map(|t| (t.x, t.y))));
+        results.sort_by_key(|r| (r.request.page, r.request.scale.to_bits(), r.request.tile.map(|t| (t.x, t.y, t.w, t.h))));
         let slowest = results.iter().map(|r| r.millis).max().unwrap_or(0);
         let glyphs: usize = results.iter().filter_map(|r| r.text.as_ref()).map(|t| t.glyphs.len()).sum();
         let warnings: usize = results.iter().map(|r| r.warnings.len()).sum();
