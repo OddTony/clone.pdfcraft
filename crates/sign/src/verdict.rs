@@ -11,13 +11,13 @@
 //!
 //! Slots are identified by content role, never by XObject name: the caption is the
 //! text layer still carrying the unverified template, and the icon is the one
-//! vector drawing that inhabits the frame. Frames and borders span the box while
-//! the status mark lives in a corner of it, so a drawing counts as the icon only
-//! when it sits strictly inside the frame and covers at most half of it. Only
-//! appearances that still carry the unverified caption are rewritten, so a file
-//! that already shows its verdict is left alone, as is anything with an
-//! unexpected shape. Every anomaly degrades to the previous behaviour (the raw
-//! appearance plus the UI's own verdict mark) rather than failing.
+//! vector drawing that is not framing. Frames, borders and panels are rectangles
+//! however they are stroked, while the status mark is not, so a drawing made only
+//! of axis-aligned rectangles is decoration, never the icon. Only appearances
+//! that still carry the unverified caption are rewritten, so a file that already
+//! shows its verdict is left alone, as is anything with an unexpected shape.
+//! Every anomaly degrades to the previous behaviour (the raw appearance plus the
+//! UI's own verdict mark) rather than failing.
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
 use pdfcraft_fonts::{helvetica_width, literal, win_ansi};
@@ -65,7 +65,7 @@ pub fn has_substitutable_appearances(doc: &Document, signatures: &[SignatureInfo
     signatures
         .iter()
         .filter(|s| s.signed && s.status == Status::Valid)
-        .any(|sig| widget_layers(doc, &sig.field).is_some_and(|widgets| widgets.iter().any(|w| find_slots(doc, w.frame, &w.layers).is_some())))
+        .any(|sig| widget_layers(doc, &sig.field).is_some_and(|widgets| widgets.iter().any(|layers| find_slots(doc, layers).is_some())))
 }
 
 /// The most XObject levels an appearance tree is followed down.
@@ -93,8 +93,8 @@ fn substitute_valid_state(doc: &mut Document, field: &str, shared: &HashMap<ObjR
     }
     // Plan first, write after: no stream changes until every widget checks out.
     let mut plan = Vec::new();
-    for w in &widgets {
-        let Some((icon, caption)) = find_slots(doc, w.frame, &w.layers) else {
+    for layers in &widgets {
+        let Some((icon, caption)) = find_slots(doc, layers) else {
             return false;
         };
         if shared.get(&icon.r).is_some_and(|&n| n > 1) || shared.get(&caption.r).is_some_and(|&n| n > 1) {
@@ -122,28 +122,27 @@ fn substitute_valid_state(doc: &mut Document, field: &str, shared: &HashMap<ObjR
 
 /// The icon and caption layers of one widget, found by content role: the caption is
 /// the text layer still carrying the unverified template, and the icon is the
-/// one vector drawing that inhabits the frame. Names are never consulted: signers arrange
+/// one vector drawing that is not framing. Names are never consulted: signers arrange
 /// `n0`–`n4` either way round, and only the content tells which slot is which.
-/// Singularity alone never qualifies a layer: a lone frame-spanning drawing is
-/// decoration, however it is stroked, so the icon must sit strictly inside the
-/// frame and cover at most half of it. When either slot is missing, repeated or
-/// misplaced, there is no slot and the caller falls back to the overlay badge.
-fn find_slots(doc: &Document, frame: Option<[f64; 4]>, layers: &[Layer]) -> Option<(LayerRef, LayerRef)> {
-    let frame = frame?;
+/// Singularity alone never qualifies a layer: backgrounds, borders and panels are
+/// rectangles however they are stroked, so a drawing made only of axis-aligned
+/// rectangles is decoration, not the status mark. When either slot is missing,
+/// repeated or framing-only, there is no slot and the caller falls back to the
+/// overlay badge.
+fn find_slots(doc: &Document, layers: &[Layer]) -> Option<(LayerRef, LayerRef)> {
     let mut captions: Vec<&Layer> = Vec::new();
-    let mut icons: Vec<(&Layer, Vec<u8>)> = Vec::new();
+    let mut icons: Vec<&Layer> = Vec::new();
     for layer in layers {
         let (probe, decoded) = probe_layer(doc, layer);
         if probe.has_text && layer_contains(&decoded, b"Not Verified") {
             captions.push(layer);
         }
-        if probe.is_form && !probe.has_text && probe.has_draw {
-            icons.push((layer, decoded));
+        if probe.is_form && !probe.has_text && !is_only_rectangles(&decoded) {
+            icons.push(layer);
         }
     }
-    let ([caption], [(icon, decoded)]) = (captions.as_slice(), icons.as_slice()) else { return None };
-    let extents = drawn_extents(decoded)?;
-    drawing_inhabits_frame(&extents, &frame).then(|| (LayerRef::of(icon), LayerRef::of(caption)))
+    let ([caption], [icon]) = (captions.as_slice(), icons.as_slice()) else { return None };
+    Some((LayerRef::of(icon), LayerRef::of(caption)))
 }
 
 // A layer reference with its dictionary, for rewriting.
@@ -158,18 +157,16 @@ impl LayerRef {
     }
 }
 
-/// What a layer draws, probed from capped decoded content: whether it shows text,
-/// draws a line or curve (a bare `re` rectangle alone does not count), and is
-/// a form (image and other streams never qualify).
+/// What a layer draws, probed from capped decoded content: whether it shows text
+/// and whether it is a form (image and other streams never qualify).
 /// Returns the decoded bytes alongside, so callers never decode twice.
 struct Probe {
     is_form: bool,
     has_text: bool,
-    has_draw: bool,
 }
 
 fn probe_layer(doc: &Document, layer: &Layer) -> (Probe, Vec<u8>) {
-    let empty = Probe { is_form: false, has_text: false, has_draw: false };
+    let empty = Probe { is_form: false, has_text: false };
     let resolved = doc.resolve(&Object::Ref(layer.r));
     let stream = match &*resolved {
         Object::Stream(s) => s,
@@ -177,29 +174,18 @@ fn probe_layer(doc: &Document, layer: &Layer) -> (Probe, Vec<u8>) {
     };
     let Ok(decoded) = stream.decoded_within(MAX_LAYER_DECODED) else { return (empty, Vec::new()) };
     let is_form = stream.dict.get(b"Subtype").map(|s| doc.resolve(s)).is_none_or(|s| s.as_name().is_none_or(|n| n == b"Form"));
-    let (has_text, has_draw) = content_kinds(&decoded);
-    (Probe { is_form, has_text, has_draw }, decoded)
+    (Probe { is_form, has_text: shows_text(&decoded) }, decoded)
 }
 
-/// Whether decoded content ops show text (`Tj TJ ' "`) or draw a line or curve
-/// (`m l c v y h`), tokenised so operator-like bytes inside literal strings
-/// never count (hex payloads stay glued to their `<…>` brackets, so they never
-/// exact-match a bare operator). A bare `re` rectangle alone (background fills,
-/// borders) counts as neither: it never identifies the status icon on its own.
-fn content_kinds(decoded: &[u8]) -> (bool, bool) {
+/// Whether decoded content shows text (`Tj TJ ' "`), tokenised so operator-like
+/// bytes inside literal strings never count (hex payloads stay glued to their
+/// `<…>` brackets, so they never exact-match a bare operator).
+fn shows_text(decoded: &[u8]) -> bool {
     const TEXT_OPS: &[&[u8]] = &[b"Tj", b"TJ", b"'", b"\""];
-    const DRAW_OPS: &[&[u8]] = &[b"m", b"l", b"c", b"v", b"y", b"h"];
-    let flat = blank_strings(decoded);
-    let mut has_text = false;
-    let mut has_draw = false;
-    for tok in flat.split(|c| matches!(c, b' ' | b'\n' | b'\r' | b'\t' | b'\x0c' | b'\0')) {
-        if tok.is_empty() {
-            continue;
-        }
-        has_text |= TEXT_OPS.contains(&tok);
-        has_draw |= DRAW_OPS.contains(&tok);
-    }
-    (has_text, has_draw)
+    blank_strings(decoded)
+        .split(|c| matches!(c, b' ' | b'\n' | b'\r' | b'\t' | b'\x0c' | b'\0'))
+        .filter(|tok| !tok.is_empty())
+        .any(|tok| TEXT_OPS.contains(&tok))
 }
 
 /// Decoded content with literal strings blanked: `(a Tj)` draws an "a", not an
@@ -233,78 +219,134 @@ fn blank_strings(decoded: &[u8]) -> Vec<u8> {
     flat
 }
 
-/// The bounding box of a layer's vector drawing: every path coordinate of
-/// `m l c v y h re`, strings blanked first so string bytes never read as
-/// numbers. `None` when nothing is drawn or numbers refuse to parse: callers
-/// treat that as no slot, never as a zero-size drawing.
-fn drawn_extents(decoded: &[u8]) -> Option<[f64; 4]> {
-    fn take(stack: &mut Vec<f64>, n: usize) -> Option<Vec<f64>> {
-        if stack.len() < n {
-            stack.clear();
-            return None;
+/// Whether a vector drawing is only axis-aligned rectangles: frames, borders and
+/// panels, stroked with lines or `re` alike. Curves, irregular or open segments
+/// and unparseable numbers are content, not framing, so this returns false for
+/// them; an empty or degenerate drawing counts as framing, since there is no
+/// mark in it to identify. Callers exclude framing from the icon slot and fall
+/// back to the overlay badge instead of repainting decoration.
+fn is_only_rectangles(decoded: &[u8]) -> bool {
+    /// A closed loop of segments is a rectangle when its corners turn exactly
+    /// four times between horizontal and vertical. Collinear splits contribute
+    /// no turn, so mid-edge points need no tolerance arithmetic; identical
+    /// literals compare exactly, so axis checks need none either.
+    fn is_rect(pts: &[[f64; 2]]) -> bool {
+        let Some(first) = pts.first() else {
+            return true;
+        };
+        let (mut x0, mut y0, mut x1, mut y1) = (first[0], first[1], first[0], first[1]);
+        for p in &pts[1..] {
+            x0 = x0.min(p[0]);
+            y0 = y0.min(p[1]);
+            x1 = x1.max(p[0]);
+            y1 = y1.max(p[1]);
         }
-        Some(stack.split_off(stack.len() - n))
+        if x1 <= x0 || y1 <= y0 {
+            return true;
+        }
+        let mut dirs = Vec::new();
+        for w in pts.windows(2) {
+            let (dx, dy) = (w[1][0] - w[0][0], w[1][1] - w[0][1]);
+            if dx == 0.0 && dy == 0.0 {
+                continue;
+            }
+            if dx != 0.0 && dy != 0.0 {
+                return false;
+            }
+            dirs.push(dx != 0.0);
+        }
+        if dirs.is_empty() {
+            return true;
+        }
+        let mut turns = 0;
+        for i in 0..dirs.len() {
+            if dirs[i] != dirs[(i + 1) % dirs.len()] {
+                turns += 1;
+            }
+        }
+        if turns != 4 {
+            return false;
+        }
+        true
+    }
+    // The subpath under construction and whether `h` closed it: paint ends the
+    // subpath, and anything left open is content, not framing.
+    fn flush(current: &mut Vec<[f64; 2]>, closed: &mut bool) -> bool {
+        let mut pts = std::mem::take(current);
+        let was_closed = std::mem::replace(closed, false);
+        let Some(first) = pts.first().copied() else {
+            return true;
+        };
+        if was_closed {
+            pts.push(first);
+        }
+        if pts.first() != pts.last() {
+            return false;
+        }
+        is_rect(&pts)
     }
     let flat = blank_strings(decoded);
     let mut stack: Vec<f64> = Vec::new();
-    let mut ext: Option<[f64; 4]> = None;
-    let mut grow = |x: f64, y: f64| {
-        ext = Some(match ext {
-            Some([x0, y0, x1, y1]) => [x0.min(x), y0.min(y), x1.max(x), y1.max(y)],
-            None => [x, y, x, y],
-        });
-    };
+    let mut current: Vec<[f64; 2]> = Vec::new();
+    let mut closed = false;
     for tok in flat.split(|c| matches!(c, b' ' | b'\n' | b'\r' | b'\t' | b'\x0c' | b'\0')) {
         if tok.is_empty() {
             continue;
         }
         let Ok(word) = std::str::from_utf8(tok) else {
-            stack.clear();
-            continue;
+            return true;
         };
         if let Ok(n) = word.parse::<f64>() {
             stack.push(n);
             if stack.len() > 64 {
-                return None;
+                return true;
             }
             continue;
         }
         match word {
-            "m" | "l" => {
-                let p = take(&mut stack, 2)?;
-                grow(p[0], p[1]);
+            "m" => {
+                if stack.len() < 2 {
+                    return true;
+                }
+                if !flush(&mut current, &mut closed) {
+                    return false;
+                }
+                let n = stack.len();
+                current.push([stack[n - 2], stack[n - 1]]);
+                stack.clear();
             }
-            "c" => {
-                let p = take(&mut stack, 6)?;
-                grow(p[0], p[1]);
-                grow(p[2], p[3]);
-                grow(p[4], p[5]);
+            "l" => {
+                if stack.len() < 2 {
+                    return true;
+                }
+                if current.is_empty() {
+                    return true;
+                }
+                let n = stack.len();
+                current.push([stack[n - 2], stack[n - 1]]);
+                stack.clear();
             }
-            "v" | "y" => {
-                let p = take(&mut stack, 4)?;
-                grow(p[0], p[1]);
-                grow(p[2], p[3]);
-            }
-            "h" => {}
+            "c" | "v" | "y" => return false,
+            "h" => closed = true,
             "re" => {
-                let p = take(&mut stack, 4)?;
-                grow(p[0], p[1]);
-                grow(p[0] + p[2], p[1] + p[3]);
+                if stack.len() < 4 {
+                    return true;
+                }
+                if !flush(&mut current, &mut closed) {
+                    return false;
+                }
+                stack.clear();
+            }
+            "S" | "s" | "f" | "F" | "f*" | "B" | "b*" | "n" | "W" | "W*" => {
+                if !flush(&mut current, &mut closed) {
+                    return false;
+                }
+                stack.clear();
             }
             _ => stack.clear(),
         }
     }
-    ext
-}
-
-/// Whether a drawing belongs to the frame's content rather than its decoration:
-/// strictly inside the frame with room to spare, covering at most half of it.
-/// Strict on purpose: a border drawn exactly along the frame edges is equal,
-/// not inside, and stays decoration.
-fn drawing_inhabits_frame(drawing: &[f64; 4], frame: &[f64; 4]) -> bool {
-    let (fw, fh) = (frame[2] - frame[0], frame[3] - frame[1]);
-    let (w, h) = (drawing[2] - drawing[0], drawing[3] - drawing[1]);
-    drawing[0] > frame[0] && drawing[1] > frame[1] && drawing[2] < frame[2] && drawing[3] < frame[3] && w > 0.0 && h > 0.0 && w * h <= 0.5 * fw * fh
+    flush(&mut current, &mut closed)
 }
 
 // A form layer: its reference (for rewriting) and stream dictionary.
@@ -313,18 +355,8 @@ struct Layer {
     dict: Dict,
 }
 
-// One widget's appearance: the frame every layer is measured against (the `/N`
-// bounding box) and its form layers. The rewritten layers carry identity
-// matrices, so generated content is laid out in bounding-box coordinates. A
-// widget without a single measurable frame keeps `None` and vetoes the rewrite:
-// without a frame, no drawing's role can be told from decoration.
-struct WidgetLayers {
-    frame: Option<[f64; 4]>,
-    layers: Vec<Layer>,
-}
-
-/// The form XObjects of each widget of `field`, one entry per widget.
-fn widget_layers(doc: &Document, field: &str) -> Option<Vec<WidgetLayers>> {
+/// The form XObjects of each widget of `field`, one list per widget.
+fn widget_layers(doc: &Document, field: &str) -> Option<Vec<Vec<Layer>>> {
     if field.is_empty() {
         return None;
     }
@@ -336,26 +368,15 @@ fn widget_layers(doc: &Document, field: &str) -> Option<Vec<WidgetLayers>> {
         let mut seen = HashSet::new();
         let Some(apd) = w.get(b"AP").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned()) else { continue };
         let Some(n) = apd.get(b"N") else { continue };
-        let frame = appearance_frame(doc, n);
         walk_appearance(doc, n, 0, &mut seen, &mut layers);
-        out.push(WidgetLayers { frame, layers });
+        out.push(layers);
     }
     Some(out)
 }
 
-/// The bounding box of a widget's `/N` appearance stream: the frame the icon's
-/// drawing is measured against. Anything but a single stream with a sane box
-/// vetoes the rewrite.
-fn appearance_frame(doc: &Document, n: &Object) -> Option<[f64; 4]> {
-    match &*doc.resolve(n) {
-        Object::Stream(s) => stream_bbox(doc, &s.dict),
-        _ => None,
-    }
-}
-
 // Every layer reference reachable from `field`'s appearance trees, for sharing checks.
 fn appearance_layer_refs(doc: &Document, field: &str) -> Vec<ObjRef> {
-    widget_layers(doc, field).unwrap_or_default().into_iter().flat_map(|w| w.layers).map(|l| l.r).collect()
+    widget_layers(doc, field).unwrap_or_default().into_iter().flatten().map(|l| l.r).collect()
 }
 
 /// Form widgets of the named signature field: the field dictionary itself when it is
@@ -626,7 +647,7 @@ mod tests {
             ),
             stream("[0 0 100 100]", "<< >>", "0 g 0 0 100 100 re f"),
             stream("[0 0 100 100]", helv_font, "BT /F1 10 Tf 5 50 Td (Signed by Test) Tj ET"),
-            stream("[0 0 50 30]", "<< >>", "0.8 0.1 0.1 RG 3 w 5 5 m 20 5 l 20 25 l 5 25 l h S"),
+            stream("[0 0 50 30]", "<< >>", "0.8 0.1 0.1 RG 3 w 5 5 m 20 5 l 12 22 l h S"),
             stream("[0 21 50 30]", helv_font, "BT /F1 9 Tf 2 22 Td (Signature Not Verified) Tj ET"),
             stream("[0 0 100 100]", "<< >>", "0 g 0 0 100 100 re f"),
             "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
@@ -668,9 +689,13 @@ mod tests {
     /// selection. Callers keep the references: after a substitution the marker the
     /// selection looks for is gone by design.
     fn slots(doc: &Document, field: &str) -> (ObjRef, ObjRef) {
-        let widgets = widget_layers(doc, field).unwrap();
-        let w = &widgets[0];
-        let (icon, caption) = find_slots(doc, w.frame, &w.layers).unwrap();
+        let mut widgets = Vec::new();
+        collect_widgets(doc, field, &mut widgets).unwrap();
+        let mut seen = HashSet::new();
+        let mut layers = Vec::new();
+        let apd = widgets[0].get(b"AP").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned()).unwrap();
+        walk_appearance(doc, apd.get(b"N").unwrap(), 0, &mut seen, &mut layers);
+        let (icon, caption) = find_slots(doc, &layers).unwrap();
         (icon.r, caption.r)
     }
 
@@ -715,50 +740,46 @@ mod tests {
     }
 
     #[test]
-    fn content_kinds_read_operators_not_string_contents() {
-        assert_eq!(content_kinds(b"BT /F1 10 Tf 5 50 Td (Signed by Test) Tj ET"), (true, false));
-        assert_eq!(content_kinds(b"0.8 0.1 0.1 RG 3 w 5 5 m 20 5 l S"), (false, true));
-        // A bare rectangle alone never marks a layer as drawn: backgrounds and
-        // borders must not win the icon slot, however long they are.
-        assert_eq!(content_kinds(b"0 g 0 0 100 100 re f"), (false, false));
-        assert_eq!(content_kinds(b"0 G 3 w 0 0 10 10 re 20 20 30 30 re S"), (false, false));
+    fn shows_text_reads_operators_not_string_contents() {
+        assert!(shows_text(b"BT /F1 10 Tf 5 50 Td (Signed by Test) Tj ET"));
+        assert!(!shows_text(b"0.8 0.1 0.1 RG 3 w 5 5 m 20 5 l S"));
+        assert!(!shows_text(b"0 g 0 0 100 100 re f"));
         // Operator-like bytes inside strings never count, in either direction.
-        assert_eq!(content_kinds(b"(a Tj of irony)"), (false, false));
-        assert_eq!(content_kinds(b"BT (m) Tj ET"), (true, false));
-        assert_eq!(content_kinds(b"(re)"), (false, false));
-        assert_eq!(content_kinds(b""), (false, false));
+        assert!(!shows_text(b"(a Tj of irony)"));
+        assert!(shows_text(b"BT (m) Tj ET"));
+        assert!(!shows_text(b"(re)"));
+        assert!(!shows_text(b""));
         // `)` always delimits, so a string glued to its operator still tokenises.
-        assert_eq!(content_kinds(b"(a)Tj"), (true, false));
-        assert_eq!(content_kinds(b"((a) b \\( c) Tj"), (true, false));
-        assert_eq!(content_kinds(b"(abc"), (false, false));
+        assert!(shows_text(b"(a)Tj"));
+        assert!(shows_text(b"((a) b \\( c) Tj"));
+        assert!(!shows_text(b"(abc"));
     }
 
     #[test]
-    fn drawn_extents_cover_path_coordinates_not_string_bytes() {
-        assert_eq!(drawn_extents(b"5 5 m 20 5 l 20 25 l h S"), Some([5.0, 5.0, 20.0, 25.0]));
-        assert_eq!(drawn_extents(b"0 0 100 100 re S"), Some([0.0, 0.0, 100.0, 100.0]));
-        assert_eq!(drawn_extents(b"0 0 10 10 re 20 20 30 30 re S"), Some([0.0, 0.0, 50.0, 50.0]));
-        assert_eq!(drawn_extents(b"0 0 m 10 0 l 10 0 20 10 20 20 c 30 30 40 40 v 50 40 50 50 y S"), Some([0.0, 0.0, 50.0, 50.0]));
-        // String bytes never read as coordinates, even when numeric.
-        assert_eq!(drawn_extents(b"BT (99 99) Tj ET"), None);
-        assert_eq!(drawn_extents(b"BT /F1 10 Tf (5 5 m) Tj ET"), None);
-        // Graphics state and painting ops carry no coordinates.
-        assert_eq!(drawn_extents(b"q 0 G 2 w Q"), None);
-        assert_eq!(drawn_extents(b""), None);
-        // Malformed numbers fail closed, never as zero size.
-        assert_eq!(drawn_extents(b"5 m"), None);
-        assert_eq!(drawn_extents(b"a b m"), None);
-    }
-
-    #[test]
-    fn only_inhabitants_count_as_the_icon() {
-        let frame = [0.0, 0.0, 50.0, 30.0];
-        assert!(drawing_inhabits_frame(&[5.0, 5.0, 20.0, 25.0], &frame), "the glyph lives in a corner");
-        assert!(!drawing_inhabits_frame(&[0.0, 0.0, 50.0, 30.0], &frame), "edge-exact is decoration, not inside");
-        assert!(!drawing_inhabits_frame(&[1.0, 1.0, 99.0, 99.0], &frame), "spanning past the frame is decoration");
-        assert!(!drawing_inhabits_frame(&[5.0, 5.0, 45.0, 25.0], &frame), "four-fifths of the frame is no corner mark");
-        assert!(!drawing_inhabits_frame(&[5.0, 5.0, 5.0, 5.0], &frame), "a point draws nothing");
-        assert!(!drawing_inhabits_frame(&[f64::NAN, 5.0, 20.0, 25.0], &frame));
+    fn only_non_framing_drawings_count_as_the_icon() {
+        // Rectangles however stroked: fills, single and nested borders, panels.
+        assert!(is_only_rectangles(b"0 g 0 0 100 100 re f"));
+        assert!(is_only_rectangles(b"0 G 2 w 0 0 100 100 re S 10 10 80 80 re S"));
+        assert!(is_only_rectangles(b"1 1 m 99 1 l 99 99 l 1 99 l h S"));
+        assert!(is_only_rectangles(b"1 1 m 99 1 l 99 99 l 1 99 l 1 1 l S"));
+        assert!(is_only_rectangles(b"0 0 m 50 0 l 100 0 l 100 100 l 0 100 l h S"));
+        assert!(is_only_rectangles(b"0 0 m 50 0 l 50 30 l 0 30 l 0 0 l 60 0 m 100 0 l 100 30 l 60 30 l 60 0 l S"));
+        // Curves, diagonals and open paths are content, not framing.
+        assert!(!is_only_rectangles(b"5 5 m 20 5 l 12 22 l h S"));
+        assert!(!is_only_rectangles(b"0 0 m 50 30 l S 0 30 m 50 0 l S"));
+        assert!(!is_only_rectangles(b"0 0 m 10 0 l 10 0 20 10 20 20 c S"));
+        assert!(!is_only_rectangles(b"0 G 1 w 0 0 m 50 30 l S"));
+        assert!(!is_only_rectangles(b"0 0 m 100 0 l S"));
+        // Operator words inside strings never count: without blanking, the `c`
+        // below would read as a curve.
+        assert!(is_only_rectangles(b"0 0 10 10 re S (x c y)"));
+        // Text-only layers carry no drawing, and malformed numbers exclude the
+        // layer rather than guessing: both fall back, never misidentify.
+        assert!(is_only_rectangles(b"BT (99 99) Tj ET"));
+        assert!(is_only_rectangles(b"5 m"));
+        assert!(is_only_rectangles(b"a b m"));
+        assert!(is_only_rectangles(b"q 0 G 2 w Q"));
+        assert!(is_only_rectangles(b""));
     }
 
     #[test]
@@ -1030,18 +1051,35 @@ mod tests {
     }
 
     #[test]
-    fn a_widget_without_a_measurable_frame_is_left_alone() {
+    fn nested_line_rectangles_are_not_the_icon() {
         let doc = &mut open(layered_fixture());
+        // Borders drawn as nested line rectangles rather than `re`: every piece
+        // is still a frame, so a glyph reduced to a bare rectangle alongside
+        // still leaves no icon slot.
+        let glyph = ObjRef::new(10, 0);
         let (_, caption) = slots(doc, "Signature1");
         let caption_before = decoded(doc, caption);
-        // The appearance stream without its bounding box: no frame, no role.
-        doc.update_dict(ObjRef::new(6, 0), |d| {
-            d.remove(b"BBox");
-        })
-        .unwrap();
+        let dict = match &*doc.resolve(&Object::Ref(glyph)) {
+            Object::Stream(s) => s.dict.clone(),
+            _ => panic!("glyph is a stream"),
+        };
+        doc.set(glyph, Object::Stream(Stream::from_raw(stripped(&dict), b"0 G 2 w 0 0 50 30 re S".to_vec())));
+        let glyph_before = decoded(doc, glyph);
+        let border = ObjRef::new(12, 0);
+        let dict = match &*doc.resolve(&Object::Ref(border)) {
+            Object::Stream(s) => s.dict.clone(),
+            _ => panic!("border is a stream"),
+        };
+        doc.set(
+            border,
+            Object::Stream(Stream::from_raw(stripped(&dict), b"0 G 1 w 5 5 m 95 5 l 95 95 l 5 95 l h 15 15 m 85 15 l 85 85 l 15 85 l h S".to_vec())),
+        );
+        let border_before = decoded(doc, border);
         let mut sigs = vec![verdict("Signature1", Status::Valid)];
         assert!(!show_valid_appearances(doc, &mut sigs));
-        assert!(!sigs[0].verdict_shown, "without a frame nothing is the icon");
+        assert!(!sigs[0].verdict_shown, "nested frames are still frames");
+        assert_eq!(decoded(doc, border), border_before);
+        assert_eq!(decoded(doc, glyph), glyph_before);
         assert_eq!(decoded(doc, caption), caption_before);
     }
 
