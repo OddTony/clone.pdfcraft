@@ -55,7 +55,8 @@ pub(crate) fn panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
 
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         widgets::section_title(ui, tl!("Pages selected"));
-        let picked = view.organize_range.show(ui, &view.selected, n, |ui| {
+        let current = view.current;
+        let picked = view.organize_range.show(ui, &view.selected, n, current, |ui| {
             use pdfcraft_engine::{PageOrientation as O, PageParity as P, filter_pages};
             let all: Vec<usize> = (0..n).collect();
             let mut chosen = None;

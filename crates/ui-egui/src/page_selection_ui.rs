@@ -60,11 +60,13 @@ fn formatted(pages: &BTreeSet<usize>) -> String {
 impl PageSelectionInput {
     /// The field, as Acrobat's Pages selected: typed pages apply on Enter or when the field loses
     /// focus, and the chevron opens `menu` (pages by kind), whose choice is returned the same way.
+    /// With nothing selected it shows the current page (0-based `current`), which actions apply to.
     pub(crate) fn show(
         &mut self,
         ui: &mut egui::Ui,
         selected: &BTreeSet<usize>,
         count: usize,
+        current: usize,
         menu: impl FnOnce(&mut egui::Ui) -> Option<Vec<usize>>,
     ) -> Option<Vec<usize>> {
         if self.selection != *selected {
@@ -87,7 +89,13 @@ impl PageSelectionInput {
         ui.horizontal(|ui| {
             let label = tl!("Selected pages");
             let width = (ui.available_width() - 32.0).max(40.0);
-            let field = ui.add(egui::TextEdit::singleline(&mut self.text).id(id).desired_width(width).char_limit(16_384).hint_text("1, 12, 16-18"));
+            let field = ui.add(
+                egui::TextEdit::singleline(&mut self.text)
+                    .id(id)
+                    .desired_width(width)
+                    .char_limit(16_384)
+                    .hint_text(current.saturating_add(1).to_string()),
+            );
             field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, ui.is_enabled(), label));
             commit = ui.is_enabled() && !cancel && field.lost_focus();
             let pick = crate::icons::button(ui, "chevron-down", 26.0, false, tl!("Select pages"));
