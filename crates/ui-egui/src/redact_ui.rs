@@ -234,19 +234,23 @@ fn to_user(xf: &PageXform, info: &DocInfo, page: usize, p: Pos2) -> [f64; 2] {
 /// Redact tool input on a page. Presses on text are left to text selection (the selection is
 /// marked when it ends, see [`after_text`]); presses elsewhere draw a box. Returns `true` when
 /// the gesture is a box.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn page_input(
     ui: &egui::Ui,
     resp: &egui::Response,
     xf: &PageXform,
+    page_ptr: Option<Pos2>,
     page: usize,
     info: &DocInfo,
     over_text: impl Fn(Pos2) -> bool,
     view: &mut DocView,
 ) -> bool {
-    let pointer = ui.input(|i| i.pointer.hover_pos().or(i.pointer.interact_pos()));
     if let Some((dp, start)) = view.redact_drag
         && dp == page
     {
+        // A box being drawn ends where the pointer is, even past the page or over the chrome
+        // (or, on touch, where the finger lifted).
+        let pointer = ui.input(|i| i.pointer.hover_pos().or(i.pointer.interact_pos()));
         if resp.drag_stopped() || !ui.input(|i| i.pointer.primary_down()) {
             view.redact_drag = None;
             let end = pointer.unwrap_or(start);
@@ -258,7 +262,7 @@ pub(crate) fn page_input(
         }
         return true;
     }
-    let Some(p) = pointer.filter(|p| xf.rect.contains(*p)) else { return false };
+    let Some(p) = page_ptr.filter(|p| xf.rect.contains(*p)) else { return false };
     if !over_text(p) {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }

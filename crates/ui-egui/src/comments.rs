@@ -529,6 +529,9 @@ pub enum SortBy {
 pub(crate) struct PageCx<'a> {
     pub page: usize,
     pub xf: &'a PageXform,
+    /// The pointer as the pages see it this frame (`None` when something covers them): see
+    /// `page_ptr` in `canvas::document_area`.
+    pub ptr: Option<Pos2>,
     pub info: &'a DocInfo,
     pub tool: QuickTool,
     pub prefs: &'a CommentPrefs,
@@ -1344,7 +1347,17 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
         // Scrolled away: keep the draft until the page is back.
         return None;
     };
-    let cx = PageCx { page, xf: &xf, info, tool: QuickTool::Select, prefs, allowed: true, hidden: false, redact_mark: ([0.89, 0.13, 0.13], 1.0) };
+    let cx = PageCx {
+        page,
+        xf: &xf,
+        ptr: None,
+        info,
+        tool: QuickTool::Select,
+        prefs,
+        allowed: true,
+        hidden: false,
+        redact_mark: ([0.89, 0.13, 0.13], 1.0),
+    };
     let anchor = cx.to_screen(c.at);
     let t = Tokens::get(ctx);
     let mut post = false;

@@ -12,8 +12,7 @@ use crate::{PdfCraftApp, QuickTool};
 pub type Marquee = (usize, Rect, [f32; 4]);
 
 /// Drag a rectangle on page `page` (Marquee Zoom, Snapshot).
-pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, page: usize, view: &mut DocView) {
-    let pointer = ui.input(|i| i.pointer.hover_pos());
+pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, pointer: Option<Pos2>, page: usize, view: &mut DocView) {
     let origin = ui.input(|i| i.pointer.press_origin());
     if pointer.is_some_and(|p| xf.rect.contains(p)) {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);

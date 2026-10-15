@@ -616,6 +616,7 @@ pub(crate) fn page_input(
     ui: &egui::Ui,
     resp: &egui::Response,
     xf: &PageXform,
+    pointer: Option<Pos2>,
     page: usize,
     info: &DocInfo,
     tool: FillTool,
@@ -627,10 +628,7 @@ pub(crate) fn page_input(
     author: &str,
     date_text: &Result<String, String>,
 ) -> Option<FillAction> {
-    let pointer = ui.input(|i| i.pointer.hover_pos())?;
-    if !resp.contains_pointer() || !xf.rect.contains(pointer) {
-        return None;
-    }
+    let pointer = pointer.filter(|p| xf.rect.contains(*p))?;
     let p = info.pages.get(page)?;
     let at = to_user(xf, info, page, pointer);
     let saved = match tool {

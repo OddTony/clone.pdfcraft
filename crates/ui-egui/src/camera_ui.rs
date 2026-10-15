@@ -58,8 +58,15 @@ fn screen(xf: &PageXform, c: [f32; 2]) -> Pos2 {
 }
 
 /// Corner dragging on one page. A press on a page without the quadrilateral moves it there.
-pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, page: usize, view: &mut DocView, allowed: bool) {
-    let pointer = ui.input(|i| i.pointer.hover_pos());
+pub(crate) fn page_input(
+    ui: &egui::Ui,
+    resp: &egui::Response,
+    xf: &PageXform,
+    pointer: Option<Pos2>,
+    page: usize,
+    view: &mut DocView,
+    allowed: bool,
+) {
     let origin = ui.input(|i| i.pointer.press_origin());
     if !allowed {
         if pointer.is_some_and(|p| xf.rect.contains(p)) {

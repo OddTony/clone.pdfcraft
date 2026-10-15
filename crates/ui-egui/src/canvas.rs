@@ -2535,15 +2535,6 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     };
     let mut open_signature = false;
     let mut hover_text: Option<(Pos2, String)> = None;
-    // A dialog, save prompt or palette covers the page. Hover tips are drawn above those
-    // windows, so a comment under the pointer would otherwise float over the dialog.
-    let page_covered = app.dialog.is_some()
-        || app.close_request.is_some()
-        || app.palette_open
-        || app.password_prompt.is_some()
-        || app.pending_link.is_some()
-        || app.pending_remote_link.is_some()
-        || app.updates.open;
     let mut clicked_link: Option<LinkTarget> = None;
     let mut remote_open: Option<(pdfcraft_engine::DocId, String, pdfcraft_render::RemoteDestination)> = None;
     let mut canvas_action: Option<comments::CanvasAction> = None;
@@ -2626,6 +2617,15 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         let mut current_overlap = -1.0f32;
         let mut current_height = f32::INFINITY;
         let pointer = ui.input(|i| i.pointer.hover_pos());
+        // The pointer as the pages see it: only while the content widget is under it (not a
+        // dialog, the palette, the quick bar, a menu or the chrome over a page scrolled under
+        // it), or while it holds a press or drag that began on it. egui decides that from its
+        // layers, modals and clip rects, so page hovers, cursors and tips need no list of what
+        // can cover the page. `contains_pointer` alone still reaches through the few points
+        // along an Area's edge (egui's interact radius), so the top layer must be the page's.
+        let held = resp.is_pointer_button_down_on() || resp.dragged() || resp.drag_stopped();
+        let page_layer = ui.layer_id();
+        let page_ptr = pointer.filter(|p| held || resp.contains_pointer() && ui.ctx().layer_id_at(*p).is_none_or(|l| l == page_layer));
         // A press on a page makes it the current one (as in Acrobat), so a page command with
         // no selection (Rotate, Delete) acts on the page the reader pointed at, not on a page
         // gone to earlier that still shows whole beside it.
@@ -2786,7 +2786,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(0.5, t.border.gamma_multiply(0.8)), egui::StrokeKind::Outside);
 
             // Comments: tools, selection, moving and resizing come before text selection.
-            let pcx = comments::PageCx { page: i, xf: &xf, info, tool, prefs, allowed, hidden: comments_hidden, redact_mark };
+            let pcx = comments::PageCx { page: i, xf: &xf, ptr: page_ptr, info, tool, prefs, allowed, hidden: comments_hidden, redact_mark };
             if let QuickTool::Measure(measure_tool) = tool {
                 crate::measure_ui::page_input(ui, &resp, doc, view, &pcx, measure_tool, units);
             }
@@ -2795,7 +2795,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             // every viewing mode); then comments; then text selection.
             if let QuickTool::Stamp(kind) = tool
                 && allowed
-                && let Some(p) = ui.input(|inp| inp.pointer.hover_pos()).filter(|p| xf.rect.contains(*p))
+                && let Some(p) = page_ptr.filter(|p| xf.rect.contains(*p))
             {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
                 if resp.clicked() {
@@ -2819,7 +2819,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             }
             if let Some(cs) = custom_stamp.as_ref()
                 && allowed
-                && let Some(p) = ui.input(|inp| inp.pointer.hover_pos()).filter(|p| xf.rect.contains(*p))
+                && let Some(p) = page_ptr.filter(|p| xf.rect.contains(*p))
             {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
                 if resp.clicked() {
@@ -2846,6 +2846,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     ui,
                     &resp,
                     &xf,
+                    page_ptr,
                     i,
                     info,
                     ft,
@@ -2869,15 +2870,15 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 }
             }
             if matches!(tool, QuickTool::SignArea { .. }) {
-                crate::sign_ui::page_input(ui, &resp, &xf, i, info, view);
+                crate::sign_ui::page_input(ui, &resp, &xf, page_ptr, i, info, view);
             }
             if matches!(tool, QuickTool::MarqueeZoom | QuickTool::Snapshot) {
-                crate::zoom_snap::page_input(ui, &resp, &xf, i, view);
+                crate::zoom_snap::page_input(ui, &resp, &xf, page_ptr, i, view);
             }
             if tool == QuickTool::EnhanceCamera {
-                crate::camera_ui::page_input(ui, &resp, &xf, i, view, can_modify);
+                crate::camera_ui::page_input(ui, &resp, &xf, page_ptr, i, view, can_modify);
             }
-            if tool == QuickTool::Crop && crate::crop::page_input(ui, &resp, &xf, i, info, view, can_crop) {
+            if tool == QuickTool::Crop && crate::crop::page_input(ui, &resp, &xf, page_ptr, i, info, view, can_crop) {
                 view.current = i;
                 open_boxes = true;
             }
@@ -2911,7 +2912,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     let (vx, vy) = xf.screen_to_view(p);
                     text.as_ref().is_some_and(|t| t.glyphs.iter().any(|g| vx >= g.rect[0] && vx <= g.rect[2] && vy >= g.rect[1] && vy <= g.rect[3]))
                 };
-                crate::redact_ui::page_input(ui, &resp, &xf, i, info, over_text, view)
+                crate::redact_ui::page_input(ui, &resp, &xf, page_ptr, i, info, over_text, view)
             };
             let image_owns_pointer = tool == QuickTool::EditText && crate::edit_text_ui::image_owns_pointer(ui, &xf, i, info, view);
             let on_objects =
@@ -3226,9 +3227,8 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 }
             }
             // Fill & Sign keeps its placement cursor clear of link/comment hover feedback.
-            if !page_covered
-                && !matches!(tool, QuickTool::Fill(_))
-                && let Some(p) = pointer
+            if !matches!(tool, QuickTool::Fill(_))
+                && let Some(p) = page_ptr
             {
                 for l in info.links.iter().filter(|l| l.page == i) {
                     let sr = xf.user_rect(info, i, l.rect);

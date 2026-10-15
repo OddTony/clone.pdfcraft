@@ -17,16 +17,17 @@ fn to_user(xf: &PageXform, info: &DocInfo, page: usize, p: Pos2) -> [f64; 2] {
 }
 
 /// Crop gestures on one page. Returns `Some(true)` to open Set Page Boxes for this page.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn page_input(
     ui: &egui::Ui,
     resp: &egui::Response,
     xf: &PageXform,
+    pointer: Option<Pos2>,
     page: usize,
     info: &DocInfo,
     view: &mut DocView,
     allowed: bool,
 ) -> bool {
-    let pointer = ui.input(|i| i.pointer.hover_pos());
     let origin = ui.input(|i| i.pointer.press_origin());
     if pointer.is_some_and(|p| xf.rect.contains(p)) {
         ui.ctx().set_cursor_icon(if allowed { egui::CursorIcon::Crosshair } else { egui::CursorIcon::NotAllowed });
