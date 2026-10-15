@@ -382,7 +382,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     #[cfg(not(target_arch = "wasm32"))]
     ui.add(widgets::checkbox(&mut app.reload_changed_files, tl!("Reload documents when their files change on disk")));
     ui.horizontal(|ui| {
-        ui.label(tl!("Mouse wheel scroll speed"));
+        ui.label(tl!("Scroll speed (mouse wheel and arrow keys)"));
         for speed in crate::scroll_speed::ScrollSpeed::ALL {
             widgets::radio_value(ui, &mut app.scroll_speed, speed, tl_ctx!("scroll speed", speed.label()));
         }
@@ -395,6 +395,11 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
             widgets::radio_value(ui, &mut app.animation_effects, choice, tl_ctx!("animation effects", choice.label()));
         }
     });
+    // Only where the app draws the title bar (GNOME on Wayland); elsewhere the desktop draws it.
+    if app.window_controls.is_some() {
+        ui.add(widgets::checkbox(&mut app.system_title_bar, tl!("Use system title bar")))
+            .on_hover_text(tl!("Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme."));
+    }
     ui.add_space(8.0);
     // Reading colours (Acrobat: Replace Document Colors): solid text and line-art paints are
     // remapped while rendering, and the page clears to the background colour. The preference

@@ -228,7 +228,7 @@ fn tools_that_write_a_path_are_held_to_the_write_root() {
             ("form_merge_data", json!({"paths": [input("a.pdf")], "path": file("merged.csv")})),
             ("action_run", json!({"paths": [input("a.pdf")], "folder": file("actions"), "action": "Add Page Numbers"})),
             ("ocr_recognize_files", json!({"paths": [input("a.pdf")], "folder": file("ocr")})),
-            ("sign_id_create", json!({"name": "Test", "password": "secret1", "path": file("id.p12"), "key": "p256"})),
+            ("sign_id_create", json!({"name": "Test", "password": "secret12", "path": file("id.p12"), "key": "p256"})),
         ]
     };
 
@@ -278,20 +278,20 @@ fn signing_writes_and_reads_only_inside_the_roots() {
     let roots = AutomationRoots::new(Some(&work), Some(&work)).unwrap();
     let mut server = McpServer::new(Automation::new().with_automation_roots(roots).with_clock(|| 1_700_000_000));
     ok(&mut server, "doc_open", json!({"path": s(&work.join("a.pdf"))}));
-    ok(&mut server, "sign_id_create", json!({"name": "Test", "password": "secret1", "path": s(&work.join("id.p12")), "key": "p256"}));
+    ok(&mut server, "sign_id_create", json!({"name": "Test", "password": "secret12", "path": s(&work.join("id.p12")), "key": "p256"}));
     refused(
         &mut server,
         "sign_id_create",
-        json!({"name": "Test", "password": "secret1", "path": s(&base.join("outside/id.p12")), "key": "p256"}),
+        json!({"name": "Test", "password": "secret12", "path": s(&base.join("outside/id.p12")), "key": "p256"}),
         "outside the write root",
     );
     refused(
         &mut server,
         "sign_document",
-        json!({"doc": 1, "id": s(&work.join("id.p12")), "password": "secret1", "out": s(&base.join("outside/signed.pdf"))}),
+        json!({"doc": 1, "id": s(&work.join("id.p12")), "password": "secret12", "out": s(&base.join("outside/signed.pdf"))}),
         "outside the write root",
     );
-    ok(&mut server, "sign_document", json!({"doc": 1, "id": s(&work.join("id.p12")), "password": "secret1", "out": s(&work.join("signed.pdf"))}));
+    ok(&mut server, "sign_document", json!({"doc": 1, "id": s(&work.join("id.p12")), "password": "secret12", "out": s(&work.join("signed.pdf"))}));
     assert!(work.join("signed.pdf").is_file());
     assert_eq!(names(&base.join("outside")), ["pic.png", "secret.pdf"]);
 }
