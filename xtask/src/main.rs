@@ -9,6 +9,7 @@ mod fuzz;
 mod gates;
 mod layers;
 mod macos_integration;
+mod native_wayland_clipboard;
 mod parity;
 mod screenshots;
 mod version;
@@ -31,6 +32,11 @@ const COMMANDS: &[(&str, &str, Command)] = &[
         "macos-integration",
         "Report macOS bundle, Quick Look, Spotlight and PDF integration diagnostics without mutating system state",
         macos_integration::run,
+    ),
+    (
+        "native-wayland-clipboard",
+        "Run an isolated native PNG clipboard check (Linux, Sway; --test-executable skips compilation)",
+        native_wayland_clipboard::run,
     ),
     ("text-oracle", "Compare text extraction with pdftotext over corpus/ (word F1; target median ≥ 0.97)", gates::text_oracle),
     (

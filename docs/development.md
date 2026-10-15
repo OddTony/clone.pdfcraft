@@ -147,3 +147,32 @@ Relative includes resolve beside the config that contains them. Included directo
 digit-prefixed `*.conf` files, in lexical order; backups and disabled files are ignored. The scan
 limits each config to 1 MiB, visits at most 256 config files/directories, and bounds include depth
 to 16 and directory entries to 32,768. Cyclic includes are skipped.
+
+## Native Wayland image clipboard
+
+`cargo xtask native-wayland-clipboard` is an opt-in Linux integration check. It builds only the
+UI library test executable with Cargo's JSON artifact discovery, then requires the exact ignored
+native test. `--test-executable <file>` uses an existing libtest executable instead. The ordinary
+CI path needs no compositor. `--help` lists optional tool-path overrides.
+
+Prerequisites are Linux 5.3+ pidfd support, Sway with a headless pixman backend, `wl-copy`,
+`wl-paste` and `wayland-info` on PATH. The compositor must expose ext/wlr data-control and a seat.
+The production arboard Wayland feature must already be enabled; this runner adds no test-only
+feature that could hide a missing release backend. X11 behavior remains unchanged. This does
+not claim support for GNOME sessions lacking data-control or establish new X11 runtime coverage.
+
+The runner owns a fresh runtime/home/config tree with directory mode 0700, clears existing display/socket/bus variables,
+and starts its own compositor with Xwayland disabled. It generates a tiny asymmetric RGBA PNG,
+requires the external owner's compositor-confirmed PNG selection, then runs Create-from-Clipboard.
+A distinct export must also receive a positive selection notification and match an external PNG
+read before the test is acknowledged. It never attaches to the user's compositor or clipboard.
+
+Compilation has a 20 minute deadline; the actual isolated run has 90 seconds with shorter per-stage
+deadlines. Each of at most eight owned peers has a combined 4 MiB stdout/stderr cap, nonblocking pipes and
+pidfd exit notifications. Owned groups are signalled before their leaders are reaped; explicit
+cleanup confirms exit, with RAII fallback on errors. SIGINT and SIGTERM wake the event loop through
+a self-pipe and clean up the owned groups before the command returns. Registrations exist only for
+this terminal command and are removed on shutdown; removing them does not restore prior signal
+dispositions. Forced termination such as SIGKILL cannot run cleanup. These bounds do not guarantee prompt exit
+from an uninterruptible kernel operation. No reader thread can remain blocked on an inherited pipe.
+Temporary generated pixels are contributor-original; no binary fixture or font asset is committed.

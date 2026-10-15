@@ -291,3 +291,54 @@ impl PdfCraftApp {
         }
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod native_wayland_clipboard_tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    const INPUT: &[u8] = &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255];
+    const EXPORT: &[u8] = &[0, 255, 255, 255, 255, 0, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255];
+
+    #[test]
+    #[ignore = "run cargo xtask native-wayland-clipboard with an isolated compositor"]
+    fn native_wayland_image_clipboard_creates_pdf_and_exports_png() -> Result<(), Box<dyn std::error::Error>> {
+        // Refuse a direct accidental invocation against the user's active clipboard.
+        let owned_runtime = std::env::var_os("PDFCRAFT_NATIVE_CLIPBOARD_RUNTIME").ok_or("use the isolated native clipboard runner")?;
+        assert_eq!(std::env::var_os("XDG_RUNTIME_DIR"), Some(owned_runtime));
+        assert!(std::env::var_os("DISPLAY").is_none(), "X11 must not mask a missing Wayland backend");
+        let display = std::env::var_os("WAYLAND_DISPLAY").ok_or("isolated Wayland display missing")?;
+        let mut components = std::path::Path::new(&display).components();
+        assert!(
+            matches!(components.next(), Some(std::path::Component::Normal(_))) && components.next().is_none(),
+            "display must be inside the owned runtime"
+        );
+        match read_clipboard().ok_or("external native clipboard PNG unavailable")? {
+            Clip::Image { width, height, rgba } => {
+                assert_eq!((width, height), (2, 2));
+                assert_eq!(rgba, INPUT);
+            }
+            Clip::Text(_) => return Err("expected the external PNG, received text".into()),
+        }
+        let mut app = PdfCraftApp::new();
+        app.create_from_clipboard();
+        let docs = app.session.docs();
+        assert_eq!(docs.len(), 1);
+        let document = docs.first().ok_or("clipboard did not create a document")?;
+        assert_eq!(document.name, "Clipboard.pdf");
+        assert_eq!(document.info.pages.len(), 1);
+        let page = document.info.pages.first().ok_or("clipboard PDF has no page")?;
+        assert_eq!((page.width, page.height), (2.0, 2.0));
+
+        // Keep this protocol owner alive while the runner observes the fresh selection and
+        // verifies distinct PNG pixels through an external native consumer.
+        let mut clipboard = arboard::Clipboard::new()?;
+        clipboard.set_image(arboard::ImageData { width: 2, height: 2, bytes: std::borrow::Cow::Borrowed(EXPORT) })?;
+        writeln!(std::io::stdout(), "ARTCRAFT_PDF_EXPORT_WAITING")?;
+        std::io::stdout().flush()?;
+        let mut acknowledgement = [0; b"export-ready\n".len()];
+        std::io::stdin().read_exact(&mut acknowledgement)?;
+        assert_eq!(&acknowledgement, b"export-ready\n");
+        Ok(())
+    }
+}
