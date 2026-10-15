@@ -42,6 +42,10 @@ impl PdfCraftApp {
                 let Some(doc) = self.session.get(id) else { return true };
                 let info = &doc.info;
                 let view = &mut self.views[i];
+                if !matches!(edit, Edit::AddAnnotation(_)) {
+                    // Only a new drawing waits on its raster; any other edit may remove or move it.
+                    view.comments.settling.clear();
+                }
                 view.signature_drag.committed(&edit, doc.edit_generation());
                 view.move_background.committed(&edit, doc.edit_generation());
                 if let Some(page) = comment_page(&edit).or_else(|| content_page(&edit)) {
@@ -509,7 +513,8 @@ impl PdfCraftApp {
             return true;
         }
         let author = self.comment_prefs.author.clone();
-        let edit = crate::fill_sign::typed(tb.page, tb.at, &text, tb.size, &author);
+        let rotation = self.session.get(id).map_or(0, |doc| crate::comments::page_rotation(&doc.info, tb.page));
+        let edit = crate::fill_sign::typed(tb.page, tb.at, &text, tb.size, rotation, &author);
         if self.apply_edit(edit) {
             if let Some(view) = self.views.get_mut(i) {
                 view.fill_text = None;
@@ -835,6 +840,17 @@ impl PdfCraftApp {
 
     /// Intercept window close while documents have unsaved changes.
     pub(crate) fn guard_quit(&mut self, ctx: &egui::Context) {
+        // egui's default quit shortcut ignores extra Alt/Shift, including Ctrl+Alt+Q for '@'.
+        ctx.options_mut(|o| o.quit_shortcuts.clear());
+        let shortcut = ctx.input(|i| {
+            i.events.iter().any(|e| {
+                matches!(e, egui::Event::Key { key: egui::Key::Q, pressed: true, modifiers, .. }
+                    if modifiers.matches_exact(egui::Modifiers::COMMAND))
+            })
+        });
+        if shortcut {
+            self.request_quit(ctx);
+        }
         self.sync_unsaved_flag();
         if !ctx.input(|i| i.viewport().close_requested()) {
             return;
@@ -878,6 +894,7 @@ fn comment_page(edit: &Edit) -> Option<usize> {
         | Edit::ResizeAnnotation { page, .. }
         | Edit::StyleAnnotation { page, .. }
         | Edit::FillAnnotation { page, .. }
+        | Edit::FontSizeAnnotation { page, .. }
         | Edit::SetAnnotationInfo { page, .. } => Some(*page),
         _ => None,
     }
