@@ -55,7 +55,7 @@ pdfcraft-cli edit   <in.pdf> --out out.pdf [--rotate 1,3:90] [--delete 2,4] [--m
                       [--insert-blank 1] [--title T] [--author A] [--full]
                       (options run in order; page numbers refer to the document after the earlier options)
 pdfcraft-cli combine <a.pdf> <b.pdf> … --out combined.pdf
-pdfcraft-cli extract <in.pdf> --pages 1,3,5 --out out.pdf
+pdfcraft-cli extract <in.pdf> --pages 1,3,5-8 --out out.pdf    (pages and ranges, in the order given)
 pdfcraft-cli split   <in.pdf> (--every N | --before 3,7) [--out-dir DIR]
 pdfcraft-cli check  <files or dirs…> [--timeout 20] [--dpi 36] [--json out.json]
 pdfcraft-cli audit  <file.pdf> [--password PW]            find faux redactions (fails when found)
@@ -64,7 +64,8 @@ pdfcraft-cli batch <files or dirs...> --steps convert,ocr,optimize --out-dir DIR
                       [--ppi 150] [--quality 60] [--dpi 300] [--language en] [--ocr-all-pages]
 pdfcraft-cli tools                                       automation tools and their JSON Schemas
 pdfcraft-cli run    <tool> [key=value …] [--root DIR] [--out image.png]
-pdfcraft-cli run    --script steps.json [--root DIR]      [{\"tool\": \"doc_open\", \"args\": {…}}, …]
+pdfcraft-cli run    --script steps.json [--root DIR] [--report]
+                      [{\"tool\": \"doc_open\", \"args\": {…}}, …]; --report prints one JSON document for the run
 ",
     mcp_usage!(),
     "\
@@ -161,15 +162,20 @@ fn audit(args: &[String]) -> Result<(), CliError> {
     validate_options("audit", args, AUDIT_OPTIONS)?;
     let path = *positional(args).first().ok_or("audit: missing file")?;
     let bytes = read(path)?;
-    let doc = pdfcraft_cos::Document::open_with_password(bytes, flag(args, "--password")).map_err(|e| format!("{path}: {e}"))?;
+    let password = flag(args, "--password");
+    let doc = pdfcraft_cos::Document::open_with_password(bytes.clone(), password).map_err(|e| format!("{path}: {e}"))?;
     let findings = pdfcraft_audit::audit_redactions(&doc).map_err(|e| format!("{path}: {e}"))?;
+    // Rectangles in points from the top-left of the displayed page, as `doc_audit_redactions`
+    // reports them; the page geometry is read only when there is something to place.
+    let info = if findings.is_empty() { None } else { Some(inspect(bytes, password).map_err(|e| format!("{path}: {e}"))?) };
     let items: Vec<serde_json::Value> = findings
         .into_iter()
         .map(|f| {
+            let rect = f.rect.map(|v| v as f32);
             serde_json::json!({
                 "page": f.page + 1,
                 "kind": f.kind.id(),
-                "rect": f.rect,
+                "rect": info.as_ref().map_or(rect, |i| pdfcraft_automation::view_rect(i, f.page, rect)),
                 "covered_text": f.covered_text,
             })
         })
@@ -251,6 +257,7 @@ const RUN_OPTIONS: &[OptionSpec] = &[
     OptionSpec { name: "--root", takes_value: true },
     OptionSpec { name: "--script", takes_value: true },
     OptionSpec { name: "--out", takes_value: true },
+    OptionSpec { name: "--report", takes_value: false },
 ];
 const UI_OPTIONS: &[OptionSpec] = &[OptionSpec { name: "--control", takes_value: true }, OptionSpec { name: "--out", takes_value: true }];
 
@@ -376,9 +383,30 @@ fn text(args: &[String]) -> Result<(), CliError> {
     }
 }
 
-/// 1-based page list ("1,3,5") → 0-based indices.
+/// The most pages one `A-B` range may name: a bound on what a typed range can allocate.
+const MAX_RANGE: usize = 1_000_000;
+
+/// 1-based pages ("1,3,5-8": single pages and inclusive ranges, in the order given) → 0-based
+/// indices (#1923).
 fn page_list(s: &str) -> Result<Vec<usize>, String> {
-    s.split(',').map(|p| p.trim().parse::<usize>().ok().filter(|n| *n > 0).map(|n| n - 1).ok_or(format!("bad page number {p:?}"))).collect()
+    let number = |t: &str, item: &str| t.trim().parse::<usize>().ok().filter(|n| *n > 0).ok_or_else(|| format!("bad page number {item:?}"));
+    let mut out = Vec::new();
+    for item in s.split(',').map(str::trim) {
+        match item.split_once('-') {
+            Some((from, to)) => {
+                let (from, to) = (number(from, item)?, number(to, item)?);
+                if to < from {
+                    return Err(format!("bad page range {item:?}: it ends before it starts"));
+                }
+                if to - from >= MAX_RANGE {
+                    return Err(format!("bad page range {item:?}: more than {MAX_RANGE} pages"));
+                }
+                out.extend(from - 1..to);
+            }
+            None => out.push(number(item, item)? - 1),
+        }
+    }
+    Ok(out)
 }
 
 /// The options `edit` understands, for its "unknown option" message.
@@ -757,22 +785,88 @@ fn print_output(auto: &pdfcraft_automation::Automation, content: Vec<pdfcraft_au
                     let written = auto.write_output(path, &data).map_err(|e| e.to_string())?;
                     stdout_line(format_args!("{}", serde_json::json!({ "image": written.to_string_lossy(), "width": width, "height": height })))?;
                 }
-                None => stdout_line(format_args!(
-                    "{}",
-                    serde_json::json!({ "image": "png", "width": width, "height": height, "bytes": data.len(), "hint": "pass --out file.png to save it" })
-                ))?,
+                None => stdout_line(format_args!("{}", png_summary(&data, width, height)))?,
             },
         }
     }
     Ok(())
 }
 
+/// What a PNG result is reported as when it isn't written to a file.
+fn png_summary(data: &[u8], width: u32, height: u32) -> serde_json::Value {
+    serde_json::json!({ "image": "png", "width": width, "height": height, "bytes": data.len(), "hint": "pass --out file.png to save it" })
+}
+
+/// A tool's result as JSON values, for the `--report` of a script. Same content as
+/// [`print_output`], collected instead of printed.
+fn output_values(
+    auto: &pdfcraft_automation::Automation,
+    content: Vec<pdfcraft_automation::Content>,
+    out: Option<&str>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let mut values = Vec::new();
+    for c in content {
+        values.push(match c {
+            pdfcraft_automation::Content::Json(v) => v,
+            pdfcraft_automation::Content::Png { data, width, height } => match out {
+                Some(path) => {
+                    let written = auto.write_output(path, &data).map_err(|e| e.to_string())?;
+                    serde_json::json!({ "image": written.to_string_lossy(), "width": width, "height": height })
+                }
+                None => png_summary(&data, width, height),
+            },
+        });
+    }
+    Ok(values)
+}
+
+/// Run a script and print one JSON document: per step its number, tool and `ok`/`error`/`skipped`
+/// with the result or the message. The first failing step ends the run, as without `--report`;
+/// the steps after it are listed as skipped and the exit status is the same.
+fn run_script_report(auto: &mut pdfcraft_automation::Automation, steps: &[serde_json::Value]) -> Result<(), CliError> {
+    let mut report = Vec::with_capacity(steps.len());
+    let mut failure: Option<String> = None;
+    for (i, step) in steps.iter().enumerate() {
+        let n = i + 1;
+        let tool = step["tool"].as_str();
+        if failure.is_some() {
+            report.push(serde_json::json!({ "step": n, "tool": tool, "status": "skipped" }));
+            continue;
+        }
+        let outcome = match tool {
+            None => Err(format!("step {n}: missing \"tool\"")),
+            Some(t) => auto
+                .call(t, &step["args"])
+                .map_err(|e| e.to_string())
+                .and_then(|content| output_values(auto, content, step["out"].as_str()))
+                .map_err(|e| format!("step {n} ({t}): {e}")),
+        };
+        match outcome {
+            Ok(result) => report.push(serde_json::json!({ "step": n, "tool": tool, "status": "ok", "result": result })),
+            Err(message) => {
+                report.push(serde_json::json!({ "step": n, "tool": tool, "status": "error", "error": message }));
+                failure = Some(message);
+            }
+        }
+    }
+    let document = serde_json::json!({ "ok": failure.is_none(), "steps": report });
+    stdout_line(format_args!("{}", serde_json::to_string_pretty(&document).unwrap_or_default()))?;
+    failure.map_or(Ok(()), |message| Err(CliError::Message(message)))
+}
+
 fn run(args: &[String]) -> Result<(), CliError> {
     validate_options("run", args, RUN_OPTIONS)?;
+    let report = args.iter().any(|a| a == "--report");
+    if report && flag(args, "--script").is_none() {
+        return Err("run: --report needs --script".to_string().into());
+    }
     let mut auto = automation(args)?;
     if let Some(script) = flag(args, "--script") {
         let text = std::fs::read_to_string(script).map_err(|e| format!("{script}: {e}"))?;
         let steps: Vec<serde_json::Value> = serde_json::from_str(&text).map_err(|e| format!("{script}: {e}"))?;
+        if report {
+            return run_script_report(&mut auto, &steps);
+        }
         for (i, step) in steps.iter().enumerate() {
             let tool = step["tool"].as_str().ok_or(format!("step {}: missing \"tool\"", i + 1))?;
             let content = auto.call(tool, &step["args"]).map_err(|e| format!("step {} ({tool}): {e}", i + 1))?;
