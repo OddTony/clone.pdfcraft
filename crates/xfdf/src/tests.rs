@@ -380,6 +380,18 @@ fn one_column_csv_still_reads_its_quotes() {
 }
 
 #[test]
+fn quoted_empty_csv_value_clears_a_field() {
+    for data in ["Name\n\"\"\n", "Name\r\n\"\"\r\n", "Name\n\"\"", "Name\n\n\"\"\n", "Name\n\"\"\nGrace\n"] {
+        let mut dst = one_field();
+        set_value(&mut dst, "Name", &FieldValue::Text("Ada".into())).unwrap();
+        let report = import(&mut dst, data.as_bytes()).unwrap();
+        assert_eq!(report.fields, 1, "{data:?}");
+        assert!(report.rejected.is_empty(), "{report:?}");
+        assert!(values(&dst)[0].1.is_empty(), "{data:?}");
+    }
+}
+
+#[test]
 fn multi_select_lists_round_trip_through_xml_csv_and_text() {
     let src = filled();
     for format in [Format::Xml, Format::Csv, Format::Txt] {
@@ -873,5 +885,40 @@ fn duplicate_xfdf_annotation_flags_do_not_turn_on_unrelated_bits() {
         let annotations = doc.get(page).as_dict().and_then(|p| p.get(b"Annots")).map(|a| doc.resolve(a)).and_then(|a| a.as_array().cloned()).unwrap();
         let square = annotations.iter().filter_map(|a| doc.resolve(a).as_dict().cloned()).find(|d| d.name(b"Subtype") == Some(b"Square")).unwrap();
         assert_eq!(square.get(b"F").and_then(Object::as_int), Some(expected), "flags={flags}");
+    }
+}
+
+// XML comments and processing instructions are not field text (XML 1.0 §§2.5–2.6).
+fn split_text_values() -> [(&'static str, &'static str); 5] {
+    [
+        ("Ada<!--editor note--> Lovelace", "Ada Lovelace"),
+        ("<!--editor note-->Ada", "Ada"),
+        ("Ada<?editor keep?> Lovelace", "Ada Lovelace"),
+        (" Å<!--note--><![CDATA[<&>]]><?editor keep?>&#x03A9; ", " Å<&>Ω "),
+        ("<!--empty--><?editor keep?>", ""),
+    ]
+}
+
+#[test]
+fn xfdf_data_values_join_text_around_xml_comments_and_instructions() {
+    for (xml_text, expected) in split_text_values() {
+        let xml = format!(r#"<xfdf xmlns="http://ns.adobe.com/xfdf/"><fields><field name="Name"><value>{xml_text}</value></field></fields></xfdf>"#);
+        assert_eq!(data_values(xml.as_bytes()).unwrap(), vec![("Name".into(), vec![expected.to_string()])], "{xml_text}");
+    }
+}
+
+#[test]
+fn xfdf_import_keeps_text_around_xml_comments_and_instructions() {
+    for (xml_text, expected) in split_text_values() {
+        let xml = format!(r#"<xfdf xmlns="http://ns.adobe.com/xfdf/"><fields><field name="Name"><value>{xml_text}</value></field></fields></xfdf>"#);
+        let mut doc = one_field();
+        set_value(&mut doc, "Name", &FieldValue::Text("old value".into())).unwrap();
+        let report = import(&mut doc, xml.as_bytes()).unwrap();
+        assert_eq!(report.fields, 1);
+        assert!(report.rejected.is_empty(), "{report:?}");
+        let saved = write_full(&doc, &SaveOptions::default()).unwrap();
+        let reopened = Document::open(Arc::new(saved)).unwrap();
+        let want: Vec<&str> = if expected.is_empty() { vec![] } else { vec![expected] };
+        assert_eq!(values(&reopened)[0].1, want, "{xml_text}");
     }
 }
