@@ -325,6 +325,15 @@ mod tests {
     use crate::pdf::Metrics;
 
     #[test]
+    fn read_only_installed_font_name_and_coverage_do_not_require_export() {
+        let font = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+        assert_eq!(display_names_at(font, 0).unwrap(), display_names(font).unwrap());
+        assert!(display_names_at(font, 1).is_err());
+        assert!(covers_at(font, 0, "Hello!"));
+        assert!(!covers_at(font, 0, "שלום"));
+    }
+
+    #[test]
     fn full_unicode_embedding_keeps_outlines_advances_and_roundtrip_codes() {
         let bytes = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
         let mut doc = Document::new_empty();
