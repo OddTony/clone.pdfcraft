@@ -140,7 +140,10 @@ pub struct TextEditLayout {
 }
 
 pub fn text_edit_layout(doc: &Document, page: usize, block: usize, text: &str, style: &BlockStyle) -> Result<TextEditLayout, EditError> {
-    let original = text_blocks(doc, page)?;
+    // This runs on every keystroke: read the page once for the paragraphs, the untouched runs
+    // and the rewrite, which starts from the same unchanged page.
+    let lines = text_lines(doc, page)?;
+    let original = group_blocks(&lines);
     let source = original.get(block).ok_or(EditError::Invalid("text block does not exist".into()))?;
     if text == source.editor_text && *style == BlockStyle::default() {
         return Ok(TextEditLayout { source_rect: source.rect, draft_rect: Some(source.rect), overflow: false });
@@ -150,13 +153,13 @@ pub fn text_edit_layout(doc: &Document, page: usize, block: usize, text: &str, s
     let key =
         |line: &TextLine| (line.text.clone(), line.font.clone(), line.rect.map(f64::to_bits), line.size.to_bits(), line.color.map(f64::to_bits));
     let mut untouched = std::collections::BTreeMap::new();
-    for (index, line) in text_lines(doc, page)?.iter().enumerate() {
+    for (index, line) in lines.iter().enumerate() {
         if !source.lines.contains(&index) {
             *untouched.entry(key(line)).or_insert(0_usize) += 1;
         }
     }
     let mut draft = doc.clone();
-    rewrite_block(&mut draft, page, block, Some(text), style)?;
+    rewrite_block_from(&mut draft, page, lines, block, Some(text), style, MAX_TYPE3_GLYPHS)?;
     let mut rect: Option<[f64; 4]> = None;
     for line in text_lines(&draft, page)? {
         if let Some(count) = untouched.get_mut(&key(&line))
@@ -1166,6 +1169,22 @@ fn unicode_hex(ch: char) -> String {
     encoded.iter().map(|u| format!("{u:04X}")).collect()
 }
 
+/// No font this build has can draw `text`. Only Japanese text is about the Japanese face: other
+/// characters are missing from the paragraph's font, and choosing a font that has them works too.
+fn no_fallback_font(text: &str) -> EditError {
+    let japanese = |c: char| matches!(u32::from(c), 0x3000..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF);
+    if text.chars().any(japanese) {
+        return no_japanese_font();
+    }
+    let Some(ch) = text.chars().find(|c| !c.is_whitespace() && !is_win_ansi_char(*c)) else { return no_japanese_font() };
+    EditError::Invalid(format!(
+        "the paragraph's font has no glyph for {ch} (U+{:04X}) and this build has no fallback font for it; \
+         choose a font that has it (Load font… or Installed fonts…), or use an official release, which includes \
+         PdfCraft's fallback fonts (to build them in, set CRAFT_FONTS_DIR to a craft-fonts checkout)",
+        u32::from(ch)
+    ))
+}
+
 /// This build has no Japanese face to draw replacement text with.
 fn no_japanese_font() -> EditError {
     EditError::Invalid(
@@ -1230,7 +1249,7 @@ fn type3_font(
     // character. When none has them all, the best face reports the character it lacks. Hebrew
     // text keeps the Hebrew face and takes each character it lacks from the next face that has it.
     let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
-        .ok_or_else(no_japanese_font)?;
+        .ok_or_else(|| no_fallback_font(text))?;
     let others: &[&CraftFont] = if hebrew { faces.get(1..).unwrap_or_default() } else { &[] };
     // Every outline is read before the document is touched, so a character that fails leaves it
     // as it was. Each font takes the next `per_font` characters; codes restart at 1 in each.
@@ -1336,6 +1355,28 @@ fn type3_encode(fallback: &Type3Fallback, text: &str) -> Option<Vec<(String, Vec
         }
     }
     runs.into_iter().map(|(font, bytes)| Some((fallback.names.get(font)?.clone(), bytes))).collect()
+}
+
+/// The source font's own TrueType/OpenType program, when the document embeds a complete one whose
+/// licence allows editable embedding. A subset (an `ABCDEF+` name) is left out: a character can keep
+/// its mapping there after the subsetter dropped its outline.
+fn source_program(doc: &Document, fonts: &Dict, name: &str) -> Option<Vec<u8>> {
+    let font = fonts.get(name.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned())?;
+    let base = Metrics::from_dict(doc, &font).base_font;
+    if base.split_once('+').is_some_and(|(tag, _)| tag.len() == 6 && tag.bytes().all(|b| b.is_ascii_uppercase())) {
+        return None;
+    }
+    let bytes = pdfcraft_fonts::pdf::embedded_sfnt(doc, &font)?;
+    pdfcraft_fonts::embedding::validate(&bytes).is_ok().then_some(bytes)
+}
+
+/// Whether `text` has characters `line`'s font can't encode that its own program can draw.
+fn source_program_completes(doc: &Document, fonts: &Dict, line: &TextLine, text: &str) -> bool {
+    let Some(metrics) = fonts.get(line.font.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned()).map(|f| Metrics::from_dict(doc, &f)) else {
+        return false;
+    };
+    let missing: String = text.chars().filter(|c| !c.is_whitespace() && !source_encodes(&metrics, &c.to_string())).collect();
+    !missing.is_empty() && source_program(doc, fonts, &line.font).is_some_and(|bytes| pdfcraft_fonts::embedding::covers(&bytes, &missing))
 }
 
 /// A subset may contain all the letters but no space glyph: producers use another subset
@@ -1703,6 +1744,19 @@ pub(crate) fn rewrite_block_with_limit(
     max_glyphs: usize,
 ) -> Result<LineEdit, EditError> {
     let lines = text_lines(doc, page)?;
+    rewrite_block_from(doc, page, lines, block, text, style, max_glyphs)
+}
+
+/// [`rewrite_block_with_limit`] with the page's [`text_lines`], read from `doc` as it is now.
+fn rewrite_block_from(
+    doc: &mut Document,
+    page: usize,
+    lines: Vec<TextLine>,
+    block: usize,
+    text: Option<&str>,
+    style: &BlockStyle,
+    max_glyphs: usize,
+) -> Result<LineEdit, EditError> {
     let blocks = group_blocks(&lines);
     let b = blocks.get(block).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no paragraph {}", page + 1, block + 1)))?;
     let members: Vec<&TextLine> = b.lines.iter().map(|i| &lines[*i]).collect();
@@ -1729,6 +1783,7 @@ pub(crate) fn rewrite_block_with_limit(
                     || pdfcraft_fonts::source_shaping::required(draft)
                     || !pdfcraft_fonts::embedding::matching_faces(&b.base_font).is_empty()
             }) || registered_face
+                || text.is_some_and(|draft| source_program_completes(doc, &fonts_res, first, draft))
                 || b.rows.iter().any(|row| row.len() > 1)
                 || members.iter().any(|line| line.font != first.font || line.size != first.size || line.color != first.color))
                 && style.family.is_none()
