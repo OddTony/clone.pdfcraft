@@ -1035,7 +1035,11 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
         });
         if joins && let Some(l) = lines.last_mut() {
             let gap = last.map_or(0.0, |(_, pen)| pen.continues(&s, 0.0).1);
-            if gap > l.size * 0.2 && !l.text.ends_with(' ') && !s.text.starts_with(' ') {
+            // Independently positioned Hebrew vowel marks do not start new words.
+            // Never invent a word-space directly before a combining character.
+            if gap > l.size * 0.2 && !l.text.ends_with(' ') && !s.text.starts_with(' ')
+                && !s.text.chars().next().is_some_and(crate::bidi::is_hebrew_mark)
+            {
                 l.text.push(' ');
             }
             l.text.push_str(&s.text);
@@ -1088,10 +1092,34 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
             l.text = crate::indic::to_logical(&l.text);
         }
         l.text = crate::bidi::to_logical(&l.text);
+        l.text = repair_hebrew_mark_spacing(&l.text);
     }
     // Lines of only spaces aren't editable text.
     lines.retain(|l| !l.text.trim().is_empty());
     Ok(lines)
+}
+
+/// Some PDFs position Hebrew vowel marks in separate Tj/TJ runs, and their
+/// visual gaps become synthetic spaces during extraction. A base-letter followed
+/// by whitespace and a combining mark is a single grapheme, not two words.
+/// Do not change actual spaces elsewhere; retain Unicode marks for copy/save.
+fn repair_hebrew_mark_spacing(input: &str) -> String {
+    let chars: Vec<char> = input.chars().collect();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        out.push(ch);
+        i += 1;
+        if matches!(ch as u32, 0x05D0..=0x05EA | 0xFB1D..=0xFB4F) {
+            let start = i;
+            while chars.get(i).is_some_and(|c| *c == ' ') { i += 1; }
+            if !chars.get(i).is_some_and(|c| crate::bidi::is_hebrew_mark(*c)) {
+                out.extend(chars[start..i].iter());
+            }
+        }
+    }
+    out
 }
 
 /// Joining independent text objects is safe only when they use the same text and graphics
