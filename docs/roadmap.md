@@ -1,5 +1,13 @@
 # PdfCraft roadmap: milestones and what's next
 
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M3 #1580 candidate synchronized with upstream `afa8e184`; existing wheel and document-opening fixes retained; estimates unchanged)
+
+**M3 candidate #1580:** Native Wayland pinch delivery remains an additional patch on
+top of the upstream wheel policy. Its production scale/lifecycle tests are in
+`apps/pdfcraft/tests/winit_wayland_pinch.rs`; existing PDF pointer anchoring stays
+unchanged. Hardware delivery and seat/capability teardown were not revalidated
+during this upstream synchronization.
+
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up, 2,528 entries; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (M2/M6: spot-colour images convert once per pixel value; widget placement and the Fields panel scale with the field count; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M3 candidate: coordinate control clicks on slow frames and coalesced text selection; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)

@@ -5,6 +5,16 @@ licence files unchanged. Every patch is marked `PdfCraft patch:` in the source, 
 PdfCraft test, and should be proposed upstream. Remove the vendored copy once upstream releases
 the fix. Vendoring copyleft code is never allowed (plan/adr/0001).
 
+The Wayland pinch extension (#1580) additionally binds the optional
+`zwp_pointer_gestures_v1` protocol and forwards two-finger gestures as
+`PinchGesture`. Cumulative scales become logarithmic deltas for egui-winit's
+exponential conversion; invalid scales and pointer/seat teardown are guarded.
+`pdfcraft` `tests/winit_wayland_pinch.rs` exercises the production scale and
+lifecycle policy through egui; `trackpad_pinch_zooms_the_pdf_under_the_pointer`
+covers PDF anchoring. Native delivery was previously traced on GNOME/Wayland and
+physical pinch was contributor-confirmed; neither was repeated for this upstream
+merge, and live seat/capability teardown remains untested.
+
 A PdfCraft patch in `hayro-syntax::Page::base_dimensions` expresses the existing one-point floor as a raw reciprocal of `/UserUnit`, rounded upward only when f32 multiplication would fall below one point. Five `pdfcraft-render` regressions with prefix `raster::tests::raw_crop_` cover the observed dimensions, origins and rotations, units 41/47, bounded vector rasters and unchanged nearly-zero A4 fallback. Accepted page-unit policy and licences are unchanged.
 
 | Crate | Version | Licence | Patches | Test |
