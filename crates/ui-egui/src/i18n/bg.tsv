@@ -1236,6 +1236,7 @@
 	Copy text	Копирай текста
 	Properties…	Свойства…
 	Make Current Properties Default	Направи текущите свойства подразбиращи се
+	Make Properties Default	Направи свойствата подразбиращи се
 	More options	Още опции
 	Sort by	Сортиране по
 	Author	Автор
@@ -1368,6 +1369,9 @@
 	Sort comments by:	Сортирай коментарите по:
 	Create PDF Comment Summary	Създай PDF обобщение на коментарите
 	Revert to the previously saved version of “{name}”? Changes since then can't be undone afterwards.	Да се върне ли последната записана версия на „{name}“? Промените след нея няма да могат да бъдат отменени.
+	Save over the changed file?	Да се запише ли върху променения файл?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	„{name}“ беше променен на диска след отварянето или последното записване. Записването сега заменя тази по-нова версия с настоящата.
+	Save anyway	Запис въпреки това
 	Number pages	Номерирай страниците
 	Style	Стил
 	None (prefix only)	Без (само префикс)
@@ -1573,6 +1577,8 @@
 	Sent to {printer}	Изпратено до {printer}
 	Sent to {printer}: {msg}	Изпратено до {printer}: {msg}
 	Looking for printers…	Търсене на принтери…
+	Sending sheet {s} of {n} to {printer}…	Изпращане на лист {s} от {n} до {printer}…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Не са намерени принтери. Проверете дали принтерът е инсталиран и дали услугата за опашка за печат работи, след което отворете „Печат“ отново.
 	Sending to {printer}…	Изпращане до {printer}…
 	Choose a folder for the searchable files	Изберете папка за файловете с възможност за търсене
 	Files are combined from top to bottom. Leave Pages empty to take every page.	Файловете се обединяват отгоре надолу. Оставете „Страници“ празно, за да се вземат всички страници.
@@ -2232,14 +2238,14 @@ key	Space	Интервал
 	Printer paper and scaling may differ. Check driver settings.	Хартията и мащабът на принтера може да се различават. Проверете настройките на драйвера.
 	Drawing scale changes. Use Actual size for full-scale plans.	Мащабът на чертежа се променя. Използвайте Действителен размер за планове в оригинален мащаб.
 	Reload documents when their files change on disk	Презареждай документите, когато файловете им се променят на диска
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Този файл е променен на диска. Презаредете го, за да видите новата версия; незаписаните ви промени ще бъдат загубени.
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Този файл беше променен на диска. „Презареждане“ показва новата версия и отхвърля незаписаните ви промени; „Запис“ я заменя с тази версия.
 	Reload	Презареди
 	Couldn't reload {name}: {e}	Неуспешно презареждане на {name}: {e}
 	Select page {label}	Избиране на страница {label}
 	Rotate page {label} counterclockwise	Завъртане на страница {label} обратно на часовниковата стрелка
 	Rotate page {label} clockwise	Завъртане на страница {label} по часовниковата стрелка
 	Delete page {label}	Изтриване на страница {label}
-	Mouse wheel scroll speed	Скорост на превъртане с колелцето на мишката
+	Scroll speed (mouse wheel and arrow keys)	Скорост на превъртане (колелце на мишката и клавиши със стрелки)
 scroll speed	Slow	Ниска
 scroll speed	Normal	Нормална
 scroll speed	Fast	Висока
@@ -2369,3 +2375,5 @@ animation effects	Off	Изключени
 	Shown while the pointer is over a mark.	Показва се, докато показалецът е над маркировка.
 	Opacity:	Непрозрачност:
 	Make properties default	Задаване като свойства по подразбиране
+	Pages selected	Избрани страници
+	Page properties	Свойства на страницата

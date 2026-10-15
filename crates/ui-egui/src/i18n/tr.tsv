@@ -1253,6 +1253,7 @@
 	Copy text	Metni kopyala
 	Properties…	Özellikler…
 	Make Current Properties Default	Geçerli Özellikleri Varsayılan Yap
+	Make Properties Default	Özellikleri Varsayılan Yap
 	More options	Diğer seçenekler
 	Sort by	Sırala
 	Author	Yazar
@@ -1373,6 +1374,9 @@
 	Sort comments by:	Yorumları şuna göre sırala:
 	Create PDF Comment Summary	PDF Yorum Özeti Oluştur
 	Revert to the previously saved version of “{name}”? Changes since then can't be undone afterwards.	“{name}” belgesinin daha önce kaydedilmiş sürümüne geri dönülsün mü? O andan sonraki değişiklikler geri alınamaz.
+	Save over the changed file?	Değiştirilen dosyanın üzerine kaydedilsin mi?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	“{name}” açıldıktan veya son kaydedildikten sonra diskte değişti. Şimdi kaydetmek o daha yeni sürümü bununla değiştirir.
+	Save anyway	Yine de kaydet
 	Number pages	Sayfaları numaralandır
 	Style	Stil
 	None (prefix only)	Yok (yalnızca önek)
@@ -2180,6 +2184,8 @@ key	Space	Boşluk
 
 # Printing and multi-object selection
 	Looking for printers…	Yazıcılar aranıyor…
+	Sending sheet {s} of {n} to {printer}…	{n} yapraktan {s}. yaprak {printer} yazıcısına gönderiliyor…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Yazıcı bulunamadı. Yazıcının yüklü olduğunu ve yazdırma biriktiricisinin çalıştığını denetleyip Yazdır'ı yeniden açın.
 	Sending to {printer}…	{printer} yazıcısına gönderiliyor…
 	Column select	Sütun seçimi
 @plural	{n} object selected|{n} objects selected	{n} nesne seçildi
@@ -2266,10 +2272,10 @@ key	Space	Boşluk
 	Printer paper and scaling may differ. Check driver settings.	Yazıcı kâğıdı ve ölçekleme farklı olabilir. Sürücü ayarlarını kontrol edin.
 	Drawing scale changes. Use Actual size for full-scale plans.	Çizim ölçeği değişir. Tam ölçekli planlar için Gerçek boyutu kullanın.
 	Reload documents when their files change on disk	Diskteki dosyaları değiştiğinde belgeleri yeniden yükle
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Bu dosya diskte değişti. Yeni sürümü görmek için yeniden yükleyin; kaydedilmemiş değişiklikleriniz kaybolacak.
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Bu dosya diskte değişti. Yeniden yükle yeni sürümü gösterir ve kaydedilmemiş değişikliklerinizi atar; Kaydet onu bu sürümle değiştirir.
 	Reload	Yeniden yükle
 	Couldn't reload {name}: {e}	{name} yeniden yüklenemedi: {e}
-	Mouse wheel scroll speed	Fare tekerleği kaydırma hızı
+	Scroll speed (mouse wheel and arrow keys)	Kaydırma hızı (fare tekerleği ve ok tuşları)
 scroll speed	Slow	Yavaş
 scroll speed	Normal	Orta
 scroll speed	Fast	Hızlı
@@ -2402,3 +2408,5 @@ animation effects	Off	Kapalı
 	Shown while the pointer is over a mark.	İşaretçi bir işaretin üzerindeyken gösterilir.
 	Opacity:	Opaklık:
 	Make properties default	Özellikleri varsayılan yap
+	Pages selected	Seçilen sayfalar
+	Page properties	Sayfa özellikleri

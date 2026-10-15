@@ -591,7 +591,15 @@ impl PageCx<'_> {
     }
 
     /// The same geometry drives the live image, its handles, and the edit on release.
-    pub(crate) fn adjusted_rect(&self, a: &Annotation, gesture: Option<&Gesture>, pointer: Option<Pos2>, pending: Option<&Edit>) -> Rect {
+    /// `shift` is whether Shift is held now: it keeps the box's proportions from a corner.
+    pub(crate) fn adjusted_rect(
+        &self,
+        a: &Annotation,
+        gesture: Option<&Gesture>,
+        pointer: Option<Pos2>,
+        shift: bool,
+        pending: Option<&Edit>,
+    ) -> Rect {
         let r = self.screen_rect(a);
         if let Some(Edit::ResizeAnnotation { page, index, rect }) = pending
             && (*page, *index) == (self.page, a.index)
@@ -610,7 +618,7 @@ impl PageCx<'_> {
         match (gesture, pointer) {
             (Some(Gesture::Move { page, index, from }), Some(p)) if (*page, *index) == (self.page, a.index) => r.translate(p - *from),
             (Some(Gesture::Resize { page, index, handle, from, aspect_ratio }), Some(p)) if (*page, *index) == (self.page, a.index) => {
-                resized(r, *handle, p - *from, *aspect_ratio)
+                resized(r, *handle, p - *from, corner_ratio(r, *aspect_ratio, shift))
             }
             _ => r,
         }
@@ -643,7 +651,13 @@ fn handle_pos(r: Rect, (hx, hy): (i8, i8)) -> Pos2 {
     pos2(x, y)
 }
 
-fn resized(r: Rect, (hx, hy): (i8, i8), d: egui::Vec2, aspect_ratio: Option<f32>) -> Rect {
+/// The proportions a corner drag of `r` keeps: the box's own fixed ratio (an image signature's),
+/// else `r`'s current one while Shift is held, else none.
+pub(crate) fn corner_ratio(r: Rect, fixed: Option<f32>, shift: bool) -> Option<f32> {
+    fixed.or_else(|| (shift && r.width() > 0.0 && r.height() > 0.0).then(|| r.width() / r.height()))
+}
+
+pub(crate) fn resized(r: Rect, (hx, hy): (i8, i8), d: egui::Vec2, aspect_ratio: Option<f32>) -> Rect {
     if hx != 0
         && hy != 0
         && let Some(ratio) = aspect_ratio.filter(|v| v.is_finite() && *v > 0.0)
@@ -677,6 +691,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
     let pressed_here = origin.is_some_and(|o| page_rect.contains(o));
     let over_page = pointer.is_some_and(|p| page_rect.contains(p));
     let fill_grab = fill_grabs(ui, cx, view);
+    let draw_grab = draw_grabs(ui, cx, view);
     let caret_text = if cx.tool == QuickTool::Comment(CommentTool::Caret) { view.page_text(cx.page) } else { None };
     let cv = &mut view.comments;
     if cv.gesture.is_some() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
@@ -694,6 +709,9 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
         cv.selected = cx.hit(p).map(|a| (cx.page, a.index));
     }
     match cx.tool {
+        // The shape just drawn is selected with its handles showing: they resize it without a
+        // trip to the Select tool (#2338). Anywhere else the tool keeps drawing.
+        QuickTool::Comment(_) if draw_grab => select_input(ui, resp, cx, view, pointer, origin, pressed_here),
         QuickTool::Comment(tool) if tool.draws() => {
             if !cx.allowed {
                 return false;
@@ -909,25 +927,53 @@ pub(crate) fn select_grabs(ui: &egui::Ui, cx: &PageCx<'_>, view: &DocView) -> bo
     cx.tool == QuickTool::Select && grabs(ui, cx, view, |a| !is_markup(&a.subtype))
 }
 
+/// With a shape tool (rectangle, oval, line, polygon…), the selected comment's resize handles
+/// are picked up as with the Select tool, so the shape just drawn can be resized straight away
+/// (#2338). Only the handles: a press anywhere else, the shape itself included, still draws.
+pub(crate) fn draw_grabs(ui: &egui::Ui, cx: &PageCx<'_>, view: &DocView) -> bool {
+    let QuickTool::Comment(tool) = cx.tool else { return false };
+    if !(tool.draws() || tool.clicks_points()) || tool == CommentTool::Eraser || cx.hidden {
+        return false;
+    }
+    let cv = &view.comments;
+    if matches!(cv.gesture, Some(Gesture::Resize { page, .. }) if page == cx.page) {
+        return true;
+    }
+    // A polygon being clicked out keeps its clicks, even near an old shape's handle.
+    if cv.gesture.is_some() {
+        return false;
+    }
+    press_point(ui, cx).is_some_and(|p| on_handle(cx, view, p, |_| true))
+}
+
 /// Whether the press (or, with no button down, the pointer) is on a `pick` comment or on the
 /// selected one's resize handles.
 fn grabs(ui: &egui::Ui, cx: &PageCx<'_>, view: &DocView, pick: impl Fn(&Annotation) -> bool) -> bool {
     if cx.hidden {
         return false;
     }
-    let cv = &view.comments;
-    if matches!(cv.gesture, Some(Gesture::Move { page, .. } | Gesture::Resize { page, .. }) if page == cx.page) {
+    if matches!(view.comments.gesture, Some(Gesture::Move { page, .. } | Gesture::Resize { page, .. }) if page == cx.page) {
         return true;
     }
+    let Some(p) = press_point(ui, cx) else { return false };
+    on_handle(cx, view, p, &pick) || cx.hit(p).is_some_and(pick)
+}
+
+/// Where a gesture on this page is decided: the press while the button is down, otherwise the
+/// pointer (egui clears the press origin on release). `None` off the page.
+fn press_point(ui: &egui::Ui, cx: &PageCx<'_>) -> Option<Pos2> {
     let (pointer, origin, down) = ui.input(|i| (i.pointer.hover_pos(), i.pointer.press_origin(), i.pointer.any_down()));
-    let Some(p) = (if down { origin } else { pointer }).filter(|p| cx.xf.rect.contains(*p)) else { return false };
-    let on_handle = cv
+    (if down { origin } else { pointer }).filter(|p| cx.xf.rect.contains(*p))
+}
+
+/// Whether `p` is on a resize handle of the selected comment, when it is a resizable `pick`.
+fn on_handle(cx: &PageCx<'_>, view: &DocView, p: Pos2, pick: impl Fn(&Annotation) -> bool) -> bool {
+    view.comments
         .selected
         .filter(|(page, _)| *page == cx.page)
         .and_then(|(_, i)| cx.get(i))
         .filter(|a| pick(a) && cx.allowed && resizable(a))
-        .is_some_and(|a| HANDLES.into_iter().any(|h| handle_pos(cx.screen_rect(a), h).distance(p) <= 7.0));
-    on_handle || cx.hit(p).is_some_and(pick)
+        .is_some_and(|a| HANDLES.into_iter().any(|h| handle_pos(cx.screen_rect(a), h).distance(p) <= 7.0))
 }
 
 fn clamp_to(r: Rect, p: Pos2) -> Pos2 {
@@ -1010,7 +1056,9 @@ fn select_input(
             Some(Gesture::Resize { page, index, handle, from, aspect_ratio }) if page == cx.page => {
                 cv.gesture = None;
                 if let Some(a) = cx.get(index) {
-                    let r = resized(cx.screen_rect(a), handle, p - from, aspect_ratio);
+                    let from_rect = cx.screen_rect(a);
+                    let shift = ui.input(|i| i.modifiers.shift);
+                    let r = resized(from_rect, handle, p - from, corner_ratio(from_rect, aspect_ratio, shift));
                     let rect = cx.rect_to_user(r);
                     if r.width() >= 4.0 && r.height() >= 4.0 {
                         view.pending_edit = Some(Edit::ResizeAnnotation { page, index, rect });
@@ -1126,7 +1174,8 @@ pub(crate) fn paint_page(ui: &egui::Ui, painter: &egui::Painter, cx: &PageCx<'_>
         {
             return paint_gesture(painter, cx, view);
         }
-        let r = cx.adjusted_rect(a, cv.gesture.as_ref(), pointer, view.pending_edit.as_ref()).expand(2.0);
+        let shift = ui.input(|i| i.modifiers.shift);
+        let r = cx.adjusted_rect(a, cv.gesture.as_ref(), pointer, shift, view.pending_edit.as_ref()).expand(2.0);
         painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.0, SELECT_BLUE), egui::StrokeKind::Middle);
         if cx.allowed && resizable(a) {
             for h in HANDLES {
@@ -1975,6 +2024,22 @@ mod tests {
         plus[0].click();
         h.run();
         assert_eq!(h.query_all_by_label("Apply").count(), 1, "only the first grid's picker opens");
+    }
+
+    #[test]
+    fn shift_keeps_the_current_proportions_unless_the_box_has_its_own() {
+        let r = Rect::from_min_max(pos2(100.0, 100.0), pos2(196.0, 132.0));
+        assert_eq!(corner_ratio(r, None, false), None);
+        assert_eq!(corner_ratio(r, None, true), Some(3.0));
+        assert_eq!(corner_ratio(r, Some(2.0), false), Some(2.0));
+        assert_eq!(corner_ratio(r, Some(2.0), true), Some(2.0));
+        // A degenerate box has no proportions to keep (no division by zero).
+        let flat = Rect::from_min_max(pos2(100.0, 100.0), pos2(196.0, 100.0));
+        assert_eq!(corner_ratio(flat, None, true), None);
+        // Dragging a corner with Shift held scales the box instead of stretching it.
+        let out = resized(r, (1, 1), vec2(48.0, 0.0), corner_ratio(r, None, true));
+        assert_eq!(out.min, r.min);
+        assert!((out.width() / out.height() - 3.0).abs() < 0.001);
     }
 
     #[test]

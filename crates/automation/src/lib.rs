@@ -33,10 +33,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pdfcraft_engine::{CombineSource, DocId, Document, Edit, Session, commands};
-use pdfcraft_platform::staging::{StagingName, create_staging, staging_suffixes};
+use pdfcraft_platform::staging::{StagingName, staging_suffixes};
 use pdfcraft_render::{PageRenderer, PageText, RenderConfig, RenderRequest, RequestKind};
 use serde_json::{Value, json};
 
+pub use pdfcraft_render::Pixels;
 pub use tools::{ToolDef, tools};
 
 /// One piece of a tool's result.
@@ -140,20 +141,28 @@ impl Automation {
         self
     }
 
+    /// The clock and time zone of a host without its own. See [`Session::with_wall_clock`].
+    pub fn with_wall_clock(mut self, clock: fn() -> i64, utc_offset: fn() -> i64) -> Self {
+        self.session = std::mem::take(&mut self.session).with_wall_clock(clock, utc_offset);
+        self
+    }
+
     pub fn session(&self) -> &Session {
         &self.session
     }
 
     /// Save `bytes` that a caller writes on the session's behalf, such as `pdfcraft-cli run`
     /// saving a rendered page. With a root, it is confined like a tool's own output (a relative
-    /// path resolves inside it) and written atomically. Without one, the path is written as
-    /// given, so `/dev/stdout` and the like still work. Returns where the file went.
+    /// path resolves inside it). Written atomically either way (#2166), except to something
+    /// that is not a regular file, such as `/dev/stdout` or a pipe, which is written as given.
+    /// Returns where the file went.
     pub fn write_output(&self, path: &str, bytes: &[u8]) -> Result<PathBuf> {
         let target = self.resolve(path, true)?;
-        if self.root.is_some() {
-            write_atomic(&target, bytes)?;
-        } else {
+        let special = self.root.is_none() && std::fs::metadata(&target).is_ok_and(|m| !m.is_file() && !m.is_dir());
+        if special {
             std::fs::write(&target, bytes).map_err(|e| failed(format!("{path}: {e}")))?;
+        } else {
+            write_atomic(&target, bytes)?;
         }
         Ok(target)
     }
@@ -832,7 +841,8 @@ impl Automation {
             .session
             .bookmark_page(id, offset, limit)
             .ok_or_else(|| ToolError::Failed(format!("no open document with id {} (see doc_list)", id.0)))?;
-        Ok(json!({ "bookmarks": nest_rows(&page.rows), "next": page.next, "truncated": page.truncated }))
+        let pages = &self.doc(a)?.info.pages;
+        Ok(json!({ "bookmarks": nest_rows(&page.rows, pages), "next": page.next, "truncated": page.truncated }))
     }
 
     fn doc(&self, a: &Args) -> Result<&Document> {
@@ -1216,7 +1226,7 @@ impl Automation {
             let out = pdfcraft_engine::export::extract_images(&doc.export_source(), &pages, min).map_err(failed)?;
             let mut files = Vec::new();
             for (k, img) in out.images.iter().enumerate() {
-                let path = child(&folder, &pdfcraft_engine::export::image_file_name(&stem, img, k + 1));
+                let path = child(&folder, &pdfcraft_engine::export::image_file_name(&stem, img, k + 1, doc.info.pages.len()));
                 write_atomic(&path, &img.data)?;
                 files.push(json!({ "path": path.to_string_lossy(), "page": img.page + 1, "width": img.width, "height": img.height }));
             }
@@ -1774,6 +1784,27 @@ impl Automation {
         Ok(Content::Png { data, width: out.width, height: out.height })
     }
 
+    /// A page as RGBA pixels, without encoding a PNG. `page` is 1-based and `scale` is pixels
+    /// per point (1.0 = 72 dpi). For an embedder that paints the result straight onto a canvas:
+    /// the `page_render` tool only returns PNG, and encoding one to decode it again is wasted
+    /// work on every scroll. It uses the same renderer, and the same per-document cache, as
+    /// `page_render`.
+    pub fn render_pixels(&mut self, doc: u64, page: usize, scale: f32) -> Result<(u32, u32, pdfcraft_render::Pixels)> {
+        if !(scale.is_finite() && scale > 0.0 && scale <= (MAX_DPI / 72.0) as f32) {
+            return Err(ToolError::InvalidArgs(format!("scale must be between 0 and {}", MAX_DPI / 72.0)));
+        }
+        let id = DocId(doc);
+        let n = self.session.get(id).ok_or_else(|| failed(format!("no open document with id {doc} (see doc_list)")))?.info.pages.len();
+        if page < 1 || page > n {
+            return Err(ToolError::InvalidArgs(format!("page {page} is out of range: the document has {n} pages")));
+        }
+        let out = self.renderer(id)?.render(RenderRequest { page: page - 1, kind: RequestKind::Pixels, tile: None, scale, tag: 0, preview: false });
+        if let Some(e) = out.error {
+            return Err(failed(format!("page {page} could not be rendered: {e}")));
+        }
+        Ok((out.width, out.height, out.rgba))
+    }
+
     fn page(&self, a: &Args) -> Result<usize> {
         let n = self.doc(a)?.info.pages.len();
         let p = a.int("page")?;
@@ -2170,7 +2201,7 @@ impl Args<'_> {
 
 /// Bookmark rows in listing order as JSON: a row holds the rows that follow it on the page at the
 /// next level down in `children`, and paths and pages are 1-based.
-fn nest_rows(rows: &[pdfcraft_engine::BookmarkRow]) -> Vec<Value> {
+fn nest_rows(rows: &[pdfcraft_engine::BookmarkRow], pages: &[pdfcraft_render::PageInfo]) -> Vec<Value> {
     // The open rows, outermost first, with their depth and the children gathered so far.
     let mut open: Vec<(usize, Value, Vec<Value>)> = Vec::new();
     let mut roots = Vec::new();
@@ -2180,13 +2211,46 @@ fn nest_rows(rows: &[pdfcraft_engine::BookmarkRow]) -> Vec<Value> {
             close_row(&mut open, &mut roots);
         }
         let path: Vec<usize> = row.path.iter().map(|p| p.saturating_add(1)).collect();
-        let fields = json!({ "path": path, "title": row.title, "page": row.page.map(|p| p.saturating_add(1)), "open": row.open });
+        let mut fields = json!({ "path": path, "title": row.title, "page": row.page.map(|p| p.saturating_add(1)), "open": row.open });
+        if let Some(destination) = row.page.and_then(|p| pages.get(p)).and_then(|p| destination(&row.view, p)) {
+            fields["destination"] = destination;
+        }
         open.push((depth, fields, Vec::new()));
     }
     while !open.is_empty() {
         close_row(&mut open, &mut roots);
     }
     roots
+}
+
+/// Where on its page a bookmark or link goes, in points from the top-left of the displayed page
+/// like every `rect`: the destination type (`XYZ`, `Fit`, `FitH`, `FitV`, `FitR`) and its
+/// position, `null` where the destination leaves it unspecified (`/XYZ null null null` keeps the
+/// reader's position and zoom). `None` for a destination without a type.
+pub(crate) fn destination(view: &pdfcraft_render::DestView, page: &pdfcraft_render::PageInfo) -> Option<Value> {
+    use pdfcraft_render::DestView;
+    let points = |left: Option<f32>, top: Option<f32>| {
+        let [x, y] = page.dest_fraction(left, top, 0);
+        let round = |v: f32| f64::from((v * 100.0).round() / 100.0);
+        (x.map(|x| round(x * page.width)), y.map(|y| round(y * page.height)))
+    };
+    Some(match view {
+        DestView::Top => return None,
+        DestView::Xyz { left, top, zoom } => {
+            let (x, y) = points(*left, *top);
+            json!({ "fit": "XYZ", "left": x, "top": y, "zoom": zoom.map(f64::from) })
+        }
+        DestView::Fit => json!({ "fit": "Fit" }),
+        DestView::FitH { top } => {
+            let (x, y) = points(None, *top);
+            json!({ "fit": "FitH", "left": x, "top": y })
+        }
+        DestView::FitV { left } => {
+            let (x, y) = points(*left, None);
+            json!({ "fit": "FitV", "left": x, "top": y })
+        }
+        DestView::FitR { rect } => json!({ "fit": "FitR", "rect": comments::rect_to_view(page, *rect) }),
+    })
 }
 
 /// Closes the innermost open row: it joins the row above it as a child, or the top level.
@@ -2440,32 +2504,20 @@ fn write_atomic_synced(
     suffixes: impl IntoIterator<Item = u64>,
     sync: impl FnOnce(&std::fs::File) -> std::io::Result<()>,
 ) -> Result<()> {
-    use std::io::Write;
     // A folder can't be replaced, and staging beside it could land outside the root: "." names
     // the root itself, whose parent isn't ours to write in.
     if path.is_dir() {
         return Err(failed(format!("{}: is a folder, not a file", path.display())));
     }
     let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
-    let name = path.file_name().ok_or_else(|| failed(format!("{}: not a file path", path.display())))?;
+    path.file_name().ok_or_else(|| failed(format!("{}: not a file path", path.display())))?;
     std::fs::create_dir_all(dir).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
-    let (tmp, file) =
-        create_staging(dir, &name.to_string_lossy(), StagingName::SuffixThenTag, suffixes).map_err(|e| failed(format!("{}: {e}", dir.display())))?;
-    // Closed at the end of the block, before the rename.
-    let written = {
-        let mut file = file;
-        // Surface delayed writeback failures before replacing the destination or marking
-        // a document clean. The handle is closed before rename (required on Windows).
-        file.write_all(bytes).and_then(|()| sync(&file))
-    };
-    if let Err(e) = written {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(failed(format!("{}: {e}", tmp.display())));
-    }
-    std::fs::rename(&tmp, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        failed(format!("{}: {e}", path.display()))
-    })
+    // The writer itself is the platform crate's, shared with the desktop app and the CLI
+    // (#2166): the staging file is written, flushed (delayed writeback failures surface before
+    // the destination is replaced or a document marked clean), closed and renamed; a failure at
+    // any step removes it and leaves the destination as it was.
+    pdfcraft_platform::staging::write_atomically_with(path, bytes, StagingName::SuffixThenTag, suffixes, sync)
+        .map_err(|e| failed(format!("{}: {e}", path.display())))
 }
 
 #[cfg(test)]

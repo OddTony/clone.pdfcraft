@@ -245,6 +245,30 @@ fn autotag_preview_proposes_text_without_changing_the_pdf() {
 }
 
 #[test]
+fn render_pixels_agrees_with_page_render_and_skips_the_png() {
+    let dir = workdir("render-pixels");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+
+    let (width, height, pixels) = a.render_pixels(doc, 1, 1.0).unwrap();
+    let png = a.call("page_render", &json!({ "doc": doc, "page": 1, "dpi": 72 })).unwrap();
+    let Content::Png { width: png_width, height: png_height, .. } = png[0] else { panic!("expected an image") };
+    assert_eq!((width, height), (png_width, png_height), "scale 1.0 is 72 dpi, like the tool");
+    assert_eq!(pixels.as_ref().len(), width as usize * height as usize * 4, "RGBA, four bytes a pixel");
+    assert!(pixels.as_ref().as_chunks::<4>().0.iter().any(|p| p[..3] != [255, 255, 255]), "the page text is drawn, not a blank sheet");
+
+    let (double_width, _, _) = a.render_pixels(doc, 1, 2.0).unwrap();
+    assert_eq!(double_width, width * 2, "the scale is pixels per point");
+
+    for scale in [0.0_f32, -1.0, f32::NAN, f32::INFINITY, 1.0e6] {
+        assert!(matches!(a.render_pixels(doc, 1, scale), Err(ToolError::InvalidArgs(_))), "scale {scale} must be refused");
+    }
+    assert!(matches!(a.render_pixels(doc, 0, 1.0), Err(ToolError::InvalidArgs(_))), "pages are 1-based");
+    assert!(matches!(a.render_pixels(doc, 99, 1.0), Err(ToolError::InvalidArgs(_))), "a page past the end");
+    assert!(matches!(a.render_pixels(9_999, 1, 1.0), Err(ToolError::Failed(_))), "a document that is not open");
+}
+
+#[test]
 fn autotag_apply_writes_reviewable_tags_and_survives_save_reopen() {
     let dir = workdir("autotag-apply");
     let mut a = auto(&dir);
@@ -1541,6 +1565,54 @@ fn bookmark_list_pages_reach_bookmarks_past_the_hundred_thousandth() {
     assert!(matches!(a.call("bookmark_list", &json!({ "doc": doc, "offset": -1 })), Err(ToolError::InvalidArgs(_))));
 }
 
+/// Bookmarks and links say where on the page they go, in the same top-left points as rect, and a
+/// link through a named destination says which page that is.
+#[test]
+fn destinations_are_listed_with_their_position() {
+    let dir = workdir("destination-positions");
+    let objs: Vec<&str> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /Outlines 5 0 R /Names << /Dests << /Names [(sec-b) [4 0 R /XYZ 72 500 0]] >> >> >>",
+        "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 612 792] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [8 0 R 9 0 R 10 0 R] >>",
+        "<< /Type /Page /Parent 2 0 R >>",
+        "<< /Type /Outlines /First 6 0 R /Last 7 0 R /Count 2 >>",
+        "<< /Title (Section B) /Parent 5 0 R /Next 7 0 R /Dest [4 0 R /XYZ 72 500 0] >>",
+        "<< /Title (Wide view) /Parent 5 0 R /Prev 6 0 R /Dest [4 0 R /FitH 400] >>",
+        "<< /Type /Annot /Subtype /Link /Rect [72 700 300 716] /Border [0 0 0] /Dest [4 0 R /XYZ 72 500 2] >>",
+        "<< /Type /Annot /Subtype /Link /Rect [72 670 300 686] /Border [0 0 0] /Dest (sec-b) >>",
+        "<< /Type /Annot /Subtype /Link /Rect [72 640 300 656] /Border [0 0 0] /A << /S /URI /URI (https://example.com) >> >>",
+    ];
+    let mut pdf = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = pdf.len();
+    pdf.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        pdf.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    pdf.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    std::fs::write(dir.join("dests.pdf"), pdf).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "dests.pdf" }))["doc"].as_u64().unwrap();
+    let marks = ok(&mut a, "bookmark_list", json!({ "doc": doc }));
+    // 792 − 500 = 292 points from the top; a zoom of 0 keeps the reader's zoom.
+    assert_eq!(marks["bookmarks"][0]["destination"], json!({ "fit": "XYZ", "left": 72.0, "top": 292.0, "zoom": null }), "{marks}");
+    assert_eq!(marks["bookmarks"][1]["destination"], json!({ "fit": "FitH", "left": null, "top": 392.0 }), "{marks}");
+    let links = ok(&mut a, "link_list", json!({ "doc": doc }));
+    let explicit = &links["links"][0];
+    assert_eq!(
+        (explicit["to_page"].clone(), explicit["destination"].clone()),
+        (json!(2), json!({ "fit": "XYZ", "left": 72.0, "top": 292.0, "zoom": 2.0 }))
+    );
+    let named = &links["links"][1];
+    assert_eq!((named["to_page"].clone(), named["named"].clone(), named.get("other")), (json!(2), json!(true), None), "{links}");
+    assert_eq!(named["destination"]["top"], 292.0);
+    assert_eq!((links["links"][2]["url"].clone(), links["links"][2].get("destination")), (json!("https://example.com"), None));
+}
+
 #[test]
 fn bookmarks_from_structure_through_tools() {
     let dir = workdir("bookmarks-structure");
@@ -1758,7 +1830,7 @@ fn protecting_through_tools() {
 fn signing_an_encrypted_form_through_tools() {
     let dir = workdir("sign-encrypted");
     let mut a = auto(&dir);
-    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret1", "path": "ada.p12" }));
+    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret12", "path": "ada.p12" }));
     let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
     let field = ok(&mut a, "form_add_field", json!({ "doc": doc, "page": 1, "type": "signature", "rect": [20, 200, 180, 250] }))["field"]
         .as_str()
@@ -1771,12 +1843,12 @@ fn signing_an_encrypted_form_through_tools() {
     assert_eq!(ok(&mut b, "doc_info", json!({ "doc": form }))["security"]["protected"], true);
     match b.call(
         "sign_document",
-        &json!({ "doc": form, "id": "ada.p12", "password": "secret1", "page": 1, "rect": [200, 200, 380, 250], "out": "new.pdf" }),
+        &json!({ "doc": form, "id": "ada.p12", "password": "secret12", "page": 1, "rect": [200, 200, 380, 250], "out": "new.pdf" }),
     ) {
         Err(ToolError::Failed(m)) => assert!(m.contains("adding new signature fields"), "{m}"),
         other => panic!("a new field needs the permissions password: {other:?}"),
     }
-    let r = ok(&mut b, "sign_document", json!({ "doc": form, "id": "ada.p12", "password": "secret1", "field": field, "out": "signed.pdf" }));
+    let r = ok(&mut b, "sign_document", json!({ "doc": form, "id": "ada.p12", "password": "secret12", "field": field, "out": "signed.pdf" }));
     assert_eq!((r["signature"]["signer"].as_str(), r["signature"]["status"].as_str()), (Some("Ada Lovelace"), Some("unknown")));
     let original = std::fs::read(dir.join("form.pdf")).unwrap();
     let signed = std::fs::read(dir.join("signed.pdf")).unwrap();
@@ -1784,7 +1856,7 @@ fn signing_an_encrypted_form_through_tools() {
     let mut c = auto(&dir);
     let re = ok(&mut c, "doc_open", json!({ "path": "signed.pdf" }))["doc"].as_u64().unwrap();
     assert_eq!(ok(&mut c, "doc_info", json!({ "doc": re }))["security"]["protected"], true, "still encrypted");
-    ok(&mut c, "sign_trust", json!({ "paths": ["ada.p12"], "password": "secret1" }));
+    ok(&mut c, "sign_trust", json!({ "paths": ["ada.p12"], "password": "secret12" }));
     let list = ok(&mut c, "sign_list", json!({ "doc": re }));
     assert_eq!((list["all_valid"].as_bool(), list["signatures"][0]["status"].as_str()), (Some(true), Some("valid")), "{list}");
 }
@@ -3338,6 +3410,67 @@ fn an_applied_redaction_at_the_end_of_a_line_audits_clean() {
     assert_eq!(r["count"], 0, "{r}");
 }
 
+/// A long tagged document lists its tags a page at a time, and only the types, pages or depths
+/// asked for: a 20-page guide has hundreds of tags, more than one tool result should hold.
+#[test]
+fn structure_tags_are_listed_a_page_at_a_time() {
+    let dir = workdir("tags-paging");
+    // A Document holding, on each of 3 pages, one H1 and 149 P: 451 tags.
+    let mut objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R /MarkInfo << /Marked true >> >>".into(),
+        "<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 /MediaBox [0 0 200 200] >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+        String::new(), // 6: the root, below
+        String::new(), // 7: the Document, below
+    ];
+    let mut kids = Vec::new();
+    for page in 0..3 {
+        for i in 0..150 {
+            let n = objs.len() + 1;
+            kids.push(format!("{n} 0 R"));
+            objs.push(format!("<< /S /{} /P 7 0 R /Pg {} 0 R >>", if i == 0 { "H1" } else { "P" }, 3 + page));
+        }
+    }
+    objs[5] = "<< /Type /StructTreeRoot /K 7 0 R >>".into();
+    objs[6] = format!("<< /S /Document /P 6 0 R /K [{}] >>", kids.join(" "));
+    let mut pdf = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = pdf.len();
+    pdf.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        pdf.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    pdf.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    std::fs::write(dir.join("long.pdf"), pdf).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "long.pdf" }))["doc"].as_u64().unwrap();
+    let first = ok(&mut a, "accessibility_tags", json!({ "doc": doc }));
+    assert_eq!((first["count"].as_u64(), first["tags"].as_array().map(Vec::len), first["next"].as_u64()), (Some(451), Some(200), Some(200)));
+    assert_eq!(first["tags"][0]["type"], "Document");
+    let last = ok(&mut a, "accessibility_tags", json!({ "doc": doc, "offset": 400, "limit": 100 }));
+    assert_eq!((last["tags"].as_array().map(Vec::len), last["next"].clone()), (Some(51), Value::Null));
+    let headings = ok(&mut a, "accessibility_tags", json!({ "doc": doc, "types": ["H1"] }));
+    let pages: Vec<u64> = headings["tags"].as_array().unwrap().iter().map(|t| t["page"].as_u64().unwrap()).collect();
+    assert_eq!((headings["count"].as_u64(), pages), (Some(3), vec![1, 2, 3]));
+    let page2 = ok(&mut a, "accessibility_tags", json!({ "doc": doc, "pages": [2], "types": ["H1", "P"], "limit": 1000 }));
+    assert_eq!((page2["count"].as_u64(), page2["next"].clone()), (Some(150), Value::Null));
+    assert_eq!(ok(&mut a, "accessibility_tags", json!({ "doc": doc, "max_depth": 0 }))["count"], 1, "the Document alone");
+    for bad in [
+        json!({ "doc": doc, "limit": 0 }),
+        json!({ "doc": doc, "limit": 1001 }),
+        json!({ "doc": doc, "offset": -1 }),
+        json!({ "doc": doc, "pages": [0] }),
+    ] {
+        assert!(matches!(a.call("accessibility_tags", &bad), Err(ToolError::InvalidArgs(_))), "{bad}");
+    }
+}
+
 #[test]
 fn printing_through_tools() {
     let dir = workdir("print");
@@ -4209,12 +4342,12 @@ fn signing_with_an_image_typed_or_drawn_graphic_through_tools() {
     std::fs::write(dir.join("logo.png"), png).unwrap();
     std::fs::write(dir.join("broken.png"), b"broken").unwrap();
     let mut a = auto(&dir);
-    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret1", "path": "ada.p12" }));
+    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret12", "path": "ada.p12" }));
     let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
     let sign = |a: &mut Automation, rect: [f64; 4], graphic: Value, out: &str| {
         a.call(
             "sign_document",
-            &json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "page": 1, "rect": rect, "graphic": graphic, "out": out }),
+            &json!({ "doc": doc, "id": "ada.p12", "password": "secret12", "page": 1, "rect": rect, "graphic": graphic, "out": out }),
         )
     };
     for (graphic, why) in [
@@ -4234,7 +4367,7 @@ fn signing_with_an_image_typed_or_drawn_graphic_through_tools() {
     // A missing file fails as it does for every tool that reads one.
     assert!(matches!(sign(&mut a, [20.0, 200.0, 180.0, 250.0], json!({ "image": "missing.png" }), "bad.pdf"), Err(ToolError::Failed(_))));
     // An invisible signature shows nothing, so a graphic for one is a mistake.
-    let r = a.call("sign_document", &json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "graphic": { "text": "Ada" }, "out": "bad.pdf" }));
+    let r = a.call("sign_document", &json!({ "doc": doc, "id": "ada.p12", "password": "secret12", "graphic": { "text": "Ada" }, "out": "bad.pdf" }));
     assert!(matches!(r, Err(ToolError::InvalidArgs(_))), "{r:?}");
     assert!(!dir.join("bad.pdf").exists());
 
@@ -4270,11 +4403,13 @@ fn digital_ids_signing_and_validation_through_tools() {
     let id = ok(
         &mut a,
         "sign_id_create",
-        json!({ "name": "Ada Lovelace", "organization": "Analytical Engines", "email": "ada@example.com", "country": "GB", "key": "p256", "password": "secret1", "path": "ada.p12" }),
+        json!({ "name": "Ada Lovelace", "organization": "Analytical Engines", "email": "ada@example.com", "country": "GB", "key": "p256", "password": "secret12", "path": "ada.p12" }),
     );
     assert_eq!(id["certificate"]["subject"], "C=GB, O=Analytical Engines, CN=Ada Lovelace, E=ada@example.com");
     assert_eq!(id["certificate"]["self_signed"], true);
     assert!(matches!(a.call("sign_id_create", &json!({ "name": "X", "password": "short", "path": "x.p12" })), Err(ToolError::InvalidArgs(_))));
+    // Eight characters at least (#1847): seven is refused.
+    assert!(matches!(a.call("sign_id_create", &json!({ "name": "X", "password": "seven77", "path": "x.p12" })), Err(ToolError::InvalidArgs(_))));
 
     let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
     assert_eq!(ok(&mut a, "sign_list", json!({ "doc": doc }))["count"], 0);
@@ -4297,7 +4432,7 @@ fn digital_ids_signing_and_validation_through_tools() {
     let r = ok(
         &mut a,
         "sign_document",
-        json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "page": 2, "rect": [20, 200, 180, 250], "reason": "Approved", "location": "London", "out": "signed.pdf" }),
+        json!({ "doc": doc, "id": "ada.p12", "password": "secret12", "page": 2, "rect": [20, 200, 180, 250], "reason": "Approved", "location": "London", "out": "signed.pdf" }),
     );
     assert_eq!(r["signature"]["status"], "unknown");
     assert_eq!(r["signature"]["signer"], "Ada Lovelace");
@@ -4307,7 +4442,7 @@ fn digital_ids_signing_and_validation_through_tools() {
     assert!(dir.join("signed.pdf").exists());
 
     // Trust the ID: valid; comment afterwards: still valid, change allowed.
-    let t = ok(&mut a, "sign_trust", json!({ "paths": ["ada.p12"], "password": "secret1" }));
+    let t = ok(&mut a, "sign_trust", json!({ "paths": ["ada.p12"], "password": "secret12" }));
     assert_eq!(t["trusted"].as_array().unwrap().len(), 1);
     let list = ok(&mut a, "sign_list", json!({ "doc": doc }));
     assert_eq!((list["all_valid"].as_bool(), list["signatures"][0]["status"].as_str()), (Some(true), Some("valid")));
@@ -6275,4 +6410,22 @@ fn doc_print_as_image() {
         Err(ToolError::InvalidArgs(m)) => assert!(m.contains("dpi"), "{m}"),
         other => panic!("{other:?}"),
     }
+}
+
+/// Without a root, `write_output` still writes through a staging file (#2166): the folder is
+/// made, nothing is left beside the file, and a folder at the path is refused.
+#[test]
+fn a_root_less_write_output_is_atomic_too() {
+    let dir = std::env::temp_dir().join(format!("pdfcraft-automation-rootless-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let free = Automation::new();
+    let target = dir.join("new").join("page.png");
+    let written = free.write_output(&target.to_string_lossy(), &[1, 2, 3]).unwrap();
+    assert_eq!(written, target);
+    assert_eq!(std::fs::read(&target).unwrap(), [1, 2, 3]);
+    let names: Vec<_> = std::fs::read_dir(dir.join("new")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert_eq!(names, ["page.png"], "no staging file left beside it");
+    let e = free.write_output(&dir.join("new").to_string_lossy(), &[4]).unwrap_err();
+    assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -1290,6 +1290,7 @@
 	Copy text	Copiar texto
 	Properties…	Propiedades…
 	Make Current Properties Default	Usar las propiedades actuales como predeterminadas
+	Make Properties Default	Usar las propiedades como predeterminadas
 	More options	Más opciones
 	Sort by	Ordenar por
 	Author	Autor
@@ -1411,6 +1412,9 @@
 	Sort comments by:	Ordenar comentarios por:
 	Create PDF Comment Summary	Crear resumen de comentarios en PDF
 	Revert to the previously saved version of “{name}”? Changes since then can't be undone afterwards.	¿Revertir a la última versión guardada de «{name}»? Los cambios hechos desde entonces no se podrán deshacer después.
+	Save over the changed file?	¿Guardar sobre el archivo modificado?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	«{name}» cambió en el disco después de abrirse o guardarse por última vez. Guardar ahora reemplaza esa versión más reciente por esta.
+	Save anyway	Guardar de todos modos
 	Number pages	Numerar páginas
 	Style	Estilo
 	None (prefix only)	Ninguno (solo prefijo)
@@ -1616,6 +1620,8 @@
 	Sent to {printer}	Enviado a {printer}
 	Sent to {printer}: {msg}	Enviado a {printer}: {msg}
 	Looking for printers…	Buscando impresoras…
+	Sending sheet {s} of {n} to {printer}…	Enviando la hoja {s} de {n} a {printer}…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	No se encontró ninguna impresora. Compruebe que la impresora está instalada y que la cola de impresión está en marcha, y vuelva a abrir Imprimir.
 	Sending to {printer}…	Enviando a {printer}…
 	Choose a folder for the searchable files	Elige una carpeta para los archivos con búsqueda
 	Files are combined in this order. Leave Pages empty to take every page.	Los archivos se combinan en este orden. Deja Páginas vacío para incluir todas las páginas.
@@ -2145,7 +2151,7 @@ action wizard	Start	Iniciar
 	Home / End	Inicio / Fin
 	H / Space (hold)	H / Espacio (mantener)
 	Reload documents when their files change on disk	Recargar los documentos cuando sus archivos cambien en el disco
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Este archivo ha cambiado en el disco. Recárgalo para ver la nueva versión; se perderán tus cambios sin guardar.
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Este archivo cambió en el disco. Recargar muestra la versión nueva y descarta los cambios sin guardar; Guardar la reemplaza por esta versión.
 	Reload	Recargar
 	Couldn't reload {name}: {e}	No se pudo recargar {name}: {e}
 	Created a PDF from {n} files	Se creó un PDF a partir de {n} archivos
@@ -2413,7 +2419,7 @@ key	Space	Espacio
 	Rotate page {label} counterclockwise	Girar la página {label} a la izquierda
 	Rotate page {label} clockwise	Girar la página {label} a la derecha
 	Delete page {label}	Eliminar la página {label}
-	Mouse wheel scroll speed	Velocidad de desplazamiento de la rueda del ratón
+	Scroll speed (mouse wheel and arrow keys)	Velocidad de desplazamiento (rueda del ratón y teclas de flecha)
 scroll speed	Slow	Lenta
 scroll speed	Normal	Normal
 scroll speed	Fast	Rápida
@@ -2546,3 +2552,5 @@ animation effects	Off	Desactivados
 	Shown while the pointer is over a mark.	Se muestra mientras el puntero está sobre una marca.
 	Opacity:	Opacidad:
 	Make properties default	Usar como propiedades predeterminadas
+	Pages selected	Páginas seleccionadas
+	Page properties	Propiedades de página
