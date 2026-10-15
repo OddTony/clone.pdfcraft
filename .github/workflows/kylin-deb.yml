@@ -3,12 +3,15 @@
 # packaging/linux/kylin/README.md for what ships and why.
 #
 # Native runners (no cross compilation) inside a Debian bullseye container, following the
-# deepin-screenshot packaging workflow. workflow_dispatch produces artifacts; a v* tag also
-# attaches the debs to that tag's release.
+# deepin-screenshot packaging workflow. Pushes to main build automatically (as that repo's
+# master does); a v* tag also attaches the debs to the tag's release; any branch can be built
+# on demand through workflow_dispatch.
 name: Kylin deb
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
