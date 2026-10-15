@@ -2380,3 +2380,14 @@ animation effects	Off	Ki
 	PDF and text	PDF és szöveg
 	Restyle raw document	Nyers dokumentum újraformázása
 	Restyle text	Szöveg újraformázása
+	Align objects	Objektumok igazítása
+	Distribute objects	Objektumok elosztása
+	Arrange	Elrendezés
+	Align center	Középre igazítás
+	Align top	Fentre igazítás
+	Align middle	Függőlegesen középre
+	Align bottom	Lentre igazítás
+	Distribute horizontally	Vízszintes elosztás
+	Distribute vertically	Függőleges elosztás
+	The objects are already aligned.	Az objektumok már igazítva vannak.
+	These objects could not be aligned.	Ezeket az objektumokat nem sikerült igazítani.

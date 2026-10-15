@@ -5821,3 +5821,63 @@ fn format_studio_reads_docx_and_restyles_in_place() {
     assert!(s1.contains(&18), "{s1:?}");
     assert!(s2.contains(&11), "{s2:?}");
 }
+
+#[test]
+fn objects_align_left_and_distribute_vertically() {
+    let dir = workdir("object-align");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_create", json!({ "from": "blank", "width": 600, "height": 800 }))["doc"].as_u64().unwrap();
+    ok(&mut a, "page_add_text", json!({ "doc": doc, "page": 1, "text": "Alpha", "at": [50, 100] }));
+    ok(&mut a, "page_add_text", json!({ "doc": doc, "page": 1, "text": "Beta", "at": [200, 250] }));
+    ok(&mut a, "page_add_text", json!({ "doc": doc, "page": 1, "text": "Gamma", "at": [350, 500] }));
+    let list = ok(&mut a, "object_list", json!({ "doc": doc, "page": 1 }));
+    assert_eq!(list["count"], 3);
+    let generation = list["generation"].as_u64().unwrap();
+    let before: Vec<[f64; 4]> = list["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| {
+            let r = o["rect"].as_array().unwrap();
+            [r[0].as_f64().unwrap(), r[1].as_f64().unwrap(), r[2].as_f64().unwrap(), r[3].as_f64().unwrap()]
+        })
+        .collect();
+    let objects: Vec<Value> = list["objects"].as_array().unwrap().iter().map(|o| json!({ "kind": o["kind"], "index": o["index"] })).collect();
+    let r = ok(&mut a, "object_align", json!({ "doc": doc, "page": 1, "objects": objects, "op": "left", "generation": generation }));
+    assert_eq!(r["moved"], 2, "{r}");
+    assert_eq!(r["placed"], 1, "{r}");
+    let list = ok(&mut a, "object_list", json!({ "doc": doc, "page": 1 }));
+    let xs: Vec<f64> = list["objects"].as_array().unwrap().iter().map(|o| o["rect"][0].as_f64().unwrap()).collect();
+    assert!(xs.windows(2).all(|w| (w[0] - w[1]).abs() < 0.01), "{xs:?}");
+    let generation = list["generation"].as_u64().unwrap();
+    let objects: Vec<Value> = list["objects"].as_array().unwrap().iter().map(|o| json!({ "kind": o["kind"], "index": o["index"] })).collect();
+    let r = ok(&mut a, "object_align", json!({ "doc": doc, "page": 1, "objects": objects, "op": "distribute-v", "generation": generation }));
+    assert!(r["moved"].as_u64().unwrap() >= 1, "{r}");
+    let list = ok(&mut a, "object_list", json!({ "doc": doc, "page": 1 }));
+    let mut ys: Vec<f64> =
+        list["objects"].as_array().unwrap().iter().map(|o| (o["rect"][1].as_f64().unwrap() + o["rect"][3].as_f64().unwrap()) / 2.0).collect();
+    ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let gaps: Vec<f64> = ys.windows(2).map(|w| w[1] - w[0]).collect();
+    assert!((gaps[0] - gaps[1]).abs() < 0.5, "{ys:?}");
+    assert!(matches!(
+        err(&mut a, "object_align", json!({ "doc": doc, "page": 1, "objects": objects, "op": "left", "generation": 0 })),
+        ToolError::Failed(_)
+    ));
+    assert!(matches!(
+        err(&mut a, "object_align", json!({ "doc": doc, "page": 1, "objects": objects[..2].to_vec(), "op": "distribute-v" })),
+        ToolError::Failed(_)
+    ));
+    ok(&mut a, "edit_undo", json!({ "doc": doc }));
+    ok(&mut a, "edit_undo", json!({ "doc": doc }));
+    let list = ok(&mut a, "object_list", json!({ "doc": doc, "page": 1 }));
+    let after: Vec<[f64; 4]> = list["objects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| {
+            let r = o["rect"].as_array().unwrap();
+            [r[0].as_f64().unwrap(), r[1].as_f64().unwrap(), r[2].as_f64().unwrap(), r[3].as_f64().unwrap()]
+        })
+        .collect();
+    assert_eq!(before, after);
+}

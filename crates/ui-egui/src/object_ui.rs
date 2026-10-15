@@ -412,6 +412,44 @@ pub(crate) fn move_error(error: &pdfcraft_engine::EditError) -> String {
     }
 }
 
+/// An align or distribute refusal in UI words.
+pub(crate) fn align_notice(error: &pdfcraft_engine::EditError) -> String {
+    match error.to_string().as_str() {
+        "the objects are already aligned" => tl!("The objects are already aligned.").into(),
+        _ => tl!("These objects could not be aligned.").into(),
+    }
+}
+
+impl crate::PdfCraftApp {
+    /// Arrange ▸ align or distribute the Edit-text multi-selection on its page.
+    /// The selection follows the moved objects; a refusal becomes a notice.
+    pub(crate) fn align_selection(&mut self, op: pdfcraft_engine::AlignOp) {
+        use std::collections::BTreeMap;
+        let Some((i, _)) = self.active_ids() else { return };
+        let (page, selected, id) = match (self.views[i].objects.page, self.views[i].objects.selected.clone()) {
+            (Some(page), selected) if !selected.is_empty() => (page, selected, self.views[i].id),
+            _ => return,
+        };
+        let targets: Vec<_> = selected.iter().map(|o| o.target).collect();
+        match self.session.align_objects(id, page, targets, op, false) {
+            Ok(report) => {
+                let deltas: BTreeMap<_, _> = report.deltas.into_iter().collect();
+                let mut expected = selected;
+                for object in &mut expected {
+                    if let Some(d) = deltas.get(&object.target) {
+                        object.rect = [object.rect[0] + d[0], object.rect[1] + d[1], object.rect[2] + d[0], object.rect[3] + d[1]];
+                    }
+                }
+                self.views[i].objects.pending = Some(expected);
+                self.views[i].page_changed(page);
+            }
+            Err(e) => {
+                self.views[i].objects.notice = Some(align_notice(&e));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -429,6 +467,15 @@ mod tests {
                 "Text used as a clipping path cannot be moved with this selection.",
                 "These objects could not be moved. Select them again and try a smaller move.",
                 "This page contains objects that cannot be selected together.",
+                "Arrange",
+                "Align center",
+                "Align top",
+                "Align middle",
+                "Align bottom",
+                "Distribute horizontally",
+                "Distribute vertically",
+                "The objects are already aligned.",
+                "These objects could not be aligned.",
             ] {
                 assert_ne!(crate::i18n::tr(lang, label), label, "{}: {label}", language.code);
             }

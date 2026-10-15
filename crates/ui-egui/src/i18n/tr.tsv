@@ -2377,3 +2377,14 @@ animation effects	Off	Kapalı
 	PDF and text	PDF ve metin
 	Restyle raw document	Ham belgeyi yeniden biçimlendir
 	Restyle text	Metni yeniden biçimlendir
+	Align objects	Nesneleri hizala
+	Distribute objects	Nesneleri dağıt
+	Arrange	Düzenle
+	Align center	Ortala
+	Align top	Üste hizala
+	Align middle	Dikey ortala
+	Align bottom	Alta hizala
+	Distribute horizontally	Yatay dağıt
+	Distribute vertically	Dikey dağıt
+	The objects are already aligned.	Nesneler zaten hizalı.
+	These objects could not be aligned.	Bu nesneler hizalanamadı.

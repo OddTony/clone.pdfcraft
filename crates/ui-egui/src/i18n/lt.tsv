@@ -2625,3 +2625,14 @@ key	Space	Tarpas
 	PDF and text	PDF ir tekstas
 	Restyle raw document	Reformuoti pirminį dokumentą
 	Restyle text	Reformuoti tekstą
+	Align objects	Lygiuoti objektus
+	Distribute objects	Paskirstyti objektus
+	Arrange	Išdėstyti
+	Align center	Lygiuoti centre
+	Align top	Lygiuoti viršuje
+	Align middle	Lygiuoti vertikaliai centre
+	Align bottom	Lygiuoti apačioje
+	Distribute horizontally	Paskirstyti horizontaliai
+	Distribute vertically	Paskirstyti vertikaliai
+	The objects are already aligned.	Objektai jau sulygiuoti.
+	These objects could not be aligned.	Šių objektų sulygiuoti nepavyko.

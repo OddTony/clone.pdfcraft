@@ -2511,3 +2511,14 @@ animation effects	Off	Desactivados
 	AI chat isn't available in the web build; use the desktop app or CLI.	El chat de IA no está disponible en la versión web; usa la aplicación de escritorio o la CLI.
 	PDF and text	PDF y texto
 	Restyle raw document	Aplicar estilo al documento
+	Align objects	Alinear objetos
+	Distribute objects	Distribuir objetos
+	Arrange	Organizar
+	Align center	Centrar
+	Align top	Alinear arriba
+	Align middle	Centrar verticalmente
+	Align bottom	Alinear abajo
+	Distribute horizontally	Distribuir horizontalmente
+	Distribute vertically	Distribuir verticalmente
+	The objects are already aligned.	Los objetos ya están alineados.
+	These objects could not be aligned.	No se pudieron alinear estos objetos.

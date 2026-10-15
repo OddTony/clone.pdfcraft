@@ -2255,3 +2255,14 @@ animation effects	Off	關
 	PDF and text	PDF 和文字
 	Restyle raw document	為原始檔案套用樣式
 	Restyle text	重新設定文字樣式
+	Align objects	對齊物件
+	Distribute objects	均勻分佈物件
+	Arrange	排列
+	Align center	置中對齊
+	Align top	頂端對齊
+	Align middle	垂直置中
+	Align bottom	底端對齊
+	Distribute horizontally	水平分佈
+	Distribute vertically	垂直分佈
+	The objects are already aligned.	物件已經對齊。
+	These objects could not be aligned.	無法對齊這些物件。

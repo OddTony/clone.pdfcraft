@@ -2455,3 +2455,14 @@ animation effects	Off	Vypnuto
 	PDF and text	PDF a text
 	Restyle raw document	Přeformátovat zdroj
 	Restyle text	Přeformátovat text
+	Align objects	Zarovnat objekty
+	Distribute objects	Rozmístit objekty
+	Arrange	Uspořádat
+	Align center	Zarovnat na střed
+	Align top	Zarovnat nahoru
+	Align middle	Zarovnat svisle na střed
+	Align bottom	Zarovnat dolů
+	Distribute horizontally	Rozmístit vodorovně
+	Distribute vertically	Rozmístit svisle
+	The objects are already aligned.	Objekty jsou již zarovnány.
+	These objects could not be aligned.	Tyto objekty se nepodařilo zarovnat.

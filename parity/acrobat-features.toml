@@ -2139,11 +2139,11 @@ title = "Align and distribute objects"
 area = "C"
 tier = "P1"
 milestone = "M7"
-status = "planned"
+status = "partial"
 commands = []
-tools = []
-evidence = []
-notes = ""
+tools = ["object_align"]
+evidence = ["crates/edit/src/tests.rs::align_moves_each_edge_to_the_scope", "crates/edit/src/tests.rs::align_centres_and_distributes_evenly", "crates/automation/tests/automation.rs::objects_align_left_and_distribute_vertically"]
+notes = "Headless align/distribute over the object inventory (left, center, right, top, middle, bottom, distribute-h/v within the selection or page box), one atomic undo step, stale-generation guard. No canvas buttons, no arrange (z-order), no cross-page moves yet"
 
 [[feature]]
 id = "edit.vector-edit"

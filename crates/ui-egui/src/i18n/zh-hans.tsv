@@ -2345,3 +2345,14 @@ animation effects	Off	关
 	PDF and text	PDF 和文本
 	Restyle raw document	为原始文档应用样式
 	Restyle text	重新设置文本样式
+	Align objects	对齐对象
+	Distribute objects	均匀分布对象
+	Arrange	排列
+	Align center	居中对齐
+	Align top	顶端对齐
+	Align middle	垂直居中
+	Align bottom	底端对齐
+	Distribute horizontally	水平分布
+	Distribute vertically	垂直分布
+	The objects are already aligned.	对象已经对齐。
+	These objects could not be aligned.	无法对齐这些对象。

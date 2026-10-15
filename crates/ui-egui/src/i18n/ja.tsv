@@ -2381,3 +2381,14 @@ animation effects	Off	オフ
 	PDF and text	PDFとテキスト
 	Restyle raw document	原文ドキュメントを書式設定
 	Restyle text	テキストの書式を変更
+	Align objects	オブジェクトを整列
+	Distribute objects	オブジェクトを均等に配置
+	Arrange	配置
+	Align center	中央揃え
+	Align top	上揃え
+	Align middle	上下中央揃え
+	Align bottom	下揃え
+	Distribute horizontally	水平方向に均等配置
+	Distribute vertically	垂直方向に均等配置
+	The objects are already aligned.	オブジェクトは既に揃っています。
+	These objects could not be aligned.	これらのオブジェクトを配置できませんでした。

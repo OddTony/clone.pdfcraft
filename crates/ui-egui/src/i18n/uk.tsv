@@ -2403,3 +2403,14 @@ animation effects	Off	Вимкнено
 	PDF and text	PDF і текст
 	Restyle raw document	Змінити стиль вхідного документа
 	Restyle text	Змінити стиль тексту
+	Align objects	Вирівняти об’єкти
+	Distribute objects	Розподілити об’єкти
+	Arrange	Розташувати
+	Align center	Вирівняти по центру
+	Align top	Вирівняти вгорі
+	Align middle	Вирівняти вертикально по центру
+	Align bottom	Вирівняти внизу
+	Distribute horizontally	Розподілити горизонтально
+	Distribute vertically	Розподілити вертикально
+	The objects are already aligned.	Об’єкти вже вирівняні.
+	These objects could not be aligned.	Ці об’єкти не вдалося вирівняти.

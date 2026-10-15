@@ -185,6 +185,40 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
             if count > 0 {
                 ui.label(crate::i18n::trn(crate::i18n::current(), count as u64, "{n} object selected", "{n} objects selected"));
                 ui.label(tl!("Drag the selection to move it. Esc clears the selection."));
+                if count > 1 {
+                    ui.label(tl!("Arrange"));
+                    ui.horizontal(|ui| {
+                        if ui.small_button(tl!("Align left")).clicked() {
+                            app.align_selection(pdfcraft_engine::AlignOp::Left);
+                        }
+                        if ui.small_button(tl!("Align center")).clicked() {
+                            app.align_selection(pdfcraft_engine::AlignOp::Center);
+                        }
+                        if ui.small_button(tl!("Align right")).clicked() {
+                            app.align_selection(pdfcraft_engine::AlignOp::Right);
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        if ui.small_button(tl!("Align top")).clicked() {
+                            app.align_selection(pdfcraft_engine::AlignOp::Top);
+                        }
+                        if ui.small_button(tl!("Align middle")).clicked() {
+                            app.align_selection(pdfcraft_engine::AlignOp::Middle);
+                        }
+                        if ui.small_button(tl!("Align bottom")).clicked() {
+                            app.align_selection(pdfcraft_engine::AlignOp::Bottom);
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        let distribute = count > 2;
+                        if ui.add_enabled(distribute, egui::Button::new(tl!("Distribute horizontally")).small()).clicked() && distribute {
+                            app.align_selection(pdfcraft_engine::AlignOp::DistributeH);
+                        }
+                        if ui.add_enabled(distribute, egui::Button::new(tl!("Distribute vertically")).small()).clicked() && distribute {
+                            app.align_selection(pdfcraft_engine::AlignOp::DistributeV);
+                        }
+                    });
+                }
             } else {
                 ui.label(tl!("Shift-click to select several objects. Drag empty space to select an area."));
             }

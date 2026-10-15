@@ -2402,3 +2402,14 @@ animation effects	Off	معطّلة
 	PDF and text	PDF ونص
 	Restyle raw document	تطبيق التنسيق على المستند الخام
 	Restyle text	إعادة تنسيق النص
+	Align objects	محاذاة العناصر
+	Distribute objects	توزيع العناصر
+	Arrange	ترتيب
+	Align center	توسيط
+	Align top	محاذاة للأعلى
+	Align middle	توسيط عمودي
+	Align bottom	محاذاة للأسفل
+	Distribute horizontally	توزيع أفقي
+	Distribute vertically	توزيع عمودي
+	The objects are already aligned.	العناصر محاذاة بالفعل.
+	These objects could not be aligned.	تعذرت محاذاة هذه العناصر.

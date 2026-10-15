@@ -2391,3 +2391,14 @@ animation effects	Off	Ανενεργά
 	PDF and text	PDF και κείμενο
 	Restyle raw document	Αναδιαμόρφωση ακατέργαστου εγγράφου
 	Restyle text	Επαναμορφοποίηση κειμένου
+	Align objects	Στοίχιση αντικειμένων
+	Distribute objects	Κατανομή αντικειμένων
+	Arrange	Τακτοποίηση
+	Align center	Στοίχιση στο κέντρο
+	Align top	Στοίχιση επάνω
+	Align middle	Κατακόρυφη στοίχιση στο κέντρο
+	Align bottom	Στοίχιση κάτω
+	Distribute horizontally	Οριζόντια κατανομή
+	Distribute vertically	Κατακόρυφη κατανομή
+	The objects are already aligned.	Τα αντικείμενα είναι ήδη στοιχισμένα.
+	These objects could not be aligned.	Δεν ήταν δυνατή η στοίχιση αυτών των αντικειμένων.

@@ -381,3 +381,30 @@ fn modifier_selection_picks_foreground_text_and_added_items_over_background_artw
         assert!(new.rect.iter().enumerate().all(|(i, value)| (value - old.rect[i] - shift[i % 2]).abs() < 0.01), "{old:?} -> {new:?}");
     }
 }
+
+#[test]
+fn arrange_buttons_align_the_marquee_selection() {
+    let mut h = harness();
+    let before = objects(&h);
+    let (a, b) = (at(&h, 5.0, 5.0), at(&h, 395.0, 495.0));
+    h.hover_at(a);
+    h.run_steps(2);
+    h.drag_at(a);
+    h.run_steps(2);
+    h.hover_at(b);
+    h.run_steps(2);
+    h.drop_at(b);
+    h.run_steps(4);
+    h.get_by_label("4 objects selected");
+    h.get_by_label("Align left").click();
+    h.run_steps(4);
+    let after = objects(&h);
+    assert_ne!(before, after, "aligning moved nothing");
+    let x0: Vec<f64> = after.iter().map(|o| o.rect[0]).collect();
+    assert!(x0.windows(2).all(|w| (w[0] - w[1]).abs() < 0.5), "{x0:?}");
+    let app = h.state();
+    assert_eq!(app.session.get(app.views[0].id).unwrap().can_undo(), Some("Align objects"));
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.run_steps(4);
+    assert_eq!(objects(&h), before);
+}

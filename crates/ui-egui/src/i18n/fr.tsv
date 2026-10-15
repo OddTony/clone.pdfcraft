@@ -2381,3 +2381,14 @@ animation effects	Off	Désactivés
 	PDF and text	PDF et texte
 	Restyle raw document	Reformater le document brut
 	Restyle text	Reformater le texte
+	Align objects	Aligner les objets
+	Distribute objects	Distribuer les objets
+	Arrange	Disposition
+	Align center	Centrer
+	Align top	Aligner en haut
+	Align middle	Centrer verticalement
+	Align bottom	Aligner en bas
+	Distribute horizontally	Distribuer horizontalement
+	Distribute vertically	Distribuer verticalement
+	The objects are already aligned.	Les objets sont déjà alignés.
+	These objects could not be aligned.	Impossible d’aligner ces objets.

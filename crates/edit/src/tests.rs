@@ -3443,3 +3443,60 @@ fn an_items_measured_face_is_the_face_it_is_written_as() {
     let courier = |italic| Family::Courier.width("Anna", 12.0, false, italic);
     assert_eq!(courier(false), courier(true));
 }
+
+fn align_obj(index: usize, rect: [f64; 4]) -> objects::EditableObject {
+    objects::EditableObject { target: objects::ObjectTarget { kind: objects::ObjectKind::Text, index }, rect, content_type: "text", text: None }
+}
+
+fn align_all() -> Vec<objects::EditableObject> {
+    vec![align_obj(0, [0.0, 0.0, 10.0, 10.0]), align_obj(1, [20.0, 0.0, 30.0, 20.0]), align_obj(2, [40.0, 0.0, 50.0, 10.0])]
+}
+
+fn align_targets(objects: &[objects::EditableObject]) -> Vec<objects::ObjectTarget> {
+    objects.iter().map(|o| o.target).collect()
+}
+
+#[test]
+fn align_moves_each_edge_to_the_scope() {
+    let objects = align_all();
+    let scope = [0.0, 0.0, 50.0, 20.0];
+    let moves = objects::align_offsets(&objects, &align_targets(&objects), objects::AlignOp::Left, scope).unwrap();
+    assert_eq!(moves, vec![(objects[1].target, [-20.0, 0.0]), (objects[2].target, [-40.0, 0.0])]);
+    let moves = objects::align_offsets(&objects, &align_targets(&objects), objects::AlignOp::Right, scope).unwrap();
+    assert_eq!(moves, vec![(objects[0].target, [40.0, 0.0]), (objects[1].target, [20.0, 0.0])]);
+    let moves = objects::align_offsets(&objects, &align_targets(&objects), objects::AlignOp::Top, scope).unwrap();
+    assert_eq!(moves, vec![(objects[0].target, [0.0, 10.0]), (objects[2].target, [0.0, 10.0])]);
+    let moves = objects::align_offsets(&objects, &align_targets(&objects), objects::AlignOp::Bottom, scope).unwrap();
+    assert!(moves.is_empty(), "every bottom edge is already at 0: {moves:?}");
+}
+
+#[test]
+fn align_centres_and_distributes_evenly() {
+    let objects = align_all();
+    let scope = [0.0, 0.0, 50.0, 20.0];
+    let moves = objects::align_offsets(&objects, &align_targets(&objects), objects::AlignOp::Center, scope).unwrap();
+    assert_eq!(moves, vec![(objects[0].target, [20.0, 0.0]), (objects[2].target, [-20.0, 0.0])]);
+    let moves = objects::align_offsets(&objects, &align_targets(&objects), objects::AlignOp::Middle, scope).unwrap();
+    assert_eq!(moves, vec![(objects[0].target, [0.0, 5.0]), (objects[2].target, [0.0, 5.0])]);
+    let uneven = vec![align_obj(0, [0.0, 0.0, 10.0, 10.0]), align_obj(1, [30.0, 0.0, 40.0, 10.0]), align_obj(2, [40.0, 0.0, 50.0, 10.0])];
+    let moves = objects::align_offsets(&uneven, &align_targets(&uneven), objects::AlignOp::DistributeH, scope).unwrap();
+    assert_eq!(moves, vec![(uneven[1].target, [-10.0, 0.0])]);
+    let moves = objects::align_offsets(&objects, &align_targets(&objects), objects::AlignOp::DistributeH, scope).unwrap();
+    assert!(moves.is_empty(), "{moves:?}");
+}
+
+#[test]
+fn align_refuses_bad_selections() {
+    let objects = align_all();
+    let scope = [0.0, 0.0, 50.0, 20.0];
+    assert!(objects::align_offsets(&[], &[], objects::AlignOp::Left, scope).is_err());
+    assert!(objects::align_offsets(&objects, &align_targets(&objects[..2]), objects::AlignOp::DistributeH, scope).is_err());
+    let mut dup = align_targets(&objects);
+    dup.push(dup[0]);
+    assert!(objects::align_offsets(&objects, &dup, objects::AlignOp::Left, scope).is_err());
+    let unknown = vec![objects::ObjectTarget { kind: objects::ObjectKind::Image, index: 9 }];
+    assert!(objects::align_offsets(&objects, &unknown, objects::AlignOp::Left, scope).is_err());
+    assert!(objects::align_offsets(&objects, &align_targets(&objects), objects::AlignOp::Left, [10.0, 10.0, 0.0, 0.0]).is_err());
+    assert_eq!(objects::AlignOp::from_name("distribute-v"), Some(objects::AlignOp::DistributeV));
+    assert!(objects::AlignOp::from_name("diagonal").is_none());
+}

@@ -171,6 +171,13 @@ pub fn tools() -> Vec<ToolDef> {
                     "type":"object","properties":{"kind":{"type":"string","enum":["added","text","image"]},"index":{"type":"integer","minimum":1}},"required":["kind","index"],"additionalProperties":false}},
                 "offset":{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2},
                 "generation":{"type":"integer","minimum":0,"description":"Use generation returned by object_list to reject a stale selection."}}), &["doc","page","objects","offset"])),
+        t("object_align", "Align or distribute objects", "Align selected references from object_list to an edge or centre, or distribute their centres evenly: op left, center, right, top, middle, bottom, distribute-h or distribute-v (distribute needs 3). Within the selection box, or the page box with to_page. One undo step; already-placed objects are left out and counted in placed. Clipping and vertical text are refused. A bad/stale reference refuses the entire move.")
+            .with(schema(json!({"doc":doc(),"page":{"type":"integer","minimum":1},
+                "objects":{"type":"array","minItems":1,"maxItems":1000,"uniqueItems":true,"items":{
+                    "type":"object","properties":{"kind":{"type":"string","enum":["added","text","image"]},"index":{"type":"integer","minimum":1}},"required":["kind","index"],"additionalProperties":false}},
+                "op":{"type":"string","enum":["left","center","right","top","middle","bottom","distribute-h","distribute-v"]},
+                "to_page":{"type":"boolean","description":"Align within the page box instead of the selection box (default false)."},
+                "generation":{"type":"integer","minimum":0,"description":"Use generation returned by object_list to reject a stale selection."}}), &["doc","page","objects","op"])),
         t("text_extract", "Extract text", "Extract the text of some or all pages, in reading order. With rect, only the text inside that rectangle on each page, as Column select takes it: one row per visual line, side-by-side pieces (table cells) separated by a tab.")
             .ro()
             .cmd("edit.column_select")

@@ -6,7 +6,7 @@ use pdfcraft_engine::{AddedContent, AddedText, Edit, FontFamily, TextAlign};
 use serde_json::{Value, json};
 
 use crate::comments::parse_color;
-use crate::{Args, Automation, Result, ToolError, failed};
+use crate::{Args, Automation, Result, ToolError, failed, summary};
 
 fn bad(m: impl Into<String>) -> ToolError {
     ToolError::InvalidArgs(m.into())
@@ -222,9 +222,8 @@ impl Automation {
         Ok(json!({"page":page+1,"generation":doc.edit_generation(),"count":items.len(),"objects":items}))
     }
 
-    pub(crate) fn object_move(&mut self, a: &Args) -> Result<Value> {
+    pub(crate) fn object_targets(&self, a: &Args) -> Result<Vec<pdfcraft_engine::ObjectTarget>> {
         use pdfcraft_engine::{MAX_MOVE_OBJECTS, ObjectKind, ObjectTarget};
-        let page = self.page(a)?;
         let rows = a
             .get("objects")
             .and_then(Value::as_array)
@@ -250,6 +249,13 @@ impl Automation {
                 .ok_or_else(|| bad("object index must be a positive integer from object_list"))?;
             targets.push(ObjectTarget { kind, index });
         }
+        Ok(targets)
+    }
+
+    pub(crate) fn object_move(&mut self, a: &Args) -> Result<Value> {
+        use pdfcraft_engine::Edit;
+        let page = self.page(a)?;
+        let targets = self.object_targets(a)?;
         let delta = a
             .get("offset")
             .and_then(Value::as_array)
@@ -269,5 +275,30 @@ impl Automation {
         let mut result = self.apply(a, Edit::MoveObjects { page, objects: targets, offset })?;
         result["moved"] = json!(count);
         Ok(result)
+    }
+
+    pub(crate) fn object_align(&mut self, a: &Args) -> Result<Value> {
+        use pdfcraft_engine::AlignOp;
+        let page = self.page(a)?;
+        let targets = self.object_targets(a)?;
+        let op = a
+            .get("op")
+            .and_then(Value::as_str)
+            .and_then(AlignOp::from_name)
+            .ok_or_else(|| bad("op must be left, center, right, top, middle, bottom, distribute-h or distribute-v"))?;
+        let to_page = a.opt_bool("to_page")?.unwrap_or(false);
+        let doc = self.doc(a)?;
+        if let Some(g) = a.get("generation") {
+            let g = g.as_u64().ok_or_else(|| bad("generation must be a non-negative integer from object_list"))?;
+            if g != doc.edit_generation() {
+                return Err(failed("the document changed; call object_list again before aligning"));
+            }
+        }
+        let id = doc.id;
+        let report = self.session.align_objects(id, page, targets, op, to_page).map_err(failed)?;
+        let mut out = summary(self.doc(a)?);
+        out["moved"] = json!(report.moved);
+        out["placed"] = json!(report.placed);
+        Ok(out)
     }
 }

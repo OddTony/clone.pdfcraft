@@ -98,6 +98,139 @@ pub fn editable_objects(doc: &Document, page: usize) -> Result<Vec<EditableObjec
     Ok(objects)
 }
 
+/// How to arrange selected objects. Distribute modes space centres evenly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AlignOp {
+    Left,
+    Center,
+    Right,
+    Top,
+    Middle,
+    Bottom,
+    DistributeH,
+    DistributeV,
+}
+
+impl AlignOp {
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "left" => Some(Self::Left),
+            "center" => Some(Self::Center),
+            "right" => Some(Self::Right),
+            "top" => Some(Self::Top),
+            "middle" => Some(Self::Middle),
+            "bottom" => Some(Self::Bottom),
+            "distribute-h" => Some(Self::DistributeH),
+            "distribute-v" => Some(Self::DistributeV),
+            _ => None,
+        }
+    }
+
+    pub fn is_distribute(self) -> bool {
+        matches!(self, Self::DistributeH | Self::DistributeV)
+    }
+}
+
+/// Deltas smaller than this (user-space points) count as already placed.
+const ALIGN_EPS: f64 = 1e-9;
+
+/// Per-target user-space offsets performing `op` on the selected `targets`
+/// within `scope` (a user-space bounding box: the selection or the page).
+/// Targets are (kind, index) references into `objects`; unknown or repeated
+/// references are refused, as is a selection too small for the operation
+/// (distribute needs 3). Targets already in place are left out; when nothing
+/// would move the result is empty.
+pub fn align_offsets(
+    objects: &[EditableObject],
+    targets: &[ObjectTarget],
+    op: AlignOp,
+    scope: [f64; 4],
+) -> Result<Vec<(ObjectTarget, [f64; 2])>, EditError> {
+    if targets.is_empty() || targets.len() > MAX_MOVE_OBJECTS {
+        return Err(EditError::Invalid("select between 1 and 1000 objects to align".into()));
+    }
+    if !scope.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORDINATE) || scope[2] <= scope[0] || scope[3] <= scope[1] {
+        return Err(EditError::Invalid("the alignment scope is invalid".into()));
+    }
+    let inventory: BTreeMap<_, _> = objects.iter().map(|o| (o.target, o)).collect();
+    let mut unique = BTreeSet::new();
+    let mut selected = Vec::with_capacity(targets.len());
+    for target in targets {
+        if !unique.insert(*target) {
+            return Err(EditError::Invalid("an object was selected more than once".into()));
+        }
+        let object =
+            inventory.get(target).ok_or_else(|| EditError::Invalid("a selected object no longer exists; select the objects again".into()))?;
+        if !valid_rect(object.rect) {
+            return Err(EditError::Invalid("a selected object has invalid geometry".into()));
+        }
+        selected.push(*object);
+    }
+    if op.is_distribute() && selected.len() < 3 {
+        return Err(EditError::Invalid("distributing needs at least 3 objects".into()));
+    }
+    // Selection bounding box (user space, y up).
+    let center = |o: &EditableObject| [(o.rect[0] + o.rect[2]) / 2.0, (o.rect[1] + o.rect[3]) / 2.0];
+    // Each object's anchor along the moving axis; the delta moves it to the scope's anchor.
+    let anchors: Vec<(ObjectTarget, f64)> = selected
+        .iter()
+        .map(|o| {
+            let [cx, cy] = center(o);
+            let along = match op {
+                AlignOp::Left => o.rect[0],
+                AlignOp::Center | AlignOp::DistributeH => cx,
+                AlignOp::Right => o.rect[2],
+                AlignOp::Top => o.rect[3],
+                AlignOp::Middle | AlignOp::DistributeV => cy,
+                AlignOp::Bottom => o.rect[1],
+            };
+            (o.target, along)
+        })
+        .collect();
+    // Scope anchor per axis choice.
+    let scope_along = match op {
+        AlignOp::Left => scope[0],
+        AlignOp::Center | AlignOp::DistributeH => (scope[0] + scope[2]) / 2.0,
+        AlignOp::Right => scope[2],
+        AlignOp::Top => scope[3],
+        AlignOp::Middle | AlignOp::DistributeV => (scope[1] + scope[3]) / 2.0,
+        AlignOp::Bottom => scope[1],
+    };
+    let mut moves = Vec::new();
+    if op == AlignOp::DistributeH || op == AlignOp::DistributeV {
+        // Evenly spaced centres between the extreme centres; the extremes stay.
+        let horizontal = op == AlignOp::DistributeH;
+        let mut order: Vec<usize> = (0..anchors.len()).collect();
+        order.sort_by(|&a, &b| anchors[a].1.partial_cmp(&anchors[b].1).unwrap_or(std::cmp::Ordering::Equal));
+        let (first, last) = (anchors[order[0]].1, anchors[order[anchors.len() - 1]].1);
+        let span = last - first;
+        if span > ALIGN_EPS {
+            let n = anchors.len() as f64;
+            for (rank, &i) in order.iter().enumerate() {
+                let want = first + span * rank as f64 / (n - 1.0);
+                let delta = want - anchors[i].1;
+                if delta.abs() > ALIGN_EPS {
+                    moves.push((anchors[i].0, if horizontal { [delta, 0.0] } else { [0.0, delta] }));
+                }
+            }
+        }
+    } else {
+        let horizontal = matches!(op, AlignOp::Left | AlignOp::Center | AlignOp::Right);
+        for (target, along) in anchors {
+            let delta = scope_along - along;
+            if delta.abs() > ALIGN_EPS {
+                moves.push((target, if horizontal { [delta, 0.0] } else { [0.0, delta] }));
+            }
+        }
+    }
+    for (_, d) in &moves {
+        if !d.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORDINATE) {
+            return Err(EditError::Invalid("the alignment is too large".into()));
+        }
+    }
+    Ok(moves)
+}
+
 /// Move selected mixed objects by a user-space vector as one atomic operation. All targets
 /// refer to the original inventories. A refusal leaves the graph, including overlay, untouched.
 pub fn move_objects(doc: &mut Document, page: usize, targets: &[ObjectTarget], offset: [f64; 2]) -> Result<(), EditError> {
