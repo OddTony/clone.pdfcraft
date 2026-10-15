@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Check out selected source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_ref || github.ref_name }}
           persist-credentials: false
@@ -32,7 +32,7 @@ jobs:
           targets: aarch64-apple-darwin
 
       - name: Check out the optional font collection
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: storytold/craft-fonts
           ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
@@ -137,7 +137,7 @@ jobs:
           ls -lh dist/PDFCraftBeta-macOS-AppleSilicon.zip
 
       - name: Upload downloadable macOS app
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: PDFCraftBeta-macOS-AppleSilicon
           path: dist/PDFCraftBeta-macOS-AppleSilicon.zip
