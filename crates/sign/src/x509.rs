@@ -166,10 +166,17 @@ const PROCESSED_EXTENSIONS: [&str; 11] = [
 ];
 
 /// Extended key usages that allow signing documents: anyExtendedKeyUsage, emailProtection,
-/// codeSigning, documentSigning (RFC 9336), Adobe Authentic Documents and Microsoft document
-/// signing.
-const DOCUMENT_SIGNING_EKUS: [&str; 6] =
-    ["2.5.29.37.0", "1.3.6.1.5.5.7.3.4", "1.3.6.1.5.5.7.3.3", "1.3.6.1.5.5.7.3.36", "1.2.840.113583.1.1.5", "1.3.6.1.4.1.311.10.3.12"];
+/// codeSigning, documentSigning (RFC 9336), Adobe Authentic Documents, Microsoft document
+/// signing, and client authentication (id-kp-clientAuth, used by ICP-Brasil A3 certificates).
+const DOCUMENT_SIGNING_EKUS: [&str; 7] = [
+    "2.5.29.37.0",
+    "1.3.6.1.5.5.7.3.4",
+    "1.3.6.1.5.5.7.3.3",
+    "1.3.6.1.5.5.7.3.36",
+    "1.2.840.113583.1.1.5",
+    "1.3.6.1.4.1.311.10.3.12",
+    "1.3.6.1.5.5.7.3.2",
+];
 
 /// The certificate extensions `Certificate::parse` reads, gathered tolerantly: an
 /// extension that does not parse leaves its field at the default instead of failing the

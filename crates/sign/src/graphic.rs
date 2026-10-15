@@ -25,6 +25,10 @@ pub enum Graphic {
     Outlines(Vec<Vec<[f64; 2]>>),
     /// Straight (not premultiplied) RGBA pixels, rows from the top.
     Image { width: u32, height: u32, rgba: Arc<Vec<u8>> },
+    /// Standard clean digital signature appearance (no watermark image).
+    Standard,
+    /// Custom background watermark image with low opacity.
+    BackgroundImage { width: u32, height: u32, rgba: Arc<Vec<u8>>, opacity: f32 },
 }
 
 /// Sizes only: a graphic can hold megabytes of pixels or points.
@@ -34,6 +38,10 @@ impl std::fmt::Debug for Graphic {
             Graphic::Strokes(s) => write!(f, "Strokes({} strokes, {} points)", s.len(), s.iter().map(Vec::len).sum::<usize>()),
             Graphic::Outlines(c) => write!(f, "Outlines({} contours, {} points)", c.len(), c.iter().map(Vec::len).sum::<usize>()),
             Graphic::Image { width, height, rgba } => write!(f, "Image({width}x{height}, {} bytes)", rgba.len()),
+            Graphic::Standard => write!(f, "Standard"),
+            Graphic::BackgroundImage { width, height, rgba, opacity } => {
+                write!(f, "BackgroundImage({width}x{height}, {} bytes, opacity={opacity})", rgba.len())
+            }
         }
     }
 }
@@ -78,7 +86,7 @@ impl Graphic {
                 }
                 c.iter().map(Vec::len).sum()
             }
-            Graphic::Image { width, height, rgba } => {
+            Graphic::Image { width, height, rgba } | Graphic::BackgroundImage { width, height, rgba, .. } => {
                 if *width == 0 || *height == 0 || *width > MAX_SIDE || *height > MAX_SIDE || u64::from(*width) * u64::from(*height) > MAX_PIXELS {
                     return Err(bad(&format!("image is {width} x {height} pixels; at most {MAX_SIDE} per side and 16 megapixels")));
                 }
@@ -88,6 +96,7 @@ impl Graphic {
                 }
                 return Ok(());
             }
+            Graphic::Standard => return Ok(()),
         };
         if points > MAX_POINTS {
             return Err(bad(&format!("has {points} points; at most {MAX_POINTS}")));
@@ -101,6 +110,7 @@ impl Graphic {
         self.check()?;
         let n = crate::pdf::fmt;
         match self {
+            Graphic::Standard => Ok((String::new(), None)),
             Graphic::Strokes(strokes) => {
                 let curves: Vec<Vec<[(f64, f64); 3]>> =
                     strokes.iter().map(|s| smooth_segments(&s.iter().map(|p| (p[0], p[1])).collect::<Vec<_>>())).collect();
@@ -150,8 +160,45 @@ impl Graphic {
                 let image = image_xobject(doc, *width, *height, rgba);
                 Ok((format!("q {} 0 0 {} {} {} cm /Im1 Do Q\n", n(w * k), n(h * k), n(x), n(y)), Some(image)))
             }
+            Graphic::BackgroundImage { width, height, rgba, opacity } => {
+                let [x0, y0, aw, ah] = area;
+                let cx = x0 + aw * 0.46;
+                let cy = y0 + ah * 0.50;
+                let max_h = ah * 0.85;
+                let max_w = aw * 0.45;
+                let (w, h) = (f64::from(*width), f64::from(*height));
+                let k = (max_w / w).min(max_h / h);
+                let draw_w = w * k;
+                let draw_h = h * k;
+                let x = cx - draw_w / 2.0;
+                let y = cy - draw_h / 2.0;
+                let image = image_xobject_with_opacity(doc, *width, *height, rgba, *opacity);
+                Ok((format!("q {} 0 0 {} {} {} cm /Im1 Do Q\n", n(draw_w), n(draw_h), n(x), n(y)), Some(image)))
+            }
         }
     }
+}
+
+/// An RGB image XObject, with a soft mask scaled by `opacity` for watermark transparency.
+fn image_xobject_with_opacity(doc: &mut Document, width: u32, height: u32, rgba: &[u8], opacity: f32) -> ObjRef {
+    let dict = |space: &str| {
+        let mut d = Dict::new();
+        d.set(b"Type".to_vec(), Object::name("XObject"));
+        d.set(b"Subtype".to_vec(), Object::name("Image"));
+        d.set(b"Width".to_vec(), Object::Int(i64::from(width)));
+        d.set(b"Height".to_vec(), Object::Int(i64::from(height)));
+        d.set(b"ColorSpace".to_vec(), Object::name(space));
+        d.set(b"BitsPerComponent".to_vec(), Object::Int(8));
+        d
+    };
+    let (pixels, _) = rgba.as_chunks::<4>();
+    let rgb: Vec<u8> = pixels.iter().flat_map(|p| [p[0], p[1], p[2]]).collect();
+    let mut d = dict("DeviceRGB");
+    let op = opacity.clamp(0.01, 1.0);
+    let alpha: Vec<u8> = pixels.iter().map(|p| (p[3] as f32 * op).round() as u8).collect();
+    let mask = doc.add(Object::Stream(Stream::flate(dict("DeviceGray"), &alpha)));
+    d.set(b"SMask".to_vec(), Object::Ref(mask));
+    doc.add(Object::Stream(Stream::flate(d, &rgb)))
 }
 
 /// An RGB image XObject, with a soft mask when any pixel isn't opaque. `rgba` is checked.

@@ -315,7 +315,7 @@ fn visible_signatures_show_a_drawn_typed_or_image_graphic() {
         assert_eq!(im.dict.get(b"SMask").is_some(), translucent);
     }
     // With no text at all, the graphic has the whole box (194 x 44): 176 x 44, centred.
-    let bare = Appearance { name: false, date: false, reason: false, location: false, distinguished_name: false, labels: false };
+    let bare = Appearance { name: false, date: false, reason: false, location: false, distinguished_name: false, labels: false, border: false, background: false };
     let signed = pdfcraft_sign::sign(&open(&fixture()), &id, &SignOptions { graphic: Some(picture(false)), appearance: bare, ..opts() }).unwrap();
     assert!(appearance_of(&signed, "Signature1").0.contains("q 176 0 0 44 12 3 cm /Im1 Do Q"));
     // An invisible signature has nothing to show: no image is embedded.
