@@ -246,6 +246,100 @@ fn space_audit_counts_images_a_content_stream_dictionary_points_at_as_images() {
 }
 
 #[test]
+fn space_audit_counts_what_fields_and_comments_draw_with_by_kind() {
+    // A font or image a form field or comment draws with is still a font or image. The form
+    // was claimed first, so its fonts made a fillable form look like mostly "Forms".
+    let mut doc = Document::new_empty();
+    let p = page(&mut doc, &[], "BT ET");
+    let font = |doc: &mut Document| {
+        let file = doc.add(Object::Stream(Stream::from_raw(Dict::new(), vec![7; 40_000])));
+        let mut desc = Dict::new();
+        desc.set(b"Type".to_vec(), Object::name("FontDescriptor"));
+        desc.set(b"FontFile2".to_vec(), Object::Ref(file));
+        let desc = doc.add(Object::Dict(desc));
+        let mut f = Dict::new();
+        f.set(b"Type".to_vec(), Object::name("Font"));
+        f.set(b"Subtype".to_vec(), Object::name("TrueType"));
+        f.set(b"FontDescriptor".to_vec(), Object::Ref(desc));
+        doc.add(Object::Dict(f))
+    };
+    let (field_font, comment_font) = (font(&mut doc), font(&mut doc));
+    let icon = image(&mut doc, 200, 200, 3, false, None);
+    let appearance = |doc: &mut Document, kind: &str, name: &str, r: ObjRef| {
+        let mut entries = Dict::new();
+        entries.set(name.as_bytes().to_vec(), Object::Ref(r));
+        let mut res = Dict::new();
+        res.set(kind.as_bytes().to_vec(), Object::Dict(entries));
+        let mut d = Dict::new();
+        d.set(b"Subtype".to_vec(), Object::name("Form"));
+        d.set(b"Resources".to_vec(), Object::Dict(res));
+        Object::Ref(doc.add(Object::Stream(Stream::from_raw(d, b"q Q".to_vec()))))
+    };
+    let annot = |doc: &mut Document, subtype: &str, ap: Object| {
+        let mut d = Dict::new();
+        d.set(b"Type".to_vec(), Object::name("Annot"));
+        d.set(b"Subtype".to_vec(), Object::name(subtype));
+        d.set(b"Rect".to_vec(), Object::Array(vec![0.into(), 0.into(), 10.into(), 10.into()]));
+        d.set(b"P".to_vec(), Object::Ref(p));
+        let mut aps = Dict::new();
+        aps.set(b"N".to_vec(), ap);
+        d.set(b"AP".to_vec(), Object::Dict(aps));
+        Object::Ref(doc.add(Object::Dict(d)))
+    };
+    // A text field's appearance uses the form's default font; a check box's "on" state (one of
+    // a dictionary of states) draws an image; a free-text comment has a font of its own.
+    let text_ap = appearance(&mut doc, "Font", "F1", field_font);
+    let text = annot(&mut doc, "Widget", text_ap);
+    let mut states = Dict::new();
+    states.set(b"On".to_vec(), appearance(&mut doc, "XObject", "Im0", icon));
+    let check = annot(&mut doc, "Widget", Object::Dict(states));
+    let comment_ap = appearance(&mut doc, "Font", "F2", comment_font);
+    let comment = annot(&mut doc, "FreeText", comment_ap);
+    doc.update_dict(p, |d| d.set(b"Annots".to_vec(), Object::Array(vec![text.clone(), check.clone(), comment]))).unwrap();
+    let mut fonts = Dict::new();
+    fonts.set(b"F1".to_vec(), Object::Ref(field_font));
+    let mut dr = Dict::new();
+    dr.set(b"Font".to_vec(), Object::Dict(fonts));
+    let mut form = Dict::new();
+    form.set(b"Fields".to_vec(), Object::Array(vec![text, check]));
+    form.set(b"DR".to_vec(), Object::Dict(dr));
+    let root = doc.root().unwrap();
+    doc.update_dict(root, |c| c.set(b"AcroForm".to_vec(), Object::Dict(form))).unwrap();
+    let bytes = write_full(&doc, &SaveOptions { object_streams: false, ..SaveOptions::default() }).unwrap();
+    let doc = Document::open(Arc::new(bytes.clone())).unwrap();
+    let audit = audit_space(&doc, bytes.len() as u64);
+    let get = |c: SpaceCategory| audit.iter().find(|u| u.category == c).unwrap().bytes;
+    assert!(get(SpaceCategory::Fonts) > 80_000, "both fonts are fonts: {audit:?}");
+    assert!(get(SpaceCategory::Images) > 2_000, "the check box's image is an image: {audit:?}");
+    assert!(get(SpaceCategory::Forms) < 2_000 && get(SpaceCategory::Comments) < 1_000, "{audit:?}");
+    assert!(get(SpaceCategory::Forms) > 0 && get(SpaceCategory::Comments) > 0, "the fields and the comment are still counted: {audit:?}");
+}
+
+#[test]
+fn space_audit_survives_deeply_nested_forms() {
+    // Each form draws the next; sorting their resources by kind recursed once per form, so a
+    // long enough chain overflowed the stack.
+    let mut doc = Document::new_empty();
+    let mut next: Option<ObjRef> = None;
+    for _ in 0..20_000 {
+        let mut d = Dict::new();
+        d.set(b"Subtype".to_vec(), Object::name("Form"));
+        if let Some(n) = next {
+            let mut x = Dict::new();
+            x.set(b"X".to_vec(), Object::Ref(n));
+            let mut res = Dict::new();
+            res.set(b"XObject".to_vec(), Object::Dict(x));
+            d.set(b"Resources".to_vec(), Object::Dict(res));
+        }
+        next = Some(doc.add(Object::Stream(Stream::from_raw(d, b"/X Do".to_vec()))));
+    }
+    page(&mut doc, &[("X", next.unwrap())], "/X Do");
+    let audit = audit_space(&doc, 0);
+    let forms = audit.iter().find(|u| u.category == SpaceCategory::XObjectForms).unwrap();
+    assert!(forms.bytes > 20_000 * 40, "every form is counted, however deep: {audit:?}");
+}
+
+#[test]
 fn invalid_links_and_unreferenced_destinations_go() {
     let mut doc = Document::new_empty();
     let p = page(&mut doc, &[], "BT ET");
@@ -820,4 +914,111 @@ fn images_that_do_not_tile_a_picture_are_left_alone() {
     unmerged(&mut few, &all);
     let (mut off, _) = printed_page(40, |_| false, |_, s| s);
     unmerged(&mut off, &Settings { merge_fragments: false, ..Settings::default() });
+}
+
+/// `levels` nested forms with their own resources, the innermost drawing `img` over the unit square.
+fn nested_forms(doc: &mut Document, img: ObjRef, levels: usize) -> ObjRef {
+    let mut inner = form(doc, Some(Object::Dict(resources(xobjects(&[("Im", img)])))), "/Im Do");
+    for _ in 1..levels {
+        inner = form(doc, Some(Object::Dict(resources(xobjects(&[("F", inner)])))), "/F Do");
+    }
+    inner
+}
+
+#[test]
+fn a_deeply_nested_form_is_measured_at_its_largest_use() {
+    // 1200 px drawn 1 in wide (1200 ppi) and then 8 in wide (150 ppi): 150 ppi, so it isn't resampled.
+    let small = "q 72 0 0 72 36 36 cm /F Do Q";
+    let large = "q 576 0 0 576 18 100 cm /F Do Q";
+    for levels in [1, 6, 12] {
+        for (pages, label) in [(vec![format!("{small} {large}")], "one page"), (vec![small.into(), large.into()], "two pages")] {
+            let mut doc = Document::new_empty();
+            let img = image(&mut doc, 1200, 1200, 3, false, None);
+            let outer = nested_forms(&mut doc, img, levels);
+            for c in &pages {
+                page(&mut doc, &[("F", outer)], c);
+            }
+            let refs = pdfcraft_annot::page_refs(&doc).unwrap();
+            assert_eq!(effective_resolutions(&doc, &refs)[&img].round(), 150.0, "{levels} levels, {label}");
+            optimize(&mut doc, &Settings::default()).unwrap();
+            assert_eq!(stream(&doc, img).dict.int(b"Width"), Some(1200), "{levels} levels, {label}");
+        }
+    }
+}
+
+#[test]
+fn a_form_drawing_itself_is_walked_once_per_use() {
+    let mut doc = Document::new_empty();
+    let img = image(&mut doc, 1200, 1200, 3, false, None);
+    let f = form(&mut doc, None, "/Im Do q 2 0 0 2 0 0 cm /F Do Q");
+    let mut x = xobjects(&[("Im", img)]);
+    x.set(b"F".to_vec(), Object::Ref(f));
+    let mut d = match &*doc.get(f) {
+        Object::Stream(s) => s.clone(),
+        _ => unreachable!(),
+    };
+    d.dict.set(b"Resources".to_vec(), Object::Dict(resources(x)));
+    doc.set(f, Object::Stream(d));
+    page(&mut doc, &[("F", f)], "q 72 0 0 72 36 36 cm /F Do Q");
+    let refs = pdfcraft_annot::page_refs(&doc).unwrap();
+    // Only the outer use: the cycle isn't followed, and doesn't count as a missed use.
+    assert_eq!(effective_resolutions(&doc, &refs)[&img].round(), 1200.0);
+}
+
+#[test]
+fn a_shared_form_without_resources_draws_each_callers_image() {
+    // G has no /Resources, so its /Im is whichever image the form drawing it names.
+    let mut doc = Document::new_empty();
+    let a = image(&mut doc, 1200, 1200, 3, false, None);
+    let b = image(&mut doc, 1200, 1200, 3, false, None);
+    let g = form(&mut doc, None, "/Im Do");
+    let mut outers = Vec::new();
+    for img in [a, b] {
+        let mut inner = form(&mut doc, Some(Object::Dict(resources(xobjects(&[("Im", img), ("G", g)])))), "/G Do");
+        for _ in 1..6 {
+            inner = form(&mut doc, Some(Object::Dict(resources(xobjects(&[("F", inner)])))), "/F Do");
+        }
+        outers.push(inner);
+    }
+    page(&mut doc, &[("A", outers[0]), ("B", outers[1])], "q 72 0 0 72 36 36 cm /A Do Q q 576 0 0 576 18 100 cm /B Do Q");
+    let refs = pdfcraft_annot::page_refs(&doc).unwrap();
+    let ppi = effective_resolutions(&doc, &refs);
+    assert_eq!(ppi[&a].round(), 1200.0);
+    assert_eq!(ppi.get(&b).map(|p| p.round()), Some(150.0));
+}
+
+#[test]
+fn images_are_not_resampled_when_some_uses_could_not_be_measured() {
+    // Too deep: the 13th form isn't followed, so its use of the image is unknown.
+    let mut doc = Document::new_empty();
+    let img = image(&mut doc, 1200, 1200, 3, false, None);
+    let other = image(&mut doc, 1200, 1200, 3, false, None);
+    let deep = nested_forms(&mut doc, img, 13);
+    page(
+        &mut doc,
+        &[("F", deep), ("Im", img), ("O", other)],
+        "q 72 0 0 72 36 36 cm /Im Do Q q 72 0 0 72 200 36 cm /O Do Q q 576 0 0 576 18 100 cm /F Do Q",
+    );
+    let refs = pdfcraft_annot::page_refs(&doc).unwrap();
+    let ppi = effective_resolutions(&doc, &refs);
+    assert_eq!((ppi[&img], ppi[&other]), (f64::INFINITY, f64::INFINITY));
+    optimize(&mut doc, &Settings::default()).unwrap();
+    assert_eq!(stream(&doc, img).dict.int(b"Width"), Some(1200));
+
+    // Too much work: forms without resources (so nothing can be skipped), each drawing the next
+    // three times, twelve deep, would be (3^12 - 1) / 2 walks.
+    let mut doc = Document::new_empty();
+    let img = image(&mut doc, 1200, 1200, 3, false, None);
+    let mut names = vec![("Im", img)];
+    let mut next = "Im";
+    let labels = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"];
+    for (i, label) in labels.iter().enumerate().rev() {
+        let s = 1.0 + i as f64 / 100.0;
+        let f = form(&mut doc, None, &format!("q {s} 0 0 {s} 0 0 cm /{next} Do Q /{next} Do q 1 0 0 1 1 0 cm /{next} Do Q"));
+        names.push((label, f));
+        next = label;
+    }
+    page(&mut doc, &names, "q 72 0 0 72 36 36 cm /F1 Do Q");
+    let refs = pdfcraft_annot::page_refs(&doc).unwrap();
+    assert_eq!(effective_resolutions(&doc, &refs)[&img], f64::INFINITY);
 }

@@ -941,6 +941,26 @@ mod tests {
         }
     }
 
+    /// Every catalog says the labels of a visible signature, which are looked up by the sign
+    /// crate's own English words (so the `tl!` scan can't see them), and the note shown when they
+    /// fall back to English. Each label that runs into its value keeps a separator at its end.
+    #[test]
+    fn signature_appearance_labels_are_in_every_catalog() {
+        let english = pdfcraft_engine::sign::AppearanceLabels::default();
+        let note = "The labels are in English: the signature's font can't draw them in this language.";
+        for language in LANGUAGES.iter().filter(|language| !language.source.is_empty()) {
+            let lang = Lang::from_code(language.code).expect("registered language");
+            assert!(has(lang, note), "{} lacks the labels note", language.code);
+            for (field, label) in english.fields() {
+                assert!(has(lang, label), "{} lacks the signature label {field}: {label:?}", language.code);
+                let said = tr(lang, label);
+                if field != "signed_by" && !lang.rtl() {
+                    assert!(said.ends_with(' ') || said.ends_with('：'), "{}: the {field} label runs into its value: {said:?}", language.code);
+                }
+            }
+        }
+    }
+
     /// Japanese translates every `tl!("…")` literal in the UI source, so a new string can't ship in
     /// English by accident (the same check French, German, Russian and Simplified Chinese have).
     #[test]
@@ -1166,6 +1186,8 @@ mod tests {
         assert_eq!(tr(es, "Informe del usuario.pdf"), "Informe del usuario.pdf");
         assert_eq!(trn(es, 1, "{n} page", "{n} pages"), "1 página");
         assert_eq!(trn(es, 3, "{n} page", "{n} pages"), "3 páginas");
+        // The signature pad's Type is the verb (type your name), not the noun "Tipo".
+        assert_eq!(tr_ctx(es, "signature pad", "Type"), "Escribir");
         let mut app = crate::PdfCraftApp::default();
         app.set_option("language", "es").unwrap();
         assert_eq!(app.language, "es");
@@ -1180,6 +1202,9 @@ mod tests {
         let es = Lang::from_code("es").expect("es registered");
         for command in pdfcraft_engine::commands::COMMANDS {
             assert!(has(es, command.label), "missing command: {}", command.label);
+            if let Some(menu) = command.menu {
+                assert!(has(es, menu), "missing menu: {menu}");
+            }
         }
         for group in pdfcraft_engine::catalog::TOOL_GROUPS {
             assert!(has(es, group.label), "missing group: {}", group.label);
@@ -1190,6 +1215,16 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// New tl!("literal") labels must not silently fall back to English in Spanish.
+    #[test]
+    fn spanish_covers_ui_literals() {
+        let es = Lang::from_code("es").expect("es registered");
+        let literals = ui_literals();
+        assert!(literals.len() > 900, "source scan found only {} literals", literals.len());
+        let missing: Vec<_> = literals.iter().filter(|label| !has(es, label)).collect();
+        assert!(missing.is_empty(), "untranslated Spanish UI literals: {missing:#?}");
     }
 
     /// Spanish says everything the layers below word for themselves: what the accessibility
@@ -1286,8 +1321,9 @@ mod tests {
         let te = Lang::from_code("te").expect("te registered");
         assert_eq!(tr_ctx(te, "signature pad", "Type"), "టైప్ చేయి");
         assert_eq!(tr(te, "Type"), "రకం");
+        // A context no catalog defines, so the fallback stays tested as catalogs fill their gaps.
         let es = Lang::from_code("es").expect("es registered");
-        assert_eq!(tr_ctx(es, "signature pad", "Type"), tr(es, "Type"));
+        assert_eq!(tr_ctx(es, "no such context", "Type"), tr(es, "Type"));
     }
 
     /// Telugu translates every registered command and every All tools group, section and item.
@@ -1370,6 +1406,8 @@ mod tests {
             "ΔLOC",
             "+Bin",
             "−Bin",
+            // The distinguished name of a certificate, abbreviated as in X.500.
+            "DN: ",
         ];
         let (entries, errors) = parse_entries(cs.0.source, cs.0.plural_forms());
         assert!(errors.is_empty(), "{errors:?}");
@@ -1482,6 +1520,8 @@ mod tests {
             "−Bin",
             "Model",
             "Home / End",
+            // The distinguished name of a certificate, abbreviated as in X.500.
+            "DN: ",
         ];
         let (entries, errors) = parse_entries(tr_lang.0.source, tr_lang.0.plural_forms());
         assert!(errors.is_empty(), "Turkish catalog errors: {errors:?}");
@@ -2934,6 +2974,8 @@ mod tests {
             "ΔLOC",
             "+Bin",
             "−Bin",
+            // The distinguished name of a certificate, abbreviated as in X.500.
+            "DN: ",
         ];
         let unchanged: Vec<_> = entries
             .iter()
@@ -3012,6 +3054,8 @@ mod tests {
             "ΔLOC",
             "+Bin",
             "−Bin",
+            // The distinguished name of a certificate, abbreviated as in X.500.
+            "DN: ",
         ];
         let unchanged: Vec<_> = entries
             .iter()
