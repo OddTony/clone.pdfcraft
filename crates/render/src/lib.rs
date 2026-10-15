@@ -9,6 +9,8 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod inspect;
+#[cfg(windows)]
+mod installed_fonts;
 mod pixels;
 mod raster;
 mod reading;
@@ -26,6 +28,18 @@ pub use raster::{
 };
 pub use reading::{ReadingColors, ReadingParams};
 pub use text::{PageText, TextGlyph};
+
+/// Installed reading-only font bytes for an inline editor, including a collection face index.
+/// Never a font input for embedding/export: editing reuses the PDF's original font resource.
+pub fn installed_editor_preview(name: &str) -> Option<(Vec<u8>, u32)> {
+    #[cfg(windows)]
+    return installed_fonts::preview(name);
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        None
+    }
+}
 
 /// Errors surfaced to the user when a document cannot be opened.
 #[derive(Debug, thiserror::Error)]

@@ -5,6 +5,14 @@ source rows and mixed styles. Embedded TrueType and OpenType/CFF faces are used 
 source font programs, colour, size and baseline anchors stay intact. A textless preview
 prevents a second copy underneath. The frame shows the live extent as text grows or shrinks.
 
+Existing GB/GBK-encoded Chinese text can be decoded and rewritten even when its font has no
+`ToUnicode` map. The original PDF encoding and font resource are retained. On Windows,
+installed SimSun, KaiTi, SimHei, DengXian and FangSong faces can supply reading and inline
+editor previews for unembedded fonts. These font programs stay in memory and are never
+embedded by this fallback; the saved PDF still requires a compatible font on the reader's
+machine. Set `PDFCRAFT_SYSTEM_FONTS=0` to disable installed preview fonts. This does not add
+support for every CJK encoding or vertical text editing.
+
 A subset font contains only some of the original face's glyphs. A new character cannot be
 reconstructed from a glyph the PDF does not contain. **Load font…** imports an openly licensed,
 embeddable standalone `.ttf` or `.otf` face. **Installed fonts…** discovers eligible user-installed

@@ -37,6 +37,56 @@ fn session_with(n: usize) -> (Session, DocId) {
 }
 
 #[test]
+fn gbk_editor_preview_edits_undo_and_save_without_embedding_system_fonts() {
+    use pdfcraft_cos::{Dict, ObjRef, Object, Stream};
+    let mut pdf = pdfcraft_cos::Document::open(Arc::new(fixture(1))).unwrap();
+    let mut descendant = Dict::new();
+    descendant.set(b"Subtype".to_vec(), Object::name("CIDFontType2"));
+    let mut collection = Dict::new();
+    collection.set(b"Registry".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"Adobe".to_vec())));
+    collection.set(b"Ordering".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"GB1".to_vec())));
+    collection.set(b"Supplement".to_vec(), Object::Int(2));
+    descendant.set(b"CIDSystemInfo".to_vec(), Object::Dict(collection));
+    let mut descriptor = Dict::new();
+    descriptor.set(b"FontName".to_vec(), Object::name("SimSun"));
+    descriptor.set(b"Ascent".to_vec(), Object::Int(859));
+    descriptor.set(b"Descent".to_vec(), Object::Int(-140));
+    descendant.set(b"FontDescriptor".to_vec(), Object::Dict(descriptor));
+    pdf.update_dict(ObjRef::new(3, 0), |f| {
+        f.set(b"Subtype".to_vec(), Object::name("Type0"));
+        f.set(b"BaseFont".to_vec(), Object::name("SimSun"));
+        f.set(b"Encoding".to_vec(), Object::name("GBK-EUC-H"));
+        f.set(b"DescendantFonts".to_vec(), Object::Array(vec![Object::Dict(descendant)]));
+    })
+    .unwrap();
+    pdf.set(ObjRef::new(5, 0), Object::Stream(Stream::from_raw(Dict::new(), b"BT /F1 12 Tf 20 150 Td <D6D0CEC4> Tj ET".to_vec())));
+    let bytes = Arc::new(pdfcraft_cos::write_full(&pdf, &Default::default()).unwrap());
+    let mut session = Session::new();
+    let id = session.open("synthetic-gbk.pdf", None, bytes, None).unwrap();
+    let doc = session.get(id).unwrap();
+    assert_eq!(doc.text_blocks(0)[0].text, "中文");
+    let fonts = doc.text_editor_fonts(0);
+    let again = doc.text_editor_fonts(0);
+    assert!(!doc.dirty);
+    if let Some((_, index)) = pdfcraft_render::installed_editor_preview("SimSun") {
+        let preview = fonts.iter().find(|f| f.resource == "F1").expect("installed source face available for editing");
+        assert_eq!(preview.index, index);
+        assert!(Arc::ptr_eq(&preview.bytes, &again.iter().find(|f| f.resource == "F1").unwrap().bytes), "preview fonts are shared across frames");
+    }
+    session
+        .apply(id, Edit::EditTextBlock { page: 0, block: 0, text: "中文测试".into(), style: BlockStyle { width: Some(120.0), ..Default::default() } })
+        .unwrap();
+    assert_eq!(session.get(id).unwrap().text_blocks(0)[0].text, "中文测试");
+    session.undo(id).unwrap();
+    assert_eq!(session.get(id).unwrap().text_blocks(0)[0].text, "中文");
+    session.redo(id).unwrap();
+    let saved = session.save_bytes(id).unwrap();
+    assert!(saved.len() < 16_000, "no installed font program is written into the PDF");
+    let reopened = session.open("reopened-gbk.pdf", None, saved, None).unwrap();
+    assert_eq!(session.get(reopened).unwrap().text_blocks(0)[0].text, "中文测试");
+}
+
+#[test]
 fn prepared_open_does_not_mutate_the_session_until_commit() {
     fn assert_send<T: Send>() {}
     assert_send::<crate::PreparedDocument>();

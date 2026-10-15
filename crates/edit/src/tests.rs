@@ -758,6 +758,38 @@ fn text_page(content: &str) -> Document {
     Document::open(Arc::new(out)).unwrap()
 }
 
+#[test]
+fn gbk_text_is_editable_and_keeps_the_source_font_after_save() {
+    for paragraph in [false, true] {
+        let mut doc = text_page("BT /F1 12 Tf 72 700 Td <D6D0CEC4413132> Tj ET BT /F1 12 Tf 72 650 Td <B1A3C1F4> Tj ET");
+        let mut descriptor = Dict::new();
+        descriptor.set(b"Ascent".to_vec(), Object::Int(859));
+        descriptor.set(b"Descent".to_vec(), Object::Int(-140));
+        let mut cid = Dict::new();
+        cid.set(b"Subtype".to_vec(), Object::name("CIDFontType2"));
+        cid.set(b"FontDescriptor".to_vec(), Object::Dict(descriptor));
+        cid.set(b"W".to_vec(), Object::Array(vec![Object::Int(814), Object::Int(907), Object::Int(500)]));
+        doc.update_dict(pdfcraft_cos::ObjRef::new(5, 0), |f| {
+            f.set(b"Subtype".to_vec(), Object::name("Type0"));
+            f.set(b"BaseFont".to_vec(), Object::name("SimSun"));
+            f.set(b"Encoding".to_vec(), Object::name("GBK-EUC-H"));
+            f.set(b"DescendantFonts".to_vec(), Object::Array(vec![Object::Dict(cid)]));
+        })
+        .unwrap();
+        let before = text::text_blocks(&doc, 0).unwrap();
+        assert_eq!(before.iter().map(|b| b.text.as_str()).collect::<Vec<_>>(), ["中文A12", "保留"]);
+        let replacement = "中文B34测试";
+        let result =
+            if paragraph { text::replace_block(&mut doc, 0, 0, replacement) } else { text::replace_line(&mut doc, 0, 0, replacement) }.unwrap();
+        assert!(result.substituted.is_none(), "reuse the GB1 font resource instead of embedding a system font");
+        let reopened = reopen(&doc);
+        let after = text::text_blocks(&reopened, 0).unwrap();
+        assert_eq!(after.iter().map(|b| b.text.replace(' ', "")).collect::<Vec<_>>(), [replacement, "保留"]);
+        assert_eq!(after[0].base_font, "SimSun");
+        assert_eq!(after[1].rect, before[1].rect, "an unrelated label retains its position");
+    }
+}
+
 fn descriptor_text_page() -> Document {
     let content = "BT /F1 12 Tf 72 700 Td (ab) Tj ET";
     let objs: Vec<String> = vec![

@@ -11,6 +11,7 @@ mod craft;
 pub mod embedding;
 mod encodings;
 pub mod fallback;
+mod named_cmaps;
 pub mod pdf;
 mod script;
 mod shaping;

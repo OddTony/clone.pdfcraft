@@ -593,6 +593,10 @@ impl Metrics {
             m.composite = true;
             m.default = 1000.0;
             m.codes = Codes::Two;
+            if let Some(named) = font.name(b"Encoding").and_then(crate::named_cmaps::get) {
+                m.codes = Codes::Ranges(named.spaces.clone());
+                m.cid_map = named.cids.clone();
+            }
             if let Some(e) = font.get(b"Encoding").map(|e| doc.resolve(e))
                 && let Object::Stream(s) = &*e
                 && let Ok(data) = s.decoded()
@@ -784,11 +788,15 @@ impl Metrics {
                 }
             }
         }
-        let mut out = Vec::with_capacity(text.len() * self.code_len);
+        let mut out = Vec::with_capacity(text.len().saturating_mul(self.code_len));
         for ch in text.chars() {
             let code = *reverse.get(&ch)?;
             let bytes = code.to_be_bytes();
-            out.extend_from_slice(&bytes[4 - self.code_len.clamp(1, 4)..]);
+            let length = match &self.codes {
+                Codes::Ranges(ranges) => ranges.iter().find_map(|(len, lo, hi)| (code >= be(lo) && code <= be(hi)).then_some(*len))?,
+                _ => self.code_len,
+            };
+            out.extend_from_slice(bytes.get(4usize.checked_sub(length)?..)?);
         }
         Some(out)
     }
@@ -1046,6 +1054,13 @@ pub fn glyph_unicode(name: &str) -> Option<char> {
 /// Code → Unicode for a font: its ToUnicode CMap, else (simple fonts) its encoding.
 fn unicode_map(doc: &Document, font: &Dict, composite: bool) -> Unicode {
     let mut out = Unicode::default();
+    if composite {
+        // Missing ToUnicode is normal for GB1 fonts. Use the renderer's public CMap chain,
+        // with the explicit ToUnicode entries below taking precedence when supplied.
+        if let Some(named) = font.name(b"Encoding").and_then(crate::named_cmaps::get) {
+            out.encoding = named.unicode.clone();
+        }
+    }
     if !composite {
         let enc = font.get(b"Encoding").map(|e| doc.resolve(e));
         let base_name = match enc.as_deref() {
@@ -1119,6 +1134,40 @@ mod tests {
     use pdfcraft_cos::{Dict, Document, Object, Stream};
 
     use super::*;
+
+    #[test]
+    fn gbk_named_cmap_decodes_reencodes_and_measures_cids() {
+        let mut doc = Document::new_empty();
+        let mut descendant = Dict::new();
+        descendant.set(b"W".to_vec(), Object::Array(vec![Object::Int(814), Object::Int(907), Object::Int(500)]));
+        let f = font(
+            &mut doc,
+            vec![
+                ("Subtype", Object::name("Type0")),
+                ("BaseFont", Object::name("SimSun")),
+                ("Encoding", Object::name("GBK-EUC-H")),
+                ("DescendantFonts", Object::Array(vec![Object::Dict(descendant)])),
+            ],
+        );
+        let m = Metrics::from_dict(&doc, &f);
+        let bytes = b"\xd6\xd0A 12\xce\xc4";
+        assert_eq!(m.codes(bytes), vec![(0xD6D0, 2), (65, 1), (32, 1), (49, 1), (50, 1), (0xCEC4, 2)]);
+        // Adobe-GB1's CID 814 is U+2002 (en space), even though GBK represents it as 0x20.
+        assert_eq!(m.decode(bytes), "中A\u{2002}12文");
+        let encoded = m.encode("中A\u{2002}12文").unwrap();
+        assert_eq!(m.decode(&encoded), "中A\u{2002}12文");
+        assert_eq!(m.codes(&encoded).iter().map(|(_, len)| *len).collect::<Vec<_>>(), [2, 1, 1, 1, 1, 2]);
+        assert_eq!(m.width(65), 0.5, "ASCII code 65 maps to GB1 CID 846, not CID 65");
+        assert_eq!(m.width(0xD6D0), 1.0);
+        assert!(m.encode("😀").is_none());
+        assert!(m.decode(b"\x81").is_empty(), "a truncated multibyte code is not a guessed character");
+        let override_map = b"1 beginbfchar <D6D0> <6D4B> endbfchar";
+        let mut explicit = f;
+        explicit.set(b"ToUnicode".to_vec(), Object::Ref(doc.add(Object::Stream(Stream::from_raw(Dict::new(), override_map.to_vec())))));
+        let m = Metrics::from_dict(&doc, &explicit);
+        assert_eq!(m.decode(b"\xd6\xd0\xce\xc4"), "测文", "ToUnicode overrides the built-in collection");
+        assert!(m.encode("中").is_none(), "an overridden code cannot encode its old meaning");
+    }
 
     /// A font whose ranges cover a few low codes keeps tables that size, not a fixed 64k-entry one.
     #[test]

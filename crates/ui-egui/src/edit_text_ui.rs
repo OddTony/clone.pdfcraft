@@ -768,7 +768,9 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
     let mut families = BTreeMap::new();
     for (index, program) in programs.iter().enumerate() {
         let name = format!("pdf-source-{index}");
-        definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(program.bytes.clone())));
+        let mut data = egui::FontData::from_owned(program.bytes.as_ref().clone());
+        data.index = program.index;
+        definitions.font_data.insert(name.clone(), Arc::new(data));
         families.insert(program.resource.clone(), name);
     }
     for program in &programs {

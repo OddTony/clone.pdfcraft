@@ -22,6 +22,10 @@ serde = { workspace = true }
 # Reads rendered pixel words as bytes; already in the tree through hayro.
 bytemuck = { version = "1" }
 
+[target.'cfg(windows)'.dependencies]
+# Validates installed reading-only CJK substitutes; already used by pdfcraft-fonts.
+skrifa = "0.44"
+
 # lopdf (bootstrap) draws random bytes for encryption; on the web they come from the browser.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.4", features = ["wasm_js"] }

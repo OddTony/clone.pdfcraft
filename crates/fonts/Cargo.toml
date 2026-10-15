@@ -15,3 +15,5 @@ skrifa = "0.44"
 # Arabic shaping for text written into PDFs; already in the tree via egui, on the same read-fonts.
 harfrust = "0.12"
 unicode-bidi = "0.3"
+# The same public, embedded CMap tables used by the renderer, including GBK -> CID -> Unicode.
+hayro-cmap = "0.1"

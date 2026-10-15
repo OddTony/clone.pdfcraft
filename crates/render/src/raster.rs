@@ -73,7 +73,13 @@ impl RenderConfig {
         InterpreterSettings {
             ocg_overrides: self.layers.clone(),
             hide_comments: self.hide_comments,
-            font_resolver: Arc::new(move |query| japanese_fallback(query).or_else(|| standard(query))),
+            font_resolver: Arc::new(move |query| {
+                #[cfg(windows)]
+                if let Some(font) = crate::installed_fonts::resolve(query) {
+                    return Some(font);
+                }
+                japanese_fallback(query).or_else(|| standard(query))
+            }),
             ..InterpreterSettings::default()
         }
     }
@@ -5615,6 +5621,48 @@ trailer << /Root 1 0 R >>
             }
             // 日本 at 40 pt covers a few hundred dark pixels; a blank or missing-glyph run doesn't.
             assert!(inked > 300, "{base_font}: 日本 is drawn ({inked} dark pixels)");
+        }
+    }
+
+    /// Windows PDFs often name the installed Chinese faces instead of embedding them. Test
+    /// both GBK -> Adobe-GB1 -> Unicode and an Identity-H font with its own ToUnicode map.
+    /// Synthetic text only: no user's invoice or system-font bytes are stored in the repo.
+    #[cfg(windows)]
+    #[test]
+    fn non_embedded_chinese_fonts_draw_gbk_and_identity_text() {
+        if std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0") {
+            return;
+        }
+        for (name, file) in [("SimSun", "simsun.ttc"), ("KaiTi", "simkai.ttf"), ("SimHei", "simhei.ttf"), ("DengXian", "Deng.ttf")] {
+            let root = std::env::var_os("WINDIR").map(std::path::PathBuf::from).unwrap_or_default();
+            if !root.join("Fonts").join(file).is_file() {
+                continue;
+            }
+            for (encoding, collection, code, unicode) in
+                [("GBK-EUC-H", "GB1", "D6D0CEC4", ""), ("Identity-H", "Identity", "00010002", "/ToUnicode 8 0 R")]
+            {
+                let cmap = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /Test def /CMapType 2 def 1 begincodespacerange <0000> <FFFF> endcodespacerange 2 beginbfchar <0001> <4E2D> <0002> <6587> endbfchar endcmap CMapName currentdict /CMap defineresource pop end end";
+                let content = format!("BT /F1 40 Tf 5 15 Td <{code}> Tj ET");
+                let pdf = format!(
+                    "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n\
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 60] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n\
+4 0 obj << /Length {} >> stream\n{content}\nendstream endobj\n\
+5 0 obj << /Type /Font /Subtype /Type0 /BaseFont /{name} /Encoding /{encoding} /DescendantFonts [6 0 R] {unicode} >> endobj\n\
+6 0 obj << /Type /Font /Subtype /CIDFontType2 /BaseFont /{name} /CIDSystemInfo << /Registry (Adobe) /Ordering ({collection}) /Supplement 2 >> /FontDescriptor 7 0 R /DW 1000 >> endobj\n\
+7 0 obj << /Type /FontDescriptor /FontName /{name} /Flags 32 /FontBBox [0 -140 1000 859] /ItalicAngle 0 /Ascent 859 /Descent -140 /CapHeight 700 /StemV 80 >> endobj\n\
+8 0 obj << /Length {} >> stream\n{cmap}\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF",
+                    content.len(),
+                    cmap.len()
+                );
+                let mut r = PageRenderer::new(Arc::new(pdf.into_bytes()), RenderConfig::default());
+                let p = r.render(RenderRequest { scale: 1.0, ..Default::default() });
+                assert!(p.error.is_none(), "{name} {encoding}: {:?}", p.error);
+                let inked = p.rgba.as_chunks::<4>().0.iter().filter(|c| c[0] < 128).count();
+                assert!(inked > 300, "{name} {encoding}: 中文 must draw, got {inked} dark pixels");
+                let text = r.render(RenderRequest { kind: RequestKind::Text, ..Default::default() });
+                assert!(text.text.as_ref().is_some_and(|t| t.plain_text() == "中文"), "{name} {encoding}: {:?}", text.text);
+            }
         }
     }
 

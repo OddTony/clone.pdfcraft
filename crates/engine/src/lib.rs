@@ -256,6 +256,7 @@ struct Editor {
     appearances: AppearanceCache,
     /// The text blocks last computed for one page, reused while the document is unchanged.
     text_blocks: TextBlocksCache,
+    editor_fonts: text_preview::EditorFontsCache,
 }
 
 /// One page's text blocks ([`pdfcraft_edit::text_blocks`]) and the unmodified document state they
@@ -3213,6 +3214,7 @@ impl Session {
                         keys,
                         appearances: AppearanceCache::default(),
                         text_blocks: TextBlocksCache::default(),
+                        editor_fonts: text_preview::EditorFontsCache::default(),
                     }),
                     None,
                 )
