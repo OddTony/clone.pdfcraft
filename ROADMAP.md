@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M3 #2387 candidate: recurring narrow gutters keep text selection within article columns; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M3 #2080 candidate: explicit search jumps join per-tab history; rail and control-channel Back/Forward; estimates unchanged)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M4 #1910: Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -156,6 +157,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+
+- **2026-10-15 (M3, #2387):** Recurring gutters on three nearby baselines separate closely spaced article columns before reading-order grouping. Plain drag stays in either column, forward or backward; isolated wide word spaces and rectangular column selection retain their behavior. Bounded lookback and allocation keep the prior heuristic as fallback. Synthetic layout and pointer-drag regressions pass; estimates unchanged.
 - **2026-10-12 (M2, inline-image boundaries):** Unfiltered inline images with known sample layouts keep pixel bytes that look like the `EI` terminator when content is rewritten. Regression tests cover row padding, colour-space and parameter aliases, masks and malformed sizes; classic and packed saved PDFs retain the pixels in independent readers and renderers. Filtered and resource-defined layouts retain the existing tolerant heuristic. Estimates unchanged.
 - **2026-10-12 (M3, drawing markups):** While a comment is being drawn, the pointer in a band along any edge of the view (or just past it) scrolls the view up, down, left or right, so points beyond what is shown can be reached. A polygon, cloud or run of connected lines takes back its last point with Backspace, Delete or Undo (the first point's removal cancels it). Edge scrolling has unit tests of its maths only; it has not been exercised end to end in the app by an automated test.
 - **2026-10-12 (gap 6, #1319, #1305, #1324):** Editing an XFA form keeps a radio item's stored text when it contains a space, so a later layout still selects it. Replace Pages on a split selection replaces those pages and leaves the gap; editing the dialog range still replaces the span. Marking a figure decorative rewrites only that figure's content stream, so a header, added text and unknown stream entries stay. Estimates unchanged.
