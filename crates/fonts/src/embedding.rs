@@ -29,8 +29,14 @@ pub fn covers(bytes: &[u8], text: &str) -> bool {
 /// Read display names without treating an already installed interface font as
 /// an exportable PDF font. Embedding permission validation remains in `names`.
 pub fn display_names(bytes: &[u8]) -> Result<(String, String), String> {
+    display_names_at(bytes, 0)
+}
+
+/// Read the family and PostScript name of one face in a macOS .ttc collection.
+/// This is only metadata discovery: it does not grant PDF embedding permission.
+pub fn display_names_at(bytes: &[u8], index: u32) -> Result<(String, String), String> {
     use skrifa::string::StringId;
-    let f = FontRef::new(bytes).map_err(|e| e.to_string())?;
+    let f = FontRef::from_index(bytes, index).map_err(|e| e.to_string())?;
     let name = |id| {
         f.localized_strings(id)
             .find(|s| s.language() == Some("en"))
