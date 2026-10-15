@@ -57,6 +57,7 @@ mod js_ui;
 mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
+mod ofd_ui;
 mod optimize_ui;
 mod search_ui;
 mod sign_ui;

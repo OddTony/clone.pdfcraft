@@ -27,6 +27,11 @@
 	Name on new comments	Tên trên bình luận mới
 	Hide hover previews for highlights without comment text	Ẩn bản xem trước khi di chuột cho các phần tô sáng không có nội dung nhận xét
 	Open…	Mở…
+	Open OFD (early alpha)…	Mở OFD (bản alpha sớm)…
+	OFD documents	Tài liệu OFD
+	OFD (early alpha): converted to PDF. Compare it with the original.	OFD (bản alpha sớm): đã chuyển đổi sang PDF. Hãy so sánh với bản gốc.
+	OFD (early alpha): converted to PDF. Objects not shown: {n}.	OFD (bản alpha sớm): đã chuyển đổi sang PDF. Số đối tượng không được hiển thị: {n}.
+	Signatures and seals are not carried over or checked.	Chữ ký và con dấu không được chuyển sang và không được kiểm tra.
 	Open Recent	Mở gần đây
 	Clear Recent Files	Xóa tệp gần đây
 	Remove from Recent	Xóa khỏi Gần đây
