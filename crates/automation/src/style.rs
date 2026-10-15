@@ -12,6 +12,14 @@ impl Automation {
         Ok(json!({ "profile": profile, "document": summary(doc) }))
     }
 
+    pub(crate) fn style_patch(&self, a: &Args) -> Result<Value> {
+        let profile: pdfcraft_style::StyleProfile = serde_json::from_value(a.get("profile").cloned().unwrap_or(Value::Null))
+            .map_err(|e| crate::ToolError::InvalidArgs(format!("profile: {e}")))?;
+        let patch = a.get("patch").cloned().unwrap_or(Value::Null);
+        let patched = pdfcraft_style::apply_patch(&profile, &patch).map_err(|e| crate::ToolError::InvalidArgs(e.to_string()))?;
+        Ok(json!({ "profile": patched }))
+    }
+
     pub(crate) fn style_apply(&mut self, a: &Args) -> Result<Value> {
         let profile: pdfcraft_style::StyleProfile = serde_json::from_value(a.get("profile").cloned().unwrap_or(Value::Null))
             .map_err(|e| crate::ToolError::InvalidArgs(format!("profile: {e}")))?;

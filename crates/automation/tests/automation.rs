@@ -5728,6 +5728,15 @@ fn format_studio_profiles_and_applies_styles() {
     assert!(written["bytes"].as_u64().unwrap() > 500);
     assert!(dir.join("styled.pdf").exists());
 
+    // A follow-up patch changes the profile; re-applying restyles with it.
+    let patched = ok(&mut a, "style_patch", json!({ "profile": profile, "patch": {"body_size": 14, "page_numbers": true} }))["profile"].clone();
+    assert!((patched["body_size"].as_f64().unwrap() - 14.0).abs() < 0.01);
+    assert_eq!(patched["page_numbers"], true);
+    assert_eq!(patched["page"], profile["page"]);
+    let repaged = ok(&mut a, "style_apply", json!({ "profile": patched, "title": "Patched", "text": "Hello" }))["doc"].as_u64().unwrap();
+    assert!(page_text(&mut a, repaged).join(" ").contains("1 / 1"));
+    assert!(matches!(err(&mut a, "style_patch", json!({ "profile": profile, "patch": {"body_size": 99} })), ToolError::InvalidArgs(_)));
+
     // Both sources at once, and unknown profile versions, are refused.
     assert!(matches!(err(&mut a, "style_apply", json!({ "profile": profile, "text": "x", "raw_doc": reference })), ToolError::InvalidArgs(_)));
     let mut bad = profile.clone();

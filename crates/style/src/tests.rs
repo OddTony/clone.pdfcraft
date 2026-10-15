@@ -53,6 +53,47 @@ fn styled_document_renders_pages() {
 }
 
 #[test]
+fn patches_change_only_named_keys() {
+    let profile = StyleProfile::default();
+    let patch = serde_json::json!({"body_size": 14, "page_numbers": true, "summary": "bigger body, numbered pages"});
+    let patched = apply_patch(&profile, &patch).expect("patch");
+    assert!((patched.body_size - 14.0).abs() < 0.01);
+    assert!((patched.body_leading - 17.5).abs() < 0.01);
+    assert!(patched.page_numbers);
+    assert_eq!(patched.page, profile.page);
+    assert_eq!(patched.base_font, profile.base_font);
+}
+
+#[test]
+fn patches_replace_headings_and_fonts() {
+    let profile = StyleProfile::default();
+    let patch = serde_json::json!({"headings": [{"level": 1, "size": 22, "bold": false}], "base_font": "times"});
+    let patched = apply_patch(&profile, &patch).expect("patch");
+    assert_eq!(patched.headings.len(), 1);
+    assert!((patched.headings[0].size - 22.0).abs() < 0.01);
+    assert!(!patched.headings[0].bold);
+    assert_eq!(patched.base_font, BaseFont::Times);
+}
+
+#[test]
+fn bad_patches_are_refused() {
+    let profile = StyleProfile::default();
+    for patch in [
+        serde_json::json!({"body_size": 99}),
+        serde_json::json!({"margins": [360.0, 36.0, 360.0, 36.0]}),
+        serde_json::json!({"headings": [{"level": 1, "size": 22}, {"level": 2, "size": 16}, {"level": 3, "size": 13}, {"level": 1, "size": 20}]}),
+        serde_json::json!({"base_font": "comic-sans"}),
+        serde_json::json!({"page_size": [100.0, 100.0]}),
+        serde_json::json!([1, 2, 3]),
+    ] {
+        assert!(apply_patch(&profile, &patch).is_err(), "{patch}");
+    }
+    let mut versioned = profile.clone();
+    versioned.version = 2;
+    assert!(apply_patch(&versioned, &serde_json::json!({"body_size": 12})).is_err());
+}
+
+#[test]
 fn undrawable_text_is_refused() {
     let profile = StyleProfile::default();
     let items = vec![StyledItem::Body("日本語".into())];

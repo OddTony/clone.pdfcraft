@@ -664,6 +664,7 @@ impl Automation {
                 summary(self.session.get(new).ok_or_else(|| failed("the document vanished"))?)
             }
             "doc_export_images" | "doc_export_text" | "doc_export_all_images" => self.export(name, &a)?,
+            "style_patch" => self.style_patch(&a)?,
             "ai_chat" => self.ai_chat(&a)?,
             "style_profile" => self.style_profile(&a)?,
             "style_apply" => self.style_apply(&a)?,

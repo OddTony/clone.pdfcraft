@@ -1096,6 +1096,15 @@ pub fn tools() -> Vec<ToolDef> {
                 }),
                 &["profile"],
             )),
+        t("style_patch", "Change a formatting profile", "Format Studio follow-ups: apply a validated patch to a StyleProfile (what ai_chat proposes as fenced JSON, or UI choices). Keys: body_size (6-24), headings ([{level 1-3, size 6-48, bold}], at most 3), page_numbers, bullet_indent (0-144), base_font (helvetica, times, courier), margins ([left, top, right, bottom], 18-360 each, leaving room for text). Unknown keys are refused. Read-only: feed the result back into style_apply.")
+            .ro()
+            .with(schema(
+                json!({
+                    "profile": { "type": "object", "description": "StyleProfile from style_profile." },
+                    "patch": { "type": "object", "description": "The changes to apply." },
+                }),
+                &["profile", "patch"],
+            )),
         t("ai_chat", "Ask the AI provider", "Format Studio follow-ups (BYOK, opt-in): one OpenRouter-compatible chat round trip. Every call carries its own api_key (never stored or logged); base_url defaults to https://openrouter.ai/api/v1. With doc, the call also sends the document's StyleProfile plus the first pages of text (at most ~12k characters) — never the whole file. The network runs only for this call.")
             .with(schema(
                 json!({

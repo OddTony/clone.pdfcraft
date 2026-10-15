@@ -9539,9 +9539,9 @@ tier = "P3"
 milestone = "M13"
 status = "partial"
 commands = []
-tools = ["style_profile", "style_apply", "ai_chat"]
+tools = ["style_profile", "style_patch", "style_apply", "ai_chat"]
 evidence = ["crates/automation/tests/automation.rs::format_studio_profiles_and_applies_styles"]
-notes = "Format Studio: deterministic reference profiles (page size, margins, body/headings, bullets, page numbers) applied to raw text or raw documents; ai_chat proposes profile patches for follow-up prompts. No DOCX import, no in-place PDF restyle, no UI panel yet"
+notes = "Format Studio: deterministic reference profiles (page size, margins, body/headings, bullets, page numbers) applied to raw text or raw documents; style_patch validates follow-up changes (what ai_chat proposes); ai_chat is BYOK OpenRouter chat over bounded context. No DOCX import, no in-place PDF restyle, no UI panel yet"
 
 [[feature]]
 id = "misc.ai-presentation"

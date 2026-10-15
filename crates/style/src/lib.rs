@@ -242,6 +242,106 @@ pub fn extract(page: [f64; 2], blocks: &[BlockSample]) -> Result<StyleProfile, S
     Ok(profile)
 }
 
+/// Apply a follow-up patch to a profile (what `ai_chat` proposes as fenced
+/// JSON, or what a user picks in the UI): `body_size`, `headings`
+/// (`[{level, size, bold}]`), `page_numbers`, `bullet_indent`, `base_font`
+/// (`helvetica`/`times`/`courier`) and `margins` (`[left, top, right, bottom]`).
+/// Unknown keys are refused so typos fail loudly; everything is range-checked
+/// and the result keeps `version`. Geometry the patch doesn't mention
+/// (page size) is never invented.
+pub fn apply_patch(profile: &StyleProfile, patch: &serde_json::Value) -> Result<StyleProfile, StyleError> {
+    if profile.version != 1 {
+        return Err(StyleError::Invalid("profile.version must be 1".into()));
+    }
+    let map = patch.as_object().ok_or_else(|| StyleError::Invalid("the patch must be a JSON object".into()))?;
+    for key in map.keys() {
+        if !["body_size", "headings", "page_numbers", "bullet_indent", "base_font", "margins", "summary"].contains(&key.as_str()) {
+            return Err(StyleError::Invalid(format!("unknown patch key {key:?}")));
+        }
+    }
+    let mut out = profile.clone();
+    if let Some(size) = map.get("body_size") {
+        let size = size.as_f64().filter(|s| s.is_finite()).ok_or_else(|| StyleError::Invalid("body_size must be a number".into()))?;
+        if !(6.0..=24.0).contains(&size) {
+            return Err(StyleError::Invalid("body_size must be between 6 and 24 pt".into()));
+        }
+        out.body_size = (size * 100.0).round() / 100.0;
+        out.body_leading = ((size * 1.25) * 100.0).round() / 100.0;
+    }
+    if let Some(headings) = map.get("headings") {
+        let list = headings.as_array().ok_or_else(|| StyleError::Invalid("headings must be an array".into()))?;
+        if list.len() > 3 {
+            return Err(StyleError::Invalid("at most 3 heading levels".into()));
+        }
+        let mut parsed = Vec::with_capacity(list.len());
+        for h in list {
+            let o = h.as_object().ok_or_else(|| StyleError::Invalid("each heading must be an object".into()))?;
+            let level = o
+                .get("level")
+                .and_then(serde_json::Value::as_u64)
+                .filter(|l| (1..=3).contains(l))
+                .ok_or_else(|| StyleError::Invalid("each heading needs level 1, 2 or 3".into()))?;
+            let size = o
+                .get("size")
+                .and_then(serde_json::Value::as_f64)
+                .filter(|s| s.is_finite())
+                .ok_or_else(|| StyleError::Invalid("each heading needs a size".into()))?;
+            if !(6.0..=48.0).contains(&size) {
+                return Err(StyleError::Invalid("heading sizes must be between 6 and 48 pt".into()));
+            }
+            let bold = o.get("bold").and_then(serde_json::Value::as_bool).unwrap_or(true);
+            let factor = match level {
+                1 => 1.0,
+                2 => 0.8,
+                _ => 0.6,
+            };
+            parsed.push(HeadingStyle {
+                level: level as u8,
+                size: (size * 100.0).round() / 100.0,
+                bold,
+                space_before: (out.body_size * factor).round(),
+                space_after: (out.body_size * factor / 2.0).round(),
+            });
+        }
+        parsed.sort_by_key(|h| h.level);
+        out.headings = parsed;
+    }
+    if let Some(numbers) = map.get("page_numbers") {
+        out.page_numbers = numbers.as_bool().ok_or_else(|| StyleError::Invalid("page_numbers must be true or false".into()))?;
+    }
+    if let Some(indent) = map.get("bullet_indent") {
+        let indent = indent.as_f64().filter(|v| v.is_finite()).ok_or_else(|| StyleError::Invalid("bullet_indent must be a number".into()))?;
+        if !(0.0..=144.0).contains(&indent) {
+            return Err(StyleError::Invalid("bullet_indent must be between 0 and 144 pt".into()));
+        }
+        out.bullet_indent = indent;
+    }
+    if let Some(font) = map.get("base_font") {
+        out.base_font = match font.as_str() {
+            Some("helvetica") => BaseFont::Helvetica,
+            Some("times") => BaseFont::Times,
+            Some("courier") => BaseFont::Courier,
+            _ => return Err(StyleError::Invalid("base_font must be helvetica, times or courier".into())),
+        };
+    }
+    if let Some(margins) = map.get("margins") {
+        let list =
+            margins.as_array().filter(|m| m.len() == 4).ok_or_else(|| StyleError::Invalid("margins must be [left, top, right, bottom]".into()))?;
+        let mut parsed = [0.0; 4];
+        for (i, m) in list.iter().enumerate() {
+            parsed[i] = m.as_f64().filter(|v| v.is_finite()).ok_or_else(|| StyleError::Invalid("each margin must be a number".into()))?;
+            if !(18.0..=360.0).contains(&parsed[i]) {
+                return Err(StyleError::Invalid("margins must be between 18 and 360 pt".into()));
+            }
+        }
+        if parsed[0] + parsed[2] >= out.page[0] || parsed[1] + parsed[3] >= out.page[1] {
+            return Err(StyleError::Invalid("margins leave no room for text".into()));
+        }
+        out.margins = parsed;
+    }
+    Ok(out)
+}
+
 /// Parse plain raw text into styled items.
 ///
 /// `# `, `## `, `### ` start headings; `- `, `* `, `• ` start bullets;
