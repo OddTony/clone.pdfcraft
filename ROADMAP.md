@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M14 Windows IPC candidate integrates current main while preserving Unix/BSD forwarding; estimates unchanged)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M3 #2080 candidate: explicit search jumps join per-tab history; rail and control-channel Back/Forward; estimates unchanged)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M4 #1910: Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -156,6 +157,9 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+
+- **2026-10-15 (M14, Windows IPC integration):** Normally merged upstream `13e3154ab3c0eee937038ea188c0a731a331c5e7`. Preserve its Unix/BSD socket/display/Wayland behavior in a separate platform module and retain authenticated Windows handoff, launch options and fallback. Local scoped validation: 554 tests passed, two ignored; strict Clippy, native macOS builds, assets/layers/parity and cargo-deny pass. Raw audit retains main's RSA advisory. Windows runtime/security boundaries and WASM require hosted CI/manual platform checks; no shipped claim or estimate change.
+
 - **2026-10-13 (community, M3, #1569 review):** Pixel-only Wayland wheel, wheel-tilt and continuous input use standalone moved events, so Ctrl zoom does not remain latched after the modifier is released (#991); vendored winit patch (13), with a policy test. Estimates unchanged.
 - **2026-10-12 (M6):** XFDF field import and data-file extraction join all text nodes in a value, preserving text after XML comments and processing instructions. Synthetic regressions cover Unicode, CDATA, empty values and PDF save/reopen. Estimates unchanged.
 - **2026-10-12 (M7, picture right-click menu):** The Edit text & images menu of a picture gains Cut Image, Redact Image (a redaction mark over the picture, applied from Redact a PDF), Create Link… and Recognize Text… (for that page), in all 21 catalogs. The menu was drawn only while the pointer was over the picture, so its items outside the picture (most of a logo's menu, and Delete below a page) could not be clicked; an open menu now stays drawn. Still missing from Acrobat's menu: Arrange (bring to front, send backward), Remove crop, Draw freehand and Edit image using… (opening an external editor).
@@ -514,3 +518,7 @@ Newest first: the date, what moved, and the new overall estimate.
 
 - **2026-10-12 (M8):** Redaction cleans indirect and form structure references, preserving surviving form tags.
 - **2026-10-13 (M7):** Edit a PDF ▸ Add content: Header and footer, Watermark and Background open an Add / Update / Remove menu (Update and Remove enabled only when the document has that mark), as Acrobat's Watermark control does. The catalogue gains `ToolItem::actions`, so any tool can list more commands (#1192).
+
+- **2026-10-13 (M14/M3, current-main integration):** Integrated main `5e12f5fd`, including async-opening fix `b5467d93`, and retained all upstream and IPC records. Socket authentication, protocol, launch-option preservation and fallback remain unchanged. Local app (75 passed, 1 ignored), UI command (23 passed), opening-worker (11 passed), strict Clippy, native build and repository gates pass; Windows-only crypto/COM checks require CI. Estimates unchanged.
+- **2026-10-13 (upstream integration, M14 IPC hardening):** Integrated upstream main `7437bde` without IPC source changes; retained both branches’ progress entries and reconciled the roadmap conflicts. Formatting, strict Clippy for `pdfcraft` and `pdfcraft-platform`, all `pdfcraft` app tests (65 passed, 1 ignored), all 12 portable IPC protocol tests, native app/CLI builds, and layers/assets/parity gates pass. WASM validation was unavailable because `wasm32-unknown-unknown` is not installed; Windows COM validation requires Windows CI. Estimates unchanged.
+- **2026-10-12 (fork, M14 Windows IPC hardening):** Follow-up to #715 and echelon’s invitation in #616: retain AF_UNIX, separate-window fallback and launch options; add user-protected nonce-bound frames, bounded admission/deadlines and OS profile/session routing. Native crypto lifetime and process-startup regressions pass on the repaired candidate; temporary instrumentation removed for final validation. Independent review found no blocker. No new dependency packages; not merged. Manual Windows boundaries and shell behavior remain unverified. Estimates unchanged.

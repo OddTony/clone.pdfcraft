@@ -38,12 +38,18 @@ mod logging;
 mod motion;
 mod reopen;
 mod settings;
+// Keep the upstream Unix/BSD transport separate from the Windows authenticated protocol.
+#[cfg_attr(all(unix, not(target_os = "macos")), path = "single_instance_unix.rs")]
 mod single_instance;
 mod text_scale;
 mod updates;
 #[cfg(test)]
 #[path = "windows_manifest.rs"]
 mod windows_manifest;
+/// Keep portable Windows protocol regressions active on Linux/BSD CI too.
+#[cfg(all(test, unix, not(target_os = "macos")))]
+#[path = "single_instance.rs"]
+mod windows_single_instance;
 
 /// Freedesktop app id: the `.desktop` file name and the hicolor icon name.
 const APP_ID: &str = "ai.storyteller.pdfcraft";
@@ -230,6 +236,9 @@ fn main() -> eframe::Result {
     // Explorer double-click, a file manager or `xdg-open`) hands them to the PdfCraft already
     // running and exits (#282, #317, #1726). Any option means the caller wants this launch's own
     // window.
+    #[cfg(windows)]
+    let may_hand_off = single_instance::may_hand_off(new_window, &files, !options.is_empty(), control_file.is_some(), create_images);
+    #[cfg(not(windows))]
     let may_hand_off = !new_window && !files.is_empty() && options.is_empty() && control_file.is_none() && !create_images;
     let instance = match single_instance::claim(&single_instance::absolute(&files), may_hand_off) {
         single_instance::Claim::HandedOff => return Ok(()),
