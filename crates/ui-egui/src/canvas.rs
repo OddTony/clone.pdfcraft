@@ -332,7 +332,7 @@ pub(crate) struct SignatureBadge {
 pub(crate) fn signature_badges(signatures: &[pdfcraft_engine::SignatureInfo], page: usize) -> Vec<SignatureBadge> {
     signatures
         .iter()
-        .filter(|s| s.signed && s.visible && s.page == Some(page) && !s.verdict_shown)
+        .filter(|s| s.signed && s.visible && s.page == Some(page))
         .filter_map(|s| {
             s.rect.filter(|r| r.iter().all(|v| v.is_finite() && v.abs() < f32::MAX as f64)).map(|rect| SignatureBadge {
                 rect,
@@ -3392,10 +3392,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     view.flash = None;
                 }
             }
-            // Validation marks over signature widgets: the page shows the appearance the
-            // signer embedded (often "Signature Not Verified" with a question mark). The
-            // signed bytes must not be rewritten, so the verdict lives in the display
-            // copy (validated-state layers) with this glyph as its fallback.
+            // Validation is viewer chrome over the signer's original artwork, which
+            // may still say "Signature Not Verified". These badges never enter document
+            // streams, image/text exports, vector printing or Print as Image.
             for badge in signature_badges(&doc.signatures, i) {
                 let [x0, y0, x1, y1] = badge.rect;
                 let sr = xf.user_rect(info, i, [x0 as f32, y0 as f32, x1 as f32, y1 as f32]);
@@ -5177,7 +5176,6 @@ mod tests {
             timestamp_time: None,
             status: pdfcraft_engine::SignatureStatus::Valid,
             modification: pdfcraft_engine::sign::Modification::None,
-            verdict_shown: false,
             details: Vec::new(),
         }
     }
@@ -5218,13 +5216,6 @@ mod tests {
         let signatures: Vec<_> = hostile.into_iter().map(|rect| signature(true, true, Some(0), Some(rect))).collect();
         let badges = signature_badges(&signatures, 0);
         assert_eq!(badges.len(), 1);
-    }
-
-    #[test]
-    fn signature_badges_skip_verdicts_the_appearance_already_shows() {
-        let mut shown = signature(true, true, Some(0), Some([10.0, 10.0, 100.0, 50.0]));
-        shown.verdict_shown = true;
-        assert!(signature_badges(&[shown], 0).is_empty());
     }
 
     #[test]

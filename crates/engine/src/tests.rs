@@ -2779,7 +2779,6 @@ fn validated_signatures_without_layers_keep_their_appearance() {
     assert_eq!(sig.status, SignatureStatus::Valid);
     // Our own flat appearance has no validation layers: nothing is substituted, and
     // the display copy carries no generated caption.
-    assert!(!sig.verdict_shown);
     let display = doc.display.clone();
     assert!(!display.windows(b"Signature valid".len()).any(|w| w == b"Signature valid"));
     // With nothing to draw, the display copy aliases the file exactly as before.
@@ -2859,7 +2858,7 @@ const LAYERED_BR_MARK: [i64; 3] = [1_111_111_111, 2_222_222_222, 3_333_333_333];
 /// 14 page content. The field is unsigned: `sign_prepared` adds the value.
 fn layered_signable_fixture() -> Vec<u8> {
     fn stream(bbox: &str, resources: &str, ops: &str) -> String {
-        format!("<< /BBox {bbox} /Length {} /Resources {resources} >>\nstream\n{ops}\nendstream", ops.len())
+        format!("<< /Type /XObject /Subtype /Form /BBox {bbox} /Length {} /Resources {resources} >>\nstream\n{ops}\nendstream", ops.len())
     }
     let helv = "<< /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >>";
     let objs = vec![
@@ -2952,7 +2951,97 @@ fn sign_prepared(doc: &mut pdfcraft_cos::Document, id: &sign::pkcs12::DigitalId,
     out
 }
 
-/// A real layered signature through `Session`: validity, display substitution,
+/// Replace one synthetic appearance stream while retaining its resource dictionary.
+fn signature_layer_ops(doc: &mut pdfcraft_cos::Document, number: u32, ops: &[u8]) {
+    let r = pdfcraft_cos::ObjRef::new(number, 0);
+    let dict = doc.resolve(&pdfcraft_cos::Object::Ref(r)).as_dict().unwrap().clone();
+    doc.set(r, pdfcraft_cos::Object::Stream(pdfcraft_cos::Stream::from_raw(dict, ops.to_vec())));
+}
+
+fn printed_pixels(bytes: Vec<u8>) -> (u32, u32, Vec<u8>) {
+    let mut renderer = pdfcraft_render::PageRenderer::new(Arc::new(bytes), Default::default());
+    let r = renderer.render(pdfcraft_render::RenderRequest { page: 0, scale: 1.0, ..Default::default() });
+    assert!(r.error.is_none(), "{:?}", r.error);
+    (r.width, r.height, r.rgba.to_vec())
+}
+
+/// Validation belongs to viewer chrome, not to document artwork or export sources.
+fn assert_signature_artwork_survives_trust(mut cos: pdfcraft_cos::Document, expected_text: &[&str]) {
+    let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
+    let identity = sign::pkcs12::open(&p12, "test").unwrap();
+    let anchor = identity.chain.first().cloned().unwrap_or_else(|| identity.certificate.clone());
+    let signed = Arc::new(sign_prepared(&mut cos, &identity, "D:20261002120000+01'00'"));
+    let mut session = Session::new().with_clock(|| 1_800_000_000);
+    let id = session.open("artwork.pdf", None, signed.clone(), None).unwrap();
+    let original_display = session.get(id).unwrap().display.clone();
+    let mut exporter = export::Exporter::new(session.get(id).unwrap());
+    let original_text = exporter.text_of(&[0]).unwrap();
+    let original_png = exporter.png(0, 72.0).unwrap();
+    for text in expected_text {
+        assert!(original_text.contains(text), "fixture text {text:?} must be exported: {original_text:?}");
+    }
+    let mut settings = print::Settings { pages: vec![0], paper: (200.0, 200.0), ..Default::default() };
+    let original_vector_print = printed_pixels(session.print_pdf(id, &settings).unwrap());
+    settings.raster = Some(print::Raster { dpi: 72.0, grayscale: false });
+    let original_raster_print = printed_pixels(session.print_pdf(id, &settings).unwrap());
+    session.set_trusted_certificates(vec![anchor.clone()]);
+    let doc = session.get(id).unwrap();
+    assert_eq!(doc.signatures[0].status, SignatureStatus::Valid);
+    assert!(doc.display == original_display, "trust must preserve all original appearance bytes");
+    let mut exporter = export::Exporter::new(doc);
+    assert_eq!(exporter.text_of(&[0]).unwrap(), original_text, "text exports retain signer details and baked caption");
+    assert_eq!(exporter.png(0, 72.0).unwrap(), original_png, "image exports exclude the viewer overlay");
+    assert_eq!(printed_pixels(session.print_pdf(id, &settings).unwrap()), original_raster_print, "Print as Image retains document artwork");
+    settings.raster = None;
+    assert_eq!(printed_pixels(session.print_pdf(id, &settings).unwrap()), original_vector_print);
+    assert_eq!(session.save_bytes(id).unwrap(), signed, "unchanged saves retain the signed file exactly");
+    session.apply(id, Edit::SetInfo { key: "Title".into(), value: "Preserved artwork".into() }).unwrap();
+    let saved = session.save_bytes(id).unwrap();
+    assert!(saved.starts_with(&signed), "a real save appends without replacing signed appearance streams");
+    let mut reopened = Session::new().with_clock(|| 1_800_000_000);
+    reopened.set_trusted_certificates(vec![anchor]);
+    let id = reopened.open("saved.pdf", None, saved, None).unwrap();
+    let doc = reopened.get(id).unwrap();
+    assert_eq!(doc.signatures[0].status, SignatureStatus::Valid);
+    let mut exporter = export::Exporter::new(doc);
+    assert_eq!(exporter.text_of(&[0]).unwrap(), original_text);
+    assert_eq!(exporter.png(0, 72.0).unwrap(), original_png);
+}
+
+#[test]
+fn chamfered_signature_borders_survive_trust_exports_printing_and_save() {
+    for raster_glyph in [false, true] {
+        let mut doc = pdfcraft_cos::Document::open(Arc::new(layered_signable_fixture())).unwrap();
+        signature_layer_ops(&mut doc, 12, b"0 G 1 w 10 1 m 90 1 l 99 10 l 99 90 l 90 99 l 10 99 l 1 90 l 1 10 l h S");
+        signature_layer_ops(&mut doc, 10, b"0 G 2 w 0 0 50 30 re S");
+        if raster_glyph {
+            let mut image = pdfcraft_cos::Dict::new();
+            image.set(b"Subtype", pdfcraft_cos::Object::name("Image"));
+            image.set(b"Width", pdfcraft_cos::Object::Int(8));
+            image.set(b"Height", pdfcraft_cos::Object::Int(8));
+            image.set(b"ColorSpace", pdfcraft_cos::Object::name("DeviceRGB"));
+            image.set(b"BitsPerComponent", pdfcraft_cos::Object::Int(8));
+            let image = doc.add(pdfcraft_cos::Object::Stream(pdfcraft_cos::Stream::from_raw(image, vec![0; 8 * 8 * 3])));
+            let mut xobjects = pdfcraft_cos::Dict::new();
+            xobjects.set(b"im", pdfcraft_cos::Object::Ref(image));
+            xobjects.set(b"unused", pdfcraft_cos::Object::Ref(pdfcraft_cos::ObjRef::new(8, 0)));
+            let mut resources = pdfcraft_cos::Dict::new();
+            resources.set(b"XObject", pdfcraft_cos::Object::Dict(xobjects));
+            doc.update_dict(pdfcraft_cos::ObjRef::new(10, 0), |d| d.set(b"Resources", pdfcraft_cos::Object::Dict(resources))).unwrap();
+            signature_layer_ops(&mut doc, 10, b"q 20 0 0 20 5 5 cm /im Do Q");
+        }
+        assert_signature_artwork_survives_trust(doc, &["Not Verified"]);
+    }
+}
+
+#[test]
+fn mixed_signature_caption_details_survive_trust_exports_printing_and_save() {
+    let mut doc = pdfcraft_cos::Document::open(Arc::new(layered_signable_fixture())).unwrap();
+    signature_layer_ops(&mut doc, 11, b"BT /F1 5 Tf 2 27 Td (Alice Signer) Tj 0 -3 Td (alice@example.org) Tj 0 -3 Td (Signature Not Verified) Tj ET");
+    assert_signature_artwork_survives_trust(doc, &["Alice Signer", "alice@example.org", "Not Verified"]);
+}
+
+/// A real layered signature through `Session`: validity, original artwork,
 /// rendering, saving and reopening. `password` opens the signed bytes.
 fn check_layered_round_trip(signed: Arc<Vec<u8>>, password: Option<&str>, anchor: &sign::x509::Certificate) {
     let mut s = Session::new().with_clock(|| 1_800_000_000);
@@ -2961,18 +3050,14 @@ fn check_layered_round_trip(signed: Arc<Vec<u8>>, password: Option<&str>, anchor
     let sig = &doc.signatures[0];
     assert!(sig.signed && sig.field == "Signature1" && sig.page == Some(0) && sig.visible);
     assert_eq!(sig.status, SignatureStatus::Unknown, "untrusted at first");
-    // Trusting the signer validates and draws the validated state into the
-    // display copy only.
+    // Trust changes the verdict while preserving every appearance byte. The page
+    // overlay is UI chrome and is not part of the document's display/export source.
     s.set_trusted_certificates(vec![anchor.clone()]);
     let doc = s.get(vid).unwrap();
-    let sig = &doc.signatures[0];
-    assert_eq!(sig.status, SignatureStatus::Valid);
-    assert!(sig.verdict_shown, "the appearance carries the verdict for display");
-    assert!(bytes_has(&doc.display, b"Signature valid"));
-    // The stale caption bytes linger only as dead objects: incremental writes
-    // append the rewritten stream, so a byte search still finds the original.
-    // The flag above plus the rendered caption are the precise signals.
-    assert!(!Arc::ptr_eq(&doc.display, &doc.bytes), "substitution built a display copy");
+    assert_eq!(doc.signatures[0].status, SignatureStatus::Valid);
+    assert!(Arc::ptr_eq(&doc.display, &doc.bytes), "trust does not build a signature display copy");
+    assert!(bytes_has(&doc.display, b"Not Verified"));
+    assert!(!bytes_has(&doc.display, b"Signature valid"));
     let mut renderer = pdfcraft_render::PageRenderer::new(doc.display.clone(), doc.config.clone());
     let rendered = renderer.render(pdfcraft_render::RenderRequest { page: 0, scale: 1.0, ..Default::default() });
     assert!(rendered.error.is_none(), "{:?}", rendered.error);
@@ -2988,8 +3073,7 @@ fn check_layered_round_trip(signed: Arc<Vec<u8>>, password: Option<&str>, anchor
     assert_eq!(rsig.status, SignatureStatus::Valid);
 }
 
-/// A layered signature trusted for display, with its session and document id: the
-/// starting point for what a later edit does to the mark the display copy carries.
+/// A trusted layered signature whose original appearance remains document artwork.
 fn trusted_layered_session() -> (Session, DocId) {
     let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
     let id = sign::pkcs12::open(&p12, "test").unwrap();
@@ -2999,21 +3083,19 @@ fn trusted_layered_session() -> (Session, DocId) {
     let mut s = Session::new().with_clock(|| 1_800_000_000);
     let vid = s.open("layered.pdf", None, signed, None).unwrap();
     s.set_trusted_certificates(vec![anchor]);
-    assert!(s.get(vid).unwrap().signatures[0].verdict_shown, "the trusted signature draws its state");
+    assert_eq!(s.get(vid).unwrap().signatures[0].status, SignatureStatus::Valid);
     (s, vid)
 }
 
-/// Metadata cannot change a signature, so the display copy is left alone and the mark
-/// has to survive it: without the mark the page paints its overlay badge on top of the
-/// state it already draws.
+/// Metadata edits retain the original caption; the UI can still show its verdict badge.
 #[test]
-fn a_metadata_edit_keeps_the_validated_state_marked() {
+fn a_metadata_edit_keeps_the_original_signature_appearance() {
     let (mut s, vid) = trusted_layered_session();
     s.apply(vid, Edit::SetInfo { key: "Title".into(), value: "Contract".into() }).unwrap();
     let doc = s.get(vid).unwrap();
-    assert_eq!(doc.signatures[0].status, SignatureStatus::Valid, "metadata leaves the verdict alone");
-    assert!(doc.signatures[0].verdict_shown, "the display copy still carries the state, so the mark stays");
-    assert!(bytes_has(&doc.display, b"Signature valid"), "the display copy was not rebuilt");
+    assert_eq!(doc.signatures[0].status, SignatureStatus::Valid);
+    assert!(bytes_has(&doc.display, b"Not Verified"));
+    assert!(!bytes_has(&doc.display, b"Signature valid"));
 }
 
 /// An unchanged document never reaches the writer, so the edit is what makes this the
@@ -3028,7 +3110,7 @@ fn saving_after_an_edit_keeps_the_baked_appearance() {
 }
 
 #[test]
-fn real_layered_signatures_show_the_validated_state() {
+fn real_layered_signatures_keep_their_original_appearance() {
     let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
     let id = sign::pkcs12::open(&p12, "test").unwrap();
     let anchor = id.chain.first().cloned().unwrap_or_else(|| id.certificate.clone());
@@ -3059,15 +3141,14 @@ fn real_layered_signatures_round_trip_behind_a_user_password() {
     let signed = Arc::new(sign_prepared(&mut doc, &id, date));
     let mut probe = Session::new().with_clock(|| 1_800_000_000);
     assert!(probe.open("enc.pdf", None, signed.clone(), Some("wrong")).is_err(), "wrong passwords refuse");
-    // Encrypted display bytes stay encrypted: the flag, not the caption text,
-    // proves the substitution ran, alongside validity and an intact save.
+    // Encrypted appearance bytes remain unchanged through trust and save/reopen.
     let mut s = Session::new().with_clock(|| 1_800_000_000);
     let vid = s.open("enc.pdf", None, signed.clone(), Some("user")).unwrap();
     assert_eq!(s.get(vid).unwrap().signatures[0].status, SignatureStatus::Unknown);
     s.set_trusted_certificates(vec![anchor.clone()]);
     let doc = s.get(vid).unwrap();
     assert_eq!(doc.signatures[0].status, SignatureStatus::Valid);
-    assert!(doc.signatures[0].verdict_shown);
+    assert!(Arc::ptr_eq(&doc.display, &doc.bytes), "encrypted signature artwork remains original");
     let saved = s.save_bytes(vid).unwrap();
     let mut t = Session::new().with_clock(|| 1_800_000_000);
     t.set_trusted_certificates(vec![anchor.clone()]);

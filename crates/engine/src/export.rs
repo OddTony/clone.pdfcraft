@@ -28,9 +28,9 @@ pub struct ExportSource {
 
 impl Document {
     /// What an export reads, for exporting on another thread. These are the displayed
-    /// bytes, so they may carry appearances PdfCraft drew (a comment that has none, a
-    /// validated signature state) that the file itself does not hold. Exports follow the
-    /// page as shown; saving does not.
+    /// bytes, so they may carry missing comment appearances PdfCraft drew. Signature
+    /// artwork stays original; viewer validation badges are not document content and
+    /// do not enter image/text exports or Print as Image. Saving uses the working file.
     pub fn export_source(&self) -> ExportSource {
         ExportSource {
             bytes: self.display.clone(),
