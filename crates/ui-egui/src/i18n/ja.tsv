@@ -2270,6 +2270,22 @@ key	Space	スペース
 	Resize panel window	パネルウィンドウのサイズを変更
 	Tools	ツール
 	Inspector	インスペクター
+	Scan and text recognition	スキャンと文字認識
+	Searchable Image	検索可能な画像
+	Corrected scan	補正済みスキャン
+	Scan correction	スキャン補正
+	Automatically rotate sideways and upside-down pages	横向きや上下逆のページを自動回転
+	Straighten skewed scans	スキャンの傾きを補正
+	Add searchable text	検索可能なテキストを追加
+	Uncertain orientations are left unchanged. Deskew fits the full image inside the page.	向きが不確かな場合は変更しません。傾き補正では画像全体をページ内に収めます。
+	Correct scans	スキャンを補正
+	Scan processing cancelled	スキャン処理をキャンセルしました
+	; 1 page skipped	; 1 ページをスキップ
+	; {n} pages skipped	; {n} ページをスキップ
+	; corrected {n} pages	; {n} ページを補正
+	Crop scanner borders to the paper edge	スキャンの余白を用紙の端まで切り抜く
+	Safety margin (pt)	安全余白（pt）
+	Only clear paper edges are cropped. Indistinguishable white borders are kept.	明確な用紙の端だけを切り抜きます。区別できない白い余白は保持します。
 
 # Architectural print controls (follow-up to #599).
 	PDF page: {size}	PDFページ: {size}
@@ -2380,6 +2396,7 @@ animation effects	Off	オフ
 	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
 	Move tag earlier	タグを前へ移動
 	Move tag later	タグを後へ移動
+	Straighten scanned page	スキャンしたページの傾きを補正
 	Turn upside down (180°)	上下反転 (180°)
 	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 インチ ラベル (101.6 × 152.4 mm)
 	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	各ページを印刷領域で切り抜き、正しい向きに回転して、伸縮させずに用紙に合わせます。1 枚に 1 ラベル。

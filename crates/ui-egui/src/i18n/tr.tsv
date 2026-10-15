@@ -2376,6 +2376,25 @@ animation effects	Off	Kapalı
 	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
 	Move tag earlier	Etiketi daha erken taşı
 	Move tag later	Etiketi daha geç taşı
+
+# Scan correction and multilingual OCR (#1012).
+	Scan and text recognition	Tarama ve metin tanıma
+	Searchable Image	Aranabilir Resim
+	Corrected scan	Düzeltilmiş tarama
+	Scan correction	Tarama düzeltme
+	Automatically rotate sideways and upside-down pages	Yan veya baş aşağı sayfaları otomatik döndür
+	Straighten skewed scans	Eğik taramaları düzelt
+	Add searchable text	Aranabilir metin ekle
+	Uncertain orientations are left unchanged. Deskew fits the full image inside the page.	Belirsiz yönlendirmeler değiştirilmez. Eğiklik düzeltilirken resmin tamamı sayfaya sığdırılır.
+	Correct scans	Taramaları düzelt
+	Scan processing cancelled	Tarama işlemi iptal edildi
+	; 1 page skipped	; 1 sayfa atlandı
+	; {n} pages skipped	; {n} sayfa atlandı
+	; corrected {n} pages	; {n} sayfa düzeltildi
+	Crop scanner borders to the paper edge	Tarayıcı kenarlıklarını kâğıt kenarına kadar kırp
+	Safety margin (pt)	Güvenlik payı (pt)
+	Only clear paper edges are cropped. Indistinguishable white borders are kept.	Yalnızca belirgin kâğıt kenarları kırpılır. Ayırt edilemeyen beyaz kenarlıklar korunur.
+	Straighten scanned page	Taranmış sayfayı düzelt
 	Turn upside down (180°)	Baş aşağı çevir (180°)
 	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 inç etiket (101,6 × 152,4 mm)
 	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Her sayfayı basılı alanına göre kırpar, dik çevirir ve germeden sayfaya sığdırır. Sayfa başına bir etiket.
