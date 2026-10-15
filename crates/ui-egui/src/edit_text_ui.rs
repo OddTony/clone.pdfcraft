@@ -214,15 +214,6 @@ impl LineEditor {
         self.focus = true;
     }
 
-    pub(crate) fn edit(&self) -> Option<Edit> {
-        let style = self.style();
-        (self.text != self.original || style != pdfcraft_engine::BlockStyle::default()).then(|| Edit::EditTextBlock {
-            page: self.page,
-            block: self.block,
-            text: self.text.clone(),
-            style,
-        })
-    }
     pub(crate) fn has_changes(&self) -> bool {
         self.text != self.original || self.look != self.look0 || self.extras != self.extras0
     }
@@ -1111,11 +1102,11 @@ pub(crate) fn page_input(
             if open.page == page && open.block == hit {
                 return true;
             }
-            if let Some(old) = view.line_editor.take() {
-                let style = old.style();
-                if old.text != old.original || style != pdfcraft_engine::BlockStyle::default() {
-                    view.pending_edit = Some(Edit::EditTextBlock { page: old.page, block: old.block, text: old.text, style });
-                }
+            if let Some(old) = view.line_editor.take()
+                && let Some(edit) = finished_edit(old.clone())
+            {
+                view.pending_line_editor = Some(old);
+                view.pending_edit = Some(edit);
             }
             // The clicked box opens next frame, from the document with that edit applied.
             view.pending_text_open = Some((page, hit));

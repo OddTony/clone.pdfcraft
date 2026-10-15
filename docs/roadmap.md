@@ -1,5 +1,6 @@
 # PdfCraft roadmap: milestones and what's next
 
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7: PR #1572 refreshed; logical Arabic editing and rejected paragraph-switch drafts verified; estimates unchanged)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up, 2,528 entries; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (M2/M6: spot-colour images convert once per pixel value; widget placement and the Fields panel scale with the field count; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M3 candidate: coordinate control clicks on slow frames and coalesced text selection; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -185,6 +186,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | patch | M7: refresh PR #1572 against main, retain rejected paragraph-switch drafts and preserve upstream APIs/evidence. 975 scoped tests pass (6 ignored), plus dependency/quality/WASM gates; RTL/CJK stays partial and estimates unchanged. |
 | 2026-10-12 | minor | M6: valid AcroForm XML element names with original PDF field names preserved; saved-PDF collision and Unicode regressions. Estimates unchanged. |
 | 2026-10-12 | minor | M6: preserve carriage returns in exported CSV field names and values; saved-PDF round-trip coverage. Estimates unchanged. |
 | 2026-10-12 | minor | M7 local candidate: text drafts grow and save their width; single visual rows grow across style boundaries; both text tools retype added items and Add Text edits source text. Added-item textless previews are read-only and covered by UI/tool regressions. Estimates unchanged. |

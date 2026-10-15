@@ -434,9 +434,8 @@ impl PdfCraftApp {
         false
     }
 
-    /// Apply the edit queued on tab `i` (the active one). Returns false only when it was a
-    /// field's typing and the field refused it (#166): the editor reopens with the text, and the
-    /// user has been told why, so the typing isn't lost and the caller can stop.
+    /// Apply the edit queued on tab `i` (the active one). A refused field or source-text edit
+    /// restores its draft and returns false, so the caller stops without losing the typing.
     fn apply_queued_edit(&mut self, i: usize) -> bool {
         let Some(edit) = self.views.get_mut(i).and_then(|v| v.pending_edit.take()) else { return true };
         let source_draft = self.views.get_mut(i).and_then(|v| v.pending_line_editor.take()).filter(|draft| {
@@ -481,6 +480,7 @@ impl PdfCraftApp {
             draft.request_focus();
             if let Some(view) = self.views.get_mut(i) {
                 view.line_editor = Some(draft);
+                view.pending_text_open = None;
             }
             return false;
         }
@@ -534,7 +534,7 @@ impl PdfCraftApp {
     fn commit_open_page_text(&mut self, id: pdfcraft_engine::DocId) -> bool {
         let Some(i) = self.views.iter().position(|v| v.id == id) else { return true };
         if let Some(draft) = self.views[i].line_editor.clone() {
-            if let Some(edit) = draft.edit()
+            if let Some(edit) = crate::edit_text_ui::finished_edit(draft)
                 && !self.apply_edit(edit)
             {
                 if let Some(editor) = self.views[i].line_editor.as_mut() {

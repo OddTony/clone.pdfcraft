@@ -2601,6 +2601,42 @@ fn switching_straight_to_another_box_applies_the_open_paragraph() {
 }
 
 #[test]
+fn switching_boxes_retains_a_source_draft_that_the_engine_rejects() {
+    let bytes = source_font_fixture_with_text("BT /F1 24 Tf 20 220 Td (Top) Tj ET BT /F2 24 Tf 20 120 Td (Bottom) Tj ET");
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("boxes.pdf", None, bytes).unwrap();
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let scale = page.width() / 300.0;
+    let id = h.state().views[0].id;
+    let original = h.state().session.get(id).unwrap().bytes.clone();
+    let blocks = h.state().session.get(id).unwrap().text_blocks(0);
+    let point = |text: &str| {
+        let b = blocks.iter().find(|b| b.text == text).unwrap();
+        egui::pos2(page.left() + ((b.rect[0] + b.rect[2]) / 2.0) as f32 * scale, page.top() + (300.0 - (b.rect[1] + b.rect[3]) / 2.0) as f32 * scale)
+    };
+    click_at(&mut h, point("Top"));
+    // This unassigned scalar cannot be encoded in the source's standard PDF font.
+    let rejected = "Keep this \u{10ffff} draft";
+    h.state_mut().views[0].line_editor.as_mut().unwrap().text = rejected.into();
+    h.run_steps(1);
+    click_at(&mut h, point("Bottom"));
+    assert_eq!(h.state().views[0].line_editor.as_ref().unwrap().text, rejected, "a refused switch preserves the original draft");
+    assert_eq!(h.state().session.get(id).unwrap().bytes, original, "a rejected edit leaves the document intact");
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert!(h.state().views[0].line_editor.is_none(), "the rejected switch must not leave a delayed open behind");
+    click_at(&mut h, point("Bottom"));
+    assert_eq!(h.state().views[0].line_editor.as_ref().unwrap().text, "Bottom");
+}
+
+#[test]
 fn editing_existing_text_in_place() {
     let mut h = harness(1, |_| {});
     assert!(h.state_mut().execute("edit.edit_text"));
