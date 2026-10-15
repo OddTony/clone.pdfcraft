@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Hardened-runtime entitlements for Pdfcraft. Deliberately empty: the app is pure Rust,
-     loads no unsigned code, needs no JIT, and is not sandboxed (it opens files by path, from the
-     command line and drag-and-drop). Add exceptions here only with a reason in a comment. -->
+<!-- Hardened-runtime entitlements for Pdfcraft (the app and the CLI). The app is pure Rust, needs
+     no JIT, and is not sandboxed (it opens files by path, from the command line and
+     drag-and-drop). Add exceptions here only with a reason in a comment. -->
 <plist version="1.0">
 <dict>
+	<!-- PKCS #11 signing loads the module the user chose (a smart card driver, KIR's CloudSigner
+	     for mSzafir) into the process. Those libraries are signed by their vendors, or not at all,
+	     and library validation refuses any whose Team ID isn't ours ("mapping process and mapped
+	     file (non-platform) have different Team IDs"). Only modules the user set up are loaded
+	     (crates/sign/src/pkcs11.rs). -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
 </dict>
 </plist>

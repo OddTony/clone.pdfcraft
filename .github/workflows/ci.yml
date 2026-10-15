@@ -48,13 +48,14 @@ jobs:
           echo "CRAFT_FONTS_DIR=$GITHUB_WORKSPACE/craft-fonts" >> "$GITHUB_ENV"
           echo "CRAFT_FONTS_REQUIRED=1" >> "$GITHUB_ENV"
 
-      - name: Install Linux system dependencies (egui/winit/rfd) and the oracles
+      # SoftHSM is the software token the PKCS #11 signing tests use (they skip without it).
+      - name: Install Linux system dependencies (egui/winit/rfd, SoftHSM) and the oracles
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev \
-            libgl1-mesa-dev libgtk-3-dev \
+            libgl1-mesa-dev libgtk-3-dev softhsm2 \
             qpdf poppler-utils
 
       # The independent oracles (crates/oracle) are only worth having when they run. With this

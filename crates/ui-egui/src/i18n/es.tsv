@@ -2568,3 +2568,21 @@ animation effects	Off	Desactivados
 	Make properties default	Usar como propiedades predeterminadas
 	Pages selected	Páginas seleccionadas
 	Page properties	Propiedades de página
+
+# Signing with a PKCS #11 device (smart card, token, CloudSigner for mSzafir).
+	PKCS #11 device  ·  	Dispositivo PKCS #11  ·  
+	the certificate expired on {date}	el certificado caducó el {date}
+	Choose the module's library file.	Elija el archivo de biblioteca del módulo.
+	{file}: there is no such file.	{file}: no existe ese archivo.
+	The module's tokens hold no digital ID PdfCraft can sign with.	Los tokens del módulo no contienen ningún ID digital con el que PdfCraft pueda firmar.
+	The device's digital ID isn't available any more; start signing again to list it.	El ID digital del dispositivo ya no está disponible; vuelva a iniciar la firma para que aparezca.
+	Enter the device's PIN.	Introduzca el PIN del dispositivo.
+	The PIN is incorrect.	El PIN es incorrecto.
+	Use a signature creation device (PKCS #11 module: smart card, token, CloudSigner for mSzafir)	Usar un dispositivo de creación de firma (módulo PKCS #11: tarjeta inteligente, token, CloudSigner para mSzafir)
+	Module (.dylib, .so, .dll)	Módulo (.dylib, .so, .dll)
+	CloudSigner (mSzafir) is found by itself when it is installed: start it and log in before signing.	CloudSigner (mSzafir) se detecta solo cuando está instalado: ábralo e inicie sesión antes de firmar.
+	PKCS #11 module	Módulo PKCS #11
+	PIN	PIN
+	After Sign, enter the OTT code from the mSzafir app in CloudSigner's window and approve the signature in the app. With CloudSigner's persistent OTT code on, the code is asked for only once every few minutes.	Después de Firmar, introduzca el código OTT de la aplicación mSzafir en la ventana de CloudSigner y apruebe la firma en la aplicación. Con el código OTT persistente de CloudSigner activado, el código solo se pide una vez cada pocos minutos.
+	The key is on the device, which signs once it has its PIN.	La clave está en el dispositivo, que firma cuando recibe su PIN.
+	The key is on the device, which may ask for its PIN itself.	La clave está en el dispositivo, que puede pedir su PIN por sí mismo.
