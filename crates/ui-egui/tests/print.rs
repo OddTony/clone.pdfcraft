@@ -342,18 +342,24 @@ fn architectural_page_can_be_matched_at_100_percent() {
 }
 
 #[test]
-fn custom_page_cannot_silently_match_a_standard_paper() {
+fn custom_page_can_be_matched_at_100_percent() {
     let mut h = harness();
     assert!(h.state_mut().execute("print.dialog"));
     h.run_steps(3);
     // The 300 x 400 pt fixture is not a standard sheet.
     assert!(pdfcraft_engine::print::matching_paper((300.0, 400.0)).is_none());
-    let before = h.state().print_draft.clone();
-    assert!(h.get_by_label("Match page at 100%").accesskit_node().is_disabled());
     h.get_by_label("Match page at 100%").click();
     h.run_steps(3);
-    assert_eq!(h.state().print_draft.paper, before.paper);
-    assert_eq!(h.state().print_draft.size, before.size);
+    let draft = &h.state().print_draft;
+    assert_eq!(draft.custom_paper, Some((300.0, 400.0)));
+    assert_eq!(draft.size, pdfcraft_engine::print::SizeMode::Actual);
+    let settings = draft.settings(1, &[]).unwrap();
+    assert_eq!(settings.paper, (300.0, 400.0));
+    assert_eq!(settings.layout, pdfcraft_engine::print::Layout::Size(pdfcraft_engine::print::SizeMode::Actual));
+    assert!(!draft.job("custom.pdf").options.iter().any(|(key, _)| key == "media"), "custom paper must not request the previous preset's media");
+    if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
+        h.render().unwrap().save(format!("{dir}/custom-page-print.png")).unwrap();
+    }
 }
 
 /// A driver Windows reports without two-sided printing keeps its own setting whatever Two-sided

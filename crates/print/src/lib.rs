@@ -384,13 +384,18 @@ fn place_crop(page: usize, crop: [f64; 4], cell: [f64; 4], s: f64, quarter: u8) 
     Placement { page, matrix: Matrix([a, b, c, d, e - a * crop[0] - c * crop[1], f - b * crop[0] - d * crop[1]]), clip: crop }
 }
 
+/// A displayed PDF page as a valid portrait paper size, independent of orientation.
+pub fn page_paper(size: (f64, f64)) -> Option<(f64, f64)> {
+    if !(size.0 >= 72.0 && size.1 >= 72.0 && size.0.is_finite() && size.1.is_finite()) {
+        return None;
+    }
+    Some((size.0.min(size.1), size.0.max(size.1)))
+}
+
 /// Match a displayed PDF page to a standard sheet, independent of orientation.
 /// Half a point allows rounded metric PDF dimensions without confusing distinct sizes.
 pub fn matching_paper(size: (f64, f64)) -> Option<usize> {
-    if !size.0.is_finite() || !size.1.is_finite() {
-        return None;
-    }
-    let size = (size.0.min(size.1), size.0.max(size.1));
+    let size = page_paper(size)?;
     PAPERS.iter().position(|(_, p)| (p.0 - size.0).abs() <= 0.5 && (p.1 - size.1).abs() <= 0.5)
 }
 
