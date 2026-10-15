@@ -76,6 +76,8 @@ pub struct PrintDraft {
     pub as_image: bool,
     pub dpi: f64,
     pub paper: usize,
+    /// A page-sized sheet not present in [`PAPERS`], stored in portrait orientation.
+    pub custom_paper: Option<(f64, f64)>,
     /// The sheet shown in the preview (0-based).
     pub sheet: usize,
     pub current_page: usize,
@@ -129,6 +131,7 @@ impl Default for PrintDraft {
             as_image: false,
             dpi: 300.0,
             paper: 0,
+            custom_paper: None,
             sheet: 0,
             current_page: 0,
             driver_options: None,
@@ -179,7 +182,7 @@ impl PrintDraft {
         };
         Ok(print::Settings {
             pages,
-            paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1,
+            paper: self.custom_paper.unwrap_or(PAPERS[self.paper.min(PAPERS.len() - 1)].1),
             orientation: self.orientation,
             layout,
             content: self.content,
@@ -203,8 +206,8 @@ impl PrintDraft {
                 _ => Vec::new(),
             }
             .into_iter()
-            // The sheet the PDF was laid out on, not the queue's default paper.
-            .chain(print::cups_media(self.paper).map(|m| ("media".to_string(), m.to_string())))
+            // Only an active preset supplies its CUPS media name.
+            .chain(self.custom_paper.is_none().then_some(self.paper).and_then(print::cups_media).map(|m| ("media".to_string(), m.to_string())))
             .collect(),
         }
     }
@@ -904,15 +907,30 @@ pub(crate) fn body(
                 });
                 ui.end_row();
                 ui.label(tl!("Paper:"));
-                let paper_name = PAPERS.get(d.paper).map_or("US Letter", |p| p.0);
-                let before = d.paper;
-                egui::ComboBox::from_id_salt("paper").selected_text(tl!(paper_name)).width(260.0).show_ui(ui, |ui| {
+                let page_paper = sizes.get(d.current_page).copied().and_then(print::page_paper);
+                let page_label = page_paper.map(|paper| {
+                    crate::i18n::fmt(tl!("PDF page: {size}"), &[("size", &d.units.size(paper.0, paper.1))])
+                });
+                let custom_label = d.custom_paper.map(|paper| {
+                    crate::i18n::fmt(tl!("PDF page: {size}"), &[("size", &d.units.size(paper.0, paper.1))])
+                });
+                let paper_name = custom_label.as_deref().unwrap_or_else(|| PAPERS.get(d.paper).map_or(tl!("US Letter"), |p| tl!(p.0)));
+                let before = (d.paper, d.custom_paper);
+                egui::ComboBox::from_id_salt("paper").selected_text(paper_name).width(260.0).show_ui(ui, |ui| {
+                    if let (Some(paper), Some(label)) = (page_paper, page_label.as_deref())
+                        && ui.selectable_label(d.custom_paper == Some(paper), label).clicked()
+                    {
+                        d.custom_paper = Some(paper);
+                    }
                     for (i, (name, _)) in PAPERS.iter().enumerate() {
-                        ui.selectable_value(&mut d.paper, i, tl!(name));
+                        if ui.selectable_label(d.custom_paper.is_none() && d.paper == i, tl!(name)).clicked() {
+                            d.paper = i;
+                            d.custom_paper = None;
+                        }
                     }
                 });
                 // Label stock gets the label layout (cut, turned upright, fitted).
-                if d.paper != before && d.paper == print::LABEL_PAPER {
+                if (d.paper, d.custom_paper) != before && d.custom_paper.is_none() && d.paper == print::LABEL_PAPER {
                     d.handling = Handling::Label;
                     d.sheet = 0;
                 }
@@ -938,10 +956,16 @@ pub(crate) fn body(
                 ui.horizontal_wrapped(|ui| {
                     ui.label(crate::i18n::fmt(tl!("PDF page: {size}"), &[("size", &d.units.size(source.0, source.1))]));
                     let matched = print::matching_paper(source);
-                    if ui.add_enabled(matched.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked()
-                        && let Some(paper) = matched
+                    let page_paper = print::page_paper(source);
+                    if ui.add_enabled(page_paper.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked()
+                        && let Some(paper) = page_paper
                     {
-                        d.paper = paper;
+                        if let Some(index) = matched {
+                            d.paper = index;
+                            d.custom_paper = None;
+                        } else {
+                            d.custom_paper = Some(paper);
+                        }
                         d.handling = Handling::Size;
                         d.size = SizeMode::Actual;
                         d.orientation = Orientation::Auto;

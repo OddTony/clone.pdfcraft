@@ -805,6 +805,15 @@ mod tests {
         }
     }
 
+    #[test]
+    fn letter_paper_name_is_translated_in_every_catalog() {
+        for info in LANGUAGES.iter().filter(|info| info.code != "en") {
+            let lang = Lang::from_code(info.code).expect("registered language");
+            assert!(has(lang, "US Letter"), "{} lacks the default paper name", info.code);
+            assert_ne!(tr(lang, "US Letter"), "US Letter", "{} falls back to English", info.code);
+        }
+    }
+
     /// Japanese translates every registered command and every All tools group, section and item.
     #[test]
     fn japanese_covers_commands_and_catalogue() {
