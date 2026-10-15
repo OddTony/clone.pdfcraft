@@ -20,6 +20,7 @@
 	Create PDF from file…	Dosyadan PDF oluştur…
 	Create PDF from images…	Görsellerden PDF oluştur…
 	Create PDF from multiple files…	Birden çok dosyadan PDF oluştur…
+	Create separate PDFs…	Ayrı PDF'ler oluştur…
 	Create PDF from clipboard	Panodan PDF oluştur
 	Combine files…	Dosyaları birleştir…
 	Save	Kaydet
@@ -41,6 +42,8 @@
 	Take a snapshot	Anlık görüntü al
 	Full screen mode	Tam ekran modu
 	Read mode	Okuma modu
+	Next tab	Sonraki sekme
+	Previous tab	Önceki sekme
 	Switch light / dark theme	Açık / koyu temaya geç
 	Comments panel	Yorumlar paneli
 	Form fields panel	Form alanları paneli
@@ -182,6 +185,9 @@
 	Add or edit links	Bağlantı ekle veya düzenle
 	Create links from URLs	URL'lerden bağlantı oluştur
 	Remove all links	Tüm bağlantıları kaldır
+	No links to remove	Kaldırılacak bağlantı yok
+	Removed 1 link	1 bağlantı kaldırıldı
+	Removed {n} links	{n} bağlantı kaldırıldı
 	Add Bates numbering…	Bates numaralandırması ekle…
 	Add image…	Resim ekle…
 	Redact text and images	Metin ve resimleri karart
@@ -220,6 +226,7 @@
 	Optimize PDF…	PDF'i eniyile…
 	Export to text…	Metne dışa aktar…
 	Export to Word…	Word'e dışa aktar…
+	Export to PowerPoint…	PowerPoint'e dışa aktar…
 	Export to HTML…	HTML'e dışa aktar…
 	Export to RTF…	RTF'ye dışa aktar…
 	JavaScript console…	JavaScript konsolu…
@@ -304,6 +311,7 @@
 	Create from	Şuradan oluştur
 	Single file	Tek dosya
 	Multiple files	Birden çok dosya
+	Separate PDFs	Ayrı PDF'ler
 	Images	Resimler
 	Clipboard	Pano
 	Blank page	Boş sayfa
@@ -656,6 +664,11 @@
 	of the following fields:	aşağıdaki alanların:
 	Simplified field notation:	Basitleştirilmiş alan gösterimi:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	Adlarda + - * / ve parantez içeren alan adları; adlardaki boşluklardan önce \\ koyun.
+	Finding document fonts…	Belge yazı tipleri aranıyor…
+	Installed fonts…	Yüklü yazı tipleri…
+	Keep source fonts	Kaynak yazı tiplerini koru
+	Load font…	Yazı tipi yükle…
+	No openly licensed document fonts found. Load a font file.	Açık lisanslı belge yazı tipi bulunamadı. Bir yazı tipi dosyası yükleyin.
 	Format text	Metni biçimlendir
 	Bold	Kalın
 	Italic	İtalik
@@ -705,6 +718,12 @@
 	Flip Vertical	Dikey Çevir
 	Replace Image…	Resmi Değiştir…
 	Save Image As…	Resmi Farklı Kaydet…
+	Copy Image	Resmi Kopyala
+	The image has been copied ({w} × {h} pixels)	Resim kopyalandı ({w} × {h} piksel)
+	Couldn't copy the image: {e}	Resim kopyalanamadı: {e}
+	Copy Image in Original Format	Resmi Özgün Biçimde Kopyala
+	The image has been copied as a {ext} file	Resim {ext} dosyası olarak kopyalandı
+	The page has changed; select the image again	Sayfa değişti; resmi yeniden seçin
 	Check for updates	Güncellemeleri denetle
 	No check has run yet.	Henüz denetim yapılmadı.
 	Checking for a newer version…	Daha yeni bir sürüm denetleniyor…
@@ -793,6 +812,7 @@
 	, Expires: 	, Son kullanma tarihi: 
 	No digital IDs yet.	Henüz dijital kimlik yok.
 	Configure New Digital ID	Yeni Dijital Kimlik Yapılandır
+	Remove "{name}" from this list? The file itself is not deleted.	"{name}" bu listeden kaldırılsın mı? Dosyanın kendisi silinmez.
 	Continue	Devam Et
 	Configure a Digital ID for Signing	İmzalama için Dijital Kimlik Yapılandır
 	Use a Digital ID from a file	Dosyadan Dijital Kimlik Kullan
@@ -811,6 +831,7 @@
 	{verb} as "{name}"	"{name}" olarak {verb}
 	Certify	Sertifikala
 	The signature will be invisible.	İmza görünmez olacak.
+	The existing action will be preserved.	Mevcut işlem korunacak.
 	Distinguished name	Ayırt edici ad
 	Labels	Etiketler
 	Permitted actions after certifying	Sertifikalandırma sonrası izin verilen eylemler
@@ -1484,7 +1505,7 @@
 	Couldn't optimize the file: {e}	Dosya en iyileştirilemedi: {e}
 	Couldn't write {path}: {e}	{path} yazılamadı: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	Form {u} adresine gönderilmek isteniyor; PdfCraft form verilerini göndermez. Girdilerinizi korumak için belgeyi kaydedin.
-	{s} actions run in the JavaScript engine (M6)	{s} eylemleri JavaScript motorunda çalışır (M6)
+	This PDF uses the unsupported {s} action.	Bu PDF desteklenmeyen {s} eylemini kullanıyor.
 	{name}: the {other} action isn't supported yet	{name}: {other} eylemi henüz desteklenmiyor
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} formu {url} adresine gönderiyor; PdfCraft form verilerini göndermez. Girdilerinizi korumak için belgeyi kaydedin.
 	Export stopped: {e}	Dışa aktarma durduruldu: {e}
@@ -1761,6 +1782,8 @@
 	{month} {y}	{month} {y}
 	Change {key}	{key} değiştir
 	Insert pages from {name}	{name} belgesinden sayfalar ekle
+	Insert pages from {name} — 1 field renamed	{name} dosyasından sayfa ekle — 1 alan yeniden adlandırıldı
+	Insert pages from {name} — fields renamed	{name} dosyasından sayfa ekle — alanlar yeniden adlandırıldı
 	Fill in {name}	{name} doldur
 	Set the image of {name}	{name} resmini ayarla
 	Edit script of {name}	{name} komut dosyasını düzenle
@@ -1791,6 +1814,7 @@
 	Delete document JavaScript	Belge JavaScript'ini sil
 	Edit document JavaScript	Belge JavaScript'ini düzenle
 	Edit text	Metni düzenle
+	Load document font	Belge yazı tipini yükle
 	Move image	Resmi taşı
 	Rotate image	Resmi döndür
 	Flip image	Resmi çevir
@@ -1914,6 +1938,7 @@
 	DPI sets the printed page size without resampling the image.	DPI, resmi yeniden örneklemeden yazdırılan sayfa boyutunu ayarlar.
 	Create	Oluştur
 	Dynamic XFA form laid out from its template: {pages}, {fields}.	Şablonundan oluşturulmuş dinamik XFA formu: {pages}, {fields}.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Bu formun komut dosyaları kapatıldı, çünkü biri çok uzun süre çalıştı. Yeniden çalıştırmak için belgeyi yeniden açın.
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA formu: Diğer görüntüleyicilerin doldurduklarınızı göstermesi için alanları ve XFA verileri eşitlenir.
 @plural	{n} page|{n} pages	{n} sayfa
 @plural	{n} field|{n} fields	{n} alan
@@ -2240,6 +2265,9 @@ key	Space	Boşluk
 scroll speed	Slow	Yavaş
 scroll speed	Normal	Orta
 scroll speed	Fast	Hızlı
+	Animation effects	Animasyon efektleri
+animation effects	On	Açık
+animation effects	Off	Kapalı
 	Enhance camera image	Kamera görüntüsünü iyileştir
 	Drag the corners onto the document's edges, then choose Enhance page.	Köşeleri belgenin kenarlarına sürükleyin, ardından Sayfayı iyileştir'i seçin.
 	Enhance page	Sayfayı iyileştir
@@ -2252,6 +2280,97 @@ scroll speed	Fast	Hızlı
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Bu yazıcının sürücüsü diğer programlardan gelen çift taraflı yazdırma ayarlarını kabul etmez, bu yüzden kendi ayarı geçerlidir. Değiştirmek için: Özellikler…
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Bu alanın yazı tipi “{c}” ({code}) karakterini çizemiyor, bu yüzden PdfCraft yerine ? gösteriyor. Değer kaydedilir ve diğer PDF görüntüleyiciler alanı ondan yeniden çizer.
 	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	PdfCraft'ın yazdığı yazı tipleri “{c}” ({code}) karakterini çizemiyor, bu yüzden her PDF görüntüleyicide ? olarak görünür. Metin kaydedilir.
+	Browser's print dialog	Tarayıcının yazdırma penceresi
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Kopya sayısı, çift taraflı yazdırma ve renk tarayıcının yazdırma penceresinde seçilir.
+	Preparing {n} sheets for printing…	Yazdırma için {n} sayfa hazırlanıyor…
+	Preparing sheet {done} of {total} for printing…	Yazdırma için sayfa {done}/{total} hazırlanıyor…
+	Opening the browser's print dialog…	Tarayıcının yazdırma penceresi açılıyor…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	Tarayıcıdan yazdırılamadı ({e}); bunun yerine yazdırmak için {name} indirildi
 	Tools panel side	Araçlar panelinin yeri
 	Add comment	Yorum ekle
 	Change tag properties	Etiket özelliklerini değiştir
+# Accessibility structure tags.
+	Tags panel	Etiketler paneli
+	Tags	Etiketler
+	Tag type	Etiket türü
+	Actual text	Gerçek metin
+	Find a tag	Etiket bul
+	Collapse tag	Etiketi daralt
+	Expand tag	Etiketi genişlet
+	Revert changes	Değişiklikleri geri al
+	Save tag properties	Etiket özelliklerini kaydet
+	This document has no editable structure tags.	Bu belgede düzenlenebilir yapı etiketleri yok.
+	{n} tags	{n} etiket
+	Save or revert changes before selecting another tag.	Başka bir etiket seçmeden önce değişiklikleri kaydedin veya geri alın.
+	Left out: {names}	Dışarıda bırakılanlar: {names}
+	already a PDF	zaten bir PDF
+	no unused output name	kullanılmayan çıktı adı yok
+	no output folder was chosen	çıktı klasörü seçilmedi
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	{n} PDF indirildi
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} alan adı önceki dosyalarla çakışıyor ve yeniden adlandırılacak: {list}
+	Scan	Tara
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Beyaz bir kâğıda imzanızı atın ve parlak, eşit ışıkta fotoğrafını çekin (flaş kullanın). Fotoğrafı seçin veya buraya bırakın: PdfCraft imzayı bulur ve kâğıdı kaldırır.
+	Choose photo…	Fotoğraf seç…
+	No photo chosen	Fotoğraf seçilmedi
+	Photo	Fotoğraf
+	Ink sensitivity	Mürekkep hassasiyeti
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	Çerçevede imza bulunamadı. Çerçeveyi imzanın üzerine taşıyın veya mürekkep hassasiyetini artırın.
+	Couldn't use the photo: {e}	Fotoğraf kullanılamadı: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	Sekmeyi kapat
+	Reopen Closed Tab	Kapatılan sekmeyi yeniden aç
+	Reveal in Finder	Finder’da göster
+	Reveal in File Explorer	Dosya Gezgini’nde göster
+	Other colour…	Diğer renk…
+	Recent colours	Son kullanılan renkler
+	Reading colours	Okuma renkleri
+	Replace document colours	Belge renklerini değiştir
+	Black on white	Beyaz üzerinde siyah
+	White on black	Siyah üzerinde beyaz
+	Yellow on black	Siyah üzerinde sarı
+	Green on black	Siyah üzerinde yeşil
+	Page background	Sayfa arka planı
+	Only change the colour of black text or line art	Yalnızca siyah metin veya çizgi sanatının rengini değiştir
+	Change the colour of line art as well as text	Metnin yanı sıra çizgi sanatının rengini de değiştir
+	Colours are remapped while rendering; the document itself never changes.	Renkler görüntülenirken yeniden eşlenir; belgenin kendisi asla değişmez.
+	Couldn't follow linked PDF: {reason}	Bağlantılı PDF açılamadı: {reason}
+	The linked PDF opened, but its named destination was not applied.	Bağlantılı PDF açıldı, ancak adlandırılmış hedefi uygulanmadı.
+	The linked PDF opened, but its page destination was out of range.	Bağlantılı PDF açıldı, ancak sayfa hedefi aralık dışında.
+	Local cross-PDF links require the desktop app	PDF'ler arası yerel bağlantılar masaüstü uygulamasını gerektirir
+	Minimize	Küçült
+	Maximize	Büyüt
+	Restore	Geri yükle
+	Use system title bar	Sistem başlık çubuğunu kullan
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Sekme çubuğu yerine pencere düğmeleri için basit bir başlık çubuğu göster. GNOME uygulamalar için başlık çubuğu çizmez, bu yüzden bu çubuk onun temasına uymaz.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	İzin ver
+	Only allow this if you trust the source document.	Buna yalnızca kaynak belgeye güveniyorsanız izin verin.
+	Open this local PDF?	Bu yerel PDF açılsın mı?
+	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
+	Move tag earlier	Etiketi daha erken taşı
+	Move tag later	Etiketi daha geç taşı
+	Mark as artifact	Yapıt olarak işaretle
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Bu yaprak etiketini okuma sırasından kaldırın ve doğrudan içeriğini yapıt olarak işaretleyin
+	Mark content as artifact	İçeriği yapıt olarak işaretle
+	Word count	Sözcük sayısı
+	Current page only	Yalnızca geçerli sayfa
+	Exclude tagged tables	Etiketli tabloları hariç tut
+	Exclude tagged code blocks	Etiketli kod bloklarını hariç tut
+	Exclude image/OCR text	Görüntü/OCR metnini hariç tut
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Hariç tutma işlemleri PDF etiketlerini kullanır. Etiketsiz tablolar ve kod sayılmaya devam eder. Görüntüleri hariç tutmak görünmez metni de kaldırır.
+	Words	Sözcükler
+	Characters	Karakterler
+	Characters without spaces	Boşluksuz karakterler
+	Pages counted	Sayılan sayfalar
+	Some pages contain no countable text. Scanned images need OCR first.	Bazı sayfalarda sayılabilecek metin yok. Taranmış görüntüler için önce OCR gerekir.
+	Some content could not be classified safely and was kept in the count.	Bazı içerikler güvenilir biçimde sınıflandırılamadığı için sayıma dahil edildi.
+	Counting words… {n} pages read	Sözcükler sayılıyor… {n} sayfa okundu
+	Word counting stopped unexpectedly.	Sözcük sayımı beklenmedik şekilde durdu.
+	Word count…	Sözcük sayısı…
+@id	file.word_count	Sözcük sayısı…
+	Standard	Standart
+	Mobile	Mobil
+	Merge image fragments	Görüntü parçalarını birleştir
+	Optimizing… merging image fragments	İyileştiriliyor… görüntü parçaları birleştiriliyor

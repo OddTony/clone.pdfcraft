@@ -54,6 +54,8 @@
 	Take a snapshot	Суретке түсіру
 	Full screen mode	Толық экран режимі
 	Read mode	Оқу режимі
+	Next tab	Келесі қойынды
+	Previous tab	Алдыңғы қойынды
 	Switch light / dark theme	Ашық / қараңғы теманы ауыстыру
 	Comments panel	Түсініктемелер панелі
 	Form fields panel	Форма өрістері панелі
@@ -186,6 +188,9 @@
 	Add or edit links	Сілтемелерді қосу немесе түзету
 	Create links from URLs	URL-ден сілтемелер жасау
 	Remove all links	Барлық сілтемелерді алып тастау
+	No links to remove	Жоятын сілтеме жоқ
+	Removed 1 link	1 сілтеме жойылды
+	Removed {n} links	Жойылған сілтемелер: {n}
 	Add Bates numbering…	Bates нөмірлеуін қосу…
 	Add image…	Сурет қосу…
 	Redact text and images	Мәтін мен суреттерді жасыру
@@ -224,6 +229,7 @@
 	Optimize PDF…	PDF оңтайландыру…
 	Export to text…	Мәтінге экспорттау…
 	Export to Word…	Word-ға экспорттау…
+	Export to PowerPoint…	PowerPoint-қа экспорттау…
 	Export to HTML…	HTML-ге экспорттау…
 	Export to RTF…	RTF-ке экспорттау…
 	JavaScript console…	JavaScript консолі…
@@ -307,6 +313,7 @@
 	Create from	Мынадан жасау
 	Single file	Бір файл
 	Multiple files	Бірнеше файл
+	Separate PDFs	Бөлек PDF файлдары
 	Images	Кескіндер
 	Clipboard	Алмасу буфері
 	Blank page	Бос бет
@@ -658,6 +665,11 @@
 	of the following fields:	келесі өрістердің:
 	Simplified field notation:	Жеңілдетілген өріс жазылуы:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	Құрамында + - * / және жақшалар бар өріс атаулары; атаудағы бос орынның алдында \\ қойыңыз.
+	Finding document fonts…	Құжат қаріптері ізделуде…
+	Installed fonts…	Орнатылған қаріптер…
+	Keep source fonts	Бастапқы қаріптерді сақтау
+	Load font…	Қаріпті жүктеу…
+	No openly licensed document fonts found. Load a font file.	Ашық лицензиялы құжат қаріптері табылмады. Қаріп файлын жүктеңіз.
 	Format text	Мәтінді пішімдеу
 	Bold	Жуан
 	Italic	Көлбеу
@@ -707,6 +719,12 @@
 	Flip Vertical	Тікке аудару
 	Replace Image…	Суретті ауыстыру…
 	Save Image As…	Суретті басқаша сақтау…
+	Copy Image	Суретті көшіру
+	The image has been copied ({w} × {h} pixels)	Сурет көшірілді ({w} × {h} пиксель)
+	Couldn't copy the image: {e}	Суретті көшіру мүмкін болмады: {e}
+	Copy Image in Original Format	Суретті бастапқы пішімде көшіру
+	The image has been copied as a {ext} file	Сурет {ext} файлы ретінде көшірілді
+	The page has changed; select the image again	Бет өзгерді; суретті қайта таңдаңыз
 	Check for updates	Жаңартуларды тексеру
 	No check has run yet.	Тексеру әлі жүргізілген жоқ.
 	Checking for a newer version…	Жаңа нұсқа бар ма екені тексерілуде…
@@ -795,6 +813,7 @@
 	, Expires: 	, Жарамдылық мерзімі: 
 	No digital IDs yet.	Әзірге цифрлық ID жоқ.
 	Configure New Digital ID	Жаңа цифрлық ID теңшеу
+	Remove "{name}" from this list? The file itself is not deleted.	«{name}» осы тізімнен алып тасталсын ба? Файлдың өзі жойылмайды.
 	Continue	Жалғастыру
 	Configure a Digital ID for Signing	Қол қоюға арналған цифрлық ID теңшеу
 	Use a Digital ID from a file	Файлдағы цифрлық ID-ді пайдалану
@@ -813,6 +832,7 @@
 	{verb} as "{name}"	«{name}» ретінде {verb}
 	Certify	Куәландыру
 	The signature will be invisible.	Қолтаңба көрінбейтін болады.
+	The existing action will be preserved.	Қолданыстағы әрекет сақталады.
 	Distinguished name	Ажырататын атау
 	Labels	Белгілер
 	Permitted actions after certifying	Куәландырғаннан кейінгі рұқсат етілген әрекеттер
@@ -1469,7 +1489,7 @@
 	Couldn't optimize the file: {e}	Файлды оңтайландыру мүмкін болмады: {e}
 	Couldn't write {path}: {e}	{path} жолына жазу мүмкін болмады: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	Форма {u} адресіне жіберілуді сұрайды; PdfCraft форма деректерін жібермейді. Енгізген деректеріңізді сақтап қалу үшін құжатты сақтаңыз.
-	{s} actions run in the JavaScript engine (M6)	{s} әрекет JavaScript қозғалтқышында орындалады (M6)
+	This PDF uses the unsupported {s} action.	Бұл PDF қолдау көрсетілмейтін {s} әрекетін пайдаланады.
 	{name}: the {other} action isn't supported yet	{name}: {other} әрекеті әлі қолдау көрсетілмейді
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} форманы {url} адресіне жібереді; PdfCraft форма деректерін жібермейді. Енгізген деректеріңізді сақтап қалу үшін құжатты сақтаңыз.
 	Export stopped: {e}	Экспорт тоқтатылды: {e}
@@ -1790,6 +1810,8 @@
 	{month} {y}	{month} {y}
 	Change {key}	Өзгерту: {key}
 	Insert pages from {name}	Беттерді {name} файлынан енгізу
+	Insert pages from {name} — 1 field renamed	{name} ішінен беттерді кірістіру — 1 өріс қайта аталды
+	Insert pages from {name} — fields renamed	{name} ішінен беттерді кірістіру — өрістер қайта аталды
 	Fill in {name}	{name} толтыру
 	Set the image of {name}	{name} кескінін орнату
 	Edit script of {name}	{name} скриптін түзету
@@ -1820,6 +1842,7 @@
 	Delete document JavaScript	Құжаттың JavaScript-ін жою
 	Edit document JavaScript	Құжаттың JavaScript-ін түзету
 	Edit text	Мәтінді түзету
+	Load document font	Құжат қаріпін жүктеу
 	Move image	Кескінді жылжыту
 	Rotate image	Кескінді бұру
 	Flip image	Кескінді аудару
@@ -1943,6 +1966,7 @@
 	DPI sets the printed page size without resampling the image.	DPI пиксельдер санын өзгертпей, басып шығарылатын беттің өлшемін орнатады.
 	Create	Жасау
 	Dynamic XFA form laid out from its template: {pages}, {fields}.	Ұлгісі бойынша құрылған динамикалық XFA формасы: {pages}, {fields}.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Бұл форманың скрипттері өшірілді, себебі олардың бірі тым ұзақ орындалды. Оларды қайта іске қосу үшін құжатты қайта ашыңыз.
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA формасы: өрістері мен XFA деректері өзара синхрондалып тұрады, сондықтан басқа қарау құралдары да сіз енгізген мәндерді көрсетеді.
 	Switch to two-page view first to show the cover page	Мұқабаны көрсету үшін алдымен екі беттік көрініске ауысыңыз
 	Page display: {layout}	Беттерді көрсету: {layout}
@@ -1956,6 +1980,7 @@
 @plural	{n} page|{n} pages	{n} бет|{n} бет
 @plural	{n} field|{n} fields	{n} өріс|{n} өріс
 	Create PDF from multiple files…	Бірнеше файлдан PDF жасау…
+	Create separate PDFs…	Бөлек PDF файлдарын жасау…
 	Optimizing… removing user data	Оңтайландыру… пайдаланушы деректерін жою
 	Optimizing… image {d} of {t}	Оңтайландыру… сурет {d} / {t}
 	Optimizing… cleaning up	Оңтайландыру… тазарту
@@ -2242,6 +2267,9 @@ key	Space	Бос орын
 scroll speed	Slow	Баяу
 scroll speed	Normal	Қалыпты
 scroll speed	Fast	Жылдам
+	Animation effects	Анимация әсерлері
+animation effects	On	Қосулы
+animation effects	Off	Өшірулі
 	Enhance camera image	Камера суретін жақсарту
 	Drag the corners onto the document's edges, then choose Enhance page.	Бұрыштарды құжаттың жиектеріне сүйреп, содан кейін «Бетті жақсарту» таңдаңыз.
 	Enhance page	Бетті жақсарту
@@ -2254,6 +2282,97 @@ scroll speed	Fast	Жылдам
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Бұл принтердің драйвері басқа бағдарламалардан екі жақты басып шығару баптауларын қабылдамайды, сондықтан өз баптауы қолданылады. Оны мына жерден өзгертіңіз: Сипаттар…
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Бұл өрістің қаріпі «{c}» ({code}) таңбасын сала алмайды, сондықтан PdfCraft оның орнына ? көрсетеді. Мән сақталады, ал басқа PDF қарау құралдары өрісті соған қарап қайта салады.
 	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	PdfCraft жазатын қаріптер «{c}» ({code}) таңбасын сала алмайды, сондықтан ол барлық PDF қарау құралдарында ? болып көрінеді. Мәтін сақталады.
+	Browser's print dialog	Браузердің басып шығару терезесі
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Көшірмелер саны, екі жақты басып шығару және түс браузердің басып шығару терезесінде таңдалады.
+	Preparing {n} sheets for printing…	Басып шығаруға парақтар дайындалуда: {n}…
+	Preparing sheet {done} of {total} for printing…	Басып шығаруға {total} парақтың {done}-сі дайындалуда…
+	Opening the browser's print dialog…	Браузердің басып шығару терезесі ашылуда…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	Браузерден басып шығару мүмкін болмады ({e}); оның орнына басып шығару үшін {name} жүктелді
 	Tools panel side	Құралдар панелінің жағы
 	Add comment	Түсініктеме қосу
 	Change tag properties	Тег қасиеттерін өзгерту
+# Accessibility structure tags.
+	Tags panel	Тегтер панелі
+	Tags	Тегтер
+	Tag type	Тег түрі
+	Actual text	Нақты мәтін
+	Find a tag	Тегті табу
+	Collapse tag	Тегті жинау
+	Expand tag	Тегті жаю
+	Revert changes	Өзгерістерді қайтару
+	Save tag properties	Тег қасиеттерін сақтау
+	This document has no editable structure tags.	Бұл құжатта өңделетін құрылымдық тегтер жоқ.
+	{n} tags	{n} тег
+	Save or revert changes before selecting another tag.	Басқа тегті таңдамас бұрын өзгерістерді сақтаңыз немесе қайтарыңыз.
+	Left out: {names}	Қалдырылды: {names}
+	already a PDF	бұл қазірдің өзінде PDF
+	no unused output name	бос шығыс атауы жоқ
+	no output folder was chosen	шығыс қалтасы таңдалмады
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	{n} PDF жүктелді|{n} PDF жүктелді
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} өріс атауы алдыңғы файлдармен қайшы келеді және қайта аталады: {list}|{n} өріс атауы алдыңғы файлдармен қайшы келеді және қайта аталады: {list}
+	Scan	Сканерлеу
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Ақ қағаз парағына қол қойып, оны жарық әрі біркелкі жарықта суретке түсіріңіз (жарқылды қосыңыз). Суретті таңдаңыз немесе осында тастаңыз: PdfCraft қолтаңбаны тауып, қағазды алып тастайды.
+	Choose photo…	Суретті таңдау…
+	No photo chosen	Сурет таңдалмаған
+	Photo	Сурет
+	Ink sensitivity	Сия сезімталдығы
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	Жақтауда қолтаңба табылмады. Жақтауды қолтаңбаның үстіне жылжытыңыз немесе сия сезімталдығын арттырыңыз.
+	Couldn't use the photo: {e}	Суретті пайдалану мүмкін болмады: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	Қойындыны жабу
+	Reopen Closed Tab	Жабылған қойындыны қайта ашу
+	Reveal in Finder	Finder ішінде көрсету
+	Reveal in File Explorer	Файл шолғышында көрсету
+	Other colour…	Басқа түс…
+	Recent colours	Соңғы түстер
+	Reading colours	Оқу түстері
+	Replace document colours	Құжат түстерін ауыстыру
+	Black on white	Ақ фонда қара
+	White on black	Қара фонда ақ
+	Yellow on black	Қара фонда сары
+	Green on black	Қара фонда жасыл
+	Page background	Бет фоны
+	Only change the colour of black text or line art	Тек қара мәтіннің немесе сызықтық суреттің түсін өзгерту
+	Change the colour of line art as well as text	Мәтінмен қатар сызықтық суреттің түсін де өзгерту
+	Colours are remapped while rendering; the document itself never changes.	Түстер көрсету кезінде қайта белгіленеді; құжаттың өзі ешқашан өзгермейді.
+	Couldn't follow linked PDF: {reason}	Байланысты PDF ашылмады: {reason}
+	The linked PDF opened, but its named destination was not applied.	Байланысты PDF ашылды, бірақ оның аталған мақсаты қолданылмады.
+	The linked PDF opened, but its page destination was out of range.	Байланысты PDF ашылды, бірақ оның мақсатты беті ауқымнан тыс.
+	Local cross-PDF links require the desktop app	PDF файлдары арасындағы жергілікті сілтемелер үшін жұмыс үстелі қолданбасы қажет
+	Minimize	Жию
+	Maximize	Жаю
+	Restore	Қалпына келтіру
+	Use system title bar	Жүйелік тақырып жолағын пайдалану
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Терезе батырмалары үшін қойындылар жолағының орнына қарапайым тақырып жолағын көрсету. GNOME қолданбаларға тақырып жолағын салмайды, сондықтан бұл жолақ оның тақырыбына сәйкес келмейді.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	Рұқсат беру
+	Only allow this if you trust the source document.	Бастапқы құжатқа сенсеңіз ғана рұқсат беріңіз.
+	Open this local PDF?	Осы жергілікті PDF файлын ашу керек пе?
+	This document is trying to open a local file:	Бұл құжат жергілікті файлды ашуға әрекеттеніп жатыр:
+	Move tag earlier	Тегті ертерек жылжыту
+	Move tag later	Тегті кейінірек жылжыту
+	Mark as artifact	Артефакт ретінде белгілеу
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Осы жапырақ тегін оқу ретінен алып тастап, оның тікелей мазмұнын артефакт ретінде белгілеңіз
+	Mark content as artifact	Мазмұнды артефакт ретінде белгілеу
+	Word count	Сөздер саны
+	Current page only	Тек ағымдағы бет
+	Exclude tagged tables	Белгіленген кестелерді есепке алмау
+	Exclude tagged code blocks	Белгіленген код блоктарын есепке алмау
+	Exclude image/OCR text	Сурет/OCR мәтінін есепке алмау
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Есептен шығару PDF тегтерін пайдаланады. Тегсіз кестелер мен код есепте қалады. Суреттерді алып тастау көрінбейтін мәтінді де алып тастайды.
+	Words	Сөздер
+	Characters	Таңбалар
+	Characters without spaces	Бос орынсыз таңбалар
+	Pages counted	Есептелген беттер
+	Some pages contain no countable text. Scanned images need OCR first.	Кейбір беттерде санауға болатын мәтін жоқ. Сканерленген суреттерге алдымен OCR қажет.
+	Some content could not be classified safely and was kept in the count.	Кейбір мазмұнды сенімді түрде жіктеу мүмкін болмады, сондықтан ол есепте қалды.
+	Counting words… {n} pages read	Сөздер саналуда… {n} бет оқылды
+	Word counting stopped unexpectedly.	Сөздерді санау күтпеген жерден тоқтады.
+	Word count…	Сөздер саны…
+@id	file.word_count	Сөздер саны…
+	Standard	Стандартты
+	Mobile	Мобильді құрылғы
+	Merge image fragments	Сурет фрагменттерін біріктіру
+	Optimizing… merging image fragments	Оңтайландыру… сурет фрагменттерін біріктіру

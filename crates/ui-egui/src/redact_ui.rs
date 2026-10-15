@@ -92,6 +92,8 @@ pub struct SearchDraft {
     pub text: String,
     /// The word list, one word or phrase per line.
     pub words: String,
+    pub case_sensitive: bool,
+    pub whole_words: bool,
     pub pattern: RedactPattern,
     /// The result of the last search (matches marked), shown in the dialog.
     pub found: Option<usize>,
@@ -99,7 +101,15 @@ pub struct SearchDraft {
 
 impl Default for SearchDraft {
     fn default() -> Self {
-        Self { mode: SearchMode::Phrase, text: String::new(), words: String::new(), pattern: RedactPattern::Phone, found: None }
+        Self {
+            mode: SearchMode::Phrase,
+            text: String::new(),
+            words: String::new(),
+            case_sensitive: false,
+            whole_words: false,
+            pattern: RedactPattern::Phone,
+            found: None,
+        }
     }
 }
 
@@ -201,7 +211,7 @@ impl PdfCraftApp {
             let Some(text) = out.text else { continue };
             let hits = match d.mode {
                 SearchMode::Patterns => text.find_with(|c| pdfcraft_engine::find_pattern(d.pattern, c)),
-                _ => needles.iter().flat_map(|w| text.find(w)).collect(),
+                _ => needles.iter().flat_map(|w| text.find_opts(w, d.case_sensitive, d.whole_words)).collect(),
             };
             for h in hits {
                 let quads: Vec<[f64; 8]> = text.line_rects(h).into_iter().map(|r| page_info.view_rect_to_quad(r)).collect();
@@ -284,6 +294,10 @@ pub(crate) fn search_body(ui: &mut egui::Ui, d: &mut SearchDraft, t: &Tokens) ->
             let n = pdfcraft_engine::redact_word_list(&d.words).len();
             ui.label(egui::RichText::new(crate::i18n::fmt(tl!("{n} word(s) or phrase(s)"), &[("n", &n.to_string())])).small().color(t.text_faint));
         });
+    });
+    ui.add_enabled_ui(d.mode != SearchMode::Patterns, |ui| {
+        ui.add(widgets::checkbox(&mut d.whole_words, tl!("Whole words only")));
+        ui.add(widgets::checkbox(&mut d.case_sensitive, tl!("Case-sensitive")));
     });
     ui.add_space(6.0);
     widgets::radio_value(ui, &mut d.mode, SearchMode::Patterns, tl!("Patterns"));

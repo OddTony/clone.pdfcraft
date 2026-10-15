@@ -80,6 +80,8 @@
 	Column select	تحديد عمود
 	Full screen mode	وضع ملء الشاشة
 	Read mode	وضع القراءة
+	Next tab	علامة التبويب التالية
+	Previous tab	علامة التبويب السابقة
 	Switch light / dark theme	التبديل بين السمة الفاتحة والداكنة
 	Comments panel	لوحة التعليقات
 	Form fields panel	لوحة حقول النموذج
@@ -225,6 +227,9 @@
 	Add or edit links	إضافة روابط أو تحريرها
 	Create links from URLs	إنشاء روابط من عناوين URL
 	Remove all links	إزالة كل الروابط
+	No links to remove	لا توجد روابط لإزالتها
+	Removed 1 link	تمت إزالة رابط واحد
+	Removed {n} links	الروابط التي أزيلت: {n}
 	Add Bates numbering…	إضافة ترقيم بيتس…
 	Add image…	إضافة صورة…
 	Redact text and images	حجب النص والصور
@@ -263,6 +268,7 @@
 	Optimize PDF…	تحسين PDF…
 	Export to text…	تصدير إلى نص…
 	Export to Word…	تصدير إلى Word…
+	Export to PowerPoint…	تصدير إلى PowerPoint…
 	Export to HTML…	تصدير إلى HTML…
 	Export to RTF…	تصدير إلى RTF…
 	JavaScript console…	وحدة تحكم JavaScript…
@@ -347,6 +353,7 @@
 	Create from	إنشاء من
 	Single file	ملف واحد
 	Multiple files	عدة ملفات
+	Separate PDFs	ملفات PDF منفصلة
 	Images	صور
 	Clipboard	الحافظة
 	Blank page	صفحة فارغة
@@ -698,6 +705,14 @@
 	of the following fields:	للحقول التالية:
 	Simplified field notation:	صيغة الحقول المبسطة:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	أسماء الحقول مع + - * / والأقواس؛ ضع \\ قبل المسافات في الأسماء.
+
+# Document font selection
+	Finding document fonts…	جارٍ البحث عن خطوط المستند…
+	Installed fonts…	الخطوط المثبتة…
+	Keep source fonts	الاحتفاظ بالخطوط الأصلية
+	Load font…	تحميل خط…
+	No openly licensed document fonts found. Load a font file.	لم يُعثر على خطوط ذات ترخيص مفتوح. حمّل ملف خط.
+
 	Format text	تنسيق النص
 	Bold	غامق
 	Italic	مائل
@@ -747,6 +762,12 @@
 	Flip Vertical	قلب عمودي
 	Replace Image…	استبدال الصورة…
 	Save Image As…	حفظ الصورة باسم…
+	Copy Image	نسخ الصورة
+	The image has been copied ({w} × {h} pixels)	نُسخت الصورة ({w} × {h} بكسل)
+	Couldn't copy the image: {e}	تعذّر نسخ الصورة: {e}
+	Copy Image in Original Format	نسخ الصورة بتنسيقها الأصلي
+	The image has been copied as a {ext} file	نُسخت الصورة كملف {ext}
+	The page has changed; select the image again	تغيّرت الصفحة؛ حدّد الصورة مرة أخرى
 	Check for updates	التحقق من التحديثات
 	No check has run yet.	لم يُجرَ أي تحقق بعد.
 	Checking for a newer version…	جارٍ التحقق من وجود إصدار أحدث…
@@ -836,6 +857,7 @@
 	, Expires: 	، تنتهي: 
 	No digital IDs yet.	لا توجد معرّفات رقمية بعد.
 	Configure New Digital ID	إعداد معرّف رقمي جديد
+	Remove "{name}" from this list? The file itself is not deleted.	إزالة "{name}" من هذه القائمة؟ لن يُحذف الملف نفسه.
 	Continue	متابعة
 	Configure a Digital ID for Signing	إعداد معرّف رقمي للتوقيع
 	Use a Digital ID from a file	استخدام معرّف رقمي من ملف
@@ -854,6 +876,7 @@
 	{verb} as "{name}"	{verb} باسم "{name}"
 	Certify	تصديق
 	The signature will be invisible.	سيكون التوقيع غير مرئي.
+	The existing action will be preserved.	سيتم الاحتفاظ بالإجراء الحالي.
 	Distinguished name	الاسم المميز
 	Labels	التسميات
 	Graphic	رسم
@@ -1527,7 +1550,7 @@
 	Couldn't optimize the file: {e}	تعذّر تحسين الملف: {e}
 	Couldn't write {path}: {e}	تعذّرت الكتابة في {path}: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	النموذج يطلب إرساله إلى {u}؛ PdfCraft لا يرسل بيانات النماذج. احفظ المستند للاحتفاظ بما أدخلته.
-	{s} actions run in the JavaScript engine (M6)	إجراءات {s} تعمل في محرك JavaScript (M6)
+	This PDF uses the unsupported {s} action.	يستخدم هذا الملف إجراء {s} غير مدعوم.
 	{name}: the {other} action isn't supported yet	{name}: الإجراء {other} غير مدعوم بعد
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} يرسل النموذج إلى {url}؛ PdfCraft لا يرسل بيانات النماذج. احفظ المستند للاحتفاظ بما أدخلته.
 	Export stopped: {e}	توقف التصدير: {e}
@@ -1862,6 +1885,8 @@
 	{month} {y}	{month} {y}
 	Change {key}	تغيير {key}
 	Insert pages from {name}	إدراج صفحات من {name}
+	Insert pages from {name} — 1 field renamed	إدراج صفحات من {name} — تمت إعادة تسمية حقل واحد
+	Insert pages from {name} — fields renamed	إدراج صفحات من {name} — تمت إعادة تسمية حقول
 	Fill in {name}	تعبئة {name}
 	Set the image of {name}	تعيين صورة {name}
 	Edit script of {name}	تحرير سكربت {name}
@@ -1892,6 +1917,7 @@
 	Delete document JavaScript	حذف JavaScript المستند
 	Edit document JavaScript	تحرير JavaScript المستند
 	Edit text	تحرير النص
+	Load document font	تحميل خط المستند
 	Move image	نقل الصورة
 	Rotate image	تدوير الصورة
 	Flip image	قلب الصورة
@@ -2015,6 +2041,7 @@
 	DPI sets the printed page size without resampling the image.	قيمة DPI تحدد حجم الصفحة المطبوعة دون إعادة تشكيل الصورة.
 	Create	إنشاء
 	Dynamic XFA form laid out from its template: {pages}, {fields}.	نموذج XFA ديناميكي رُتِّب من قالبه: {pages}، {fields}.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	سكربتات هذا النموذج متوقفة لأن أحدها استغرق وقتًا طويلًا جدًا. أعد فتح المستند لتشغيلها من جديد.
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	نموذج XFA: حقوله وبيانات XFA فيه تبقى متطابقة، فتعرض العارضات الأخرى ما تعبئه.
 	Switch to two-page view first to show the cover page	انتقل أولًا إلى عرض الصفحتين لإظهار صفحة الغلاف
 	Page display: {layout}	عرض الصفحات: {layout}
@@ -2027,7 +2054,9 @@
 	Couldn't import the signature image: {e}	تعذّر استيراد صورة التوقيع: {e}
 @plural	{n} page|{n} pages	{n} صفحة|{n} صفحة|{n} صفحتان|{n} صفحات|{n} صفحة|{n} صفحة
 @plural	{n} field|{n} fields	{n} حقل|{n} حقل|{n} حقلان|{n} حقول|{n} حقلًا|{n} حقل
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	يتعارض {n} من أسماء الحقول مع الملفات السابقة وسيتم تغيير أسمائها: {list}|يتعارض اسم {n} حقل مع الملفات السابقة وسيتم تغيير اسمه: {list}|يتعارض اسما {n} حقل مع الملفات السابقة وسيتم تغيير اسميهما: {list}|تتعارض أسماء {n} حقول مع الملفات السابقة وسيتم تغيير أسمائها: {list}|يتعارض {n} اسم حقل مع الملفات السابقة وسيتم تغيير أسمائها: {list}|يتعارض {n} من أسماء الحقول مع الملفات السابقة وسيتم تغيير أسمائها: {list}
 	Create PDF from multiple files…	إنشاء PDF من عدة ملفات…
+	Create separate PDFs…	إنشاء ملفات PDF منفصلة…
 	Optimizing… removing user data	جارٍ التحسين… إزالة بيانات المستخدم
 	Optimizing… image {d} of {t}	جارٍ التحسين… الصورة {d} من {t}
 	Optimizing… cleaning up	جارٍ التحسين… التنظيف
@@ -2264,6 +2293,9 @@ key	Space	مسافة
 scroll speed	Slow	بطيئة
 scroll speed	Normal	عادية
 scroll speed	Fast	سريعة
+	Animation effects	تأثيرات الحركة
+animation effects	On	مفعّلة
+animation effects	Off	معطّلة
 	Enhance camera image	تحسين صورة الكاميرا
 	Drag the corners onto the document's edges, then choose Enhance page.	اسحب الزوايا إلى حواف المستند، ثم اختر تحسين الصفحة.
 	Enhance page	تحسين الصفحة
@@ -2273,7 +2305,97 @@ scroll speed	Fast	سريعة
 	Original	الأصل
 	Greyscale	تدرج رمادي
 	Black and white	أبيض وأسود
+	Reading colours	ألوان القراءة
+	Replace document colours	استبدال ألوان المستند
+	Black on white	أسود على أبيض
+	White on black	أبيض على أسود
+	Yellow on black	أصفر على أسود
+	Green on black	أخضر على أسود
+	Page background	خلفية الصفحة
+	Only change the colour of black text or line art	تغيير لون النص الأسود والخطوط فقط
+	Change the colour of line art as well as text	تغيير لون الخطوط أيضًا، وليس النص فقط
+	Colours are remapped while rendering; the document itself never changes.	تُستبدل الألوان عند الرسم؛ المستند نفسه لا يتغير أبدًا.
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	لا يقبل برنامج تشغيل هذه الطابعة إعدادات الطباعة على الوجهين من البرامج الأخرى، لذا يُطبَّق إعداده الخاص. غيّره من خصائص…
+	Browser's print dialog	مربع حوار الطباعة في المتصفح
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	يُختار عدد النسخ والطباعة على الوجهين والألوان في مربع حوار الطباعة في المتصفح.
+	Preparing {n} sheets for printing…	جارٍ تجهيز {n} من الأوراق للطباعة…
+	Preparing sheet {done} of {total} for printing…	جارٍ تجهيز الورقة {done} من {total} للطباعة…
+	Opening the browser's print dialog…	جارٍ فتح مربع حوار الطباعة في المتصفح…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	تعذّرت الطباعة من المتصفح ({e})؛ نُزّل {name} لطباعته بدلًا من ذلك
 	Tools panel side	جانب لوحة الأدوات
 	Add comment	إضافة تعليق
 	Change tag properties	تغيير خصائص الوسم
+# Accessibility structure tags.
+	Tags panel	لوحة الوسوم
+	Tags	الوسوم
+	Tag type	نوع الوسم
+	Actual text	النص الفعلي
+	Find a tag	ابحث عن وسم
+	Collapse tag	طي الوسم
+	Expand tag	توسيع الوسم
+	Revert changes	التراجع عن التغييرات
+	Save tag properties	حفظ خصائص الوسم
+	This document has no editable structure tags.	لا يحتوي هذا المستند على وسوم بنيوية قابلة للتحرير.
+	{n} tags	{n} وسوم
+	Save or revert changes before selecting another tag.	احفظ التغييرات أو تراجع عنها قبل تحديد وسم آخر.
+	Left out: {names}	تم استبعاد: {names}
+	already a PDF	ملف PDF بالفعل
+	no unused output name	لا يوجد اسم ناتج غير مستخدم
+	no output folder was chosen	لم يتم اختيار مجلد للإخراج
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	تم تنزيل {n} من ملفات PDF|تم تنزيل ملف PDF واحد ({n})|تم تنزيل ملفي PDF ({n})|تم تنزيل {n} ملفات PDF|تم تنزيل {n} ملف PDF|تم تنزيل {n} من ملفات PDF
+	Scan	مسح ضوئي
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	وقّع على ورقة بيضاء والتقط لها صورة في إضاءة ساطعة ومتساوية (استخدم الفلاش). اختر الصورة أو أفلتها هنا: يعثر PdfCraft على التوقيع ويزيل الورق.
+	Choose photo…	اختيار صورة…
+	No photo chosen	لم تُختر صورة
+	Photo	صورة
+	Ink sensitivity	حساسية الحبر
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	لم يُعثر على توقيع داخل الإطار. حرّك الإطار فوق التوقيع أو ارفع حساسية الحبر.
+	Couldn't use the photo: {e}	تعذّر استخدام الصورة: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	إغلاق علامة التبويب
+	Reopen Closed Tab	إعادة فتح علامة التبويب المغلقة
+	Reveal in Finder	إظهار في Finder
+	Reveal in File Explorer	إظهار في مستكشف الملفات
+	Other colour…	لون آخر…
+	Recent colours	الألوان الأخيرة
+	Couldn't follow linked PDF: {reason}	تعذّر فتح ملف PDF المرتبط: {reason}
+	The linked PDF opened, but its named destination was not applied.	فُتح ملف PDF المرتبط، لكن لم تُطبَّق وجهته المسماة.
+	The linked PDF opened, but its page destination was out of range.	فُتح ملف PDF المرتبط، لكن وجهة الصفحة خارج النطاق.
+	Local cross-PDF links require the desktop app	تتطلب الروابط المحلية بين ملفات PDF تطبيق سطح المكتب
+	Minimize	تصغير
+	Maximize	تكبير
+	Restore	استعادة
+	Use system title bar	استخدام شريط عنوان النظام
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	إظهار شريط عنوان بسيط لأزرار النافذة بدلًا من شريط الألسنة. لا يرسم GNOME أشرطة العناوين للتطبيقات، لذلك لا يتبع هذا الشريط سمته.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	السماح
+	Only allow this if you trust the source document.	لا تسمح بذلك إلا إذا كنت تثق بالمستند المصدر.
+	Open this local PDF?	هل تريد فتح ملف PDF المحلي هذا؟
+	This document is trying to open a local file:	يحاول هذا المستند فتح ملف محلي:
+	Move tag earlier	نقل العلامة للأعلى
+	Move tag later	نقل العلامة للأسفل
+	Mark as artifact	وضع علامة كعنصر زخرفي
+	Remove this leaf tag from reading order and mark its direct content as an artifact	أزل هذه العلامة من ترتيب القراءة وضع علامة على محتواها المباشر كعنصر زخرفي
+	Mark content as artifact	وضع علامة على المحتوى كعنصر زخرفي
+	Word count	عدد الكلمات
+	Current page only	الصفحة الحالية فقط
+	Exclude tagged tables	استبعاد الجداول الموسومة
+	Exclude tagged code blocks	استبعاد كتل التعليمات البرمجية الموسومة
+	Exclude image/OCR text	استبعاد نص الصور والتعرف الضوئي على الحروف
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	تعتمد الاستثناءات على وسوم PDF. تبقى الجداول والتعليمات البرمجية غير الموسومة ضمن العدد. يستبعد خيار الصور النص غير المرئي أيضًا.
+	Words	الكلمات
+	Characters	الأحرف
+	Characters without spaces	الأحرف دون مسافات
+	Pages counted	الصفحات المحسوبة
+	Some pages contain no countable text. Scanned images need OCR first.	لا تحتوي بعض الصفحات على نص قابل للعد. تتطلب الصور الممسوحة ضوئيًا التعرف الضوئي على الحروف أولًا.
+	Some content could not be classified safely and was kept in the count.	تعذر تصنيف بعض المحتوى بشكل موثوق، لذا بقي ضمن العدد.
+	Counting words… {n} pages read	جارٍ عد الكلمات… تمت قراءة {n} من الصفحات
+	Word counting stopped unexpectedly.	توقف عد الكلمات بشكل غير متوقع.
+	Word count…	عدد الكلمات…
+@id	file.word_count	عدد الكلمات…
+	Standard	قياسي
+	Mobile	الهاتف المحمول
+	Merge image fragments	دمج أجزاء الصور
+	Optimizing… merging image fragments	جارٍ التحسين… دمج أجزاء الصور

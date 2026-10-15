@@ -47,12 +47,16 @@ The desktop UI discovers printers and submits jobs on workers, so neither operat
 the dialog; the Windows backend starts without a console window. Physical printer output
 still needs hardware validation.
 
-Not yet: the web spooler, print as image, poster labels, PostScript output, colour conversion for
+In a browser there is no spooler: the app (`pdfcraft-ui-egui`'s `web_print`) draws the print-ready
+PDF's sheets with PdfCraft's renderer and prints them through the browser's print dialog, which
+sets copies, two-sided printing and colour. This crate stays free of web APIs.
+
+Not yet: print as image, poster labels, PostScript output, colour conversion for
 grayscale.
 
 ## Architectural sheets and scale
 
-The Paper menu and `doc_print` share Letter, Legal, Tabloid, A3/A4/A5 plus
+The Paper menu and `doc_print` share Letter, Legal, Tabloid, A3/A4/A5/A6 plus
 ARCH A/B/C/D/E1/E, ANSI C/D/E and ISO A0/A1/A2. ARCH D is 24 × 36 inches;
 ANSI D is 22 × 34 inches. Dimensions follow the [HP DesignJet paper-size table](https://support.hp.com/hr-en/document/bpp01676).
 Automation accepts short names such as `"ARCH D"` (case-insensitive) or the full menu label.
@@ -67,7 +71,7 @@ this is not per-page paper-source selection.
 
 **PDF scale** describes the source-to-sheet transform in the previewed print-ready
 PDF, not measured physical output. Fit reserves an 18 pt margin and can reduce even
-a matching page. The current Windows backend still rasterises and can substitute
-paper/shrink a job if its driver lacks the requested size. These controls do not
-add #599's strict PrintTicket validation or vector spooler. Verify the driver's
-paper/scaling settings and physical calibration before relying on drawing scale.
+a matching page. On Windows craft-print sends the sheets as vectors with a PrintTicket
+for the sheet's exact paper and no scaling (#599's approach), validated by the driver:
+a job is refused, not shrunk, when the driver lacks the paper or would change it. Verify
+the driver's paper settings and physical calibration before relying on drawing scale.
