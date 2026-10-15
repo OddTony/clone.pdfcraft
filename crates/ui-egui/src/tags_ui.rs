@@ -20,6 +20,9 @@ pub(crate) struct State {
     /// The tag list per (document, edit generation): walking the structure tree is too slow
     /// to repeat every frame on a large tagged PDF.
     cache: Option<(DocId, u64, Arc<Vec<TagInfo>>)>,
+    /// The selected tag's marked content per (document, edit generation, tag): reading it parses
+    /// page content, so it isn't repeated every frame either.
+    content_cache: Option<(DocId, u64, ObjRef, Arc<Vec<TagContentItem>>)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -64,8 +67,20 @@ impl Draft {
 }
 
 impl State {
-    pub(crate) fn selected(&self) -> Option<ObjRef> {
-        self.selected
+    /// The selected tag's marked content, read again only after an edit or a new selection.
+    pub(crate) fn content(&mut self, doc: &pdfcraft_engine::Document) -> Arc<Vec<TagContentItem>> {
+        let Some(object) = self.selected else { return Arc::default() };
+        let generation = doc.edit_generation();
+        if let Some((id, g, o, content)) = &self.content_cache
+            && *id == doc.id
+            && *g == generation
+            && *o == object
+        {
+            return content.clone();
+        }
+        let content = Arc::new(doc.tag_content(object).unwrap_or_default());
+        self.content_cache = Some((doc.id, generation, object, content.clone()));
+        content
     }
     /// The document's tags, walked again only after an edit.
     pub(crate) fn tags(&mut self, doc: &pdfcraft_engine::Document) -> Arc<Vec<TagInfo>> {
@@ -202,10 +217,14 @@ pub(crate) fn panel(
             state.draft = Draft::from_tag(tag);
         }
     });
-    let (mut earlier, mut later) = (false, false);
+    let (mut earlier, mut later, mut artifact) = (false, false, false);
     ui.horizontal(|ui| {
         earlier = ui.add_enabled(can_edit && !dirty && before.is_some(), egui::Button::new(tl!("Move tag earlier"))).clicked();
         later = ui.add_enabled(can_edit && !dirty && after.is_some(), egui::Button::new(tl!("Move tag later"))).clicked();
+        artifact = ui
+            .add_enabled(can_edit && !dirty, egui::Button::new(tl!("Mark as artifact")))
+            .on_hover_text(tl!("Remove this leaf tag from reading order and mark its direct content as an artifact"))
+            .clicked();
     });
     ui.separator();
     for item in content {
@@ -228,6 +247,8 @@ pub(crate) fn panel(
             before.map(|anchor| Edit::MoveTag { object: tag.object, anchor: anchor.object, placement: TagPlacement::Before })
         } else if later {
             after.map(|anchor| Edit::MoveTag { object: tag.object, anchor: anchor.object, placement: TagPlacement::After })
+        } else if artifact {
+            Some(Edit::MarkTagArtifact { object: tag.object })
         } else {
             None
         },

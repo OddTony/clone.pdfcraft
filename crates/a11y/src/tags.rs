@@ -157,13 +157,22 @@ pub fn tag_content(doc: &Document, object: ObjRef) -> Result<Vec<TagContentItem>
     if let Some(kids) = element.dict.get(b"K") {
         direct_marks(doc, kids, element.page, &mut marks);
     }
+    // Each page's content is parsed once, however many of its MCIDs the tag owns.
+    let mut texts: std::collections::HashMap<usize, std::collections::HashMap<i64, String>> = std::collections::HashMap::new();
     Ok(marks
         .into_iter()
         .map(|(page, mcid)| {
             let page = page.and_then(|p| page_index.get(&p).copied());
             let text = page
-                .and_then(|i| pages.get(i))
-                .map(|p| crate::headings::mcid_texts(doc, &p.dict).get(&mcid).cloned().unwrap_or_default())
+                .and_then(|i| {
+                    let page_texts = match texts.entry(i) {
+                        std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+                        std::collections::hash_map::Entry::Vacant(e) => {
+                            e.insert(pages.get(i).map(|p| crate::headings::mcid_texts(doc, &p.dict)).unwrap_or_default())
+                        }
+                    };
+                    page_texts.get(&mcid).cloned()
+                })
                 .unwrap_or_default();
             TagContentItem { page, mcid, text }
         })
