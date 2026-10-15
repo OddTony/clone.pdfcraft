@@ -2429,3 +2429,18 @@ animation effects	Off	Aus
 	Make properties default	Eigenschaften als Standard festlegen
 	Pages selected	Ausgewählte Seiten
 	Page properties	Seiteneigenschaften
+
+# Plugins panel and menu.
+	Disabled	Deaktiviert
+	Enabled	Aktiviert
+	Incompatible	Inkompatibel
+	Install a plugin	Ein Plugin installieren
+	Install a plugin…	Ein Plugin installieren…
+	Manage plugins…	Plugins verwalten…
+	No commands available	Keine Befehle verfügbar
+	No plugins installed	Keine Plugins installiert
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Noch keine Plugins installiert. Installieren Sie ein .wasm-Plugin, um PdfCraft zu erweitern.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Keine Plugins installiert. Ein Plugin ist eine einzelne .wasm-Datei; installieren Sie oben eines.
+	Plugins	Plugins
+	Refresh	Aktualisieren
+	Refresh plugins	Plugins aktualisieren

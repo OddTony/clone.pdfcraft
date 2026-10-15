@@ -2672,3 +2672,16 @@ key	Space	Tarpas
 	Make properties default	Nustatyti ypatybes kaip numatytąsias
 	Pages selected	Pasirinkti puslapiai
 	Page properties	Puslapio ypatybės
+
+# Plugins panel and menu.
+	Incompatible	Nesuderinama
+	Install a plugin	Įdiegti papildinį
+	Install a plugin…	Įdiegti papildinį…
+	Manage plugins…	Tvarkyti papildinius…
+	No commands available	Nėra galimų komandų
+	No plugins installed	Nėra įdiegtų papildinių
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Dar nėra įdiegtų papildinių. Įdiekite .wasm papildinį, kad išplėstumėte PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Nėra įdiegtų papildinių. Papildinys yra vienas .wasm failas; įdiekite jį aukščiau.
+	Plugins	Papildiniai
+	Refresh plugins	Atnaujinti papildinius
+	Plugins are sandboxed WebAssembly packages. They survive PdfCraft updates as long as their API version is supported.	Papildiniai yra smėlio dėžėje veikiantys „WebAssembly“ paketai. Jie išlieka po PdfCraft atnaujinimų, kol palaikoma jų API versija.

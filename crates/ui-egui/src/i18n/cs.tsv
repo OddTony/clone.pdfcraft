@@ -2502,3 +2502,18 @@ animation effects	Off	Vypnuto
 	Make properties default	Nastavit vlastnosti jako výchozí
 	Pages selected	Vybrané stránky
 	Page properties	Vlastnosti stránky
+
+# Plugins panel and menu.
+	Disabled	Zakázáno
+	Enabled	Povoleno
+	Incompatible	Nekompatibilní
+	Install a plugin	Instalovat plugin
+	Install a plugin…	Instalovat plugin…
+	Manage plugins…	Spravovat pluginy…
+	No commands available	Nejsou k dispozici žádné příkazy
+	No plugins installed	Nejsou nainstalovány žádné pluginy
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Zatím nejsou nainstalovány žádné pluginy. Nainstalujte plugin .wasm a rozšiřte PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Nejsou nainstalovány žádné pluginy. Plugin je jeden soubor .wasm; nainstalujte jej výše.
+	Plugins	Pluginy
+	Refresh	Obnovit
+	Refresh plugins	Obnovit pluginy

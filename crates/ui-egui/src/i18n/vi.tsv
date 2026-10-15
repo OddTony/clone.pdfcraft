@@ -2615,3 +2615,16 @@ key	Space	Space
 	Redact Image	Xóa nội dung nhạy cảm của hình ảnh
 	Create Link…	Tạo liên kết…
 	Recognize Text…	Nhận dạng văn bản…
+
+# Plugins panel and menu.
+	Incompatible	Không tương thích
+	Install a plugin	Cài đặt plugin
+	Install a plugin…	Cài đặt plugin…
+	Manage plugins…	Quản lý plugin…
+	No commands available	Không có lệnh nào khả dụng
+	No plugins installed	Chưa cài đặt plugin nào
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	Chưa cài đặt plugin nào. Hãy cài đặt plugin .wasm để mở rộng PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	Chưa cài đặt plugin nào. Plugin là một tệp .wasm duy nhất; hãy cài đặt một plugin ở trên.
+	Plugins	Plugin
+	Refresh plugins	Làm mới plugin
+	Plugins are sandboxed WebAssembly packages. They survive PdfCraft updates as long as their API version is supported.	Plugin là các gói WebAssembly chạy trong sandbox. Chúng vẫn hoạt động sau khi cập nhật PdfCraft miễn là phiên bản API của chúng còn được hỗ trợ.

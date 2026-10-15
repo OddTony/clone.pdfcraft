@@ -2706,3 +2706,15 @@ certificate	Version	الإصدار
 	Make properties default	جعل الخصائص افتراضية
 	Pages selected	الصفحات المحددة
 	Page properties	خصائص الصفحة
+# Plugins panel and menu.
+	Enabled	مفعّل
+	Incompatible	غير متوافق
+	Install a plugin	تثبيت إضافة
+	Install a plugin…	تثبيت إضافة…
+	Manage plugins…	إدارة الإضافات…
+	No commands available	لا توجد أوامر متاحة
+	No plugins installed	لا توجد إضافات مثبّتة
+	No plugins installed yet. Install a .wasm plug-in to extend PdfCraft.	لا توجد إضافات مثبّتة بعد. ثبّت إضافة .wasm لتوسيع PdfCraft.
+	No plugins installed. A plugin is a single .wasm file; install one above.	لا توجد إضافات مثبّتة. الإضافة ملف .wasm واحد؛ ثبّت واحدة أعلاه.
+	Plugins	الإضافات
+	Refresh plugins	تحديث الإضافات
