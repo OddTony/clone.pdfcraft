@@ -98,7 +98,8 @@ update the numbers.
   baseline is still replaced. Rewritten rows retain their original painting slots (#2377), and
   different-style rows separated by artwork stay independent unless an explicit paragraph tag joins
   them. Semantic grouping remains heuristic;
-  interleaved turned/visual-order paragraphs are refused. Estimates are unchanged.
+  interleaved turned/visual-order paragraphs and ActualText spans crossing artwork are refused.
+  Estimates are unchanged.
 
 - **Missing:** robust in-place editing of text PdfCraft didn't write: subset fonts without the
   needed glyphs, CJK and right-to-left text, rotated text, lists, superscript/subscript, keeping

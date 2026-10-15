@@ -732,6 +732,22 @@ impl Carry {
 /// A `Do` met while interpreting: its operator index, XObject name and the state there.
 type Invocation = (usize, Vec<u8>, Ts);
 
+fn paints(op: &Op) -> bool {
+    matches!(op.op.as_slice(), b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" | b"Do" | b"sh" | b"BI")
+}
+
+/// ActualText can combine several physical rows into one logical run. Such a run
+/// cannot be distributed across painting slots without a glyph-to-logical-text map.
+fn crosses_paint(line: &TextLine, ops: &[Op]) -> bool {
+    let mut bounds: Option<(usize, usize)> = None;
+    for &i in &line.ops {
+        if ops.get(i).is_some_and(|op| matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"")) {
+            bounds = Some(bounds.map_or((i, i), |(a, b)| (a.min(i), b.max(i))));
+        }
+    }
+    bounds.and_then(|(a, b)| ops.get(a..b)).is_some_and(|span| span.iter().any(paints))
+}
+
 fn interpret(
     doc: &Document,
     ops: &[Op],
@@ -750,7 +766,7 @@ fn interpret(
     let mut marked = std::mem::take(&mut carry.marked);
     let mut actual: Vec<Option<(usize, usize, String)>> = Vec::new();
     for (i, op) in ops.iter().enumerate() {
-        if matches!(op.op.as_slice(), b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" | b"Do" | b"sh" | b"BI") {
+        if paints(op) {
             carry.paint = carry.paint.saturating_add(1);
         }
         match op.op.as_slice() {
@@ -2029,6 +2045,16 @@ fn rewrite_block_from(
     let members: Vec<&TextLine> = b.lines.iter().map(|i| &lines[*i]).collect();
     let first = members.first().copied().ok_or_else(|| EditError::Invalid("the paragraph has no source runs".into()))?;
     let p = page_dict(doc, page)?;
+    if members.iter().any(|line| line.actual_text) {
+        if *style == BlockStyle::default() && text.is_none_or(|draft| draft == b.editor_text || draft == b.text) {
+            return Ok(LineEdit { substituted: None });
+        }
+        let pieces = Pieces::join(&content_streams(doc, &p.dict).into_iter().map(|(_, data)| data).collect::<Vec<_>>());
+        let ops = pieces.parse().ops;
+        if members.iter().any(|line| crosses_paint(line, &ops)) {
+            return Err(EditError::Invalid("text spanning artwork inside ActualText cannot be rewritten safely".into()));
+        }
+    }
     let mut res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let mut fonts_res = res.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
     let registered_face = fonts_res.iter().any(|(name, _)| name.starts_with(b"PCFull"));

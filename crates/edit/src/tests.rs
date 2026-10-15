@@ -3720,6 +3720,24 @@ fn interleaved_reflow_is_bounded_without_mutation() {
 }
 
 #[test]
+fn actual_text_crossing_artwork_is_refused_without_mutation() {
+    let mut doc = text_page(
+        "q 0 0.5 0 rg 60 695 240 18 re f Q \
+         /Span << /ActualText (First row\nSecond row) >> BDC \
+         BT /F1 12 Tf 1 g 72 700 Td (First row) Tj ET \
+         q 0 0.5 0 rg 60 677 240 18 re f Q \
+         BT /F1 12 Tf 1 g 72 682 Td (Second row) Tj ET EMC",
+    );
+    let blocks = text::text_blocks(&doc, 0).unwrap();
+    assert_eq!(blocks.len(), 1);
+    let before = pdfcraft_cos::write_full(&doc, &SaveOptions::default()).unwrap();
+    text::replace_block(&mut doc, 0, 0, &blocks[0].editor_text).unwrap();
+    assert_eq!(pdfcraft_cos::write_full(&doc, &SaveOptions::default()).unwrap(), before);
+    assert!(text::replace_block(&mut doc, 0, 0, "Other row\nNew row").is_err());
+    assert_eq!(pdfcraft_cos::write_full(&doc, &SaveOptions::default()).unwrap(), before);
+}
+
+#[test]
 fn image_selection_bounds_respect_clips_and_restore_graphics_state() {
     let mut doc = image_page();
     let page = pdfcraft_model::pages(&doc)[0].clone();
