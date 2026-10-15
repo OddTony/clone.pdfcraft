@@ -197,6 +197,12 @@
 	 · password-protected	 · apsaugotas slaptažodžiu
 	(none)	(nėra)
 	, Expires: 	, galiojimo pabaiga: 
+	Digitally signed by	Skaitmeniniu parašu pasirašė
+	DN: 	DN: 
+	Reason: 	Priežastis: 
+	Location: 	Vieta: 
+	Date: 	Data: 
+	The labels are in English: the signature's font can't draw them in this language.	Etiketės rodomos angliškai: parašo šriftas negali jų atvaizduoti šia kalba.
 	1 difference found	Rastas 1 skirtumas
 	1 file	1 failas
 	1 file done	1 failas apdorotas
@@ -588,6 +594,7 @@
 	Font colour:	Šrifto spalva:
 	Font size 0 uses automatic sizing.	Šrifto dydis 0 reiškia, kad dydis parenkamas automatiškai.
 	Font size:	Šrifto dydis:
+	Font size	Šrifto dydis
 	Font:	Šriftas:
 	Font: Helvetica	Šriftas: „Helvetica“
 	Fonts	Šriftai
@@ -1089,6 +1096,7 @@
 	Sort items	Rūšiuoti elementus
 	Source	Šaltinis
 	Space Audit	Vietos naudojimo analizė
+	What takes up the space in this file, by kind of content.	Kas užima vietą šiame faile, pagal turinio rūšį.
 	Special	Specialusis
 	Split document	Skaidyti dokumentą
 	Split into files…	Skaidyti į failus…
@@ -1542,6 +1550,7 @@
 	Separate PDFs	Atskiri PDF dokumentai
 	Set measurement scale	Nustatyti matavimo mastelį
 	Set page boxes	Nustatyti puslapio sritis
+	Set page transitions	Nustatyti puslapių perėjimus
 	Set page boxes…	Nustatyti puslapio sritis…
 	Set properties	Nustatyti savybes
 	Show cover page in two-page view	Rodyti viršelio puslapį dviejų puslapių rodinyje
@@ -1694,7 +1703,7 @@
 	The font {} isn't embedded	Šriftas {} neįdėtas
 	The metadata doesn't identify the file as {}	Metaduomenys nenurodo, kad failas atitinka {}
 	The password is incorrect.	Slaptažodis netinkamas.
-	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
+	The password must have at least 8 characters.	Slaptažodį turi sudaryti bent 8 simboliai.
 	The passwords do not match.	Slaptažodžiai nesutampa.
 	The security settings don't allow screen readers to read the text	Saugos nuostatos neleidžia ekrano skaitymo programoms skaityti teksto
 	The signature algorithm and the SignerInfo's digest algorithm name different hashes; the signature was made with the SignerInfo's.	Parašo algoritmas ir „SignerInfo“ santraukos algoritmas nurodo skirtingas maišos funkcijas; pasirašyta naudojant „SignerInfo“ nurodytą funkciją.
@@ -2594,7 +2603,50 @@ key	Space	Tarpas
 # Absolute local GoToR confirmation (#1364).
 	Allow	Leisti
 	Only allow this if you trust the source document.	Leiskite tai tik tuo atveju, jei pasitikite pirminiu dokumentu.
+	Open in Full Screen mode?	Atidaryti viso ekrano režimu?
+	This document asks to open in Full Screen mode: the page fills the screen and nothing else shows. Press Esc at any time to leave it.	Šis dokumentas prašo būti atidarytas viso ekrano režimu: puslapis užpildo ekraną ir daugiau niekas nerodoma. Norėdami išeiti, bet kada paspauskite Esc.
+	Full Screen	Visas ekranas
+	Not now	Ne dabar
 	Open this local PDF?	Atverti šį vietinį PDF failą?
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+	Mark as artifact	Pažymėti kaip artefaktą
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Pašalinkite šią lapo žymą iš skaitymo tvarkos ir pažymėkite jos tiesioginį turinį kaip artefaktą
+	Mark content as artifact	Pažymėti turinį kaip artefaktą
+	Word count	Žodžių skaičius
+	Current page only	Tik dabartinis puslapis
+	Exclude tagged tables	Neįtraukti pažymėtų lentelių
+	Exclude tagged code blocks	Neįtraukti pažymėtų kodo blokų
+	Exclude image/OCR text	Neįtraukti vaizdų ir OCR teksto
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Išimtys naudoja PDF žymas. Nepažymėtos lentelės ir kodas lieka įtraukti. Vaizdų išimtis pašalina ir nematomą tekstą.
+	Words	Žodžiai
+	Characters	Simboliai
+	Characters without spaces	Simboliai be tarpų
+	Pages counted	Suskaičiuoti puslapiai
+	Some pages contain no countable text. Scanned images need OCR first.	Kai kuriuose puslapiuose nėra skaičiuojamo teksto. Nuskaitytiems vaizdams pirmiausia reikia OCR.
+	Some content could not be classified safely and was kept in the count.	Dalies turinio nepavyko patikimai klasifikuoti, todėl jis liko įtrauktas į skaičių.
+	Counting words… {n} pages read	Skaičiuojami žodžiai… perskaityta puslapių: {n}
+	Word counting stopped unexpectedly.	Žodžių skaičiavimas netikėtai sustojo.
+	Word count…	Žodžių skaičius…
+@id	file.word_count	Žodžių skaičius…
+	Standard	Standartinis
+	Mobile	Mobilusis
+	Merge image fragments	Sujungti vaizdo fragmentus
+	Optimizing… merging image fragments	Optimizuojama… jungiami vaizdo fragmentai
+	Side by side	Greta
+	New file only	Tik naujas failas
+	Old file: {name}	Senas failas: {name}
+	New file: {name}	Naujas failas: {name}
+	Print as image	Spausdinti kaip vaizdą
+	Resolution:	Raiška:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Naudokite, kai spausdintuvas praleidžia tekstą, šešėliavimą ar skaidrumą. Atspaudas nebėra ieškomas tekstas; spausdinant pilkais atspalviais vaizdai yra pilki.
+	Crop Image	Apkarpyti vaizdą
+	Remove Crop	Pašalinti apkarpymą
+	Trim the picture with its handles; Enter or Done applies	Apkarpykite paveikslėlį rankenėlėmis; Enter arba Atlikta pritaiko
+	Redaction mark appearance	Užtamsinimo žymės išvaizda
+	Outline colour:	Kontūro spalva:
+	Fill colour:	Užpildo spalva:
+	Shown while the pointer is over a mark.	Rodoma, kol žymeklis yra virš žymės.
+	Opacity:	Nepermatomumas:
+	Make properties default	Nustatyti ypatybes kaip numatytąsias
