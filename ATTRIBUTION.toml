@@ -41,7 +41,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Traditional Chinese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "ed90d62cc4fc1636f73770e088d634cad3e26456eace2953e5357ffcc679c272"
+sha256 = "6e8b229c892125f47e7b5482ccb93dd25b62f2e8d0b434247c97ef028b389bd4"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/cs.tsv"
@@ -223,24 +223,24 @@ sha256 = "c422754c9e43d64bf7cbe43215cc5af4fd393442aebeebf0f3306ab7f3c033d5"
 path = "crates/ui-egui/src/i18n/lt.tsv"
 title = "Lithuanian interface translation catalog"
 author = "PdfCraft contributors"
-source = "Contributor-original: clean-room translations of PdfCraft's English UI labels and user-facing messages; reviewed by a native Lithuanian-speaking contributor"
+source = "Contributor-original: clean-room translations of PdfCraft's English UI labels and user-facing messages; original catalog reviewed by a native Lithuanian-speaking contributor; 2026-10-15 coverage additions are AI-assisted and not separately native-reviewed"
 licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Lithuanian UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "af80386e1a327030e1c8f19692e96ba9e1a12994c99786c6a428655545a8d965"
+sha256 = "1b1da43103181b358aaf38fa6ff49020f8b71314506abdcddd7d598954e9d62d"
 
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/vi.tsv"
 title = "Vietnamese interface translation catalog"
 author = "PdfCraft contributors"
-source = "Contributor-original: clean-room translations of PdfCraft's English UI labels; PhotoCraft and VectorCraft Vietnamese catalogs used only as translation memory when English source and semantic context matched; reviewed by a native Vietnamese-speaking contributor"
+source = "Contributor-original: clean-room translations of PdfCraft's English UI labels; PhotoCraft and VectorCraft Vietnamese catalogs used only as translation memory when English source and semantic context matched; original catalog reviewed by a native Vietnamese-speaking contributor; 2026-10-15 coverage additions are AI-assisted and not separately native-reviewed"
 licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Vietnamese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "b5a0ef70e1cd5c595a485367c6a8c22c5c4d4d8b9146f4709cfb03679a29c1f0"
+sha256 = "0475391a3ec7f0c94c31a8b8475717333f967ad6fd145a2c716accb229ec062a"
 
 [[asset]]
 path = "assets/icons/accessibility.svg"
