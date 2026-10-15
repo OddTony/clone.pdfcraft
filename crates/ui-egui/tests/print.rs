@@ -256,6 +256,69 @@ fn print_dialog_shows_the_printer_driver_options() {
     assert_eq!(h.state().print_draft.job("form.pdf").options, media, "another queue must not inherit driver options");
 }
 
+/// The Paper list offers the printer's own sizes after the standard ones (a label printer's
+/// 4 × 6 in, an envelope), the job names the chosen one as its media (the printer's keyword, also
+/// for a standard size the printer has), and the list follows the printer.
+#[test]
+fn the_printers_own_paper_sizes_are_offered_and_named_as_the_jobs_media() {
+    use pdfcraft_engine::print::{PAPERS, spool};
+    let mut h = harness();
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+    let paper = |key: &str, label: &str, size: (f64, f64)| spool::PrinterPaper { key: key.into(), label: label.into(), size };
+    {
+        let d = &mut h.state_mut().print_draft;
+        d.units = pdfcraft_ui_egui::units::Unit::Inches;
+        d.printer = Some("Label_Queue".into());
+        // Read for this printer already, so the dialog doesn't look for a system queue.
+        d.printer_papers = Some((
+            "Label_Queue".into(),
+            vec![
+                paper("Letter", "US Letter", (612.0, 792.0)),
+                paper("w162h288", "2.25 x 4 in", (162.0, 288.0)),
+                paper("EnvDL", "DL Envelope", (311.81, 623.62)),
+            ],
+        ));
+    }
+    h.run_steps(2);
+    // Letter is a standard size already: not listed twice, but chosen as the printer's keyword.
+    assert_eq!(
+        h.state().print_draft.own_papers_listed(),
+        [(PAPERS.len() + 1, "2.25 x 4 in (2.25 × 4.00 in)".to_string()), (PAPERS.len() + 2, "DL Envelope (4.33 × 8.66 in)".to_string())]
+    );
+    assert_eq!(h.state().print_draft.media().as_deref(), Some("Letter"));
+    // The Paper combo shows its choice as its value; opened, the printer's sizes end the list
+    // (below the fold of the popup, so the choice is made as the item would make it).
+    h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some("US Letter")).click();
+    h.run_steps(2);
+    h.get_by_label("2.25 x 4 in (2.25 × 4.00 in)");
+    h.get_by_label("DL Envelope (4.33 × 8.66 in)");
+    h.state_mut().print_draft.paper = PAPERS.len() + 1;
+    h.run_steps(2);
+    h.get_by(|n| n.role() == Role::ComboBox && n.value().as_deref() == Some("2.25 x 4 in (2.25 × 4.00 in)"));
+    let d = &h.state().print_draft;
+    assert_eq!((d.paper, d.paper_size(), d.media().as_deref()), (PAPERS.len() + 1, (162.0, 288.0), Some("w162h288")));
+    assert_eq!(d.settings(1, &[]).unwrap().paper, (162.0, 288.0), "the sheets are laid out on the label");
+    assert!(d.job("form.pdf").options.contains(&("media".to_string(), "w162h288".to_string())));
+    // Match page at 100% finds the printer's own sizes too.
+    assert_eq!(d.paper_index((288.0, 162.0)), Some(PAPERS.len() + 1));
+    assert_eq!(d.paper_index((612.0, 792.0)), Some(0), "a standard size first");
+    // Another printer's list is read when it is chosen (none here: no such queue), and the
+    // label size, which it lacks, gives way to the first standard size.
+    h.state_mut().print_draft.printer = Some("Office_Queue".into());
+    h.run_steps(2);
+    let d = &h.state().print_draft;
+    assert_eq!(d.printer_papers, Some(("Office_Queue".to_string(), Vec::new())));
+    assert_eq!((d.paper, d.paper_name().as_str(), d.media().as_deref()), (0, "US Letter", Some("Letter")));
+    // A standard size stays chosen across printers; Save as PDF has no sizes of its own.
+    h.state_mut().print_draft.paper = 4;
+    h.state_mut().print_draft.printer = None;
+    h.run_steps(2);
+    let d = &h.state().print_draft;
+    assert!(d.printer_papers.is_none() && d.own_papers().is_empty());
+    assert_eq!((d.paper, d.paper_name().as_str(), d.media().as_deref()), (4, "A4", Some("A4")));
+}
+
 /// The desktop app lists printers in the background (PowerShell on Windows takes a second or
 /// more): the dialog opens at once, then preselects the default when the list arrives — unless
 /// the user has already picked a printer.

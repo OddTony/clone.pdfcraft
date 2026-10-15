@@ -75,7 +75,11 @@ pub struct PrintDraft {
     /// Print as image (Acrobat's Advanced Print Setup) at `dpi`.
     pub as_image: bool,
     pub dpi: f64,
+    /// Index into the Paper list: the standard sizes, then the printer's own.
     pub paper: usize,
+    /// The printer's own paper sizes and the printer they were read for
+    /// ([`spool::printer_papers`]); `None` until a printer is chosen.
+    pub printer_papers: Option<(String, Vec<spool::PrinterPaper>)>,
     /// The sheet shown in the preview (0-based).
     pub sheet: usize,
     pub current_page: usize,
@@ -129,6 +133,7 @@ impl Default for PrintDraft {
             as_image: false,
             dpi: 300.0,
             paper: 0,
+            printer_papers: None,
             sheet: 0,
             current_page: 0,
             driver_options: None,
@@ -179,7 +184,7 @@ impl PrintDraft {
         };
         Ok(print::Settings {
             pages,
-            paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1,
+            paper: self.paper_size(),
             orientation: self.orientation,
             layout,
             content: self.content,
@@ -204,9 +209,65 @@ impl PrintDraft {
             }
             .into_iter()
             // The sheet the PDF was laid out on, not the queue's default paper.
-            .chain(print::cups_media(self.paper).map(|m| ("media".to_string(), m.to_string())))
+            .chain(self.media().map(|m| ("media".to_string(), m)))
             .collect(),
         }
+    }
+
+    /// The printer's own paper sizes, when they were read for the chosen printer.
+    pub fn own_papers(&self) -> &[spool::PrinterPaper] {
+        match (&self.printer, &self.printer_papers) {
+            (Some(p), Some((read_for, papers))) if p == read_for => papers,
+            _ => &[],
+        }
+    }
+
+    /// The printer's own sizes the Paper list offers after the standard ones, as (index,
+    /// label): those that aren't a standard size already, each with its size in the
+    /// preferences' unit.
+    pub fn own_papers_listed(&self) -> Vec<(usize, String)> {
+        self.own_papers()
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| print::matching_paper(p.size).is_none())
+            .map(|(i, p)| (PAPERS.len() + i, format!("{} ({})", p.label, self.units.size(p.size.0, p.size.1))))
+            .collect()
+    }
+
+    /// The chosen paper's size (points, portrait); a stale index reads as the first size.
+    pub fn paper_size(&self) -> (f64, f64) {
+        match self.paper.checked_sub(PAPERS.len()) {
+            None => PAPERS.get(self.paper).map_or(PAPERS[0].1, |p| p.1),
+            Some(i) => self.own_papers().get(i).map_or(PAPERS[0].1, |p| p.size),
+        }
+    }
+
+    /// The chosen paper as the dialog names it: a standard size translated, one of the
+    /// printer's own as its driver names it, with its size.
+    pub fn paper_name(&self) -> String {
+        match self.paper.checked_sub(PAPERS.len()).map(|i| self.own_papers().get(i)) {
+            Some(Some(p)) => format!("{} ({})", p.label, self.units.size(p.size.0, p.size.1)),
+            Some(None) => tl!(PAPERS[0].0).to_string(),
+            None => tl!(PAPERS.get(self.paper).map_or(PAPERS[0].0, |p| p.0)).to_string(),
+        }
+    }
+
+    /// The index in the Paper list of a sheet of this size (points, either way round): a
+    /// standard size, else one of the printer's own.
+    pub fn paper_index(&self, size: (f64, f64)) -> Option<usize> {
+        print::matching_paper(size).or_else(|| spool::paper_of_size(self.own_papers(), size).map(|i| PAPERS.len() + i))
+    }
+
+    /// The `media` the job names, so the spooler feeds the sheet the PDF was laid out on rather
+    /// than the queue's default: the printer's own keyword for the chosen size when it has one,
+    /// else the CUPS name of the standard size ([`print::cups_media`]).
+    pub fn media(&self) -> Option<String> {
+        let own = self.own_papers();
+        let index = match self.paper.checked_sub(PAPERS.len()) {
+            Some(i) => Some(i),
+            None => spool::paper_of_size(own, self.paper_size()),
+        };
+        index.and_then(|i| own.get(i)).map(|p| p.key.clone()).or_else(|| print::cups_media(self.paper).map(str::to_string))
     }
 }
 
@@ -904,11 +965,35 @@ pub(crate) fn body(
                 });
                 ui.end_row();
                 ui.label(tl!("Paper:"));
-                let paper_name = PAPERS.get(d.paper).map_or("US Letter", |p| p.0);
+                // The printer's own sizes (a label printer's 4 × 6 in, an office printer's
+                // envelopes), read once per printer; Save as PDF and the browser have none. A
+                // size chosen on the last printer stays chosen when this one has it too, else
+                // the first standard size is chosen.
+                let wanted = d.printer.clone().filter(|_| !browser);
+                if d.printer_papers.as_ref().map(|(read_for, _)| read_for) != wanted.as_ref() {
+                    // The size chosen so far: on the last printer's list when it was one of its own.
+                    let size = match (d.paper.checked_sub(PAPERS.len()), &d.printer_papers) {
+                        (Some(i), Some((_, last))) => last.get(i).map_or(PAPERS[0].1, |p| p.size),
+                        _ => d.paper_size(),
+                    };
+                    d.printer_papers = wanted.map(|p| {
+                        let papers = spool::printer_papers(&p);
+                        (p, papers)
+                    });
+                    d.paper = d.paper_index(size).unwrap_or(0);
+                }
                 let before = d.paper;
-                egui::ComboBox::from_id_salt("paper").selected_text(tl!(paper_name)).width(260.0).show_ui(ui, |ui| {
+                let own = d.own_papers_listed();
+                // Tall enough for a dozen rows: a label printer's own sizes come after the standard ones.
+                egui::ComboBox::from_id_salt("paper").selected_text(d.paper_name()).width(260.0).height(420.0).show_ui(ui, |ui| {
                     for (i, (name, _)) in PAPERS.iter().enumerate() {
                         ui.selectable_value(&mut d.paper, i, tl!(name));
+                    }
+                    if !own.is_empty() {
+                        ui.separator();
+                    }
+                    for (i, label) in &own {
+                        ui.selectable_value(&mut d.paper, *i, label.as_str());
                     }
                 });
                 // Label stock gets the label layout (cut, turned upright, fitted).
@@ -937,7 +1022,7 @@ pub(crate) fn body(
             if let Some(&source) = sizes.get(d.current_page) {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(crate::i18n::fmt(tl!("PDF page: {size}"), &[("size", &d.units.size(source.0, source.1))]));
-                    let matched = print::matching_paper(source);
+                    let matched = d.paper_index(source);
                     if ui.add_enabled(matched.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked()
                         && let Some(paper) = matched
                     {
