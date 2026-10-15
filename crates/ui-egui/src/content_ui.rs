@@ -3,7 +3,7 @@
 //! (images keep their proportions), double-click text to retype it, format it from the panel,
 //! Delete to remove it. Each change is one undoable engine edit.
 
-use egui::{Color32, CornerRadius, Pos2, Rect, Stroke, pos2};
+use egui::{Color32, CornerRadius, Pos2, Rect, Stroke};
 use pdfcraft_engine::{Added, AddedContent, AddedText, Edit, FontFamily, TextAlign};
 use pdfcraft_render::DocInfo;
 
@@ -266,23 +266,22 @@ fn dragged(r: Rect, grab: Grab, d: egui::Vec2, keep_aspect: bool, alt: bool) -> 
     match grab {
         Grab::Move => r.translate(d),
         Grab::Corner(left, top, _) => {
-            if alt {
-                let cx = r.center();
-                let half_w = r.width() / 2.0;
-                let half_h = r.height() / 2.0;
-                let new_half_w = (half_w + (if left { -d.x } else { d.x })).max(2.0);
-                let new_half_h = (half_h + (if top { -d.y } else { d.y })).max(2.0);
-                let min_x = cx.x - new_half_w;
-                let max_x = cx.x + new_half_w;
-                let min_y = cx.y - new_half_h;
-                let max_y = cx.y + new_half_h;
-                return Rect::from_min_max(pos2(min_x, min_y), pos2(max_x, max_y));
-            }
             let (mut dx, mut dy) = (if left { -d.x } else { d.x }, if top { -d.y } else { d.y });
-            if keep_aspect && r.width() > 0.0 && r.height() > 0.0 {
+            if alt {
+                // Both sides move, so the size changes twice as fast as the pointer.
+                dx *= 2.0;
+                dy *= 2.0;
+            }
+            let proportional = keep_aspect && r.width() > 0.0 && r.height() > 0.0;
+            if proportional {
                 let k = ((r.width() + dx) / r.width()).max((r.height() + dy) / r.height()).max(0.05);
                 dx = r.width() * k - r.width();
                 dy = r.height() * k - r.height();
+            }
+            if alt {
+                // A proportional size is already positive (k >= 0.05); a free one is kept from collapsing.
+                let size = egui::vec2(r.width() + dx, r.height() + dy);
+                return Rect::from_center_size(r.center(), if proportional { size } else { size.max(egui::vec2(4.0, 4.0)) });
             }
             let mut out = r;
             if left {
@@ -956,6 +955,24 @@ mod tests {
         h.get_by_label(tooltip).click();
         h.run();
         h.state().clone().expect("the button updates the image")
+    }
+
+    #[test]
+    fn alt_corner_drags_resize_from_the_centre_and_images_keep_their_proportions() {
+        let r = Rect::from_min_max(egui::pos2(100.0, 100.0), egui::pos2(196.0, 132.0));
+        for (left, top) in [(true, true), (false, true), (true, false), (false, false)] {
+            let out_dir = egui::vec2(if left { -1.0 } else { 1.0 }, if top { -1.0 } else { 1.0 });
+            // Text and other content stretch freely, but around the centre.
+            let out = dragged(r, Grab::Corner(left, top, true), out_dir * egui::vec2(24.0, 16.0), false, true);
+            assert!((out.center() - r.center()).length() < 0.001);
+            assert!((out.size() - egui::vec2(144.0, 64.0)).length() < 0.001);
+            // Images keep their proportions with Alt too.
+            for d in [egui::vec2(24.0, 0.0), egui::vec2(0.0, 16.0), egui::vec2(-200.0, -200.0)] {
+                let out = dragged(r, Grab::Corner(left, top, true), out_dir * d, true, true);
+                assert!((out.center() - r.center()).length() < 0.001);
+                assert!((out.width() / out.height() - 3.0).abs() < 0.001);
+            }
+        }
     }
 
     #[test]
