@@ -27,6 +27,7 @@ comment menu	Edit	సవరించు
 	Auto follows the system's text size. Pages always render at the display's full resolution.	ఆటో సిస్టమ్ టెక్స్ట్ పరిమాణాన్ని అనుసరిస్తుంది. పేజీలు ఎల్లప్పుడూ డిస్‌ప్లే పూర్తి రిజల్యూషన్‌లో చూపబడతాయి.
 	Identity	గుర్తింపు
 	Name on new comments	కొత్త వ్యాఖ్యలపై చూపే పేరు
+	Hide hover previews for highlights without comment text	వ్యాఖ్య వచనం లేని హైలైట్‌లకు హోవర్ ప్రివ్యూలను దాచు
 	Open…	తెరువు…
 	New blank PDF	కొత్త ఖాళీ PDF
 	Create PDF from file…	ఫైల్ నుండి PDF సృష్టించు…
@@ -1266,6 +1267,7 @@ comment menu	Edit	సవరించు
 	Copy text	టెక్స్ట్‌ను కాపీ చేయి
 	Properties…	లక్షణాలు…
 	Make Current Properties Default	ప్రస్తుత లక్షణాలను డిఫాల్ట్‌గా చేయి
+	Make Properties Default	లక్షణాలను డిఫాల్ట్‌గా చేయి
 	More options	మరిన్ని ఎంపికలు
 	Sort by	క్రమపరిచే విధానం
 	Author	రచయిత
@@ -1596,6 +1598,8 @@ action wizard	Start	ప్రారంభించు
 	Sent to {printer}	{printer}కు పంపబడింది
 	Sent to {printer}: {msg}	{printer}కు పంపబడింది: {msg}
 	Looking for printers…	ప్రింటర్ల కోసం వెతుకుతోంది…
+	Sending sheet {s} of {n} to {printer}…	{printer}కు {n}లో {s}వ షీట్ పంపుతోంది…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	ప్రింటర్లు ఏవీ కనుగొనబడలేదు. ప్రింటర్ ఇన్‌స్టాల్ అయిందో, ప్రింట్ స్పూలర్ నడుస్తోందో తనిఖీ చేసి, ముద్రణను మళ్లీ తెరవండి.
 	Sending to {printer}…	{printer}కు పంపుతోంది…
 	Choose a folder for the searchable files	వెతకగలిగే ఫైల్‌ల కోసం ఒక ఫోల్డర్‌ను ఎంచుకోండి
 	Files are combined in this order. Leave Pages empty to take every page.	ఫైల్‌లు ఈ క్రమంలో కలపబడతాయి. అన్ని పేజీలను తీసుకోవడానికి పేజీలు ఫీల్డ్‌ను ఖాళీగా వదలండి.
@@ -2178,6 +2182,8 @@ key	Space	స్పేస్
 	Reset page size	పేజీ పరిమాణాన్ని రీసెట్ చేయి
 	Expand all	అన్నీ విస్తరించు
 	Collapse all	అన్నీ ముడుచు
+	Collapse all pages	అన్ని పేజీలను ముడుచు
+	Expand all pages	అన్ని పేజీలను విస్తరించు
 	Remove page	పేజీని తీసివేయి
 	Remove {n} pages	{n} పేజీలను తీసివేయి
 
@@ -2194,7 +2200,7 @@ key	Space	స్పేస్
 	Rotate page {label} counterclockwise	{label} పేజీని అపసవ్య దిశలో తిప్పండి
 	Rotate page {label} clockwise	{label} పేజీని సవ్య దిశలో తిప్పండి
 	Delete page {label}	{label} పేజీని తొలగించండి
-	Mouse wheel scroll speed	మౌస్ వీల్ స్క్రోల్ వేగం
+	Scroll speed (mouse wheel and arrow keys)	స్క్రోల్ వేగం (మౌస్ వీల్ మరియు బాణం కీలు)
 scroll speed	Slow	నెమ్మదిగా
 scroll speed	Normal	సాధారణం
 scroll speed	Fast	వేగంగా
@@ -2267,6 +2273,10 @@ animation effects	Off	ఆఫ్
 	Local cross-PDF links require the desktop app	PDFల మధ్య స్థానిక లింక్‌లకు డెస్క్‌టాప్ యాప్ అవసరం
 	The existing action will be preserved.	ఉన్న చర్య అలాగే ఉంచబడుతుంది.
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	ఒక స్క్రిప్ట్ చాలా సేపు నడిచినందున ఈ ఫారమ్ స్క్రిప్ట్‌లు ఆపివేయబడ్డాయి. వాటిని మళ్లీ నడపడానికి పత్రాన్ని మళ్లీ తెరవండి.
+	Cut Image	చిత్రాన్ని కత్తిరించు
+	Redact Image	చిత్రాన్ని రెడాక్ట్ చేయి
+	Create Link…	లింక్ సృష్టించు…
+	Recognize Text…	టెక్స్ట్‌ను గుర్తించు…
 	Minimize	కనిష్ఠీకరించు
 	Maximize	గరిష్ఠీకరించు
 	Restore	పునరుద్ధరించు
@@ -2284,6 +2294,13 @@ animation effects	Off	ఆఫ్
 	This document is trying to open a local file:	ఈ పత్రం ఒక స్థానిక ఫైల్‌ను తెరవడానికి ప్రయత్నిస్తోంది:
 	Move tag earlier	ట్యాగ్‌ను ముందుకు తరలించు
 	Move tag later	ట్యాగ్‌ను వెనుకకు తరలించు
+	Turn upside down (180°)	తలకిందులుగా తిప్పు (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 అం. లేబుల్ (101.6 × 152.4 మి.మీ.)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	ప్రతి పేజీని ముద్రిత ప్రాంతానికి కత్తిరించి, నిటారుగా తిప్పి, సాగదీయకుండా షీట్‌కు సరిపెడుతుంది. ఒక్కో షీట్‌కు ఒక లేబుల్.
+	Find untagged content	ట్యాగ్ చేయని కంటెంట్‌ను కనుగొను
+	No untagged content was found.	ట్యాగ్ చేయని కంటెంట్ కనుగొనబడలేదు.
+	Found {n} untagged content problems.	ట్యాగ్ చేయని కంటెంట్‌లో {n} సమస్యలు కనుగొనబడ్డాయి.
+	Tag form fields	ఫారమ్ ఫీల్డ్‌లకు ట్యాగ్‌లు జోడించు
 	Mark as artifact	ఆర్టిఫాక్ట్‌గా గుర్తించు
 	Remove this leaf tag from reading order and mark its direct content as an artifact	ఈ లీఫ్ ట్యాగ్‌ను పఠన క్రమం నుంచి తీసివేసి, దాని ప్రత్యక్ష కంటెంట్‌ను ఆర్టిఫాక్ట్‌గా గుర్తించండి
 	Mark content as artifact	కంటెంట్‌ను ఆర్టిఫాక్ట్‌గా గుర్తించు

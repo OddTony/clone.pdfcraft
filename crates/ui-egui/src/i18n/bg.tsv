@@ -60,6 +60,7 @@
 	Auto follows the system's text size. Pages always render at the display's full resolution.	Автоматично следва размера на текста в системата. Страниците винаги се изобразяват с пълната разделителна способност на екрана.
 	Identity	Самоличност
 	Name on new comments	Име в новите коментари
+	Hide hover previews for highlights without comment text	Скриване на прегледите при посочване за маркирания без текст на коментар
 	Open…	Отвори…
 	Open Recent	Последно отваряни
 	Pin folder to Home…	Закачи папка в Начало…
@@ -1236,6 +1237,7 @@
 	Copy text	Копирай текста
 	Properties…	Свойства…
 	Make Current Properties Default	Направи текущите свойства подразбиращи се
+	Make Properties Default	Направи свойствата подразбиращи се
 	More options	Още опции
 	Sort by	Сортиране по
 	Author	Автор
@@ -1576,6 +1578,8 @@
 	Sent to {printer}	Изпратено до {printer}
 	Sent to {printer}: {msg}	Изпратено до {printer}: {msg}
 	Looking for printers…	Търсене на принтери…
+	Sending sheet {s} of {n} to {printer}…	Изпращане на лист {s} от {n} до {printer}…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Не са намерени принтери. Проверете дали принтерът е инсталиран и дали услугата за опашка за печат работи, след което отворете „Печат“ отново.
 	Sending to {printer}…	Изпращане до {printer}…
 	Choose a folder for the searchable files	Изберете папка за файловете с възможност за търсене
 	Files are combined from top to bottom. Leave Pages empty to take every page.	Файловете се обединяват отгоре надолу. Оставете „Страници“ празно, за да се вземат всички страници.
@@ -2216,6 +2220,8 @@ key	Space	Интервал
 	Switch to List view to change the pages it takes.	Превключете към изглед списък, за да промените кои страници се вземат.
 	Expand all	Разгъни всички
 	Collapse all	Свий всички
+	Collapse all pages	Свий всички страници
+	Expand all pages	Разгъни всички страници
 	Remove page	Премахни страницата
 	Remove {n} pages	Премахни {n} страници
 
@@ -2243,7 +2249,7 @@ key	Space	Интервал
 	Rotate page {label} counterclockwise	Завъртане на страница {label} обратно на часовниковата стрелка
 	Rotate page {label} clockwise	Завъртане на страница {label} по часовниковата стрелка
 	Delete page {label}	Изтриване на страница {label}
-	Mouse wheel scroll speed	Скорост на превъртане с колелцето на мишката
+	Scroll speed (mouse wheel and arrow keys)	Скорост на превъртане (колелце на мишката и клавиши със стрелки)
 scroll speed	Slow	Ниска
 scroll speed	Normal	Нормална
 scroll speed	Fast	Висока
@@ -2317,6 +2323,10 @@ animation effects	Off	Изключени
 	The linked PDF opened, but its named destination was not applied.	Свързаният PDF се отвори, но именуваната му цел не беше приложена.
 	The linked PDF opened, but its page destination was out of range.	Свързаният PDF се отвори, но целевата му страница е извън обхвата.
 	Local cross-PDF links require the desktop app	Локалните връзки между PDF файлове изискват настолното приложение
+	Cut Image	Изрежи изображението
+	Redact Image	Заличи изображението
+	Create Link…	Създай връзка…
+	Recognize Text…	Разпознаване на текст…
 	Minimize	Минимизиране
 	Maximize	Максимизиране
 	Restore	Възстановяване
@@ -2334,6 +2344,13 @@ animation effects	Off	Изключени
 	This document is trying to open a local file:	Този документ се опитва да отвори локален файл:
 	Move tag earlier	Преместване на етикета по-рано
 	Move tag later	Преместване на етикета по-късно
+	Turn upside down (180°)	Обърни наопаки (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикет 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Изрязва всяка страница до отпечатаната ѝ област, завърта я изправено и я побира в листа без разтягане. Един етикет на лист.
+	Find untagged content	Намиране на немаркирано съдържание
+	No untagged content was found.	Не е намерено немаркирано съдържание.
+	Found {n} untagged content problems.	Открити са {n} проблема с немаркирано съдържание.
+	Tag form fields	Маркиране на полетата на формуляра
 	Mark as artifact	Маркиране като артефакт
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Премахнете този листов етикет от реда на четене и маркирайте прякото му съдържание като артефакт
 	Mark content as artifact	Маркиране на съдържание като артефакт

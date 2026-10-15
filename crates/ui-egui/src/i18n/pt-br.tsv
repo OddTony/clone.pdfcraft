@@ -23,6 +23,7 @@
 	Auto follows the system's text size. Pages always render at the display's full resolution.	Automático segue o tamanho do texto do sistema. As páginas sempre são exibidas na resolução total da tela.
 	Identity	Identidade
 	Name on new comments	Nome nos novos comentários
+	Hide hover previews for highlights without comment text	Ocultar as prévias ao passar o ponteiro em destaques sem texto de comentário
 	Open…	Abrir…
 	Open Recent	Abrir recentes
 	Clear Recent Files	Limpar arquivos recentes
@@ -1180,6 +1181,7 @@
 	Copy text	Copiar texto
 	Properties…	Propriedades…
 	Make Current Properties Default	Tornar as propriedades atuais padrão
+	Make Properties Default	Tornar as propriedades padrão
 	More options	Mais opções
 	Sort by	Classificar por
 	Author	Autor
@@ -1510,6 +1512,8 @@
 	Sent to {printer}	Enviado para {printer}
 	Sent to {printer}: {msg}	Enviado para {printer}: {msg}
 	Looking for printers…	Procurando impressoras…
+	Sending sheet {s} of {n} to {printer}…	Enviando a folha {s} de {n} para {printer}…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Nenhuma impressora encontrada. Verifique se a impressora está instalada e se o spooler de impressão está em execução e abra Imprimir novamente.
 	Sending to {printer}…	Enviando para {printer}…
 	Choose a folder for the searchable files	Escolha uma pasta para os arquivos pesquisáveis
 	Files are combined in this order. Leave Pages empty to take every page.	Os arquivos são combinados nesta ordem. Deixe Páginas em branco para incluir todas as páginas.
@@ -2255,6 +2259,8 @@ key	Space	Espaço
 	Switch to List view to change the pages it takes.	Mude para a exibição em lista para alterar as páginas incluídas.
 	Expand all	Expandir tudo
 	Collapse all	Recolher tudo
+	Collapse all pages	Recolher todas as páginas
+	Expand all pages	Expandir todas as páginas
 	Remove page	Remover página
 	Remove {n} pages	Remover {n} páginas
 
@@ -2294,7 +2300,7 @@ calendar date	September	setembro
 calendar date	October	outubro
 calendar date	November	novembro
 calendar date	December	dezembro
-	Mouse wheel scroll speed	Velocidade de rolagem da roda do mouse
+	Scroll speed (mouse wheel and arrow keys)	Velocidade de rolagem (roda do mouse e teclas de seta)
 scroll speed	Slow	Lenta
 scroll speed	Normal	Normal
 scroll speed	Fast	Rápida
@@ -2368,6 +2374,10 @@ animation effects	Off	Desativados
 	The linked PDF opened, but its named destination was not applied.	O PDF vinculado foi aberto, mas seu destino nomeado não foi aplicado.
 	The linked PDF opened, but its page destination was out of range.	O PDF vinculado foi aberto, mas sua página de destino está fora do intervalo.
 	Local cross-PDF links require the desktop app	Links locais entre PDFs exigem o aplicativo para desktop
+	Cut Image	Recortar imagem
+	Redact Image	Ocultar dados da imagem
+	Create Link…	Criar link…
+	Recognize Text…	Reconhecer texto…
 	Minimize	Minimizar
 	Maximize	Maximizar
 	Restore	Restaurar
@@ -2385,6 +2395,13 @@ animation effects	Off	Desativados
 	This document is trying to open a local file:	Este documento está tentando abrir um arquivo local:
 	Move tag earlier	Mover tag para antes
 	Move tag later	Mover tag para depois
+	Turn upside down (180°)	Virar de cabeça para baixo (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Etiqueta 4 × 6 pol (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Recorta cada página na área impressa, deixa-a na vertical e ajusta-a à folha sem distorcer. Uma etiqueta por folha.
+	Find untagged content	Encontrar conteúdo sem marcação
+	No untagged content was found.	Nenhum conteúdo sem marcação foi encontrado.
+	Found {n} untagged content problems.	Foram encontrados {n} problemas de conteúdo sem marcação.
+	Tag form fields	Marcar campos de formulário
 	Mark as artifact	Marcar como artefato
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Remova esta tag folha da ordem de leitura e marque seu conteúdo direto como artefato
 	Mark content as artifact	Marcar conteúdo como artefato

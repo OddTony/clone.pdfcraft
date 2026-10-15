@@ -2280,6 +2280,8 @@ impl PdfCraftApp {
         });
         // Set apart: one more key inside the macro above passes serde_json's recursion limit.
         v["redact_prefs"] = self.redact_defaults.to_json();
+        // Set outside json! above, which is at serde_json's macro recursion limit.
+        v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
         v["community_card_closed"] = self.community_card_closed.into();
         v.to_string()
     }
@@ -2384,6 +2386,9 @@ impl PdfCraftApp {
         // name is cut to a sane length.
         if let Some(author) = v["author"].as_str().map(str::trim).filter(|a| !a.is_empty()) {
             self.comment_prefs.author = author.chars().take(MAX_AUTHOR_CHARS).collect();
+        }
+        if let Some(hide) = v["hide_empty_highlight_hover"].as_bool() {
+            self.comment_prefs.hide_empty_highlight_hover = hide;
         }
         // Per-tool comment styles (#340): each field goes through its clamping setter, so a
         // malformed or hostile entry is clamped or ignored rather than trusted.
@@ -2694,6 +2699,13 @@ impl PdfCraftApp {
                 };
             }
             ("author", _) => self.comment_prefs.author = value.to_string(),
+            ("hide-empty-highlight-hover", _) => {
+                self.comment_prefs.hide_empty_highlight_hover = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err("hide-empty-highlight-hover must be true or false".into()),
+                };
+            }
             ("ui-scale", _) => self.ui_scale = ui_scale::parse(value)?,
             ("system-title-bar", _) => {
                 self.system_title_bar = match value {
@@ -2808,7 +2820,7 @@ impl PdfCraftApp {
             {
                 object_ui::nudge_keys(ctx, &mut self.views[i], doc);
             }
-            canvas::shortcuts(&mut self.views[i], ctx);
+            canvas::shortcuts(&mut self.views[i], ctx, self.scroll_speed);
             self.copy_key(i, ctx);
             self.image_pick_keys(i, ctx);
         }
@@ -2840,10 +2852,19 @@ impl PdfCraftApp {
         if !copy || ctx.egui_wants_keyboard_input() {
             return;
         }
-        let Some((id, text)) = self.views.get(i).and_then(|v| Some((v.id, v.selected_text()?))) else { return };
-        if self.may_copy(id) {
-            ctx.copy_text(text);
+        self.copy_selected_text(i, ctx);
+    }
+
+    /// Shared permission gate for copying selected page text from menus and keyboard events.
+    pub(crate) fn copy_selected_text(&mut self, i: usize, ctx: &egui::Context) -> bool {
+        let Some((id, text)) = self.views.get(i).and_then(|v| Some((v.id, v.selected_text()?))).filter(|(_, text)| !text.is_empty()) else {
+            return false;
+        };
+        if !self.may_copy(id) {
+            return false;
         }
+        ctx.copy_text(text);
+        true
     }
 
     /// The quick tools' keys, as in Acrobat: V selects, H pans, and holding Space pans until it
@@ -3011,6 +3032,8 @@ impl eframe::App for PdfCraftApp {
             self.control = Some(control);
         }
         self.guard_quit(ctx);
+        // macOS: quit through `terminate:` instead of dropping the window (Touch Bar crash, #1136).
+        craft_quit::on_close_request(ctx);
         let now = ctx.input(|i| i.time);
         self.autosave_tick(now);
         // Reload documents whose files a build rewrote (#431).

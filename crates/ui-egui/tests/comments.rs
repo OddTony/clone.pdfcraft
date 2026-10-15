@@ -511,6 +511,28 @@ fn comments_are_selected_moved_and_deleted_with_the_select_tool() {
 }
 
 #[test]
+fn a_shape_just_drawn_resizes_from_its_handles_without_the_select_tool() {
+    // #2338: the new shape showed its handles, but only the Select tool answered them.
+    let square = QuickTool::Comment(pdfcraft_ui_egui::comments::CommentTool::Rectangle);
+    let mut h = harness(|app| app.set_option("quick", "square").unwrap());
+    drag_pt(&mut h, (40.0, 100.0), (140.0, 40.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 0)), "the new rectangle is selected");
+    let before = comments(&h)[0].rect;
+    // Drag its bottom-right handle 40 pt right and 20 pt down.
+    drag_pt(&mut h, (before[2], before[1]), (before[2] + 40.0, before[1] - 20.0));
+    let c = comments(&h);
+    assert_eq!(c.len(), 1, "the handle resized the rectangle instead of drawing another: {c:?}");
+    let r = c[0].rect;
+    assert!((r[2] - (before[2] + 40.0)).abs() < 3.0 && (r[1] - (before[1] - 20.0)).abs() < 3.0, "resized: {before:?} → {r:?}");
+    assert!((r[0] - before[0]).abs() < 1.0 && (r[3] - before[3]).abs() < 1.0, "the opposite corner stays: {before:?} → {r:?}");
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Resize comment"));
+    assert_eq!(h.state().quick_tool, square, "the rectangle tool stays on");
+    // Away from the handles the tool still draws, over the shape too.
+    drag_pt(&mut h, (60.0, 90.0), (120.0, 60.0));
+    assert_eq!(comments(&h).len(), 2, "a drag inside the rectangle draws a second one");
+}
+
+#[test]
 fn the_panel_posts_comments_and_replies() {
     let mut h = harness(|app| app.set_option("panel", "comments").unwrap());
     field(&h, "Add a comment").click();
@@ -713,6 +735,61 @@ fn the_panel_filters_and_sorts() {
     assert_eq!(h.query_all_by_label("Oval").count(), ovals + 1, "a group header was added");
 }
 
+/// #1554: a page group's chevron folds that page's cards away and back, and the choice holds.
+#[test]
+fn page_groups_collapse_and_expand() {
+    let mut h = harness(|app| app.set_option("panel", "comments").unwrap());
+    for (page, text) in [(0, "First page note"), (1, "Second page note")] {
+        let shape = pdfcraft_engine::Shape::Note { at: [100.0, 100.0], icon: pdfcraft_engine::NoteIcon::Comment };
+        h.state_mut().apply_edit(pdfcraft_engine::Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
+            page,
+            style: pdfcraft_engine::Style::default_for(&shape),
+            shape,
+            contents: text.into(),
+            author: "Tester".into(),
+        }));
+    }
+    h.state_mut().views[0].comments.selected = None;
+    h.run_steps(3);
+    let shown = |h: &Harness<'static, PdfCraftApp>, text: &str| h.query_all_by_label_contains(text).count() > 0;
+    assert!(shown(&h, "First page note") && shown(&h, "Second page note"));
+    assert_eq!(h.query_all_by_label("Collapse").count(), 2, "one chevron per page group");
+
+    h.query_all_by_label("Collapse").next().unwrap().click();
+    h.run_steps(3);
+    assert!(!shown(&h, "First page note"), "page 1's card is folded away");
+    assert!(shown(&h, "Second page note"), "page 2 stays open");
+    h.run_steps(5);
+    assert!(!shown(&h, "First page note"), "the group stays folded on later frames");
+
+    h.get_by_label("Expand").click();
+    h.run_steps(3);
+    assert!(shown(&h, "First page note"), "page 1's card is back");
+
+    // Selecting a comment on a folded page opens its group so the card can be shown.
+    h.query_all_by_label("Collapse").next().unwrap().click();
+    h.run_steps(3);
+    assert!(!shown(&h, "First page note"));
+    h.state_mut().views[0].comments.selected = Some((0, 0));
+    h.state_mut().views[0].comments.reveal = true;
+    h.run_steps(3);
+    assert!(shown(&h, "First page note"), "the selected comment's group opened");
+
+    // "…" ▸ Collapse all pages, then Expand all pages.
+    h.state_mut().views[0].comments.selected = None;
+    h.get_by_label("More options").click();
+    h.run_steps(2);
+    h.get_by_label("Collapse all pages").click();
+    h.run_steps(3);
+    assert!(!shown(&h, "First page note") && !shown(&h, "Second page note"), "every page is folded");
+    assert_eq!(h.query_all_by_label("Expand").count(), 2);
+    h.get_by_label("More options").click();
+    h.run_steps(2);
+    h.get_by_label("Expand all pages").click();
+    h.run_steps(3);
+    assert!(shown(&h, "First page note") && shown(&h, "Second page note"), "every page is open again");
+}
+
 #[test]
 fn comments_take_checkmarks_lock_hide_and_summarize() {
     let mut h = harness(|app| {
@@ -836,6 +913,46 @@ fn polygons_clouds_connected_lines_callouts_and_inserted_text() {
     assert_eq!(h.state().quick_tool, QuickTool::Select);
 }
 
+fn drawn_points(h: &Harness<'static, PdfCraftApp>) -> usize {
+    match &h.state().views[0].comments.gesture {
+        Some(pdfcraft_ui_egui::comments::Gesture::Draw { points, .. }) => points.len(),
+        _ => 0,
+    }
+}
+
+#[test]
+fn a_wrong_polygon_point_is_taken_back_with_backspace_or_undo() {
+    let mut h = harness(|app| app.set_option("quick", "polygon").unwrap());
+    for p in [(40.0, 40.0), (120.0, 40.0), (200.0, 150.0)] {
+        click_pt(&mut h, p);
+    }
+    assert_eq!(drawn_points(&h), 3);
+    // Backspace takes back the wrong click, then Undo takes back the one before it.
+    h.key_press(egui::Key::Backspace);
+    h.run_steps(2);
+    assert_eq!(drawn_points(&h), 2);
+    h.state_mut().undo();
+    h.run_steps(2);
+    assert_eq!(drawn_points(&h), 1);
+    // The right corner goes where the wrong one was, and the polygon finishes with all three.
+    click_pt(&mut h, (80.0, 110.0));
+    click_pt(&mut h, (120.0, 40.0));
+    assert_eq!(drawn_points(&h), 3);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    let c = comments(&h);
+    assert_eq!(c.len(), 1);
+    assert_eq!(c[0].subtype, "Polygon");
+    // Taking back the only point cancels the drawing without making a comment.
+    h.state_mut().set_option("quick", "polygon").unwrap();
+    click_pt(&mut h, (200.0, 200.0));
+    h.key_press(egui::Key::Backspace);
+    h.run_steps(2);
+    assert_eq!(drawn_points(&h), 0);
+    assert!(h.state().views[0].comments.gesture.is_none());
+    assert_eq!(comments(&h).len(), 1);
+}
+
 #[test]
 fn inserted_text_snaps_to_the_gap_between_characters_on_the_baseline() {
     let mut h = harness(|app| app.set_option("quick", "caret").unwrap());
@@ -938,6 +1055,54 @@ fn make_current_properties_default() {
     let c = comments(&h);
     let last = c.iter().rfind(|a| a.subtype == "Square").unwrap();
     assert_eq!(last.color, Some([0.0, 0.47, 0.84]));
+}
+
+/// Acrobat's Properties ▸ Make Properties Default: OK with the box ticked makes the edited look
+/// the tool's default (here a strikethrough's colour); without it, only the comment changes.
+#[test]
+fn properties_dialog_makes_the_strikethrough_colour_default() {
+    use pdfcraft_ui_egui::comments::CommentTool;
+    let mut h = harness(|app| app.set_option("quick", "strikeout").unwrap());
+    let green = [0.18, 0.62, 0.36];
+    let blue = [0.0, 0.47, 0.84];
+    assert_ne!(h.state().comment_prefs.style(CommentTool::StrikeOut).color, green);
+    drag_pt(&mut h, (18.0, 155.0), (150.0, 155.0));
+    assert_eq!(comments(&h).iter().filter(|a| a.subtype == "StrikeOut").count(), 1);
+
+    // Without the box: the comment turns blue, the tool keeps its colour.
+    let before = h.state().comment_prefs.style(CommentTool::StrikeOut);
+    h.state_mut().open_comment_props(0, 0);
+    h.run_steps(2);
+    h.state_mut().comment_props.as_mut().expect("open").edited.color = Some(blue);
+    h.get_by_label("OK").click();
+    h.run_steps(3);
+    assert_eq!(h.state().comment_prefs.style(CommentTool::StrikeOut).color, before.color);
+
+    // With it: green, and a 0% opacity is clamped so the next strikethrough stays visible.
+    h.state_mut().open_comment_props(0, 0);
+    h.run_steps(2);
+    {
+        let d = h.state_mut().comment_props.as_mut().expect("open");
+        d.edited.color = Some(green);
+        d.edited.opacity = 0.0;
+    }
+    h.get_by_label("Make Properties Default").click();
+    h.run_steps(1);
+    assert!(h.state().comment_props.as_ref().is_some_and(|d| d.make_default));
+    h.get_by_label("OK").click();
+    h.run_steps(3);
+    let st = h.state().comment_prefs.style(CommentTool::StrikeOut);
+    assert_eq!((st.color, st.opacity), (green, 0.1));
+    let fresh = {
+        let mut fresh = PdfCraftApp::new();
+        fresh.restore(&h.state().persist());
+        fresh.comment_prefs.style(CommentTool::StrikeOut).color
+    };
+    assert_eq!(fresh, green, "the default persisted");
+    drag_pt(&mut h, (18.0, 155.0), (150.0, 155.0));
+    let c = comments(&h);
+    let made = c.iter().rfind(|a| a.subtype == "StrikeOut").and_then(|a| a.color).expect("a colougreen strikethrough");
+    assert!(made.iter().zip(green).all(|(m, r)| (f64::from(*m) - r).abs() < 0.01), "the next strikethrough is green: {made:?}");
 }
 
 /// #1302: making an arrow's properties the default updates the Arrow tool, not later plain lines.
@@ -1132,6 +1297,37 @@ fn hovering_a_comment_shows_its_author_and_text() {
     h.hover_at(p);
     h.run_steps(3);
     assert!(h.query_by_label_contains("Check this figure").is_none(), "a dialog covers the page hover");
+}
+
+#[test]
+fn preference_hides_author_only_highlight_hover_previews() {
+    // A highlight annotation with author Ada and empty contents over the first page.
+    let pdf = String::from_utf8_lossy(TEXT_FIXTURE).replace("/Contents 5 0 R /Resources", "/Contents 5 0 R /Annots [8 0 R] /Resources").replace(
+        "trailer",
+        "8 0 obj << /Type /Annot /Subtype /Highlight /Rect [50 50 150 120] /C [1 1 0] /T (Ada) /QuadPoints [50 120 150 120 50 50 150 50] >> endobj\ntrailer",
+    );
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("highlight_hover.pdf", None, pdf.into_bytes()).expect("opens");
+        app.set_option("left", "closed").unwrap();
+        app.set_option("panel", "none").unwrap();
+        app
+    });
+    h.run_steps(4);
+    settle(&mut h);
+
+    let p = at(&h, 100.0, 85.0);
+    // By default, author-only hover is shown.
+    h.hover_at(p);
+    h.run_steps(3);
+    h.get_by_label("Ada");
+
+    // Enabling preference hides author-only highlight hover.
+    h.state_mut().set_option("hide-empty-highlight-hover", "true").unwrap();
+    h.hover_at(p);
+    h.run_steps(3);
+    assert!(h.query_by_label("Ada").is_none(), "author-only hover must be suppressed");
 }
 
 #[test]

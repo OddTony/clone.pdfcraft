@@ -130,15 +130,15 @@ update the numbers.
 - **Missing:** fixes for the ≈ 13 of ≈ 25 filed reports of features marked `shipped` that give wrong results still open,
   plus triage of ≈ 220 other open issues.
 - **Evidence:** 245 open issues on 2026-10-10. The first batch of `fix(...)` reports was fixed by
-  2026-10-10 (#799, #800, #807, #809, #810, #811, #815, #816, #817, #818, #819, #821). Stamps placed
-  on a rotated page read upright: rubber stamps, natural-size and explicit-rectangle images, and
-  PDF-page stamps (#1398). The rest of the backlog is untriaged.
   2026-10-10 (#799, #800, #807, #809, #810, #811, #815, #816, #817, #818, #819, #821). A later
   batch keeps a cloudy comment flatten cannot draw (#1317), leaves a refused text-box restyle or
   resize unchanged (#1327), keeps arrow defaults off plain lines (#1302), stops a custom text
   match on the separator instead of the next glyph (#1315), and states the vertical-text
   redaction refusal without claiming an overlap (#1340). Organize Pages opens on the page being
-  read, selected and scrolled into view (#1910). The rest of the backlog is untriaged.
+  read, selected and scrolled into view (#1910). Stamps placed on a rotated page read upright
+  (#1398). Another batch keeps a spaced XFA radio value in the datasets (#1319), replaces only the
+  selected pages when they are not adjacent (#1305), and leaves unrelated page streams in place
+  when a figure is marked decorative (#1324). The rest of the backlog is untriaged.
 - **Impact:** every one is a user who lost trust. Crash reports outrank feature work
   (`AGENTS.md` §4).
 - **Estimate:** 45–80 h (≈ 0.2–0.4 h per issue). **Doc:** this file.
@@ -198,8 +198,10 @@ update the numbers.
 
 ### 11. Accessibility: only text-only automatic structure creation
 
-- **Missing:** auto-tag mixed text, images, tables, lists, links and fields; connect preview heading
-  proposals to Apply; visual Order and Content panels, Reading Order tool, table editor, Make Accessible action,
+- **Missing:** apply auto-tag proposals to marked content and a valid parent tree, tag fields
+  into structure trees with unusual layouts (only a direct Document root with a direct
+  ParentTree Nums array is extended),
+  visual Tags, Order and Content panels, Reading Order tool, table editor, Make Accessible action,
   Read Out Loud; full keyboard operation of PdfCraft itself and a screen-reader audit.
 - **Evidence:** all 32 checker rules, figure alt text, tag property and sibling order edits, and
   a bounded auto-tag preview exist. Apply writes valid structure and parent-tree links for
@@ -356,14 +358,15 @@ update the numbers.
 
 - **Missing:** a menu and tool listing captured from Acrobat (names only, `plan/acrobat/`, never
   committed) diffed against the checklist, so that features the checklist never listed show up.
-  Also correct `misc.localization` and `misc.installers`, which are still `planned` though both
-  ship.
+  `misc.localization` and `misc.installers` are now `partial` (Chinese, Telugu and Arabic are not
+  fully usable yet; Linux packages are unsigned).
 - **Estimate:** 4–8 h. **Doc:** [target-app-parity.md](target-app-parity.md).
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |
 | 2026-10-13 | minor | Gap 6: Organize Pages selects and reveals the current page on open, including after an earlier grid selection elsewhere (#1910). Estimates unchanged. |
 | 2026-10-12 | minor | Gap 6: rubber stamps, explicit image rectangles and PDF-page stamps read upright on rotated pages (#1398). Estimates unchanged. |
 | 2026-10-12 | minor | #1316: replacing a line or paragraph keeps a neighbouring line whose glyph box overlaps. Gap 3 remains. Estimates unchanged. |

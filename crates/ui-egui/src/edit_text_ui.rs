@@ -15,11 +15,17 @@ use crate::canvas::{DocView, PageXform};
 
 const ACCENT: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);
 
+#[derive(Clone, Copy, PartialEq)]
+enum TextTarget {
+    Block(usize),
+    Added(usize),
+}
+
 /// A cached, read-only page background. The source glyphs are removed before rasterization;
 /// colour, pictures and unselected text beneath the editor remain visible.
 #[derive(Default)]
 pub(crate) struct TextBackground {
-    key: Option<(u64, usize, usize)>,
+    key: Option<(u64, usize, TextTarget)>,
     renderer: Option<pdfcraft_render::RenderPool>,
     texture: Option<egui::TextureHandle>,
     tag: Option<u64>,
@@ -33,12 +39,26 @@ impl TextBackground {
         self.renderer.is_some() && self.received != self.tag
     }
 
-    pub fn prepare(&mut self, ctx: &egui::Context, doc: &pdfcraft_engine::Document, editor: Option<&LineEditor>, scale: f32) {
-        let key = editor.map(|ed| (doc.edit_generation(), ed.page, ed.block));
+    pub fn prepare(
+        &mut self,
+        ctx: &egui::Context,
+        doc: &pdfcraft_engine::Document,
+        editor: Option<&LineEditor>,
+        draft: Option<&crate::content_ui::TextDraft>,
+        scale: f32,
+    ) {
+        let key = editor
+            .map(|ed| (doc.edit_generation(), ed.page, TextTarget::Block(ed.block)))
+            .or_else(|| draft.and_then(|d| d.index.map(|index| (doc.edit_generation(), d.page, TextTarget::Added(index)))));
         if self.key != key {
             *self = Self { key, ..Default::default() };
-            if let Some((_, page, block)) = key {
-                self.renderer = doc.text_edit_preview(page, block).ok().map(|p| p.renderer());
+            if let Some((_, page, target)) = key {
+                self.renderer = match target {
+                    TextTarget::Block(block) => doc.text_edit_preview(page, block),
+                    TextTarget::Added(index) => doc.added_text_preview(page, index),
+                }
+                .ok()
+                .map(|p| p.renderer());
             }
         }
         if let Some(ed) = editor {
@@ -82,11 +102,26 @@ impl TextBackground {
     }
 
     pub fn ready(&self, page: usize, block: usize) -> bool {
-        self.key.is_some_and(|(_, p, b)| (p, b) == (page, block)) && self.texture.is_some()
+        self.key.is_some_and(|(_, p, target)| (p, target) == (page, TextTarget::Block(block))) && self.texture.is_some()
     }
 
-    pub fn paint(&self, painter: &egui::Painter, xf: &PageXform, page: usize, editor: Option<&LineEditor>) {
-        let Some(_) = editor.filter(|ed| ed.page == page && self.ready(page, ed.block)) else { return };
+    pub fn ready_added(&self, page: usize, index: usize) -> bool {
+        self.key.is_some_and(|(_, p, target)| (p, target) == (page, TextTarget::Added(index))) && self.texture.is_some()
+    }
+
+    pub fn paint(
+        &self,
+        painter: &egui::Painter,
+        xf: &PageXform,
+        page: usize,
+        editor: Option<&LineEditor>,
+        draft: Option<&crate::content_ui::TextDraft>,
+    ) {
+        let ready = editor.is_some_and(|ed| ed.page == page && self.ready(page, ed.block))
+            || draft.is_some_and(|d| d.page == page && d.index.is_some_and(|index| self.ready_added(page, index)));
+        if !ready {
+            return;
+        }
         let Some(tex) = &self.texture else { return };
         // Font metrics can underestimate the actual glyph ink. Paint the complete textless
         // page so overhanging glyphs cannot remain outside the estimated source rectangle.
@@ -273,7 +308,7 @@ fn look_of(b: &pdfcraft_engine::TextBlock) -> pdfcraft_engine::AddedText {
     source_look(&b.base_font, b.size, b.color, b.bold, b.italic)
 }
 
-fn editor_font(look: &pdfcraft_engine::AddedText, size: f32) -> FontId {
+pub(crate) fn editor_font(look: &pdfcraft_engine::AddedText, size: f32) -> FontId {
     let family = match (look.family, look.bold) {
         (pdfcraft_engine::FontFamily::Courier, _) => FontFamily::Monospace,
         (_, true) => FontFamily::Name("semibold".into()),
@@ -575,6 +610,14 @@ pub(crate) enum ImageAction {
     Save(usize, usize),
     Copy(usize, usize),
     CopyFile(usize, usize),
+    /// Copy the picture, then remove it from the page.
+    Cut(usize, usize),
+    /// Mark the picture for redaction (applied later from Redact a PDF).
+    Redact(usize, usize),
+    /// Create a link over the picture.
+    Link(usize, usize),
+    /// Open Recognize Text for the picture's page.
+    Recognize(usize),
 }
 
 fn user_box(xf: &PageXform, info: &DocInfo, page: usize, r: Rect) -> [f64; 4] {
@@ -759,6 +802,22 @@ pub(crate) fn image_input(
     if !allow_interaction {
         return false;
     }
+    // An open menu stays drawn wherever the pointer is: most of its items lie outside the picture
+    // (a logo is smaller than its menu), and a menu that is not drawn for a frame cannot be clicked.
+    // Only a menu opened by a right-click on the picture: one opened over text or empty page while
+    // a picture stays selected is the page's own menu.
+    let menu_key = resp.id.with("image-menu");
+    if resp.secondary_clicked() {
+        ui.ctx().data_mut(|d| d.insert_temp(menu_key, false));
+    }
+    let mut menu_drawn = false;
+    if let Some(sel) = selected
+        && resp.context_menu_opened()
+        && ui.ctx().data(|d| d.get_temp::<bool>(menu_key)).unwrap_or(false)
+    {
+        resp.context_menu(|ui| image_menu(ui, page, sel, images, view, action));
+        menu_drawn = true;
+    }
     let Some(p) = hover_pos.filter(|p| xf.rect.contains(*p)) else { return false };
     let Some(hit) = boxes.iter().enumerate().rposition(|(i, b)| b.contains(p) && image_contains(i, p)) else { return false };
     if selected != Some(hit) {
@@ -775,63 +834,140 @@ pub(crate) fn image_input(
     if resp.clicked() || resp.secondary_clicked() {
         view.image_selection = Some(ImageSelection { page, index: hit, drag: None, crop: None });
     }
-    if selected == Some(hit) {
-        resp.context_menu(|ui| {
-            use pdfcraft_engine::ImageEdit as E;
-            let items: [(&str, Option<E>); 4] = [
-                (tl!("Rotate Clockwise"), Some(E::Rotate(1))),
-                (tl!("Rotate Counterclockwise"), Some(E::Rotate(3))),
-                (tl!("Flip Horizontal"), Some(E::Flip { horizontal: true })),
-                (tl!("Flip Vertical"), Some(E::Flip { horizontal: false })),
-            ];
-            for (label, change) in items {
-                if ui.button(label).clicked() {
-                    view.pending_edit = change.map(|c| Edit::EditPageImage { page, index: hit, change: c });
-                    ui.close();
-                }
-            }
-            // Crop: the handles trim instead of resizing until Done.
-            if ui.button(tl!("Crop Image")).clicked() {
-                if let (Some(s), Some(im)) = (view.image_selection.as_mut(), images.get(hit)) {
-                    s.crop = Some(CropMode::new(im.visible_rect.unwrap_or(im.rect)));
-                }
-                ui.close();
-            }
-            let cropped =
-                images.get(hit).is_some_and(|im| im.visible_rect.is_some_and(|v| v.iter().zip(im.rect.iter()).any(|(a, b)| (a - b).abs() > 0.01)));
-            if ui.add_enabled(cropped, egui::Button::new(tl!("Remove Crop"))).clicked() {
-                if let Some(im) = images.get(hit) {
-                    view.pending_edit = Some(Edit::EditPageImage { page, index: hit, change: E::Crop(im.rect) });
-                }
-                ui.close();
-            }
-            let raster = images.get(hit).is_some_and(|image| !image.is_form);
-            if ui.add_enabled(raster, egui::Button::new(tl!("Replace Image…"))).clicked() {
-                *action = Some(ImageAction::Replace(page, hit));
-                ui.close();
-            }
-            if ui.add_enabled(raster, egui::Button::new(tl!("Save Image As…"))).clicked() {
-                *action = Some(ImageAction::Save(page, hit));
-                ui.close();
-            }
-            // Copying also finds the picture inside grouped Form artwork.
-            if ui.button(tl!("Copy Image")).clicked() {
-                *action = Some(ImageAction::Copy(page, hit));
-                ui.close();
-            }
-            if ui.button(tl!("Copy Image in Original Format")).clicked() {
-                *action = Some(ImageAction::CopyFile(page, hit));
-                ui.close();
-            }
-            ui.separator();
-            if ui.button(tl!("Delete")).clicked() {
-                view.image_selection = None;
-                view.pending_edit = Some(Edit::EditPageImage { page, index: hit, change: E::Delete });
-                ui.close();
-            }
-        });
+    if resp.secondary_clicked() {
+        ui.ctx().data_mut(|d| d.insert_temp(menu_key, true));
+    }
+    if selected == Some(hit) && !menu_drawn {
+        resp.context_menu(|ui| image_menu(ui, page, hit, images, view, action));
     }
     true
+}
+
+/// The right-click menu of the picture `hit` (its rotate, flip, replace, copy, cut, redact, link,
+/// recognize and delete items).
+fn image_menu(
+    ui: &mut egui::Ui,
+    page: usize,
+    hit: usize,
+    images: &[pdfcraft_engine::PageImage],
+    view: &mut DocView,
+    action: &mut Option<ImageAction>,
+) {
+    use pdfcraft_engine::ImageEdit as E;
+    let items: [(&str, Option<E>); 4] = [
+        (tl!("Rotate Clockwise"), Some(E::Rotate(1))),
+        (tl!("Rotate Counterclockwise"), Some(E::Rotate(3))),
+        (tl!("Flip Horizontal"), Some(E::Flip { horizontal: true })),
+        (tl!("Flip Vertical"), Some(E::Flip { horizontal: false })),
+    ];
+    for (label, change) in items {
+        if ui.button(label).clicked() {
+            view.pending_edit = change.map(|c| Edit::EditPageImage { page, index: hit, change: c });
+            ui.close();
+        }
+    }
+    // Crop: the handles trim instead of resizing until Done.
+    if ui.button(tl!("Crop Image")).clicked() {
+        if let (Some(s), Some(im)) = (view.image_selection.as_mut(), images.get(hit)) {
+            s.crop = Some(CropMode::new(im.visible_rect.unwrap_or(im.rect)));
+        }
+        ui.close();
+    }
+    let cropped = images.get(hit).is_some_and(|im| im.visible_rect.is_some_and(|v| v.iter().zip(im.rect.iter()).any(|(a, b)| (a - b).abs() > 0.01)));
+    if ui.add_enabled(cropped, egui::Button::new(tl!("Remove Crop"))).clicked() {
+        if let Some(im) = images.get(hit) {
+            view.pending_edit = Some(Edit::EditPageImage { page, index: hit, change: E::Crop(im.rect) });
+        }
+        ui.close();
+    }
+    let raster = images.get(hit).is_some_and(|image| !image.is_form);
+    if ui.add_enabled(raster, egui::Button::new(tl!("Replace Image…"))).clicked() {
+        *action = Some(ImageAction::Replace(page, hit));
+        ui.close();
+    }
+    if ui.add_enabled(raster, egui::Button::new(tl!("Save Image As…"))).clicked() {
+        *action = Some(ImageAction::Save(page, hit));
+        ui.close();
+    }
+    // Cutting and copying also find the picture inside grouped Form artwork.
+    if ui.button(tl!("Cut Image")).clicked() {
+        *action = Some(ImageAction::Cut(page, hit));
+        ui.close();
+    }
+    if ui.button(tl!("Copy Image")).clicked() {
+        *action = Some(ImageAction::Copy(page, hit));
+        ui.close();
+    }
+    if ui.button(tl!("Copy Image in Original Format")).clicked() {
+        *action = Some(ImageAction::CopyFile(page, hit));
+        ui.close();
+    }
+    ui.separator();
+    if ui.button(tl!("Redact Image")).clicked() {
+        *action = Some(ImageAction::Redact(page, hit));
+        ui.close();
+    }
+    if ui.button(tl!("Create Link…")).clicked() {
+        *action = Some(ImageAction::Link(page, hit));
+        ui.close();
+    }
+    if ui.button(tl!("Recognize Text…")).clicked() {
+        *action = Some(ImageAction::Recognize(page));
+        ui.close();
+    }
+    ui.separator();
+    if ui.button(tl!("Delete")).clicked() {
+        view.image_selection = None;
+        view.pending_edit = Some(Edit::EditPageImage { page, index: hit, change: E::Delete });
+        ui.close();
+    }
+}
+
+/// Open `block` on `page` in the inline editor. The box's geometry and source are read from the
+/// `lines` handed in, so callers pass the document's current inventory.
+#[allow(clippy::too_many_arguments)]
+fn open_editor(
+    ui: &egui::Ui,
+    xf: &PageXform,
+    doc: &pdfcraft_engine::Document,
+    lines: &[pdfcraft_engine::TextBlock],
+    boxes: &[Rect],
+    page: usize,
+    block: usize,
+    view: &mut DocView,
+) {
+    view.pending_text_open = None;
+    let (Some(l), Some(b)) = (lines.get(block), boxes.get(block)) else { return };
+    view.image_selection = None;
+    let source_lines = doc.text_lines(page);
+    let text = l.editor_text.clone();
+    // Screen pixels per point, from the box's width.
+    let scale = (b.width() - 4.0) / ((l.rect[2] - l.rect[0]).max(1.0) as f32);
+    // How far the editor box may grow: a single-line paragraph's rewrite grows to the
+    // page's right edge, a multi-line paragraph rewraps to its own width.
+    let right = xf.rect.right().min(view.viewport_rect().right()) - 6.0;
+    let max_width = if l.rows.len() == 1 { (right - b.left()).max(b.width()) } else { b.width() };
+    view.line_editor = Some(LineEditor {
+        selection: None,
+        font_resource: None,
+        page,
+        block,
+        text: text.clone(),
+        original: text,
+        rect: *b,
+        source_rect: l.rect.map(|v| v as f32),
+        multiline: l.rows.len() > 1,
+        source: Some((l.clone(), source_lines)),
+        fonts: install_source_fonts(ui.ctx(), doc, page),
+        overflow: false,
+        max_width,
+        size: (l.size as f32 * scale).clamp(8.0, 72.0),
+        focus: true,
+        look: look_of(l),
+        look0: look_of(l),
+        extras: Extras::default(),
+        extras0: Extras::default(),
+    });
 }
 
 /// Lines and their screen boxes for a page; hover outlines, click opens the editor. Returns
@@ -859,6 +995,15 @@ pub(crate) fn page_input(
         if active != Some(i) {
             painter.rect_stroke(*b, CornerRadius::same(2), Stroke::new(0.75, ACCENT.gamma_multiply(0.35)), egui::StrokeKind::Outside);
         }
+    }
+    // A box a switching click asked for opens now, once the edit queued with that click has
+    // applied and `lines`/`boxes` are the document's new inventory (#2022).
+    if allow_interaction
+        && active.is_none()
+        && let Some((open_page, block)) = view.pending_text_open
+        && open_page == page
+    {
+        open_editor(ui, xf, doc, lines, &boxes, page, block, view);
     }
     if !allow_interaction {
         return false;
@@ -946,36 +1091,24 @@ pub(crate) fn page_input(
     });
     if resp.clicked() {
         view.image_selection = None;
-        let l = &lines[hit];
-        let source_lines = doc.text_lines(page);
-        let text = l.editor_text.clone();
-        // Screen pixels per point, from the box's width.
-        let scale = (boxes[hit].width() - 4.0) / ((l.rect[2] - l.rect[0]).max(1.0) as f32);
-        // How far the editor box may grow: a single-line paragraph's rewrite grows to the
-        // page's right edge, a multi-line paragraph rewraps to its own width.
-        let right = xf.rect.right().min(view.viewport_rect().right()) - 6.0;
-        let max_width = if l.rows.len() == 1 { (right - boxes[hit].left()).max(boxes[hit].width()) } else { boxes[hit].width() };
-        view.line_editor = Some(LineEditor {
-            selection: None,
-            font_resource: None,
-            page,
-            block: hit,
-            text: text.clone(),
-            original: text,
-            rect: boxes[hit],
-            source_rect: l.rect.map(|v| v as f32),
-            multiline: l.rows.len() > 1,
-            source: Some((l.clone(), source_lines)),
-            fonts: install_source_fonts(ui.ctx(), doc, page),
-            overflow: false,
-            max_width,
-            size: (l.size as f32 * scale).clamp(8.0, 72.0),
-            focus: true,
-            look: look_of(l),
-            look0: look_of(l),
-            extras: Extras::default(),
-            extras0: Extras::default(),
-        });
+        // A click that moves the editor to another paragraph applies the open one first, so its
+        // typed text is not dropped with the switched-away editor (#2022). A click on the open
+        // box's own frame, which the editor's overlay does not cover, keeps it open instead.
+        if let Some(open) = view.line_editor.as_ref().filter(|e| e.has_changes()) {
+            if open.page == page && open.block == hit {
+                return true;
+            }
+            if let Some(old) = view.line_editor.take() {
+                let style = old.style();
+                if old.text != old.original || style != pdfcraft_engine::BlockStyle::default() {
+                    view.pending_edit = Some(Edit::EditTextBlock { page: old.page, block: old.block, text: old.text, style });
+                }
+            }
+            // The clicked box opens next frame, from the document with that edit applied.
+            view.pending_text_open = Some((page, hit));
+            return true;
+        }
+        open_editor(ui, xf, doc, lines, &boxes, page, hit, view);
     }
     true
 }
@@ -1206,7 +1339,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             // extent: single rows grow toward the page edge, paragraphs rewrap at their
             // source width, and the visible frame grows/shrinks vertically with their rows.
             // An OCR phrase (several stretched words on one scanned line) also grows rightwards.
-            let single_run = ed.source.as_ref().is_some_and(|(block, _)| block.lines.len() == 1 || block.invisible);
+            let single_run = ed.source.as_ref().is_some_and(|(block, _)| block.rows.len() == 1 || block.invisible);
             let width = if !ed.multiline && single_run && !ed.text.contains('\n') && ed.has_changes() {
                 let job = editor_job(ui, ed, &ed.text, scale, f32::INFINITY);
                 let natural = ui.fonts_mut(|f| f.layout_job(job)).size().x;
@@ -1351,7 +1484,7 @@ mod tests {
         let ctx = egui::Context::default();
         let mut background = TextBackground::default();
         for _ in 0..100 {
-            background.prepare(&ctx, doc, Some(&ed), 1.0);
+            background.prepare(&ctx, doc, Some(&ed), None, 1.0);
             if background.ready(0, 0) {
                 break;
             }
@@ -1360,12 +1493,12 @@ mod tests {
         assert!(background.ready(0, 0));
         assert!(!background.pending());
         let texture = background.texture.as_ref().unwrap().id();
-        background.prepare(&ctx, doc, Some(&ed), 1.0);
+        background.prepare(&ctx, doc, Some(&ed), None, 1.0);
         assert_eq!(background.texture.as_ref().unwrap().id(), texture);
         assert_eq!(doc.bytes, source);
         assert_eq!(doc.edit_generation(), generation);
         assert!(!doc.dirty && doc.can_undo().is_none());
-        background.prepare(&ctx, doc, None, 1.0);
+        background.prepare(&ctx, doc, None, None, 1.0);
         assert!(background.texture.is_none() && background.renderer.is_none());
     }
 
@@ -1380,7 +1513,7 @@ mod tests {
         let ctx = egui::Context::default();
         ctx.begin_pass(egui::RawInput { max_texture_side: Some(16384), ..Default::default() });
         let mut background = TextBackground::default();
-        background.prepare(&ctx, doc, Some(&ed), 8.0);
+        background.prepare(&ctx, doc, Some(&ed), None, 8.0);
         let expected = 8.0f32.min(crate::canvas::TILE_THRESHOLD / page.width.max(page.height));
         assert!(expected > crate::canvas::BASE_SIDE / page.width.max(page.height), "the test page needs the larger side");
         assert_eq!(background.tag, Some((expected * 1000.0) as u64));
@@ -1388,7 +1521,7 @@ mod tests {
         ctx.end_pass().textures_delta.clear();
         ctx.begin_pass(egui::RawInput { max_texture_side: Some(2048), ..Default::default() });
         let mut small = TextBackground::default();
-        small.prepare(&ctx, doc, Some(&ed), 8.0);
+        small.prepare(&ctx, doc, Some(&ed), None, 8.0);
         assert_eq!(small.tag, Some(((2048.0 / page.width.max(page.height)) * 1000.0) as u64));
         ctx.end_pass().textures_delta.clear();
     }

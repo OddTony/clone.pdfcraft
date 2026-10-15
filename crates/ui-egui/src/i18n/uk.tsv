@@ -32,6 +32,7 @@
 	Auto follows the system's text size. Pages always render at the display's full resolution.	Автоматичний режим використовує розмір тексту із системних налаштувань. Сторінки завжди відображаються в повній роздільній здатності екрана.
 	Identity	Особисті дані
 	Name on new comments	Ім’я в нових коментарях
+	Hide hover previews for highlights without comment text	Приховувати спливний перегляд для виділень без тексту коментаря
 	Open…	Відкрити…
 	Open Recent	Відкрити нещодавні
 	Pin folder to Home…	Закріпити теку на головній…
@@ -1294,6 +1295,7 @@
 	Copy text	Копіювати текст
 	Properties…	Властивості…
 	Make Current Properties Default	Зробити поточні властивості типовими
+	Make Properties Default	Зробити властивості типовими
 	More options	Додаткові параметри
 	Sort by	Сортувати за
 	Author	Автор
@@ -1614,6 +1616,8 @@
 	Sent to {printer}	Надіслано на {printer}
 	Sent to {printer}: {msg}	Надіслано на {printer}: {msg}
 	Looking for printers…	Пошук принтерів…
+	Sending sheet {s} of {n} to {printer}…	Надсилання аркуша {s} із {n} на {printer}…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Принтери не знайдено. Перевірте, що принтер установлено, а диспетчер друку працює, і знову відкрийте «Друк».
 	Sending to {printer}…	Надсилання на {printer}…
 	Choose a folder for the searchable files	Виберіть теку для файлів із пошуком
 	Files are combined from top to bottom. Leave Pages empty to take every page.	Файли об’єднуються згори донизу. Залиште «Сторінки» порожнім, щоб узяти всі сторінки.
@@ -2277,6 +2281,8 @@ key	Space	Пробіл
 	Switch to List view to change the pages it takes.	Перейдіть до вигляду списком, щоб змінити, які сторінки взяти.
 	Expand all	Розгорнути всі
 	Collapse all	Згорнути всі
+	Collapse all pages	Згорнути всі сторінки
+	Expand all pages	Розгорнути всі сторінки
 	Remove page	Видалити сторінку
 	Remove {n} pages	Видалити сторінки: {n}
 
@@ -2302,7 +2308,7 @@ key	Space	Пробіл
 	Rotate page {label} counterclockwise	Повернути сторінку {label} проти годинникової стрілки
 	Rotate page {label} clockwise	Повернути сторінку {label} за годинниковою стрілкою
 	Delete page {label}	Видалити сторінку {label}
-	Mouse wheel scroll speed	Швидкість прокручування коліщатком миші
+	Scroll speed (mouse wheel and arrow keys)	Швидкість прокручування (коліщатко миші та клавіші зі стрілками)
 scroll speed	Slow	Повільна
 scroll speed	Normal	Звичайна
 scroll speed	Fast	Швидка
@@ -2376,6 +2382,10 @@ animation effects	Off	Вимкнено
 	The linked PDF opened, but its named destination was not applied.	Пов’язаний PDF відкрито, але його іменоване призначення не застосовано.
 	The linked PDF opened, but its page destination was out of range.	Пов’язаний PDF відкрито, але сторінка призначення поза межами діапазону.
 	Local cross-PDF links require the desktop app	Локальні посилання між PDF працюють лише в настільному застосунку
+	Cut Image	Вирізати зображення
+	Redact Image	Вилучити вміст зображення
+	Create Link…	Створити посилання…
+	Recognize Text…	Розпізнати текст…
 	Minimize	Згорнути
 	Maximize	Розгорнути
 	Restore	Відновити
@@ -2393,6 +2403,13 @@ animation effects	Off	Вимкнено
 	This document is trying to open a local file:	Цей документ намагається відкрити локальний файл:
 	Move tag earlier	Перемістити тег раніше
 	Move tag later	Перемістити тег пізніше
+	Turn upside down (180°)	Перевернути (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикетка 4 × 6 дюйма (101,6 × 152,4 мм)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Обрізає кожну сторінку за надрукованою областю, розвертає її прямо та вписує в аркуш без спотворень. Одна етикетка на аркуш.
+	Find untagged content	Знайти нетегований вміст
+	No untagged content was found.	Нетегованого вмісту не знайдено.
+	Found {n} untagged content problems.	Знайдено проблем із нетегованим вмістом: {n}.
+	Tag form fields	Позначити поля форми
 	Mark as artifact	Позначити як артефакт
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Вилучіть цей кінцевий тег із порядку читання та позначте його безпосередній вміст як артефакт
 	Mark content as artifact	Позначити вміст як артефакт

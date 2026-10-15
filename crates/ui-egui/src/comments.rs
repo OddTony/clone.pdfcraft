@@ -250,6 +250,8 @@ pub struct CommentPrefs {
     pub pinned: bool,
     /// The tool each flyout group shows (the last one used).
     pub group_tool: [CommentTool; 3],
+    /// Hide hover previews on highlight annotations when they contain no comment text beyond the author.
+    pub hide_empty_highlight_hover: bool,
 }
 
 impl Default for CommentPrefs {
@@ -259,6 +261,7 @@ impl Default for CommentPrefs {
             styles: ALL.iter().map(|t| (*t, Style::default_for(&t.sample()))).collect(),
             pinned: false,
             group_tool: [CommentTool::Note, CommentTool::Highlight, CommentTool::Ink],
+            hide_empty_highlight_hover: false,
         }
     }
 }
@@ -478,6 +481,8 @@ pub struct CommentView {
     pub hidden_checks: Vec<String>,
     /// How the panel orders comments.
     pub sort: SortBy,
+    /// Pages whose group is folded in the panel (when sorted by page).
+    pub collapsed_pages: Vec<usize>,
     /// Comment Properties was asked for from the panel: (page, index).
     pub props_request: Option<(usize, usize)>,
     /// Make Current Properties Default was asked for: (page, index).
@@ -491,6 +496,22 @@ pub struct CommentView {
     pub context_at: Option<(usize, [f64; 2])>,
     /// A one-shot tool just finished; the app returns to the Select tool unless pinned.
     pub tool_done: bool,
+}
+
+impl CommentView {
+    /// Takes back the last point of a polygon, cloud or connected lines being drawn; the first
+    /// point's removal cancels the drawing. Returns whether there was such a drawing.
+    pub fn undo_point(&mut self) -> bool {
+        let Some(Gesture::Draw { tool, points, .. }) = self.gesture.as_mut() else { return false };
+        if !tool.clicks_points() {
+            return false;
+        }
+        points.pop();
+        if points.is_empty() {
+            self.gesture = None;
+        }
+        true
+    }
 }
 
 /// Comments panel order (Acrobat: Sort by page, author, date, type, colour).
@@ -691,6 +712,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
     let pressed_here = origin.is_some_and(|o| page_rect.contains(o));
     let over_page = pointer.is_some_and(|p| page_rect.contains(p));
     let fill_grab = fill_grabs(ui, cx, view);
+    let draw_grab = draw_grabs(ui, cx, view);
     let caret_text = if cx.tool == QuickTool::Comment(CommentTool::Caret) { view.page_text(cx.page) } else { None };
     let cv = &mut view.comments;
     if cv.gesture.is_some() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
@@ -708,6 +730,9 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
         cv.selected = cx.hit(p).map(|a| (cx.page, a.index));
     }
     match cx.tool {
+        // The shape just drawn is selected with its handles showing: they resize it without a
+        // trip to the Select tool (#2338). Anywhere else the tool keeps drawing.
+        QuickTool::Comment(_) if draw_grab => select_input(ui, resp, cx, view, pointer, origin, pressed_here),
         QuickTool::Comment(tool) if tool.draws() => {
             if !cx.allowed {
                 return false;
@@ -775,6 +800,17 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
             }
             let finish = resp.double_clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter));
+            // Backspace (or Delete) takes back the last point, e.g. after a wrong click; Undo does too.
+            // Only while a drawing is in progress: otherwise Delete belongs to the selected comment.
+            if matches!(cv.gesture, Some(Gesture::Draw { page, .. }) if page == cx.page)
+                && !ui.ctx().egui_wants_keyboard_input()
+                && ui.input_mut(|i| {
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace) || i.consume_key(egui::Modifiers::NONE, egui::Key::Delete)
+                })
+            {
+                cv.undo_point();
+                return true;
+            }
             if resp.clicked()
                 && over_page
                 && let Some(p) = pointer
@@ -923,25 +959,53 @@ pub(crate) fn select_grabs(ui: &egui::Ui, cx: &PageCx<'_>, view: &DocView) -> bo
     cx.tool == QuickTool::Select && grabs(ui, cx, view, |a| !is_markup(&a.subtype))
 }
 
+/// With a shape tool (rectangle, oval, line, polygon…), the selected comment's resize handles
+/// are picked up as with the Select tool, so the shape just drawn can be resized straight away
+/// (#2338). Only the handles: a press anywhere else, the shape itself included, still draws.
+pub(crate) fn draw_grabs(ui: &egui::Ui, cx: &PageCx<'_>, view: &DocView) -> bool {
+    let QuickTool::Comment(tool) = cx.tool else { return false };
+    if !(tool.draws() || tool.clicks_points()) || tool == CommentTool::Eraser || cx.hidden {
+        return false;
+    }
+    let cv = &view.comments;
+    if matches!(cv.gesture, Some(Gesture::Resize { page, .. }) if page == cx.page) {
+        return true;
+    }
+    // A polygon being clicked out keeps its clicks, even near an old shape's handle.
+    if cv.gesture.is_some() {
+        return false;
+    }
+    press_point(ui, cx).is_some_and(|p| on_handle(cx, view, p, |_| true))
+}
+
 /// Whether the press (or, with no button down, the pointer) is on a `pick` comment or on the
 /// selected one's resize handles.
 fn grabs(ui: &egui::Ui, cx: &PageCx<'_>, view: &DocView, pick: impl Fn(&Annotation) -> bool) -> bool {
     if cx.hidden {
         return false;
     }
-    let cv = &view.comments;
-    if matches!(cv.gesture, Some(Gesture::Move { page, .. } | Gesture::Resize { page, .. }) if page == cx.page) {
+    if matches!(view.comments.gesture, Some(Gesture::Move { page, .. } | Gesture::Resize { page, .. }) if page == cx.page) {
         return true;
     }
+    let Some(p) = press_point(ui, cx) else { return false };
+    on_handle(cx, view, p, &pick) || cx.hit(p).is_some_and(pick)
+}
+
+/// Where a gesture on this page is decided: the press while the button is down, otherwise the
+/// pointer (egui clears the press origin on release). `None` off the page.
+fn press_point(ui: &egui::Ui, cx: &PageCx<'_>) -> Option<Pos2> {
     let (pointer, origin, down) = ui.input(|i| (i.pointer.hover_pos(), i.pointer.press_origin(), i.pointer.any_down()));
-    let Some(p) = (if down { origin } else { pointer }).filter(|p| cx.xf.rect.contains(*p)) else { return false };
-    let on_handle = cv
+    (if down { origin } else { pointer }).filter(|p| cx.xf.rect.contains(*p))
+}
+
+/// Whether `p` is on a resize handle of the selected comment, when it is a resizable `pick`.
+fn on_handle(cx: &PageCx<'_>, view: &DocView, p: Pos2, pick: impl Fn(&Annotation) -> bool) -> bool {
+    view.comments
         .selected
         .filter(|(page, _)| *page == cx.page)
         .and_then(|(_, i)| cx.get(i))
         .filter(|a| pick(a) && cx.allowed && resizable(a))
-        .is_some_and(|a| HANDLES.into_iter().any(|h| handle_pos(cx.screen_rect(a), h).distance(p) <= 7.0));
-    on_handle || cx.hit(p).is_some_and(pick)
+        .is_some_and(|a| HANDLES.into_iter().any(|h| handle_pos(cx.screen_rect(a), h).distance(p) <= 7.0))
 }
 
 fn clamp_to(r: Rect, p: Pos2) -> Pos2 {

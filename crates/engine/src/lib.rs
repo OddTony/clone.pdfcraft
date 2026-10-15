@@ -52,13 +52,14 @@ pub use pdfcraft_organize::view::{InitialView, Layout as InitialLayout, Magnific
 
 pub use pdfcraft_cos::Algorithm;
 pub use pdfcraft_create::{CONVERTIBLE, CreateError, ImageResolution, SourceKind, decode_text, source_kind};
+pub use pdfcraft_edit::added::{text_rect as added_text_rect, text_width as added_text_width};
 pub use pdfcraft_edit::{
     Added, AddedImage, AddedText, Align as TextAlign, Background, Content as AddedContent, Family as FontFamily, HeaderFooter, MarkKind, Watermark,
 };
 pub use pdfcraft_forms::{
     BorderStyle, CheckStyle, Field as FormField, FieldAction, FieldChange, FieldFont, FieldKind as FormFieldKind, FieldProps, FieldValue,
     Look as FieldLook, LookPatch as FieldLookPatch, NewField, TabOrder, Trigger as FieldTrigger, Widget as FormWidget, af as form_scripts,
-    appearance::auto_text_size_by as field_auto_text_size_by, flags as field_flags,
+    appearance as form_appearance, appearance::auto_text_size_by as field_auto_text_size_by, flags as field_flags,
 };
 
 pub use pdfcraft_a11y as a11y;
@@ -165,7 +166,38 @@ pub fn merge_data_files(files: &[(String, Vec<u8>)]) -> Result<String, String> {
 
 pub type SplitPart = (usize, usize, Arc<Vec<u8>>);
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+#[cfg(test)]
+thread_local! {
+    static SECONDARY_SCAN_COUNTS: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
+#[cfg(test)]
+fn reset_secondary_scan_counts() {
+    SECONDARY_SCAN_COUNTS.with(|counts| counts.set((0, 0)));
+}
+
+#[cfg(test)]
+fn secondary_scan_counts() -> (usize, usize) {
+    SECONDARY_SCAN_COUNTS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn record_marker_scan() {
+    SECONDARY_SCAN_COUNTS.with(|counts| {
+        let (markers, links) = counts.get();
+        counts.set((markers + 1, links));
+    });
+}
+
+#[cfg(test)]
+fn record_link_scan() {
+    SECONDARY_SCAN_COUNTS.with(|counts| {
+        let (markers, links) = counts.get();
+        counts.set((markers, links + 1));
+    });
+}
 
 use pdfcraft_cos::{SaveOptions, write_full, write_incremental};
 use pdfcraft_render::{DocInfo, Layer, LayerOp, OpenError, ReadingColors, RenderConfig, RenderPool, inspect};
@@ -197,6 +229,8 @@ enum Scope {
     Comments,
     /// Only form field values (and their widget appearances).
     Form,
+    /// Link annotations; the full inspection is refreshed, but page-content indexes stay valid.
+    Links,
     /// Only page content streams, resources and added content/marks: the page tree,
     /// annotations, form fields, links, outline and fonts are unchanged, so the full
     /// re-inspection is skipped (seconds on very large files).
@@ -234,6 +268,7 @@ fn scope_of(edit: &Edit) -> Scope {
         | Edit::FillAnnotation { .. }
         | Edit::FontSizeAnnotation { .. }
         | Edit::SetAnnotationInfo { .. } => Scope::Comments,
+        Edit::AddLink { .. } | Edit::SetLink { .. } | Edit::DeleteLink { .. } | Edit::RemoveLinks { .. } | Edit::AddLinks { .. } => Scope::Links,
         Edit::SetFieldValue { .. } | Edit::ResetForm { .. } | Edit::SetFieldImage { .. } | Edit::ApplyScriptChanges { .. } => Scope::Form,
         // Page content, resources and added content/marks only: the page tree, annotations,
         // fields, links and document metadata are untouched (see `refresh_content`).
@@ -344,12 +379,8 @@ pub struct Document {
     pub read_only_reason: Option<String>,
     /// Interactive form fields of the current state (empty without a form).
     pub form: Arc<Vec<pdfcraft_forms::Field>>,
-    /// Page marks present (headers and footers, watermarks, backgrounds), for Update/Remove.
-    pub marks: Vec<MarkKind>,
-    /// Text and images added with Edit a PDF ▸ Add content (still editable).
-    pub added: Vec<pdfcraft_edit::Added>,
-    /// Link annotations, for Edit a PDF ▸ Link.
-    pub links: Vec<pdfcraft_annot::links::LinkItem>,
+    marker_scan: OnceLock<pdfcraft_edit::MarkerScan>,
+    links: OnceLock<Vec<pdfcraft_annot::links::LinkItem>>,
     /// Signature fields, validated against the session's trust store (Signatures panel).
     pub signatures: Arc<Vec<SignatureInfo>>,
     trust: Arc<TrustStore>,
@@ -564,6 +595,11 @@ impl Document {
         self.editor.as_ref().map(|e| a11y::tags(&e.cos)).unwrap_or_default()
     }
 
+    /// Marked-content items directly owned by one reachable indirect structure tag.
+    pub fn tag_content(&self, object: pdfcraft_cos::ObjRef) -> Result<Vec<a11y::TagContentItem>, a11y::TagError> {
+        self.editor.as_ref().map(|e| a11y::tag_content(&e.cos, object)).unwrap_or_else(|| Ok(Vec::new()))
+    }
+
     /// The edit that fixes `rule`, for the rules with an automatic fix: the document language
     /// (`value` is the language), the title (`value` replaces it; else the current title or the
     /// file name) and the tab order.
@@ -658,6 +694,54 @@ impl Document {
     /// Redaction marks waiting to be applied.
     pub fn redaction_marks(&self) -> usize {
         self.info.annotations.iter().filter(|a| a.subtype == "Redact").count()
+    }
+
+    /// Page marks present (headers and footers, watermarks, backgrounds), for Update/Remove.
+    pub fn marks(&self) -> &[MarkKind] {
+        &self
+            .marker_scan
+            .get_or_init(|| {
+                self.editor
+                    .as_ref()
+                    .map(|e| {
+                        #[cfg(test)]
+                        record_marker_scan();
+                        pdfcraft_edit::scan_markers(&e.cos)
+                    })
+                    .unwrap_or_default()
+            })
+            .marks
+    }
+
+    /// Text and images added with Edit a PDF ▸ Add content (still editable).
+    pub fn added(&self) -> &[pdfcraft_edit::Added] {
+        &self
+            .marker_scan
+            .get_or_init(|| {
+                self.editor
+                    .as_ref()
+                    .map(|e| {
+                        #[cfg(test)]
+                        record_marker_scan();
+                        pdfcraft_edit::scan_markers(&e.cos)
+                    })
+                    .unwrap_or_default()
+            })
+            .added
+    }
+
+    /// Link annotations, for Edit a PDF ▸ Link.
+    pub fn links(&self) -> &[pdfcraft_annot::links::LinkItem] {
+        self.links.get_or_init(|| {
+            self.editor
+                .as_ref()
+                .map(|e| {
+                    #[cfg(test)]
+                    record_link_scan();
+                    pdfcraft_annot::links::list(&e.cos)
+                })
+                .unwrap_or_default()
+        })
     }
 
     /// Changes to content and document information are allowed.
@@ -791,12 +875,35 @@ fn is_placeholder_title(title: &str) -> bool {
 /// What is displayed: the working file, plus (in memory only, never saved) the appearances
 /// PdfCraft draws for comments that have none ([`pdfcraft_annot::with_missing_appearances`]).
 /// The working file is unchanged, and so is everything that reads it (saving, signatures, …).
+/// The reader shows the same pages in `a` and `b`: count, displayed size and rotation.
+fn same_pages(a: &[pdfcraft_render::PageInfo], b: &[pdfcraft_render::PageInfo]) -> bool {
+    a.len() == b.len()
+        && a.iter().zip(b).all(|(x, y)| (x.width - y.width).abs() < 0.01 && (x.height - y.height).abs() < 0.01 && x.rotation == y.rotation)
+}
+
 fn display_bytes(editor: Option<&mut Editor>, bytes: &Arc<Vec<u8>>) -> Arc<Vec<u8>> {
     let Some(display) = editor.and_then(|e| pdfcraft_annot::with_missing_appearances_cached(&e.cos, &mut e.appearances)) else {
         return bytes.clone();
     };
     // Writing fails only as saving the document would; the page then shows as it always did.
     write_incremental(&display, &SaveOptions::default()).map(Arc::new).unwrap_or_else(|_| bytes.clone())
+}
+
+/// The copy PDFCraft displays when opening `bytes`: with appearances drawn, in memory only, for
+/// comments that have none. Render paths outside the app, such as the CLI, use this so their page
+/// images agree with the app and independent viewers. It never changes the source document, and an
+/// unparseable file, a write failure or a parser panic falls back to the original bytes.
+pub fn display_bytes_for(bytes: Arc<Vec<u8>>, password: Option<&str>) -> Arc<Vec<u8>> {
+    guard(|| {
+        pdfcraft_cos::Document::open_with_password(bytes.clone(), password)
+            .ok()
+            .and_then(|cos| pdfcraft_annot::with_missing_appearances(&cos))
+            .and_then(|display| write_incremental(&display, &SaveOptions::default()).ok())
+            .map(Arc::new)
+    })
+    .ok()
+    .flatten()
+    .unwrap_or(bytes)
 }
 
 /// Fails when the renderer still draws text under an applied redaction mark.
@@ -924,6 +1031,8 @@ pub struct BookmarkRow {
     pub open: bool,
     /// The 0-based page it goes to.
     pub page: Option<usize>,
+    /// Where on that page it goes ([`pdfcraft_render::DestView::Top`] when it doesn't say).
+    pub view: pdfcraft_render::DestView,
 }
 
 /// One page of the bookmark list, in outline order.
@@ -951,7 +1060,7 @@ fn outline_rows(items: &[pdfcraft_render::OutlineItem]) -> Vec<BookmarkRow> {
             top.1 += 1;
         }
         let path: Vec<usize> = levels.iter().map(|(_, listed)| listed.saturating_sub(1)).collect();
-        rows.push(BookmarkRow { path, title: item.title.clone(), open: item.open, page: item.page });
+        rows.push(BookmarkRow { path, title: item.title.clone(), open: item.open, page: item.page, view: item.view });
         if !item.children.is_empty() {
             levels.push((&item.children, 0));
         }
@@ -1374,6 +1483,8 @@ pub enum Edit {
         figure: u32,
         alt: Option<String>,
     },
+    /// Add `/Form` tags and object references for all widgets in an untagged AcroForm.
+    AutoTagFormFields,
     /// Change one property on a reachable indirect structure tag.
     SetTagProperty {
         object: pdfcraft_cos::ObjRef,
@@ -1864,6 +1975,7 @@ impl Edit {
             Edit::SetInitialView(_) => Label::of("Change initial view"),
             Edit::AutoTagText => Label::of("Automatically tag text"),
             Edit::SetAltText { .. } => Label::of("Set alternate text"),
+            Edit::AutoTagFormFields => Label::of("Tag form fields"),
             Edit::SetTagProperty { .. } => Label::of("Change tag properties"),
             Edit::MoveTag { .. } => Label::of("Move object"),
             Edit::MarkDecorative { .. } => Label::of("Mark figure as decorative"),
@@ -2059,6 +2171,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::SetInitialView(_)
         | Edit::AutoTagText
         | Edit::SetAltText { .. }
+        | Edit::AutoTagFormFields
         | Edit::SetTagProperty { .. }
         | Edit::MoveTag { .. }
         | Edit::MarkDecorative { .. }
@@ -2346,6 +2459,9 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         Edit::SetAltText { figure, alt } => {
             let r = pdfcraft_cos::ObjRef::new(*figure, doc.generation(*figure));
             a11y::set_alt(doc, r, alt.as_deref()).map_err(|e| EditError::Accessibility(e.to_string()))?;
+        }
+        Edit::AutoTagFormFields => {
+            a11y::tag_form_fields(doc).map_err(EditError::Accessibility)?;
         }
         Edit::SetTagProperty { object, property, value } => {
             a11y::set_tag_property(doc, *object, *property, value.as_deref()).map_err(|e| EditError::Accessibility(e.to_string()))?;
@@ -2762,6 +2878,11 @@ pub struct Session {
     next_id: u64,
     /// Seconds since the Unix epoch, injected so saves are deterministic in tests.
     clock: Option<fn() -> i64>,
+    /// Seconds to add to UTC for local time, read from whoever knows the zone (a browser, say).
+    /// Separate from `clock` on purpose: `clock` alone is the test shortcut that takes the
+    /// injected time AS local time and zeroes the zone, so injecting only it leaves either the
+    /// local dates or the UTC ones wrong by the zone's offset.
+    utc_offset: Option<fn() -> i64>,
     /// Certificates trusted for signing (Acrobat: Trusted Certificates).
     trust: Arc<TrustStore>,
     /// Preferences ▸ JavaScript ▸ Enable Acrobat JavaScript, inverted (on by default).
@@ -3100,6 +3221,28 @@ impl Session {
         self
     }
 
+    /// A real clock for a host that has neither a clock nor a time zone of its own (a
+    /// `wasm32-unknown-unknown` build: `now()` would be empty and `local_utc_offset()` is 0, so
+    /// Fill & Sign stamps 1 Jan 1970 and `/ModDate` is never written). `clock` is the UTC time in
+    /// seconds since the epoch; `utc_offset` is the local zone's seconds east of UTC, asked on every
+    /// use because the zone changes with the date (daylight saving). Unlike
+    /// [`Session::with_clock`], which is a test shortcut, nothing here is taken as local time.
+    pub fn with_wall_clock(mut self, clock: fn() -> i64, utc_offset: fn() -> i64) -> Self {
+        self.clock = Some(clock);
+        self.utc_offset = Some(utc_offset);
+        self
+    }
+
+    /// Seconds to add to UTC for the local time of this session: the injected zone, else 0 under
+    /// the test clock (which is already local), else the system's.
+    fn local_offset(&self) -> i64 {
+        match (self.utc_offset, self.clock) {
+            (Some(zone), _) => zone(),
+            (None, Some(_)) => 0,
+            (None, None) => local_utc_offset(),
+        }
+    }
+
     /// Seconds since the Unix epoch from the session clock (0 when unknown).
     pub fn now_secs(&self) -> i64 {
         self.now().unwrap_or(0)
@@ -3119,7 +3262,7 @@ impl Session {
     /// is taken as local time.
     /// A dynamic stamp's second line: "By Ada at 2:14 pm, Oct 02, 2026" (local time).
     pub fn stamp_by_line(&self, author: &str) -> String {
-        let offset = if self.clock.is_some() { 0 } else { local_utc_offset() };
+        let offset = self.local_offset();
         let d = self.now().map(|t| pdfcraft_cos::pdf_date(t + offset)).unwrap_or_default();
         let num = |a: usize, b: usize| d.get(a..b).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
         let (y, mo, day, hh, mm) = (num(2, 6), num(6, 8), num(8, 10), num(10, 12), num(12, 14));
@@ -3130,7 +3273,7 @@ impl Session {
     }
 
     pub fn today(&self) -> (i64, u32, u32) {
-        let offset = if self.clock.is_some() { 0 } else { local_utc_offset() };
+        let offset = self.local_offset();
         self.now().map(|t| pdfcraft_cos::pdf_date(t + offset)).as_deref().and_then(parse_ymd).unwrap_or((1970, 1, 1))
     }
 
@@ -3315,6 +3458,31 @@ impl Session {
             },
             (_, cos) => (bytes, info, cos),
         };
+        // The catalog leads to no page, but the reader found pages by scanning: gather the page
+        // objects into a page tree as one more revision, or page edits address none of them
+        // (#1656). Kept only when the reader then shows the same pages, and never on a signed
+        // document, where writing the repair could rewrite the file under its signatures.
+        let (bytes, info, cos) = match cos {
+            Ok(Ok(cos)) if !info.pages.is_empty() && pdfcraft_organize::page_count(&cos).unwrap_or(0) == 0 => {
+                let mut work = cos.clone();
+                let signed = || pdfcraft_sign::pdf::list(&cos, &bytes, &context.trust).iter().any(|s| s.signed);
+                let rebuilt = match pdfcraft_organize::recover_page_tree(&mut work) {
+                    Ok(n) if n > 0 && !signed() => rebase(&work).ok().filter(|(_, i, _)| same_pages(&i.pages, &info.pages)),
+                    _ => None,
+                };
+                match rebuilt {
+                    Some((b, i, mut c)) => {
+                        for line in cos.repair_log() {
+                            c.note_repair(line.clone());
+                        }
+                        c.note_repair(format!("the page tree is missing; its {} pages were found by scanning the file", i.pages.len()));
+                        (b, i, Ok(Ok(c)))
+                    }
+                    None => (bytes, info, Ok(Ok(cos))),
+                }
+            }
+            cos => (bytes, info, cos),
+        };
         // XFA notes survive the document being re-read after edits.
         let xfa_warnings: Vec<String> = if info.xfa.is_some() { info.warnings.clone() } else { Vec::new() };
         let mut document = Self::build_document(&context.trust, name, path, bytes, info, cos, render_password, password, xfa);
@@ -3385,14 +3553,6 @@ impl Session {
             };
             e.cos.note_repair(line);
         }
-        let (marks, added) = editor
-            .as_ref()
-            .map(|e| {
-                let scan = pdfcraft_edit::scan_markers(&e.cos);
-                (scan.marks, scan.added)
-            })
-            .unwrap_or_default();
-        let links = editor.as_ref().map(|e| pdfcraft_annot::links::list(&e.cos)).unwrap_or_default();
         let sig_cache = Arc::new(pdfcraft_sign::DigestCache::default());
         let signatures = editor.as_ref().map(|e| signatures_of(&e.cos, &bytes, trust, &sig_cache)).unwrap_or_default();
         Document {
@@ -3409,9 +3569,8 @@ impl Session {
             snapshot_generation: 0,
             read_only_reason,
             form: Arc::new(form),
-            marks,
-            added,
-            links,
+            marker_scan: OnceLock::new(),
+            links: OnceLock::new(),
             signatures,
             trust: trust.clone(),
             sig_cache,
@@ -3562,8 +3721,9 @@ impl Session {
         }
         // Signed documents are only ever saved incrementally: an edit that needs a full rewrite
         // (applying redactions, changing security, sanitizing) would invalidate the signatures.
+        // So does any edit to a file rebuilt from object headers: it has no chain to append to.
         let rewrites = |c: &pdfcraft_cos::Document| c.full_save_required() || c.encryption_changed();
-        if signed && rewrites(&next) && !rewrites(&editor.cos) {
+        if signed && ((rewrites(&next) && !rewrites(&editor.cos)) || (next.is_modified() && next.revisions().is_empty())) {
             return Err(EditError::SignedRewrite(edit.label().to_string()));
         }
         // What this edit drew with `?` (a value or comment text its font can't draw, stored as
@@ -3679,6 +3839,9 @@ impl Session {
         if scope == Scope::Content {
             return Self::refresh_content(doc, None);
         }
+        if scope == Scope::Links {
+            return Self::refresh_links(doc);
+        }
         // Metadata edits keep the renderer, which holds the working file anyway.
         if scope != Scope::Metadata {
             Self::release_working(doc);
@@ -3716,7 +3879,11 @@ impl Session {
         let form = Arc::new(form);
         match scope {
             Scope::Metadata => return Ok(()),
-            Scope::Comments => doc.info.annotations = comment_list(&editor.cos),
+            Scope::Comments => {
+                doc.info.annotations = comment_list(&editor.cos);
+                // Link indexes are positions in /Annots, so comment insertion/deletion can move them.
+                doc.links = OnceLock::new();
+            }
             Scope::Form => {
                 // PERF: keystroke path, index once. A linear find per field is O(F^2);
                 // forms reach 10k fields.
@@ -3737,6 +3904,7 @@ impl Session {
                     }
                 }
             }
+            Scope::Links => return Self::refresh_links(doc),
             // Handled above; kept as a full refresh so the match stays total.
             Scope::Full => return Self::refresh(doc),
             // Handled above (content-only refresh); the arm keeps the match total.
@@ -3786,11 +3954,8 @@ impl Session {
         // The edit must still leave a file the viewer can open; anything else rolls back above.
         pdfcraft_render::check_pages(bytes.clone(), doc.password.as_deref(), doc.info.pages.len()).map_err(|e| EditError::Reopen(e.to_string()))?;
         let (touches_added, touches_marks) = Self::content_refresh_lists(edit);
-        if touches_added {
-            doc.added = pdfcraft_edit::list_added(&editor.cos);
-        }
-        if touches_marks {
-            doc.marks = pdfcraft_edit::marks_present(&editor.cos);
+        if touches_added || touches_marks {
+            doc.marker_scan = OnceLock::new();
         }
         doc.info.file_size = bytes.len();
         if !doc.signatures.is_empty() {
@@ -3827,6 +3992,15 @@ impl Session {
 
     /// Rebuild working bytes, inspection and renderer from the current edit state.
     fn refresh(doc: &mut Document) -> Result<(), EditError> {
+        Self::refresh_with_indexes(doc, true, true)
+    }
+
+    /// Reinspect a link edit while preserving the page-content marker scan cache.
+    fn refresh_links(doc: &mut Document) -> Result<(), EditError> {
+        Self::refresh_with_indexes(doc, false, true)
+    }
+
+    fn refresh_with_indexes(doc: &mut Document, invalidate_markers: bool, invalidate_links: bool) -> Result<(), EditError> {
         // A full refresh may follow structural or annotation changes: cached appearances
         // may be stale, so they are rebuilt below.
         if let Some(editor) = doc.editor.as_mut() {
@@ -3854,10 +4028,12 @@ impl Session {
         let mut form = pdfcraft_forms::fields(&editor.cos);
         xfa::mark_script_buttons(&editor.cos, &mut form);
         doc.form = Arc::new(form);
-        let marker_scan = pdfcraft_edit::scan_markers(&editor.cos);
-        doc.marks = marker_scan.marks;
-        doc.added = marker_scan.added;
-        doc.links = pdfcraft_annot::links::list(&editor.cos);
+        if invalidate_markers {
+            doc.marker_scan = OnceLock::new();
+        }
+        if invalidate_links {
+            doc.links = OnceLock::new();
+        }
         doc.signatures = signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache);
         doc.display = display_bytes(Some(editor), &bytes);
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
@@ -4159,6 +4335,20 @@ impl Session {
         pdfcraft_print::impose(&cos, settings).map_err(|e| EditError::Print(e.to_string()))
     }
 
+    /// For each page, whether its text mostly runs bottom-to-top ([`pdfcraft_print::text_reads_up`]);
+    /// only `pages` are read, the others are `false`.
+    pub fn print_text_up(&self, id: DocId, pages: &[usize]) -> Vec<bool> {
+        let Some(doc) = self.get(id) else { return Vec::new() };
+        let cos = match doc.editor.as_ref() {
+            Some(e) => e.cos.clone(),
+            None => match pdfcraft_cos::Document::open_with_password(doc.bytes.clone(), doc.password.as_deref()) {
+                Ok(c) => c,
+                Err(_) => return Vec::new(),
+            },
+        };
+        (0..doc.info.pages.len()).map(|i| pages.contains(&i) && pdfcraft_print::text_reads_up(&cos, i)).collect()
+    }
+
     /// Combine whole files, in order, into new PDF bytes (one bookmark per file).
     pub fn combine(&self, sources: &[(String, Arc<Vec<u8>>)]) -> Result<Arc<Vec<u8>>, EditError> {
         let docs = sources.iter().map(|(n, b)| open_source(n, b)).collect::<Result<Vec<_>, _>>()?;
@@ -4395,7 +4585,7 @@ impl Session {
                         ]
                     })
                     .filter(|r| {
-                        !doc.links.iter().any(|l| l.page == page && l.rect[0] < r[2] && r[0] < l.rect[2] && l.rect[1] < r[3] && r[1] < l.rect[3])
+                        !doc.links().iter().any(|l| l.page == page && l.rect[0] < r[2] && r[0] < l.rect[2] && l.rect[1] < r[3] && r[1] < l.rect[3])
                     })
                     .collect();
                 if !rects.is_empty() {
@@ -4412,7 +4602,17 @@ impl Session {
         let doc = self.get(id)?;
         if let Some(editor) = doc.editor.as_ref() {
             let page = pdfcraft_organize::bookmark_page(&editor.cos, offset, limit);
-            let rows = page.bookmarks.into_iter().map(|b| BookmarkRow { path: b.path, title: b.title, open: b.open, page: b.page }).collect();
+            let rows = page
+                .bookmarks
+                .into_iter()
+                .map(|b| {
+                    let view = b.view.map_or_else(Default::default, |(kind, numbers)| {
+                        let numbers: Vec<Option<f32>> = numbers.iter().map(|n| n.map(|n| n as f32)).collect();
+                        pdfcraft_render::DestView::from_operands(Some(&kind), &numbers)
+                    });
+                    BookmarkRow { path: b.path, title: b.title, open: b.open, page: b.page, view }
+                })
+                .collect();
             return Some(BookmarkPage { rows, next: page.next, truncated: false });
         }
         let all = outline_rows(&doc.info.outline);
@@ -4580,7 +4780,7 @@ impl Session {
 
     /// The signing time as a PDF date in local time with its offset (`D:…+02'00'`).
     pub fn signing_date(&self) -> String {
-        let offset = if self.clock.is_some() { 0 } else { local_utc_offset() };
+        let offset = self.local_offset();
         let local = pdfcraft_cos::pdf_date(self.now().unwrap_or(0) + offset);
         let stamp = local.trim_end_matches('Z');
         if offset == 0 {

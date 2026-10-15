@@ -23,6 +23,7 @@
 	Auto follows the system's text size. Pages always render at the display's full resolution.	Automatisch folgt der Textgröße des Systems. Seiten werden immer in der vollen Auflösung des Bildschirms dargestellt.
 	Identity	Identität
 	Name on new comments	Name für neue Kommentare
+	Hide hover previews for highlights without comment text	Hover-Vorschau für Hervorhebungen ohne Kommentartext ausblenden
 	Open…	Öffnen…
 	New blank PDF	Neues leeres PDF
 	Create PDF from file…	PDF aus Datei erstellen…
@@ -1282,6 +1283,7 @@
 	Copy text	Text kopieren
 	Properties…	Eigenschaften…
 	Make Current Properties Default	Als Standard festlegen
+	Make Properties Default	Eigenschaften als Standard festlegen
 	More options	Weitere Optionen
 	Sort by	Sortieren nach
 	Author	Verfasser
@@ -1610,6 +1612,8 @@
 	Sent to {printer}	An {printer} gesendet
 	Sent to {printer}: {msg}	An {printer} gesendet: {msg}
 	Looking for printers…	Drucker werden gesucht…
+	Sending sheet {s} of {n} to {printer}…	Blatt {s} von {n} wird an {printer} gesendet…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Es wurden keine Drucker gefunden. Prüfen Sie, ob der Drucker installiert ist und die Druckwarteschlange läuft, und öffnen Sie dann „Drucken“ erneut.
 	Sending to {printer}…	Wird an {printer} gesendet…
 	Choose a folder for the searchable files	Wähle einen Ordner für die durchsuchbaren Dateien
 	Files are combined in this order. Leave Pages empty to take every page.	Die Dateien werden in dieser Reihenfolge kombiniert. Lass „Seiten“ leer, um alle Seiten zu übernehmen.
@@ -2258,6 +2262,8 @@ key	Space	Leertaste
 	Switch to List view to change the pages it takes.	Wechsle zur Listenansicht, um die übernommenen Seiten zu ändern.
 	Expand all	Alle ausklappen
 	Collapse all	Alle einklappen
+	Collapse all pages	Alle Seiten einklappen
+	Expand all pages	Alle Seiten ausklappen
 	Remove page	Seite entfernen
 	Remove {n} pages	{n} Seiten entfernen
 
@@ -2281,7 +2287,7 @@ key	Space	Leertaste
 	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Diese Datei wurde auf dem Datenträger geändert. „Neu laden“ zeigt die neue Version und verwirft Ihre ungespeicherten Änderungen; „Speichern“ ersetzt sie durch diese Version.
 	Reload	Neu laden
 	Couldn't reload {name}: {e}	{name} konnte nicht neu geladen werden: {e}
-	Mouse wheel scroll speed	Scrollgeschwindigkeit des Mausrads
+	Scroll speed (mouse wheel and arrow keys)	Bildlaufgeschwindigkeit (Mausrad und Pfeiltasten)
 scroll speed	Slow	Langsam
 scroll speed	Normal	Normal
 scroll speed	Fast	Schnell
@@ -2355,6 +2361,10 @@ animation effects	Off	Aus
 	The linked PDF opened, but its named destination was not applied.	Die verknüpfte PDF wurde geöffnet, aber ihr benanntes Ziel wurde nicht angewendet.
 	The linked PDF opened, but its page destination was out of range.	Die verknüpfte PDF wurde geöffnet, aber ihr Seitenziel liegt außerhalb des Bereichs.
 	Local cross-PDF links require the desktop app	Lokale Verknüpfungen zwischen PDFs erfordern die Desktop-App
+	Cut Image	Bild ausschneiden
+	Redact Image	Bild schwärzen
+	Create Link…	Link erstellen…
+	Recognize Text…	Text erkennen…
 	Minimize	Minimieren
 	Maximize	Maximieren
 	Restore	Wiederherstellen
@@ -2372,6 +2382,13 @@ animation effects	Off	Aus
 	This document is trying to open a local file:	Dieses Dokument versucht, eine lokale Datei zu öffnen:
 	Move tag earlier	Tag früher verschieben
 	Move tag later	Tag später verschieben
+	Turn upside down (180°)	Auf den Kopf drehen (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Etikett 4 × 6 Zoll (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Schneidet jede Seite auf ihren bedruckten Bereich zu, richtet sie auf und passt sie ohne Verzerrung an das Blatt an. Ein Etikett pro Blatt.
+	Find untagged content	Nicht markierten Inhalt suchen
+	No untagged content was found.	Es wurde kein unmarkierter Inhalt gefunden.
+	Found {n} untagged content problems.	{n} Probleme mit unmarkiertem Inhalt gefunden.
+	Tag form fields	Formularfelder taggen
 	Mark as artifact	Als Artefakt markieren
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Dieses Blatt-Tag aus der Lesereihenfolge entfernen und seinen direkten Inhalt als Artefakt markieren
 	Mark content as artifact	Inhalt als Artefakt markieren

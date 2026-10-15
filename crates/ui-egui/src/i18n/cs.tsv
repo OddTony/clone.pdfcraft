@@ -40,6 +40,7 @@
 	Auto follows the system's text size. Pages always render at the display's full resolution.	Automaticky se řídí velikostí textu v systému. Stránky se vždy vykreslují v plném rozlišení displeje.
 	Identity	Identita
 	Name on new comments	Jméno autora nových komentářů
+	Hide hover previews for highlights without comment text	Skrýt náhledy při najetí u zvýraznění bez textu komentáře
 	Enable Acrobat JavaScript	Povolit Acrobat JavaScript
 	OK	OK
 	Open…	Otevřít…
@@ -1364,6 +1365,7 @@ key	Space	Mezerník
 	Copy text	Kopírovat text
 	Properties…	Vlastnosti…
 	Make Current Properties Default	Nastavit aktuální vlastnosti jako výchozí
+	Make Properties Default	Nastavit vlastnosti jako výchozí
 	More options	Další možnosti
 	Sort by	Seřadit podle
 	Author	Autor
@@ -2256,6 +2258,8 @@ certificate	Subject	Subjekt
 	List view	Zobrazení seznamu
 	Expand all	Rozbalit vše
 	Collapse all	Sbalit vše
+	Collapse all pages	Sbalit všechny stránky
+	Expand all pages	Rozbalit všechny stránky
 	Files are combined in the order shown. Drag them to change it.	Soubory se slučují v zobrazeném pořadí. Pořadí změníte přetažením.
 	Pages: {k} of {n}	Stránky: {k} z {n}
 	Check the pages	Zkontrolujte stránky
@@ -2264,6 +2268,8 @@ certificate	Subject	Subjekt
 	Remove page	Odebrat stránku
 	Remove {n} pages	Odebrat stránky ({n})
 	Looking for printers…	Hledání tiskáren…
+	Sending sheet {s} of {n} to {printer}…	Odesílání listu {s} z {n} na {printer}…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Nebyly nalezeny žádné tiskárny. Zkontrolujte, že je tiskárna nainstalovaná a zařazování tisku běží, a pak znovu otevřete Tisk.
 	Sending to {printer}…	Odesílání na {printer}…
 	Fill colour	Barva výplně
 	Fill colour: none	Barva výplně: žádná
@@ -2331,7 +2337,7 @@ certificate	Subject	Subjekt
 	Active	Aktivní
 	Dark theme	Tmavý motiv
 	Appearance settings…	Nastavení vzhledu…
-	Mouse wheel scroll speed	Rychlost posouvání kolečkem myši
+	Scroll speed (mouse wheel and arrow keys)	Rychlost posouvání (kolečko myši a šipky)
 scroll speed	Slow	Pomalá
 scroll speed	Normal	Normální
 scroll speed	Fast	Rychlá
@@ -2428,6 +2434,10 @@ animation effects	Off	Vypnuto
 	The linked PDF opened, but its named destination was not applied.	Odkazovaný PDF se otevřel, ale jeho pojmenovaný cíl nebyl použit.
 	The linked PDF opened, but its page destination was out of range.	Odkazovaný PDF se otevřel, ale cílová stránka je mimo rozsah.
 	Local cross-PDF links require the desktop app	Místní odkazy mezi soubory PDF vyžadují desktopovou aplikaci
+	Cut Image	Vyjmout obrázek
+	Redact Image	Začernit obrázek
+	Create Link…	Vytvořit odkaz…
+	Recognize Text…	Rozpoznat text…
 	Minimize	Minimalizovat
 	Maximize	Maximalizovat
 	Restore	Obnovit
@@ -2445,6 +2455,13 @@ animation effects	Off	Vypnuto
 	This document is trying to open a local file:	Tento dokument se pokouší otevřít místní soubor:
 	Move tag earlier	Přesunout značku dříve
 	Move tag later	Přesunout značku později
+	Turn upside down (180°)	Otočit vzhůru nohama (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Štítek 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Ořízne každou stránku na potištěnou oblast, otočí ji svisle a přizpůsobí listu bez deformace. Jeden štítek na list.
+	Find untagged content	Najít neoznačený obsah
+	No untagged content was found.	Nebyl nalezen žádný neoznačený obsah.
+	Found {n} untagged content problems.	Nalezeno problémů s neoznačeným obsahem: {n}.
+	Tag form fields	Označit pole formuláře
 	Mark as artifact	Označit jako artefakt
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Odeberte tuto značku listu z pořadí čtení a označte její přímý obsah jako artefakt
 	Mark content as artifact	Označit obsah jako artefakt
