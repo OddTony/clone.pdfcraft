@@ -26,10 +26,10 @@ pub fn covers(bytes: &[u8], text: &str) -> bool {
     FontRef::new(bytes).is_ok_and(|f| text.chars().all(|c| matches!(c, '\n' | '\r') || f.charmap().map(c).is_some_and(|g| g.to_u32() != 0)))
 }
 
-/// Names come from the program, never a caller's guessed family.
-pub fn names(bytes: &[u8]) -> Result<(String, String), String> {
+/// Read display names without treating an already installed interface font as
+/// an exportable PDF font. Embedding permission validation remains in `names`.
+pub fn display_names(bytes: &[u8]) -> Result<(String, String), String> {
     use skrifa::string::StringId;
-    validate(bytes)?;
     let f = FontRef::new(bytes).map_err(|e| e.to_string())?;
     let name = |id| {
         f.localized_strings(id)
@@ -41,6 +41,13 @@ pub fn names(bytes: &[u8]) -> Result<(String, String), String> {
     let family = name(StringId::FAMILY_NAME).ok_or("the font has no family name")?;
     let postscript = name(StringId::POSTSCRIPT_NAME).unwrap_or_else(|| family.replace(' ', ""));
     Ok((family, postscript))
+}
+
+/// Names for a font that may be embedded into a document. Do not use this
+/// validation for read-only interface font discovery.
+pub fn names(bytes: &[u8]) -> Result<(String, String), String> {
+    validate(bytes)?;
+    display_names(bytes)
 }
 
 /// A selected external font is document input. Require its own open-licence declaration;
