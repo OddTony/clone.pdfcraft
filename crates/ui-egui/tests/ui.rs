@@ -192,6 +192,35 @@ fn read_mode_rail_buttons_open_their_panels() {
     h.get_by_label("Alpha section");
 }
 
+/// A document that asks to open in Full Screen mode (`/PageMode /FullScreen`) is asked about
+/// first, as in Acrobat: "Not now" leaves the window as it is, "Full Screen" enters it.
+#[test]
+fn a_document_asking_for_full_screen_is_asked_about_first() {
+    let deck = || String::from_utf8(FIXTURE.to_vec()).unwrap().replace("/Outlines 6 0 R", "/Outlines 6 0 R /PageMode /FullScreen").into_bytes();
+    let mut h = harness(move |app| app.open_bytes("deck.pdf", None, deck()).expect("opens"));
+    h.run_steps(3);
+    assert!(!h.state().full_screen, "nothing happens before the answer");
+    h.get_by_label("Open in Full Screen mode?");
+    h.get_by_label("Not now").click();
+    h.run_steps(3);
+    assert!(!h.state().full_screen);
+    assert!(h.query_by_label("Open in Full Screen mode?").is_none() && h.state().pending_full_screen.is_none());
+    // Asked again for the next such document; Full Screen enters it.
+    let again = String::from_utf8(FIXTURE.to_vec()).unwrap().replace("/Outlines 6 0 R", "/Outlines 6 0 R /PageMode /FullScreen").into_bytes();
+    h.state_mut().open_bytes("deck2.pdf", None, again).expect("opens");
+    h.run_steps(3);
+    h.get_by_label("Full Screen").click();
+    h.run_steps(3);
+    assert!(h.state().full_screen, "Full Screen enters it");
+    assert!(h.state().pending_full_screen.is_none());
+    // A plain document asks nothing.
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    h.state_mut().open_bytes("plain.pdf", None, FIXTURE.to_vec()).expect("opens");
+    h.run_steps(3);
+    assert!(h.query_by_label("Open in Full Screen mode?").is_none() && !h.state().full_screen);
+}
+
 /// Switching to Read mode closes the open pane, and switching back reopens it.
 #[test]
 fn read_mode_closes_the_panes_and_leaving_it_brings_them_back() {
@@ -268,6 +297,28 @@ fn a_tab_with_an_arabic_file_name_keeps_its_logical_accessible_name() {
     h.state_mut().open_bytes(long, None, FIXTURE.to_vec()).expect("fixture opens");
     h.run_steps(3);
     h.get_by_label(long);
+}
+
+/// A middle click on a tab closes it, as in Acrobat and browsers (#1853); a tab with unsaved
+/// changes asks first, as its close button does.
+#[test]
+fn a_middle_click_closes_the_tab() {
+    let mut h = harness(|app| {
+        app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
+        app.open_bytes("second.pdf", None, FIXTURE.to_vec()).unwrap();
+    });
+    h.get_by_label("first.pdf").click_button(egui::PointerButton::Middle);
+    h.run_steps(3);
+    let app = h.state();
+    assert_eq!(app.views.len(), 1);
+    assert_eq!(app.session.get(app.views[0].id).unwrap().name, "second.pdf");
+    assert!(app.close_request.is_none(), "a clean document closes without asking");
+    h.state_mut().apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+    h.run_steps(2);
+    h.get_by_label("second.pdf (edited)").click_button(egui::PointerButton::Middle);
+    h.run_steps(3);
+    assert_eq!(h.state().views.len(), 1, "unsaved changes ask first");
+    assert!(h.state().close_request.is_some());
 }
 
 #[test]
@@ -1256,4 +1307,28 @@ fn the_combine_tab_does_not_move_and_documents_stay_in_order() {
     let first = h.get_by_role_and_label(egui::accesskit::Role::Tab, "first.pdf").rect();
     drag_named_tab(&mut h, "Combine files", first.left_center() - egui::vec2(10.0, 0.0), true);
     assert_eq!(h.state().views.iter().map(|view| view.id).collect::<Vec<_>>(), ids);
+}
+
+/// The Edit tab turns on Edit text & images at once, as Acrobat does, so every paragraph and image
+/// is boxed and editable with one click; another tab puts the tool down again.
+#[test]
+fn the_edit_tab_turns_on_edit_text_and_images() {
+    use pdfcraft_ui_egui::{Mode, QuickTool};
+    let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
+    assert_eq!(h.state().quick_tool, QuickTool::Select);
+    h.get_by_label("Edit").click();
+    h.run_steps(3);
+    assert_eq!(h.state().mode, Mode::Edit);
+    assert_eq!(h.state().quick_tool, QuickTool::EditText);
+    h.get_by_label("All tools").click();
+    h.run_steps(3);
+    assert_eq!(h.state().mode, Mode::AllTools);
+    assert_eq!(h.state().quick_tool, QuickTool::Select);
+    // Another tool picked inside Edit is not taken away by leaving it.
+    h.get_by_label("Edit").click();
+    h.run_steps(3);
+    h.state_mut().quick_tool = QuickTool::Hand;
+    h.get_by_label("Convert").click();
+    h.run_steps(3);
+    assert_eq!(h.state().quick_tool, QuickTool::Hand);
 }

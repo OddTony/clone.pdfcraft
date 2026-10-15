@@ -86,6 +86,11 @@ impl PdfCraftApp {
         }
         commands::is_enabled(spec, &self.session, self.active_ids().map(|(_, id)| id))
             && (spec.needs != commands::Needs::TwoPageView || self.active.and_then(|i| self.views.get(i)).is_some_and(crate::DocView::cover_applies))
+            && match spec.id {
+                "view.previous_view" => self.active.and_then(|i| self.views.get(i)).is_some_and(|v| !v.back.is_empty()),
+                "view.next_view" => self.active.and_then(|i| self.views.get(i)).is_some_and(|v| !v.forward.is_empty()),
+                _ => true,
+            }
     }
 
     /// Run a registered command by id. Returns `false` when the id is unknown or the command
@@ -174,6 +179,7 @@ impl PdfCraftApp {
             "file.close_all" => self.close_all(),
             "file.revert" => self.dialog = Some(Dialog::Revert),
             "file.properties" => self.dialog = Some(Dialog::Properties(PropsTab::Description)),
+            "file.word_count" => self.dialog = Some(Dialog::WordCount),
             "protect.properties" => self.dialog = Some(Dialog::Properties(PropsTab::Security)),
             // A restricted document's security changes once its permissions password is entered.
             "protect.password" | "protect.remove" if self.active_ids().and_then(|(_, id)| self.session.get(id)).is_some_and(|d| d.can_unlock()) => {
@@ -214,9 +220,15 @@ impl PdfCraftApp {
                 }
             }
             "view.focus_page_input" => {
-                if let (Some(ctx), Some(view)) = (self.ctx.clone(), active.and_then(|i| self.views.get(i))) {
-                    // The page box in the toolbar (chrome.rs); select its number so typing replaces it.
-                    let id = egui::Id::new("page-input");
+                if let (Some(ctx), Some(view)) = (self.ctx.clone(), active.and_then(|i| self.views.get_mut(i))) {
+                    // The page box in the toolbar (chrome.rs); select its label so typing replaces it.
+                    let id = view.page_input_id();
+                    if !ctx.memory(|m| m.has_focus(id))
+                        && let Some(doc) = self.session.get(view.id)
+                    {
+                        // Navigation and this command can arrive before the next rail frame.
+                        view.page_input = view.current_page_label(doc.info.pages.get(view.current).map(|p| p.label.as_str()));
+                    }
                     ctx.memory_mut(|m| m.request_focus(id));
                     let mut state = egui::TextEdit::load_state(&ctx, id).unwrap_or_default();
                     let len = view.page_input.chars().count();
@@ -260,6 +272,11 @@ impl PdfCraftApp {
                 }
             }
             "view.read_mode" => self.switch_mode(if self.mode == Mode::Read { Mode::AllTools } else { Mode::Read }, false),
+            "view.previous_view" | "view.next_view" => {
+                if let Some(v) = active.and_then(|i| self.views.get_mut(i)) {
+                    return v.view_history(id == "view.next_view");
+                }
+            }
             "view.next_tab" => self.step_tab(true),
             "view.previous_tab" => self.step_tab(false),
             "view.theme" => {
@@ -310,8 +327,12 @@ impl PdfCraftApp {
                 self.apply_edit(Edit::ResetForm { names: None });
             }
             "page.organize" => {
-                if let Some(i) = active {
-                    self.views[i].organize = !self.views[i].organize;
+                if let Some(v) = active.and_then(|i| self.views.get_mut(i)) {
+                    if v.organize {
+                        v.organize = false;
+                    } else {
+                        v.open_organize();
+                    }
                 }
             }
             "page.rotate" => {
@@ -444,7 +465,10 @@ impl PdfCraftApp {
                 self.redact_search.found = None;
                 self.dialog = Some(Dialog::RedactSearch);
             }
-            "redact.properties" => self.dialog = Some(Dialog::RedactProps),
+            "redact.properties" => {
+                self.redact_before = Some(self.redact_prefs.clone());
+                self.dialog = Some(Dialog::RedactProps);
+            }
             "redact.apply" => {
                 let marks = active.and_then(|i| self.session.get(self.views[i].id)).map_or(0, |d| d.redaction_marks());
                 if marks == 0 {
@@ -668,6 +692,10 @@ impl PdfCraftApp {
         specs.sort_by_key(|c| std::cmp::Reverse(c.shortcut.map(|s| s.modifier_count()).unwrap_or(0)));
         for spec in specs {
             let Some(s) = spec.shortcut else { continue };
+            // Keep the canvas's silent no-op when there is no previous/next view to visit.
+            if matches!(spec.id, "view.previous_view" | "view.next_view") && !self.command_enabled(spec) {
+                continue;
+            }
             if typing && !spec.in_text {
                 continue;
             }
