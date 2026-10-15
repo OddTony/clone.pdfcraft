@@ -1,5 +1,7 @@
 # PdfCraft roadmap
 
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M10 #1012: Chinese OCR choices and locale mapping, rustls security update, isolated XFA binding test; estimates unchanged)
+
 **Stage: alpha** · next: beta, ~26% (ready for real work 49% → 75%) and ~400–700 h away
 
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M3 candidate: native opens retain chosen tools through password retries and defer startup intake while preparation is pending; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -148,6 +150,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+
+- **2026-10-15 (M10, #1012 follow-up):** Updated rustls to 0.23.46 for RUSTSEC-2026-0346–0349. Isolated the shared-XFA-data binding regression from unrelated table calculations, retaining production deadlines and all binding assertions. Added traditional/simplified Chinese OCR choices, script/region locale mapping and unmasked decoding, with dispatch and Unicode persistence coverage. Real Chinese scan accuracy and native FreeBSD confirmation remain pending; no new font assets or vertical/script-conversion claims. Estimates unchanged.
 
 - **2026-10-14 (M10, #1012 follow-up):** Visible OCR replacements use drawing glyphs rather than empty Type 3 placeholders and calibrate replacement metrics to the scanned source width; covers wide/narrow Latin letters and accented text, save/reopen and undo. The FormCalc clipping regression now uses one calculation instead of a multi-script demo, retaining production time limits and checking exactly 65,536 saved characters with scripts disabled on reopen. Red/green proofs cover width correction and clipping. Full edit/engine tests, strict Clippy, WASM, formatting, layers/assets and CLI render checked; native FreeBSD confirmation remains in CI. Estimates unchanged.
 

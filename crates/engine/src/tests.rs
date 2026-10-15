@@ -3516,23 +3516,29 @@ fn a_value_a_script_sets_reaches_every_field_bound_to_the_same_data_node() {
     // `carried` inside the area and a second `carried` outside it bind to one data node (areas
     // are not data scopes). In document order: `setter` writes the inner one, `echo` reads the
     // outer one in the same event, and the saved data holds the one value.
-    let tpl = pdfcraft_xfa::fixtures::leave_template("<form><page><carried>5</carried></page></form>")
-        .replace(
-            r#"    <field name="rest" y="2.5in" w="2in" h="0.3in" access="readOnly">"#,
-            r#"    <field name="setter" y="3in" w="2in" h="0.3in"><ui><numericEdit/></ui><calculate><script>carried = 9
+    // Keep this binding regression independent of the leave form's repeating table and
+    // unrelated calculation scripts: those can exhaust the real script deadline in a VM.
+    let tpl = r#"<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/">
+<template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">
+<subform name="form" layout="tb">
+ <pageSet><pageArea><contentArea w="7.5in" h="10in"/><medium short="8.5in" long="11in"/></pageArea></pageSet>
+ <subform name="page" w="7.5in" h="9in">
+  <subform w="7.5in" h="8in">
+   <area name="box">
+    <field name="carried" y="1.5in" w="2in" h="0.3in"><ui><numericEdit/></ui></field>
+    <field name="allowance" y="2in" w="2in" h="0.3in"><ui><numericEdit/></ui><value><float>30</float></value></field>
+    <field name="setter" y="3in" w="2in" h="0.3in"><ui><numericEdit/></ui><calculate><script>carried = 9
 9</script></calculate></field>
-    <field name="rest" y="2.5in" w="2in" h="0.3in" access="readOnly">"#,
-        )
-        .replace(
-            "  </subform>\n </subform>\n</subform>",
-            r#"  </subform>
+   </area>
+  </subform>
   <field name="carried" y="8.2in" w="2in" h="0.3in"><ui><numericEdit/></ui></field>
   <field name="echo" y="8.5in" w="2in" h="0.3in"><ui><numericEdit/></ui><calculate><script>carried + 0</script></calculate></field>
  </subform>
-</subform>"#,
-        );
-    assert!(tpl.contains("name=\"echo\"") && tpl.contains("name=\"setter\""), "the fixture was reshaped");
-    let bytes = Arc::new(pdfcraft_xfa::fixtures::shell(&tpl));
+</subform>
+</template>
+<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/"><xfa:data><form><page><carried>5</carried></page></form></xfa:data></xfa:datasets>
+</xdp:xdp>"#;
+    let bytes = Arc::new(pdfcraft_xfa::fixtures::shell(tpl));
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let id = s.open("shared.pdf", None, bytes, None).expect("opens");
     let out = s.take_js_output(id);

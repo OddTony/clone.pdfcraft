@@ -12,12 +12,16 @@ pub(crate) struct Multilingual {
 }
 
 // Keep European names intact across Latin languages. This is a script restriction,
-// not a per-language spelling dictionary; Japanese retains the complete vocabulary.
+// not a per-language spelling dictionary; Japanese and Chinese retain the complete vocabulary.
 fn latin_entry(entry: &str) -> bool {
     entry.chars().all(|ch| {
         !matches!(ch as u32, 0x2e80..=0xa4cf | 0xf900..=0xfaff | 0xff00..=0xffef | 0x1b000..=0x1b16f | 0x20000..=0x323af)
             && (!ch.is_alphabetic() || ch <= '\u{017f}')
     })
+}
+
+fn decoder_mask<'a>(language: &str, latin_alphabet: &'a [bool]) -> Option<&'a [bool]> {
+    (!matches!(language, "ja" | "zh-Hant" | "zh-Hans")).then_some(latin_alphabet)
 }
 
 fn best_class<'a>(row: &'a [f32], allowed: Option<&[bool]>) -> Option<(usize, &'a f32)> {
@@ -149,7 +153,7 @@ impl Multilingual {
             if step as f32 * scale >= w as f32 {
                 break;
             }
-            let allowed = (language != "ja").then_some(self.latin_alphabet.as_slice());
+            let allowed = decoder_mask(language, &self.latin_alphabet);
             let Some((index, &score)) = best_class(row, allowed) else { continue };
             if index != 0 && index != previous {
                 let Some(ch) = self.alphabet.get(index) else { continue };
@@ -180,6 +184,20 @@ impl Multilingual {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chinese_decoder_keeps_han_and_full_width_punctuation() {
+        let alphabet = ["", "A", "體", "体", "，", "。"];
+        let mask: Vec<_> = alphabet.iter().map(|s| latin_entry(s)).collect();
+        for language in ["zh-Hant", "zh-Hans", "ja"] {
+            for chosen in 2..alphabet.len() {
+                let mut scores = vec![0.1; alphabet.len()];
+                scores[chosen] = 0.9;
+                assert_eq!(best_class(&scores, decoder_mask(language, &mask)).unwrap().0, chosen, "{language}");
+            }
+        }
+        assert!(decoder_mask("it", &mask).is_some());
+    }
 
     #[test]
     fn latin_decoder_preserves_names_accents_and_punctuation() {

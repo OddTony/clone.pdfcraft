@@ -365,3 +365,27 @@ fn corrected_scans_do_not_duplicate_existing_ocr() {
     s.undo(id).unwrap();
     assert_eq!(s.get(id).unwrap().bytes, before);
 }
+
+/// Decoded Han text needs no installed font to survive the invisible PDF text layer.
+#[test]
+fn chinese_ocr_text_layer_preserves_scripts_and_punctuation_after_save() {
+    for sentence in ["繁體中文，臺灣。", "简体中文，中国。"] {
+        let (mut s, id) = scan("Synthetic scan", 0, 0.0);
+        let before = s.get(id).unwrap().bytes.clone();
+        let pixels = render(&s, id);
+        s.apply(
+            id,
+            Edit::AddOcrText {
+                page: 0,
+                words: vec![PlacedWord { text: sentence.into(), origin: [20.0, 20.0], across: [150.0, 0.0], up: [0.0, 20.0] }],
+            },
+        )
+        .unwrap();
+        let saved = s.save_bytes(id).unwrap();
+        let reopened = s.open("chinese.pdf", None, saved, None).unwrap();
+        assert!(text(&s, reopened).contains(sentence), "{:?}", text(&s, reopened));
+        assert_eq!(pixels, render(&s, reopened));
+        s.undo(id).unwrap();
+        assert_eq!(s.get(id).unwrap().bytes, before);
+    }
+}

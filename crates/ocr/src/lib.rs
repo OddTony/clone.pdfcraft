@@ -1,6 +1,6 @@
 //! pdfcraft-ocr — Scan & OCR ▸ Recognize text (L4).
 //!
-//! Ocrs detects text; PaddleOCR models read English, accented Latin/Japanese and
+//! Ocrs detects text; PaddleOCR models read English, accented Latin/Japanese/Chinese and
 //! classify page orientation through RTen. Models are fetched by `cargo xtask models` (see
 //! ATTRIBUTION.toml), never at runtime. The engine places Unicode invisible text in PDFs;
 //! [`text_layer`] remains the legacy WinAnsi content helper. See README.md for limitations.
@@ -26,7 +26,7 @@ pub const DICTIONARY: &str = "multilingual-dictionary.txt";
 /// `€`, which made a scanned "€250" read as "E250".
 pub const ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~€ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-/// Supported and tested language choices (ISO 639-1).
+/// Language choices (BCP 47 tags); see README.md for validation limits.
 pub const LANGUAGES: &[(&str, &str)] = &[
     ("en", "English"),
     ("de", "Deutsch"),
@@ -40,12 +40,28 @@ pub const LANGUAGES: &[(&str, &str)] = &[
     ("sv", "Svenska"),
     ("fi", "Suomi"),
     ("pt", "Português"),
+    ("zh-Hant", "繁體中文"),
+    ("zh-Hans", "简体中文"),
 ];
 
-/// Map the primary system locale to an OCR choice, independently of UI translations.
-/// Regional variants share a recognizer. Missing or unsupported locales use English.
+/// Map the system locale to an OCR choice, independently of UI translations.
+/// Chinese script tags take precedence over region; bare `zh` selects simplified Chinese.
+/// Missing or unsupported locales use English.
 pub fn language_for_locale(locale: Option<&str>) -> &'static str {
-    let primary = locale.unwrap_or_default().trim().split(['-', '_', '.', '@']).next().unwrap_or_default();
+    let locale = locale.unwrap_or_default().trim().split(['.', '@']).next().unwrap_or_default();
+    let mut parts = locale.split(['-', '_']);
+    let primary = parts.next().unwrap_or_default();
+    if primary.eq_ignore_ascii_case("zh") {
+        // Only language/script/region subtags matter, never a later extension or private use.
+        let next = parts.next().unwrap_or_default();
+        if next.eq_ignore_ascii_case("Hant") {
+            return "zh-Hant";
+        }
+        if next.eq_ignore_ascii_case("Hans") {
+            return "zh-Hans";
+        }
+        return if ["TW", "HK", "MO"].iter().any(|region| next.eq_ignore_ascii_case(region)) { "zh-Hant" } else { "zh-Hans" };
+    }
     // Older platforms use the generic Norwegian tag for Bokmål.
     let primary = if primary.eq_ignore_ascii_case("no") { "nb" } else { primary };
     LANGUAGES.iter().find(|(code, _)| code.eq_ignore_ascii_case(primary)).map_or("en", |(code, _)| *code)
@@ -318,7 +334,16 @@ mod tests {
             (" EN-us ", "en"),
             ("is-IS", "en"),
             ("nn-NO", "en"),
-            ("zh-Hans", "en"),
+            ("zh-Hans", "zh-Hans"),
+            ("zh", "zh-Hans"),
+            ("zh-CN", "zh-Hans"),
+            ("zh_SG.UTF-8", "zh-Hans"),
+            ("zh-TW", "zh-Hant"),
+            ("zh_HK", "zh-Hant"),
+            ("zh-MO", "zh-Hant"),
+            (" ZH-hANT-cn ", "zh-Hant"),
+            ("zh-Hans-TW", "zh-Hans"),
+            ("zh-Hant-HK", "zh-Hant"),
             ("C.UTF-8", "en"),
             ("POSIX", "en"),
             ("", "en"),

@@ -5,7 +5,7 @@
 Release packages ship these files beside the application.
 
 - English, German, French, Spanish, Italian, Dutch, Danish, Norwegian Bokmål,
-  Swedish, Finnish, Portuguese and horizontal Japanese use PaddlePaddle's
+  Swedish, Finnish, Portuguese, horizontal Japanese and Chinese (traditional/simplified) use PaddlePaddle's
   PP-OCRv6 small model through the existing Rust RTen runtime. The legacy English
   recognizer API remains available to existing callers.
 - PP-LCNet classifies quarter-turn orientation. Preprocessing centres on ink bounds,
@@ -43,7 +43,7 @@ different document language. CLI/MCP calls retain English as their deterministic
 
 Limits: this scan pipeline does not correct perspective or dewarp pages. Camera photos
 use the separate Enhance camera image command. No guarantee on photos or ambiguous text,
-no vertical Japanese claim, and deskew refuses annotated pages rather than separating
+no vertical Japanese or Chinese claim, and deskew refuses annotated pages rather than separating
 annotations from their targets. Supported OCR languages are deliberately limited to
 those exposed and tested, despite the model's larger vocabulary.
 
@@ -51,7 +51,7 @@ Recognition includes a small margin around detected lines to retain capital acce
 and final punctuation; invisible text retains the detected line's original height.
 For the Latin languages, decoding excludes CJK, kana, full-width forms and letters
 outside ASCII/Latin-1/Latin Extended-A, while preserving other European names,
-digits and punctuation. Japanese retains the full dictionary. This is not a
+digits and punctuation. Japanese and both Chinese choices retain the full dictionary. This is not a
 language-specific spelling filter. Community French checks still found missed
 `ï`, capital `Œ`/`Æ` and `Ë`, and inconsistent straight/curly apostrophes; the model
 does not guarantee exact transcription. Apostrophe equivalence in search remains
@@ -76,3 +76,15 @@ The French save/reopen regression covers accented capitals, ç, œ, straight
 and curly apostrophes (allowing the model's normalization) and line-final punctuation,
 with unchanged scan pixels. Decoder unit
 tests cover European names and curly apostrophes without depending on model files.
+
+Chinese choices use `zh-Hant` and `zh-Hans`. Explicit script subtags take precedence;
+`zh-TW`, `zh-HK`, and `zh-MO` select traditional Chinese, while `zh-CN`, `zh-SG`,
+and bare `zh` select simplified Chinese. Both use the same existing model and full
+dictionary, without script conversion. Decoder, locale, UI selection, public-tool
+dispatch and Unicode save/reopen tests cover this wiring; real Chinese scan accuracy
+has not yet been measured. This adds no CJK font: Chinese interface glyph coverage
+still depends on the available interface fonts (see docs/gaps.md, gap 5).
+
+Community Italian checks report improved accents and word spacing, but still find
+paragraphs in the wrong reading order, occasional joined words, and model spelling
+errors. These are remaining recognition/layout limits, not guaranteed transcriptions.

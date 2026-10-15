@@ -4151,7 +4151,7 @@ fn ocr_tools_make_a_scan_searchable() {
     let mut a = auto(&dir);
     let status = ok(&mut a, "ocr_status", json!({}));
     assert_eq!(status["languages"][0]["code"], "en");
-    for language in ["de", "ja", "fr", "es", "it", "nl", "da", "nb", "sv", "fi", "pt"] {
+    for language in ["de", "ja", "fr", "es", "it", "nl", "da", "nb", "sv", "fi", "pt", "zh-Hant", "zh-Hans"] {
         assert!(status["languages"].as_array().unwrap().iter().any(|l| l["code"] == language));
     }
     for name in ["ocr_recognize", "ocr_recognize_files"] {
@@ -4174,6 +4174,13 @@ fn ocr_tools_make_a_scan_searchable() {
     let again = ok(&mut a, "ocr_recognize", json!({ "doc": scan, "pages": [1] }));
     assert!(again["pages"][0]["skipped"].is_string(), "{again}");
     assert!(matches!(a.call("ocr_recognize", &json!({ "doc": scan, "language": "xx" })), Err(ToolError::InvalidArgs(_))));
+    // Both Chinese choices must reach the real recognizer through the public tool.
+    // An ASCII fixture checks dispatch only, not Chinese scan accuracy.
+    for language in ["zh-Hant", "zh-Hans"] {
+        let doc = ok(&mut a, "doc_create", json!({ "from": "images", "paths": [png.to_string_lossy()] }))["doc"].as_u64().unwrap();
+        let result = ok(&mut a, "ocr_recognize", json!({ "doc": doc, "language": language, "auto_rotate": false, "deskew": false }));
+        assert!(result["pages"][0]["text"].as_str().unwrap().to_lowercase().contains("searchable"), "{language}: {result}");
+    }
 }
 
 /// #1028: `skip_text_pages: false` reads a picture on a page that has its own text, and the

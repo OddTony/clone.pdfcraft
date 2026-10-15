@@ -37,14 +37,19 @@ fn recognize_text_dialog_adds_searchable_text() {
     let label = pdfcraft_engine::ocr::LANGUAGES.iter().find(|(code, _)| *code == expected).unwrap().1;
     h.get_by_value(label).click();
     h.run_steps(2);
-    for label in ["Nederlands", "Dansk", "Norsk bokmål", "Svenska", "Suomi", "Português"] {
+    for label in ["Nederlands", "Dansk", "Norsk bokmål", "Svenska", "Suomi", "Português", "繁體中文", "简体中文"] {
         h.get_by_label(label);
     }
-    h.get_by_label("Português").click();
+    // The expanded language list scrolls when the popup reaches the window edge.
+    h.get_by_label("简体中文").scroll_to_me();
+    h.run_steps(4);
+    h.get_by_label("简体中文").click();
     h.run_steps(2);
-    assert_eq!(h.state().ocr_draft.language, "pt", "the last language in the list can be chosen");
-    h.get_by_value("Português").click();
+    assert_eq!(h.state().ocr_draft.language, "zh-Hans", "the last language in the list can be chosen");
+    h.get_by_value("简体中文").click();
     h.run_steps(2);
+    h.get_by_label("Italiano").scroll_to_me();
+    h.run_steps(4);
     h.get_by_label("Italiano").click();
     h.run_steps(2);
     assert_eq!(h.state().ocr_draft.language, "it");
