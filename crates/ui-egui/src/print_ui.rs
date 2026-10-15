@@ -1269,20 +1269,20 @@ pub(crate) fn body(
     });
     ui.add_space(12.0);
     let (mut go, mut cancel) = (false, false);
-    ui.horizontal(|ui| {
-        // The paper is kept for this printer (or Save as PDF) when this is ticked at Print time.
-        let for_whom = d.printer.as_deref().map_or_else(|| tl!("Save as PDF").to_string(), printer_label);
-        ui.add(widgets::checkbox(&mut d.remember_paper, crate::i18n::fmt(tl!("Remember this paper for {printer}"), &[("printer", &for_whom)])));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let looking = still_looking(d);
-            let label = if d.printer.is_some() || looking { tl!("Print") } else { tl!("Save as PDF") };
-            if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty() && !looking, |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
-                go = true;
-            }
-            if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
-                cancel = true;
-            }
-        });
+    // The paper is kept for this printer (or Save as PDF) when this is ticked at Print time. On its
+    // own row above the buttons: sharing their row moved them while the dialog settled.
+    let for_whom = d.printer.as_deref().map_or_else(|| tl!("Save as PDF").to_string(), printer_label);
+    ui.add(widgets::checkbox(&mut d.remember_paper, crate::i18n::fmt(tl!("Remember this paper for {printer}"), &[("printer", &for_whom)])));
+    ui.add_space(8.0);
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        let looking = still_looking(d);
+        let label = if d.printer.is_some() || looking { tl!("Print") } else { tl!("Save as PDF") };
+        if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty() && !looking, |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
+            go = true;
+        }
+        if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
+            cancel = true;
+        }
     });
     if go {
         d.remember_now();
