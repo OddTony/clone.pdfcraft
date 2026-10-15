@@ -1,5 +1,5 @@
-//! Design tokens and egui style (plan/acrobat/02-ui-ux.md §1: neutral chrome, white panels,
-//! one blue accent; Dark Gray keeps pages white). Every custom widget reads `Tokens::get`.
+//! Design tokens and egui style: distinct neutral surfaces and one blue accent.
+//! Both themes keep PDF pages white. Every custom widget reads `Tokens::get`.
 
 use std::sync::Arc;
 
@@ -72,26 +72,26 @@ impl Tokens {
         match kind {
             ThemeKind::Light => Self {
                 kind,
-                titlebar: Color32::from_rgb(0xE9, 0xE9, 0xEB),
-                chrome: Color32::from_rgb(0xFF, 0xFF, 0xFF),
-                panel: Color32::from_rgb(0xFF, 0xFF, 0xFF),
-                pasteboard: Color32::from_rgb(0xF1, 0xF1, 0xF3),
+                titlebar: Color32::from_rgb(0xCD, 0xD7, 0xE3),
+                chrome: Color32::from_rgb(0xDF, 0xE6, 0xEF),
+                panel: Color32::from_rgb(0xF4, 0xF6, 0xFA),
+                pasteboard: Color32::from_rgb(0xB7, 0xC2, 0xD0),
                 card: Color32::from_rgb(0xFF, 0xFF, 0xFF),
-                border: Color32::from_rgb(0xDA, 0xDA, 0xDE),
-                divider: Color32::from_rgb(0xE8, 0xE8, 0xEB),
-                text: Color32::from_rgb(0x22, 0x22, 0x26),
-                text_muted: Color32::from_rgb(0x5E, 0x5E, 0x66),
-                text_faint: Color32::from_rgb(0x6B, 0x6B, 0x73),
-                icon: Color32::from_rgb(0x44, 0x44, 0x4B),
-                hover: Color32::from_rgb(0xF0, 0xF0, 0xF3),
-                pressed: Color32::from_rgb(0xE4, 0xE4, 0xE9),
-                selected: Color32::from_rgb(0xE6, 0xEE, 0xFD),
-                accent: Color32::from_rgb(0x1B, 0x63, 0xE0),
-                accent_text: Color32::from_rgb(0x17, 0x55, 0xC4),
-                accent_soft: Color32::from_rgb(0xE3, 0xEC, 0xFD),
+                border: Color32::from_rgb(0x7C, 0x8D, 0xA3),
+                divider: Color32::from_rgb(0xB1, 0xBE, 0xCD),
+                text: Color32::from_rgb(0x17, 0x20, 0x2E),
+                text_muted: Color32::from_rgb(0x38, 0x46, 0x5A),
+                text_faint: Color32::from_rgb(0x3F, 0x4B, 0x5E),
+                icon: Color32::from_rgb(0x30, 0x40, 0x58),
+                hover: Color32::from_rgb(0xD8, 0xE5, 0xF4),
+                pressed: Color32::from_rgb(0xBC, 0xCC, 0xE1),
+                selected: Color32::from_rgb(0xCB, 0xDD, 0xFA),
+                accent: Color32::from_rgb(0x14, 0x56, 0xBD),
+                accent_text: Color32::from_rgb(0x10, 0x49, 0x9F),
+                accent_soft: Color32::from_rgb(0xD2, 0xE2, 0xFB),
                 field: Color32::from_rgb(0xFF, 0xFF, 0xFF),
                 badge_new: Color32::from_rgb(0x1B, 0x63, 0xE0),
-                page_shadow: Color32::from_black_alpha(34),
+                page_shadow: Color32::from_black_alpha(52),
                 radius: 6,
             },
             ThemeKind::Dark => Self {
