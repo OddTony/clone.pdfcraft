@@ -220,6 +220,9 @@ pub const SYSTEM_FALLBACK: &str = "system-fallback";
 pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
 /// The name of the installed Telugu face [`installed_font_definitions`] may add.
 pub const SYSTEM_TELUGU_FALLBACK: &str = "system-telugu-fallback";
+/// The name of the installed Chinese face [`installed_font_definitions`] may add outside a
+/// Chinese interface.
+pub const SYSTEM_HAN_FALLBACK: &str = "system-han-fallback";
 
 /// What [`install_fonts_for`] installs: [`font_definitions_for`], then, on desktop, one face
 /// already installed on this machine. It only draws characters no embedded face has.
@@ -234,6 +237,12 @@ pub const SYSTEM_TELUGU_FALLBACK: &str = "system-telugu-fallback";
 ///
 /// An installed Devanagari face and an installed Telugu face, when there are, end every family
 /// just before that one, so Hindi and Telugu text draw in a build without such faces (#1531).
+///
+/// Outside a Chinese interface, an installed Chinese face follows them: bookmark titles, file
+/// names and tab names come from documents, and the Japanese faces lack Simplified-only
+/// characters (务, 欢, …), which drew as boxes (#142, #826). It comes after every embedded face,
+/// so it only draws what they can't; a name mixing both faces may sit slightly off one baseline,
+/// which reads better than boxes.
 ///
 /// `PDFCRAFT_SYSTEM_FONTS=0` leaves them out.
 pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
@@ -253,8 +262,18 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                 stack.push(name.to_owned());
             }
         }
+        let bundled_chinese = !pdfcraft_fonts::ui_chinese_fonts().is_empty();
+        if cjk == CjkPreference::Default
+            && !bundled_chinese
+            && let Some(data) = fallback(Need::Hans)
+        {
+            fonts.font_data.insert(SYSTEM_HAN_FALLBACK.to_owned(), data);
+            for stack in fonts.families.values_mut() {
+                stack.push(SYSTEM_HAN_FALLBACK.to_owned());
+            }
+        }
         let need = match cjk {
-            _ if !pdfcraft_fonts::ui_chinese_fonts().is_empty() => Need::Other,
+            _ if bundled_chinese => Need::Other,
             CjkPreference::SimplifiedChinese => Need::Hans,
             CjkPreference::TraditionalChinese => Need::Hant,
             CjkPreference::Default => Need::Other,

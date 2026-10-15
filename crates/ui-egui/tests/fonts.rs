@@ -249,6 +249,43 @@ fn chinese_ui_uses_an_installed_chinese_face() {
     }
 }
 
+/// Outside a Chinese interface, Chinese text from documents (bookmark titles, file names, #142)
+/// draws with an installed Chinese face after every embedded one, including the
+/// Simplified-only characters the Japanese faces lack (#826).
+#[test]
+fn other_languages_draw_chinese_document_text() {
+    if !pdfcraft_fonts::ui_chinese_fonts().is_empty() {
+        eprintln!("skipping other_languages_draw_chinese_document_text: a Hans face is bundled");
+        return;
+    }
+    let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
+    // The Simplified Chinese interface finds the same installed face, if there is one.
+    if !theme::installed_font_definitions(theme::CjkPreference::SimplifiedChinese).font_data.contains_key(theme::SYSTEM_FALLBACK) {
+        eprintln!("skipping other_languages_draw_chinese_document_text: no installed Chinese face (or PDFCRAFT_SYSTEM_FONTS=0)");
+        assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == theme::SYSTEM_HAN_FALLBACK)));
+        return;
+    }
+    for (family, stack) in &defs.families {
+        let han = stack.iter().position(|n| n == theme::SYSTEM_HAN_FALLBACK).expect("in every family");
+        assert_eq!(stack.iter().filter(|n| *n == theme::SYSTEM_HAN_FALLBACK).count(), 1, "{family:?}");
+        // Every embedded face first: Japanese text keeps its own glyphs.
+        for embedded in stack.iter().filter(|n| defs.font_data.contains_key(*n) && !n.starts_with("system-")) {
+            assert!(stack.iter().position(|n| n == embedded).is_some_and(|i| i < han), "{family:?}: {stack:?}");
+        }
+    }
+    // The bookmark titles of the reports' files: 服务注释.pdf (#210) and ebook.pdf (#142).
+    const TITLES: &str = "一、服务内容二、无形资产三、不动产交通运输服务邮政服务电信服务概述导出设备规格欢说";
+    let mut fonts = Fonts::new(TextOptions::default(), defs);
+    for id in families() {
+        let missing: String = TITLES.chars().filter(|c| !fonts.has_glyphs(&id, &c.to_string())).collect();
+        assert!(missing.is_empty(), "{id:?} lacks {missing}");
+    }
+    // A Chinese interface uses its own placement instead.
+    for cjk in [theme::CjkPreference::SimplifiedChinese, theme::CjkPreference::TraditionalChinese] {
+        assert!(!theme::installed_font_definitions(cjk).font_data.contains_key(theme::SYSTEM_HAN_FALLBACK), "{cjk:?}");
+    }
+}
+
 /// Without craft-fonts the interface fonts still install and lay out any text (Japanese falls
 /// back to egui's replacement glyph) without panicking; Latin text is unaffected.
 #[test]
