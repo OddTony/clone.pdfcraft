@@ -409,6 +409,13 @@ fn open_inspect_render_and_find() {
     assert_eq!(info["pages"][0]["width"], 200.0);
     assert_eq!(info["pages"][1]["label"], "2");
 
+    // The fixture names /Helvetica without embedding it, so an agent can see both that a face is
+    // standing in and why that face. `substitution` is null only when nothing stands in.
+    let font = &info["fonts"][0];
+    assert_eq!((&font["name"], &font["embedded"]), (&json!("Helvetica"), &json!(false)));
+    assert_eq!(font["substitute"], json!("Helvetica"));
+    assert!(font["substitution"].as_str().is_some_and(|w| w.contains("standard 14")), "{font}");
+
     assert_eq!(page_text(&mut a, doc), ["Page 1", "Page 2", "Page 3"]);
 
     let found = ok(&mut a, "text_find", json!({ "doc": doc, "query": "page  2" }));
@@ -515,6 +522,44 @@ fn an_in_place_save_reports_a_required_rewrite_as_not_incremental() {
         let kept = std::fs::read(dir.join("a.pdf")).unwrap().starts_with(&original);
         assert_eq!((saved["incremental"].as_bool(), kept), (Some(incremental), incremental), "{tool}");
     }
+}
+
+/// Issue #1698: a save whose bytes don't reopen is refused before it touches the file. The
+/// catalog's `/Pages` is not a page tree, so the reader finds the page by scanning, while a
+/// full rewrite keeps only what the catalog reaches and drops it.
+#[test]
+fn a_save_that_does_not_reopen_leaves_the_file_as_it_was() {
+    let dir = workdir("save-verify-before-write");
+    let objs: [&[u8]; 4] = [
+        b"<< /Type /Catalog /Pages 3 0 R >>",
+        b"<< /Type /Page /MediaBox [0 0 200 300] /Contents 4 0 R >>",
+        b"[ 0 ]",
+        b"<< /Length 18 >>\nstream\n0 0 m 100 100 l S\nendstream",
+    ];
+    let mut original = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(original.len());
+        original.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        original.extend_from_slice(o);
+        original.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = original.len();
+    original.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+    for o in offsets {
+        original.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    original.extend_from_slice(format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+    std::fs::write(dir.join("damaged.pdf"), &original).unwrap();
+
+    let mut a = auto(&dir);
+    let opened = ok(&mut a, "doc_open", json!({ "path": "damaged.pdf" }));
+    assert_eq!(opened["pages"], 1, "{opened}");
+    let doc = opened["doc"].as_u64().unwrap();
+    let e = err(&mut a, "doc_save", json!({ "doc": doc, "full": true }));
+    assert!(e.to_string().contains("could not be reopened"), "{e}");
+    let on_disk = std::fs::read(dir.join("damaged.pdf")).unwrap();
+    assert!(on_disk == original, "the file was replaced by {} bytes that don't reopen", on_disk.len());
 }
 
 /// organize.field-name-conflicts: combining files whose forms share a field name keeps the
@@ -2000,6 +2045,40 @@ trailer << /Root 1 0 R >>
     let check = ok(&mut a, "accessibility_check", json!({ "doc": fd, "rules": ["figures-alt-text", "tagged-content"] }));
     assert_eq!(check["failed"], 0, "{check}");
     assert!(matches!(a.call("accessibility_set_alt", &json!({ "doc": fd, "figure": 6, "alt": "x" })), Err(ToolError::Failed(_))));
+}
+
+#[test]
+fn marking_a_leaf_tag_as_an_artifact_through_automation_is_undoable_and_saved() {
+    let dir = workdir("a11y-artifact");
+    std::fs::write(
+        dir.join("tagged.pdf"),
+        b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 5 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Contents 4 0 R /StructParents 0 >> endobj
+4 0 obj << /Length 48 >> stream
+/Figure << /MCID 0 >> BDC 10 150 40 20 re f EMC
+endstream endobj
+5 0 obj << /Type /StructTreeRoot /K 6 0 R /ParentTree 8 0 R >> endobj
+6 0 obj << /S /Document /P 5 0 R /K [7 0 R] >> endobj
+7 0 obj << /S /Figure /P 6 0 R /Pg 3 0 R /K 0 >> endobj
+8 0 obj << /Nums [0 [7 0 R]] >> endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+    )
+    .unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "tagged.pdf" }))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "accessibility_tags", json!({ "doc": doc }))["count"], 2);
+    let tagged = ok(&mut a, "accessibility_mark_tag_artifact", json!({ "doc": doc, "object": 7, "generation": 0 }));
+    assert_eq!(tagged["count"], 1);
+    assert_eq!(ok(&mut a, "accessibility_check", json!({ "doc": doc, "rules": ["tagged-content"] }))["failed"], 0);
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "artifact.pdf" }));
+    let saved = pdfcraft_cos::Document::open(std::sync::Arc::new(std::fs::read(dir.join("artifact.pdf")).unwrap())).unwrap();
+    assert_eq!(pdfcraft_engine::a11y::tags(&saved).len(), 1);
+    assert_eq!(ok(&mut a, "edit_undo", json!({ "doc": doc }))["undone"], "Mark content as artifact");
+    assert_eq!(ok(&mut a, "accessibility_tags", json!({ "doc": doc }))["count"], 2);
+    assert!(matches!(a.call("accessibility_mark_tag_artifact", &json!({ "doc": doc, "object": 6, "generation": 0 })), Err(ToolError::Failed(_))));
 }
 
 #[test]

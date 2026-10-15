@@ -131,6 +131,7 @@ pub mod ui_scale;
 pub mod updates;
 mod wheel_pager;
 mod widgets;
+pub mod window_controls;
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod open_worker_tests;
@@ -249,9 +250,11 @@ fn read_grid_file((name, source): GridFile) -> Result<(String, Vec<u8>), (String
     Ok((name, bytes))
 }
 
-/// Files dropped on a document's page grid.
+/// Files dropped on a document's page grid or its Pages panel.
 struct GridDrop {
     doc: pdfcraft_engine::DocId,
+    /// Dropped on the Pages panel (its gap decides where they go), not the page grid.
+    panel: bool,
     files: Vec<GridFile>,
     /// When to stop waiting for the pointer (egui time, seconds).
     deadline: f64,
@@ -574,6 +577,14 @@ pub struct PdfCraftApp {
     pub toast: Option<(String, f64)>,
     /// Whether the macOS title bar is drawn by us (traffic lights over our tab strip).
     pub integrated_titlebar: bool,
+    /// Set when the desktop leaves the window frame to the app (GNOME on Wayland): the tab strip
+    /// carries these window buttons and the window's edges resize it.
+    pub window_controls: Option<window_controls::Layout>,
+    /// Preferences ▸ Use system title bar: where `window_controls` is set, give the window back
+    /// winit's frame instead of drawing the header bar (#1001).
+    pub system_title_bar: bool,
+    /// Whether the window currently has the app's header bar (`None` until the first frame).
+    app_frame_shown: Option<bool>,
     pub password_prompt: Option<PasswordPrompt>,
     pub unlock_prompt: Option<UnlockPrompt>,
     pub full_screen: bool,
@@ -912,6 +923,9 @@ impl PdfCraftApp {
             pinned: Default::default(),
             toast: None,
             integrated_titlebar: false,
+            window_controls: None,
+            system_title_bar: false,
+            app_frame_shown: None,
             password_prompt: None,
             unlock_prompt: None,
             full_screen: false,
@@ -1167,11 +1181,15 @@ impl PdfCraftApp {
             open_worker::ResultKind::Failed(reason) => {
                 self.notify_fmt("Couldn't open {name}: {reason}", &[("name", &pending.name), ("reason", &reason)]);
             }
-            open_worker::ResultKind::Conversion(bytes) => {
-                if let Some(Err(error)) = self.open_converted(&pending.name, &bytes) {
-                    self.notify_fmt("Couldn't open {name}: {e}", &[("name", &pending.name), ("e", &error)]);
+            open_worker::ResultKind::Conversion(bytes) => match self.open_converted(&pending.name, &bytes) {
+                Some(Ok(())) => {
+                    if let Some(command) = pending.then {
+                        self.execute(command);
+                    }
                 }
-            }
+                Some(Err(error)) => self.notify_fmt("Couldn't open {name}: {e}", &[("name", &pending.name), ("e", &error)]),
+                None => {}
+            },
             open_worker::ResultKind::Prepared { bytes, result } => match *result {
                 Ok(prepared) => match self.finish_open(&pending.name, pending.path.clone(), bytes.len(), prepared, pending.activate) {
                     Ok(id) => {
@@ -1352,11 +1370,29 @@ impl PdfCraftApp {
         (self.dialog.is_none() && self.session.get(view.id)?.allows_assembly()).then_some(view.id)
     }
 
-    /// Files dropped while the page grid shows are inserted into it rather than opened: they
-    /// are kept until [`Self::finish_grid_drop`] knows the gap. Returns the files not taken.
+    /// The document whose Pages panel is under the pointer and may take pages, if any.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn panel_target(&self, ctx: &egui::Context) -> Option<pdfcraft_engine::DocId> {
+        let view = self.active.and_then(|i| self.views.get(i))?;
+        let pointer = ctx.input(|i| i.pointer.hover_pos())?;
+        let over = view.pages_panel.is_some_and(|panel| panel.contains(pointer));
+        (over && self.dialog.is_none() && self.session.get(view.id)?.allows_assembly()).then_some(view.id)
+    }
+
+    /// Files dropped on the Pages panel, or while the page grid shows, are inserted into the
+    /// document rather than opened: they are kept until [`Self::finish_grid_drop`] knows the
+    /// gap. Returns the files not taken.
     #[cfg(not(target_arch = "wasm32"))]
     fn drop_on_grid(&mut self, dropped: Vec<egui::DroppedFileHandle>, ctx: &egui::Context) -> Vec<egui::DroppedFileHandle> {
-        let Some(id) = self.grid_target().filter(|_| !dropped.is_empty()) else { return dropped };
+        if dropped.is_empty() {
+            return dropped;
+        }
+        // The panel first: the grid takes files dropped anywhere in the window.
+        let (id, panel) = match (self.panel_target(ctx), self.grid_target()) {
+            (Some(id), _) => (id, true),
+            (None, Some(id)) => (id, false),
+            (None, None) => return dropped,
+        };
         let mut files = Vec::new();
         for f in &dropped {
             let name = f.path().file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "dropped.pdf".into());
@@ -1373,22 +1409,29 @@ impl PdfCraftApp {
             // Where there is no telling where the pointer is during the drag, its place arrives
             // with the first move after the drop.
             ctx.request_repaint();
-            self.grid_drop = Some(GridDrop { doc: id, files, deadline: ctx.input(|i| i.time) + 1.0 });
+            self.grid_drop = Some(GridDrop { doc: id, panel, files, deadline: ctx.input(|i| i.time) + 1.0 });
         }
         Vec::new()
     }
 
-    /// Insert files dropped on the page grid at the gap under the pointer, or at the end when
-    /// the pointer hasn't shown up in time.
+    /// Insert files dropped on the page grid or the Pages panel at the gap under the pointer,
+    /// or at the end when the pointer hasn't shown up in time.
     fn finish_grid_drop(&mut self, ctx: &egui::Context) {
-        let Some(GridDrop { doc: id, deadline, .. }) = &self.grid_drop else { return };
-        let (id, deadline) = (*id, *deadline);
-        if self.grid_target() != Some(id) {
+        let Some(GridDrop { doc: id, panel, deadline, .. }) = &self.grid_drop else { return };
+        let (id, panel, deadline) = (*id, *panel, *deadline);
+        let still = if panel {
+            self.dialog.is_none()
+                && self.active_ids().map(|(_, active)| active) == Some(id)
+                && self.session.get(id).is_some_and(|d| d.allows_assembly())
+        } else {
+            self.grid_target() == Some(id)
+        };
+        if !still {
             self.grid_drop = None;
             return self.notify_tr("The document changed while you were choosing a file, so nothing was changed.");
         }
         let Some(view) = self.active.and_then(|i| self.views.get_mut(i)) else { return };
-        let gap = match view.grid_gap {
+        let gap = match if panel { view.panel_gap } else { view.grid_gap } {
             Some(gap) => gap,
             None if ctx.input(|i| i.time) >= deadline => usize::MAX,
             None => return ctx.request_repaint(),
@@ -1452,6 +1495,28 @@ impl PdfCraftApp {
                 #[cfg(target_arch = "wasm32")]
                 self.notify_fmt("Downloading attachments on the web arrives with M3.10 ({n} bytes ready)", &[("n", &bytes.len().to_string())]);
             }
+        }
+    }
+
+    /// Whether the app draws the window's title bar, buttons and resize edges: the desktop leaves
+    /// the frame to the app and Use system title bar is off.
+    pub fn draws_window_frame(&self) -> bool {
+        self.window_controls.is_some() && !self.system_title_bar
+    }
+
+    /// Follow Use system title bar at once: the window starts without winit's frame wherever the
+    /// app may draw its own, and gets it back (or loses it again) when the preference changes.
+    fn sync_window_frame(&mut self, ctx: &egui::Context) {
+        if self.window_controls.is_none() {
+            return;
+        }
+        let app_frame = self.draws_window_frame();
+        if self.app_frame_shown != Some(app_frame) {
+            // The window opens undecorated, so only a change from that needs a command.
+            if self.app_frame_shown.is_some() || !app_frame {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(!app_frame));
+            }
+            self.app_frame_shown = Some(app_frame);
         }
     }
 
@@ -1652,6 +1717,12 @@ impl PdfCraftApp {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn open_path(&mut self, path: &str) {
+        self.open_path_then(path, None);
+    }
+
+    /// Keep a chosen tool with its file until preparation and any password entry finish.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_path_then(&mut self, path: &str, then: Option<&'static str>) {
         let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string());
         // Taken before reading: a build that rewrites the file meanwhile still counts as a change.
         let stamp = file_watch::Stamp::at(path);
@@ -1664,10 +1735,15 @@ impl PdfCraftApp {
                     let before = self.views.len();
                     if let Err(error) = self.open_bytes(&name, Some(path.to_string()), bytes) {
                         self.notify_fmt("Couldn't open {name}: {e}", &[("name", &name), ("e", &error)]);
-                    } else if self.views.len() > before
-                        && let Some(doc) = self.views.last().map(|view| view.id)
-                    {
-                        self.watch.known_as(doc, stamp);
+                    } else if let Some(prompt) = self.password_prompt.as_mut().filter(|p| p.path.as_deref() == Some(path)) {
+                        prompt.then = then;
+                    } else if self.views.len() > before {
+                        if let Some(doc) = self.views.last().map(|view| view.id) {
+                            self.watch.known_as(doc, stamp);
+                        }
+                        if let Some(command) = then {
+                            self.execute(command);
+                        }
                     }
                 }
                 Err(error) => self.notify_fmt("Couldn't read {name}: {e}", &[("name", &name), ("e", &error.to_string())]),
@@ -1684,7 +1760,7 @@ impl PdfCraftApp {
             activate: true,
             after_open: None,
             recovered: None,
-            then: None,
+            then,
         }) {
             self.notify_fmt("Couldn't open {name}: {e}", &[("name", &name), ("e", &error)]);
         }
@@ -1749,6 +1825,20 @@ impl PdfCraftApp {
             Some(a) if a >= self.views.len() => Some(self.views.len() - 1),
             other => other,
         };
+    }
+
+    /// Moves the tab at `from` so it sits at `to` (#1537). The same document stays active
+    /// wherever it lands; an index out of range changes nothing.
+    pub fn move_tab(&mut self, from: usize, to: usize) {
+        if from >= self.views.len() || to >= self.views.len() || from == to {
+            return;
+        }
+        let active = self.active_ids().map(|(_, id)| id);
+        let view = self.views.remove(from);
+        self.views.insert(to, view);
+        if let Some(id) = active {
+            self.active = self.views.iter().position(|v| v.id == id);
+        }
     }
 
     pub fn active_ids(&self) -> Option<(usize, DocId)> {
@@ -1938,14 +2028,7 @@ impl PdfCraftApp {
         let command = spec.id;
         self.ask_one(pickers::Ask::File(dialog), None, move |app, path| {
             let path = path.to_string_lossy().into_owned();
-            let before = app.views.len();
-            app.open_path(&path);
-            if let Some(prompt) = app.password_prompt.as_mut().filter(|p| p.path.as_deref() == Some(path.as_str())) {
-                // Encrypted: the tool runs once the password is in.
-                prompt.then = Some(command);
-            } else if app.views.len() > before && app.active.is_some() {
-                app.execute(command);
-            }
+            app.open_path_then(&path, Some(command));
         });
     }
 
@@ -2049,6 +2132,7 @@ impl PdfCraftApp {
             // Kept only while the preference is on.
             "last_session": self.reopen_last_session.then(|| self.session_to_save()),
             "reload_changed_files": self.reload_changed_files,
+            "system_title_bar": self.system_title_bar,
             "pinned_folders": self.pinned.folders,
             "theme": self.theme_preference,
             "scroll_speed": self.scroll_speed,
@@ -2131,6 +2215,9 @@ impl PdfCraftApp {
             self.reopen_last_session = on;
         }
         self.last_session = last_session::LastSession::from_json(&v["last_session"]);
+        if let Some(on) = v["system_title_bar"].as_bool() {
+            self.system_title_bar = on;
+        }
         if let Some(on) = v["reload_changed_files"].as_bool() {
             self.reload_changed_files = on;
         }
@@ -2496,6 +2583,13 @@ impl PdfCraftApp {
             }
             ("author", _) => self.comment_prefs.author = value.to_string(),
             ("ui-scale", _) => self.ui_scale = ui_scale::parse(value)?,
+            ("system-title-bar", _) => {
+                self.system_title_bar = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err("system-title-bar must be true or false".into()),
+                };
+            }
             ("flatten-fill-sign", _) => {
                 self.flatten_fill_sign_on_save = match value {
                     "true" => true,
@@ -2761,7 +2855,12 @@ impl eframe::App for PdfCraftApp {
         }
         // Don't replace a pending prompt or import. A startup file may need its own password
         // prompt, so its bytes stay queued until the current interaction finishes.
-        if self.password_prompt.is_none()
+        #[cfg(not(target_arch = "wasm32"))]
+        let opening = !self.pending_opens.is_empty();
+        #[cfg(target_arch = "wasm32")]
+        let opening = false;
+        if !opening
+            && self.password_prompt.is_none()
             && self.image_import.is_none()
             && self.dialog.is_none()
             && self.close_request.is_none()
@@ -2883,6 +2982,10 @@ impl eframe::App for PdfCraftApp {
             widgets::toast(self, &ctx);
             self.finish_render_frame(&ctx);
             return;
+        }
+        self.sync_window_frame(&ctx);
+        if self.draws_window_frame() {
+            window_controls::resize_edges(&ctx);
         }
         chrome::tab_strip(self, ui);
         chrome::mode_bar(self, ui);
