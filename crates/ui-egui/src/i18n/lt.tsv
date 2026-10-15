@@ -2672,3 +2672,18 @@ key	Space	Tarpas
 	Make properties default	Nustatyti ypatybes kaip numatytąsias
 	Pages selected	Pasirinkti puslapiai
 	Page properties	Puslapio ypatybės
+	Replace…	Pakeisti…
+	Replace ({key})	Pakeisti ({key})
+	Replace with	Pakeisti į
+	Replace all	Pakeisti visus
+	No matches to replace	Nėra ką pakeisti
+	{why} ({n})	{why} ({n})
+	Not replaced: {why}	Nepakeista: {why}
+	Nothing replaced	Nieko nepakeista
+	Replaced {n} on {pages}	Pakeista: {n} ({pages})
+	{k} skipped: {why}	Praleista {k}: {why}
+	spans two paragraphs	apima dvi pastraipas
+	scanned text	nuskaitytas tekstas
+	the font can't draw it	šriftas negali jo atvaizduoti
+	the paragraph can't be rewritten	pastraipos negalima perrašyti
+	not editable text	neredaguojamas tekstas

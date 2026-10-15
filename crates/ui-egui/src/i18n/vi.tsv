@@ -2615,3 +2615,18 @@ key	Space	Space
 	Redact Image	Xóa nội dung nhạy cảm của hình ảnh
 	Create Link…	Tạo liên kết…
 	Recognize Text…	Nhận dạng văn bản…
+	Replace…	Thay thế…
+	Replace ({key})	Thay thế ({key})
+	Replace with	Thay thế bằng
+	Replace all	Thay thế tất cả
+	No matches to replace	Không có kết quả khớp để thay thế
+	{why} ({n})	{why} ({n})
+	Not replaced: {why}	Không thay thế: {why}
+	Nothing replaced	Không có gì được thay thế
+	Replaced {n} on {pages}	Đã thay thế {n} trên {pages}
+	{k} skipped: {why}	Đã bỏ qua {k}: {why}
+	spans two paragraphs	trải qua hai đoạn văn
+	scanned text	văn bản được quét
+	the font can't draw it	phông chữ không vẽ được
+	the paragraph can't be rewritten	không thể viết lại đoạn văn
+	not editable text	văn bản không chỉnh sửa được

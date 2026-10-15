@@ -2568,3 +2568,18 @@ animation effects	Off	Desactivados
 	Make properties default	Usar como propiedades predeterminadas
 	Pages selected	Páginas seleccionadas
 	Page properties	Propiedades de página
+	Replace…	Reemplazar…
+	Replace ({key})	Reemplazar ({key})
+	Replace with	Reemplazar por
+	Replace all	Reemplazar todo
+	No matches to replace	No hay coincidencias que reemplazar
+	{why} ({n})	{why} ({n})
+	Not replaced: {why}	No se ha reemplazado: {why}
+	Nothing replaced	No se ha reemplazado nada
+	Replaced {n} on {pages}	Se han reemplazado {n} en {pages}
+	{k} skipped: {why}	{k} omitidas: {why}
+	spans two paragraphs	abarca dos párrafos
+	scanned text	texto escaneado
+	the font can't draw it	la fuente no puede dibujarlo
+	the paragraph can't be rewritten	el párrafo no se puede reescribir
+	not editable text	texto no editable
