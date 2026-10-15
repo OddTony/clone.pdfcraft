@@ -344,6 +344,9 @@ const DIRECTION_TOLERANCE: f64 = WORD_GAP as f64;
 /// A word gap is wider than the line's typical letter gap by this fraction of the line height.
 const WORD_GAP: f32 = 0.15;
 
+/// Same-baseline segments separated by this many glyph heights no longer nearly touch.
+const COLUMN_GAP_HEIGHT: f32 = 1.2;
+
 /// A glyph with its writing direction to the nearest quarter turn (right, down, left, up) and as
 /// a unit vector.
 type Drawn = (usize, [f64; 2], TextGlyph);
@@ -1294,6 +1297,8 @@ fn union(a: &mut [f32; 4], b: &[f32; 4]) {
 /// Heuristics (documented so they can be tuned and tested; plan/architecture.md §8):
 /// 1. *Segments:* consecutive glyphs (content order) on one baseline with no column-sized gap.
 ///    Segments on the same baseline that nearly touch are merged (text drawn out of order).
+///    A gutter repeated across three nearby lines also separates columns whose gap is smaller
+///    than the usual three glyph heights; an isolated large word space still stays in its line.
 /// 2. *Blocks:* segments stacked with line-sized gaps and overlapping horizontally.
 /// 3. *Block order:* repeatedly take the top-most remaining block, preferring a block to its left
 ///    that overlaps it vertically (so columns read left, then right).
@@ -1305,6 +1310,66 @@ pub fn layout(glyphs: Vec<TextGlyph>) -> PageText {
     // Each glyph is emitted exactly once.
     let glyphs = order.iter().filter_map(|i| slots.get_mut(*i).and_then(Option::take)).collect();
     PageText { glyphs, line_of, space_before }
+}
+
+/// Breaks before glyphs following a recurring gutter. Look back at most 64 gaps, rather than
+/// comparing every glyph with every other glyph. The optional pass uses at most 1 MB of flags;
+/// on denser pages or allocation failure, keep the existing layout heuristic.
+fn column_breaks(glyphs: &[&TextGlyph]) -> Vec<bool> {
+    const MAX_GLYPHS: usize = 1_000_000;
+    const LOOKBACK: usize = 64;
+    struct Gap {
+        before: usize,
+        left: f32,
+        right: f32,
+        cy: f32,
+        height: f32,
+    }
+
+    let mut breaks = Vec::new();
+    if glyphs.len() > MAX_GLYPHS || breaks.try_reserve_exact(glyphs.len()).is_err() {
+        return breaks;
+    }
+    breaks.resize(glyphs.len(), false);
+    let mut recent: std::collections::VecDeque<Gap> = std::collections::VecDeque::with_capacity(LOOKBACK);
+    let aligned = |a: &Gap, b: &Gap| {
+        let h = a.height.min(b.height);
+        let dy = (a.cy - b.cy).abs();
+        let overlap = a.right.min(b.right) - a.left.max(b.left);
+        dy.is_finite() && dy > h * 0.5 && dy <= h * 4.5 && overlap >= h * COLUMN_GAP_HEIGHT && a.height.max(b.height) / h < 1.35
+    };
+    for (i, pair) in glyphs.windows(2).enumerate() {
+        let [p, g] = pair else { continue };
+        if !p.rect.iter().chain(&g.rect).all(|v| v.is_finite()) {
+            continue;
+        }
+        let h = (p.rect[3] - p.rect[1]).min(g.rect[3] - g.rect[1]);
+        let (py, gy) = ((p.rect[1] + p.rect[3]) / 2.0, (g.rect[1] + g.rect[3]) / 2.0);
+        let width = g.rect[0] - p.rect[2];
+        if !(h.is_finite() && h > 0.0 && py.is_finite() && gy.is_finite() && width.is_finite())
+            || (py - gy).abs() >= h * 0.5
+            || width < h * COLUMN_GAP_HEIGHT
+        {
+            continue;
+        }
+        let gap = Gap { before: i.saturating_add(1), left: p.rect[2], right: g.rect[0], cy: py, height: h };
+        if let Some(first) = recent.iter().rev().find(|other| aligned(&gap, other))
+            && recent.iter().any(|other| aligned(&gap, other) && aligned(first, other))
+        {
+            // Mark every matching earlier gap, including redraws on the same baseline, so an
+            // overprinted copy cannot bridge columns after its original has been separated.
+            for before in std::iter::once(gap.before).chain(recent.iter().filter(|other| aligned(&gap, other)).map(|other| other.before)) {
+                if let Some(flag) = breaks.get_mut(before) {
+                    *flag = true;
+                }
+            }
+        }
+        if recent.len() == LOOKBACK {
+            recent.pop_front();
+        }
+        recent.push_back(gap);
+    }
+    breaks
 }
 
 /// [`layout`] as the reading order of indices into `glyphs`, with each one's line and word gap.
@@ -1334,6 +1399,7 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
     }
     let height = |i: usize| (glyphs[i].rect[3] - glyphs[i].rect[1]).max(0.1);
     let cy = |i: usize| (glyphs[i].rect[1] + glyphs[i].rect[3]) / 2.0;
+    let column_breaks = column_breaks(&glyphs);
 
     // 1. Segments in content order. Every run is a range of consecutive glyphs.
     let mut segs: Vec<Seg> = Vec::new();
@@ -1341,12 +1407,13 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
     let mut furthest_progress = 0.0;
     for i in 0..n {
         let g = glyphs[i].rect;
-        let cont = segs.last().is_some_and(|s| {
-            let Some(p) = s.first.end.checked_sub(1) else { return false };
-            let ph = height(p).min(height(i));
-            let gap = g[0] - glyphs[p].rect[2];
-            (cy(i) - cy(p)).abs() < ph * 0.5 && gap < ph * 3.0 && g[0] > glyphs[p].rect[0] - ph * 2.0
-        });
+        let cont = !column_breaks.get(i).copied().unwrap_or(false)
+            && segs.last().is_some_and(|s| {
+                let Some(p) = s.first.end.checked_sub(1) else { return false };
+                let ph = height(p).min(height(i));
+                let gap = g[0] - glyphs[p].rect[2];
+                (cy(i) - cy(p)).abs() < ph * 0.5 && gap < ph * 3.0 && g[0] > glyphs[p].rect[0] - ph * 2.0
+            });
         let reset = cont && segs.last().is_some_and(|s| restarts_run(&glyphs, s.first.start, i, furthest_progress));
         if cont
             && !reset
@@ -1418,7 +1485,7 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
                 let (sa, sb) = (&segs[a], &segs[b]);
                 let h = sa.h.min(sb.h);
                 let gap = (sb.bbox[0] - sa.bbox[2]).max(sa.bbox[0] - sb.bbox[2]);
-                if (sa.cy() - sb.cy()).abs() < h * 0.3 && (sa.h / sb.h - 1.0).abs() < 0.35 && gap < h * 1.2 {
+                if (sa.cy() - sb.cy()).abs() < h * 0.3 && (sa.h / sb.h - 1.0).abs() < 0.35 && gap < h * COLUMN_GAP_HEIGHT {
                     let sb = segs.remove(b);
                     let a = if b < a { a - 1 } else { a };
                     segs[a].merge(sb);
@@ -2002,6 +2069,63 @@ mod tests {
         word(&mut v, "Right2", 200.0, 24.0, 6.0);
         let t = layout(v);
         assert_eq!(t.plain_text(), "Left1\nLeft2\nRight1\nRight2");
+    }
+
+    #[test]
+    fn narrow_gutters_keep_interleaved_columns_in_reading_order() {
+        for gap in [14.0, 18.0, 24.0] {
+            let mut glyphs = Vec::new();
+            for row in 0..3 {
+                let y = 10.0 + row as f32 * 14.0;
+                word(&mut glyphs, &format!("Left{}", row + 1), 10.0, y, 6.0);
+                word(&mut glyphs, &format!("Right{}", row + 1), 40.0 + gap, y, 6.0);
+            }
+            let text = layout(glyphs);
+            assert_eq!(text.plain_text(), "Left1\nLeft2\nLeft3\nRight1\nRight2\nRight3", "gutter={gap}");
+            let selected = text.line_rects(0..15);
+            assert_eq!(selected.len(), 3);
+            assert!(selected.iter().all(|r| r[2] <= 40.0), "selecting the left column never highlights the right");
+        }
+    }
+
+    #[test]
+    fn a_narrow_gutter_can_be_supported_by_ragged_column_lines() {
+        let mut glyphs = Vec::new();
+        for (row, left) in ["Short", "Longerleftword", "Midlength"].into_iter().enumerate() {
+            let y = 10.0 + row as f32 * 14.0;
+            word(&mut glyphs, left, 10.0, y, 6.0);
+            word(&mut glyphs, &format!("Right{}", row + 1), 120.0, y, 6.0);
+        }
+        assert_eq!(layout(glyphs).plain_text(), "Short\nLongerleftword\nMidlength\nRight1\nRight2\nRight3");
+    }
+
+    #[test]
+    fn redrawn_narrow_columns_keep_each_column_whole() {
+        let mut glyphs = Vec::new();
+        for row in 0..3 {
+            for shadow in [0.0, 0.2] {
+                let y = 10.0 + row as f32 * 14.0;
+                word(&mut glyphs, &format!("Left{}", row + 1), 10.0 + shadow, y, 6.0);
+                word(&mut glyphs, &format!("Right{}", row + 1), 58.0 + shadow, y, 6.0);
+            }
+        }
+        assert_eq!(layout(glyphs).plain_text(), "Left1\nLeft2\nLeft3\nRight1\nRight2\nRight3");
+    }
+
+    #[test]
+    fn isolated_large_word_spaces_do_not_make_columns() {
+        let mut glyphs = Vec::new();
+        word(&mut glyphs, "Wide", 10.0, 10.0, 6.0);
+        word(&mut glyphs, "space", 52.0, 10.0, 6.0);
+        assert_eq!(layout(glyphs).plain_text(), "Wide space");
+
+        let mut glyphs = Vec::new();
+        for row in 0..3 {
+            let y = 10.0 + row as f32 * 14.0;
+            word(&mut glyphs, "Normal", 10.0, y, 6.0);
+            word(&mut glyphs, "space", 52.0, y, 6.0);
+        }
+        assert_eq!(layout(glyphs).plain_text(), "Normal space\nNormal space\nNormal space");
     }
 
     #[test]

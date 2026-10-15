@@ -28,10 +28,14 @@ trailer << /Root 1 0 R >>
 }
 
 fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
+    harness_with(table(), setup)
+}
+
+fn harness_with(pdf: Vec<u8>, setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).with_step_dt(1.0 / 60.0).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
-        app.open_bytes("table.pdf", None, table()).expect("opens");
+        app.open_bytes("columns.pdf", None, pdf).expect("opens");
         app.set_option("left", "closed").unwrap();
         app.set_option("author", "Tester").unwrap();
         setup(&mut app);
@@ -145,4 +149,46 @@ fn alt_drag_with_the_highlighter_marks_only_the_column() {
     let doc = app.session.get(app.views[0].id).unwrap();
     let marks: Vec<(&str, usize)> = doc.info.annotations.iter().map(|a| (a.subtype.as_str(), a.quads.len())).collect();
     assert_eq!(marks, [("Highlight", 4)], "Name, Qty, Apple and 12, each its own quad");
+}
+
+/// Issue #2387: article columns with a 25.6 pt gutter, drawn one row at a time. The gutter is
+/// narrower than three glyph heights, so it used to become a word space inside one long line.
+fn article_columns() -> Vec<u8> {
+    let content = "BT /F1 14 Tf \
+        1 0 0 1 20 250 Tm (Left first line.) Tj 1 0 0 1 180 250 Tm (Right first line.) Tj \
+        1 0 0 1 20 225 Tm (Left other line.) Tj 1 0 0 1 180 225 Tm (Right other line.) Tj \
+        1 0 0 1 20 200 Tm (Left final line.) Tj 1 0 0 1 180 200 Tm (Right final line.) Tj ET";
+    format!(
+        "%PDF-1.7\n\
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n\
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n\
+4 0 obj << /Length {} >> stream\n{content}\nendstream endobj\n\
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Courier >> endobj\n\
+trailer << /Root 1 0 R >>\n%%EOF",
+        content.len()
+    )
+    .into_bytes()
+}
+
+#[test]
+fn plain_drag_stays_in_an_article_column_in_both_directions() {
+    let mut h = harness_with(article_columns(), |_| {});
+    // Anchor to the same physical glyphs before and after the fix, independently of the text's
+    // reading-order indices: Courier advances 8.4 pt, and the first/last baselines are 50 pt apart.
+    let origin = glyph(&h, 0);
+    let scale = h.state().views[0].page_screen_rect(0).unwrap().width() / 400.0;
+    for (offset, last, expected) in [
+        (0.0, 15.0, "Left first line.\nLeft other line.\nLeft final line."),
+        (160.0, 16.0, "Right first line.\nRight other line.\nRight final line."),
+    ] {
+        let start = origin + vec2(offset * scale, 0.0);
+        let end = start + vec2(last * 8.4 * scale, 50.0 * scale);
+        for (from, to) in [(start, end), (end, start)] {
+            h.key_press(egui::Key::Escape);
+            h.run_steps(60);
+            drag(&mut h, from, to, Modifiers::NONE);
+            assert_eq!(text(&h).as_deref(), Some(expected));
+        }
+    }
 }
