@@ -1473,7 +1473,7 @@ impl Document {
                     return Err(CosError::Syntax { offset: lx.pos, detail: "invalid xref object range".into() });
                 }
                 // Renumbered and logged by the materialized reader.
-                if subsection_numbered_one_too_high(data, lx.pos, start, count) {
+                if subsection_numbered_one_too_high(data, self.header_offset, lx.pos, start, count) {
                     return Ok(None);
                 }
                 let Some(next_rows) = usize::try_from(count).ok().and_then(|count| row_count.checked_add(count)) else { return Ok(None) };
@@ -1746,7 +1746,7 @@ impl Document {
                 if !valid_xref_range(start, count) || count > 10_000_000 {
                     return Err(CosError::Syntax { offset: lx.pos, detail: "invalid xref object range".into() });
                 }
-                let start = if subsection_numbered_one_too_high(data, lx.pos, start, count) {
+                let start = if subsection_numbered_one_too_high(data, self.header_offset, lx.pos, start, count) {
                     renumbered = true;
                     0
                 } else {
@@ -1991,9 +1991,10 @@ fn object_header_at(data: &[u8], at: usize) -> Option<(Option<u32>, u16, usize)>
 /// A subsection numbered from 1 whose first entry is object 0's free-list head
 /// (`0000000000 65535 f`), and whose second entry points at `1 G obj`: the producer wrote the
 /// table from 0 but numbered it from 1, so every entry would land one number too high and
-/// object 1 would read as free. `at` is where the subsection's entries start. Without the
-/// header check the entry is taken as it is: object 1 may really be free.
-fn subsection_numbered_one_too_high(data: &[u8], at: usize, start: i64, count: i64) -> bool {
+/// object 1 would read as free. `at` is where the subsection's entries start; the offset is
+/// also tried relative to a shifted header, as `load` does. Without the header check the entry
+/// is taken as it is: object 1 may really be free.
+fn subsection_numbered_one_too_high(data: &[u8], header_offset: usize, at: usize, start: i64, count: i64) -> bool {
     if start != 1 || count < 2 {
         return false;
     }
@@ -2011,10 +2012,11 @@ fn subsection_numbered_one_too_high(data: &[u8], at: usize, start: i64, count: i
     };
     let (Some(0), Some(65535), b"f") = entry() else { return false };
     let (Some(offset), Some(generation), b"n") = entry() else { return false };
+    let holds_object_one = |offset: usize| {
+        object_header_at(data, offset).is_some_and(|(num, header_generation, _)| num == Some(1) && u32::from(header_generation) == generation)
+    };
     usize::try_from(offset)
-        .ok()
-        .and_then(|offset| object_header_at(data, offset))
-        .is_some_and(|(num, header_generation, _)| num == Some(1) && u32::from(header_generation) == generation)
+        .is_ok_and(|offset| holds_object_one(offset) || (header_offset != 0 && holds_object_one(offset.saturating_add(header_offset))))
 }
 
 pub(crate) fn find(hay: &[u8], needle: &[u8], from: usize, to: usize) -> Option<usize> {
@@ -2336,17 +2338,18 @@ mod tests {
             ],
             "/Root 5 0 R /Info 6 0 R",
         );
-        // /Size 7 is one short of the shifted numbers; /Size 8 covers them all.
-        for size in [7, 8] {
+        // /Size 7 is one short of the shifted numbers; /Size 8 covers them all. Junk before the
+        // header moves every object past the offsets the table gives.
+        for (size, junk) in [(7, ""), (8, ""), (7, "%JUNKJUNK\n")] {
             let text = String::from_utf8_lossy(&base).replace("\nxref\n0 7\n", "\nxref\n1 7\n").replace("/Size 7 ", &format!("/Size {size} "));
-            let doc = Document::open(Arc::new(text.into_bytes())).unwrap();
+            let doc = Document::open(Arc::new(format!("{junk}{text}").into_bytes())).unwrap();
             let image = first_page_image(&doc);
-            assert_eq!(image.as_dict().and_then(|d| d.name(b"Subtype")), Some(&b"Image"[..]), "/Size {size}: {image:?}");
-            assert_eq!(doc.xref_entry(0), Some(XrefEntry::Free { next_generation: 65535 }), "/Size {size}");
-            assert!(doc.repair_log().iter().any(|l| l.contains("from 0")), "/Size {size}: {:?}", doc.repair_log());
+            assert_eq!(image.as_dict().and_then(|d| d.name(b"Subtype")), Some(&b"Image"[..]), "/Size {size} {junk:?}: {image:?}");
+            assert_eq!(doc.xref_entry(0), Some(XrefEntry::Free { next_generation: 65535 }), "/Size {size} {junk:?}");
+            assert!(doc.repair_log().iter().any(|l| l.contains("from 0")), "/Size {size} {junk:?}: {:?}", doc.repair_log());
             let saved = Document::open(Arc::new(crate::write_full(&doc, &crate::SaveOptions::default()).unwrap())).unwrap();
             let image = first_page_image(&saved);
-            assert!(matches!(&*image, Object::Stream(s) if &s.raw[..] == b"ABCDEFGHIJKL"), "/Size {size}: {image:?}");
+            assert!(matches!(&*image, Object::Stream(s) if &s.raw[..] == b"ABCDEFGHIJKL"), "/Size {size} {junk:?}: {image:?}");
         }
     }
 
@@ -2361,13 +2364,17 @@ mod tests {
         table.extend(entries[2..].iter().cloned());
         let text = String::from_utf8_lossy(&base).into_owned();
         let at = text.rfind("\nxref\n").unwrap() + 1;
-        let mut bytes = base[..at].to_vec();
-        bytes.extend_from_slice(format!("xref\n{}\ntrailer\n<< /Size 4 /Root 2 0 R >>\nstartxref\n{at}\n%%EOF\n", table.join("\n")).as_bytes());
-        let doc = Document::open(Arc::new(bytes)).unwrap();
-        assert_eq!(doc.xref_entry(1), Some(XrefEntry::Free { next_generation: 65535 }));
-        assert_eq!(*doc.get(ObjRef::new(1, 0)), Object::Null, "the freed object stays freed");
-        assert!(matches!(&*doc.get(ObjRef::new(2, 0)), Object::Dict(d) if d.name(b"Type") == Some(&b"Catalog"[..])));
-        assert!(doc.repair_log().is_empty(), "{:?}", doc.repair_log());
+        for junk in ["", "%JUNKJUNK\n"] {
+            let mut bytes = junk.as_bytes().to_vec();
+            bytes.extend_from_slice(&base[..at]);
+            bytes.extend_from_slice(format!("xref\n{}\ntrailer\n<< /Size 4 /Root 2 0 R >>\nstartxref\n{at}\n%%EOF\n", table.join("\n")).as_bytes());
+            let doc = Document::open(Arc::new(bytes)).unwrap();
+            assert_eq!(doc.xref_entry(1), Some(XrefEntry::Free { next_generation: 65535 }), "{junk:?}");
+            assert_eq!(*doc.get(ObjRef::new(1, 0)), Object::Null, "{junk:?}: the freed object stays freed");
+            assert!(matches!(&*doc.get(ObjRef::new(2, 0)), Object::Dict(d) if d.name(b"Type") == Some(&b"Catalog"[..])), "{junk:?}");
+            assert!(!doc.repair_log().iter().any(|l| l.contains("from 0")), "{junk:?}: {:?}", doc.repair_log());
+            assert!(!junk.is_empty() || doc.repair_log().is_empty(), "{:?}", doc.repair_log());
+        }
     }
 
     #[test]
