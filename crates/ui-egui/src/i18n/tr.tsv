@@ -2372,6 +2372,7 @@ animation effects	Off	Kapalı
 	Find untagged content	Etiketlenmemiş içeriği bul
 	No untagged content was found.	Etiketlenmemiş içerik bulunamadı.
 	Found {n} untagged content problems.	{n} etiketlenmemiş içerik sorunu bulundu.
+	Tag form fields	Form alanlarını etiketle
 	Mark as artifact	Yapıt olarak işaretle
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Bu yaprak etiketini okuma sırasından kaldırın ve doğrudan içeriğini yapıt olarak işaretleyin
 	Mark content as artifact	İçeriği yapıt olarak işaretle

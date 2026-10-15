@@ -2376,6 +2376,7 @@ animation effects	Off	オフ
 	Find untagged content	タグなしのコンテンツを検索
 	No untagged content was found.	タグなしのコンテンツは見つかりませんでした。
 	Found {n} untagged content problems.	タグなしのコンテンツの問題が {n} 件見つかりました。
+	Tag form fields	フォームフィールドにタグを付ける
 	Mark as artifact	アーティファクトとしてマーク
 	Remove this leaf tag from reading order and mark its direct content as an artifact	このリーフタグを読み上げ順序から削除し、その直接のコンテンツをアーティファクトとしてマークします
 	Mark content as artifact	コンテンツをアーティファクトとしてマーク

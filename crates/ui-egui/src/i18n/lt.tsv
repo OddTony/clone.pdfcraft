@@ -2620,6 +2620,7 @@ key	Space	Tarpas
 	Find untagged content	Rasti nepažymėtą turinį
 	No untagged content was found.	Nepažymėto turinio nerasta.
 	Found {n} untagged content problems.	Rasta nepažymėto turinio problemų: {n}.
+	Tag form fields	Žymėti formos laukus
 	Mark as artifact	Pažymėti kaip artefaktą
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Pašalinkite šią lapo žymą iš skaitymo tvarkos ir pažymėkite jos tiesioginį turinį kaip artefaktą
 	Mark content as artifact	Pažymėti turinį kaip artefaktą

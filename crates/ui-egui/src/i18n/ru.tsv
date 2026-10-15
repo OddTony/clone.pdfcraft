@@ -2289,6 +2289,7 @@ animation effects	Off	Выкл
 	Find untagged content	Найти нетегированный контент
 	No untagged content was found.	Нетегированный контент не найден.
 	Found {n} untagged content problems.	Найдено проблем с нетегированным контентом: {n}.
+	Tag form fields	Пометить поля формы
 	Mark as artifact	Пометить как артефакт
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Удалите этот конечный тег из порядка чтения и пометьте его непосредственное содержимое как артефакт
 	Mark content as artifact	Пометить содержимое как артефакт
