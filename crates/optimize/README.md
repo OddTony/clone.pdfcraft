@@ -6,12 +6,23 @@ Advanced optimization).
 ```rust
 let report = optimize(&mut doc, &Settings::default())?;   // Reduce File Size's choices
 let report = optimize(&mut doc, &Settings::lossless())?;  // preserve image data and user data
+let report = optimize(&mut doc, &Preset::Mobile.settings())?; // smaller, for screens
 // Or with progress: called before each image and the clean-up; `false` cancels.
 let report = optimize_with_progress(&mut doc, &settings, &mut |stage| keep_going)?;
 ```
 
+- **Presets:** Standard (Reduce File Size's choices: images above 225 ppi to 150 ppi, JPEG
+  medium) and Mobile (above 144 ppi to 96 ppi, JPEG high), as in Acrobat's Settings menu.
+- **Merge image fragments** (`fragments`, on by default): some PDF printers draw a page picture
+  as thousands of images one pixel row high. Runs of upright 8-bit grey or RGB images in one
+  colour space, sharing their left and right edges and stacked edge to edge (at least four,
+  drawn with nothing else between them), become one lossless image at their finest resolution,
+  which the image settings then resample; the strips are dropped by Clean Up. A real page
+  printed this way went from 4.3 MB to 231 KB (Standard) and 161 KB (Mobile). Not merged yet:
+  side-by-side tiles, rotated strips, masks.
 - **Images:** the effective resolution of each image is measured where pages draw it (the CTM
-  through form XObjects; the smallest over all uses). Colour and grayscale images above a
+  through form XObjects, up to 12 deep; the smallest over all uses). If a use can't be
+  measured (forms nested deeper, or drawn too many times), no image is resampled. Colour and grayscale images above a
   threshold are resampled with a bicubic (Catmull-Rom) filter to a target resolution and
   stored as JPEG (Acrobat's quality steps) or ZIP; soft masks are resampled with their image.
   An image is replaced only if the result is smaller. Left alone: CMYK and other colour spaces,
@@ -30,7 +41,7 @@ then this, then merges identical objects and writes a full, compressed save
 progress bar). JPEG decoding and
 encoding and resampling come from the `image` crate.
 
-`Settings::lossless()` disables downsampling, image re-encoding, all discard flags, link and
+`Settings::lossless()` disables fragment merging, downsampling, image re-encoding, all discard flags, link and
 named-destination removal, and unused-XObject pruning. Encoded and raw image samples stay exact;
 non-image streams and the full-save structure may be compressed. The engine can still merge
 identical resources. Pass an empty `discard` list to `Session::optimized_bytes`; already absent
@@ -40,6 +51,6 @@ options. `Settings::default()` and `doc_reduce` keep their existing lossy choice
 
 This is not a byte-identical archival copy: a full rewrite drops old revisions and may update the
 modification date. It is not guaranteed to be smaller. Signed PDFs are refused by the engine.
-UI preset management, monochrome/JBIG2/CCITT re-encoding and broader real-scan quality benchmarks
+Saved custom presets, monochrome/JBIG2/CCITT re-encoding and broader real-scan quality benchmarks
 remain separate work. The full-save reference-generation correction is tracked in upstream
 [PR #1143](https://github.com/storytold/pdfcraft/pull/1143); this change does not duplicate it.

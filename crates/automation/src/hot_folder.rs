@@ -5,7 +5,18 @@ use serde_json::json;
 
 impl Automation {
     #[cfg(not(target_arch = "wasm32"))]
+    fn check_hot_folder_roots(&self) -> Result<()> {
+        if self.roots.is_some() {
+            return Err(failed(
+                "Hot Folder does not support separate automation read/write roots; use --root to confine all task paths to one folder",
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn hot_folder_project(&self, args: &Args) -> Result<Value> {
+        self.check_hot_folder_roots()?;
         use pdfcraft_engine::hot_folder_sources as source;
         let path = self.resolve(args.str("path")?, true)?;
         let parent = path.parent().ok_or_else(|| failed("project needs a parent folder"))?;
@@ -27,6 +38,7 @@ impl Automation {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn hot_folder_source(&self, args: &Args) -> Result<Value> {
+        self.check_hot_folder_roots()?;
         use pdfcraft_engine::{hot_folder as hf, hot_folder_sources as source};
         let path = self.resolve(args.str("config")?, false)?;
         let config = hf::load_config(&path).map_err(failed)?;
@@ -93,6 +105,7 @@ impl Automation {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn hot_folder(&self, action: &str, args: &Args) -> Result<Value> {
+        self.check_hot_folder_roots()?;
         use pdfcraft_engine::hot_folder as hf;
         let path = self.resolve(args.str("config")?, action == "hot_folder_configure")?;
         // Validate every nested path with the same root resolver as other automation tools.

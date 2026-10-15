@@ -283,3 +283,28 @@ fn hot_folder_tools_apply_page_templates_blank_archives_and_multiple_outputs() {
     assert!(std::fs::read_to_string(root.join("out/source.txt")).unwrap().contains("Pipeline"));
     assert_eq!(std::fs::read(root.join("in/source.pdf")).unwrap(), *source);
 }
+
+#[test]
+fn hot_folder_refuses_split_roots_before_writing_configuration() {
+    use pdfcraft_automation::file_access::AutomationRoots;
+    let root = tempfile::tempdir().unwrap();
+    for folder in ["in", "out"] {
+        std::fs::create_dir(root.path().join(folder)).unwrap();
+    }
+    let config = root.path().join("tasks.json");
+    let args = json!({"config":config,"settings":{"tasks":[{
+        "id":"incoming","name":"Incoming","input":root.path().join("in"),
+        "output":root.path().join("out"),"enabled":false
+    }]}});
+    // The arguments are valid in the supported single-root mode.
+    let mut single = Automation::new().with_root(root.path()).unwrap();
+    call(&mut single, "hot_folder_configure", args.clone());
+    std::fs::remove_file(&config).unwrap();
+    for (read, write) in [(true, true), (true, false), (false, true)] {
+        let roots = AutomationRoots::new(read.then_some(root.path()), write.then_some(root.path())).unwrap();
+        let mut a = Automation::new().with_automation_roots(roots);
+        let error = a.call("hot_folder_configure", &args).unwrap_err();
+        assert!(error.to_string().contains("does not support separate automation read/write roots"), "{error}");
+        assert!(!config.exists());
+    }
+}

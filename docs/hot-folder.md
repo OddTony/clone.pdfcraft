@@ -111,7 +111,9 @@ same engine through `pdfcraft-cli run` and opt-in MCP. All nested paths honour `
 inputs, every saving/blank archive folder, configuration and sidecars. Poll processes one stable
 file or complete bounded batch per task per due interval; it never silently starts a background worker.
 `hot_folder_run_now` overrides the next calendar occurrence. `hot_folder_service` exposes explicit
-service administration; mutations are refused in a filesystem-confined `--root` session.
+service administration; mutations are refused in any filesystem-confined session. Hot Folder task, source and project
+tools currently refuse separate `--automation-read-root` / `--automation-write-root` settings;
+use the supported shared `--root` confinement instead.
 `hot_folder_project` writes an ordered open manifest without replacing existing files.
 `hot_folder_source` provides credential status/removal, FTP password storage from a named environment
 variable, Outlook device sign-in and folder listing. Secrets never appear in tool results or task JSON.
