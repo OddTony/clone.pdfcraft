@@ -2428,3 +2428,51 @@ animation effects	Off	オフ
 	Make properties default	プロパティをデフォルトに設定
 	Pages selected	選択したページ
 	Page properties	ページのプロパティ
+	Turn upside down (180°)	上下反転 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 インチ ラベル (101.6 × 152.4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	各ページを印刷領域で切り抜き、正しい向きに回転して、伸縮させずに用紙に合わせます。1 枚に 1 ラベル。
+	Find untagged content	タグなしのコンテンツを検索
+	No untagged content was found.	タグなしのコンテンツは見つかりませんでした。
+	Found {n} untagged content problems.	タグなしのコンテンツの問題が {n} 件見つかりました。
+	Tag form fields	フォームフィールドにタグを付ける
+	Mark as artifact	アーティファクトとしてマーク
+	Remove this leaf tag from reading order and mark its direct content as an artifact	このリーフタグを読み上げ順序から削除し、その直接のコンテンツをアーティファクトとしてマークします
+	Mark content as artifact	コンテンツをアーティファクトとしてマーク
+	Word count	文字数と単語数
+	Current page only	現在のページのみ
+	Exclude tagged tables	タグ付きの表を除外
+	Exclude tagged code blocks	タグ付きのコードブロックを除外
+	Exclude image/OCR text	画像・OCRのテキストを除外
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	除外にはPDFタグを使用します。タグのない表やコードは集計に含まれます。画像の除外では非表示のテキストも除外されます。
+	Words	単語数
+	Characters	文字数
+	Characters without spaces	空白を除く文字数
+	Pages counted	集計したページ数
+	Some pages contain no countable text. Scanned images need OCR first.	一部のページには集計できるテキストがありません。スキャン画像には先にOCRを実行してください。
+	Some content could not be classified safely and was kept in the count.	正確に分類できなかった内容は集計に含まれています。
+	Counting words… {n} pages read	単語を集計中… {n}ページ読み取り済み
+	Word counting stopped unexpectedly.	単語の集計が予期せず停止しました。
+	Word count…	文字数と単語数…
+@id	file.word_count	文字数と単語数…
+	Standard	標準
+	Mobile	モバイル
+	Merge image fragments	画像の断片を結合
+	Optimizing… merging image fragments	最適化中… 画像の断片を結合しています
+	Side by side	並べて表示
+	New file only	新しいファイルのみ
+	Old file: {name}	古いファイル: {name}
+	New file: {name}	新しいファイル: {name}
+	Print as image	画像として印刷
+	Resolution:	解像度:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	プリンターが文字、グラデーション、透明部分を印刷しないときに使います。印刷物は検索できる文字ではなくなります。グレースケール印刷と併用すると画像はグレーになります。
+	Crop Image	画像を切り抜き
+	Remove Crop	切り抜きを解除
+	Trim the picture with its handles; Enter or Done applies	ハンドルで画像を切り抜きます。Enter または完了で適用
+	Redaction mark appearance	墨消しマークの外観
+	Outline colour:	枠線の色:
+	Fill colour:	塗りの色:
+	Shown while the pointer is over a mark.	ポインターがマーク上にあるときに表示されます。
+	Opacity:	不透明度:
+	Make properties default	プロパティをデフォルトに設定
+	Pages selected	選択したページ
+	Page properties	ページのプロパティ>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))

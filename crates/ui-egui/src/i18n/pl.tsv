@@ -2408,3 +2408,51 @@ animation effects	Off	Wyłączone
 	Make properties default	Ustaw właściwości jako domyślne
 	Pages selected	Zaznaczone strony
 	Page properties	Właściwości strony
+	Turn upside down (180°)	Obróć do góry nogami (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Etykieta 4 × 6 cali (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Przycina każdą stronę do zadrukowanego obszaru, obraca ją pionowo i dopasowuje do arkusza bez rozciągania. Jedna etykieta na arkusz.
+	Find untagged content	Znajdź nieoznaczoną zawartość
+	No untagged content was found.	Nie znaleziono nieoznaczonej zawartości.
+	Found {n} untagged content problems.	Znaleziono problemów z nieoznaczoną zawartością: {n}.
+	Tag form fields	Oznacz pola formularza
+	Mark as artifact	Oznacz jako artefakt
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Usuń ten znacznik liścia z kolejności odczytu i oznacz jego bezpośrednią zawartość jako artefakt
+	Mark content as artifact	Oznacz zawartość jako artefakt
+	Word count	Liczba słów
+	Current page only	Tylko bieżąca strona
+	Exclude tagged tables	Wyklucz oznaczone tabele
+	Exclude tagged code blocks	Wyklucz oznaczone bloki kodu
+	Exclude image/OCR text	Wyklucz tekst obrazów/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Wykluczenia używają znaczników PDF. Nieoznaczone tabele i kod nadal są uwzględniane. Wykluczenie obrazów usuwa również niewidoczny tekst.
+	Words	Słowa
+	Characters	Znaki
+	Characters without spaces	Znaki bez spacji
+	Pages counted	Policzone strony
+	Some pages contain no countable text. Scanned images need OCR first.	Niektóre strony nie zawierają tekstu do policzenia. Zeskanowane obrazy wymagają najpierw OCR.
+	Some content could not be classified safely and was kept in the count.	Części treści nie udało się wiarygodnie sklasyfikować, więc pozostała uwzględniona w liczbie.
+	Counting words… {n} pages read	Liczenie słów… odczytane strony: {n}
+	Word counting stopped unexpectedly.	Liczenie słów zostało nieoczekiwanie przerwane.
+	Word count…	Liczba słów…
+@id	file.word_count	Liczba słów…
+	Standard	Standardowe
+	Mobile	Urządzenie mobilne
+	Merge image fragments	Scal fragmenty obrazów
+	Optimizing… merging image fragments	Optymalizacja… scalanie fragmentów obrazów
+	Side by side	Obok siebie
+	New file only	Tylko nowy plik
+	Old file: {name}	Stary plik: {name}
+	New file: {name}	Nowy plik: {name}
+	Print as image	Drukuj jako obraz
+	Resolution:	Rozdzielczość:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Użyj, gdy drukarka pomija tekst, cieniowanie lub przezroczystość. Wydruk nie jest już tekstem do przeszukiwania; przy druku w skali szarości obrazy są szare.
+	Crop Image	Przytnij obraz
+	Remove Crop	Usuń przycięcie
+	Trim the picture with its handles; Enter or Done applies	Przytnij obraz uchwytami; Enter lub Gotowe stosuje
+	Redaction mark appearance	Wygląd znacznika redakcji
+	Outline colour:	Kolor obrysu:
+	Fill colour:	Kolor wypełnienia:
+	Shown while the pointer is over a mark.	Widoczny, gdy wskaźnik jest nad znacznikiem.
+	Opacity:	Krycie:
+	Make properties default	Ustaw właściwości jako domyślne
+	Pages selected	Zaznaczone strony
+	Page properties	Właściwości strony>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))

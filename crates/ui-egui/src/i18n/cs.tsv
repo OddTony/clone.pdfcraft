@@ -2502,3 +2502,51 @@ animation effects	Off	Vypnuto
 	Make properties default	Nastavit vlastnosti jako výchozí
 	Pages selected	Vybrané stránky
 	Page properties	Vlastnosti stránky
+	Turn upside down (180°)	Otočit vzhůru nohama (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Štítek 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Ořízne každou stránku na potištěnou oblast, otočí ji svisle a přizpůsobí listu bez deformace. Jeden štítek na list.
+	Find untagged content	Najít neoznačený obsah
+	No untagged content was found.	Nebyl nalezen žádný neoznačený obsah.
+	Found {n} untagged content problems.	Nalezeno problémů s neoznačeným obsahem: {n}.
+	Tag form fields	Označit pole formuláře
+	Mark as artifact	Označit jako artefakt
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Odeberte tuto značku listu z pořadí čtení a označte její přímý obsah jako artefakt
+	Mark content as artifact	Označit obsah jako artefakt
+	Word count	Počet slov
+	Current page only	Pouze aktuální stránka
+	Exclude tagged tables	Vynechat označené tabulky
+	Exclude tagged code blocks	Vynechat označené bloky kódu
+	Exclude image/OCR text	Vynechat text obrázků a OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Vynechávání využívá tagy PDF. Neoznačené tabulky a kód zůstávají zahrnuty. Vynechání obrázků odstraní i neviditelný text.
+	Words	Slova
+	Characters	Znaky
+	Characters without spaces	Znaky bez mezer
+	Pages counted	Započítané stránky
+	Some pages contain no countable text. Scanned images need OCR first.	Některé stránky neobsahují text k počítání. U naskenovaných obrázků je nejprve nutné OCR.
+	Some content could not be classified safely and was kept in the count.	Část obsahu nebylo možné spolehlivě zařadit a zůstala zahrnuta v počtu.
+	Counting words… {n} pages read	Počítání slov… přečtené stránky: {n}
+	Word counting stopped unexpectedly.	Počítání slov se neočekávaně zastavilo.
+	Word count…	Počet slov…
+@id	file.word_count	Počet slov…
+	Standard	Standardní
+	Mobile	Mobilní zařízení
+	Merge image fragments	Sloučit fragmenty obrázků
+	Optimizing… merging image fragments	Optimalizace… slučování fragmentů obrázků
+	Side by side	Vedle sebe
+	New file only	Jen nový soubor
+	Old file: {name}	Starý soubor: {name}
+	New file: {name}	Nový soubor: {name}
+	Print as image	Tisknout jako obrázek
+	Resolution:	Rozlišení:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Použijte, když tiskárna vynechává text, stínování nebo průhlednost. Výtisk už není prohledávatelný text; s tiskem v odstínech šedi jsou obrázky šedé.
+	Crop Image	Oříznout obrázek
+	Remove Crop	Odebrat oříznutí
+	Trim the picture with its handles; Enter or Done applies	Ořízněte obrázek úchyty; Enter nebo Hotovo použije
+	Redaction mark appearance	Vzhled značky začernění
+	Outline colour:	Barva obrysu:
+	Fill colour:	Barva výplně:
+	Shown while the pointer is over a mark.	Zobrazí se, když je ukazatel nad značkou.
+	Opacity:	Neprůhlednost:
+	Make properties default	Nastavit vlastnosti jako výchozí
+	Pages selected	Vybrané stránky
+	Page properties	Vlastnosti stránky>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))
