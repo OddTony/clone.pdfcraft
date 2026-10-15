@@ -1168,30 +1168,37 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
                     scanned += 1;
                     let path = entry.path();
                     let Some(ext) = path.extension().and_then(|e| e.to_str()) else { continue };
-                    if !ext.eq_ignore_ascii_case("ttf") && !ext.eq_ignore_ascii_case("otf") { continue; }
+                    let collection = ext.eq_ignore_ascii_case("ttc");
+                    if !collection && !ext.eq_ignore_ascii_case("ttf") && !ext.eq_ignore_ascii_case("otf") { continue; }
                     let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
-                    if !meta.is_file() || meta.len() > (16 << 20) { continue; }
+                    // Larger, multi-face collections are ordinary macOS installed fonts.
+                    let limit = if collection { 64_u64 << 20 } else { 16_u64 << 20 };
+                    if !meta.is_file() || meta.len() > limit { continue; }
                     let Ok(bytes) = std::fs::read(&path) else { continue };
-                    let Ok((family, postscript)) = pdfcraft_fonts::embedding::display_names(&bytes) else { continue };
-                    let matched: Vec<_> = missing.iter().filter(|(resource, source)| {
-                        !families.contains_key(resource)
-                            && [family.as_str(), postscript.as_str()].iter().any(|name| {
-                                pdfcraft_fonts::embedding::face_key(name) ==
-                                    pdfcraft_fonts::embedding::face_key(source)
-                            })
-                    }).collect();
-                    if matched.is_empty() { continue; }
-                    // Validate the font parser and glyph coverage for each matched run.
-                    let name = format!("pdf-source-installed-{}", definitions.font_data.len());
-                    definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(bytes)));
-                    // Register this as a usable egui family, not just font data.
-                    let mut stack = vec![name.clone()];
-                    if let Some(defaults) = definitions.families.get(&FontFamily::Proportional) {
-                        stack.extend(defaults.iter().cloned());
-                    }
-                    definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
-                    for (resource, _) in matched {
-                        families.insert(resource.clone(), name.clone());
+                    for face_index in 0..if collection { 16 } else { 1 } {
+                        let Ok((family, postscript)) = pdfcraft_fonts::embedding::display_names_at(&bytes, face_index) else { break };
+                        let matched: Vec<_> = missing.iter().filter(|(resource, source)| {
+                            !families.contains_key(resource)
+                                && [family.as_str(), postscript.as_str()].iter().any(|name| {
+                                    pdfcraft_fonts::embedding::face_key(name) ==
+                                        pdfcraft_fonts::embedding::face_key(source)
+                                })
+                        }).collect();
+                        if matched.is_empty() { continue; }
+                        let name = format!("pdf-source-installed-{}", definitions.font_data.len());
+                        let mut data = egui::FontData::from_owned(bytes.clone());
+                        data.index = face_index;
+                        definitions.font_data.insert(name.clone(), Arc::new(data));
+                        // A system font is an interface-only fallback: it must not be
+                        // selected for implicit embedding in the saved PDF.
+                        let mut stack = vec![name.clone()];
+                        if let Some(defaults) = definitions.families.get(&FontFamily::Proportional) {
+                            stack.extend(defaults.iter().cloned());
+                        }
+                        definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
+                        for (resource, _) in matched {
+                            families.insert(resource.clone(), name.clone());
+                        }
                     }
                 }
             }
