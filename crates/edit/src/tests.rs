@@ -3604,6 +3604,121 @@ fn centered_mixed_size_title_keeps_three_rows_when_changed() {
     }
 }
 
+/// #2377 A: two ordinary rows remain one paragraph, but each must stay between its
+/// background and foreground artwork. Exercise both rewrite paths, including formatting
+/// that rewrites every row rather than keeping an untouched source row.
+#[test]
+fn paragraph_rows_keep_their_paint_order() {
+    let source = "q 0 0.5 0 rg 60 695 240 18 re f Q \
+                  BT /F1 12 Tf 1 g 72 700 Td (First row) Tj ET \
+                  q 1 0 0 rg 75 700 3 6 re f Q \
+                  q 0 0.5 0 rg 60 677 240 18 re f Q \
+                  BT /F1 12 Tf 1 g 72 682 Td (Second row) Tj ET \
+                  q 0 0 1 rg 75 682 3 6 re f Q";
+    for draft in ["Other row\nNew row", "Other row New row"] {
+        let mut doc = text_page(source);
+        assert_eq!(text::text_blocks(&doc, 0).unwrap().len(), 1);
+        let style = text::BlockStyle { color: Some([1.0; 3]), ..Default::default() };
+        text::rewrite_block(&mut doc, 0, 0, Some(draft), &style).unwrap();
+        let doc = reopen(&doc);
+        let content = streams(&doc, 0).join("\n");
+        let second_background = content.find("60 677 240 18 re").unwrap();
+        let second_text = content.find("(New").expect(&content);
+        let second_foreground = content.find("75 682 3 6 re").unwrap();
+        assert!(second_background < second_text && second_text < second_foreground, "{content}");
+        assert!(content.find("(Other row)").unwrap() < content.find("75 700 3 6 re").unwrap(), "{content}");
+    }
+}
+
+/// #2377 B: separate painted labels are not a mixed-style paragraph. Equal-size rows
+/// with different weights or colours are independent too; plain multiline text still joins.
+#[test]
+fn painted_labels_with_different_styles_are_separate_paragraphs() {
+    for (font, size, color) in [("F1", 20, "1 g"), ("F2", 9, "1 g"), ("F1", 9, "0 g")] {
+        let mut doc = text_page(&format!(
+            "q 0 0.5 0 rg 60 695 300 18 re f Q \
+             BT /F1 9 Tf 1 g 72 700 Td (Label) Tj ET \
+             q 0 0.5 0 rg 60 667 300 28 re f Q \
+             BT /{font} {size} Tf {color} 72 682 Td (Heading) Tj ET"
+        ));
+        doc.update_dict(pdfcraft_cos::ObjRef::new(6, 0), |f| {
+            *f = Dict::new();
+            f.set(b"Type".to_vec(), Object::name("Font"));
+            f.set(b"Subtype".to_vec(), Object::name("Type1"));
+            f.set(b"BaseFont".to_vec(), Object::name("Helvetica-Bold"));
+        })
+        .unwrap();
+        let before = text::text_blocks(&doc, 0).unwrap();
+        assert_eq!(before.len(), 2, "{before:?}");
+        text::replace_block(&mut doc, 0, 1, "Changed").unwrap();
+        let after = text::text_blocks(&reopen(&doc), 0).unwrap();
+        assert_eq!(after[0], before[0], "editing the heading leaves the label alone");
+        assert_eq!(after[1].text, "Changed");
+        assert_eq!(after[1].size, before[1].size);
+        assert_eq!(after[1].base_font, before[1].base_font);
+        assert_eq!(after[1].color, before[1].color);
+    }
+}
+
+#[test]
+fn interleaved_rows_keep_their_transforms_clips_and_neighbours() {
+    let source = "q 2 0 0 2 0 0 cm 30 345 120 14 re W n \
+                  BT /F1 6 Tf 36 350 Td (First row) Tj ET Q \
+                  q 0 0.5 0 rg 60 677 240 18 re f Q \
+                  q 60 677 240 18 re W n 1 0 0 1 10 0 cm \
+                  BT /F1 12 Tf 62 682 Td (Second row) Tj [-25000] TJ (Neighbour) Tj ET Q";
+    let mut doc = text_page(source);
+    let before = text::text_blocks(&doc, 0).unwrap();
+    assert_eq!(before.len(), 2);
+    let style = text::BlockStyle { color: Some([0.2, 0.3, 0.4]), ..Default::default() };
+    text::rewrite_block(&mut doc, 0, 0, Some("Other row\nNew row"), &style).unwrap();
+    let reopened = reopen(&doc);
+    let after = text::text_blocks(&reopened, 0).unwrap();
+    assert_eq!(after[0].editor_text, "Other row\nNew row");
+    let lines = text::text_lines(&reopened, 0).unwrap();
+    let rows = &after[0].rows;
+    assert_eq!(lines[rows[0][0]].baseline(), [72.0, 700.0]);
+    assert_eq!(lines[rows[1][0]].baseline(), [72.0, 682.0]);
+    assert_eq!(after[1], before[1]);
+    let content = streams(&reopened, 0).join("\n");
+    assert!(content.contains("30 345 120 14 re W n"));
+    assert!(content.contains("60 677 240 18 re W n"));
+}
+
+#[test]
+fn an_explicit_paragraph_keeps_mixed_rows_across_artwork() {
+    let mut doc = text_page(
+        "/P BMC BT /F1 12 Tf 72 700 Td (First row) Tj ET \
+         q 0 0.5 0 rg 60 670 300 26 re f Q \
+         BT /F1 20 Tf 72 676 Td (Second row) Tj ET EMC",
+    );
+    let before = text::text_blocks(&doc, 0).unwrap();
+    assert_eq!(before.len(), 1, "an explicit paragraph takes precedence over guessed style boundaries");
+    text::replace_block(&mut doc, 0, 0, "Other row\nNew row").unwrap();
+    let reopened = reopen(&doc);
+    let after = text::text_blocks(&reopened, 0).unwrap();
+    assert_eq!(after.len(), 1);
+    assert_eq!(after[0].editor_text, "Other row\nNew row");
+    let lines = text::text_lines(&reopened, 0).unwrap();
+    assert_eq!(lines[after[0].rows[0][0]].size, 12.0);
+    assert_eq!(lines[after[0].rows[1][0]].size, 20.0);
+    let content = streams(&reopened, 0).join("\n");
+    assert!(content.find("60 670 300 26 re").unwrap() < content.find("(New").unwrap());
+}
+
+#[test]
+fn interleaved_reflow_is_bounded_without_mutation() {
+    let mut doc = text_page(
+        "BT /F1 12 Tf 72 700 Td (First row) Tj ET \
+         q 0 0.5 0 rg 60 677 240 18 re f Q \
+         BT /F1 12 Tf 72 682 Td (Second row) Tj ET",
+    );
+    let before = pdfcraft_cos::write_full(&doc, &SaveOptions::default()).unwrap();
+    let draft = format!("{}end", "\n".repeat(10_001));
+    assert!(text::replace_block(&mut doc, 0, 0, &draft).is_err());
+    assert_eq!(pdfcraft_cos::write_full(&doc, &SaveOptions::default()).unwrap(), before);
+}
+
 #[test]
 fn image_selection_bounds_respect_clips_and_restore_graphics_state() {
     let mut doc = image_page();

@@ -1902,8 +1902,8 @@ milestone = "M7"
 status = "shipped"
 commands = ["edit.edit_text"]
 tools = ["text_paragraphs"]
-evidence = ["crates/edit/src/tests.rs::paragraphs_are_found_and_rewrapped", "crates/edit/src/tests.rs::text_lines_are_found_and_replaced_in_place", "crates/ui-egui/tests/editing.rs::editing_existing_text_in_place", "crates/automation/tests/automation.rs::editing_existing_text_through_tools"]
-notes = "lines grouped into paragraphs by stream, font, size, left alignment and regular baseline spacing; hyphenated line ends are joined"
+evidence = ["crates/edit/src/tests.rs::paragraph_rows_keep_their_paint_order", "crates/edit/src/tests.rs::painted_labels_with_different_styles_are_separate_paragraphs", "crates/automation/tests/automation.rs::text_edit_keeps_interleaved_paint_order_after_save_and_undo", "crates/automation/tests/automation.rs::text_edit_keeps_painted_heading_separate_from_label", "crates/edit/src/tests.rs::paragraphs_are_found_and_rewrapped", "crates/edit/src/tests.rs::text_lines_are_found_and_replaced_in_place", "crates/ui-egui/tests/editing.rs::editing_existing_text_in_place", "crates/automation/tests/automation.rs::editing_existing_text_through_tools"]
+notes = "lines grouped into paragraphs by stream, font, size, left alignment and regular baseline spacing; hyphenated line ends are joined; different-style rows separated by artwork stay independent unless an explicit paragraph tag joins them (#2377); same-style multiline rows retain their original painting slots during edits; turned/visual-order paragraphs interleaved with artwork are refused rather than reordered; semantic grouping remains heuristic"
 
 [[feature]]
 id = "edit.font-reuse-substitution"

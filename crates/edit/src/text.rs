@@ -58,6 +58,9 @@ pub struct TextLine {
     origin: Origin,
     /// Explicit marked-content scope (when present); distinct scopes must not be guessed into one paragraph.
     scope: Option<usize>,
+    /// Non-text painting generation at the source run. Unlike graphics state, painting
+    /// order is not restored by Q; rows on opposite sides of artwork need their own slots.
+    paint: usize,
     /// Right-to-left `/ActualText` already supplies typing order; glyph text still needs bidi
     /// recovery. Left-to-right ActualText (e.g. a Latin ligature) joins its line as usual.
     logical_order: bool,
@@ -655,6 +658,7 @@ struct Shown {
     visual_order: bool,
     decodable: bool,
     scope: Option<usize>,
+    paint: usize,
     logical_order: bool,
     actual_text: bool,
 }
@@ -703,6 +707,7 @@ struct Carry {
     ts: Ts,
     stack: Vec<Ts>,
     marked: Vec<Option<usize>>,
+    paint: usize,
 }
 
 impl Carry {
@@ -720,7 +725,7 @@ impl Carry {
             rise: 0.0,
             render_mode: 0,
         };
-        Carry { ts, stack: Vec::new(), marked: Vec::new() }
+        Carry { ts, stack: Vec::new(), marked: Vec::new(), paint: 0 }
     }
 }
 
@@ -745,6 +750,9 @@ fn interpret(
     let mut marked = std::mem::take(&mut carry.marked);
     let mut actual: Vec<Option<(usize, usize, String)>> = Vec::new();
     for (i, op) in ops.iter().enumerate() {
+        if matches!(op.op.as_slice(), b"S" | b"s" | b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" | b"Do" | b"sh" | b"BI") {
+            carry.paint = carry.paint.saturating_add(1);
+        }
         match op.op.as_slice() {
             b"BMC" | b"BDC" if marked.len() < 256 => {
                 // Marked text paragraphs/headings are authoritative boundaries. Ignore
@@ -978,6 +986,7 @@ fn interpret(
                     visual_order: m.visual_order,
                     decodable,
                     scope: marked.last().copied().flatten(),
+                    paint: carry.paint,
                     logical_order: false,
                     actual_text: false,
                 });
@@ -1021,7 +1030,7 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
             let bt = pen.bt;
             let (near, gap) = pen.continues(&s, if bt == s.bt { 3.0 } else { 1.5 });
             piece == si
-                && lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order)
+                && lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order && l.paint == s.paint)
                 && (bt == s.bt || lines.last().is_some_and(|l| compatible_word(l, &s)))
                 && (s.text.trim().is_empty() || lines.last().is_some_and(|l| same_font(l, &s.font, s.face.as_deref())))
                 && (s.text.trim().is_empty()
@@ -1063,6 +1072,7 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
                 face: s.face.clone(),
                 stream: si,
                 scope: s.scope,
+                paint: s.paint,
                 logical_order: s.logical_order,
                 actual_text: s.actual_text,
                 ops: std::iter::once(s.op).chain(s.extra_ops.iter().copied()).collect(),
@@ -1112,7 +1122,7 @@ fn compatible_word(line: &TextLine, shown: &Shown) -> bool {
 fn add_shown(lines: &mut Vec<TextLine>, last: &mut Option<Pen>, s: Shown, stream: usize) {
     let joins = last.is_some_and(|pen| {
         let bt = pen.bt;
-        lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order)
+        lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order && l.paint == s.paint)
             && (bt == s.bt || lines.last().is_some_and(|l| compatible_word(l, &s)))
             && (s.text.trim().is_empty() || lines.last().is_some_and(|l| same_font(l, &s.font, s.face.as_deref())))
             && (s.text.trim().is_empty()
@@ -1150,6 +1160,7 @@ fn add_shown(lines: &mut Vec<TextLine>, last: &mut Option<Pen>, s: Shown, stream
             face: s.face.clone(),
             stream,
             scope: s.scope,
+            paint: s.paint,
             logical_order: s.logical_order,
             actual_text: s.actual_text,
             ops: std::iter::once(s.op).chain(s.extra_ops.iter().copied()).collect(),
@@ -1260,7 +1271,7 @@ fn reading_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError
         let Some(form) = form_call(w.doc, resources, name, ts.ctm, &w.path, &mut w.visits) else { return };
         let ops = parse(&form.data).ops;
         // The form starts with the graphics state at its `Do`, its own matrix applied.
-        let mut carry = Carry { ts: Ts { ctm: form.ctm, ..ts }, stack: Vec::new(), marked: Vec::new() };
+        let mut carry = Carry { ts: Ts { ctm: form.ctm, ..ts }, stack: Vec::new(), marked: Vec::new(), paint: 0 };
         let stream = w.next_stream;
         w.next_stream = w.next_stream.saturating_add(1);
         if let Some(r) = form.obj {
@@ -1853,16 +1864,26 @@ pub fn clear_block(doc: &mut Document, page: usize, block: usize) -> Result<(), 
     let streams = content_streams(doc, &p.dict);
     let pieces = Pieces::join(&streams.iter().map(|(_, d)| d.as_slice()).collect::<Vec<_>>());
     let ops = pieces.parse().ops;
-    let shown = interpret(doc, &ops, &fonts, &mut HashMap::new(), &mut Carry::new(), None, false);
+    let mut patches = glyphless_shows(doc, &ops, &fonts, &drops)?;
+    let data = splice(&pieces, &ops, |i| patches.remove(&i).map_or((Vec::new(), true), |v| (v, false)));
+    let contents = rewritten_contents(doc, &streams, data);
+    doc.update_dict(p.obj, |d| d.set(b"Contents".to_vec(), contents))?;
+    Ok(())
+}
+
+/// Erase glyphs while retaining each showing operator's advance and line movement.
+/// Both editor previews and row-by-row rewrites must leave unrelated following text in place.
+fn glyphless_shows(doc: &Document, ops: &[Op], fonts: &Dict, drops: &std::collections::HashSet<usize>) -> Result<HashMap<usize, Vec<Op>>, EditError> {
+    let shown = interpret(doc, ops, fonts, &mut HashMap::new(), &mut Carry::new(), None, false);
     let mut patches = HashMap::new();
     for s in shown.into_iter().filter(|s| drops.contains(&s.op)) {
         if s.state.render_mode >= 4 {
-            return Err(EditError::Invalid("text used as a clipping path cannot be previewed for editing".into()));
+            return Err(EditError::Invalid("text used as a clipping path cannot be removed safely for editing".into()));
         }
         let denominator = s.state.size * s.state.scale;
         let adjustment = if denominator != 0.0 { -1000.0 * s.advance / denominator } else { 0.0 };
         if !adjustment.is_finite() || (denominator == 0.0 && s.advance != 0.0) {
-            return Err(EditError::Invalid("the paragraph's text advance cannot be previewed".into()));
+            return Err(EditError::Invalid("the paragraph's text advance cannot be preserved".into()));
         }
         let mut replacement = Vec::new();
         if let Some(op) = ops.get(s.op) {
@@ -1877,10 +1898,7 @@ pub fn clear_block(doc: &mut Document, page: usize, block: usize) -> Result<(), 
         replacement.push(Op::new("TJ", vec![Object::Array(vec![pdfcraft_content::num(adjustment)])]));
         patches.insert(s.op, replacement);
     }
-    let data = splice(&pieces, &ops, |i| patches.remove(&i).map_or((Vec::new(), true), |v| (v, false)));
-    let contents = rewritten_contents(doc, &streams, data);
-    doc.update_dict(p.obj, |d| d.set(b"Contents".to_vec(), contents))?;
-    Ok(())
+    Ok(patches)
 }
 
 /// The paragraphs on a page as a reader sees them, including text drawn by form XObjects
@@ -2025,6 +2043,10 @@ fn rewrite_block_from(
     // Text turned on the page (a landscape page drawn a quarter turn round) is rewritten in its
     // own text space below; the styled region path lays rows out along the page's x axis.
     let upright = members.iter().all(|line| line.upright());
+    let interleaved = members.iter().any(|line| line.paint != first.paint);
+    if interleaved && (!upright || hebrew || members.iter().any(|line| line.visual_order)) {
+        return Err(EditError::Invalid("turned or visual-order text interleaved with artwork cannot be reflowed safely".into()));
+    }
     if !upright && (!style.ranges.is_empty() || style.resource.is_some()) {
         return Err(EditError::Invalid("formatting part of turned text, or choosing a document font for it, isn't supported yet".into()));
     }
@@ -2034,6 +2056,7 @@ fn rewrite_block_from(
         && !visual_indic
         && (!style.ranges.is_empty()
             || style.resource.is_some()
+            || interleaved
             || (text.is_some_and(|draft| {
                 draft.contains('\n')
                     || pdfcraft_fonts::source_shaping::required(draft)
