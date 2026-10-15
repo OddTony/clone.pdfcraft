@@ -196,6 +196,27 @@ fn shape_source(
             return Ok(Some((bytes, shaped, family)));
         }
     }
+    // Preserve the source's embedded glyphs first. When its subset cannot cover newly
+    // inserted Hebrew, prefer a complete matching build face before substituting families.
+    for face in pdfcraft_fonts::embedding::matching_faces(&family) {
+        if pdfcraft_fonts::embedding::covers(face.bytes, text)
+            && let Ok(shaped) = pdfcraft_fonts::source_shaping::shape(face.bytes, text)
+        {
+            return Ok(Some((face.bytes.to_vec(), shaped, face.family.to_string())));
+        }
+    }
+    // Hebrew input may come from a subset with no matching complete face. The bundled
+    // Hebrew document face supports shaped glyphs (including marks), unlike the legacy
+    // one-character Type 3 fallback. Never use an interface-only system font here.
+    if text.chars().any(|c| matches!(c as u32, 0x0590..=0x05FF | 0xFB1D..=0xFB4F)) {
+        for face in pdfcraft_fonts::ui_hebrew_fonts() {
+            if pdfcraft_fonts::embedding::covers(face.bytes, text)
+                && let Ok(shaped) = pdfcraft_fonts::source_shaping::shape(face.bytes, text)
+            {
+                return Ok(Some((face.bytes.to_vec(), shaped, face.family.to_string())));
+            }
+        }
+    }
     Err(EditError::Invalid("complex text needs the complete source TrueType/OpenType face; load that font before editing".into()))
 }
 
