@@ -4338,6 +4338,7 @@ dependencies = [
  "sha2 0.11.0",
  "sha3",
  "thiserror 2.0.21",
+ "zeroize",
 ]
 
 [[package]]
@@ -4386,6 +4387,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "winsafe",
+ "zeroize",
 ]
 
 [[package]]
