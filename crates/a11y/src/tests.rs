@@ -123,6 +123,26 @@ fn autotag_form_fields_writes_widget_structure_and_parent_tree() {
 }
 
 #[test]
+fn autotag_form_fields_tags_a_widget_listed_on_two_pages_once() {
+    let mut doc = pdf(
+        &[
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R] >> >>".into(),
+            "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>".into(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Annots [5 0 R] >>".into(),
+            "<< /Length 0 >>\nstream\n\nendstream".into(),
+            "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [20 60 120 80] >>".into(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Annots [5 0 R] >>".into(),
+        ],
+        "",
+    );
+    assert_eq!(tag_form_fields(&mut doc).unwrap(), 1);
+    let tree = doc.get(doc.root().unwrap()).as_dict().unwrap().reference(b"StructTreeRoot").unwrap();
+    let parent_tree = doc.get(tree).as_dict().unwrap().reference(b"ParentTree").unwrap();
+    let nums = doc.get(parent_tree).as_dict().unwrap().get(b"Nums").and_then(|n| n.as_array().cloned()).unwrap();
+    assert_eq!(nums.len(), 2, "one key and one /Form element for the shared widget");
+}
+
+#[test]
 fn autotag_form_fields_extends_a_direct_existing_structure_tree() {
     let mut doc = pdf(
         &[
