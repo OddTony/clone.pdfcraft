@@ -3955,6 +3955,7 @@ name = "pdfcraft-cli"
 version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
+ "pdfcraft-annot",
  "pdfcraft-audit",
  "pdfcraft-automation",
  "pdfcraft-cos",
