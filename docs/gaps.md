@@ -1,6 +1,7 @@
 # Where PdfCraft falls short of Acrobat Pro
 
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7: PR #1572 refreshed; logical Arabic editing and rejected paragraph-switch drafts verified; estimates unchanged)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (gap 6: #1910 Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (gap 6: #1398 stamps read upright on rotated pages; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -75,6 +76,13 @@ update the numbers.
   **Doc:** [pdf-spec-parity.md](pdf-spec-parity.md).
 
 ### 3. Editing existing text is fragile on real files
+
+- **Local Arabic editor candidate (2026-10-12):** both inline editors now separate logical
+  editing from bidi paint order. Regression tests cover incremental mixed input, pointer
+  insertion/drag, logical clipboard and history, grapheme deletion, IME commit, preserved
+  styles/alignment, rejected-draft retention and two save/reopen cycles with a selected full
+  Arabic face. Native-GPU shell screenshots are checked locally. General mixed contextual
+  resource/style rows and legacy font programs remain restricted; estimates are unchanged.
 
 - **Fork progress (2026-10-11):** compatible words and subset-font spaces form lines;
   source fonts lacking a space glyph remain reusable; inline editing previews remove source
@@ -379,6 +387,7 @@ update the numbers.
 | Date | Change | Summary |
 |---|---|---|
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
+| 2026-10-15 | patch | M7: refresh PR #1572 against main, retain rejected paragraph-switch drafts and preserve upstream APIs/evidence. 975 scoped tests pass (6 ignored), plus dependency/quality/WASM gates; RTL/CJK stays partial and estimates unchanged. |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |
 | 2026-10-13 | minor | Gap 6: Organize Pages selects and reveals the current page on open, including after an earlier grid selection elsewhere (#1910). Estimates unchanged. |
 | 2026-10-12 | minor | Gap 6: rubber stamps, explicit image rectangles and PDF-page stamps read upright on rotated pages (#1398). Estimates unchanged. |

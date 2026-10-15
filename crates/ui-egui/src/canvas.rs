@@ -411,6 +411,8 @@ pub struct DocView {
     select_anchor: Option<usize>,
     /// An edit requested by the view (organize toolbar, keys), applied by the app this frame.
     pub pending_edit: Option<Edit>,
+    /// A source-text draft awaiting an engine verdict; restore it on rejection.
+    pub(crate) pending_line_editor: Option<crate::edit_text_ui::LineEditor>,
     /// Edit text: the lines per page (with the document generation they were read at), and the
     /// line being edited.
     pub(crate) edit_lines: HashMap<usize, (u64, Vec<pdfcraft_engine::TextBlock>)>,
@@ -671,6 +673,7 @@ impl DocView {
             select_anchor: None,
             organize_range: Default::default(),
             pending_edit: None,
+            pending_line_editor: None,
             edit_lines: HashMap::new(),
             line_editor: None,
             pending_text_open: None,
@@ -5286,6 +5289,32 @@ trailer << /Root 1 0 R >>
             warnings: Vec::new(),
             millis: 0,
         }
+    }
+
+    #[test]
+    fn pen_preview_hands_off_only_to_current_page_pixels_and_clears_on_undo() {
+        let ctx = egui::Context::default();
+        let info = thumbnail_info(2);
+        let mut v = DocView::new(DocId(1), &info, ViewDefaults::default());
+        let stroke =
+            crate::comments::Settling { page: 0, tool: crate::comments::CommentTool::Ink, points: vec![[40.0, 100.0], [140.0, 60.0]], since: 1.0 };
+        v.comments.settling.push(stroke.clone());
+        let page = RenderRequest { page: 0, scale: 1.0, tag: 1000, ..Default::default() };
+        let thumbnail = RenderRequest { tag: THUMB_TAG | 1000, ..page };
+        let other = RenderRequest { page: 1, ..page };
+        v.last_queue = vec![page, thumbnail, other];
+        let obsolete = RenderRequest { tag: 999, ..page };
+        assert_eq!(v.receive_result(&ctx, solid_result(obsolete, 10, 10)), 0);
+        assert_eq!(v.comments.settling_len(), 1, "obsolete pixels cannot replace the preview");
+        for request in [thumbnail, other] {
+            assert!(v.receive_result(&ctx, solid_result(request, 10, 10)) > 0);
+            assert_eq!(v.comments.settling_len(), 1, "only current pixels of this page can replace it");
+        }
+        assert!(v.receive_result(&ctx, solid_result(page, 10, 10)) > 0);
+        assert_eq!(v.comments.settling_len(), 0, "even an immediate result replaces the preview");
+        v.comments.settling.push(stroke);
+        v.invalidate_content();
+        assert_eq!(v.comments.settling_len(), 0, "undo before a raster arrives must leave no preview");
     }
 
     #[test]
