@@ -239,3 +239,66 @@ fn a_page_past_the_end_after_earlier_edits_names_that_option() {
     assert!(err.contains("--move: page 3 does not exist") && err.contains("has 2 pages"), "{err}");
     assert!(!output.exists());
 }
+
+/// Editing a file in place replaces it whole, through a staging file beside it (#1793), and
+/// leaves nothing else in the folder.
+#[test]
+fn an_in_place_edit_replaces_the_file_and_leaves_nothing_behind() {
+    let path = tmp("in-place", "doc.pdf");
+    std::fs::write(&path, fixture()).unwrap();
+    let p = path.to_str().unwrap();
+    let out = Command::new(BIN).args(["edit", p, "--out", p, "--rotate", "1:90", "--full"]).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(first_page_rotation(&path), 90);
+    let left: Vec<_> = std::fs::read_dir(path.parent().unwrap()).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+    assert_eq!(left, ["doc.pdf"]);
+}
+
+/// A folder at `--out` is refused and stays a folder.
+#[test]
+fn a_folder_at_out_is_refused() {
+    let input = tmp("out-folder", "in.pdf");
+    std::fs::write(&input, fixture()).unwrap();
+    let folder = tmp("out-folder", "out.pdf");
+    std::fs::create_dir_all(&folder).unwrap();
+    let out = Command::new(BIN).args(["edit", input.to_str().unwrap(), "--out", folder.to_str().unwrap(), "--rotate", "1:90"]).output().unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("out.pdf"));
+    assert!(folder.is_dir());
+}
+
+/// An in-place edit whose output doesn't reopen leaves the file as it was (#1698, #1793). The
+/// catalog's `/Pages` is not a page tree, so the reader finds the page by scanning, while a full
+/// rewrite keeps only what the catalog reaches and drops it.
+#[test]
+fn an_in_place_edit_that_does_not_reopen_leaves_the_file_as_it_was() {
+    let objs: [&[u8]; 4] = [
+        b"<< /Type /Catalog /Pages 3 0 R >>",
+        b"<< /Type /Page /MediaBox [0 0 200 300] /Contents 4 0 R >>",
+        b"[ 0 ]",
+        b"<< /Length 18 >>\nstream\n0 0 m 100 100 l S\nendstream",
+    ];
+    let mut original = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(original.len());
+        original.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        original.extend_from_slice(o);
+        original.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = original.len();
+    original.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+    for o in offsets {
+        original.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    original.extend_from_slice(format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+    let path = tmp("reopen", "damaged.pdf");
+    std::fs::write(&path, &original).unwrap();
+    let p = path.to_str().unwrap();
+    let out = Command::new(BIN).args(["edit", p, "--out", p, "--title", "Edited", "--full"]).output().unwrap();
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("could not be reopened"), "{stderr}");
+    let on_disk = std::fs::read(&path).unwrap();
+    assert!(on_disk == original, "the file was replaced by {} bytes that don't reopen", on_disk.len());
+}
