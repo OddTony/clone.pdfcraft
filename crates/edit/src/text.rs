@@ -2164,7 +2164,7 @@ fn rewrite_block_from(
     let paragraphs: Vec<&str> = text.split('\n').collect();
     let (mut wrapped, mut starts): (Vec<String>, Vec<bool>) = (Vec::new(), Vec::new());
     for (pi, p) in paragraphs.iter().enumerate() {
-        for (li, line) in wrap(p, width + 0.5, &advance).into_iter().enumerate() {
+        for (li, line) in wrap(p, width + 0.5, advance).into_iter().enumerate() {
             wrapped.push(line);
             starts.push(pi > 0 && li == 0);
         }
