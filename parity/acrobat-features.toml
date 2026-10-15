@@ -3716,8 +3716,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.square"]
 tools = ["comment_add", "comment_edit"]
-evidence = ["crates/ui-egui/tests/comments.rs::shapes_and_ink_are_drawn_by_dragging", "crates/annot/src/tests.rs::restyle_and_resize_redraw_the_appearance", "crates/annot/src/tests.rs::shapes_can_be_filled_and_unfilled", "crates/ui-egui/tests/comments.rs::shapes_take_a_fill_colour_from_the_quick_bar_and_properties"]
-notes = "resize with the 8 handles; fill colour or no fill (#686) from the quick bar, Properties and comment_edit `fill`; fill swatches are the comment palette only (no custom colour picker yet)"
+evidence = ["crates/ui-egui/tests/comments.rs::shapes_and_ink_are_drawn_by_dragging", "crates/annot/src/tests.rs::restyle_and_resize_redraw_the_appearance", "crates/annot/src/tests.rs::shapes_can_be_filled_and_unfilled", "crates/ui-egui/tests/comments.rs::shapes_take_a_fill_colour_from_the_quick_bar_and_properties", "crates/ui-egui/tests/comments.rs::a_just_drawn_rectangle_can_be_resized_without_switching_to_select"]
+notes = "resize with the 8 handles, including immediately after drawing with the shape tool; fill colour or no fill (#686) from the quick bar, Properties and comment_edit `fill`; fill swatches are the comment palette only (no custom colour picker yet)"
 
 [[feature]]
 id = "comment.oval"
@@ -3728,8 +3728,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.circle"]
 tools = ["comment_add"]
-evidence = ["crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment"]
-notes = ""
+evidence = ["crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment", "crates/ui-egui/tests/comments.rs::a_just_drawn_oval_can_be_resized_without_switching_to_select"]
+notes = "resize with the 8 handles, including immediately after drawing with the shape tool"
 
 [[feature]]
 id = "comment.polygon"

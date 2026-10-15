@@ -644,8 +644,22 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 && pressed_here
                 && let Some(o) = origin
             {
-                cv.gesture = Some(Gesture::Draw { page: cx.page, tool, points: vec![cx.to_user(o)] });
-                cv.selected = None;
+                // While a just-drawn shape is selected, Acrobat can resize it without switching
+                // tools: only a press that misses its handles starts a new shape.
+                let selected = cv.selected.filter(|(p, _)| *p == cx.page).and_then(|(_, i)| cx.get(i));
+                let handle_at = |p: Pos2| -> Option<(i8, i8)> {
+                    let a = selected.filter(|a| cx.allowed && resizable(a))?;
+                    let r = cx.screen_rect(a);
+                    HANDLES.into_iter().find(|h| handle_pos(r, *h).distance(p) <= 7.0)
+                };
+                if let Some(handle) = handle_at(o)
+                    && let Some(a) = selected
+                {
+                    cv.gesture = Some(Gesture::Resize { page: cx.page, index: a.index, handle, from: o, aspect_ratio: None });
+                } else {
+                    cv.gesture = Some(Gesture::Draw { page: cx.page, tool, points: vec![cx.to_user(o)] });
+                    cv.selected = None;
+                }
             }
             if let Some(Gesture::Draw { page, tool, points }) = cv.gesture.as_mut()
                 && *page == cx.page
@@ -661,6 +675,22 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 } else {
                     points.truncate(1);
                     points.push(u);
+                }
+            }
+            if resp.drag_stopped()
+                && let Some(Gesture::Resize { page, index, handle, from, aspect_ratio }) = cv.gesture.clone()
+                && page == cx.page
+            {
+                cv.gesture = None;
+                if let Some(a) = cx.get(index) {
+                    let pointer = ui.input(|i| i.pointer.hover_pos()).filter(|p| page_rect.contains(*p));
+                    if let Some(p) = pointer {
+                        let r = resized(cx.screen_rect(a), handle, p - from, aspect_ratio);
+                        let rect = cx.rect_to_user(r);
+                        if r.width() >= 4.0 && r.height() >= 4.0 {
+                            view.pending_edit = Some(Edit::ResizeAnnotation { page, index, rect });
+                        }
+                    }
                 }
             }
             if resp.drag_stopped()

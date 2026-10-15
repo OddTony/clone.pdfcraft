@@ -302,6 +302,41 @@ fn shapes_and_ink_are_drawn_by_dragging() {
 }
 
 #[test]
+fn a_just_drawn_rectangle_can_be_resized_without_switching_to_select() {
+    // #2338: Acrobat leaves the shape tool active after drawing, so its handles must work too.
+    let mut h = harness(|app| app.set_option("quick", "square").unwrap());
+    drag_pt(&mut h, (40.0, 100.0), (140.0, 40.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 0)), "the new rectangle is selected");
+    // A drag from its bottom-right handle grows the same rectangle; it must not create a second one.
+    drag_pt(&mut h, (140.0, 40.0), (220.0, 120.0));
+    assert_eq!(h.state().quick_tool, QuickTool::Comment(pdfcraft_ui_egui::comments::CommentTool::Rectangle));
+    let c = comments(&h);
+    assert_eq!(c.len(), 1, "no second Square was drawn: {c:?}");
+    let r = c[0].rect;
+    assert!(
+        (r[0] - 40.0).abs() < 3.0 && (r[1] - 100.0).abs() < 3.0 && (r[2] - 220.0).abs() < 3.0 && (r[3] - 120.0).abs() < 3.0,
+        "the rectangle grew from its handled corner: {r:?}"
+    );
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Resize comment"));
+}
+
+#[test]
+fn a_just_drawn_oval_can_be_resized_without_switching_to_select() {
+    let mut h = harness(|app| app.set_option("quick", "circle").unwrap());
+    drag_pt(&mut h, (40.0, 100.0), (140.0, 40.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 0)), "the new oval is selected");
+    drag_pt(&mut h, (140.0, 40.0), (220.0, 120.0));
+    let c = comments(&h);
+    assert_eq!(c.len(), 1, "no second Circle was drawn: {c:?}");
+    assert_eq!(c[0].subtype, "Circle");
+    let r = c[0].rect;
+    assert!(
+        (r[0] - 40.0).abs() < 3.0 && (r[1] - 100.0).abs() < 3.0 && (r[2] - 220.0).abs() < 3.0 && (r[3] - 120.0).abs() < 3.0,
+        "the oval grew from its handled corner: {r:?}"
+    );
+}
+
+#[test]
 fn pen_strokes_stay_unselected_so_writing_continues() {
     let mut h = harness(|app| app.set_option("quick", "ink").unwrap());
     // No Comments panel: the author's name should only show in a hover popup.
