@@ -499,6 +499,12 @@ impl Document {
         self.editor.as_ref().map(|e| optimize::audit_space(&e.cos, self.bytes.len() as u64)).unwrap_or_default()
     }
 
+    /// Does `page` (0-based) paint an opaque fill over its whole area first, hiding a background
+    /// placed behind it? Add Background then blends instead ([`Background::multiply`]).
+    pub fn page_hides_background(&self, page: usize) -> bool {
+        self.editor.as_ref().is_some_and(|e| pdfcraft_edit::page_hides_background(&e.cos, page))
+    }
+
     /// Edit a PDF: the images `page` draws (0-based).
     pub fn page_images(&self, page: usize) -> Vec<pdfcraft_edit::PageImage> {
         self.editor.as_ref().and_then(|e| pdfcraft_edit::page_images(&e.cos, page).ok()).unwrap_or_default()

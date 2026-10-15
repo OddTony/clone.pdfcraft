@@ -96,3 +96,63 @@ fn backgrounds_and_watermarks_from_a_file() {
     let s = h.state();
     assert_eq!(s.session.get(s.views[0].id).unwrap().can_undo(), Some("Add background"));
 }
+
+/// A page that paints itself white before its content would hide a background behind it: the
+/// dialog notices, starts on Blend with page content and says why; switching back says what
+/// that would do. The background it adds blends (Multiply) over the page.
+#[test]
+fn background_dialog_blends_on_pages_that_paint_themselves_white() {
+    let content = "q 1 g 0 0 300 400 re f Q 0 g 40 140 20 20 re f";
+    let pdf = format!(
+        "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+        content.len()
+    );
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("white.pdf", None, pdf.clone().into_bytes()).unwrap();
+        app
+    });
+    h.run_steps(4);
+    h.state_mut().execute("edit.background");
+    h.run_steps(2);
+    assert!(h.state().marks_draft.bg.multiply, "starts blended");
+    h.get_by_label("This page has an opaque background of its own, so the background is blended with its content.");
+    h.get_by_label("Appear behind page").click();
+    h.run_steps(2);
+    assert!(!h.state().marks_draft.bg.multiply);
+    h.get_by_label("This page has an opaque background of its own, which hides anything behind it. Choose Blend with page content.");
+    h.get_by_label("Blend with page content").click();
+    h.run_steps(2);
+    h.get_by_label("OK").click();
+    h.run_steps(3);
+    assert_eq!(marks(&h), vec![MarkKind::Background]);
+    let s = h.state();
+    let bytes = s.session.get(s.views[0].id).unwrap().bytes.clone();
+    // Rendered: the default cream background on the page's white, the black square still black.
+    let mut r = pdfcraft_render::PageRenderer::new(bytes, pdfcraft_render::RenderConfig::default());
+    let p = r.render(pdfcraft_render::RenderRequest { page: 0, scale: 1.0, ..Default::default() });
+    assert!(p.error.is_none(), "{:?}", p.error);
+    let px = |x: u32, y: u32| p.rgba[((y * p.width + x) * 4) as usize..][..4].to_vec();
+    assert_eq!(px(5, 5), vec![255, 255, 217, 255], "the background shows on the white");
+    assert_eq!(px(50, 400 - 150), vec![0, 0, 0, 255], "the content stays black");
+}
+
+/// On an ordinary page the dialog says nothing and keeps a background behind the content.
+#[test]
+fn background_dialog_stays_behind_on_ordinary_pages() {
+    let mut h = harness();
+    h.state_mut().execute("edit.background");
+    h.run_steps(2);
+    assert!(!h.state().marks_draft.bg.multiply && !h.state().marks_draft.hides_background);
+    h.get_by_label("Blend with page content");
+    assert!(h.query_by_label_contains("opaque background of its own").is_none());
+}

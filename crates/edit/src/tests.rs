@@ -4249,3 +4249,98 @@ fn japanese_paragraphs_wrap_between_characters_without_closing_marks_at_a_row_st
         }
     }
 }
+
+/// A one-page document (600 × 800) whose content is `content`.
+fn page_with(content: &str) -> Document {
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".into(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offs = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offs.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let x = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offs {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{x}\n%%EOF\n", objs.len() + 1).as_bytes());
+    Document::open(Arc::new(out)).unwrap()
+}
+
+/// A blended background goes right over the page's own content, under the marks already on
+/// top, and draws with a Multiply graphics state; removing it restores the original content.
+#[test]
+fn blended_backgrounds_go_over_the_content_and_under_other_marks() {
+    let mut doc = fixture();
+    let original = streams(&doc, 0);
+    let mut hf = HeaderFooter::default();
+    hf.text[1] = "Head".into();
+    add_header_footer(&mut doc, &[0], &hf, false, &cx()).unwrap();
+    let bg = Background { color: [0.0, 0.0, 1.0], opacity: 0.5, multiply: true, ..Background::default() };
+    add_background(&mut doc, &[0], &bg, false).unwrap();
+    let s = streams(&doc, 0);
+    assert_eq!(s.len(), 5, "wrapper open, original, wrapper close, background, header: {s:?}");
+    assert_eq!(s[1], original[0]);
+    assert!(s[2].starts_with("Q %PdfCraft"), "{s:?}");
+    assert!(s[3].contains("/PCMark /Background") && s[3].contains("/PCGSM50 gs"), "{}", s[3]);
+    assert!(s[4].contains("/PCMark /HeaderFooter"), "the header stays on top: {}", s[4]);
+    let page = &pdfcraft_model::pages(&doc)[0];
+    let res = doc.resolve(page.dict.get(b"Resources").unwrap());
+    let states = doc.resolve(res.as_dict().unwrap().get(b"ExtGState").unwrap());
+    let state = doc.resolve(states.as_dict().unwrap().get(b"PCGSM50").unwrap());
+    let state = state.as_dict().unwrap();
+    assert_eq!(state.name(b"BM"), Some(&b"Multiply"[..]));
+    assert_eq!(state.get(b"ca").and_then(Object::as_f64), Some(0.5));
+    // Updating swaps it in place, under the header still.
+    add_background(&mut doc, &[0], &Background { opacity: 1.0, ..bg.clone() }, true).unwrap();
+    let s = streams(&doc, 0);
+    assert!(s[3].contains("/PCGSM100 gs") && s[4].contains("/PCMark /HeaderFooter"), "{s:?}");
+    assert_eq!(marks_present(&reopen(&doc)).len(), 2);
+    assert_eq!(remove_marks(&mut doc, &[0], MarkKind::Background).unwrap(), 1);
+    assert_eq!(remove_marks(&mut doc, &[0], MarkKind::HeaderFooter).unwrap(), 1);
+    assert_eq!(streams(&reopen(&doc), 0), original, "back to exactly the original content");
+    // Behind stays the default, with no blending.
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    let s = streams(&doc, 0);
+    assert!(s[0].contains("/PCMark /Background") && s[0].contains("/PCGS100 gs"), "{s:?}");
+}
+
+/// Pages that paint an opaque fill over their whole area first hide a background behind them.
+#[test]
+fn page_hides_background_finds_a_page_sized_fill_first() {
+    let hides = |content: &str| page_hides_background(&page_with(content), 0);
+    // As written by accounting software: a white page, then the text.
+    assert!(hides("q\n1 g\n0 0 600 800 re f\nQ\nBT /F1 12 Tf (x) Tj ET"));
+    assert!(hides("1 1 1 rg 0 0 600 800 re f* 0 g BT ET"), "any fill rule");
+    assert!(hides("/Artifact BMC 2 0 0 2 0 0 cm 0 0 300 400 re f EMC"), "through a scale");
+    assert!(hides("0 1 -1 0 600 0 cm 0 0 800 600 re f"), "through a quarter turn");
+    assert!(hides("-10 -10 620 820 re 10 10 5 5 re f"), "larger than the page, among other rectangles");
+    assert!(hides("q 0 0 600 800 re 0 0 600 800 re f Q"), "any rectangle of the path");
+    // Not a covering fill first.
+    assert!(!hides("BT /F1 12 Tf (x) Tj ET 1 g 0 0 600 800 re f"), "text comes first");
+    assert!(!hides("1 g 0 0 300 800 re f"), "half the page");
+    assert!(!hides("/GS0 gs 1 g 0 0 600 800 re f"), "a gs could make it translucent");
+    assert!(!hides("0 0 10 10 re W n 1 g 0 0 600 800 re f"), "clipped");
+    assert!(!hides("0.7 0.7 -0.7 0.7 0 0 cm 0 0 2000 2000 re f"), "turned by 45°");
+    assert!(!hides("0 0 m 600 0 l 600 800 l 0 800 l h f"), "not rectangles");
+    assert!(!hides("0 0 600 800 re S"), "stroked");
+    assert!(!hides("0 0 600 800 re n 0 0 1 1 re f"), "the page-sized path was ended unpainted");
+    assert!(!hides("q Q Q Q"), "nothing painted");
+    assert!(!hides(""), "no content");
+    assert!(!hides("0 0 600 re f"), "malformed rectangle");
+    assert!(!hides("1 0 0 cm 0 0 600 800 re f"), "malformed matrix");
+    let big = "9".repeat(300);
+    assert!(!hides(&format!("{big} 0 0 {big} 0 0 cm {big} 0 0 {big} 0 0 cm 0 0 600 800 re f")), "a matrix that overflows");
+    assert!(!page_hides_background(&page_with("1 g 0 0 600 800 re f"), 1), "no such page");
+    // Marks PdfCraft added don't count, and a background added behind doesn't change the answer.
+    let mut doc = page_with("1 g 0 0 600 800 re f");
+    add_watermark(&mut doc, &[0], &Watermark { text: "DRAFT".into(), behind: true, ..Watermark::default() }, false).unwrap();
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    assert!(page_hides_background(&doc, 0));
+}

@@ -2496,8 +2496,8 @@ milestone = "M7"
 status = "shipped"
 commands = ["edit.background"]
 tools = ["doc_background"]
-evidence = ["crates/ui-egui/tests/ui_group/marks.rs::watermark_and_background_dialogs", "crates/engine/src/tests.rs::headers_footers_watermarks_and_backgrounds_show_update_and_remove", "crates/engine/src/tests.rs::backgrounds_and_watermarks_from_files", "crates/ui-egui/tests/ui_group/marks.rs::backgrounds_and_watermarks_from_a_file", "crates/organize/src/tests.rs::a_page_becomes_a_form_xobject_upright"]
-notes = "colour, or a picture from a file (an image or a page of a PDF) scaled relative to the page"
+evidence = ["crates/ui-egui/tests/ui_group/marks.rs::watermark_and_background_dialogs", "crates/engine/src/tests.rs::headers_footers_watermarks_and_backgrounds_show_update_and_remove", "crates/engine/src/tests.rs::backgrounds_and_watermarks_from_files", "crates/ui-egui/tests/ui_group/marks.rs::backgrounds_and_watermarks_from_a_file", "crates/organize/src/tests.rs::a_page_becomes_a_form_xobject_upright", "crates/engine/src/tests.rs::blended_backgrounds_show_on_pages_that_paint_themselves_white", "crates/edit/src/tests.rs::page_hides_background_finds_a_page_sized_fill_first", "crates/automation/tests/automation.rs::blended_backgrounds_through_tools", "crates/ui-egui/tests/ui_group/marks.rs::background_dialog_blends_on_pages_that_paint_themselves_white"]
+notes = "colour, or a picture from a file (an image or a page of a PDF) scaled relative to the page. Pages that paint an opaque fill over themselves first (common in accounting and office exports) hide a background behind them; the dialog detects that on the current page and blends the background over the content instead (Multiply: white shows it, text stays dark), and doc_background reports such pages in hidden_behind. Detection is conservative: only an unclipped rectangle fill painted first with no gs before it counts, and only the current page is checked when the dialog opens"
 
 [[feature]]
 id = "edit.background-update-remove"

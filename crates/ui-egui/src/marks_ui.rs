@@ -90,6 +90,9 @@ pub struct MarksDraft {
     pub use_file: bool,
     pub file: Option<(String, std::sync::Arc<Vec<u8>>)>,
     pub file_page: usize,
+    /// Background: the current page paints an opaque fill over itself first, so a background
+    /// behind it would stay hidden (checked when the dialog opens).
+    pub hides_background: bool,
 }
 
 impl Default for MarksDraft {
@@ -107,6 +110,7 @@ impl Default for MarksDraft {
             use_file: false,
             file: None,
             file_page: 1,
+            hides_background: false,
         }
     }
 }
@@ -299,6 +303,20 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
                     d.bg.opacity = pct / 100.0;
                 }
             });
+            ui.horizontal(|ui| {
+                ui.label(tl!("Location"));
+                widgets::radio_value(ui, &mut d.bg.multiply, false, tl!("Appear behind page"));
+                widgets::radio_value(ui, &mut d.bg.multiply, true, tl!("Blend with page content"))
+                    .on_hover_text(tl!("Multiplies the background with the page: white areas show it and text stays dark."));
+            });
+            if d.hides_background {
+                let note = if d.bg.multiply {
+                    tl!("This page has an opaque background of its own, so the background is blended with its content.")
+                } else {
+                    tl!("This page has an opaque background of its own, which hides anything behind it. Choose Blend with page content.")
+                };
+                ui.label(egui::RichText::new(note).small().color(t.text_faint));
+            }
         }
     }
     ui.add_space(8.0);

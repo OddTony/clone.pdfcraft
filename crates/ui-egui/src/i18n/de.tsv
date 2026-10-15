@@ -793,6 +793,10 @@
 	Rotation	Drehung
 	Appear behind page	Hinter der Seite anzeigen
 	Appear on top of page	Vor der Seite anzeigen
+	Blend with page content	Mit dem Seiteninhalt mischen
+	Multiplies the background with the page: white areas show it and text stays dark.	Multipliziert den Hintergrund mit der Seite: Weiße Flächen zeigen ihn, Text bleibt dunkel.
+	This page has an opaque background of its own, so the background is blended with its content.	Diese Seite hat einen eigenen deckenden Hintergrund. Daher wird der Hintergrund mit ihrem Inhalt gemischt.
+	This page has an opaque background of its own, which hides anything behind it. Choose Blend with page content.	Diese Seite hat einen eigenen deckenden Hintergrund, der alles dahinter verdeckt. Wählen Sie „Mit dem Seiteninhalt mischen“.
 	Offset from centre	Abstand von der Mitte
 	From colour	Aus Farbe
 	Page Range Options	Optionen für Seitenbereich

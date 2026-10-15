@@ -902,10 +902,20 @@ pub fn tools() -> Vec<ToolDef> {
                 }),
                 &["doc"],
             )),
-        t("doc_background", "Add background", "Fill page backgrounds with a colour, or a picture from `file` (an image, or page `file_page` of a PDF) fitted at `scale` (default 1), behind the content. Undoable.")
+        t("doc_background", "Add background", "Fill page backgrounds with a colour, or a picture from `file` (an image, or page `file_page` of a PDF) fitted at `scale` (default 1), behind the content; or, with multiply: true, blended over it with the Multiply blend mode, which keeps dark text dark and shows the background where the page is white. Pages that paint an opaque fill over their whole area first hide a background behind them and need multiply; the result lists them in `hidden_behind` (1-based) when multiply is off. Undoable.")
             .cmd("edit.background")
             .with(schema(
-                json!({ "doc": doc(), "pages": pages("to fill (default: all)"), "color": { "type": "string" }, "file": { "type": "string" }, "file_page": { "type": "integer", "minimum": 1 }, "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, "opacity": { "type": "number", "minimum": 0, "maximum": 1 }, "replace": { "type": "boolean" } }),
+                json!({
+                    "doc": doc(),
+                    "pages": pages("to fill (default: all)"),
+                    "color": { "type": "string" },
+                    "file": { "type": "string" },
+                    "file_page": { "type": "integer", "minimum": 1 },
+                    "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+                    "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "multiply": { "type": "boolean", "description": "Blend over the page content instead of going behind it (default false)." },
+                    "replace": { "type": "boolean" },
+                }),
                 &["doc"],
             )),
         t("doc_remove_marks", "Remove header & footer, watermark or background", "Remove every header and footer, watermark or background PdfCraft (or a compatible tool) added. Undoable.")

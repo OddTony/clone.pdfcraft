@@ -371,6 +371,18 @@ impl PdfCraftApp {
                     K::Background
                 };
                 self.marks_draft.replace = id.ends_with(".update");
+                if kind == K::Background {
+                    // A page that paints over itself first would hide a background behind it:
+                    // blend instead, and say why.
+                    let hides = self
+                        .active_ids()
+                        .and_then(|(i, doc)| Some((self.views.get(i)?.current, self.session.get(doc)?)))
+                        .is_some_and(|(page, doc)| doc.page_hides_background(page));
+                    self.marks_draft.hides_background = hides;
+                    if hides {
+                        self.marks_draft.bg.multiply = true;
+                    }
+                }
                 self.dialog = Some(Dialog::Marks(kind));
             }
             "edit.bates" => {
