@@ -93,6 +93,8 @@
 	Marquee zoom	Zvětšit vybranou oblast
 	Full screen mode	Režim celé obrazovky
 	Read mode	Režim čtení
+	Next tab	Další karta
+	Previous tab	Předchozí karta
 	Switch light / dark theme	Přepnout světlý / tmavý motiv
 	Comments panel	Panel komentářů
 	Form fields panel	Panel formulářových polí
@@ -2426,3 +2428,6 @@ animation effects	Off	Vypnuto
 	This document is trying to open a local file:	Tento dokument se pokouší otevřít místní soubor:
 	Move tag earlier	Přesunout značku dříve
 	Move tag later	Přesunout značku později
+	Mark as artifact	Označit jako artefakt
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Odeberte tuto značku listu z pořadí čtení a označte její přímý obsah jako artefakt
+	Mark content as artifact	Označit obsah jako artefakt
