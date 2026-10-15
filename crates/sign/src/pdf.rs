@@ -17,6 +17,7 @@ use std::sync::Arc;
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, SaveOptions, Stream};
 
 use crate::SignError;
+use crate::Graphic;
 use crate::cms::SignedData;
 use crate::der::Time;
 use crate::keys::DigestAlg;
@@ -1671,11 +1672,22 @@ pub struct Appearance {
     pub location: bool,
     pub distinguished_name: bool,
     pub labels: bool,
+    pub border: bool,
+    pub background: bool,
 }
 
 impl Default for Appearance {
     fn default() -> Self {
-        Self { name: true, date: true, reason: false, location: false, distinguished_name: false, labels: true }
+        Self {
+            name: true,
+            date: true,
+            reason: false,
+            location: false,
+            distinguished_name: false,
+            labels: true,
+            border: true,
+            background: true,
+        }
     }
 }
 
@@ -2101,13 +2113,43 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
             )));
         }
     }
+    let (clean_name, doc_id) = if let Some((cn, doc_num)) = name.split_once(':') {
+        let doc_digits: String = doc_num.chars().filter(|c| c.is_ascii_digit()).collect();
+        let formatted = if doc_digits.len() == 11 {
+            format!("CPF: {}.{}.{}-{}", &doc_digits[..3], &doc_digits[3..6], &doc_digits[6..9], &doc_digits[9..])
+        } else if doc_digits.len() == 14 {
+            format!("CNPJ: {}.{}.{}/{}-{}", &doc_digits[..2], &doc_digits[2..5], &doc_digits[5..8], &doc_digits[8..12], &doc_digits[12..])
+        } else if !doc_num.trim().is_empty() {
+            format!("ID: {}", doc_num.trim())
+        } else {
+            String::new()
+        };
+        (cn.trim(), if formatted.is_empty() { None } else { Some(formatted) })
+    } else {
+        (name.trim(), None)
+    };
+
+    let is_standard = matches!(opts.graphic, Some(Graphic::Standard | Graphic::BackgroundImage { .. }));
     let mut lines: Vec<String> = Vec::new();
     let label = |l: &str, v: &str| if a.labels { format!("{l}{v}") } else { v.to_string() };
-    // The labels are the caller's words, so a signature signed in another language reads in it.
     let wording = &opts.appearance_labels;
     if a.name {
         lines.push(if a.labels { wording.signed_by.clone() } else { String::new() });
-        lines.push(name.to_string());
+        if is_standard {
+            if let Some((before_last_space, last_word)) = name.rsplit_once(' ')
+                && last_word.contains(':')
+            {
+                lines.push(before_last_space.trim().to_string());
+                lines.push(last_word.trim().to_string());
+            } else {
+                lines.push(name.to_string());
+            }
+        } else if let Some(ref d) = doc_id {
+            lines.push(clean_name.to_string());
+            lines.push(d.clone());
+        } else {
+            lines.push(name.to_string());
+        }
     }
     if a.distinguished_name {
         lines.push(label(&wording.distinguished_name, &dn));
@@ -2123,7 +2165,24 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
         lines.push(label(&wording.location, l));
     }
     if a.date {
-        lines.push(label(&wording.date, &display_date(&opts.date)));
+        let raw = display_date(&opts.date);
+        let friendly_date = if is_standard {
+            raw
+        } else if raw.len() >= 19 && raw.chars().nth(4) == Some('.') && raw.chars().nth(7) == Some('.') {
+            let y = &raw[0..4];
+            let m = &raw[5..7];
+            let d = &raw[8..10];
+            let rest = &raw[10..];
+            format!("{d}/{m}/{y}{rest}")
+        } else {
+            raw
+        };
+        let date_label = if is_standard && wording.date.trim_start().starts_with("Data:") {
+            wording.date.replace("Data:", "Dados:")
+        } else {
+            wording.date.clone()
+        };
+        lines.push(label(&date_label, &friendly_date));
     }
     lines.retain(|l| !l.is_empty());
     let mut out = Vec::new();
@@ -2132,34 +2191,79 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
         let pad = (h * 0.06).clamp(1.0, 6.0);
         let (left_w, right_x) = match (&opts.graphic, a.name) {
             (Some(_), _) if lines.is_empty() => (w, pad),
+            (Some(Graphic::Standard | Graphic::BackgroundImage { .. }), true) => (w * 0.44, w * 0.44 + pad),
             (Some(_), _) | (None, true) => (w * 0.5, w * 0.5 + pad),
             (None, false) => (0.0, pad),
         };
         let right_w = (w - right_x - pad).max(1.0);
+
+        // 1. Subtle, elegant background
+        if a.background {
+            out.extend(format!("q 0.985 0.99 1.0 rg 0 0 {} {} re f Q\n", fmt(w), fmt(h)).bytes());
+        }
+        // 2. Crisp, professional border
+        if a.border {
+            out.extend(format!("q 0.75 0.80 0.88 RG 0.8 w 0.5 0.5 {} {} re s Q\n", fmt(w - 1.0), fmt(h - 1.0)).bytes());
+        }
+        // 3. Vertical separator line between logo/seal and text
+        if a.border && left_w > 0.0 && right_w > 0.0 && !lines.is_empty() {
+            out.extend(format!("q 0.82 0.86 0.92 RG 0.6 w {} {} m {} {} l s Q\n", fmt(left_w), fmt(pad), fmt(left_w), fmt(h - pad)).bytes());
+        }
+
         if let Some(g) = &opts.graphic {
-            let (ops, im) = g.draw(doc, [pad, pad, (left_w - 2.0 * pad).max(0.0), (h - 2.0 * pad).max(0.0)])?;
+            let area = if is_standard {
+                [0.0, 0.0, w, h]
+            } else {
+                [pad, pad, (left_w - 2.0 * pad).max(0.0), (h - 2.0 * pad).max(0.0)]
+            };
+            let (ops, im) = g.draw(doc, area)?;
             out.extend(ops.bytes());
             image = im;
         }
-        out.extend_from_slice(b"BT\n0 g\n");
-        if a.name && opts.graphic.is_none() {
-            // The name fills the left half.
-            let mut size = (h * 0.4).min(36.0);
+
+        if a.name && (opts.graphic.is_none() || is_standard) {
             let fit = (left_w - 2.0 * pad).max(1.0);
-            let longest = helvetica_width(name, 1.0).max(0.01);
-            size = size.min(fit / longest).max(4.0);
-            let words = wrap(name, size, fit);
-            let total = words.len() as f64 * size * 1.1;
+            let display_str = if is_standard { name } else if doc_id.is_some() { clean_name } else { name };
+            let (size, words) = if is_standard {
+                let longest_word = display_str.split_whitespace().map(|w| helvetica_width(w, 1.0)).fold(0.0, f64::max).max(0.01);
+                let mut sz = (h * 0.28).min(14.0).min(fit / longest_word).max(5.0);
+                let w = loop {
+                    let wrapped = wrap(display_str, sz, fit);
+                    if (wrapped.len() <= 3 && wrapped.len() as f64 * sz * 1.15 <= h - 2.0 * pad) || sz <= 6.5 {
+                        break wrapped;
+                    }
+                    sz *= 0.92;
+                };
+                (sz, w)
+            } else {
+                let longest = helvetica_width(display_str, 1.0).max(0.01);
+                let mut sz = (h * 0.4).min(36.0);
+                sz = sz.min(fit / longest).max(4.0);
+                let w = wrap(display_str, sz, fit);
+                (sz, w)
+            };
+
+            let total = (words.len() as f64 + if !is_standard && doc_id.is_some() { 1.0 } else { 0.0 }) * size * 1.1;
             let mut y = (h + total) / 2.0 - size * 0.85;
+            out.extend_from_slice(b"BT\n");
             for l in &words {
-                out.extend(format!("/Helv {} Tf 1 0 0 1 {} {} Tm ", fmt(size), fmt(pad), fmt(y)).bytes());
+                let font_name = if is_standard { "/Helv" } else { "/HelvB" };
+                out.extend(format!("{} {} Tf 0.05 0.08 0.12 rg 1 0 0 1 {} {} Tm ", font_name, fmt(size), fmt(pad), fmt(y)).bytes());
                 out.extend(literal(&win_ansi(l)));
                 out.extend_from_slice(b" Tj\n");
                 y -= size * 1.1;
             }
+            if !is_standard && let Some(ref doc_str) = doc_id {
+                let doc_size = (size * 0.65).clamp(6.5, 9.5);
+                out.extend(format!("/Helv {} Tf 0.35 0.40 0.50 rg 1 0 0 1 {} {} Tm ", fmt(doc_size), fmt(pad), fmt(y)).bytes());
+                out.extend(literal(&win_ansi(doc_str)));
+                out.extend_from_slice(b" Tj\n");
+            }
+            out.extend_from_slice(b"ET\n");
         }
-        // The details, shrunk to fit the right side.
-        let mut size = (h / (lines.len().max(1) as f64 * 1.15)).min(12.0);
+
+        // The details, cleanly laid out on the right side
+        let mut size = (h / (lines.len().max(1) as f64 * 1.18)).min(9.5);
         let wrapped = loop {
             let all: Vec<String> = lines.iter().flat_map(|l| wrap(l, size, right_w)).collect();
             if all.len() as f64 * size * 1.15 <= h - 2.0 * pad || size <= 3.0 {
@@ -2167,9 +2271,20 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
             }
             size *= 0.9;
         };
+        out.extend_from_slice(b"BT\n");
         let mut y = h - pad - size * 0.9;
-        for l in &wrapped {
-            out.extend(format!("/Helv {} Tf 1 0 0 1 {} {} Tm ", fmt(size), fmt(right_x), fmt(y)).bytes());
+        for (i, l) in wrapped.iter().enumerate() {
+            let is_header = i == 0 && a.labels;
+            let is_signer = (i == 1 && a.labels) || (i == 0 && !a.labels);
+            if is_standard {
+                out.extend(format!("/Helv {} Tf 0 0 0 rg 1 0 0 1 {} {} Tm ", fmt(size), fmt(right_x), fmt(y)).bytes());
+            } else if is_header {
+                out.extend(format!("/HelvB {} Tf 0.15 0.35 0.65 rg 1 0 0 1 {} {} Tm ", fmt(size * 0.9), fmt(right_x), fmt(y)).bytes());
+            } else if is_signer {
+                out.extend(format!("/HelvB {} Tf 0.08 0.12 0.20 rg 1 0 0 1 {} {} Tm ", fmt(size), fmt(right_x), fmt(y)).bytes());
+            } else {
+                out.extend(format!("/Helv {} Tf 0.25 0.28 0.35 rg 1 0 0 1 {} {} Tm ", fmt(size), fmt(right_x), fmt(y)).bytes());
+            }
             out.extend(literal(&win_ansi(l)));
             out.extend_from_slice(b" Tj\n");
             y -= size * 1.15;
@@ -2185,8 +2300,14 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
     font.set(b"Subtype".to_vec(), Object::name("Type1"));
     font.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
     font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
+    let mut font_bold = Dict::new();
+    font_bold.set(b"Type".to_vec(), Object::name("Font"));
+    font_bold.set(b"Subtype".to_vec(), Object::name("Type1"));
+    font_bold.set(b"BaseFont".to_vec(), Object::name("Helvetica-Bold"));
+    font_bold.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
     let mut fonts = Dict::new();
     fonts.set(b"Helv".to_vec(), Object::Dict(font));
+    fonts.set(b"HelvB".to_vec(), Object::Dict(font_bold));
     let mut res = Dict::new();
     res.set(b"Font".to_vec(), Object::Dict(fonts));
     if let Some(im) = image {

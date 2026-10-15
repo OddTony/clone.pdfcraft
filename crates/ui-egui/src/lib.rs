@@ -779,6 +779,7 @@ pub struct PdfCraftApp {
     /// What visible digital signatures show on their left, and its preview in Sign as.
     pub sign_graphic: sign_ui::SignGraphic,
     pub(crate) sign_graphic_preview: Option<(fill_sign::SavedSig, egui::TextureHandle)>,
+    pub(crate) sign_bg_preview: Option<(fill_sign::SavedSig, egui::TextureHandle)>,
     #[cfg(target_arch = "wasm32")]
     pub(crate) signature_images: fill_sign::ImageInbox,
     /// The Comment Properties dialog's state.
@@ -1055,6 +1056,7 @@ impl PdfCraftApp {
             saved_signature_previews: [None, None],
             sign_graphic: sign_ui::SignGraphic::Name,
             sign_graphic_preview: None,
+            sign_bg_preview: None,
             #[cfg(target_arch = "wasm32")]
             signature_images: Default::default(),
             comment_props: None,

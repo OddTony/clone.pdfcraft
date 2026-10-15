@@ -3,8 +3,9 @@
 //! Sign as dialogs, the Signatures panel, and the signature message bar.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use egui::{Align, Color32, CornerRadius, Layout, Pos2, Rect, Stroke, vec2};
+use egui::{Align, Color32, CornerRadius, Layout, Pos2, Rect, Stroke, pos2, vec2};
 use pdfcraft_engine::sign::{self, Appearance, AppearanceLabels, Certificate, DigitalId, Modification, Name, PrivateKey};
 use pdfcraft_engine::{SignOptions, SignatureImage, SignatureInfo, SignatureStatus};
 
@@ -81,8 +82,13 @@ impl Default for NewIdDraft {
 /// Draw or Image). The one last signed with is remembered.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SignGraphic {
-    /// The signer's name in large type (when Name is on).
+    /// Standard clean digital signature appearance: 2-column signature with no watermark.
     #[default]
+    #[serde(alias = "Acrobat", alias = "Badge")]
+    Standard,
+    /// Custom background watermark image with low opacity.
+    BackgroundImage(#[serde(with = "crate::fill_sign::image_data")] SignatureImage),
+    /// The signer's name in large type (when Name is on).
     Name,
     /// The saved Fill & Sign signature, as it is when signing.
     FillSign,
@@ -109,6 +115,10 @@ pub struct SignDraft {
     pub graphic: SignGraphic,
     /// The image the dialog holds (remembered or chosen), so Image can be chosen again.
     pub image: Option<SignatureImage>,
+    /// The background watermark image (remembered or chosen).
+    pub bg_image: Option<SignatureImage>,
+    /// Background opacity (default 0.20 = 20%).
+    pub bg_opacity: f32,
     pub new_id: NewIdDraft,
     pub error: Option<String>,
     /// Sign with a Digital ID ▸ Remove was clicked for this list entry: asking to confirm.
@@ -119,19 +129,24 @@ impl SignDraft {
     /// Starts at Choose when there are IDs to show (even only unusable ones, so their reasons
     /// are seen), with the first usable one selected.
     fn new(page: usize, rect: Option<[f64; 4]>, field: Option<String>, certify: Option<u8>, ids: &[DigitalIdEntry]) -> Self {
+        let mut appearance = Appearance::default();
+        appearance.border = false;
+        appearance.background = false;
         Self {
             page,
             rect,
             field,
             certify,
-            step: if ids.is_empty() { SignStep::Configure } else { SignStep::Choose },
+            step: SignStep::Choose,
             selected: ids.iter().position(|e| e.unusable.is_none()),
             password: String::new(),
             reason: String::new(),
             location: String::new(),
-            appearance: Appearance::default(),
-            graphic: SignGraphic::Name,
+            appearance,
+            graphic: SignGraphic::Standard,
             image: None,
+            bg_image: None,
+            bg_opacity: 0.20,
             new_id: NewIdDraft::default(),
             error: None,
             confirm_remove: None,
@@ -241,6 +256,23 @@ fn windows_id(reference: &str) -> Result<DigitalId, String> {
     Err(format!("{reference}: Windows certificate store identities are only available on Windows"))
 }
 
+/// A PKCS#11 hardware token identity by its `pkcs11:` reference.
+fn pkcs11_id(reference: &str, pin: &str) -> Result<DigitalId, String> {
+    if pin.trim().is_empty() {
+        return Err(tl!("Please enter the token PIN to sign.").to_string());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        sign::pkcs11::verify_pin(reference, pin, None).map_err(|e| match e {
+            sign::SignError::WrongPassword => tl!("The token PIN is incorrect.").to_string(),
+            e => e.to_string(),
+        })?;
+        return sign::pkcs11::find(reference, Some(pin), None).map_err(|e| e.to_string());
+    }
+    #[cfg(target_arch = "wasm32")]
+    Err(format!("{reference}: PKCS#11 hardware tokens are not supported in the browser"))
+}
+
 pub fn entry_for(path: &str, c: &Certificate) -> DigitalIdEntry {
     DigitalIdEntry {
         path: path.to_string(),
@@ -277,13 +309,16 @@ impl PdfCraftApp {
         if let SignGraphic::Image(image) = &self.sign_graphic {
             draft.image = Some(image.clone());
         }
+        if let SignGraphic::BackgroundImage(image) = &self.sign_graphic {
+            draft.bg_image = Some(image.clone());
+        }
         self.sign_draft = Some(draft);
         self.dialog = Some(crate::Dialog::Sign);
     }
 
-    /// List OS key store signing identities (after the file-based IDs).
+    /// List OS key store and PKCS#11 hardware token signing identities (after the file-based IDs).
     fn refresh_os_key_store_ids(&mut self) {
-        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:"));
+        self.digital_ids.retain(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("pkcs11:"));
         #[cfg(target_os = "macos")]
         if self.os_key_store_ids {
             match sign::keychain::identities(None) {
@@ -316,6 +351,28 @@ impl PdfCraftApp {
                 Err(e) => self.notify_fmt("The Windows store's digital IDs couldn't be listed: {e}", &[("e", &e.to_string())]),
             }
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Ok(listing) = sign::pkcs11::list(None) {
+                for id in &listing.ids {
+                    let mut entry = entry_for(&sign::pkcs11::reference(&id.certificate), &id.certificate);
+                    if let Some(ref name) = id.friendly_name {
+                        entry.name = name.clone();
+                    }
+                    self.digital_ids.push(entry);
+                }
+                for u in &listing.unusable {
+                    self.digital_ids.push(DigitalIdEntry {
+                        path: format!("pkcs11:{}", u.fingerprint.split(' ').collect::<String>().to_ascii_lowercase()),
+                        name: format!("{} (Token A3 · {})", u.subject, u.token_label),
+                        issuer: String::new(),
+                        email: String::new(),
+                        expires: String::new(),
+                        unusable: Some(u.reason.clone()),
+                    });
+                }
+            }
+        }
     }
 
     /// Add a digital ID file to the list (or select it if it's there).
@@ -332,7 +389,11 @@ impl PdfCraftApp {
     /// disk. Keychain and Windows store IDs belong to the OS and are listed again on every
     /// signing, so they can't be removed here. The open dialog's selection follows the list.
     pub fn remove_digital_id(&mut self, index: usize) -> bool {
-        if self.digital_ids.get(index).is_none_or(|e| e.path.starts_with("keychain:") || e.path.starts_with("windows:")) {
+        if self
+            .digital_ids
+            .get(index)
+            .is_none_or(|e| e.path.starts_with("keychain:") || e.path.starts_with("windows:") || e.path.starts_with("pkcs11:"))
+        {
             return false;
         }
         self.digital_ids.remove(index);
@@ -414,6 +475,11 @@ impl PdfCraftApp {
             keychain_id(&entry.path)?
         } else if entry.path.starts_with("windows:") {
             windows_id(&entry.path)?
+        } else if entry.path.starts_with("pkcs11:") {
+            if d.password.trim().is_empty() {
+                return Err(tl!("Please enter the token PIN to sign.").to_string());
+            }
+            pkcs11_id(&entry.path, &d.password)?
         } else {
             let bytes = std::fs::read(&entry.path).map_err(|e| format!("{}: {e}", entry.path))?;
             sign::pkcs12::open(&bytes, &d.password).map_err(|e| match e {
@@ -423,9 +489,19 @@ impl PdfCraftApp {
         };
         let some = |s: &str| (!s.trim().is_empty()).then(|| s.trim().to_string());
         // Only a visible signature shows its graphic.
-        let graphic = match self.graphic_sig(&d.graphic) {
-            Some(saved) if d.rect.is_some() || d.field.is_some() => Some(saved.graphic().ok_or("The saved signature has nothing to draw.")?),
-            _ => None,
+        let graphic = match &d.graphic {
+            SignGraphic::Standard => (d.rect.is_some() || d.field.is_some()).then_some(sign::Graphic::Standard),
+            SignGraphic::BackgroundImage(image) => (d.rect.is_some() || d.field.is_some()).then_some(sign::Graphic::BackgroundImage {
+                width: u32::try_from(image.size()[0]).unwrap_or(0),
+                height: u32::try_from(image.size()[1]).unwrap_or(0),
+                rgba: Arc::new(image.rgba().to_vec()),
+                opacity: d.bg_opacity,
+            }),
+            SignGraphic::Name => None,
+            SignGraphic::FillSign | SignGraphic::Image(_) => match self.graphic_sig(&d.graphic) {
+                Some(saved) if d.rect.is_some() || d.field.is_some() => Some(saved.graphic().ok_or("The saved signature has nothing to draw.")?),
+                _ => None,
+            },
         };
         let choice = d.graphic.clone();
         let opts = SignOptions {
@@ -446,17 +522,34 @@ impl PdfCraftApp {
         let name = self.session.get(doc_id).map(|d| d.name.clone()).unwrap_or_default();
         let stem = name.trim_end_matches(".pdf").trim_end_matches(".PDF").to_string();
         let sign_and_save = move |app: &mut Self, path: PathBuf| -> Result<(), String> {
-            // Sign what was typed while the save panel was open, too (#166); a refused value
-            // has said why already.
+            log::info!("Starting sign_and_save for {:?}", path);
             if !app.commit_typing_in(doc_id) {
+                log::warn!("commit_typing_in returned false");
                 return Err(String::new());
             }
-            let signed = app.session.sign(doc_id, &id, opts).map_err(|e| e.to_string())?;
-            crate::editing::write_atomically(&path.to_string_lossy(), signed.as_slice()).map_err(|e| format!("Could not save: {e}"))?;
+            let signed = match app.session.sign(doc_id, &id, opts) {
+                Ok(s) => {
+                    log::info!("Document signed successfully ({} bytes)", s.len());
+                    s
+                }
+                Err(e) => {
+                    log::error!("Error in session.sign: {e}");
+                    app.notify(format!("Digital signature error: {e}"));
+                    return Err(e.to_string());
+                }
+            };
+            if let Err(e) = crate::editing::write_atomically(&path.to_string_lossy(), signed.as_slice()) {
+                log::error!("Error saving signed file to disk: {e}");
+                app.notify(format!("Save error: {e}"));
+                return Err(format!("Could not save: {e}"));
+            }
+            log::info!("Signed file written successfully to {:?}", path);
             // Our own write is not a change on disk to reload (#431).
             #[cfg(not(target_arch = "wasm32"))]
             app.watch.known_now(doc_id, &path.to_string_lossy());
-            app.session.mark_signed(doc_id, signed, Some(path.to_string_lossy().into_owned())).map_err(|e| e.to_string())?;
+            if let Err(e) = app.session.mark_signed(doc_id, signed, Some(path.to_string_lossy().into_owned())) {
+                log::warn!("mark_signed warning: {e}");
+            }
             app.sign_graphic = choice;
             if let Some(view) = app.views.iter_mut().find(|v| v.id == doc_id) {
                 view.invalidate_content();
@@ -470,18 +563,23 @@ impl PdfCraftApp {
             #[cfg(not(target_arch = "wasm32"))]
             None => {
                 let dialog = rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(format!("{stem}_signed.pdf"));
-                // The signature's page, rectangle and field refer to the document as it is now:
-                // the pick is dropped (with a notice) if it is edited or switched away from
-                // meanwhile. Once the picker shows, the dialog closes; an error from here on
-                // arrives as a notice. If no picker could show, the dialog stays open.
-                let asked = self.ask_one(crate::pickers::Ask::Save(dialog), Some(doc_id), move |app, path| {
+                log::debug!("Opening Save As dialog ({stem}_signed.pdf)...");
+                let asked = self.ask_one(crate::pickers::Ask::Save(dialog), None, move |app, path| {
+                    log::debug!("User selected destination path: {:?}", path);
                     if let Err(e) = sign_and_save(app, path)
                         && !e.is_empty()
                     {
+                        log::error!("Save flow failure: {e}");
                         app.notify(e);
                     }
                 });
-                if asked { Ok(()) } else { Err(String::new()) }
+                if asked {
+                    log::debug!("Save As dialog presented.");
+                    Ok(())
+                } else {
+                    log::error!("Failed to open Save As dialog.");
+                    Err(String::new())
+                }
             }
             #[cfg(target_arch = "wasm32")]
             None => {
@@ -518,6 +616,33 @@ impl PdfCraftApp {
                 }
                 (Ok(_), None) => {}
                 (Err(e), _) => app.notify_fmt("Couldn't import the signature image: {e}", &[("e", &e.to_string())]),
+            }
+        });
+    }
+
+    /// Sign as ▸ Choose background image…: imports an image for the translucent signature background watermark.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn pick_sign_background_image(&mut self) {
+        let epoch = self.dialog_epoch();
+        let dialog = rfd::AsyncFileDialog::new().add_filter(tl!("Image"), &["png", "jpg", "jpeg"]);
+        self.ask_one(crate::pickers::Ask::File(dialog), None, move |app, path| {
+            if app.dialog_epoch() != epoch || app.dialog != Some(crate::Dialog::Sign) {
+                return;
+            }
+            let image = std::fs::File::open(path)
+                .map_err(pdfcraft_engine::signature_image::SignatureImageError::from)
+                .and_then(SignatureImage::read)
+                .and_then(|image| image.remove_white_background(250, 20));
+            match (image, app.sign_draft.as_mut()) {
+                (Ok(image), Some(d)) => {
+                    d.graphic = SignGraphic::BackgroundImage(image.clone());
+                    d.bg_image = Some(image);
+                    d.appearance.border = false;
+                    d.appearance.background = false;
+                    d.error = None;
+                }
+                (Ok(_), None) => {}
+                (Err(e), _) => app.notify_fmt("Couldn't import the background image: {e}", &[("e", &e.to_string())]),
             }
         });
     }
@@ -625,6 +750,8 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 tl!("Keychain  ·  ").to_string()
             } else if e.path.starts_with("windows:") {
                 tl!("Windows store  ·  ").to_string()
+            } else if e.path.starts_with("pkcs11:") {
+                tl!("Token A3 (PKCS#11)  ·  ").to_string()
             } else {
                 String::new()
             };
@@ -659,6 +786,10 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             ui.label(egui::RichText::new(tl!("No digital IDs yet.")).color(t.text_muted));
         }
     });
+    let selected_is_token = d.selected.and_then(|i| ids.get(i)).is_some_and(|e| e.path.starts_with("pkcs11:"));
+    if selected_is_token {
+        ui.label(egui::RichText::new(tl!("Click Continue to enter token PIN and sign.")).small().color(t.accent));
+    }
     ui.add_space(10.0);
     // Remove takes a digital ID file off the list after asking (#1396); OS key store IDs stay.
     let mut remove = None;
@@ -674,11 +805,17 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         });
         ui.add_space(10.0);
     }
-    let removable = d.selected.filter(|&i| ids.get(i).is_some_and(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:")));
+    let mut refresh = false;
+    let removable = d.selected.filter(|&i| {
+        ids.get(i).is_some_and(|e| !e.path.starts_with("keychain:") && !e.path.starts_with("windows:") && !e.path.starts_with("pkcs11:"))
+    });
     ui.horizontal(|ui| {
         if widgets::pill_button(ui, tl!("Configure New Digital ID"), false).clicked() {
             d.step = SignStep::Configure;
             d.error = None;
+        }
+        if widgets::pill_button(ui, tl!("Refresh Tokens"), false).clicked() {
+            refresh = true;
         }
         if d.confirm_remove.is_none() && ui.add_enabled_ui(removable.is_some(), |ui| widgets::pill_button(ui, tl!("Remove"), false)).inner.clicked() {
             d.confirm_remove = removable;
@@ -693,6 +830,12 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             }
         });
     });
+    if refresh {
+        app.refresh_os_key_store_ids();
+        if let Some(draft) = app.sign_draft.as_mut() {
+            draft.selected = app.digital_ids.iter().position(|e| e.unusable.is_none());
+        }
+    }
     if let Some(i) = remove {
         app.remove_digital_id(i);
     }
@@ -814,7 +957,7 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
 /// The saved signature or image `g` stands for, given the saved Fill & Sign `signature`.
 fn graphic_of(signature: Option<&SavedSig>, g: &SignGraphic) -> Option<SavedSig> {
     match g {
-        SignGraphic::Name => None,
+        SignGraphic::Standard | SignGraphic::Name | SignGraphic::BackgroundImage(_) => None,
         SignGraphic::FillSign => signature.cloned(),
         SignGraphic::Image(image) => Some(SavedSig::Image(image.clone())),
     }
@@ -851,14 +994,65 @@ pub(crate) fn appearance_labels(lang: crate::i18n::Lang) -> (AppearanceLabels, b
 /// The detail lines of a visible signature, as `sign::pdf` stamps them (the distinguished name
 /// aside, which the dialog doesn't know before the ID is opened): the label above the name, then
 /// the reason, location and date, each after its label. `reason` and `location` are as typed.
-fn detail_lines(a: &Appearance, labels: &AppearanceLabels, name: &str, reason: &str, location: &str, date: &str) -> Vec<String> {
+pub fn parse_signer_name(full_name: &str) -> (String, Option<String>) {
+    let base = if let Some((before_paren, _)) = full_name.split_once(" (Token ") {
+        before_paren.trim()
+    } else {
+        full_name.trim()
+    };
+
+    if let Some((cn, doc_num)) = base.split_once(':') {
+        let doc_digits: String = doc_num.chars().filter(|c| c.is_ascii_digit()).collect();
+        let formatted = if doc_digits.len() == 11 {
+            format!("CPF: {}.{}.{}-{}", &doc_digits[..3], &doc_digits[3..6], &doc_digits[6..9], &doc_digits[9..])
+        } else if doc_digits.len() == 14 {
+            format!("CNPJ: {}.{}.{}/{}-{}", &doc_digits[..2], &doc_digits[2..5], &doc_digits[5..8], &doc_digits[8..12], &doc_digits[12..])
+        } else if !doc_num.trim().is_empty() {
+            format!("ID: {}", doc_num.trim())
+        } else {
+            String::new()
+        };
+        (cn.trim().to_string(), if formatted.is_empty() { None } else { Some(formatted) })
+    } else {
+        (base.to_string(), None)
+    }
+}
+
+/// The detail lines of a visible signature, as `sign::pdf` stamps them (the distinguished name
+/// aside, which the dialog doesn't know before the ID is opened): the label above the name, then
+/// the reason, location and date, each after its label. `reason` and `location` are as typed.
+fn detail_lines(a: &Appearance, labels: &AppearanceLabels, name: &str, reason: &str, location: &str, date: &str, is_standard: bool) -> Vec<String> {
+    let (clean_name, doc_id) = parse_signer_name(name);
+
     let label = |l: &str, v: &str| if a.labels { format!("{l}{v}") } else { v.to_string() };
     let mut lines = Vec::new();
     if a.name {
         if a.labels {
             lines.push(labels.signed_by.clone());
         }
-        lines.push(name.to_string());
+        if is_standard {
+            let base = if let Some((before_paren, _)) = name.split_once(" (Token ") {
+                before_paren.trim()
+            } else {
+                name.trim()
+            };
+            if let Some((before_last_space, last_word)) = base.rsplit_once(' ')
+                && last_word.contains(':')
+            {
+                lines.push(before_last_space.trim().to_string());
+                lines.push(last_word.trim().to_string());
+            } else {
+                lines.push(base.to_string());
+            }
+        } else {
+            lines.push(clean_name);
+            if let Some(d) = doc_id {
+                lines.push(d);
+            }
+        }
+    }
+    if a.distinguished_name {
+        lines.push(label(&labels.distinguished_name, name));
     }
     if a.reason && !reason.trim().is_empty() {
         lines.push(label(&labels.reason, reason.trim()));
@@ -867,10 +1061,149 @@ fn detail_lines(a: &Appearance, labels: &AppearanceLabels, name: &str, reason: &
         lines.push(label(&labels.location, location.trim()));
     }
     if a.date {
-        lines.push(label(&labels.date, date));
+        let friendly_date = if is_standard {
+            date.to_string()
+        } else if date.len() >= 19 && date.chars().nth(4) == Some('.') && date.chars().nth(7) == Some('.') {
+            let y = &date[0..4];
+            let m = &date[5..7];
+            let d = &date[8..10];
+            let rest = &date[10..];
+            format!("{d}/{m}/{y}{rest}")
+        } else {
+            date.to_string()
+        };
+        let date_label = if is_standard && labels.date.trim_start().starts_with("Data:") {
+            labels.date.replace("Data:", "Dados:")
+        } else {
+            labels.date.clone()
+        };
+        lines.push(label(&date_label, &friendly_date));
     }
     lines.retain(|l| !l.is_empty());
     lines
+}
+
+fn paint_standard_name(ui: &egui::Ui, rect: Rect, full_name: &str, t: &Tokens) {
+    let base = if let Some((before_paren, _)) = full_name.split_once(" (Token ") {
+        before_paren.trim()
+    } else {
+        full_name.trim()
+    };
+    let text_color = if t.dark() { Color32::WHITE } else { Color32::from_rgb(0x0A, 0x0E, 0x14) };
+    let lines: Vec<String> = if let Some((before_colon, after_colon)) = base.split_once(':') {
+        let words: Vec<&str> = before_colon.split_whitespace().collect();
+        if words.len() >= 3 {
+            let l1 = format!("{} {}", words[0], words[1]);
+            let l2 = words[2..words.len() - 1].join(" ");
+            let l3 = format!("{}:{}", words[words.len() - 1], after_colon.trim());
+            if l2.is_empty() {
+                vec![l1, l3]
+            } else {
+                vec![l1, l2, l3]
+            }
+        } else if words.len() == 2 {
+            vec![words[0].to_string(), format!("{}:{}", words[1], after_colon.trim())]
+        } else {
+            vec![before_colon.trim().to_string(), format!(":{}", after_colon.trim())]
+        }
+    } else {
+        vec![base.to_string()]
+    };
+
+    let line_h = 19.0;
+    let total_h = lines.len() as f32 * line_h;
+    let mut y = (rect.min.y + (rect.height() - total_h) / 2.0).max(rect.min.y + 4.0);
+    for line in lines {
+        let galley = ui.painter().layout_no_wrap(line, theme::regular(13.0), text_color);
+        ui.painter().galley(pos2(rect.min.x, y), galley, text_color);
+        y += line_h;
+    }
+}
+
+fn paint_styled_name(ui: &egui::Ui, rect: Rect, full_name: &str, t: &Tokens) {
+    let (clean_name, doc_id) = parse_signer_name(full_name);
+
+    let name_color = if t.dark() { Color32::WHITE } else { Color32::from_rgb(0x0F, 0x17, 0x2A) };
+    let doc_color = if t.dark() { Color32::from_rgb(0x94, 0xA3, 0xB8) } else { Color32::from_rgb(0x64, 0x74, 0x8B) };
+
+    let galley = ui.painter().layout(clean_name, theme::semibold(12.0), name_color, rect.width());
+    let doc_galley = doc_id.as_ref().map(|d| ui.painter().layout_no_wrap(d.clone(), theme::regular(10.0), doc_color));
+
+    let name_h = galley.size().y;
+    let doc_h = doc_galley.as_ref().map_or(0.0, |g| g.size().y + 4.0);
+    let total_h = name_h + doc_h;
+    let y = (rect.min.y + (rect.height() - total_h) / 2.0).max(rect.min.y + 2.0);
+
+    ui.painter().galley(pos2(rect.min.x, y), galley, name_color);
+    if let Some(doc_g) = doc_galley {
+        ui.painter().galley(pos2(rect.min.x, y + name_h + 4.0), doc_g, doc_color);
+    }
+}
+
+fn paint_details(ui: &egui::Ui, rect: Rect, lines: &[String], a: &Appearance, is_standard: bool, t: &Tokens) {
+    let header_color = if t.dark() { Color32::from_rgb(0x60, 0xA5, 0xFA) } else { Color32::from_rgb(0x1E, 0x40, 0xAF) };
+    let name_color = if t.dark() { Color32::WHITE } else { Color32::from_rgb(0x0F, 0x17, 0x2A) };
+    let text_color = if t.dark() { Color32::from_rgb(0xCB, 0xD5, 0xE1) } else { Color32::from_rgb(0x33, 0x41, 0x55) };
+    let plain_color = if t.dark() { Color32::WHITE } else { Color32::BLACK };
+
+    let mut y = rect.min.y;
+    for (i, line) in lines.iter().enumerate() {
+        let is_header = i == 0 && a.labels;
+        let is_signer = (i == 1 && a.labels) || (i == 0 && !a.labels);
+
+        let (font, color) = if is_standard {
+            (theme::regular(9.5), plain_color)
+        } else if is_header {
+            (theme::bold(9.5), header_color)
+        } else if is_signer {
+            (theme::bold(11.0), name_color)
+        } else {
+            (theme::regular(9.5), text_color)
+        };
+
+        let galley = ui.painter().layout(line.clone(), font, color, rect.width());
+        let h = galley.size().y;
+        ui.painter().galley(pos2(rect.min.x, y), galley, color);
+        y += h + 2.0;
+        if y > rect.max.y - 10.0 {
+            break;
+        }
+    }
+}
+
+fn paint_background_image(
+    ui: &egui::Ui,
+    rect: Rect,
+    image: &SignatureImage,
+    opacity: f32,
+    cache: &mut Option<(SavedSig, egui::TextureHandle)>,
+) {
+    let key = SavedSig::Image(image.clone());
+    if cache.as_ref().is_some_and(|(s, _)| *s != key) {
+        *cache = None;
+    }
+    let (_, tex) = cache.get_or_insert_with(|| {
+        let pixels = egui::ColorImage::from_rgba_unmultiplied(image.size(), image.rgba());
+        (key, ui.ctx().load_texture("sign-bg-image", pixels, egui::TextureOptions::LINEAR))
+    });
+
+    let cx = rect.min.x + rect.width() * 0.46;
+    let cy = rect.center().y;
+    let max_h = rect.height() * 0.85;
+    let max_w = rect.width() * 0.45;
+    let [w, h] = image.size();
+    let size = vec2(w as f32, h as f32);
+    let k = (max_w / size.x).min(max_h / size.y);
+    let draw_size = size * k;
+    let img_rect = Rect::from_center_size(pos2(cx, cy), draw_size);
+
+    let alpha_byte = ((255.0 * opacity.clamp(0.01, 1.0)).round() as u8).max(5);
+    ui.painter().image(
+        tex.id(),
+        img_rect,
+        Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+        Color32::from_white_alpha(alpha_byte),
+    );
 }
 
 /// The signature as it will look: the graphic (or the name) on the left, the details beside it
@@ -881,25 +1214,62 @@ fn preview(
     name: &str,
     a: &Appearance,
     lines: &[String],
-    graphic: Option<&SavedSig>,
+    sign_graphic: &SignGraphic,
+    saved_graphic: Option<&SavedSig>,
     cache: &mut Option<(SavedSig, egui::TextureHandle)>,
+    bg_opacity: f32,
+    bg_cache: &mut Option<(SavedSig, egui::TextureHandle)>,
 ) {
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 96.0), egui::Sense::hover());
-    let bg = if t.dark() { Color32::from_gray(0xF4) } else { Color32::WHITE };
-    ui.painter().rect(rect, CornerRadius::same(4), bg, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 115.0), egui::Sense::hover());
+    let bg = if a.background {
+        if t.dark() { Color32::from_rgb(0x1E, 0x29, 0x3B) } else { Color32::from_rgb(0xF8, 0xFA, 0xFC) }
+    } else {
+        if t.dark() { Color32::from_gray(0x18) } else { Color32::WHITE }
+    };
+    let border_stroke = if a.border {
+        Stroke::new(1.0, if t.dark() { Color32::from_rgb(0x3B, 0x4B, 0x65) } else { Color32::from_rgb(0xC8, 0xD4, 0xE4) })
+    } else {
+        Stroke::NONE
+    };
+    ui.painter().rect(rect, CornerRadius::same(5), bg, border_stroke, egui::StrokeKind::Inside);
     let inner = rect.shrink(10.0);
-    // As in the signature itself: a graphic with no details beside it fills the box.
-    let alone = graphic.is_some() && lines.is_empty();
-    let half = Rect::from_min_size(inner.min, vec2(inner.width() * 0.5 - 6.0, inner.height()));
-    if let Some(g) = graphic {
-        crate::fill_sign::paint_saved(ui, if alone { inner } else { half }, g, cache, "sign-graphic");
-    } else if a.name {
-        let galley = ui.painter().layout(name.to_string(), theme::regular(22.0), Color32::BLACK, half.width());
-        ui.painter().galley(half.left_center() - vec2(0.0, galley.size().y / 2.0), galley, Color32::BLACK);
+    let is_standard = matches!(sign_graphic, SignGraphic::Standard);
+    let is_bg_img = matches!(sign_graphic, SignGraphic::BackgroundImage(_));
+    let alone = matches!(sign_graphic, SignGraphic::FillSign | SignGraphic::Image(_)) && lines.is_empty();
+    let left_w = if alone { inner.width() } else if is_standard || is_bg_img { inner.width() * 0.42 } else { inner.width() * 0.44 };
+    let left_rect = Rect::from_min_size(inner.min, vec2(left_w, inner.height()));
+    let divider_x = inner.min.x + left_w;
+
+    if a.border && !alone && !lines.is_empty() {
+        let div_stroke = Stroke::new(1.0, if t.dark() { Color32::from_rgb(0x33, 0x41, 0x55) } else { Color32::from_rgb(0xE2, 0xE8, 0xF0) });
+        ui.painter().line_segment([pos2(divider_x, inner.min.y + 4.0), pos2(divider_x, inner.max.y - 4.0)], div_stroke);
     }
-    let x = if (a.name || graphic.is_some()) && !alone { inner.center().x + 6.0 } else { inner.left() };
-    let galley = ui.painter().layout(lines.join("\n"), theme::regular(11.0), Color32::from_gray(0x20), inner.right() - x);
-    ui.painter().galley(egui::pos2(x, inner.center().y - galley.size().y / 2.0), galley, Color32::BLACK);
+
+    if let SignGraphic::BackgroundImage(img) = sign_graphic {
+        paint_background_image(ui, rect, img, bg_opacity, bg_cache);
+    }
+
+    match sign_graphic {
+        SignGraphic::Standard | SignGraphic::BackgroundImage(_) => {
+            if a.name {
+                paint_standard_name(ui, left_rect, name, t);
+            }
+        }
+        SignGraphic::Name if a.name => {
+            paint_styled_name(ui, left_rect, name, t);
+        }
+        SignGraphic::FillSign | SignGraphic::Image(_) => {
+            if let Some(g) = saved_graphic {
+                crate::fill_sign::paint_saved(ui, left_rect, g, cache, "sign-graphic");
+            }
+        }
+        _ => {}
+    }
+
+    if !alone {
+        let right_rect = Rect::from_min_max(pos2(divider_x + 10.0, inner.min.y), inner.max);
+        paint_details(ui, right_rect, lines, a, is_standard || is_bg_img, t);
+    }
 }
 
 fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
@@ -919,16 +1289,31 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         ),
     );
     let in_os_key_store = entry.path.starts_with("keychain:") || entry.path.starts_with("windows:");
+    let is_pkcs11 = entry.path.starts_with("pkcs11:");
     let mut close = false;
     let mut go = false;
     #[cfg(not(target_arch = "wasm32"))]
     let mut pick = false;
+    #[cfg(not(target_arch = "wasm32"))]
+    let mut pick_bg = false;
     if d.rect.is_some() || d.field.is_some() {
         ui.label(egui::RichText::new(tl!("Appearance")).font(theme::semibold(12.5)));
+        let is_standard = matches!(d.graphic, SignGraphic::Standard | SignGraphic::BackgroundImage(_));
         let graphic = graphic_of(app.signature.as_ref(), &d.graphic);
         let (labels, in_english) = appearance_labels(crate::i18n::current());
-        let lines = detail_lines(&d.appearance, &labels, &entry.name, &d.reason, &d.location, &date);
-        preview(ui, t, &entry.name, &d.appearance, &lines, graphic.as_ref(), &mut app.sign_graphic_preview);
+        let lines = detail_lines(&d.appearance, &labels, &entry.name, &d.reason, &d.location, &date, is_standard);
+        preview(
+            ui,
+            t,
+            &entry.name,
+            &d.appearance,
+            &lines,
+            &d.graphic,
+            graphic.as_ref(),
+            &mut app.sign_graphic_preview,
+            d.bg_opacity,
+            &mut app.sign_bg_preview,
+        );
         if in_english && d.appearance.labels {
             ui.label(
                 egui::RichText::new(tl!("The labels are in English: the signature's font can't draw them in this language."))
@@ -936,26 +1321,38 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                     .color(t.text_muted),
             );
         }
+        ui.add_space(6.0);
         ui.horizontal_wrapped(|ui| {
-            let a = &mut d.appearance;
-            ui.add(widgets::checkbox(&mut a.name, tl!("Name")));
-            ui.add(widgets::checkbox(&mut a.date, tl!("Date")));
-            ui.add(widgets::checkbox(&mut a.reason, tl!("Reason")));
-            ui.add(widgets::checkbox(&mut a.location, tl!("Location")));
-            ui.add(widgets::checkbox(&mut a.distinguished_name, tl!("Distinguished name")));
-            ui.add(widgets::checkbox(&mut a.labels, tl!("Labels")));
-        });
-        // Acrobat: Configure Signature Appearance, Text, Draw or Image.
-        ui.horizontal_wrapped(|ui| {
-            ui.label(tl!("Graphic"));
-            widgets::radio_value(ui, &mut d.graphic, SignGraphic::Name, tl!("Signer's name"));
+            ui.label(egui::RichText::new(tl!("Model:")).font(theme::semibold(12.0)));
+            if ui.selectable_label(d.graphic == SignGraphic::Standard, tl!("Standard")).clicked() {
+                d.graphic = SignGraphic::Standard;
+                d.appearance.border = false;
+                d.appearance.background = false;
+            }
+            let is_bg = matches!(d.graphic, SignGraphic::BackgroundImage(_));
+            if ui.selectable_label(is_bg, tl!("Background image")).clicked() {
+                if let Some(bg) = &d.bg_image {
+                    d.graphic = SignGraphic::BackgroundImage(bg.clone());
+                } else {
+                    pick_bg = true;
+                }
+                d.appearance.border = false;
+                d.appearance.background = false;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            if widgets::pill_button(ui, tl!("Choose background image…"), false).clicked() {
+                pick_bg = true;
+            }
+            if ui.selectable_label(d.graphic == SignGraphic::Name, tl!("Signer's name")).clicked() {
+                d.graphic = SignGraphic::Name;
+            }
             ui.add_enabled_ui(app.signature.is_some(), |ui| {
-                if ui.add(widgets::radio(d.graphic == SignGraphic::FillSign, tl!("Fill & Sign signature"))).clicked() {
+                if ui.selectable_label(d.graphic == SignGraphic::FillSign, tl!("Fill & Sign signature")).clicked() {
                     d.graphic = SignGraphic::FillSign;
                 }
             });
             ui.add_enabled_ui(d.image.is_some(), |ui| {
-                if ui.add(widgets::radio(matches!(d.graphic, SignGraphic::Image(_)), tl!("Image"))).clicked()
+                if ui.selectable_label(matches!(d.graphic, SignGraphic::Image(_)), tl!("Left image")).clicked()
                     && let Some(image) = &d.image
                 {
                     d.graphic = SignGraphic::Image(image.clone());
@@ -966,7 +1363,32 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 pick = true;
             }
         });
-        ui.add_space(6.0);
+        if matches!(d.graphic, SignGraphic::BackgroundImage(_)) {
+            ui.add_space(3.0);
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(tl!("Background opacity:")).font(theme::semibold(12.0)));
+                ui.add(egui::Slider::new(&mut d.bg_opacity, 0.05..=0.60).custom_formatter(|n, _| format!("{:.0}%", n * 100.0)));
+            });
+        }
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(tl!("Style:")).font(theme::semibold(12.0)));
+            let a = &mut d.appearance;
+            ui.add(widgets::checkbox(&mut a.border, tl!("Decorative border")));
+            ui.add(widgets::checkbox(&mut a.background, tl!("Subtle background")));
+        });
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new(tl!("Details:")).font(theme::semibold(12.0)));
+            let a = &mut d.appearance;
+            ui.add(widgets::checkbox(&mut a.name, tl!("Name")));
+            ui.add(widgets::checkbox(&mut a.date, tl!("Date")));
+            ui.add(widgets::checkbox(&mut a.reason, tl!("Reason")));
+            ui.add(widgets::checkbox(&mut a.location, tl!("Location")));
+            ui.add(widgets::checkbox(&mut a.distinguished_name, tl!("Distinguished name")));
+            ui.add(widgets::checkbox(&mut a.labels, tl!("Labels")));
+        });
+        ui.add_space(8.0);
     } else {
         ui.label(egui::RichText::new(tl!("The signature will be invisible.")).color(t.text_muted));
     }
@@ -1004,6 +1426,19 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
                 .small()
                 .color(t.text_muted),
             );
+        } else if is_pkcs11 {
+            let l = ui.label(egui::RichText::new(tl!("Token PIN")).font(theme::semibold(13.0)));
+            let r = ui.add(crate::widgets::line(&mut d.password).password(true).hint_text(tl!("Enter token PIN")).desired_width(220.0)).labelled_by(l.id);
+            if d.password.is_empty() && !r.has_focus() {
+                r.request_focus();
+            }
+            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                if d.password.trim().is_empty() {
+                    d.error = Some(tl!("Please enter the token PIN to sign.").to_string());
+                } else {
+                    go = true;
+                }
+            }
         } else {
             let l = ui.label(tl!("Digital ID password"));
             let r = ui.add(crate::widgets::line(&mut d.password).password(true).desired_width(200.0)).labelled_by(l.id);
@@ -1022,7 +1457,11 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if widgets::pill_button(ui, tl!("Sign"), true).clicked() {
-                go = true;
+                if is_pkcs11 && d.password.trim().is_empty() {
+                    d.error = Some(tl!("Please enter the token PIN to sign.").to_string());
+                } else {
+                    go = true;
+                }
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
                 close = true;
@@ -1032,6 +1471,10 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     #[cfg(not(target_arch = "wasm32"))]
     if pick {
         app.pick_sign_graphic_image();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    if pick_bg {
+        app.pick_sign_background_image();
     }
     if go {
         match app.finish_signing() {
