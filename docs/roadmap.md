@@ -181,7 +181,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-15 | minor | M10 #1012: integrate afa8e184; Chinese fragment joining and Catalan; retain original-raster OCR for scanned-field labels; repair catalog duplicates and missing entries. Estimates unchanged |
+| 2026-10-15 | minor | M10 #1012: integrate dc41044b; Chinese fragment joining and Catalan; retain original-raster OCR for scanned-field labels; repair catalog duplicates and missing entries. Estimates unchanged |
 | 2026-10-15 | minor | M10 #1012: Chinese OCR choice/locale/decoder wiring; rustls security update and focused XFA binding regression; native FreeBSD and Chinese scan accuracy remain pending |
 | 2026-10-14 | minor | M10 #1012 follow-up: visible OCR font metrics calibrated against source widths; FormCalc clipping test isolated from unrelated scripts with exact saved-content checks. Estimates unchanged |
 | 2026-10-14 | minor | M10 #1012: OCR phrase grouping uses ink-box overlap; both cross-platform editing failures fixed, full edit/engine suites and save/reopen/undo verified. Estimates unchanged |

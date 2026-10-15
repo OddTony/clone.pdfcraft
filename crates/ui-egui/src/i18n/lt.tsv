@@ -2624,25 +2624,6 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
-
-# Scan correction and multilingual OCR (#1012).
-	Scan and text recognition	Nuskaitymas ir teksto atpažinimas
-	Searchable Image	Paveikslėlis su ieškomu tekstu
-	Corrected scan	Pataisytas nuskaitytas vaizdas
-	Scan correction	Nuskaityto vaizdo taisymas
-	Automatically rotate sideways and upside-down pages	Automatiškai pasukti šonu ar aukštyn kojomis nuskaitytus puslapius
-	Straighten skewed scans	Ištiesinti pakrypusius nuskaitytus vaizdus
-	Add searchable text	Pridėti tekstą, kuriame galima ieškoti
-	Uncertain orientations are left unchanged. Deskew fits the full image inside the page.	Neaiški orientacija nekeičiama. Tiesinant visas vaizdas sutalpinamas puslapyje.
-	Correct scans	Taisyti nuskaitytus vaizdus
-	Scan processing cancelled	Nuskaityto vaizdo apdorojimas atšauktas
-	; 1 page skipped	; praleistas 1 puslapis
-	; {n} pages skipped	; praleista puslapių: {n}
-	; corrected {n} pages	; pataisyta puslapių: {n}
-	Crop scanner borders to the paper edge	Apkirpti nuskaitytą vaizdą iki popieriaus krašto
-	Safety margin (pt)	Apsauginė paraštė (pt)
-	Only clear paper edges are cropped. Indistinguishable white borders are kept.	Apkerpami tik aiškūs popieriaus kraštai. Neatskiriami balti kraštai paliekami.
-	Straighten scanned page	Ištiesinti nuskaitytą puslapį
 	Turn upside down (180°)	Apversti aukštyn kojomis (180°)
 	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 col. etiketė (101,6 × 152,4 mm)
 	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Apkerpa kiekvieną puslapį iki spausdinamos srities, pasuka tiesiai ir pritaiko lapui neiškraipydama. Viena etiketė lape.
@@ -2692,8 +2673,28 @@ key	Space	Tarpas
 	Pages selected	Pasirinkti puslapiai
 	Page properties	Puslapio ypatybės
 
-# PR #1012 integration additions; native-speaker review pending.
+# AI-assisted additions for concurrently merged UI features (2026-10-15).
+# These additions have not had separate native-speaker review.
 	Mouse wheel scroll speed	Pelės ratuko slinkimo greitis
 	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neišsaugoti pakeitimai bus prarasti.
+	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neįrašyti pakeitimai bus prarasti.
 theme	Appearance	Išvaizda
+
+# PR #1012 OCR additions; native-speaker review pending.
+	Scan and text recognition	Nuskaitymas ir teksto atpažinimas
+	Searchable Image	Paveikslėlis su ieškomu tekstu
+	Corrected scan	Pataisytas nuskaitytas vaizdas
+	Scan correction	Nuskaityto vaizdo taisymas
+	Automatically rotate sideways and upside-down pages	Automatiškai pasukti šonu ar aukštyn kojomis nuskaitytus puslapius
+	Straighten skewed scans	Ištiesinti pakrypusius nuskaitytus vaizdus
+	Add searchable text	Pridėti tekstą, kuriame galima ieškoti
+	Uncertain orientations are left unchanged. Deskew fits the full image inside the page.	Neaiški orientacija nekeičiama. Tiesinant visas vaizdas sutalpinamas puslapyje.
+	Correct scans	Taisyti nuskaitytus vaizdus
+	Scan processing cancelled	Nuskaityto vaizdo apdorojimas atšauktas
+	; 1 page skipped	; praleistas 1 puslapis
+	; {n} pages skipped	; praleista puslapių: {n}
+	; corrected {n} pages	; pataisyta puslapių: {n}
+	Crop scanner borders to the paper edge	Apkirpti nuskaitytą vaizdą iki popieriaus krašto
+	Safety margin (pt)	Apsauginė paraštė (pt)
+	Only clear paper edges are cropped. Indistinguishable white borders are kept.	Apkerpami tik aiškūs popieriaus kraštai. Neatskiriami balti kraštai paliekami.
+	Straighten scanned page	Ištiesinti nuskaitytą puslapį
