@@ -2813,6 +2813,12 @@ impl PdfCraftApp {
             {
                 object_ui::nudge_keys(ctx, &mut self.views[i], doc);
             }
+            if self.is_preparing() {
+                let id = self.views[i].id;
+                if let Some(doc) = self.session.get(id).filter(|d| d.allows_modification()) {
+                    prepare::nudge_keys(ctx, &mut self.views[i], &doc.form, doc);
+                }
+            }
             canvas::shortcuts(&mut self.views[i], ctx, self.scroll_speed);
             self.copy_key(i, ctx);
             self.image_pick_keys(i, ctx);

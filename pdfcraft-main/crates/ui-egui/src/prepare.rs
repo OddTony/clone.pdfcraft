@@ -7,7 +7,7 @@
 
 use egui::{Color32, CornerRadius, Pos2, Rect, Stroke, vec2};
 use pdfcraft_engine::form_scripts::{CalcOp, Calculate, DATE_PRESETS, Format, TIME_PRESETS, Validate, format_value};
-use pdfcraft_engine::{BorderStyle, Edit, FieldFont, FieldLook, FieldProps, FormField, FormFieldKind, NewField};
+use pdfcraft_engine::{BorderStyle, Document, Edit, FieldFont, FieldLook, FieldProps, FormField, FormFieldKind, NewField};
 use pdfcraft_render::DocInfo;
 
 use crate::canvas::{DocView, PageXform};
@@ -499,6 +499,100 @@ pub fn arrange(form: &[FormField], anchor: &(String, usize), others: &[(String, 
         .map(|((name, wi), rect)| Edit::SetFieldProps { name, props: Box::new(FieldProps { rect: Some((wi, rect)), ..Default::default() }) })
         .collect();
     (!edits.is_empty()).then(|| Edit::Batch { label: op.label().into(), edits })
+}
+
+/// One undoable step moving widgets to `moves` (skipping unchanged rects): a single
+/// `SetFieldProps` for one field, otherwise a "Move fields" batch.
+fn moved_edits(form: &[FormField], moves: Vec<((String, usize), [f64; 4])>) -> Option<Edit> {
+    let rect_of = |k: &(String, usize)| form.iter().find(|f| f.name == k.0).and_then(|f| f.widgets.get(k.1)).map(|w| w.rect);
+    let mut edits: Vec<Edit> = moves
+        .into_iter()
+        .filter(|(k, nr)| rect_of(k).is_some_and(|r| r.iter().zip(nr).any(|(x, y)| (x - y).abs() > 1e-6)))
+        .map(|((name, wi), rect)| Edit::SetFieldProps { name, props: Box::new(FieldProps { rect: Some((wi, rect)), ..Default::default() }) })
+        .collect();
+    if edits.is_empty() {
+        return None;
+    }
+    if edits.len() == 1 { edits.pop() } else { Some(Edit::Batch { label: "Move fields".into(), edits }) }
+}
+
+/// Move every selected widget by `delta` (user space, points) as one undoable step.
+pub fn nudge(form: &[FormField], keys: &[(String, usize)], delta: [f64; 2]) -> Option<Edit> {
+    if keys.is_empty() || delta == [0.0, 0.0] {
+        return None;
+    }
+    if !delta.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+    let moves: Vec<((String, usize), [f64; 4])> = keys
+        .iter()
+        .filter_map(|k| {
+            let r = form.iter().find(|f| f.name == k.0)?.widgets.get(k.1)?.rect;
+            Some(((k.0.clone(), k.1), [r[0] + delta[0], r[1] + delta[1], r[2] + delta[0], r[3] + delta[1]]))
+        })
+        .collect();
+    moved_edits(form, moves)
+}
+
+/// The arrow keys move the selected fields a point, Shift and an arrow ten points, as in
+/// Acrobat. They are taken before the view turns the page with them.
+pub(crate) fn nudge_keys(ctx: &egui::Context, view: &mut DocView, form: &[FormField], doc: &Document) {
+    if ctx.egui_wants_keyboard_input() || view.pending_edit.is_some() {
+        return;
+    }
+    if view.prepare.grab.is_some() || view.prepare.marquee_before.is_some() {
+        return;
+    }
+    let keys: Vec<(String, usize)> = view.prepare.selected.iter().chain(view.prepare.also.iter()).cloned().collect();
+    if keys.is_empty() {
+        return;
+    }
+    use egui::{Key, Modifiers};
+    let mut step = egui::Vec2::ZERO;
+    ctx.input_mut(|i| {
+        for (key, direction) in [
+            (Key::ArrowLeft, egui::vec2(-1.0, 0.0)),
+            (Key::ArrowRight, egui::vec2(1.0, 0.0)),
+            (Key::ArrowUp, egui::vec2(0.0, -1.0)),
+            (Key::ArrowDown, egui::vec2(0.0, 1.0)),
+        ] {
+            // Shift first: a plain key pattern also matches a Shift press.
+            if i.consume_key(Modifiers::SHIFT, key) {
+                step += direction * 10.0;
+            } else if i.consume_key(Modifiers::NONE, key) {
+                step += direction;
+            }
+        }
+    });
+    if step == egui::Vec2::ZERO {
+        return;
+    }
+    // A point on screen, whatever the zoom and the view's rotation: one screen pixel's step in
+    // view space, at unit length (as for Edit a PDF's objects).
+    let mut moves = Vec::new();
+    for k in &keys {
+        let Some(w) = form.iter().find(|f| f.name == k.0).and_then(|f| f.widgets.get(k.1)) else { continue };
+        let Some(page) = w.page else { continue };
+        let offset = if let Some(xf) = view.page_xform(page) {
+            let c = xf.rect.center();
+            let unit = |d: egui::Vec2| {
+                let (a, b) = (xf.screen_to_view(c), xf.screen_to_view(c + d));
+                let v = egui::vec2(b.0 - a.0, b.1 - a.1);
+                if v.length() > 0.0 { v / v.length() } else { egui::Vec2::ZERO }
+            };
+            let delta = unit(egui::vec2(1.0, 0.0)) * step.x + unit(egui::vec2(0.0, 1.0)) * step.y;
+            doc.object_move_offset(page, [f64::from(delta.x), f64::from(delta.y)]).ok()
+        } else {
+            // Off-screen: no view transform to undo; view space runs as screen space (y down).
+            doc.object_move_offset(page, [f64::from(step.x), f64::from(step.y)]).ok()
+        };
+        let Some([dx, dy]) = offset.filter(|o| o.iter().all(|v| v.is_finite())) else { continue };
+        let r = w.rect;
+        moves.push(((k.0.clone(), k.1), [r[0] + dx, r[1] + dy, r[2] + dx, r[3] + dy]));
+    }
+    if let Some(edit) = moved_edits(form, moves) {
+        view.pending_edit = Some(edit);
+    }
 }
 
 /// Fields with their light-blue fill and name tags, the selection with its handles, and the
@@ -1593,5 +1687,62 @@ mod tests {
             assert_eq!(if top { out.max.y } else { out.min.y }, if top { r.max.y } else { r.min.y });
         }
         assert_eq!(dragged(r, Grab::Move, vec2(5.0, 6.0), true), r.translate(vec2(5.0, 6.0)));
+    }
+
+    fn test_field(name: &str, rect: [f64; 4]) -> FormField {
+        use pdfcraft_engine::FormWidget;
+        FormField {
+            name: name.into(),
+            obj: pdfcraft_cos::ObjRef::new(1, 0),
+            kind: FormFieldKind::Text,
+            value: Vec::new(),
+            default: Vec::new(),
+            flags: 0,
+            max_len: None,
+            options: Vec::new(),
+            da: String::new(),
+            quadding: 0,
+            tooltip: None,
+            widgets: vec![FormWidget {
+                obj: pdfcraft_cos::ObjRef::new(2, 0),
+                page: Some(0),
+                rect,
+                on_state: None,
+                state: None,
+                tab: 0,
+                locked: false,
+                hidden: false,
+                rotation: 0,
+                list: None,
+            }],
+            actions: Default::default(),
+            button: None,
+        }
+    }
+
+    #[test]
+    fn nudging_moves_one_field_and_several_as_one_step() {
+        let form = vec![test_field("a", [10.0, 10.0, 70.0, 30.0]), test_field("b", [10.0, 40.0, 70.0, 60.0])];
+        assert!(nudge(&form, &[], [1.0, 0.0]).is_none(), "nothing selected");
+        assert!(nudge(&form, &[("a".into(), 0)], [0.0, 0.0]).is_none(), "no movement");
+        // One field: a single SetFieldProps, one point right.
+        let edit = nudge(&form, &[("a".into(), 0)], [1.0, 0.0]).expect("moves");
+        match edit {
+            Edit::SetFieldProps { name, props } => {
+                assert_eq!(name, "a");
+                assert_eq!(props.rect, Some((0, [11.0, 10.0, 71.0, 30.0])));
+            }
+            other => panic!("single nudge is a single edit, not {other:?}"),
+        }
+        // Two fields: one batch moving both up by a point.
+        let edit = nudge(&form, &[("a".into(), 0), ("b".into(), 0)], [0.0, 1.0]).expect("moves both");
+        match edit {
+            Edit::Batch { label, edits } => {
+                assert_eq!(label, "Move fields");
+                assert_eq!(edits.len(), 2);
+            }
+            other => panic!("several nudges are one batch, not {other:?}"),
+        }
+        assert!(nudge(&form, &[("missing".into(), 0)], [1.0, 0.0]).is_none(), "unknown fields don't move");
     }
 }

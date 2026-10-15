@@ -560,3 +560,36 @@ fn actions_tab_adds_and_removes_actions() {
         ]
     );
 }
+
+#[test]
+fn arrow_keys_nudge_the_selected_field_instead_of_turning_the_page() {
+    use egui::{Key, Modifiers};
+    let mut h = harness();
+    h.state_mut().apply_edit(pdfcraft_engine::Edit::AddField {
+        page: 0,
+        rect: [40.0, 300.0, 100.0, 322.0],
+        kind: pdfcraft_engine::NewField::Text { multiline: false },
+        name: Some("nudge_me".into()),
+    });
+    h.run_steps(2);
+    assert!(h.state_mut().execute("form.prepare"));
+    h.run_steps(2);
+    {
+        let p = &mut h.state_mut().views[0].prepare;
+        p.selected = Some(("nudge_me".into(), 0));
+        p.also.clear();
+    }
+    h.run_steps(1);
+    let before = rect_of(&h, "nudge_me");
+    let near = |a: f64, b: f64| (a - b).abs() < 0.02;
+    // As in Acrobat: an arrow moves it a point, Shift and an arrow ten.
+    h.key_press_modifiers(Modifiers::NONE, Key::ArrowRight);
+    h.run_steps(4);
+    h.key_press_modifiers(Modifiers::SHIFT, Key::ArrowUp);
+    h.run_steps(4);
+    let moved = rect_of(&h, "nudge_me");
+    assert!(near(moved[0], before[0] + 1.0) && near(moved[1], before[1] + 10.0), "{before:?} → {moved:?}");
+    assert!(near(moved[2] - moved[0], before[2] - before[0]), "moved, not resized");
+    assert_eq!(h.state().views[0].current, 0, "the arrows moved the field, not the page");
+    assert_eq!(h.state().views[0].prepare.selected.as_ref().map(|s| s.0.as_str()), Some("nudge_me"), "it stays selected for the next nudge");
+}
