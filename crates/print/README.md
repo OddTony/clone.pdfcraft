@@ -72,8 +72,9 @@ sizes again each time it opens. The job names the chosen sheet as its `media`
 by the printer's own keyword (`w288h432` for a label printer's 4 × 6 in; `Letter` for a
 standard size the printer has), else by the CUPS name of the standard size, so the spooler
 feeds that sheet rather than the queue's default. Headless: `printer_papers` lists them and
-`doc_print` takes a key or label as `paper`. Windows and the web list none yet (craft-print
-reads the driver's sizes when the job is sent and refuses a sheet the driver lacks).
+`doc_print` takes a key or label as `paper`. On Windows the sizes are the driver's page media
+sizes (`craft_print::printer_papers`; a Zebra label driver offers its one "User defined"
+stock), the default marked; the web lists none.
 
 **Match page at 100%** uses the currently viewed document page to choose a standard
 sheet or one of the printer's own (either orientation, within 0.5 pt for rounded metric

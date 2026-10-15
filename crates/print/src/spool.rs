@@ -82,15 +82,24 @@ pub struct PrinterPaper {
     pub default: bool,
 }
 
-/// The paper sizes a printer's driver offers (CUPS: its PPD's `*PaperDimension` entries, in the
-/// PPD's order); empty when it names none, when the destination is unknown, and on other
-/// platforms. Reads a file, so call it when a printer is chosen, not every frame.
+/// The paper sizes a printer's driver offers, in the driver's order: on CUPS its PPD's
+/// `*PaperDimension` entries; on Windows its PrintCapabilities page media sizes (craft-print),
+/// keyed by their Print Schema or vendor name. Empty when it names none, when the printer is
+/// unknown, and on the web. Reads a file or the driver, so call it when a printer is chosen,
+/// not every frame.
 pub fn printer_papers(printer: &str) -> Vec<PrinterPaper> {
     #[cfg(all(unix, not(target_arch = "wasm32")))]
     {
         printer_papers_in(printer, std::path::Path::new("/etc/cups/ppd"))
     }
-    #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
+    #[cfg(windows)]
+    {
+        craft_print::printer_papers(printer)
+            .into_iter()
+            .map(|p| PrinterPaper { key: p.key, label: p.label, size: p.size, default: p.default })
+            .collect()
+    }
+    #[cfg(not(any(all(unix, not(target_arch = "wasm32")), windows)))]
     {
         let _ = printer;
         Vec::new()
