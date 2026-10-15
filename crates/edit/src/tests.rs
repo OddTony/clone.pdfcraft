@@ -3662,10 +3662,12 @@ fn painted_labels_with_different_styles_are_separate_paragraphs() {
 
 #[test]
 fn interleaved_rows_keep_their_transforms_clips_and_neighbours() {
-    let source = "q 2 0 0 2 0 0 cm 30 345 120 14 re W n \
+    // Both independently established clips cover [60, 670, 300, 720] in page space:
+    // this remains one paragraph when #1902 separates genuinely different clips.
+    let source = "q 2 0 0 2 0 0 cm 30 335 120 25 re W n \
                   BT /F1 6 Tf 36 350 Td (First row) Tj ET Q \
                   q 0 0.5 0 rg 60 677 240 18 re f Q \
-                  q 60 677 240 18 re W n 1 0 0 1 10 0 cm \
+                  q 60 670 240 50 re W n 1 0 0 1 10 0 cm \
                   BT /F1 12 Tf 62 682 Td (Second row) Tj [-25000] TJ (Neighbour) Tj ET Q";
     let mut doc = text_page(source);
     let before = text::text_blocks(&doc, 0).unwrap();
@@ -3681,8 +3683,8 @@ fn interleaved_rows_keep_their_transforms_clips_and_neighbours() {
     assert_eq!(lines[rows[1][0]].baseline(), [72.0, 682.0]);
     assert_eq!(after[1], before[1]);
     let content = streams(&reopened, 0).join("\n");
-    assert!(content.contains("30 345 120 14 re W n"));
-    assert!(content.contains("60 677 240 18 re W n"));
+    assert!(content.contains("30 335 120 25 re W n"));
+    assert!(content.contains("60 670 240 50 re W n"));
 }
 
 #[test]
