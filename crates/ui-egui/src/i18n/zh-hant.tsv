@@ -329,6 +329,9 @@
 	Hide a field	隱藏欄位
 	Submit a form	送出表單
 	Fields to reset (comma-separated; empty: all)	要重設的欄位（逗號分隔；為空表示全部）
+	Submit a form	提交表單
+	Submit a form with GET	提交表單 (GET)
+	Fields to reset (comma-separated; empty: all)	要重置的欄位（逗號分隔；為空表示全部）
 	Print, NextPage, PrevPage, FirstPage or LastPage	Print、NextPage、PrevPage、FirstPage 或 LastPage
 	Field names (comma-separated)	欄位名（逗號分隔）
 	URL to submit to	要送出到的 URL
@@ -2384,3 +2387,918 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+	Turn upside down (180°)	上下顛倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英吋標籤 (101.6 × 152.4 公釐)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	將每頁裁切至其列印區域，轉正後不拉伸地符合紙張。每張紙一個標籤。
+	Find untagged content	尋找未標記的內容
+	No untagged content was found.	找不到未標記的內容。
+	Found {n} untagged content problems.	發現 {n} 個未標記內容問題。
+	Tag form fields	標記表單欄位
+	Mark as artifact	標記為成品
+	Remove this leaf tag from reading order and mark its direct content as an artifact	從閱讀順序中移除此葉標記，並將其直接內容標記為成品
+	Mark content as artifact	將內容標記為成品
+	About	關於
+	Contributors	貢獻者
+	Models	模型
+	Show	顯示
+	Username	使用者名稱
+	Display name	顯示名稱
+	Real name	真實姓名
+	Sort	排序
+	Name (A–Z)	名稱（A–Z）
+	Merged PRs	已合併的 PR
+	PRs	PR
+	Commits	提交次數
+	Lines added	新增行數
+	Lines deleted	刪除行數
+	Line delta	行數增減
+	Binary assets added	新增的二進位資產
+	Binary assets removed	移除的二進位資產
+	First commit	首次提交
+	Last commit	最近提交
+	+LOC	新增行
+	−LOC	刪除行
+	ΔLOC	行數增減
+	+Bin	新增二進位
+	−Bin	移除二進位
+	First	首次提交
+	Last	最近提交
+	Reverse the order	反轉順序
+	Grab bag	精簡
+	Table	表格
+	{n} contributors · {c} commits	{n} 位貢獻者 · {c} 次提交
+	No contributor data was built into this copy.	此版本未內建貢獻者資料。
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}：{prs} 個 PR、{commits} 次提交、+{added} / −{deleted} 行（Δ {delta}）、+{bin_added} / −{bin_deleted} 個二進位資產，{first} – {last}
+	No model credits were built into this copy.	此版本未內建模型致謝資料。
+	Company	公司
+	Model	模型
+	% of all commits	佔全部提交的百分比
+	Lines +/−	行數 +/−
+	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	請僅在信任此文件時繼續。網址可能夾帶文件中的資訊，例如您在表單中輸入的內容。
+	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	請單面列印。保持紙張順序，沿裁切標記裁切，再依由左至右、由上至下的順序疊放各疊紙張。
+	Flatten Fill & Sign when saving	儲存時將填寫與簽署內容平面化
+	Text, marks and signatures become part of the page. Other comments stay editable.	文字、標記和簽名會成為頁面的一部分。其他註解仍可編輯。
+	Offset from centre	距中心的位移
+	Line ending	線條端點
+	Change {what}	變更{what}
+	Cut and stack	裁切後疊放
+	Default workspace mode	預設工作區模式
+	Default page display	預設頁面顯示
+	Default zoom	預設縮放
+	Documents and view	文件與檢視
+	Open email app	開啟電子郵件應用程式
+	Open link	開啟連結
+	Open this web page?	要開啟此網頁嗎？
+	Scripts run in a sandbox without file or network access. A script that asks to open a web page needs your permission first. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	指令碼在沙箱中執行，無法存取檔案或網路。指令碼要開啟網頁時，需要先經過您的允許。關閉 JavaScript 後，Acrobat 的標準格式、驗證和計算函式仍可運作。
+	Sign yourself	自行簽署
+	Used when opening PDFs. An explicit launch or control mode takes precedence for the session.	開啟 PDF 時使用。若啟動時或透過控制通道明確指定了模式，則本次工作階段以該模式為準。
+	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	在 PDF 未指定版面配置或縮放時使用。連續捲動不會在頁面之間自動對齊。
+	Write this email?	要撰寫這封電子郵件嗎？
+	{who} in this document wants to open this address in your browser:	此文件中的{who}想在瀏覽器中開啟這個網址：
+	{who} in this document wants to open your email app with this address:	此文件中的{who}想用這個地址開啟您的電子郵件應用程式：
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	這個網址混用了不同字母系統的字母，這是仿冒其他網站名稱的常見手法。
+	This web address uses letters from another alphabet, which can look like familiar ones.	這個網址使用了其他字母系統的字母，看起來可能和常見字母很像。
+	Create PDF from images	從圖片建立 PDF
+	Selected image files: {count}	已選取的圖片檔案：{count}
+	Use image resolution	使用圖片解析度
+	Use each image's embedded DPI; use 72 DPI when it is absent.	使用每張圖片內嵌的 DPI；沒有時使用 72 DPI。
+	Use 72 DPI (one point per pixel)	使用 72 DPI（每個像素一點）
+	Use custom DPI	使用自訂 DPI
+	DPI sets the printed page size without resampling the image.	DPI 決定列印時的頁面大小，不會重新取樣圖片。
+	Create	建立
+	Dynamic XFA form laid out from its template: {pages}, {fields}.	依範本排版的動態 XFA 表單：{pages}、{fields}。
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA 表單：欄位與 XFA 資料會保持同步，因此其他檢視器也會顯示您填寫的內容。
+@plural	{n} page|{n} pages	{n} 頁
+@plural	{n} field|{n} fields	{n} 個欄位
+	PDF page: {size}	PDF 頁面：{size}
+	Match page at 100%	以 100% 符合頁面
+	PDF scale: {scale}%	PDF 比例：{scale}%
+	Printer paper and scaling may differ. Check driver settings.	印表機的紙張與縮放可能不同，請檢查驅動程式設定。
+	Drawing scale changes. Use Actual size for full-scale plans.	圖面比例會改變。如需原尺寸的圖面，請使用「實際大小」。
+	Done adding text	完成新增文字
+	Discard this text (Esc)	捨棄此文字（Esc）
+	Word count	字詞統計
+	Current page only	僅目前頁面
+	Exclude tagged tables	排除帶標籤的表格
+	Exclude tagged code blocks	排除帶標籤的程式碼區塊
+	Exclude image/OCR text	排除影像/OCR文字
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除規則使用PDF標籤。沒有標籤的表格和程式碼仍計入統計。排除影像時也會排除不可見文字。
+	Words	詞數
+	Characters	字元數
+	Characters without spaces	不含空白的字元數
+	Pages counted	已統計頁數
+	Some pages contain no countable text. Scanned images need OCR first.	部分頁面沒有可統計的文字。掃描影像需要先進行OCR辨識。
+	Some content could not be classified safely and was kept in the count.	部分內容無法可靠分類，已保留在統計中。
+	Counting words… {n} pages read	正在統計字詞… 已讀取{n}頁
+	Word counting stopped unexpectedly.	字詞統計意外停止。
+	Word count…	字詞統計…
+@id	file.word_count	字詞統計…
+	Standard	標準
+	Mobile	行動裝置
+	Merge image fragments	合併影像片段
+	Optimizing… merging image fragments	正在最佳化… 正在合併影像片段
+	Side by side	並排
+	New file only	僅新檔案
+	Old file: {name}	舊檔案：{name}
+	New file: {name}	新檔案：{name}
+	Print as image	以影像列印
+	Resolution:	解析度：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	當印表機漏印文字、漸層或透明效果時使用。列印結果不再是可搜尋的文字；搭配灰階列印時影像為灰色。
+	Crop Image	裁切影像
+	Remove Crop	移除裁切
+	Trim the picture with its handles; Enter or Done applies	用控點裁切圖片;按 Enter 或「完成」套用
+	Redaction mark appearance	塗黑標記外觀
+	Outline colour:	輪廓色彩:
+	Fill colour:	填滿色彩:
+	Shown while the pointer is over a mark.	指標位於標記上方時顯示。
+	Opacity:	不透明度:
+	Make properties default	將內容設為預設
+	Pages selected	選取的頁面
+	Page properties	頁面屬性>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))
+	Turn upside down (180°)	上下顛倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英吋標籤 (101.6 × 152.4 公釐)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	將每頁裁切至其列印區域，轉正後不拉伸地符合紙張。每張紙一個標籤。
+	Find untagged content	尋找未標記的內容
+	No untagged content was found.	找不到未標記的內容。
+	Found {n} untagged content problems.	發現 {n} 個未標記內容問題。
+	Tag form fields	標記表單欄位
+	Mark as artifact	標記為成品
+	Remove this leaf tag from reading order and mark its direct content as an artifact	從閱讀順序中移除此葉標記，並將其直接內容標記為成品
+	Mark content as artifact	將內容標記為成品
+	About	關於
+	Contributors	貢獻者
+	Models	模型
+	Show	顯示
+	Username	使用者名稱
+	Display name	顯示名稱
+	Real name	真實姓名
+	Sort	排序
+	Name (A–Z)	名稱（A–Z）
+	Merged PRs	已合併的 PR
+	PRs	PR
+	Commits	提交次數
+	Lines added	新增行數
+	Lines deleted	刪除行數
+	Line delta	行數增減
+	Binary assets added	新增的二進位資產
+	Binary assets removed	移除的二進位資產
+	First commit	首次提交
+	Last commit	最近提交
+	+LOC	新增行
+	−LOC	刪除行
+	ΔLOC	行數增減
+	+Bin	新增二進位
+	−Bin	移除二進位
+	First	首次提交
+	Last	最近提交
+	Reverse the order	反轉順序
+	Grab bag	精簡
+	Table	表格
+	{n} contributors · {c} commits	{n} 位貢獻者 · {c} 次提交
+	No contributor data was built into this copy.	此版本未內建貢獻者資料。
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}：{prs} 個 PR、{commits} 次提交、+{added} / −{deleted} 行（Δ {delta}）、+{bin_added} / −{bin_deleted} 個二進位資產，{first} – {last}
+	No model credits were built into this copy.	此版本未內建模型致謝資料。
+	Company	公司
+	Model	模型
+	% of all commits	佔全部提交的百分比
+	Lines +/−	行數 +/−
+	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	請僅在信任此文件時繼續。網址可能夾帶文件中的資訊，例如您在表單中輸入的內容。
+	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	請單面列印。保持紙張順序，沿裁切標記裁切，再依由左至右、由上至下的順序疊放各疊紙張。
+	Flatten Fill & Sign when saving	儲存時將填寫與簽署內容平面化
+	Text, marks and signatures become part of the page. Other comments stay editable.	文字、標記和簽名會成為頁面的一部分。其他註解仍可編輯。
+	Offset from centre	距中心的位移
+	Line ending	線條端點
+	Change {what}	變更{what}
+	Cut and stack	裁切後疊放
+	Default workspace mode	預設工作區模式
+	Default page display	預設頁面顯示
+	Default zoom	預設縮放
+	Documents and view	文件與檢視
+	Open email app	開啟電子郵件應用程式
+	Open link	開啟連結
+	Open this web page?	要開啟此網頁嗎？
+	Scripts run in a sandbox without file or network access. A script that asks to open a web page needs your permission first. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	指令碼在沙箱中執行，無法存取檔案或網路。指令碼要開啟網頁時，需要先經過您的允許。關閉 JavaScript 後，Acrobat 的標準格式、驗證和計算函式仍可運作。
+	Sign yourself	自行簽署
+	Used when opening PDFs. An explicit launch or control mode takes precedence for the session.	開啟 PDF 時使用。若啟動時或透過控制通道明確指定了模式，則本次工作階段以該模式為準。
+	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	在 PDF 未指定版面配置或縮放時使用。連續捲動不會在頁面之間自動對齊。
+	Write this email?	要撰寫這封電子郵件嗎？
+	{who} in this document wants to open this address in your browser:	此文件中的{who}想在瀏覽器中開啟這個網址：
+	{who} in this document wants to open your email app with this address:	此文件中的{who}想用這個地址開啟您的電子郵件應用程式：
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	這個網址混用了不同字母系統的字母，這是仿冒其他網站名稱的常見手法。
+	This web address uses letters from another alphabet, which can look like familiar ones.	這個網址使用了其他字母系統的字母，看起來可能和常見字母很像。
+	Create PDF from images	從圖片建立 PDF
+	Selected image files: {count}	已選取的圖片檔案：{count}
+	Use image resolution	使用圖片解析度
+	Use each image's embedded DPI; use 72 DPI when it is absent.	使用每張圖片內嵌的 DPI；沒有時使用 72 DPI。
+	Use 72 DPI (one point per pixel)	使用 72 DPI（每個像素一點）
+	Use custom DPI	使用自訂 DPI
+	DPI sets the printed page size without resampling the image.	DPI 決定列印時的頁面大小，不會重新取樣圖片。
+	Create	建立
+	Dynamic XFA form laid out from its template: {pages}, {fields}.	依範本排版的動態 XFA 表單：{pages}、{fields}。
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA 表單：欄位與 XFA 資料會保持同步，因此其他檢視器也會顯示您填寫的內容。
+@plural	{n} page|{n} pages	{n} 頁
+@plural	{n} field|{n} fields	{n} 個欄位
+	PDF page: {size}	PDF 頁面：{size}
+	Match page at 100%	以 100% 符合頁面
+	PDF scale: {scale}%	PDF 比例：{scale}%
+	Printer paper and scaling may differ. Check driver settings.	印表機的紙張與縮放可能不同，請檢查驅動程式設定。
+	Drawing scale changes. Use Actual size for full-scale plans.	圖面比例會改變。如需原尺寸的圖面，請使用「實際大小」。
+	Done adding text	完成新增文字
+	Discard this text (Esc)	捨棄此文字（Esc）
+	Word count	字詞統計
+	Current page only	僅目前頁面
+	Exclude tagged tables	排除帶標籤的表格
+	Exclude tagged code blocks	排除帶標籤的程式碼區塊
+	Exclude image/OCR text	排除影像/OCR文字
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除規則使用PDF標籤。沒有標籤的表格和程式碼仍計入統計。排除影像時也會排除不可見文字。
+	Words	詞數
+	Characters	字元數
+	Characters without spaces	不含空白的字元數
+	Pages counted	已統計頁數
+	Some pages contain no countable text. Scanned images need OCR first.	部分頁面沒有可統計的文字。掃描影像需要先進行OCR辨識。
+	Some content could not be classified safely and was kept in the count.	部分內容無法可靠分類，已保留在統計中。
+	Counting words… {n} pages read	正在統計字詞… 已讀取{n}頁
+	Word counting stopped unexpectedly.	字詞統計意外停止。
+	Word count…	字詞統計…
+@id	file.word_count	字詞統計…
+	Standard	標準
+	Mobile	行動裝置
+	Merge image fragments	合併影像片段
+	Optimizing… merging image fragments	正在最佳化… 正在合併影像片段
+	Side by side	並排
+	New file only	僅新檔案
+	Old file: {name}	舊檔案：{name}
+	New file: {name}	新檔案：{name}
+	Print as image	以影像列印
+	Resolution:	解析度：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	當印表機漏印文字、漸層或透明效果時使用。列印結果不再是可搜尋的文字；搭配灰階列印時影像為灰色。
+	Crop Image	裁切影像
+	Remove Crop	移除裁切
+	Trim the picture with its handles; Enter or Done applies	用控點裁切圖片;按 Enter 或「完成」套用
+	Redaction mark appearance	塗黑標記外觀
+	Outline colour:	輪廓色彩:
+	Fill colour:	填滿色彩:
+	Shown while the pointer is over a mark.	指標位於標記上方時顯示。
+	Opacity:	不透明度:
+	Make properties default	將內容設為預設
+	Pages selected	選取的頁面
+	Page properties	頁面屬性
+	Turn upside down (180°)	上下顛倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英吋標籤 (101.6 × 152.4 公釐)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	將每頁裁切至其列印區域，轉正後不拉伸地符合紙張。每張紙一個標籤。
+	Find untagged content	尋找未標記的內容
+	No untagged content was found.	找不到未標記的內容。
+	Found {n} untagged content problems.	發現 {n} 個未標記內容問題。
+	Tag form fields	標記表單欄位
+	Mark as artifact	標記為成品
+	Remove this leaf tag from reading order and mark its direct content as an artifact	從閱讀順序中移除此葉標記，並將其直接內容標記為成品
+	Mark content as artifact	將內容標記為成品
+	About	關於
+	Contributors	貢獻者
+	Models	模型
+	Show	顯示
+	Username	使用者名稱
+	Display name	顯示名稱
+	Real name	真實姓名
+	Sort	排序
+	Name (A–Z)	名稱（A–Z）
+	Merged PRs	已合併的 PR
+	PRs	PR
+	Commits	提交次數
+	Lines added	新增行數
+	Lines deleted	刪除行數
+	Line delta	行數增減
+	Binary assets added	新增的二進位資產
+	Binary assets removed	移除的二進位資產
+	First commit	首次提交
+	Last commit	最近提交
+	+LOC	新增行
+	−LOC	刪除行
+	ΔLOC	行數增減
+	+Bin	新增二進位
+	−Bin	移除二進位
+	First	首次提交
+	Last	最近提交
+	Reverse the order	反轉順序
+	Grab bag	精簡
+	Table	表格
+	{n} contributors · {c} commits	{n} 位貢獻者 · {c} 次提交
+	No contributor data was built into this copy.	此版本未內建貢獻者資料。
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}：{prs} 個 PR、{commits} 次提交、+{added} / −{deleted} 行（Δ {delta}）、+{bin_added} / −{bin_deleted} 個二進位資產，{first} – {last}
+	No model credits were built into this copy.	此版本未內建模型致謝資料。
+	Company	公司
+	Model	模型
+	% of all commits	佔全部提交的百分比
+	Lines +/−	行數 +/−
+	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	請僅在信任此文件時繼續。網址可能夾帶文件中的資訊，例如您在表單中輸入的內容。
+	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	請單面列印。保持紙張順序，沿裁切標記裁切，再依由左至右、由上至下的順序疊放各疊紙張。
+	Flatten Fill & Sign when saving	儲存時將填寫與簽署內容平面化
+	Text, marks and signatures become part of the page. Other comments stay editable.	文字、標記和簽名會成為頁面的一部分。其他註解仍可編輯。
+	Offset from centre	距中心的位移
+	Line ending	線條端點
+	Change {what}	變更{what}
+	Cut and stack	裁切後疊放
+	Default workspace mode	預設工作區模式
+	Default page display	預設頁面顯示
+	Default zoom	預設縮放
+	Documents and view	文件與檢視
+	Open email app	開啟電子郵件應用程式
+	Open link	開啟連結
+	Open this web page?	要開啟此網頁嗎？
+	Scripts run in a sandbox without file or network access. A script that asks to open a web page needs your permission first. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	指令碼在沙箱中執行，無法存取檔案或網路。指令碼要開啟網頁時，需要先經過您的允許。關閉 JavaScript 後，Acrobat 的標準格式、驗證和計算函式仍可運作。
+	Sign yourself	自行簽署
+	Used when opening PDFs. An explicit launch or control mode takes precedence for the session.	開啟 PDF 時使用。若啟動時或透過控制通道明確指定了模式，則本次工作階段以該模式為準。
+	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	在 PDF 未指定版面配置或縮放時使用。連續捲動不會在頁面之間自動對齊。
+	Write this email?	要撰寫這封電子郵件嗎？
+	{who} in this document wants to open this address in your browser:	此文件中的{who}想在瀏覽器中開啟這個網址：
+	{who} in this document wants to open your email app with this address:	此文件中的{who}想用這個地址開啟您的電子郵件應用程式：
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	這個網址混用了不同字母系統的字母，這是仿冒其他網站名稱的常見手法。
+	This web address uses letters from another alphabet, which can look like familiar ones.	這個網址使用了其他字母系統的字母，看起來可能和常見字母很像。
+	Create PDF from images	從圖片建立 PDF
+	Selected image files: {count}	已選取的圖片檔案：{count}
+	Use image resolution	使用圖片解析度
+	Use each image's embedded DPI; use 72 DPI when it is absent.	使用每張圖片內嵌的 DPI；沒有時使用 72 DPI。
+	Use 72 DPI (one point per pixel)	使用 72 DPI（每個像素一點）
+	Use custom DPI	使用自訂 DPI
+	DPI sets the printed page size without resampling the image.	DPI 決定列印時的頁面大小，不會重新取樣圖片。
+	Create	建立
+	Dynamic XFA form laid out from its template: {pages}, {fields}.	依範本排版的動態 XFA 表單：{pages}、{fields}。
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA 表單：欄位與 XFA 資料會保持同步，因此其他檢視器也會顯示您填寫的內容。
+@plural	{n} page|{n} pages	{n} 頁
+@plural	{n} field|{n} fields	{n} 個欄位
+	PDF page: {size}	PDF 頁面：{size}
+	Match page at 100%	以 100% 符合頁面
+	PDF scale: {scale}%	PDF 比例：{scale}%
+	Printer paper and scaling may differ. Check driver settings.	印表機的紙張與縮放可能不同，請檢查驅動程式設定。
+	Drawing scale changes. Use Actual size for full-scale plans.	圖面比例會改變。如需原尺寸的圖面，請使用「實際大小」。
+	Done adding text	完成新增文字
+	Discard this text (Esc)	捨棄此文字（Esc）
+	Word count	字詞統計
+	Current page only	僅目前頁面
+	Exclude tagged tables	排除帶標籤的表格
+	Exclude tagged code blocks	排除帶標籤的程式碼區塊
+	Exclude image/OCR text	排除影像/OCR文字
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除規則使用PDF標籤。沒有標籤的表格和程式碼仍計入統計。排除影像時也會排除不可見文字。
+	Words	詞數
+	Characters	字元數
+	Characters without spaces	不含空白的字元數
+	Pages counted	已統計頁數
+	Some pages contain no countable text. Scanned images need OCR first.	部分頁面沒有可統計的文字。掃描影像需要先進行OCR辨識。
+	Some content could not be classified safely and was kept in the count.	部分內容無法可靠分類，已保留在統計中。
+	Counting words… {n} pages read	正在統計字詞… 已讀取{n}頁
+	Word counting stopped unexpectedly.	字詞統計意外停止。
+	Word count…	字詞統計…
+@id	file.word_count	字詞統計…
+	Standard	標準
+	Mobile	行動裝置
+	Merge image fragments	合併影像片段
+	Optimizing… merging image fragments	正在最佳化… 正在合併影像片段
+	Side by side	並排
+	New file only	僅新檔案
+	Old file: {name}	舊檔案：{name}
+	New file: {name}	新檔案：{name}
+	Print as image	以影像列印
+	Resolution:	解析度：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	當印表機漏印文字、漸層或透明效果時使用。列印結果不再是可搜尋的文字；搭配灰階列印時影像為灰色。
+	Crop Image	裁切影像
+	Remove Crop	移除裁切
+	Trim the picture with its handles; Enter or Done applies	用控點裁切圖片;按 Enter 或「完成」套用
+	Redaction mark appearance	塗黑標記外觀
+	Outline colour:	輪廓色彩:
+	Fill colour:	填滿色彩:
+	Shown while the pointer is over a mark.	指標位於標記上方時顯示。
+	Opacity:	不透明度:
+	Make properties default	將內容設為預設
+	Pages selected	選取的頁面
+	Page properties	頁面屬性>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))>>>>>>> bf291a86 (M6: submit current PDF from form actions)
+	Turn upside down (180°)	上下顛倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英吋標籤 (101.6 × 152.4 公釐)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	將每頁裁切至其列印區域，轉正後不拉伸地符合紙張。每張紙一個標籤。
+	Find untagged content	尋找未標記的內容
+	No untagged content was found.	找不到未標記的內容。
+	Found {n} untagged content problems.	發現 {n} 個未標記內容問題。
+	Tag form fields	標記表單欄位
+	Mark as artifact	標記為成品
+	Remove this leaf tag from reading order and mark its direct content as an artifact	從閱讀順序中移除此葉標記，並將其直接內容標記為成品
+	Mark content as artifact	將內容標記為成品
+	About	關於
+	Contributors	貢獻者
+	Models	模型
+	Show	顯示
+	Username	使用者名稱
+	Display name	顯示名稱
+	Real name	真實姓名
+	Sort	排序
+	Name (A–Z)	名稱（A–Z）
+	Merged PRs	已合併的 PR
+	PRs	PR
+	Commits	提交次數
+	Lines added	新增行數
+	Lines deleted	刪除行數
+	Line delta	行數增減
+	Binary assets added	新增的二進位資產
+	Binary assets removed	移除的二進位資產
+	First commit	首次提交
+	Last commit	最近提交
+	+LOC	新增行
+	−LOC	刪除行
+	ΔLOC	行數增減
+	+Bin	新增二進位
+	−Bin	移除二進位
+	First	首次提交
+	Last	最近提交
+	Reverse the order	反轉順序
+	Grab bag	精簡
+	Table	表格
+	{n} contributors · {c} commits	{n} 位貢獻者 · {c} 次提交
+	No contributor data was built into this copy.	此版本未內建貢獻者資料。
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}：{prs} 個 PR、{commits} 次提交、+{added} / −{deleted} 行（Δ {delta}）、+{bin_added} / −{bin_deleted} 個二進位資產，{first} – {last}
+	No model credits were built into this copy.	此版本未內建模型致謝資料。
+	Company	公司
+	Model	模型
+	% of all commits	佔全部提交的百分比
+	Lines +/−	行數 +/−
+	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	請僅在信任此文件時繼續。網址可能夾帶文件中的資訊，例如您在表單中輸入的內容。
+	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	請單面列印。保持紙張順序，沿裁切標記裁切，再依由左至右、由上至下的順序疊放各疊紙張。
+	Flatten Fill & Sign when saving	儲存時將填寫與簽署內容平面化
+	Text, marks and signatures become part of the page. Other comments stay editable.	文字、標記和簽名會成為頁面的一部分。其他註解仍可編輯。
+	Offset from centre	距中心的位移
+	Line ending	線條端點
+	Change {what}	變更{what}
+	Cut and stack	裁切後疊放
+	Default workspace mode	預設工作區模式
+	Default page display	預設頁面顯示
+	Default zoom	預設縮放
+	Documents and view	文件與檢視
+	Open email app	開啟電子郵件應用程式
+	Open link	開啟連結
+	Open this web page?	要開啟此網頁嗎？
+	Scripts run in a sandbox without file or network access. A script that asks to open a web page needs your permission first. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	指令碼在沙箱中執行，無法存取檔案或網路。指令碼要開啟網頁時，需要先經過您的允許。關閉 JavaScript 後，Acrobat 的標準格式、驗證和計算函式仍可運作。
+	Sign yourself	自行簽署
+	Used when opening PDFs. An explicit launch or control mode takes precedence for the session.	開啟 PDF 時使用。若啟動時或透過控制通道明確指定了模式，則本次工作階段以該模式為準。
+	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	在 PDF 未指定版面配置或縮放時使用。連續捲動不會在頁面之間自動對齊。
+	Write this email?	要撰寫這封電子郵件嗎？
+	{who} in this document wants to open this address in your browser:	此文件中的{who}想在瀏覽器中開啟這個網址：
+	{who} in this document wants to open your email app with this address:	此文件中的{who}想用這個地址開啟您的電子郵件應用程式：
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	這個網址混用了不同字母系統的字母，這是仿冒其他網站名稱的常見手法。
+	This web address uses letters from another alphabet, which can look like familiar ones.	這個網址使用了其他字母系統的字母，看起來可能和常見字母很像。
+	Create PDF from images	從圖片建立 PDF
+	Selected image files: {count}	已選取的圖片檔案：{count}
+	Use image resolution	使用圖片解析度
+	Use each image's embedded DPI; use 72 DPI when it is absent.	使用每張圖片內嵌的 DPI；沒有時使用 72 DPI。
+	Use 72 DPI (one point per pixel)	使用 72 DPI（每個像素一點）
+	Use custom DPI	使用自訂 DPI
+	DPI sets the printed page size without resampling the image.	DPI 決定列印時的頁面大小，不會重新取樣圖片。
+	Create	建立
+	Dynamic XFA form laid out from its template: {pages}, {fields}.	依範本排版的動態 XFA 表單：{pages}、{fields}。
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA 表單：欄位與 XFA 資料會保持同步，因此其他檢視器也會顯示您填寫的內容。
+@plural	{n} page|{n} pages	{n} 頁
+@plural	{n} field|{n} fields	{n} 個欄位
+	PDF page: {size}	PDF 頁面：{size}
+	Match page at 100%	以 100% 符合頁面
+	PDF scale: {scale}%	PDF 比例：{scale}%
+	Printer paper and scaling may differ. Check driver settings.	印表機的紙張與縮放可能不同，請檢查驅動程式設定。
+	Drawing scale changes. Use Actual size for full-scale plans.	圖面比例會改變。如需原尺寸的圖面，請使用「實際大小」。
+	Done adding text	完成新增文字
+	Discard this text (Esc)	捨棄此文字（Esc）
+	Word count	字詞統計
+	Current page only	僅目前頁面
+	Exclude tagged tables	排除帶標籤的表格
+	Exclude tagged code blocks	排除帶標籤的程式碼區塊
+	Exclude image/OCR text	排除影像/OCR文字
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除規則使用PDF標籤。沒有標籤的表格和程式碼仍計入統計。排除影像時也會排除不可見文字。
+	Words	詞數
+	Characters	字元數
+	Characters without spaces	不含空白的字元數
+	Pages counted	已統計頁數
+	Some pages contain no countable text. Scanned images need OCR first.	部分頁面沒有可統計的文字。掃描影像需要先進行OCR辨識。
+	Some content could not be classified safely and was kept in the count.	部分內容無法可靠分類，已保留在統計中。
+	Counting words… {n} pages read	正在統計字詞… 已讀取{n}頁
+	Word counting stopped unexpectedly.	字詞統計意外停止。
+	Word count…	字詞統計…
+@id	file.word_count	字詞統計…
+	Standard	標準
+	Mobile	行動裝置
+	Merge image fragments	合併影像片段
+	Optimizing… merging image fragments	正在最佳化… 正在合併影像片段
+	Side by side	並排
+	New file only	僅新檔案
+	Old file: {name}	舊檔案：{name}
+	New file: {name}	新檔案：{name}
+	Print as image	以影像列印
+	Resolution:	解析度：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	當印表機漏印文字、漸層或透明效果時使用。列印結果不再是可搜尋的文字；搭配灰階列印時影像為灰色。
+	Crop Image	裁切影像
+	Remove Crop	移除裁切
+	Trim the picture with its handles; Enter or Done applies	用控點裁切圖片;按 Enter 或「完成」套用
+	Redaction mark appearance	塗黑標記外觀
+	Outline colour:	輪廓色彩:
+	Fill colour:	填滿色彩:
+	Shown while the pointer is over a mark.	指標位於標記上方時顯示。
+	Opacity:	不透明度:
+	Make properties default	將內容設為預設
+	Pages selected	選取的頁面
+	Page properties	頁面屬性
+	Turn upside down (180°)	上下顛倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英吋標籤 (101.6 × 152.4 公釐)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	將每頁裁切至其列印區域，轉正後不拉伸地符合紙張。每張紙一個標籤。
+	Find untagged content	尋找未標記的內容
+	No untagged content was found.	找不到未標記的內容。
+	Found {n} untagged content problems.	發現 {n} 個未標記內容問題。
+	Tag form fields	標記表單欄位
+	Mark as artifact	標記為成品
+	Remove this leaf tag from reading order and mark its direct content as an artifact	從閱讀順序中移除此葉標記，並將其直接內容標記為成品
+	Mark content as artifact	將內容標記為成品
+	About	關於
+	Contributors	貢獻者
+	Models	模型
+	Show	顯示
+	Username	使用者名稱
+	Display name	顯示名稱
+	Real name	真實姓名
+	Sort	排序
+	Name (A–Z)	名稱（A–Z）
+	Merged PRs	已合併的 PR
+	PRs	PR
+	Commits	提交次數
+	Lines added	新增行數
+	Lines deleted	刪除行數
+	Line delta	行數增減
+	Binary assets added	新增的二進位資產
+	Binary assets removed	移除的二進位資產
+	First commit	首次提交
+	Last commit	最近提交
+	+LOC	新增行
+	−LOC	刪除行
+	ΔLOC	行數增減
+	+Bin	新增二進位
+	−Bin	移除二進位
+	First	首次提交
+	Last	最近提交
+	Reverse the order	反轉順序
+	Grab bag	精簡
+	Table	表格
+	{n} contributors · {c} commits	{n} 位貢獻者 · {c} 次提交
+	No contributor data was built into this copy.	此版本未內建貢獻者資料。
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}：{prs} 個 PR、{commits} 次提交、+{added} / −{deleted} 行（Δ {delta}）、+{bin_added} / −{bin_deleted} 個二進位資產，{first} – {last}
+	No model credits were built into this copy.	此版本未內建模型致謝資料。
+	Company	公司
+	Model	模型
+	% of all commits	佔全部提交的百分比
+	Lines +/−	行數 +/−
+	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	請僅在信任此文件時繼續。網址可能夾帶文件中的資訊，例如您在表單中輸入的內容。
+	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	請單面列印。保持紙張順序，沿裁切標記裁切，再依由左至右、由上至下的順序疊放各疊紙張。
+	Flatten Fill & Sign when saving	儲存時將填寫與簽署內容平面化
+	Text, marks and signatures become part of the page. Other comments stay editable.	文字、標記和簽名會成為頁面的一部分。其他註解仍可編輯。
+	Offset from centre	距中心的位移
+	Line ending	線條端點
+	Change {what}	變更{what}
+	Cut and stack	裁切後疊放
+	Default workspace mode	預設工作區模式
+	Default page display	預設頁面顯示
+	Default zoom	預設縮放
+	Documents and view	文件與檢視
+	Open email app	開啟電子郵件應用程式
+	Open link	開啟連結
+	Open this web page?	要開啟此網頁嗎？
+	Scripts run in a sandbox without file or network access. A script that asks to open a web page needs your permission first. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	指令碼在沙箱中執行，無法存取檔案或網路。指令碼要開啟網頁時，需要先經過您的允許。關閉 JavaScript 後，Acrobat 的標準格式、驗證和計算函式仍可運作。
+	Sign yourself	自行簽署
+	Used when opening PDFs. An explicit launch or control mode takes precedence for the session.	開啟 PDF 時使用。若啟動時或透過控制通道明確指定了模式，則本次工作階段以該模式為準。
+	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	在 PDF 未指定版面配置或縮放時使用。連續捲動不會在頁面之間自動對齊。
+	Write this email?	要撰寫這封電子郵件嗎？
+	{who} in this document wants to open this address in your browser:	此文件中的{who}想在瀏覽器中開啟這個網址：
+	{who} in this document wants to open your email app with this address:	此文件中的{who}想用這個地址開啟您的電子郵件應用程式：
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	這個網址混用了不同字母系統的字母，這是仿冒其他網站名稱的常見手法。
+	This web address uses letters from another alphabet, which can look like familiar ones.	這個網址使用了其他字母系統的字母，看起來可能和常見字母很像。
+	Create PDF from images	從圖片建立 PDF
+	Selected image files: {count}	已選取的圖片檔案：{count}
+	Use image resolution	使用圖片解析度
+	Use each image's embedded DPI; use 72 DPI when it is absent.	使用每張圖片內嵌的 DPI；沒有時使用 72 DPI。
+	Use 72 DPI (one point per pixel)	使用 72 DPI（每個像素一點）
+	Use custom DPI	使用自訂 DPI
+	DPI sets the printed page size without resampling the image.	DPI 決定列印時的頁面大小，不會重新取樣圖片。
+	Create	建立
+	Dynamic XFA form laid out from its template: {pages}, {fields}.	依範本排版的動態 XFA 表單：{pages}、{fields}。
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA 表單：欄位與 XFA 資料會保持同步，因此其他檢視器也會顯示您填寫的內容。
+@plural	{n} page|{n} pages	{n} 頁
+@plural	{n} field|{n} fields	{n} 個欄位
+	PDF page: {size}	PDF 頁面：{size}
+	Match page at 100%	以 100% 符合頁面
+	PDF scale: {scale}%	PDF 比例：{scale}%
+	Printer paper and scaling may differ. Check driver settings.	印表機的紙張與縮放可能不同，請檢查驅動程式設定。
+	Drawing scale changes. Use Actual size for full-scale plans.	圖面比例會改變。如需原尺寸的圖面，請使用「實際大小」。
+	Done adding text	完成新增文字
+	Discard this text (Esc)	捨棄此文字（Esc）
+	Word count	字詞統計
+	Current page only	僅目前頁面
+	Exclude tagged tables	排除帶標籤的表格
+	Exclude tagged code blocks	排除帶標籤的程式碼區塊
+	Exclude image/OCR text	排除影像/OCR文字
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除規則使用PDF標籤。沒有標籤的表格和程式碼仍計入統計。排除影像時也會排除不可見文字。
+	Words	詞數
+	Characters	字元數
+	Characters without spaces	不含空白的字元數
+	Pages counted	已統計頁數
+	Some pages contain no countable text. Scanned images need OCR first.	部分頁面沒有可統計的文字。掃描影像需要先進行OCR辨識。
+	Some content could not be classified safely and was kept in the count.	部分內容無法可靠分類，已保留在統計中。
+	Counting words… {n} pages read	正在統計字詞… 已讀取{n}頁
+	Word counting stopped unexpectedly.	字詞統計意外停止。
+	Word count…	字詞統計…
+@id	file.word_count	字詞統計…
+	Standard	標準
+	Mobile	行動裝置
+	Merge image fragments	合併影像片段
+	Optimizing… merging image fragments	正在最佳化… 正在合併影像片段
+	Side by side	並排
+	New file only	僅新檔案
+	Old file: {name}	舊檔案：{name}
+	New file: {name}	新檔案：{name}
+	Print as image	以影像列印
+	Resolution:	解析度：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	當印表機漏印文字、漸層或透明效果時使用。列印結果不再是可搜尋的文字；搭配灰階列印時影像為灰色。
+	Crop Image	裁切影像
+	Remove Crop	移除裁切
+	Trim the picture with its handles; Enter or Done applies	用控點裁切圖片;按 Enter 或「完成」套用
+	Redaction mark appearance	塗黑標記外觀
+	Outline colour:	輪廓色彩:
+	Fill colour:	填滿色彩:
+	Shown while the pointer is over a mark.	指標位於標記上方時顯示。
+	Opacity:	不透明度:
+	Make properties default	將內容設為預設
+	Pages selected	選取的頁面
+	Page properties	頁面屬性>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))
+	Turn upside down (180°)	上下顛倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英吋標籤 (101.6 × 152.4 公釐)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	將每頁裁切至其列印區域，轉正後不拉伸地符合紙張。每張紙一個標籤。
+	Find untagged content	尋找未標記的內容
+	No untagged content was found.	找不到未標記的內容。
+	Found {n} untagged content problems.	發現 {n} 個未標記內容問題。
+	Tag form fields	標記表單欄位
+	Mark as artifact	標記為成品
+	Remove this leaf tag from reading order and mark its direct content as an artifact	從閱讀順序中移除此葉標記，並將其直接內容標記為成品
+	Mark content as artifact	將內容標記為成品
+	About	關於
+	Contributors	貢獻者
+	Models	模型
+	Show	顯示
+	Username	使用者名稱
+	Display name	顯示名稱
+	Real name	真實姓名
+	Sort	排序
+	Name (A–Z)	名稱（A–Z）
+	Merged PRs	已合併的 PR
+	PRs	PR
+	Commits	提交次數
+	Lines added	新增行數
+	Lines deleted	刪除行數
+	Line delta	行數增減
+	Binary assets added	新增的二進位資產
+	Binary assets removed	移除的二進位資產
+	First commit	首次提交
+	Last commit	最近提交
+	+LOC	新增行
+	−LOC	刪除行
+	ΔLOC	行數增減
+	+Bin	新增二進位
+	−Bin	移除二進位
+	First	首次提交
+	Last	最近提交
+	Reverse the order	反轉順序
+	Grab bag	精簡
+	Table	表格
+	{n} contributors · {c} commits	{n} 位貢獻者 · {c} 次提交
+	No contributor data was built into this copy.	此版本未內建貢獻者資料。
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}：{prs} 個 PR、{commits} 次提交、+{added} / −{deleted} 行（Δ {delta}）、+{bin_added} / −{bin_deleted} 個二進位資產，{first} – {last}
+	No model credits were built into this copy.	此版本未內建模型致謝資料。
+	Company	公司
+	Model	模型
+	% of all commits	佔全部提交的百分比
+	Lines +/−	行數 +/−
+	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	請僅在信任此文件時繼續。網址可能夾帶文件中的資訊，例如您在表單中輸入的內容。
+	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	請單面列印。保持紙張順序，沿裁切標記裁切，再依由左至右、由上至下的順序疊放各疊紙張。
+	Flatten Fill & Sign when saving	儲存時將填寫與簽署內容平面化
+	Text, marks and signatures become part of the page. Other comments stay editable.	文字、標記和簽名會成為頁面的一部分。其他註解仍可編輯。
+	Offset from centre	距中心的位移
+	Line ending	線條端點
+	Change {what}	變更{what}
+	Cut and stack	裁切後疊放
+	Default workspace mode	預設工作區模式
+	Default page display	預設頁面顯示
+	Default zoom	預設縮放
+	Documents and view	文件與檢視
+	Open email app	開啟電子郵件應用程式
+	Open link	開啟連結
+	Open this web page?	要開啟此網頁嗎？
+	Scripts run in a sandbox without file or network access. A script that asks to open a web page needs your permission first. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	指令碼在沙箱中執行，無法存取檔案或網路。指令碼要開啟網頁時，需要先經過您的允許。關閉 JavaScript 後，Acrobat 的標準格式、驗證和計算函式仍可運作。
+	Sign yourself	自行簽署
+	Used when opening PDFs. An explicit launch or control mode takes precedence for the session.	開啟 PDF 時使用。若啟動時或透過控制通道明確指定了模式，則本次工作階段以該模式為準。
+	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	在 PDF 未指定版面配置或縮放時使用。連續捲動不會在頁面之間自動對齊。
+	Write this email?	要撰寫這封電子郵件嗎？
+	{who} in this document wants to open this address in your browser:	此文件中的{who}想在瀏覽器中開啟這個網址：
+	{who} in this document wants to open your email app with this address:	此文件中的{who}想用這個地址開啟您的電子郵件應用程式：
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	這個網址混用了不同字母系統的字母，這是仿冒其他網站名稱的常見手法。
+	This web address uses letters from another alphabet, which can look like familiar ones.	這個網址使用了其他字母系統的字母，看起來可能和常見字母很像。
+	Create PDF from images	從圖片建立 PDF
+	Selected image files: {count}	已選取的圖片檔案：{count}
+	Use image resolution	使用圖片解析度
+	Use each image's embedded DPI; use 72 DPI when it is absent.	使用每張圖片內嵌的 DPI；沒有時使用 72 DPI。
+	Use 72 DPI (one point per pixel)	使用 72 DPI（每個像素一點）
+	Use custom DPI	使用自訂 DPI
+	DPI sets the printed page size without resampling the image.	DPI 決定列印時的頁面大小，不會重新取樣圖片。
+	Create	建立
+	Dynamic XFA form laid out from its template: {pages}, {fields}.	依範本排版的動態 XFA 表單：{pages}、{fields}。
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA 表單：欄位與 XFA 資料會保持同步，因此其他檢視器也會顯示您填寫的內容。
+@plural	{n} page|{n} pages	{n} 頁
+@plural	{n} field|{n} fields	{n} 個欄位
+	PDF page: {size}	PDF 頁面：{size}
+	Match page at 100%	以 100% 符合頁面
+	PDF scale: {scale}%	PDF 比例：{scale}%
+	Printer paper and scaling may differ. Check driver settings.	印表機的紙張與縮放可能不同，請檢查驅動程式設定。
+	Drawing scale changes. Use Actual size for full-scale plans.	圖面比例會改變。如需原尺寸的圖面，請使用「實際大小」。
+	Done adding text	完成新增文字
+	Discard this text (Esc)	捨棄此文字（Esc）
+	Word count	字詞統計
+	Current page only	僅目前頁面
+	Exclude tagged tables	排除帶標籤的表格
+	Exclude tagged code blocks	排除帶標籤的程式碼區塊
+	Exclude image/OCR text	排除影像/OCR文字
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除規則使用PDF標籤。沒有標籤的表格和程式碼仍計入統計。排除影像時也會排除不可見文字。
+	Words	詞數
+	Characters	字元數
+	Characters without spaces	不含空白的字元數
+	Pages counted	已統計頁數
+	Some pages contain no countable text. Scanned images need OCR first.	部分頁面沒有可統計的文字。掃描影像需要先進行OCR辨識。
+	Some content could not be classified safely and was kept in the count.	部分內容無法可靠分類，已保留在統計中。
+	Counting words… {n} pages read	正在統計字詞… 已讀取{n}頁
+	Word counting stopped unexpectedly.	字詞統計意外停止。
+	Word count…	字詞統計…
+@id	file.word_count	字詞統計…
+	Standard	標準
+	Mobile	行動裝置
+	Merge image fragments	合併影像片段
+	Optimizing… merging image fragments	正在最佳化… 正在合併影像片段
+	Side by side	並排
+	New file only	僅新檔案
+	Old file: {name}	舊檔案：{name}
+	New file: {name}	新檔案：{name}
+	Print as image	以影像列印
+	Resolution:	解析度：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	當印表機漏印文字、漸層或透明效果時使用。列印結果不再是可搜尋的文字；搭配灰階列印時影像為灰色。
+	Crop Image	裁切影像
+	Remove Crop	移除裁切
+	Trim the picture with its handles; Enter or Done applies	用控點裁切圖片;按 Enter 或「完成」套用
+	Redaction mark appearance	塗黑標記外觀
+	Outline colour:	輪廓色彩:
+	Fill colour:	填滿色彩:
+	Shown while the pointer is over a mark.	指標位於標記上方時顯示。
+	Opacity:	不透明度:
+	Make properties default	將內容設為預設
+	Pages selected	選取的頁面
+	Page properties	頁面屬性
+	Turn upside down (180°)	上下顛倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英吋標籤 (101.6 × 152.4 公釐)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	將每頁裁切至其列印區域，轉正後不拉伸地符合紙張。每張紙一個標籤。
+	Find untagged content	尋找未標記的內容
+	No untagged content was found.	找不到未標記的內容。
+	Found {n} untagged content problems.	發現 {n} 個未標記內容問題。
+	Tag form fields	標記表單欄位
+	Mark as artifact	標記為成品
+	Remove this leaf tag from reading order and mark its direct content as an artifact	從閱讀順序中移除此葉標記，並將其直接內容標記為成品
+	Mark content as artifact	將內容標記為成品
+	About	關於
+	Contributors	貢獻者
+	Models	模型
+	Show	顯示
+	Username	使用者名稱
+	Display name	顯示名稱
+	Real name	真實姓名
+	Sort	排序
+	Name (A–Z)	名稱（A–Z）
+	Merged PRs	已合併的 PR
+	PRs	PR
+	Commits	提交次數
+	Lines added	新增行數
+	Lines deleted	刪除行數
+	Line delta	行數增減
+	Binary assets added	新增的二進位資產
+	Binary assets removed	移除的二進位資產
+	First commit	首次提交
+	Last commit	最近提交
+	+LOC	新增行
+	−LOC	刪除行
+	ΔLOC	行數增減
+	+Bin	新增二進位
+	−Bin	移除二進位
+	First	首次提交
+	Last	最近提交
+	Reverse the order	反轉順序
+	Grab bag	精簡
+	Table	表格
+	{n} contributors · {c} commits	{n} 位貢獻者 · {c} 次提交
+	No contributor data was built into this copy.	此版本未內建貢獻者資料。
+	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}：{prs} 個 PR、{commits} 次提交、+{added} / −{deleted} 行（Δ {delta}）、+{bin_added} / −{bin_deleted} 個二進位資產，{first} – {last}
+	No model credits were built into this copy.	此版本未內建模型致謝資料。
+	Company	公司
+	Model	模型
+	% of all commits	佔全部提交的百分比
+	Lines +/−	行數 +/−
+	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	請僅在信任此文件時繼續。網址可能夾帶文件中的資訊，例如您在表單中輸入的內容。
+	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	請單面列印。保持紙張順序，沿裁切標記裁切，再依由左至右、由上至下的順序疊放各疊紙張。
+	Flatten Fill & Sign when saving	儲存時將填寫與簽署內容平面化
+	Text, marks and signatures become part of the page. Other comments stay editable.	文字、標記和簽名會成為頁面的一部分。其他註解仍可編輯。
+	Offset from centre	距中心的位移
+	Line ending	線條端點
+	Change {what}	變更{what}
+	Cut and stack	裁切後疊放
+	Default workspace mode	預設工作區模式
+	Default page display	預設頁面顯示
+	Default zoom	預設縮放
+	Documents and view	文件與檢視
+	Open email app	開啟電子郵件應用程式
+	Open link	開啟連結
+	Open this web page?	要開啟此網頁嗎？
+	Scripts run in a sandbox without file or network access. A script that asks to open a web page needs your permission first. With JavaScript off, Acrobat's standard format, validate and calculate functions still work.	指令碼在沙箱中執行，無法存取檔案或網路。指令碼要開啟網頁時，需要先經過您的允許。關閉 JavaScript 後，Acrobat 的標準格式、驗證和計算函式仍可運作。
+	Sign yourself	自行簽署
+	Used when opening PDFs. An explicit launch or control mode takes precedence for the session.	開啟 PDF 時使用。若啟動時或透過控制通道明確指定了模式，則本次工作階段以該模式為準。
+	Used when a PDF doesn't ask for a layout or zoom. Continuous scrolling never snaps between pages.	在 PDF 未指定版面配置或縮放時使用。連續捲動不會在頁面之間自動對齊。
+	Write this email?	要撰寫這封電子郵件嗎？
+	{who} in this document wants to open this address in your browser:	此文件中的{who}想在瀏覽器中開啟這個網址：
+	{who} in this document wants to open your email app with this address:	此文件中的{who}想用這個地址開啟您的電子郵件應用程式：
+	This web address mixes letters from different alphabets, a common way to imitate another site's name.	這個網址混用了不同字母系統的字母，這是仿冒其他網站名稱的常見手法。
+	This web address uses letters from another alphabet, which can look like familiar ones.	這個網址使用了其他字母系統的字母，看起來可能和常見字母很像。
+	Create PDF from images	從圖片建立 PDF
+	Selected image files: {count}	已選取的圖片檔案：{count}
+	Use image resolution	使用圖片解析度
+	Use each image's embedded DPI; use 72 DPI when it is absent.	使用每張圖片內嵌的 DPI；沒有時使用 72 DPI。
+	Use 72 DPI (one point per pixel)	使用 72 DPI（每個像素一點）
+	Use custom DPI	使用自訂 DPI
+	DPI sets the printed page size without resampling the image.	DPI 決定列印時的頁面大小，不會重新取樣圖片。
+	Create	建立
+	Dynamic XFA form laid out from its template: {pages}, {fields}.	依範本排版的動態 XFA 表單：{pages}、{fields}。
+	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA 表單：欄位與 XFA 資料會保持同步，因此其他檢視器也會顯示您填寫的內容。
+@plural	{n} page|{n} pages	{n} 頁
+@plural	{n} field|{n} fields	{n} 個欄位
+	PDF page: {size}	PDF 頁面：{size}
+	Match page at 100%	以 100% 符合頁面
+	PDF scale: {scale}%	PDF 比例：{scale}%
+	Printer paper and scaling may differ. Check driver settings.	印表機的紙張與縮放可能不同，請檢查驅動程式設定。
+	Drawing scale changes. Use Actual size for full-scale plans.	圖面比例會改變。如需原尺寸的圖面，請使用「實際大小」。
+	Done adding text	完成新增文字
+	Discard this text (Esc)	捨棄此文字（Esc）
+	Word count	字詞統計
+	Current page only	僅目前頁面
+	Exclude tagged tables	排除帶標籤的表格
+	Exclude tagged code blocks	排除帶標籤的程式碼區塊
+	Exclude image/OCR text	排除影像/OCR文字
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除規則使用PDF標籤。沒有標籤的表格和程式碼仍計入統計。排除影像時也會排除不可見文字。
+	Words	詞數
+	Characters	字元數
+	Characters without spaces	不含空白的字元數
+	Pages counted	已統計頁數
+	Some pages contain no countable text. Scanned images need OCR first.	部分頁面沒有可統計的文字。掃描影像需要先進行OCR辨識。
+	Some content could not be classified safely and was kept in the count.	部分內容無法可靠分類，已保留在統計中。
+	Counting words… {n} pages read	正在統計字詞… 已讀取{n}頁
+	Word counting stopped unexpectedly.	字詞統計意外停止。
+	Word count…	字詞統計…
+@id	file.word_count	字詞統計…
+	Standard	標準
+	Mobile	行動裝置
+	Merge image fragments	合併影像片段
+	Optimizing… merging image fragments	正在最佳化… 正在合併影像片段
+	Side by side	並排
+	New file only	僅新檔案
+	Old file: {name}	舊檔案：{name}
+	New file: {name}	新檔案：{name}
+	Print as image	以影像列印
+	Resolution:	解析度：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	當印表機漏印文字、漸層或透明效果時使用。列印結果不再是可搜尋的文字；搭配灰階列印時影像為灰色。
+	Crop Image	裁切影像
+	Remove Crop	移除裁切
+	Trim the picture with its handles; Enter or Done applies	用控點裁切圖片;按 Enter 或「完成」套用
+	Redaction mark appearance	塗黑標記外觀
+	Outline colour:	輪廓色彩:
+	Fill colour:	填滿色彩:
+	Shown while the pointer is over a mark.	指標位於標記上方時顯示。
+	Opacity:	不透明度:
+	Make properties default	將內容設為預設
+	Pages selected	選取的頁面
+	Page properties	頁面屬性>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))>>>>>>> bf291a86 (M6: submit current PDF from form actions)>>>>>>> ddde26a6 (M6: submit selected FDF and XFDF form data)
+# HTML form submission
+	Form values to send: {count}	要傳送的表單值：{count} 個
+	Only send if you trust this document and destination. The form values leave this computer.	只有在信任此文件與目的地時才傳送。表單值將離開這部電腦。
+	Only send if you trust this document and destination. GET puts form values in the URL.	只有在信任此文件與目的地時才傳送。GET 會將表單值放入 URL。
+	Form submission is not available in the browser.	瀏覽器中無法提交表單。
+	Couldn't send the form: {error}	無法提交表單：{error}
+	Form sent to {url} (HTTP {status}).	表單已傳送至 {url}（HTTP {status}）。
+	This form's submission format or field selection is not supported yet.	尚未支援此表單的提交格式或欄位選擇。
+	Scripted submission to {u} is not supported yet.	尚未支援透過指令碼提交至 {u}。
+
+# Full-document PDF submission
+	Submit PDF document	傳送 PDF 文件
+	Entire PDF document to send: {bytes} bytes	要傳送的完整 PDF 文件：{bytes} 位元組
+	Only send if you trust this document and destination. The entire PDF leaves this computer.	僅在信任此文件和目的地時傳送。完整 PDF 將離開這部電腦。
+
+# FDF and XFDF submission actions
+	Submit FDF data	傳送 FDF 資料
+	Submit XFDF data	傳送 XFDF 資料
+	Comments to send	要傳送的註解

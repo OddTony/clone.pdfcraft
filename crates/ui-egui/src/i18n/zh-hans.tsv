@@ -372,6 +372,7 @@
 	Show a field	显示字段
 	Hide a field	隐藏字段
 	Submit a form	提交表单
+	Submit a form with GET	提交表单 (GET)
 	Fields to reset (comma-separated; empty: all)	要重置的字段（逗号分隔；为空表示全部）
 	Print, NextPage, PrevPage, FirstPage or LastPage	Print、NextPage、PrevPage、FirstPage 或 LastPage
 	Field names (comma-separated)	字段名（逗号分隔）
@@ -2392,3 +2393,359 @@ animation effects	Off	关
 	Make properties default	将属性设为默认
 	Pages selected	选定的页面
 	Page properties	页面属性
+	Turn upside down (180°)	上下颠倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英寸标签 (101.6 × 152.4 毫米)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	将每页裁切到其打印区域，转正后不拉伸地适合纸张。每张纸一个标签。
+	Find untagged content	查找未标记的内容
+	No untagged content was found.	未找到未标记的内容。
+	Found {n} untagged content problems.	发现 {n} 个未标记内容问题。
+	Tag form fields	标记表单字段
+	Mark as artifact	标记为工件
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此叶标签，并将其直接内容标记为工件
+	Mark content as artifact	将内容标记为工件
+	Word count	字词统计
+	Current page only	仅当前页
+	Exclude tagged tables	排除带标签的表格
+	Exclude tagged code blocks	排除带标签的代码块
+	Exclude image/OCR text	排除图像/OCR文本
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除规则使用PDF标签。无标签的表格和代码仍计入统计。排除图像时也会排除不可见文本。
+	Words	词数
+	Characters	字符数
+	Characters without spaces	不含空白的字符数
+	Pages counted	已统计页数
+	Some pages contain no countable text. Scanned images need OCR first.	部分页面没有可统计的文本。扫描图像需要先进行OCR识别。
+	Some content could not be classified safely and was kept in the count.	部分内容无法可靠分类，已保留在统计中。
+	Counting words… {n} pages read	正在统计字词… 已读取{n}页
+	Word counting stopped unexpectedly.	字词统计意外停止。
+	Word count…	字词统计…
+@id	file.word_count	字词统计…
+	Standard	标准
+	Mobile	移动设备
+	Merge image fragments	合并图像碎片
+	Optimizing… merging image fragments	正在优化… 正在合并图像碎片
+	Side by side	并排
+	New file only	仅新文件
+	Old file: {name}	旧文件：{name}
+	New file: {name}	新文件：{name}
+	Print as image	作为图像打印
+	Resolution:	分辨率：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	当打印机漏印文字、渐变或透明效果时使用。打印结果不再是可搜索的文字；配合灰度打印时图像为灰色。
+	Crop Image	裁剪图像
+	Remove Crop	移除裁剪
+	Trim the picture with its handles; Enter or Done applies	用控制柄裁剪图片;按 Enter 或“完成”应用
+	Redaction mark appearance	涂黑标记外观
+	Outline colour:	轮廓颜色:
+	Fill colour:	填充颜色:
+	Shown while the pointer is over a mark.	指针位于标记上方时显示。
+	Opacity:	不透明度:
+	Make properties default	将属性设为默认
+	Pages selected	选定的页面
+	Page properties	页面属性>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))
+	Turn upside down (180°)	上下颠倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英寸标签 (101.6 × 152.4 毫米)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	将每页裁切到其打印区域，转正后不拉伸地适合纸张。每张纸一个标签。
+	Find untagged content	查找未标记的内容
+	No untagged content was found.	未找到未标记的内容。
+	Found {n} untagged content problems.	发现 {n} 个未标记内容问题。
+	Tag form fields	标记表单字段
+	Mark as artifact	标记为工件
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此叶标签，并将其直接内容标记为工件
+	Mark content as artifact	将内容标记为工件
+	Word count	字词统计
+	Current page only	仅当前页
+	Exclude tagged tables	排除带标签的表格
+	Exclude tagged code blocks	排除带标签的代码块
+	Exclude image/OCR text	排除图像/OCR文本
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除规则使用PDF标签。无标签的表格和代码仍计入统计。排除图像时也会排除不可见文本。
+	Words	词数
+	Characters	字符数
+	Characters without spaces	不含空白的字符数
+	Pages counted	已统计页数
+	Some pages contain no countable text. Scanned images need OCR first.	部分页面没有可统计的文本。扫描图像需要先进行OCR识别。
+	Some content could not be classified safely and was kept in the count.	部分内容无法可靠分类，已保留在统计中。
+	Counting words… {n} pages read	正在统计字词… 已读取{n}页
+	Word counting stopped unexpectedly.	字词统计意外停止。
+	Word count…	字词统计…
+@id	file.word_count	字词统计…
+	Standard	标准
+	Mobile	移动设备
+	Merge image fragments	合并图像碎片
+	Optimizing… merging image fragments	正在优化… 正在合并图像碎片
+	Side by side	并排
+	New file only	仅新文件
+	Old file: {name}	旧文件：{name}
+	New file: {name}	新文件：{name}
+	Print as image	作为图像打印
+	Resolution:	分辨率：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	当打印机漏印文字、渐变或透明效果时使用。打印结果不再是可搜索的文字；配合灰度打印时图像为灰色。
+	Crop Image	裁剪图像
+	Remove Crop	移除裁剪
+	Trim the picture with its handles; Enter or Done applies	用控制柄裁剪图片;按 Enter 或“完成”应用
+	Redaction mark appearance	涂黑标记外观
+	Outline colour:	轮廓颜色:
+	Fill colour:	填充颜色:
+	Shown while the pointer is over a mark.	指针位于标记上方时显示。
+	Opacity:	不透明度:
+	Make properties default	将属性设为默认
+	Pages selected	选定的页面
+	Page properties	页面属性
+	Turn upside down (180°)	上下颠倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英寸标签 (101.6 × 152.4 毫米)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	将每页裁切到其打印区域，转正后不拉伸地适合纸张。每张纸一个标签。
+	Find untagged content	查找未标记的内容
+	No untagged content was found.	未找到未标记的内容。
+	Found {n} untagged content problems.	发现 {n} 个未标记内容问题。
+	Tag form fields	标记表单字段
+	Mark as artifact	标记为工件
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此叶标签，并将其直接内容标记为工件
+	Mark content as artifact	将内容标记为工件
+	Word count	字词统计
+	Current page only	仅当前页
+	Exclude tagged tables	排除带标签的表格
+	Exclude tagged code blocks	排除带标签的代码块
+	Exclude image/OCR text	排除图像/OCR文本
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除规则使用PDF标签。无标签的表格和代码仍计入统计。排除图像时也会排除不可见文本。
+	Words	词数
+	Characters	字符数
+	Characters without spaces	不含空白的字符数
+	Pages counted	已统计页数
+	Some pages contain no countable text. Scanned images need OCR first.	部分页面没有可统计的文本。扫描图像需要先进行OCR识别。
+	Some content could not be classified safely and was kept in the count.	部分内容无法可靠分类，已保留在统计中。
+	Counting words… {n} pages read	正在统计字词… 已读取{n}页
+	Word counting stopped unexpectedly.	字词统计意外停止。
+	Word count…	字词统计…
+@id	file.word_count	字词统计…
+	Standard	标准
+	Mobile	移动设备
+	Merge image fragments	合并图像碎片
+	Optimizing… merging image fragments	正在优化… 正在合并图像碎片
+	Side by side	并排
+	New file only	仅新文件
+	Old file: {name}	旧文件：{name}
+	New file: {name}	新文件：{name}
+	Print as image	作为图像打印
+	Resolution:	分辨率：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	当打印机漏印文字、渐变或透明效果时使用。打印结果不再是可搜索的文字；配合灰度打印时图像为灰色。
+	Crop Image	裁剪图像
+	Remove Crop	移除裁剪
+	Trim the picture with its handles; Enter or Done applies	用控制柄裁剪图片;按 Enter 或“完成”应用
+	Redaction mark appearance	涂黑标记外观
+	Outline colour:	轮廓颜色:
+	Fill colour:	填充颜色:
+	Shown while the pointer is over a mark.	指针位于标记上方时显示。
+	Opacity:	不透明度:
+	Make properties default	将属性设为默认
+	Pages selected	选定的页面
+	Page properties	页面属性>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))>>>>>>> bf291a86 (M6: submit current PDF from form actions)
+	Turn upside down (180°)	上下颠倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英寸标签 (101.6 × 152.4 毫米)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	将每页裁切到其打印区域，转正后不拉伸地适合纸张。每张纸一个标签。
+	Find untagged content	查找未标记的内容
+	No untagged content was found.	未找到未标记的内容。
+	Found {n} untagged content problems.	发现 {n} 个未标记内容问题。
+	Tag form fields	标记表单字段
+	Mark as artifact	标记为工件
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此叶标签，并将其直接内容标记为工件
+	Mark content as artifact	将内容标记为工件
+	Word count	字词统计
+	Current page only	仅当前页
+	Exclude tagged tables	排除带标签的表格
+	Exclude tagged code blocks	排除带标签的代码块
+	Exclude image/OCR text	排除图像/OCR文本
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除规则使用PDF标签。无标签的表格和代码仍计入统计。排除图像时也会排除不可见文本。
+	Words	词数
+	Characters	字符数
+	Characters without spaces	不含空白的字符数
+	Pages counted	已统计页数
+	Some pages contain no countable text. Scanned images need OCR first.	部分页面没有可统计的文本。扫描图像需要先进行OCR识别。
+	Some content could not be classified safely and was kept in the count.	部分内容无法可靠分类，已保留在统计中。
+	Counting words… {n} pages read	正在统计字词… 已读取{n}页
+	Word counting stopped unexpectedly.	字词统计意外停止。
+	Word count…	字词统计…
+@id	file.word_count	字词统计…
+	Standard	标准
+	Mobile	移动设备
+	Merge image fragments	合并图像碎片
+	Optimizing… merging image fragments	正在优化… 正在合并图像碎片
+	Side by side	并排
+	New file only	仅新文件
+	Old file: {name}	旧文件：{name}
+	New file: {name}	新文件：{name}
+	Print as image	作为图像打印
+	Resolution:	分辨率：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	当打印机漏印文字、渐变或透明效果时使用。打印结果不再是可搜索的文字；配合灰度打印时图像为灰色。
+	Crop Image	裁剪图像
+	Remove Crop	移除裁剪
+	Trim the picture with its handles; Enter or Done applies	用控制柄裁剪图片;按 Enter 或“完成”应用
+	Redaction mark appearance	涂黑标记外观
+	Outline colour:	轮廓颜色:
+	Fill colour:	填充颜色:
+	Shown while the pointer is over a mark.	指针位于标记上方时显示。
+	Opacity:	不透明度:
+	Make properties default	将属性设为默认
+	Pages selected	选定的页面
+	Page properties	页面属性
+	Turn upside down (180°)	上下颠倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英寸标签 (101.6 × 152.4 毫米)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	将每页裁切到其打印区域，转正后不拉伸地适合纸张。每张纸一个标签。
+	Find untagged content	查找未标记的内容
+	No untagged content was found.	未找到未标记的内容。
+	Found {n} untagged content problems.	发现 {n} 个未标记内容问题。
+	Tag form fields	标记表单字段
+	Mark as artifact	标记为工件
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此叶标签，并将其直接内容标记为工件
+	Mark content as artifact	将内容标记为工件
+	Word count	字词统计
+	Current page only	仅当前页
+	Exclude tagged tables	排除带标签的表格
+	Exclude tagged code blocks	排除带标签的代码块
+	Exclude image/OCR text	排除图像/OCR文本
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除规则使用PDF标签。无标签的表格和代码仍计入统计。排除图像时也会排除不可见文本。
+	Words	词数
+	Characters	字符数
+	Characters without spaces	不含空白的字符数
+	Pages counted	已统计页数
+	Some pages contain no countable text. Scanned images need OCR first.	部分页面没有可统计的文本。扫描图像需要先进行OCR识别。
+	Some content could not be classified safely and was kept in the count.	部分内容无法可靠分类，已保留在统计中。
+	Counting words… {n} pages read	正在统计字词… 已读取{n}页
+	Word counting stopped unexpectedly.	字词统计意外停止。
+	Word count…	字词统计…
+@id	file.word_count	字词统计…
+	Standard	标准
+	Mobile	移动设备
+	Merge image fragments	合并图像碎片
+	Optimizing… merging image fragments	正在优化… 正在合并图像碎片
+	Side by side	并排
+	New file only	仅新文件
+	Old file: {name}	旧文件：{name}
+	New file: {name}	新文件：{name}
+	Print as image	作为图像打印
+	Resolution:	分辨率：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	当打印机漏印文字、渐变或透明效果时使用。打印结果不再是可搜索的文字；配合灰度打印时图像为灰色。
+	Crop Image	裁剪图像
+	Remove Crop	移除裁剪
+	Trim the picture with its handles; Enter or Done applies	用控制柄裁剪图片;按 Enter 或“完成”应用
+	Redaction mark appearance	涂黑标记外观
+	Outline colour:	轮廓颜色:
+	Fill colour:	填充颜色:
+	Shown while the pointer is over a mark.	指针位于标记上方时显示。
+	Opacity:	不透明度:
+	Make properties default	将属性设为默认
+	Pages selected	选定的页面
+	Page properties	页面属性>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))
+	Turn upside down (180°)	上下颠倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英寸标签 (101.6 × 152.4 毫米)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	将每页裁切到其打印区域，转正后不拉伸地适合纸张。每张纸一个标签。
+	Find untagged content	查找未标记的内容
+	No untagged content was found.	未找到未标记的内容。
+	Found {n} untagged content problems.	发现 {n} 个未标记内容问题。
+	Tag form fields	标记表单字段
+	Mark as artifact	标记为工件
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此叶标签，并将其直接内容标记为工件
+	Mark content as artifact	将内容标记为工件
+	Word count	字词统计
+	Current page only	仅当前页
+	Exclude tagged tables	排除带标签的表格
+	Exclude tagged code blocks	排除带标签的代码块
+	Exclude image/OCR text	排除图像/OCR文本
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除规则使用PDF标签。无标签的表格和代码仍计入统计。排除图像时也会排除不可见文本。
+	Words	词数
+	Characters	字符数
+	Characters without spaces	不含空白的字符数
+	Pages counted	已统计页数
+	Some pages contain no countable text. Scanned images need OCR first.	部分页面没有可统计的文本。扫描图像需要先进行OCR识别。
+	Some content could not be classified safely and was kept in the count.	部分内容无法可靠分类，已保留在统计中。
+	Counting words… {n} pages read	正在统计字词… 已读取{n}页
+	Word counting stopped unexpectedly.	字词统计意外停止。
+	Word count…	字词统计…
+@id	file.word_count	字词统计…
+	Standard	标准
+	Mobile	移动设备
+	Merge image fragments	合并图像碎片
+	Optimizing… merging image fragments	正在优化… 正在合并图像碎片
+	Side by side	并排
+	New file only	仅新文件
+	Old file: {name}	旧文件：{name}
+	New file: {name}	新文件：{name}
+	Print as image	作为图像打印
+	Resolution:	分辨率：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	当打印机漏印文字、渐变或透明效果时使用。打印结果不再是可搜索的文字；配合灰度打印时图像为灰色。
+	Crop Image	裁剪图像
+	Remove Crop	移除裁剪
+	Trim the picture with its handles; Enter or Done applies	用控制柄裁剪图片;按 Enter 或“完成”应用
+	Redaction mark appearance	涂黑标记外观
+	Outline colour:	轮廓颜色:
+	Fill colour:	填充颜色:
+	Shown while the pointer is over a mark.	指针位于标记上方时显示。
+	Opacity:	不透明度:
+	Make properties default	将属性设为默认
+	Pages selected	选定的页面
+	Page properties	页面属性
+	Turn upside down (180°)	上下颠倒 (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英寸标签 (101.6 × 152.4 毫米)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	将每页裁切到其打印区域，转正后不拉伸地适合纸张。每张纸一个标签。
+	Find untagged content	查找未标记的内容
+	No untagged content was found.	未找到未标记的内容。
+	Found {n} untagged content problems.	发现 {n} 个未标记内容问题。
+	Tag form fields	标记表单字段
+	Mark as artifact	标记为工件
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此叶标签，并将其直接内容标记为工件
+	Mark content as artifact	将内容标记为工件
+	Word count	字词统计
+	Current page only	仅当前页
+	Exclude tagged tables	排除带标签的表格
+	Exclude tagged code blocks	排除带标签的代码块
+	Exclude image/OCR text	排除图像/OCR文本
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除规则使用PDF标签。无标签的表格和代码仍计入统计。排除图像时也会排除不可见文本。
+	Words	词数
+	Characters	字符数
+	Characters without spaces	不含空白的字符数
+	Pages counted	已统计页数
+	Some pages contain no countable text. Scanned images need OCR first.	部分页面没有可统计的文本。扫描图像需要先进行OCR识别。
+	Some content could not be classified safely and was kept in the count.	部分内容无法可靠分类，已保留在统计中。
+	Counting words… {n} pages read	正在统计字词… 已读取{n}页
+	Word counting stopped unexpectedly.	字词统计意外停止。
+	Word count…	字词统计…
+@id	file.word_count	字词统计…
+	Standard	标准
+	Mobile	移动设备
+	Merge image fragments	合并图像碎片
+	Optimizing… merging image fragments	正在优化… 正在合并图像碎片
+	Side by side	并排
+	New file only	仅新文件
+	Old file: {name}	旧文件：{name}
+	New file: {name}	新文件：{name}
+	Print as image	作为图像打印
+	Resolution:	分辨率：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	当打印机漏印文字、渐变或透明效果时使用。打印结果不再是可搜索的文字；配合灰度打印时图像为灰色。
+	Crop Image	裁剪图像
+	Remove Crop	移除裁剪
+	Trim the picture with its handles; Enter or Done applies	用控制柄裁剪图片;按 Enter 或“完成”应用
+	Redaction mark appearance	涂黑标记外观
+	Outline colour:	轮廓颜色:
+	Fill colour:	填充颜色:
+	Shown while the pointer is over a mark.	指针位于标记上方时显示。
+	Opacity:	不透明度:
+	Make properties default	将属性设为默认
+	Pages selected	选定的页面
+	Page properties	页面属性>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))>>>>>>> bf291a86 (M6: submit current PDF from form actions)>>>>>>> ddde26a6 (M6: submit selected FDF and XFDF form data)
+# HTML form submission
+	Form values to send: {count}	要发送的表单值：{count} 个
+	Only send if you trust this document and destination. The form values leave this computer.	仅当您信任此文档和目标地址时才发送。表单值将离开这台电脑。
+	Only send if you trust this document and destination. GET puts form values in the URL.	仅在信任此文档和目标地址时发送。GET 会将表单值放入 URL。
+	Form submission is not available in the browser.	浏览器中无法提交表单。
+	Couldn't send the form: {error}	无法提交表单：{error}
+	Form sent to {url} (HTTP {status}).	表单已发送至 {url}（HTTP {status}）。
+	This form's submission format or field selection is not supported yet.	尚不支持此表单的提交格式或字段选择。
+	Scripted submission to {u} is not supported yet.	尚不支持通过脚本提交至 {u}。
+
+# Full-document PDF submission
+	Submit PDF document	发送 PDF 文档
+	Entire PDF document to send: {bytes} bytes	要发送的完整 PDF 文档：{bytes} 字节
+	Only send if you trust this document and destination. The entire PDF leaves this computer.	仅在信任此文档和目标地址时发送。完整 PDF 将离开此计算机。
+
+# FDF and XFDF submission actions
+	Submit FDF data	提交 FDF 数据
+	Submit XFDF data	提交 XFDF 数据
+	Comments to send	要发送的批注
+>>>>>>> 6422f4f7 (M6: support reviewed HTML GET form submission)

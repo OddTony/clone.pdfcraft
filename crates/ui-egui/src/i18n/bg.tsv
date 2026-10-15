@@ -366,6 +366,7 @@
 	Show a field	Покажи поле
 	Hide a field	Скрий поле
 	Submit a form	Изпрати формуляр
+	Submit a form with GET	Изпрати формуляр (GET)
 	Fields to reset (comma-separated; empty: all)	Полета за нулиране (разделени със запетая; празно: всички)
 	Print, NextPage, PrevPage, FirstPage or LastPage	Print, NextPage, PrevPage, FirstPage или LastPage
 	Field names (comma-separated)	Имена на полета (разделени със запетая)
@@ -2391,3 +2392,359 @@ animation effects	Off	Изключени
 	Make properties default	Задаване като свойства по подразбиране
 	Pages selected	Избрани страници
 	Page properties	Свойства на страницата
+	Turn upside down (180°)	Обърни наопаки (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикет 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Изрязва всяка страница до отпечатаната ѝ област, завърта я изправено и я побира в листа без разтягане. Един етикет на лист.
+	Find untagged content	Намиране на немаркирано съдържание
+	No untagged content was found.	Не е намерено немаркирано съдържание.
+	Found {n} untagged content problems.	Открити са {n} проблема с немаркирано съдържание.
+	Tag form fields	Маркиране на полетата на формуляра
+	Mark as artifact	Маркиране като артефакт
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Премахнете този листов етикет от реда на четене и маркирайте прякото му съдържание като артефакт
+	Mark content as artifact	Маркиране на съдържание като артефакт
+	Word count	Брой думи
+	Current page only	Само текущата страница
+	Exclude tagged tables	Изключване на маркираните таблици
+	Exclude tagged code blocks	Изключване на маркираните блокове с код
+	Exclude image/OCR text	Изключване на текст от изображения/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Изключването използва PDF тагове. Немаркираните таблици и код остават включени. Изключването на изображения премахва и невидимия текст.
+	Words	Думи
+	Characters	Знаци
+	Characters without spaces	Знаци без интервали
+	Pages counted	Преброени страници
+	Some pages contain no countable text. Scanned images need OCR first.	Някои страници не съдържат текст за преброяване. Сканираните изображения първо изискват OCR.
+	Some content could not be classified safely and was kept in the count.	Част от съдържанието не може да бъде класифицирана надеждно и е включена в броя.
+	Counting words… {n} pages read	Преброяване на думи… прочетени страници: {n}
+	Word counting stopped unexpectedly.	Преброяването на думи спря неочаквано.
+	Word count…	Брой думи…
+@id	file.word_count	Брой думи…
+	Standard	Стандартни
+	Mobile	Мобилни устройства
+	Merge image fragments	Обединяване на фрагменти от изображения
+	Optimizing… merging image fragments	Оптимизиране… обединяване на фрагменти от изображения
+	Side by side	Един до друг
+	New file only	Само новият файл
+	Old file: {name}	Стар файл: {name}
+	New file: {name}	Нов файл: {name}
+	Print as image	Печат като изображение
+	Resolution:	Разделителна способност:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Използвайте го, когато принтерът пропуска текст, сенки или прозрачност. Отпечатаното вече не е текст за търсене; с печат в сиво изображенията са сиви.
+	Crop Image	Изрязване на изображението
+	Remove Crop	Премахване на изрязването
+	Trim the picture with its handles; Enter or Done applies	Изрежете картината чрез дръжките; Enter или Готово прилага
+	Redaction mark appearance	Вид на маркировката за заличаване
+	Outline colour:	Цвят на контура:
+	Fill colour:	Цвят на запълването:
+	Shown while the pointer is over a mark.	Показва се, докато показалецът е над маркировка.
+	Opacity:	Непрозрачност:
+	Make properties default	Задаване като свойства по подразбиране
+	Pages selected	Избрани страници
+	Page properties	Свойства на страницата>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))
+	Turn upside down (180°)	Обърни наопаки (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикет 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Изрязва всяка страница до отпечатаната ѝ област, завърта я изправено и я побира в листа без разтягане. Един етикет на лист.
+	Find untagged content	Намиране на немаркирано съдържание
+	No untagged content was found.	Не е намерено немаркирано съдържание.
+	Found {n} untagged content problems.	Открити са {n} проблема с немаркирано съдържание.
+	Tag form fields	Маркиране на полетата на формуляра
+	Mark as artifact	Маркиране като артефакт
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Премахнете този листов етикет от реда на четене и маркирайте прякото му съдържание като артефакт
+	Mark content as artifact	Маркиране на съдържание като артефакт
+	Word count	Брой думи
+	Current page only	Само текущата страница
+	Exclude tagged tables	Изключване на маркираните таблици
+	Exclude tagged code blocks	Изключване на маркираните блокове с код
+	Exclude image/OCR text	Изключване на текст от изображения/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Изключването използва PDF тагове. Немаркираните таблици и код остават включени. Изключването на изображения премахва и невидимия текст.
+	Words	Думи
+	Characters	Знаци
+	Characters without spaces	Знаци без интервали
+	Pages counted	Преброени страници
+	Some pages contain no countable text. Scanned images need OCR first.	Някои страници не съдържат текст за преброяване. Сканираните изображения първо изискват OCR.
+	Some content could not be classified safely and was kept in the count.	Част от съдържанието не може да бъде класифицирана надеждно и е включена в броя.
+	Counting words… {n} pages read	Преброяване на думи… прочетени страници: {n}
+	Word counting stopped unexpectedly.	Преброяването на думи спря неочаквано.
+	Word count…	Брой думи…
+@id	file.word_count	Брой думи…
+	Standard	Стандартни
+	Mobile	Мобилни устройства
+	Merge image fragments	Обединяване на фрагменти от изображения
+	Optimizing… merging image fragments	Оптимизиране… обединяване на фрагменти от изображения
+	Side by side	Един до друг
+	New file only	Само новият файл
+	Old file: {name}	Стар файл: {name}
+	New file: {name}	Нов файл: {name}
+	Print as image	Печат като изображение
+	Resolution:	Разделителна способност:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Използвайте го, когато принтерът пропуска текст, сенки или прозрачност. Отпечатаното вече не е текст за търсене; с печат в сиво изображенията са сиви.
+	Crop Image	Изрязване на изображението
+	Remove Crop	Премахване на изрязването
+	Trim the picture with its handles; Enter or Done applies	Изрежете картината чрез дръжките; Enter или Готово прилага
+	Redaction mark appearance	Вид на маркировката за заличаване
+	Outline colour:	Цвят на контура:
+	Fill colour:	Цвят на запълването:
+	Shown while the pointer is over a mark.	Показва се, докато показалецът е над маркировка.
+	Opacity:	Непрозрачност:
+	Make properties default	Задаване като свойства по подразбиране
+	Pages selected	Избрани страници
+	Page properties	Свойства на страницата
+	Turn upside down (180°)	Обърни наопаки (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикет 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Изрязва всяка страница до отпечатаната ѝ област, завърта я изправено и я побира в листа без разтягане. Един етикет на лист.
+	Find untagged content	Намиране на немаркирано съдържание
+	No untagged content was found.	Не е намерено немаркирано съдържание.
+	Found {n} untagged content problems.	Открити са {n} проблема с немаркирано съдържание.
+	Tag form fields	Маркиране на полетата на формуляра
+	Mark as artifact	Маркиране като артефакт
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Премахнете този листов етикет от реда на четене и маркирайте прякото му съдържание като артефакт
+	Mark content as artifact	Маркиране на съдържание като артефакт
+	Word count	Брой думи
+	Current page only	Само текущата страница
+	Exclude tagged tables	Изключване на маркираните таблици
+	Exclude tagged code blocks	Изключване на маркираните блокове с код
+	Exclude image/OCR text	Изключване на текст от изображения/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Изключването използва PDF тагове. Немаркираните таблици и код остават включени. Изключването на изображения премахва и невидимия текст.
+	Words	Думи
+	Characters	Знаци
+	Characters without spaces	Знаци без интервали
+	Pages counted	Преброени страници
+	Some pages contain no countable text. Scanned images need OCR first.	Някои страници не съдържат текст за преброяване. Сканираните изображения първо изискват OCR.
+	Some content could not be classified safely and was kept in the count.	Част от съдържанието не може да бъде класифицирана надеждно и е включена в броя.
+	Counting words… {n} pages read	Преброяване на думи… прочетени страници: {n}
+	Word counting stopped unexpectedly.	Преброяването на думи спря неочаквано.
+	Word count…	Брой думи…
+@id	file.word_count	Брой думи…
+	Standard	Стандартни
+	Mobile	Мобилни устройства
+	Merge image fragments	Обединяване на фрагменти от изображения
+	Optimizing… merging image fragments	Оптимизиране… обединяване на фрагменти от изображения
+	Side by side	Един до друг
+	New file only	Само новият файл
+	Old file: {name}	Стар файл: {name}
+	New file: {name}	Нов файл: {name}
+	Print as image	Печат като изображение
+	Resolution:	Разделителна способност:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Използвайте го, когато принтерът пропуска текст, сенки или прозрачност. Отпечатаното вече не е текст за търсене; с печат в сиво изображенията са сиви.
+	Crop Image	Изрязване на изображението
+	Remove Crop	Премахване на изрязването
+	Trim the picture with its handles; Enter or Done applies	Изрежете картината чрез дръжките; Enter или Готово прилага
+	Redaction mark appearance	Вид на маркировката за заличаване
+	Outline colour:	Цвят на контура:
+	Fill colour:	Цвят на запълването:
+	Shown while the pointer is over a mark.	Показва се, докато показалецът е над маркировка.
+	Opacity:	Непрозрачност:
+	Make properties default	Задаване като свойства по подразбиране
+	Pages selected	Избрани страници
+	Page properties	Свойства на страницата>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))>>>>>>> bf291a86 (M6: submit current PDF from form actions)
+	Turn upside down (180°)	Обърни наопаки (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикет 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Изрязва всяка страница до отпечатаната ѝ област, завърта я изправено и я побира в листа без разтягане. Един етикет на лист.
+	Find untagged content	Намиране на немаркирано съдържание
+	No untagged content was found.	Не е намерено немаркирано съдържание.
+	Found {n} untagged content problems.	Открити са {n} проблема с немаркирано съдържание.
+	Tag form fields	Маркиране на полетата на формуляра
+	Mark as artifact	Маркиране като артефакт
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Премахнете този листов етикет от реда на четене и маркирайте прякото му съдържание като артефакт
+	Mark content as artifact	Маркиране на съдържание като артефакт
+	Word count	Брой думи
+	Current page only	Само текущата страница
+	Exclude tagged tables	Изключване на маркираните таблици
+	Exclude tagged code blocks	Изключване на маркираните блокове с код
+	Exclude image/OCR text	Изключване на текст от изображения/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Изключването използва PDF тагове. Немаркираните таблици и код остават включени. Изключването на изображения премахва и невидимия текст.
+	Words	Думи
+	Characters	Знаци
+	Characters without spaces	Знаци без интервали
+	Pages counted	Преброени страници
+	Some pages contain no countable text. Scanned images need OCR first.	Някои страници не съдържат текст за преброяване. Сканираните изображения първо изискват OCR.
+	Some content could not be classified safely and was kept in the count.	Част от съдържанието не може да бъде класифицирана надеждно и е включена в броя.
+	Counting words… {n} pages read	Преброяване на думи… прочетени страници: {n}
+	Word counting stopped unexpectedly.	Преброяването на думи спря неочаквано.
+	Word count…	Брой думи…
+@id	file.word_count	Брой думи…
+	Standard	Стандартни
+	Mobile	Мобилни устройства
+	Merge image fragments	Обединяване на фрагменти от изображения
+	Optimizing… merging image fragments	Оптимизиране… обединяване на фрагменти от изображения
+	Side by side	Един до друг
+	New file only	Само новият файл
+	Old file: {name}	Стар файл: {name}
+	New file: {name}	Нов файл: {name}
+	Print as image	Печат като изображение
+	Resolution:	Разделителна способност:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Използвайте го, когато принтерът пропуска текст, сенки или прозрачност. Отпечатаното вече не е текст за търсене; с печат в сиво изображенията са сиви.
+	Crop Image	Изрязване на изображението
+	Remove Crop	Премахване на изрязването
+	Trim the picture with its handles; Enter or Done applies	Изрежете картината чрез дръжките; Enter или Готово прилага
+	Redaction mark appearance	Вид на маркировката за заличаване
+	Outline colour:	Цвят на контура:
+	Fill colour:	Цвят на запълването:
+	Shown while the pointer is over a mark.	Показва се, докато показалецът е над маркировка.
+	Opacity:	Непрозрачност:
+	Make properties default	Задаване като свойства по подразбиране
+	Pages selected	Избрани страници
+	Page properties	Свойства на страницата
+	Turn upside down (180°)	Обърни наопаки (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикет 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Изрязва всяка страница до отпечатаната ѝ област, завърта я изправено и я побира в листа без разтягане. Един етикет на лист.
+	Find untagged content	Намиране на немаркирано съдържание
+	No untagged content was found.	Не е намерено немаркирано съдържание.
+	Found {n} untagged content problems.	Открити са {n} проблема с немаркирано съдържание.
+	Tag form fields	Маркиране на полетата на формуляра
+	Mark as artifact	Маркиране като артефакт
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Премахнете този листов етикет от реда на четене и маркирайте прякото му съдържание като артефакт
+	Mark content as artifact	Маркиране на съдържание като артефакт
+	Word count	Брой думи
+	Current page only	Само текущата страница
+	Exclude tagged tables	Изключване на маркираните таблици
+	Exclude tagged code blocks	Изключване на маркираните блокове с код
+	Exclude image/OCR text	Изключване на текст от изображения/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Изключването използва PDF тагове. Немаркираните таблици и код остават включени. Изключването на изображения премахва и невидимия текст.
+	Words	Думи
+	Characters	Знаци
+	Characters without spaces	Знаци без интервали
+	Pages counted	Преброени страници
+	Some pages contain no countable text. Scanned images need OCR first.	Някои страници не съдържат текст за преброяване. Сканираните изображения първо изискват OCR.
+	Some content could not be classified safely and was kept in the count.	Част от съдържанието не може да бъде класифицирана надеждно и е включена в броя.
+	Counting words… {n} pages read	Преброяване на думи… прочетени страници: {n}
+	Word counting stopped unexpectedly.	Преброяването на думи спря неочаквано.
+	Word count…	Брой думи…
+@id	file.word_count	Брой думи…
+	Standard	Стандартни
+	Mobile	Мобилни устройства
+	Merge image fragments	Обединяване на фрагменти от изображения
+	Optimizing… merging image fragments	Оптимизиране… обединяване на фрагменти от изображения
+	Side by side	Един до друг
+	New file only	Само новият файл
+	Old file: {name}	Стар файл: {name}
+	New file: {name}	Нов файл: {name}
+	Print as image	Печат като изображение
+	Resolution:	Разделителна способност:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Използвайте го, когато принтерът пропуска текст, сенки или прозрачност. Отпечатаното вече не е текст за търсене; с печат в сиво изображенията са сиви.
+	Crop Image	Изрязване на изображението
+	Remove Crop	Премахване на изрязването
+	Trim the picture with its handles; Enter or Done applies	Изрежете картината чрез дръжките; Enter или Готово прилага
+	Redaction mark appearance	Вид на маркировката за заличаване
+	Outline colour:	Цвят на контура:
+	Fill colour:	Цвят на запълването:
+	Shown while the pointer is over a mark.	Показва се, докато показалецът е над маркировка.
+	Opacity:	Непрозрачност:
+	Make properties default	Задаване като свойства по подразбиране
+	Pages selected	Избрани страници
+	Page properties	Свойства на страницата>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))
+	Turn upside down (180°)	Обърни наопаки (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикет 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Изрязва всяка страница до отпечатаната ѝ област, завърта я изправено и я побира в листа без разтягане. Един етикет на лист.
+	Find untagged content	Намиране на немаркирано съдържание
+	No untagged content was found.	Не е намерено немаркирано съдържание.
+	Found {n} untagged content problems.	Открити са {n} проблема с немаркирано съдържание.
+	Tag form fields	Маркиране на полетата на формуляра
+	Mark as artifact	Маркиране като артефакт
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Премахнете този листов етикет от реда на четене и маркирайте прякото му съдържание като артефакт
+	Mark content as artifact	Маркиране на съдържание като артефакт
+	Word count	Брой думи
+	Current page only	Само текущата страница
+	Exclude tagged tables	Изключване на маркираните таблици
+	Exclude tagged code blocks	Изключване на маркираните блокове с код
+	Exclude image/OCR text	Изключване на текст от изображения/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Изключването използва PDF тагове. Немаркираните таблици и код остават включени. Изключването на изображения премахва и невидимия текст.
+	Words	Думи
+	Characters	Знаци
+	Characters without spaces	Знаци без интервали
+	Pages counted	Преброени страници
+	Some pages contain no countable text. Scanned images need OCR first.	Някои страници не съдържат текст за преброяване. Сканираните изображения първо изискват OCR.
+	Some content could not be classified safely and was kept in the count.	Част от съдържанието не може да бъде класифицирана надеждно и е включена в броя.
+	Counting words… {n} pages read	Преброяване на думи… прочетени страници: {n}
+	Word counting stopped unexpectedly.	Преброяването на думи спря неочаквано.
+	Word count…	Брой думи…
+@id	file.word_count	Брой думи…
+	Standard	Стандартни
+	Mobile	Мобилни устройства
+	Merge image fragments	Обединяване на фрагменти от изображения
+	Optimizing… merging image fragments	Оптимизиране… обединяване на фрагменти от изображения
+	Side by side	Един до друг
+	New file only	Само новият файл
+	Old file: {name}	Стар файл: {name}
+	New file: {name}	Нов файл: {name}
+	Print as image	Печат като изображение
+	Resolution:	Разделителна способност:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Използвайте го, когато принтерът пропуска текст, сенки или прозрачност. Отпечатаното вече не е текст за търсене; с печат в сиво изображенията са сиви.
+	Crop Image	Изрязване на изображението
+	Remove Crop	Премахване на изрязването
+	Trim the picture with its handles; Enter or Done applies	Изрежете картината чрез дръжките; Enter или Готово прилага
+	Redaction mark appearance	Вид на маркировката за заличаване
+	Outline colour:	Цвят на контура:
+	Fill colour:	Цвят на запълването:
+	Shown while the pointer is over a mark.	Показва се, докато показалецът е над маркировка.
+	Opacity:	Непрозрачност:
+	Make properties default	Задаване като свойства по подразбиране
+	Pages selected	Избрани страници
+	Page properties	Свойства на страницата
+	Turn upside down (180°)	Обърни наопаки (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Етикет 4 × 6 in (101,6 × 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Изрязва всяка страница до отпечатаната ѝ област, завърта я изправено и я побира в листа без разтягане. Един етикет на лист.
+	Find untagged content	Намиране на немаркирано съдържание
+	No untagged content was found.	Не е намерено немаркирано съдържание.
+	Found {n} untagged content problems.	Открити са {n} проблема с немаркирано съдържание.
+	Tag form fields	Маркиране на полетата на формуляра
+	Mark as artifact	Маркиране като артефакт
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Премахнете този листов етикет от реда на четене и маркирайте прякото му съдържание като артефакт
+	Mark content as artifact	Маркиране на съдържание като артефакт
+	Word count	Брой думи
+	Current page only	Само текущата страница
+	Exclude tagged tables	Изключване на маркираните таблици
+	Exclude tagged code blocks	Изключване на маркираните блокове с код
+	Exclude image/OCR text	Изключване на текст от изображения/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Изключването използва PDF тагове. Немаркираните таблици и код остават включени. Изключването на изображения премахва и невидимия текст.
+	Words	Думи
+	Characters	Знаци
+	Characters without spaces	Знаци без интервали
+	Pages counted	Преброени страници
+	Some pages contain no countable text. Scanned images need OCR first.	Някои страници не съдържат текст за преброяване. Сканираните изображения първо изискват OCR.
+	Some content could not be classified safely and was kept in the count.	Част от съдържанието не може да бъде класифицирана надеждно и е включена в броя.
+	Counting words… {n} pages read	Преброяване на думи… прочетени страници: {n}
+	Word counting stopped unexpectedly.	Преброяването на думи спря неочаквано.
+	Word count…	Брой думи…
+@id	file.word_count	Брой думи…
+	Standard	Стандартни
+	Mobile	Мобилни устройства
+	Merge image fragments	Обединяване на фрагменти от изображения
+	Optimizing… merging image fragments	Оптимизиране… обединяване на фрагменти от изображения
+	Side by side	Един до друг
+	New file only	Само новият файл
+	Old file: {name}	Стар файл: {name}
+	New file: {name}	Нов файл: {name}
+	Print as image	Печат като изображение
+	Resolution:	Разделителна способност:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Използвайте го, когато принтерът пропуска текст, сенки или прозрачност. Отпечатаното вече не е текст за търсене; с печат в сиво изображенията са сиви.
+	Crop Image	Изрязване на изображението
+	Remove Crop	Премахване на изрязването
+	Trim the picture with its handles; Enter or Done applies	Изрежете картината чрез дръжките; Enter или Готово прилага
+	Redaction mark appearance	Вид на маркировката за заличаване
+	Outline colour:	Цвят на контура:
+	Fill colour:	Цвят на запълването:
+	Shown while the pointer is over a mark.	Показва се, докато показалецът е над маркировка.
+	Opacity:	Непрозрачност:
+	Make properties default	Задаване като свойства по подразбиране
+	Pages selected	Избрани страници
+	Page properties	Свойства на страницата>>>>>>> fdb51e07 (M6: integrate form submission with origin/main (rebase 1/5))>>>>>>> bf291a86 (M6: submit current PDF from form actions)>>>>>>> ddde26a6 (M6: submit selected FDF and XFDF form data)
+# HTML form submission
+	Form values to send: {count}	Стойности на формуляра за изпращане: {count}
+	Only send if you trust this document and destination. The form values leave this computer.	Изпращайте само ако имате доверие на документа и получателя. Стойностите от формуляра ще напуснат този компютър.
+	Only send if you trust this document and destination. GET puts form values in the URL.	Изпращайте само ако имате доверие на този документ и получателя. GET поставя стойностите на формуляра в URL адреса.
+	Form submission is not available in the browser.	Изпращането на формуляри не е налично в браузъра.
+	Couldn't send the form: {error}	Формулярът не можа да бъде изпратен: {error}
+	Form sent to {url} (HTTP {status}).	Формулярът е изпратен до {url} (HTTP {status}).
+	This form's submission format or field selection is not supported yet.	Форматът за изпращане или изборът на полета в този формуляр още не се поддържа.
+	Scripted submission to {u} is not supported yet.	Изпращането чрез скрипт до {u} още не се поддържа.
+
+# Full-document PDF submission
+	Submit PDF document	Изпрати PDF документ
+	Entire PDF document to send: {bytes} bytes	Целият PDF документ за изпращане: {bytes} байта
+	Only send if you trust this document and destination. The entire PDF leaves this computer.	Изпращайте само ако имате доверие на документа и получателя. Целият PDF напуска този компютър.
+
+# FDF and XFDF submission actions
+	Submit FDF data	Изпращане на FDF данни
+	Submit XFDF data	Изпращане на XFDF данни
+	Comments to send	Коментари за изпращане
+>>>>>>> 6422f4f7 (M6: support reviewed HTML GET form submission)
