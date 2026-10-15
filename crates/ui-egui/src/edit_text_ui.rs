@@ -1584,6 +1584,24 @@ mod tests {
     }
 
     #[test]
+    fn opening_a_source_paragraph_never_paints_its_reconstructed_glyphs() {
+        let (app, mut ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        ed.source = Some((doc.text_blocks(0).remove(0), doc.text_lines(0)));
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::theme::font_definitions());
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let original = editor_job(ui, &ed, &ed.text, 1.0, 400.0);
+            assert!(!original.sections.is_empty());
+            assert!(original.sections.iter().all(|s| s.format.color == Color32::TRANSPARENT));
+            ed.text.push('x');
+            let edited = editor_job(ui, &ed, &ed.text, 1.0, 400.0);
+            assert!(edited.sections.iter().any(|s| s.format.color != Color32::TRANSPARENT));
+        });
+        output.drop_without_applying_deltas();
+    }
+
+    #[test]
     fn text_background_is_cached_without_editing_and_released_on_cancel() {
         let (app, ed) = preview_app();
         let doc = app.session.get(app.views[0].id).unwrap();
