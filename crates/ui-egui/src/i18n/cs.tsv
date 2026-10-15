@@ -2428,3 +2428,28 @@ animation effects	Off	Vypnuto
 	This document is trying to open a local file:	Tento dokument se pokouší otevřít místní soubor:
 	Move tag earlier	Přesunout značku dříve
 	Move tag later	Přesunout značku později
+
+# Format Studio.
+	Format Studio	Studio formátování
+	Format Studio…	Studio formátování…
+	Reference:	Předloha:
+	No reference yet	Zatím žádná předloha
+	Choose reference…	Vybrat předlohu…
+	Raw:	Zdroj:
+	No raw file yet	Zatím žádný zdrojový soubor
+	Choose raw file…	Vybrat zdrojový soubor…
+	Reading the raw document…	Čte se zdrojový dokument…
+	The raw text was truncated to what fits.	Zdrojový text byl zkrácen.
+	…or paste the raw text here; # headings, - bullets	…nebo sem vložte zdrojový text; # nadpisy, - odrážky
+	Generate styled PDF	Vytvořit formátované PDF
+	Ask AI to change the formatting	Požádat AI o změnu formátování
+	API key:	Klíč API:
+	Paste an OpenRouter key	Vložit klíč OpenRouter
+	Model:	Model AI:
+	e.g. bigger headings, numbered pages	např. větší nadpisy, číslované stránky
+	Send	Odeslat
+	Sending…	Odesílání…
+	The answer proposes formatting changes.	Odpověď navrhuje změny formátování.
+	The answer stopped unexpectedly.	Odpověď se nečekaně přerušila.
+	AI chat isn't available in the web build; use the desktop app or CLI.	AI chat není ve webové verzi k dispozici; použijte desktopovou aplikaci nebo CLI.
+	PDF and text	PDF a text

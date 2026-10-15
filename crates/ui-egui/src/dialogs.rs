@@ -758,6 +758,10 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 });
                 return;
             }
+            Dialog::FormatStudio => {
+                crate::format_studio::dialog(ui, app);
+                return;
+            }
             Dialog::Revert => {
                 let name = app.active_ids().and_then(|(_, id)| app.session.get(id)).map(|d| d.name.clone()).unwrap_or_default();
                 ui.label(egui::RichText::new(tl!("Revert")).font(theme::semibold(18.0)));

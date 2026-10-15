@@ -2350,3 +2350,28 @@ animation effects	Off	Kapalı
 	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
 	Move tag earlier	Etiketi daha erken taşı
 	Move tag later	Etiketi daha geç taşı
+
+# Format Studio.
+	Format Studio	Biçim Stüdyosu
+	Format Studio…	Biçim Stüdyosu…
+	Reference:	Referans:
+	No reference yet	Henüz referans yok
+	Choose reference…	Referans seç…
+	Raw:	Ham:
+	No raw file yet	Henüz ham dosya yok
+	Choose raw file…	Ham dosya seç…
+	Reading the raw document…	Ham belge okunuyor…
+	The raw text was truncated to what fits.	Ham metin kısaltıldı.
+	…or paste the raw text here; # headings, - bullets	…veya ham metni buraya yapıştırın; # başlıklar, - madde işaretleri
+	Generate styled PDF	Stilli PDF oluştur
+	Ask AI to change the formatting	Yapay zekâdan biçimi değiştirmesini iste
+	API key:	API anahtarı:
+	Paste an OpenRouter key	OpenRouter anahtarı yapıştır
+	Model:	Yapay zekâ modeli:
+	e.g. bigger headings, numbered pages	örn. daha büyük başlıklar, numaralı sayfalar
+	Send	Gönder
+	Sending…	Gönderiliyor…
+	The answer proposes formatting changes.	Yanıt biçim değişiklikleri öneriyor.
+	The answer stopped unexpectedly.	Yanıt beklenmedik şekilde durdu.
+	AI chat isn't available in the web build; use the desktop app or CLI.	Yapay zekâ sohbeti web sürümünde yok; masaüstü uygulamasını veya CLI’yi kullanın.
+	PDF and text	PDF ve metin

@@ -2267,3 +2267,28 @@ animation effects	Off	Выкл
 	This document is trying to open a local file:	Этот документ пытается открыть локальный файл:
 	Move tag earlier	Переместить тег раньше
 	Move tag later	Переместить тег позже
+
+# Format Studio.
+	Format Studio	Студия форматирования
+	Format Studio…	Студия форматирования…
+	Reference:	Образец :
+	No reference yet	Эталон пока не выбран
+	Choose reference…	Выбрать эталон…
+	Raw:	Исходник :
+	No raw file yet	Исходный файл пока не выбран
+	Choose raw file…	Выбрать исходный файл…
+	Reading the raw document…	Чтение исходного документа…
+	The raw text was truncated to what fits.	Исходный текст был обрезан.
+	…or paste the raw text here; # headings, - bullets	…или вставьте сюда исходный текст; # заголовки, - списки
+	Generate styled PDF	Создать PDF в стиле
+	Ask AI to change the formatting	Попросить ИИ изменить форматирование
+	API key:	Ключ API :
+	Paste an OpenRouter key	Вставьте ключ OpenRouter
+	Model:	Модель :
+	e.g. bigger headings, numbered pages	напр. более крупные заголовки, нумерация страниц
+	Send	Отправить
+	Sending…	Отправка…
+	The answer proposes formatting changes.	Ответ содержит предложения по форматированию.
+	The answer stopped unexpectedly.	Ответ неожиданно прервался.
+	AI chat isn't available in the web build; use the desktop app or CLI.	ИИ-чат недоступен в веб-версии; используйте настольное приложение или CLI.
+	PDF and text	PDF и текст

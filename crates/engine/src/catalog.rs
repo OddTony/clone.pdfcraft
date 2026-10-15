@@ -154,6 +154,7 @@ pub static TOOL_GROUPS: &[ToolGroup] = &[
                 item("Images", "image", "create.images", Ready),
                 item("Clipboard", "copy-plus", "create.clipboard", Ready),
                 item("Blank page", "file-plus-2", "create.blank", Ready),
+                item("Format Studio", "sparkles", "format.studio", Ready),
             ],
         }],
     },

@@ -2353,3 +2353,28 @@ animation effects	Off	Ki
 	This document is trying to open a local file:	Ez a dokumentum egy helyi fájlt próbál megnyitni:
 	Move tag earlier	Címke korábbra helyezése
 	Move tag later	Címke későbbre helyezése
+
+# Format Studio.
+	Format Studio	Formátumstúdió
+	Format Studio…	Formátumstúdió…
+	Reference:	Referencia:
+	No reference yet	Még nincs referencia
+	Choose reference…	Referencia választása…
+	Raw:	Nyers:
+	No raw file yet	Még nincs nyers fájl
+	Choose raw file…	Nyers fájl választása…
+	Reading the raw document…	A nyers dokumentum olvasása…
+	The raw text was truncated to what fits.	A nyers szöveg csonkolva lett.
+	…or paste the raw text here; # headings, - bullets	…vagy illessze be ide a nyers szöveget; # címsorok, - felsorolások
+	Generate styled PDF	Formázott PDF létrehozása
+	Ask AI to change the formatting	Kérje meg a MI-t a formázás módosítására
+	API key:	API-kulcs:
+	Paste an OpenRouter key	OpenRouter-kulcs beillesztése
+	Model:	Modell:
+	e.g. bigger headings, numbered pages	pl. nagyobb címsorok, számozott oldalak
+	Send	Küldés
+	Sending…	Küldés…
+	The answer proposes formatting changes.	A válasz formázási módosításokat javasol.
+	The answer stopped unexpectedly.	A válasz váratlanul megszakadt.
+	AI chat isn't available in the web build; use the desktop app or CLI.	A MI-csevegés nem érhető el a webes verzióban; használja az asztali alkalmazást vagy a CLI-t.
+	PDF and text	PDF és szöveg

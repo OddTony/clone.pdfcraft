@@ -2355,3 +2355,28 @@ animation effects	Off	Aus
 	This document is trying to open a local file:	Dieses Dokument versucht, eine lokale Datei zu öffnen:
 	Move tag earlier	Tag früher verschieben
 	Move tag later	Tag später verschieben
+
+# Format Studio.
+	Format Studio	Formatstudio
+	Format Studio…	Formatstudio…
+	Reference:	Referenz:
+	No reference yet	Noch keine Referenz
+	Choose reference…	Referenz wählen…
+	Raw:	Rohtext:
+	No raw file yet	Noch keine Rohdatei
+	Choose raw file…	Rohdatei wählen…
+	Reading the raw document…	Rohdokument wird gelesen…
+	The raw text was truncated to what fits.	Der Rohtext wurde auf die passende Länge gekürzt.
+	…or paste the raw text here; # headings, - bullets	…oder Rohtext hier einfügen; # Überschriften, - Aufzählungen
+	Generate styled PDF	Gestyltes PDF erzeugen
+	Ask AI to change the formatting	KI bitten, die Formatierung zu ändern
+	API key:	API-Schlüssel:
+	Paste an OpenRouter key	OpenRouter-Schlüssel einfügen
+	Model:	Modell:
+	e.g. bigger headings, numbered pages	z. B. größere Überschriften, nummerierte Seiten
+	Send	Senden
+	Sending…	Wird gesendet…
+	The answer proposes formatting changes.	Die Antwort schlägt Formatänderungen vor.
+	The answer stopped unexpectedly.	Die Antwort ist unerwartet abgebrochen.
+	AI chat isn't available in the web build; use the desktop app or CLI.	KI-Chat gibt es nicht im Web-Build; Desktop-App oder CLI verwenden.
+	PDF and text	PDF und Text

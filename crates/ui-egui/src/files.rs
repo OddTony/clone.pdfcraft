@@ -26,6 +26,10 @@ pub enum FilePurpose {
     CreateMultipleSeparate,
     /// Find text and redact ▸ Import list: a text file with one word or phrase per line.
     RedactWords,
+    /// File ▸ Format Studio: the reference PDF whose formatting is reused.
+    FormatReference,
+    /// File ▸ Format Studio: the raw PDF or text to restyle.
+    FormatRaw,
 }
 
 /// Discover installed document fonts off the GUI thread, only when the picker is opened.
@@ -65,6 +69,12 @@ fn files_picker(purpose: FilePurpose) -> rfd::AsyncFileDialog {
     }
     if purpose == FilePurpose::RedactWords {
         return dialog.add_filter(tl!("Text"), &["txt"]);
+    }
+    if purpose == FilePurpose::FormatReference {
+        return dialog.add_filter("PDF", &["pdf"]);
+    }
+    if purpose == FilePurpose::FormatRaw {
+        return dialog.add_filter(tl!("PDF and text"), &["pdf", "txt", "text"]).add_filter("PDF", &["pdf"]);
     }
     if !matches!(purpose, FilePurpose::CreateMultiple | FilePurpose::CreateMultipleSeparate | FilePurpose::InsertPages | FilePurpose::Combine) {
         return dialog.add_filter("PDF", &["pdf"]);
@@ -255,6 +265,16 @@ impl PdfCraftApp {
     /// Create a PDF ▸ Separate PDFs: pick source files, then a destination folder.
     pub fn create_multiple_separate_dialog(&mut self) {
         self.pick_files(FilePurpose::CreateMultipleSeparate, true);
+    }
+
+    /// File ▸ Format Studio: pick the reference PDF.
+    pub fn format_reference_dialog(&mut self) {
+        self.pick_files(FilePurpose::FormatReference, false);
+    }
+
+    /// File ▸ Format Studio: pick the raw PDF or text file.
+    pub fn format_raw_dialog(&mut self) {
+        self.pick_files(FilePurpose::FormatRaw, false);
     }
 
     /// Scan & OCR ▸ Recognize text ▸ In multiple files: ask for the PDFs.
@@ -493,6 +513,14 @@ impl PdfCraftApp {
                 }
                 self.redact_search.words = pdfcraft_engine::redact_word_list(&pdfcraft_engine::decode_text(&bytes)).join("\n");
                 self.redact_search.mode = crate::redact_ui::SearchMode::Words;
+            }
+            FilePurpose::FormatReference => {
+                let Some((name, bytes)) = files.into_iter().next() else { return };
+                self.use_format_reference(name, bytes);
+            }
+            FilePurpose::FormatRaw => {
+                let Some((name, bytes)) = files.into_iter().next() else { return };
+                self.use_format_raw(name, bytes);
             }
         }
     }

@@ -2334,3 +2334,28 @@ animation effects	Off	Wyłączone
 	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
 	Move tag earlier	Przenieś znacznik wcześniej
 	Move tag later	Przenieś znacznik później
+
+# Format Studio.
+	Format Studio	Studio formatowania
+	Format Studio…	Studio formatowania…
+	Reference:	Wzorzec:
+	No reference yet	Brak wzorca
+	Choose reference…	Wybierz wzorzec…
+	Raw:	Źródło:
+	No raw file yet	Brak pliku źródłowego
+	Choose raw file…	Wybierz plik źródłowy…
+	Reading the raw document…	Odczytywanie dokumentu źródłowego…
+	The raw text was truncated to what fits.	Tekst źródłowy został obcięty.
+	…or paste the raw text here; # headings, - bullets	…lub wklej tutaj tekst źródłowy; # nagłówki, - wypunktowania
+	Generate styled PDF	Generuj sformatowany PDF
+	Ask AI to change the formatting	Poproś AI o zmianę formatowania
+	API key:	Klucz API:
+	Paste an OpenRouter key	Wklej klucz OpenRouter
+	Model:	Model:
+	e.g. bigger headings, numbered pages	np. większe nagłówki, numerowane strony
+	Send	Wyślij
+	Sending…	Wysyłanie…
+	The answer proposes formatting changes.	Odpowiedź proponuje zmiany formatowania.
+	The answer stopped unexpectedly.	Odpowiedź nieoczekiwanie się zatrzymała.
+	AI chat isn't available in the web build; use the desktop app or CLI.	Czat AI nie jest dostępny w wersji internetowej; użyj aplikacji desktopowej lub CLI.
+	PDF and text	PDF i tekst

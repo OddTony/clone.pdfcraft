@@ -2317,3 +2317,28 @@ animation effects	Off	Изключени
 	This document is trying to open a local file:	Този документ се опитва да отвори локален файл:
 	Move tag earlier	Преместване на етикета по-рано
 	Move tag later	Преместване на етикета по-късно
+
+# Format Studio.
+	Format Studio	Студио за форматиране
+	Format Studio…	Студио за форматиране…
+	Reference:	Образец:
+	No reference yet	Все още няма образец
+	Choose reference…	Избор на образец…
+	Raw:	Суров:
+	No raw file yet	Все още няма суров файл
+	Choose raw file…	Избор на суров файл…
+	Reading the raw document…	Четене на суровия документ…
+	The raw text was truncated to what fits.	Суровият текст е съкратен.
+	…or paste the raw text here; # headings, - bullets	…или поставете суровия текст тук; # заглавия, - списъци
+	Generate styled PDF	Създаване на форматиран PDF
+	Ask AI to change the formatting	Помолете ИИ да промени форматирането
+	API key:	API ключ:
+	Paste an OpenRouter key	Поставете OpenRouter ключ
+	Model:	Модел:
+	e.g. bigger headings, numbered pages	напр. по-големи заглавия, номерирани страници
+	Send	Изпрати
+	Sending…	Изпраща се…
+	The answer proposes formatting changes.	Отговорът предлага промени във форматирането.
+	The answer stopped unexpectedly.	Отговорът спря неочаквано.
+	AI chat isn't available in the web build; use the desktop app or CLI.	ИИ чатът не е наличен в уеб версията; използвайте настолното приложение или CLI.
+	PDF and text	PDF и текст

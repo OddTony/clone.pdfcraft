@@ -2359,3 +2359,28 @@ animation effects	Off	Izklopljeni
 	This document is trying to open a local file:	Ta dokument poskuša odpreti lokalno datoteko:
 	Move tag earlier	Premakni oznako prej
 	Move tag later	Premakni oznako pozneje
+
+# Format Studio.
+	Format Studio	Studio za oblikovanje
+	Format Studio…	Studio za oblikovanje…
+	Reference:	Referenca:
+	No reference yet	Reference še ni
+	Choose reference…	Izberi referenco…
+	Raw:	Surovo:
+	No raw file yet	Surove datoteke še ni
+	Choose raw file…	Izberi surovo datoteko…
+	Reading the raw document…	Berem surov dokument…
+	The raw text was truncated to what fits.	Surovo besedilo je bilo skrajšano.
+	…or paste the raw text here; # headings, - bullets	…ali sem prilepite surovo besedilo; # naslovi, - seznami
+	Generate styled PDF	Ustvari oblikovan PDF
+	Ask AI to change the formatting	Prosi umetno inteligenco, naj spremeni oblikovanje
+	API key:	Ključ API:
+	Paste an OpenRouter key	Prilepite ključ OpenRouter
+	Model:	Model:
+	e.g. bigger headings, numbered pages	npr. večji naslovi, oštevilčene strani
+	Send	Pošlji
+	Sending…	Pošiljanje…
+	The answer proposes formatting changes.	Odgovor predlaga spremembe oblikovanja.
+	The answer stopped unexpectedly.	Odgovor se je nepričakovano ustavil.
+	AI chat isn't available in the web build; use the desktop app or CLI.	Klepet UI ni na voljo v spletni različici; uporabite namizno aplikacijo ali CLI.
+	PDF and text	PDF in besedilo

@@ -79,6 +79,7 @@ pub mod file_watch;
 mod files;
 pub mod fill_sign;
 pub mod folders_ui;
+mod format_studio;
 pub mod forms_ui;
 mod home;
 mod icon_data;
@@ -336,6 +337,8 @@ pub enum Dialog {
     AuditSpace,
     /// Signatures ▸ Show certificate.
     CertificateViewer,
+    /// File ▸ Format Studio: restyle a raw document like a reference one.
+    FormatStudio,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -626,6 +629,8 @@ pub struct PdfCraftApp {
     pub rotate_draft: RotateDraft,
     /// Summarize Comments: sort order.
     pub summary_sort: pdfcraft_engine::SummarySort,
+    /// File ▸ Format Studio: reference, raw content, profile, and AI chat.
+    pub(crate) format: format_studio::FormatStudio,
     /// The signing dialogs' state.
     pub sign_draft: Option<SignDraft>,
     /// Digital ID files the user has created or added.
@@ -949,6 +954,7 @@ impl PdfCraftApp {
             extract_draft: ExtractDraft::default(),
             rotate_draft: RotateDraft::default(),
             summary_sort: Default::default(),
+            format: format_studio::FormatStudio::fresh(),
             sign_draft: None,
             digital_ids: Vec::new(),
             sig_expanded: Vec::new(),
@@ -2909,6 +2915,7 @@ impl eframe::App for PdfCraftApp {
         }
         self.poll_export();
         self.poll_ocr();
+        self.poll_format_studio();
         self.poll_optimize();
         self.poll_action();
         self.process_file_requests();

@@ -2318,3 +2318,28 @@ animation effects	Off	关
 	This document is trying to open a local file:	此文档正尝试打开本地文件：
 	Move tag earlier	将标签前移
 	Move tag later	将标签后移
+
+# Format Studio.
+	Format Studio	格式工作室
+	Format Studio…	格式工作室…
+	Reference:	参考文件：
+	No reference yet	尚未选择参考文件
+	Choose reference…	选择参考文件…
+	Raw:	原始文件：
+	No raw file yet	尚未选择原始文件
+	Choose raw file…	选择原始文件…
+	Reading the raw document…	正在读取原始文档…
+	The raw text was truncated to what fits.	原始文本已被截断。
+	…or paste the raw text here; # headings, - bullets	…或在此粘贴原始文本；# 标题，- 项目符号
+	Generate styled PDF	生成样式 PDF
+	Ask AI to change the formatting	让 AI 修改格式
+	API key:	API 密钥：
+	Paste an OpenRouter key	粘贴 OpenRouter 密钥
+	Model:	模型：
+	e.g. bigger headings, numbered pages	例如更大的标题、页码
+	Send	发送
+	Sending…	发送中…
+	The answer proposes formatting changes.	回答中包含格式修改建议。
+	The answer stopped unexpectedly.	回答意外中断。
+	AI chat isn't available in the web build; use the desktop app or CLI.	网页版不支持 AI 聊天；请使用桌面应用或 CLI。
+	PDF and text	PDF 和文本

@@ -2364,3 +2364,28 @@ animation effects	Off	Ανενεργά
 	This document is trying to open a local file:	Αυτό το έγγραφο προσπαθεί να ανοίξει ένα τοπικό αρχείο:
 	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
 	Move tag later	Μετακίνηση ετικέτας αργότερα
+
+# Format Studio.
+	Format Studio	Στούντιο μορφοποίησης
+	Format Studio…	Στούντιο μορφοποίησης…
+	Reference:	Αναφορά:
+	No reference yet	Δεν υπάρχει ακόμη αναφορά
+	Choose reference…	Επιλογή αναφοράς…
+	Raw:	Ακατέργαστο:
+	No raw file yet	Δεν υπάρχει ακόμη ακατέργαστο αρχείο
+	Choose raw file…	Επιλογή ακατέργαστου αρχείου…
+	Reading the raw document…	Ανάγνωση του ακατέργαστου εγγράφου…
+	The raw text was truncated to what fits.	Το ακατέργαστο κείμενο περικόπηκε.
+	…or paste the raw text here; # headings, - bullets	…ή επικολλήστε εδώ το ακατέργαστο κείμενο· # επικεφαλίδες, - λίστες
+	Generate styled PDF	Δημιουργία μορφοποιημένου PDF
+	Ask AI to change the formatting	Ζητήστε από το AI να αλλάξει τη μορφοποίηση
+	API key:	Κλειδί API:
+	Paste an OpenRouter key	Επικόλληση κλειδιού OpenRouter
+	Model:	Μοντέλο:
+	e.g. bigger headings, numbered pages	π.χ. μεγαλύτερες επικεφαλίδες, αριθμημένες σελίδες
+	Send	Αποστολή
+	Sending…	Αποστολή…
+	The answer proposes formatting changes.	Η απάντηση προτείνει αλλαγές μορφοποίησης.
+	The answer stopped unexpectedly.	Η απάντηση σταμάτησε απροσδόκητα.
+	AI chat isn't available in the web build; use the desktop app or CLI.	Η συνομιλία AI δεν είναι διαθέσιμη στην έκδοση web· χρησιμοποιήστε την εφαρμογή desktop ή το CLI.
+	PDF and text	PDF και κείμενο

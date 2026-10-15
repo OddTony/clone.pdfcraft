@@ -2354,3 +2354,28 @@ animation effects	Off	オフ
 	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
 	Move tag earlier	タグを前へ移動
 	Move tag later	タグを後へ移動
+
+# Format Studio.
+	Format Studio	フォーマットスタジオ
+	Format Studio…	フォーマットスタジオ…
+	Reference:	参照：
+	No reference yet	まだ参照がありません
+	Choose reference…	参照を選ぶ…
+	Raw:	原文：
+	No raw file yet	まだ原文ファイルがありません
+	Choose raw file…	原文ファイルを選ぶ…
+	Reading the raw document…	原文ドキュメントを読み取り中…
+	The raw text was truncated to what fits.	テキストが収まる長さに切り詰められました。
+	…or paste the raw text here; # headings, - bullets	…または未整形テキストをここに貼り付け（# 見出し、- 箇条書き）
+	Generate styled PDF	スタイル付きPDFを生成
+	Ask AI to change the formatting	AIに書式の変更を依頼
+	API key:	APIキー：
+	Paste an OpenRouter key	OpenRouterキーを貼り付け
+	Model:	モデル：
+	e.g. bigger headings, numbered pages	例：大きな見出し、ページ番号付き
+	Send	送信
+	Sending…	送信中…
+	The answer proposes formatting changes.	回答に書式変更の提案が含まれています。
+	The answer stopped unexpectedly.	回答が途中で止まりました。
+	AI chat isn't available in the web build; use the desktop app or CLI.	AIチャットはWeb版では使えません。デスクトップアプリかCLIを使ってください。
+	PDF and text	PDFとテキスト

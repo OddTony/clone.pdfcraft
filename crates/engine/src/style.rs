@@ -10,6 +10,38 @@ use crate::{Document, EditError, Session};
 
 pub use pdfcraft_style::{BaseFont, BlockSample, HeadingStyle, StyleError, StyleProfile, StyledItem};
 
+/// Bounded raw text of a PDF for Format Studio generation: pages joined with
+/// `Page N:` headers (like the automation `raw_doc` path), at most
+/// `max_pages` pages (clamped to 1–2000) and `max_chars` characters (clamped
+/// to 1 KiB–4 MiB, cut at a char boundary). Unreadable pages are skipped.
+/// Returns the text and whether anything was left out. Never fails: the
+/// caller checks copying permission first. Thread-safe: everything is owned.
+pub fn source_text(bytes: &Arc<Vec<u8>>, password: Option<&str>, page_count: usize, max_pages: usize, max_chars: usize) -> (String, bool) {
+    let pages = page_count.min(max_pages.clamp(1, 2000));
+    let cap = max_chars.clamp(1024, 4_000_000);
+    let config = pdfcraft_render::RenderConfig { password: password.map(std::sync::Arc::from), ..Default::default() };
+    let mut renderer = pdfcraft_render::PageRenderer::new(bytes.clone(), config);
+    let mut out = String::new();
+    let mut left_out = page_count > pages;
+    for page in 0..pages {
+        let rendered =
+            renderer.render(pdfcraft_render::RenderRequest { page, kind: pdfcraft_render::RequestKind::Text, scale: 1.0, ..Default::default() });
+        let Some(text) = rendered.text else {
+            left_out = true;
+            continue;
+        };
+        let chunk = format!("Page {}:\n{}\n\n", page + 1, text.plain_text());
+        if out.len() + chunk.len() > cap {
+            let rest = cap.saturating_sub(out.len()).min(chunk.len());
+            out.push_str(&chunk[..chunk.floor_char_boundary(rest)]);
+            left_out = true;
+            break;
+        }
+        out.push_str(&chunk);
+    }
+    (out, left_out)
+}
+
 /// Extract the [`StyleProfile`] of an open document.
 ///
 /// Samples per-run text lines (not grouped paragraphs: grouping merges mixed

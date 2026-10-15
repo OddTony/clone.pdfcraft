@@ -9540,8 +9540,8 @@ milestone = "M13"
 status = "partial"
 commands = []
 tools = ["style_profile", "style_patch", "style_apply", "ai_chat"]
-evidence = ["crates/automation/tests/automation.rs::format_studio_profiles_and_applies_styles"]
-notes = "Format Studio: deterministic reference profiles (page size, margins, body/headings, bullets, page numbers) applied to raw text or raw documents; style_patch validates follow-up changes (what ai_chat proposes); ai_chat is BYOK OpenRouter chat over bounded context. No DOCX import, no in-place PDF restyle, no UI panel yet"
+evidence = ["crates/automation/tests/automation.rs::format_studio_profiles_and_applies_styles", "crates/ui-egui/tests/format_studio.rs::format_studio_picks_reference_and_raw_then_generates"]
+notes = "Format Studio: deterministic reference profiles (page size, margins, body/headings, bullets, page numbers) applied to raw text or raw documents; style_patch validates follow-up changes (what ai_chat proposes); ai_chat is BYOK OpenRouter chat over bounded context; File menu dialog with dual picks, Generate, and in-app key field plus chat. No DOCX import, no in-place PDF restyle yet"
 
 [[feature]]
 id = "misc.ai-presentation"

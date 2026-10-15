@@ -2228,3 +2228,28 @@ animation effects	Off	關
 	This document is trying to open a local file:	此文件正嘗試開啟本機檔案：
 	Move tag earlier	將標記前移
 	Move tag later	將標記後移
+
+# Format Studio.
+	Format Studio	格式工作室
+	Format Studio…	格式工作室…
+	Reference:	參考檔案：
+	No reference yet	尚未選擇參考檔案
+	Choose reference…	選擇參考檔案…
+	Raw:	原始檔案：
+	No raw file yet	尚未選擇原始檔案
+	Choose raw file…	選擇原始檔案…
+	Reading the raw document…	正在讀取原始文件…
+	The raw text was truncated to what fits.	原始文字已被截斷。
+	…or paste the raw text here; # headings, - bullets	…或在此貼上原始文字；# 標題，- 項目符號
+	Generate styled PDF	產生樣式 PDF
+	Ask AI to change the formatting	讓 AI 修改格式
+	API key:	API 金鑰：
+	Paste an OpenRouter key	貼上 OpenRouter 金鑰
+	Model:	模型：
+	e.g. bigger headings, numbered pages	例如更大的標題、頁碼
+	Send	傳送
+	Sending…	傳送中…
+	The answer proposes formatting changes.	回答中包含格式修改建議。
+	The answer stopped unexpectedly.	回答意外中斷。
+	AI chat isn't available in the web build; use the desktop app or CLI.	網頁版不支援 AI 聊天；請使用桌面應用程式或 CLI。
+	PDF and text	PDF 和文字

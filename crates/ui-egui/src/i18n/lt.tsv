@@ -2598,3 +2598,28 @@ key	Space	Tarpas
 	This document is trying to open a local file:	Šis dokumentas bando atverti vietinį failą:
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
+
+# Format Studio.
+	Format Studio	Formato studija
+	Format Studio…	Formato studija…
+	Reference:	Etalonas:
+	No reference yet	Etalono dar nėra
+	Choose reference…	Pasirinkti etaloną…
+	Raw:	Pirminis:
+	No raw file yet	Pirminio failo dar nėra
+	Choose raw file…	Pasirinkti pirminį failą…
+	Reading the raw document…	Skaitomas pirminis dokumentas…
+	The raw text was truncated to what fits.	Pirminis tekstas sutrumpintas.
+	…or paste the raw text here; # headings, - bullets	…arba čia įklijuokite pirminį tekstą; # antraštės, - sąrašai
+	Generate styled PDF	Generuoti formatuotą PDF
+	Ask AI to change the formatting	Paprašyti DI pakeisti formatavimą
+	API key:	API raktas:
+	Paste an OpenRouter key	Įklijuokite OpenRouter raktą
+	Model:	Modelis:
+	e.g. bigger headings, numbered pages	pvz. didesnės antraštės, numeruoti puslapiai
+	Send	Siųsti
+	Sending…	Siunčiama…
+	The answer proposes formatting changes.	Atsakyme siūlomi formatavimo pakeitimai.
+	The answer stopped unexpectedly.	Atsakymas netikėtai nutrūko.
+	AI chat isn't available in the web build; use the desktop app or CLI.	DI pokalbiai žiniatinklio versijoje neveikia; naudokite darbalaukio programą arba CLI.
+	PDF and text	PDF ir tekstas

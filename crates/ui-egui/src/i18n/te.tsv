@@ -2267,3 +2267,28 @@ animation effects	Off	ఆఫ్
 	This document is trying to open a local file:	ఈ పత్రం ఒక స్థానిక ఫైల్‌ను తెరవడానికి ప్రయత్నిస్తోంది:
 	Move tag earlier	ట్యాగ్‌ను ముందుకు తరలించు
 	Move tag later	ట్యాగ్‌ను వెనుకకు తరలించు
+
+# Format Studio.
+	Format Studio	ఫార్మాట్ స్టూడియో
+	Format Studio…	ఫార్మాట్ స్టూడియో…
+	Reference:	సూచన:
+	No reference yet	ఇంకా సూచన లేదు
+	Choose reference…	సూచనను ఎంచుకోండి…
+	Raw:	ముడి:
+	No raw file yet	ఇంకా ముడి ఫైల్ లేదు
+	Choose raw file…	ముడి ఫైల్‌ను ఎంచుకోండి…
+	Reading the raw document…	ముడి పత్రాన్ని చదువుతోంది…
+	The raw text was truncated to what fits.	ముడి పాఠం కత్తిరించబడింది.
+	…or paste the raw text here; # headings, - bullets	…లేదా ముడి పాఠాన్ని ఇక్కడ అతికించండి; # శీర్షికలు, - జాబితాలు
+	Generate styled PDF	ఫార్మాట్ చేసిన PDF సృష్టించండి
+	Ask AI to change the formatting	ఫార్మాటింగ్ మార్చమని AI ని అడగండి
+	API key:	API కీ:
+	Paste an OpenRouter key	OpenRouter కీని అతికించండి
+	Model:	మోడల్:
+	e.g. bigger headings, numbered pages	ఉదా. పెద్ద శీర్షికలు, సంఖ్యల పేజీలు
+	Send	పంపండి
+	Sending…	పంపుతోంది…
+	The answer proposes formatting changes.	సమాధానం ఫార్మాటింగ్ మార్పులను సూచిస్తోంది.
+	The answer stopped unexpectedly.	సమాధానం అకస్మాత్తుగా ఆగిపోయింది.
+	AI chat isn't available in the web build; use the desktop app or CLI.	వెబ్ వెర్షన్‌లో AI చాట్ అందుబాటులో లేదు; డెస్క్‌టాప్ యాప్ లేదా CLI ని ఉపయోగించండి.
+	PDF and text	PDF మరియు పాఠం

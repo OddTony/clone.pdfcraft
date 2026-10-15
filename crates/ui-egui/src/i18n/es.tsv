@@ -2484,3 +2484,28 @@ animation effects	Off	Desactivados
 	This document is trying to open a local file:	Este documento intenta abrir un archivo local:
 	Move tag earlier	Mover etiqueta antes
 	Move tag later	Mover etiqueta después
+
+# Format Studio.
+	Format Studio	Estudio de formato
+	Format Studio…	Estudio de formato…
+	Reference:	Referencia:
+	No reference yet	Aún no hay referencia
+	Choose reference…	Elegir referencia…
+	Raw:	Original:
+	No raw file yet	Aún no hay archivo original
+	Choose raw file…	Elegir archivo original…
+	Reading the raw document…	Leyendo el documento original…
+	The raw text was truncated to what fits.	El texto original se ha truncado.
+	…or paste the raw text here; # headings, - bullets	…o pega aquí el texto original; # títulos, - viñetas
+	Generate styled PDF	Generar PDF con formato
+	Ask AI to change the formatting	Pedir a la IA que cambie el formato
+	API key:	Clave de API:
+	Paste an OpenRouter key	Pegar una clave de OpenRouter
+	Model:	Modelo:
+	e.g. bigger headings, numbered pages	p. ej. títulos más grandes, páginas numeradas
+	Send	Enviar
+	Sending…	Enviando…
+	The answer proposes formatting changes.	La respuesta propone cambios de formato.
+	The answer stopped unexpectedly.	La respuesta se interrumpió inesperadamente.
+	AI chat isn't available in the web build; use the desktop app or CLI.	El chat de IA no está disponible en la versión web; usa la aplicación de escritorio o la CLI.
+	PDF and text	PDF y texto

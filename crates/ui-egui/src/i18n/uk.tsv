@@ -2376,3 +2376,28 @@ animation effects	Off	Вимкнено
 	This document is trying to open a local file:	Цей документ намагається відкрити локальний файл:
 	Move tag earlier	Перемістити тег раніше
 	Move tag later	Перемістити тег пізніше
+
+# Format Studio.
+	Format Studio	Студія форматування
+	Format Studio…	Студія форматування…
+	Reference:	Зразок:
+	No reference yet	Зразка поки немає
+	Choose reference…	Вибрати зразок…
+	Raw:	Вхідний:
+	No raw file yet	Вхідного файлу поки немає
+	Choose raw file…	Вибрати вхідний файл…
+	Reading the raw document…	Читання вхідного документа…
+	The raw text was truncated to what fits.	Вхідний текст було скорочено.
+	…or paste the raw text here; # headings, - bullets	…або вставте сюди вхідний текст; # заголовки, - списки
+	Generate styled PDF	Створити форматований PDF
+	Ask AI to change the formatting	Попросити ШІ змінити форматування
+	API key:	Ключ API:
+	Paste an OpenRouter key	Вставте ключ OpenRouter
+	Model:	Модель:
+	e.g. bigger headings, numbered pages	напр. більші заголовки, нумеровані сторінки
+	Send	Надіслати
+	Sending…	Надсилання…
+	The answer proposes formatting changes.	Відповідь пропонує зміни форматування.
+	The answer stopped unexpectedly.	Відповідь несподівано перервалася.
+	AI chat isn't available in the web build; use the desktop app or CLI.	ШІ-чат недоступний у вебверсії; скористайтеся настільною програмою або CLI.
+	PDF and text	PDF і текст

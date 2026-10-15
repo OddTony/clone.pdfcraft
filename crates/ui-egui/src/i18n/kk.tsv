@@ -2352,3 +2352,28 @@ animation effects	Off	Өшірулі
 	This document is trying to open a local file:	Бұл құжат жергілікті файлды ашуға әрекеттеніп жатыр:
 	Move tag earlier	Тегті ертерек жылжыту
 	Move tag later	Тегті кейінірек жылжыту
+
+# Format Studio.
+	Format Studio	Пішімдеу студиясы
+	Format Studio…	Пішімдеу студиясы…
+	Reference:	Үлгі:
+	No reference yet	Үлгі әлі жоқ
+	Choose reference…	Үлгіні таңдау…
+	Raw:	Бастапқы:
+	No raw file yet	Бастапқы файл әлі жоқ
+	Choose raw file…	Бастапқы файлды таңдау…
+	Reading the raw document…	Бастапқы құжат оқылуда…
+	The raw text was truncated to what fits.	Бастапқы мәтін қысқартылды.
+	…or paste the raw text here; # headings, - bullets	…немесе бастапқы мәтінді осында қойыңыз; # тақырыптар, - тізімдер
+	Generate styled PDF	Пішімделген PDF жасау
+	Ask AI to change the formatting	Жасанды интеллектіден пішімді өзгертуді сұрау
+	API key:	API кілті:
+	Paste an OpenRouter key	OpenRouter кілтін қойыңыз
+	Model:	Модель:
+	e.g. bigger headings, numbered pages	мыс. үлкенірек тақырыптар, нөмірленген беттер
+	Send	Жіберу
+	Sending…	Жіберілуде…
+	The answer proposes formatting changes.	Жауап пішім өзгерістерін ұсынады.
+	The answer stopped unexpectedly.	Жауап күтпеген жерден тоқтады.
+	AI chat isn't available in the web build; use the desktop app or CLI.	ЖИ чаты веб-нұсқада жоқ; жұмыс үстелі қолданбасын немесе CLI пайдаланыңыз.
+	PDF and text	PDF және мәтін

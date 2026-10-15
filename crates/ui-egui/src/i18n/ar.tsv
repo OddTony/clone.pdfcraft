@@ -2375,3 +2375,28 @@ animation effects	Off	معطّلة
 	This document is trying to open a local file:	يحاول هذا المستند فتح ملف محلي:
 	Move tag earlier	نقل العلامة للأعلى
 	Move tag later	نقل العلامة للأسفل
+
+# Format Studio.
+	Format Studio	استوديو التنسيق
+	Format Studio…	استوديو التنسيق…
+	Reference:	المرجع:
+	No reference yet	لا يوجد مرجع بعد
+	Choose reference…	اختيار المرجع…
+	Raw:	الخام:
+	No raw file yet	لا يوجد ملف خام بعد
+	Choose raw file…	اختيار الملف الخام…
+	Reading the raw document…	جارٍ قراءة المستند الخام…
+	The raw text was truncated to what fits.	تم اقتطاع النص الخام.
+	…or paste the raw text here; # headings, - bullets	…أو الصق النص الخام هنا؛ # عناوين، - تعداد نقطي
+	Generate styled PDF	إنشاء PDF منسّق
+	Ask AI to change the formatting	اطلب من الذكاء الاصطناعي تغيير التنسيق
+	API key:	مفتاح API:
+	Paste an OpenRouter key	الصق مفتاح OpenRouter
+	Model:	النموذج:
+	e.g. bigger headings, numbered pages	mثال: عناوين أكبر، أرقام صفحات
+	Send	إرسال
+	Sending…	جارٍ الإرسال…
+	The answer proposes formatting changes.	تقترح الإجابة تغييرات على التنسيق.
+	The answer stopped unexpectedly.	توقفت الإجابة بشكل غير متوقع.
+	AI chat isn't available in the web build; use the desktop app or CLI.	دردشة الذكاء الاصطناعي غير متوفرة في إصدار الويب؛ استخدم تطبيق سطح المكتب أو CLI.
+	PDF and text	PDF ونص

@@ -2354,3 +2354,28 @@ animation effects	Off	Désactivés
 	This document is trying to open a local file:	Ce document tente d’ouvrir un fichier local :
 	Move tag earlier	Déplacer la balise plus tôt
 	Move tag later	Déplacer la balise plus tard
+
+# Format Studio.
+	Format Studio	Studio de mise en forme
+	Format Studio…	Studio de mise en forme…
+	Reference:	Référence :
+	No reference yet	Pas encore de référence
+	Choose reference…	Choisir une référence…
+	Raw:	Brut :
+	No raw file yet	Pas encore de fichier brut
+	Choose raw file…	Choisir un fichier brut…
+	Reading the raw document…	Lecture du document brut…
+	The raw text was truncated to what fits.	Le texte brut a été tronqué.
+	…or paste the raw text here; # headings, - bullets	…ou collez le texte brut ici ; # titres, - puces
+	Generate styled PDF	Générer le PDF mis en forme
+	Ask AI to change the formatting	Demander à l’IA de modifier la mise en forme
+	API key:	Clé API :
+	Paste an OpenRouter key	Coller une clé OpenRouter
+	Model:	Modèle :
+	e.g. bigger headings, numbered pages	p. ex. grands titres, pages numérotées
+	Send	Envoyer
+	Sending…	Envoi en cours…
+	The answer proposes formatting changes.	La réponse propose des changements de mise en forme.
+	The answer stopped unexpectedly.	La réponse s’est interrompue de façon inattendue.
+	AI chat isn't available in the web build; use the desktop app or CLI.	Le chat IA n’est pas disponible dans la version web ; utilisez l’application de bureau ou l’interface en ligne de commande.
+	PDF and text	PDF et texte
