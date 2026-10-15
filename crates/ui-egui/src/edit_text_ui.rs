@@ -1127,6 +1127,51 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
         definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(program.bytes.clone())));
         families.insert(program.resource.clone(), name);
     }
+    // Interface-only matching of a PDF's named font to a user-installed face.
+    // No system font bytes are written back into a PDF. Source-embedded fonts win.
+    // A face must match the PDF family/PostScript name, not merely its style.
+    #[cfg(target_os = "macos")]
+    {
+        let missing: Vec<_> = doc.text_lines(page).into_iter()
+            .filter(|line| !families.contains_key(&line.font))
+            .map(|line| (line.font, line.base_font))
+            .collect();
+        if !missing.is_empty() {
+            let mut roots = vec![std::path::PathBuf::from("/Library/Fonts")];
+            if let Some(home) = std::env::var_os("HOME") {
+                roots.push(std::path::PathBuf::from(home).join("Library/Fonts"));
+            }
+            let mut scanned = 0_usize;
+            for root in roots {
+                let Ok(entries) = std::fs::read_dir(root) else { continue };
+                for entry in entries.flatten() {
+                    if scanned >= 1024 || families.len() >= 128 { break; }
+                    scanned += 1;
+                    let path = entry.path();
+                    let Some(ext) = path.extension().and_then(|e| e.to_str()) else { continue };
+                    if !ext.eq_ignore_ascii_case("ttf") && !ext.eq_ignore_ascii_case("otf") { continue; }
+                    let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
+                    if !meta.is_file() || meta.len() > (16 << 20) { continue; }
+                    let Ok(bytes) = std::fs::read(&path) else { continue };
+                    let Ok((family, postscript)) = pdfcraft_fonts::embedding::names(&bytes) else { continue };
+                    let matched: Vec<_> = missing.iter().filter(|(resource, source)| {
+                        !families.contains_key(resource)
+                            && [family.as_str(), postscript.as_str()].iter().any(|name| {
+                                pdfcraft_fonts::embedding::face_key(name) ==
+                                    pdfcraft_fonts::embedding::face_key(source)
+                            })
+                    }).collect();
+                    if matched.is_empty() { continue; }
+                    // Validate the font parser and glyph coverage for each matched run.
+                    let name = format!("pdf-source-installed-{}", definitions.font_data.len());
+                    definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(bytes)));
+                    for (resource, _) in matched {
+                        families.insert(resource.clone(), name.clone());
+                    }
+                }
+            }
+        }
+    }
     for program in &programs {
         let Some(name) = families.get(&program.resource) else { continue };
         // Word-created PDFs often split one face into several subsets. Use all of the
