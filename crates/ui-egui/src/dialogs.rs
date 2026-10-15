@@ -1173,10 +1173,6 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                             ui.label(egui::RichText::new(tl!("Part of")).color(t.text_muted));
                             widgets::artcraft_logo(ui, 16.0);
                         });
-                        ui.add_space(6.0);
-                        if let Some(cmd) = widgets::community_links(ui) {
-                            link_command = Some(cmd);
-                        }
                     }
                 }
             }
