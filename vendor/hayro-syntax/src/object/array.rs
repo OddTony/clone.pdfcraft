@@ -43,6 +43,24 @@ impl<'a> Array<'a> {
         ResolvedArrayIter::new(self.data, &self.ctx)
     }
 
+    /// PdfCraft patch: resolve each raw slot, returning `None` for an unreadable or
+    /// wrong-type entry without ending the iterator. Callers may skip those slots in
+    /// structural lists, but must preserve them in positional or key/value arrays.
+    #[allow(
+        private_bounds,
+        reason = "users shouldn't be able to implement `ObjectLike` for custom objects."
+    )]
+    pub fn resolved_entries<T>(&self) -> impl Iterator<Item = Option<T>> + 'a
+    where
+        T: ObjectLike<'a> + 'a,
+    {
+        let ctx = self.ctx.clone();
+        self.raw_iter().map(move |entry| match entry {
+            MaybeRef::Ref(r) => ctx.xref().get_with::<T>(r.into(), &ctx),
+            MaybeRef::NotRef(object) => object.cast::<T>(),
+        })
+    }
+
     /// Return a flex iterator over the items in the array.
     pub fn flex_iter(&self) -> FlexArrayIter<'a> {
         FlexArrayIter::new(self.data, &self.ctx)
