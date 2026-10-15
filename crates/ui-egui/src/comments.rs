@@ -471,8 +471,6 @@ pub struct CommentView {
     pub editing: Option<(usize, usize, String)>,
     /// The panel should scroll the selected card into view.
     pub reveal: bool,
-    /// A comment with text was clicked: open the Comments panel on it, even if it was closed.
-    pub(crate) open_panel: bool,
     /// The "Add a comment" box at the top of the Comments panel.
     pub add_box: String,
     /// The Comments panel's search query (`None`: search closed).
@@ -1123,8 +1121,6 @@ fn select_input(
             Some(a) => {
                 cv.selected = Some((cx.page, a.index));
                 cv.reveal = true;
-                // An explicit click shows the comment's thread, unlike a tool opening the panel.
-                cv.open_panel |= cx.tool == QuickTool::Select && a.contents.as_deref().is_some_and(|t| !t.trim().is_empty());
                 consumed = true;
             }
             None => cv.selected = None,

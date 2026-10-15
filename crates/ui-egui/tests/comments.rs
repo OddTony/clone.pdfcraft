@@ -483,50 +483,6 @@ fn the_composer_for_a_comment_on_selected_text_is_titled_add_comment() {
     h.get_by_label("Add comment");
 }
 
-/// Clicking a comment that has text shows it, even after the Comments panel was closed: the
-/// click asks for that thread, unlike a comment tool opening the panel on its own (#225).
-#[test]
-fn clicking_a_comment_with_text_opens_the_closed_comments_panel_on_its_thread() {
-    use pdfcraft_ui_egui::RightPanel;
-    let mut h = harness(|_| {});
-    h.state_mut().views[0].select_text(0, 4, 8);
-    h.run_steps(3);
-    h.get_by_label("Add comment").click();
-    h.run_steps(2);
-    field(&h, "Add a comment").type_text("Is this the right word?");
-    h.run_steps(2);
-    h.get_by_label("Post").click();
-    h.run_steps(3);
-    settle(&mut h);
-    h.state_mut().views[0].select_text(0, 10, 14);
-    h.run_steps(3);
-    h.get_by_label("Underline").click();
-    h.run_steps(3);
-    settle(&mut h);
-    let c = comments(&h);
-    assert_eq!(c.len(), 2);
-    let (commented, bare) = (&c[0], &c[1]);
-    assert_eq!((bare.contents.as_deref().unwrap_or(""), commented.contents.as_deref()), ("", Some("Is this the right word?")));
-    h.state_mut().choose_right_panel(Some(RightPanel::Comments));
-    h.state_mut().choose_right_panel(None);
-    h.run_steps(2);
-    settle(&mut h);
-    assert!(h.state().comments_panel_closed);
-    // A comment without text is only selected, as before.
-    let bare_at = h.state().views[0].glyph_screen_pos(0, 12).expect("text layer");
-    click(&mut h, bare_at);
-    assert_eq!(h.state().views[0].comments.selected, Some((0, bare.index)));
-    assert_eq!(h.state().right, None);
-    let commented_at = h.state().views[0].glyph_screen_pos(0, 6).expect("text layer");
-    click(&mut h, commented_at);
-    h.run_steps(3);
-    assert_eq!(h.state().views[0].comments.selected, Some((0, commented.index)));
-    assert_eq!(h.state().right, Some(RightPanel::Comments), "the click opens the closed panel");
-    assert!(!h.state().comments_panel_closed);
-    assert!(!h.state().views[0].comments.reveal, "the panel scrolled to the comment's card");
-    assert!(h.query_all_by_label("Is this the right word?").next().is_some(), "the thread is shown");
-}
-
 #[test]
 fn shapes_and_ink_are_drawn_by_dragging() {
     let mut h = harness(|app| app.set_option("quick", "square").unwrap());

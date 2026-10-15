@@ -3640,9 +3640,6 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         field_props = true;
     }
     let field_props = field_props.then(|| view.prepare.selected.clone()).flatten();
-    if std::mem::take(&mut view.comments.open_panel) {
-        canvas_action = canvas_action.or(Some(comments::CanvasAction::OpenComments));
-    }
     match canvas_action {
         Some(comments::CanvasAction::Edit(e)) => view.pending_edit = Some(*e),
         // `choose_right_panel` would borrow all of `app` while `view` is held; same effect.
