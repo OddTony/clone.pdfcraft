@@ -12,6 +12,7 @@ use pdfcraft_engine::{Edit, ObjectKind, ObjectTarget};
 use pdfcraft_render::DocInfo;
 
 use crate::canvas::{DocView, PageXform};
+use crate::page_pointer::PagePointer;
 
 const ACCENT: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);
 
@@ -390,6 +391,7 @@ fn crop_input(
     ui: &egui::Ui,
     resp: &egui::Response,
     xf: &PageXform,
+    ptr: &PagePointer,
     page: usize,
     info: &DocInfo,
     view: &mut DocView,
@@ -399,12 +401,12 @@ fn crop_input(
 ) -> bool {
     let painter = ui.painter();
     let Some(mode) = view.image_selection.as_mut().and_then(|s| s.crop.as_mut()) else { return false };
-    let hover_pos = ui.input(|inp| inp.pointer.hover_pos());
+    let hover_pos = ptr.pos;
     let keep_screen = |keep: [f64; 4]| xf.user_rect(info, page, keep.map(|v| v as f32)).intersect(b);
     // A drag in progress moves a grip; the box stays inside the picture and at least 6 px.
     if allow_interaction
         && resp.drag_started()
-        && let Some(o) = ui.input(|inp| inp.pointer.press_origin())
+        && let Some(o) = ptr.origin
     {
         let k = keep_screen(mode.keep);
         let grip = crop_handles(k).iter().position(|h| h.distance(o) < 8.0).or_else(|| k.contains(o).then_some(8));
@@ -535,7 +537,7 @@ impl ImageSelection {
 
 /// Once a selected corner is grabbed, text under it cannot take over the gesture. The same
 /// applies after the pointer leaves the image/page while dragging.
-pub(crate) fn image_owns_pointer(ui: &egui::Ui, xf: &PageXform, page: usize, info: &DocInfo, view: &DocView) -> bool {
+pub(crate) fn image_owns_pointer(ui: &egui::Ui, xf: &PageXform, ptr: &PagePointer, page: usize, info: &DocInfo, view: &DocView) -> bool {
     let Some(selection) = view.image_selection.as_ref().filter(|s| s.page == page) else { return false };
     if selection.drag.is_some() {
         return true;
@@ -543,7 +545,7 @@ pub(crate) fn image_owns_pointer(ui: &egui::Ui, xf: &PageXform, page: usize, inf
     let Some(image) = view.edit_images.get(&page).and_then(|(_, images)| images.get(selection.index)) else { return false };
     let Some(rect) = image.visible_rect else { return false };
     let b = xf.user_rect(info, page, rect.map(|v| v as f32));
-    let p = ui.input(|i| if i.pointer.primary_down() { i.pointer.press_origin() } else { i.pointer.hover_pos() });
+    let p = if ui.input(|i| i.pointer.primary_down()) { ptr.origin } else { ptr.pos };
     p.is_some_and(|p| [b.left_top(), b.right_top(), b.left_bottom(), b.right_bottom()].iter().any(|c| c.distance(p) < 8.0))
 }
 
@@ -633,6 +635,7 @@ pub(crate) fn image_input(
     ui: &egui::Ui,
     resp: &egui::Response,
     xf: &PageXform,
+    ptr: &PagePointer,
     page: usize,
     info: &DocInfo,
     images: &[pdfcraft_engine::PageImage],
@@ -642,7 +645,7 @@ pub(crate) fn image_input(
 ) -> bool {
     let boxes: Vec<Rect> = images.iter().map(|im| im.visible_rect.map_or(Rect::NOTHING, |r| xf.user_rect(info, page, r.map(|v| v as f32)))).collect();
     let painter = ui.painter();
-    let hover_pos = ui.input(|i| i.pointer.hover_pos());
+    let hover_pos = ptr.pos;
     let image_contains = |index: usize, point: Pos2| {
         let (x, y) = xf.screen_to_view(point);
         let Some(p) = info.pages.get(page) else { return false };
@@ -683,7 +686,7 @@ pub(crate) fn image_input(
     if let Some(i) = selected.filter(|i| boxes.get(*i).is_some_and(|b| b.is_positive())) {
         let b = boxes[i];
         if view.image_selection.as_ref().is_some_and(|s| s.crop.is_some()) {
-            return crop_input(ui, resp, xf, page, info, view, i, b, allow_interaction);
+            return crop_input(ui, resp, xf, ptr, page, info, view, i, b, allow_interaction);
         }
         let corners = [b.left_top(), b.right_top(), b.left_bottom(), b.right_bottom()];
         let handles = |rect: Rect| {
@@ -704,10 +707,9 @@ pub(crate) fn image_input(
         if allow_interaction && let Some(corner) = hover_pos.and_then(|p| corners.iter().position(|c| c.distance(p) < 8.0)) {
             ui.ctx().set_cursor_icon(if matches!(corner, 0 | 3) { egui::CursorIcon::ResizeNwSe } else { egui::CursorIcon::ResizeNeSw });
         }
-        let origin = ui.input(|i| i.pointer.press_origin());
         if allow_interaction
             && resp.drag_started()
-            && let Some(o) = origin
+            && let Some(o) = ptr.origin
         {
             let corner = corners.iter().position(|c| c.distance(o) < 8.0);
             if corner.is_some() || image_contains(i, o) {
@@ -977,6 +979,7 @@ pub(crate) fn page_input(
     ui: &egui::Ui,
     resp: &egui::Response,
     xf: &PageXform,
+    ptr: &PagePointer,
     page: usize,
     doc: &pdfcraft_engine::Document,
     lines: &[pdfcraft_engine::TextBlock],
@@ -1020,7 +1023,7 @@ pub(crate) fn page_input(
     if let Some(d) = view.block_drag.filter(|d| d.page == page)
         && let (Some(b), Some(l)) = (boxes.get(d.block).copied(), lines.get(d.block))
     {
-        let p = ui.input(|i| i.pointer.interact_pos()).unwrap_or(d.start);
+        let p = ptr.pos.unwrap_or(d.start);
         let dx = p.x - d.start.x;
         let preview = match d.grip {
             Grip::Move => b.translate(p - d.start),
@@ -1065,13 +1068,13 @@ pub(crate) fn page_input(
     // quick flick has left the edge by then.
     if resp.drag_started()
         && active.is_none()
-        && let Some(o) = ui.input(|i| i.pointer.press_origin())
+        && let Some(o) = ptr.origin
         && let Some((block, grip)) = grab_at(&boxes, o, upright)
     {
         view.block_drag = Some(BlockDrag { page, block, generation: doc.edit_generation(), start: o, grip });
         return true;
     }
-    let Some(p) = ui.input(|i| i.pointer.hover_pos()).filter(|p| xf.rect.contains(*p)) else { return false };
+    let Some(p) = ptr.within(xf.rect) else { return false };
     let Some((hit, grip)) = grab_at(&boxes, p, upright) else { return false };
     if active != Some(hit) {
         painter.rect_stroke(boxes[hit], CornerRadius::same(2), Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);

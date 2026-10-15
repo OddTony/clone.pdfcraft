@@ -15,6 +15,7 @@ mod links;
 mod marks;
 mod pageboxes;
 mod pdf_links;
+mod pointer;
 mod protect;
 mod redact;
 mod text_select;
