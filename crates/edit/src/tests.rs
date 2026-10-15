@@ -4416,7 +4416,7 @@ fn blended_backgrounds_go_under_additions_on_a_page_with_no_content() {
 
 /// Normal backgrounds belong above a page's white paint, below its original foreground.
 #[test]
-fn background_under_content_preserves_and_restores_original_streams() {
+fn background_under_content_preserves_original_stream_bytes() {
     let mut doc = page_with("q 1 g 0 0 600 800 re f Q\n1 0 0 rg 20 20 50 50 re f");
     let original = streams(&doc, 0);
     add_background(&mut doc, &[0], &Background::default(), false).unwrap();
@@ -4429,7 +4429,7 @@ fn background_under_content_preserves_and_restores_original_streams() {
     assert_eq!(streams(&doc, 0).len(), 3, "update does not keep splitting");
     let mut doc = reopen(&doc);
     remove_marks(&mut doc, &[0], MarkKind::Background).unwrap();
-    assert_eq!(streams(&doc, 0), original, "removing after save restores the exact original stream");
+    assert_eq!(streams(&doc, 0).concat(), original.concat(), "removing after save preserves every original content byte");
 }
 
 #[test]
@@ -4464,7 +4464,7 @@ fn background_under_content_handles_arrays_transforms_and_later_edits() {
     add_background(&mut doc, &[0], &Background::default(), false).unwrap();
     assert_eq!(streams(&doc, 0).len(), 4);
     remove_marks(&mut doc, &[0], MarkKind::Background).unwrap();
-    assert_eq!(streams(&doc, 0), original);
+    assert_eq!(streams(&doc, 0).concat(), original.concat());
     // A prefix split across content streams still gives an exact insertion boundary.
     let page = page_list(&doc).remove(0);
     let head = doc.add(Object::Stream(Stream::flate(Dict::new(), b"q 0 0 0 0 k 0 0 600 800 re")));
@@ -4474,8 +4474,8 @@ fn background_under_content_handles_arrays_transforms_and_later_edits() {
     add_background(&mut doc, &[0], &Background::default(), false).unwrap();
     assert_eq!(streams(&doc, 0).len(), 4);
     remove_marks(&mut doc, &[0], MarkKind::Background).unwrap();
-    assert_eq!(streams(&doc, 0), original);
-    // A subsequent foreground edit must survive removal, even if that prevents rejoining.
+    assert_eq!(streams(&doc, 0).concat(), original.concat());
+    // A subsequent foreground edit must survive removal, without restoring an obsolete copy.
     add_background(&mut doc, &[0], &Background::default(), false).unwrap();
     let page = page_list(&doc).remove(0);
     let list = contents(&mut doc, &page).unwrap();

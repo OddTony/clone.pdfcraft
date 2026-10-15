@@ -818,7 +818,6 @@ pub fn remove_marks(doc: &mut Document, pages: &[usize], kind: MarkKind) -> Resu
         let before = list.len();
         let mut kept: Vec<Object> = list.into_iter().filter(|o| stream_tag(doc, o).as_deref() != Some(kind.tag())).collect();
         removed += before - kept.len();
-        background::rejoin(doc, &mut kept);
         // Marks on top come after the closing wrapper; without any, the wrapper has no purpose.
         let is_wrap = |o: &Object| stream_tag(doc, o).as_deref() == Some("Wrap");
         let close = kept.iter().rposition(&is_wrap);

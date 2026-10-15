@@ -221,5 +221,6 @@ strokes and unknown operators prevent insertion. Unsupported pages keep behind-p
 segmentation of scanned pages or arbitrary artwork.
 
 `multiply: true` explicitly blends over original content and can change its colours. Updating
-and removing either mode are undoable. Removing a normal background restores original stream
-references when the split fragments have not subsequently been edited.
+and removing either mode are undoable. Removing a normal background leaves the original
+content bytes in separate streams. No restoration references retain obsolete content, so a
+later redaction and full save can remove the original source objects.

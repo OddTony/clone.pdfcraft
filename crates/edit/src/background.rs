@@ -116,8 +116,9 @@ pub(super) fn supported(doc: &Document, page: usize) -> bool {
     boundary(doc, &page, &list).is_some()
 }
 
-/// Split just the stream containing the boundary. Originals remain in the object graph, and
-/// removal restores their references if neither fragment has subsequently been edited.
+/// Split just the stream containing the boundary, retaining its bytes in two fragments.
+/// Do not keep a reference to the original: it could retain text after a later redaction and
+/// full save. Removing the background leaves the fragments as ordinary page content.
 pub(super) fn place(doc: &mut Document, page: &pdfcraft_model::Page, content: &[u8]) -> Result<bool, EditError> {
     let mut list = contents(doc, page)?;
     let Some(at) = boundary(doc, page, &list) else { return Ok(false) };
@@ -128,12 +129,7 @@ pub(super) fn place(doc: &mut Document, page: &pdfcraft_model::Page, content: &[
     let mut insert = at.index.saturating_add(1);
     if !suffix.is_empty() {
         let tail = Object::Ref(doc.add(Object::Stream(Stream::flate(stream.dict.clone(), suffix))));
-        let mut dict = stream.dict.clone();
-        let mut split = Dict::new();
-        split.set(b"Original".to_vec(), original);
-        split.set(b"Tail".to_vec(), tail.clone());
-        dict.set(b"PCBackgroundSplit".to_vec(), Object::Dict(split));
-        let head = Object::Ref(doc.add(Object::Stream(Stream::flate(dict, prefix))));
+        let head = Object::Ref(doc.add(Object::Stream(Stream::flate(stream.dict.clone(), prefix))));
         if let Some(slot) = list.get_mut(at.index) {
             *slot = head;
         }
@@ -147,39 +143,4 @@ pub(super) fn place(doc: &mut Document, page: &pdfcraft_model::Page, content: &[
     list.insert(insert, mark);
     doc.update_dict(page.obj, |d| d.set(b"Contents".to_vec(), Object::Array(list)))?;
     Ok(true)
-}
-
-/// Never restore over a subsequent content edit. Rejoining is optional and bounded; if a
-/// fragment changed (or another item now separates them), keep both fragments verbatim.
-pub(super) fn rejoin(doc: &Document, list: &mut Vec<Object>) {
-    let mut i = 0usize;
-    while i.saturating_add(1) < list.len() {
-        let replacement = (|| {
-            let head = doc.resolve(list.get(i)?);
-            let Object::Stream(head) = &*head else { return None };
-            let split = head.dict.get(b"PCBackgroundSplit")?.as_dict()?;
-            let tail_ref = split.get(b"Tail")?;
-            if list.get(i.saturating_add(1))? != tail_ref {
-                return None;
-            }
-            let original = split.get(b"Original")?;
-            let tail = doc.resolve(tail_ref);
-            let old = doc.resolve(original);
-            let (Object::Stream(tail), Object::Stream(old)) = (&*tail, &*old) else { return None };
-            let mut joined = head.decoded_strict_within(COVER_SCAN_BYTES).ok()?;
-            joined.extend(tail.decoded_strict_within(COVER_SCAN_BYTES.saturating_sub(joined.len())).ok()?);
-            if joined != old.decoded_strict_within(COVER_SCAN_BYTES).ok()? {
-                return None;
-            }
-            Some(original.clone())
-        })();
-        if let Some(original) = replacement {
-            if let Some(slot) = list.get_mut(i) {
-                *slot = original;
-            }
-            list.remove(i.saturating_add(1));
-        } else {
-            i = i.saturating_add(1);
-        }
-    }
 }
