@@ -494,6 +494,7 @@ pub static TOOL_GROUPS: &[ToolGroup] = &[
             title: "Standards",
             items: &[
                 item("Save as PDF/A", "file-check", "standards.pdfa", Ready),
+                item("Verify PDF/X", "file-check", "standards.pdfx", Ready),
                 item("Save as PDF/X", "file-check", "standards.pdfx", Planned("M11")),
                 item("Save as PDF/UA", "accessibility", "standards.pdfua", Planned("M11")),
                 item("Preflight", "file-check", "preflight.run", Planned("M11")),
