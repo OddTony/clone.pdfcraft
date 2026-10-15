@@ -2378,6 +2378,10 @@ animation effects	Off	معطّلة
 	The linked PDF opened, but its named destination was not applied.	فُتح ملف PDF المرتبط، لكن لم تُطبَّق وجهته المسماة.
 	The linked PDF opened, but its page destination was out of range.	فُتح ملف PDF المرتبط، لكن وجهة الصفحة خارج النطاق.
 	Local cross-PDF links require the desktop app	تتطلب الروابط المحلية بين ملفات PDF تطبيق سطح المكتب
+	Cut Image	قص الصورة
+	Redact Image	حجب الصورة
+	Create Link…	إنشاء رابط…
+	Recognize Text…	التعرف على النص…
 	Minimize	تصغير
 	Maximize	تكبير
 	Restore	استعادة
@@ -2395,6 +2399,9 @@ animation effects	Off	معطّلة
 	This document is trying to open a local file:	يحاول هذا المستند فتح ملف محلي:
 	Move tag earlier	نقل العلامة للأعلى
 	Move tag later	نقل العلامة للأسفل
+	Turn upside down (180°)	اقلب رأسًا على عقب (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	ملصق 4 × 6 بوصة (101.6 × 152.4 مم)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	يقص كل صفحة إلى المنطقة المطبوعة، ويديرها لتصبح مستقيمة ويلائمها مع الورقة دون تمديد. ملصق واحد لكل ورقة.
 	Find untagged content	العثور على محتوى غير مُعلَّم
 	No untagged content was found.	لم يتم العثور على محتوى غير معلَّم.
 	Found {n} untagged content problems.	تم العثور على {n} مشكلة في محتوى غير معلَّم.

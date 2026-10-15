@@ -2270,6 +2270,10 @@ animation effects	Off	ఆఫ్
 	Local cross-PDF links require the desktop app	PDFల మధ్య స్థానిక లింక్‌లకు డెస్క్‌టాప్ యాప్ అవసరం
 	The existing action will be preserved.	ఉన్న చర్య అలాగే ఉంచబడుతుంది.
 	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	ఒక స్క్రిప్ట్ చాలా సేపు నడిచినందున ఈ ఫారమ్ స్క్రిప్ట్‌లు ఆపివేయబడ్డాయి. వాటిని మళ్లీ నడపడానికి పత్రాన్ని మళ్లీ తెరవండి.
+	Cut Image	చిత్రాన్ని కత్తిరించు
+	Redact Image	చిత్రాన్ని రెడాక్ట్ చేయి
+	Create Link…	లింక్ సృష్టించు…
+	Recognize Text…	టెక్స్ట్‌ను గుర్తించు…
 	Minimize	కనిష్ఠీకరించు
 	Maximize	గరిష్ఠీకరించు
 	Restore	పునరుద్ధరించు
@@ -2287,6 +2291,9 @@ animation effects	Off	ఆఫ్
 	This document is trying to open a local file:	ఈ పత్రం ఒక స్థానిక ఫైల్‌ను తెరవడానికి ప్రయత్నిస్తోంది:
 	Move tag earlier	ట్యాగ్‌ను ముందుకు తరలించు
 	Move tag later	ట్యాగ్‌ను వెనుకకు తరలించు
+	Turn upside down (180°)	తలకిందులుగా తిప్పు (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 అం. లేబుల్ (101.6 × 152.4 మి.మీ.)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	ప్రతి పేజీని ముద్రిత ప్రాంతానికి కత్తిరించి, నిటారుగా తిప్పి, సాగదీయకుండా షీట్‌కు సరిపెడుతుంది. ఒక్కో షీట్‌కు ఒక లేబుల్.
 	Find untagged content	ట్యాగ్ చేయని కంటెంట్‌ను కనుగొను
 	No untagged content was found.	ట్యాగ్ చేయని కంటెంట్ కనుగొనబడలేదు.
 	Found {n} untagged content problems.	ట్యాగ్ చేయని కంటెంట్‌లో {n} సమస్యలు కనుగొనబడ్డాయి.

@@ -287,6 +287,22 @@ fn dragged(r: Rect, grab: Grab, d: egui::Vec2, keep_aspect: bool) -> Rect {
     }
 }
 
+/// Added text and images keep pointer ownership over a form field while editing content.
+pub(crate) fn select_grabs(ui: &egui::Ui, xf: &PageXform, page: usize, info: &DocInfo, added: &[Added], view: &DocView) -> bool {
+    let cv = &view.content;
+    if cv.grab.is_some_and(|(grab_page, _, _)| grab_page == page) {
+        return true;
+    }
+    let Some(p) = ui.input(|i| i.pointer.hover_pos().or(i.pointer.interact_pos())).filter(|p| xf.rect.contains(*p)) else {
+        return false;
+    };
+    on_page(added, page).into_iter().any(|(index, item)| {
+        let rect = screen_rect(xf, info, page, item.content.rect());
+        rect.expand(2.0).contains(p)
+            || cv.selected == Some((page, index)) && handles(rect).into_iter().any(|(corner, _, _)| corner.distance(p) <= 6.0)
+    })
+}
+
 /// Pointer input on one page in Edit mode (`adding_text` with the Text tool). `true` when it
 /// used the input.
 #[allow(clippy::too_many_arguments)]
@@ -714,12 +730,12 @@ impl crate::PdfCraftApp {
     }
 
     /// Copy Image: image `index` on `page`, at its own resolution, to the clipboard.
-    pub(crate) fn copy_page_image(&mut self, page: usize, index: usize) {
-        let Some((_, id)) = self.active_ids() else { return };
+    pub(crate) fn copy_page_image(&mut self, page: usize, index: usize) -> bool {
+        let Some((_, id)) = self.active_ids() else { return false };
         if !self.may_copy(id) {
-            return;
+            return false;
         }
-        let Some(pixels) = self.session.get(id).map(|d| d.page_image_rgba(page, index)) else { return };
+        let Some(pixels) = self.session.get(id).map(|d| d.page_image_rgba(page, index)) else { return false };
         let copied = pixels.and_then(|(w, h, rgba)| {
             #[cfg(not(target_arch = "wasm32"))]
             if self.system_clipboard {
@@ -734,9 +750,55 @@ impl crate::PdfCraftApp {
             Ok((w, h))
         });
         match copied {
-            Ok((w, h)) => self.notify_fmt("The image has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())]),
-            Err(e) => self.notify_fmt("Couldn't copy the image: {e}", &[("e", &e)]),
+            Ok((w, h)) => {
+                self.notify_fmt("The image has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())]);
+                true
+            }
+            Err(e) => {
+                self.notify_fmt("Couldn't copy the image: {e}", &[("e", &e)]);
+                false
+            }
         }
+    }
+
+    /// The picture's visible box on its page, in user space.
+    fn page_image_box(&self, page: usize, index: usize) -> Option<[f64; 4]> {
+        let (_, id) = self.active_ids()?;
+        let image = self.session.get(id)?.page_images(page).into_iter().nth(index)?;
+        Some(image.visible_rect.unwrap_or(image.rect))
+    }
+
+    /// Cut: copy the picture, and only when that worked take it off the page (one undo step).
+    pub(crate) fn cut_page_image(&mut self, page: usize, index: usize) {
+        if self.copy_page_image(page, index) {
+            self.apply_edit(Edit::EditPageImage { page, index, change: pdfcraft_engine::ImageEdit::Delete });
+        }
+    }
+
+    /// Redact image: a redaction mark over the whole picture. It is applied, like any mark, from
+    /// Redact a PDF.
+    pub(crate) fn redact_page_image(&mut self, page: usize, index: usize) {
+        let Some(rect) = self.page_image_box(page, index) else { return };
+        let author = self.comment_prefs.author.clone();
+        let mark = self.redact_prefs.mark(page, vec![pdfcraft_engine::rect_quad(rect)], &author);
+        if self.apply_edit(mark) {
+            self.notify_tr("The image is marked for redaction. Apply it with Redact a PDF");
+        }
+    }
+
+    /// Create link: the link properties for a new link over the picture.
+    pub(crate) fn link_page_image(&mut self, page: usize, index: usize) {
+        if let Some(rect) = self.page_image_box(page, index) {
+            self.open_link_props(page, Some(rect), None);
+        }
+    }
+
+    /// Recognize text: the Recognize Text dialog, set to this page.
+    pub fn recognize_text_on_page(&mut self, page: usize) {
+        self.ocr_draft.pages = crate::ocr_ui::OcrPages::Range;
+        self.ocr_draft.from = page + 1;
+        self.ocr_draft.to = page + 1;
+        self.dialog = Some(crate::Dialog::RecognizeText);
     }
 
     /// Click an image field: pick a picture for it.

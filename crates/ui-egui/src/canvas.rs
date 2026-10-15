@@ -2892,7 +2892,10 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 (o.consumed || field_tool.is_some(), false)
             } else {
                 use crate::forms_ui::FieldPointer;
-                let field = if tool == QuickTool::Select && !comments::select_grabs(ui, &pcx, view) {
+                let field = if tool == QuickTool::Select
+                    && !(editing_content && can_modify && crate::content_ui::select_grabs(ui, &xf, i, info, &added, view))
+                    && !comments::select_grabs(ui, &pcx, view)
+                {
                     crate::forms_ui::page_input(ui, &resp, &xf, i, info, &form, can_fill, view)
                 } else {
                     FieldPointer::Away
@@ -3725,8 +3728,17 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     match image_action {
         Some(crate::edit_text_ui::ImageAction::Replace(page, index)) => app.replace_page_image_dialog(page, index),
         Some(crate::edit_text_ui::ImageAction::Save(page, index)) => app.save_page_image(page, index),
-        Some(crate::edit_text_ui::ImageAction::Copy(page, index)) => app.copy_page_image(page, index),
+        Some(crate::edit_text_ui::ImageAction::Copy(page, index)) => {
+            app.copy_page_image(page, index);
+        }
         Some(crate::edit_text_ui::ImageAction::CopyFile(page, index)) => app.copy_page_image_file(page, index),
+        Some(crate::edit_text_ui::ImageAction::Cut(page, image)) => {
+            app.views[index].image_selection = None;
+            app.cut_page_image(page, image);
+        }
+        Some(crate::edit_text_ui::ImageAction::Redact(page, index)) => app.redact_page_image(page, index),
+        Some(crate::edit_text_ui::ImageAction::Link(page, index)) => app.link_page_image(page, index),
+        Some(crate::edit_text_ui::ImageAction::Recognize(page)) => app.recognize_text_on_page(page),
         None => {}
     }
     if let Some(why) = refused {
