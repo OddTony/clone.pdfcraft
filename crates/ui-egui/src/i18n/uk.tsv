@@ -2401,3 +2401,5 @@ animation effects	Off	Вимкнено
 	The answer stopped unexpectedly.	Відповідь несподівано перервалася.
 	AI chat isn't available in the web build; use the desktop app or CLI.	ШІ-чат недоступний у вебверсії; скористайтеся настільною програмою або CLI.
 	PDF and text	PDF і текст
+	Restyle raw document	Змінити стиль вхідного документа
+	Restyle text	Змінити стиль тексту

@@ -13,6 +13,7 @@
 
 use std::sync::Arc;
 
+use pdfcraft_engine::DocId;
 use pdfcraft_engine::style::StyleProfile;
 
 use crate::PdfCraftApp;
@@ -57,6 +58,8 @@ pub(crate) struct FormatStudio {
     pub(crate) raw_name: Option<String>,
     pub(crate) raw_text: String,
     pub(crate) raw_truncated: bool,
+    /// The open tab of a picked raw PDF, for in-place restyling.
+    pub(crate) raw_doc: Option<DocId>,
     pub(crate) extraction: Extraction,
     pub(crate) key: String,
     pub(crate) model: String,
@@ -123,18 +126,35 @@ impl PdfCraftApp {
         }
     }
 
-    /// A picked raw file: text goes straight into the editor, a PDF opens as
-    /// a tab and its text is read on a worker thread (bounded, with notice).
+    /// Raw text from a file: capped, named, and detached from any raw tab.
+    pub(crate) fn set_raw_text(&mut self, name: String, text: String, raw_doc: Option<DocId>) {
+        let mut text = text;
+        if text.len() > MAX_RAW_CHARS {
+            text.truncate(text.floor_char_boundary(MAX_RAW_CHARS.min(text.len())));
+            self.format.raw_truncated = true;
+        } else {
+            self.format.raw_truncated = false;
+        }
+        self.format.raw_text = text;
+        self.format.raw_name = Some(name);
+        self.format.raw_doc = raw_doc;
+        self.format.extraction = Extraction::Idle;
+    }
+
+    /// A picked raw file: text goes straight into the editor, a Word file is
+    /// read for its structure, and a PDF opens as a tab while its text is read
+    /// on a worker thread (bounded, with notice).
     pub(crate) fn use_format_raw(&mut self, name: String, bytes: Vec<u8>) {
         let lower = name.to_ascii_lowercase();
         if lower.ends_with(".txt") || lower.ends_with(".text") {
-            let mut text = pdfcraft_engine::decode_text(&bytes);
-            if text.len() > MAX_RAW_CHARS {
-                text.truncate(text.floor_char_boundary(MAX_RAW_CHARS.min(text.len())));
-                self.format.raw_truncated = true;
+            self.set_raw_text(name, pdfcraft_engine::decode_text(&bytes), None);
+            return;
+        }
+        if lower.ends_with(".docx") {
+            match pdfcraft_engine::docx_text(&name, &bytes) {
+                Ok(text) => self.set_raw_text(name, text, None),
+                Err(e) => self.notify_fmt("Couldn't read the Word file: {e}", &[("e", &e.to_string())]),
             }
-            self.format.raw_text = text;
-            self.format.raw_name = Some(name);
             return;
         }
         self.open_created(&name, Arc::new(bytes.clone()), "Opened the raw document");
@@ -145,7 +165,9 @@ impl PdfCraftApp {
             return;
         }
         let (bytes, password, pages) = (doc.bytes.clone(), doc.password.clone(), doc.info.pages.len());
+        let raw_doc = view.id;
         self.format.raw_name = Some(name);
+        self.format.raw_doc = Some(raw_doc);
         #[cfg(not(target_arch = "wasm32"))]
         {
             let (tx, rx) = std::sync::mpsc::channel();
@@ -232,6 +254,23 @@ impl PdfCraftApp {
         match self.session.create_from_style(&title, &text, &profile) {
             Ok(bytes) => self.open_created(&format!("{title}.pdf"), bytes, "Created the styled document"),
             Err(e) => self.notify_fmt("Couldn't style the document: {e}", &[("e", &e.to_string())]),
+        }
+    }
+
+    /// Restyle the picked raw PDF in place from the reference profile.
+    pub(crate) fn format_restyle(&mut self) {
+        let (Some(profile), Some(id)) = (self.format.profile.clone(), self.format.raw_doc) else { return };
+        if self.session.get(id).is_none() {
+            self.format.raw_doc = None;
+            self.notify_tr("The raw document is no longer open.");
+            return;
+        }
+        match self.session.restyle_text(id, &profile) {
+            Ok(report) => self.notify_fmt(
+                "Restyled {p} paragraphs and {h} headings ({s} skipped).",
+                &[("p", &report.paragraphs.to_string()), ("h", &report.headings.to_string()), ("s", &report.skipped.to_string())],
+            ),
+            Err(e) => self.notify_fmt("Couldn't restyle the document: {e}", &[("e", &e.to_string())]),
         }
     }
 
@@ -351,6 +390,10 @@ pub(crate) fn dialog(ui: &mut egui::Ui, app: &mut PdfCraftApp) {
         let ready = app.format.can_generate();
         if widgets::pill_button(ui, tl!("Generate styled PDF"), ready).clicked() && ready {
             app.format_generate();
+        }
+        let restyle_ready = app.format.profile.is_some() && app.format.raw_doc.is_some();
+        if widgets::pill_button(ui, tl!("Restyle raw document"), restyle_ready).clicked() && restyle_ready {
+            app.format_restyle();
         }
     });
     ui.add_space(8.0);

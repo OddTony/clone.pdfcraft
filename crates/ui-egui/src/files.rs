@@ -74,7 +74,7 @@ fn files_picker(purpose: FilePurpose) -> rfd::AsyncFileDialog {
         return dialog.add_filter("PDF", &["pdf"]);
     }
     if purpose == FilePurpose::FormatRaw {
-        return dialog.add_filter(tl!("PDF and text"), &["pdf", "txt", "text"]).add_filter("PDF", &["pdf"]);
+        return dialog.add_filter(tl!("PDF and text"), &["pdf", "txt", "text", "docx"]).add_filter("PDF", &["pdf"]);
     }
     if !matches!(purpose, FilePurpose::CreateMultiple | FilePurpose::CreateMultipleSeparate | FilePurpose::InsertPages | FilePurpose::Combine) {
         return dialog.add_filter("PDF", &["pdf"]);

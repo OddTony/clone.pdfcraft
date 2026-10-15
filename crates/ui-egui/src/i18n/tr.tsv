@@ -2375,3 +2375,5 @@ animation effects	Off	Kapalı
 	The answer stopped unexpectedly.	Yanıt beklenmedik şekilde durdu.
 	AI chat isn't available in the web build; use the desktop app or CLI.	Yapay zekâ sohbeti web sürümünde yok; masaüstü uygulamasını veya CLI’yi kullanın.
 	PDF and text	PDF ve metin
+	Restyle raw document	Ham belgeyi yeniden biçimlendir
+	Restyle text	Metni yeniden biçimlendir

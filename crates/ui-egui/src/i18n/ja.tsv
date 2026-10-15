@@ -2379,3 +2379,5 @@ animation effects	Off	オフ
 	The answer stopped unexpectedly.	回答が途中で止まりました。
 	AI chat isn't available in the web build; use the desktop app or CLI.	AIチャットはWeb版では使えません。デスクトップアプリかCLIを使ってください。
 	PDF and text	PDFとテキスト
+	Restyle raw document	原文ドキュメントを書式設定
+	Restyle text	テキストの書式を変更

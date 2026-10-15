@@ -2253,3 +2253,5 @@ animation effects	Off	關
 	The answer stopped unexpectedly.	回答意外中斷。
 	AI chat isn't available in the web build; use the desktop app or CLI.	網頁版不支援 AI 聊天；請使用桌面應用程式或 CLI。
 	PDF and text	PDF 和文字
+	Restyle raw document	為原始檔案套用樣式
+	Restyle text	重新設定文字樣式

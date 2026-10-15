@@ -2125,6 +2125,7 @@ action wizard	Start	Iniciar
 	Mark pages for redaction	Marcar páginas para censurar
 	Change document properties	Cambiar propiedades del documento
 	Mark differences	Marcar diferencias
+	Restyle text	Aplicar estilo al texto
 	Run form script	Ejecutar script del formulario
 	Scripted content must be usable with a keyboard and assistive technology. Check the document's scripts.	El contenido con scripts debe poder usarse con teclado y con tecnologías de asistencia. Revisa los scripts del documento.
 	Table rows belong directly in a table or its head, body or foot. Fix the table's tags.	Las filas de una tabla van directamente en la tabla o en su encabezado, cuerpo o pie. Corrige las etiquetas de la tabla.
@@ -2509,3 +2510,4 @@ animation effects	Off	Desactivados
 	The answer stopped unexpectedly.	La respuesta se interrumpió inesperadamente.
 	AI chat isn't available in the web build; use the desktop app or CLI.	El chat de IA no está disponible en la versión web; usa la aplicación de escritorio o la CLI.
 	PDF and text	PDF y texto
+	Restyle raw document	Aplicar estilo al documento

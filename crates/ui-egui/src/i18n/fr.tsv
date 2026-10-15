@@ -2379,3 +2379,5 @@ animation effects	Off	Désactivés
 	The answer stopped unexpectedly.	La réponse s’est interrompue de façon inattendue.
 	AI chat isn't available in the web build; use the desktop app or CLI.	Le chat IA n’est pas disponible dans la version web ; utilisez l’application de bureau ou l’interface en ligne de commande.
 	PDF and text	PDF et texte
+	Restyle raw document	Reformater le document brut
+	Restyle text	Reformater le texte

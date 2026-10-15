@@ -2623,3 +2623,5 @@ key	Space	Tarpas
 	The answer stopped unexpectedly.	Atsakymas netikėtai nutrūko.
 	AI chat isn't available in the web build; use the desktop app or CLI.	DI pokalbiai žiniatinklio versijoje neveikia; naudokite darbalaukio programą arba CLI.
 	PDF and text	PDF ir tekstas
+	Restyle raw document	Reformuoti pirminį dokumentą
+	Restyle text	Reformuoti tekstą

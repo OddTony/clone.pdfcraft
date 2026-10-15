@@ -2292,3 +2292,5 @@ animation effects	Off	Выкл
 	The answer stopped unexpectedly.	Ответ неожиданно прервался.
 	AI chat isn't available in the web build; use the desktop app or CLI.	ИИ-чат недоступен в веб-версии; используйте настольное приложение или CLI.
 	PDF and text	PDF и текст
+	Restyle raw document	Применить стиль к исходнику
+	Restyle text	Переформатировать текст

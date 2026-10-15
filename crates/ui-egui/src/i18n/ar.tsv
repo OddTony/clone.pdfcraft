@@ -2400,3 +2400,5 @@ animation effects	Off	معطّلة
 	The answer stopped unexpectedly.	توقفت الإجابة بشكل غير متوقع.
 	AI chat isn't available in the web build; use the desktop app or CLI.	دردشة الذكاء الاصطناعي غير متوفرة في إصدار الويب؛ استخدم تطبيق سطح المكتب أو CLI.
 	PDF and text	PDF ونص
+	Restyle raw document	تطبيق التنسيق على المستند الخام
+	Restyle text	إعادة تنسيق النص
