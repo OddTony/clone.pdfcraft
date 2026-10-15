@@ -701,7 +701,8 @@ fn delete_and_backspace_in_a_text_field_leave_the_selection_alone() {
     // The page number box in the toolbar.
     assert!(h.state_mut().execute("view.focus_page_input"));
     h.run_steps(2);
-    assert!(h.ctx.memory(|m| m.has_focus(egui::Id::new("page-input"))));
+    let page_input = egui::Id::new(("page-input", h.state().views[0].id.0));
+    assert!(h.ctx.memory(|m| m.has_focus(page_input)));
     for key in [Key::Backspace, Key::Delete] {
         h.key_press(key);
         h.run_steps(3);
