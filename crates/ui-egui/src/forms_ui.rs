@@ -346,7 +346,7 @@ pub(crate) fn paint_page(ui: &egui::Ui, painter: &egui::Painter, xf: &PageXform,
             if focused {
                 painter.rect_stroke(r.expand(1.0), CornerRadius::same(2), Stroke::new(2.0, FOCUS_BLUE), egui::StrokeKind::Outside);
             }
-            if view.forms.unbaked.contains(&(f.name.clone(), page)) || (f.kind == FormFieldKind::List && fillable(f)) {
+            if view.forms.unbaked.contains(&(f.name.clone(), page)) {
                 paint_unbaked_widget(painter, xf, f, w, r);
             } else if fillable(f) && pointer.is_some_and(|p| r.contains(p)) {
                 painter.rect_stroke(r, CornerRadius::same(1), Stroke::new(1.0, FOCUS_BLUE.gamma_multiply(0.8)), egui::StrokeKind::Outside);
@@ -601,10 +601,11 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, f
             }
         }
         FormFieldKind::List => {
-            let (up, down, esc, tab, shift) = ctx.input(|i| {
+            let (up, down, esc, tab, shift) = ctx.input_mut(|i| {
                 (
-                    i.key_pressed(egui::Key::ArrowUp),
-                    i.key_pressed(egui::Key::ArrowDown),
+                    // Consumed, so the arrows move the selection without also scrolling the page.
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
                     i.key_pressed(egui::Key::Escape),
                     i.key_pressed(egui::Key::Tab),
                     i.modifiers.shift,
