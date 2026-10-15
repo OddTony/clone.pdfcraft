@@ -17,7 +17,7 @@ permissions:
 jobs:
   macos-beta:
     name: Apple Silicon PDFCraftBeta.app
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 120
     steps:
       - name: Check out selected source
