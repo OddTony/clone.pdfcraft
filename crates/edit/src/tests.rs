@@ -4413,3 +4413,91 @@ fn blended_backgrounds_go_under_additions_on_a_page_with_no_content() {
     assert_eq!(s.len(), 3, "{s:?}");
     assert!(s[0].contains("/PCGS100 gs") && s[1].contains("/PCGSM100 gs") && s[2].contains("/PCMark /HeaderFooter"), "{s:?}");
 }
+
+/// Normal backgrounds belong above a page's white paint, below its original foreground.
+#[test]
+fn background_under_content_preserves_and_restores_original_streams() {
+    let mut doc = page_with("q 1 g 0 0 600 800 re f Q\n1 0 0 rg 20 20 50 50 re f");
+    let original = streams(&doc, 0);
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    let s = streams(&doc, 0);
+    assert_eq!(s.len(), 3, "white prefix, background, original foreground");
+    assert!(s[0].contains("600 800 re f Q"));
+    assert!(s[1].contains("/PCMark /Background") && !s[1].contains("PCGSM"));
+    assert!(s[2].contains("1 0 0 rg"));
+    add_background(&mut doc, &[0], &Background { color: [0.0, 0.0, 1.0], ..Background::default() }, true).unwrap();
+    assert_eq!(streams(&doc, 0).len(), 3, "update does not keep splitting");
+    let mut doc = reopen(&doc);
+    remove_marks(&mut doc, &[0], MarkKind::Background).unwrap();
+    assert_eq!(streams(&doc, 0), original, "removing after save restores the exact original stream");
+}
+
+#[test]
+fn background_under_content_rejects_uncertain_prefixes() {
+    for content in [
+        "q 0.8 g 0 0 600 800 re f Q",
+        "q 1 g 0 0 600 800 re f", // no balanced insertion point
+        "q /GS gs 1 g 0 0 600 800 re f Q",
+        "q 0 0 600 800 re W n 1 g 0 0 600 800 re f Q",
+        "q 1 g 0 0 600 800 re B Q",
+        "/OC /Layer BDC q 1 g 0 0 600 800 re f Q EMC",
+        "q 1 g 0 0 600 800 re 0 0 600 800 re f* Q",
+        "q 1 g 0 0 599.9 800 re f Q",
+        "q 1 g 0 0 600 800 re f 0 0 10 10 re f Q",
+        "1 0 0 1 10 10 cm 1 g -10 -10 600 800 re f",
+    ] {
+        let doc = page_with(content);
+        assert!(!page_has_white_background(&doc, 0), "{content}");
+    }
+    for space in ["DefaultGray", "DefaultRGB", "DefaultCMYK"] {
+        let doc = page_with_resources("q 1 g 0 0 600 800 re f Q", &format!("<< /ColorSpace << /{space} /DeviceGray >> >>"));
+        assert!(!page_has_white_background(&doc, 0));
+    }
+}
+
+#[test]
+fn background_under_content_handles_arrays_transforms_and_later_edits() {
+    let mut doc = page_with("q 2 0 0 2 0 0 cm 1 1 1 rg 0 0 300 400 re f Q\n0.5 g 20 20 10 10 re f");
+    let original = streams(&doc, 0);
+    assert!(page_has_white_background(&doc, 0));
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    assert_eq!(streams(&doc, 0).len(), 4);
+    remove_marks(&mut doc, &[0], MarkKind::Background).unwrap();
+    assert_eq!(streams(&doc, 0), original);
+    // A prefix split across content streams still gives an exact insertion boundary.
+    let page = page_list(&doc).remove(0);
+    let head = doc.add(Object::Stream(Stream::flate(Dict::new(), b"q 0 0 0 0 k 0 0 600 800 re")));
+    let tail = doc.add(Object::Stream(Stream::flate(Dict::new(), b"f Q\n1 0 0 rg 20 20 10 10 re f")));
+    doc.update_dict(page.obj, |d| d.set(b"Contents".to_vec(), Object::Array(vec![Object::Ref(head), Object::Ref(tail)]))).unwrap();
+    let original = streams(&doc, 0);
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    assert_eq!(streams(&doc, 0).len(), 4);
+    remove_marks(&mut doc, &[0], MarkKind::Background).unwrap();
+    assert_eq!(streams(&doc, 0), original);
+    // A subsequent foreground edit must survive removal, even if that prevents rejoining.
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    let page = page_list(&doc).remove(0);
+    let list = contents(&mut doc, &page).unwrap();
+    let r = list.last().unwrap().as_ref().unwrap();
+    doc.set(r, Object::Stream(Stream::flate(Dict::new(), b"0 1 0 rg 20 20 10 10 re f")));
+    remove_marks(&mut doc, &[0], MarkKind::Background).unwrap();
+    assert!(streams(&doc, 0).last().unwrap().contains("0 1 0 rg"));
+}
+
+#[test]
+fn background_under_content_selects_placement_for_each_page() {
+    let mut doc = fixture();
+    let page = page_list(&doc).remove(0);
+    let white = doc.add(Object::Stream(Stream::flate(Dict::new(), b"q 1 g 0 0 600 800 re f Q\n0 g 10 10 20 20 re f")));
+    doc.update_dict(page.obj, |d| {
+        d.set(b"MediaBox".to_vec(), Object::Array([0, 0, 600, 800].map(Object::Int).to_vec()));
+        d.set(b"Contents".to_vec(), Object::Ref(white));
+    })
+    .unwrap();
+    assert!(page_has_white_background(&doc, 0));
+    assert!(!page_has_white_background(&doc, 2));
+    add_background(&mut doc, &[0, 2], &Background::default(), false).unwrap();
+    assert!(streams(&doc, 0)[1].contains("/PCMark /Background"));
+    assert!(streams(&doc, 2)[0].contains("/PCMark /Background"));
+}

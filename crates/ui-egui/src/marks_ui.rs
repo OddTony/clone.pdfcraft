@@ -305,7 +305,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: M
             });
             ui.horizontal(|ui| {
                 ui.label(tl!("Location"));
-                widgets::radio_value(ui, &mut d.bg.multiply, false, tl!("Appear behind page"));
+                widgets::radio_value(ui, &mut d.bg.multiply, false, tl!("Behind text and images"));
                 widgets::radio_value(ui, &mut d.bg.multiply, true, tl!("Blend with page content"))
                     .on_hover_text(tl!("Multiplies the background with the page: white areas show it and text stays dark."));
             });

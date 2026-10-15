@@ -1253,7 +1253,8 @@ impl Automation {
         let mut out = self.apply(a, edit)?;
         // A background behind a page that paints itself over first stays hidden: say which.
         let doc = self.doc(a)?;
-        let hidden: Vec<usize> = behind.into_iter().filter(|&p| doc.page_hides_background(p)).map(|p| p.saturating_add(1)).collect();
+        let hidden: Vec<usize> =
+            behind.into_iter().filter(|&p| doc.page_hides_background(p) && !doc.page_has_white_background(p)).map(|p| p.saturating_add(1)).collect();
         if let (false, Some(o)) = (hidden.is_empty(), out.as_object_mut()) {
             o.insert("hidden_behind".into(), json!(hidden));
         }

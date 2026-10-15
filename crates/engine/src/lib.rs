@@ -500,9 +500,14 @@ impl Document {
     }
 
     /// Does `page` (0-based) paint an opaque fill over its whole area first, hiding a background
-    /// placed behind it? Add Background then blends instead ([`Background::multiply`]).
+    /// placed behind it? See also [`Self::page_has_white_background`].
     pub fn page_hides_background(&self, page: usize) -> bool {
         self.editor.as_ref().is_some_and(|e| pdfcraft_edit::page_hides_background(&e.cos, page))
+    }
+
+    /// A normal background fits above a recognised white fill, below the original foreground.
+    pub fn page_has_white_background(&self, page: usize) -> bool {
+        self.editor.as_ref().is_some_and(|e| pdfcraft_edit::page_has_white_background(&e.cos, page))
     }
 
     /// Edit a PDF: the images `page` draws (0-based).

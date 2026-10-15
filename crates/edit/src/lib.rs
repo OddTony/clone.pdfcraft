@@ -143,7 +143,7 @@ impl Default for Watermark {
     }
 }
 
-/// A background behind the page content: a solid colour, or a picture from a file.
+/// A background below the page foreground: a solid colour, or a picture from a file.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Background {
     pub color: Rgb,
@@ -152,9 +152,9 @@ pub struct Background {
     /// Pictures: size relative to the page (1.0 fits the page).
     pub scale: f64,
     /// Blend the background with the page content (the Multiply blend mode, ISO 32000-2
-    /// §11.3.5) instead of drawing it behind. For pages that paint an opaque fill over their whole
-    /// area first ([`page_hides_background`]), which hides anything behind them: multiplied over
-    /// them, white shows the background and dark text stays dark.
+    /// §11.3.5) instead of placing it below the foreground. This can change foreground colours.
+    /// The default normal placement already handles recognised leading white page fills;
+    /// blending remains an explicit option for other pages.
     pub multiply: bool,
 }
 
@@ -656,8 +656,8 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
     Ok(())
 }
 
-/// Add a background to `pages`: a solid colour or a picture, behind the content or, with
-/// [`Background::multiply`], blended over it.
+/// Add a background to `pages`: below the foreground, above a recognised leading white fill
+/// (otherwise behind the page), or explicitly blended over it with [`Background::multiply`].
 pub fn add_background(doc: &mut Document, pages: &[usize], bg: &Background, replace: bool) -> Result<(), EditError> {
     let all = page_list(doc);
     check(pages, all.len())?;
@@ -686,7 +686,9 @@ pub fn add_background(doc: &mut Document, pages: &[usize], bg: &Background, repl
             add_picture_resource(doc, &page_list(doc)[i].clone(), src)?;
         }
         let page = &page_list(doc)[i];
-        place(doc, page, MarkKind::Background, content.into_bytes(), layer)?;
+        if bg.multiply || !background::place(doc, page, content.as_bytes())? {
+            place(doc, page, MarkKind::Background, content.into_bytes(), layer)?;
+        }
     }
     Ok(())
 }
@@ -696,10 +698,17 @@ pub fn add_background(doc: &mut Document, pages: &[usize], bg: &Background, repl
 /// have one.
 const COVER_SCAN_BYTES: usize = 1024 * 1024;
 
+mod background;
+
+/// Whether a normal background can be inserted above a balanced leading white fill.
+pub fn page_has_white_background(doc: &Document, page: usize) -> bool {
+    background::supported(doc, page)
+}
+
 /// Does page `page` (0-based) start by painting an opaque fill over its whole visible area, so
 /// that a background behind its content stays hidden? Files from accounting and office software
-/// often do: an opaque white rectangle the size of the page is the first thing drawn. Such pages
-/// need [`Background::multiply`].
+/// often do: an opaque white rectangle the size of the page is the first thing drawn. Normal
+/// placement handles the subset recognised by [`page_has_white_background`].
 ///
 /// Conservative: only a fill of a path that is one rectangle, unclipped and with no `gs` before it
 /// (which could make it translucent or blend it), counts; anything else painted first answers
@@ -809,6 +818,7 @@ pub fn remove_marks(doc: &mut Document, pages: &[usize], kind: MarkKind) -> Resu
         let before = list.len();
         let mut kept: Vec<Object> = list.into_iter().filter(|o| stream_tag(doc, o).as_deref() != Some(kind.tag())).collect();
         removed += before - kept.len();
+        background::rejoin(doc, &mut kept);
         // Marks on top come after the closing wrapper; without any, the wrapper has no purpose.
         let is_wrap = |o: &Object| stream_tag(doc, o).as_deref() == Some("Wrap");
         let close = kept.iter().rposition(&is_wrap);

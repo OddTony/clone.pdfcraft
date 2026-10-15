@@ -3293,9 +3293,8 @@ fn white_backed_page() -> Vec<u8> {
     out
 }
 
-/// A page that paints itself white first hides a background behind it; blended with Multiply,
-/// the background shows on the white and the text stays black, from a colour or a picture, and
-/// after saving and reopening.
+/// A leading white fill is handled by normal placement. Explicit Multiply remains available
+/// for colour and picture backgrounds, including after saving and reopening.
 #[test]
 fn blended_backgrounds_show_on_pages_that_paint_themselves_white() {
     let mut s = Session::new().with_clock(|| 1_700_000_000);
@@ -3303,7 +3302,7 @@ fn blended_backgrounds_show_on_pages_that_paint_themselves_white() {
     assert!(s.get(id).unwrap().page_hides_background(0));
     let blue = Background { color: [0.0, 0.0, 1.0], ..Background::default() };
     s.apply(id, Edit::AddBackground { pages: vec![0], settings: blue.clone(), replace: false, file: None }).unwrap();
-    assert_eq!(pixel(&s, id, 0, 5, 5), [255, 255, 255, 255], "behind, the page's white covers it");
+    assert_eq!(pixel(&s, id, 0, 5, 5), [0, 0, 255, 255], "normal placement goes above the white fill");
     let blended = Background { multiply: true, ..blue };
     s.apply(id, Edit::AddBackground { pages: vec![0], settings: blended, replace: true, file: None }).unwrap();
     assert_eq!(pixel(&s, id, 0, 5, 5), [0, 0, 255, 255], "blended, it shows on the white");
@@ -5889,4 +5888,39 @@ fn cropping_an_existing_image_clips_it_and_moves_with_it() {
     assert!(v.iter().zip(shown.iter()).all(|(a, b)| (a - b).abs() < 0.01), "{v:?} vs {shown:?}");
     // No area, or a box off the image, is refused.
     assert!(s.apply(id, Edit::EditPageImage { page: 0, index: 0, change: ImageEdit::Crop([10.0, 10.0, 10.0, 50.0]) }).is_err());
+}
+
+/// A real underlay keeps red and white foreground unchanged; Multiply cannot do that.
+#[test]
+fn background_under_content_preserves_coloured_and_white_foreground() {
+    let mut cos = pdfcraft_cos::Document::open(Arc::new(white_backed_page())).unwrap();
+    let page = pdfcraft_model::pages(&cos).remove(0);
+    let stream = cos.add(pdfcraft_cos::Object::Stream(pdfcraft_cos::Stream::flate(
+        pdfcraft_cos::Dict::new(),
+        b"q 1 g 0 0 200 300 re f Q 1 0 0 rg 40 140 20 20 re f 1 g 80 140 20 20 re f",
+    )));
+    cos.update_dict(page.obj, |d| d.set(b"Contents".to_vec(), pdfcraft_cos::Object::Ref(stream))).unwrap();
+    let bytes = Arc::new(pdfcraft_cos::write_incremental(&cos, &pdfcraft_cos::SaveOptions::default()).unwrap());
+    let mut s = Session::new();
+    let id = s.open("colours.pdf", None, bytes.clone(), None).unwrap();
+    let blue = Background { color: [0.0, 0.0, 1.0], ..Background::default() };
+    s.apply(id, Edit::AddBackground { pages: vec![0], settings: blue, replace: false, file: None }).unwrap();
+    assert_eq!(pixel(&s, id, 0, 5, 5), [0, 0, 255, 255]);
+    assert_eq!(pixel(&s, id, 0, 50, 150), [255, 0, 0, 255]);
+    assert_eq!(pixel(&s, id, 0, 90, 150), [255, 255, 255, 255]);
+    s.undo(id).unwrap();
+    assert_eq!(pixel(&s, id, 0, 5, 5), [255, 255, 255, 255]);
+    s.redo(id).unwrap();
+    let image = MarkFile { name: "blue.bmp".into(), bytes: Arc::new(bmp(2, 3, [255, 0, 0])), page: 0 };
+    s.apply(id, Edit::AddBackground { pages: vec![0], settings: Background::default(), replace: true, file: Some(image) }).unwrap();
+    assert_eq!(pixel(&s, id, 0, 5, 5), [0, 0, 255, 255]);
+    assert_eq!(pixel(&s, id, 0, 50, 150), [255, 0, 0, 255]);
+    assert_eq!(pixel(&s, id, 0, 90, 150), [255, 255, 255, 255]);
+    let saved = s.save_bytes(id).unwrap();
+    let again = s.open("saved.pdf", None, saved, None).unwrap();
+    assert_eq!(pixel(&s, again, 0, 50, 150), [255, 0, 0, 255]);
+    assert_eq!(pixel(&s, again, 0, 90, 150), [255, 255, 255, 255]);
+    s.apply(again, Edit::RemoveMarks { kind: MarkKind::Background }).unwrap();
+    assert_eq!(pixel(&s, again, 0, 5, 5), [255, 255, 255, 255]);
+    assert_eq!(pixel(&s, again, 0, 50, 150), [255, 0, 0, 255]);
 }

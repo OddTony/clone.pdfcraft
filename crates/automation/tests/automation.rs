@@ -2156,8 +2156,8 @@ fn blended_backgrounds_through_tools() {
     };
     let doc = ok(&mut a, "doc_open", json!({ "path": "white.pdf" }))["doc"].as_u64().unwrap();
     let r = ok(&mut a, "doc_background", json!({ "doc": doc, "color": "#0000FF" }));
-    assert_eq!(r["hidden_behind"], json!([1]), "{r}");
-    assert_eq!(pixel(&mut a, doc, 5, 5), [255, 255, 255, 255], "hidden behind the page's white");
+    assert!(r.get("hidden_behind").is_none(), "{r}");
+    assert_eq!(pixel(&mut a, doc, 5, 5), [0, 0, 255, 255], "normal placement goes above the white fill");
     let r = ok(&mut a, "doc_background", json!({ "doc": doc, "color": "#0000FF", "multiply": true, "replace": true }));
     assert!(r.get("hidden_behind").is_none(), "{r}");
     assert_eq!(pixel(&mut a, doc, 5, 5), [0, 0, 255, 255], "blended, it shows");

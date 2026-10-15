@@ -97,11 +97,10 @@ fn backgrounds_and_watermarks_from_a_file() {
     assert_eq!(s.session.get(s.views[0].id).unwrap().can_undo(), Some("Add background"));
 }
 
-/// A page that paints itself white before its content would hide a background behind it: the
-/// dialog notices, starts on Blend with page content and says why; switching back says what
-/// that would do. The background it adds blends (Multiply) over the page.
+/// A leading white page fill does not require blending: the normal background stays below
+/// original content and the dialog leaves Multiply as an explicit choice.
 #[test]
-fn background_dialog_blends_on_pages_that_paint_themselves_white() {
+fn background_dialog_places_below_content_on_pages_that_paint_themselves_white() {
     let content = "q 1 g 0 0 300 400 re f Q 0 g 40 140 20 20 re f";
     let pdf = format!(
         "%PDF-1.7
@@ -124,14 +123,15 @@ trailer << /Root 1 0 R >>
     h.run_steps(4);
     h.state_mut().execute("edit.background");
     h.run_steps(2);
-    assert!(h.state().marks_draft.bg.multiply, "starts blended");
-    h.get_by_label("This page has an opaque background of its own, so the background is blended with its content.");
-    h.get_by_label("Appear behind page").click();
-    h.run_steps(2);
-    assert!(!h.state().marks_draft.bg.multiply);
-    h.get_by_label("This page has an opaque background of its own, which hides anything behind it. Choose Blend with page content.");
+    assert!(!h.state().marks_draft.bg.multiply, "normal placement preserves foreground colours");
+    h.get_by_label("Behind text and images");
+    assert!(h.query_by_label_contains("opaque background of its own").is_none());
     h.get_by_label("Blend with page content").click();
     h.run_steps(2);
+    assert!(h.state().marks_draft.bg.multiply);
+    h.get_by_label("Behind text and images").click();
+    h.run_steps(2);
+    assert!(!h.state().marks_draft.bg.multiply);
     h.get_by_label("OK").click();
     h.run_steps(3);
     assert_eq!(marks(&h), vec![MarkKind::Background]);
