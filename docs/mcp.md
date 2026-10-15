@@ -86,6 +86,4 @@ sent extra keys before get an error now.
   minimized or locked window may draw no frames: screenshots then fail after 5 s, and
   requests can wait until it is drawn again.
 
-Ask Agent is **design only** at this stage. See [the protocol design](ask-agent-design.md) and
-[the action catalogue](ask-agent-actions-design.md); `wait_for_request` and `reply_to_request`
-are not implemented by this bridge.
+Ask Agent (`wait_for_request`, `reply_to_request`) is not part of this bridge.
