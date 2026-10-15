@@ -56,6 +56,7 @@ mod export_ui;
 mod js_ui;
 mod marks_ui;
 mod measure_ui;
+pub mod native_menu;
 mod ocr_ui;
 mod optimize_ui;
 mod search_ui;

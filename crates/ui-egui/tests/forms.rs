@@ -262,6 +262,27 @@ fn saving_while_still_typing_in_a_field_saves_the_text() {
 }
 
 #[test]
+fn native_menu_save_commits_the_focused_form_draft() {
+    // Issue #166: ⌘S with the field still focused saved it blank.
+    let dir = scratch("native-menu-save");
+    let out = dir.join("saved.pdf");
+    let mut h = harness();
+    click_field(&mut h, "name", 0);
+    h.event(egui::Event::Text("Browser Form 123".into()));
+    h.run_steps(2);
+    assert!(h.state().views[0].forms.focus.is_some(), "still typing");
+    h.state_mut().save_override = Some(out.to_string_lossy().into_owned());
+    let ctx = h.ctx.clone();
+    h.state_mut().native_menu_command(&ctx, "file.save");
+    h.run_steps(3);
+    assert_eq!(saved_value(&out, "name"), ["Browser Form 123"], "the saved PDF has the typed text");
+    assert_eq!(value(&h, "name"), ["Browser Form 123"]);
+    let doc = h.state().session.get(h.state().views[0].id).unwrap();
+    assert!(!doc.dirty, "and the document is saved, not left with an unsaved change");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn tabbing_back_to_the_same_field_then_saving_keeps_the_committed_value() {
     // A form with one text field wraps Tab back to that field. Multiple widgets of one
     // field share its value too: opening the next widget must see the accepted edit.

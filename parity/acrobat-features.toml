@@ -1742,8 +1742,8 @@ milestone = "M4"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/ui-egui/tests/commands.rs::the_pages_menu_comes_from_the_registry"]
-notes = ""
+evidence = ["crates/ui-egui/tests/commands.rs::the_pages_menu_comes_from_the_registry", "crates/ui-egui/tests/commands.rs::native_menu_close_keeps_empty_window_and_unsaved_tab_semantics", "crates/ui-egui/tests/commands.rs::native_menu_state_tracks_history_checks_language_and_modal_ownership", "crates/ui-egui/tests/commands.rs::native_menu_edits_the_focused_text_field_without_touching_document_history", "crates/ui-egui/tests/forms.rs::native_menu_save_commits_the_focused_form_draft", "apps/pdfcraft/src/native_menu.rs::menu_accelerators_parse_without_taking_native_window_shortcuts"]
+notes = "macOS also exposes the registry through a native menu bar with recent files, live translations, availability and checkmarks, focused text editing, guarded Close/Quit and native Window actions. Empty-window Close retains #869. Full native coverage of view-local controls, Services text exchange and a running windowless app are not claimed; native menu rendering and system minimise require a desktop smoke check."
 
 [[feature]]
 id = "view.about-dialog"

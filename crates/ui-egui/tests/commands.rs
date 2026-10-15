@@ -672,3 +672,97 @@ fn ctrl_tab_steps_through_the_tabs_in_order_and_wraps_around() {
         assert!(!doc.dirty, "switching tabs changes no document");
     }
 }
+
+#[test]
+fn native_menu_close_keeps_empty_window_and_unsaved_tab_semantics() {
+    let mut h = Harness::builder().with_size(egui::vec2(1000.0, 700.0)).build_eframe(|_cc| PdfCraftApp::new());
+    h.ctx.set_os(OperatingSystem::Mac);
+    h.run_steps(4);
+    let ctx = h.ctx.clone();
+    assert!(h.state().native_menu_state(&ctx, "file.close").enabled);
+    h.state_mut().native_menu_command(&ctx, "file.close");
+    h.step();
+    assert!(h.output().viewport_output.values().any(|v| v.commands.contains(&egui::ViewportCommand::Close)));
+
+    let mut h = harness();
+    h.ctx.set_os(OperatingSystem::Mac);
+    h.state_mut().apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+    let ctx = h.ctx.clone();
+    h.state_mut().native_menu_command(&ctx, "file.close");
+    h.run_steps(2);
+    assert!(!h.state().native_menu_state(&ctx, "file.close").enabled);
+    h.get_by_label("Cancel").click();
+    h.run_steps(2);
+    assert_eq!(h.state().views.len(), 1);
+    assert!(h.state().session.get(h.state().views[0].id).unwrap().dirty);
+}
+
+#[test]
+fn native_menu_state_tracks_history_checks_language_and_modal_ownership() {
+    let mut h = harness();
+    let ctx = h.ctx.clone();
+    assert!(!h.state().native_menu_state(&ctx, "edit.undo").enabled);
+    h.state_mut().apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+    let undo = h.state().native_menu_state(&ctx, "edit.undo");
+    assert!(undo.enabled && undo.label.starts_with("Undo "));
+    h.state_mut().native_menu_command(&ctx, "view.theme.dark");
+    assert_eq!(h.state().native_menu_state(&ctx, "view.theme.dark").checked, Some(true));
+    h.state_mut().native_menu_command(&ctx, "app.preferences");
+    h.run_steps(2);
+    assert!(!h.state().native_menu_state(&ctx, "file.close").enabled);
+    h.state_mut().native_menu_command(&ctx, "file.close");
+    assert_eq!(h.state().views.len(), 1, "stale menu actions cannot close beneath a dialog");
+    h.state_mut().set_option("language", "de").unwrap();
+    h.run_steps(2);
+    assert_ne!(h.state().native_menu_state(&ctx, "file.open").label, "Open…");
+}
+
+#[test]
+fn native_menu_edits_the_focused_text_field_without_touching_document_history() {
+    let mut app = PdfCraftApp::new();
+    app.open_bytes("doc.pdf", None, fixture(1)).unwrap();
+    app.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+    app.dialog = Some(Dialog::Preferences);
+    let mut h = Harness::builder().build_ui_state(
+        |ui, state: &mut (PdfCraftApp, String)| {
+            ui.text_edit_singleline(&mut state.1).request_focus();
+        },
+        (app, "alpha".to_owned()),
+    );
+    h.run_steps(2);
+    let input = |h: &mut Harness<'_, (PdfCraftApp, String)>, id: &str| {
+        let mut raw = egui::RawInput::default();
+        assert!(h.state().0.native_menu_input(&h.ctx, &mut raw, id, || "beta".into()));
+        h.input_mut().events.extend(raw.events);
+        h.run_steps(1);
+    };
+    input(&mut h, "edit.select_all");
+    input(&mut h, "edit.copy");
+    assert!(h.output().platform_output.commands.iter().any(|c| matches!(c, egui::OutputCommand::CopyText(t) if t == "alpha")));
+    input(&mut h, "edit.paste");
+    assert_eq!(h.state().1, "beta");
+    input(&mut h, "edit.undo");
+    assert_eq!(h.state().1, "alpha");
+    input(&mut h, "edit.redo");
+    assert_eq!(h.state().1, "beta");
+    let doc = h.state().0.session.get(h.state().0.views[0].id).unwrap();
+    assert!(doc.can_undo().is_some(), "text Undo must not undo the document rotation");
+    assert!(doc.can_redo().is_none());
+}
+
+#[test]
+fn native_menu_page_clipboard_keeps_copy_cut_and_paste_routes() {
+    let mut h = harness();
+    h.state_mut().system_clipboard = false;
+    h.state_mut().set_option("organize", "on").unwrap();
+    h.run_steps(2);
+    let ctx = h.ctx.clone();
+    assert!(h.state().native_menu_state(&ctx, "edit.copy").enabled);
+    assert!(!h.state().native_menu_state(&ctx, "edit.paste").enabled);
+    h.state_mut().native_menu_command(&ctx, "edit.copy");
+    assert!(h.state().page_clipboard.is_some());
+    assert!(h.state().native_menu_state(&ctx, "edit.paste").enabled);
+    h.state_mut().native_menu_command(&ctx, "edit.paste");
+    h.run_steps(3);
+    assert!(h.state().session.get(h.state().views[0].id).unwrap().dirty);
+}
