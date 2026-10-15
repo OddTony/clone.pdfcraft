@@ -2,7 +2,7 @@
 //! right-hand panels (Comments, Bookmarks, Pages, Fields, Layers, Attachments).
 
 use egui::{Align, Align2, Color32, CornerRadius, Layout, Rect, Sense, Stroke, pos2, vec2};
-use pdfcraft_engine::catalog::{self, Availability, TOOL_GROUPS, ToolGroup};
+use pdfcraft_engine::catalog::{self, Availability, TOOL_GROUPS, ToolGroup, ToolItem};
 use pdfcraft_render::{DocInfo, FieldKind, OutlineItem};
 
 use crate::theme::{self, Tokens};
@@ -228,31 +228,13 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
                 ui.painter().rect_filled(r, CornerRadius::same(4), fill);
                 ui.painter().text(r.center(), Align2::CENTER_CENTER, chip_label, font, cfg);
                 let resp = theme::hand(resp).on_hover_text(format!("{} — {}", tl!(item.label), item.command));
+                // An entry with further commands opens a menu; its caret goes before the chip.
                 if item.actions.is_empty() {
                     if resp.clicked() {
                         run = Some(item.command);
                     }
-                } else {
-                    // A caret before the chip says the entry opens a menu (Add / Update / Remove).
-                    let c = r.left_center() - vec2(10.0, 0.0);
-                    ui.painter().add(egui::Shape::convex_polygon(
-                        vec![c + vec2(-3.5, -2.0), c + vec2(3.5, -2.0), c + vec2(0.0, 2.5)],
-                        fg,
-                        egui::Stroke::NONE,
-                    ));
-                    egui::Popup::menu(&resp).show(|ui| {
-                        ui.set_min_width(180.0);
-                        for (n, id) in item.actions.iter().enumerate() {
-                            let Some(spec) = pdfcraft_engine::commands::command(id) else { continue };
-                            // Add stays usable with no document open: it asks for a file first.
-                            let enabled = (n == 0 && app.active.is_none()) || app.command_enabled(spec);
-                            let label = crate::i18n::menu_label(spec.id, spec.label);
-                            if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
-                                run = Some(spec.id);
-                                ui.close();
-                            }
-                        }
-                    });
+                } else if let Some(cmd) = actions_menu(app, ui, &resp, item, r.left_center() - vec2(10.0, 0.0), fg) {
+                    run = Some(cmd);
                 }
             }
         }
@@ -365,8 +347,14 @@ fn edit_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static 
         let more = ui.data(|d| d.get_temp::<bool>(more_id)).unwrap_or(false);
         let shown = if more { content.len() } else { EDIT_CONTENT_SHOWN.min(content.len()) };
         for i in content.iter().take(shown) {
-            if edit_row(ui, t, i.icon, tl!(i.label), i.availability).clicked() {
-                run = Some(i.command);
+            let resp = edit_row(ui, t, i.icon, tl!(i.label), i.availability);
+            // Header and footer, Watermark and Background open their Add / Update / Remove menu.
+            if i.actions.is_empty() {
+                if resp.clicked() {
+                    run = Some(i.command);
+                }
+            } else if let Some(cmd) = actions_menu(app, ui, &resp, i, resp.rect.right_center() - vec2(14.0, 0.0), t.text) {
+                run = Some(cmd);
             }
         }
         if content.len() > EDIT_CONTENT_SHOWN {
@@ -397,6 +385,31 @@ fn edit_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static 
     if let Some(cmd) = run {
         app.run_command(cmd);
     }
+}
+
+/// A tool entry with further commands (Add / Update / Remove): a caret at `caret` says it opens a
+/// menu, and each command is enabled by its own needs. Returns the command chosen.
+fn actions_menu(app: &PdfCraftApp, ui: &egui::Ui, resp: &egui::Response, item: &ToolItem, caret: egui::Pos2, color: Color32) -> Option<&'static str> {
+    ui.painter().add(egui::Shape::convex_polygon(
+        vec![caret + vec2(-3.5, -2.0), caret + vec2(3.5, -2.0), caret + vec2(0.0, 2.5)],
+        color,
+        egui::Stroke::NONE,
+    ));
+    let mut run = None;
+    egui::Popup::menu(resp).show(|ui| {
+        ui.set_min_width(180.0);
+        for (n, id) in item.actions.iter().enumerate() {
+            let Some(spec) = pdfcraft_engine::commands::command(id) else { continue };
+            // Add stays usable with no document open: it asks for a file first.
+            let enabled = (n == 0 && app.active.is_none()) || app.command_enabled(spec);
+            let label = crate::i18n::menu_label(spec.id, spec.label);
+            if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                run = Some(spec.id);
+                ui.close();
+            }
+        }
+    });
+    run
 }
 
 /// One row of the Edit panel: a monochrome icon and the label, as Acrobat draws them. A planned
