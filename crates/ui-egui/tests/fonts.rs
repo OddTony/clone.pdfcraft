@@ -219,6 +219,40 @@ fn system_fallback_covers_sinhala_and_tamil() {
     }
 }
 
+/// No embedded face has Hangul, so on a machine with an installed Korean face the installed
+/// definitions include it once per family and it draws every Hangul syllable of the Korean
+/// catalog. macOS always ships Apple SD Gothic Neo, so there the test never skips.
+#[test]
+fn system_fallback_covers_the_korean_catalog() {
+    assert!(!theme::font_definitions().font_data.contains_key(theme::SYSTEM_HANGUL_FALLBACK));
+    let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
+    let off = std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0");
+    if !defs.font_data.contains_key(theme::SYSTEM_HANGUL_FALLBACK) && (off || !cfg!(target_os = "macos")) {
+        eprintln!("skipping system_fallback_covers_the_korean_catalog: no installed Hangul fallback font (or PDFCRAFT_SYSTEM_FONTS=0)");
+        assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == theme::SYSTEM_HANGUL_FALLBACK)));
+        return;
+    }
+    for (family, stack) in &defs.families {
+        assert_eq!(stack.iter().filter(|n| *n == theme::SYSTEM_HANGUL_FALLBACK).count(), 1, "{family:?}: {stack:?}");
+    }
+    let mut hangul: Vec<char> = include_str!("../src/i18n/ko.tsv")
+        .lines()
+        .filter(|l| !l.starts_with('#'))
+        .filter_map(|l| l.split('\t').nth(2))
+        .flat_map(str::chars)
+        .filter(|c| matches!(*c, '\u{ac00}'..='\u{d7a3}'))
+        .collect();
+    hangul.sort_unstable();
+    hangul.dedup();
+    assert!(hangul.len() > 300, "the catalog's Hangul: {}", hangul.len());
+    let mut fonts = Fonts::new(TextOptions::default(), defs);
+    for id in families() {
+        let missing: String = hangul.iter().filter(|c| !fonts.has_glyphs(&id, &c.to_string())).collect();
+        assert!(missing.is_empty(), "{id:?} lacks {missing}");
+    }
+    assert!(layout_widths(&mut fonts, "한국어").iter().all(|w| w.is_finite() && *w > 0.0));
+}
+
 /// The Han characters of a catalog's translations.
 fn catalog_han(catalog: &str) -> String {
     let mut han: Vec<char> = catalog
