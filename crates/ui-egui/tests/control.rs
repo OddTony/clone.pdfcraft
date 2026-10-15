@@ -1576,3 +1576,25 @@ fn click_and_drag_refuse_coordinates_that_overflow_like_move() {
     assert_eq!(ok(&mut h, &c, "ui.click", json!({ "x": x, "y": y }))["clicked"], json!([x, y]));
     ok(&mut h, &c, "ui.drag", json!({ "from": [x, y], "to": [x + 10.0, y], "steps": 2 }));
 }
+
+#[test]
+fn outline_view_toggles_by_command_and_option_and_rejects_unknown_modes() {
+    let (mut h, c) = harness_pages(1);
+    let mode = |h: &Harness<'static, PdfCraftApp>| format!("{:?}", h.state().views[0].outline);
+    assert_eq!(mode(&h), "Off");
+    ok(&mut h, &c, "ui.command", json!({"id":"view.outline"}));
+    assert_eq!(mode(&h), "Paths");
+    // Overlay replaces Paths; running the same command again leaves the mode.
+    ok(&mut h, &c, "ui.command", json!({"id":"view.outline_overlay"}));
+    assert_eq!(mode(&h), "Overlay");
+    h.run_steps(3);
+    ok(&mut h, &c, "ui.command", json!({"id":"view.outline_overlay"}));
+    assert_eq!(mode(&h), "Off");
+    h.state_mut().set_option("outline", "paths").unwrap();
+    h.run_steps(3);
+    assert_eq!(mode(&h), "Paths");
+    assert!(h.state_mut().set_option("outline", "sideways").is_err());
+    assert_eq!(mode(&h), "Paths");
+    h.state_mut().set_option("outline", "off").unwrap();
+    assert_eq!(mode(&h), "Off");
+}
