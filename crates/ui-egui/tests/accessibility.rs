@@ -434,3 +434,52 @@ fn finding_untagged_content_shows_the_focused_accessibility_results() {
     let active: Vec<Rule> = report.results.iter().filter(|result| result.status != Status::Skipped).map(|result| result.rule).collect();
     assert_eq!(active, [Rule::TaggedContent, Rule::TaggedAnnotations, Rule::TaggedFormFields]);
 }
+
+/// Prepare for accessibility ▸ Verify PDF/UA: the panel lists the failed Matterhorn conditions with
+/// where they fail, and the ones only a person can judge apart from the passes. The options dialog
+/// chooses between the checker's rules and a part of PDF/UA.
+#[test]
+fn verify_pdfua_lists_failed_and_manual_conditions() {
+    use pdfcraft_engine::a11y::pdfua::{Outcome, Part};
+    use pdfcraft_ui_egui::A11yProfile;
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("notes.pdf", None, FIXTURE.to_vec()).unwrap();
+        app
+    });
+    h.run_steps(3);
+    assert!(h.state_mut().execute("a11y.check_pdfua"));
+    h.run_steps(3);
+    assert_eq!(h.state().right, Some(RightPanel::Accessibility));
+    let (part, failed, manual) = {
+        let r = &h.state().a11y.ua.as_ref().unwrap().1;
+        (r.part, r.count(Outcome::Failed), r.count(Outcome::Manual))
+    };
+    assert_eq!((part, manual), (Part::Ua1, 47), "the file declares nothing, so PDF/UA-1");
+    assert!(failed > 0);
+    assert_eq!(h.state().a11y_options.profile, A11yProfile::PdfUa(Part::Ua1), "the dialog keeps the choice");
+    h.get_by_label_contains("06-002 Metadata");
+    h.get_by_label("Needs manual check (47)");
+    h.get_by_label("Declared conformance: none");
+    // A failed condition opens on what fails and where.
+    h.get_by_label_contains("01-005 Real content tagged").click();
+    h.run_steps(2);
+    h.get_by_label("The document isn't tagged, so none of its content is");
+    // The options dialog: PDF/UA hides the checker's own options.
+    assert!(h.state_mut().execute("a11y.check"));
+    h.run_steps(2);
+    h.get_by_label("Standards");
+    assert!(h.query_by_label_contains("of 32 in all categories").is_none());
+    h.state_mut().a11y_options.profile = A11yProfile::PdfUa(Part::Ua2);
+    h.get_by_label("Start Checking").click();
+    h.run_steps(3);
+    assert_eq!(h.state().a11y.ua.as_ref().unwrap().1.part, Part::Ua2);
+    h.get_by_label("PDF/UA-2");
+    // Back to the checker's rules: its results replace PDF/UA's in the panel.
+    h.state_mut().a11y_options.profile = A11yProfile::Checker;
+    h.state_mut().run_accessibility_check();
+    h.run_steps(2);
+    assert!(h.state().a11y.ua.is_none() && h.state().a11y.report.is_some());
+    h.get_by_label("Title - Failed");
+}
