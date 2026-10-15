@@ -543,6 +543,7 @@
 	Remove unused objects and merge identical ones	Пайдаланылмаған нысандарды алып тастау және ұқсастарын біріктіру
 	Audit space usage…	Кеңістікті пайдалануды тексеру…
 	Space Audit	Кеңістікті пайдалану аудиті
+	What takes up the space in this file, by kind of content.	Бұл файлдағы орынды не алып жатыр, мазмұн түрі бойынша.
 	Bytes	Байт
 	Content Streams	Мазмұн ағындары
 	X Object Forms	XObject формалары
@@ -1238,6 +1239,7 @@
 	Copy text	Мәтінді көшіру
 	Properties…	Сипаттар…
 	Make Current Properties Default	Ағымдағы сипаттарды әдепкі етіп орнату
+	Make Properties Default	Сипаттарды әдепкі етіп орнату
 	More options	Қосымша параметрлер
 	Sort by	Бойынша сұрыптау
 	Author	Автор
@@ -1356,6 +1358,9 @@
 	Sort comments by:	Түсініктемелерді сұрыптау:
 	Create PDF Comment Summary	Түсініктемелердің PDF қорытындысын жасау
 	Revert to the previously saved version of “{name}”? Changes since then can't be undone afterwards.	«{name}» бұрын сақталған нұсқасына оралу керек пе? Осы уақыттан кейінгі өзгерістерді кейін болдырмауға болмайды.
+	Save over the changed file?	Өзгертілген файлдың үстіне сақтау керек пе?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	«{name}» ашылғаннан немесе соңғы сақталғаннан кейін дискіде өзгертілді. Қазір сақтау сол жаңарақ нұсқаны осымен алмастырады.
+	Save anyway	Бәрібір сақтау
 	Number pages	Беттерді нөмірлеу
 	Style	Стиль
 	None (prefix only)	Жоқ (тек префикс)
@@ -2233,6 +2238,7 @@ key	Space	Бос орын
 	Fill & Sign signature	«Толтыру және қол қою» қолтаңбасы
 	Choose image…	Сурет таңдау…
 	Looking for printers…	Принтерлер ізделуде…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Принтерлер табылмады. Принтердің орнатылғанын және басып шығару кезегі қызметінің жұмыс істеп тұрғанын тексеріп, «Басып шығару» терезесін қайта ашыңыз.
 	Sending to {printer}…	{printer} құрылғысына жіберілуде…
 	Enter permissions password…	Рұқсаттар құпиясөзін енгізу…
 	Permissions password	Рұқсаттар құпиясөзі
@@ -2267,10 +2273,10 @@ key	Space	Бос орын
 	Printer paper and scaling may differ. Check driver settings.	Принтер қағазы мен масштабы өзгеше болуы мүмкін. Драйвер параметрлерін тексеріңіз.
 	Drawing scale changes. Use Actual size for full-scale plans.	Сызба масштабы өзгереді. Толық масштабты жоспарлар үшін Нақты өлшемді пайдаланыңыз.
 	Reload documents when their files change on disk	Дискідегі файлдары өзгергенде құжаттарды қайта жүктеу
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Бұл файл дискіде өзгерді. Жаңа нұсқасын көру үшін оны қайта жүктеңіз; сақталмаған өзгерістер жоғалады.
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Бұл файл дискіде өзгертілді. «Қайта жүктеу» жаңа нұсқаны көрсетіп, сақталмаған өзгерістеріңізді тастайды; «Сақтау» оны осы нұсқамен алмастырады.
 	Reload	Қайта жүктеу
 	Couldn't reload {name}: {e}	{name} қайта жүктеу мүмкін болмады: {e}
-	Mouse wheel scroll speed	Тінтуір дөңгелегімен айналдыру жылдамдығы
+	Scroll speed (mouse wheel and arrow keys)	Айналдыру жылдамдығы (тінтуір дөңгелегі және көрсеткі пернелері)
 scroll speed	Slow	Баяу
 scroll speed	Normal	Қалыпты
 scroll speed	Fast	Жылдам
@@ -2403,3 +2409,5 @@ animation effects	Off	Өшірулі
 	Shown while the pointer is over a mark.	Меңзер белгінің үстінде тұрғанда көрсетіледі.
 	Opacity:	Мөлдірсіздік:
 	Make properties default	Қасиеттерді әдепкі ету
+	Pages selected	Таңдалған беттер
+	Page properties	Бет қасиеттері

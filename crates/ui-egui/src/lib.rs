@@ -7,6 +7,12 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+/// Whether `a` and `b` name the same file: equal, or equal once made absolute against the
+/// current directory (links are not resolved, as in `last_session`).
+pub(crate) fn same_file(a: &str, b: &str) -> bool {
+    a == b || matches!((std::path::absolute(a), std::path::absolute(b)), (Ok(x), Ok(y)) if x == y)
+}
+
 /// Translate an English UI string into the current language (see [`i18n`]).
 macro_rules! tl {
     ($s:expr) => {
@@ -122,6 +128,7 @@ pub(crate) const MAX_AUTHOR_CHARS: usize = 200;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod open_worker;
+mod organize_panel;
 pub mod portable;
 mod protect;
 mod recovery;
@@ -300,6 +307,8 @@ pub enum Dialog {
     Print,
     /// File ▸ Revert confirmation.
     Revert,
+    /// Save over a file that changed on disk since the document came from it (#2166).
+    OverwriteChanged,
     /// Link Properties.
     LinkProps,
     /// Organize ▸ Extract (options), Rotate Pages.
@@ -610,6 +619,9 @@ pub struct PdfCraftApp {
     pub host_dirty: Option<HostDirtyFn>,
     /// A pending "save changes?" question (closing a dirty tab or quitting).
     pub close_request: Option<CloseRequest>,
+    /// A save waiting behind [`Dialog::OverwriteChanged`] (the web build has no files to check).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub pending_overwrite: Option<editing::PendingOverwrite>,
     /// Save to this path instead of asking (tests and automation).
     pub save_override: Option<String>,
     /// Document Properties ▸ Description fields being edited: (document, Title/Author/Subject/Keywords).
@@ -950,6 +962,8 @@ impl PdfCraftApp {
             host_save: None,
             host_dirty: None,
             close_request: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            pending_overwrite: None,
             save_override: None,
             props_draft: None,
             view_draft: None,
@@ -1660,10 +1674,16 @@ impl PdfCraftApp {
         }
     }
 
+    /// The tab already showing the file at `path` (the same path, or one that names the same
+    /// file once made absolute).
+    pub(crate) fn tab_showing(&self, path: &str) -> Option<usize> {
+        self.views.iter().position(|v| self.session.get(v.id).and_then(|d| d.path.as_deref()).is_some_and(|p| same_file(p, path)))
+    }
+
     /// Open a file from a recent list: focus the tab already showing it, else open it (File ▸
     /// Open Recent and the Home view's list share this).
     pub fn open_recent(&mut self, path: &str) {
-        if let Some(i) = self.views.iter().position(|v| self.session.get(v.id).and_then(|d| d.path.as_deref()) == Some(path)) {
+        if let Some(i) = self.tab_showing(path) {
             self.active = Some(i);
         } else {
             #[cfg(not(target_arch = "wasm32"))]
@@ -1760,6 +1780,18 @@ impl PdfCraftApp {
     /// Keep a chosen tool with its file until preparation and any password entry finish.
     #[cfg(not(target_arch = "wasm32"))]
     fn open_path_then(&mut self, path: &str, then: Option<&'static str>) {
+        // One file, one tab (#2166): a file that is open already comes to the front instead,
+        // and the tool it was opened for runs on it. One still being opened is left to that.
+        if let Some(i) = self.tab_showing(path) {
+            self.active = Some(i);
+            if let Some(command) = then {
+                self.execute(command);
+            }
+            return;
+        }
+        if self.pending_opens.iter().any(|p| p.path.as_deref().is_some_and(|p| same_file(p, path))) {
+            return;
+        }
         let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.to_string());
         // Taken before reading: a build that rewrites the file meanwhile still counts as a change.
         let stamp = file_watch::Stamp::at(path);
@@ -2100,7 +2132,9 @@ impl PdfCraftApp {
         }
     }
 
-    /// Select the workspace and its matching tool panel, just like the mode bar.
+    /// Select the workspace and its matching tool panel, just like the mode bar. Edit turns on
+    /// Edit text & images at once, as Acrobat does: every paragraph and image on the page gets its
+    /// box and is editable with one click. Leaving Edit puts the editing tools down again.
     pub(crate) fn select_mode(&mut self, mode: Mode) {
         self.mode = mode;
         self.reveal_tools();
@@ -2113,6 +2147,23 @@ impl PdfCraftApp {
             Mode::Sign => LeftPanel::Tool("fill_sign"),
             _ => LeftPanel::AllTools,
         };
+        if mode == Mode::Edit {
+            self.quick_tool = QuickTool::EditText;
+        } else if matches!(self.quick_tool, QuickTool::EditText | QuickTool::AddText) {
+            self.put_down_edit_text();
+        }
+    }
+
+    /// Back to the Select tool from an editing tool. A paragraph still open in the editor is
+    /// applied, as clicking away from it does; left open, its page would keep showing the
+    /// paragraph's text removed with no editor over it.
+    pub(crate) fn put_down_edit_text(&mut self) {
+        self.quick_tool = QuickTool::Select;
+        if let Some(ed) = self.active.and_then(|i| self.views.get_mut(i)).and_then(|v| v.line_editor.take())
+            && let Some(edit) = edit_text_ui::finished_edit(ed)
+        {
+            self.apply_edit(edit);
+        }
     }
 
     /// Switches workspace because the user chose to (mode bar, Read mode command). Entering Read
@@ -2750,7 +2801,7 @@ impl PdfCraftApp {
             {
                 object_ui::nudge_keys(ctx, &mut self.views[i], doc);
             }
-            canvas::shortcuts(&mut self.views[i], ctx);
+            canvas::shortcuts(&mut self.views[i], ctx, self.scroll_speed);
             self.copy_key(i, ctx);
             self.image_pick_keys(i, ctx);
         }

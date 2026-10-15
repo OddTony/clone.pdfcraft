@@ -56,6 +56,13 @@ fn organize(pages: usize) -> Harness<'static, PdfCraftApp> {
     harness(pages, |app| app.set_option("organize", "on").unwrap())
 }
 
+/// Organize pages ▸ Insert ▸ `item`.
+fn insert_menu(h: &mut Harness<'static, PdfCraftApp>, item: &str) {
+    h.get_by_label("Insert").click();
+    h.run_steps(2);
+    h.get_by_label(item).click();
+}
+
 fn type_selection(h: &mut Harness<'static, PdfCraftApp>, text: &str) {
     use egui::accesskit::Role;
     h.get_by_role_and_label(Role::TextInput, "Selected pages").click();
@@ -114,7 +121,7 @@ fn organize_page_range_rejects_invalid_input_and_escape_cancels_without_clearing
     assert_eq!(h.state().views[0].target_pages(), [1, 2]);
     assert_eq!(h.get_by_role_and_label(Role::TextInput, "Selected pages").value().as_deref(), Some("2-3"));
     type_selection(&mut h, "5, 4, 4");
-    h.get_by_label("Apply").click();
+    h.key_press(Key::Enter);
     h.run_steps(2);
     assert_eq!(h.state().views[0].target_pages(), [3, 4]);
     type_selection(&mut h, " ");
@@ -481,7 +488,7 @@ fn insert_blank_page_after_selection() {
     let mut h = organize(2);
     h.get_by_label("Page 1").click();
     h.run_steps(1);
-    h.get_by_label("Insert a blank page after the selection").click();
+    insert_menu(&mut h, "Insert a blank page after the selection");
     h.run_steps(3);
     assert_eq!(page_texts(h.state()), ["Page 1", "", "Page 2"]);
     let app = h.state();
@@ -1538,7 +1545,7 @@ fn replace_button_replaces_selected_pages_in_organize() {
     h.get_by_label("Page 3").click_modifiers(Modifiers::COMMAND);
     h.run_steps(2);
     h.state_mut().pick_override = Some(vec![other.to_string_lossy().into_owned()]);
-    h.get_by_label("Replace pages…").click();
+    h.get_by_label("Replace").click();
     h.run_steps(3);
     egui_kittest::kittest::Queryable::get_by_label(&h, "Replace Pages");
     assert_eq!(h.state().replace_draft.as_ref().unwrap().from, 2);
@@ -1648,7 +1655,7 @@ fn plus_between_pages_inserts_picked_files_there_in_order() {
     // The toolbar button still inserts after the selection, not at the last "+" used.
     h.get_by_label("Page 2").click();
     h.run_steps(2);
-    h.get_by_label("Insert pages from a file…").click();
+    insert_menu(&mut h, "Insert pages from a file…");
     h.run_steps(4);
     assert_eq!(texts_of(h.state(), 0), ["a note", "Page 1", "a note", "Page 2", "Page 3", "a note"]);
     // A file that can't be converted changes nothing.
@@ -1914,10 +1921,10 @@ fn split_dialog_writes_one_file_per_part() {
     let d = dir.to_string_lossy().into_owned();
     let mut h = organize(3);
     h.state_mut().export_dir_override = Some(d);
-    h.get_by_label("Split into files…").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     h.get_by_label_contains("Creates 3 files from 3 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -1943,7 +1950,7 @@ fn split_at_bookmarks_with_equal_titles_keeps_every_part() {
     h.state_mut().run_command("page.split");
     h.run_steps(3);
     h.get_by_label_contains("Creates 3 files from 3 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -1963,7 +1970,7 @@ fn split_before_selected_pages() {
     h.state_mut().run_command("page.split");
     h.run_steps(3);
     h.get_by_label_contains("Creates 2 files from 4 pages");
-    h.get_by_label("Split").click();
+    h.get_all_by_label("Split").last().unwrap().click();
     h.run_steps(3);
     let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     names.sort();
@@ -2474,6 +2481,51 @@ fn switching_from_a_narrow_editor_keeps_one_frame_and_a_wide_heading_on_one_line
         h.render().unwrap().save(path).unwrap();
     }
     assert!(!dirty(&h));
+}
+
+/// #2022: clicking straight into another text box while one is open for typing must apply the
+/// open paragraph first; the typed text used to be dropped with the editor that switched away.
+#[test]
+fn switching_straight_to_another_box_applies_the_open_paragraph() {
+    let bytes = source_font_fixture_with_text("BT /F1 24 Tf 20 220 Td (Top) Tj ET BT /F2 24 Tf 20 120 Td (Bottom) Tj ET");
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("boxes.pdf", None, bytes).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 300.0;
+    let mut blocks = {
+        let s = h.state();
+        s.session.get(s.views[0].id).unwrap().text_blocks(0)
+    };
+    blocks.sort_by(|a, b| b.rect[1].partial_cmp(&a.rect[1]).unwrap_or(std::cmp::Ordering::Equal));
+    assert_eq!(blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>(), ["Top", "Bottom"], "two editable boxes");
+    let center = |b: &pdfcraft_engine::TextBlock| {
+        egui::pos2(r.left() + ((b.rect[0] + b.rect[2]) / 2.0) as f32 * k, r.top() + (300.0 - (b.rect[1] + b.rect[3]) / 2.0) as f32 * k)
+    };
+    // Open the top box and type into it.
+    click_at(&mut h, center(&blocks[0]));
+    let ed = h.state().views[0].line_editor.clone().expect("the top box opens for typing");
+    assert_eq!(ed.text, "Top");
+    h.state_mut().views[0].line_editor.as_mut().unwrap().text = "Top edited".into();
+    h.run_steps(1);
+    // Click straight into the bottom box: the open paragraph is applied, and the bottom box opens.
+    click_at(&mut h, center(&blocks[1]));
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    assert_eq!(
+        doc.text_blocks(0).iter().map(|b| b.text.clone()).collect::<Vec<_>>(),
+        ["Top edited", "Bottom"],
+        "the typed text is applied, not dropped"
+    );
+    assert_eq!(doc.can_undo(), Some("Edit text"));
+    let ed = s.views[0].line_editor.clone().expect("the bottom box is now open");
+    assert_eq!(ed.text, "Bottom");
 }
 
 #[test]
@@ -4423,4 +4475,46 @@ fn cropping_a_picture_with_its_handles() {
     let doc = h.state().session.get(id).unwrap();
     assert_eq!(doc.page_images(0)[0].visible_rect.unwrap(), v);
     assert!(h.state().views[0].image_selection.as_ref().is_none_or(|s| s.crop.is_none()));
+}
+
+/// Organize pages has Acrobat's panel whenever the grid shows, however it was opened, and the
+/// panel's Close ends Organize: the grid closes and All tools comes back.
+#[test]
+fn organize_panel_comes_with_the_grid_and_closes_it() {
+    let mut h = organize(3);
+    h.get_by_label("Insert");
+    h.get_by_label("Bates numbering");
+    h.get_by_label("Page properties");
+    h.get_by_label("Close panel").click();
+    h.run_steps(3);
+    assert!(!h.state().views[0].organize, "Close ends Organize");
+    assert_eq!(h.state().left, pdfcraft_ui_egui::LeftPanel::AllTools);
+    assert!(h.query_by_label("Page properties").is_none(), "the panel is gone");
+}
+
+/// Leaving Organize (a page opened from the grid, or the grid's Close) goes back to the
+/// workspace's panel: under the Edit tab, the Edit panel, not All tools.
+#[test]
+fn leaving_organize_goes_back_to_the_workspace_panel() {
+    use pdfcraft_ui_egui::{LeftPanel, Mode};
+    let mut h = harness(3, |_| {});
+    h.state_mut().mode = Mode::Edit;
+    h.state_mut().left = LeftPanel::Tool("edit");
+    h.run_steps(2);
+    h.state_mut().left = LeftPanel::Tool("organize");
+    h.state_mut().views[0].organize = true;
+    h.run_steps(3);
+    h.get_by_label("Pages selected".to_uppercase().as_str());
+    // What opening a page from the grid does.
+    h.state_mut().views[0].organize = false;
+    h.run_steps(3);
+    assert_eq!(h.state().left, LeftPanel::Tool("edit"), "back to the Edit panel");
+    // The same from All tools goes back to All tools.
+    h.state_mut().mode = Mode::AllTools;
+    h.state_mut().left = LeftPanel::Tool("organize");
+    h.state_mut().views[0].organize = true;
+    h.run_steps(3);
+    h.state_mut().views[0].organize = false;
+    h.run_steps(3);
+    assert_eq!(h.state().left, LeftPanel::AllTools);
 }

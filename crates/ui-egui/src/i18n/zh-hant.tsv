@@ -219,6 +219,7 @@
 	Remove unused objects and merge identical ones	刪除未使用的物件併合並相同的物件
 	Audit space usage…	審計空間使用情況…
 	Space Audit	空間審計
+	What takes up the space in this file, by kind of content.	此檔案的空間被哪些內容佔用，依內容類型列出。
 	Bytes	位元組
 	Content Streams	內容流
 	X Object Forms	XObject 表單
@@ -1187,6 +1188,7 @@
 	Copy text	複製文字
 	Properties…	屬性…
 	Make Current Properties Default	將目前屬性設為預設
+	Make Properties Default	將屬性設為預設
 	More options	更多選項
 	Sort by	排序方式
 	Author	作者
@@ -1319,6 +1321,10 @@
 	Sort comments by:	註解排序依據：
 	Create PDF Comment Summary	建立 PDF 註解摘要
 	Revert to the previously saved version of “{name}”? Changes since then can't be undone afterwards.	還原到「{name}」的上次儲存版本？此後的更改將無法復原。
+	Revert to the previously saved version of “{name}”? Changes since then can't be undone afterwards.	還原到“{name}”的上次儲存版本？此後的更改將無法復原。
+	Save over the changed file?	覆寫已變更的檔案？
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	「{name}」在開啟或上次儲存後已在磁碟上變更。現在儲存會以此版本取代那個較新的版本。
+	Save anyway	仍要儲存
 	Number pages	頁面編號
 	Style	樣式
 	None (prefix only)	無（僅字首）
@@ -1524,6 +1530,7 @@
 	Sent to {printer}	已傳送到{printer}
 	Sent to {printer}: {msg}	已傳送到{printer}：{msg}
 	Looking for printers…	正在尋找印表機…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	找不到印表機。請確認印表機已安裝、列印多工緩衝處理器正在執行，然後重新開啟「列印」。
 	Sending to {printer}…	正在傳送到{printer}…
 	Choose a folder for the searchable files	選擇可搜尋檔案的資料夾
 	Files are combined from top to bottom. Leave Pages empty to take every page.	檔案將按從上到下的順序合併。頁碼留空表示取全部頁面。
@@ -2143,14 +2150,14 @@ key	Space	空格
 	Tools	工具
 	Inspector	檢查器
 	Reload documents when their files change on disk	檔案在磁碟上變更時重新載入對應的文件
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	此檔案已在磁碟上變更。請重新載入以查看新版本；未儲存的變更將會遺失。
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	此檔案已在磁碟上變更。「重新載入」會顯示新版本並捨棄未儲存的變更；「儲存」則會以此版本取代它。
 	Reload	重新載入
 	Couldn't reload {name}: {e}	無法重新載入{name}：{e}
 	Select page {label}	選取頁面 {label}
 	Rotate page {label} counterclockwise	逆時針旋轉頁面 {label}
 	Rotate page {label} clockwise	順時針旋轉頁面 {label}
 	Delete page {label}	刪除頁面 {label}
-	Mouse wheel scroll speed	滑鼠滾輪捲動速度
+	Scroll speed (mouse wheel and arrow keys)	捲動速度（滑鼠滾輪與方向鍵）
 scroll speed	Slow	慢
 scroll speed	Normal	正常
 scroll speed	Fast	快
@@ -2360,3 +2367,5 @@ animation effects	Off	關
 	Shown while the pointer is over a mark.	指標位於標記上方時顯示。
 	Opacity:	不透明度:
 	Make properties default	將內容設為預設
+	Pages selected	選取的頁面
+	Page properties	頁面屬性

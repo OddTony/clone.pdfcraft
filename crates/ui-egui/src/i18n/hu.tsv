@@ -554,6 +554,7 @@
 	Remove unused objects and merge identical ones	Nem használt objektumok eltávolítása és az azonosak egyesítése
 	Audit space usage…	Helyfoglalás vizsgálata…
 	Space Audit	Helyfoglalás
+	What takes up the space in this file, by kind of content.	Mi foglalja a helyet ebben a fájlban, tartalomtípusonként.
 	Bytes	Bájt
 	Content Streams	Tartalomfolyamok
 	X Object Forms	XObject-űrlapok
@@ -1265,6 +1266,7 @@
 	Copy text	Szöveg másolása
 	Properties…	Tulajdonságok…
 	Make Current Properties Default	A jelenlegi tulajdonságok legyenek az alapértelmezettek
+	Make Properties Default	A tulajdonságok legyenek az alapértelmezettek
 	More options	További beállítások
 	Sort by	Rendezés szempontja
 	Author	Szerző
@@ -1385,6 +1387,9 @@
 	Sort comments by:	Megjegyzések rendezése eszerint:
 	Create PDF Comment Summary	PDF-megjegyzésösszefoglaló létrehozása
 	Revert to the previously saved version of “{name}”? Changes since then can't be undone afterwards.	Visszatérsz „{name}” előzőleg mentett változatához? Az azóta tett módosítások utána nem vonhatók vissza.
+	Save over the changed file?	Felülírja a megváltozott fájlt?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	A(z) „{name}” megváltozott a lemezen a megnyitás vagy az utolsó mentés óta. A mentés most ezt az újabb változatot cseréli le erre.
+	Save anyway	Mentés mindenképp
 	Number pages	Oldalak számozása
 	Style	Stílus
 	None (prefix only)	Nincs (csak előtag)
@@ -1590,6 +1595,7 @@
 	Sent to {printer}	Elküldve ide: {printer}
 	Sent to {printer}: {msg}	Elküldve ide: {printer}: {msg}
 	Looking for printers…	Nyomtatók keresése…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Nem található nyomtató. Ellenőrizze, hogy a nyomtató telepítve van-e, és fut-e a nyomtatási sorkezelő, majd nyissa meg újra a Nyomtatást.
 	Sending to {printer}…	Küldés ide: {printer}…
 	Choose a folder for the searchable files	Válassz mappát a kereshető fájloknak
 	Files are combined in this order. Leave Pages empty to take every page.	A fájlok ebben a sorrendben egyesülnek. Hagyd üresen az Oldalak mezőt, ha minden oldalt kéred.
@@ -2267,14 +2273,14 @@ key	Space	Szóköz
 	Printer paper and scaling may differ. Check driver settings.	A nyomtató papírja és méretezése eltérhet. Ellenőrizze az illesztőprogram beállításait.
 	Drawing scale changes. Use Actual size for full-scale plans.	A rajz méretaránya változik. Méretarányos tervekhez használja a Tényleges méret beállítást.
 	Reload documents when their files change on disk	Dokumentumok újratöltése, ha a fájljuk megváltozik a lemezen
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Ez a fájl megváltozott a lemezen. Töltsd újra az új változat megtekintéséhez; a nem mentett módosításaid elvesznek.
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Ez a fájl megváltozott a lemezen. Az Újratöltés az új változatot mutatja, és eldobja a nem mentett módosításokat; a Mentés erre a változatra cseréli le.
 	Reload	Újratöltés
 	Couldn't reload {name}: {e}	{name} újratöltése nem sikerült: {e}
 	Select page {label}	{label}. oldal kijelölése
 	Rotate page {label} counterclockwise	{label}. oldal elforgatása az óramutató járásával ellentétesen
 	Rotate page {label} clockwise	{label}. oldal elforgatása az óramutató járásával megegyezően
 	Delete page {label}	{label}. oldal törlése
-	Mouse wheel scroll speed	Egérgörgő görgetési sebessége
+	Scroll speed (mouse wheel and arrow keys)	Görgetési sebesség (egérgörgő és nyílbillentyűk)
 scroll speed	Slow	Lassú
 scroll speed	Normal	Normál
 scroll speed	Fast	Gyors
@@ -2404,3 +2410,5 @@ animation effects	Off	Ki
 	Shown while the pointer is over a mark.	Akkor látszik, amikor a mutató egy jelölés fölött van.
 	Opacity:	Átlátszatlanság:
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
+	Pages selected	Kijelölt oldalak
+	Page properties	Oldaltulajdonságok
