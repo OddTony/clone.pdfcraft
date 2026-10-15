@@ -115,3 +115,7 @@ lopdf = { path = "vendor/lopdf" }
 winit = { path = "vendor/winit" }
 egui-wgpu = { path = "vendor/egui-wgpu" }
 vello_common = { path = "vendor/vello_common" }
+
+# Toshiba PrintCapabilities whitespace regression (#2430), pending upstream winprint.rs#5.
+[patch."https://github.com/storytold/winprint.rs"]
+winprint = { git = "https://github.com/YouseifUS/winprint.rs", rev = "948103ce7e7c3bf0e8c263e0e2970a8869014fc3" }

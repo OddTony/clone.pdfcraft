@@ -77,6 +77,53 @@ fn texts(h: &Harness<'static, PdfCraftApp>) -> Vec<String> {
 }
 
 #[test]
+fn dragging_an_added_image_to_another_page_transfers_it_above_the_page() {
+    let mut h = harness();
+    assert!(h.state_mut().apply_edit(pdfcraft_engine::Edit::InsertBlankPage { at: 1, width: 300.0, height: 400.0 }));
+    h.state_mut().set_option("zoom", "60").unwrap();
+    h.state_mut().execute("edit.edit_text");
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(30, 20, image::Rgb([220, 30, 20])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    assert!(h.state_mut().apply_edit(pdfcraft_engine::Edit::AddImage {
+        page: 0,
+        rect: Some([100.0, 200.0, 160.0, 240.0]),
+        name: "red.png".into(),
+        bytes: std::sync::Arc::new(png),
+    }));
+    h.run_steps(8);
+    let source = h.state().views[0].page_screen_rect(0).unwrap();
+    let target = h.state().views[0].page_screen_rect(1).unwrap();
+    let start = source.min + egui::vec2(130.0, 180.0) * (source.width() / 300.0);
+    let end = target.center();
+    h.hover_at(start);
+    h.run_steps(1);
+    h.drag_at(start);
+    h.run_steps(1);
+    for i in 1..=10 {
+        h.hover_at(start + (end - start) * (i as f32 / 10.0));
+        h.run_steps(1);
+    }
+    h.drop_at(end);
+    h.run_steps(6);
+    let items = added(&h);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].page, 1, "the image must belong to the destination page");
+    let rect = items[0].content.rect();
+    assert!((rect[0] - 120.0).abs() < 2.0 && (rect[1] - 180.0).abs() < 2.0, "{rect:?}");
+    let s = h.state();
+    let bytes = s.session.save_bytes(s.views[0].id).unwrap();
+    let mut session = pdfcraft_engine::Session::new();
+    let id = session.open("moved.pdf", None, bytes, None).unwrap();
+    assert_eq!(session.get(id).unwrap().added()[0].page, 1);
+    assert!(h.state_mut().execute("edit.undo"));
+    h.run_steps(3);
+    assert_eq!(added(&h)[0].page, 0);
+    assert!(h.state_mut().execute("edit.redo"));
+    h.run_steps(3);
+    assert_eq!(added(&h)[0].page, 1);
+}
+
+#[test]
 fn text_tool_drafts_grow_for_latin_and_arabic() {
     for text in ["Wide words ".repeat(8), "سلام عليكم ".repeat(8)] {
         let mut h = harness();

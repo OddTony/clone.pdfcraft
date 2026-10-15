@@ -1736,6 +1736,58 @@ fn missing_glyphs_substitute_helvetica_and_impossible_text_is_refused() {
 }
 
 #[test]
+fn justified_paragraph_keeps_alignment_when_the_inline_editor_sends_row_breaks() {
+    let text = "The quick brown fox jumps over the lazy dog and keeps running through the field until it reaches the river at the end of the long summer day.";
+    let mut doc = text_page("BT /F1 12 Tf 14.4 TL 72 700 Td (Original.) Tj ET");
+    text::rewrite_block(&mut doc, 0, 0, Some(text), &text::BlockStyle { width: Some(200.0), align: Some(Align::Justify), ..Default::default() })
+        .unwrap();
+    let draft = text::text_blocks(&doc, 0).unwrap()[0].editor_text.replace("dog", "cat");
+    assert!(draft.contains('\n'));
+    text::rewrite_block(&mut doc, 0, 0, Some(&draft), &Default::default()).unwrap();
+    let lines = text::text_lines(&reopen(&doc), 0).unwrap();
+    assert!(lines.len() > 1);
+    for line in lines.iter().take(lines.len() - 1) {
+        assert!((line.rect[2] - 272.0).abs() < 0.05, "{}: {:?}", line.text, line.rect);
+    }
+}
+
+#[test]
+fn paragraph_layout_survives_repeated_text_edits_and_reopen() {
+    let original = "The quick brown fox jumps over the lazy dog and keeps running through the field until it reaches the river at the end of the long summer day.";
+    for align in [Align::Left, Align::Center, Align::Right, Align::Justify] {
+        let mut doc = text_page("BT /F1 12 Tf 14.4 TL 72 700 Td (Original paragraph.) Tj ET");
+        let style = text::BlockStyle { width: Some(200.0), align: Some(align), ..Default::default() };
+        text::rewrite_block(&mut doc, 0, 0, Some(original), &style).unwrap();
+        doc = reopen(&doc);
+        let baseline = text::text_lines(&doc, 0).unwrap();
+        for replacement in [original.replace("lazy", "sleepy"), original.to_string()] {
+            text::rewrite_block(&mut doc, 0, 0, Some(&replacement), &Default::default()).unwrap();
+            doc = reopen(&doc);
+        }
+        let after = text::text_lines(&doc, 0).unwrap();
+        assert_eq!(streams(&doc, 0).join(" ").matches("/PCParagraph").count(), 1, "repeated edits do not nest layout markers");
+        assert_eq!(after.len(), baseline.len(), "{align:?}: row count drifted");
+        for (before, after) in baseline.iter().zip(after) {
+            assert_eq!(before.text, after.text);
+            for (a, b) in before.rect.iter().zip(after.rect) {
+                assert!((a - b).abs() < 0.05, "{align:?}: {:?} -> {:?}", before.rect, after.rect);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_short_paragraph_keeps_its_explicit_width_on_the_next_edit() {
+    let mut doc = text_page("BT /F1 12 Tf 72 700 Td (Original.) Tj ET");
+    text::rewrite_block(&mut doc, 0, 0, Some("Short."), &text::BlockStyle { width: Some(100.0), ..Default::default() }).unwrap();
+    let mut doc = reopen(&doc);
+    text::rewrite_block(&mut doc, 0, 0, Some("A longer replacement that should wrap within the chosen width."), &Default::default()).unwrap();
+    let lines = text::text_lines(&reopen(&doc), 0).unwrap();
+    assert!(lines.len() > 1);
+    assert!(lines.iter().all(|line| line.rect[2] <= 172.5), "{lines:?}");
+}
+
+#[test]
 fn paragraphs_are_found_and_rewrapped() {
     let mut doc = text_page(
         "BT 0 0 1 rg /F1 10 Tf 12 TL 72 700 Td (The quick brown fox) Tj T* (jumps over the) Tj T* (lazy dog.) Tj ET \

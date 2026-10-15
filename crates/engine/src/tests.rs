@@ -2479,6 +2479,50 @@ fn added_text_and_images_render_and_stay_editable() {
 }
 
 #[test]
+fn moving_added_images_between_pages_keeps_pixels_history_and_resources() {
+    let (mut s, id) = session_with(2);
+    let picture = |rgb: [u8; 3]| {
+        let mut bytes = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut bytes, 1, 1);
+            enc.set_color(png::ColorType::Rgb);
+            enc.write_header().unwrap().write_image_data(&rgb).unwrap();
+        }
+        Arc::new(bytes)
+    };
+    // The destination's opaque blue background must remain below the moved red image.
+    s.apply(id, Edit::AddImage { page: 1, rect: Some([0.0, 0.0, 200.0, 300.0]), name: "blue.png".into(), bytes: picture([0, 0, 255]) }).unwrap();
+    s.apply(id, Edit::AddImage { page: 0, rect: Some([20.0, 180.0, 100.0, 220.0]), name: "red.png".into(), bytes: picture([255, 0, 0]) }).unwrap();
+    let content = s.get(id).unwrap().added()[0].content.with_rect([40.0, 180.0, 120.0, 220.0]);
+    let before = s.save_bytes(id).unwrap();
+    for (page, index) in [(usize::MAX, 0), (0, usize::MAX)] {
+        assert!(s.apply(id, Edit::MoveContent { page, index, to: 1, content: content.clone() }).is_err());
+        assert_eq!(s.save_bytes(id).unwrap(), before, "an invalid source changes nothing");
+    }
+    assert!(s.apply(id, Edit::MoveContent { page: 0, index: 0, to: usize::MAX, content: content.clone() }).is_err());
+    assert_eq!(s.save_bytes(id).unwrap(), before, "an invalid destination changes nothing");
+    s.apply(id, Edit::MoveContent { page: 0, index: 0, to: 1, content }).unwrap();
+    let check = |s: &Session, id| {
+        let doc = s.get(id).unwrap();
+        assert_eq!(doc.added().len(), 2);
+        assert!(doc.added().iter().all(|item| item.page == 1));
+        let mut renderer = pdfcraft_render::PageRenderer::new(doc.bytes.clone(), Default::default());
+        let shot = renderer.render(pdfcraft_render::RenderRequest { page: 1, scale: 1.0, ..Default::default() });
+        assert!(shot.error.is_none(), "{:?}", shot.error);
+        let at = ((100 * shot.width + 80) * 4) as usize;
+        assert_eq!(&shot.rgba[at..at + 4], &[255, 0, 0, 255], "red image above destination background");
+    };
+    check(&s, id);
+    s.undo(id).unwrap();
+    assert_eq!(s.get(id).unwrap().added()[0].page, 0);
+    s.redo(id).unwrap();
+    check(&s, id);
+    let mut again = Session::new();
+    let reopened = again.open("moved.pdf", None, s.save_bytes(id).unwrap(), None).unwrap();
+    check(&again, reopened);
+}
+
+#[test]
 fn added_images_rotate_flip_and_crop_as_drawn() {
     // A 20×10 image: left half red, right half blue.
     let mut px = Vec::new();

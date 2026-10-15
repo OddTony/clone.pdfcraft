@@ -279,6 +279,7 @@ fn scope_of(edit: &Edit) -> Scope {
         | Edit::AddText { .. }
         | Edit::AddImage { .. }
         | Edit::UpdateContent { .. }
+        | Edit::MoveContent { .. }
         | Edit::DeleteContent { .. }
         | Edit::ReplaceImage { .. }
         | Edit::AddHeaderFooter { .. }
@@ -1622,6 +1623,13 @@ pub enum Edit {
         index: usize,
         content: AddedContent,
     },
+    /// Transfer an added item to another page, above its existing content.
+    MoveContent {
+        page: usize,
+        index: usize,
+        to: usize,
+        content: AddedContent,
+    },
     DeleteContent {
         page: usize,
         index: usize,
@@ -2010,7 +2018,7 @@ impl Edit {
             Edit::RemoveMarks { kind: MarkKind::Background } => Label::of("Remove background"),
             Edit::AddText { .. } => Label::of("Add text"),
             Edit::AddImage { .. } => Label::of("Add image"),
-            Edit::UpdateContent { .. } => Label::of("Edit content"),
+            Edit::UpdateContent { .. } | Edit::MoveContent { .. } => Label::of("Edit content"),
             Edit::DeleteContent { .. } => Label::of("Delete content"),
             Edit::ReplaceImage { .. } => Label::of("Replace image"),
             Edit::ApplyRedactions { .. } => Label::of("Apply redactions"),
@@ -2150,6 +2158,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::AddText { .. }
         | Edit::AddImage { .. }
         | Edit::UpdateContent { .. }
+        | Edit::MoveContent { .. }
         | Edit::MoveObjects { .. }
         | Edit::DeleteContent { .. }
         | Edit::ReplaceImage { .. }
@@ -2570,6 +2579,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             };
             pdfcraft_edit::add_content(doc, *page, &AddedContent::Image(pdfcraft_edit::AddedImage::new(rect, image)))?;
         }
+        Edit::MoveContent { page, index, to, content } => pdfcraft_edit::move_content(doc, *page, *index, *to, content)?,
         Edit::UpdateContent { page, index, content } => pdfcraft_edit::update_content(doc, *page, *index, content)?,
         Edit::DeleteContent { page, index } => pdfcraft_edit::delete_content(doc, *page, *index)?,
         Edit::ReplaceImage { page, index, name, bytes } => {
@@ -3927,7 +3937,12 @@ impl Session {
         let touches_added = edit.is_none_or(|e| {
             matches!(
                 e,
-                Edit::AddText { .. } | Edit::AddImage { .. } | Edit::UpdateContent { .. } | Edit::DeleteContent { .. } | Edit::ReplaceImage { .. }
+                Edit::AddText { .. }
+                    | Edit::AddImage { .. }
+                    | Edit::UpdateContent { .. }
+                    | Edit::MoveContent { .. }
+                    | Edit::DeleteContent { .. }
+                    | Edit::ReplaceImage { .. }
             ) || matches!(e, Edit::MoveObjects { objects, .. } if objects.iter().any(|o| o.kind == ObjectKind::Added))
         });
         let touches_marks = edit.is_none_or(|e| {

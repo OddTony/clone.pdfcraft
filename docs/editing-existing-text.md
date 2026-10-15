@@ -62,6 +62,11 @@ another code (a composite font, the generated Type 3 fallback) each space is fol
 adjustment instead. Justifying a paragraph with several formats in it is not supported yet: it is
 left-aligned.
 
+A paragraph's chosen width and alignment are retained in private marked-content properties
+when PdfCraft rewrites it. Later text-only edits reuse those values, including after saving and
+reopening; explicit formatting overrides them. Untagged source paragraphs still use geometric
+inference until edited with an explicit width or alignment.
+
 For headless editing, use `text_font_files` → `text_font_import` → `text_fonts` and pass a
 resource to `text_edit.font_resource`. `text_edit.ranges` holds selected range formatting.
 `text_edit_layout` accepts resource/ranges too and measures a draft without applying it.

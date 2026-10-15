@@ -227,7 +227,12 @@ impl MoveBackground {
         }
         mesh.add_triangle(0, 1, 2);
         mesh.add_triangle(0, 2, 3);
-        painter.add(egui::Shape::mesh(mesh));
+        // Draw the moving picture after the pages, so the destination's paper cannot cover
+        // it. The source background above stays clipped to its own page.
+        ui.ctx()
+            .layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("moving-added-content")))
+            .with_clip_rect(ui.clip_rect())
+            .add(egui::Shape::mesh(mesh));
     }
 }
 
@@ -320,6 +325,9 @@ pub(crate) fn page_input(
 ) -> bool {
     let mut consumed = false;
     let pointer = ui.input(|i| i.pointer.hover_pos().or(i.pointer.interact_pos()));
+    let destination = pointer
+        .and_then(|p| view.visible_page_rects().into_iter().find(|(_, r)| r.contains(p)))
+        .and_then(|(page, _)| view.page_xform(page).map(|xf| (page, xf)));
     let cv = &mut view.content;
     if let Some((gp, grab, start)) = cv.grab
         && gp == page
@@ -335,7 +343,8 @@ pub(crate) fn page_input(
             {
                 let keep = matches!(a.content, AddedContent::Image(_));
                 let r = dragged(screen_rect(xf, info, page, a.content.rect()), grab, end - start, keep);
-                let (p0, p1) = (to_display(xf, info, page, r.left_bottom()), to_display(xf, info, page, r.right_top()));
+                let (to, target) = if grab == Grab::Move { destination.unwrap_or((page, *xf)) } else { (page, *xf) };
+                let (p0, p1) = (to_display(&target, info, to, r.left_bottom()), to_display(&target, info, to, r.right_top()));
                 let mut rect = [p0[0], p0[1], p1[0], p1[1]];
                 if let AddedContent::Text(t) = &a.content
                     && grab == Grab::Move
@@ -343,7 +352,14 @@ pub(crate) fn page_input(
                     // Text height follows its lines: keep the top edge's offset only.
                     rect = [rect[0], rect[3] - (t.rect[3] - t.rect[1]), rect[2], rect[3]];
                 }
-                view.pending_edit = Some(Edit::UpdateContent { page, index: si, content: a.content.with_rect(rect) });
+                let content = a.content.with_rect(rect);
+                view.pending_edit = Some(if to != page {
+                    cv.select_added = Some((to, on_page(added, to).len()));
+                    cv.selected = None;
+                    Edit::MoveContent { page, index: si, to, content }
+                } else {
+                    Edit::UpdateContent { page, index: si, content }
+                });
             }
         }
         return consumed;

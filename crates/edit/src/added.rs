@@ -1091,7 +1091,7 @@ fn find(doc: &Document, page: usize, index: usize) -> Result<Added, EditError> {
         .into_iter()
         .filter(|a| a.page == page)
         .nth(index)
-        .ok_or_else(|| EditError::Invalid(format!("page {} has no added item {}", page + 1, index + 1)))
+        .ok_or_else(|| EditError::Invalid(format!("page {} has no added item {}", page.saturating_add(1), index.saturating_add(1))))
 }
 
 /// Replace item `index` of `page` (moved, resized, retyped or reformatted).
@@ -1101,6 +1101,24 @@ pub fn update_content(doc: &mut Document, page: usize, index: usize, c: &Content
         return Err(EditError::Invalid("an item can't change between text and image".into()));
     }
     write(doc, page, c, Some(a.obj))?;
+    Ok(())
+}
+
+/// Move item `index` of `page` to `to`, using destination display-space content.
+pub fn move_content(doc: &mut Document, page: usize, index: usize, to: usize, c: &Content) -> Result<(), EditError> {
+    let a = find(doc, page, index)?;
+    if std::mem::discriminant(&a.content) != std::mem::discriminant(c) {
+        return Err(EditError::Invalid("an item can't change between text and image".into()));
+    }
+    if page == to {
+        return update_content(doc, page, index, c);
+    }
+    // Write above the destination's existing content, with its own display transform and
+    // resources. Commit both changes together, so an invalid destination loses nothing.
+    let mut work = doc.clone();
+    add_content(&mut work, to, c)?;
+    delete_content(&mut work, page, index)?;
+    *doc = work;
     Ok(())
 }
 
