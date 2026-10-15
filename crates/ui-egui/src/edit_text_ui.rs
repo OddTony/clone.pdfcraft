@@ -1288,6 +1288,12 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
 fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> Arc<egui::Galley> {
     let mut job = editor_job(ui, ed, text, scale, width);
     let centered = job.halign == egui::Align::Center;
+    // PDF source rows have physical left and right edges. For an RTL paragraph,
+    // retain the source right edge rather than treating its varying left edge
+    // as the paragraph anchor.
+    let rtl = text.chars().find(|c| c.is_alphabetic()).is_some_and(|c| {
+        matches!(u32::from(c), 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFC)
+    });
     job.halign = egui::Align::LEFT;
     let mut galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
     let Some((block, lines)) = &ed.source else { return galley };
@@ -1331,7 +1337,13 @@ fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: 
         let base_y = (block.rect[3] - baseline) as f32 * scale;
         let row = Arc::make_mut(&mut placed.row);
         placed.pos.y = base_y - ascent;
-        placed.pos.x = if centered { (width - row.size.x) / 2.0 } else { (source_rect[0] - block.rect[0]) as f32 * scale };
+        placed.pos.x = if centered {
+            (width - row.size.x) / 2.0
+        } else if rtl {
+            (source_rect[2] - block.rect[0]) as f32 * scale - row.size.x
+        } else {
+            (source_rect[0] - block.rect[0]) as f32 * scale
+        };
         for glyph in &mut row.glyphs {
             let dy = ascent - glyph.pos.y;
             glyph.pos.y = ascent;
