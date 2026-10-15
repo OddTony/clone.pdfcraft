@@ -919,7 +919,7 @@
 	Set document title	Ange dokumenttitel
 	Run a JavaScript	Kör JavaScript
 	Prepare for Distribution	Förbered för distribution
-	Remove hidden information and flatten comments and form fields, so recipients see only the pages.	Tar bort dold information och plattar ut kommentarer och formulärfält så att mottagarna bara ser sidorna.
+	Remove hidden information and flatten comments and form fields, so recipients see only the pages.	Tar bort dold information och plattar till kommentarer och formulärfält så att mottagarna bara ser sidorna.
 	Optimize Scanned Documents	Optimera skannade dokument
 	Make scans searchable, then make them smaller.	Gör skanningar sökbara och gör dem sedan mindre.
 	Add Page Numbers	Lägg till sidnummer
@@ -1141,9 +1141,9 @@
 	Links, actions and JavaScripts	Länkar, åtgärder och JavaScript-skript
 	Private data of other applications	Privat data från andra program
 	None found	Inget hittades
-	Form fields are flattened: their values stay visible. Saving rewrites the whole file.	Formulärfält plattas ut: deras värden förblir synliga. Sparandet skriver om hela filen.
+	Form fields are flattened: their values stay visible. Saving rewrites the whole file.	Formulärfält plattas till: deras värden förblir synliga. Sparandet skriver om hela filen.
 	Remove	Ta bort
-	Sanitizing removes hidden information from the document: metadata, file attachments, comments, form fields (flattened), hidden text and layers, bookmarks, links, actions and scripts, and private application data.	Sanering tar bort dold information från dokumentet: metadata, bilagor, kommentarer, formulärfält (utplattade), dold text och dolda lager, bokmärken, länkar, åtgärder och skript samt privat programdata.
+	Sanitizing removes hidden information from the document: metadata, file attachments, comments, form fields (flattened), hidden text and layers, bookmarks, links, actions and scripts, and private application data.	Sanering tar bort dold information från dokumentet: metadata, bilagor, kommentarer, formulärfält (tillplattade), dold text och dolda lager, bokmärken, länkar, åtgärder och skript samt privat programdata.
 	Save the document afterwards; saving rewrites the whole file so nothing removed stays in it.	Spara dokumentet efteråt; när du sparar skrivs hela filen om så att inget borttaget blir kvar i den.
 	Printer:	Skrivare:
 	Save as PDF	Spara som PDF
@@ -1707,8 +1707,8 @@
 	Nothing to undo	Inget att ångra
 	Nothing to redo	Inget att göra om
 	This document has no form fields you can fill in	Det här dokumentet har inga formulärfält som du kan fylla i
-	This document has no comments to flatten	Det här dokumentet har inga kommentarer att platta ut
-	This document has no form fields to flatten	Det här dokumentet har inga formulärfält att platta ut
+	This document has no comments to flatten	Det här dokumentet har inga kommentarer att platta till
+	This document has no form fields to flatten	Det här dokumentet har inga formulärfält att platta till
 	There are no redaction marks (mark text, areas or pages first)	Det finns inga maskningsmarkeringar (markera text, områden eller sidor först)
 	This document has no {kind} to change	Det här dokumentet saknar {kind} att ändra
 	header or footer	sidhuvud eller sidfot
@@ -1911,7 +1911,7 @@
 	Change link properties	Ändra länkegenskaper
 	Delete link	Ta bort länk
 	Create link	Skapa länk
-	Flatten	Platta ut
+	Flatten	Platta till
 	Add sticky note	Lägg till klisterlapp
 	Add highlight	Lägg till överstrykning
 	Add underline	Lägg till understrykning
@@ -2062,7 +2062,7 @@
 	Table	Tabell
 	Username	Användarnamn
 	Display name	Visningsnamn
-	Real name	Riktigt namn
+	Real name	Fullständigt namn
 	Name (A–Z)	Namn (A–Ö)
 	Merged PRs	Sammanslagna PR
 	PRs	PR
@@ -2081,9 +2081,9 @@
 	First	Första
 	Last commit	Sista incheckningen
 	Last	Sista
-	No contributor data was built into this copy.	Ingen data om bidragsgäster har byggts in i den här kopian.
+	No contributor data was built into this copy.	Ingen data om bidragsgivare har byggts in i den här kopian.
 	No model credits were built into this copy.	Inga krediter för modeller har byggts in i den här kopian.
-	{n} contributors · {c} commits	{n} bidragsgäster · {c} incheckningar
+	{n} contributors · {c} commits	{n} bidragsgivare · {c} incheckningar
 	Company	Företag
 	Model	Modell
 	% of all commits	% av alla incheckningar
@@ -2091,10 +2091,10 @@
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}: {prs} PR, {commits} incheckningar, +{added} / −{deleted} rader (Δ {delta}), +{bin_added} / −{bin_deleted} binärfiler, {first} – {last}
 	None of those files can be made into a PDF; use PDFs, images or .txt files	Ingen av de filerna kan göras till en PDF; använd PDF-filer, bilder eller .txt-filer
 	About	Om
-	Contributors	Bidragsgäster
+	Contributors	Bidragsgivare
 	Models	Modeller
 	Only continue if you trust this document. An address can carry information from the document, such as what you typed into its form.	Fortsätt bara om du litar på det här dokumentet. En adress kan innehålla information från dokumentet, till exempel det du skrev i dess formulär.
-	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	Skriv ut enkelsidigt. Behåll arken i ordning, klipp vid märkena och stapla sedan höarna från vänster till höger, uppifrån och ner.
+	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	Skriv ut enkelsidigt. Behåll arken i ordning, klipp vid märkena och stapla sedan högarna från vänster till höger, uppifrån och ner.
 comment menu	Edit	Redigera
 	Undo {action}	Ångra {action}
 	Redo {action}	Gör om {action}
@@ -2166,7 +2166,7 @@ calendar date	December	december
 	Larger pages	Större sidor
 	Smaller pages	Mindre sidor
 	Reset page size	Återställ sidstorlek
-	Flatten Fill & Sign when saving	Platta ut Fyll i och signera när du sparar
+	Flatten Fill & Sign when saving	Platta till Fyll i och signera när du sparar
 	Text, marks and signatures become part of the page. Other comments stay editable.	Text, märken och signaturer blir en del av sidan. Andra kommentarer förblir redigerbara.
 	Date format	Datumformat
 	Fill & Sign dates	Datum i Fyll i och signera
@@ -2214,7 +2214,7 @@ certificate	Subject	Ämne
 	Move object	Flytta objekt
 	Move objects	Flytta objekt
 	Vertical text cannot be moved with this selection.	Vertikal text kan inte flyttas med den här markeringen.
-	Text used as a clipping path cannot be moved with this selection.	Text som används som urklippsbana kan inte flyttas med den här markeringen.
+	Text used as a clipping path cannot be moved with this selection.	Text som används som beskärningsbana kan inte flyttas med den här markeringen.
 	These objects could not be moved. Select them again and try a smaller move.	Objekten kunde inte flyttas. Markera dem igen och försök med en mindre flytt.
 	This page contains objects that cannot be selected together.	Den här sidan innehåller objekt som inte kan markeras tillsammans.
 	Fill colour	Fyllnadsfärg
@@ -2249,10 +2249,10 @@ key	Space	Space
 	PDF scale: {scale}%	PDF-skala: {scale} %
 	Printer paper and scaling may differ. Check driver settings.	Skrivarpapper och skalning kan skilja sig. Kontrollera drivrutinsinställningarna.
 	Drawing scale changes. Use Actual size for full-scale plans.	Ritningsskalan varierar. Använd Faktisk storlek för ritningar i full skala.
-	Reload documents when their files change on disk	Läs om dokument när deras filer ändras på disken
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Den här filen har ändrats på disken. Läs om den för att se den nya versionen; dina osparade ändringar går förlorade.
-	Reload	Läs om
-	Couldn't reload {name}: {e}	Kunde inte läsa om {name}: {e}
+	Reload documents when their files change on disk	Läs in dokument igen när filerna ändras på disken
+	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Den här filen har ändrats på disken. Läs in den igen för att se den nya versionen; dina osparade ändringar går förlorade.
+	Reload	Läs in igen
+	Couldn't reload {name}: {e}	Kunde inte läsas in igen {name}: {e}
 	Select page {label}	Markera sidan {label}
 	Rotate page {label} counterclockwise	Rotera sidan {label} moturs
 	Rotate page {label} clockwise	Rotera sidan {label} medurs
@@ -2307,7 +2307,7 @@ animation effects	Off	Av
 	Save or revert changes before selecting another tag.	Spara eller återställ ändringarna innan du markerar en annan tagg.
 	Left out: {names}	Uteslöts: {names}
 	already a PDF	redan en PDF
-	no unused output name	inget ledigt utdatanamn
+	no unused output name	inget ledigt filnamn för utdata
 	no output folder was chosen	ingen utdatamapp valdes
 @plural	Downloaded {n} PDF|Downloaded {n} PDFs	Hämtade {n} PDF|Hämtade {n} PDF-filer
 	Scan	Skanna
@@ -2359,10 +2359,10 @@ animation effects	Off	Av
 	{who}, certificate issued by {issuer}.	{who}, certifikat utfärdat av {issuer}.
 	{who}, certificate issued by an unknown issuer.	{who}, certifikat utfärdat av en okänd utfärdare.
 	Digital Signature	Digital signatur
-	Non-Repudiation	Icke-förnekande
+	Non-Repudiation	Oavvislighet
 	Key Encipherment	Nyckelkryptering
 	Data Encipherment	Datakryptering
-	Key Agreement	Nyckelöverenskommelse
+	Key Agreement	Nyckelutbyte
 	Certificate Signing	Certifikatsignering
 	CRL Signing	CRL-signering
 	Encipher Only	Chiffrera endast
@@ -2400,7 +2400,7 @@ animation effects	Off	Av
 	Zoom out (⌘−)	Zooma ut (⌘−)
 	DeviceCMYK is used, but the PDF/A output intent isn't a CMYK profile	DeviceCMYK används, men utmatningsavsikten för PDF/A är inte en CMYK-profil
 	DeviceRGB is used, but the PDF/A output intent isn't an RGB profile	DeviceRGB används, men utmatningsavsikten för PDF/A är inte en RGB-profil
-	Flatten Fill & Sign	Platta ut Fyll i och signera
+	Flatten Fill & Sign	Platta till Fyll i och signera
 	The security settings don't allow screen readers to read the text	Säkerhetsinställningarna tillåter inte skärmläsare att läsa texten
 	No page has text: the document appears to be images of pages	Ingen sida har text: dokumentet verkar bestå av bilder av sidor
 	The document has no tags (structure tree)	Dokumentet har inga taggar (strukturträd)

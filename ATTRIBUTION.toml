@@ -302,7 +302,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Swedish UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "63c7ab025223731c0fad718f7c8f2cc177f5988af64be7c0376713fa64ae46d8"
+sha256 = "f9f7f5d2ce61581bb91210deff86fd54d1b1620fcc24fd4a3145176f69e71501"
 [[asset]]
 path = "crates/ui-egui/src/i18n/fi.tsv"
 title = "Finnish interface translation catalog"
