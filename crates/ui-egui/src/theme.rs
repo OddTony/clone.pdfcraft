@@ -416,6 +416,9 @@ pub fn medium(size: f32) -> FontId {
 pub fn semibold(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name("semibold".into()))
 }
+pub fn bold(size: f32) -> FontId {
+    semibold(size)
+}
 
 pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
     // Keep the native window inherited. A concrete egui theme pins macOS's
