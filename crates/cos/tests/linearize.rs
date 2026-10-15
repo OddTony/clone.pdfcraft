@@ -71,6 +71,68 @@ fn one_page() -> Vec<u8> {
         .build()
 }
 
+/// Three pages with extra catalog, page 2 and page 3 entries, and extra objects from number 9.
+fn three_pages(catalog: &str, page2: &str, page3: &str, extra: &[Vec<u8>]) -> Vec<u8> {
+    let mut pdf = Pdf::new()
+        .obj(format!("<< /Type /Catalog /Pages 2 0 R {catalog} >>"))
+        .obj("<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 /MediaBox [0 0 200 300] >>")
+        .obj("<< /Type /Page /Parent 2 0 R /Resources << >> /Contents 6 0 R >>")
+        .obj(format!("<< /Type /Page /Parent 2 0 R /Resources << >> /Contents 7 0 R {page2} >>"))
+        .obj(format!("<< /Type /Page /Parent 2 0 R /Contents 8 0 R {page3} >>"))
+        .stream("", "0 0 m 10 10 l S")
+        .stream("", "0 0 m 20 20 l S")
+        .stream("", "0 0 m 30 30 l S");
+    for body in extra {
+        pdf = pdf.obj(body);
+    }
+    pdf.build()
+}
+
+/// Objects reached in ways the nine-page fixture doesn't: each case is one way qpdf's idea of
+/// who owns an object once differed from ours.
+fn awkward() -> Vec<(&'static str, Vec<u8>)> {
+    let obj = |s: &str| s.as_bytes().to_vec();
+    vec![
+        (
+            "an open outline and page 3 share a destination",
+            three_pages(
+                "/Outlines 9 0 R /PageMode /UseOutlines",
+                "",
+                "/Resources << >> /Annots [12 0 R]",
+                &[
+                    obj("<< /Type /Outlines /First 10 0 R /Last 10 0 R /Count 1 >>"),
+                    obj("<< /Title (Three) /Parent 9 0 R /Dest 11 0 R >>"),
+                    obj("[5 0 R /Fit]"),
+                    obj("<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /Dest 11 0 R >>"),
+                ],
+            ),
+        ),
+        (
+            "page 2 reaches the catalog",
+            three_pages(
+                "/Names 9 0 R",
+                "/PieceInfo << /Back 1 0 R >>",
+                "/Resources << >>",
+                &[obj("<< /Dests 10 0 R >>"), obj("<< /Names [(three) 11 0 R] >>"), obj("[5 0 R /Fit]")],
+            ),
+        ),
+        (
+            "an indirect /PageMode opens the outlines",
+            three_pages(
+                "/Outlines 9 0 R /PageMode 12 0 R",
+                "",
+                "/Resources << >>",
+                &[
+                    obj("<< /Type /Outlines /First 10 0 R /Last 11 0 R /Count 2 >>"),
+                    obj("<< /Title (One) /Parent 9 0 R /Next 11 0 R /Dest [3 0 R /Fit] >>"),
+                    obj("<< /Title (Three) /Parent 9 0 R /Prev 10 0 R /Dest [5 0 R /Fit] >>"),
+                    obj("/UseOutlines"),
+                ],
+            ),
+        ),
+    ]
+}
+
 fn open(bytes: Vec<u8>) -> Document {
     Document::open(Arc::new(bytes)).unwrap()
 }
@@ -121,6 +183,19 @@ fn qpdf_finds_no_linearization_errors() {
     let plain = write_full(&open(fixture(false)), &SaveOptions { object_streams: false, ..SaveOptions::default() }).unwrap();
     let (ok, report) = qpdf_verdict(&qpdf, &plain, None);
     assert!(!ok && report.contains("is not linearized"), "{report}");
+}
+
+#[test]
+fn qpdf_agrees_on_objects_reached_in_awkward_ways() {
+    let qpdf = pdfcraft_oracle::or_skip!(pdfcraft_oracle::qpdf());
+    let failures: Vec<String> = awkward()
+        .into_iter()
+        .filter_map(|(name, bytes)| {
+            let (ok, report) = qpdf_verdict(&qpdf, &write_full(&open(bytes), &linearized()).unwrap(), None);
+            (!ok).then(|| format!("{name}: {report}"))
+        })
+        .collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 #[test]

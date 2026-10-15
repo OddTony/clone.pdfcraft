@@ -18,8 +18,9 @@
 //! What is document-level and what a page's section holds follow what `qpdf
 //! --check-linearization` expects, observed as a black box: the catalog's `/OpenAction`,
 //! `/ViewerPreferences`, `/Threads` and `/AcroForm` with everything they reach are
-//! document-level, and a page's section stops at other pages, the page tree, document-level
-//! objects and thumbnails.
+//! document-level; a page's section stops at other pages, the page tree, those document-level
+//! objects and thumbnails, and goes through the catalog; open outlines take only what no page
+//! reaches.
 //!
 //! Written with classic cross-reference tables and no object streams, so a linearized file is
 //! larger than a compressed full save. Hint tables hold 32-bit offsets: larger files are refused.
@@ -266,7 +267,9 @@ impl Plan {
         let root = trailer.reference(b"Root").ok_or_else(|| refuse("the document has no catalog"))?;
         let catalog = graph.at(root).ok_or_else(|| missing(root))?;
         let mut part = vec![Part::Rest; n];
-        // Other pages, the page tree and thumbnails end a page's section.
+        // Other pages, the page tree and thumbnails end a page's section. (A thumbnail another
+        // page also draws stays out of that page's too: qpdf places such an image by rules of
+        // its own, which neither choice matches.)
         let mut blocked = vec![false; n];
         for (p, &i) in pages.iter().enumerate() {
             blocked[i] = true;
@@ -305,30 +308,18 @@ impl Plan {
             }
         }
 
-        // Part 6: the first page and its reach, then the outlines when the document opens with
-        // them shown.
-        let enter = |part: &[Part], t: usize| !blocked[t] && part[t] != Part::Document;
+        // Part 6: the first page and its reach. A page's reach goes through the catalog, which
+        // stays document-level, but not past the other document-level objects.
+        let enter = |part: &[Part], t: usize| !blocked[t] && (t == catalog || part[t] != Part::Document);
         stamp += 1;
         let first = graph.reach(pages[0], &mut mark, stamp, &mut work, |t| enter(&part, t))?;
         let mut first: Vec<usize> = first.into_iter().filter(|&i| i == pages[0] || part[i] == Part::Rest).collect();
         for &i in &first {
             part[i] = Part::First;
         }
-        let outline_root = catalog_dict.reference(b"Outlines").and_then(|r| graph.at(r)).filter(|&o| !blocked[o]);
-        let mut outlines = Vec::new();
-        if catalog_dict.name(b"PageMode") == Some(&b"UseOutlines"[..])
-            && let Some(root) = outline_root.filter(|&o| part[o] == Part::Rest)
-        {
-            stamp += 1;
-            outlines = graph.reach(root, &mut mark, stamp, &mut work, |t| enter(&part, t) && part[t] == Part::Rest)?;
-            for &i in &outlines {
-                part[i] = Part::First;
-            }
-            first.extend(&outlines);
-        }
 
         // Parts 7 and 8: what only one later page reaches is that page's; what several reach,
-        // shared. Then each later page's uses of part 6 and part 8, transitively.
+        // shared.
         let mut own: Vec<Vec<usize>> = vec![Vec::new(); pages.len()];
         let mut shared = Vec::new();
         for (p, &page) in pages.iter().enumerate().skip(1) {
@@ -347,6 +338,26 @@ impl Plan {
                 }
             }
         }
+
+        // Outlines shown on opening end part 6: what no page reaches, which qpdf gives the pages.
+        let outline_root = catalog_dict.reference(b"Outlines").and_then(|r| graph.at(r)).filter(|&o| !blocked[o]);
+        let page_mode = match catalog_dict.get(b"PageMode") {
+            Some(Object::Ref(r)) => reader.get(*r).as_name().map(<[u8]>::to_vec),
+            v => v.and_then(Object::as_name).map(<[u8]>::to_vec),
+        };
+        let mut outlines = Vec::new();
+        if page_mode.as_deref() == Some(&b"UseOutlines"[..])
+            && let Some(root) = outline_root.filter(|&o| part[o] == Part::Rest)
+        {
+            stamp += 1;
+            outlines = graph.reach(root, &mut mark, stamp, &mut work, |t| !blocked[t] && part[t] == Part::Rest)?;
+            for &i in &outlines {
+                part[i] = Part::First;
+            }
+            first.extend(&outlines);
+        }
+
+        // Each later page's uses of part 6 and part 8, transitively.
         let mut uses = vec![Vec::new(); pages.len()];
         for (p, &page) in pages.iter().enumerate().skip(1) {
             stamp += 1;
