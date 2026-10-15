@@ -67,7 +67,7 @@ impl Server {
         deliver(&self.inbox, paths)
     }
 
-    pub fn connect(&self, ctx: &egui::Context) -> OsEventsFn {
+    pub fn connect(&self, ctx: &egui::Context, _native_wayland: bool) -> OsEventsFn {
         let wake = ctx.clone();
         self.inbox.lock().unwrap_or_else(PoisonError::into_inner).wake = Some(Box::new(move || wake.request_repaint()));
         let inbox = Arc::clone(&self.inbox);

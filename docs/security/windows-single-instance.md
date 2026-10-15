@@ -1,10 +1,9 @@
 # Windows single-instance security
 
-Status: implemented fork candidate; automated regressions validated on the repaired
-implementation, with final cleanup validation recorded in the contribution draft.
-Manual Windows security-boundary and shell verification remains outstanding.
-Based on upstream `87b448b6`; compatible by inspection and merge simulation with
-`0a098648` (2026-10-12). This feature is not merged or released.
+Status: implemented PR candidate, integrated with upstream
+`13e3154ab3c0eee937038ea188c0a731a331c5e7` on 2026-10-15 through a normal
+merge. This feature is not merged or released. Current local validation and
+remaining Windows/manual checks are distinguished below.
 
 ## Scope and threat model
 
@@ -97,9 +96,10 @@ behavior, not a stuck OS API. Filesystem manipulation and clients occupying the
 bounded slots can still cause denial of service. No remote-peer rejection or
 race-free filesystem guarantee is claimed.
 
-macOS Apple Events and Linux/FreeBSD/web behavior are unchanged. Linux/FreeBSD
-single-instance forwarding, macOS direct-executable forwarding, tab detaching
-and Combine Files are not implemented by this contribution.
+macOS Apple Events and web behavior are unchanged. Upstream Linux/FreeBSD
+single-instance forwarding, display routing and Wayland attention handling remain
+in a separate, unchanged platform module. They do not use the Windows protocol.
+macOS direct-executable forwarding, tab detaching and Combine Files are outside scope.
 
 ## Verification and remaining manual work
 
@@ -133,3 +133,37 @@ process startup remain regression tests. Native tests passed after this repair.
 - [Microsoft: DataProtectionProvider](https://learn.microsoft.com/en-us/uwp/api/windows.security.cryptography.dataprotection.dataprotectionprovider)
 - [Microsoft: peer impersonation supports IP sockets](https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-wsaimpersonatesocketpeer)
 - [Microsoft: cached factories invalidated by COM teardown](https://devblogs.microsoft.com/oldnewthing/20211105-00/?p=105878/)
+
+## Current integration validation — 2026-10-15
+
+Upstream main still has the legacy Windows newline-JSON/`ok` transport, without
+this contribution's protected nonces, strict schema/path bounds, worker/queue
+limits or token-derived routing. The hardening has not already landed elsewhere.
+
+The Unix/BSD platform module is byte-identical to main's original transport file;
+platform selection preserves its XDG/display routing and Wayland attention
+behavior. Windows selects the authenticated implementation and has no legacy
+protocol fallback. Portable Windows protocol regressions remain enabled on
+Linux/BSD test builds too. The Windows protocol/crypto implementation is unchanged
+from the previously published, CI-validated candidate; only the UI connection
+signature is adapted to upstream's startup API.
+
+On macOS ARM64: 554 scoped tests passed, two ignored (83 desktop/all-target tests,
+421 UI unit tests, 50 UI control tests), including all 12 portable IPC regressions.
+Formatting, strict all-target desktop Clippy, native desktop/CLI/xtask builds,
+assets, layering and parity passed. An isolated portable native launch accepted
+explicit authenticated UI control, returned state/inspection and quit cleanly.
+Initial sandbox-only socket/graphics failures passed with normal local access;
+assertions, authentication and timeouts were not weakened.
+
+Cargo.lock is byte-identical to main. Rustls is 0.23.46 and the four reported
+rustls advisories are absent. Cargo deny passed. Raw cargo audit reports only
+RUSTSEC-2023-0071 in rsa 0.10.0-rc.18, identically on unchanged main; the existing
+verification-only ADR/policy applies. No dependency policy was changed.
+
+The host lacks Windows and WASM target standard libraries and cannot execute
+Windows cryptography or AF_UNIX behavior. Fresh hosted Windows/Linux/FreeBSD,
+ARM64 and WASM checks must validate this merge. Prior published HEAD 389e5328
+passed those hosted checks, but that is historical evidence, not a result for
+this integration. Manual cross-account, mixed-elevation, session, ACL/reparse and
+Explorer/shell checks listed above remain outstanding.

@@ -102,7 +102,7 @@ fn delivered_files_reach_the_ui_once_wake_it_and_bring_the_window_forward() {
     let server = Server::new();
     let files = paths(2);
     server.deliver(vec![files[0].clone()]).unwrap();
-    let mut poll = server.connect(&egui::Context::default());
+    let mut poll = server.connect(&egui::Context::default(), false);
     server.deliver(vec![files[1].clone()]).unwrap();
     assert!(matches!(poll().as_slice(), [OsEvent::Open(p)] if p == &files));
     assert!(poll().is_empty());
@@ -117,7 +117,7 @@ fn queue_capacity_rejects_the_whole_batch_and_draining_restores_capacity() {
         server.deliver(paths(1)).unwrap();
     }
     assert_eq!(server.deliver(paths(2)).unwrap_err().kind(), io::ErrorKind::WouldBlock);
-    let mut poll = server.connect(&egui::Context::default());
+    let mut poll = server.connect(&egui::Context::default(), false);
     assert!(matches!(poll().as_slice(), [OsEvent::Open(p)] if p.len() == MAX_BATCHES));
     for _ in 0..MAX_QUEUED_PATHS / MAX_PATHS {
         server.deliver(paths(MAX_PATHS)).unwrap();
@@ -240,7 +240,7 @@ mod native {
     fn a_second_launch_hands_its_files_to_the_first() {
         let path = socket("hand-off");
         let Claim::Primary(first) = claim_at(&path, &[], false) else { panic!("the first launch listens") };
-        let mut poll = first.connect(&egui::Context::default());
+        let mut poll = first.connect(&egui::Context::default(), false);
         let files = paths(2);
         assert!(matches!(claim_at(&path, &files, true), Claim::HandedOff));
         assert_eq!(poll_until(&mut poll, 2), files);
@@ -284,7 +284,7 @@ mod native {
     fn malformed_oversized_truncated_and_replayed_requests_do_not_queue_or_stop_the_primary() {
         let path = socket("hostile");
         let Claim::Primary(server) = claim_at(&path, &[], false) else { panic!("primary") };
-        let mut poll = server.connect(&egui::Context::default());
+        let mut poll = server.connect(&egui::Context::default(), false);
         for case in 0..6 {
             let stream = UnixStream::connect(&path).unwrap();
             let (crypto, nonce) = hello(&stream);
@@ -339,7 +339,7 @@ mod native {
             server.deliver(paths(1)).unwrap();
         }
         assert!(matches!(claim_at(&path, &paths(1), true), Claim::Alone));
-        let mut poll = server.connect(&egui::Context::default());
+        let mut poll = server.connect(&egui::Context::default(), false);
         assert_eq!(poll_until(&mut poll, MAX_BATCHES).len(), MAX_BATCHES);
         assert!(matches!(claim_at(&path, &paths(1), true), Claim::HandedOff));
         drop(server);
@@ -350,7 +350,7 @@ mod native {
     fn acknowledgment_loss_can_duplicate_opens_with_the_preserved_fallback_policy() {
         let path = socket("ack-loss");
         let Claim::Primary(server) = claim_at(&path, &[], false) else { panic!("primary") };
-        let mut poll = server.connect(&egui::Context::default());
+        let mut poll = server.connect(&egui::Context::default(), false);
         let stream = UnixStream::connect(&path).unwrap();
         let (crypto, nonce) = hello(&stream);
         let files = paths(1);
@@ -467,7 +467,7 @@ mod native {
         if let Claim::Primary(server) = claim {
             std::fs::write(dir.join("ready"), b"ready").unwrap();
             wait_file(&dir.join("release"));
-            let mut poll = server.connect(&egui::Context::default());
+            let mut poll = server.connect(&egui::Context::default(), false);
             if mode == "race" {
                 std::fs::write(dir.join("received"), serde_json::to_vec(&poll_until(&mut poll, 7)).unwrap()).unwrap();
             }
