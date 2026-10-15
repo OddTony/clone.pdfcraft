@@ -4118,14 +4118,16 @@ fn selection_actions(
         return false;
     }
     let rect = xf.view_rect(last);
-    let editable = doc
-        .allows_modification()
+    let editable = (doc.allows_modification() && !view.line_editor.as_ref().is_some_and(|editor| editor.has_changes()))
         .then(|| {
-            doc.text_blocks(selection.page).iter().enumerate().find_map(|(i, block)| {
+            let blocks = doc.text_blocks(selection.page);
+            let mut candidates = blocks.iter().enumerate().filter_map(|(i, block)| {
                 (xf.user_rect(info, selection.page, block.rect.map(|v| v as f32)).expand(2.0).intersects(rect)
                     && block.editor_text.matches(&selected).count() == 1)
                     .then_some(i)
-            })
+            });
+            let first = candidates.next()?;
+            candidates.next().is_none().then_some(first)
         })
         .flatten();
     if !viewport.intersects(rect) {

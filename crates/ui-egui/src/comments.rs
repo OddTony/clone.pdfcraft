@@ -1391,7 +1391,7 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
             let hint = match c.kind {
                 ComposerKind::TextBox | ComposerKind::Callout { .. } => tl!("Type text"),
                 ComposerKind::Caret { .. } => tl!("Text to insert"),
-                ComposerKind::Replace => tl!("Replacement text"),
+                ComposerKind::Replace => tl_ctx!("review-suggestion", "Replacement text"),
                 _ => tl!("Add a comment"),
             };
             let mut options = crate::bidi_edit::Options::new(ui, "composer-text");
