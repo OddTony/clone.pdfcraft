@@ -2317,3 +2317,11 @@ animation effects	Off	Изключени
 	This document is trying to open a local file:	Този документ се опитва да отвори локален файл:
 	Move tag earlier	Преместване на етикета по-рано
 	Move tag later	Преместване на етикета по-късно
+	Export to Excel…	Експортирай в Excel…
+	Export to Excel	Експортиране в Excel
+	Sheets	Листове
+	One sheet for the whole document	Един лист за целия документ
+	A table that runs across pages stays together; the pages follow one another down the sheet.	Таблица, която продължава на няколко страници, остава цяла; страниците следват една след друга надолу по листа.
+	One sheet per page	Един лист на страница
+	Each page on its own sheet, named Page 1, Page 2…	Всяка страница на свой лист, наречен Page 1, Page 2…
+	Tables become cells; numbers, amounts, percentages and dates become values Excel can compute with, shown as on the page.	Таблиците стават клетки; числата, сумите, процентите и датите стават стойности, с които Excel може да смята, показани както на страницата.

@@ -2354,3 +2354,11 @@ animation effects	Off	オフ
 	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
 	Move tag earlier	タグを前へ移動
 	Move tag later	タグを後へ移動
+	Export to Excel…	Excel に書き出す…
+	Export to Excel	Excel に書き出し
+	Sheets	シート
+	One sheet for the whole document	文書全体を 1 枚のシートに
+	A table that runs across pages stays together; the pages follow one another down the sheet.	複数ページにまたがる表はひとつにまとまり、ページはシートの下へ順に続きます。
+	One sheet per page	ページごとに 1 枚のシート
+	Each page on its own sheet, named Page 1, Page 2…	各ページを別のシートに。シート名: Page 1、Page 2…
+	Tables become cells; numbers, amounts, percentages and dates become values Excel can compute with, shown as on the page.	表はセルになり、数値・金額・パーセント・日付は Excel で計算できる値になります (表示はページと同じ)。

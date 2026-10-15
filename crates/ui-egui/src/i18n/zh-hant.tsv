@@ -2228,3 +2228,11 @@ animation effects	Off	關
 	This document is trying to open a local file:	此文件正嘗試開啟本機檔案：
 	Move tag earlier	將標記前移
 	Move tag later	將標記後移
+	Export to Excel…	匯出為 Excel…
+	Export to Excel	匯出為 Excel
+	Sheets	工作表
+	One sheet for the whole document	整份文件一個工作表
+	A table that runs across pages stays together; the pages follow one another down the sheet.	跨頁的表格保持完整；各頁在工作表中依序向下排列。
+	One sheet per page	每頁一個工作表
+	Each page on its own sheet, named Page 1, Page 2…	每頁各自一個工作表，名為 Page 1、Page 2…
+	Tables become cells; numbers, amounts, percentages and dates become values Excel can compute with, shown as on the page.	表格會變成儲存格；數字、金額、百分比和日期會變成 Excel 可以計算的值，顯示與頁面相同。
