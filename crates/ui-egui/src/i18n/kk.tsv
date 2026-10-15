@@ -2262,7 +2262,7 @@ key	Space	Бос орын
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Бұл файл дискіде өзгерді. Жаңа нұсқасын көру үшін оны қайта жүктеңіз; сақталмаған өзгерістер жоғалады.
 	Reload	Қайта жүктеу
 	Couldn't reload {name}: {e}	{name} қайта жүктеу мүмкін болмады: {e}
-	Mouse wheel scroll speed	Тінтуір дөңгелегімен айналдыру жылдамдығы
+	Scroll speed (mouse wheel and arrow keys)	Айналдыру жылдамдығы (тінтуір дөңгелегі және көрсеткі пернелері)
 scroll speed	Slow	Баяу
 scroll speed	Normal	Қалыпты
 scroll speed	Fast	Жылдам

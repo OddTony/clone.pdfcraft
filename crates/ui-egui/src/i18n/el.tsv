@@ -2272,7 +2272,7 @@ comment menu	Edit	Επεξεργασία
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Αυτό το αρχείο άλλαξε στον δίσκο. Επαναφορτώστε το για να δείτε τη νέα έκδοση· οι μη αποθηκευμένες αλλαγές θα χαθούν.
 	Reload	Επαναφόρτωση
 	Couldn't reload {name}: {e}	Δεν ήταν δυνατή η επαναφόρτωση του {name}: {e}
-	Mouse wheel scroll speed	Ταχύτητα κύλισης τροχού ποντικιού
+	Scroll speed (mouse wheel and arrow keys)	Ταχύτητα κύλισης (τροχός ποντικιού και πλήκτρα βέλους)
 scroll speed	Slow	Αργή
 scroll speed	Normal	Κανονική
 scroll speed	Fast	Γρήγορη

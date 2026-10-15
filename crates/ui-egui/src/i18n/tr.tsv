@@ -2260,7 +2260,7 @@ key	Space	Boşluk
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Bu dosya diskte değişti. Yeni sürümü görmek için yeniden yükleyin; kaydedilmemiş değişiklikleriniz kaybolacak.
 	Reload	Yeniden yükle
 	Couldn't reload {name}: {e}	{name} yeniden yüklenemedi: {e}
-	Mouse wheel scroll speed	Fare tekerleği kaydırma hızı
+	Scroll speed (mouse wheel and arrow keys)	Kaydırma hızı (fare tekerleği ve ok tuşları)
 scroll speed	Slow	Yavaş
 scroll speed	Normal	Orta
 scroll speed	Fast	Hızlı

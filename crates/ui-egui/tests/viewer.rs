@@ -1225,3 +1225,26 @@ fn selection_mouse_wheel_resumes_after_point_scrolling() {
         }
     }
 }
+
+/// ↓ / ↑ follow the Scroll speed preference as the wheel does (#985): Fast reaches the next page
+/// in about half the presses of Normal, and Slow takes about twice as many.
+#[test]
+fn arrow_keys_follow_the_scroll_speed_preference() {
+    use egui::Key;
+    let lines_to_page_2 = |speed: &str| {
+        let mut h = harness();
+        h.state_mut().active = Some(0);
+        h.state_mut().set_option("scroll_speed", speed).unwrap();
+        h.run_steps(4);
+        let mut n = 0;
+        while h.state().views[0].current == 0 {
+            h.key_press(Key::ArrowDown);
+            h.run_steps(2);
+            n += 1;
+            assert!(n < 1000, "↓ never reached page 2 at {speed}");
+        }
+        n
+    };
+    let (slow, normal, fast) = (lines_to_page_2("slow"), lines_to_page_2("normal"), lines_to_page_2("fast"));
+    assert!(fast * 3 < normal * 2 && normal * 3 < slow * 2, "presses to page 2: slow {slow}, normal {normal}, fast {fast}");
+}

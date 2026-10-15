@@ -2268,7 +2268,7 @@ key	Space	Leertaste
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Diese Datei wurde auf dem Datenträger geändert. Lade sie neu, um die neue Version zu sehen; deine nicht gespeicherten Änderungen gehen dabei verloren.
 	Reload	Neu laden
 	Couldn't reload {name}: {e}	{name} konnte nicht neu geladen werden: {e}
-	Mouse wheel scroll speed	Scrollgeschwindigkeit des Mausrads
+	Scroll speed (mouse wheel and arrow keys)	Bildlaufgeschwindigkeit (Mausrad und Pfeiltasten)
 scroll speed	Slow	Langsam
 scroll speed	Normal	Normal
 scroll speed	Fast	Schnell
