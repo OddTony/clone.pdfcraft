@@ -52,6 +52,7 @@ pub use pdfcraft_organize::view::{InitialView, Layout as InitialLayout, Magnific
 
 pub use pdfcraft_cos::Algorithm;
 pub use pdfcraft_create::{CONVERTIBLE, CreateError, ImageResolution, SourceKind, decode_text, source_kind};
+pub use pdfcraft_edit::added::{text_rect as added_text_rect, text_width as added_text_width};
 pub use pdfcraft_edit::{
     Added, AddedImage, AddedText, Align as TextAlign, Background, Content as AddedContent, Family as FontFamily, HeaderFooter, MarkKind, Watermark,
 };
@@ -592,6 +593,11 @@ impl Document {
     /// Reachable indirect structure tags, in document order.
     pub fn tags(&self) -> Vec<a11y::TagInfo> {
         self.editor.as_ref().map(|e| a11y::tags(&e.cos)).unwrap_or_default()
+    }
+
+    /// Marked-content items directly owned by one reachable indirect structure tag.
+    pub fn tag_content(&self, object: pdfcraft_cos::ObjRef) -> Result<Vec<a11y::TagContentItem>, a11y::TagError> {
+        self.editor.as_ref().map(|e| a11y::tag_content(&e.cos, object)).unwrap_or_else(|| Ok(Vec::new()))
     }
 
     /// The edit that fixes `rule`, for the rules with an automatic fix: the document language
