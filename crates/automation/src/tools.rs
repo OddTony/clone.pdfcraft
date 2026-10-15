@@ -1082,6 +1082,31 @@ pub fn tools() -> Vec<ToolDef> {
         t("doc_export_text", "Export text", "Write the reading-order text of pages to a .txt file (pages separated by form feeds).")
             .cmd("export.text")
             .with(schema(json!({ "doc": doc(), "path": { "type": "string" }, "pages": pages("to export (default: all)") }), &["doc", "path"])),
+        t("style_profile", "Extract a formatting profile", "Format Studio: read a reference PDF's formatting as a reusable StyleProfile (page size, margins, body size, heading levels, bullet indent, page numbers). Samples at most max_pages pages (default 12, at most 20) and 2,000 blocks, so large documents stay fast. Read-only.")
+            .ro()
+            .with(schema(json!({ "doc": doc(), "max_pages": { "type": "integer", "minimum": 1, "maximum": 20 } }), &["doc"])),
+        t("style_apply", "Generate a styled PDF", "Format Studio: build a new styled PDF from raw content and a StyleProfile (from style_profile). Give text directly, or raw_doc (an open document whose extracted text is restyled: '# '/bullets become headings/bullets). Plain markers '# ', '## ', '- '/'• ' choose the style; short ALL-CAPS lines become headings. Without out the result opens as a new unsaved document; with out it is written under --root.")
+            .with(schema(
+                json!({
+                    "profile": { "type": "object", "description": "StyleProfile from style_profile." },
+                    "text": { "type": "string", "description": "Raw unformatted text." },
+                    "raw_doc": { "type": "integer", "minimum": 1, "description": "Open raw document id (from doc_open) instead of text." },
+                    "title": { "type": "string" },
+                    "out": { "type": "string", "description": "File to write. Omit to open the result as a new unsaved document instead." },
+                }),
+                &["profile"],
+            )),
+        t("ai_chat", "Ask the AI provider", "Format Studio follow-ups (BYOK, opt-in): one OpenRouter-compatible chat round trip. Every call carries its own api_key (never stored or logged); base_url defaults to https://openrouter.ai/api/v1. With doc, the call also sends the document's StyleProfile plus the first pages of text (at most ~12k characters) — never the whole file. The network runs only for this call.")
+            .with(schema(
+                json!({
+                    "api_key": { "type": "string", "description": "OpenRouter (or compatible) bearer key. Sent only in this request's Authorization header." },
+                    "base_url": { "type": "string", "description": "OpenAI-compatible base URL (default https://openrouter.ai/api/v1)." },
+                    "model": { "type": "string", "description": "Model id (default anthropic/claude-sonnet-4)." },
+                    "prompt": { "type": "string", "minLength": 1, "description": "What to change or ask." },
+                    "doc": doc(),
+                }),
+                &["api_key", "prompt"],
+            )),
         t(
             "fill_sign_add",
             "Fill & Sign: type text or place a mark",

@@ -12,6 +12,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod a11y;
+mod ai;
 mod batch;
 mod comments;
 mod content;
@@ -25,6 +26,7 @@ mod printing;
 mod reading;
 mod redact;
 mod signing;
+mod style;
 mod text_cache;
 mod tools;
 
@@ -662,6 +664,9 @@ impl Automation {
                 summary(self.session.get(new).ok_or_else(|| failed("the document vanished"))?)
             }
             "doc_export_images" | "doc_export_text" | "doc_export_all_images" => self.export(name, &a)?,
+            "ai_chat" => self.ai_chat(&a)?,
+            "style_profile" => self.style_profile(&a)?,
+            "style_apply" => self.style_apply(&a)?,
             "doc_header_footer" | "doc_watermark" | "doc_background" | "doc_remove_marks" => self.marks(name, &a)?,
             "doc_unprotect" => {
                 let mut out = self.apply(&a, Edit::RemoveProtection)?;

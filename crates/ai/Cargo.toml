@@ -1,0 +1,20 @@
+[package]
+name = "pdfcraft-ai"
+description = "Opt-in AI provider interface: OpenRouter-compatible chat with a user-supplied key (BYOK). Off by default; no network without an explicit key."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Transport lives behind a native-only gate: the wasm gate checks every layered
+# crate, and there is no TCP on wasm32 (the web build gets a clear error instead).
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider", "_ring", "json"] }
+rustls-native-certs = "0.8"

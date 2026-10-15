@@ -5679,3 +5679,68 @@ fn absolute_gotor_consent_does_not_bypass_validation_or_passwords() {
     assert_eq!(opened["document"]["encrypted"], true);
     assert_eq!(opened["destination_applied"], true);
 }
+
+#[test]
+fn format_studio_profiles_and_applies_styles() {
+    // A Letter reference with a real heading hierarchy, built by the styler itself.
+    let reference = {
+        let profile = pdfcraft_style::StyleProfile::default();
+        let items = vec![
+            pdfcraft_style::StyledItem::Heading { level: 1, text: "Annual Report".into() },
+            pdfcraft_style::StyledItem::Body("First body paragraph with enough words to fill several lines of text.".into()),
+            pdfcraft_style::StyledItem::Bullet("A bullet point".into()),
+        ];
+        let doc = pdfcraft_style::render("Reference", &items, &profile).unwrap();
+        pdfcraft_cos::write_full(&doc, &pdfcraft_cos::SaveOptions::default()).unwrap()
+    };
+    let dir = workdir("format-studio");
+    std::fs::write(dir.join("reference.pdf"), reference).unwrap();
+    let mut a = auto(&dir);
+    let reference = ok(&mut a, "doc_open", json!({ "path": "reference.pdf" }))["doc"].as_u64().unwrap();
+
+    let profile = ok(&mut a, "style_profile", json!({ "doc": reference }))["profile"].clone();
+    assert_eq!(profile["version"], 1);
+    assert!((profile["body_size"].as_f64().unwrap() - 11.0).abs() < 0.01);
+    assert!((profile["headings"][0]["size"].as_f64().unwrap() - 18.0).abs() < 0.6);
+    assert_eq!(profile["page"], json!([612.0, 792.0]));
+
+    // Literal text with markers becomes a styled document.
+    let styled = ok(
+        &mut a,
+        "style_apply",
+        json!({ "profile": profile, "title": "Styled", "text": "# Quarterly summary\n\nRevenue grew across every region this quarter.\n\n- opened two offices" }),
+    )["doc"]
+        .as_u64()
+        .unwrap();
+    // Narrow wrap can split mid-word, so compare whitespace-normalised text loosely.
+    let texts = page_text(&mut a, styled).join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(texts.contains("Quarterly summary"), "{texts}");
+    assert!(texts.contains("Revenue grew"), "{texts}");
+    assert!(texts.contains("opened two offices"), "{texts}");
+
+    // An open raw document can be restyled directly.
+    let restyled = ok(&mut a, "style_apply", json!({ "profile": profile, "title": "Restyled", "raw_doc": reference }))["doc"].as_u64().unwrap();
+    let texts = page_text(&mut a, restyled).join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(texts.contains("Annual Report"), "{texts}");
+
+    // Writing to `out` stays under the root.
+    let written = ok(&mut a, "style_apply", json!({ "profile": profile, "title": "File", "text": "Hello", "out": "styled.pdf" }));
+    assert!(written["bytes"].as_u64().unwrap() > 500);
+    assert!(dir.join("styled.pdf").exists());
+
+    // Both sources at once, and unknown profile versions, are refused.
+    assert!(matches!(err(&mut a, "style_apply", json!({ "profile": profile, "text": "x", "raw_doc": reference })), ToolError::InvalidArgs(_)));
+    let mut bad = profile.clone();
+    bad["version"] = json!(2);
+    assert!(matches!(err(&mut a, "style_apply", json!({ "profile": bad, "text": "x" })), ToolError::InvalidArgs(_)));
+}
+
+#[test]
+fn ai_chat_validates_before_any_network() {
+    let dir = workdir("ai-chat-validation");
+    let mut a = auto(&dir);
+    // Missing key and non-https endpoints fail as argument errors, without network.
+    assert!(matches!(err(&mut a, "ai_chat", json!({ "api_key": "", "prompt": "hi" })), ToolError::InvalidArgs(_)));
+    assert!(matches!(err(&mut a, "ai_chat", json!({ "api_key": "k", "prompt": "hi", "base_url": "http://insecure" })), ToolError::InvalidArgs(_)));
+    assert!(matches!(err(&mut a, "ai_chat", json!({ "api_key": "k", "prompt": "" })), ToolError::InvalidArgs(_)));
+}

@@ -10,6 +10,8 @@ workspace = true
 
 [dependencies]
 pdfcraft-engine = { workspace = true }
+pdfcraft-ai = { workspace = true }
+pdfcraft-style = { workspace = true }
 pdfcraft-cos = { workspace = true }
 pdfcraft-render = { workspace = true }
 pdfcraft-organize = { workspace = true }

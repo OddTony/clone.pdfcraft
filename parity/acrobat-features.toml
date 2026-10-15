@@ -9501,11 +9501,11 @@ title = "AI provider interface (local model or own endpoint), off by default"
 area = "N"
 tier = "P2"
 milestone = "M13"
-status = "planned"
+status = "partial"
 commands = []
-tools = []
-evidence = []
-notes = ""
+tools = ["ai_chat"]
+evidence = ["crates/ai/src/tests.rs::bad_configs_are_refused_before_network", "crates/automation/tests/automation.rs::ai_chat_validates_before_any_network"]
+notes = "BYOK OpenRouter-compatible chat (own endpoint via base_url), key per call and never stored or logged, https-only, bounded prompts; no local model, no key storage UI yet"
 
 [[feature]]
 id = "misc.ai-summary"
@@ -9525,11 +9525,11 @@ title = "Ask questions with citations to pages"
 area = "N"
 tier = "P2"
 milestone = "M13"
-status = "planned"
+status = "partial"
 commands = []
-tools = []
-evidence = []
-notes = ""
+tools = ["ai_chat"]
+evidence = ["crates/automation/tests/automation.rs::ai_chat_validates_before_any_network"]
+notes = "ai_chat answers over the StyleProfile plus the first pages of text (~12k chars, never the whole file); no page-citation format or local model yet"
 
 [[feature]]
 id = "misc.ai-conversational-edit"
@@ -9537,11 +9537,11 @@ title = "Natural-language editing through registry commands"
 area = "N"
 tier = "P3"
 milestone = "M13"
-status = "planned"
+status = "partial"
 commands = []
-tools = []
-evidence = []
-notes = ""
+tools = ["style_profile", "style_apply", "ai_chat"]
+evidence = ["crates/automation/tests/automation.rs::format_studio_profiles_and_applies_styles"]
+notes = "Format Studio: deterministic reference profiles (page size, margins, body/headings, bullets, page numbers) applied to raw text or raw documents; ai_chat proposes profile patches for follow-up prompts. No DOCX import, no in-place PDF restyle, no UI panel yet"
 
 [[feature]]
 id = "misc.ai-presentation"

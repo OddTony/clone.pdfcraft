@@ -69,6 +69,7 @@ family (`sign`, `sign_with_timestamp`, `timestamp_document`, `embed_ltv`).
 | `links` | Link creation, properties, and finding URLs in page text |
 | `js` | The bridge to `pdfcraft-js`. `forms` never depends on `js` directly; the engine injects it, so a build without JavaScript is possible |
 | `xfa`, `ocr`, `compare`, `export` | Façades over the L3/L4 crates of the same names |
+| `style` | Format Studio: `StyleProfile` extraction over open documents, styled PDF generation |
 
 ## Not done here
 

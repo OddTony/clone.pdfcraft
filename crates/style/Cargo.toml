@@ -1,0 +1,16 @@
+[package]
+name = "pdfcraft-style"
+description = "Reference formatting profiles: extract margins, fonts, headings and bullets from a sample, then generate a styled PDF from plain items"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+pdfcraft-cos = { workspace = true }
+pdfcraft-fonts = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
