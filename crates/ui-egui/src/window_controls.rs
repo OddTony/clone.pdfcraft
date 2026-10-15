@@ -1,11 +1,9 @@
 //! Window buttons and resize edges for desktops that leave the window frame to the app.
 //!
-//! GNOME on Wayland has no server-side decorations (the compositor offers no
-//! `zxdg_decoration_manager_v1`), so winit drew its own imitation frame. Instead the app turns the
-//! frame off and the tab strip becomes the header bar, as in GNOME's own apps: it carries the
+//! Opting into `PDFCRAFT_TITLEBAR=app` turns the toolkit's frame off and makes the tab strip
+//! the header bar. The default is winit's Adwaita frame on GNOME/Wayland. The app header carries the
 //! minimize, maximize and close buttons in the desktop's order (GNOME's `button-layout`), and
-//! thin zones along the window's edges resize it. Desktops with server-side decorations (KDE,
-//! Sway, Hyprland, X11) keep their own frame and never get here.
+//! thin zones along the window's edges resize it.
 
 use crate::theme::Tokens;
 use egui::viewport::ResizeDirection;

@@ -598,3 +598,15 @@ A center `move` can include `before` (panel ID or null to append) for tab order.
 The equivalent `{"action": ...}` form accepts a serialized shared docking action;
 this is also the form emitted by the renderer. Protected-canvas and app-specific panel
 rules apply equally to both forms.
+
+## Linux window controls
+
+Linux desktop builds enable winit's Adwaita client-side frame on GNOME/Wayland,
+where the compositor does not provide server-side decorations. Its minimize,
+maximize/restore and close icons are drawn as vectors, so the close button does
+not depend on a font containing a particular character. The frame follows the
+desktop's button layout; X11 and compositors offering server-side decorations
+keep their window manager's frame.
+
+The toolkit frame is the default. `PDFCRAFT_TITLEBAR=app` still explicitly selects
+the integrated app header; `PDFCRAFT_TITLEBAR=system` selects the toolkit frame.
