@@ -23,7 +23,15 @@ pub fn matching_faces(name: &str) -> Vec<&'static crate::CraftFont> {
 
 /// Whether a complete font program can show every non-newline character.
 pub fn covers(bytes: &[u8], text: &str) -> bool {
-    FontRef::new(bytes).is_ok_and(|f| text.chars().all(|c| matches!(c, '\n' | '\r') || f.charmap().map(c).is_some_and(|g| g.to_u32() != 0)))
+    covers_at(bytes, 0, text)
+}
+
+/// Glyph coverage of a specific face in a font collection. Intended for
+/// read-only editor matching; PDF export still validates embedding separately.
+pub fn covers_at(bytes: &[u8], index: u32, text: &str) -> bool {
+    FontRef::from_index(bytes, index).is_ok_and(|f| {
+        text.chars().all(|c| matches!(c, '\n' | '\r') || c.is_whitespace() || f.charmap().map(c).is_some_and(|g| g.to_u32() != 0))
+    })
 }
 
 /// Read display names without treating an already installed interface font as
