@@ -920,6 +920,34 @@ fn formats_validation_and_calculations_run_like_acrobat() {
 }
 
 #[test]
+fn new_text_fields_fit_their_box() {
+    // #1888: a fixed 12 pt was clipped in a short box. New text and date fields take Acrobat's
+    // Auto size: 12 pt where there is room, smaller where there isn't.
+    let mut doc = one_page();
+    let tf_size = |ap: &str| {
+        ap.split("/Helv ")
+            .nth(1)
+            .and_then(|s| s.split(' ').next())
+            .and_then(|n| n.parse::<f64>().ok())
+            .unwrap_or_else(|| panic!("no /Helv size in {ap}"))
+    };
+    for (kind, name, value) in [(NewField::Text { multiline: false }, "short", "Hello world"), (NewField::Date, "date", "10/13/2026")] {
+        add_field(&mut doc, 0, [20.0, 20.0, 200.0, 28.0], &kind, Some(name)).unwrap();
+        set_value(&mut doc, name, &FieldValue::Text(value.into())).unwrap();
+        let f = field(&fields(&doc), name).clone();
+        assert_eq!(f.da, "/Helv 0 Tf 0 g", "{name}");
+        let size = tf_size(&ap(&doc, &f.widgets[0]));
+        assert!(size > 0.0 && size <= 8.0, "{name}: {size} pt in an 8 pt box");
+    }
+    add_field(&mut doc, 0, [20.0, 50.0, 200.0, 72.0], &NewField::Text { multiline: false }, Some("tall")).unwrap();
+    set_value(&mut doc, "tall", &FieldValue::Text("Hello world".into())).unwrap();
+    assert_eq!(tf_size(&ap(&doc, &field(&fields(&doc), "tall").widgets[0])), 12.0, "a box with room keeps the 12 pt look");
+    // An explicit size still wins.
+    set_props(&mut doc, "short", &FieldProps { font_size: Some(12.0), ..FieldProps::default() }).unwrap();
+    assert_eq!(tf_size(&ap(&doc, &field(&fields(&doc), "short").widgets[0])), 12.0);
+}
+
+#[test]
 fn appearance_properties_restyle_every_widget() {
     let mut doc = one_page();
     add_field(&mut doc, 0, [50.0, 700.0, 250.0, 720.0], &NewField::Text { multiline: false }, Some("name")).unwrap();
@@ -1966,4 +1994,43 @@ fn page_shapes_closes_only_last_stroked_subpath_but_all_filled_subpaths() {
     let filled = detection_test_shapes(format!("{paths} f").as_bytes());
     assert_eq!(filled.boxes, [[50.0, 100.0, 170.0, 140.0], [200.0, 100.0, 320.0, 140.0]]);
     assert!(filled.rules.is_empty());
+}
+
+#[test]
+fn auto_text_size_fits_single_and_multiline_text() {
+    use crate::appearance::auto_text_size;
+    use pdfcraft_fonts::{helvetica_width, wrap_with};
+    let long = "Weekly progress and diligence: CoBank refi, IL and Redwood Falls";
+    // Single line: the height's size for short text, shrunk to the width for long text.
+    assert_eq!(auto_text_size("Hi", 94.0, 8.0, false, helvetica_width), 8.0 / 1.15);
+    let s = auto_text_size(long, 194.0, 8.0, false, helvetica_width);
+    assert!(s > 4.0 && s < 8.0 / 1.15 && helvetica_width(long, s) <= 194.0 + 1e-9, "{s}");
+    // Never past 12 pt or under 4 pt.
+    assert_eq!(auto_text_size("Hi", 500.0, 500.0, false, helvetica_width), 12.0);
+    assert_eq!(auto_text_size(&long.repeat(20), 20.0, 8.0, false, helvetica_width), 4.0);
+    // Multiline: the largest size whose wrapped lines fit the height.
+    let m = auto_text_size(long, 114.0, 44.0, true, helvetica_width);
+    assert!(wrap_with(long, m, 114.0, helvetica_width).len() as f64 * m * 1.15 <= 44.0, "{m}");
+    assert!(wrap_with(long, m + 0.5, 114.0, helvetica_width).len() as f64 * (m + 0.5) * 1.15 > 44.0, "{m} is the largest that fits");
+    // Hostile boxes and measurements don't panic or return nonsense.
+    for (w, h) in [(f64::NAN, 10.0), (10.0, f64::INFINITY), (-5.0, -5.0), (0.0, 0.0)] {
+        for multiline in [false, true] {
+            let s = auto_text_size(long, w, h, multiline, helvetica_width);
+            assert!((4.0..=12.0).contains(&s), "{w}×{h}: {s}");
+        }
+    }
+    assert_eq!(auto_text_size(long, 50.0, 10.0, false, |_, _| f64::NAN), 10.0 / 1.15);
+}
+
+#[test]
+fn document_scripts_read_each_name_tree_node_once() {
+    // The root lists itself and the leaf twice each.
+    let doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R /Names << /JavaScript 3 0 R >> >>".into(),
+        "<< /Type /Pages /Kids [] /Count 0 >>".into(),
+        "<< /Kids [3 0 R 4 0 R 3 0 R 4 0 R] >>".into(),
+        "<< /Names [(init) 5 0 R] >>".into(),
+        "<< /S /JavaScript /JS (var ready = true;) >>".into(),
+    ]);
+    assert_eq!(document_scripts_named(&doc), [("init".to_string(), "var ready = true;".to_string())]);
 }
