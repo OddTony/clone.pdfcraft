@@ -848,6 +848,21 @@ fn swapped_around_center(r: [f64; 4]) -> Option<[f64; 4]> {
     (out.iter().all(|v| v.is_finite()) && out[2] - out[0] >= 4.0 && out[3] - out[1] >= 4.0).then_some(out)
 }
 
+/// The part of `f`'s full name that its parent fields give it, `"MASTER."` for `MASTER.first`.
+/// [`fields`] appends the field's own `/T` last, so this is the name without that `/T`, not the
+/// name up to its last period: a `/T` that itself holds one (`ADDRESS.street`, which ISO 32000-2
+/// §12.7.4.2 forbids but files carry) has no parent part.
+fn parent_prefix(doc: &Document, f: &Field) -> String {
+    let own = doc.get(f.obj).as_dict().and_then(|d| d.get(b"T").and_then(|t| crate::text_of(&doc.resolve(t))));
+    match own {
+        Some(t) => f.name.strip_suffix(t.as_str()).unwrap_or_default().to_string(),
+        // No readable /T (absent at the top level, or not text): the field reads as its parent's
+        // full name, and the new /T adds a part to it.
+        None if !f.name.is_empty() => format!("{}.", f.name),
+        None => String::new(),
+    }
+}
+
 /// Change a field's properties (General and Options tabs) and redraw it.
 pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<String, FormError> {
     if props.font_size.is_some_and(|size| !size.is_finite() || size < 0.0) {
@@ -896,17 +911,17 @@ pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<S
         crate::set_field_actions(doc, name, acts)?;
     }
     let mut new_name = name.to_string();
-    if let Some(n) = props.name.as_deref().map(str::trim).filter(|n| *n != f.name) {
+    // Rename the terminal part (the field's own /T): the new full name keeps the parents' part.
+    let rename = props.name.as_deref().map(str::trim).filter(|n| *n != f.name).map(|n| (n, format!("{}{n}", parent_prefix(doc, &f))));
+    if let Some((n, full)) = rename.filter(|(_, full)| *full != f.name) {
         if n.is_empty() || n.contains('.') {
             return invalid("field names can't be empty or contain a period");
         }
-        if all.iter().any(|x| x.name == n) {
-            return invalid(format!("a field named {n:?} already exists"));
+        if all.iter().any(|x| x.name == full) {
+            return invalid(format!("a field named {full:?} already exists"));
         }
-        // Rename the terminal part (the field's own /T).
-        let prefix = f.name.rsplit_once('.').map(|(p, _)| format!("{p}.")).unwrap_or_default();
-        new_name = format!("{prefix}{n}");
         doc.update_dict(f.obj, |d| d.set(b"T".to_vec(), PdfString::text(n)))?;
+        new_name = full;
     }
     // The new default appearance when the size or the look changes.
     let size = props.font_size.unwrap_or_else(|| crate::appearance::parse_da(&f.da).size);

@@ -833,6 +833,90 @@ fn properties_rename_and_delete() {
     assert_eq!(annots.as_array().unwrap().len(), 13 - 3, "the deleted widgets left the page");
 }
 
+/// A parent `MASTER` with kids `first` and `last`, a top-level `middle`, and a field whose own
+/// `/T` holds a period (`ADDRESS.street`), which ISO 32000-2 §12.7.4.2 forbids but files carry.
+fn dotted_names() -> Document {
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),                 // 1
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(), // 2
+        "<< /Type /Page /Parent 2 0 R /Annots [6 0 R 7 0 R 8 0 R 9 0 R] >>".into(), // 3
+        "<< /Fields [5 0 R 8 0 R 9 0 R] /DA (/Helv 0 Tf 0 g) >>".into(),            // 4
+        "<< /T (MASTER) /Kids [6 0 R 7 0 R] >>".into(),                             // 5
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (first) /Parent 5 0 R /Rect [50 700 250 720] /P 3 0 R >>".into(), // 6
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (last) /Parent 5 0 R /Rect [50 650 250 670] /P 3 0 R >>".into(), // 7
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (middle) /Rect [50 600 250 620] /P 3 0 R >>".into(), // 8
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (ADDRESS.street) /Rect [50 550 250 570] /P 3 0 R >>".into(), // 9
+    ];
+    document(&objs)
+}
+
+fn rename(doc: &mut Document, name: &str, to: &str) -> Result<String, FormError> {
+    set_props(doc, name, &FieldProps { name: Some(to.into()), ..FieldProps::default() })
+}
+
+fn t_of(doc: &Document, r: ObjRef) -> String {
+    text_of(&doc.resolve(doc.get(r).as_dict().unwrap().get(b"T").unwrap())).unwrap()
+}
+
+#[test]
+fn renaming_a_kid_checks_the_full_name_it_would_take() {
+    let mut doc = dotted_names();
+    // MASTER.last is taken, though no field's full name is the bare "last".
+    let err = rename(&mut doc, "MASTER.first", "last").unwrap_err();
+    assert!(err.to_string().contains("MASTER.last"), "{err}");
+    assert_eq!(t_of(&doc, ObjRef::new(6, 0)), "first", "a refused rename changes nothing");
+    // A top-level "middle" does not clash with MASTER.middle.
+    assert_eq!(rename(&mut doc, "MASTER.last", "middle").unwrap(), "MASTER.middle");
+    let doc = reopen(&doc);
+    let all = fields(&doc);
+    let names: Vec<&str> = all.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, ["MASTER.first", "MASTER.middle", "middle", "ADDRESS.street"]);
+    // The hierarchy is kept: the kid stays under MASTER, which keeps its own name.
+    assert_eq!(field(&all, "MASTER.middle").obj, ObjRef::new(7, 0));
+    assert_eq!(t_of(&doc, ObjRef::new(7, 0)), "middle");
+    assert_eq!(t_of(&doc, ObjRef::new(5, 0)), "MASTER");
+}
+
+#[test]
+fn renaming_a_kid_whose_own_name_is_not_text_keeps_its_parent() {
+    let mut doc = dotted_names();
+    // A /T that is neither a string nor a name gives no part: the kid reads as its parent's name.
+    // The parent has field kids, so it is not a terminal field: "MASTER" names the kid alone.
+    doc.update_dict(ObjRef::new(7, 0), |d| d.set(b"T".to_vec(), Object::Int(5))).unwrap();
+    let named: Vec<ObjRef> = fields(&doc).iter().filter(|f| f.name == "MASTER").map(|f| f.obj).collect();
+    assert_eq!(named, [ObjRef::new(7, 0)]);
+    assert_eq!(rename(&mut doc, "MASTER", "last").unwrap(), "MASTER.last");
+    let doc = reopen(&doc);
+    assert_eq!(field(&fields(&doc), "MASTER.last").obj, ObjRef::new(7, 0));
+    assert_eq!(t_of(&doc, ObjRef::new(7, 0)), "last");
+    assert_eq!(t_of(&doc, ObjRef::new(5, 0)), "MASTER", "the parent is not renamed");
+}
+
+#[test]
+fn renaming_a_field_to_its_own_name_changes_nothing() {
+    let mut doc = dotted_names();
+    for (name, to) in [("MASTER.first", "first"), ("MASTER.first", "MASTER.first"), ("ADDRESS.street", "ADDRESS.street")] {
+        assert_eq!(rename(&mut doc, name, to).unwrap(), name, "{name} -> {to}");
+    }
+    assert_eq!(t_of(&doc, ObjRef::new(6, 0)), "first");
+    assert_eq!(t_of(&doc, ObjRef::new(9, 0)), "ADDRESS.street");
+}
+
+#[test]
+fn renaming_a_field_whose_own_name_holds_a_period_returns_its_real_name() {
+    let mut doc = dotted_names();
+    // The period is inside the field's own /T, not a parent: the whole name is replaced.
+    let renamed = rename(&mut doc, "ADDRESS.street", "street1").unwrap();
+    let doc = reopen(&doc);
+    let all = fields(&doc);
+    assert_eq!(field(&all, &renamed).obj, ObjRef::new(9, 0), "the returned name is the one the saved file reads back");
+    assert_eq!(renamed, "street1");
+    assert!(!all.iter().any(|f| f.name.starts_with("ADDRESS")));
+    // And it is checked as "street1": a top-level "middle" is taken.
+    let mut doc = dotted_names();
+    assert!(rename(&mut doc, "ADDRESS.street", "middle").is_err());
+}
+
 #[test]
 fn deleting_works_with_a_form_dictionary_inside_the_catalog() {
     let mut doc = fixture();
