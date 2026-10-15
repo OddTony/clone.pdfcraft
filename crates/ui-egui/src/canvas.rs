@@ -5292,6 +5292,32 @@ trailer << /Root 1 0 R >>
     }
 
     #[test]
+    fn pen_preview_hands_off_only_to_current_page_pixels_and_clears_on_undo() {
+        let ctx = egui::Context::default();
+        let info = thumbnail_info(2);
+        let mut v = DocView::new(DocId(1), &info, ViewDefaults::default());
+        let stroke =
+            crate::comments::Settling { page: 0, tool: crate::comments::CommentTool::Ink, points: vec![[40.0, 100.0], [140.0, 60.0]], since: 1.0 };
+        v.comments.settling.push(stroke.clone());
+        let page = RenderRequest { page: 0, scale: 1.0, tag: 1000, ..Default::default() };
+        let thumbnail = RenderRequest { tag: THUMB_TAG | 1000, ..page };
+        let other = RenderRequest { page: 1, ..page };
+        v.last_queue = vec![page, thumbnail, other];
+        let obsolete = RenderRequest { tag: 999, ..page };
+        assert_eq!(v.receive_result(&ctx, solid_result(obsolete, 10, 10)), 0);
+        assert_eq!(v.comments.settling_len(), 1, "obsolete pixels cannot replace the preview");
+        for request in [thumbnail, other] {
+            assert!(v.receive_result(&ctx, solid_result(request, 10, 10)) > 0);
+            assert_eq!(v.comments.settling_len(), 1, "only current pixels of this page can replace it");
+        }
+        assert!(v.receive_result(&ctx, solid_result(page, 10, 10)) > 0);
+        assert_eq!(v.comments.settling_len(), 0, "even an immediate result replaces the preview");
+        v.comments.settling.push(stroke);
+        v.invalidate_content();
+        assert_eq!(v.comments.settling_len(), 0, "undo before a raster arrives must leave no preview");
+    }
+
+    #[test]
     fn thumbnails_release_on_scroll_panel_close_and_request_again_after_eviction() {
         let ctx = egui::Context::default();
         let info = thumbnail_info(10_000);

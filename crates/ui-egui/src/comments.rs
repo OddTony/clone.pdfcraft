@@ -1911,6 +1911,17 @@ mod tests {
     use super::*;
     use pdfcraft_render::TextGlyph;
 
+    #[test]
+    fn released_ink_waits_for_its_own_page_raster() {
+        let mut comments = CommentView::default();
+        comments.settle(1.0, 0, CommentTool::Ink, &[[40.0, 100.0], [140.0, 60.0]]);
+        assert_eq!(comments.settling_len(), 1, "the released stroke has a preview");
+        comments.page_rendered(1);
+        assert_eq!(comments.settling_len(), 1, "another page cannot replace the preview");
+        comments.page_rendered(0);
+        assert_eq!(comments.settling_len(), 0, "its own page raster replaces the preview");
+    }
+
     /// One glyph per character, `w` points wide, on a line of `em`-point text whose baseline is at `y`, drawn
     /// along `direction` (a unit vector in view space, y down).
     fn line(chars: &str, x: f32, y: f32, w: f32, em: f32, direction: [f32; 2]) -> PageText {

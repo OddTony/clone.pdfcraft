@@ -421,24 +421,26 @@ fn stroke_without_settling(h: &mut Harness<'static, PdfCraftApp>, a: (f32, f32),
     h.run_steps(1);
 }
 
-/// #1858: on release the live stroke is replaced by the committed annotation, but the page
-/// raster that draws it arrives later. The stroke stays painted from its points meanwhile.
+/// #1858: the released stroke is committed and eventually drawn by the page raster.
+/// A fast worker can finish within the release frame. The deterministic canvas/comment
+/// unit tests cover the intermediate preview and raster handoff without racing that worker.
 #[test]
-fn a_released_pen_stroke_stays_drawn_until_the_page_raster_has_it() {
+fn a_released_pen_stroke_is_committed_and_finishes_settling() {
     let mut h = harness(|app| app.set_option("quick", "ink").unwrap());
     stroke_without_settling(&mut h, (40.0, 100.0), (140.0, 60.0));
     assert_eq!(comments(&h).len(), 1, "the stroke is committed");
-    assert_eq!(h.state().views[0].comments.settling_len(), 1, "still drawn from its points");
     settle(&mut h);
+    assert!(!h.state().render_pending(), "the page raster has arrived");
     assert_eq!(h.state().views[0].comments.settling_len(), 0, "the raster draws it now");
 }
 
 #[test]
-fn undoing_a_pen_stroke_before_its_raster_leaves_no_ghost() {
+fn undoing_a_pen_stroke_leaves_no_ghost() {
     let mut h = harness(|app| app.set_option("quick", "ink").unwrap());
     stroke_without_settling(&mut h, (40.0, 100.0), (140.0, 60.0));
-    assert_eq!(h.state().views[0].comments.settling_len(), 1);
+    assert_eq!(comments(&h).len(), 1);
     h.state_mut().undo();
+    assert!(comments(&h).is_empty());
     assert_eq!(h.state().views[0].comments.settling_len(), 0);
 }
 
