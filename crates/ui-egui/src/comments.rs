@@ -409,12 +409,53 @@ pub struct Composer {
     pub focus: bool,
 }
 
+/// A released drawing gesture waiting for the page raster to show its annotation.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Settling {
+    pub page: usize,
+    pub tool: CommentTool,
+    pub points: Vec<[f64; 2]>,
+    /// Frame time (seconds) at release; a raster that never arrives must not leave a ghost.
+    pub since: f64,
+}
+
+/// Longest a released drawing stays painted without its page raster, and how many are kept.
+const SETTLE_SECS: f64 = 20.0;
+const SETTLE_MAX: usize = 16;
+
+impl CommentView {
+    /// Remember a released drag drawing so it stays on screen until its page is re-rendered.
+    fn settle(&mut self, now: f64, page: usize, tool: CommentTool, points: &[[f64; 2]]) {
+        if !matches!(tool, CommentTool::Ink | CommentTool::Line | CommentTool::Arrow | CommentTool::Rectangle | CommentTool::Oval) {
+            return;
+        }
+        self.settling.retain(|s| now - s.since < SETTLE_SECS);
+        if self.settling.len() >= SETTLE_MAX {
+            self.settling.remove(0);
+        }
+        self.settling.push(Settling { page, tool, points: points.to_vec(), since: now });
+    }
+
+    /// How many released drawings are still painted from their points (waiting for a raster).
+    pub fn settling_len(&self) -> usize {
+        self.settling.len()
+    }
+
+    /// A fresh raster of `page` is on screen: it draws the committed annotation itself.
+    pub(crate) fn page_rendered(&mut self, page: usize) {
+        self.settling.retain(|s| s.page != page);
+    }
+}
+
 /// Per-document commenting state.
 #[derive(Clone, Debug, Default)]
 pub struct CommentView {
     /// The selected comment: (page, index in `/Annots`).
     pub selected: Option<(usize, usize)>,
     pub gesture: Option<Gesture>,
+    /// Drawings just released: shown from their points until the page raster that includes the
+    /// committed annotation arrives, so the stroke never vanishes in between (#1858).
+    pub(crate) settling: Vec<Settling>,
     /// Escape ends egui's drag too; ignore its synthetic release until the mouse is up.
     cancelled_drag: bool,
     pub composer: Option<Composer>,
@@ -671,6 +712,8 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 if tool == CommentTool::Eraser {
                     view.pending_edit = erase(cx, &points);
                 } else if let Some(shape) = drawn_shape(tool, &points) {
+                    let now = ui.input(|i| i.time);
+                    cv.settle(now, page, tool, &points);
                     view.pending_edit = Some(new_comment(cx, tool, shape, String::new()));
                 }
             }
@@ -684,6 +727,8 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 && let Some(shape) = drawn_shape(tool, &[cx.to_user(p)])
             {
                 cv.selected = None;
+                let now = ui.input(|i| i.time);
+                cv.settle(now, cx.page, tool, &[cx.to_user(p)]);
                 view.pending_edit = Some(new_comment(cx, tool, shape, String::new()));
             }
             true
@@ -1062,8 +1107,19 @@ pub(crate) fn paint_page(ui: &egui::Ui, painter: &egui::Painter, cx: &PageCx<'_>
 }
 
 fn paint_gesture(painter: &egui::Painter, cx: &PageCx<'_>, view: &DocView) {
+    let now = painter.ctx().input(|i| i.time);
+    for s in view.comments.settling.iter().filter(|s| s.page == cx.page && now - s.since < SETTLE_SECS) {
+        paint_draw(painter, cx, &s.tool, &s.points);
+    }
     if let Some(Gesture::Draw { page, tool, points }) = &view.comments.gesture
         && *page == cx.page
+    {
+        paint_draw(painter, cx, tool, points);
+    }
+}
+
+/// A drawing tool's shape from its points (a live drag, or a released one still settling).
+fn paint_draw(painter: &egui::Painter, cx: &PageCx<'_>, tool: &CommentTool, points: &[[f64; 2]]) {
     {
         let style = cx.prefs.style(*tool);
         let zoom = cx.xf.rect.width() / cx.xf.pw.max(1.0);
@@ -1210,7 +1266,7 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
                 edit.request_focus();
                 c.focus = false;
             }
-            let enter = ui.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.command);
+            let enter = submit_key(ui, &edit, false);
             if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 cancel = true;
             }
@@ -1252,11 +1308,17 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
         }
         ComposerKind::TextBox => {
             view.comments.tool_done = true;
-            Some(new_comment(&cx, CommentTool::TextBox, Shape::TextBox { rect: text_box_rect(c.at, &text, 12.0), font_size: 12.0 }, text))
+            Some(new_comment(
+                &cx,
+                CommentTool::TextBox,
+                Shape::TextBox { rect: text_box_rect(c.at, &text, 12.0, page_rotation(info, page)), font_size: 12.0 },
+                text,
+            ))
         }
         ComposerKind::Callout { point } => {
             view.comments.tool_done = true;
-            let rect = text_box_rect(c.at, &text, 10.0);
+            // A callout's leader and box stay in user-space axes (its appearance isn't turned).
+            let rect = text_box_rect(c.at, &text, 10.0, 0);
             let side = if point[0] < rect[0] {
                 rect[0]
             } else if point[0] > rect[2] {
@@ -1286,6 +1348,27 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
             Some(new_comment(&cx, CommentTool::Caret, Shape::Caret { rect: [x - half, y - size, x + half, y] }, text))
         }
     }
+}
+
+/// Submit only from the focused comment editor. Match each key event's modifiers exactly,
+/// so Shift+Enter stays a newline and another editor cannot submit this draft. Replies also
+/// keep their existing unmodified Enter-to-post behavior.
+pub(crate) fn submit_key(ui: &mut egui::Ui, field: &egui::Response, plain_enter: bool) -> bool {
+    field.has_focus()
+        && ui.input_mut(|input| {
+            let mut submit = false;
+            input.events.retain(|event| {
+                let matched = matches!(event,
+                    egui::Event::Key { key: egui::Key::Enter, pressed: true, modifiers, .. }
+                        if modifiers.matches_exact(egui::Modifiers::CTRL)
+                            || modifiers.matches_exact(egui::Modifiers::COMMAND)
+                            || plain_enter && modifiers.matches_exact(egui::Modifiers::NONE)
+                );
+                submit |= matched;
+                !matched
+            });
+            submit
+        })
 }
 
 /// The side of the caret's box, in user space units, away from text.
@@ -1340,14 +1423,21 @@ pub(crate) fn caret_snap(text: &PageText, vx: f32, vy: f32) -> Option<([f32; 2],
 }
 
 /// A text box sized to its text (at most 300 pt wide), hanging from its top-left corner.
-pub fn text_box_rect(at: [f64; 2], text: &str, size: f64) -> [f64; 4] {
+/// The box for `text` at `size` with its displayed top-left corner at `at`, on a page turned by
+/// `rotation` (its `/Rotate`): on a quarter-turned page it is taller than wide in user space.
+pub fn text_box_rect(at: [f64; 2], text: &str, size: f64, rotation: i64) -> [f64; 4] {
     use pdfcraft_engine::annot_text::{text_width, wrap};
     let pad = 2.0;
     let longest = text.lines().map(|l| text_width(l, size)).fold(0.0, f64::max);
     let w = (longest + 2.0 * pad + 4.0).clamp(40.0, 300.0);
     let lines = wrap(text, size, w - 2.0 * pad).len().max(1);
     let h = lines as f64 * size * 1.2 + 2.0 * pad + 2.0;
-    [at[0], at[1] - h, at[0] + w, at[1]]
+    pdfcraft_engine::text_box_at(rotation, at, w, h).unwrap_or([at[0], at[1] - h, at[0] + w, at[1]])
+}
+
+/// The `/Rotate` of `page` (0 when it is unknown).
+pub(crate) fn page_rotation(info: &DocInfo, page: usize) -> i64 {
+    info.pages.get(page).map_or(0, |p| i64::from(p.rotation))
 }
 
 /// Delete / Escape handling for comments (only while no text field has focus).
@@ -1899,10 +1989,10 @@ mod tests {
 
     #[test]
     fn text_boxes_fit_their_text() {
-        let r = text_box_rect([100.0, 500.0], "Hi", 12.0);
+        let r = text_box_rect([100.0, 500.0], "Hi", 12.0, 0);
         assert_eq!((r[0], r[3]), (100.0, 500.0));
         assert!(r[2] - r[0] < 60.0);
-        let long = text_box_rect([0.0, 500.0], &"word ".repeat(80), 12.0);
+        let long = text_box_rect([0.0, 500.0], &"word ".repeat(80), 12.0, 0);
         assert_eq!(long[2], 300.0);
         assert!(long[3] - long[1] > 50.0);
     }
