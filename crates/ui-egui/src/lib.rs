@@ -1742,7 +1742,10 @@ impl PdfCraftApp {
     /// The File ▸ Open picker: PDFs, and images and text that become PDFs.
     #[cfg(not(target_arch = "wasm32"))]
     fn open_picker() -> rfd::AsyncFileDialog {
-        rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE)
+        rfd::AsyncFileDialog::new()
+            .add_filter("PDF", &["pdf"])
+            .add_filter(tl!("CAdES signature envelope"), &["p7m"])
+            .add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE)
     }
 
     pub fn open_dialog(&mut self) {
@@ -1761,6 +1764,7 @@ impl PdfCraftApp {
             wasm_bindgen_futures::spawn_local(async move {
                 if let Some(h) = rfd::AsyncFileDialog::new()
                     .add_filter("PDF", &["pdf"])
+                    .add_filter(tl!("CAdES signature envelope"), &["p7m"])
                     .add_filter(tl!("Images and text"), &create_ui::CONVERTIBLE)
                     .pick_file()
                     .await

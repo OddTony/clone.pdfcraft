@@ -297,6 +297,23 @@ impl Editor {
     }
 }
 
+/// What the CAdES envelope a document was opened from says about it (issue #1449). Present
+/// only on documents opened from a `.p7m`; see [`Session::open`] and [`Session::extract_original`].
+#[derive(Clone, Debug)]
+pub struct EnvelopeInfo {
+    /// The signer's name as their certificate shows it.
+    pub signer: String,
+    /// When the signer says they signed, as "YYYY-MM-DD HH:MM UTC" (an envelope without a
+    /// signing-time attribute has none).
+    pub signing_time: Option<String>,
+    /// Whether the content still matches what was signed. Trust is never checked here.
+    pub digest_ok: bool,
+    /// How many signers the envelope carries (details of the first are shown).
+    pub signers: usize,
+    /// Encoding irregularities that were tolerated while reading the envelope.
+    pub quirks: Vec<String>,
+}
+
 pub struct Document {
     pub id: DocId,
     pub name: String,
@@ -318,6 +335,8 @@ pub struct Document {
     snapshot_generation: u64,
     /// Why the document cannot be edited (e.g. encryption), if so.
     pub read_only_reason: Option<String>,
+    /// The CAdES envelope the document was opened from (read-only by nature), if so.
+    pub envelope: Option<EnvelopeInfo>,
     /// Interactive form fields of the current state (empty without a form).
     pub form: Arc<Vec<pdfcraft_forms::Field>>,
     /// Page marks present (headers and footers, watermarks, backgrounds), for Update/Remove.
@@ -2544,6 +2563,17 @@ fn renderer_password(bytes: &[u8]) -> String {
     }
 }
 
+/// A display name without one trailing `.p7m` (any case): what the PDF inside the envelope is
+/// called. Anything else is kept as it is.
+fn strip_p7m(name: &str) -> String {
+    // The matched suffix is ASCII, so cutting it off stays on a char boundary.
+    if name.len() >= 4 && name.as_bytes()[name.len() - 4..].eq_ignore_ascii_case(b".p7m") {
+        name[..name.len() - 4].to_string()
+    } else {
+        name.to_string()
+    }
+}
+
 /// The last-resort guard (AGENTS.md §4): run `f`, turning a panic that escapes it into an error
 /// message, so one bad file or edit can't take the app and its other documents down. It is a
 /// safety net for bugs, not a substitute for returning errors.
@@ -2710,6 +2740,13 @@ impl OpenContext {
         password: Option<&str>,
     ) -> Result<PreparedDocument, OpenError> {
         let name = name.into();
+        // A CAdES envelope (.p7m, issue #1449) opens as the document it wraps, read-only. The
+        // DER object is structurally disjoint from any PDF (a PDF starts with `%`, DER with a
+        // SEQUENCE), so this one sniff decides which reader sees the bytes.
+        if pdfcraft_sign::p7m::is_cms_envelope(&bytes) {
+            return guard(|| Session::prepare_envelope(self, name, bytes, password))
+                .unwrap_or_else(|m| Err(OpenError::Invalid(format!("reading it failed unexpectedly ({m})"))));
+        }
         guard(|| Session::prepare_open_unguarded(self, name, path, bytes, password))
             .unwrap_or_else(|m| Err(OpenError::Invalid(format!("reading it failed unexpectedly ({m})"))))
     }
@@ -3033,6 +3070,39 @@ impl Session {
         id
     }
 
+    /// Prepare the document a CMS envelope wraps: read-only, with the signer identified.
+    /// Detached signatures and non-PDF content are actionable errors (never a repair).
+    fn prepare_envelope(context: &OpenContext, name: String, bytes: Arc<Vec<u8>>, password: Option<&str>) -> Result<PreparedDocument, OpenError> {
+        let env = pdfcraft_sign::p7m::read(&bytes).map_err(|e| OpenError::Invalid(e.to_string()))?;
+        let content = match env.content {
+            Some(c) => c,
+            // A detached signature has its document beside it, not inside: opening the file
+            // alone has nothing to show (and nothing to verify the signature against).
+            None => return Err(OpenError::Unsupported("this is a detached CAdES signature; the signed document is not inside the file".into())),
+        };
+        if !content.starts_with(b"%PDF-") {
+            let kind = if content.starts_with(b"<?xml") || content.starts_with(b"<") { "XML data" } else { "non-PDF data" };
+            return Err(OpenError::Unsupported(format!("the CAdES envelope contains {kind}, not a PDF")));
+        }
+        // `path` stays None: Save writes a read-only document in full to its path, and that
+        // file is the envelope, which is never rewritten.
+        let mut prepared = Self::prepare_open_unguarded(context, strip_p7m(&name), None, Arc::new(content), password)?;
+        // The user's file is the envelope, not the PDF inside it: the document keeps the
+        // envelope's bytes (what Extract hands out) and no editor of its own.
+        prepared.document.editor = None;
+        prepared.document.read_only_reason =
+            Some("This document is inside a CAdES signature envelope (.p7m); extracting the original PDF makes an editable copy.".into());
+        prepared.document.envelope = Some(EnvelopeInfo {
+            signer: env.signer_name,
+            signing_time: env.signing_time.map(|t| format!("{:04}-{:02}-{:02} {:02}:{:02} UTC", t.year, t.month, t.day, t.hour, t.minute)),
+            digest_ok: env.digest_ok,
+            signers: env.signers,
+            quirks: env.quirks.iter().map(|q| (*q).to_string()).collect(),
+        });
+        prepared.document.dirty = false;
+        Ok(prepared)
+    }
+
     /// Synchronous convenience API used by the CLI and automation.
     pub fn open(&mut self, name: impl Into<String>, path: Option<String>, bytes: Arc<Vec<u8>>, password: Option<&str>) -> Result<DocId, OpenError> {
         let prepared = self.prepare_open(name, path, bytes, password)?;
@@ -3264,6 +3334,7 @@ impl Session {
             generation: 0,
             snapshot_generation: 0,
             read_only_reason,
+            envelope: None,
             form: Arc::new(form),
             marks,
             added,
@@ -4257,6 +4328,17 @@ impl Session {
             d.generation += 1;
         }
         Ok(id)
+    }
+
+    /// Extract the original PDF from a CAdES envelope document as a new, editable, unsaved
+    /// copy (the envelope itself is never changed). Refuses plain documents.
+    pub fn extract_original(&mut self, id: DocId) -> Result<DocId, String> {
+        let doc = self.get(id).ok_or("no such document")?;
+        if doc.envelope.is_none() {
+            return Err("this document is not inside a CAdES envelope".into());
+        }
+        let (name, bytes) = (doc.name.clone(), doc.bytes.clone());
+        self.open_new(name, bytes).map_err(|e| e.to_string())
     }
 
     fn cos(&self, id: DocId) -> Result<&pdfcraft_cos::Document, EditError> {
