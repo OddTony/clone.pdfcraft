@@ -175,7 +175,7 @@ pub fn interpret_page<'a>(
     if context.settings.render_annotations
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
     {
-        // PdfCraft patch (26): bracket the annotations so devices can tell their paints from
+        // PdfCraft patch (29): bracket the annotations so devices can tell their paints from
         // the document's own (the reading-colours setting recolours the document, not comments).
         device.begin_annotations();
         for annot in annot_arr.iter::<Dict<'_>>() {

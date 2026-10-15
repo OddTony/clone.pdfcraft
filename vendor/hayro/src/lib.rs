@@ -254,7 +254,7 @@ pub fn render_into<'a>(
         interpreter_settings.preview,
     );
 
-    // PdfCraft patch (27): the page renders as one transparency group with the background
+    // PdfCraft patch (18): the page renders as one transparency group with the background
     // painted *inside* it, as the initial backdrop. A group isolates what it wraps from what
     // was painted before it, so with the background outside, a Multiply highlight blended
     // only with the group's transparent backdrop and stayed its own colour — over a dark

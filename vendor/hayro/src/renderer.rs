@@ -432,7 +432,7 @@ pub(crate) struct Renderer {
     /// PdfCraft patch: when set, solid text and line-art paint colours are remapped
     /// while rendering (the "reading colours" view setting).
     color_replacement: Option<ColorReplacement>,
-    /// PdfCraft patch (26): while the page's annotations are being drawn, paints keep their
+    /// PdfCraft patch (17): while the page's annotations are being drawn, paints keep their
     /// colours — reading colours replace document colours, never annotation colours.
     in_annotations: bool,
     pub(crate) inside_pattern: bool,
@@ -1028,7 +1028,7 @@ impl Renderer {
         let Some(replacement) = self.color_replacement else {
             return paint.clone();
         };
-        // PdfCraft patch (26): annotations keep the colours they were given; reading colours
+        // PdfCraft patch (17): annotations keep the colours they were given; reading colours
         // replace document colours only (issue #1548).
         if self.in_annotations {
             return paint.clone();
@@ -1625,12 +1625,12 @@ impl<'a> Device<'a> for Renderer {
         }
     }
 
-    /// PdfCraft patch (26): the reading-colours mapping is suspended for annotations.
+    /// PdfCraft patch (17): the reading-colours mapping is suspended for annotations.
     fn begin_annotations(&mut self) {
         self.in_annotations = true;
     }
 
-    /// PdfCraft patch (26): back to document content; reading colours apply again.
+    /// PdfCraft patch (17): back to document content; reading colours apply again.
     fn end_annotations(&mut self) {
         self.in_annotations = false;
     }
