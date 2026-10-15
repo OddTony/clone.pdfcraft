@@ -649,8 +649,10 @@ mod pkcs11_device {
         }
     }
 
-    /// A token "UI test" holding one RSA identity, "Device Signer".
-    fn set_up_token(lib: &std::path::Path) {
+    /// A token "UI test" holding one RSA identity, "Device Signer"; returns the context that made
+    /// it. The caller keeps it to the end: dropping it unloads the module, and on macOS SoftHSM's
+    /// thread-exit destructors then run in unmapped memory once the app loads it again.
+    fn set_up_token(lib: &std::path::Path) -> Pkcs11 {
         let ctx = Pkcs11::new(lib).unwrap();
         ctx.initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK)).unwrap();
         let free = *ctx.get_slots_with_token().unwrap().first().unwrap();
@@ -694,6 +696,7 @@ mod pkcs11_device {
             ])
             .unwrap();
         keeper.logout().unwrap();
+        ctx
     }
 
     fn signed(h: &Harness<'static, PdfCraftApp>) -> bool {
@@ -706,7 +709,7 @@ mod pkcs11_device {
     fn dialog_checks() {
         let (Some(lib), Some(work)) = (std::env::var_os("PDFCRAFT_TEST_SOFTHSM_LIB"), std::env::var_os("PDFCRAFT_TEST_WORKDIR")) else { return };
         let (lib, work) = (PathBuf::from(lib), PathBuf::from(work));
-        set_up_token(&lib);
+        let _setup = set_up_token(&lib);
         let lib_text = lib.to_string_lossy().into_owned();
 
         // No digital IDs yet: Configure, with a signature creation device.

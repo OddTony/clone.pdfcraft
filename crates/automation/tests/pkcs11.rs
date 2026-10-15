@@ -77,8 +77,10 @@ impl ExternalKey for SetupKey {
     }
 }
 
-/// A token holding one RSA identity, "Token Signer"; returns its certificate.
-fn set_up_token(lib: &std::path::Path) -> Certificate {
+/// A token holding one RSA identity, "Token Signer"; returns its certificate and the context that
+/// made it. The caller keeps the context to the end: dropping it unloads the module, and on macOS
+/// SoftHSM's thread-exit destructors then run in unmapped memory once the tools load it again.
+fn set_up_token(lib: &std::path::Path) -> (Certificate, Pkcs11) {
     let ctx = Pkcs11::new(lib).unwrap();
     ctx.initialize(CInitializeArgs::new(CInitializeFlags::OS_LOCKING_OK)).unwrap();
     let free = *ctx.get_slots_with_token().unwrap().first().unwrap();
@@ -122,7 +124,7 @@ fn set_up_token(lib: &std::path::Path) -> Certificate {
         ])
         .unwrap();
     keeper.logout().unwrap();
-    cert
+    (cert, ctx)
 }
 
 /// A one-page PDF.
@@ -165,15 +167,17 @@ fn ok(a: &mut Automation, tool: &str, args: Value) -> Value {
 fn softhsm_tool_checks() {
     let (Some(lib), Some(dir)) = (std::env::var_os("PDFCRAFT_PKCS11_MODULES"), std::env::var_os("PDFCRAFT_TEST_WORKDIR")) else { return };
     let (lib, dir) = (PathBuf::from(lib), PathBuf::from(dir));
-    let cert = set_up_token(&lib);
+    let (cert, _setup) = set_up_token(&lib);
     for name in ["a", "b", "c", "d"] {
         std::fs::write(dir.join(format!("{name}.pdf")), fixture()).unwrap();
     }
     let mut a = Automation::new().with_root(&dir).unwrap().with_clock(|| 1_790_000_000);
 
+    // Other modules on the machine list their identities too (CloudSigner, where it's installed).
     let listed = ok(&mut a, "sign_token_ids", json!({}));
-    assert_eq!(listed["count"], 1, "{listed}");
-    let id = &listed["ids"][0];
+    let ours: Vec<&Value> = listed["ids"].as_array().unwrap().iter().filter(|i| i["module"] == lib.to_string_lossy().as_ref()).collect();
+    assert_eq!(ours.len(), 1, "{listed}");
+    let id = ours[0];
     assert_eq!(id["name"], "Token Signer (Tools test)");
     assert_eq!(id["needs_pin"], true);
     assert_eq!(id["certificate"]["sha256"], cert.fingerprint());
