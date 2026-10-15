@@ -117,6 +117,12 @@ impl TextBackground {
         editor: Option<&LineEditor>,
         draft: Option<&crate::content_ui::TextDraft>,
     ) {
+        // Entering Edit Text must never redraw untouched text through a different font
+        // or bidi renderer. The original page raster remains authoritative until
+        // a real edit changes the glyphs or their style.
+        if editor.is_some_and(|ed| ed.page == page && ed.pristine_source_visible()) {
+            return;
+        }
         let ready = editor.is_some_and(|ed| ed.page == page && self.ready(page, ed.block))
             || draft.is_some_and(|d| d.page == page && d.index.is_some_and(|index| self.ready_added(page, index)));
         if !ready {
@@ -212,6 +218,15 @@ pub(crate) fn extras_panel(ui: &mut egui::Ui, e: &mut Extras) -> bool {
 impl LineEditor {
     pub(crate) fn has_changes(&self) -> bool {
         self.text != self.original || self.look != self.look0 || self.extras != self.extras0
+    }
+
+    /// Keep the original PDF glyphs on screen while the editor is pristine.
+    /// This avoids word-order changes, mark detachment, and font substitutions
+    /// merely from opening the editor. OCR layers are not visible PDF text.
+    pub(crate) fn pristine_source_visible(&self) -> bool {
+        !self.has_changes()
+            && self.font_resource.is_none()
+            && self.source.as_ref().is_some_and(|(block, _)| !block.invisible)
     }
 
     /// Extra width permitted by the editor. Source containers now remain fixed.
@@ -1262,7 +1277,7 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
                 egui::TextFormat {
                     font_id: font,
                     extra_letter_spacing: spacing + ed.extras.char_spacing as f32 * scale,
-                    color: color32(look.color),
+                    color: if ed.pristine_source_visible() { Color32::TRANSPARENT } else { color32(look.color) },
                     italics: look.italic && !embedded,
                     ..Default::default()
                 },
@@ -1398,6 +1413,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     ed.size = (ed.look.size as f32 * scale).clamp(1.0, 300.0);
     let font = editor_font(&ed.look, ed.size);
     let text_color = color32(ed.look.color);
+    let pristine_source = ed.pristine_source_visible();
     let mut done = None;
     egui::Area::new(egui::Id::new("edit-text-line")).order(egui::Order::Foreground).fixed_pos(Pos2::new(ed.rect.left(), ed.rect.top())).show(
         ctx,
@@ -1432,17 +1448,17 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             }
             // White, unless the text is too pale to read on white (white text from a coloured
             // banner, #913): then a dark box, with a caret that shows on it.
-            let fill = if background_ready { Color32::TRANSPARENT } else { editor_fill(text_color) };
+            let fill = if background_ready || pristine_source { Color32::TRANSPARENT } else { editor_fill(text_color) };
             // Until the background worker finishes, cover the entire source box, including
             // lines the draft no longer occupies. Shrinking the text must never expose a copy.
-            if !background_ready {
+            if !background_ready && !pristine_source {
                 ui.painter().rect_filled(ed.rect.expand(1.0), CornerRadius::ZERO, fill);
             }
             egui::Frame::NONE.fill(fill).show(ui, |ui| {
                 // A textless PDF preview keeps its real page background through the transparent editor.
                 // The temporary opaque cover uses the shared caret-contrast rule.
                 ui.visuals_mut().text_cursor.stroke.color =
-                    if background_ready { if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE } } else { caret_color_on(fill) };
+                    if background_ready || pristine_source { if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE } } else { caret_color_on(fill) };
                 let rows = 1;
                 let snapshot = ed.clone();
                 let mut layouter =
