@@ -97,8 +97,6 @@ let form = pdfcraft_xfa::layout_xml(template_xml)?;       // pages of items, for
   A hidden instance of a repeating subform hides every instance (overrides apply to the template).
   A repeating subform shows what its data holds once the data holds any instance, else its
   `initial` count, and never fewer than one (`occur min="0"` still shows one row).
-  Each script runs in a fresh engine on its own thread; a form with hundreds of calculate
-  scripts pays that on every field change (a shared engine per event is the obvious next step).
 - **Script limits.** Forms run their scripts on open without being asked, so the engine bounds
   each event: a script's effects (values set again on the same object merge, the last wins;
   10 000 effects, 100 message boxes, 1 000 console lines per script and per event), its loop
@@ -106,6 +104,13 @@ let form = pdfcraft_xfa::layout_xml(template_xml)?;       // pages of items, for
   click and change), 2 000 scripts and 50 relayouts per event, and 3 s (open, changes) or 5 s
   (click) of scripts per event, after which the rest are skipped and reported. Only a click may
   print, save, open a link or move the focus; other events asking are noted in the console.
+  All the scripts of one event (open, a change, a click) run on one thread, each in a fresh
+  JavaScript context (or FormCalc interpreter) on a copy of the form as the engine holds it
+  then: scripts share nothing, a script that fails halfway leaves nothing behind, and what a
+  script changed reaches the next one only through the engine, which applies the effects and
+  keeps its live form up to date in place for values (rebuilding it only when the structure
+  changed). A form with hundreds of calculations runs them all well within the open budget,
+  where each used to pay for a thread of its own and a rebuild of the whole form.
   What open-time scripts change is noted in the document's XFA warnings. Known gaps: the
   engine's loop limit is per call frame, so loops inside nested calls can run far longer; such
   a script is abandoned after 1 s (3 s for a click) on its thread, which keeps running until the
@@ -113,6 +118,12 @@ let form = pdfcraft_xfa::layout_xml(template_xml)?;       // pages of items, for
   allocates is not capped (the same holds for AcroForm JavaScript).
 - **Static XFA forms** (`/NeedsRendering` absent, AcroForm fields present) keep their AcroForm;
   only their data is read and written.
+- **Flattening and converting.** `strip` takes the XFA out of a document: the packets,
+  `/NeedsRendering`, the layout mark, the overrides and the private keys on the fields. The
+  engine calls it after flattening an XFA form's fields (so Adobe's viewers show the baked
+  pages instead of laying the form out again from the template) and for "convert to a static
+  form" (`xfa_to_static`), which keeps the laid-out pages and the fields with their values as
+  an ordinary AcroForm that no viewer lays out again and whose scripts no longer run.
 - **Field kinds.** Choice lists become combo boxes (editable with `textEntry`) or list boxes
   (`open="always"`, multi-select with `open="multiSelect"`), with the shown items and the saved
   values of `<items save="1">` as the options; the data holds saved values, several on
