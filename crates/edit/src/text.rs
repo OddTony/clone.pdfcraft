@@ -1092,7 +1092,11 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
             l.text = crate::indic::to_logical(&l.text);
         }
         l.text = crate::bidi::to_logical(&l.text);
-        l.text = repair_hebrew_mark_spacing(&l.text);
+    }
+    // Even /ActualText supplied in logical order can contain position-derived
+    // gaps between Hebrew bases and separately positioned combining marks.
+    for line in &mut lines {
+        line.text = repair_hebrew_mark_spacing(&line.text);
     }
     // Lines of only spaces aren't editable text.
     lines.retain(|l| !l.text.trim().is_empty());
