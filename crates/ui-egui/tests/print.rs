@@ -244,14 +244,14 @@ fn print_dialog_shows_the_printer_driver_options() {
     h.get_by_label("Printer properties");
     h.get_by_label("Media");
     h.get_by_label("Paper tray");
-    assert_eq!(h.state().print_draft.job("form.pdf").options, [("InputSlot".to_string(), "Tray2".to_string())]);
+    assert!(h.state().print_draft.job("form.pdf").options.contains(&("InputSlot".to_string(), "Tray2".to_string())));
     h.get_by_label("Reset to printer defaults").click();
     h.run_steps(2);
-    assert!(h.state().print_draft.job("form.pdf").options.is_empty(), "defaults are not sent");
+    assert!(!h.state().print_draft.job("form.pdf").options.iter().any(|(k, _)| k == "InputSlot"), "defaults are not sent");
     // Options read for another printer never go with this one's job.
     h.state_mut().print_draft.driver_choices.insert("InputSlot".into(), "Tray2".into());
     h.state_mut().print_draft.printer = Some("Other_Queue".into());
-    assert!(h.state().print_draft.job("form.pdf").options.is_empty());
+    assert!(!h.state().print_draft.job("form.pdf").options.iter().any(|(k, _)| k == "InputSlot"));
 }
 
 /// The desktop app lists printers in the background (PowerShell on Windows takes a second or
@@ -423,4 +423,30 @@ fn an_empty_printer_list_says_none_were_found() {
     h.run_steps(2);
     h.get_by_label_contains("No printers were found");
     assert!(!h.get_by_role_and_label(Role::Button, "Save as PDF").accesskit_node().is_disabled());
+}
+
+#[test]
+fn orientation_choices_pass_options_to_spooler() {
+    let mut h = harness();
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+
+    // Default form.pdf is portrait; with Auto orientation, sends orientation-requested=3
+    let options = h.state().print_draft.job("form.pdf").options;
+    assert!(options.contains(&("orientation-requested".to_string(), "3".to_string())));
+    assert!(!options.contains(&("orientation-requested".to_string(), "4".to_string())));
+
+    // Clicking Landscape radio button sends orientation-requested=4 and landscape=true
+    h.get_by_label("Landscape").click();
+    h.run_steps(2);
+    let options = h.state().print_draft.job("form.pdf").options;
+    assert!(options.contains(&("orientation-requested".to_string(), "4".to_string())));
+    assert!(options.contains(&("landscape".to_string(), "true".to_string())));
+
+    // Clicking Portrait radio button sends orientation-requested=3
+    h.get_by_label("Portrait").click();
+    h.run_steps(2);
+    let options = h.state().print_draft.job("form.pdf").options;
+    assert!(options.contains(&("orientation-requested".to_string(), "3".to_string())));
+    assert!(!options.contains(&("orientation-requested".to_string(), "4".to_string())));
 }

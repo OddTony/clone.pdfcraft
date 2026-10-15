@@ -93,6 +93,8 @@ pub struct PrintDraft {
     pub crops: Vec<Option<print::Crop>>,
     /// The pages `crops` were read for, so a changed page selection reads them again.
     pub crop_pages: Option<Vec<usize>>,
+    /// Auto orientation detected a landscape sheet layout.
+    pub auto_landscape: bool,
 }
 
 impl Default for PrintDraft {
@@ -138,6 +140,7 @@ impl Default for PrintDraft {
             label_flip: false,
             crops: Vec::new(),
             crop_pages: None,
+            auto_landscape: false,
         }
     }
 }
@@ -188,7 +191,22 @@ impl PrintDraft {
         })
     }
 
+    pub fn is_landscape(&self) -> bool {
+        match self.orientation {
+            Orientation::Landscape => true,
+            Orientation::Portrait => false,
+            Orientation::Auto => self.handling == Handling::Booklet || self.auto_landscape,
+        }
+    }
+
     pub fn job(&self, title: &str) -> spool::Job {
+        let is_landscape = self.is_landscape();
+        let orientation_options = if is_landscape {
+            vec![("orientation-requested".to_string(), "4".to_string()), ("landscape".to_string(), "true".to_string())]
+        } else {
+            vec![("orientation-requested".to_string(), "3".to_string())]
+        };
+
         spool::Job {
             printer: self.printer.clone(),
             copies: self.copies.max(1),
@@ -205,6 +223,7 @@ impl PrintDraft {
             .into_iter()
             // The sheet the PDF was laid out on, not the queue's default paper.
             .chain(print::cups_media(self.paper).map(|m| ("media".to_string(), m.to_string())))
+            .chain(orientation_options)
             .collect(),
         }
     }
@@ -291,7 +310,8 @@ fn default_printer(printers: &[spool::Printer]) -> Option<String> {
 
 impl PdfCraftApp {
     pub fn open_print(&mut self) {
-        let Some((i, _)) = self.active_ids() else { return };
+        let Some((i, id)) = self.active_ids() else { return };
+        let auto_landscape = self.session.get(id).and_then(|d| d.info.pages.first()).map_or(false, |p| p.width > p.height);
         let (printers, printers_loading) = match self.printer_source.clone() {
             // The list from the last time the dialog opened, until the fresh one arrives.
             #[cfg(not(target_arch = "wasm32"))]
@@ -324,6 +344,7 @@ impl PdfCraftApp {
             sheet: 0,
             selected,
             which,
+            auto_landscape,
             ..keep
         };
         self.dialog = Some(crate::Dialog::Print);
@@ -518,7 +539,15 @@ impl PdfCraftApp {
                     }
                 }
             }
-            Some(printer) => self.send_to_printer(printer, bytes, self.print_draft.job(&name)),
+            Some(printer) => {
+                let sizes: Vec<(f64, f64)> = doc.info.pages.iter().map(|p| (f64::from(p.width), f64::from(p.height))).collect();
+                if let Ok(sheets) = print::layout(&sizes, &settings) {
+                    if let Some(first) = sheets.first() {
+                        self.print_draft.auto_landscape = first.size.0 > first.size.1;
+                    }
+                }
+                self.send_to_printer(printer, bytes, self.print_draft.job(&name))
+            }
             None => self.save_print_pdf(&name, bytes),
         }
     }
@@ -807,6 +836,9 @@ pub(crate) fn body(
     ui.add_space(8.0);
     let settings = d.settings(sizes.len(), labels);
     let sheets = settings.as_ref().ok().and_then(|s| print::layout(sizes, s).ok()).unwrap_or_default();
+    if let Some(first) = sheets.first() {
+        d.auto_landscape = first.size.0 > first.size.1;
+    }
     d.sheet = d.sheet.min(sheets.len().saturating_sub(1));
     ui.horizontal_top(|ui| {
         // Settings.
@@ -1279,6 +1311,33 @@ mod tests {
         assert_eq!(job.scaling, spool::Scaling::Exact);
         assert_eq!(job.duplex, Some(spool::Duplex::LongEdge));
         assert_eq!(PrintDraft::default().job("report.pdf").duplex, Some(spool::Duplex::Off));
+    }
+
+    #[test]
+    fn job_passes_orientation_options_to_spooler() {
+        // Portrait sends orientation-requested=3
+        let draft = PrintDraft { orientation: Orientation::Portrait, ..PrintDraft::default() };
+        let job = draft.job("portrait.pdf");
+        assert!(job.options.contains(&("orientation-requested".to_string(), "3".to_string())));
+        assert!(!job.options.contains(&("orientation-requested".to_string(), "4".to_string())));
+
+        // Landscape sends orientation-requested=4 and landscape=true
+        let draft = PrintDraft { orientation: Orientation::Landscape, ..PrintDraft::default() };
+        let job = draft.job("landscape.pdf");
+        assert!(job.options.contains(&("orientation-requested".to_string(), "4".to_string())));
+        assert!(job.options.contains(&("landscape".to_string(), "true".to_string())));
+
+        // Auto with auto_landscape detected sends orientation-requested=4
+        let draft = PrintDraft { orientation: Orientation::Auto, auto_landscape: true, ..PrintDraft::default() };
+        let job = draft.job("auto_landscape.pdf");
+        assert!(job.options.contains(&("orientation-requested".to_string(), "4".to_string())));
+        assert!(job.options.contains(&("landscape".to_string(), "true".to_string())));
+
+        // Booklet handling is always landscape
+        let draft = PrintDraft { orientation: Orientation::Auto, handling: Handling::Booklet, ..PrintDraft::default() };
+        let job = draft.job("booklet.pdf");
+        assert!(job.options.contains(&("orientation-requested".to_string(), "4".to_string())));
+        assert!(job.options.contains(&("landscape".to_string(), "true".to_string())));
     }
 
     /// A job being spooled holds the progress card, counting its sheets as the spooler reports
