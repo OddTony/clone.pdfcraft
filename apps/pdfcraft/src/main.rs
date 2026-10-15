@@ -32,6 +32,7 @@ use pdfcraft_ui_egui::PdfCraftApp;
 #[cfg(target_os = "macos")]
 mod apple_events;
 mod compositor_gpu;
+mod decorations;
 mod logging;
 #[cfg(target_os = "windows")]
 mod motion;
@@ -199,6 +200,8 @@ fn main() -> eframe::Result {
     }
     let files = rejoin_split_paths(files, |p| std::path::Path::new(p).is_file());
     let integrated = cfg!(target_os = "macos");
+    // GNOME on Wayland leaves the window frame to the app (src/decorations.rs).
+    let window_controls = if cfg!(any(target_os = "macos", target_os = "windows")) { None } else { decorations::app_drawn() };
     migrate_legacy_folders();
     // The log file lives in the settings folder; opened after the arguments (so `--version` leaves
     // no file behind) and after the PrintCraft migration (which a fresh folder would block).
@@ -210,9 +213,10 @@ fn main() -> eframe::Result {
             Err(e) => log::warn!("no log file: {e}"),
         }
     }
-    // Windows: a launch that only names files (an Outlook attachment, an Explorer double-click)
-    // hands them to the PdfCraft already running and exits (#282, #317). Any option means the
-    // caller wants this launch's own window.
+    // Windows, Linux and the BSDs: a launch that only names files (an Outlook attachment, an
+    // Explorer double-click, a file manager or `xdg-open`) hands them to the PdfCraft already
+    // running and exits (#282, #317, #1726). Any option means the caller wants this launch's own
+    // window.
     let may_hand_off = !new_window && !files.is_empty() && options.is_empty() && control_file.is_none() && !create_images;
     let instance = match single_instance::claim(&single_instance::absolute(&files), may_hand_off) {
         single_instance::Claim::HandedOff => return Ok(()),
@@ -220,7 +224,7 @@ fn main() -> eframe::Result {
         single_instance::Claim::Alone => None,
     };
     let choice = renderer_choice(std::env::var("PDFCRAFT_RENDERER").ok().as_deref());
-    let launch = Launch { files, options, control_file, create_images, integrated };
+    let launch = Launch { files, options, control_file, create_images, integrated, window_controls };
     // Finder, Open With and the Dock deliver files as Apple events, not arguments; catch the one
     // that launched us as well as later ones. Lives until the event loop returns.
     #[cfg(target_os = "macos")]
@@ -230,7 +234,7 @@ fn main() -> eframe::Result {
     let first = if choice == RendererChoice::Gl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let result = eframe::run_native(
         "PdfCraft",
-        native_options(integrated, first),
+        native_options(launch.integrated, launch.window_controls.is_some(), first),
         app_creator(
             launch.clone(),
             Rc::clone(&started),
@@ -248,7 +252,7 @@ fn main() -> eframe::Result {
             log::error!("the GPU renderer (wgpu) didn't start: {e}. Starting with OpenGL instead; set PDFCRAFT_RENDERER=gl to skip wgpu.");
             eframe::run_native(
                 "PdfCraft",
-                native_options(integrated, eframe::Renderer::Glow),
+                native_options(launch.integrated, launch.window_controls.is_some(), eframe::Renderer::Glow),
                 app_creator(
                     launch,
                     started,
@@ -288,7 +292,7 @@ fn retry_with_gl(choice: RendererChoice, app_started: bool) -> bool {
 }
 
 /// The window and renderer settings for one run.
-fn native_options(integrated: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
+fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("PdfCraft")
         .with_inner_size([1440.0, 920.0])
@@ -303,6 +307,10 @@ fn native_options(integrated: bool, renderer: eframe::Renderer) -> eframe::Nativ
     }
     if integrated {
         viewport = viewport.with_fullsize_content_view(true).with_titlebar_shown(false).with_title_shown(false);
+    }
+    if app_frame {
+        // The tab strip is the title bar (pdfcraft_ui_egui::window_controls).
+        viewport = viewport.with_decorations(false);
     }
     let persistence_path = settings_dir().map(|d| d.join("app.ron"));
     // Set explicitly, so the renderer never depends on which one eframe defaults to.
@@ -321,6 +329,20 @@ struct Launch {
     control_file: Option<String>,
     create_images: bool,
     integrated: bool,
+    /// The window buttons the app draws, when the desktop leaves the frame to it.
+    window_controls: Option<pdfcraft_ui_egui::window_controls::Layout>,
+}
+
+/// Whether the window is a native Wayland one (not X11 or XWayland).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn native_wayland(cc: &eframe::CreationContext<'_>) -> bool {
+    use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+    cc.display_handle().is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)))
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn native_wayland(_: &eframe::CreationContext<'_>) -> bool {
+    false
 }
 
 fn app_creator<'a>(
@@ -329,7 +351,7 @@ fn app_creator<'a>(
     instance: Option<&'a single_instance::Server>,
     #[cfg(target_os = "macos")] apple_events: &'a apple_events::AppleEvents,
 ) -> eframe::AppCreator<'a> {
-    let Launch { files, options, control_file, create_images, integrated } = launch;
+    let Launch { files, options, control_file, create_images, integrated, window_controls } = launch;
     Box::new(move |cc| {
         started.set(true);
         let mut app = PdfCraftApp::new();
@@ -343,6 +365,7 @@ fn app_creator<'a>(
             app.restore(&json);
         }
         app.integrated_titlebar = integrated;
+        app.window_controls = window_controls;
         app.system_text_scale = text_scale::system();
         // Windows' Animation effects setting, which Preferences ▸ Animation effects follows unless
         // it is set to On or Off.
@@ -356,9 +379,14 @@ fn app_creator<'a>(
         #[cfg(target_os = "macos")]
         {
             app.os_events = Some(apple_events.connect(&cc.egui_ctx));
+            // winit's Quit (⌘Q) ends the process without asking about unsaved changes (#1136). This
+            // menu's Quit closes the window instead, so `guard_quit` asks, as for the close button.
+            if let Err(e) = craft_quit::install_app_menu(&cc.egui_ctx, "PdfCraft") {
+                log::warn!("couldn't install the app menu, so ⌘Q quits without asking to save: {e}");
+            }
         }
         if let Some(server) = instance {
-            app.os_events = Some(server.connect(&cc.egui_ctx));
+            app.os_events = Some(server.connect(&cc.egui_ctx, native_wayland(cc)));
         }
         if let Some(file) = &control_file {
             let client = app.attach_control(&cc.egui_ctx);
@@ -805,8 +833,15 @@ mod tests {
         assert!(!retry_with_gl(RendererChoice::Wgpu, false));
         assert!(!retry_with_gl(RendererChoice::Gl, false));
         // Each run states its renderer rather than relying on eframe's default.
-        assert_eq!(native_options(false, eframe::Renderer::Wgpu).renderer, eframe::Renderer::Wgpu);
-        assert_eq!(native_options(false, eframe::Renderer::Glow).renderer, eframe::Renderer::Glow);
+        assert_eq!(native_options(false, false, eframe::Renderer::Wgpu).renderer, eframe::Renderer::Wgpu);
+        assert_eq!(native_options(false, false, eframe::Renderer::Glow).renderer, eframe::Renderer::Glow);
+    }
+
+    #[test]
+    fn the_desktop_frame_is_turned_off_only_when_the_app_draws_one() {
+        use super::native_options;
+        assert_eq!(native_options(false, false, eframe::Renderer::Glow).viewport.decorations, None);
+        assert_eq!(native_options(false, true, eframe::Renderer::Glow).viewport.decorations, Some(false));
     }
 
     #[test]
@@ -957,7 +992,7 @@ mod tests {
         // than the device allows.
         use eframe::wgpu;
         let _gpu = gpu();
-        let native = super::native_options(false, eframe::Renderer::Wgpu);
+        let native = super::native_options(false, false, eframe::Renderer::Wgpu);
         let eframe::egui_wgpu::WgpuSetup::CreateNew(setup) = &native.wgpu_options.wgpu_setup else {
             panic!("default setup creates its own instance")
         };
@@ -1024,7 +1059,7 @@ mod tests {
     fn pipeline_creation_error_is_returned_and_device_remains_usable() {
         use eframe::{egui_wgpu, wgpu};
         let _gpu = gpu();
-        let mut native = super::native_options(false, eframe::Renderer::Wgpu);
+        let mut native = super::native_options(false, false, eframe::Renderer::Wgpu);
         let egui_wgpu::WgpuSetup::CreateNew(setup) = &native.wgpu_options.wgpu_setup else { panic!("default setup creates its own instance") };
         let instance = pollster::block_on(native.wgpu_options.wgpu_setup.new_instance());
         let options = wgpu::RequestAdapterOptions { power_preference: setup.power_preference, ..Default::default() };
