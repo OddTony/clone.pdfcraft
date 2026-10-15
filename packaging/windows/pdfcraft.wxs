@@ -179,6 +179,19 @@
       <Component Id="PdfcraftApp" Guid="E724C1C6-091F-4E21-A685-80D089FDBE21">
         <File Id="PdfcraftExe" Source="$(var.BinDir)\pdfcraft.exe" KeyPath="yes" />
 
+        <!-- Clear legacy image-menu keys before WriteRegistryValues recreates the opted-in
+             menu. Late product removal preserves shared components and the SCM account. -->
+        <RemoveRegistryKey Id="LegacyImageMenu_png" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_jpg" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpg\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_jpeg" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpeg\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_tif" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tif\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_tiff" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.tiff\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_gif" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.gif\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_bmp" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.bmp\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_jp2" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jp2\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_j2k" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.j2k\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+        <RemoveRegistryKey Id="LegacyImageMenu_jpx" Root="HKLM" Key="Software\Classes\SystemFileAssociations\.jpx\shell\PdfCraft.CreatePdf" Action="removeOnInstall" />
+
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\pdfcraft.exe" Value="[#PdfcraftExe]" Type="string" />
 
         <!-- PDF files (#107): PdfCraft is offered under "Open with" and in Settings ▸ Default
@@ -240,8 +253,8 @@
       <!-- Image context menu (#190): "Create PDF with PdfCraft…" opens the DPI chooser, without
            changing image file defaults. Its own component with an HKLM key path, so
            INSTALLIMAGECONTEXTMENU=0 leaves it out and uninstall removes it. These rows were in
-           PdfcraftApp up to 0.7.1; moving them is safe because MajorUpgrade removes the old version
-           before installing (afterInstallValidate), so no old row is left behind. -->
+           PdfcraftApp up to 0.7.1; its RemoveRegistryKey rows clear the legacy entries before
+           this component writes the selected menu, including upgrades with the menu disabled. -->
       <Component Id="PdfcraftImageContextMenu" Guid="1B783BF3-12DF-4588-AF80-E2CEA8BC1E5A"
           Condition="INSTALLIMAGECONTEXTMENU = 1">
         <RegistryValue Root="HKLM" Key="Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.CreatePdf" Value="Create PDF with PdfCraft…" Type="string" KeyPath="yes" />

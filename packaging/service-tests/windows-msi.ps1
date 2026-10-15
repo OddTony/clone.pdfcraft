@@ -82,9 +82,21 @@ try {
   Start-Sleep -Seconds 2
   if ((Get-Item -LiteralPath "$data/tasks.heartbeat").LastWriteTimeUtc -le $heartbeatBefore) { throw 'Alternate account cannot write through the service SID' }
   Set-Content -LiteralPath "$data/keep-user-tasks.txt" -Value 'synthetic task preservation fixture'
+  # Model rows left by the pre-0.8 shared app component, including an obsolete subkey.
+  # Menu opt-out on upgrade must remove these while preserving the service account.
+  foreach ($ext in @('png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx')) {
+    $menuKey = "HKLM:\Software\Classes\SystemFileAssociations\.$ext\shell\PdfCraft.CreatePdf"
+    if (-not (Test-Path -LiteralPath "$menuKey\command")) { throw "$ext image menu missing before upgrade" }
+    New-Item -Path "$menuKey\LegacyProbe" -Force | Out-Null
+  }
   # No INSTALLHOTFOLDER override: a major upgrade must preserve the opt-in choice.
-  Invoke-Msi "/i `"$upgrade`"" 'upgrade'
+  Invoke-Msi "/i `"$upgrade`" INSTALLIMAGECONTEXTMENU=0" 'upgrade'
   $installedMsi = $upgrade
+  foreach ($ext in @('png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx')) {
+    if (Test-Path -LiteralPath "HKLM:\Software\Classes\SystemFileAssociations\.$ext\shell\PdfCraft.CreatePdf") {
+      throw "$ext image menu survived upgrade opt-out"
+    }
+  }
   $service = Get-CimInstance Win32_Service -Filter "Name='PdfCraftHotFolder'"
   if ($service.State -ne 'Running' -or $service.StartMode -ne 'Auto' -or $service.StartName -ne 'NT AUTHORITY\NetworkService') {
     throw "Upgrade did not preserve the optional automatic service and its account: state=$($service.State), startup=$($service.StartMode), account=$($service.StartName)"

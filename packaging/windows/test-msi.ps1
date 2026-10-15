@@ -165,14 +165,16 @@ function Assert-MenuSearch([string] $Found, [string] $Key, [string] $Release, [s
   Assert-Equal ([int] $upgrade[3]) 258 "$What release detection attributes"
   if (($secure[0] -split ';') -notcontains $Release) { throw "$Release is not secure: '$($secure[0])'" }
 }
-# The old version is removed before the new one is installed, so rows that moved between components
-# (the image menu left PdfcraftApp after 0.7.1) are removed with it rather than orphaned.
-$validate = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''InstallValidate''' 1
+# Install over shared components before removing the old product to preserve the SCM account.
+$execute = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''InstallExecute''' 1
 $remove = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''RemoveExistingProducts''' 1
-$initialize = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''InstallInitialize''' 1
-if ([int] $remove[0] -le [int] $validate[0] -or [int] $remove[0] -ge [int] $initialize[0]) {
-  throw "RemoveExistingProducts ($($remove[0])) must run between InstallValidate and InstallInitialize"
+$finalize = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''InstallFinalize''' 1
+if ([int] $remove[0] -le [int] $execute[0] -or [int] $remove[0] -ge [int] $finalize[0]) {
+  throw "RemoveExistingProducts ($($remove[0])) must run between InstallExecute and InstallFinalize"
 }
+$removeRegistry = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''RemoveRegistryValues''' 1
+$writeRegistry = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''WriteRegistryValues''' 1
+if ([int] $removeRegistry[0] -ge [int] $writeRegistry[0]) { throw 'Legacy menu cleanup must precede menu writes' }
 
 # Image context menu (#190) opens the DPI chooser. Its own component, gated by INSTALLIMAGECONTEXTMENU
 # (on for a first install, kept on update only while present, secure), with the .png label as key
@@ -180,6 +182,11 @@ if ([int] $remove[0] -le [int] $validate[0] -or [int] $remove[0] -ge [int] $init
 $imageKey = 'Software\Classes\SystemFileAssociations\.png\shell\PdfCraft.CreatePdf'
 foreach ($ext in @('png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'jp2', 'j2k', 'jpx')) {
   $key = 'Software\Classes\SystemFileAssociations\.' + $ext + '\shell\PdfCraft.CreatePdf'
+  # Cleanup belongs to the always-installed app, so opting out also removes pre-0.8 rows.
+  $cleanup = Read-Row ('SELECT `Root`, `Name`, `Component_` FROM `RemoveRegistry` WHERE `Key` = ''' + $key + '''') 3
+  Assert-Equal $cleanup[0] '2' "$ext legacy menu cleanup HKLM root"
+  Assert-Equal $cleanup[1] '-' "$ext legacy menu cleanup includes subkeys"
+  Assert-Equal $cleanup[2] 'PdfcraftApp' "$ext legacy menu cleanup component"
   $menu = Read-Row ('SELECT `Value`, `Component_`, `Root` FROM `Registry` WHERE `Key` = ''' + $key + ''' AND `Name` IS NULL') 3
   Assert-Equal $menu[0] 'Create PDF with PdfCraft…' "$ext context menu label"
   Assert-Equal $menu[1] 'PdfcraftImageContextMenu' "$ext context menu component"
