@@ -236,3 +236,4 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 | 2026-10-12 | minor | M8: image redaction removes alternate images and unsupported masks only on affected images. Estimates unchanged. |
 | 2026-10-10 | major | Created from ROADMAP.md §Milestones, §Critical path, §Risks and §Where we're lacking. Merged the duplicated M1, M2, M3 and M14 rows, re-measured Done and Remaining, added Current focus and the ranked upcoming milestones |
 | 2026-10-15 | minor | Candidate fixes #2394, #2395, #2515 and #2430; existing CCITT `/Rows 0` repair verified. Estimates unchanged. |
+| 2026-10-15 | minor | M0.4: allow the pinned #2430 winprint patch source; cargo-deny 0.20.2 passes advisories, bans, licenses and sources after reproducing the source rejection. Estimates unchanged. |
