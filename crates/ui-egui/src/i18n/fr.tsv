@@ -2354,3 +2354,51 @@ animation effects	Off	Désactivés
 	This document is trying to open a local file:	Ce document tente d’ouvrir un fichier local :
 	Move tag earlier	Déplacer la balise plus tôt
 	Move tag later	Déplacer la balise plus tard
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	Un modèle local n'est pas un modèle de pointe du cloud : il peut se tromper, et une longue réponse prend son temps sur le processeur. Vérifiez tout ce qui est critique, et pesez la taille du modèle face à cette machine avant de le télécharger.
+	Ask	Demander
+	Ask anything	Posez n'importe quelle question
+	Ask in any language	Posez vos questions dans n'importe quelle langue
+	Assistant	Assistant
+	Best for: a step up in quality, still light	Idéal pour : un cran de plus en qualité, toujours léger
+	Best for: balanced everyday and technical work	Idéal pour : l'équilibre du quotidien et du technique
+	Best for: everyday help on the lightest machines	Idéal pour : l'aide quotidienne sur les machines les plus légères
+	Best for: near-flagship answers at MoE speed	Idéal pour : des réponses presque de pointe à la vitesse MoE
+	Best for: the deepest reasoning this family has	Idéal pour : le raisonnement le plus profond de cette famille
+	Compress and export	Compresser et exporter
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	Craft AI exécute un modèle Gemma local sur cette machine. Rien de ce que vous écrivez ici n'en sort : pas de compte, pas de service cloud, pas de télémétrie — le panneau parle à un moteur de modèles sur 127.0.0.1.
+	Craft AI runs in the native app — it needs a local model runtime.	Craft AI fonctionne dans l'application native — il lui faut un moteur de modèles local.
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	Craft AI parle à un moteur de modèles sur cette machine — Ollama, LM Studio ou le serveur de llama.cpp — et jamais à un service cloud. Lancez-en un, puis Actualisez.
+	Delete file	Supprimer le fichier
+	Disk {size}	Disque {size}
+	Download with Ollama	Télécharger avec Ollama
+	Downloading… {pct}% — {note}	Téléchargement… {pct} % — {note}
+	Fits this machine	Convient à cette machine
+	Form field advice	Conseils pour les champs de formulaire
+	Limits	Limites
+	Local and private	Local et privé
+	Looking for a local model runtime…	Recherche d'un moteur de modèles local…
+	Needs {disk} GB of disk	Exige {disk} Go de disque
+	Needs {ram} GB of RAM	Exige {ram} Go de RAM
+	No local model runtime found.	Aucun moteur de modèles local trouvé.
+	No model installed yet — see the Models tab.	Aucun modèle installé pour l'instant — voir l'onglet Modèles.
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	Un seul téléchargement sert toutes les applications ArtCraft : le modèle arrive dans un dossier partagé qu'elles lisent toutes.
+	Organize pages plan	Plan d’organisation des pages
+	PDF/A and standards advice	Conseils PDF/A et normes
+	RAM {gb} GB	RAM {gb} Go
+	Redaction checklist	Liste de contrôle du masquage
+	Refresh	Actualiser
+	Runtime	Moteur
+	Save model file	Enregistrer le fichier du modèle
+	Saved in the shared folder	Enregistré dans le dossier partagé
+	Saving… {pct}%	Enregistrement… {pct} %
+	Task	Tâche
+	The form's purpose and its fields (names, types, tab order)	L’objet du formulaire et ses champs (noms, types, ordre de tabulation)
+	The shared folder:	Le dossier partagé :
+	The standard it must meet and where the file goes	La norme à respecter et la destination du fichier
+	Thinking… {s}s	Réflexion… {s} s
+	This machine: {ram} GB RAM, {disk} GB free	Cette machine : {ram} Go de RAM, {disk} Go libres
+	What must go, and what the document is	Ce qui doit disparaître, et la nature du document
+	What you want to end up with (order, extract, split, combine)	Ce que vous voulez obtenir (ordre, extraire, diviser, fusionner)
+	Where the file is going and what matters (size, quality, compatibility)	La destination du fichier et ce qui compte (taille, qualité, compatibilité)

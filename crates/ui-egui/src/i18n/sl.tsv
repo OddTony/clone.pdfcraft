@@ -2359,3 +2359,51 @@ animation effects	Off	Izklopljeni
 	This document is trying to open a local file:	Ta dokument poskuša odpreti lokalno datoteko:
 	Move tag earlier	Premakni oznako prej
 	Move tag later	Premakni oznako pozneje
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	Krajevni model ni vodilni oblak: lahko se zmoti, dolg odgovor pa na procesorju vzame svoj čas. Preverite vse ključno in pred prenosom primerjte velikost modela s tem računalnikom.
+	Ask	Vprašaj
+	Ask anything	Vprašajte karkoli
+	Ask in any language	Vprašajte v katerem koli jeziku
+	Assistant	Pomočnik
+	Best for: a step up in quality, still light	Najboljše za: stopnico višje po kakovosti, še vedno lahko
+	Best for: balanced everyday and technical work	Najboljše za: uravnoteženo vsakodnevno in tehnično delo
+	Best for: everyday help on the lightest machines	Najboljše za: vsakodnevno pomoč na najlažjih računalnikih
+	Best for: near-flagship answers at MoE speed	Najboljše za: skoraj vodilne odgovore s hitrostjo MoE
+	Best for: the deepest reasoning this family has	Najboljše za: najgloblje sklepanje v tej družini
+	Compress and export	Stisni in izvozi
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	Craft AI poganja krajevni model Gemma na tem računalniku. Kar tu napišete, ga ne zapusti: brez računa, brez oblačne storitve, brez telemetrije — pulta se pogovarja z izvajalnikom modelov na 127.0.0.1.
+	Craft AI runs in the native app — it needs a local model runtime.	Craft AI teče v namiznem programu — rabi krajevni izvajalnik modelov.
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	Craft AI se pogovarja z izvajalnikom modelov na tem računalniku — Ollama, LM Studio ali strežnik llama.cpp — in nikoli z oblačno storitvijo. Zagonite enega in kliknite Osveži.
+	Delete file	Izbriši datoteko
+	Disk {size}	Disk {size}
+	Download with Ollama	Prenesi z Ollamo
+	Downloading… {pct}% — {note}	Prenašanje… {pct}% — {note}
+	Fits this machine	Ustreza temu računalniku
+	Form field advice	Nasveti za polja obrazca
+	Limits	Meje
+	Local and private	Krajevno in zasebno
+	Looking for a local model runtime…	Iskanje krajevnega izvajalnika modelov…
+	Needs {disk} GB of disk	Rabi {disk} GB diska
+	Needs {ram} GB of RAM	Rabi {ram} GB pomnilnika
+	No local model runtime found.	Krajevnega izvajalnika modelov ni bilo mogoče najti.
+	No model installed yet — see the Models tab.	Model še ni nameščen — glejte zavihek Modeli.
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	En prenos streže vsem programom ArtCraft: model pristane v skupni mapi, ki jo berejo vsi.
+	Organize pages plan	Načrt urejanja strani
+	PDF/A and standards advice	Nasveti za PDF/A in standarde
+	RAM {gb} GB	Pomnilnik {gb} GB
+	Redaction checklist	Kontrolni seznam zakrivanja
+	Refresh	Osveži
+	Runtime	Izvajalnik
+	Save model file	Shrani datoteko modela
+	Saved in the shared folder	Shranjen v skupni mapi
+	Saving… {pct}%	Shranjevanje… {pct}%
+	Task	Naloga
+	The form's purpose and its fields (names, types, tab order)	Namen obrazca in njegova polja (imena, vrste, vrstni red z Tab)
+	The shared folder:	Skupna mapa:
+	The standard it must meet and where the file goes	Standard, ki ga mora izpolnjevati, in kam gre datoteka
+	Thinking… {s}s	Razmišlja… {s}s
+	This machine: {ram} GB RAM, {disk} GB free	Ta računalnik: {ram} GB pomnilnika, {disk} GB prosto
+	What must go, and what the document is	Kaj mora izginiti in kaj je dokument
+	What you want to end up with (order, extract, split, combine)	Kaj želite doseči (vrstni red, izvleči, razdeli, združi)
+	Where the file is going and what matters (size, quality, compatibility)	Kam gre datoteka in kaj je pomembno (velikost, kakovost, združljivost)

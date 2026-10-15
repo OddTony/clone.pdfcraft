@@ -2350,3 +2350,51 @@ animation effects	Off	Kapalı
 	This document is trying to open a local file:	Bu belge yerel bir dosya açmaya çalışıyor:
 	Move tag earlier	Etiketi daha erken taşı
 	Move tag later	Etiketi daha geç taşı
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	Yerel bir model, en iyi bulut modeli değildir: yanılabilir ve uzun bir yanıt işlemcide zaman alır. Kritik olan her şeyi denetleyin; indirmeden önce modelin boyutunu bu makineyle karşılaştırın.
+	Ask	Sor
+	Ask anything	Her şeyi sorun
+	Ask in any language	Herhangi bir dilde sorun
+	Assistant	Yardımcı
+	Best for: a step up in quality, still light	Şunun için en iyisi: kalitede bir adım yukarı, yine de hafif
+	Best for: balanced everyday and technical work	Şunun için en iyisi: dengeli günlük ve teknik iş
+	Best for: everyday help on the lightest machines	Şunun için en iyisi: en hafif makinelerde günlük yardım
+	Best for: near-flagship answers at MoE speed	Şunun için en iyisi: MoE hızıyla amiral gemisine yakın yanıtlar
+	Best for: the deepest reasoning this family has	Şunun için en iyisi: bu ailenin en derin akıl yürütmesi
+	Compress and export	Sıkıştır ve dışa aktar
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	Craft AI bu makinede yerel bir Gemma modeli çalıştırır. Buraya yazdığınız hiçbir şey makineden çıkmaz: hesap yok, bulut hizmeti yok, telemetri yok — panel, 127.0.0.1 üzerindeki bir model çalışma zamanıyla konuşur.
+	Craft AI runs in the native app — it needs a local model runtime.	Craft AI masaüstü uygulamada çalışır — yerel bir model çalışma zamanına ihtiyaç duyar.
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	Craft AI bu makinedeki bir model çalışma zamanıyla konuşur — Ollama, LM Studio ya da llama.cpp sunucusu — ve asla bir bulut hizmetiyle değil. Birini başlatın, sonra Yenile'ye basın.
+	Delete file	Dosyayı sil
+	Disk {size}	Disk {size}
+	Download with Ollama	Ollama ile indir
+	Downloading… {pct}% — {note}	İndiriliyor… {pct}% — {note}
+	Fits this machine	Bu makineye uygun
+	Form field advice	Form alanları için öneriler
+	Limits	Sınırlar
+	Local and private	Yerel ve özel
+	Looking for a local model runtime…	Yerel bir model çalışma zamanı aranıyor…
+	Needs {disk} GB of disk	{disk} GB disk gerekir
+	Needs {ram} GB of RAM	{ram} GB RAM gerekir
+	No local model runtime found.	Yerel bir model çalışma zamanı bulunamadı.
+	No model installed yet — see the Models tab.	Henüz bir model kurulu değil — Modeller sekmesine bakın.
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	Tek indirme her ArtCraft uygulamasına hizmet eder: model, hepsinin okuduğu paylaşılan bir klasöre iner.
+	Organize pages plan	Sayfa düzenleme planı
+	PDF/A and standards advice	PDF/A ve standartlar için öneriler
+	RAM {gb} GB	RAM {gb} GB
+	Redaction checklist	Karartma kontrol listesi
+	Refresh	Yenile
+	Runtime	Çalışma zamanı
+	Save model file	Model dosyasını kaydet
+	Saved in the shared folder	Paylaşılan klasöre kaydedildi
+	Saving… {pct}%	Kaydediliyor… {pct}%
+	Task	Görev
+	The form's purpose and its fields (names, types, tab order)	Formun amacı ve alanları (adlar, türler, sekme sırası)
+	The shared folder:	Paylaşılan klasör:
+	The standard it must meet and where the file goes	Uyması gereken standart ve dosyanın gideceği yer
+	Thinking… {s}s	Düşünüyor… {s}sn
+	This machine: {ram} GB RAM, {disk} GB free	Bu makine: {ram} GB RAM, {disk} GB boş
+	What must go, and what the document is	Neyin gitmesi gerektiği ve belgenin ne olduğu
+	What you want to end up with (order, extract, split, combine)	Ne elde etmek istiyorsunuz (sıra, çıkar, böl, birleştir)
+	Where the file is going and what matters (size, quality, compatibility)	Dosya nereye gidiyor ve ne önemli (boyut, kalite, uyumluluk)

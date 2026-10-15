@@ -2228,3 +2228,54 @@ animation effects	Off	關
 	This document is trying to open a local file:	此文件正嘗試開啟本機檔案：
 	Move tag earlier	將標記前移
 	Move tag later	將標記後移
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	Models	模型
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	本機模型不是最先進的雲端模型：它可能出錯，較長的回答在處理器上需要時間。重要事項請務必查證，下載前也請留意模型大小與這台機器的匹配。
+	About	關於
+	Ask	詢問
+	Ask anything	什麼都能問
+	Ask in any language	可用任何語言提問
+	Assistant	助理
+	Best for: a step up in quality, still light	最適合：品質再上一階，依然輕巧
+	Best for: balanced everyday and technical work	最適合：日常與技術工作並重
+	Best for: everyday help on the lightest machines	最適合：在最輕量的機器上處理日常事務
+	Best for: near-flagship answers at MoE speed	最適合：以 MoE 速度給出接近旗艦級的回答
+	Best for: the deepest reasoning this family has	最適合：這個系列中最深入的推理
+	Compress and export	壓縮與匯出
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	Craft AI 在這台機器上執行本機 Gemma 模型。你在這裡寫的任何內容都不會離開這台機器：沒有帳號、沒有雲端服務、沒有遙測 — 面板只與 127.0.0.1 上的模型執行環境通訊。
+	Craft AI runs in the native app — it needs a local model runtime.	Craft AI 在原生應用程式中執行 — 需要本機模型執行環境。
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	Craft AI 只與這台機器上的模型執行環境通訊 — Ollama、LM Studio 或 llama.cpp 的伺服器 — 絕不與雲端服務通訊。啟動其中一個後按「重新整理」。
+	Delete file	刪除檔案
+	Disk {size}	磁碟 {size}
+	Download with Ollama	用 Ollama 下載
+	Downloading… {pct}% — {note}	下載中… {pct}% — {note}
+	Fits this machine	適合這台機器
+	Form field advice	表單欄位建議
+	Limits	限制
+	Local and private	本機且私有
+	Looking for a local model runtime…	正在尋找本機模型執行環境…
+	Model	模型
+	Needs {disk} GB of disk	需要 {disk} GB 磁碟
+	Needs {ram} GB of RAM	需要 {ram} GB 記憶體
+	No local model runtime found.	找不到本機模型執行環境。
+	No model installed yet — see the Models tab.	尚未安裝模型 — 請見「模型」分頁。
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	下載一次即可供所有 ArtCraft 應用程式使用：模型放在所有應用程式共同讀取的共用資料夾。
+	Organize pages plan	頁面整理方案
+	PDF/A and standards advice	PDF/A 與標準建議
+	RAM {gb} GB	記憶體 {gb} GB
+	Redaction checklist	塗黑遮蓋清單
+	Refresh	重新整理
+	Runtime	執行環境
+	Save model file	儲存模型檔案
+	Saved in the shared folder	已存入共用資料夾
+	Saving… {pct}%	儲存中… {pct}%
+	Task	工作
+	The form's purpose and its fields (names, types, tab order)	表單的用途及其欄位（名稱、類型、Tab 順序）
+	The shared folder:	共用資料夾：
+	The standard it must meet and where the file goes	需要符合的標準，以及檔案的用途
+	Thinking… {s}s	思考中… {s} 秒
+	This machine: {ram} GB RAM, {disk} GB free	這台機器：{ram} GB 記憶體、{disk} GB 可用
+	What must go, and what the document is	需要遮蓋的內容，以及文件是什麼
+	What you want to end up with (order, extract, split, combine)	想要達到的效果（順序、擷取、分割、合併）
+	Where the file is going and what matters (size, quality, compatibility)	檔案的去向與重點（大小、品質、相容性）

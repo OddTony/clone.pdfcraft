@@ -2364,3 +2364,51 @@ animation effects	Off	Ανενεργά
 	This document is trying to open a local file:	Αυτό το έγγραφο προσπαθεί να ανοίξει ένα τοπικό αρχείο:
 	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
 	Move tag later	Μετακίνηση ετικέτας αργότερα
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	Ένα τοπικό μοντέλο δεν είναι ένα κορυφαίο νεφικό μοντέλο: μπορεί να κάνει λάθη, και μια μακριά απάντηση θέλει τον χρόνο της σε επεξεργαστή. Ελέγξτε ό,τι είναι κρίσιμο και προσέξτε το μέγεθος του μοντέλου απέναντι σε αυτόν τον υπολογιστή πριν το κατεβάσετε.
+	Ask	Ερώτηση
+	Ask anything	Ρωτήστε ό,τι θέλετε
+	Ask in any language	Ρωτήστε σε οποιαδήποτε γλώσσα
+	Assistant	Βοηθός
+	Best for: a step up in quality, still light	Καλύτερο για: ένα επίπεδο πάνω σε ποιότητα, ακόμα ελαφρύ
+	Best for: balanced everyday and technical work	Καλύτερο για: ισορροπημένη καθημερινή και τεχνική δουλειά
+	Best for: everyday help on the lightest machines	Καλύτερο για: καθημερινή βοήθεια στους πιο ελαφριούς υπολογιστές
+	Best for: near-flagship answers at MoE speed	Καλύτερο για: σχεδόν κορυφαίες απαντήσεις με ταχύτητα MoE
+	Best for: the deepest reasoning this family has	Καλύτερο για: τη βαθύτερη συλλογιστική της οικογένειας
+	Compress and export	Συμπίεση και εξαγωγή
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	Το Craft AI εκτελεί ένα τοπικό μοντέλο Gemma σε αυτόν τον υπολογιστή. Τίποτα που γράφετε εδώ δεν φεύγει από αυτόν: χωρίς λογαριασμό, χωρίς νεφική υπηρεσία, χωρίς τηλεμετρία — ο πίνακας μιλά με ένα runtime μοντέλων στο 127.0.0.1.
+	Craft AI runs in the native app — it needs a local model runtime.	Το Craft AI τρέχει στην επιτραπέζια εφαρμογή — χρειάζεται ένα τοπικό runtime μοντέλων.
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	Το Craft AI μιλά με ένα runtime μοντέλων σε αυτόν τον υπολογιστή — Ollama, LM Studio ή τον διακομιστή του llama.cpp — και ποτέ με νεφική υπηρεσία. Εκκινήστε ένα και πατήστε Ανανέωση.
+	Delete file	Διαγραφή αρχείου
+	Disk {size}	Δίσκος {size}
+	Download with Ollama	Λήψη με Ollama
+	Downloading… {pct}% — {note}	Λήψη… {pct}% — {note}
+	Fits this machine	Ταιριάζει σε αυτόν τον υπολογιστή
+	Form field advice	Συμβουλές για πεδία φόρμας
+	Limits	Όρια
+	Local and private	Τοπικό και ιδιωτικό
+	Looking for a local model runtime…	Αναζήτηση τοπικού runtime μοντέλων…
+	Needs {disk} GB of disk	Χρειάζεται {disk} GB δίσκου
+	Needs {ram} GB of RAM	Χρειάζεται {ram} GB μνήμης
+	No local model runtime found.	Δεν βρέθηκε τοπικό runtime μοντέλων.
+	No model installed yet — see the Models tab.	Δεν υπάρχει εγκατεστημένο μοντέλο ακόμα — δείτε την καρτέλα Μοντέλα.
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	Μια λήψη εξυπηρετεί κάθε εφαρμογή ArtCraft: το μοντέλο μπαίνει σε έναν κοινόχρηστο φάκελο που διαβάζουν όλες.
+	Organize pages plan	Σχέδιο οργάνωσης σελίδων
+	PDF/A and standards advice	Συμβουλές για PDF/A και πρότυπα
+	RAM {gb} GB	Μνήμη {gb} GB
+	Redaction checklist	Λίστα ελέγχου απόκρυψης
+	Refresh	Ανανέωση
+	Runtime	Runtime
+	Save model file	Αποθήκευση αρχείου μοντέλου
+	Saved in the shared folder	Αποθηκεύτηκε στον κοινόχρηστο φάκελο
+	Saving… {pct}%	Αποθήκευση… {pct}%
+	Task	Εργασία
+	The form's purpose and its fields (names, types, tab order)	Ο σκοπός της φόρμας και τα πεδία της (ονόματα, τύποι, σειρά Tab)
+	The shared folder:	Ο κοινόχρηστος φάκελος:
+	The standard it must meet and where the file goes	Το πρότυπο που πρέπει να πληροί και πού πηγαίνει το αρχείο
+	Thinking… {s}s	Σκέψη… {s}δ
+	This machine: {ram} GB RAM, {disk} GB free	Αυτός ο υπολογιστής: {ram} GB μνήμη, {disk} GB ελεύθερα
+	What must go, and what the document is	Τι πρέπει να αφαιρεθεί και τι είναι το έγγραφο
+	What you want to end up with (order, extract, split, combine)	Τι θέλετε να πετύχετε (σειρά, εξαγωγή, διαίρεση, συγχώνευση)
+	Where the file is going and what matters (size, quality, compatibility)	Πού πηγαίνει το αρχείο και τι μετράει (μέγεθος, ποιότητα, συμβατότητα)

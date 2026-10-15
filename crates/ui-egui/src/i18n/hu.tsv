@@ -2353,3 +2353,51 @@ animation effects	Off	Ki
 	This document is trying to open a local file:	Ez a dokumentum egy helyi fájlt próbál megnyitni:
 	Move tag earlier	Címke korábbra helyezése
 	Move tag later	Címke későbbre helyezése
+
+# Craft AI: the built-in local assistant panel, its models and tasks.
+	A local model is not a frontier cloud model: it can be wrong, and a long answer takes its time on CPU. Check anything critical, and mind a model's size against this machine before downloading it.	A helyi modell nem élvonalbeli felhőmodell: tévedhet, és egy hosszú válasz a processzoron időbe telik. Minden kritikus dolgot ellenőrizzen, és a letöltés előtt mérlegelje a modell méretét e géphez képest.
+	Ask	Kérdezés
+	Ask anything	Kérdezzen bármit
+	Ask in any language	Kérdezzen bármely nyelven
+	Assistant	Asszisztens
+	Best for: a step up in quality, still light	Erre való a leginkább: egy fokkal jobb minőség, még mindig könnyű
+	Best for: balanced everyday and technical work	Erre való a leginkább: hétköznapi és szakmai munka egyensúlyban
+	Best for: everyday help on the lightest machines	Erre való a leginkább: hétköznapi segítség a legkönnyebb gépeken
+	Best for: near-flagship answers at MoE speed	Erre való a leginkább: zászlóshajó közeli válaszok MoE-sebességgel
+	Best for: the deepest reasoning this family has	Erre való a leginkább: a legmélyebb gondolkodás ebben a családban
+	Compress and export	Tömörítés és exportálás
+	Craft AI runs a local Gemma model on this machine. Nothing you write here leaves it: no account, no cloud service, no telemetry — the panel talks to a model runtime on 127.0.0.1.	A Craft AI egy helyi Gemma modellt futtat ezen a gépen. Amit ide ír, az nem hagyja el a gépet: nincs fiók, nincs felhőszolgáltatás, nincs telemetria — a panel a 127.0.0.1-en futó modelfuttatóval beszél.
+	Craft AI runs in the native app — it needs a local model runtime.	A Craft AI a natív alkalmazásban fut — helyi modelfuttatóra van szüksége.
+	Craft AI talks to a model runtime on this machine — Ollama, LM Studio or llama.cpp's server — and never to a cloud service. Start one, then Refresh.	A Craft AI a gépen futó modelfuttatóval beszél — Ollamával, LM Studioval vagy a llama.cpp szerverével —, és soha felhőszolgáltatással. Indítson el egyet, majd kattintson a Frissítés gombra.
+	Delete file	Fájl törlése
+	Disk {size}	Lemez {size}
+	Download with Ollama	Letöltés Ollamával
+	Downloading… {pct}% — {note}	Letöltés… {pct}% — {note}
+	Fits this machine	Belefér ebbe a gépbe
+	Form field advice	Tanácsok űrlapmezőkhöz
+	Limits	Határok
+	Local and private	Helyi és privát
+	Looking for a local model runtime…	Helyi modelfuttató keresése…
+	Needs {disk} GB of disk	{disk} GB lemezterület kell neki
+	Needs {ram} GB of RAM	{ram} GB RAM kell neki
+	No local model runtime found.	Nem található helyi modelfuttató.
+	No model installed yet — see the Models tab.	Még nincs telepítve modell — lásd a Modellek lapot.
+	One download serves every ArtCraft app: the model lands in a shared folder all of them read.	Egy letöltés az összes ArtCraft-alkalmazásnak elég: a modell egy közös mappába kerül, amelyet mind olvas.
+	Organize pages plan	Lapok rendszerezési terve
+	PDF/A and standards advice	PDF/A- és szabványtanácsok
+	RAM {gb} GB	RAM {gb} GB
+	Redaction checklist	Ellenőrzőlista a kitakaráshoz
+	Refresh	Frissítés
+	Runtime	Futtató
+	Save model file	Modellfájl mentése
+	Saved in the shared folder	Elmentve a közös mappába
+	Saving… {pct}%	Mentés… {pct}%
+	Task	Feladat
+	The form's purpose and its fields (names, types, tab order)	Az űrlap célja és mezői (nevek, típusok, tab-sorrend)
+	The shared folder:	A közös mappa:
+	The standard it must meet and where the file goes	Milyen szabványnak kell megfelelnie, és hová kerül a fájl
+	Thinking… {s}s	Gondolkodik… {s} mp
+	This machine: {ram} GB RAM, {disk} GB free	Ez a gép: {ram} GB RAM, {disk} GB szabad
+	What must go, and what the document is	Mi tűnjön el, és mi a dokumentum
+	What you want to end up with (order, extract, split, combine)	Mi legyen a végeredmény (sorrend, kivonás, szétválasztás, egyesítés)
+	Where the file is going and what matters (size, quality, compatibility)	Hová kerül a fájl, és mi számít (méret, minőség, kompatibilitás)
