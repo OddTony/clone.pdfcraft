@@ -876,14 +876,19 @@ fn is_placeholder_title(title: &str) -> bool {
 /// PdfCraft draws for comments that have none ([`pdfcraft_annot::with_missing_appearances`])
 /// and the validated states of layered signature appearances. The working file is
 /// unchanged, and so is everything that reads it (saving, signatures, …).
+///
+/// `verdicts` is input and output: each signature whose state gets drawn comes back
+/// marked, so the page needs no overlay badge for it. A mark describes bytes being
+/// displayed, so it has to travel with them: a mark left behind by a dropped write
+/// hides a badge the page still needs, and a mark lost by a revalidation paints the
+/// badge on top of a state the page already draws.
 fn display_bytes(editor: Option<&mut Editor>, bytes: &Arc<Vec<u8>>, verdicts: &mut [pdfcraft_sign::SignatureInfo]) -> Arc<Vec<u8>> {
     let Some(e) = editor else { return bytes.clone() };
     if let Some(mut display) = pdfcraft_annot::with_missing_appearances_cached(&e.cos, &mut e.appearances) {
         // The return is dropped on purpose: this copy is written regardless, for the
         // comment appearances it exists for, whether or not a signature changed.
         let _ = pdfcraft_sign::show_valid_appearances(&mut display, verdicts);
-        // Writing fails only as saving the document would; the page then shows as it always did.
-        return write_incremental(&display, &SaveOptions::default()).map(Arc::new).unwrap_or_else(|_| bytes.clone());
+        return write_display_copy(e, bytes, &display, verdicts);
     }
     // No comment appearances were missing, so there is no display copy yet: build one
     // only when a validated verdict could change it, and keep the file when it changed
@@ -895,7 +900,39 @@ fn display_bytes(editor: Option<&mut Editor>, bytes: &Arc<Vec<u8>>, verdicts: &m
     if !pdfcraft_sign::show_valid_appearances(&mut display, verdicts) {
         return bytes.clone();
     }
-    write_incremental(&display, &SaveOptions::default()).map(Arc::new).unwrap_or_else(|_| bytes.clone())
+    write_display_copy(e, bytes, &display, verdicts)
+}
+
+/// Write the display copy, or keep the working file when it cannot be written. The
+/// page then shows what the file holds, so no validated state was drawn and the
+/// marks have to go with it: one left behind would hide the badge the raw caption
+/// earns. Losing the copy is a repair, so it is logged rather than swallowed.
+fn write_display_copy(
+    e: &mut Editor,
+    bytes: &Arc<Vec<u8>>,
+    display: &pdfcraft_cos::Document,
+    verdicts: &mut [pdfcraft_sign::SignatureInfo],
+) -> Arc<Vec<u8>> {
+    match write_incremental(display, &SaveOptions::default()) {
+        Ok(written) => Arc::new(written),
+        Err(err) => {
+            for sig in verdicts.iter_mut() {
+                sig.verdict_shown = false;
+            }
+            e.cos.note_repair(format!("the validated signature states could not be drawn ({err})"));
+            bytes.clone()
+        }
+    }
+}
+
+/// Carry the validated-state marks across a revalidation that leaves the display copy
+/// alone. A mark describes the bytes on screen rather than the verdict, so it stays
+/// valid across a fresh validation; only new bytes clear it.
+fn carry_verdict_marks(previous: &[SignatureInfo], next: &mut [SignatureInfo]) {
+    for sig in next.iter_mut() {
+        let shown = previous.iter().any(|p| p.verdict_shown && p.field == sig.field && p.revision == sig.revision);
+        sig.verdict_shown = shown;
+    }
 }
 
 /// The reader shows the same pages in `a` and `b`: count, displayed size and rotation.
@@ -3884,7 +3921,12 @@ impl Session {
             doc.info.producer = info("Producer");
             doc.info.file_size = bytes.len();
             if !doc.signatures.is_empty() {
-                doc.signatures = Arc::new(signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache));
+                let mut signatures = signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache);
+                // Metadata cannot change a signature and the display copy is not rebuilt
+                // here, so carry the marks over: dropping them would paint the overlay
+                // badge back on top of the state the page already draws.
+                carry_verdict_marks(&doc.signatures, &mut signatures);
+                doc.signatures = Arc::new(signatures);
             }
             doc.bytes = bytes;
             return Ok(());
@@ -3995,6 +4037,21 @@ impl Session {
         doc.renderer = RenderPool::new_inline(Arc::new(Vec::new()), doc.config.clone());
         doc.display = original.clone();
         doc.bytes = original;
+        // The displayed bytes are the original's again, so no validated state is drawn
+        // now: drop the marks that claim one, or a refresh that fails afterwards leaves
+        // the page showing the file's own caption with no badge to explain it.
+        if doc.signatures.iter().any(|s| s.verdict_shown) {
+            let cleared: Vec<SignatureInfo> = doc
+                .signatures
+                .iter()
+                .cloned()
+                .map(|mut s| {
+                    s.verdict_shown = false;
+                    s
+                })
+                .collect();
+            doc.signatures = Arc::new(cleared);
+        }
     }
 
     /// After a refresh failed: draw the display bytes it left (the original, once released),
@@ -4792,7 +4849,8 @@ impl Session {
             let Some(editor) = doc.editor.as_mut() else { continue };
             // Trust changes verdicts, and verdicts choose what the display copy shows:
             // rebuild both together, as every other mutation path does.
-            let mut signatures = signatures_of(&editor.cos, &doc.bytes, &doc.trust, &doc.sig_cache);
+            let mut signatures =
+                if doc.signatures.is_empty() { Vec::new() } else { signatures_of(&editor.cos, &doc.bytes, &doc.trust, &doc.sig_cache) };
             doc.display = display_bytes(Some(editor), &doc.bytes, &mut signatures);
             doc.signatures = Arc::new(signatures);
             doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());

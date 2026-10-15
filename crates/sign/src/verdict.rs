@@ -42,8 +42,15 @@ pub fn show_valid_appearances(doc: &mut Document, signatures: &mut [SignatureInf
         if !seen_fields.insert(sig.field.clone()) {
             continue;
         }
-        let unique: HashSet<ObjRef> = appearance_layer_refs(doc, &sig.field).into_iter().collect();
-        for r in unique {
+        let refs = match appearance_layer_refs(doc, &sig.field) {
+            Ok(refs) => refs,
+            // A field the walk could not finish may share layers this pass never
+            // sees, so nothing is rewritten at all: an unseen share would put one
+            // field's verdict on another's page.
+            Err(WalkStop::Truncated) => return false,
+            Err(WalkStop::NoField) => continue,
+        };
+        for r in refs {
             *owners.entry(r).or_default() += 1;
         }
     }
@@ -65,7 +72,7 @@ pub fn has_substitutable_appearances(doc: &Document, signatures: &[SignatureInfo
     signatures
         .iter()
         .filter(|s| s.signed && s.status == Status::Valid)
-        .any(|sig| widget_layers(doc, &sig.field).is_some_and(|widgets| widgets.iter().any(|layers| find_slots(doc, layers).is_some())))
+        .any(|sig| widget_layers(doc, &sig.field).is_ok_and(|widgets| widgets.iter().any(|layers| find_slots(doc, layers).is_some())))
 }
 
 /// The most XObject levels an appearance tree is followed down.
@@ -73,6 +80,12 @@ const MAX_APPEARANCE_DEPTH: usize = 4;
 
 /// The most layers collected from one appearance tree.
 const MAX_APPEARANCE_LAYERS: usize = 64;
+
+/// The most objects one field's appearance walk visits. Depth and the layer count
+/// bound the shape of a tree, not the work: a dictionary whose entries all point at
+/// the next dictionary costs fan-out to the power of depth, so the walk counts its
+/// visits and gives up. Real appearances hold tens of objects.
+const MAX_APPEARANCE_NODES: usize = 4_096;
 
 /// The most field nodes visited looking for one field: hostile AcroForms still
 /// terminate, while real forms (tens of thousands of fields at most) never notice.
@@ -87,7 +100,7 @@ const MAX_LAYER_DECODED: usize = 1 << 20;
 /// nothing does: a half-rewritten field would be worse than the original.
 /// Streams claimed by another field (`shared`) are left alone.
 fn substitute_valid_state(doc: &mut Document, field: &str, shared: &HashMap<ObjRef, usize>) -> bool {
-    let Some(widgets) = widget_layers(doc, field) else { return false };
+    let Ok(widgets) = widget_layers(doc, field) else { return false };
     if widgets.is_empty() {
         return false;
     }
@@ -221,10 +234,10 @@ fn blank_strings(decoded: &[u8]) -> Vec<u8> {
 
 /// Whether a vector drawing is only axis-aligned rectangles: frames, borders and
 /// panels, stroked with lines or `re` alike. Curves, irregular or open segments
-/// and unparseable numbers are content, not framing, so this returns false for
-/// them; an empty or degenerate drawing counts as framing, since there is no
-/// mark in it to identify. Callers exclude framing from the icon slot and fall
-/// back to the overlay badge instead of repainting decoration.
+/// count as content and return false. A drawing the tokenizer cannot read as a
+/// rectangle (a malformed operand, an unknown operator, a lone number) counts as
+/// framing instead: a drawing we do not understand is decoration, and mistaking one
+/// for the mark repaints a border. Callers fall back to the overlay badge.
 fn is_only_rectangles(decoded: &[u8]) -> bool {
     /// A closed loop of segments is a rectangle when its corners turn exactly
     /// four times between horizontal and vertical. Collinear splits contribute
@@ -264,10 +277,7 @@ fn is_only_rectangles(decoded: &[u8]) -> bool {
                 turns += 1;
             }
         }
-        if turns != 4 {
-            return false;
-        }
-        true
+        turns == 4
     }
     // The subpath under construction and whether `h` closed it: paint ends the
     // subpath, and anything left open is content, not framing.
@@ -355,28 +365,46 @@ struct Layer {
     dict: Dict,
 }
 
-/// The form XObjects of each widget of `field`, one list per widget.
-fn widget_layers(doc: &Document, field: &str) -> Option<Vec<Vec<Layer>>> {
+/// Why an appearance walk produced nothing usable.
+enum WalkStop {
+    /// The field is not in the form, carries no widgets, or has no name: there is
+    /// nothing to rewrite here, and nothing another field could share.
+    NoField,
+    /// The walk hit a cap, so the layers it did not read may be shared with another
+    /// field. A shared layer is never rewritten, so the caller gives up rather than
+    /// decide on a partial picture.
+    Truncated,
+}
+
+/// The form XObjects of each widget of `field`, one list per widget. A walk that
+/// stopped early is an error rather than a shorter list, because the layers it did
+/// not read are exactly the ones that might be shared.
+fn widget_layers(doc: &Document, field: &str) -> Result<Vec<Vec<Layer>>, WalkStop> {
     if field.is_empty() {
-        return None;
+        return Err(WalkStop::NoField);
     }
     let mut widgets = Vec::new();
-    collect_widgets(doc, field, &mut widgets)?;
+    collect_widgets(doc, field, &mut widgets).ok_or(WalkStop::NoField)?;
     let mut out = Vec::new();
+    let mut budget = MAX_APPEARANCE_NODES;
     for w in &widgets {
         let mut layers = Vec::new();
         let mut seen = HashSet::new();
         let Some(apd) = w.get(b"AP").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned()) else { continue };
         let Some(n) = apd.get(b"N") else { continue };
-        walk_appearance(doc, n, 0, &mut seen, &mut layers);
+        if !walk_appearance(doc, n, 0, &mut budget, &mut seen, &mut layers) {
+            return Err(WalkStop::Truncated);
+        }
         out.push(layers);
     }
-    Some(out)
+    Ok(out)
 }
 
-// Every layer reference reachable from `field`'s appearance trees, for sharing checks.
-fn appearance_layer_refs(doc: &Document, field: &str) -> Vec<ObjRef> {
-    widget_layers(doc, field).unwrap_or_default().into_iter().flatten().map(|l| l.r).collect()
+/// The layer references reachable from `field`'s appearance trees, deduplicated: two
+/// widgets of one field pointing at the same stream claim it once, or the field would
+/// count as sharing with itself and veto its own rewrite.
+fn appearance_layer_refs(doc: &Document, field: &str) -> Result<HashSet<ObjRef>, WalkStop> {
+    Ok(widget_layers(doc, field)?.into_iter().flatten().map(|l| l.r).collect())
 }
 
 /// Form widgets of the named signature field: the field dictionary itself when it is
@@ -433,12 +461,18 @@ fn collect_widgets(doc: &Document, field: &str, widgets: &mut Vec<Dict>) -> Opti
 
 /// Named form XObjects under `o`, following nested resource trees. Only indirect
 /// streams are collected (only those can be rewritten); everything else is just
-/// descended into. Bounded by depth, layer count and a seen-set, so hostile graphs
-/// terminate with bounded work.
-fn walk_appearance(doc: &Document, o: &Object, depth: usize, seen: &mut HashSet<ObjRef>, out: &mut Vec<Layer>) {
+/// descended into. Returns false when a cap stopped the walk short, which callers
+/// must not read as "that was all of them".
+fn walk_appearance(doc: &Document, o: &Object, depth: usize, budget: &mut usize, seen: &mut HashSet<ObjRef>, out: &mut Vec<Layer>) -> bool {
     if depth > MAX_APPEARANCE_DEPTH || out.len() >= MAX_APPEARANCE_LAYERS {
-        return;
+        // Layers below the cap were never read, and an unread layer may be the one
+        // two fields share.
+        return false;
     }
+    if *budget == 0 {
+        return false;
+    }
+    *budget -= 1;
     let resolved = doc.resolve(o);
     let Some(res) = resolved.as_dict().and_then(|d| d.get(b"Resources")).map(|r| doc.resolve(r)) else {
         // Not a form with resources (the /N stream itself has none, say): still look
@@ -448,17 +482,19 @@ fn walk_appearance(doc: &Document, o: &Object, depth: usize, seen: &mut HashSet<
                 if matches!(k.as_slice(), b"N" | b"AP") {
                     continue;
                 }
-                walk_appearance(doc, v, depth + 1, seen, out);
+                if !walk_appearance(doc, v, depth + 1, budget, seen, out) {
+                    return false;
+                }
             }
         }
-        return;
+        return true;
     };
-    let Some(xod) = res.as_dict() else { return };
-    let Some(xobjects) = xod.get(b"XObject").map(|x| doc.resolve(x)) else { return };
-    let Some(xobjects) = xobjects.as_dict() else { return };
+    let Some(xod) = res.as_dict() else { return true };
+    let Some(xobjects) = xod.get(b"XObject").map(|x| doc.resolve(x)) else { return true };
+    let Some(xobjects) = xobjects.as_dict() else { return true };
     for (_, v) in xobjects.iter() {
         if out.len() >= MAX_APPEARANCE_LAYERS {
-            return;
+            return false;
         }
         let r = doc.resolve(v);
         if let (Some(oref), Object::Stream(s)) = (v.as_ref(), &*r)
@@ -466,8 +502,11 @@ fn walk_appearance(doc: &Document, o: &Object, depth: usize, seen: &mut HashSet<
         {
             out.push(Layer { r: oref, dict: s.dict.clone() });
         }
-        walk_appearance(doc, v, depth + 1, seen, out);
+        if !walk_appearance(doc, v, depth + 1, budget, seen, out) {
+            return false;
+        }
     }
+    true
 }
 
 // Whether decoded content holds `needle`.
@@ -654,6 +693,23 @@ mod tests {
         ])
     }
 
+    /// A file whose signature appearance hangs off a dictionary every entry of which
+    /// points back to that same dictionary, `width` entries wide: following it costs
+    /// fan-out to the power of depth, which is what the visit budget bounds.
+    fn self_referential_appearance_fixture(width: usize) -> Vec<u8> {
+        let entries = (0..width).map(|i| format!("/k{i} 7 0 R ")).collect::<String>();
+        let ops = (0..width).map(|i| format!("/k{i} Do")).collect::<Vec<_>>().join(" ");
+        assemble(vec![
+            "<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>".to_string(),
+            "<< /FT /Sig /T (Signature1) /Subtype /Widget /Rect [10 10 110 60] /AP << /N 6 0 R >> >>".to_string(),
+            "<< /Fields [4 0 R] >>".to_string(),
+            stream("[0 0 50 30]", &format!("<< /XObject << {entries} >> >>"), &format!("q {ops} Q")),
+            format!("<< {entries} >>"),
+        ])
+    }
+
     fn verdict(field: &str, status: Status) -> SignatureInfo {
         SignatureInfo {
             field: field.into(),
@@ -693,8 +749,9 @@ mod tests {
         collect_widgets(doc, field, &mut widgets).unwrap();
         let mut seen = HashSet::new();
         let mut layers = Vec::new();
+        let mut budget = MAX_APPEARANCE_NODES;
         let apd = widgets[0].get(b"AP").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned()).unwrap();
-        walk_appearance(doc, apd.get(b"N").unwrap(), 0, &mut seen, &mut layers);
+        walk_appearance(doc, apd.get(b"N").unwrap(), 0, &mut budget, &mut seen, &mut layers);
         let (icon, caption) = find_slots(doc, &layers).unwrap();
         (icon.r, caption.r)
     }
@@ -712,9 +769,10 @@ mod tests {
         collect_widgets(doc, field, &mut widgets).unwrap();
         let mut seen = HashSet::new();
         let mut layers = Vec::new();
+        let mut budget = MAX_APPEARANCE_NODES;
         for w in &widgets {
             let apd = w.get(b"AP").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned()).unwrap();
-            walk_appearance(doc, apd.get(b"N").unwrap(), 0, &mut seen, &mut layers);
+            walk_appearance(doc, apd.get(b"N").unwrap(), 0, &mut budget, &mut seen, &mut layers);
         }
         layers.into_iter().map(|l| (l.r, decoded(doc, l.r))).collect()
     }
@@ -789,6 +847,18 @@ mod tests {
         assert!(!has_substitutable_appearances(doc, &[verdict("Signature1", Status::Unknown)]));
         assert!(!has_substitutable_appearances(doc, &[verdict("NoSuchField", Status::Valid)]));
         assert!(!has_substitutable_appearances(doc, &[]));
+    }
+
+    /// The appearance walk must cost the same on a hostile tree as on a real one. A
+    /// dictionary whose entries all point back at itself is walked once per entry per
+    /// level, so without a visit budget a small file never finishes opening.
+    #[test]
+    fn an_unwalkable_appearance_tree_is_left_alone() {
+        let doc = &mut open(self_referential_appearance_fixture(200));
+        let mut sigs = [verdict("Signature1", Status::Valid)];
+        assert!(!has_substitutable_appearances(doc, &sigs), "a tree the walk cannot finish is not worth a display copy");
+        assert!(!show_valid_appearances(doc, &mut sigs), "a tree the walk cannot finish is never rewritten");
+        assert!(!sigs[0].verdict_shown, "no verdict is claimed as shown when nothing was drawn");
     }
 
     #[test]
@@ -1292,6 +1362,31 @@ mod tests {
             d.set(b"Kids".to_vec(), Object::Array(kids));
         })
         .unwrap();
+        let (_, caption) = slots(doc, "Signature1");
+        let mut sigs = vec![verdict("Signature1", Status::Valid)];
+        assert!(show_valid_appearances(doc, &mut sigs));
+        assert!(sigs[0].verdict_shown);
+        assert!(has(&decoded(doc, caption), b"Signature valid"));
+    }
+
+    #[test]
+    fn two_widgets_sharing_one_appearance_rewrite_it_once() {
+        let doc = &mut open(layered_fixture());
+        // A second widget pointing at the first one's appearance, as when a signer
+        // stamps the same signature on two pages. The field then shares every layer
+        // with itself, which must not read as a share between two fields.
+        let widget2 = doc.add(Object::Dict({
+            let mut d = Dict::new();
+            d.set(b"Type".to_vec(), Object::name("Annot"));
+            d.set(b"Subtype".to_vec(), Object::name("Widget"));
+            d.set(b"Rect".to_vec(), Object::Array(vec![Object::Int(10), Object::Int(70), Object::Int(110), Object::Int(120)]));
+            let mut ap = Dict::new();
+            ap.set(b"N".to_vec(), Object::Ref(ObjRef::new(6, 0)));
+            d.set(b"AP".to_vec(), Object::Dict(ap));
+            d
+        }));
+        let kids = Object::Array(vec![Object::Ref(widget2)]);
+        doc.update_dict(ObjRef::new(4, 0), |d| d.set(b"Kids".to_vec(), kids)).unwrap();
         let (_, caption) = slots(doc, "Signature1");
         let mut sigs = vec![verdict("Signature1", Status::Valid)];
         assert!(show_valid_appearances(doc, &mut sigs));

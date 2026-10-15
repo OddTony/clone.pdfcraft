@@ -203,10 +203,27 @@ fn drawing_a_signature_creating_an_id_signing_and_trusting() {
     assert_eq!((s.views.len(), s.active), (2, Some(1)));
     // The snapshot tab says what it is.
     h.get_by_label_contains("You are viewing the signed version of");
-    // Closing a clean snapshot closes the tab with no save prompt. (Driven through
-    // the flag: the banner's Close pill shares its label with tab chrome, which the
-    // harness cannot tell apart.)
-    h.state_mut().views[1].close_requested = true;
+    // Closing a clean snapshot closes the tab with no save prompt. The bar's own
+    // Close is addressed from its message, because the tab chrome has a Close button
+    // with the same label.
+    let label = h.get_by_label_contains("You are viewing the signed version of");
+    let label_row = label.rect().y_range();
+    let mut node = label;
+    let mut close = None;
+    for _ in 0..4 {
+        if let Some(pill) = node.query_by_label("Close") {
+            close = Some(pill);
+            break;
+        }
+        let Some(up) = node.parent() else { break };
+        node = up;
+    }
+    let close = close.expect("the notice bar holds its own Close");
+    // The bar's Close sits in the bar's row and the tab chrome's sits above it. Without
+    // this the walk could reach the chrome's button, which closes the same tab, and the
+    // test would pass with the bar's own button never pressed.
+    assert!(label_row.contains(close.rect().center().y), "the Close found is the bar's own");
+    close.click();
     h.run_steps(2);
     assert_eq!(h.state().views.len(), 1);
     assert!(h.state().close_request.is_none());

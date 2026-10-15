@@ -27,7 +27,10 @@ pub struct ExportSource {
 }
 
 impl Document {
-    /// The current state, for exporting on another thread.
+    /// What an export reads, for exporting on another thread. These are the displayed
+    /// bytes, so they may carry appearances PdfCraft drew (a comment that has none, a
+    /// validated signature state) that the file itself does not hold. Exports follow the
+    /// page as shown; saving does not.
     pub fn export_source(&self) -> ExportSource {
         ExportSource {
             bytes: self.display.clone(),

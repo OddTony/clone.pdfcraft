@@ -2988,6 +2988,45 @@ fn check_layered_round_trip(signed: Arc<Vec<u8>>, password: Option<&str>, anchor
     assert_eq!(rsig.status, SignatureStatus::Valid);
 }
 
+/// A layered signature trusted for display, with its session and document id: the
+/// starting point for what a later edit does to the mark the display copy carries.
+fn trusted_layered_session() -> (Session, DocId) {
+    let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
+    let id = sign::pkcs12::open(&p12, "test").unwrap();
+    let anchor = id.chain.first().cloned().unwrap_or_else(|| id.certificate.clone());
+    let mut doc = pdfcraft_cos::Document::open(Arc::new(layered_signable_fixture())).unwrap();
+    let signed = Arc::new(sign_prepared(&mut doc, &id, "D:20261002120000+01'00'"));
+    let mut s = Session::new().with_clock(|| 1_800_000_000);
+    let vid = s.open("layered.pdf", None, signed, None).unwrap();
+    s.set_trusted_certificates(vec![anchor]);
+    assert!(s.get(vid).unwrap().signatures[0].verdict_shown, "the trusted signature draws its state");
+    (s, vid)
+}
+
+/// Metadata cannot change a signature, so the display copy is left alone and the mark
+/// has to survive it: without the mark the page paints its overlay badge on top of the
+/// state it already draws.
+#[test]
+fn a_metadata_edit_keeps_the_validated_state_marked() {
+    let (mut s, vid) = trusted_layered_session();
+    s.apply(vid, Edit::SetInfo { key: "Title".into(), value: "Contract".into() }).unwrap();
+    let doc = s.get(vid).unwrap();
+    assert_eq!(doc.signatures[0].status, SignatureStatus::Valid, "metadata leaves the verdict alone");
+    assert!(doc.signatures[0].verdict_shown, "the display copy still carries the state, so the mark stays");
+    assert!(bytes_has(&doc.display, b"Signature valid"), "the display copy was not rebuilt");
+}
+
+/// An unchanged document never reaches the writer, so the edit is what makes this the
+/// place the display copy would leak if saving ever read it.
+#[test]
+fn saving_after_an_edit_keeps_the_baked_appearance() {
+    let (mut s, vid) = trusted_layered_session();
+    s.apply(vid, Edit::SetInfo { key: "Title".into(), value: "Contract".into() }).unwrap();
+    let saved = s.save_bytes(vid).unwrap();
+    assert!(bytes_has(&saved, b"Not Verified"), "the writer keeps the baked appearance: {saved:?}");
+    assert!(!bytes_has(&saved, b"Signature valid"), "the validated state never reaches the file");
+}
+
 #[test]
 fn real_layered_signatures_show_the_validated_state() {
     let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
