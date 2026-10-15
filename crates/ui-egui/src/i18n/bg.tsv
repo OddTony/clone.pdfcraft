@@ -2395,3 +2395,12 @@ animation effects	Off	Изключени
 	Make properties default	Задаване като свойства по подразбиране
 	Pages selected	Избрани страници
 	Page properties	Свойства на страницата
+	Simulate overprinting	Симулиране на надпечатване
+	Separating page {n}…	Цветоотделяне на страница {n}…
+	The page could not be separated: {error}	Страницата не можа да бъде цветоотделена: {error}
+	Inks	Мастила
+	Too many spot inks to separate: {names}	Твърде много специални мастила за цветоотделяне: {names}
+	Total area coverage	Общо покритие на площта
+	Page maximum: {n}%	Максимум на страницата: {n}%
+	Point at the page to read its ink coverage.	Посочете страницата, за да видите покритието с мастило.
+	Highlight coverage above	Открояване на покритие над

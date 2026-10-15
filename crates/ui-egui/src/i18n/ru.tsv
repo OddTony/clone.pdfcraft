@@ -2345,3 +2345,12 @@ animation effects	Off	Выкл
 	Make properties default	Сделать свойства стандартными
 	Pages selected	Выделенные страницы
 	Page properties	Свойства страницы
+	Simulate overprinting	Имитировать наложение красок
+	Separating page {n}…	Цветоделение страницы {n}…
+	The page could not be separated: {error}	Не удалось выполнить цветоделение страницы: {error}
+	Inks	Краски
+	Too many spot inks to separate: {names}	Слишком много плашечных красок для цветоделения: {names}
+	Total area coverage	Общее покрытие красками
+	Page maximum: {n}%	Максимум на странице: {n}%
+	Point at the page to read its ink coverage.	Наведите указатель на страницу, чтобы увидеть покрытие красками.
+	Highlight coverage above	Выделять покрытие выше

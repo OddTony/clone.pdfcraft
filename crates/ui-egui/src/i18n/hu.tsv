@@ -2431,3 +2431,12 @@ animation effects	Off	Ki
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
 	Pages selected	Kijelölt oldalak
 	Page properties	Oldaltulajdonságok
+	Simulate overprinting	Felülnyomás szimulálása
+	Separating page {n}…	{n}. oldal színbontása…
+	The page could not be separated: {error}	Az oldal színbontása nem sikerült: {error}
+	Inks	Festékek
+	Too many spot inks to separate: {names}	Túl sok direkt szín a bontáshoz: {names}
+	Total area coverage	Teljes festékfedettség
+	Page maximum: {n}%	Oldal maximuma: {n}%
+	Point at the page to read its ink coverage.	Mutasson az oldalra a festékfedettség leolvasásához.
+	Highlight coverage above	Kiemelés, ha a fedettség nagyobb, mint

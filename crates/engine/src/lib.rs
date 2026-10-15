@@ -754,6 +754,12 @@ impl Document {
         self.editable() && self.permissions().is_none_or(|p| p.fill_forms())
     }
 
+    /// How Output Preview renders the document: as it is displayed (layer choices, hidden
+    /// comments), but never with reading colours, which recolour the screen and not the print.
+    pub fn separation_config(&self) -> RenderConfig {
+        RenderConfig { reading_colors: ReadingColors::default(), ..self.config.clone() }
+    }
+
     /// Adding and changing comments is allowed (Table 22, bit 6).
     pub fn allows_annotation(&self) -> bool {
         self.editable() && self.permissions().is_none_or(|p| p.annotate())

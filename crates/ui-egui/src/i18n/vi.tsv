@@ -2685,3 +2685,13 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+
+	Simulate overprinting	Mô phỏng in chồng
+	Separating page {n}…	Đang tách màu trang {n}…
+	The page could not be separated: {error}	Không thể tách màu trang: {error}
+	Inks	Mực in
+	Too many spot inks to separate: {names}	Quá nhiều mực pha để tách màu: {names}
+	Total area coverage	Tổng độ phủ mực
+	Page maximum: {n}%	Mức tối đa của trang: {n}%
+	Point at the page to read its ink coverage.	Trỏ vào trang để xem độ phủ mực.
+	Highlight coverage above	Tô sáng độ phủ vượt quá

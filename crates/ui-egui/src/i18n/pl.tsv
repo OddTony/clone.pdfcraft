@@ -2408,3 +2408,12 @@ animation effects	Off	Wyłączone
 	Make properties default	Ustaw właściwości jako domyślne
 	Pages selected	Zaznaczone strony
 	Page properties	Właściwości strony
+	Simulate overprinting	Symuluj nadruk
+	Separating page {n}…	Rozbarwianie strony {n}…
+	The page could not be separated: {error}	Nie udało się rozbarwić strony: {error}
+	Inks	Farby
+	Too many spot inks to separate: {names}	Zbyt wiele farb dodatkowych do rozbarwienia: {names}
+	Total area coverage	Całkowite pokrycie farbą
+	Page maximum: {n}%	Maksimum strony: {n}%
+	Point at the page to read its ink coverage.	Wskaż stronę, aby odczytać pokrycie farbą.
+	Highlight coverage above	Wyróżnij pokrycie powyżej

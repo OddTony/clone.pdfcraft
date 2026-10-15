@@ -2506,3 +2506,12 @@ animation effects	Off	Vypnuto
 	Make properties default	Nastavit vlastnosti jako výchozí
 	Pages selected	Vybrané stránky
 	Page properties	Vlastnosti stránky
+	Simulate overprinting	Simulovat přetisk
+	Separating page {n}…	Separuje se strana {n}…
+	The page could not be separated: {error}	Stranu nelze separovat: {error}
+	Inks	Inkousty
+	Too many spot inks to separate: {names}	Příliš mnoho přímých barev k separaci: {names}
+	Total area coverage	Celkové krytí plochy
+	Page maximum: {n}%	Maximum strany: {n} %
+	Point at the page to read its ink coverage.	Najeďte ukazatelem na stranu a zobrazí se krytí barvami.
+	Highlight coverage above	Zvýraznit krytí nad

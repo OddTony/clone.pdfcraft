@@ -2396,3 +2396,12 @@ animation effects	Off	关
 	Make properties default	将属性设为默认
 	Pages selected	选定的页面
 	Page properties	页面属性
+	Simulate overprinting	模拟叠印
+	Separating page {n}…	正在分色第 {n} 页…
+	The page could not be separated: {error}	无法对此页分色：{error}
+	Inks	油墨
+	Too many spot inks to separate: {names}	专色过多，无法分色：{names}
+	Total area coverage	总油墨覆盖率
+	Page maximum: {n}%	页面最大值：{n}%
+	Point at the page to read its ink coverage.	将指针移到页面上即可查看油墨覆盖率。
+	Highlight coverage above	突出显示覆盖率高于

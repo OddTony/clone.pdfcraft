@@ -13,6 +13,7 @@ mod identity;
 mod layer_actions;
 mod links;
 mod marks;
+mod output_preview;
 mod pageboxes;
 mod pdf_links;
 mod protect;

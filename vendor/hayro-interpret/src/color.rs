@@ -98,6 +98,8 @@ pub(crate) enum ColorSpaceType {
     Lab(Lab),
     Separation(Separation),
     DeviceN(DeviceN),
+    /// PdfCraft patch (34): `inner` drawn as the plate of one ink (see [`Plate`]).
+    Plate(PlateSpace),
 }
 
 impl ColorSpaceType {
@@ -251,7 +253,12 @@ impl ColorSpace {
 
     /// Return `true` if the current color space is an indexed color space.
     pub(crate) fn is_indexed(&self) -> bool {
-        matches!(self.0.as_ref(), ColorSpaceType::Indexed(_))
+        match self.0.as_ref() {
+            ColorSpaceType::Indexed(_) => true,
+            // PdfCraft patch (34): a plate decodes its samples as its space does.
+            ColorSpaceType::Plate(p) => p.inner.is_indexed(),
+            _ => false,
+        }
     }
 
     /// Get the default decode array for the color space.
@@ -271,6 +278,7 @@ impl ColorSpace {
             ColorSpaceType::Indexed(_) => smallvec![(0.0, 2.0_f32.powf(n) - 1.0)],
             ColorSpaceType::Separation(_) => smallvec![(0.0, 1.0)],
             ColorSpaceType::DeviceN(d) => smallvec![(0.0, 1.0); d.num_components as usize],
+            ColorSpaceType::Plate(p) => p.inner.default_decode_arr(n),
             // Not a valid image color space.
             ColorSpaceType::Pattern(_) => smallvec![(0.0, 1.0)],
         }
@@ -302,6 +310,7 @@ impl ColorSpace {
             ColorSpaceType::Separation(_) => smallvec![1.0],
             ColorSpaceType::Pattern(c) => c.initial_color(),
             ColorSpaceType::DeviceN(d) => smallvec![1.0; d.num_components as usize],
+            ColorSpaceType::Plate(p) => p.inner.initial_color(),
         }
     }
 
@@ -323,6 +332,7 @@ impl ColorSpace {
             ColorSpaceType::Separation(_) => 1,
             ColorSpaceType::Pattern(p) => p.num_components(),
             ColorSpaceType::DeviceN(d) => d.num_components,
+            ColorSpaceType::Plate(p) => p.inner.num_components(),
         }
     }
 
@@ -373,6 +383,7 @@ impl ToRgb for ColorSpace {
             ColorSpaceType::Lab(i) => i.convert_f32(input, output, manual_scale),
             ColorSpaceType::Separation(i) => i.convert_f32(input, output, manual_scale),
             ColorSpaceType::DeviceN(i) => i.convert_f32(input, output, manual_scale),
+            ColorSpaceType::Plate(i) => i.convert_f32(input, output, manual_scale),
         }
     }
 
@@ -389,6 +400,7 @@ impl ToRgb for ColorSpace {
             ColorSpaceType::Lab(i) => i.supports_u8(),
             ColorSpaceType::Separation(i) => i.supports_u8(),
             ColorSpaceType::DeviceN(i) => i.supports_u8(),
+            ColorSpaceType::Plate(i) => i.supports_u8(),
         }
     }
 
@@ -417,6 +429,7 @@ impl ToRgb for ColorSpace {
             ColorSpaceType::Lab(i) => i.convert_u8(input, output),
             ColorSpaceType::Separation(i) => i.convert_u8(input, output),
             ColorSpaceType::DeviceN(i) => i.convert_u8(input, output),
+            ColorSpaceType::Plate(i) => i.convert_u8(input, output),
         }
     }
 
@@ -424,6 +437,7 @@ impl ToRgb for ColorSpace {
         match self.0.as_ref() {
             ColorSpaceType::Separation(s) => s.is_none(),
             ColorSpaceType::DeviceN(d) => d.is_none(),
+            ColorSpaceType::Plate(p) => p.inner.is_none(),
             _ => false,
         }
     }
@@ -833,6 +847,8 @@ pub(crate) struct Separation {
     alternate_space: ColorSpace,
     tint_transform: Function,
     is_none_separation: bool,
+    /// PdfCraft patch (34): the colorant the space paints, for separations.
+    colorant: Colorant,
 }
 
 impl Separation {
@@ -846,11 +862,13 @@ impl Separation {
         // Either I did something wrong, or no other viewers properly handles
         // `All`, so let's just ignore it as well.
         let is_none_separation = name.as_str() == "None";
+        let colorant = Colorant::from_name(name.deref());
 
         Some(Self {
             alternate_space,
             tint_transform,
             is_none_separation,
+            colorant,
         })
     }
 }
@@ -879,6 +897,8 @@ pub(crate) struct DeviceN {
     num_components: u8,
     tint_transform: Function,
     is_none: bool,
+    /// PdfCraft patch (34): the colorant of each component, for separations.
+    colorants: Vec<Colorant>,
 }
 
 impl DeviceN {
@@ -900,11 +920,22 @@ impl DeviceN {
             return None;
         }
 
+        // `All` names every colorant only in a Separation (ISO 32000-2 §8.6.6.5), so a DeviceN
+        // component named `All` paints nothing in particular.
+        let colorants = names
+            .iter()
+            .map(|n| match Colorant::from_name(n.deref()) {
+                Colorant::All => Colorant::None,
+                c => c,
+            })
+            .collect();
+
         Some(Self {
             alternate_space,
             num_components,
             tint_transform,
             is_none: all_none,
+            colorants,
         })
     }
 }
@@ -1121,6 +1152,415 @@ impl Color {
             components: smallvec![c[0], c[1], c[2]],
             opacity: c[3],
         }
+    }
+
+    /// PdfCraft patch (34): the gray film of `tint` on a plate (see [`Plate`]).
+    pub(crate) fn film(tint: f32, opacity: f32) -> Self {
+        Self::new(
+            ColorSpace::device_gray(),
+            smallvec![1.0 - unit(tint)],
+            opacity,
+        )
+    }
+
+    /// PdfCraft patch (34): this colour as drawn on `plate`. `overprint` is the graphics
+    /// state's overprint parameter for this paint (`OP` for strokes, `op` otherwise) and
+    /// `overprint_mode` its `OPM` (ISO 32000-2 §8.6.7). A paint that leaves the plate as it is
+    /// becomes fully transparent.
+    pub(crate) fn for_plate(&self, plate: &Plate, overprint: bool, overprint_mode: u8) -> Self {
+        let overprint = plate.overprint && overprint;
+        let untouched = Self::film(0.0, 0.0);
+        match self.color_space.ink_use(&plate.ink) {
+            InkUse::Nothing => untouched,
+            InkUse::Unspecified if overprint => untouched,
+            InkUse::Unspecified => Self::film(0.0, self.opacity),
+            InkUse::Paints => {
+                let tint = self
+                    .color_space
+                    .ink_tint(&self.components, &plate.ink, false);
+                // Nonzero overprint mode: a DeviceCMYK component of 0 leaves its plate as it
+                // is. It applies to colours set in DeviceCMYK itself, not to images, shadings
+                // or colours converted from another space.
+                if overprint
+                    && overprint_mode == 1
+                    && self.color_space.is_device_cmyk()
+                    && tint <= 0.0
+                {
+                    untouched
+                } else {
+                    Self::film(tint, self.opacity)
+                }
+            }
+        }
+    }
+}
+
+/// PdfCraft patch (34): a printing ink, the unit of a separation: one of the four process
+/// colorants or a spot colorant named by a `Separation` or `DeviceN` colour space (ISO 32000-2
+/// §8.6.6.4).
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Ink {
+    /// Process cyan.
+    Cyan,
+    /// Process magenta.
+    Magenta,
+    /// Process yellow.
+    Yellow,
+    /// Process black.
+    Black,
+    /// A spot colorant, by its name in the colour space.
+    Spot(Arc<str>),
+}
+
+impl Ink {
+    /// The four process inks, in plate order.
+    pub const PROCESS: [Ink; 4] = [Ink::Cyan, Ink::Magenta, Ink::Yellow, Ink::Black];
+
+    /// The ink's colorant name, as a `Separation` colour space spells it.
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Cyan => "Cyan",
+            Self::Magenta => "Magenta",
+            Self::Yellow => "Yellow",
+            Self::Black => "Black",
+            Self::Spot(name) => name,
+        }
+    }
+
+    /// The ink's position in a CMYK colour, for a process ink.
+    pub(crate) fn process_index(&self) -> Option<usize> {
+        match self {
+            Self::Cyan => Some(0),
+            Self::Magenta => Some(1),
+            Self::Yellow => Some(2),
+            Self::Black => Some(3),
+            Self::Spot(_) => None,
+        }
+    }
+}
+
+/// PdfCraft patch (34): what a `Separation` or `DeviceN` colorant name paints (ISO 32000-2
+/// §8.6.6.4): an ink (the process names are the process inks), every ink (`All`), or nothing
+/// (`None`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Colorant {
+    Ink(Ink),
+    All,
+    None,
+}
+
+impl Colorant {
+    fn from_name(name: &[u8]) -> Self {
+        match name {
+            b"Cyan" => Self::Ink(Ink::Cyan),
+            b"Magenta" => Self::Ink(Ink::Magenta),
+            b"Yellow" => Self::Ink(Ink::Yellow),
+            b"Black" => Self::Ink(Ink::Black),
+            b"All" => Self::All,
+            b"None" => Self::None,
+            other => Self::Ink(Ink::Spot(Arc::from(
+                String::from_utf8_lossy(other).as_ref(),
+            ))),
+        }
+    }
+}
+
+/// PdfCraft patch (34): draw one ink's separation instead of the composite page. Every paint
+/// draws the ink's tint as a gray film: white where the plate carries no ink, black where it
+/// carries 100%. Set through [`InterpreterSettings::plate`](crate::InterpreterSettings::plate).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Plate {
+    /// The ink whose separation is drawn.
+    pub ink: Ink,
+    /// Honour the overprint parameters `OP`, `op` and `OPM` (ISO 32000-2 §8.6.7) as a
+    /// separating device does: a paint whose colour space doesn't specify this ink leaves the
+    /// plate as it is. When `false`, every paint knocks out what is under it, as on a
+    /// composite device.
+    pub overprint: bool,
+}
+
+/// PdfCraft patch (34): told about each spot ink a paint uses, with the ink's appearance: the
+/// sRGB colour of that ink alone at a tint in `0.0..=1.0`, through the colour space's
+/// alternate space and tint transform.
+pub type InkSinkFn = Arc<dyn Fn(&Ink, &dyn Fn(f32) -> [u8; 3]) + Send + Sync>;
+
+/// PdfCraft patch (34): how a colour space paints one ink's plate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InkUse {
+    /// The space specifies the ink: its colours set the plate's tint.
+    Paints,
+    /// The space doesn't specify the ink. Overprinting leaves the plate alone; otherwise the
+    /// paint knocks it out (tint 0).
+    Unspecified,
+    /// The space paints nothing at all (the `None` colorant).
+    Nothing,
+}
+
+/// PdfCraft patch (34): DeviceCMYK to sRGB as pages are drawn (the bundled CGATS-compatible
+/// profile), to compose separations back into a preview. `cmyk` holds whole pixels of four
+/// bytes and `rgb` the same number of three-byte pixels; `None` when the lengths disagree or
+/// the transform fails.
+pub fn cmyk_to_srgb8(cmyk: &[u8], rgb: &mut [u8]) -> Option<()> {
+    if cmyk.len() % 4 != 0 || (cmyk.len() / 4).checked_mul(3)? != rgb.len() {
+        return None;
+    }
+    CMYK_TRANSFORM.convert_u8(cmyk, rgb)
+}
+
+/// A component as a tint: clamped to `0.0..=1.0`, NaN read as no ink.
+fn unit(value: f32) -> f32 {
+    clamp_component(value, 0.0, 1.0)
+}
+
+/// The DeviceCMYK colour of a DeviceRGB one by ISO 32000-2 §10.4.2.4, with black generation
+/// and undercolour removal both the identity (`BG(k) = UCR(k) = k`). Those two functions are
+/// device dependent; the identity is the simplest choice the formulas allow.
+fn rgb_to_cmyk([r, g, b]: [f32; 3]) -> [f32; 4] {
+    let (c, m, y) = (1.0 - unit(r), 1.0 - unit(g), 1.0 - unit(b));
+    let k = c.min(m).min(y);
+    [unit(c - k), unit(m - k), unit(y - k), unit(k)]
+}
+
+impl ColorSpace {
+    /// PdfCraft patch (34): this space drawn as `ink`'s plate (for images and shadings, whose
+    /// colours are converted sample by sample).
+    pub(crate) fn plate(&self, ink: Ink) -> Self {
+        Self(Arc::new(ColorSpaceType::Plate(PlateSpace {
+            inner: self.clone(),
+            ink,
+        })))
+    }
+
+    /// PdfCraft patch (34): DeviceCMYK itself (`CalCMYK` reads as it too), where the nonzero
+    /// overprint mode applies.
+    pub(crate) fn is_device_cmyk(&self) -> bool {
+        matches!(self.0.as_ref(), ColorSpaceType::DeviceCmyk)
+    }
+
+    /// PdfCraft patch (34): spaces whose colours are converted to sRGB before separation
+    /// (DeviceRGB is separated from its components directly, without a conversion).
+    fn separates_through_srgb(&self) -> bool {
+        match self.0.as_ref() {
+            ColorSpaceType::CalRgb(_) | ColorSpaceType::Lab(_) => true,
+            ColorSpaceType::ICCBased(icc) => icc.0.number_components == 3,
+            _ => false,
+        }
+    }
+
+    /// PdfCraft patch (34): how the space paints `ink`'s plate. Gray, RGB, CIE-based and ICC
+    /// spaces are process colour: they specify the four process inks and no spot ink.
+    pub(crate) fn ink_use(&self, ink: &Ink) -> InkUse {
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceCmyk
+            | ColorSpaceType::DeviceGray
+            | ColorSpaceType::DeviceRgb
+            | ColorSpaceType::ICCBased(_)
+            | ColorSpaceType::CalGray(_)
+            | ColorSpaceType::CalRgb(_)
+            | ColorSpaceType::Lab(_) => {
+                if ink.process_index().is_some() {
+                    InkUse::Paints
+                } else {
+                    InkUse::Unspecified
+                }
+            }
+            ColorSpaceType::Indexed(i) => i.base.ink_use(ink),
+            ColorSpaceType::Separation(s) => match &s.colorant {
+                Colorant::None => InkUse::Nothing,
+                Colorant::All => InkUse::Paints,
+                Colorant::Ink(i) if i == ink => InkUse::Paints,
+                Colorant::Ink(_) => InkUse::Unspecified,
+            },
+            ColorSpaceType::DeviceN(d) => {
+                if d.is_none {
+                    InkUse::Nothing
+                } else if d
+                    .colorants
+                    .iter()
+                    .any(|c| matches!(c, Colorant::Ink(i) if i == ink))
+                {
+                    InkUse::Paints
+                } else {
+                    InkUse::Unspecified
+                }
+            }
+            // A pattern is separated through what it paints.
+            ColorSpaceType::Pattern(_) => InkUse::Unspecified,
+            ColorSpaceType::Plate(p) => p.inner.ink_use(ink),
+        }
+    }
+
+    /// PdfCraft patch (34): the tint, `0.0` (no ink) to `1.0` (solid), that the colour
+    /// `components` puts on `ink`'s plate; `0.0` when the space doesn't specify the ink.
+    /// `manual_scale` as for [`ToRgb::convert_f32`] (components normalised to `0.0..=1.0`, as
+    /// an Indexed palette gives them).
+    pub(crate) fn ink_tint(&self, components: &[f32], ink: &Ink, manual_scale: bool) -> f32 {
+        let tint = match self.0.as_ref() {
+            ColorSpaceType::Separation(s) => match &s.colorant {
+                Colorant::All => components.first().copied().unwrap_or(0.0),
+                Colorant::Ink(i) if i == ink => components.first().copied().unwrap_or(0.0),
+                _ => 0.0,
+            },
+            ColorSpaceType::DeviceN(d) => d
+                .colorants
+                .iter()
+                .position(|c| matches!(c, Colorant::Ink(i) if i == ink))
+                .and_then(|k| components.get(k))
+                .copied()
+                .unwrap_or(0.0),
+            ColorSpaceType::Indexed(i) => {
+                let index = components.first().copied().unwrap_or(0.0);
+                let index = (clamp_component(index, 0.0, f32::from(i.hival)) + 0.5) as usize;
+                match i.values.get(index) {
+                    Some(values) => i.base.ink_tint(values, ink, true),
+                    None => 0.0,
+                }
+            }
+            ColorSpaceType::Pattern(_) => 0.0,
+            ColorSpaceType::Plate(p) => p.inner.ink_tint(components, ink, manual_scale),
+            _ => match (
+                self.process_cmyk(components, manual_scale),
+                ink.process_index(),
+            ) {
+                (Some(cmyk), Some(k)) => cmyk.get(k).copied().unwrap_or(0.0),
+                _ => 0.0,
+            },
+        };
+        unit(tint)
+    }
+
+    /// PdfCraft patch (34): a process colour as DeviceCMYK: CMYK spaces (DeviceCMYK, ICC with
+    /// four components) as they are, gray as black only (`k = 1 − gray`, §10.4.2.2), and RGB,
+    /// CIE-based and three-component ICC spaces through sRGB by [`rgb_to_cmyk`].
+    fn process_cmyk(&self, components: &[f32], manual_scale: bool) -> Option<[f32; 4]> {
+        let get = |k: usize| unit(components.get(k).copied().unwrap_or(0.0));
+        match self.0.as_ref() {
+            ColorSpaceType::DeviceCmyk => Some([get(0), get(1), get(2), get(3)]),
+            ColorSpaceType::ICCBased(icc) if icc.0.number_components == 4 => {
+                Some([get(0), get(1), get(2), get(3)])
+            }
+            ColorSpaceType::ICCBased(icc) if icc.0.number_components == 1 => {
+                Some([0.0, 0.0, 0.0, 1.0 - get(0)])
+            }
+            ColorSpaceType::DeviceGray | ColorSpaceType::CalGray(_) => {
+                Some([0.0, 0.0, 0.0, 1.0 - get(0)])
+            }
+            ColorSpaceType::DeviceRgb => Some(rgb_to_cmyk([get(0), get(1), get(2)])),
+            _ if self.separates_through_srgb() => {
+                let mut rgb = [0_u8; 3];
+                self.convert_sample(components, &mut rgb, manual_scale)?;
+                Some(rgb_to_cmyk(rgb.map(u8_to_f32)))
+            }
+            _ => None,
+        }
+    }
+
+    /// PdfCraft patch (34): tell `sink` about every spot ink the space names, with the ink's
+    /// appearance (the space's colour with only that component set).
+    pub(crate) fn report_spots(&self, sink: &InkSinkFn) {
+        match self.0.as_ref() {
+            ColorSpaceType::Separation(s) => {
+                if let Colorant::Ink(ink @ Ink::Spot(_)) = &s.colorant {
+                    sink(ink, &|tint| self.appearance(&[tint]));
+                }
+            }
+            ColorSpaceType::DeviceN(d) => {
+                for (k, colorant) in d.colorants.iter().enumerate() {
+                    if let Colorant::Ink(ink @ Ink::Spot(_)) = colorant {
+                        sink(ink, &|tint| {
+                            let mut components: ColorComponents = smallvec![0.0; d.colorants.len()];
+                            if let Some(c) = components.get_mut(k) {
+                                *c = tint;
+                            }
+                            self.appearance(&components)
+                        });
+                    }
+                }
+            }
+            ColorSpaceType::Indexed(i) => i.base.report_spots(sink),
+            ColorSpaceType::Pattern(cs) => cs.report_spots(sink),
+            ColorSpaceType::Plate(p) => p.inner.report_spots(sink),
+            _ => {}
+        }
+    }
+
+    /// The sRGB colour of `components` (the `None` colorant's invisibility aside).
+    fn appearance(&self, components: &[f32]) -> [u8; 3] {
+        let [r, g, b, _] = self.to_rgba(components, 1.0, false).to_rgba8();
+        [r, g, b]
+    }
+}
+
+/// PdfCraft patch (34): a colour space drawn as one ink's plate: each colour becomes the gray
+/// film of that ink's tint (see [`Plate`]).
+#[derive(Debug, Clone)]
+pub(crate) struct PlateSpace {
+    inner: ColorSpace,
+    ink: Ink,
+}
+
+impl PlateSpace {
+    fn samples(&self) -> usize {
+        usize::from(self.inner.num_components()).max(1)
+    }
+
+    /// Turn sRGB pixels, converted from the inner space, into film in place.
+    fn film_from_srgb(&self, output: &mut [u8]) {
+        let Some(k) = self.ink.process_index() else {
+            output.fill(255);
+            return;
+        };
+        for rgb in output.chunks_exact_mut(3) {
+            let cmyk = rgb_to_cmyk([u8_to_f32(rgb[0]), u8_to_f32(rgb[1]), u8_to_f32(rgb[2])]);
+            let film = f32_to_u8(1.0 - cmyk.get(k).copied().unwrap_or(0.0));
+            rgb.copy_from_slice(&[film; 3]);
+        }
+    }
+}
+
+impl ToRgb for PlateSpace {
+    fn convert_f32(&self, input: &[f32], output: &mut [u8], manual_scale: bool) -> Option<()> {
+        if self.inner.separates_through_srgb() {
+            self.inner.convert_f32(input, output, manual_scale)?;
+            self.film_from_srgb(output);
+            return Some(());
+        }
+        for (sample, rgb) in input
+            .chunks_exact(self.samples())
+            .zip(output.chunks_exact_mut(3))
+        {
+            let film = f32_to_u8(1.0 - self.inner.ink_tint(sample, &self.ink, manual_scale));
+            rgb.copy_from_slice(&[film; 3]);
+        }
+        Some(())
+    }
+
+    // The spaces that take bytes (device and ICC spaces) read them as component × 255.
+    fn supports_u8(&self) -> bool {
+        self.inner.supports_u8()
+    }
+
+    fn convert_u8(&self, input: &[u8], output: &mut [u8]) -> Option<()> {
+        if self.inner.separates_through_srgb() {
+            self.inner.convert_u8(input, output)?;
+            self.film_from_srgb(output);
+            return Some(());
+        }
+        let mut sample: ColorComponents = SmallVec::new();
+        for (bytes, rgb) in input
+            .chunks_exact(self.samples())
+            .zip(output.chunks_exact_mut(3))
+        {
+            sample.clear();
+            sample.extend(bytes.iter().copied().map(u8_to_f32));
+            let film = f32_to_u8(1.0 - self.inner.ink_tint(&sample, &self.ink, false));
+            rgb.copy_from_slice(&[film; 3]);
+        }
+        Some(())
+    }
+
+    fn is_none(&self) -> bool {
+        self.inner.is_none()
     }
 }
 

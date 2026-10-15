@@ -2430,3 +2430,12 @@ animation effects	Off	Өшірулі
 	Make properties default	Қасиеттерді әдепкі ету
 	Pages selected	Таңдалған беттер
 	Page properties	Бет қасиеттері
+	Simulate overprinting	Үстінен басуды үлгілеу
+	Separating page {n}…	{n}-бет түстерге бөлінуде…
+	The page could not be separated: {error}	Бетті түстерге бөлу мүмкін болмады: {error}
+	Inks	Бояулар
+	Too many spot inks to separate: {names}	Бөлу үшін арнайы бояулар тым көп: {names}
+	Total area coverage	Жалпы бояу жабыны
+	Page maximum: {n}%	Беттегі ең жоғары мән: {n}%
+	Point at the page to read its ink coverage.	Бояу жабынын көру үшін бетті көрсетіңіз.
+	Highlight coverage above	Мына мәннен жоғары жабынды бөлектеу

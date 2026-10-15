@@ -58,6 +58,7 @@ mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
 mod optimize_ui;
+mod output_preview_ui;
 mod search_ui;
 mod sign_ui;
 mod stamps_ui;
@@ -204,6 +205,8 @@ pub enum RightPanel {
     Search,
     /// Compare files: the differences.
     Compare,
+    /// Print production ▸ Output preview: inks, coverage and overprinting.
+    OutputPreview,
 }
 
 /// Quick-action bar tools (the vertical floating strip).
@@ -2487,6 +2490,7 @@ impl PdfCraftApp {
                     "tags" => Some(RightPanel::Tags),
                     "search" => Some(RightPanel::Search),
                     "compare" => Some(RightPanel::Compare),
+                    "output-preview" => Some(RightPanel::OutputPreview),
                     "none" => None,
                     other => return Err(format!("unknown panel {other}")),
                 }

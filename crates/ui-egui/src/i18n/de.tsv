@@ -2433,3 +2433,12 @@ animation effects	Off	Aus
 	Make properties default	Eigenschaften als Standard festlegen
 	Pages selected	Ausgewählte Seiten
 	Page properties	Seiteneigenschaften
+	Simulate overprinting	Überdrucken simulieren
+	Separating page {n}…	Seite {n} wird separiert…
+	The page could not be separated: {error}	Die Seite konnte nicht separiert werden: {error}
+	Inks	Druckfarben
+	Too many spot inks to separate: {names}	Zu viele Volltonfarben zum Separieren: {names}
+	Total area coverage	Gesamtfarbauftrag
+	Page maximum: {n}%	Seitenmaximum: {n} %
+	Point at the page to read its ink coverage.	Zeigen Sie auf die Seite, um den Farbauftrag abzulesen.
+	Highlight coverage above	Farbauftrag hervorheben über

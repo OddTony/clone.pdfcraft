@@ -2709,3 +2709,12 @@ certificate	Version	الإصدار
 	Make properties default	جعل الخصائص افتراضية
 	Pages selected	الصفحات المحددة
 	Page properties	خصائص الصفحة
+	Simulate overprinting	محاكاة الطباعة الفوقية
+	Separating page {n}…	جارٍ فصل ألوان الصفحة {n}…
+	The page could not be separated: {error}	تعذّر فصل ألوان الصفحة: {error}
+	Inks	الأحبار
+	Too many spot inks to separate: {names}	عدد الأحبار الخاصة أكبر من أن يُفصل: {names}
+	Total area coverage	إجمالي تغطية الحبر
+	Page maximum: {n}%	الحد الأقصى للصفحة: {n}%
+	Point at the page to read its ink coverage.	أشر إلى الصفحة لقراءة تغطية الحبر.
+	Highlight coverage above	تمييز التغطية الأعلى من

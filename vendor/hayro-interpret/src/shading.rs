@@ -139,6 +139,12 @@ pub struct Shading {
 }
 
 impl Shading {
+    /// PdfCraft patch (34): the shading drawn as `ink`'s plate.
+    pub(crate) fn for_plate(&mut self, ink: &crate::color::Ink) {
+        self.color_space = self.color_space.plate(ink.clone());
+        self.cache_key = crate::util::hash128(&(self.cache_key, ink));
+    }
+
     pub(crate) fn new(dict: &Dict<'_>, stream: Option<&Stream<'_>>, cache: &Cache) -> Option<Self> {
         let cache_key = dict.cache_key();
 

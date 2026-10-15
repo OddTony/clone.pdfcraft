@@ -2428,3 +2428,12 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+	Simulate overprinting	Üst baskıyı simüle et
+	Separating page {n}…	{n}. sayfa ayrıştırılıyor…
+	The page could not be separated: {error}	Sayfa ayrıştırılamadı: {error}
+	Inks	Mürekkepler
+	Too many spot inks to separate: {names}	Ayrıştırılamayacak kadar çok spot mürekkep: {names}
+	Total area coverage	Toplam alan kaplaması
+	Page maximum: {n}%	Sayfa en yüksek değeri: %{n}
+	Point at the page to read its ink coverage.	Mürekkep kaplamasını görmek için sayfanın üzerine gelin.
+	Highlight coverage above	Şunun üzerindeki kaplamayı vurgula

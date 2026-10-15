@@ -2644,3 +2644,12 @@ certificate	Key usage	Utilizzo chiave
 certificate	Self-signed	Autofirmato
 certificate	SHA-1 digest	Impronta SHA-1
 certificate	SHA-256 digest	Impronta SHA-256
+	Simulate overprinting	Simula sovrastampa
+	Separating page {n}…	Separazione della pagina {n}…
+	The page could not be separated: {error}	Impossibile separare la pagina: {error}
+	Inks	Inchiostri
+	Too many spot inks to separate: {names}	Troppi inchiostri spot da separare: {names}
+	Total area coverage	Copertura totale dell'area
+	Page maximum: {n}%	Massimo della pagina: {n}%
+	Point at the page to read its ink coverage.	Punta la pagina per leggere la copertura degli inchiostri.
+	Highlight coverage above	Evidenzia la copertura oltre

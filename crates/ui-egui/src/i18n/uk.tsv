@@ -2454,3 +2454,12 @@ animation effects	Off	Вимкнено
 	Make properties default	Зробити властивості типовими
 	Pages selected	Вибрані сторінки
 	Page properties	Властивості сторінки
+	Simulate overprinting	Імітувати накладання фарб
+	Separating page {n}…	Кольороподіл сторінки {n}…
+	The page could not be separated: {error}	Не вдалося виконати кольороподіл сторінки: {error}
+	Inks	Фарби
+	Too many spot inks to separate: {names}	Забагато плашкових фарб для кольороподілу: {names}
+	Total area coverage	Загальне покриття фарбами
+	Page maximum: {n}%	Максимум на сторінці: {n}%
+	Point at the page to read its ink coverage.	Наведіть вказівник на сторінку, щоб побачити покриття фарбами.
+	Highlight coverage above	Виділяти покриття понад

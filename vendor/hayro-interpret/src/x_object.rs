@@ -1,5 +1,5 @@
 use crate::cache::{Cache, DecodedImageCache, DecodedImageKey};
-use crate::color::{ColorComponents, ColorSpace, ToRgb};
+use crate::color::{ColorComponents, ColorSpace, Ink, InkUse, ToRgb};
 use crate::context::Context;
 use crate::device::Device;
 use crate::function::{Function, interpolate};
@@ -227,6 +227,37 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
         return;
     }
 
+    // PdfCraft patch (34): report the image's spot inks, and draw it on a plate. An image
+    // without a colour space takes one from its data (JPEG, JPEG 2000): gray, RGB or CMYK,
+    // all process colour. Images paint with the non-stroking overprint parameter.
+    let raster_cs = if x_object.is_mask {
+        None
+    } else {
+        x_object.color_space.as_ref()
+    };
+    if let (Some(sink), Some(cs)) = (&context.settings.ink_sink, raster_cs) {
+        cs.report_spots(sink);
+    }
+    let mut on_plate = None;
+    if let Some(plate) = &context.settings.plate
+        && !x_object.is_mask
+    {
+        let ink_use = match raster_cs {
+            Some(cs) => cs.ink_use(&plate.ink),
+            None if plate.ink.process_index().is_some() => InkUse::Paints,
+            None => InkUse::Unspecified,
+        };
+        let overprint = plate.overprint && context.get().graphics_state.overprint_fill;
+        if ink_use == InkUse::Nothing || (ink_use == InkUse::Unspecified && overprint) {
+            if has_oc {
+                context.ocg_state.end_marked_content();
+            }
+            return;
+        }
+        on_plate = Some(x_object.for_plate(plate.ink.clone()));
+    }
+    let x_object = on_plate.as_ref().unwrap_or(x_object);
+
     let width = x_object.width as f64;
     let height = x_object.height as f64;
 
@@ -308,9 +339,22 @@ pub(crate) struct ImageXObject<'a> {
     stream: Stream<'a>,
     transfer_function: Option<ActiveTransferFunction>,
     warning_sink: WarningSinkFn,
+    /// PdfCraft patch (34): the ink whose plate the image is drawn on, if any.
+    plate: Option<Ink>,
 }
 
 impl<'a> ImageXObject<'a> {
+    /// PdfCraft patch (34): the image drawn on `ink`'s plate. Not cached (the cache holds
+    /// colour decodes), and without a transfer function (see `get_paint`).
+    fn for_plate(&self, ink: Ink) -> Self {
+        Self {
+            plate: Some(ink),
+            decoded_cache: None,
+            transfer_function: None,
+            ..self.clone()
+        }
+    }
+
     pub(crate) fn new(
         stream: &Stream<'a>,
         resolve_cs: impl FnOnce(&Name<'_>) -> Option<ColorSpace>,
@@ -371,6 +415,7 @@ impl<'a> ImageXObject<'a> {
             stream: stream.clone(),
             is_mask,
             is_stencil_mask,
+            plate: None,
         })
     }
 
@@ -594,6 +639,11 @@ fn decode_context<'a>(
                 })
         })
         .unwrap_or(ColorSpace::device_gray());
+    // PdfCraft patch (34): on a plate, every sample converts to the ink's film.
+    let color_space = match &obj.plate {
+        Some(ink) => color_space.plate(ink.clone()),
+        None => color_space,
+    };
 
     let fallback_bpc = if obj.is_stencil_mask { 1 } else { 8 };
 

@@ -2683,3 +2683,12 @@ key	Space	Tarpas
 	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neįrašyti pakeitimai bus prarasti.
 theme	Appearance	Išvaizda
+	Simulate overprinting	Imituoti perspaudimą
+	Separating page {n}…	Atskiriamos {n} puslapio spalvos…
+	The page could not be separated: {error}	Nepavyko atskirti puslapio spalvų: {error}
+	Inks	Dažai
+	Too many spot inks to separate: {names}	Per daug specialiųjų dažų atskyrimui: {names}
+	Total area coverage	Bendras dažų padengimas
+	Page maximum: {n}%	Puslapio didžiausia vertė: {n} %
+	Point at the page to read its ink coverage.	Nurodykite puslapį, kad pamatytumėte dažų padengimą.
+	Highlight coverage above	Paryškinti padengimą virš
