@@ -5407,3 +5407,24 @@ fn cropping_an_existing_image_clips_it_and_moves_with_it() {
     // No area, or a box off the image, is refused.
     assert!(s.apply(id, Edit::EditPageImage { page: 0, index: 0, change: ImageEdit::Crop([10.0, 10.0, 10.0, 50.0]) }).is_err());
 }
+
+/// Opening a paragraph and applying its edit read the page's text blocks; after an edit they are
+/// still read once per document state, and undo and redo never get another state's blocks.
+#[test]
+fn text_blocks_stay_cached_after_an_edit_and_follow_undo_and_redo() {
+    let (mut session, id) = session_with(1);
+    let blocks = |s: &Session| s.get(id).unwrap().editor.as_ref().unwrap().text_blocks(0).unwrap();
+    let before = blocks(&session);
+    assert_eq!(before[0].editor_text, "Page 1");
+    let edit = Edit::EditTextBlock { page: 0, block: 0, text: "Edited".into(), style: pdfcraft_edit::BlockStyle::default() };
+    session.apply(id, edit).unwrap();
+    let edited = blocks(&session);
+    assert_eq!(edited[0].editor_text, "Edited");
+    assert!(Arc::ptr_eq(&edited, &blocks(&session)), "the edited page is grouped once");
+    session.undo(id).unwrap();
+    assert_eq!(blocks(&session)[0].editor_text, "Page 1");
+    session.redo(id).unwrap();
+    let redone = blocks(&session);
+    assert_eq!(redone[0].editor_text, "Edited");
+    assert!(Arc::ptr_eq(&redone, &blocks(&session)));
+}
