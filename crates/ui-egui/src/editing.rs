@@ -371,6 +371,13 @@ impl PdfCraftApp {
             self.apply_edit(Edit::DeletePages { pages: pages.clone() });
         }
         let what = if pages.len() == 1 { tl!("1 page").to_string() } else { crate::i18n::fmt(tl!("{n} pages"), &[("n", &pages.len().to_string())]) };
+        if let Some(ctx) = &self.ctx {
+            // egui-winit emits Paste only when the system clipboard contains nonempty text.
+            // The PDF snapshot stays in PageClip; a readable description enables native paste
+            // even when the clipboard was empty before Copy/Cut pages.
+            let name = self.page_clipboard.as_ref().map(|clip| clip.name.as_str()).unwrap_or_default();
+            ctx.copy_text(format!("{name}: {what}"));
+        }
         if cut {
             self.notify_fmt("Cut {what}", &[("what", &what)]);
         } else {

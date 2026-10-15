@@ -1094,7 +1094,13 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 let mut rows: Vec<(String, String)> = pdfcraft_engine::commands::COMMANDS
                     .iter()
                     .filter_map(|c| {
-                        c.shortcut.map(|k| (crate::commands::shortcut_label(ui.ctx(), k), tl!(c.label).trim_end_matches('…').to_string()))
+                        c.shortcut.map(|k| {
+                            let mut label = tl!(c.label).trim_end_matches('…').to_string();
+                            if matches!(c.id, "page.copy" | "page.cut" | "page.paste") {
+                                label = format!("{label} ({})", tl!("Organize pages"));
+                            }
+                            (crate::commands::shortcut_label(ui.ctx(), k), label)
+                        })
                     })
                     .collect();
                 let key = |s: pdfcraft_engine::commands::Shortcut| crate::commands::shortcut_label(ui.ctx(), s);

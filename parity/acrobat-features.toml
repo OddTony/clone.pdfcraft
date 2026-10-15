@@ -2656,8 +2656,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["page.rotate_dialog"]
 tools = ["page_rotate"]
-evidence = ["crates/ui-egui/tests/editing.rs::extract_options_and_rotate_pages_dialog", "crates/automation/tests/automation.rs::organizing_with_filters_bookmark_splits_and_extract_options", "crates/engine/src/tests.rs::split_by_size_and_bookmarks_and_page_filters"]
-notes = "Rotate Pages: all/selection/range; even/odd; landscape/portrait"
+evidence = ["crates/ui-egui/tests/commands.rs::page_command_shortcuts_run_the_registered_actions", "crates/ui-egui/tests/editing.rs::extract_options_and_rotate_pages_dialog", "crates/automation/tests/automation.rs::organizing_with_filters_bookmark_splits_and_extract_options", "crates/engine/src/tests.rs::split_by_size_and_bookmarks_and_page_filters"]
+notes = "Ctrl/Cmd+Shift+R opens Rotate Pages. Rotate Pages: all/selection/range; even/odd; landscape/portrait"
 
 [[feature]]
 id = "organize.delete-pages"
@@ -2668,8 +2668,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["page.delete"]
 tools = ["page_delete"]
-evidence = ["crates/organize/src/tests.rs::delete_keeps_inherited_attributes_on_survivors", "crates/organize/src/tests.rs::cannot_delete_every_page_or_missing_pages", "crates/ui-egui/tests/editing.rs::delete_is_refused_when_it_would_remove_every_page"]
-notes = ""
+evidence = ["crates/ui-egui/tests/commands.rs::page_command_shortcuts_run_the_registered_actions", "crates/organize/src/tests.rs::delete_keeps_inherited_attributes_on_survivors", "crates/organize/src/tests.rs::cannot_delete_every_page_or_missing_pages", "crates/ui-egui/tests/editing.rs::delete_is_refused_when_it_would_remove_every_page"]
+notes = "Ctrl/Cmd+Shift+D runs the existing immediate, undoable deletion of the selected/current pages. "
 
 [[feature]]
 id = "organize.move-pages"
@@ -2716,8 +2716,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["page.insert"]
 tools = ["page_insert_file"]
-evidence = ["crates/organize/src/tests.rs::inserting_pages_from_another_file_is_an_incremental_edit", "crates/organize/src/tests.rs::inserting_a_file_brings_its_bookmarks_under_one_named_after_it", "crates/automation/tests/automation.rs::inserting_a_file_brings_its_bookmarks", "crates/ui-egui/tests/editing.rs::inserting_a_file_goes_after_the_selection_and_undoes", "crates/ui-egui/tests/editing.rs::plus_between_pages_inserts_picked_files_there_in_order"]
-notes = "After the selection (toolbar, File menu) or at any gap of the page grid (a + between pages and at both ends); several files at once, in order; images and .txt files are converted first; the inserted pages end up selected. The file's bookmarks come along, collapsed under one named after the file, placed among the document's bookmarks where the pages went (as Combine does per file). The page_insert_file tool takes PDFs only. Missing: choosing which pages of the file to insert in the app; the file's tags (structure tree) are not merged."
+evidence = ["crates/ui-egui/tests/pickers.rs::insert_shortcut_uses_the_file_picker_and_preserves_the_selection", "crates/organize/src/tests.rs::inserting_pages_from_another_file_is_an_incremental_edit", "crates/organize/src/tests.rs::inserting_a_file_brings_its_bookmarks_under_one_named_after_it", "crates/automation/tests/automation.rs::inserting_a_file_brings_its_bookmarks", "crates/ui-egui/tests/editing.rs::inserting_a_file_goes_after_the_selection_and_undoes", "crates/ui-egui/tests/editing.rs::plus_between_pages_inserts_picked_files_there_in_order"]
+notes = "Ctrl/Cmd+Shift+I opens the file picker. After the selection (toolbar, File menu) or at any gap of the page grid (a + between pages and at both ends); several files at once, in order; images and .txt files are converted first; the inserted pages end up selected. The file's bookmarks come along, collapsed under one named after the file, placed among the document's bookmarks where the pages went (as Combine does per file). The page_insert_file tool takes PDFs only. Missing: choosing which pages of the file to insert in the app; the file's tags (structure tree) are not merged."
 
 [[feature]]
 id = "organize.insert-from-clipboard"
@@ -2776,8 +2776,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["page.extract"]
 tools = ["page_extract"]
-evidence = ["crates/ui-egui/tests/editing.rs::extract_button_copies_selected_pages_to_a_new_tab", "crates/automation/tests/automation.rs::combine_extract_and_split", "crates/organize/src/tests.rs::extract_and_split_keep_the_pdfx_output_intent_and_identification"]
-notes = "Carries the PDF/X output intent and identification (#263) in a new XMP packet; the source XMP (dates, other schemas) is not copied."
+evidence = ["crates/ui-egui/tests/commands.rs::native_shift_cut_opens_extract_instead_of_cutting_pages", "crates/ui-egui/tests/editing.rs::extract_button_copies_selected_pages_to_a_new_tab", "crates/automation/tests/automation.rs::combine_extract_and_split", "crates/organize/src/tests.rs::extract_and_split_keep_the_pdfx_output_intent_and_identification"]
+notes = "Ctrl/Cmd+Shift+X opens Extract, including native Shift+Cut events. Carries the PDF/X output intent and identification (#263) in a new XMP packet; the source XMP (dates, other schemas) is not copied."
 
 [[feature]]
 id = "organize.extract-separate-files"
@@ -2848,8 +2848,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["page.copy", "page.cut", "page.paste"]
 tools = ["page_insert_file"]
-evidence = ["crates/ui-egui/tests/editing.rs::copying_cutting_and_pasting_pages"]
-notes = "⌘C/⌘X/⌘V and the thumbnail menu in Organize Pages; paste works across documents"
+evidence = ["crates/ui-egui/tests/editing.rs::copying_cutting_and_pasting_pages", "crates/ui-egui/tests/editing.rs::organize_clipboard_shortcuts_copy_cut_and_paste_pages", "crates/ui-egui/tests/editing.rs::organize_clipboard_shortcuts_leave_text_and_overlays_alone"]
+notes = "Ctrl/Cmd+C/X/V in Organize Pages; text editors, dialogs and the palette retain clipboard input. Key and native clipboard events dispatch once through the registry. Copy/Cut places a readable description on the system clipboard so native Paste works from an initially empty clipboard; PDF pages stay in the app clipboard. Paste works across documents; edits are undoable and retain permission checks."
 
 [[feature]]
 id = "organize.drag-pages-between-documents"
@@ -3160,8 +3160,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["page.crop"]
 tools = ["page_set_box"]
-evidence = ["crates/ui-egui/tests/ui_group/pageboxes.rs::the_crop_tool_crops_to_the_dragged_rectangle_then_returns_to_select"]
-notes = "drag to crop; double-click opens Set Page Boxes"
+evidence = ["crates/ui-egui/tests/commands.rs::page_command_shortcuts_run_the_registered_actions", "crates/ui-egui/tests/ui_group/pageboxes.rs::the_crop_tool_crops_to_the_dragged_rectangle_then_returns_to_select"]
+notes = "Ctrl/Cmd+Shift+T selects Crop pages. drag to crop; double-click opens Set Page Boxes"
 
 [[feature]]
 id = "organize.remove-white-margins"

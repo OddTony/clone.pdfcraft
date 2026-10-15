@@ -174,9 +174,10 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("measure.info", "Measurement information", None, None, Document, "ruler"),
     c("measure.snap", "Measurement snapping", None, None, Document, "ruler"),
     c("measure.export", "Export measurements as CSV", None, None, Document, "file-output"),
-    c("page.copy", "Copy pages", None, None, Document, "copy"),
-    c("page.cut", "Cut pages", None, None, Assembly, "scissors"),
-    c("page.paste", "Paste pages", None, None, Assembly, "clipboard-paste"),
+    // Clipboard shortcuts belong to the Organize grid; the frontend scopes them to that view.
+    ct("page.copy", "Copy pages", None, Some(Shortcut::cmd("C")), Document, "copy"),
+    ct("page.cut", "Cut pages", None, Some(Shortcut::cmd("X")), Assembly, "scissors"),
+    ct("page.paste", "Paste pages", None, Some(Shortcut::cmd("V")), Assembly, "clipboard-paste"),
     c("create.file", "Create PDF from file…", FILE, None, Nothing, "file-input"),
     c("create.multiple", "Create PDF from multiple files…", FILE, None, Nothing, "files"),
     c("create.multiple_separate", "Create separate PDFs…", FILE, None, Nothing, "files"),
@@ -358,15 +359,15 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("bookmark.from_structure", "New bookmarks from structure", PAGES, None, Assembly, "list"),
     c("page.rotate", "Rotate pages clockwise", PAGES, None, Assembly, "rotate-cw"),
     c("page.rotate_ccw", "Rotate pages counterclockwise", PAGES, None, Assembly, "rotate-ccw"),
-    c("page.delete", "Delete pages", PAGES, None, Assembly, "trash-2"),
+    c("page.delete", "Delete pages", PAGES, Some(Shortcut::cmd_shift("D")), Assembly, "trash-2"),
     c("page.insert_blank", "Insert blank page", PAGES, None, Assembly, "file-plus"),
-    c("page.rotate_dialog", "Rotate pages…", PAGES, None, Assembly, "rotate-cw"),
+    c("page.rotate_dialog", "Rotate pages…", PAGES, Some(Shortcut::cmd_shift("R")), Assembly, "rotate-cw"),
     c("page.duplicate", "Duplicate pages", PAGES, None, Assembly, "copy-plus"),
-    c("page.crop", "Crop pages", PAGES, None, Assembly, "crop"),
+    c("page.crop", "Crop pages", PAGES, Some(Shortcut::cmd_shift("T")), Assembly, "crop"),
     c("page.boxes", "Set page boxes…", PAGES, None, Assembly, "square-dashed-mouse-pointer"),
-    c("page.insert", "Insert pages from file…", PAGES, None, Assembly, "file-input"),
+    c("page.insert", "Insert pages from file…", PAGES, Some(Shortcut::cmd_shift("I")), Assembly, "file-input"),
     c("page.replace", "Replace pages…", PAGES, None, Assembly, "replace"),
-    c("page.extract", "Extract pages…", PAGES, None, Assembly, "file-output"),
+    c("page.extract", "Extract pages…", PAGES, Some(Shortcut::cmd_shift("X")), Assembly, "file-output"),
     c("page.split", "Split document…", PAGES, None, Assembly, "scissors"),
     c("page.number", "Number pages…", PAGES, None, Assembly, "hash"),
     c("help.shortcuts", "Keyboard shortcuts", HELP, None, Nothing, "circle-help"),
@@ -454,6 +455,26 @@ mod tests {
                         assert!(command(i.command).is_some(), "catalogue item {} ({}) is Ready but not registered", i.label, i.command);
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn page_shortcuts_follow_platform_conventions() {
+        for (id, shortcut) in [
+            ("page.rotate_dialog", Shortcut::cmd_shift("R")),
+            ("page.delete", Shortcut::cmd_shift("D")),
+            ("page.insert", Shortcut::cmd_shift("I")),
+            ("page.extract", Shortcut::cmd_shift("X")),
+            ("page.crop", Shortcut::cmd_shift("T")),
+            ("page.copy", Shortcut::cmd("C")),
+            ("page.cut", Shortcut::cmd("X")),
+            ("page.paste", Shortcut::cmd("V")),
+        ] {
+            let spec = command(id).unwrap();
+            assert_eq!(spec.shortcut, Some(shortcut), "{id}");
+            if matches!(id, "page.copy" | "page.cut" | "page.paste") {
+                assert!(!spec.in_text, "{id} must leave text editors alone");
             }
         }
     }

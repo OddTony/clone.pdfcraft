@@ -687,7 +687,7 @@ impl PdfCraftApp {
     }
 
     /// Run the registered keyboard shortcuts (more specific combinations first).
-    pub(crate) fn registry_shortcuts(&mut self, ctx: &egui::Context) {
+    pub(crate) fn registry_shortcuts(&mut self, ctx: &egui::Context, initial_modifiers: egui::Modifiers) {
         use egui::{Key, KeyboardShortcut, Modifiers};
         // Buttons also own keyboard focus for Tab/Enter activation, but they must not
         // suppress document shortcuts. Text editors retain their own undo/redo handling.
@@ -701,6 +701,12 @@ impl PdfCraftApp {
         specs.sort_by_key(|c| std::cmp::Reverse(c.shortcut.map(|s| s.modifier_count()).unwrap_or(0)));
         for spec in specs {
             let Some(s) = spec.shortcut else { continue };
+            let page_clipboard = matches!(spec.id, "page.copy" | "page.cut" | "page.paste");
+            if page_clipboard
+                && (typing || form_typing || self.palette_open || !active.and_then(|(i, _)| self.views.get(i)).is_some_and(|v| v.organize))
+            {
+                continue;
+            }
             // Keep the canvas's silent no-op when there is no previous/next view to visit.
             if matches!(spec.id, "view.previous_view" | "view.next_view") && !self.command_enabled(spec) {
                 continue;
@@ -719,7 +725,42 @@ impl PdfCraftApp {
             if s.mac_ctrl {
                 m |= Modifiers::CTRL;
             }
-            if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, key))) {
+            let pressed = ctx.input_mut(|input| {
+                // Native backends send clipboard events instead of letter keys, even for
+                // Ctrl/Cmd+Shift+X (Extract). Match the modifiers before consuming the event,
+                // so Extract wins over Cut and text editors keep their clipboard input.
+                let mut native_pressed = false;
+                if page_clipboard || spec.id == "page.extract" {
+                    let mut modifiers = initial_modifiers;
+                    input.events.retain(|event| {
+                        match event {
+                            egui::Event::ModifiersChanged(new) => modifiers = *new,
+                            egui::Event::WindowFocused(false) => modifiers = Modifiers::NONE,
+                            _ => {}
+                        }
+                        let matched = (modifiers.matches_exact(m) || (!s.shift && modifiers.is_none()))
+                            && matches!((s.key, event), ("C", egui::Event::Copy) | ("X", egui::Event::Cut) | ("V", egui::Event::Paste(_)));
+                        native_pressed |= matched;
+                        !matched
+                    });
+                }
+                // Consume both representations if a backend supplies both: one edit per key.
+                let mut key_pressed = false;
+                if spec.id.starts_with("page.") {
+                    // Page actions use letter keys: extra Alt/Shift must not turn typing (or
+                    // a different clipboard command) into an edit of the document.
+                    input.events.retain(|event| {
+                        let matched = matches!(event, egui::Event::Key { key: k, pressed: true, modifiers, .. }
+                            if *k == key && modifiers.matches_exact(m));
+                        key_pressed |= matched;
+                        !matched
+                    });
+                } else {
+                    key_pressed = input.consume_shortcut(&KeyboardShortcut::new(m, key));
+                }
+                key_pressed || native_pressed
+            });
+            if pressed {
                 if form_typing {
                     // A form field has the keyboard: let it take this frame's typing (and
                     // Escape) first, so ⌘S saves what's on screen (#166). Runs next frame, for

@@ -95,6 +95,22 @@ fn insert_from_file_uses_the_pick_on_the_next_frame() {
 }
 
 #[test]
+fn insert_shortcut_uses_the_file_picker_and_preserves_the_selection() {
+    let dir = std::env::temp_dir().join(format!("pdfcraft-shortcut-insert-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("more.pdf");
+    std::fs::write(&file, fixture(2)).unwrap();
+    let mut h = harness(&[3]);
+    h.state_mut().views[0].select_pages(&[1]);
+    h.state_mut().pick_override = Some(vec![file.to_string_lossy().into_owned()]);
+    h.key_press_modifiers(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::I);
+    h.run_steps(3);
+    assert_eq!(pages(h.state(), 0), 5);
+    assert_eq!(h.state().views[0].target_pages(), [2, 3]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_pick_for_a_document_that_is_no_longer_active_is_dropped() {
     let dir = std::env::temp_dir().join(format!("printcraft-pickers-switch-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

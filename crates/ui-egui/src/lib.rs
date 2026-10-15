@@ -738,6 +738,9 @@ pub struct PdfCraftApp {
     /// Shortcuts pressed while a text field had the keyboard, run on the next frame (see
     /// `registry_shortcuts`).
     deferred_commands: Vec<(&'static str, Option<DocId>)>,
+    /// Modifiers at the end of the previous frame, so clipboard events can use the modifiers
+    /// held when they arrived, even if the keys were released later in the same frame.
+    shortcut_modifiers: egui::Modifiers,
     /// The dialog seen at the last check, and a counter bumped whenever it changes (see
     /// [`Self::dialog_epoch`]).
     dialog_seen: Option<Dialog>,
@@ -1030,6 +1033,7 @@ impl PdfCraftApp {
             last_autosave: 0.0,
             allow_quit: false,
             deferred_commands: Vec::new(),
+            shortcut_modifiers: egui::Modifiers::NONE,
             dialog_seen: None,
             dialog_epoch: 0,
             ctx: None,
@@ -2767,6 +2771,7 @@ impl PdfCraftApp {
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
         use egui::Key;
+        let initial_modifiers = std::mem::replace(&mut self.shortcut_modifiers, ctx.input(|input| input.modifiers));
         // "Save changes?" is modal: its keys are its own (⌘D is Don't save there, not Document
         // properties; Escape cancels it rather than clearing a selection), and nothing may run
         // underneath it. They are read here, before the canvas can consume them.
@@ -2786,7 +2791,7 @@ impl PdfCraftApp {
         {
             return;
         }
-        self.registry_shortcuts(ctx);
+        self.registry_shortcuts(ctx, initial_modifiers);
         // (Esc closes a Combine file shown large first.)
         if self.full_screen && self.combine_tab.preview.is_none() && ctx.input(|i| i.key_pressed(Key::Escape)) {
             self.set_full_screen(ctx, false);
