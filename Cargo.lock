@@ -4017,6 +4017,7 @@ name = "pdfcraft-automation"
 version = "0.8.0"
 dependencies = [
  "base64 0.22.1",
+ "cryptoki",
  "flate2",
  "image",
  "pdfcraft-cos",
@@ -4376,6 +4377,7 @@ dependencies = [
  "bytemuck",
  "craft-quit",
  "craft-ui",
+ "cryptoki",
  "eframe",
  "egui",
  "egui_extras",

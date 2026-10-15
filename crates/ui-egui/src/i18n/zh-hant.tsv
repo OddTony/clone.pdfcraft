@@ -2384,3 +2384,21 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+
+# Signing with a PKCS #11 device (smart card, token, CloudSigner for mSzafir).
+	PKCS #11 device  ·  	PKCS #11 裝置  ·  
+	the certificate expired on {date}	憑證已於 {date} 到期
+	Choose the module's library file.	請選擇模組的程式庫檔案。
+	{file}: there is no such file.	{file}：沒有這個檔案。
+	The module's tokens hold no digital ID PdfCraft can sign with.	模組的權杖中沒有 PdfCraft 可用來簽名的數位 ID。
+	The device's digital ID isn't available any more; start signing again to list it.	裝置的數位 ID 已無法使用；請重新開始簽名以列出它。
+	Enter the device's PIN.	請輸入裝置的 PIN。
+	The PIN is incorrect.	PIN 不正確。
+	Use a signature creation device (PKCS #11 module: smart card, token, CloudSigner for mSzafir)	使用簽名建立裝置（PKCS #11 模組：智慧卡、權杖、mSzafir 的 CloudSigner）
+	Module (.dylib, .so, .dll)	模組 (.dylib, .so, .dll)
+	CloudSigner (mSzafir) is found by itself when it is installed: start it and log in before signing.	安裝 CloudSigner (mSzafir) 後會自動找到：簽名前請先啟動並登入。
+	PKCS #11 module	PKCS #11 模組
+	PIN	PIN
+	After Sign, enter the OTT code from the mSzafir app in CloudSigner's window and approve the signature in the app. With CloudSigner's persistent OTT code on, the code is asked for only once every few minutes.	按下簽名後，請在 CloudSigner 視窗中輸入 mSzafir 應用程式提供的 OTT 碼，並在應用程式中核准簽名。開啟 CloudSigner 的持續 OTT 碼後，每隔幾分鐘才需輸入一次。
+	The key is on the device, which signs once it has its PIN.	金鑰在裝置上，裝置取得 PIN 後即會簽名。
+	The key is on the device, which may ask for its PIN itself.	金鑰在裝置上，裝置可能會自行要求輸入 PIN。
