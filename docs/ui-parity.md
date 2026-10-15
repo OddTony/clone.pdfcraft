@@ -48,7 +48,7 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 | Hand tool, middle-button pan, autoscroll | yes | hand tool; Linux autoscroll | partial |
 | Text selection, column select | yes, Alt-drag columns | reading-order selection; Alt/Option-drag or Edit ▸ Column select (#740) | shipped |
 | Select and move several objects at once | yes | on one page: Shift/Ctrl/⌘-click and marquee, one undo step (#844), vector paths included (#1540); not across pages, no group resize | partial |
-| Object handles: corners keep proportion, edges free | yes | yes for added images and signatures; a selected vector path's corners resize it freely (#1540) | partial |
+| Object handles: corners keep proportion, edges free | yes | yes for added images and signatures; Shift on a corner keeps the proportions of comments, stamps and form fields (#2199); a selected vector path's corners resize it freely (#1540); no Alt resize from the centre | shipped |
 | Arrange, align and distribute page objects | yes | fields; in Edit text & images, the selection's right-click menu aligns and distributes any mix of objects and arranges one vector path or image (#1540); text isn't arranged | shipped |
 | Rulers, grids, snap to grid, guides | yes | no | planned |
 | Cursor coordinates, line weights | yes | no | planned |

@@ -402,7 +402,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
         ui.ctx().set_cursor_icon(match gesture.corner {
             Some(corner) => corner_cursor(corner),
             None if gesture.marquee => egui::CursorIcon::Crosshair,
-            None => egui::CursorIcon::Grabbing,
+            None => egui::CursorIcon::Move,
         });
         return true;
     }
@@ -424,7 +424,7 @@ fn input(s: &mut ObjectSelection, ui: &egui::Ui, resp: &egui::Response, xf: &Pag
             if let Some(corner) = handle {
                 ui.ctx().set_cursor_icon(corner_cursor(corner));
             } else if union.contains(p) {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
             }
             return true;
         }
