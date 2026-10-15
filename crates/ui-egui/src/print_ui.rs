@@ -67,6 +67,9 @@ pub struct PrintDraft {
     pub cut_marks: bool,
     pub orientation: Orientation,
     pub content: Content,
+    /// Print as image (Acrobat's Advanced Print Setup) at `dpi`.
+    pub as_image: bool,
+    pub dpi: f64,
     pub paper: usize,
     /// The sheet shown in the preview (0-based).
     pub sheet: usize,
@@ -111,6 +114,8 @@ impl Default for PrintDraft {
             cut_marks: true,
             orientation: Orientation::Auto,
             content: Content::DocumentAndMarkups,
+            as_image: false,
+            dpi: 300.0,
             paper: 0,
             sheet: 0,
             current_page: 0,
@@ -156,7 +161,14 @@ impl PrintDraft {
             Handling::Booklet => Layout::Booklet { subset: self.booklet_subset, binding: self.binding },
             Handling::Poster => Layout::Poster { scale: self.poster_scale, overlap: self.overlap, cut_marks: self.cut_marks },
         };
-        Ok(print::Settings { pages, paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1, orientation: self.orientation, layout, content: self.content })
+        Ok(print::Settings {
+            pages,
+            paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1,
+            orientation: self.orientation,
+            layout,
+            content: self.content,
+            raster: self.as_image.then_some(print::Raster { dpi: self.dpi, grayscale: self.grayscale }),
+        })
     }
 
     pub fn job(&self, title: &str) -> spool::Job {
@@ -218,6 +230,13 @@ fn listed_printers() -> Vec<spool::Printer> {
     {
         spool::printers()
     }
+}
+
+/// The first list is still being read and the user hasn't chosen yet (#160): no printer is
+/// selected only because none is known yet, so the dialog says it is looking rather than
+/// offering Save as PDF, and its button waits. Printing then would have saved a PDF.
+fn still_looking(d: &PrintDraft) -> bool {
+    d.printers_loading && d.printer.is_none() && !d.printer_picked
 }
 
 /// A printer's name as the dialog shows it.
@@ -664,7 +683,11 @@ pub(crate) fn body(
                 // The browser's print dialog sets copies, two-sided printing and colour itself.
                 let browser = d.printer.as_deref() == Some(crate::web_print::BROWSER_PRINTER);
                 ui.horizontal(|ui| {
-                    let shown = d.printer.as_deref().map_or_else(|| tl!("Save as PDF").to_string(), printer_label);
+                    let shown = match d.printer.as_deref() {
+                        Some(p) => printer_label(p),
+                        None if still_looking(d) => tl!("Looking for printers…").to_string(),
+                        None => tl!("Save as PDF").to_string(),
+                    };
                     egui::ComboBox::from_id_salt("printer").selected_text(shown).width(260.0).show_ui(ui, |ui| {
                         if d.printers_loading {
                             ui.add_enabled(false, egui::Label::new(tl!("Looking for printers…")));
@@ -678,7 +701,11 @@ pub(crate) fn body(
                             };
                             ui.selectable_value(&mut d.printer, Some(p.name.clone()), label);
                         }
-                        ui.selectable_value(&mut d.printer, None, tl!("Save as PDF"));
+                        // Chosen even when it was already the selection, so the list arriving
+                        // later doesn't replace it with the default printer.
+                        if ui.selectable_value(&mut d.printer, None, tl!("Save as PDF")).clicked() {
+                            d.printer_picked = true;
+                        }
                     });
                     let tip = if spool::HAS_PRINTER_PREFERENCES {
                         tl!("Opens the printer driver's preferences. They are saved for every print from this computer; the copies, two-sided, grayscale and paper chosen here still apply.")
@@ -706,6 +733,17 @@ pub(crate) fn body(
                     d.driver_error = None;
                 }
                 ui.end_row();
+                // The spooler answered with no printer at all (#160): say so, rather than
+                // leaving Save as PDF looking like the only thing PdfCraft can do.
+                if !d.printers_loading && d.printers.is_empty() {
+                    ui.label("");
+                    ui.label(
+                        egui::RichText::new(tl!("No printers were found. Check that the printer is installed and the print spooler is running, then open Print again."))
+                            .small()
+                            .color(t.text_muted),
+                    );
+                    ui.end_row();
+                }
                 ui.label(tl!("Copies:"));
                 ui.add_enabled_ui(!browser, |ui| {
                     ui.horizontal(|ui| {
@@ -909,6 +947,29 @@ pub(crate) fn body(
                 ],
                 220.0,
             );
+            // Advanced (Acrobat's Advanced Print Setup): print as image. Folded unless it is on.
+            ui.add_space(6.0);
+            egui::CollapsingHeader::new(egui::RichText::new(tl!("Advanced").to_uppercase()).font(theme::semibold(10.5)).color(t.text_faint))
+                .id_salt("print-advanced")
+                .default_open(d.as_image)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add(widgets::checkbox(&mut d.as_image, tl!("Print as image")));
+                        ui.add_enabled_ui(d.as_image, |ui| {
+                            ui.label(tl!("Resolution:"));
+                            let mut dpi = d.dpi.round() as u32;
+                            combo(ui, "print-dpi", &mut dpi, &[(150, "150 dpi"), (300, "300 dpi"), (600, "600 dpi")], 100.0);
+                            d.dpi = f64::from(dpi);
+                        });
+                    });
+                    ui.label(
+                        egui::RichText::new(tl!(
+                            "Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey."
+                        ))
+                        .small()
+                        .color(t.text_muted),
+                    );
+                });
         });
         ui.add_space(12.0);
         // Preview.
@@ -1013,8 +1074,9 @@ pub(crate) fn body(
     ui.add_space(12.0);
     let (mut go, mut cancel) = (false, false);
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let label = if d.printer.is_some() { "Print" } else { "Save as PDF" };
-        if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty(), |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
+        let looking = still_looking(d);
+        let label = if d.printer.is_some() || looking { tl!("Print") } else { tl!("Save as PDF") };
+        if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty() && !looking, |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
             go = true;
         }
         if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
