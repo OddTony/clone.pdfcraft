@@ -4282,6 +4282,7 @@ dependencies = [
  "pdfcraft-fonts",
  "pdfcraft-forms",
  "pdfcraft-model",
+ "pdfcraft-organize",
  "pdfcraft-testkit",
  "pdfcraft-xfa",
  "thiserror 2.0.21",

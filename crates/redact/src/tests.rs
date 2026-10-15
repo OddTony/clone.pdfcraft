@@ -631,6 +631,209 @@ fn hidden_information_is_counted_and_removed() {
     assert!(shown, "the field's value stays visible as page content");
 }
 
+/// A one-page document (see `one_page`) plus `/Info` entries, a catalog XMP packet and a
+/// page-level XMP packet, for the metadata-redaction tests (#2448).
+fn meta_doc(content: &[u8], info: &[(&str, &str)], catalog_packet: Option<&str>, page_packet: Option<&str>) -> Document {
+    let mut doc = one_page(content, "", vec![]);
+    let metadata = |p: &str| {
+        let mut d = Dict::new();
+        d.set(b"Type".to_vec(), Object::name("Metadata"));
+        d.set(b"Subtype".to_vec(), Object::name("XML"));
+        Object::Stream(Stream::from_raw(d, p.as_bytes().to_vec()))
+    };
+    if let Some(p) = catalog_packet {
+        let r = doc.add(metadata(p));
+        let root = doc.root().unwrap();
+        doc.update_dict(root, |d| d.set(b"Metadata".to_vec(), Object::Ref(r))).unwrap();
+    }
+    if let Some(p) = page_packet {
+        let r = doc.add(metadata(p));
+        let page = pdfcraft_model::pages(&doc)[0].obj;
+        doc.update_dict(page, |d| d.set(b"Metadata".to_vec(), Object::Ref(r))).unwrap();
+    }
+    if !info.is_empty() {
+        let mut d = Dict::new();
+        for (k, v) in info {
+            d.set(k.as_bytes().to_vec(), Object::String(pdfcraft_cos::PdfString::text(v)));
+        }
+        let r = doc.add(Object::Dict(d));
+        doc.trailer_mut().set(b"Info".to_vec(), Object::Ref(r));
+    }
+    doc
+}
+
+/// One `/Info` entry as text, straight from the trailer dictionary.
+fn info_value(doc: &Document, key: &str) -> Option<String> {
+    let info = doc.trailer().get(b"Info").map(|o| doc.resolve(o))?;
+    info.as_dict()?.get(key.as_bytes()).and_then(|v| doc.resolve(v).as_string().map(|s| s.to_text()))
+}
+
+/// The catalog's XMP packet, decoded.
+fn xmp_text(doc: &Document) -> Option<String> {
+    let r = doc.get(doc.root()?).as_dict()?.reference(b"Metadata")?;
+    match &*doc.get(r) {
+        Object::Stream(s) => Some(String::from_utf8_lossy(&s.decoded().ok()?).into_owned()),
+        _ => None,
+    }
+}
+
+/// Issue #2448: a string redacted off the page must not survive in `/Info` (here Title, while
+/// Author survives) or in the XMP property mirroring it (here `dc:title`, while the rest of the
+/// packet stays). The match is case-insensitive: the page shows TOPSECRET, the title doesn't.
+#[test]
+fn redacted_text_is_cleared_from_info_and_xmp_on_apply() {
+    let packet = "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>\
+<rdf:Description rdf:about='' xmlns:dc='http://purl.org/dc/elements/1.1/'><dc:title><rdf:Alt><rdf:li xml:lang='x-default'>TopSecret plan</rdf:li></rdf:Alt></dc:title></rdf:Description>\
+<rdf:Description rdf:about='' xmlns:pdf='http://ns.adobe.com/pdf/1.3/'><pdf:Producer>Writer 1.0</pdf:Producer></rdf:Description>\
+</rdf:RDF></x:xmpmeta>";
+    let clean = "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>\
+<rdf:Description rdf:about='' xmlns:xmp='http://ns.adobe.com/xap/1.0/'><xmp:CreateTool>Writer</xmp:CreateTool></rdf:Description>\
+</rdf:RDF></x:xmpmeta>";
+    let mut doc =
+        meta_doc(b"BT /F1 10 Tf 10 100 Td (TOPSECRET PLAN) Tj ET", &[("Title", "TopSecret plan"), ("Author", "Ada")], Some(packet), Some(clean));
+    assert_eq!(under(&mut doc, 0, &[[10.0, 95.0, 55.0, 110.0]]), 9, "TOPSECRET is nine glyphs");
+    mark(&mut doc, 0, &[[10.0, 95.0, 55.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.info_entries_cleared, 1, "the Title entry and nothing else: {r:?}");
+    let doc = reopen(&doc);
+    assert_eq!(info_value(&doc, "Title"), None, "the entry repeating removed text is gone");
+    assert_eq!(info_value(&doc, "Author").as_deref(), Some("Ada"), "unrelated entries stay");
+    let xmp = xmp_text(&doc).unwrap_or_default();
+    assert!(!xmp.contains("dc:title"), "the mirrored property went with it: {xmp}");
+    assert!(xmp.contains("Writer 1.0"), "the rest of the packet stays: {xmp}");
+    let page = &pdfcraft_model::pages(&doc)[0];
+    assert!(page.dict.get(b"Metadata").is_some(), "a clean page-level stream stays");
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("topsecret"), "no trace in the saved file");
+}
+
+/// Issue #2448, review follow-up: a value SHORTER than the removed run is still removed text —
+/// the author of a whole redacted sentence — whether `/Info` or a custom XMP schema holds it.
+#[test]
+fn a_value_inside_a_longer_removed_run_is_cleared_too() {
+    let packet = "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>\
+<rdf:Description rdf:about='' xmlns:acme='https://example.org/acme/' acme:code='James Bond'><acme:Agent>James Bond</acme:Agent></rdf:Description>\
+<rdf:Description rdf:about='' xmlns:pdf='http://ns.adobe.com/pdf/1.3/'><pdf:Producer>Writer 1.0</pdf:Producer></rdf:Description>\
+</rdf:RDF></x:xmpmeta>";
+    let mut doc =
+        meta_doc(b"BT /F1 10 Tf 10 100 Td (JAMES BOND IS A SPY) Tj ET", &[("Author", "James Bond"), ("Subject", "Spy stories")], Some(packet), None);
+    assert_eq!(under(&mut doc, 0, &[[10.0, 95.0, 105.0, 110.0]]), 19, "the whole phrase is nineteen glyphs");
+    mark(&mut doc, 0, &[[10.0, 95.0, 105.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.info_entries_cleared, 1, "the Author entry: {r:?}");
+    assert_eq!(r.xmp_removed, 1, "the packet holding the name in its custom schema: {r:?}");
+    let doc = reopen(&doc);
+    assert_eq!(info_value(&doc, "Author"), None, "the shorter value is part of the removed text");
+    assert_eq!(info_value(&doc, "Subject").as_deref(), Some("Spy stories"), "an unrelated value stays");
+    let cat = doc.get(doc.root().unwrap()).as_dict().cloned().unwrap();
+    assert!(!cat.contains(b"Metadata"), "the custom-schema value took the packet with it");
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("james bond"), "no trace in the saved file");
+    let reread = Document::open(Arc::new(bytes)).unwrap();
+    assert_eq!(info_value(&reread, "Subject").as_deref(), Some("Spy stories"), "unrelated metadata survives in the saved file");
+}
+
+/// Issue #2448: the fallback. A secret held where PdfCraft cannot edit per-entry — a custom XMP
+/// schema, entity-escaped, and a page-level packet — takes the whole stream with it, the same
+/// shape as removing hidden information's metadata category.
+#[test]
+fn an_xmp_stream_holding_redacted_text_is_removed_whole() {
+    let packet = "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>\
+<rdf:Description rdf:about='' xmlns:acme='https://example.org/acme/'><acme:Project>&lt;SECRET&amp;PLAN&gt;</acme:Project></rdf:Description>\
+<rdf:Description rdf:about='' xmlns:pdf='http://ns.adobe.com/pdf/1.3/'><pdf:Producer>Writer 1.0</pdf:Producer></rdf:Description>\
+</rdf:RDF></x:xmpmeta>";
+    let page_packet = "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>\
+<rdf:Description rdf:about='' xmlns:pdf='http://ns.adobe.com/pdf/1.3/'><pdf:Keywords>OTHERTEXT</pdf:Keywords></rdf:Description>\
+</rdf:RDF></x:xmpmeta>";
+    let mut doc = meta_doc(b"BT /F1 10 Tf 10 100 Td (MEMO <SECRET&PLAN> OTHERTEXT HERE) Tj ET", &[], Some(packet), Some(page_packet));
+    assert_eq!(under(&mut doc, 0, &[[35.0, 95.0, 100.0, 110.0]]), 13, "<SECRET&PLAN> is thirteen glyphs");
+    mark(&mut doc, 0, &[[35.0, 95.0, 100.0, 110.0], [105.0, 95.0, 150.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.xmp_removed, 2, "the catalog and page streams: {r:?}");
+    let doc = reopen(&doc);
+    let cat = doc.get(doc.root().unwrap()).as_dict().cloned().unwrap();
+    assert!(!cat.contains(b"Metadata"), "the escaped secret took the catalog stream with it");
+    let page = &pdfcraft_model::pages(&doc)[0];
+    assert!(page.dict.get(b"Metadata").is_none(), "the page-level stream went too");
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    let text = String::from_utf8_lossy(&bytes).to_lowercase();
+    assert!(!text.contains("secret&plan") && !text.contains("secret&amp;plan"), "no escaped trace in the saved file");
+    assert!(!text.contains("othertext"), "the page-level secret is gone too");
+}
+
+/// Issue #2448: a trailer `/Info` that is a direct dictionary is the one shape an entry-by-entry
+/// clear cannot edit, so the final check removes it whole (the hidden-information shape); a save
+/// then writes a fresh date-only `/Info`.
+#[test]
+fn a_direct_info_dictionary_holding_redacted_text_is_removed_whole() {
+    let mut doc = one_page(b"BT /F1 10 Tf 10 100 Td (TOPSECRET PLAN) Tj ET", "", vec![]);
+    let mut info = Dict::new();
+    info.set(b"Title".to_vec(), Object::String(pdfcraft_cos::PdfString::text("TopSecret plan")));
+    info.set(b"Author".to_vec(), Object::String(pdfcraft_cos::PdfString::text("Ada")));
+    doc.trailer_mut().set(b"Info".to_vec(), Object::Dict(info));
+    mark(&mut doc, 0, &[[10.0, 95.0, 55.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.info_entries_cleared, 2, "the whole dictionary, both entries: {r:?}");
+    assert!(doc.trailer().get(b"Info").is_none(), "the whole dictionary went");
+    let doc = reopen(&doc);
+    let info = doc.trailer().get(b"Info").map(|o| doc.resolve(o)).and_then(|o| o.as_dict().cloned());
+    if let Some(d) = &info {
+        assert!(!d.contains(b"Title") && !d.contains(b"Author"), "nothing of it came back: {d:?}");
+    }
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("topsecret"), "no trace in the saved file");
+}
+
+/// Issue #2448: a non-ASCII title is stored as UTF-16BE (`PdfString::text`), and the removed
+/// run's Euro sign is only known through the font's ToUnicode map; the match still has to find it.
+#[test]
+fn utf16_info_entries_holding_redacted_text_are_cleared() {
+    let packet = "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>\
+<rdf:Description rdf:about='' xmlns:pdf='http://ns.adobe.com/pdf/1.3/'><pdf:Producer>Writer 1.0</pdf:Producer></rdf:Description>\
+</rdf:RDF></x:xmpmeta>";
+    let mut doc = pdf(vec![
+        b"<< /Type /Catalog /Pages 2 0 R /Metadata 8 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".to_vec(),
+        stream("", b"BT /F1 10 Tf 10 100 Td (TOPSECRET$PLAN) Tj ET"),
+        // The font of `one_page`, plus a ToUnicode map that reads code $ as U+20AC (€).
+        FONT.replace("95 0 R", "6 0 R").replace("/FontDescriptor", "/ToUnicode 7 0 R /FontDescriptor").into_bytes(),
+        widths(),
+        stream("", b"1 beginbfchar <24> <20AC> endbfchar"),
+        stream("/Type /Metadata /Subtype /XML", packet.as_bytes()),
+    ]);
+    let mut info = Dict::new();
+    info.set(b"Title".to_vec(), Object::String(pdfcraft_cos::PdfString::text("Classified SECRET€ memo")));
+    info.set(b"Author".to_vec(), Object::String(pdfcraft_cos::PdfString::text("Ada")));
+    let r = doc.add(Object::Dict(info));
+    doc.trailer_mut().set(b"Info".to_vec(), Object::Ref(r));
+    assert_eq!(under(&mut doc, 0, &[[25.0, 95.0, 60.0, 110.0]]), 7, "SECRET$ is seven glyphs");
+    mark(&mut doc, 0, &[[25.0, 95.0, 60.0, 110.0]], "");
+    apply(&mut doc, None).unwrap();
+    let doc = reopen(&doc);
+    assert_eq!(info_value(&doc, "Title"), None, "the UTF-16BE title repeating removed text is gone");
+    assert_eq!(info_value(&doc, "Author").as_deref(), Some("Ada"), "unrelated entries stay");
+    let needle: Vec<u8> = "SECRET€".encode_utf16().flat_map(u16::to_be_bytes).collect();
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(!bytes.windows(needle.len()).any(|w| w == needle), "no UTF-16BE trace in the saved file");
+    // A full write may pack /Info into a compressed object stream, so survival is checked by
+    // reading the file back, not by scanning its bytes.
+    let reread = Document::open(Arc::new(bytes)).unwrap();
+    assert_eq!(info_value(&reread, "Author").as_deref(), Some("Ada"), "unrelated metadata survives");
+}
+
+/// Issue #2448: with nothing to apply, metadata is left alone.
+#[test]
+fn applying_with_no_marks_leaves_metadata_alone() {
+    let packet = "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#'>\
+<rdf:Description rdf:about='' xmlns:dc='http://purl.org/dc/elements/1.1/'><dc:title><rdf:Alt><rdf:li xml:lang='x-default'>TopSecret plan</rdf:li></rdf:Alt></dc:title></rdf:Description>\
+</rdf:RDF></x:xmpmeta>";
+    let mut doc = meta_doc(b"BT /F1 10 Tf 10 100 Td (PLAIN) Tj ET", &[("Title", "TopSecret plan")], Some(packet), None);
+    assert_eq!(apply(&mut doc, None), Err(RedactError::NothingToApply));
+    assert_eq!(info_value(&doc, "Title").as_deref(), Some("TopSecret plan"), "the entry stays");
+    assert!(xmp_text(&doc).is_some_and(|x| x.contains("TopSecret")), "the packet stays");
+}
+
 /// Issue #1325: removing comments keeps the annotations that are not comments: the multimedia
 /// and print-production ones (Watermark, PrinterMark, TrapNet, Screen, Movie, RichMedia, 3D).
 #[test]

@@ -85,6 +85,10 @@ pub(crate) struct Scope<'a> {
     pub hidden_layers: Vec<ObjRef>,
     /// Content removed from hidden layers (blocks and XObjects).
     pub layer_blocks: usize,
+    /// Redaction (apply mode): the text of each maximal run of removed glyphs, for the metadata
+    /// pass. A run joins across `TJ` kerning numbers and splits at kept glyphs, at codes with no
+    /// Unicode meaning, and at operator ends.
+    pub removed_fragments: Vec<String>,
     fonts: HashMap<Vec<u8>, Rc<Metrics>>,
     used_names: Vec<Vec<u8>>,
     depth: usize,
@@ -99,6 +103,7 @@ impl<'a> Scope<'a> {
             hidden_text: None,
             hidden_layers: Vec::new(),
             layer_blocks: 0,
+            removed_fragments: Vec::new(),
             fonts: HashMap::new(),
             used_names: Vec::new(),
             depth: 0,
@@ -629,11 +634,22 @@ pub(crate) fn process(doc: &mut Document, scope: &mut Scope<'_>, streams: &[Vec<
 
 /// Lay out a shown string (or `TJ` array) glyph by glyph, advancing `tm`. Returns the `TJ`
 /// items with the glyphs under a region replaced by displacements, and how many were removed.
-fn show(scope: &Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (Vec<Object>, usize) {
+fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (Vec<Object>, usize) {
     let f = &gs.font;
     let size = gs.size;
     let mut out: Vec<Object> = Vec::new();
     let mut removed = 0;
+    // Redaction only: collect what is removed, for the metadata pass. Hidden-text sanitising
+    // (empty regions or a page box) collects nothing.
+    let collect = scope.mode == Mode::Apply && !scope.rects.is_empty() && scope.hidden_text.is_none();
+    // The removed text of this one show() call: joined across `TJ` kerning numbers, split by
+    // kept glyphs and codes with no Unicode meaning.
+    let mut frag = String::new();
+    let flush = |frag: &mut String, scope: &mut Scope<'_>| {
+        if !frag.is_empty() {
+            scope.removed_fragments.push(std::mem::take(frag));
+        }
+    };
     let push_num = |out: &mut Vec<Object>, v: f64| {
         if v == 0.0 {
             return;
@@ -675,6 +691,16 @@ fn show(scope: &Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (Vec<O
                 for g in &glyphs {
                     if g.hit {
                         removed += 1;
+                        if collect {
+                            let t = f.decode(&bytes[g.bytes.clone()]);
+                            if t.is_empty() {
+                                // A code the font gives no meaning: the run cannot be known to
+                                // continue through it, so each side matches on its own.
+                                flush(&mut frag, scope);
+                            } else {
+                                frag.push_str(&t);
+                            }
+                        }
                         if !run.is_empty() {
                             out.push(string(std::mem::take(&mut run)));
                         }
@@ -683,6 +709,9 @@ fn show(scope: &Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (Vec<O
                             push_num(&mut out, -g.advance * 1000.0 / size);
                         }
                     } else {
+                        if collect {
+                            flush(&mut frag, scope);
+                        }
                         run.extend_from_slice(&bytes[g.bytes.clone()]);
                     }
                 }
@@ -698,6 +727,7 @@ fn show(scope: &Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (Vec<O
             }
         }
     }
+    flush(&mut frag, scope);
     (out, removed)
 }
 

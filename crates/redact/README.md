@@ -1,6 +1,6 @@
 # pdfcraft-redact
 
-Layer L4 (may use `edit`): redaction, architecture §11.2.
+Layer L4 (may use `edit`, `organize`): redaction, architecture §11.2.
 
 ```rust
 // Marks are Redact annotations (pdfcraft-annot: Shape::Redact { quads, overlay }).
@@ -27,12 +27,46 @@ clear_marks(&mut doc, None)?;                        // remove marks without app
 - **form XObjects**: rewritten recursively into new objects (pages sharing the original keep it);
 - **annotations** whose rectangle overlaps (with their pop-ups), and **form fields** with a
   widget under a mark;
+- **document metadata** that repeats removed text: `/Info` entries whose value contains a removed
+  text run (case-insensitive) are cleared — through `pdfcraft_organize::set_info`, which also
+  removes the XMP property mirroring each entry (`dc:title`, `dc:creator`, `dc:description`,
+  `pdf:Keywords`, `xmp:CreatorTool`, `pdf:Producer`) while leaving the rest of the packet
+  byte-for-byte intact;
 - the marks themselves, replaced by boxes in their fill colour (and overlay text) drawn into the
   page as a `/PCMark /Redaction` stream.
 
 A verification pass re-reads each redacted page and fails the operation if any glyph or inline
 image is still under an area. Content that can't be decoded makes the operation fail rather than
 leave it unredacted.
+
+## Metadata redaction (#2448)
+
+What the marks removed must not survive in metadata either. The interpreter decodes every glyph
+run it cuts out into *fragments*: maximal runs that join across `TJ` kerning numbers and split at
+kept glyphs, at codes with no Unicode meaning, and at operator ends. After verification, each
+`/Info` string entry whose value contains a fragment (lowercased, two characters or more) — or
+is contained in one, for a value shorter than the run; the author of a whole redacted sentence
+is removed text too — is cleared with its mirrored XMP property; then every catalog and page
+`/Metadata` stream is checked in its raw bytes **and** in an entity-unescaped view of them (XMP
+stores `AT&T` as `AT&amp;T`), and value by value (each tag's text, each quoted attribute),
+and removed whole when a fragment or part of one survives there — custom schemas cannot be
+edited per-entry — or when the stream cannot be decoded and read as UTF-8 within 16 MiB. A
+trailer `/Info` that is a direct dictionary (the one shape an entry clear cannot edit) is
+removed whole when it still matches. All of this happens before the forced full save, so the
+previous revision's bytes leave the file.
+
+The match errs towards clearing, in both directions:
+
+- **over-clearing**: a fully redacted common word is a fragment, and an unrelated entry or packet
+  merely containing it goes too; the wholesale fallback drops a whole stream for one
+  custom-schema hit;
+- **under-matching**: text inside images never becomes a fragment, runs shorter than two
+  characters are ignored, fragments do not join across operators, and `/Metadata` on component
+  objects (images, fonts, form XObjects) is not scanned — the same scope as Remove hidden
+  information.
+
+Remove hidden information (metadata category, `doc_remove_hidden`) is therefore the certain
+follow-up when a document's metadata must be provably free of the redacted text.
 
 Before changing any page, `apply` prepares the redaction appearances with a shared 8 MiB
 budget for their uncompressed PDF content across the selected pages. It bounds repeated-text
