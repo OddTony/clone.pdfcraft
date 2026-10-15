@@ -2277,6 +2277,8 @@ scroll speed	Slow	Αργή
 scroll speed	Normal	Κανονική
 scroll speed	Fast	Γρήγορη
 	Animation effects	Εφέ κίνησης
+	Graphics	Γραφικά
+	Applies the next time PdfCraft starts. Choose OpenGL if the window flickers on a display with G-SYNC, FreeSync or another variable refresh rate.	Εφαρμόζεται την επόμενη φορά που θα ξεκινήσει το PdfCraft. Επιλέξτε OpenGL αν το παράθυρο τρεμοπαίζει σε οθόνη με G-SYNC, FreeSync ή άλλο μεταβλητό ρυθμό ανανέωσης.
 animation effects	On	Ενεργά
 animation effects	Off	Ανενεργά
 	Enhance camera image	Βελτίωση εικόνας κάμερας

@@ -395,6 +395,29 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
             widgets::radio_value(ui, &mut app.animation_effects, choice, tl_ctx!("animation effects", choice.label()));
         }
     });
+    // The browser draws the web build. Chosen before the window exists, so it applies at the
+    // next start (crate::renderer explains the flicker it works around).
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        ui.horizontal(|ui| {
+            ui.label(tl!("Graphics"));
+            for choice in crate::renderer::RendererPreference::ALL {
+                // "OpenGL" is a name, not translated.
+                let label = match choice {
+                    crate::renderer::RendererPreference::Auto => tl!("Auto"),
+                    crate::renderer::RendererPreference::Gl => choice.label(),
+                };
+                widgets::radio_value(ui, &mut app.renderer, choice, label);
+            }
+        });
+        ui.label(
+            egui::RichText::new(tl!(
+                "Applies the next time PdfCraft starts. Choose OpenGL if the window flickers on a display with G-SYNC, FreeSync or another variable refresh rate."
+            ))
+            .small()
+            .color(t.text_muted),
+        );
+    }
     // Only where the app draws the title bar (GNOME on Wayland); elsewhere the desktop draws it.
     if app.window_controls.is_some() {
         ui.add(widgets::checkbox(&mut app.system_title_bar, tl!("Use system title bar")))

@@ -23,6 +23,9 @@ egui = { workspace = true }
 serde_json = { workspace = true }
 # Records from every crate go to standard error and the log file (src/logging.rs).
 log = { workspace = true }
+# Reads Preferences ▸ Graphics from eframe's `app.ron` before the window exists, to choose the
+# renderer (src/main.rs). The version eframe's `persistence` feature already brings in.
+ron = "0.12"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Finder double-click / Open With / Dock drops arrive as Apple events (#73); this small audited
