@@ -30,7 +30,7 @@ pub fn covers(bytes: &[u8], text: &str) -> bool {
 /// read-only editor matching; PDF export still validates embedding separately.
 pub fn covers_at(bytes: &[u8], index: u32, text: &str) -> bool {
     FontRef::from_index(bytes, index).is_ok_and(|f| {
-        text.chars().all(|c| matches!(c, '\n' | '\r') || c.is_whitespace() || f.charmap().map(c).is_some_and(|g| g.to_u32() != 0))
+        text.chars().all(|c| matches!(c, '\n' | '\r') || f.charmap().map(c).is_some_and(|g| g.to_u32() != 0))
     })
 }
 
