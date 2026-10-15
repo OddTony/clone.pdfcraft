@@ -1156,7 +1156,7 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
             .filter(|line| !families.contains_key(&line.font))
             .map(|line| (line.font, line.base_font, line.text))
             .collect();
-        if !missing.is_empty() {
+        if !missing.is_empty() && std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_none_or(|v| v != "0") {
             let mut roots = vec![
                 std::path::PathBuf::from("/Library/Fonts"),
                 std::path::PathBuf::from("/System/Library/Fonts"),
@@ -1169,6 +1169,11 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
             for root in roots {
                 let Ok(entries) = std::fs::read_dir(root) else { continue };
                 for entry in entries.flatten() {
+                    // Stop parsing installed fonts once every missing document face
+                    // has been matched. Keep the same opt-out as the UI font policy.
+                    if missing.iter().all(|(resource, _, _)| families.contains_key(resource)) {
+                        break;
+                    }
                     if scanned >= 1024 || families.len() >= 128 { break; }
                     scanned += 1;
                     let path = entry.path();
