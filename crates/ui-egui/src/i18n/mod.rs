@@ -1665,6 +1665,8 @@ mod tests {
             "Radio",
             "PushButton",
             "Keychain  ·  ",
+            // The distinguished name of a certificate, abbreviated as in X.500.
+            "DN: ",
         ];
         let (entries, errors) = parse_entries(ka.0.source, ka.0.plural_forms());
         assert!(errors.is_empty(), "Georgian catalog errors: {errors:?}");
