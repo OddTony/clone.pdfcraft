@@ -190,6 +190,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("file.revert", "Revert", FILE, None, Undo, "rotate-ccw"),
     c("print.dialog", "Print…", FILE, Some(Shortcut::cmd("P")), Document, "printer"),
     c("file.properties", "Document properties…", FILE, Some(Shortcut::cmd("D")), Document, "info"),
+    c("file.word_count", "Word count…", FILE, None, Copying, "hash"),
     ct("edit.undo", "Undo", EDIT, Some(Shortcut::cmd("Z")), Undo, "undo-2"),
     ct("edit.redo", "Redo", EDIT, Some(Shortcut::cmd_shift("Z")), Redo, "redo-2"),
     c("edit.find", "Find…", EDIT, Some(Shortcut::cmd("F")), Document, "search"),
@@ -216,6 +217,11 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("edit.snapshot", "Take a snapshot", EDIT, None, Copying, "camera"),
     c("view.full_screen", "Full screen mode", VIEW, Some(Shortcut::cmd("L")), Document, "maximize"),
     c("view.read_mode", "Read mode", VIEW, Some(Shortcut { command: true, shift: false, mac_ctrl: true, key: "H" }), Document, "book-open"),
+    // Browsers' tab keys (#1542): Ctrl+Tab on every platform, ⌃Tab rather than ⌘Tab on macOS,
+    // where the system takes ⌘Tab. They follow the tabs' order on screen and wrap around, and
+    // also run from Combine files, which has no document open.
+    c("view.next_tab", "Next tab", VIEW, Some(Shortcut { command: false, shift: false, mac_ctrl: true, key: "Tab" }), Nothing, "chevron-right"),
+    c("view.previous_tab", "Previous tab", VIEW, Some(Shortcut { command: false, shift: true, mac_ctrl: true, key: "Tab" }), Nothing, "chevron-left"),
     c("view.focus_page_input", "Go to page…", VIEW, Some(Shortcut::cmd_shift("N")), Document, "text-cursor-input"),
     c("ui.dock.reset", "Reset panel layout", VIEW, None, Nothing, "settings"),
     c("view.theme", "Switch light / dark theme", None, None, Nothing, "moon"),
