@@ -1165,6 +1165,12 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
                     // Validate the font parser and glyph coverage for each matched run.
                     let name = format!("pdf-source-installed-{}", definitions.font_data.len());
                     definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(bytes)));
+                    // Register this as a usable egui family, not just font data.
+                    let mut stack = vec![name.clone()];
+                    if let Some(defaults) = definitions.families.get(&FontFamily::Proportional) {
+                        stack.extend(defaults.iter().cloned());
+                    }
+                    definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
                     for (resource, _) in matched {
                         families.insert(resource.clone(), name.clone());
                     }
