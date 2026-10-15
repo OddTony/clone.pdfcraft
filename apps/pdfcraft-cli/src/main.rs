@@ -524,6 +524,20 @@ fn split(args: &[String]) -> Result<(), CliError> {
     Ok(())
 }
 
+/// What is rendered: the file, plus the appearances PdfCraft draws for comments that carry no
+/// normal appearance stream (`/AP /N`), which viewers such as Poppler and MuPDF draw from the
+/// annotation dictionary. The display renderer has always done this; `render` builds its renderer
+/// straight from the input bytes, so a FreeText, Text note, Highlight or Ink annotation without an
+/// appearance was left out of the PNG (#2371). Nothing is saved and the input file is unchanged;
+/// a file that cannot be opened or rewritten for display is rendered exactly as before.
+fn display_bytes(original: Arc<Vec<u8>>) -> Arc<Vec<u8>> {
+    use pdfcraft_cos::{Document, SaveOptions, write_incremental};
+    let Ok(doc) = Document::open(original.clone()) else { return original };
+    let Some(with_appearances) = pdfcraft_annot::with_missing_appearances(&doc) else { return original };
+    // Writing fails only as saving the document would; the page then renders as it always did.
+    write_incremental(&with_appearances, &SaveOptions::default()).map(Arc::new).unwrap_or(original)
+}
+
 fn render(args: &[String]) -> Result<(), CliError> {
     validate_options("render", args, RENDER_OPTIONS)?;
     let path = *positional(args).first().ok_or("render: missing file")?;
@@ -540,7 +554,7 @@ fn render(args: &[String]) -> Result<(), CliError> {
         _ => return Err(format!("render: --out {out}: use a .png, .jpg, .tif or .pam name").into()),
     };
     let mut r = PageRenderer::new(
-        read(path)?,
+        display_bytes(read(path)?),
         RenderConfig { password: flag(args, "--password").map(Arc::from), reject_oversize: true, ..Default::default() },
     );
     let p = r.render(RenderRequest { page: page_index, kind: RequestKind::Pixels, tile: None, scale: dpi / 72.0, tag: 0, preview: false });
