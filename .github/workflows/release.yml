@@ -24,7 +24,7 @@ jobs:
     with:
       app-name: pdfcraft
       app-title: PdfCraft
-      craft-fonts-ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
+      craft-fonts-ref: 0806e7d6b4e55b2ac66a21ff747ac5f2234d979f
       version: ${{ inputs.version }}
     secrets:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}

@@ -211,6 +211,9 @@
       <Component Id="PdfcraftNotice">
         <File Id="PdfcraftNoticeFile" Source="$(var.BinDir)\NOTICE" KeyPath="yes" />
       </Component>
+      <?ifdef FontNoticesDir?>
+      <Files Include="$(var.FontNoticesDir)\OFL-*.txt" />
+      <?endif?>
     </ComponentGroup>
 
     <!-- OCR models (#103), with their licences and ATTRIBUTION.txt, in models\ beside pdfcraft.exe

@@ -16,11 +16,17 @@
 //! (`/NeedAppearances`). Widths use the approximate metrics of `pdfcraft-fonts` (Helvetica, or one
 //! em per full-width character in composite fonts).
 //!
+//! Filling and authoring use [`field_appearance_portable`]: CJK text takes approved embedded
+//! build-input fonts when its source resource cannot render it portably. Their real advances
+//! drive layout, /AP and /DR share the resources, and the widget's /DA selects the primary face.
+//! The immutable helpers retain the no-build-input fallback described above.
+//!
 //! `/MK /R` (0, 90, 180, 270, counterclockwise) lays the content out in the upright box and sets
 //! the appearance `/Matrix` so that box lands on the widget rectangle. Any other value is 0, and
 //! rotation 0 leaves `/Matrix` off.
 
 use pdfcraft_cos::{Dict, Document, Object, Stream};
+use pdfcraft_fonts::cjk::{EmbeddedCjkText, PreparedCjkText};
 use pdfcraft_fonts::pdf::Metrics;
 use pdfcraft_fonts::{UnicodeCMap, cjk_width, helvetica_width, literal, win_ansi, wrap_with};
 
@@ -155,6 +161,8 @@ enum FontText {
     WinAnsi,
     /// A reused simple font's encoding, including indirect dictionaries and Differences.
     Simple(Box<Metrics>),
+    /// An embedded composite font with its own Unicode mapping and advances.
+    Composite(Box<Metrics>),
     /// A composite font with a predefined Unicode CMap.
     Unicode(UnicodeCMap),
 }
@@ -164,7 +172,7 @@ impl FontText {
         match self {
             Self::WinAnsi => win_ansi(s),
             // Selection checks every displayed string first; wrapping only removes line breaks.
-            Self::Simple(metrics) => metrics.encode(&s.replace('\t', " ")).unwrap_or_default(),
+            Self::Simple(metrics) | Self::Composite(metrics) => metrics.encode(&s.replace('\t', " ")).unwrap_or_default(),
             Self::Unicode(cmap) => cmap.encode(s),
         }
     }
@@ -172,6 +180,12 @@ impl FontText {
     fn can_encode(&self, s: &str) -> bool {
         match self {
             Self::Simple(metrics) => metrics.encode(&s.replace('\t', " ")).is_some(),
+            Self::Composite(metrics) => metrics.encode(&s.replace('\t', " ")).is_some_and(|bytes| {
+                metrics.codes(&bytes).iter().all(|(code, _)| {
+                    let width = metrics.width(*code);
+                    width.is_finite() && (0.0..=16.0).contains(&width)
+                })
+            }),
             _ => true,
         }
     }
@@ -182,7 +196,7 @@ impl FontText {
     fn first_unencodable(&self, s: &str) -> Option<char> {
         match self {
             Self::WinAnsi => pdfcraft_fonts::first_undrawable(s),
-            Self::Simple(metrics) => {
+            Self::Simple(metrics) | Self::Composite(metrics) => {
                 s.chars().map(|c| if c == '\t' { ' ' } else { c }).find(|c| metrics.encode(c.encode_utf8(&mut [0; 4])).is_none())
             }
             Self::Unicode(cmap) => cmap.first_unencodable(s),
@@ -192,6 +206,10 @@ impl FontText {
     fn width(&self, s: &str, size: f64) -> f64 {
         match self {
             Self::WinAnsi | Self::Simple(_) => helvetica_width(s, size),
+            Self::Composite(metrics) => metrics
+                .encode(&s.replace(['\t', '\r', '\n'], " "))
+                .map(|bytes| metrics.codes(&bytes).iter().map(|(code, _)| metrics.width(*code)).sum::<f64>() * size)
+                .unwrap_or(0.0),
             Self::Unicode(_) => cjk_width(s, size),
         }
     }
@@ -210,7 +228,12 @@ fn dr_font(doc: &Document, name: &str) -> Option<(Object, FontText)> {
         // Japanese, Chinese and Korean forms: a CID font addressed by Unicode (a non-embedded
         // `/HeiseiMin-W3` with `/UniJIS-UCS2-H`, say). Embedded CMap streams and Identity-H need
         // the font's own mapping, so those still fall back to Helvetica.
-        Some(b"Type0") => return Some((entry, FontText::Unicode(UnicodeCMap::from_name(fd.name(b"Encoding")?)?))),
+        Some(b"Type0") => {
+            if pdfcraft_fonts::pdf::embedded_sfnt(doc, fd).is_some() {
+                return Some((entry, FontText::Composite(Box::new(Metrics::from_dict(doc, fd)))));
+            }
+            return Some((entry, FontText::Unicode(UnicodeCMap::from_name(fd.name(b"Encoding")?)?)));
+        }
         _ => return None,
     }
     // Symbolic fonts (ZapfDingbats, Symbol) can't show WinAnsi text.
@@ -421,6 +444,108 @@ pub fn field_appearance_as(doc: &Document, f: &Field, w: &Widget, values: &[Stri
 /// hold it: the form's font is a simple (WinAnsi) font, Helvetica stands in for one PdfCraft can't
 /// write with (an embedded subset, `Identity-H`), or a UCS-2 CMap meets a character beyond U+FFFF.
 pub fn field_appearance_drawn(doc: &Document, f: &Field, w: &Widget, values: &[String], format: bool) -> (Stream, Option<char>) {
+    field_appearance_impl(doc, f, w, values, format, None)
+}
+
+/// Prepare approved embedded fonts before drawing a CJK field. This path is used by both
+/// filling and authoring; the immutable public appearance helpers remain available.
+pub fn field_appearance_portable(
+    doc: &mut Document,
+    f: &Field,
+    w: &Widget,
+    values: &[String],
+    format: bool,
+) -> Result<(Stream, Option<char>), crate::FormError> {
+    let formatted =
+        if format && matches!(f.kind, FieldKind::Text | FieldKind::Combo) && values.len() == 1 && f.actions.format != crate::af::Format::None {
+            values.first().map(|one| vec![crate::af::format_value(&f.actions.format, one)])
+        } else {
+            None
+        };
+    let values = formatted.as_deref().unwrap_or(values);
+    let shown = if f.has(flags::PASSWORD) {
+        String::new()
+    } else if f.kind == FieldKind::List {
+        f.options.iter().map(|(_, label)| label.as_str()).collect::<Vec<_>>().join("\n")
+    } else if f.kind == FieldKind::Combo {
+        values.iter().map(|v| f.options.iter().find(|(e, _)| e == v).map_or(v.as_str(), |(_, d)| d.as_str())).collect::<Vec<_>>().join(", ")
+    } else {
+        values.first().cloned().unwrap_or_default()
+    };
+    if !pdfcraft_fonts::cjk::contains_cjk(&shown) || pdfcraft_fonts::cjk::document_cjk_fonts_for_style(false, false).is_empty() {
+        return Ok(field_appearance_impl(doc, f, w, values, false, None));
+    }
+    let wd = doc.get(w.obj).as_dict().cloned().unwrap_or_default();
+    let original_da = wd.get(b"DA").map(|v| doc.resolve(v)).and_then(|o| o.as_string().map(|s| s.to_text())).unwrap_or_else(|| f.da.clone());
+    let da = parse_da(&original_da);
+    let reusable = dr_font(doc, &da.font).is_some_and(|(entry, enc)| {
+        // ToUnicode describes extraction, not the glyphs present in a source
+        // subset. A declared mapping can encode CJK while drawing only .notdef.
+        doc.dict(&entry)
+            .and_then(|fd| pdfcraft_fonts::pdf::embedded_sfnt(doc, &fd))
+            .is_some_and(|bytes| pdfcraft_fonts::embedding::covers(&bytes, &shown.replace(['\r', '\n', '\t'], " ")))
+            && shown.split(['\r', '\n']).all(|s| enc.can_encode(s) && enc.first_unencodable(s).is_none())
+    });
+    if reusable {
+        return Ok(field_appearance_impl(doc, f, w, values, false, None));
+    }
+    let prepared = match PreparedCjkText::new(&shown, false, false) {
+        Ok(prepared) => prepared,
+        Err(_) => {
+            // Preserve the form's established lossless-value/marked-appearance behaviour:
+            // an unsupported value may already have been stored by the fill operation.
+            let (stream, missing) = field_appearance_impl(doc, f, w, values, false, None);
+            let faces = pdfcraft_fonts::cjk::document_cjk_fonts_for_style(false, false);
+            let missing = missing
+                .or_else(|| {
+                    shown
+                        .chars()
+                        .filter(|c| !c.is_whitespace())
+                        .find(|c| !faces.iter().any(|face| pdfcraft_fonts::embedding::covers(face.bytes, &c.to_string())))
+                })
+                .or_else(|| shown.chars().find(|c| !c.is_ascii()));
+            return Ok((stream, missing));
+        }
+    };
+    let mut af = acroform(doc).ok_or_else(|| crate::FormError::Invalid("the document has no AcroForm dictionary".into()))?;
+    let mut dr = af.get(b"DR").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let mut fonts = dr.get(b"Font").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let embedded = prepared.install(doc, &mut fonts).map_err(crate::FormError::Invalid)?;
+    let primary = embedded.primary_name().ok_or_else(|| crate::FormError::Invalid("no embedded CJK font was selected".into()))?;
+    dr.set(b"Font".to_vec(), Object::Dict(fonts));
+    af.set(b"DR".to_vec(), Object::Dict(dr));
+    let root = doc.root().ok_or_else(|| crate::FormError::Invalid("the document has no catalog".into()))?;
+    let indirect = doc.get(root).as_dict().and_then(|d| d.get(b"AcroForm")).and_then(Object::as_ref);
+    if let Some(r) = indirect {
+        doc.update_dict(r, |d| *d = af)?;
+    } else {
+        doc.update_dict(root, |d| d.set(b"AcroForm".to_vec(), Object::Dict(af)))?;
+    }
+    let updated_da = replace_da_font(&original_da, primary);
+    doc.update_dict(w.obj, |d| d.set(b"DA".to_vec(), pdfcraft_cos::PdfString::literal(updated_da.into_bytes())))?;
+    Ok(field_appearance_impl(doc, f, w, values, false, Some(&embedded)))
+}
+
+fn replace_da_font(da: &str, font: &str) -> String {
+    let mut tokens: Vec<String> = da.split_whitespace().map(str::to_string).collect();
+    if let Some(index) = tokens.iter().rposition(|s| s == "Tf").and_then(|i| i.checked_sub(2))
+        && let Some(slot) = tokens.get_mut(index)
+    {
+        *slot = format!("/{font}");
+    } else {
+        tokens.extend([format!("/{font}"), "0".into(), "Tf".into()]);
+    }
+    tokens.join(" ")
+}
+
+fn field_appearance_impl(
+    doc: &Document,
+    f: &Field,
+    w: &Widget,
+    values: &[String],
+    format: bool,
+    cjk: Option<&EmbeddedCjkText>,
+) -> (Stream, Option<char>) {
     // The Format event: what is shown, not what is stored.
     let formatted: Vec<String>;
     let values = if format
@@ -451,14 +576,14 @@ pub fn field_appearance_drawn(doc: &Document, f: &Field, w: &Widget, values: &[S
         } else if f.kind == FieldKind::Text && f.has(flags::MULTILINE) {
             text.split(['\n', '\r']).all(|line| enc.can_encode(line))
         } else {
-            enc.can_encode(&text)
+            enc.can_encode(&text.replace(['\r', '\n'], " "))
         }
     };
     let (font_name, font_obj, enc) = match dr_font(doc, &da.font).filter(|(_, enc)| can_show(enc)) {
         Some((o, enc)) => (da.font.clone(), o, enc),
         None => ("Helv".to_string(), helvetica(), FontText::WinAnsi),
     };
-    let width_of = |text: &str, size: f64| enc.width(text, size);
+    let width_of = |text: &str, size: f64| cjk.map_or_else(|| enc.width(text, size), |font| font.width(text, size));
     let (mut c, bw) = frame(doc, &wd, width, height);
     let pad = 2.0 + bw;
     let inner_w = (width - 2.0 * pad).max(1.0);
@@ -466,9 +591,22 @@ pub fn field_appearance_drawn(doc: &Document, f: &Field, w: &Widget, values: &[S
     let mut body: Vec<u8> = Vec::new();
     // The first character drawn that the font can't hold (drawn as `?`), for the caller to report.
     let mut unencodable: Option<char> = None;
-    let mut show = |body: &mut Vec<u8>, x: f64, y: f64, text: &str| {
+    let mut show = |body: &mut Vec<u8>, x: f64, y: f64, text: &str, size: f64| {
         // A line break in a single-line value is a space, as in viewers (multiline text is split).
         let text: String = text.chars().map(|c| if matches!(c, '\n' | '\r') { ' ' } else { c }).collect();
+        if let Some(cjk) = cjk {
+            body.extend(format!("1 0 0 1 {} {} Tm ", n(x), n(y)).bytes());
+            if let Some(runs) = cjk.runs(&text) {
+                for (name, bytes) in runs {
+                    body.extend(format!("/{name} {} Tf ", n(size)).bytes());
+                    body.extend(literal(&bytes));
+                    body.extend_from_slice(b" Tj\n");
+                }
+            } else {
+                unencodable = text.chars().next();
+            }
+            return;
+        }
         if unencodable.is_none() {
             unencodable = enc.first_unencodable(&text);
         }
@@ -500,7 +638,7 @@ pub fn field_appearance_drawn(doc: &Document, f: &Field, w: &Widget, values: &[S
                 if values.contains(export) {
                     c.push_str(&format!("0.6 0.75 0.86 rg\n{} {} {} {} re f\n", n(bw), n(y - line), n(width - 2.0 * bw), n(line)));
                 }
-                show(&mut body, pad, y - line + size * 0.25, display);
+                show(&mut body, pad, y - line + size * 0.25, display, size);
                 y -= line;
             }
         }
@@ -515,7 +653,7 @@ pub fn field_appearance_drawn(doc: &Document, f: &Field, w: &Widget, values: &[S
                     if y < -size {
                         break;
                     }
-                    show(&mut body, x_for(&line, size), y, &line);
+                    show(&mut body, x_for(&line, size), y, &line, size);
                     y -= size * 1.15;
                 }
             } else {
@@ -534,10 +672,10 @@ pub fn field_appearance_drawn(doc: &Document, f: &Field, w: &Widget, values: &[S
                     let cell = width / cells as f64;
                     for (i, ch) in text.chars().take(cells).enumerate() {
                         let s = ch.to_string();
-                        show(&mut body, cell * i as f64 + (cell - width_of(&s, size)) / 2.0, y, &s);
+                        show(&mut body, cell * i as f64 + (cell - width_of(&s, size)) / 2.0, y, &s, size);
                     }
                 } else {
-                    show(&mut body, x_for(&text, size), y, &text);
+                    show(&mut body, x_for(&text, size), y, &text, size);
                 }
             }
         }
@@ -560,6 +698,11 @@ pub fn field_appearance_drawn(doc: &Document, f: &Field, w: &Widget, values: &[S
     content.extend_from_slice(b"ET\nQ\nEMC\n");
     let mut fonts = Dict::new();
     fonts.set(font_name.into_bytes(), font_obj);
+    if let Some(cjk) = cjk {
+        for (name, entry) in cjk.resources.iter() {
+            fonts.set(name.clone(), entry.clone());
+        }
+    }
     let mut res = Dict::new();
     res.set(b"Font".to_vec(), Object::Dict(fonts));
     let mut d = Dict::new();

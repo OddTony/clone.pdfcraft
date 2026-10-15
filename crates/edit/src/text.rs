@@ -1455,9 +1455,9 @@ fn no_hebrew_font() -> EditError {
 
 /// The faces a Type 3 replacement may draw `text` with, best first. Text with Hebrew takes the
 /// Hebrew face first (its Latin and digits too, so a line keeps one look), then the Japanese
-/// faces for anything it lacks; other text takes the Japanese faces, as before.
+/// and Chinese faces for anything it lacks; other text takes the CJK faces.
 fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
-    let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
+    let japanese = pdfcraft_fonts::cjk::document_cjk_fonts_for_style(family == crate::added::Family::Times, bold);
     if !text.chars().any(crate::bidi::is_hebrew) {
         return Ok((japanese, false));
     }
@@ -1495,13 +1495,13 @@ fn type3_font(
     // text keeps the Hebrew face and takes each character it lacks from the next face that has it.
     let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
         .ok_or_else(|| no_fallback_font(text))?;
-    let others: &[&CraftFont] = if hebrew { faces.get(1..).unwrap_or_default() } else { &[] };
+    let others: &[&CraftFont] = &faces;
     // Every outline is read before the document is touched, so a character that fails leaves it
     // as it was. Each font takes the next `per_font` characters; codes restart at 1 in each.
     let per_font = max_glyphs.clamp(1, MAX_TYPE3_GLYPHS);
     let mut glyphs = Vec::with_capacity(chars.len());
     for (i, ch) in chars.into_iter().enumerate() {
-        // Hebrew text: the first face with the glyph, else the Hebrew face's error.
+        // Try the selected face, then the other CJK/Hebrew faces for missing glyphs.
         let (path, width) = others.iter().fold(type3_path(face, ch), |found, f| found.or_else(|e| type3_path(f, ch).map_err(|_| e)))?;
         let code = u8::try_from((i % per_font).saturating_add(1))
             .map_err(|_| EditError::Invalid("replacement text has too many unique characters".into()))?;

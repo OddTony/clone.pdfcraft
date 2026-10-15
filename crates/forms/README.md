@@ -29,6 +29,12 @@ delete_field(&mut doc, "email")?;
 
 ## Behaviour
 
+- With approved CJK craft-fonts, filling and authoring embed Unicode fonts for Japanese and
+  Simplified/Traditional Chinese text when the source font cannot render it portably.
+  Generated appearances use real advances; `/AP`, `/DR` and the affected widget's `/DA`
+  retain usable font resources through save/reopen and later editing. Full programs are
+  reused across fields. Password appearances remain masked. Without a suitable bundled
+  face, the existing preserved-value/undrawn-warning behaviour below applies.
 - Inheritable attributes (`/FT`, `/Ff`, `/V`, `/DV`, `/DA`, `/Q`, `/MaxLen`) are resolved down the
   field tree; the form's `/DA` and `/Q` are the last fallback.
 - Text and choice fields get new appearance streams (`/Tx BMC … EMC`): auto-size (`0 Tf`), comb,

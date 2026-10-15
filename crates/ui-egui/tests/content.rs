@@ -284,9 +284,9 @@ fn text_the_standard_fonts_cant_draw_stays_in_the_editor() {
     h.run_steps(2);
     let p = at(&h, 40.0, 300.0);
     click(&mut h, p);
-    h.event(egui::Event::Text("Hello 世界".into()));
+    h.event(egui::Event::Text("Hello \u{10ffff}".into()));
     h.run_steps(2);
-    h.get_by_label_contains("can't draw “世” (U+4E16)");
+    h.get_by_label_contains("U+10FFFF");
     if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
         h.render().unwrap().save(format!("{dir}/undrawable-text.png")).unwrap();
     }
@@ -294,12 +294,12 @@ fn text_the_standard_fonts_cant_draw_stays_in_the_editor() {
     h.run_steps(3);
     assert!(texts(&h).is_empty(), "nothing was written to the page");
     let draft = h.state().views[0].content.draft.as_ref().map(|d| d.text.clone());
-    assert_eq!(draft.as_deref(), Some("Hello 世界"), "the typed text is kept");
+    assert_eq!(draft.as_deref(), Some("Hello \u{10ffff}"), "the typed text is kept");
     // A click elsewhere on the page doesn't finish it, or replace it with a new box.
     let elsewhere = at(&h, 40.0, 150.0);
     click(&mut h, elsewhere);
     let draft = h.state().views[0].content.draft.as_ref().map(|d| d.text.clone());
-    assert_eq!(draft.as_deref(), Some("Hello 世界"), "clicking elsewhere keeps the typed text");
+    assert_eq!(draft.as_deref(), Some("Hello \u{10ffff}"), "clicking elsewhere keeps the typed text");
     assert!(texts(&h).is_empty());
     // Once the text can be drawn, Done adds it (Done took the focus, so edit the draft directly).
     if let Some(d) = h.state_mut().views[0].content.draft.as_mut() {
@@ -323,9 +323,9 @@ fn a_kept_draft_goes_with_its_deleted_page() {
     h.run_steps(4);
     let p = h.state().views[0].page_screen_rect(1).expect("page 2 on screen").min + egui::vec2(40.0, 40.0);
     click(&mut h, p);
-    h.event(egui::Event::Text("日本語".into()));
+    h.event(egui::Event::Text("日本語\u{10ffff}".into()));
     h.run_steps(2);
-    assert_eq!(h.state().views[0].content.draft.as_ref().map(|d| (d.page, d.text.as_str())), Some((1, "日本語")));
+    assert_eq!(h.state().views[0].content.draft.as_ref().map(|d| (d.page, d.text.as_str())), Some((1, "日本語\u{10ffff}")));
     assert!(h.state_mut().apply_edit(pdfcraft_engine::Edit::DeletePages { pages: vec![1] }));
     h.run_steps(2);
     assert!(h.state().views[0].content.draft.is_none());

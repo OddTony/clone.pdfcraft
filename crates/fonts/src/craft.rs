@@ -36,11 +36,11 @@ pub fn ui_japanese_fonts() -> Vec<&'static CraftFont> {
     fonts
 }
 
-/// The `Hans` craft-fonts faces for Simplified Chinese interface text, in manifest order.
+/// The `Hans` and `Hant` craft-fonts faces for Chinese interface text, in manifest order.
 /// Empty when built without craft-fonts (Chinese text then shows the font system's
 /// replacement glyph, the same degraded mode as Japanese without craft-fonts).
 pub fn ui_chinese_fonts() -> Vec<&'static CraftFont> {
-    CRAFT_FONTS.iter().filter(|f| f.covers("Hans")).collect()
+    CRAFT_FONTS.iter().filter(|f| f.covers("Hans") || f.covers("Hant")).collect()
 }
 
 /// The `Arab` craft-fonts faces for Arabic-script interface text (file names, document titles),
@@ -107,7 +107,7 @@ pub fn ui_cjk_fonts(prefer_hans: bool) -> Vec<&'static CraftFont> {
 }
 
 fn order_cjk<'a>(faces: impl IntoIterator<Item = &'a CraftFont>, prefer_hans: bool) -> Vec<&'a CraftFont> {
-    let mut out: Vec<&'a CraftFont> = faces.into_iter().filter(|f| f.covers("Hans") || f.covers("Jpan")).collect();
+    let mut out: Vec<&'a CraftFont> = faces.into_iter().filter(|f| f.covers("Hans") || f.covers("Hant") || f.covers("Jpan")).collect();
     let first = if prefer_hans { "Hans" } else { "Jpan" };
     // The preferred script's faces first (a face covering both counts as preferred); within each
     // group the Japanese UI face (BIZ UDPGothic, not a serif) leads, otherwise manifest order
@@ -304,7 +304,7 @@ mod tests {
         let ui = ui_japanese_fonts();
         assert_eq!(ui.len(), CRAFT_FONTS.iter().filter(|f| f.covers("Jpan")).count());
         let ui_zh = ui_chinese_fonts();
-        assert_eq!(ui_zh.len(), CRAFT_FONTS.iter().filter(|f| f.covers("Hans")).count());
+        assert_eq!(ui_zh.len(), CRAFT_FONTS.iter().filter(|f| f.covers("Hans") || f.covers("Hant")).count());
         if CRAFT_FONTS.is_empty() {
             eprintln!("built without craft-fonts (CRAFT_FONTS_DIR unset): no Japanese faces, as expected");
             assert!(SHIPPORI_MINCHO.is_none() && ui.is_empty() && ui_zh.is_empty());

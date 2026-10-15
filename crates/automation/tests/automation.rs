@@ -7,6 +7,37 @@ use pdfcraft_automation::mcp::McpServer;
 use pdfcraft_automation::{Automation, Content, ToolError, tools};
 use serde_json::{Value, json};
 
+#[path = "../../render/tests/support/cjk.rs"]
+mod imported_cjk;
+
+#[test]
+#[ignore = "portable release acceptance requires Hans and Hant build inputs"]
+fn portable_cjk_prefilled_fields_render_without_form_fill() {
+    for script in ["Hans", "Hant"] {
+        assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)));
+    }
+    let dir = workdir("prefilled-cjk");
+    let mut a = auto(&dir);
+    for (index, (encoding, collection, codes, text)) in imported_cjk::CASES.into_iter().enumerate() {
+        let source = imported_cjk::prefilled(encoding, collection, codes, text);
+        let path = format!("prefilled-{index}.pdf");
+        std::fs::write(dir.join(&path), &source).unwrap();
+        let result = ok(&mut a, "doc_open", json!({"path":path}));
+        let doc = result["doc"].as_u64().unwrap();
+        assert_eq!(ok(&mut a, "form_fields", json!({"doc":doc}))["fields"][0]["value"], text);
+        let output = a.call("page_render", &json!({"doc":doc,"page":1,"dpi":72})).unwrap();
+        let image = output.iter().find_map(|c| if let Content::Png { data, .. } = c { Some(data) } else { None }).unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(image)).read_info().unwrap();
+        let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut pixels).unwrap();
+        let channels = info.color_type.samples();
+        assert!(pixels[..info.buffer_size()].chunks_exact(channels).filter(|p| p[0] < 128).count() > 60, "unfocused {text}");
+        assert_eq!(std::fs::read(dir.join(&path)).unwrap(), source, "rendering never writes the input");
+        assert_eq!(ok(&mut a, "doc_info", json!({"doc":doc}))["document"]["dirty"], false);
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 /// A PDF with `n` 200×300 pt pages reading "Page 1", "Page 2", …
 fn fixture(n: usize) -> Vec<u8> {
     let mut objs: Vec<Vec<u8>> = vec![b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()];
@@ -212,6 +243,44 @@ fn page_transitions_are_set_and_removed_through_the_tools() {
         entry(&dir, "out/t4.pdf", 1, b"Trans").is_some() && entry(&dir, "out/t4.pdf", 2, b"Trans").is_some(),
         "one undo step brings both pages back"
     );
+}
+
+#[test]
+#[ignore = "portable release acceptance requires Japanese, Simplified and Traditional build inputs"]
+fn portable_cjk_tools_edit_fill_undo_save_reopen_and_render() {
+    for script in ["Jpan", "Hans", "Hant"] {
+        assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)));
+    }
+    let dir = workdir("portable-cjk");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_create", json!({"from":"blank","width":600,"height":800}))["doc"].as_u64().unwrap();
+    let address = "〒100-0001東京都千代田区千代田1-1";
+    let name = "山田太郎";
+    ok(&mut a, "page_add_text", json!({"doc":doc,"page":1,"text":address,"at":[40,50],"width":520,"size":16}));
+    assert!(page_text(&mut a, doc)[0].contains(address));
+    ok(&mut a, "content_update", json!({"doc":doc,"page":1,"index":1,"text":name}));
+    assert!(page_text(&mut a, doc)[0].contains(name));
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert!(page_text(&mut a, doc)[0].contains(address));
+    ok(&mut a, "edit_redo", json!({"doc":doc}));
+    ok(&mut a, "text_edit", json!({"doc":doc,"page":1,"line":1,"text":address}));
+    for (i, text) in [name, "简体中文：测试编辑汉龙马", "繁體中文：測試編輯漢龍馬"].into_iter().enumerate() {
+        let field = format!("Field{i}");
+        let y = 150 + i * 60;
+        ok(&mut a, "form_add_field", json!({"doc":doc,"page":1,"type":"text","rect":[40,y,560,y+35],"name":field}));
+        let result = ok(&mut a, "form_fill", json!({"doc":doc,"values":{field:text}}));
+        assert!(result.get("warnings").is_none(), "{result}");
+    }
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"portable-cjk.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"portable-cjk.pdf"}))["doc"].as_u64().unwrap();
+    assert!(page_text(&mut a, reopened)[0].contains(address));
+    let fields = ok(&mut a, "form_fields", json!({"doc":reopened}));
+    assert_eq!(fields["fields"][0]["value"], name);
+    let result = ok(&mut a, "form_fill", json!({"doc":reopened,"values":{"Field0":address}}));
+    assert!(result.get("warnings").is_none(), "{result}");
+    let rendered = a.call("page_render", &json!({"doc":reopened,"page":1})).unwrap();
+    assert!(rendered.iter().any(|c| matches!(c, Content::Png { data, width, height } if !data.is_empty() && *width > 0 && *height > 0)));
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
@@ -4200,7 +4269,11 @@ fn text_the_standard_fonts_cannot_draw_is_never_silent_through_tools() {
     let out = ok(&mut a, "form_fill", json!({ "doc": doc, "values": { "who": "Ada" } }));
     assert!(out.get("warnings").is_none(), "{out}");
     let out = ok(&mut a, "form_fill", json!({ "doc": doc, "values": { "who": "张三" } }));
-    warned(&out, &["form field \"who\"", "\"张\" (U+5F20)", "other PDF viewers redraw the field"]);
+    if pdfcraft_fonts::cjk::PreparedCjkText::new("张三", false, false).is_ok() {
+        assert!(out.get("warnings").is_none(), "{out}");
+    } else {
+        warned(&out, &["form field \"who\"", "\"张\" (U+5F20)", "other PDF viewers redraw the field"]);
+    }
     let fields = ok(&mut a, "form_fields", json!({ "doc": doc }));
     assert_eq!(fields["fields"][0]["value"], "张三", "{fields}");
     let out = ok(&mut a, "form_add_field", json!({ "doc": doc, "page": 1, "type": "button", "rect": [20, 60, 120, 82], "caption": "提交" }));

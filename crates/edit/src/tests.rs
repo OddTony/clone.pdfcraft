@@ -938,6 +938,49 @@ fn without_craft_fonts(test: &str) -> bool {
 }
 
 #[test]
+#[ignore = "portable release acceptance requires Japanese, Simplified and Traditional build inputs"]
+fn portable_cjk_existing_chinese_replacement_keeps_mixed_glyphs() {
+    assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers("Hans")));
+    let mut doc = text_page("BT /F2 12 Tf 72 700 Td (Original) Tj ET");
+    let text = "简体中文 丢龍馬";
+    text::replace_line(&mut doc, 0, 0, text).unwrap();
+    assert_eq!(text::text_lines(&reopen(&doc), 0).unwrap()[0].text, text);
+}
+
+#[test]
+#[ignore = "portable release acceptance requires Japanese, Simplified and Traditional build inputs"]
+fn portable_cjk_page_add_replace_and_update_survive_reopen() {
+    for script in ["Jpan", "Hans", "Hant"] {
+        assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)));
+    }
+    for value in
+        ["〒100-0001東京都千代田区千代田1-1", "山田太郎", "简体中文：测试编辑汉龙马", "繁體中文：測試編輯漢龍馬", "ひらがな カタカナ ABC 丢龍馬"]
+    {
+        let mut doc = text_page("BT /F2 12 Tf 72 700 Td (Original) Tj ET");
+        text::replace_line(&mut doc, 0, 0, value).unwrap();
+        let mut doc = reopen(&doc);
+        assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, value);
+        let added = AddedText { rect: [72.0, 400.0, 200.0, 500.0], text: value.into(), size: 12.0, ..Default::default() };
+        assert!(added::first_undrawable(&added).is_none());
+        let prepared = pdfcraft_fonts::cjk::PreparedCjkText::new(value, false, false).unwrap();
+        for line in added::lines(&added) {
+            assert!(prepared.width(&line, added.size) <= 128.01);
+        }
+        add_content(&mut doc, 0, &Content::Text(added.clone())).unwrap();
+        let mut doc = reopen(&doc);
+        let Content::Text(saved) = &list_added(&doc)[0].content else { panic!("text item") };
+        assert_eq!(saved.text, value);
+        let extracted = text::text_lines(&doc, 0).unwrap().iter().map(|l| l.text.clone()).collect::<String>();
+        assert!(extracted.contains(value));
+        let updated = AddedText { text: format!("{value} 2026"), align: Align::Right, ..added };
+        update_content(&mut doc, 0, 0, &Content::Text(updated.clone())).unwrap();
+        let reopened = reopen(&doc);
+        let Content::Text(saved) = &list_added(&reopened)[0].content else { panic!("text item") };
+        assert_eq!(saved.text, updated.text);
+    }
+}
+
+#[test]
 fn japanese_line_uses_unicode_type3_fallback() {
     if without_craft_fonts("japanese_line_uses_unicode_type3_fallback") {
         return;
@@ -1161,8 +1204,8 @@ fn japanese_replacement_missing_a_glyph_after_240_changes_nothing() {
         return;
     }
     // The first CJK character that no face draws: the 242nd unique character, in a second font.
-    let faces = pdfcraft_fonts::document_japanese_fonts_for_style(false, false);
-    let missing = (0x4E00u32..0x9FFF)
+    let faces = pdfcraft_fonts::cjk::document_cjk_fonts_for_style(false, false);
+    let missing = (0x20000u32..0x3FFFF)
         .filter_map(char::from_u32)
         .find(|ch| faces.iter().all(|face| pdfcraft_fonts::japanese_glyph_from(face, *ch).is_err()))
         .expect("some CJK character is outside every face");
@@ -2516,9 +2559,9 @@ fn header_and_watermark_drawability_matches_what_applying_refuses() {
 fn page_text_the_standard_fonts_cant_draw_is_refused() {
     let mut doc = fixture();
     let before: Vec<Vec<String>> = (0..3).map(|p| streams(&reopen(&doc), p)).collect();
-    let text = AddedText { rect: [72.0, 600.0, 300.0, 700.0], text: "日本語のテキスト".into(), ..AddedText::default() };
+    let text = AddedText { rect: [72.0, 600.0, 300.0, 700.0], text: "日本語\u{10ffff}".into(), ..AddedText::default() };
     let err = add_content(&mut doc, 0, &Content::Text(text)).unwrap_err().to_string();
-    assert!(err.contains("\"日\" (U+65E5)"), "{err}");
+    assert!(err.contains("U+10FFFF") || err.contains("U+65E5"), "{err}");
     let hf = HeaderFooter {
         text: ["Ελληνικά".into(), String::new(), String::new(), String::new(), String::new(), String::new()],
         ..HeaderFooter::default()
@@ -2533,8 +2576,8 @@ fn page_text_the_standard_fonts_cant_draw_is_refused() {
     add_content(&mut doc, 0, &Content::Text(text.clone())).unwrap();
     // Retyping existing text is refused the same way, and the whole document is left as it was.
     let saved = write_incremental(&doc, &SaveOptions::default()).unwrap();
-    let retyped = AddedText { text: "Café 中".into(), ..text.clone() };
-    assert!(update_content(&mut doc, 0, 0, &Content::Text(retyped)).unwrap_err().to_string().contains("U+4E2D"));
+    let retyped = AddedText { text: "Café \u{10ffff}".into(), ..text.clone() };
+    assert!(update_content(&mut doc, 0, 0, &Content::Text(retyped)).unwrap_err().to_string().contains("U+10FFFF"));
     assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), saved, "a refused update changes nothing");
     // A carriage return is checked where it would be drawn: added text splits on LF only, so
     // CRLF would leave a `?`; headers and watermarks split CRLF into lines, but not a lone CR.

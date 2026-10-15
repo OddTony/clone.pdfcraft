@@ -24,8 +24,14 @@ build input. `build.rs` embeds them as `CRAFT_FONTS` when the build sets
 `CRAFT_FONTS_DIR=<checkout>` (and fails if it can't while `CRAFT_FONTS_REQUIRED=1`, as releases
 set). Without that variable `CRAFT_FONTS` is empty and everything below copes:
 
+- `cjk::PreparedCjkText`: selects approved Jpan/Hans/Hant faces, validates coverage and
+  measures runs before mutating a PDF. Its installed form shares full Type0 programs and
+  resource dictionaries for Add Text and form appearances. It never reads system fonts.
+  See [CJK form rendering](../../docs/cjk-form-rendering.md) for the IBM SC/TC
+  input pins and explicit required-font acceptance tests.
+
 - `ui_japanese_fonts`: the `Jpan` faces for the interface, BIZ UDPGothic first.
-- `ui_chinese_fonts`: the `Hans` faces for the interface, in manifest order (without one,
+- `ui_chinese_fonts`: the `Hans` and `Hant` faces for the interface, in manifest order (without one,
   Chinese characters the Japanese faces lack show the replacement glyph).
 - `ui_cjk_fonts(prefer_hans)`: both in fallback order for the UI language (Chinese group first
   in Chinese mode, so one line never mixes faces with different vertical metrics).
