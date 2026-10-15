@@ -594,6 +594,11 @@ impl Document {
         self.editor.as_ref().map(|e| a11y::tags(&e.cos)).unwrap_or_default()
     }
 
+    /// Marked-content items directly owned by one reachable indirect structure tag.
+    pub fn tag_content(&self, object: pdfcraft_cos::ObjRef) -> Result<Vec<a11y::TagContentItem>, a11y::TagError> {
+        self.editor.as_ref().map(|e| a11y::tag_content(&e.cos, object)).unwrap_or_else(|| Ok(Vec::new()))
+    }
+
     /// The edit that fixes `rule`, for the rules with an automatic fix: the document language
     /// (`value` is the language), the title (`value` replaces it; else the current title or the
     /// file name) and the tab order.
@@ -4295,6 +4300,20 @@ impl Session {
             }
         };
         pdfcraft_print::impose(&cos, settings).map_err(|e| EditError::Print(e.to_string()))
+    }
+
+    /// For each page, whether its text mostly runs bottom-to-top ([`pdfcraft_print::text_reads_up`]);
+    /// only `pages` are read, the others are `false`.
+    pub fn print_text_up(&self, id: DocId, pages: &[usize]) -> Vec<bool> {
+        let Some(doc) = self.get(id) else { return Vec::new() };
+        let cos = match doc.editor.as_ref() {
+            Some(e) => e.cos.clone(),
+            None => match pdfcraft_cos::Document::open_with_password(doc.bytes.clone(), doc.password.as_deref()) {
+                Ok(c) => c,
+                Err(_) => return Vec::new(),
+            },
+        };
+        (0..doc.info.pages.len()).map(|i| pages.contains(&i) && pdfcraft_print::text_reads_up(&cos, i)).collect()
     }
 
     /// Combine whole files, in order, into new PDF bytes (one bookmark per file).
