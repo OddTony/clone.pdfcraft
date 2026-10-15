@@ -20,3 +20,4 @@ pdfcraft-xfa = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+pdfcraft-testkit = { workspace = true }
