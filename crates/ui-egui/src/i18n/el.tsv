@@ -1483,6 +1483,8 @@
 	A link	Ένας σύνδεσμος
 	A script	Μια δέσμη ενεργειών
 	Add {what}	Προσθήκη {what}
+	Add another {what}	Προσθήκη άλλης {what}
+	Up to {n} can be saved. Remove one to add another.	Μπορούν να αποθηκευτούν έως {n}. Καταργήστε μία για να προσθέσετε άλλη.
 	Align fields	Στοίχιση πεδίων
 	Another file dialog is still open. Finish with it first.	Ένα άλλο παράθυρο επιλογής αρχείου παραμένει ανοιχτό. Ολοκληρώστε πρώτα τη διαδικασία εκεί.
 	Basic constraints	Βασικοί περιορισμοί

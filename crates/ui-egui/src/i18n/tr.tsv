@@ -2094,6 +2094,8 @@ certificate	Subject	Konu
 action wizard	Start	Başlat
 	Reopen the files that were open when PdfCraft last closed	PdfCraft en son kapatıldığında açık olan dosyaları yeniden aç
 	Add {what}	{what} ekle
+	Add another {what}	Başka bir {what} ekle
+	Up to {n} can be saved. Remove one to add another.	En fazla {n} tane kaydedilebilir. Başka eklemek için birini kaldırın.
 	Use {what}	{what} kullan
 	Place saved {what}	Kayıtlı {what} yerleştir
 	Remove saved {what}	Kayıtlı {what} kaldır

@@ -2110,6 +2110,8 @@ action wizard	Start	Iniciar
 	@{login}: {prs} PRs, {commits} commits, +{added} / −{deleted} lines (Δ {delta}), +{bin_added} / −{bin_deleted} binary assets, {first} – {last}	@{login}: {prs} PR, {commits} commits, +{added} / −{deleted} líneas (Δ {delta}), +{bin_added} / −{bin_deleted} recursos binarios, {first} – {last}
 	Reopen the files that were open when PdfCraft last closed	Volver a abrir los archivos que estaban abiertos al cerrar PdfCraft por última vez
 	Add {what}	Añadir {what}
+	Add another {what}	Añadir otra {what}
+	Up to {n} can be saved. Remove one to add another.	Se pueden guardar hasta {n}. Quite una para añadir otra.
 	Use {what}	Usar {what}
 	Place saved {what}	Colocar {what} desde lo guardado
 	Remove saved {what}	Quitar {what} de lo guardado

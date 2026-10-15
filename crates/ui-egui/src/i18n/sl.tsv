@@ -162,6 +162,8 @@
 	Add watermark	Dodaj vodni žig
 	Add watermark…	Dodaj vodni žig…
 	Add {what}	Dodaj {what}
+	Add another {what}	Dodaj še en element: {what}
+	Up to {n} can be saved. Remove one to add another.	Shranite jih lahko največ {n}. Če želite dodati novega, enega odstranite.
 	Added 1 comment	1 komentar dodan
 	Added more than once	Večkrat dodano
 	Added the first {n} PDFs in {folder}	Dodanih je prvih {n} datotek PDF v mapi {folder}

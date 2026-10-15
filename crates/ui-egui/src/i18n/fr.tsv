@@ -2152,6 +2152,8 @@
 	A script	Un script
 	About	À propos
 	Add {what}	Ajouter {what}
+	Add another {what}	Ajouter un(e) autre {what}
+	Up to {n} can be saved. Remove one to add another.	Vous pouvez en enregistrer jusqu’à {n}. Supprimez-en un pour en ajouter un autre.
 	Added the first {n} files in {folder}	Les {n} premiers fichiers de {folder} ont été ajoutés
 	Align fields	Aligner les champs
 	Another file dialog is still open. Finish with it first.	Une autre boîte de dialogue de fichier est encore ouverte. Terminez d'abord avec celle-ci.

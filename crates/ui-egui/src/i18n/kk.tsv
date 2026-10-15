@@ -2072,6 +2072,8 @@ calendar date	December	Желтоқсан
 	Remove {name} from Recent	{name} дегенді соңғылардан алып тастау
 	Inserted text	Енгізілген мәтін
 	Add {what}	Қосу: {what}
+	Add another {what}	Тағы қосу: {what}
+	Up to {n} can be saved. Remove one to add another.	Ең көбі {n} сақтауға болады. Тағы қосу үшін біреуін өшіріңіз.
 	Use {what}	Қолдану: {what}
 	Place saved {what}	Орналастыру: сақталған {what}
 	Remove saved {what}	Алып тастау: сақталған {what}

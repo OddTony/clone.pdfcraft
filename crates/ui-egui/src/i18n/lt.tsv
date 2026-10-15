@@ -1835,6 +1835,8 @@ comment menu	Edit	Redaguoti
 	Add underline	Pridėti pabraukimą
 	Add watermark	Pridėti vandenženklį
 	Add {what}	Pridėti {what}
+	Add another {what}	Pridėti kitą {what}
+	Up to {n} can be saved. Remove one to add another.	Galima įrašyti iki {n}. Norėdami pridėti kitą, vieną pašalinkite.
 	Added the first {n} files in {folder}	Pridėti pirmieji {n} failai iš aplanko {folder}
 	Adding images arrives on the web with file pickers for images	Žiniatinklio versijoje paveikslėlius bus galima pridėti įdiegus jų failų pasirinkimą
 	Algorithm	Algoritmas

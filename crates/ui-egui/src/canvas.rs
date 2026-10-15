@@ -4230,9 +4230,13 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                                 }
                             }
                             ui.separator();
-                            if let Some(command) = crate::fill_sign::signature_entries(ui, app, &t) {
-                                app.execute(command);
-                                ui.close();
+                            match crate::fill_sign::signature_entries(ui, app, &t) {
+                                crate::fill_sign::EntryClick::None => {}
+                                crate::fill_sign::EntryClick::Run(command) => {
+                                    app.execute(command);
+                                    ui.close();
+                                }
+                                crate::fill_sign::EntryClick::Done => ui.close(),
                             }
                         });
                     if matches!(current_fill, Some(crate::fill_sign::FillTool::Text | crate::fill_sign::FillTool::Date)) {

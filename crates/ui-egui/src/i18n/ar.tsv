@@ -2148,6 +2148,8 @@ calendar date	December	ديسمبر
 	Remove {name} from Recent	إزالة {name} من الأخيرة
 	Inserted text	نص مُدرَج
 	Add {what}	إضافة {what}
+	Add another {what}	إضافة {what} آخر
+	Up to {n} can be saved. Remove one to add another.	يمكن حفظ {n} كحد أقصى. أزل واحدًا لإضافة آخر.
 	Use {what}	استخدام {what}
 	Place saved {what}	وضع {what} المحفوظ
 	Remove saved {what}	إزالة {what} المحفوظ

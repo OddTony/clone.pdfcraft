@@ -2139,6 +2139,8 @@ action wizard	Start	Starten
 
 # Labels that reach tl!() through a variable (Fill & Sign buttons, link prompts, notices, history labels, checker and certificate rows)
 	Add {what}	{what} hinzufügen
+	Add another {what}	Weitere {what} hinzufügen
+	Up to {n} can be saved. Remove one to add another.	Es können bis zu {n} gespeichert werden. Entfernen Sie eine, um eine weitere hinzuzufügen.
 	Use {what}	{what} verwenden
 	Place saved {what}	Gespeicherte {what} platzieren
 	Remove saved {what}	Gespeicherte {what} entfernen

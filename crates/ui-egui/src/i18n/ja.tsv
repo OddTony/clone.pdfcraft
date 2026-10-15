@@ -2091,6 +2091,8 @@
 	A script	スクリプト
 	About	概要
 	Add {what}	{what}を追加
+	Add another {what}	別の{what}を追加
+	Up to {n} can be saved. Remove one to add another.	保存できるのは{n}件までです。追加するには1件削除してください。
 	Align fields	フィールドを整列
 	Another file dialog is still open. Finish with it first.	別のファイルダイアログがまだ開いています。先にそちらの操作を終えてください。
 	Basic constraints	基本制約

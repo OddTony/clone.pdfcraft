@@ -576,14 +576,14 @@ impl PdfCraftApp {
                     &[("tool", &crate::i18n::in_sentence(tl!(tool.label())))],
                 );
             }
-            "sign.fill.signature.remove" => self.signature = None,
-            "sign.fill.initials.remove" => self.initials = None,
+            // The one in use; the next most recently used takes its place.
+            "sign.fill.signature.remove" | "sign.fill.initials.remove" => self.saved_list(id == "sign.fill.initials.remove").remove(0),
             "sign.fill.signature.change" | "sign.fill.initials.change" => {
                 let initials = id == "sign.fill.initials.change";
                 let saved = if initials { self.initials.as_ref() } else { self.signature.as_ref() };
                 self.signature_draft = saved.map_or_else(
                     || crate::fill_sign::SigDraft::new(initials, &self.comment_prefs.author),
-                    |s| crate::fill_sign::SigDraft::from_saved(initials, s),
+                    |s| crate::fill_sign::SigDraft::from_saved(initials, 0, s),
                 );
                 self.dialog = Some(Dialog::Signature);
             }

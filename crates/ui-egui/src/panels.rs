@@ -261,7 +261,7 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
         }
         if g.id == "fill_sign" {
             widgets::section_title(ui, tl!("Sign yourself"));
-            if let Some(cmd) = crate::fill_sign::signature_entries(ui, app, t) {
+            if let crate::fill_sign::EntryClick::Run(cmd) = crate::fill_sign::signature_entries(ui, app, t) {
                 run = Some(cmd);
             }
         }

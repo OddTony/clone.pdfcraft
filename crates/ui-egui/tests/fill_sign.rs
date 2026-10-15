@@ -400,6 +400,95 @@ fn saved_signature_cards_remove_and_add_without_changing_the_document() {
 }
 
 #[test]
+fn several_signatures_are_saved_chosen_changed_removed_and_remembered() {
+    let mut h = harness();
+    h.state_mut().signature = Some(SavedSig::Typed("Ada Lovelace".into()));
+    h.state_mut().left = pdfcraft_ui_egui::LeftPanel::Tool("fill_sign");
+    h.state_mut().left_open = true;
+    h.run_steps(3);
+    h.get_by_label("Add another signature").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, Some(Dialog::Signature));
+    h.state_mut().signature_draft.text = "A. King".into();
+    h.get_by_label("Apply").click();
+    h.run_steps(3);
+    assert_eq!(h.state().signature, Some(SavedSig::Typed("A. King".into())), "the new one is put in use");
+    assert_eq!(h.state().other_signatures, [SavedSig::Typed("Ada Lovelace".into())], "the earlier one is kept");
+
+    // Choosing the second card puts it in use and places it.
+    h.get_by_label("Use signature 2").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, None);
+    assert_eq!(h.state().quick_tool, QuickTool::Fill(FillTool::Signature));
+    assert_eq!(h.state().signature, Some(SavedSig::Typed("Ada Lovelace".into())));
+    assert_eq!(h.state().other_signatures, [SavedSig::Typed("A. King".into())]);
+    let before = h.state().session.get(h.state().views[0].id).unwrap().info.annotations.len();
+    click(&mut h, 40.0, 300.0);
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().info.annotations.len(), before + 1);
+
+    // Changing a card that isn't in use changes it in place.
+    h.state_mut().left = pdfcraft_ui_egui::LeftPanel::Tool("fill_sign");
+    h.state_mut().left_open = true;
+    h.run_steps(3);
+    h.get_by_label("Change signature 2").click();
+    h.run_steps(3);
+    assert_eq!(h.state().signature_draft.text, "A. King");
+    h.state_mut().signature_draft.text = "Augusta King".into();
+    h.get_by_label("Apply").click();
+    h.run_steps(3);
+    assert_eq!(h.state().signature, Some(SavedSig::Typed("Ada Lovelace".into())));
+    assert_eq!(h.state().other_signatures, [SavedSig::Typed("Augusta King".into())]);
+
+    // Both survive a restart; settings without the list still read.
+    let mut again = PdfCraftApp::new();
+    again.restore(&h.state().persist());
+    assert_eq!(again.signature, h.state().signature);
+    assert_eq!(again.other_signatures, h.state().other_signatures);
+    let mut older = PdfCraftApp::new();
+    older.restore(r#"{"signature_text": "Ada Lovelace"}"#);
+    assert_eq!((older.signature, older.other_signatures), (Some(SavedSig::Typed("Ada Lovelace".into())), vec![]));
+    let mut damaged = PdfCraftApp::new();
+    damaged.restore(r#"{"signature_text": "Ada", "other_signatures": [{"Typed": "Grace"}, {"Typed": " "}, {"Image": "not base64"}, 7]}"#);
+    assert_eq!(damaged.other_signatures, [SavedSig::Typed("Grace".into())], "damaged entries lose only themselves");
+
+    // Removing the one in use puts the next in use.
+    h.state_mut().left = pdfcraft_ui_egui::LeftPanel::Tool("fill_sign");
+    h.state_mut().left_open = true;
+    h.run_steps(3);
+    h.get_by_label("Remove saved signature").click();
+    h.run_steps(3);
+    assert_eq!(h.state().signature, Some(SavedSig::Typed("Augusta King".into())));
+    assert!(h.state().other_signatures.is_empty());
+}
+
+#[test]
+fn a_full_set_of_saved_signatures_disables_adding_another() {
+    let mut h = harness();
+    h.state_mut().signature = Some(SavedSig::Typed("Signer 1".into()));
+    h.state_mut().other_signatures =
+        (2..=pdfcraft_ui_egui::fill_sign::MAX_SAVED_SIGNATURES).map(|i| SavedSig::Typed(format!("Signer {i}"))).collect();
+    h.state_mut().left = pdfcraft_ui_egui::LeftPanel::Tool("fill_sign");
+    h.state_mut().left_open = true;
+    h.run_steps(3);
+    // Eight cards overflow the panel: scroll (animated) so a click is not ignored out of view.
+    h.get_by_label("Add another signature").scroll_to_me();
+    h.run_steps(30);
+    h.get_by_label("Add another signature").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, None, "a full list opens no dialog");
+    h.get_by_label("Remove saved signature 2").click();
+    h.run_steps(3);
+    assert_eq!(h.state().other_signatures.len(), pdfcraft_ui_egui::fill_sign::MAX_SAVED_SIGNATURES - 2);
+    assert!(!h.state().other_signatures.contains(&SavedSig::Typed("Signer 2".into())));
+    // Eight cards overflow the panel: scroll (animated) so a click is not ignored out of view.
+    h.get_by_label("Add another signature").scroll_to_me();
+    h.run_steps(30);
+    h.get_by_label("Add another signature").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, Some(Dialog::Signature));
+}
+
+#[test]
 fn long_typed_names_fit_the_placed_signature_and_keep_every_outline() {
     let text = "Alexandria Catherine Elizabeth Montgomery-Wellington";
     let sig = SavedSig::Typed(text.into());

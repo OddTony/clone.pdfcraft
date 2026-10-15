@@ -2120,6 +2120,8 @@
 	A script	Uno script
 	About	Informazioni
 	Add {what}	Aggiungi {what}
+	Add another {what}	Aggiungi un’altra {what}
+	Up to {n} can be saved. Remove one to add another.	Se ne possono salvare fino a {n}. Rimuovine una per aggiungerne un’altra.
 	Align fields	Allinea campi
 	Another file dialog is still open. Finish with it first.	Un'altra finestra di selezione file è ancora aperta. Completala prima.
 	Basic constraints	Vincoli di base

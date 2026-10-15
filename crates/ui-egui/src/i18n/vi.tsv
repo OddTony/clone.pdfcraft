@@ -1831,6 +1831,8 @@ comment menu	Edit	Sửa
 	Add underline	Thêm gạch chân
 	Add watermark	Thêm hình mờ
 	Add {what}	Thêm {what}
+	Add another {what}	Thêm {what} khác
+	Up to {n} can be saved. Remove one to add another.	Có thể lưu tối đa {n}. Hãy xóa một mục để thêm mục khác.
 	Added the first {n} files in {folder}	Đã thêm {n} tệp đầu tiên trong {folder}
 	Adding images arrives on the web with file pickers for images	Việc thêm hình ảnh sẽ có trên web cùng với bộ chọn tệp hình ảnh
 	Algorithm	Thuật toán

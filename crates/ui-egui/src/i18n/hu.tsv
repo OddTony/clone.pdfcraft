@@ -2126,6 +2126,8 @@ action wizard	Start	Indítás
 
 # Labels that reach tl!() through a variable (Fill & Sign buttons, link prompts, notices, history labels, checker and certificate rows)
 	Add {what}	{what} hozzáadása
+	Add another {what}	Újabb {what} hozzáadása
+	Up to {n} can be saved. Remove one to add another.	Legfeljebb {n} menthető. Újabb hozzáadásához távolítson el egyet.
 	Use {what}	{what} használata
 	Place saved {what}	Mentett {what} elhelyezése
 	Remove saved {what}	Mentett {what} eltávolítása

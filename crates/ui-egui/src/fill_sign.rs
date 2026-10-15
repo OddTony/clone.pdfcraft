@@ -49,6 +49,114 @@ impl SavedSig {
     }
 }
 
+/// Most signatures kept in settings, the one in use included; initials are counted separately.
+pub const MAX_SAVED_SIGNATURES: usize = 8;
+
+/// One kind's saved signatures (or initials): entry 0 is the one in use, which the tool places,
+/// and the others follow, most recently used first. Each lives in exactly one of the two fields.
+pub struct SavedList<'a> {
+    in_use: &'a mut Option<SavedSig>,
+    others: &'a mut Vec<SavedSig>,
+}
+
+impl<'a> SavedList<'a> {
+    pub fn new(in_use: &'a mut Option<SavedSig>, others: &'a mut Vec<SavedSig>) -> Self {
+        // Others without one in use would be unreachable from the tool: promote the first.
+        if in_use.is_none() && !others.is_empty() {
+            *in_use = Some(others.remove(0));
+        }
+        Self { in_use, others }
+    }
+
+    pub fn len(&self) -> usize {
+        usize::from(self.in_use.is_some()) + self.others.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.in_use.is_none()
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.len() >= MAX_SAVED_SIGNATURES
+    }
+
+    pub fn get(&self, slot: usize) -> Option<&SavedSig> {
+        match slot.checked_sub(1) {
+            None => self.in_use.as_ref(),
+            Some(i) => self.others.get(i),
+        }
+    }
+
+    /// Put entry `slot` in use; the one it replaces becomes the most recently used other.
+    /// `false`: there is no such entry.
+    pub fn choose(&mut self, slot: usize) -> bool {
+        let Some(i) = slot.checked_sub(1) else { return self.in_use.is_some() };
+        if i >= self.others.len() {
+            return false;
+        }
+        let chosen = self.others.remove(i);
+        if let Some(old) = self.in_use.replace(chosen) {
+            self.others.insert(0, old);
+        }
+        true
+    }
+
+    /// Forget entry `slot`; removing the one in use puts the most recently used other in use.
+    pub fn remove(&mut self, slot: usize) {
+        match slot.checked_sub(1) {
+            None => *self.in_use = (!self.others.is_empty()).then(|| self.others.remove(0)),
+            Some(i) if i < self.others.len() => {
+                self.others.remove(i);
+            }
+            Some(_) => {}
+        }
+    }
+
+    /// Replace entry `slot`, or with `None` (or a slot that no longer exists) add `sig` and put
+    /// it in use. A full list is never trimmed: `Err` gives `sig` back.
+    pub fn store(&mut self, sig: SavedSig, slot: Option<usize>) -> Result<(), SavedSig> {
+        let existing = slot.and_then(|k| match k.checked_sub(1) {
+            None => self.in_use.as_mut(),
+            Some(i) => self.others.get_mut(i),
+        });
+        if let Some(entry) = existing {
+            *entry = sig;
+            return Ok(());
+        }
+        if self.is_full() {
+            return Err(sig);
+        }
+        if let Some(old) = self.in_use.replace(sig) {
+            self.others.insert(0, old);
+        }
+        Ok(())
+    }
+}
+
+impl SavedSig {
+    /// Settings may be edited by hand: drawn points must be finite and typed text drawable.
+    pub fn is_valid(&self) -> bool {
+        match self {
+            SavedSig::Drawn(strokes) => strokes.iter().flatten().flatten().all(|v| v.is_finite()),
+            SavedSig::Typed(text) => {
+                !text.trim().is_empty() && text.chars().take(pdfcraft_engine::MAX_SIGNATURE_CHARS + 1).count() <= pdfcraft_engine::MAX_SIGNATURE_CHARS
+            }
+            SavedSig::Image(_) => true,
+        }
+    }
+}
+
+impl crate::PdfCraftApp {
+    /// The saved signatures, or with `initials` the saved initials.
+    pub fn saved_list(&mut self, initials: bool) -> SavedList<'_> {
+        if initials {
+            SavedList::new(&mut self.initials, &mut self.other_initials)
+        } else {
+            SavedList::new(&mut self.signature, &mut self.other_signatures)
+        }
+    }
+}
+
 pub(crate) mod image_data {
     use base64::Engine as _;
     use pdfcraft_engine::{SignatureImage, signature_image::MAX_SIGNATURE_IMAGE_BYTES};
@@ -84,8 +192,8 @@ pub struct SigDraft {
     pub scan: Option<ScanDraft>,
     /// Creating initials (otherwise the signature).
     pub initials: bool,
-    /// Replacing an existing saved value.
-    pub editing: bool,
+    /// The saved entry being changed ([`SavedList`] order); `None` creates a new one.
+    pub slot: Option<usize>,
 }
 
 impl SigDraft {
@@ -94,12 +202,13 @@ impl SigDraft {
         Self { text, initials, ..Default::default() }
     }
 
-    /// Edit a copy of the saved value; Cancel must leave the original untouched.
-    pub fn from_saved(initials: bool, saved: &SavedSig) -> Self {
+    /// Edit a copy of saved entry `slot`; Cancel must leave the original untouched.
+    pub fn from_saved(initials: bool, slot: usize, saved: &SavedSig) -> Self {
+        let slot = Some(slot);
         match saved {
-            SavedSig::Drawn(strokes) => Self { strokes: strokes.clone(), drawing: true, initials, editing: true, ..Default::default() },
-            SavedSig::Typed(text) => Self { text: text.clone(), initials, editing: true, ..Default::default() },
-            SavedSig::Image(image) => Self { image: Some(image.clone()), image_mode: true, initials, editing: true, ..Default::default() },
+            SavedSig::Drawn(strokes) => Self { strokes: strokes.clone(), drawing: true, initials, slot, ..Default::default() },
+            SavedSig::Typed(text) => Self { text: text.clone(), initials, slot, ..Default::default() },
+            SavedSig::Image(image) => Self { image: Some(image.clone()), image_mode: true, initials, slot, ..Default::default() },
         }
     }
 
@@ -523,50 +632,96 @@ pub(crate) fn script_preview(text: &str, w: usize, h: usize) -> egui::ColorImage
     img
 }
 
-/// Saved previews and add/remove controls, shared by the left panel and quick-tool picker.
-pub(crate) fn signature_entries(ui: &mut egui::Ui, app: &mut crate::PdfCraftApp, t: &Tokens) -> Option<&'static str> {
+/// What a click among the saved signature cards asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EntryClick {
+    None,
+    /// Run this command.
+    Run(&'static str),
+    /// Handled here (a card chosen or removed, a dialog opened): close a menu holding the cards.
+    Done,
+}
+
+/// Saved previews with use/change/remove controls, the one in use first, and add buttons; shared
+/// by the left panel and quick-tool picker.
+pub(crate) fn signature_entries(ui: &mut egui::Ui, app: &mut crate::PdfCraftApp, t: &Tokens) -> EntryClick {
     ui.set_width(ui.available_width().clamp(240.0, 248.0));
-    let mut command = None;
-    for (i, (saved, what, use_id, change_id, remove_id)) in [
-        (app.signature.as_ref(), "signature", "sign.fill.signature", "sign.fill.signature.change", "sign.fill.signature.remove"),
-        (app.initials.as_ref(), "initials", "sign.fill.initials", "sign.fill.initials.change", "sign.fill.initials.remove"),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let label = |template: &str| crate::i18n::fmt(tl!(template), &[("what", tl!(what))]);
-        let Some(saved) = saved else {
-            if crate::widgets::ghost_button(ui, "plus", &label("Add {what}")).clicked() {
-                command = Some(use_id);
+    app.saved_signature_previews.resize_with(2 * MAX_SAVED_SIGNATURES, || None);
+    let mut click = EntryClick::None;
+    for (what, initials, use_id, change_id, remove_id) in [
+        ("signature", false, "sign.fill.signature", "sign.fill.signature.change", "sign.fill.signature.remove"),
+        ("initials", true, "sign.fill.initials", "sign.fill.initials.change", "sign.fill.initials.remove"),
+    ] {
+        let label = |template: &str, what: &str| crate::i18n::fmt(tl!(template), &[("what", what)]);
+        let list = app.saved_list(initials);
+        let (count, full) = (list.len(), list.is_full());
+        if count == 0 {
+            if crate::widgets::ghost_button(ui, "plus", &label("Add {what}", tl!(what))).clicked() {
+                click = EntryClick::Run(use_id);
             }
             continue;
+        }
+        for slot in 0..count.min(MAX_SAVED_SIGNATURES) {
+            // The one in use is "signature"; the others are numbered so each card has its own name.
+            let name = if slot == 0 { tl!(what).to_string() } else { format!("{} {}", tl!(what), slot + 1) };
+            let Some(saved) = app.saved_list(initials).get(slot).cloned() else { break };
+            let cache = usize::from(initials) * MAX_SAVED_SIGNATURES + slot;
+            ui.horizontal(|ui| {
+                let (rect, response) = ui.allocate_exact_size(vec2((ui.available_width() - 68.0).max(140.0), 52.0), Sense::click());
+                let use_label = label("Use {what}", &name);
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, use_label.clone()));
+                let painter = ui.painter_at(rect);
+                painter.rect_filled(rect, CornerRadius::same(4), Color32::WHITE);
+                // With more than one saved, the one the tool places is outlined.
+                let in_use = slot == 0 && count > 1;
+                painter.rect_stroke(
+                    rect,
+                    CornerRadius::same(4),
+                    Stroke::new(if in_use { 2.0 } else { 1.0 }, if response.hovered() || in_use { t.accent } else { t.border }),
+                    egui::StrokeKind::Inside,
+                );
+                if let Some(preview) = app.saved_signature_previews.get_mut(cache) {
+                    paint_saved(ui, rect.shrink(8.0), &saved, preview, &format!("saved-{what}-{slot}"));
+                }
+                if response.on_hover_text(label("Place saved {what}", &name)).clicked() {
+                    app.saved_list(initials).choose(slot);
+                    click = EntryClick::Run(use_id);
+                }
+                if crate::icons::button(ui, "pencil", 26.0, false, &label("Change {what}", &name)).clicked() {
+                    click = if slot == 0 {
+                        EntryClick::Run(change_id)
+                    } else {
+                        app.signature_draft = SigDraft::from_saved(initials, slot, &saved);
+                        app.dialog = Some(crate::Dialog::Signature);
+                        EntryClick::Done
+                    };
+                }
+                if crate::icons::button(ui, "x", 26.0, false, &label("Remove saved {what}", &name)).clicked() {
+                    click = if slot == 0 {
+                        EntryClick::Run(remove_id)
+                    } else {
+                        app.saved_list(initials).remove(slot);
+                        EntryClick::Done
+                    };
+                }
+            });
+            ui.add_space(4.0);
+        }
+        let add = ui.add_enabled_ui(!full, |ui| crate::widgets::ghost_button(ui, "plus", &label("Add another {what}", tl!(what)))).inner;
+        let add = if full {
+            let limit = MAX_SAVED_SIGNATURES.to_string();
+            add.on_disabled_hover_text(crate::i18n::fmt(tl!("Up to {n} can be saved. Remove one to add another."), &[("n", &limit)]))
+        } else {
+            add
         };
-        ui.horizontal(|ui| {
-            let (rect, response) = ui.allocate_exact_size(vec2((ui.available_width() - 68.0).max(140.0), 52.0), Sense::click());
-            let use_label = label("Use {what}");
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, use_label.clone()));
-            let painter = ui.painter_at(rect);
-            painter.rect_filled(rect, CornerRadius::same(4), Color32::WHITE);
-            painter.rect_stroke(
-                rect,
-                CornerRadius::same(4),
-                Stroke::new(1.0, if response.hovered() { t.accent } else { t.border }),
-                egui::StrokeKind::Inside,
-            );
-            paint_saved(ui, rect.shrink(8.0), saved, &mut app.saved_signature_previews[i], &format!("saved-{what}"));
-            if response.on_hover_text(label("Place saved {what}")).clicked() {
-                command = Some(use_id);
-            }
-            if crate::icons::button(ui, "pencil", 26.0, false, &label("Change {what}")).clicked() {
-                command = Some(change_id);
-            }
-            if crate::icons::button(ui, "x", 26.0, false, &label("Remove saved {what}")).clicked() {
-                command = Some(remove_id);
-            }
-        });
+        if add.clicked() {
+            app.signature_draft = SigDraft::new(initials, &app.comment_prefs.author);
+            app.dialog = Some(crate::Dialog::Signature);
+            click = EntryClick::Done;
+        }
         ui.add_space(4.0);
     }
-    command
+    click
 }
 
 /// Draw a saved signature as large as fits in `rect`, centred: typed text and images through
@@ -756,7 +911,7 @@ pub(crate) fn signature_pad(
     photo_texture: &mut Option<(u64, egui::TextureHandle)>,
 ) -> (bool, bool, bool) {
     let what = if d.initials { tl!("initials") } else { tl!("signature") };
-    let title = if d.editing { tl!("Change {what}") } else { tl!("Create {what}") };
+    let title = if d.slot.is_some() { tl!("Change {what}") } else { tl!("Create {what}") };
     ui.label(egui::RichText::new(crate::i18n::fmt(title, &[("what", what)])).font(crate::theme::semibold(18.0)));
     ui.horizontal(|ui| {
         if crate::widgets::pill_button(ui, tl_ctx!("signature pad", "Type"), !d.drawing && !d.image_mode && !d.scan_mode).clicked() {
@@ -1241,6 +1396,72 @@ impl crate::PdfCraftApp {
 
 #[cfg(test)]
 mod tests {
+    use super::{MAX_SAVED_SIGNATURES, SavedList, SavedSig};
+
+    fn typed(name: &str) -> SavedSig {
+        SavedSig::Typed(name.into())
+    }
+
+    fn names(in_use: &Option<SavedSig>, others: &[SavedSig]) -> Vec<String> {
+        in_use
+            .iter()
+            .chain(others)
+            .map(|s| match s {
+                SavedSig::Typed(t) => t.clone(),
+                other => format!("{other:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn saved_lists_add_choose_change_and_remove_in_most_recently_used_order() {
+        let (mut in_use, mut others) = (None, Vec::new());
+        let mut list = SavedList::new(&mut in_use, &mut others);
+        assert!(list.is_empty() && list.get(0).is_none());
+        for name in ["Ada", "Grace", "Alan"] {
+            assert!(list.store(typed(name), None).is_ok());
+        }
+        assert_eq!(list.len(), 3);
+        assert_eq!(names(list.in_use, list.others), ["Alan", "Grace", "Ada"], "a new one is put in use");
+        assert!(list.choose(2));
+        assert_eq!(names(list.in_use, list.others), ["Ada", "Alan", "Grace"], "the one replaced is most recent");
+        assert!(!list.choose(3), "no such entry");
+        assert!(list.choose(0), "the one in use stays");
+        assert!(list.store(typed("Grace H."), Some(2)).is_ok());
+        assert_eq!(names(list.in_use, list.others), ["Ada", "Alan", "Grace H."], "a change keeps its place");
+        list.remove(1);
+        assert_eq!(names(list.in_use, list.others), ["Ada", "Grace H."]);
+        list.remove(9);
+        list.remove(0);
+        assert_eq!(names(list.in_use, list.others), ["Grace H."], "the next most recent is put in use");
+        list.remove(0);
+        assert!(list.is_empty());
+        assert!(list.store(typed("Edsger"), Some(4)).is_ok(), "a slot gone meanwhile adds instead");
+        assert_eq!(names(&in_use, &others), ["Edsger"]);
+    }
+
+    #[test]
+    fn a_full_saved_list_refuses_a_new_entry_rather_than_dropping_one() {
+        let (mut in_use, mut others) = (None, Vec::new());
+        let mut list = SavedList::new(&mut in_use, &mut others);
+        for i in 0..MAX_SAVED_SIGNATURES {
+            assert!(list.store(typed(&i.to_string()), None).is_ok());
+        }
+        assert!(list.is_full());
+        assert_eq!(list.store(typed("one more"), None), Err(typed("one more")));
+        assert_eq!(list.len(), MAX_SAVED_SIGNATURES);
+        assert!(list.store(typed("changed"), Some(MAX_SAVED_SIGNATURES - 1)).is_ok(), "changing one still works when full");
+        assert_eq!(list.get(MAX_SAVED_SIGNATURES - 1), Some(&typed("changed")));
+    }
+
+    #[test]
+    fn others_without_one_in_use_are_promoted() {
+        let (mut in_use, mut others) = (None, vec![typed("Ada"), typed("Grace")]);
+        let list = SavedList::new(&mut in_use, &mut others);
+        assert_eq!(list.get(0), Some(&typed("Ada")));
+        assert_eq!(list.len(), 2);
+    }
+
     #[test]
     fn undo_removes_the_last_stroke_and_skips_empty_ones() {
         let mut d = super::SigDraft { drawing: true, ..Default::default() };

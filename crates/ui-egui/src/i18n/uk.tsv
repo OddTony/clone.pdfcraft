@@ -2148,6 +2148,8 @@ calendar date	December	грудня
 
 # Labels that reach tl!() through a variable (Fill & Sign buttons, link prompts, notices, history labels, checker and certificate rows)
 	Add {what}	Додати: {what}
+	Add another {what}	Додати ще: {what}
+	Up to {n} can be saved. Remove one to add another.	Можна зберегти не більше {n}. Щоб додати ще, вилучіть один.
 	Use {what}	Використати: {what}
 	Place saved {what}	Розмістити збережене: {what}
 	Remove saved {what}	Видалити збережене: {what}

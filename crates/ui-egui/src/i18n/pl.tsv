@@ -2068,6 +2068,8 @@
 	A script	Skrypt
 	About	Informacje
 	Add {what}	Dodaj {what}
+	Add another {what}	Dodaj kolejny element: {what}
+	Up to {n} can be saved. Remove one to add another.	Można zapisać maksymalnie {n}. Usuń jeden, aby dodać kolejny.
 	Align fields	Wyrównaj pola
 	Another file dialog is still open. Finish with it first.	Inne okno wyboru pliku jest nadal otwarte. Najpierw je zamknij.
 	Basic constraints	Podstawowe ograniczenia

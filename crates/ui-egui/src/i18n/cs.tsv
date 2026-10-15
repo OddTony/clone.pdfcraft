@@ -2179,6 +2179,8 @@ calendar date	November	listopadu
 calendar date	December	prosince
 	Inserted text	Vložený text
 	Add {what}	Přidat {what}
+	Add another {what}	Přidat další {what}
+	Up to {n} can be saved. Remove one to add another.	Uložit lze nejvýše {n}. Chcete-li přidat další, jeden odeberte.
 	Use {what}	Použít {what}
 	Place saved {what}	Umístit uložené: {what}
 	Remove saved {what}	Odebrat uložené: {what}
