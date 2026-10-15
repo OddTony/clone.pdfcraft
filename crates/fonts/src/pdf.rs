@@ -257,7 +257,20 @@ fn append_editor_cmap(bytes: &mut Vec<u8>, mappings: &std::collections::BTreeMap
             }
         }
         bytes.get_mut(end..end + 4)?.copy_from_slice(b"cmap");
-        entry = Some(end);
+        // sfnt table directories are tag-sorted; keep cmap discoverable by
+        // parsers that binary-search the directory rather than scanning it.
+        let mut records = Vec::with_capacity(count + 1);
+        for i in 0..=count {
+            let at = 12 + i * 16;
+            let record: [u8; 16] = bytes.get(at..at + 16)?.try_into().ok()?;
+            records.push(record);
+        }
+        records.sort_unstable_by(|a, b| a[..4].cmp(&b[..4]));
+        entry = records.iter().position(|r| &r[..4] == b"cmap").map(|i| 12 + i * 16);
+        for (i, record) in records.iter().enumerate() {
+            let at = 12 + i * 16;
+            bytes.get_mut(at..at + 16)?.copy_from_slice(record);
+        }
         head = head.map(|o| if o >= end { o + 16 } else { o });
     }
     let entry = entry?;
