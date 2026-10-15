@@ -4,7 +4,7 @@
 `ATTRIBUTION.toml`. No document is uploaded and no model is downloaded at runtime.
 Release packages ship these files beside the application.
 
-- English, German, French, Spanish, Italian, Dutch, Danish, Norwegian Bokmål,
+- English, German, French, Spanish, Catalan, Italian, Dutch, Danish, Norwegian Bokmål,
   Swedish, Finnish, Portuguese, horizontal Japanese and Chinese (traditional/simplified) use PaddlePaddle's
   PP-OCRv6 small model through the existing Rust RTen runtime. The legacy English
   recognizer API remains available to existing callers.
@@ -88,3 +88,19 @@ still depends on the available interface fonts (see docs/gaps.md, gap 5).
 Community Italian checks report improved accents and word spacing, but still find
 paragraphs in the wrong reading order, occasional joined words, and model spelling
 errors. These are remaining recognition/layout limits, not guaranteed transcriptions.
+
+Horizontal Chinese detections are joined before recognition when their vertical ink
+bands substantially overlap and the horizontal gap is at most 1.25 ink heights
+(about one em). Overlapping fragments are recognized once; separate rows and wider
+column gaps remain separate. Searches are bounded to nearby fragments. Geometry
+regressions include actual detector boxes from an original OFL BIZ UDPGothic fixture;
+a local model comparison recovered its three lines and centred commas in reading
+order. This is not a general reading-order solution or a guarantee for every font,
+vertical writing, or thin numerals the detector misses entirely.
+
+Catalan (`ca`, including `ca-ES`, `ca-AD` and Valencian locale variants) uses the same
+Latin decoder. A model-backed regression checks accents after save/reopen with
+unchanged pixels. Community checks still report missing `ï` and `l·l` read as `l-l`.
+There is no automatic separator substitution: names, addresses and literal text
+must remain intact. The current model dictionary also lacks Spanish `¡`; a decoder
+filter cannot recover a class the model does not have.

@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 pub mod crop;
+mod lines;
 mod multilingual;
 pub mod scan;
 
@@ -33,6 +34,7 @@ pub const LANGUAGES: &[(&str, &str)] = &[
     ("ja", "日本語"),
     ("fr", "Français"),
     ("es", "Español"),
+    ("ca", "Català"),
     ("it", "Italiano"),
     ("nl", "Nederlands"),
     ("da", "Dansk"),
@@ -217,11 +219,19 @@ impl Ocr {
         let input = self.engine.prepare_input(source).map_err(|e| OcrError::Recognize(e.to_string()))?;
         let found = self.engine.detect_words(&input).map_err(|e| OcrError::Recognize(e.to_string()))?;
         let boxes = self.engine.find_text_lines(&input, &found);
+        let rects = boxes
+            .into_iter()
+            .map(|line| {
+                line.iter().map(|r| r.bounding_rect()).fold([f32::INFINITY, f32::INFINITY, 0.0f32, 0.0f32], |a, r| {
+                    [a[0].min(r.left()), a[1].min(r.top()), a[2].max(r.right()), a[3].max(r.bottom())]
+                })
+            })
+            .collect();
+        // CJK's centred punctuation can split one horizontal line into several detections.
+        // Join their geometry before padded crops reach the recognizer, avoiding duplicate ink.
+        let rects = if matches!(language, "zh-Hant" | "zh-Hans") { lines::join_fragments(rects) } else { rects };
         let mut out = Vec::new();
-        for line in boxes {
-            let rect = line.iter().map(|r| r.bounding_rect()).fold([f32::INFINITY, f32::INFINITY, 0.0f32, 0.0f32], |a, r| {
-                [a[0].min(r.left()), a[1].min(r.top()), a[2].max(r.right()), a[3].max(r.bottom())]
-            });
+        for rect in rects {
             let words = self.multilingual.read_line(image, rect, language)?;
             if !words.is_empty() {
                 out.push(Line { words });
@@ -334,6 +344,10 @@ mod tests {
             (" EN-us ", "en"),
             ("is-IS", "en"),
             ("nn-NO", "en"),
+            ("ca-ES", "ca"),
+            ("ca_ES.UTF-8", "ca"),
+            ("ca-AD", "ca"),
+            ("ca-ES-valencia", "ca"),
             ("zh-Hans", "zh-Hans"),
             ("zh", "zh-Hans"),
             ("zh-CN", "zh-Hans"),

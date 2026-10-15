@@ -389,3 +389,21 @@ fn chinese_ocr_text_layer_preserves_scripts_and_punctuation_after_save() {
         assert_eq!(s.get(id).unwrap().bytes, before);
     }
 }
+
+#[test]
+fn catalan_ocr_keeps_accents_after_save() {
+    if !ocr::available() {
+        eprintln!("skipped: run cargo xtask models");
+        return;
+    }
+    let (mut s, id) = scan("La llengua catalana és útil per a la ciència i la música.", 0, 0.0);
+    let before = render(&s, id);
+    s.recognize_text(id, &[], OcrSettings { language: "ca".into(), auto_rotate: false, deskew: false, ..Default::default() }).unwrap();
+    let saved = s.save_bytes(id).unwrap();
+    let reopened = s.open("catalan.pdf", None, saved, None).unwrap();
+    let extracted = text(&s, reopened);
+    for expected in ["catalana", "és", "útil", "ciència", "música"] {
+        assert!(extracted.contains(expected), "missing {expected:?}: {extracted:?}");
+    }
+    assert_eq!(before, render(&s, reopened));
+}
