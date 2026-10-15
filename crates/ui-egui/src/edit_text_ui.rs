@@ -68,6 +68,11 @@ impl TextBackground {
                 self.draft_key = Some(draft_key);
             }
         }
+        // The original page already has the exact text. Avoid an unused textless
+        // raster job on focus; start it only if the user actually edits the block.
+        if editor.is_some_and(LineEditor::pristine_source_visible) {
+            return;
+        }
         let (Some((_, page, _)), Some(renderer)) = (self.key, self.renderer.as_ref()) else { return };
         let Some(p) = doc.info.pages.get(page) else { return };
         // One raster stands in for the page's tiles while a paragraph is open, so everything
