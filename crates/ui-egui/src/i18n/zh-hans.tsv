@@ -537,6 +537,12 @@
 	Windows store  ·  	Windows 证书存储 · 
 	Issued by: 	颁发者：
 	, Expires: 	，有效期至：
+	Digitally signed by	数字签名者
+	DN: 	DN：
+	Reason: 	原因：
+	Location: 	位置：
+	Date: 	日期：
+	The labels are in English: the signature's font can't draw them in this language.	签名所用的字体无法显示此语言的标签，因此标签使用英文。
 	No digital IDs yet.	尚无数字 ID。
 	Configure New Digital ID	配置新数字 ID
 	Remove "{name}" from this list? The file itself is not deleted.	从此列表中移除“{name}”？文件本身不会被删除。
@@ -2318,3 +2324,33 @@ animation effects	Off	关
 	This document is trying to open a local file:	此文档正尝试打开本地文件：
 	Move tag earlier	将标签前移
 	Move tag later	将标签后移
+	Mark as artifact	标记为工件
+	Remove this leaf tag from reading order and mark its direct content as an artifact	从阅读顺序中移除此叶标签，并将其直接内容标记为工件
+	Mark content as artifact	将内容标记为工件
+	Word count	字词统计
+	Current page only	仅当前页
+	Exclude tagged tables	排除带标签的表格
+	Exclude tagged code blocks	排除带标签的代码块
+	Exclude image/OCR text	排除图像/OCR文本
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	排除规则使用PDF标签。无标签的表格和代码仍计入统计。排除图像时也会排除不可见文本。
+	Words	词数
+	Characters	字符数
+	Characters without spaces	不含空白的字符数
+	Pages counted	已统计页数
+	Some pages contain no countable text. Scanned images need OCR first.	部分页面没有可统计的文本。扫描图像需要先进行OCR识别。
+	Some content could not be classified safely and was kept in the count.	部分内容无法可靠分类，已保留在统计中。
+	Counting words… {n} pages read	正在统计字词… 已读取{n}页
+	Word counting stopped unexpectedly.	字词统计意外停止。
+	Word count…	字词统计…
+@id	file.word_count	字词统计…
+	Standard	标准
+	Mobile	移动设备
+	Merge image fragments	合并图像碎片
+	Optimizing… merging image fragments	正在优化… 正在合并图像碎片
+	Side by side	并排
+	New file only	仅新文件
+	Old file: {name}	旧文件：{name}
+	New file: {name}	新文件：{name}
+	Print as image	作为图像打印
+	Resolution:	分辨率：
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	当打印机漏印文字、渐变或透明效果时使用。打印结果不再是可搜索的文字；配合灰度打印时图像为灰色。
