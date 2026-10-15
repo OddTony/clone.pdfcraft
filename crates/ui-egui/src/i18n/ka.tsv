@@ -2234,10 +2234,8 @@ key	Space	ჰარი
 	Printer paper and scaling may differ. Check driver settings.	პრინტერის ქაღალდი და მასშტაბირება შეიძლება განსხვავდებოდეს. შეამოწმეთ დრაივერის პარამეტრები.
 	Drawing scale changes. Use Actual size for full-scale plans.	ნახაზის მასშტაბი იცვლება. სრულმასშტაბიანი გეგმებისთვის გამოიყენეთ რეალური ზომა.
 	Reload documents when their files change on disk	დოკუმენტების ხელახლა ჩატვირთვა, როცა მათი ფაილები დისკზე იცვლება
-	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	ეს ფაილი დისკზე შეიცვალა. ახალი ვერსიის სანახავად ხელახლა ჩატვირთეთ; შეუნახავი ცვლილებები დაიკარგება.
 	Reload	ხელახლა ჩატვირთვა
 	Couldn't reload {name}: {e}	{name}-ის ხელახლა ჩატვირთვა ვერ მოხერხდა: {e}
-	Mouse wheel scroll speed	თაგუნას ბორბლით გადახვევის სიჩქარე
 scroll speed	Slow	ნელი
 scroll speed	Normal	ჩვეულებრივი
 scroll speed	Fast	სწრაფი
@@ -2614,3 +2612,81 @@ certificate	Version	ვერსია
 	This document is trying to open a local file:	ეს დოკუმენტი ლოკალური ფაილის გახსნას ცდილობს:
 	Move tag earlier	ტეგის წინ გადატანა
 	Move tag later	ტეგის უკან გადატანა
+	Hide hover previews for highlights without comment text	მაჩვენებლის მიტანისას გადახედვის დამალვა მარკერებზე, რომლებსაც კომენტარის ტექსტი არ აქვთ
+theme	Appearance	იერსახე
+	Collapse all pages	ყველა გვერდის აკეცვა
+	Expand all pages	ყველა გვერდის ჩამოშლა
+	Make Properties Default	თვისებების ნაგულისხმევად დაყენება
+	Sending sheet {s} of {n} to {printer}…	ფურცელი {s} / {n} იგზავნება პრინტერზე {printer}…
+	Tag form fields	ფორმის ველების დატეგვა
+	Turn upside down (180°)	თავდაყირა შემობრუნება (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 x 6 დუიმიანი იარლიყი (101.6 x 152.4 მმ)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	თითოეულ გვერდს დაბეჭდილ არემდე ჩამოჭრის, სწორად შემოაბრუნებს და ფურცელში გაწელვის გარეშე ჩაატევს. თითო ფურცელზე ერთი იარლიყი.
+	Find untagged content	არატეგირებული შიგთავსის ძებნა
+	No untagged content was found.	არატეგირებული შიგთავსი ვერ მოიძებნა.
+	Found {n} untagged content problems.	არატეგირებული შიგთავსის ნაპოვნი პრობლემები: {n}.
+	Cut Image	გამოსახულების ამოჭრა
+	Redact Image	გამოსახულების დაფარვა
+	Create Link…	ბმულის შექმნა…
+	Recognize Text…	ტექსტის ამოცნობა…
+	Set page transitions	გვერდების გადასვლების დაყენება
+	What takes up the space in this file, by kind of content.	რა იკავებს ადგილს ამ ფაილში, შიგთავსის სახეობის მიხედვით.
+	Digitally signed by	ციფრულად ხელმოწერილია
+	DN: 	DN: 
+	Reason: 	მიზეზი: 
+	Location: 	მდებარეობა: 
+	Date: 	თარიღი: 
+	The labels are in English: the signature's font can't draw them in this language.	წარწერები ინგლისურადაა: ხელმოწერის შრიფტს ამ ენაზე მათი გამოსახვა არ შეუძლია.
+	Font size	შრიფტის ზომა
+	Save over the changed file?	შეცვლილი ფაილის გადაწერა?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	„{name}“ დისკზე შეიცვალა მისი გახსნის ან ბოლო შენახვის შემდეგ. თუ ახლა შეინახავთ, ის ახალი ვერსია ამით ჩანაცვლდება.
+	Save anyway	მაინც შენახვა
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	პრინტერები ვერ მოიძებნა. შეამოწმეთ, რომ პრინტერი დაინსტალირებულია და ბეჭდვის რიგის სერვისი გაშვებულია, შემდეგ კვლავ გახსენით „დაბეჭდვა“.
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	ეს ფაილი დისკზე შეიცვალა. „ხელახლა ჩატვირთვა“ აჩვენებს ახალ ვერსიას და შეუნახავ ცვლილებებს გააუქმებს; „შენახვა“ მას ამ ვერსიით ჩაანაცვლებს.
+	Scroll speed (mouse wheel and arrow keys)	გადახვევის სიჩქარე (თაგუნას ბორბალი და ისრიანი კლავიშები)
+	Open in Full Screen mode?	გაიხსნას სრულეკრანიან რეჟიმში?
+	This document asks to open in Full Screen mode: the page fills the screen and nothing else shows. Press Esc at any time to leave it.	ეს დოკუმენტი სრულეკრანიან რეჟიმში გახსნას ითხოვს: გვერდი მთელ ეკრანს იკავებს და სხვა არაფერი ჩანს. გამოსასვლელად ნებისმიერ დროს დააჭირეთ Esc-ს.
+	Full Screen	მთელ ეკრანზე
+	Not now	ახლა არა
+	Mark as artifact	არტეფაქტად მარკირება
+	Remove this leaf tag from reading order and mark its direct content as an artifact	ამ ბოლო დონის ტეგის კითხვის რიგიდან ამოღება და მისი უშუალო შიგთავსის არტეფაქტად მარკირება
+	Mark content as artifact	შიგთავსის არტეფაქტად მარკირება
+	Word count	სიტყვების რაოდენობა
+	Current page only	მხოლოდ მიმდინარე გვერდი
+	Exclude tagged tables	ტეგირებული ცხრილების გამორიცხვა
+	Exclude tagged code blocks	ტეგირებული კოდის ბლოკების გამორიცხვა
+	Exclude image/OCR text	გამოსახულების/OCR ტექსტის გამორიცხვა
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	გამორიცხვა PDF-ის ტეგებს ეყრდნობა. არატეგირებული ცხრილები და კოდი დათვლაში რჩება. გამოსახულებების გამორიცხვა უხილავ ტექსტსაც აკლებს.
+	Words	სიტყვები
+	Characters	სიმბოლოები
+	Characters without spaces	სიმბოლოები სივრცის გარეშე
+	Pages counted	დათვლილი გვერდები
+	Some pages contain no countable text. Scanned images need OCR first.	ზოგ გვერდზე დასათვლელი ტექსტი არ არის. დასკანერებულ გამოსახულებებს ჯერ OCR სჭირდება.
+	Some content could not be classified safely and was kept in the count.	ზოგიერთი შიგთავსის საიმედოდ კლასიფიცირება ვერ მოხერხდა და ის დათვლაში დარჩა.
+	Counting words… {n} pages read	სიტყვები ითვლება… წაკითხული გვერდები: {n}
+	Word counting stopped unexpectedly.	სიტყვების დათვლა მოულოდნელად შეწყდა.
+	Word count…	სიტყვების რაოდენობა…
+@id	file.word_count	სიტყვების დათვლა…
+	Standard	სტანდარტული
+	Mobile	მობილური
+	Merge image fragments	გამოსახულების ფრაგმენტების გაერთიანება
+	Optimizing… merging image fragments	ოპტიმიზაცია… გამოსახულების ფრაგმენტების გაერთიანება
+	Side by side	გვერდიგვერდ
+	New file only	მხოლოდ ახალი ფაილი
+	Old file: {name}	ძველი ფაილი: {name}
+	New file: {name}	ახალი ფაილი: {name}
+	Print as image	დაბეჭდვა გამოსახულებად
+	Resolution:	გარჩევადობა:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	ჩართეთ, როცა პრინტერი ტექსტს, გრადიენტულ შევსებას ან გამჭვირვალობას გამოტოვებს. ანაბეჭდში ტექსტი აღარ იქნება საძიებო; „ბეჭდვა რუხ ტონებში“ ჩართვისას სურათებიც რუხი იქნება.
+	Crop Image	გამოსახულების ჩამოჭრა
+	Remove Crop	ჩამოჭრის გაუქმება
+	Trim the picture with its handles; Enter or Done applies	ჩამოჭერით სურათი სახელურებით; Enter ან „მზადაა“ ცვლილებას გამოიყენებს
+	Redaction mark appearance	დაფარვის ნიშნის იერსახე
+	Outline colour:	კონტურის ფერი:
+	Fill colour:	შევსების ფერი:
+	Shown while the pointer is over a mark.	ჩანს, როცა მაჩვენებელი ნიშანზეა.
+	Opacity:	გაუმჭვირვალობა:
+	Make properties default	თვისებების ნაგულისხმევად დაყენება
+	Pages selected	მონიშნული გვერდები
+	Page properties	გვერდის თვისებები
+	The password must have at least 8 characters.	პაროლი მინიმუმ 8 სიმბოლოსგან უნდა შედგებოდეს.
