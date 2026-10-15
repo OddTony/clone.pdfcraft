@@ -388,7 +388,8 @@ enum Layer {
     /// Before everything (prepended).
     Behind,
     /// Right after the page's own (wrapped) content, under whatever was put on top of it
-    /// before: a blended background stays under headers, watermarks and added content.
+    /// before: a blended background stays under headers, watermarks and added content. A page
+    /// with no content of its own gets it first.
     OverContent,
     /// After everything (appended).
     OnTop,
@@ -417,11 +418,12 @@ fn place_tagged(doc: &mut Document, page: &pdfcraft_model::Page, tag: &str, cont
             list.insert(split, open);
             list.push(close);
         }
-        // Over the content: right after the wrapper's closing piece. Without a wrapper there is
-        // no original content to sit over, so it goes last like anything on top.
+        // Over the content: right after the wrapper's closing piece. Without a wrapper the page
+        // has no content of its own to sit over, so it goes first, under everything added.
         let close = list.iter().rposition(|o| stream_tag(doc, o).as_deref() == Some("Wrap"));
-        match close {
-            Some(c) if layer == Layer::OverContent => list.insert(c.saturating_add(1), mark),
+        match (layer, close) {
+            (Layer::OverContent, Some(c)) => list.insert(c.saturating_add(1), mark),
+            (Layer::OverContent, None) => list.insert(0, mark),
             _ => list.push(mark),
         }
     }
@@ -653,19 +655,22 @@ pub fn add_background(doc: &mut Document, pages: &[usize], bg: &Background, repl
     Ok(())
 }
 
-/// How much of a page's decoded content [`page_hides_background`] reads: the fill it looks for
-/// comes first, so a page that has not painted within this much doesn't have one.
-const COVER_SCAN_BYTES: usize = 256 * 1024;
+/// How much of a page's decoded content [`page_hides_background`] reads (decoding stops there):
+/// the fill it looks for comes first, so a page that has not painted within this much doesn't
+/// have one.
+const COVER_SCAN_BYTES: usize = 1024 * 1024;
 
 /// Does page `page` (0-based) start by painting an opaque fill over its whole visible area, so
 /// that a background behind its content stays hidden? Files from accounting and office software
 /// often do: an opaque white rectangle the size of the page is the first thing drawn. Such pages
 /// need [`Background::multiply`].
 ///
-/// Conservative: only a fill made of rectangles, unclipped and with no `gs` before it (which could
-/// make it translucent or blend it), counts; anything else painted first answers `false`. The
+/// Conservative: only a fill of a path that is one rectangle, unclipped and with no `gs` before it
+/// (which could make it translucent or blend it), counts; anything else painted first answers
+/// `false` (several rectangles can cancel out under either fill rule). The
 /// streams PdfCraft added (marks, added content) are skipped, a malformed page answers `false`, and at most
-/// [`COVER_SCAN_BYTES`] of content are read.
+/// [`COVER_SCAN_BYTES`] of content are decoded: a stream that would decode to more ends the
+/// reading there.
 pub fn page_hides_background(doc: &Document, page: usize) -> bool {
     use pdfcraft_content::{Matrix, Pieces, contains};
     let Some(page) = page_list(doc).into_iter().nth(page) else { return false };
@@ -685,8 +690,9 @@ pub fn page_hides_background(doc: &Document, page: usize) -> bool {
             continue;
         }
         let Object::Stream(stream) = &*doc.resolve(o) else { return false };
-        let Ok(data) = stream.decoded() else { return false };
-        let data = data.get(..COVER_SCAN_BYTES.saturating_sub(read)).unwrap_or(&data).to_vec();
+        // Bounded while decoding: a stream that would decode to more than what is left of the
+        // budget ends the reading (its start is not separately decodable).
+        let Ok(data) = stream.decoded_within(COVER_SCAN_BYTES.saturating_sub(read)) else { break };
         read = read.saturating_add(data.len());
         pieces.push(data);
     }
@@ -717,7 +723,10 @@ pub fn page_hides_background(doc: &Document, page: usize) -> bool {
                 other_path = false;
             }
             b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" => {
-                return !other_path && rects.iter().any(|r| r.iter().all(|v| v.is_finite()) && contains(*r, crop, 0.5));
+                return match rects.as_slice() {
+                    [r] => !other_path && r.iter().all(|v| v.is_finite()) && contains(*r, crop, 0.5),
+                    _ => false,
+                };
             }
             // Colour, line style and marked content change nothing that is painted.
             b"g" | b"G" | b"rg" | b"RG" | b"k" | b"K" | b"cs" | b"CS" | b"sc" | b"SC" | b"scn" | b"SCN" | b"w" | b"J" | b"j" | b"M" | b"d"

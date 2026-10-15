@@ -4320,8 +4320,12 @@ fn page_hides_background_finds_a_page_sized_fill_first() {
     assert!(hides("1 1 1 rg 0 0 600 800 re f* 0 g BT ET"), "any fill rule");
     assert!(hides("/Artifact BMC 2 0 0 2 0 0 cm 0 0 300 400 re f EMC"), "through a scale");
     assert!(hides("0 1 -1 0 600 0 cm 0 0 800 600 re f"), "through a quarter turn");
-    assert!(hides("-10 -10 620 820 re 10 10 5 5 re f"), "larger than the page, among other rectangles");
-    assert!(hides("q 0 0 600 800 re 0 0 600 800 re f Q"), "any rectangle of the path");
+    assert!(hides("-10 -10 620 820 re f"), "larger than the page");
+    assert!(hides("0 800 600 -800 re f"), "drawn with a negative height");
+    // Several rectangles can cancel out: even-odd (twice the same) or nonzero (opposite ways).
+    assert!(!hides("0 0 600 800 re 0 0 600 800 re f*"), "even-odd, twice the same rectangle");
+    assert!(!hides("0 0 600 800 re 600 0 -600 800 re f"), "nonzero, opposite windings");
+    assert!(!hides("-10 -10 620 820 re 10 10 5 5 re f"), "with another rectangle");
     // Not a covering fill first.
     assert!(!hides("BT /F1 12 Tf (x) Tj ET 1 g 0 0 600 800 re f"), "text comes first");
     assert!(!hides("1 g 0 0 300 800 re f"), "half the page");
@@ -4343,4 +4347,44 @@ fn page_hides_background_finds_a_page_sized_fill_first() {
     add_watermark(&mut doc, &[0], &Watermark { text: "DRAFT".into(), behind: true, ..Watermark::default() }, false).unwrap();
     add_background(&mut doc, &[0], &Background::default(), false).unwrap();
     assert!(page_hides_background(&doc, 0));
+}
+
+/// The scan decodes only so much: a stream that would decode to more than that is not inflated
+/// at all, even when the fill is at its start (decoding stops at the budget and the stream is
+/// left unread), so the answer is `false`.
+#[test]
+fn page_hides_background_decodes_a_bounded_amount() {
+    let filler = "% padding\n".repeat(COVER_SCAN_BYTES / 10 + 1);
+    assert!(filler.len() > COVER_SCAN_BYTES);
+    let mut doc = page_with("1 g 0 0 600 800 re f");
+    assert!(page_hides_background(&doc, 0));
+    let page = pdfcraft_model::pages(&doc)[0].clone();
+    let fill = page.dict.get(b"Contents").cloned().unwrap();
+    let set = |doc: &mut Document, content: String| {
+        let big = Object::Ref(doc.add(Object::Stream(pdfcraft_cos::Stream::flate(pdfcraft_cos::Dict::new(), content.as_bytes()))));
+        doc.update_dict(page.obj, |d| d.set(b"Contents".to_vec(), Object::Array(vec![big, fill.clone()]))).unwrap();
+    };
+    // Compressed it is small; decoded it is past the budget, with the fill right at its start.
+    set(&mut doc, format!("1 g 0 0 600 800 re f\n{filler}"));
+    assert!(!page_hides_background(&doc, 0), "the oversized stream is not decoded");
+    // Within the budget the same stream is read.
+    set(&mut doc, "1 g 0 0 600 800 re f\n% short".into());
+    assert!(page_hides_background(&doc, 0));
+}
+
+/// On a page with no content of its own (a blank page with added text) a blended background
+/// goes first, under what was added, instead of over it.
+#[test]
+fn blended_backgrounds_go_under_additions_on_a_page_with_no_content() {
+    let mut doc = fixture();
+    let mut hf = HeaderFooter::default();
+    hf.text[1] = "Head".into();
+    // Page 3 of the fixture has no content.
+    add_header_footer(&mut doc, &[2], &hf, false, &cx()).unwrap();
+    add_background(&mut doc, &[2], &Background { multiply: true, ..Background::default() }, false).unwrap();
+    let s = streams(&doc, 2);
+    assert_eq!(s.len(), 2, "{s:?}");
+    assert!(s[0].contains("/PCMark /Background") && s[1].contains("/PCMark /HeaderFooter"), "{s:?}");
+    assert_eq!(remove_marks(&mut doc, &[2], MarkKind::Background).unwrap(), 1);
+    assert_eq!(streams(&doc, 2).len(), 1);
 }
