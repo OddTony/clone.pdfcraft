@@ -1154,7 +1154,7 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
     {
         let missing: Vec<_> = doc.text_lines(page).into_iter()
             .filter(|line| !families.contains_key(&line.font))
-            .map(|line| (line.font, line.base_font))
+            .map(|line| (line.font, line.base_font, line.text))
             .collect();
         if !missing.is_empty() {
             let mut roots = vec![
@@ -1182,12 +1182,14 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
                     let Ok(bytes) = std::fs::read(&path) else { continue };
                     for face_index in 0..if collection { 16 } else { 1 } {
                         let Ok((family, postscript)) = pdfcraft_fonts::embedding::display_names_at(&bytes, face_index) else { break };
-                        let matched: Vec<_> = missing.iter().filter(|(resource, source)| {
+                        let matched: Vec<_> = missing.iter().filter(|(resource, source, sample)| {
+                            let nonspace: String = sample.chars().filter(|ch| !ch.is_whitespace()).collect();
                             !families.contains_key(resource)
                                 && [family.as_str(), postscript.as_str()].iter().any(|name| {
                                     pdfcraft_fonts::embedding::face_key(name) ==
                                         pdfcraft_fonts::embedding::face_key(source)
                                 })
+                                && pdfcraft_fonts::embedding::covers_at(&bytes, face_index, &nonspace)
                         }).collect();
                         if matched.is_empty() { continue; }
                         let name = format!("pdf-source-installed-{}", definitions.font_data.len());
@@ -1201,7 +1203,7 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
                             stack.extend(defaults.iter().cloned());
                         }
                         definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
-                        for (resource, _) in matched {
+                        for (resource, _, _) in matched {
                             families.insert(resource.clone(), name.clone());
                         }
                     }
