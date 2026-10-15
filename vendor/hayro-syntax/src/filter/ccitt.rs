@@ -15,7 +15,10 @@ pub(crate) fn decode(
 ) -> Option<FilterResult<'static>> {
     let k = params.get::<i32>(K).unwrap_or(0);
 
-    let rows = params.get::<u32>(ROWS).unwrap_or(image_params.height);
+    // PdfCraft patch: `/Rows 0` (a scanner's "use the image height", valid per ISO 32000) decoded
+    // as zero rows, so the page came out white. The image's height takes precedence over `/Rows`
+    // when it is known, as other viewers do and as upstream hayro now does (its `decode`).
+    let rows = if image_params.height > 0 { image_params.height } else { params.get::<u32>(ROWS).unwrap_or(0) };
     let end_of_block = params.get::<bool>(END_OF_BLOCK).unwrap_or(true);
 
     let settings = DecodeSettings {
