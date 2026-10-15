@@ -53,6 +53,7 @@ mod measure_ui;
 mod ocr_ui;
 mod optimize_ui;
 mod search_ui;
+mod send_email_ui;
 mod sign_ui;
 mod stamps_ui;
 mod standards_ui;
@@ -294,6 +295,8 @@ pub enum Dialog {
     Print,
     /// File ▸ Revert confirmation.
     Revert,
+    /// File ▸ Send by email: the file couldn't be attached.
+    SendEmail,
     /// Link Properties.
     LinkProps,
     /// Organize ▸ Extract (options), Rotate Pages.
@@ -640,6 +643,8 @@ pub struct PdfCraftApp {
     pub ocr_batch: Option<std::sync::Arc<std::sync::Mutex<ocr_ui::BatchProgress>>>,
     /// Background jobs (OCR, actions, listing pinned folders) run inline instead (tests).
     pub run_inline: bool,
+    /// File ▸ Send by email: the request under way and the file that couldn't be attached.
+    pub send_email: send_email_ui::SendEmailState,
     /// Action Wizard: the user's actions, the dialog state, the running action and (tests) the
     /// files to use instead of a picker.
     pub custom_actions: Vec<pdfcraft_engine::actions::Action>,
@@ -957,6 +962,7 @@ impl PdfCraftApp {
             ocr_run: None,
             ocr_batch: None,
             run_inline: false,
+            send_email: Default::default(),
             custom_actions: Vec::new(),
             wizard: Default::default(),
             action_run: None,
@@ -2911,6 +2917,7 @@ impl eframe::App for PdfCraftApp {
         self.poll_ocr();
         self.poll_optimize();
         self.poll_action();
+        self.poll_send_email();
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]
         self.process_picked();

@@ -173,6 +173,7 @@ impl PdfCraftApp {
             }
             "file.close_all" => self.close_all(),
             "file.revert" => self.dialog = Some(Dialog::Revert),
+            "file.send_email" => self.send_by_email(),
             "file.properties" => self.dialog = Some(Dialog::Properties(PropsTab::Description)),
             "protect.properties" => self.dialog = Some(Dialog::Properties(PropsTab::Security)),
             // A restricted document's security changes once its permissions password is entered.
