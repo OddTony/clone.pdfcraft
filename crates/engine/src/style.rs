@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use crate::{Document, EditError, Session};
+use crate::{DocId, Document, EditError, Session};
 
 pub use pdfcraft_style::{BaseFont, BlockSample, HeadingStyle, StyleError, StyleProfile, StyledItem};
 
@@ -64,7 +64,14 @@ pub fn profile_of(doc: &Document, max_pages: usize) -> Result<StyleProfile, Edit
             if l.text.trim().is_empty() {
                 continue;
             }
-            samples.push(BlockSample { text: l.text.clone(), size: l.size, bold: l.bold, rect: l.rect, base_font: l.base_font.clone() });
+            samples.push(BlockSample {
+                text: l.text.clone(),
+                size: l.size,
+                bold: l.bold,
+                rect: l.rect,
+                base_font: l.base_font.clone(),
+                color: l.color,
+            });
         }
     }
     pdfcraft_style::extract(page, &samples).map_err(|e| EditError::Invalid(e.to_string()))
@@ -74,7 +81,126 @@ impl Session {
     /// A new styled PDF from plain raw text and a profile (Format Studio apply).
     pub fn create_from_style(&self, title: &str, raw_text: &str, profile: &StyleProfile) -> Result<Arc<Vec<u8>>, EditError> {
         let items = pdfcraft_style::parse_plain(raw_text).map_err(|e| EditError::Invalid(e.to_string()))?;
-        let doc = pdfcraft_style::render(title, &items, profile).map_err(|e| EditError::Invalid(e.to_string()))?;
+        self.create_from_style_items(title, &items, profile)
+    }
+
+    /// A new styled PDF from already-structured items and a profile.
+    pub fn create_from_style_items(&self, title: &str, items: &[StyledItem], profile: &StyleProfile) -> Result<Arc<Vec<u8>>, EditError> {
+        let doc = pdfcraft_style::render(title, items, profile).map_err(|e| EditError::Invalid(e.to_string()))?;
         self.write_new(&doc)
     }
+
+    /// Restyle an open document's own paragraphs from a profile, in place: each
+    /// paragraph keeps its text and box and takes the reference body or heading
+    /// size, family and colour. One undo step; atomic (a refusal changes
+    /// nothing). Paragraphs the editor can't rewrite (scanned OCR layers,
+    /// rotated text, undrawable characters) are skipped and counted.
+    pub fn restyle_text(&mut self, id: DocId, profile: &StyleProfile) -> Result<RestyleReport, EditError> {
+        if profile.version != 1 {
+            return Err(EditError::Invalid("profile.version must be 1".into()));
+        }
+        let doc = self.get(id).ok_or(EditError::NoDocument)?;
+        let pages = doc.info.pages.len();
+        if pages == 0 {
+            return Err(EditError::Invalid("the document has no pages".into()));
+        }
+        // The target's own body size and heading sizes classify its paragraphs.
+        let first = doc.info.pages.first().ok_or(EditError::NoDocument)?;
+        let page_size = [f64::from(first.width), f64::from(first.height)];
+        let mut samples = Vec::new();
+        for p in 0..pages.min(20) {
+            for l in doc.text_lines(p) {
+                if samples.len() >= 2000 {
+                    break;
+                }
+                if l.text.trim().is_empty() {
+                    continue;
+                }
+                samples.push(BlockSample {
+                    text: l.text.clone(),
+                    size: l.size,
+                    bold: l.bold,
+                    rect: l.rect,
+                    base_font: l.base_font.clone(),
+                    color: l.color,
+                });
+            }
+        }
+        let target = pdfcraft_style::extract(page_size, &samples).map_err(|e| EditError::Invalid(e.to_string()))?;
+        let mut target_heads: Vec<f64> = target.headings.iter().map(|h| h.size).collect();
+        target_heads.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+        let family = match profile.base_font {
+            BaseFont::Helvetica => crate::FontFamily::Helvetica,
+            BaseFont::Times => crate::FontFamily::Times,
+            BaseFont::Courier => crate::FontFamily::Courier,
+        };
+        let mut edits = Vec::new();
+        let mut report = RestyleReport::default();
+        for page in 0..pages {
+            let blocks = doc.text_blocks(page);
+            // Descending indices: an applied rewrite must not shift the
+            // paragraphs still to come on the same page.
+            for (index, block) in blocks.iter().enumerate().rev() {
+                if block.text.trim().is_empty() || block.invisible || block.rotation.abs() > 0.1 {
+                    report.skipped += 1;
+                    continue;
+                }
+                let rank = target_heads.iter().position(|s| (block.size - s).abs() < 0.51);
+                let rank = match rank {
+                    Some(r) => r,
+                    None if block.size >= target.body_size * 1.08 => target_heads.len(),
+                    None => {
+                        // Body paragraph.
+                        let style = pdfcraft_edit::BlockStyle {
+                            family: Some((family, block.bold, block.italic)),
+                            bold: Some(block.bold),
+                            size: Some(profile.body_size),
+                            color: profile.body_color,
+                            ..Default::default()
+                        };
+                        if doc.text_edit_layout(page, index, &block.text, &style).is_err() {
+                            report.skipped += 1;
+                            continue;
+                        }
+                        report.paragraphs += 1;
+                        edits.push(crate::Edit::EditTextBlock { page, block: index, text: block.text.clone(), style });
+                        continue;
+                    }
+                };
+                let Some(heading) = profile.headings.get(rank.min(profile.headings.len().saturating_sub(1))) else {
+                    report.skipped += 1;
+                    continue;
+                };
+                let style = pdfcraft_edit::BlockStyle {
+                    family: Some((family, heading.bold, block.italic)),
+                    bold: Some(heading.bold),
+                    size: Some(heading.size),
+                    color: profile.heading_color,
+                    ..Default::default()
+                };
+                if doc.text_edit_layout(page, index, &block.text, &style).is_err() {
+                    report.skipped += 1;
+                    continue;
+                }
+                report.headings += 1;
+                edits.push(crate::Edit::EditTextBlock { page, block: index, text: block.text.clone(), style });
+            }
+        }
+        if edits.is_empty() {
+            return Err(EditError::Invalid("no paragraph could be restyled (scanned, rotated or undrawable text is left alone)".into()));
+        }
+        self.apply(id, crate::Edit::Batch { label: "Restyle text".into(), edits })?;
+        Ok(report)
+    }
+}
+
+/// What `Session::restyle_text` changed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RestyleReport {
+    /// Body paragraphs restyled.
+    pub paragraphs: usize,
+    /// Heading paragraphs restyled.
+    pub headings: usize,
+    /// Paragraphs left alone (scanned, rotated, or refused by the editor).
+    pub skipped: usize,
 }

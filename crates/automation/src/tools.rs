@@ -1085,17 +1085,20 @@ pub fn tools() -> Vec<ToolDef> {
         t("style_profile", "Extract a formatting profile", "Format Studio: read a reference PDF's formatting as a reusable StyleProfile (page size, margins, body size, heading levels, bullet indent, page numbers). Samples at most max_pages pages (default 12, at most 20) and 2,000 blocks, so large documents stay fast. Read-only.")
             .ro()
             .with(schema(json!({ "doc": doc(), "max_pages": { "type": "integer", "minimum": 1, "maximum": 20 } }), &["doc"])),
-        t("style_apply", "Generate a styled PDF", "Format Studio: build a new styled PDF from raw content and a StyleProfile (from style_profile). Give text directly, or raw_doc (an open document whose extracted text is restyled: '# '/bullets become headings/bullets). Plain markers '# ', '## ', '- '/'• ' choose the style; short ALL-CAPS lines become headings. Without out the result opens as a new unsaved document; with out it is written under --root.")
+        t("style_apply", "Generate a styled PDF", "Format Studio: build a new styled PDF from raw content and a StyleProfile (from style_profile). Give text directly, raw_path (a .txt or .docx file under --root; Word headings, lists and tables keep their structure), or raw_doc (an open document whose extracted text is restyled: '# '/bullets become headings/bullets). Plain markers '# ', '## ', '- '/'• ' choose the style; short ALL-CAPS lines become headings. Without out the result opens as a new unsaved document; with out it is written under --root.")
             .with(schema(
                 json!({
                     "profile": { "type": "object", "description": "StyleProfile from style_profile." },
                     "text": { "type": "string", "description": "Raw unformatted text." },
+                    "raw_path": { "type": "string", "description": "Raw .txt or .docx file (relative to --root when set) instead of text." },
                     "raw_doc": { "type": "integer", "minimum": 1, "description": "Open raw document id (from doc_open) instead of text." },
                     "title": { "type": "string" },
                     "out": { "type": "string", "description": "File to write. Omit to open the result as a new unsaved document instead." },
                 }),
                 &["profile"],
             )),
+        t("style_restyle", "Restyle a document in place", "Format Studio: rewrite an open document's own paragraphs from a StyleProfile (from style_profile): each paragraph keeps its text and box and takes the reference body or heading size, family and colour. Headings are found by size rank. One undo step; atomic (a refusal changes nothing). Scanned, rotated or undrawable paragraphs are skipped and counted in skipped. Returns paragraphs, headings and skipped counts.")
+            .with(schema(json!({ "doc": doc(), "profile": { "type": "object", "description": "StyleProfile from style_profile." } }), &["doc", "profile"])),
         t("style_patch", "Change a formatting profile", "Format Studio follow-ups: apply a validated patch to a StyleProfile (what ai_chat proposes as fenced JSON, or UI choices). Keys: body_size (6-24), headings ([{level 1-3, size 6-48, bold}], at most 3), page_numbers, bullet_indent (0-144), base_font (helvetica, times, courier), margins ([left, top, right, bottom], 18-360 each, leaving room for text). Unknown keys are refused. Read-only: feed the result back into style_apply.")
             .ro()
             .with(schema(

@@ -6,6 +6,8 @@ use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};
 
 mod extract;
 pub use extract::{ExtractedImage, ImageExport, extract_images, image_file};
+mod docx;
+pub use docx::{docx_text, is_docx};
 use pdfcraft_fonts::{literal, win_ansi, wrap};
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -721,3 +723,6 @@ fn set_text(title: &str, text: &str, page: (f64, f64), font_size: f64) -> Result
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod docx_tests;

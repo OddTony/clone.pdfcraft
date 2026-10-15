@@ -9539,9 +9539,9 @@ tier = "P3"
 milestone = "M13"
 status = "partial"
 commands = []
-tools = ["style_profile", "style_patch", "style_apply", "ai_chat"]
-evidence = ["crates/automation/tests/automation.rs::format_studio_profiles_and_applies_styles", "crates/ui-egui/tests/format_studio.rs::format_studio_picks_reference_and_raw_then_generates"]
-notes = "Format Studio: deterministic reference profiles (page size, margins, body/headings, bullets, page numbers) applied to raw text or raw documents; style_patch validates follow-up changes (what ai_chat proposes); ai_chat is BYOK OpenRouter chat over bounded context; File menu dialog with dual picks, Generate, and in-app key field plus chat. No DOCX import, no in-place PDF restyle yet"
+tools = ["style_profile", "style_patch", "style_apply", "style_restyle", "ai_chat"]
+evidence = ["crates/automation/tests/automation.rs::format_studio_profiles_and_applies_styles", "crates/automation/tests/automation.rs::format_studio_reads_docx_and_restyles_in_place", "crates/ui-egui/tests/format_studio.rs::format_studio_picks_reference_and_raw_then_generates", "crates/ui-egui/tests/format_studio.rs::format_studio_restyles_the_raw_pdf_in_place"]
+notes = "Format Studio: deterministic reference profiles (page size, margins, body/headings, bullets, page numbers, colours) applied to raw text, .txt, .docx or raw documents; style_patch validates follow-up changes (what ai_chat proposes); ai_chat is BYOK OpenRouter chat over bounded context; File menu dialog with dual picks, Generate, in-place restyle of the raw tab, and in-app key field plus chat; style_restyle rewrites open paragraphs in place as one undo step. No in-place margin/page-size changes, no Office-to-PDF conversion yet"
 
 [[feature]]
 id = "misc.ai-presentation"

@@ -49,7 +49,7 @@ pub use pdfcraft_organize::LabelStyle;
 pub use pdfcraft_organize::view::{InitialView, Layout as InitialLayout, Magnification, Navigation};
 
 pub use pdfcraft_cos::Algorithm;
-pub use pdfcraft_create::{CONVERTIBLE, CreateError, ImageResolution, SourceKind, decode_text, source_kind};
+pub use pdfcraft_create::{CONVERTIBLE, CreateError, ImageResolution, SourceKind, decode_text, docx_text, is_docx, source_kind};
 pub use pdfcraft_edit::{
     Added, AddedImage, AddedText, Align as TextAlign, Background, Content as AddedContent, Family as FontFamily, HeaderFooter, MarkKind, Watermark,
 };
@@ -1745,7 +1745,8 @@ pub const EDIT_LABELS: &[&str] = &[
 /// The names of the batches built below L7, which an interface shows in the same places as
 /// [`EDIT_LABELS`] and so translates the same way. A batch built in the interface itself arrives
 /// already worded in the interface's language.
-pub const BATCH_LABELS: &[&str] = &["Set document title", "Mark differences", "Detect form fields", "Run JavaScript", "Recognize text"];
+pub const BATCH_LABELS: &[&str] =
+    &["Set document title", "Mark differences", "Detect form fields", "Run JavaScript", "Recognize text", "Restyle text"];
 
 impl Edit {
     /// Label for the Edit menu and history ("Undo Rotate pages").

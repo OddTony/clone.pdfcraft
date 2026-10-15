@@ -5753,3 +5753,71 @@ fn ai_chat_validates_before_any_network() {
     assert!(matches!(err(&mut a, "ai_chat", json!({ "api_key": "k", "prompt": "hi", "base_url": "http://insecure" })), ToolError::InvalidArgs(_)));
     assert!(matches!(err(&mut a, "ai_chat", json!({ "api_key": "k", "prompt": "" })), ToolError::InvalidArgs(_)));
 }
+
+#[test]
+fn format_studio_reads_docx_and_restyles_in_place() {
+    // A Word file the way Word writes it (deflated parts): headings, a list,
+    // a table and body text.
+    let document = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Quarterly summary</w:t></w:r></w:p>
+<w:p><w:r><w:t>Revenue grew across every region.</w:t></w:r></w:p>
+<w:p><w:pPr><w:numPr/></w:pPr><w:r><w:t>Opened two offices</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:p><w:r><w:t>Q1</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Q2</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+</w:body></w:document>"#;
+    let mut zip = pdfcraft_export::Zip::default();
+    zip.add("[Content_Types].xml", b"<Types/>", true);
+    zip.add("word/document.xml", document.as_bytes(), true);
+    let dir = workdir("format-docx-restyle");
+    std::fs::write(dir.join("raw.docx"), zip.finish()).unwrap();
+    std::fs::write(dir.join("note.pdf"), fixture(1)).unwrap();
+    let mut a = auto(&dir);
+
+    // A reference profile from a styled document (heading plus body text
+    // flowing onto a second page, so restyle covers both paths).
+    let styled = {
+        let profile = pdfcraft_style::StyleProfile::default();
+        let mut body = String::from("First body paragraph with enough words to fill several lines of text. ");
+        for i in 0..150 {
+            body.push_str(&format!("Body sentence {i} with enough words to wrap onto a full line of text. "));
+        }
+        let items = vec![pdfcraft_style::StyledItem::Heading { level: 1, text: "Annual Report".into() }, pdfcraft_style::StyledItem::Body(body)];
+        let doc = pdfcraft_style::render("Reference", &items, &profile).unwrap();
+        pdfcraft_cos::write_full(&doc, &pdfcraft_cos::SaveOptions::default()).unwrap()
+    };
+    std::fs::write(dir.join("reference.pdf"), styled).unwrap();
+    let reference = ok(&mut a, "doc_open", json!({ "path": "reference.pdf" }))["doc"].as_u64().unwrap();
+    let profile = ok(&mut a, "style_profile", json!({ "doc": reference }))["profile"].clone();
+
+    // The .docx feeds style_apply straight from disk.
+    let made = ok(&mut a, "style_apply", json!({ "profile": profile, "title": "FromWord", "raw_path": "raw.docx" }))["doc"].as_u64().unwrap();
+    let texts = page_text(&mut a, made).join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(texts.contains("Quarterly summary"), "{texts}");
+    assert!(texts.contains("Revenue grew"), "{texts}");
+    assert!(texts.contains("Opened two offices"), "{texts}");
+    assert!(texts.contains("Q1"), "{texts}");
+    assert!(matches!(err(&mut a, "style_apply", json!({ "profile": profile, "raw_path": "note.pdf" })), ToolError::InvalidArgs(_)));
+
+    // In place: the target keeps its words and takes the reference sizes.
+    let target = ok(&mut a, "doc_open", json!({ "path": "reference.pdf" }))["doc"].as_u64().unwrap();
+    let patched =
+        ok(&mut a, "style_patch", json!({ "profile": profile, "patch": {"body_size": 14, "headings": [{"level": 1, "size": 22}] }}))["profile"]
+            .clone();
+    let report = ok(&mut a, "style_restyle", json!({ "doc": target, "profile": patched }));
+    assert!(report["paragraphs"].as_u64().unwrap() >= 1, "{report}");
+    assert_eq!(report["headings"], 1, "{report}");
+    let sizes = |a: &mut Automation, page: u64| {
+        ok(a, "text_paragraphs", json!({ "doc": target, "page": page }))["paragraphs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["size"].as_f64().unwrap().round() as i64)
+            .collect::<Vec<_>>()
+    };
+    let (s1, s2) = (sizes(&mut a, 1), sizes(&mut a, 2));
+    assert!(s1.contains(&22), "{s1:?}");
+    assert!(s2.contains(&14), "{s2:?}");
+    ok(&mut a, "edit_undo", json!({ "doc": target }));
+    let (s1, s2) = (sizes(&mut a, 1), sizes(&mut a, 2));
+    assert!(s1.contains(&18), "{s1:?}");
+    assert!(s2.contains(&11), "{s2:?}");
+}

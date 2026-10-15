@@ -28,6 +28,8 @@ pub struct BlockSample {
     pub bold: bool,
     pub rect: [f64; 4],
     pub base_font: String,
+    /// The text fill colour as RGB.
+    pub color: [f64; 3],
 }
 
 /// Which Type 1 family generated pages use (WinAnsi, like `pdfcraft-create`).
@@ -80,6 +82,12 @@ pub struct StyleProfile {
     pub base_font: BaseFont,
     pub body_size: f64,
     pub body_leading: f64,
+    /// Body text colour (RGB 0–1), when the reference stated one.
+    #[serde(default)]
+    pub body_color: Option<[f64; 3]>,
+    /// Heading text colour (RGB 0–1), when the reference stated one.
+    #[serde(default)]
+    pub heading_color: Option<[f64; 3]>,
     pub headings: Vec<HeadingStyle>,
     pub bullet_indent: f64,
     pub page_numbers: bool,
@@ -94,6 +102,8 @@ impl Default for StyleProfile {
             base_font: BaseFont::Helvetica,
             body_size: 11.0,
             body_leading: 13.75,
+            body_color: None,
+            heading_color: None,
             headings: vec![
                 HeadingStyle { level: 1, size: 18.0, bold: true, space_before: 12.0, space_after: 6.0 },
                 HeadingStyle { level: 2, size: 14.0, bold: true, space_before: 10.0, space_after: 4.0 },
@@ -127,6 +137,15 @@ fn median(mut values: Vec<f64>) -> Option<f64> {
     }
     values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     values.get(values.len() / 2).copied()
+}
+
+/// The median colour of `blocks`: black when none qualifies.
+fn median_color(blocks: &[&BlockSample]) -> [f64; 3] {
+    let channel = |i: usize| {
+        let values: Vec<f64> = blocks.iter().map(|b| b.color[i]).filter(|v| v.is_finite()).map(|v| v.clamp(0.0, 1.0)).collect();
+        median(values).unwrap_or(0.0)
+    };
+    [channel(0), channel(1), channel(2)]
 }
 
 /// Extract a profile from sampled reference lines and the reference page size.
@@ -170,37 +189,47 @@ pub fn extract(page: [f64; 2], blocks: &[BlockSample]) -> Result<StyleProfile, S
         profile.margins[3] = bottom.clamp(0.0, page[1] / 2.0 - 18.0).max(18.0);
     }
     // Body size: median of long blocks (real paragraphs), else median of all.
-    let long: Vec<f64> = usable.iter().filter(|b| b.text.chars().count() >= 40).map(|b| b.size.clamp(4.0, 72.0)).collect();
-    let all: Vec<f64> = usable.iter().map(|b| b.size.clamp(4.0, 72.0)).collect();
-    let body = median(long).or_else(|| median(all)).unwrap_or(11.0);
+    let long: Vec<&BlockSample> = usable.iter().filter(|b| b.text.chars().count() >= 40).copied().collect();
+    let body_lines: Vec<&BlockSample> = if long.is_empty() { usable.clone() } else { long };
+    let sizes: Vec<f64> = body_lines.iter().map(|b| b.size.clamp(4.0, 72.0)).collect();
+    let body = median(sizes).unwrap_or(11.0);
     profile.body_size = clamp_size(body);
     profile.body_leading = (profile.body_size * 1.25 * 100.0).round() / 100.0;
+    if !body_lines.is_empty() {
+        profile.body_color = Some(median_color(&body_lines));
+    }
     // Heading levels: distinct sizes clearly above body, largest first, at most three.
-    let mut clusters: Vec<(f64, usize, usize)> = Vec::new();
+    // Each cluster keeps its members' colours for the heading colour.
+    let mut clusters: Vec<(f64, Vec<[f64; 3]>, usize)> = Vec::new();
     for b in &usable {
         let size = (b.size.clamp(4.0, 72.0) * 2.0).round() / 2.0;
         if size < profile.body_size * 1.08 {
             continue;
         }
+        let color = [b.color[0].clamp(0.0, 1.0), b.color[1].clamp(0.0, 1.0), b.color[2].clamp(0.0, 1.0)];
         if let Some(slot) = clusters.iter_mut().find(|(s, _, _)| (*s - size).abs() < 0.26) {
-            slot.1 += 1;
+            if slot.1.len() < 512 {
+                slot.1.push(color);
+            }
             slot.2 += usize::from(b.bold);
         } else if clusters.len() < 8 {
-            clusters.push((size, 1, usize::from(b.bold)));
+            clusters.push((size, vec![color], usize::from(b.bold)));
         }
     }
     clusters.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut heading_colors: Vec<[f64; 3]> = Vec::new();
     profile.headings = clusters
         .into_iter()
         .take(3)
         .enumerate()
-        .map(|(i, (size, _, bold_count))| {
+        .map(|(i, (size, colors, bold_count))| {
             let level = (i as u8).saturating_add(1);
             let factor = match level {
                 1 => 1.0,
                 2 => 0.8,
                 _ => 0.6,
             };
+            heading_colors.extend(colors);
             HeadingStyle {
                 level,
                 size: clamp_size(size),
@@ -210,6 +239,13 @@ pub fn extract(page: [f64; 2], blocks: &[BlockSample]) -> Result<StyleProfile, S
             }
         })
         .collect();
+    if !heading_colors.is_empty() {
+        let channel = |i: usize| {
+            let values: Vec<f64> = heading_colors.iter().map(|c| c[i]).collect();
+            median(values).unwrap_or(0.0)
+        };
+        profile.heading_color = Some([channel(0), channel(1), channel(2)]);
+    }
     // Base font from the most common reference family name.
     let (mut helvetica, mut times, mut courier) = (0usize, 0usize, 0usize);
     for b in &usable {
@@ -245,7 +281,9 @@ pub fn extract(page: [f64; 2], blocks: &[BlockSample]) -> Result<StyleProfile, S
 /// Apply a follow-up patch to a profile (what `ai_chat` proposes as fenced
 /// JSON, or what a user picks in the UI): `body_size`, `headings`
 /// (`[{level, size, bold}]`), `page_numbers`, `bullet_indent`, `base_font`
-/// (`helvetica`/`times`/`courier`) and `margins` (`[left, top, right, bottom]`).
+/// (`helvetica`/`times`/`courier`), `body_color` and `heading_color`
+/// (`[r, g, b]` in 0–1, or null to keep the source colour) and `margins`
+/// (`[left, top, right, bottom]`).
 /// Unknown keys are refused so typos fail loudly; everything is range-checked
 /// and the result keeps `version`. Geometry the patch doesn't mention
 /// (page size) is never invented.
@@ -255,7 +293,9 @@ pub fn apply_patch(profile: &StyleProfile, patch: &serde_json::Value) -> Result<
     }
     let map = patch.as_object().ok_or_else(|| StyleError::Invalid("the patch must be a JSON object".into()))?;
     for key in map.keys() {
-        if !["body_size", "headings", "page_numbers", "bullet_indent", "base_font", "margins", "summary"].contains(&key.as_str()) {
+        if !["body_size", "headings", "page_numbers", "bullet_indent", "base_font", "body_color", "heading_color", "margins", "summary"]
+            .contains(&key.as_str())
+        {
             return Err(StyleError::Invalid(format!("unknown patch key {key:?}")));
         }
     }
@@ -323,6 +363,30 @@ pub fn apply_patch(profile: &StyleProfile, patch: &serde_json::Value) -> Result<
             Some("courier") => BaseFont::Courier,
             _ => return Err(StyleError::Invalid("base_font must be helvetica, times or courier".into())),
         };
+    }
+    for key in ["body_color", "heading_color"] {
+        let Some(value) = map.get(key) else { continue };
+        if value.is_null() {
+            if key == "body_color" {
+                out.body_color = None;
+            } else {
+                out.heading_color = None;
+            }
+            continue;
+        }
+        let list = value.as_array().filter(|v| v.len() == 3).ok_or_else(|| StyleError::Invalid(format!("{key} must be [r, g, b] or null")))?;
+        let mut color = [0.0; 3];
+        for (i, v) in list.iter().enumerate() {
+            color[i] = v.as_f64().filter(|n| n.is_finite()).ok_or_else(|| StyleError::Invalid(format!("{key} must be [r, g, b] or null")))?;
+            if !(0.0..=1.0).contains(&color[i]) {
+                return Err(StyleError::Invalid(format!("{key} components must be between 0 and 1")));
+            }
+        }
+        if key == "body_color" {
+            out.body_color = Some(color);
+        } else {
+            out.heading_color = Some(color);
+        }
     }
     if let Some(margins) = map.get("margins") {
         let list =
@@ -465,7 +529,7 @@ pub fn render(title: &str, items: &[StyledItem], profile: &StyleProfile) -> Resu
         r
     };
 
-    // Flatten items into drawable rows: (font key, size, indent, text).
+    // Flatten items into drawable rows: (font key, size, indent, colour, text).
     let mut rows: Vec<StyledRow> = Vec::new();
     for item in items {
         match item {
@@ -474,7 +538,7 @@ pub fn render(title: &str, items: &[StyledItem], profile: &StyleProfile) -> Resu
                     if rows.len() >= MAX_ITEMS * 4 {
                         return Err(StyleError::Invalid("the styled document is too long".into()));
                     }
-                    rows.push(((profile.base_font, false, false), body, 0.0, row));
+                    rows.push(((profile.base_font, false, false), body, 0.0, profile.body_color, row));
                 }
             }
             StyledItem::Heading { level, text } => {
@@ -483,7 +547,7 @@ pub fn render(title: &str, items: &[StyledItem], profile: &StyleProfile) -> Resu
                     if rows.len() >= MAX_ITEMS * 4 {
                         return Err(StyleError::Invalid("the styled document is too long".into()));
                     }
-                    rows.push(((profile.base_font, bold, false), size, 0.0, row));
+                    rows.push(((profile.base_font, bold, false), size, 0.0, profile.heading_color, row));
                 }
             }
             StyledItem::Bullet(text) => {
@@ -493,7 +557,7 @@ pub fn render(title: &str, items: &[StyledItem], profile: &StyleProfile) -> Resu
                         return Err(StyleError::Invalid("the styled document is too long".into()));
                     }
                     let indent = if i == 0 { 0.0 } else { profile.bullet_indent };
-                    rows.push(((profile.base_font, false, false), body, indent, row.clone()));
+                    rows.push(((profile.base_font, false, false), body, indent, profile.body_color, row.clone()));
                 }
             }
         }
@@ -502,7 +566,7 @@ pub fn render(title: &str, items: &[StyledItem], profile: &StyleProfile) -> Resu
         return Err(StyleError::Invalid("nothing to write".into()));
     }
     // Reject text the WinAnsi Type 1 fonts can't draw, naming the first offender.
-    for (_, _, _, text) in &rows {
+    for (_, _, _, _, text) in &rows {
         if let Some(c) = pdfcraft_fonts::first_undrawable(text) {
             return Err(StyleError::Invalid(pdfcraft_fonts::undrawable_message("the styled text", c)));
         }
@@ -525,7 +589,7 @@ pub fn render(title: &str, items: &[StyledItem], profile: &StyleProfile) -> Resu
     let total = pages.len();
     for (n, lines) in pages.iter().enumerate() {
         let mut keys: Vec<((BaseFont, bool, bool), String)> = Vec::new();
-        for (key, _, _, _) in lines {
+        for (key, _, _, _, _) in lines {
             if !keys.iter().any(|(k, _)| k == key) && keys.len() < 12 {
                 let name = format!("F{}", keys.len() + 1);
                 keys.push((*key, name));
@@ -543,10 +607,13 @@ pub fn render(title: &str, items: &[StyledItem], profile: &StyleProfile) -> Resu
         };
         let mut content = Vec::new();
         let mut y = h - mt - body;
-        for (key, size, indent, text) in lines {
+        for (key, size, indent, color, text) in lines {
             let name = key_of(key);
             let x = ml + indent;
-            let line = format!("BT /{name} {size:.2} Tf 1 0 0 1 {x:.2} {y:.2} Tm ");
+            let mut line = format!("BT /{name} {size:.2} Tf 1 0 0 1 {x:.2} {y:.2} Tm ");
+            if let Some([r, g, b]) = color.filter(|c| c.iter().all(|v| v.is_finite())) {
+                line.push_str(&format!("{} {} {} rg ", num(r), num(g), num(b)));
+            }
             content.extend_from_slice(line.as_bytes());
             content.extend_from_slice(&pdfcraft_fonts::literal(&pdfcraft_fonts::win_ansi(text)));
             content.extend_from_slice(b" Tj ET\n");
@@ -571,8 +638,13 @@ pub fn render(title: &str, items: &[StyledItem], profile: &StyleProfile) -> Resu
     Ok(doc)
 }
 
-/// One drawable row: (font key, size, extra indent, text).
-type StyledRow = ((BaseFont, bool, bool), f64, f64, String);
+/// One drawable row: (font key, size, extra indent, colour, text).
+type StyledRow = ((BaseFont, bool, bool), f64, f64, Option<[f64; 3]>, String);
+
+/// A colour component for a content stream: clamped, three decimals.
+fn num(v: f64) -> String {
+    format!("{:.3}", v.clamp(0.0, 1.0))
+}
 
 #[cfg(test)]
 mod tests;

@@ -668,6 +668,7 @@ impl Automation {
             "ai_chat" => self.ai_chat(&a)?,
             "style_profile" => self.style_profile(&a)?,
             "style_apply" => self.style_apply(&a)?,
+            "style_restyle" => self.style_restyle(&a)?,
             "doc_header_footer" | "doc_watermark" | "doc_background" | "doc_remove_marks" => self.marks(name, &a)?,
             "doc_unprotect" => {
                 let mut out = self.apply(&a, Edit::RemoveProtection)?;

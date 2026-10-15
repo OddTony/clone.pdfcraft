@@ -1,7 +1,7 @@
 use super::*;
 
 fn sample(text: &str, size: f64, bold: bool, rect: [f64; 4]) -> BlockSample {
-    BlockSample { text: text.into(), size, bold, rect, base_font: "Helvetica".into() }
+    BlockSample { text: text.into(), size, bold, rect, base_font: "Helvetica".into(), color: [0.0; 3] }
 }
 
 #[test]
