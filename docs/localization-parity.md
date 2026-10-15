@@ -1,5 +1,7 @@
 # Localization parity
 
+> **2026-10-15 CJK contribution:** native GB1/CNS1 fallback and portable field appearances use approved IBM Plex SC/TC input; synthetic initial-view, unchanged-blur and save/reopen tests cover the fix. See [CJK form rendering](cjk-form-rendering.md). Release, web coverage and native-speaker review remain separate work.
+
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (Vietnamese 100% of current key union; native-speaker community review; twelve-language mean ≈68%) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (Italian count after completing its catalog) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 

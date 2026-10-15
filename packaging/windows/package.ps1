@@ -93,6 +93,18 @@ foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
   Copy-Item (Join-Path $Root $f) $Stage
 }
 Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
+# Embedded build-input fonts need their notices in the MSI as well as the ZIP.
+# Keep the option absent for builds without craft-fonts.
+$FontNoticeArgs = @()
+if ($env:CRAFT_FONTS_DIR) {
+  Get-ChildItem -Path (Join-Path $env:CRAFT_FONTS_DIR 'fonts') -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    $ofl = Join-Path $_.FullName 'OFL.txt'
+    if (Test-Path -LiteralPath $ofl) { Copy-Item -LiteralPath $ofl -Destination (Join-Path $Stage "OFL-$($_.Name).txt") }
+  }
+  if (Get-ChildItem -LiteralPath $Stage -Filter 'OFL-*.txt') {
+    $FontNoticeArgs = @('-d', "FontNoticesDir=$Stage")
+  }
+}
 
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'pdfcraft.exe') (Join-Path $Stage 'pdfcraft-cli.exe')
 
@@ -113,6 +125,7 @@ $Msi = Join-Path $Dist "pdfcraft-$Version-windows-$Arch.msi"
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'pdfcraft.wxs') -arch $Arch `
     (Join-Path $PSScriptRoot 'installer-ui.wxs') `
+    @FontNoticeArgs `
     -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "ModelsDir=$Models" -d "IconPath=$(Join-Path $Root 'assets\app-icon\pdfcraft.ico')" `
     -o $Msi
 }

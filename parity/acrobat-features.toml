@@ -4409,8 +4409,8 @@ milestone = "M2"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/render/src/raster.rs::widget_appearance_states"]
-notes = ""
+evidence = ["crates/render/src/raster.rs::widget_appearance_states", "crates/render/src/raster.rs::portable_cjk_imported_appearances_render_before_any_edit", "crates/ui-egui/tests/forms.rs::portable_cjk_prefilled_field_survives_unchanged_focus_and_blur", "crates/automation/tests/automation.rs::portable_cjk_prefilled_fields_render_without_form_fill"]
+notes = "Non-embedded GB1/CNS1 appearances use approved Hans/Hant build-input fonts; unchanged focus/blur preserves the original PDF. CJK release acceptance runs explicitly in Linux CI. Requires the approved optional build input; web retains its smaller font selection."
 
 [[feature]]
 id = "form.fill-text"

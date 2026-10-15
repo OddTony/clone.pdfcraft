@@ -3,6 +3,54 @@
 use egui_kittest::Harness;
 use pdfcraft_ui_egui::PdfCraftApp;
 
+#[path = "../../render/tests/support/cjk.rs"]
+mod imported_cjk;
+
+#[test]
+#[ignore = "portable release acceptance requires Hans and Hant build inputs"]
+fn portable_cjk_prefilled_field_survives_unchanged_focus_and_blur() {
+    use pdfcraft_render::{PageRenderer, RenderRequest, RequestKind};
+    for script in ["Hans", "Hant"] {
+        assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)));
+    }
+    for (encoding, collection, codes, text) in imported_cjk::CASES {
+        let source = imported_cjk::prefilled(encoding, collection, codes, text);
+        let input = source.clone();
+        let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+            let mut app = PdfCraftApp::new();
+            app.open_bytes("prefilled.pdf", None, input).unwrap();
+            app.set_option("left", "closed").unwrap();
+            app.set_option("zoom", "65").unwrap();
+            app
+        });
+        h.run_steps(5);
+        let assert_visible_and_clean = |h: &Harness<'static, PdfCraftApp>| {
+            let doc = h.state().session.get(h.state().views[0].id).unwrap();
+            assert!(!doc.dirty);
+            assert!(doc.undo_label().is_none());
+            assert_eq!(doc.bytes.as_ref(), &source);
+            assert_eq!(doc.display.as_ref(), &source, "font fallback must not rewrite appearances");
+            let mut renderer = PageRenderer::new(doc.display.clone(), Default::default());
+            let output = renderer.render(RenderRequest { page: 0, kind: RequestKind::Pixels, scale: 1.0, ..Default::default() });
+            assert!(output.error.is_none());
+            assert!(output.rgba.as_chunks::<4>().0.iter().filter(|p| p[0] < 128).count() > 60, "the page itself must draw {text}");
+        };
+        assert_visible_and_clean(&h);
+        click_field(&mut h, "name", 0);
+        assert_eq!(h.state().views[0].forms.focus.as_ref().unwrap().text, text);
+        let blank = h.state().views[0].page_screen_rect(0).unwrap().min + egui::vec2(3.0, 3.0);
+        h.hover_at(blank);
+        h.run_steps(1);
+        h.drag_at(blank);
+        h.run_steps(1);
+        h.drop_at(blank);
+        h.run_steps(4);
+        assert!(h.state().views[0].forms.focus.is_none());
+        assert_eq!(value(&h, "name"), [text]);
+        assert_visible_and_clean(&h);
+    }
+}
+
 fn harness() -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();

@@ -243,7 +243,7 @@ pub const SYSTEM_TAMIL_FALLBACK: &str = "system-tamil-fallback";
 /// `PDFCRAFT_SYSTEM_FONTS=0` leaves them out.
 pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
     #[cfg_attr(target_arch = "wasm32", expect(unused_mut))]
-    let mut fonts = font_definitions_for(cjk == CjkPreference::SimplifiedChinese);
+    let mut fonts = font_definitions_for_cjk(cjk, current_font_policy_platform());
     #[cfg(not(target_arch = "wasm32"))]
     {
         use crate::system_fonts::{Need, fallback};
@@ -350,6 +350,10 @@ pub(crate) fn on_interface_baseline(mut data: FontData) -> FontData {
 }
 
 fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform) -> FontDefinitions {
+    font_definitions_for_cjk(if prefer_hans { CjkPreference::SimplifiedChinese } else { CjkPreference::Default }, platform)
+}
+
+fn font_definitions_for_cjk(cjk: CjkPreference, platform: FontPolicyPlatform) -> FontDefinitions {
     let mut fonts = FontDefinitions::default();
     let add = |fonts: &mut FontDefinitions, name: &str, bytes: &'static [u8]| {
         let data = FontData::from_static(bytes);
@@ -368,7 +372,11 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "Inter".to_owned());
     fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "JetBrainsMono".to_owned());
     // The same static bytes pdfcraft-fonts uses for Japanese/Chinese text in PDFs: one copy, not two.
-    for face in pdfcraft_fonts::ui_cjk_fonts(prefer_hans) {
+    let mut cjk_faces = pdfcraft_fonts::ui_cjk_fonts(cjk == CjkPreference::SimplifiedChinese);
+    if cjk == CjkPreference::TraditionalChinese {
+        cjk_faces.sort_by_key(|face| !face.covers("Hant"));
+    }
+    for face in cjk_faces {
         let name = face.name();
         // Japanese and Chinese faces have distinct family names, so no collision here.
         if !fonts.font_data.contains_key(&name) {

@@ -239,6 +239,14 @@ pub fn lines(t: &AddedText) -> Vec<String> {
 /// does).
 fn wrapped(t: &AddedText) -> Vec<(String, bool)> {
     let width = (t.rect[2] - t.rect[0]).max(t.size);
+    if uses_cjk(t)
+        && let Ok(prepared) = pdfcraft_fonts::cjk::PreparedCjkText::new(&t.text, t.family == Family::Times, t.bold)
+    {
+        return pdfcraft_fonts::wrap_with(&t.text.replace('\t', " "), t.size, width, |s, size| prepared.width(s, size))
+            .into_iter()
+            .map(|line| (line, false))
+            .collect();
+    }
     let mut out = Vec::new();
     for para in t.text.split('\n') {
         // Arabic or Hebrew: laid out with the bidirectional algorithm and shaped.
@@ -327,6 +335,24 @@ fn is_hebrew(c: char) -> bool {
 /// draw (or that has no face to draw it). Page-content tools refuse such text; the Add-text editor
 /// keeps it open.
 pub fn first_undrawable(t: &AddedText) -> Option<char> {
+    if uses_cjk(t) {
+        return match pdfcraft_fonts::cjk::PreparedCjkText::new(&t.text, t.family == Family::Times, t.bold) {
+            Ok(_) => None,
+            Err(_) => {
+                let faces = pdfcraft_fonts::cjk::document_cjk_fonts_for_style(t.family == Family::Times, t.bold);
+                t.text
+                    .chars()
+                    .filter(|c| !matches!(c, '\n' | '\r' | '\t'))
+                    .find(|c| !faces.iter().any(|f| pdfcraft_fonts::embedding::covers(f.bytes, &c.to_string())))
+                    .or_else(|| t.text.chars().find(|c| !c.is_ascii()))
+            }
+        };
+    }
+    if pdfcraft_fonts::cjk::contains_cjk(&t.text) && t.text.chars().any(|c| is_arabic(c) || is_hebrew(c) || is_thai(c)) {
+        // The Arabic/Hebrew/Thai shapers still emit other-script runs in WinAnsi. Do not let its
+        // recursive validation mistake a separately drawable CJK run for shaped support.
+        return t.text.chars().find(|c| pdfcraft_fonts::cjk::contains_cjk(&c.to_string()));
+    }
     if t.text.chars().any(is_thai) {
         if let Some(c) = t.text.chars().find(|c| is_thai(*c) && !pdfcraft_fonts::thai_has(*c)) {
             return Some(c);
@@ -360,6 +386,47 @@ pub fn first_undrawable(t: &AddedText) -> Option<char> {
 fn shaped_by_a_face(t: &AddedText) -> bool {
     (pdfcraft_fonts::document_arabic_font().is_some() && t.text.chars().any(is_arabic))
         || (pdfcraft_fonts::document_hebrew_font(false).is_some() && t.text.chars().any(is_hebrew))
+}
+
+fn uses_cjk(t: &AddedText) -> bool {
+    pdfcraft_fonts::cjk::contains_cjk(&t.text) && !t.text.chars().any(|c| is_arabic(c) || is_hebrew(c) || is_thai(c))
+}
+
+fn draw_cjk(doc: &mut Document, t: &AddedText, taken: &Dict, out: &mut Vec<u8>) -> Result<Dict, EditError> {
+    let prepared = pdfcraft_fonts::cjk::PreparedCjkText::new(&t.text, t.family == Family::Times, t.bold).map_err(EditError::Invalid)?;
+    let mut fonts = taken.clone();
+    let embedded = prepared.install(doc, &mut fonts).map_err(EditError::Invalid)?;
+    let r = text_rect(t);
+    let all = lines(t);
+    let [cr, cg, cb] = t.color.map(|v| v.clamp(0.0, 1.0));
+    out.extend(format!("BT {} {} {} rg\n", n(cr), n(cg), n(cb)).bytes());
+    for (i, line) in all.iter().enumerate() {
+        let width = embedded.width(line, t.size);
+        let mut x = match t.align {
+            Align::Left | Align::Justify => r[0],
+            Align::Center => r[0] + (r[2] - r[0] - width) / 2.0,
+            Align::Right => r[2] - width,
+        };
+        let y = r[3] - (i as f64 * 1.2 + 0.95) * t.size;
+        let spaces = line.matches(' ').count();
+        let gap = if t.align == Align::Justify && i.saturating_add(1) < all.len() && spaces > 0 {
+            (r[2] - r[0] - width).max(0.0) / spaces as f64
+        } else {
+            0.0
+        };
+        // PDF Tw applies only to a one-byte space; position words explicitly for Type0 text.
+        for word in line.split_inclusive(' ') {
+            out.extend(format!("1 0 0 1 {} {} Tm\n", n(x), n(y)).bytes());
+            for (name, bytes) in embedded.runs(word).ok_or_else(|| EditError::Invalid("CJK text could not be encoded".into()))? {
+                out.extend(format!("/{name} {} Tf ", n(t.size)).bytes());
+                out.extend(literal(&bytes));
+                out.extend_from_slice(b" Tj\n");
+            }
+            x += embedded.width(word, t.size) + if word.ends_with(' ') { gap } else { 0.0 };
+        }
+    }
+    out.extend_from_slice(b"ET\n");
+    Ok(embedded.resources)
 }
 
 /// An Arabic character the face shapes and draws (U+061C, a direction mark, is dropped).
@@ -755,6 +822,12 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
     .into_bytes();
     match c {
         Content::Text(t) => {
+            if uses_cjk(t) {
+                let fonts = draw_cjk(doc, t, taken, &mut out)?;
+                res.set(b"Font".to_vec(), Object::Dict(fonts));
+                out.extend_from_slice(b"Q\n");
+                return Ok((out, res));
+            }
             let base = t.family.base_font(t.bold, t.italic);
             let name = font_name(base);
             let mut font = Dict::new();

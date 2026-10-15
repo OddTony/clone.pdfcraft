@@ -73,17 +73,35 @@ impl RenderConfig {
         InterpreterSettings {
             ocg_overrides: self.layers.clone(),
             hide_comments: self.hide_comments,
-            font_resolver: Arc::new(move |query| japanese_fallback(query).or_else(|| standard(query))),
+            font_resolver: Arc::new(move |query| cjk_fallback(query).or_else(|| standard(query))),
             ..InterpreterSettings::default()
         }
     }
 }
 
+/// Approved build-input faces for non-embedded CJK fonts. The PDF's character
+/// collection, not its text's language or font name, determines the substitute.
+/// Existing appearances often encode Japanese through GBK/GB1 (e.g. SimSun).
+/// hayro maps those codes through the collection's Unicode CMap to our glyphs.
+fn cjk_fallback(query: &FontQuery) -> Option<(FontData, u32)> {
+    let FontQuery::Fallback(f) = query else { return None };
+    let script = match f.character_collection.as_ref()?.family {
+        CidFamily::AdobeJapan1 => return japanese_fallback(query),
+        CidFamily::AdobeGB1 => "Hans",
+        CidFamily::AdobeCNS1 => "Hant",
+        _ => return None,
+    };
+    let mut faces = pdfcraft_fonts::CRAFT_FONTS.iter().filter(|face| face.covers(script));
+    let first = faces.next()?;
+    let face = if first.style == "Regular" { first } else { faces.find(|face| face.style == "Regular").unwrap_or(first) };
+    Some((Arc::new(face.bytes), 0))
+}
+
 /// A Japanese face from craft-fonts for a CID font of the Adobe-Japan1 collection that the PDF
 /// doesn't embed (`HeiseiMin-W3`, `KozGoPro-Medium`, …). hayro's own substitutes for fonts that
 /// aren't embedded are the Latin standard 14, so such text drew nothing. `None` for every other
-/// font, and when PdfCraft was built without craft-fonts. Only Japanese: the pinned craft-fonts
-/// has no other CJK faces, and its later Chinese face is Noto CJK, which AGENTS.md §1.1 rules out.
+/// font, and when PdfCraft was built without craft-fonts. GB1 and CNS1 are handled
+/// separately by [`cjk_fallback`], using only approved build-input faces.
 fn japanese_fallback(query: &FontQuery) -> Option<(FontData, u32)> {
     let FontQuery::Fallback(f) = query else { return None };
     if f.character_collection.as_ref()?.family != CidFamily::AdobeJapan1 {
@@ -1237,6 +1255,66 @@ fn worker(
 
 #[cfg(test)]
 mod tests {
+    mod imported_cjk {
+        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/support/cjk.rs"));
+    }
+
+    #[test]
+    fn cjk_fallback_selects_the_character_collection_and_handles_absent_fonts() {
+        use hayro::hayro_interpret::font::FallbackFontQuery;
+        use hayro::hayro_interpret::hayro_cmap::CharacterCollection;
+        use skrifa::MetadataProvider;
+        for (family, script, text) in [(CidFamily::AdobeGB1, "Hans", "山田太郎简体中文"), (CidFamily::AdobeCNS1, "Hant", "繁體中文")] {
+            let query = FontQuery::Fallback(FallbackFontQuery {
+                post_script_name: Some("UninstalledFont".into()),
+                character_collection: Some(CharacterCollection { family, supplement: 2 }),
+                ..Default::default()
+            });
+            let result = super::cjk_fallback(&query);
+            if !pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)) {
+                assert!(result.is_none(), "never substitute a different CJK collection");
+                continue;
+            }
+            let (data, index) = result.unwrap();
+            assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script) && f.bytes == (*data).as_ref()));
+            let font = skrifa::FontRef::from_index((*data).as_ref(), index).unwrap();
+            assert!(text.chars().all(|c| font.charmap().map(c).is_some_and(|g| g.to_u32() != 0)));
+        }
+        let unknown = FontQuery::Fallback(FallbackFontQuery::default());
+        assert!(super::cjk_fallback(&unknown).is_none());
+    }
+
+    #[test]
+    #[ignore = "portable release acceptance requires Hans and Hant build inputs"]
+    fn portable_cjk_imported_appearances_render_before_any_edit() {
+        use super::*;
+        for script in ["Hans", "Hant"] {
+            assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)));
+        }
+        for (encoding, collection, codes, value) in imported_cjk::CASES {
+            let bytes = Arc::new(imported_cjk::prefilled(encoding, collection, codes, value));
+            let mut renderer = PageRenderer::new(bytes.clone(), RenderConfig::default());
+            for scale in [0.65, 1.0, 2.0, 4.0] {
+                let request = RenderRequest { page: 0, kind: RequestKind::Pixels, scale, ..Default::default() };
+                let full = renderer.render(request);
+                assert!(full.error.is_none(), "{:?}", full.error);
+                let ink = full.rgba.as_chunks::<4>().0.iter().filter(|p| p[0] < 128).count();
+                assert!(ink > (60.0 * scale * scale) as usize, "{encoding} {value} at {scale}: missing glyphs ({ink} pixels)");
+                // All text falls in the first 120 PDF points. Tiled output must
+                // match the corresponding full raster, not an editing overlay.
+                let tile = Tile { x: 0, y: 0, w: (120.0 * scale) as u32, h: full.height };
+                let part = renderer.render(RenderRequest { tile: Some(tile), ..request });
+                assert!(part.error.is_none(), "{:?}", part.error);
+                for y in 0..tile.h as usize {
+                    let a = &full.rgba[y * full.width as usize * 4..][..tile.w as usize * 4];
+                    let b = &part.rgba[y * tile.w as usize * 4..][..tile.w as usize * 4];
+                    assert_eq!(a, b, "{encoding} tile row {y} at {scale}");
+                }
+            }
+            assert_eq!(*bytes, imported_cjk::prefilled(encoding, collection, codes, value), "viewing preserves source bytes");
+        }
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn render_gate(page: usize, shared_generation: bool) -> super::RenderGate {
         let barrier = || std::sync::Arc::new(std::sync::Barrier::new(2));

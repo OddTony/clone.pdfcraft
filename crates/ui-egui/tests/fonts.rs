@@ -9,6 +9,31 @@ const CHINESE: &str = "简体中文欢迎";
 const ARABIC: &str = "واحد اثنين";
 const TELUGU: &str = "తెలుగు ఫైల్";
 
+#[test]
+#[ignore = "portable release acceptance requires Japanese, Simplified and Traditional build inputs"]
+fn portable_cjk_ui_covers_all_samples_and_prefers_traditional_face() {
+    for script in ["Jpan", "Hans", "Hant"] {
+        assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)));
+    }
+    for preference in [theme::CjkPreference::Default, theme::CjkPreference::SimplifiedChinese, theme::CjkPreference::TraditionalChinese] {
+        let defs = theme::installed_font_definitions(preference);
+        assert!(!defs.font_data.contains_key(theme::SYSTEM_FALLBACK), "run with PDFCRAFT_SYSTEM_FONTS=0");
+        if preference == theme::CjkPreference::TraditionalChinese {
+            let stack = &defs.families[&FontFamily::Proportional];
+            let tc = stack.iter().position(|s| s.starts_with("IBM Plex Sans TC")).unwrap();
+            let jp = stack.iter().position(|s| s.starts_with("BIZ UDPGothic")).unwrap();
+            assert!(tc < jp);
+        }
+        let mut fonts = Fonts::new(TextOptions::default(), defs);
+        for id in families() {
+            for sample in ["〒100-0001東京都千代田区千代田1-1", "山田太郎", "简体中文：测试编辑汉龙马", "繁體中文：測試編輯漢龍馬"]
+            {
+                assert!(fonts.has_glyphs(&id, sample), "{id:?} lacks {sample}");
+            }
+        }
+    }
+}
+
 fn families() -> Vec<FontId> {
     vec![FontId::proportional(13.0), FontId::monospace(13.0), theme::medium(13.0), theme::semibold(17.0)]
 }

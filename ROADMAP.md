@@ -1,5 +1,7 @@
 # PdfCraft roadmap
 
+> **2026-10-15 CJK contribution:** native GB1/CNS1 fallback and portable field appearances use approved IBM Plex SC/TC input; synthetic initial-view, unchanged-blur and save/reopen tests cover the fix. See [CJK form rendering](docs/cjk-form-rendering.md). Release, web coverage and native-speaker review remain separate work.
+
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)

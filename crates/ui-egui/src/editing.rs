@@ -1430,20 +1430,21 @@ mod revert_draft_tests {
     /// interface language; a drawable value says nothing.
     #[test]
     fn a_value_its_font_cannot_draw_is_kept_and_explained() {
+        // Chinese is drawable with the approved CJK input; noncharacters remain unsupported.
         let mut app = app();
         let fill =
             |app: &mut PdfCraftApp, text: &str| app.apply_edit(Edit::SetFieldValue { name: "name".into(), value: FieldValue::Text(text.into()) });
-        assert!(fill(&mut app, "张三"));
+        assert!(fill(&mut app, "\u{10ffff}"));
         let toast = app.toast.as_ref().map(|t| t.0.clone()).expect("a notice");
-        assert!(toast.contains("“张” (U+5F20)") && toast.contains("other PDF viewers redraw the field"), "{toast}");
-        assert_eq!(app.session.get(app.views[0].id).unwrap().form.iter().find(|f| f.name == "name").unwrap().value, ["张三"]);
+        assert!(toast.contains("\u{201c}\u{10ffff}\u{201d} (U+10FFFF)") && toast.contains("other PDF viewers redraw the field"), "{toast}");
+        assert_eq!(app.session.get(app.views[0].id).unwrap().form.iter().find(|f| f.name == "name").unwrap().value, ["\u{10ffff}"]);
         // The shell sets the drawing language each frame; here, directly (per thread).
         let previous = crate::i18n::current();
         crate::i18n::set_current(crate::i18n::Lang::from_code("zh-hans").expect("registered"));
-        assert!(fill(&mut app, "李四"));
+        assert!(fill(&mut app, "\u{10fffe}"));
         crate::i18n::set_current(previous);
         let toast = app.toast.as_ref().map(|t| t.0.clone()).expect("a notice");
-        assert!(toast.contains("此字段的字体无法显示“李”（U+674E）"), "{toast}");
+        assert!(toast.contains("此字段的字体无法显示\u{201c}\u{10fffe}\u{201d}（U+10FFFE）"), "{toast}");
         app.toast = None;
         assert!(fill(&mut app, "Ada"));
         assert!(app.toast.is_none(), "{:?}", app.toast);

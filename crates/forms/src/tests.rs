@@ -105,6 +105,130 @@ fn appearance_text(doc: &Document, w: &Widget, font_name: &[u8]) -> (Object, Vec
     (font.as_ref().clone(), shown)
 }
 
+/// Decode each Tj with the actual selected font, including switches within a line.
+fn portable_appearance_text(doc: &Document, w: &Widget) -> String {
+    let wd = doc.get(w.obj);
+    let normal = wd.as_dict().unwrap().get(b"AP").unwrap().as_dict().unwrap().reference(b"N").unwrap();
+    let appearance = doc.get(normal);
+    let Object::Stream(stream) = appearance.as_ref() else { panic!("appearance") };
+    let resources = doc.dict(stream.dict.get(b"Resources").unwrap()).unwrap();
+    let fonts = doc.dict(resources.get(b"Font").unwrap()).unwrap();
+    let mut selected = String::new();
+    let mut text = String::new();
+    for op in pdfcraft_content::parse(&stream.decoded().unwrap()).ops {
+        if op.is("Tf") {
+            selected = String::from_utf8(op.operands[0].as_name().unwrap().to_vec()).unwrap();
+        } else if op.is("Tj") {
+            let fd = doc.dict(fonts.get(selected.as_bytes()).unwrap()).unwrap();
+            assert!(pdfcraft_fonts::pdf::embedded_sfnt(doc, &fd).is_some(), "CJK appearances are self-contained");
+            text.push_str(&pdfcraft_fonts::pdf::Metrics::from_dict(doc, &fd).decode(&op.operands[0].as_string().unwrap().bytes));
+        }
+    }
+    text
+}
+
+#[test]
+#[ignore = "portable release acceptance requires Japanese, Simplified and Traditional build inputs"]
+fn portable_cjk_source_unicode_map_does_not_prove_glyph_coverage() {
+    assert!(!pdfcraft_fonts::document_japanese_fonts_for_style(false, false).is_empty());
+    let mut doc = fixture();
+    let mut fonts = pdfcraft_cos::Dict::new();
+    let name = pdfcraft_fonts::embedding::embed(&mut doc, &mut fonts, pdfcraft_fonts::INTER_REGULAR, "SourceLatin").unwrap();
+    let source = fonts.reference(name.as_bytes()).unwrap();
+    // A source font can declare a Unicode meaning for a code whose program has no
+    // Japanese glyph. Encoding/ToUnicode alone must not authorize its reuse.
+    let cmap = b"1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n1 beginbfchar\n<0001> <83CA>\nendbfchar\n";
+    let mapping = doc.add(Object::Stream(pdfcraft_cos::Stream::from_raw(pdfcraft_cos::Dict::new(), cmap.to_vec())));
+    doc.update_dict(source, |d| d.set(b"ToUnicode".to_vec(), Object::Ref(mapping))).unwrap();
+    doc.update_dict(ObjRef::new(4, 0), |d| {
+        let mut dr = pdfcraft_cos::Dict::new();
+        dr.set(b"Font".to_vec(), Object::Dict(fonts));
+        d.set(b"DR".to_vec(), Object::Dict(dr));
+        d.set(b"DA".to_vec(), pdfcraft_cos::PdfString::literal(format!("/{name} 12 Tf 0 g").into_bytes()));
+    })
+    .unwrap();
+    let source_font = doc.get(source).as_dict().cloned().unwrap();
+    assert!(pdfcraft_fonts::pdf::Metrics::from_dict(&doc, &source_font).encode("菊").is_some());
+    assert!(!pdfcraft_fonts::embedding::covers(pdfcraft_fonts::INTER_REGULAR, "菊"));
+    set_value(&mut doc, "name", &FieldValue::Text("菊".into())).unwrap();
+    doc = reopen(&doc);
+    let f = field(&fields(&doc), "name").clone();
+    assert_eq!(portable_appearance_text(&doc, &f.widgets[0]), "菊");
+    let wd = doc.get(f.widgets[0].obj);
+    let da_text = wd.as_dict().unwrap().get(b"DA").and_then(Object::as_string).map(|s| s.to_text()).unwrap_or(f.da);
+    let da = appearance::parse_da(&da_text);
+    assert_ne!(da.font, name, "replace the source font whose Unicode mapping promises a missing glyph");
+}
+
+#[test]
+#[ignore = "portable release acceptance requires Japanese, Simplified and Traditional build inputs"]
+fn portable_cjk_fields_keep_appearances_resources_and_further_edits() {
+    for script in ["Jpan", "Hans", "Hant"] {
+        assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)));
+    }
+    let mut doc = fixture();
+    let original = doc.get(ObjRef::new(5, 0)).as_ref().clone();
+    for text in
+        ["〒100-0001東京都千代田区千代田1-1", "山田太郎", "简体中文：测试编辑汉龙马", "繁體中文：測試編輯漢龍馬", "ひらがな カタカナ ABC 丢龍馬"]
+    {
+        set_value(&mut doc, "name", &FieldValue::Text(text.into())).unwrap();
+        doc = reopen(&doc);
+        let f = field(&fields(&doc), "name").clone();
+        assert_eq!(f.value, [text]);
+        assert_eq!(portable_appearance_text(&doc, &f.widgets[0]), text);
+        assert!(undrawn_fields(&doc).is_empty());
+        assert!(!need_appearances(&doc));
+        redraw_field(&mut doc, "name").unwrap();
+        assert_eq!(portable_appearance_text(&doc, &f.widgets[0]), text);
+        let widget = doc.get(f.widgets[0].obj);
+        let da = appearance::parse_da(&widget.as_dict().unwrap().get(b"DA").unwrap().as_string().unwrap().to_text());
+        let dr = doc.dict(acroform(&doc).unwrap().get(b"DR").unwrap()).unwrap();
+        let fonts = doc.dict(dr.get(b"Font").unwrap()).unwrap();
+        assert!(fonts.contains(da.font.as_bytes()), "default appearance font is installed for later editing");
+        assert_eq!(doc.get(ObjRef::new(5, 0)).as_ref(), &original, "source Helvetica stays untouched");
+    }
+    let programs = doc.scan_objects().filter(|(_, o)| matches!(o.as_ref(), Object::Stream(s) if s.dict.contains(b"PCFullFont"))).count();
+    set_value(&mut doc, "notes", &FieldValue::Text("山田太郎".into())).unwrap();
+    assert_eq!(doc.scan_objects().filter(|(_, o)| matches!(o.as_ref(), Object::Stream(s) if s.dict.contains(b"PCFullFont"))).count(), programs);
+    assert!(ap(&doc, &field(&fields(&doc), "notes").widgets[0]).contains("0 0 1 rg"), "field colour survives");
+}
+
+#[test]
+#[ignore = "portable release acceptance requires Japanese, Simplified and Traditional build inputs"]
+fn portable_cjk_multiline_comb_choice_and_password_fields() {
+    for script in ["Jpan", "Hans", "Hant"] {
+        assert!(pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers(script)));
+    }
+    let mut doc = fixture();
+    let text = "東京都千代田区\n繁體中文：測試編輯漢龍馬";
+    set_value(&mut doc, "notes", &FieldValue::Text(text.into())).unwrap();
+    let notes = field(&fields(&doc), "notes").clone();
+    assert_eq!(portable_appearance_text(&doc, &notes.widgets[0]), text.replace('\n', ""));
+    set_value(&mut doc, "zip", &FieldValue::Text("漢字かな名".into())).unwrap();
+    assert_eq!(portable_appearance_text(&doc, &field(&fields(&doc), "zip").widgets[0]), "漢字かな名");
+    set_value(&mut doc, "pin", &FieldValue::Text("秘密名".into())).unwrap();
+    assert!(ap(&doc, &field(&fields(&doc), "pin").widgets[0]).contains("(***) Tj"));
+    let country = field(&fields(&doc), "country").clone();
+    doc.update_dict(country.obj, |d| {
+        d.set(
+            b"Opt".to_vec(),
+            Object::Array(vec![Object::Array(vec![Object::String(PdfString::text("jp")), Object::String(PdfString::text("日本語"))])]),
+        );
+    })
+    .unwrap();
+    set_value(&mut doc, "country", &FieldValue::Text("jp".into())).unwrap();
+    assert_eq!(portable_appearance_text(&doc, &country.widgets[0]), "日本語");
+    assert_eq!(field(&fields(&doc), "country").value, ["jp"]);
+    let list = field(&fields(&doc), "toppings").clone();
+    doc.update_dict(list.obj, |d| {
+        d.set(b"Opt".to_vec(), Object::Array(vec![Object::String(PdfString::text("简体中文")), Object::String(PdfString::text("繁體中文"))]));
+    })
+    .unwrap();
+    set_value(&mut doc, "toppings", &FieldValue::Choice(vec!["繁體中文".into()])).unwrap();
+    assert_eq!(portable_appearance_text(&reopen(&doc), &list.widgets[0]), "简体中文繁體中文");
+    assert!(undrawn_fields(&doc).is_empty());
+}
+
 #[test]
 fn the_field_tree_is_read_with_inheritance() {
     let doc = fixture();
@@ -398,6 +522,14 @@ fn japanese_choices_use_the_unicode_cid_font() {
         let fonts: Vec<String> = fonts.as_dict().unwrap().iter().map(|(k, _)| String::from_utf8_lossy(k).into_owned()).collect();
         (s.decoded().unwrap(), fonts)
     };
+    if pdfcraft_fonts::document_japanese_font().is_some() {
+        for (name, expected) in [("era", "令"), ("address", "日本語のテキスト入力欄です"), ("subset", "令和")] {
+            assert_eq!(portable_appearance_text(&doc, &field(&all, name).widgets[0]), expected);
+        }
+        assert!(undrawn_fields(&doc).is_empty());
+        assert!(!need_appearances(&doc), "embedded appearances need no viewer regeneration");
+        return;
+    }
     let utf16 = |t: &str| t.encode_utf16().flat_map(u16::to_be_bytes).collect::<Vec<u8>>();
     let (era, era_fonts) = raw("era");
     assert!(era.windows(4).any(|x| x == b"(N\xe4)"), "令 as UTF-16BE: {}", String::from_utf8_lossy(&era));
@@ -444,30 +576,46 @@ fn text_a_field_font_cannot_hold_is_kept_marked_and_redrawn_elsewhere() {
         let mark = doc.get(w.obj).as_dict().and_then(pdfcraft_fonts::undrawn_mark);
         (String::from_utf8_lossy(&s.decoded().unwrap()).into_owned(), mark)
     };
-    // A WinAnsi field: the Chinese value is kept and marked; Helvetica draws `?` for it.
+    let bundled = pdfcraft_fonts::cjk::PreparedCjkText::new("签名 Ada 北N京", false, false).is_ok();
+    // A WinAnsi field uses a bundled CJK face when available; otherwise it stays marked.
     assert!(!need_appearances(&doc));
     set_value(&mut doc, "name", &FieldValue::Text("签名 Ada".into())).unwrap();
     assert_eq!(field(&fields(&doc), "name").value, ["签名 Ada"]);
     let (ap, mark) = shown(&doc, "name");
-    assert!(ap.contains("(?? Ada) Tj"), "{ap}");
-    assert_eq!(mark, Some('签'));
-    assert!(need_appearances(&doc), "other viewers are asked to redraw the form");
+    if bundled {
+        assert_eq!(portable_appearance_text(&doc, &field(&fields(&doc), "name").widgets[0]), "签名 Ada");
+        assert_eq!(mark, None);
+        assert!(!need_appearances(&doc));
+    } else {
+        assert!(ap.contains("(?? Ada) Tj"), "{ap}");
+        assert_eq!(mark, Some('签'));
+        assert!(need_appearances(&doc), "other viewers are asked to redraw the form");
+    }
     // A choice whose label Helvetica can't draw, the same way.
     set_value(&mut doc, "city", &FieldValue::Text("北N京".into())).unwrap();
-    assert_eq!(shown(&doc, "city").1, Some('北'));
+    assert_eq!(shown(&doc, "city").1, if bundled { None } else { Some('北') });
     // A UCS-2 CMap holds 签, so nothing is marked, but not a character beyond U+FFFF.
     set_value(&mut doc, "cn", &FieldValue::Text("签名".into())).unwrap();
     assert_eq!(shown(&doc, "cn").1, None);
-    set_value(&mut doc, "cn", &FieldValue::Text("𠀋".into())).unwrap();
-    assert_eq!(field(&fields(&doc), "cn").value, ["𠀋"]);
-    assert_eq!(shown(&doc, "cn").1, Some('𠀋'));
+    set_value(&mut doc, "cn", &FieldValue::Text("\u{10ffff}".into())).unwrap();
+    assert_eq!(field(&fields(&doc), "cn").value, ["\u{10ffff}"]);
+    assert_eq!(shown(&doc, "cn").1, Some('\u{10ffff}'));
     let mut undrawn = undrawn_fields(&doc);
     undrawn.sort();
-    assert_eq!(undrawn, [("city".to_string(), '北'), ("cn".to_string(), '𠀋'), ("name".to_string(), '签')]);
+    let expected = if bundled {
+        vec![("cn".to_string(), '\u{10ffff}')]
+    } else {
+        vec![("city".to_string(), '北'), ("cn".to_string(), '\u{10ffff}'), ("name".to_string(), '签')]
+    };
+    assert_eq!(undrawn, expected);
     // Drawable text clears the mark; a line break in a single-line value is a space, not `?`.
     set_value(&mut doc, "name", &FieldValue::Text("Ada\nLovelace".into())).unwrap();
     let (ap, mark) = shown(&doc, "name");
-    assert!(ap.contains("(Ada Lovelace) Tj") && !ap.contains('?'), "{ap}");
+    if bundled {
+        assert_eq!(portable_appearance_text(&doc, &field(&fields(&doc), "name").widgets[0]), "Ada Lovelace");
+    } else {
+        assert!(ap.contains("(Ada Lovelace) Tj") && !ap.contains('?'), "{ap}");
+    }
     assert_eq!(mark, None);
     // Kept through a save.
     let doc = reopen(&doc);
@@ -493,7 +641,8 @@ fn a_pdfa_form_keeps_the_value_without_asking_viewers_to_redraw() {
     assert!(declares_pdfa(&doc));
     set_value(&mut doc, "name", &FieldValue::Text("张三".into())).unwrap();
     assert_eq!(field(&fields(&doc), "name").value, ["张三"]);
-    assert_eq!(undrawn_fields(&doc), [("name".to_string(), '张')]);
+    let drawable = pdfcraft_fonts::cjk::PreparedCjkText::new("张三", false, false).is_ok();
+    assert_eq!(undrawn_fields(&doc), if drawable { vec![] } else { vec![("name".to_string(), '张')] });
     assert!(!need_appearances(&doc), "PDF/A forbids /NeedAppearances");
 }
 
@@ -512,7 +661,8 @@ fn captions_and_redrawn_values_are_kept_and_marked() {
     redraw_field(&mut doc, "name").unwrap();
     let mut undrawn = undrawn_fields(&doc);
     undrawn.sort();
-    assert_eq!(undrawn, [(go, '提'), ("name".to_string(), '张')]);
+    let drawable = pdfcraft_fonts::cjk::PreparedCjkText::new("张三", false, false).is_ok();
+    assert_eq!(undrawn, if drawable { vec![(go, '提')] } else { vec![(go, '提'), ("name".to_string(), '张')] });
     set_value(&mut doc, "notes", &FieldValue::Text("Unrelated".into())).unwrap();
     // Drawable again: the mark goes.
     doc.update_dict(name.obj, |d| d.set(b"V".to_vec(), PdfString::text("Ada"))).unwrap();
