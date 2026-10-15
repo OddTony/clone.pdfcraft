@@ -425,6 +425,7 @@
 	Compress document structure (object streams)	Stisni strukturo dokumenta (tokovi objektov)
 	Compression	Stiskanje
 	Configure New Digital ID	Nastavi novo digitalno identiteto
+	Remove "{name}" from this list? The file itself is not deleted.	Odstranim »{name}« s tega seznama? Sama datoteka ne bo izbrisana.
 	Configure a Digital ID for Signing	Nastavite digitalno identiteto za podpisovanje
 	Confirm Password	Potrdite geslo
 	Conformance level:	Raven skladnosti:
@@ -485,6 +486,7 @@
 	Create PDF from images	Ustvari PDF iz slik
 	Create PDF from images…	Ustvari PDF iz slik…
 	Create PDF from multiple files…	Ustvari PDF iz več datotek…
+	Create separate PDFs…	Ustvari ločene PDF-je…
 	Create a PDF	Ustvari PDF
 	Create a new Digital ID (self-signed, saved to a password-protected file)	Ustvari novo digitalno identiteto (samopodpisano, shranjeno v datoteko, zaščiteno z geslom)
 	Create accessibility report	Ustvari poročilo o dostopnosti
@@ -653,6 +655,7 @@
 	Duplicate…	Podvoji…
 	Dynamic	Dinamično
 	Dynamic XFA form laid out from its template: {pages}, {fields}.	Dinamični obrazec XFA, razporejen iz predloge: {pages}, {fields}.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Skripti tega obrazca so izklopljeni, ker se je eden izvajal predolgo. Če jih želite znova zagnati, znova odprite dokument.
 	E-Sign	E-podpis
 	Each field needs a tooltip that says what to enter. Add one in Field Properties > General > Tooltip.	Vsako polje potrebuje namig, ki pove, kaj vnesti. Dodajte ga v Lastnosti polja > Splošno > Namig.
 	Each file holds as many of the {n} pages as fit.	Vsaka datoteka vsebuje toliko od {n} strani, kot jih gre vanjo.
@@ -668,6 +671,7 @@
 	Edit image	Uredi sliko
 	Edit script of {name}	Uredi skript: {name}
 	Edit text	Uredi besedilo
+	Load document font	Naloži pisavo dokumenta
 	Edit text & images	Uredi besedilo in slike
 	Edit text…	Uredi besedilo…
 	Editing	Urejanje
@@ -728,6 +732,7 @@
 	Export to RTF…	Izvozi v RTF…
 	Export to Text	Izvozi v besedilo
 	Export to Word…	Izvozi v Word…
+	Export to PowerPoint…	Izvozi v PowerPoint…
 	Export to image…	Izvozi v sliko…
 	Export to text…	Izvozi v besedilo…
 	Exported 1 image	Izvožena je 1 slika
@@ -843,6 +848,11 @@
 	Form fields panel	Razdelek s polji obrazca
 	Form fill-in and digital signatures	Izpolnjevanje obrazcev in digitalni podpisi
 	Format	Oblika
+	Finding document fonts…	Iskanje pisav dokumenta…
+	Installed fonts…	Nameščene pisave…
+	Keep source fonts	Ohrani izvirne pisave
+	Load font…	Naloži pisavo…
+	No openly licensed document fonts found. Load a font file.	Ni najdenih pisav dokumenta z odprto licenco. Naložite datoteko pisave.
 	Format text	Oblikuj besedilo
 	Format:	Oblika:
 	Forms	Obrazci
@@ -934,6 +944,8 @@
 	Insert pages from a file…	Vstavi strani iz datoteke…
 	Insert pages from file…	Vstavi strani iz datoteke…
 	Insert pages from {name}	Vstavi strani iz: {name}
+	Insert pages from {name} — 1 field renamed	Vstavi strani iz {name} — 1 polje preimenovano
+	Insert pages from {name} — fields renamed	Vstavi strani iz {name} — polja preimenovana
 	Insert text	Vstavi besedilo
 	Inserted	Vstavljeno
 	Inserted text	Vstavljeno besedilo
@@ -1096,6 +1108,7 @@
 	Multi-line	Večvrstično
 	Multiple	Več
 	Multiple files	Več datotek
+	Separate PDFs	Ločeni PDF-ji
 	Multiple selection	Večkratna izbira
 	Name	Ime
 	Name (A–Z)	Ime (A–Ž)
@@ -1380,6 +1393,8 @@
 	Read	Branje
 	Read Only	Samo za branje
 	Read mode	Način branja
+	Next tab	Naslednji zavihek
+	Previous tab	Prejšnji zavihek
 	Ready	Omogočeno
 	Real name	Pravo ime
 	Reason	Razlog
@@ -1418,6 +1433,9 @@
 	Reliable character encoding is provided	Zagotovljeno je zanesljivo kodiranje znakov
 	Remove	Odstrani
 	Remove all links	Odstrani vse povezave
+	No links to remove	Ni povezav za odstranitev
+	Removed 1 link	Odstranjena je 1 povezava
+	Removed {n} links	Odstranjene povezave: {n}
 	Remove background	Odstrani ozadje
 	Remove checkmark	Odstrani kljukico
 	Remove from Recent	Odstrani iz nedavnih
@@ -1521,6 +1539,12 @@
 	Save & Close	Shrani in zapri
 	Save (M4)	Shrani (M4)
 	Save Image As…	Shrani sliko kot…
+	Copy Image	Kopiraj sliko
+	The image has been copied ({w} × {h} pixels)	Slika je kopirana ({w} × {h} slikovnih pik)
+	Couldn't copy the image: {e}	Slike ni bilo mogoče kopirati: {e}
+	Copy Image in Original Format	Kopiraj sliko v izvirni obliki
+	The image has been copied as a {ext} file	Slika je kopirana kot datoteka {ext}
+	The page has changed; select the image again	Stran se je spremenila; znova izberite sliko
 	Save as PDF	Shrani kot PDF
 	Save as PDF/A	Shrani kot PDF/A
 	Save as PDF/A-1b	Shrani kot PDF/A-1b
@@ -1782,6 +1806,7 @@
 	The same password is tried on each file.	Isto geslo se poskusi pri vsaki datoteki.
 	The selected area has been copied ({w} × {h} pixels)	Izbrano območje je kopirano ({w} × {h} slikovnih pik)
 	The signature will be invisible.	Podpis bo nevidni.
+	The existing action will be preserved.	Obstoječe dejanje bo ohranjeno.
 	The text is the same	Besedilo je enako
 	The title in the metadata and the document information differ	Naslov v metapodatkih in podatkih o dokumentu se razlikujeta
 	The value is shown as typed.	Vrednost je prikazana, kot je vnesena.
@@ -2061,7 +2086,7 @@
 	{n} {kind}	{kind}: {n}
 	{rule} - {status}	{rule} - {status}
 	{s} action	Dejanj: {s}
-	{s} actions run in the JavaScript engine (M6)	Dejanja ({s}) se izvajajo v pogonu JavaScript (M6)
+	This PDF uses the unsupported {s} action.	Ta PDF uporablja nepodprto dejanje {s}.
 	{verb} Background	Ozadje: {verb}
 	{verb} Header and Footer	Glava in noga: {verb}
 	{verb} Watermark	Vodni žig: {verb}
@@ -2248,6 +2273,9 @@ key	Space	Preslednica
 scroll speed	Slow	Počasi
 scroll speed	Normal	Običajno
 scroll speed	Fast	Hitro
+	Animation effects	Učinki animacije
+animation effects	On	Vklopljeni
+animation effects	Off	Izklopljeni
 	Enhance camera image	Izboljšaj fotografijo s kamere
 	Drag the corners onto the document's edges, then choose Enhance page.	Povlecite vogale na robove dokumenta, nato izberite Izboljšaj stran.
 	Enhance page	Izboljšaj stran
@@ -2257,8 +2285,100 @@ scroll speed	Fast	Hitro
 	Original	Izvirnik
 	Greyscale	Sivine
 	Black and white	Črno-belo
+	Reading colours	Barve za branje
+	Replace document colours	Zamenjaj barve dokumenta
+	Black on white	Črno na belem
+	White on black	Belo na črnem
+	Yellow on black	Rumeno na črnem
+	Green on black	Zeleno na črnem
+	Page background	Ozadje strani
+	Only change the colour of black text or line art	Spremeni samo barvo črnega besedila in črt
+	Change the colour of line art as well as text	Spremeni barvo tudi črt, ne samo besedila
+	Colours are remapped while rendering; the document itself never changes.	Barve se spremenijo pri izrisovanju; sam dokument se nikoli ne spremeni.
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Gonilnik tega tiskalnika ne sprejema nastavitev obojestranskega tiskanja iz drugih programov, zato velja njegova lastna nastavitev. Spremenite jo v Lastnosti…
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Pisava tega polja ne more prikazati »{c}« ({code}), zato PdfCraft namesto njega prikaže ?. Vrednost se shrani, drugi pregledovalniki PDF pa polje znova narišejo iz nje.
 	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	Pisave, s katerimi piše PdfCraft, ne morejo prikazati »{c}« ({code}), zato se v vseh pregledovalnikih PDF prikaže kot ?. Besedilo se shrani.
+	Browser's print dialog	Pogovorno okno za tiskanje v brskalniku
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Število kopij, obojestransko tiskanje in barvo izberete v pogovornem oknu za tiskanje v brskalniku.
+	Preparing {n} sheets for printing…	Priprava listov za tiskanje: {n}…
+	Preparing sheet {done} of {total} for printing…	Priprava lista {done} od {total} za tiskanje…
+	Opening the browser's print dialog…	Odpiranje pogovornega okna za tiskanje v brskalniku…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	Tiskanje iz brskalnika ni mogoče ({e}); namesto tega je bila za tiskanje prenesena datoteka {name}
 	Tools panel side	Stran podokna z orodji
 	Add comment	Dodaj komentar
+	Change tag properties	Spremeni lastnosti oznake
+# Accessibility structure tags.
+	Tags panel	Podokno oznak
+	Tags	Oznake
+	Tag type	Vrsta oznake
+	Actual text	Dejansko besedilo
+	Find a tag	Poišči oznako
+	Collapse tag	Strni oznako
+	Expand tag	Razširi oznako
+	Revert changes	Razveljavi spremembe
+	Save tag properties	Shrani lastnosti oznake
+	This document has no editable structure tags.	Ta dokument nima oznak strukture, ki bi jih bilo mogoče urejati.
+	{n} tags	{n} oznak
+	Save or revert changes before selecting another tag.	Preden izberete drugo oznako, shranite ali razveljavite spremembe.
+	Left out: {names}	Izpuščeno: {names}
+	already a PDF	je že PDF
+	no unused output name	ni prostega izhodnega imena
+	no output folder was chosen	izhodna mapa ni bila izbrana
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	Prenesen {n} PDF|Prenesena {n} PDF-ja|Preneseni {n} PDF-ji|Prenesenih {n} PDF-jev
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} ime polja se ujema z imeni iz prejšnjih datotek in bo preimenovano: {list}|{n} imeni polj se ujemata z imeni iz prejšnjih datotek in bosta preimenovani: {list}|{n} imena polj se ujemajo z imeni iz prejšnjih datotek in bodo preimenovana: {list}|{n} imen polj se ujema z imeni iz prejšnjih datotek in bo preimenovanih: {list}
+	Scan	Skeniraj
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Podpišite se na list belega papirja in ga fotografirajte v močni, enakomerni svetlobi (uporabite bliskavico). Izberite fotografijo ali jo spustite sem: PdfCraft poišče podpis in odstrani papir.
+	Choose photo…	Izberi fotografijo…
+	No photo chosen	Fotografija ni izbrana
+	Photo	Fotografija
+	Ink sensitivity	Občutljivost za črnilo
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	V okvirju ni bilo najdenega podpisa. Premaknite okvir nad podpis ali povečajte občutljivost za črnilo.
+	Couldn't use the photo: {e}	Fotografije ni bilo mogoče uporabiti: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	Zapri zavihek
+	Reopen Closed Tab	Znova odpri zaprti zavihek
+	Reveal in Finder	Prikaži v Finderju
+	Reveal in File Explorer	Prikaži v upravljalniku datotek
+	Other colour…	Druga barva…
+	Recent colours	Nedavne barve
+	Couldn't follow linked PDF: {reason}	Povezanega PDF-ja ni bilo mogoče odpreti: {reason}
+	The linked PDF opened, but its named destination was not applied.	Povezani PDF se je odprl, vendar njegov poimenovani cilj ni bil uporabljen.
+	The linked PDF opened, but its page destination was out of range.	Povezani PDF se je odprl, vendar je ciljna stran zunaj obsega.
+	Local cross-PDF links require the desktop app	Lokalne povezave med PDF-ji zahtevajo namizno aplikacijo
+	Minimize	Pomanjšaj
+	Maximize	Povečaj
+	Restore	Obnovi
+	Use system title bar	Uporabi sistemsko naslovno vrstico
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Prikaži preprosto naslovno vrstico za gumbe okna namesto vrstice zavihkov. GNOME aplikacijam ne riše naslovnih vrstic, zato ta ne sledi njegovi temi.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	Dovoli
+	Only allow this if you trust the source document.	To dovolite le, če zaupate izvornemu dokumentu.
+	Open this local PDF?	Želite odpreti ta lokalni PDF?
+	This document is trying to open a local file:	Ta dokument poskuša odpreti lokalno datoteko:
+	Move tag earlier	Premakni oznako prej
+	Move tag later	Premakni oznako pozneje
+	Mark as artifact	Označi kot artefakt
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Odstranite to listno oznako iz vrstnega reda branja in označite njeno neposredno vsebino kot artefakt
+	Mark content as artifact	Označi vsebino kot artefakt
+	Word count	Število besed
+	Current page only	Samo trenutna stran
+	Exclude tagged tables	Izključi označene tabele
+	Exclude tagged code blocks	Izključi označene bloke kode
+	Exclude image/OCR text	Izključi besedilo slik/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Izključitve uporabljajo oznake PDF. Neoznačene tabele in koda ostanejo vključene. Izključitev slik odstrani tudi nevidno besedilo.
+	Words	Besede
+	Characters	Znaki
+	Characters without spaces	Znaki brez presledkov
+	Pages counted	Preštete strani
+	Some pages contain no countable text. Scanned images need OCR first.	Nekatere strani ne vsebujejo besedila za štetje. Optično prebrane slike najprej potrebujejo OCR.
+	Some content could not be classified safely and was kept in the count.	Nekatere vsebine ni bilo mogoče zanesljivo razvrstiti, zato je ostala vključena v štetje.
+	Counting words… {n} pages read	Štetje besed… prebrane strani: {n}
+	Word counting stopped unexpectedly.	Štetje besed se je nepričakovano ustavilo.
+	Word count…	Število besed…
+@id	file.word_count	Število besed…
+	Standard	Standardno
+	Mobile	Mobilna naprava
+	Merge image fragments	Združi delce slik
+	Optimizing… merging image fragments	Optimiziranje… združevanje delcev slik

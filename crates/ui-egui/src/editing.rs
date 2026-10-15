@@ -43,13 +43,14 @@ impl PdfCraftApp {
                 let info = &doc.info;
                 let view = &mut self.views[i];
                 view.signature_drag.committed(&edit, doc.edit_generation());
+                view.move_background.committed(&edit, doc.edit_generation());
                 if let Some(page) = comment_page(&edit).or_else(|| content_page(&edit)) {
                     // Comment and content edits change one page: keep every other raster.
                     view.page_changed(page);
                 } else if let Some(form_before) = form_before
                     && doc.info.pages.len() == page_count_before
                     && doc.xfa.is_some() == had_xfa
-                    && !doc.xfa.is_some()
+                    && doc.xfa.is_none()
                     && is_form_edit(&edit)
                 {
                     let mut changed_pages = std::collections::BTreeSet::new();
@@ -344,7 +345,7 @@ impl PdfCraftApp {
             self.notify_tr("A document needs at least one page: copy instead");
             return;
         }
-        self.page_clipboard = Some(crate::PageClip { name: doc.name.clone(), bytes: doc.bytes.clone(), pages: pages.clone() });
+        self.page_clipboard = Some(crate::PageClip { from: id, name: doc.name.clone(), bytes: doc.bytes.clone(), pages: pages.clone() });
         if cut {
             self.apply_edit(Edit::DeletePages { pages: pages.clone() });
         }
@@ -365,7 +366,17 @@ impl PdfCraftApp {
         let Some(i) = self.active else { return };
         let at = self.views[i].target_pages().into_iter().max().map_or(0, |p| p + 1);
         let count = clip.pages.len();
-        if self.apply_edit(Edit::InsertPagesFrom { name: clip.name.clone(), bytes: clip.bytes.clone(), pages: Some(clip.pages.clone()), at }) {
+        // Pasting into the document the pages came from is a duplicate (or, after Cut, a move):
+        // its fields keep their names. Pasting into another document renames colliding ones.
+        let field_conflicts =
+            if self.views[i].id == clip.from { pdfcraft_engine::FieldConflicts::Merge } else { pdfcraft_engine::FieldConflicts::Rename };
+        if self.apply_edit(Edit::InsertPagesFrom {
+            name: clip.name.clone(),
+            bytes: clip.bytes.clone(),
+            pages: Some(clip.pages.clone()),
+            at,
+            field_conflicts,
+        }) {
             self.views[i].select_pages(&(at..at + count).collect::<Vec<_>>());
         }
     }
@@ -498,7 +509,8 @@ impl PdfCraftApp {
             return true;
         }
         let author = self.comment_prefs.author.clone();
-        let edit = crate::fill_sign::typed(tb.page, tb.at, &text, &author);
+        let rotation = self.session.get(id).map_or(0, |doc| crate::comments::page_rotation(&doc.info, tb.page));
+        let edit = crate::fill_sign::typed(tb.page, tb.at, &text, tb.size, rotation, &author);
         if self.apply_edit(edit) {
             if let Some(view) = self.views.get_mut(i) {
                 view.fill_text = None;
@@ -653,7 +665,7 @@ impl PdfCraftApp {
             self.notify_tr("The document was closed before it could be saved.");
             return false;
         };
-        let bytes = match self.session.save_bytes(id) {
+        let bytes = match self.session.save_bytes(id).and_then(|b| self.session.check_save(id, &b).map(|()| b)) {
             Ok(b) => b,
             Err(e) => {
                 self.notify_fmt("Couldn't save {name}: {e}", &[("name", &name), ("e", &e.to_string())]);
@@ -912,6 +924,17 @@ pub fn write_atomically(path: &str, bytes: &[u8]) -> std::io::Result<()> {
 
 /// [`write_atomically`], trying the staging names that `suffixes` give.
 fn write_atomically_with(path: &str, bytes: &[u8], suffixes: impl IntoIterator<Item = u64>) -> std::io::Result<()> {
+    write_atomically_syncing(path, bytes, suffixes, std::fs::File::sync_all)
+}
+
+/// [`write_atomically_with`], flushing the staging file with `sync_all` (the standard library's
+/// in the app, a failing one in tests).
+fn write_atomically_syncing(
+    path: &str,
+    bytes: &[u8],
+    suffixes: impl IntoIterator<Item = u64>,
+    sync_all: impl FnOnce(&std::fs::File) -> std::io::Result<()>,
+) -> std::io::Result<()> {
     use std::io::Write;
     let target = std::path::Path::new(path);
     let dir = target.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
@@ -922,7 +945,7 @@ fn write_atomically_with(path: &str, bytes: &[u8], suffixes: impl IntoIterator<I
         {
             let mut f = f;
             f.write_all(bytes)?;
-            f.sync_all()?;
+            sync_staged(&f, sync_all)?;
         }
         std::fs::rename(&tmp, target)
     })();
@@ -930,6 +953,23 @@ fn write_atomically_with(path: &str, bytes: &[u8], suffixes: impl IntoIterator<I
         let _ = std::fs::remove_file(&tmp);
     }
     result
+}
+
+/// Flush the staging file to the disk before it replaces the original. On macOS `sync_all` asks
+/// for a full flush (`F_FULLFSYNC`), which SMB and FUSE volumes, such as a mounted Cryptomator
+/// vault, refuse as unsupported: there a plain `fsync` is the strongest flush the volume offers.
+/// Any other failure still fails the save.
+fn sync_staged(f: &std::fs::File, sync_all: impl FnOnce(&std::fs::File) -> std::io::Result<()>) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use rustix::io::Errno;
+        match sync_all(f) {
+            Err(e) if matches!(Errno::from_io_error(&e), Some(Errno::NOTSUP | Errno::NOTTY)) => Ok(rustix::fs::fsync(f)?),
+            other => other,
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    sync_all(f)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1017,7 +1057,7 @@ fn bookmark_at<'a>(items: &'a [pdfcraft_render::OutlineItem], path: &[usize]) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{SaveTarget, is_mail_temp_copy, write_atomically, write_atomically_with};
+    use super::{SaveTarget, is_mail_temp_copy, write_atomically, write_atomically_syncing, write_atomically_with};
     use pdfcraft_platform::staging::{STAGING_ATTEMPTS, staging_suffixes};
     use std::path::{Path, PathBuf};
 
@@ -1174,6 +1214,43 @@ mod tests {
         std::fs::set_permissions(&target, perms).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// On macOS `sync_all` asks for a full flush, which SMB and FUSE volumes (a Cryptomator vault,
+    /// #981) refuse as unsupported: ENOTSUP (45) or ENOTTY (25). The save still goes through.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_volume_without_full_flush_still_saves() {
+        for errno in [45, 25] {
+            let dir = staging_dir(&format!("nofullsync-{errno}"));
+            let target = dir.join("out.pdf");
+            std::fs::write(&target, "OLD").unwrap();
+            let asked = std::cell::Cell::new(false);
+            let refuse = |_: &std::fs::File| {
+                asked.set(true);
+                Err(std::io::Error::from_raw_os_error(errno))
+            };
+            write_atomically_syncing(&target.to_string_lossy(), b"NEW", [7], refuse).unwrap();
+            assert!(asked.get(), "the full flush was tried");
+            assert_eq!(read(&target), "NEW");
+            assert_eq!(listing(&dir), ["out.pdf"], "no staging file is left behind");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    /// Only "not supported" is let through: any other flush failure fails the save and keeps the
+    /// original.
+    #[test]
+    fn a_failed_flush_keeps_the_original() {
+        let dir = staging_dir("syncfails");
+        let target = dir.join("out.pdf");
+        std::fs::write(&target, "OLD").unwrap();
+        let e = write_atomically_syncing(&target.to_string_lossy(), b"NEW", [7], |_| Err(std::io::Error::other("disk gone"))).unwrap_err();
+        assert_eq!(e.to_string(), "disk gone");
+        assert_eq!(read(&target), "OLD");
+        assert_eq!(listing(&dir), ["out.pdf"], "the staging file was removed");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn outlook_attachment_copies_are_recognised_on_either_separator_and_in_any_case() {
         for p in [

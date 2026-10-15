@@ -94,6 +94,7 @@ fn shared_properties_preserve_mixed_values_and_undo_the_whole_change() {
     h.run_steps(4);
     h.get_by_label("Line Thickness:").click();
     h.run_steps(4);
+    assert!(h.state().bulk_field_props.as_ref().unwrap().width.apply, "thickness click enables the property");
     h.state_mut().bulk_field_props.as_mut().unwrap().width.value = 4.0;
     h.get_by_label("OK").click();
     h.run_steps(4);

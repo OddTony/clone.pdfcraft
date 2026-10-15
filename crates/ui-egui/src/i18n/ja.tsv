@@ -57,6 +57,7 @@
 	Create PDF from file…	ファイルから PDF を作成…
 	Create PDF from images…	画像から PDF を作成…
 	Create PDF from multiple files…	複数のファイルから PDF を作成…
+	Create separate PDFs…	個別の PDF を作成…
 	Create PDF from clipboard	クリップボードから PDF を作成
 	Combine files…	ファイルを結合…
 	Save	保存
@@ -79,6 +80,8 @@
 	Column select	列の選択
 	Full screen mode	全画面表示
 	Read mode	閲覧モード
+	Next tab	次のタブ
+	Previous tab	前のタブ
 	Switch light / dark theme	明るい／暗いテーマを切り替え
 	Comments panel	コメントパネル
 	Form fields panel	フォームフィールドパネル
@@ -224,6 +227,9 @@
 	Add or edit links	リンクを追加・編集
 	Create links from URLs	URL からリンクを作成
 	Remove all links	すべてのリンクを削除
+	No links to remove	削除するリンクはありません
+	Removed 1 link	リンクを 1 件削除しました
+	Removed {n} links	リンクを {n} 件削除しました
 	Add Bates numbering…	ベイツ番号を追加…
 	Add image…	画像を追加…
 	Redact text and images	テキストと画像を墨消し
@@ -262,6 +268,7 @@
 	Optimize PDF…	PDF を最適化…
 	Export to text…	テキストに書き出す…
 	Export to Word…	Word に書き出す…
+	Export to PowerPoint…	PowerPoint に書き出す…
 	Export to HTML…	HTML に書き出す…
 	Export to RTF…	RTF に書き出す…
 	JavaScript console…	JavaScript コンソール…
@@ -346,6 +353,7 @@
 	Create from	作成元
 	Single file	単一ファイル
 	Multiple files	複数のファイル
+	Separate PDFs	個別の PDF
 	Images	画像
 	Clipboard	クリップボード
 	Blank page	空白のページ
@@ -698,6 +706,14 @@
 	of the following fields:	対象フィールド:
 	Simplified field notation:	簡易フィールド表記:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	フィールド名と + - * / および括弧を使用できます。名前に含まれる空白の前には \\ を付けてください。
+
+# Document font selection
+	Finding document fonts…	文書用フォントを検索中…
+	Installed fonts…	インストール済みフォント…
+	Keep source fonts	元のフォントを保持
+	Load font…	フォントを読み込む…
+	No openly licensed document fonts found. Load a font file.	オープンライセンスのフォントが見つかりません。フォントファイルを読み込んでください。
+
 	Format text	テキストの書式
 	Bold	太字
 	Italic	斜体
@@ -747,6 +763,12 @@
 	Flip Vertical	上下反転
 	Replace Image…	画像を置換…
 	Save Image As…	画像を別名で保存…
+	Copy Image	画像をコピー
+	The image has been copied ({w} × {h} pixels)	画像をコピーしました（{w} × {h} ピクセル）
+	Couldn't copy the image: {e}	画像をコピーできませんでした: {e}
+	Copy Image in Original Format	画像を元の形式でコピー
+	The image has been copied as a {ext} file	画像を {ext} ファイルとしてコピーしました
+	The page has changed; select the image again	ページが変更されました。画像をもう一度選択してください
 	Check for updates	アップデートを確認
 	No check has run yet.	まだ確認していません。
 	Checking for a newer version…	新しいバージョンを確認中…
@@ -836,6 +858,7 @@
 	, Expires: 	、有効期限: 
 	No digital IDs yet.	デジタル ID はまだありません。
 	Configure New Digital ID	新しいデジタル ID を設定
+	Remove "{name}" from this list? The file itself is not deleted.	「{name}」をこの一覧から削除しますか？ファイル自体は削除されません。
 	Continue	続行
 	Configure a Digital ID for Signing	署名用のデジタル ID を設定
 	Use a Digital ID from a file	ファイルのデジタル ID を使用
@@ -854,6 +877,7 @@
 	{verb} as "{name}"	「{name}」として{verb}
 	Certify	証明
 	The signature will be invisible.	署名は非表示になります。
+	The existing action will be preserved.	既存のアクションは保持されます。
 	Distinguished name	識別名
 	Labels	ラベル
 	Graphic	グラフィック
@@ -1527,7 +1551,7 @@
 	Couldn't optimize the file: {e}	ファイルを最適化できませんでした: {e}
 	Couldn't write {path}: {e}	{path} に書き込めませんでした: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	フォームは {u} への送信を要求していますが、PdfCraft はフォームデータを送信しません。入力内容を保持するには文書を保存してください。
-	{s} actions run in the JavaScript engine (M6)	{s} 件のアクションは JavaScript エンジンで実行します（M6）
+	This PDF uses the unsupported {s} action.	この PDF では未対応の {s} アクションが使われています。
 	{name}: the {other} action isn't supported yet	{name}: {other} アクションにはまだ対応していません
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} はフォームを {url} に送信しますが、PdfCraft はフォームデータを送信しません。入力内容を保持するには文書を保存してください。
 	Export stopped: {e}	書き出しを中止しました: {e}
@@ -1766,6 +1790,7 @@
 	At least one signature has problems.	問題のある署名があります。
 	This document is secured. Some changes are restricted by its security settings.	この文書は保護されています。セキュリティ設定により一部の変更が制限されています。
 	This is a dynamic XFA form, which PdfCraft can't display yet. What you see is the file's placeholder page.	この文書は動的 XFA フォームで、PdfCraft はまだ表示できません。現在はファイルの代替ページを表示しています。
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	このフォームのスクリプトは、実行に時間がかかりすぎたものがあったため無効になっています。もう一度実行するには、文書を再度開いてください。
 	This form also contains XFA data, which PdfCraft doesn't read yet. You can fill its fields, but Acrobat may show the XFA values instead.	このフォームには PdfCraft がまだ読み取れない XFA データも含まれます。フィールドには入力できますが、Acrobat は代わりに XFA の値を表示する場合があります。
 	This document contains {n} interactive form fields.	この文書には対話型フォームフィールドが {n} 個あります。
 	This file was damaged and has been repaired. Saving keeps the repaired version.	このファイルは破損していたため修復しました。保存すると修復済みの状態が保持されます。
@@ -1872,6 +1897,8 @@
 	{month} {y}	{y}年{month}
 	Change {key}	{key}を変更
 	Insert pages from {name}	{name} からページを挿入
+	Insert pages from {name} — 1 field renamed	{name} からページを挿入 — 1 個のフィールド名を変更
+	Insert pages from {name} — fields renamed	{name} からページを挿入 — フィールド名を変更
 	Fill in {name}	{name} に入力
 	Set the image of {name}	{name} の画像を設定
 	Edit script of {name}	{name} のスクリプトを編集
@@ -1902,6 +1929,7 @@
 	Delete document JavaScript	文書の JavaScript を削除
 	Edit document JavaScript	文書の JavaScript を編集
 	Edit text	テキストを編集
+	Load document font	文書フォントを読み込む
 	Move image	画像を移動
 	Rotate image	画像を回転
 	Flip image	画像を反転
@@ -2150,6 +2178,7 @@
 	−Bin	−Bin
 	−LOC	−LOC
 @plural	{n} field|{n} fields	{n} 個のフィールド
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} 個のフィールド名が前のファイルと競合するため、名前が変更されます: {list}
 @plural	{n} page|{n} pages	{n} ページ
 signature pad	Type	入力
 	Flatten Fill & Sign when saving	保存時に入力と署名を統合する
@@ -2242,6 +2271,9 @@ key	Space	スペース
 scroll speed	Slow	遅い
 scroll speed	Normal	標準
 scroll speed	Fast	速い
+	Animation effects	アニメーション効果
+animation effects	On	オン
+animation effects	Off	オフ
 	Enhance camera image	カメラ画像を補正
 	Drag the corners onto the document's edges, then choose Enhance page.	四隅を文書の端までドラッグしてから、「ページを補正」を選択します。
 	Enhance page	ページを補正
@@ -2251,6 +2283,97 @@ scroll speed	Fast	速い
 	Original	オリジナル
 	Greyscale	グレースケール
 	Black and white	白黒
+	Reading colours	読書用の色
+	Replace document colours	文書の色を置き換える
+	Black on white	白地に黒
+	White on black	黒地に白
+	Yellow on black	黒地に黄
+	Green on black	黒地に緑
+	Page background	ページの背景
+	Only change the colour of black text or line art	黒いテキストと線画の色だけを変更する
+	Change the colour of line art as well as text	テキストに加えて線画の色も変更する
+	Colours are remapped while rendering; the document itself never changes.	色は描画時に置き換えられ、文書自体が変わることはありません。
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	このプリンターのドライバーは他のプログラムからの両面印刷の設定を受け付けないため、ドライバー自身の設定が使われます。変更先: プロパティ…
+	Browser's print dialog	ブラウザーの印刷ダイアログ
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	部数、両面印刷、カラーはブラウザーの印刷ダイアログで選びます。
+	Preparing {n} sheets for printing…	{n} 枚のシートを印刷用に準備しています…
+	Preparing sheet {done} of {total} for printing…	印刷用にシート {done}/{total} を準備しています…
+	Opening the browser's print dialog…	ブラウザーの印刷ダイアログを開いています…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	ブラウザーから印刷できませんでした ({e})。代わりに印刷用の {name} をダウンロードしました
 	Tools panel side	ツールパネルの位置
 	Add comment	コメントを追加
+	Change tag properties	タグのプロパティを変更
+# Accessibility structure tags.
+	Tags panel	タグパネル
+	Tags	タグ
+	Tag type	タグの種類
+	Actual text	実際のテキスト
+	Find a tag	タグを検索
+	Collapse tag	タグを折りたたむ
+	Expand tag	タグを展開
+	Revert changes	変更を元に戻す
+	Save tag properties	タグのプロパティを保存
+	This document has no editable structure tags.	この文書には編集可能な構造タグがありません。
+	{n} tags	{n} 個のタグ
+	Save or revert changes before selecting another tag.	別のタグを選択する前に変更を保存するか元に戻してください。
+	Left out: {names}	除外: {names}
+	already a PDF	すでに PDF です
+	no unused output name	使用可能な出力名がありません
+	no output folder was chosen	出力フォルダーが選択されていません
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	{n} 個の PDF をダウンロードしました
+	Scan	スキャン
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	白い紙に署名し、明るく均一な光の下で写真を撮ってください（フラッシュを使用）。写真を選択するか、ここにドロップしてください。PdfCraft が署名を見つけ、紙の部分を取り除きます。
+	Choose photo…	写真を選択…
+	No photo chosen	写真が選択されていません
+	Photo	写真
+	Ink sensitivity	インクの感度
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	枠内に署名が見つかりません。枠を署名に合わせるか、インクの感度を上げてください。
+	Couldn't use the photo: {e}	写真を使用できません: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	タブを閉じる
+	Reopen Closed Tab	閉じたタブを再度開く
+	Reveal in Finder	Finderで表示
+	Reveal in File Explorer	ファイルエクスプローラーで表示
+	Other colour…	その他の色…
+	Recent colours	最近使った色
+	Couldn't follow linked PDF: {reason}	リンク先の PDF を開けませんでした: {reason}
+	The linked PDF opened, but its named destination was not applied.	リンク先の PDF を開きましたが、名前付き移動先は適用されませんでした。
+	The linked PDF opened, but its page destination was out of range.	リンク先の PDF を開きましたが、移動先のページが範囲外です。
+	Local cross-PDF links require the desktop app	PDF 間のローカルリンクにはデスクトップアプリが必要です
+	Minimize	最小化
+	Maximize	最大化
+	Restore	元のサイズに戻す
+	Use system title bar	システムのタイトルバーを使う
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	タブバーの代わりに、ウィンドウボタン用のシンプルなタイトルバーを表示します。GNOME はアプリのタイトルバーを描画しないため、このタイトルバーは GNOME のテーマに従いません。
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	許可
+	Only allow this if you trust the source document.	元の文書を信頼できる場合にのみ許可してください。
+	Open this local PDF?	このローカルPDFを開きますか？
+	This document is trying to open a local file:	この文書はローカルファイルを開こうとしています：
+	Move tag earlier	タグを前へ移動
+	Move tag later	タグを後へ移動
+	Mark as artifact	アーティファクトとしてマーク
+	Remove this leaf tag from reading order and mark its direct content as an artifact	このリーフタグを読み上げ順序から削除し、その直接のコンテンツをアーティファクトとしてマークします
+	Mark content as artifact	コンテンツをアーティファクトとしてマーク
+	Word count	文字数と単語数
+	Current page only	現在のページのみ
+	Exclude tagged tables	タグ付きの表を除外
+	Exclude tagged code blocks	タグ付きのコードブロックを除外
+	Exclude image/OCR text	画像・OCRのテキストを除外
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	除外にはPDFタグを使用します。タグのない表やコードは集計に含まれます。画像の除外では非表示のテキストも除外されます。
+	Words	単語数
+	Characters	文字数
+	Characters without spaces	空白を除く文字数
+	Pages counted	集計したページ数
+	Some pages contain no countable text. Scanned images need OCR first.	一部のページには集計できるテキストがありません。スキャン画像には先にOCRを実行してください。
+	Some content could not be classified safely and was kept in the count.	正確に分類できなかった内容は集計に含まれています。
+	Counting words… {n} pages read	単語を集計中… {n}ページ読み取り済み
+	Word counting stopped unexpectedly.	単語の集計が予期せず停止しました。
+	Word count…	文字数と単語数…
+@id	file.word_count	文字数と単語数…
+	Standard	標準
+	Mobile	モバイル
+	Merge image fragments	画像の断片を結合
+	Optimizing… merging image fragments	最適化中… 画像の断片を結合しています

@@ -31,6 +31,7 @@ comment menu	Edit	సవరించు
 	New blank PDF	కొత్త ఖాళీ PDF
 	Create PDF from file…	ఫైల్ నుండి PDF సృష్టించు…
 	Create PDF from multiple files…	అనేక ఫైల్‌ల నుండి PDF సృష్టించు…
+	Create separate PDFs…	వేర్వేరు PDFలను సృష్టించు…
 	Create PDF from images…	చిత్రాల నుండి PDF సృష్టించు…
 	Create PDF from clipboard	క్లిప్‌బోర్డ్ నుండి PDF సృష్టించు
 	Combine files…	ఫైల్‌లను కలుపు…
@@ -56,6 +57,8 @@ comment menu	Edit	సవరించు
 	Column select	నిలువు వరుస ఎంపిక
 	Full screen mode	పూర్తి స్క్రీన్ మోడ్
 	Read mode	చదివే మోడ్
+	Next tab	తదుపరి ట్యాబ్
+	Previous tab	మునుపటి ట్యాబ్
 	Switch light / dark theme	లేత / ముదురు థీమ్‌ల మధ్య మారు
 	Comments panel	వ్యాఖ్యల ప్యానెల్
 	Form fields panel	ఫారం ఫీల్డ్‌ల ప్యానెల్
@@ -201,6 +204,9 @@ comment menu	Edit	సవరించు
 	Add or edit links	లింక్‌లను జోడించు లేదా సవరించు
 	Create links from URLs	URLల నుండి లింక్‌లను సృష్టించు
 	Remove all links	అన్ని లింక్‌లను తీసివేయి
+	No links to remove	తీసివేయడానికి లింక్‌లు లేవు
+	Removed 1 link	1 లింక్ తీసివేయబడింది
+	Removed {n} links	తీసివేసిన లింక్‌లు: {n}
 	Add Bates numbering…	బేట్స్ నంబరింగ్ జోడించు…
 	Add image…	చిత్రాన్ని జోడించు…
 	Redact text and images	టెక్స్ట్‌ను, చిత్రాలను రెడాక్ట్ చేయి
@@ -239,6 +245,7 @@ comment menu	Edit	సవరించు
 	Optimize PDF…	PDFను ఆప్టిమైజ్ చేయి…
 	Export to text…	టెక్స్ట్‌గా ఎగుమతి చేయి…
 	Export to Word…	Wordగా ఎగుమతి చేయి…
+	Export to PowerPoint…	PowerPointగా ఎగుమతి చేయి…
 	Export to HTML…	HTMLగా ఎగుమతి చేయి…
 	Export to RTF…	RTFగా ఎగుమతి చేయి…
 	JavaScript console…	JavaScript కన్సోల్…
@@ -323,6 +330,7 @@ comment menu	Edit	సవరించు
 	Create from	సృష్టించే మూలం
 	Single file	ఒకే ఫైల్
 	Multiple files	అనేక ఫైల్‌లు
+	Separate PDFs	వేర్వేరు PDFలు
 	Images	చిత్రాలు
 	Clipboard	క్లిప్‌బోర్డ్
 	Blank page	ఖాళీ పేజీ
@@ -675,6 +683,11 @@ comment menu	Edit	సవరించు
 	of the following fields:	కింది ఫీల్డ్‌లపై:
 	Simplified field notation:	సరళీకృత ఫీల్డ్ సూత్రం:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	ఫీల్డ్ పేర్లను + - * / గుర్తులు, బ్రాకెట్‌లతో రాయండి; పేర్లలోని ఖాళీల ముందు \\ పెట్టండి.
+	Finding document fonts…	పత్రం ఫాంట్‌లను కనుగొంటోంది…
+	Installed fonts…	ఇన్‌స్టాల్ చేసిన ఫాంట్‌లు…
+	Keep source fonts	మూల ఫాంట్‌లను ఉంచు
+	Load font…	ఫాంట్‌ను లోడ్ చేయి…
+	No openly licensed document fonts found. Load a font file.	బహిరంగ లైసెన్స్ ఉన్న పత్రం ఫాంట్‌లు కనుగొనబడలేదు. ఫాంట్ ఫైల్‌ను లోడ్ చేయండి.
 	Format text	టెక్స్ట్ ఫార్మాటింగ్
 	Bold	బోల్డ్
 	Italic	ఇటాలిక్
@@ -724,6 +737,12 @@ comment menu	Edit	సవరించు
 	Flip Vertical	నిలువుగా తిరగేయి
 	Replace Image…	చిత్రాన్ని భర్తీ చేయి…
 	Save Image As…	చిత్రాన్ని ఫైల్‌గా సేవ్ చేయి…
+	Copy Image	చిత్రాన్ని కాపీ చేయి
+	The image has been copied ({w} × {h} pixels)	చిత్రం కాపీ చేయబడింది ({w} × {h} పిక్సెల్‌లు)
+	Couldn't copy the image: {e}	చిత్రాన్ని కాపీ చేయడం సాధ్యం కాలేదు: {e}
+	Copy Image in Original Format	చిత్రాన్ని అసలు ఫార్మాట్‌లో కాపీ చేయి
+	The image has been copied as a {ext} file	చిత్రం {ext} ఫైల్‌గా కాపీ చేయబడింది
+	The page has changed; select the image again	పేజీ మారింది; చిత్రాన్ని మళ్లీ ఎంచుకోండి
 	Check for updates	అప్‌డేట్‌ల కోసం తనిఖీ చేయి
 	No check has run yet.	ఇంకా తనిఖీ జరగలేదు.
 	Checking for a newer version…	కొత్త వెర్షన్ కోసం తనిఖీ చేస్తోంది…
@@ -811,6 +830,7 @@ comment menu	Edit	సవరించు
 	, Expires: 	, గడువు: 
 	No digital IDs yet.	ఇంకా డిజిటల్ ఐడీలు ఏవీ లేవు.
 	Configure New Digital ID	కొత్త డిజిటల్ ఐడీని కాన్ఫిగర్ చేయి
+	Remove "{name}" from this list? The file itself is not deleted.	ఈ జాబితా నుండి "{name}"ని తీసివేయాలా? ఫైల్ తొలగించబడదు.
 	Continue	కొనసాగించు
 	Configure a Digital ID for Signing	సంతకం కోసం డిజిటల్ ఐడీని కాన్ఫిగర్ చేయి
 	Use a Digital ID from a file	ఫైల్‌లోని డిజిటల్ ఐడీని ఉపయోగించు
@@ -1501,7 +1521,7 @@ action wizard	Start	ప్రారంభించు
 	Couldn't optimize the file: {e}	ఫైల్‌ను ఆప్టిమైజ్ చేయడం సాధ్యం కాలేదు: {e}
 	Couldn't write {path}: {e}	{path}ను రాయడం సాధ్యం కాలేదు: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	ఈ ఫారం {u}కు సమర్పించమని అడుగుతోంది; PdfCraft ఫారం డేటాను పంపదు. మీరు నింపిన వివరాలను ఉంచుకోవడానికి పత్రాన్ని సేవ్ చేయండి.
-	{s} actions run in the JavaScript engine (M6)	{s} చర్యలు JavaScript ఇంజిన్‌లో అమలవుతాయి (M6)
+	This PDF uses the unsupported {s} action.	ఈ PDF మద్దతు లేని {s} చర్యను ఉపయోగిస్తోంది.
 	{name}: the {other} action isn't supported yet	{name}: {other} చర్యకు ఇంకా మద్దతు లేదు
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	{name} ఫారాన్ని {url}కు సమర్పిస్తుంది; PdfCraft ఫారం డేటాను పంపదు. మీరు నింపిన వివరాలను ఉంచుకోవడానికి పత్రాన్ని సేవ్ చేయండి.
 	Export stopped: {e}	ఎగుమతి ఆగిపోయింది: {e}
@@ -1784,6 +1804,8 @@ action wizard	Start	ప్రారంభించు
 	{month} {y}	{month} {y}
 	Change {key}	{key} మార్చు
 	Insert pages from {name}	{name} నుండి పేజీలను చొప్పించు
+	Insert pages from {name} — 1 field renamed	{name} నుండి పేజీలను చొప్పించు — 1 ఫీల్డ్ పేరు మార్చబడింది
+	Insert pages from {name} — fields renamed	{name} నుండి పేజీలను చొప్పించు — ఫీల్డ్‌ల పేర్లు మార్చబడ్డాయి
 	Fill in {name}	{name}ను నింపు
 	Set the image of {name}	{name} చిత్రాన్ని సెట్ చేయి
 	Edit script of {name}	{name} స్క్రిప్ట్‌ను సవరించు
@@ -1814,6 +1836,7 @@ action wizard	Start	ప్రారంభించు
 	Delete document JavaScript	పత్రం స్థాయి JavaScriptను తొలగించు
 	Edit document JavaScript	పత్రం స్థాయి JavaScriptను సవరించు
 	Edit text	టెక్స్ట్‌ను సవరించు
+	Load document font	పత్రం ఫాంట్‌ను లోడ్ చేయి
 	Move image	చిత్రాన్ని తరలించు
 	Rotate image	చిత్రాన్ని తిప్పు
 	Flip image	చిత్రాన్ని తిరగేయి
@@ -1938,6 +1961,7 @@ action wizard	Start	ప్రారంభించు
 	XFA form: its fields and its XFA data are kept in step, so other viewers show what you fill in.	XFA ఫారం: దీని ఫీల్డ్‌లు, XFA డేటా ఎప్పుడూ ఒకేలా ఉంచబడతాయి, కాబట్టి మీరు నింపినది ఇతర వ్యూయర్‌లలో కూడా కనిపిస్తుంది.
 @plural	{n} page|{n} pages	{n} పేజీ|{n} పేజీలు
 @plural	{n} field|{n} fields	{n} ఫీల్డ్|{n} ఫీల్డ్‌లు
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} ఫీల్డ్ పేరు మునుపటి ఫైళ్లతో సరిపోలుతుంది, పేరు మార్చబడుతుంది: {list}|{n} ఫీల్డ్ పేర్లు మునుపటి ఫైళ్లతో సరిపోలుతున్నాయి, పేర్లు మార్చబడతాయి: {list}
 	Switch to two-page view first to show the cover page	కవర్ పేజీని చూపించడానికి ముందుగా రెండు పేజీల వీక్షణకు మారండి
 	Page display: {layout}	పేజీ ప్రదర్శన: {layout}
 	Fit to width scrolling	వెడల్పుకు సరిపోయేలా స్క్రోలింగ్
@@ -2161,6 +2185,9 @@ key	Space	స్పేస్
 scroll speed	Slow	నెమ్మదిగా
 scroll speed	Normal	సాధారణం
 scroll speed	Fast	వేగంగా
+	Animation effects	యానిమేషన్ ప్రభావాలు
+animation effects	On	ఆన్
+animation effects	Off	ఆఫ్
 	Enhance camera image	కెమెరా చిత్రాన్ని మెరుగుపరచు
 	Drag the corners onto the document's edges, then choose Enhance page.	మూలలను పత్రం అంచుల వరకు లాగి, ఆపై పేజీని మెరుగుపరచు ఎంచుకోండి.
 	Enhance page	పేజీని మెరుగుపరచు
@@ -2168,5 +2195,98 @@ scroll speed	Fast	వేగంగా
 	Original	అసలు
 	Greyscale	గ్రేస్కేల్
 	Black and white	నలుపు తెలుపు
+	Browser's print dialog	బ్రౌజర్ ముద్రణ డైలాగ్
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	కాపీలు, రెండు వైపుల ముద్రణ మరియు రంగును బ్రౌజర్ ముద్రణ డైలాగ్‌లో ఎంచుకుంటారు.
+	Preparing {n} sheets for printing…	ముద్రణ కోసం {n} షీట్‌లను సిద్ధం చేస్తోంది…
+	Preparing sheet {done} of {total} for printing…	ముద్రణ కోసం {total}లో షీట్ {done}ను సిద్ధం చేస్తోంది…
+	Opening the browser's print dialog…	బ్రౌజర్ ముద్రణ డైలాగ్‌ను తెరుస్తోంది…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	బ్రౌజర్ నుండి ముద్రించలేకపోయింది ({e}); బదులుగా ముద్రించడానికి {name}ను డౌన్‌లోడ్ చేసింది
 	Tools panel side	టూల్స్ ప్యానెల్ వైపు
 	Add comment	వ్యాఖ్యను జోడించు
+	Change tag properties	ట్యాగ్ లక్షణాలను మార్చు
+# Accessibility structure tags.
+	Tags panel	ట్యాగ్‌ల ప్యానెల్
+	Tags	ట్యాగ్‌లు
+	Tag type	ట్యాగ్ రకం
+	Actual text	వాస్తవ వచనం
+	Find a tag	ట్యాగ్‌ను కనుగొను
+	Collapse tag	ట్యాగ్‌ను కుదించు
+	Expand tag	ట్యాగ్‌ను విస్తరించు
+	Revert changes	మార్పులను రద్దు చేయి
+	Save tag properties	ట్యాగ్ లక్షణాలను సేవ్ చేయి
+	This document has no editable structure tags.	ఈ పత్రంలో సవరించగల నిర్మాణ ట్యాగ్‌లు లేవు.
+	{n} tags	{n} ట్యాగ్‌లు
+	Save or revert changes before selecting another tag.	మరొక ట్యాగ్‌ను ఎంచుకునే ముందు మార్పులను సేవ్ చేయండి లేదా రద్దు చేయండి.
+	Left out: {names}	వదిలివేసినవి: {names}
+	already a PDF	ఇప్పటికే PDF
+	no unused output name	ఉపయోగించని అవుట్‌పుట్ పేరు లేదు
+	no output folder was chosen	అవుట్‌పుట్ ఫోల్డర్ ఎంచుకోలేదు
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	{n} PDF డౌన్‌లోడ్ చేయబడింది|{n} PDFలు డౌన్‌లోడ్ చేయబడ్డాయి
+	Scan	స్కాన్
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	తెల్ల కాగితంపై సంతకం చేసి, ప్రకాశవంతమైన, సమానమైన వెలుతురులో దాని ఫోటో తీయండి (ఫ్లాష్ ఉపయోగించండి). ఫోటోను ఎంచుకోండి లేదా ఇక్కడ వదలండి: PdfCraft సంతకాన్ని కనుగొని కాగితాన్ని తొలగిస్తుంది.
+	Choose photo…	ఫోటో ఎంచుకోండి…
+	No photo chosen	ఫోటో ఎంచుకోలేదు
+	Photo	ఫోటో
+	Ink sensitivity	ఇంక్ సున్నితత్వం
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	ఫ్రేమ్‌లో సంతకం కనబడలేదు. ఫ్రేమ్‌ను సంతకం మీదకు జరపండి లేదా ఇంక్ సున్నితత్వాన్ని పెంచండి.
+	Couldn't use the photo: {e}	ఫోటోను ఉపయోగించలేకపోయాం: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	ట్యాబ్‌ను మూసివేయి
+	Reopen Closed Tab	మూసివేసిన ట్యాబ్‌ను మళ్లీ తెరువు
+	Reveal in Finder	Finderలో చూపు
+	Reveal in File Explorer	ఫైల్ ఎక్స్‌ప్లోరర్‌లో చూపు
+	Other colour…	ఇతర రంగు…
+	Recent colours	ఇటీవలి రంగులు
+	Reading colours	చదవడానికి రంగులు
+	Replace document colours	పత్రం రంగులను మార్చు
+	Page background	పేజీ నేపథ్యం
+	Only change the colour of black text or line art	నలుపు వచనం లేదా రేఖా చిత్రాల రంగును మాత్రమే మార్చు
+	Change the colour of line art as well as text	వచనంతో పాటు రేఖా చిత్రాల రంగును కూడా మార్చు
+	Colours are remapped while rendering; the document itself never changes.	రెండర్ చేసేటప్పుడు రంగులు మార్చబడతాయి; పత్రం మాత్రం ఎప్పుడూ మారదు.
+	Black on white	తెలుపుపై నలుపు
+	White on black	నలుపుపై తెలుపు
+	Yellow on black	నలుపుపై పసుపు
+	Green on black	నలుపుపై ఆకుపచ్చ
+	Couldn't follow linked PDF: {reason}	లింక్ చేసిన PDFను తెరవలేకపోయాం: {reason}
+	The linked PDF opened, but its named destination was not applied.	లింక్ చేసిన PDF తెరుచుకుంది, కానీ దాని పేరున్న గమ్యం వర్తించలేదు.
+	The linked PDF opened, but its page destination was out of range.	లింక్ చేసిన PDF తెరుచుకుంది, కానీ దాని పేజీ గమ్యం పరిధికి వెలుపల ఉంది.
+	Local cross-PDF links require the desktop app	PDFల మధ్య స్థానిక లింక్‌లకు డెస్క్‌టాప్ యాప్ అవసరం
+	The existing action will be preserved.	ఉన్న చర్య అలాగే ఉంచబడుతుంది.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	ఒక స్క్రిప్ట్ చాలా సేపు నడిచినందున ఈ ఫారమ్ స్క్రిప్ట్‌లు ఆపివేయబడ్డాయి. వాటిని మళ్లీ నడపడానికి పత్రాన్ని మళ్లీ తెరవండి.
+	Minimize	కనిష్ఠీకరించు
+	Maximize	గరిష్ఠీకరించు
+	Restore	పునరుద్ధరించు
+	Use system title bar	సిస్టమ్ శీర్షిక పట్టీని ఉపయోగించు
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	ట్యాబ్ పట్టీకి బదులుగా విండో బటన్‌ల కోసం సాధారణ శీర్షిక పట్టీని చూపించు. GNOME యాప్‌లకు శీర్షిక పట్టీలను గీయదు, కాబట్టి ఇది దాని థీమ్‌ను అనుసరించదు.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	అనుమతించు
+	Only allow this if you trust the source document.	మూల పత్రాన్ని విశ్వసిస్తే మాత్రమే దీన్ని అనుమతించండి.
+	Open this local PDF?	ఈ స్థానిక PDF ఫైల్‌ను తెరవాలా?
+	This document is trying to open a local file:	ఈ పత్రం ఒక స్థానిక ఫైల్‌ను తెరవడానికి ప్రయత్నిస్తోంది:
+	Move tag earlier	ట్యాగ్‌ను ముందుకు తరలించు
+	Move tag later	ట్యాగ్‌ను వెనుకకు తరలించు
+	Mark as artifact	ఆర్టిఫాక్ట్‌గా గుర్తించు
+	Remove this leaf tag from reading order and mark its direct content as an artifact	ఈ లీఫ్ ట్యాగ్‌ను పఠన క్రమం నుంచి తీసివేసి, దాని ప్రత్యక్ష కంటెంట్‌ను ఆర్టిఫాక్ట్‌గా గుర్తించండి
+	Mark content as artifact	కంటెంట్‌ను ఆర్టిఫాక్ట్‌గా గుర్తించు
+	Word count	పదాల లెక్క
+	Current page only	ప్రస్తుత పేజీ మాత్రమే
+	Exclude tagged tables	ట్యాగ్ చేసిన పట్టికలను మినహాయించు
+	Exclude tagged code blocks	ట్యాగ్ చేసిన కోడ్ బ్లాక్‌లను మినహాయించు
+	Exclude image/OCR text	చిత్రాలు/OCR వచనాన్ని మినహాయించు
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	మినహాయింపులు PDF ట్యాగ్‌లను ఉపయోగిస్తాయి. ట్యాగ్‌లు లేని పట్టికలు, కోడ్ లెక్కలో ఉంటాయి. చిత్రాలను మినహాయిస్తే కనిపించని వచనం కూడా తొలగించబడుతుంది.
+	Words	పదాలు
+	Characters	అక్షరాలు
+	Characters without spaces	ఖాళీలు లేని అక్షరాలు
+	Pages counted	లెక్కించిన పేజీలు
+	Some pages contain no countable text. Scanned images need OCR first.	కొన్ని పేజీల్లో లెక్కించగల వచనం లేదు. స్కాన్ చేసిన చిత్రాలకు ముందుగా OCR అవసరం.
+	Some content could not be classified safely and was kept in the count.	కొంత కంటెంట్‌ను విశ్వసనీయంగా వర్గీకరించలేకపోయాం, కాబట్టి దాన్ని లెక్కలో ఉంచాం.
+	Counting words… {n} pages read	పదాలను లెక్కిస్తోంది… {n} పేజీలు చదివింది
+	Word counting stopped unexpectedly.	పదాల లెక్క అనుకోకుండా ఆగిపోయింది.
+	Word count…	పదాల లెక్క…
+@id	file.word_count	పదాల లెక్క…
+	Standard	ప్రామాణికం
+	Mobile	మొబైల్
+	Merge image fragments	చిత్ర శకలాలను విలీనం చేయి
+	Optimizing… merging image fragments	ఆప్టిమైజ్ చేస్తోంది… చిత్ర శకలాలను విలీనం చేస్తోంది

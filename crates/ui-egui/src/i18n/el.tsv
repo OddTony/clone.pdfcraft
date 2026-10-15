@@ -42,6 +42,7 @@
 	Create PDF from file…	Δημιουργία PDF από αρχείο…
 	Create PDF from images…	Δημιουργία PDF από εικόνες…
 	Create PDF from multiple files…	Δημιουργία PDF από πολλά αρχεία…
+	Create separate PDFs…	Δημιουργία ξεχωριστών PDF…
 	Create PDF from clipboard	Δημιουργία PDF από το πρόχειρο
 	Combine files…	Συνένωση αρχείων…
 	Save	Αποθήκευση
@@ -64,6 +65,8 @@
 	Column select	Επιλογή στήλης
 	Full screen mode	Λειτουργία πλήρους οθόνης
 	Read mode	Λειτουργία ανάγνωσης
+	Next tab	Επόμενη καρτέλα
+	Previous tab	Προηγούμενη καρτέλα
 	Switch light / dark theme	Εναλλαγή φωτεινού / σκοτεινού θέματος
 	Comments panel	Πίνακας σχολίων
 	Form fields panel	Πίνακας πεδίων φόρμας
@@ -181,6 +184,7 @@
 	Details	Λεπτομέρειες
 	More	Περισσότερα
 	Edit text	Επεξεργασία κειμένου
+	Load document font	Φόρτωση γραμματοσειράς εγγράφου
 	Add text	Προσθήκη κειμένου
 	Edit image	Επεξεργασία εικόνας
 	Add image	Προσθήκη εικόνας
@@ -462,6 +466,7 @@
 	, Expires: 	, Λήξη: 
 	No digital IDs yet.	Δεν υπάρχουν ακόμη ψηφιακές ταυτότητες.
 	Configure New Digital ID	Ρύθμιση νέας ψηφιακής ταυτότητας
+	Remove "{name}" from this list? The file itself is not deleted.	Αφαίρεση του «{name}» από αυτή τη λίστα; Το ίδιο το αρχείο δεν διαγράφεται.
 	Configure a Digital ID for Signing	Ρύθμιση ψηφιακής ταυτότητας για υπογραφή
 	Use a Digital ID from a file	Χρήση ψηφιακής ταυτότητας από αρχείο
 	Create a new Digital ID (self-signed, saved to a password-protected file)	Δημιουργία νέας ψηφιακής ταυτότητας (αυτοϋπογεγραμμένης, αποθηκευμένης σε αρχείο με κωδικό πρόσβασης)
@@ -1061,7 +1066,7 @@
 	Couldn't optimize the file: {e}	Δεν ήταν δυνατή η βελτιστοποίηση του αρχείου: {e}
 	Couldn't write {path}: {e}	Δεν ήταν δυνατή η εγγραφή στο {path}: {e}
 	The form asks to be submitted to {u}; PdfCraft doesn't send form data. Save the document to keep your entries.	Η φόρμα ζητά υποβολή στο {u}, αλλά το PdfCraft δεν αποστέλλει δεδομένα φόρμας. Αποθηκεύστε το έγγραφο για να διατηρήσετε τις καταχωρίσεις σας.
-	{s} actions run in the JavaScript engine (M6)	{s} ενέργειες εκτελούνται στη μηχανή JavaScript (M6)
+	This PDF uses the unsupported {s} action.	Αυτό το PDF χρησιμοποιεί τη μη υποστηριζόμενη ενέργεια {s}.
 	{name}: the {other} action isn't supported yet	{name}: η ενέργεια {other} δεν υποστηρίζεται ακόμη
 	{name} submits the form to {url}; PdfCraft doesn't send form data. Save the document to keep your entries.	Το {name} υποβάλλει τη φόρμα στο {url}, αλλά το PdfCraft δεν αποστέλλει δεδομένα φόρμας. Αποθηκεύστε το έγγραφο για να διατηρήσετε τις καταχωρίσεις σας.
 	Export stopped: {e}	Η εξαγωγή διακόπηκε: {e}
@@ -1304,6 +1309,8 @@
 	{month} {y}	{month} {y}
 	Change {key}	Αλλαγή {key}
 	Insert pages from {name}	Εισαγωγή σελίδων από {name}
+	Insert pages from {name} — 1 field renamed	Εισαγωγή σελίδων από {name} — μετονομάστηκε 1 πεδίο
+	Insert pages from {name} — fields renamed	Εισαγωγή σελίδων από {name} — μετονομάστηκαν πεδία
 	Fill in {name}	Συμπλήρωση του {name}
 	Set the image of {name}	Ορισμός εικόνας του {name}
 	Edit script of {name}	Επεξεργασία δέσμης ενεργειών του {name}
@@ -1622,6 +1629,7 @@
 	Optimize PDF…	Βελτιστοποίηση PDF…
 	Export to text…	Εξαγωγή σε κείμενο…
 	Export to Word…	Εξαγωγή σε Word…
+	Export to PowerPoint…	Εξαγωγή σε PowerPoint…
 	Export to HTML…	Εξαγωγή σε HTML…
 	Export to RTF…	Εξαγωγή σε RTF…
 	JavaScript console…	Κονσόλα JavaScript…
@@ -1688,6 +1696,7 @@
 	Create from	Δημιουργία από
 	Single file	Ένα αρχείο
 	Multiple files	Πολλά αρχεία
+	Separate PDFs	Ξεχωριστά PDF
 	Clipboard	Πρόχειρο
 	Blank page	Κενή σελίδα
 	Combine files	Συνδυασμός αρχείων
@@ -1984,6 +1993,11 @@
 	of the following fields:	των παρακάτω πεδίων:
 	Simplified field notation:	Απλοποιημένη σύνταξη πεδίων:
 	Field names with + - * / and parentheses; put \\ before spaces in names.	Ονόματα πεδίων με + - * / και παρενθέσεις· προσθέστε \\ πριν από τα κενά των ονομάτων.
+	Finding document fonts…	Αναζήτηση γραμματοσειρών εγγράφου…
+	Installed fonts…	Εγκατεστημένες γραμματοσειρές…
+	Keep source fonts	Διατήρηση αρχικών γραμματοσειρών
+	Load font…	Φόρτωση γραμματοσειράς…
+	No openly licensed document fonts found. Load a font file.	Δεν βρέθηκαν γραμματοσειρές εγγράφου με ανοιχτή άδεια. Φορτώστε ένα αρχείο γραμματοσειράς.
 	Format text	Μορφοποίηση κειμένου
 	Centre	Κεντράρισμα
 	Thai and Arabic use regular fallback fonts when available.	Τα ταϊλανδικά και τα αραβικά χρησιμοποιούν κανονικές εναλλακτικές γραμματοσειρές, όταν είναι διαθέσιμες.
@@ -2136,6 +2150,9 @@
 	Add or edit links	Προσθήκη ή επεξεργασία συνδέσμων
 	Create links from URLs	Δημιουργία συνδέσμων από URL
 	Remove all links	Αφαίρεση όλων των συνδέσμων
+	No links to remove	Δεν υπάρχουν σύνδεσμοι για κατάργηση
+	Removed 1 link	Καταργήθηκε 1 σύνδεσμος
+	Removed {n} links	Σύνδεσμοι που καταργήθηκαν: {n}
 	Add Bates numbering…	Προσθήκη αρίθμησης Bates…
 	Add image…	Προσθήκη εικόνας…
 	Redact text and images	Οριστική απόκρυψη κειμένου και εικόνων
@@ -2215,13 +2232,13 @@ comment menu	Edit	Επεξεργασία
 	Offset from centre	Μετατόπιση από το κέντρο
 	Graphic	Γραφικό
 	Signer's name	Όνομα υπογράφοντος
-	Fill & Sign signature	Υπογραφή από τη Συμπλήρωση και υπογραφή
+	Fill & Sign signature	Υπογραφή από το εργαλείο «Συμπλήρωση και υπογραφή»
 	Choose image…	Επιλογή εικόνας…
 	Looking for printers…	Αναζήτηση εκτυπωτών…
 	Sending to {printer}…	Αποστολή στον {printer}…
 	Enter permissions password…	Εισαγωγή κωδικού δικαιωμάτων…
 	Permissions password	Κωδικός δικαιωμάτων
-	“{name}” has security restrictions. Enter its permissions password to lift them.	Το «{name}» έχει περιορισμούς ασφαλείας. Εισαγάγετε τον κωδικό δικαιωμάτων για να τους αρθούν.
+	“{name}” has security restrictions. Enter its permissions password to lift them.	Το «{name}» έχει περιορισμούς ασφαλείας. Εισαγάγετε τον κωδικό δικαιωμάτων για να αρθούν οι περιορισμοί.
 	Restrictions lifted	Οι περιορισμοί άρθηκαν
 	Couldn't unlock {name}: {e}	Δεν ήταν δυνατό το ξεκλείδωμα του {name}: {e}
 	This document has no restrictions to lift	Αυτό το έγγραφο δεν έχει περιορισμούς προς άρση
@@ -2231,7 +2248,7 @@ comment menu	Edit	Επεξεργασία
 	These files can't be read, so they won't be in the combined PDF:	Αυτά τα αρχεία δεν διαβάζονται, οπότε δεν θα συμπεριληφθούν στο συνδυασμένο PDF:
 	Combine the rest	Συνδυασμός των υπολοίπων
 	and {n} more	και {n} ακόμη
-	Drop PDFs, images, text files or folders here, or choose them.	Αποθέστε εδώ PDF, εικόνες, αρχεία κειμένου ή φακέλους ή επιλέξτε τα.
+	Drop PDFs, images, text files or folders here, or choose them.	Σύρετε εδώ PDF, εικόνες, αρχεία κειμένου ή φακέλους, ή επιλέξτε τα.
 	Every PDF, image and text file in the folder	Όλα τα PDF, οι εικόνες και τα αρχεία κειμένου του φακέλου
 	Every PDF, image and text file in the folder and the folders inside it	Όλα τα PDF, οι εικόνες και τα αρχεία κειμένου του φακέλου και των υποφακέλων του
 	No PDFs, images or text files found in {folder}	Δεν βρέθηκαν PDF, εικόνες ή αρχεία κειμένου στο {folder}
@@ -2247,7 +2264,7 @@ comment menu	Edit	Επεξεργασία
 	Tools	Εργαλεία
 	Inspector	Επιθεωρητής
 	PDF page: {size}	Σελίδα PDF: {size}
-	Match page at 100%	Ταίριασμα σελίδας στο 100%
+	Match page at 100%	Προσαρμογή σελίδας στο 100%
 	PDF scale: {scale}%	Κλίμακα PDF: {scale}%
 	Printer paper and scaling may differ. Check driver settings.	Το χαρτί και η κλίμακα του εκτυπωτή μπορεί να διαφέρουν. Ελέγξτε τις ρυθμίσεις του προγράμματος οδήγησης.
 	Drawing scale changes. Use Actual size for full-scale plans.	Η κλίμακα του σχεδίου αλλάζει. Για σχέδια σε πλήρη κλίμακα χρησιμοποιήστε το Πραγματικό μέγεθος.
@@ -2259,6 +2276,9 @@ comment menu	Edit	Επεξεργασία
 scroll speed	Slow	Αργή
 scroll speed	Normal	Κανονική
 scroll speed	Fast	Γρήγορη
+	Animation effects	Εφέ κίνησης
+animation effects	On	Ενεργά
+animation effects	Off	Ανενεργά
 	Enhance camera image	Βελτίωση εικόνας κάμερας
 	Drag the corners onto the document's edges, then choose Enhance page.	Σύρετε τις γωνίες στις άκρες του εγγράφου και επιλέξτε Βελτίωση σελίδας.
 	Enhance page	Βελτίωση σελίδας
@@ -2271,5 +2291,99 @@ scroll speed	Fast	Γρήγορη
 	This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…	Το πρόγραμμα οδήγησης αυτού του εκτυπωτή δεν δέχεται ρυθμίσεις εκτύπωσης διπλής όψης από άλλα προγράμματα, οπότε ισχύει η δική του ρύθμιση. Αλλάξτε τη στις Ιδιότητες…
 	This field's font can't draw “{c}” ({code}), so PdfCraft shows ? in its place. The value is saved, and other PDF viewers redraw the field from it.	Η γραμματοσειρά αυτού του πεδίου δεν μπορεί να σχεδιάσει το «{c}» ({code}), γι' αυτό το PdfCraft δείχνει ? στη θέση του. Η τιμή αποθηκεύεται και άλλα προγράμματα προβολής PDF επανασχεδιάζουν το πεδίο από αυτήν.
 	The fonts PdfCraft writes with can't draw “{c}” ({code}), so it shows as ? in every PDF viewer. The text is saved.	Οι γραμματοσειρές με τις οποίες γράφει το PdfCraft δεν μπορούν να σχεδιάσουν το «{c}» ({code}), γι' αυτό εμφανίζεται ως ? σε κάθε πρόγραμμα προβολής PDF. Το κείμενο αποθηκεύεται.
+	Browser's print dialog	Παράθυρο εκτύπωσης του προγράμματος περιήγησης
+	Copies, two-sided printing and colour are chosen in the browser's print dialog.	Τα αντίγραφα, η εκτύπωση διπλής όψης και το χρώμα επιλέγονται στο παράθυρο εκτύπωσης του προγράμματος περιήγησης.
+	Preparing {n} sheets for printing…	Προετοιμασία {n} φύλλων για εκτύπωση…
+	Preparing sheet {done} of {total} for printing…	Προετοιμασία φύλλου {done} από {total} για εκτύπωση…
+	Opening the browser's print dialog…	Άνοιγμα του παραθύρου εκτύπωσης του προγράμματος περιήγησης…
+	Couldn't print from the browser ({e}); downloaded {name} to print instead	Δεν ήταν δυνατή η εκτύπωση από το πρόγραμμα περιήγησης ({e}); έγινε λήψη του {name} για εκτύπωση
 	Tools panel side	Πλευρά πλαισίου εργαλείων
 	Add comment	Προσθήκη σχολίου
+	Change tag properties	Αλλαγή ιδιοτήτων ετικέτας
+# Accessibility structure tags.
+	Tags panel	Πίνακας ετικετών
+	Tags	Ετικέτες
+	Tag type	Τύπος ετικέτας
+	Actual text	Πραγματικό κείμενο
+	Find a tag	Εύρεση ετικέτας
+	Collapse tag	Σύμπτυξη ετικέτας
+	Expand tag	Ανάπτυξη ετικέτας
+	Revert changes	Αναίρεση αλλαγών
+	Save tag properties	Αποθήκευση ιδιοτήτων ετικέτας
+	This document has no editable structure tags.	Αυτό το έγγραφο δεν έχει επεξεργάσιμες ετικέτες δομής.
+	{n} tags	{n} ετικέτες
+	Save or revert changes before selecting another tag.	Αποθηκεύστε ή αναιρέστε τις αλλαγές πριν επιλέξετε άλλη ετικέτα.
+	Left out: {names}	Παραλείφθηκαν: {names}
+	already a PDF	είναι ήδη PDF
+	no unused output name	δεν υπάρχει διαθέσιμο όνομα εξόδου
+	no output folder was chosen	δεν επιλέχθηκε φάκελος εξόδου
+@plural	Downloaded {n} PDF|Downloaded {n} PDFs	Λήφθηκε {n} PDF|Λήφθηκαν {n} PDF
+@plural	{n} field name collides with earlier files and will be renamed: {list}|{n} field names collide with earlier files and will be renamed: {list}	{n} όνομα πεδίου συγκρούεται με προηγούμενα αρχεία και θα μετονομαστεί: {list}|{n} ονόματα πεδίων συγκρούονται με προηγούμενα αρχεία και θα μετονομαστούν: {list}
+	Scan	Σάρωση
+	Sign a sheet of white paper and take a photo of it in bright, even light (use the flash). Choose the photo or drop it here: PdfCraft finds the signature and removes the paper.	Υπογράψτε σε ένα λευκό φύλλο χαρτιού και φωτογραφίστε το σε έντονο, ομοιόμορφο φως (χρησιμοποιήστε το φλας). Επιλέξτε τη φωτογραφία ή αφήστε την εδώ: το PdfCraft βρίσκει την υπογραφή και αφαιρεί το χαρτί.
+	Choose photo…	Επιλογή φωτογραφίας…
+	No photo chosen	Δεν επιλέχθηκε φωτογραφία
+	Photo	Φωτογραφία
+	Ink sensitivity	Ευαισθησία μελανιού
+	No signature was found in the frame. Move the frame over the signature or raise the ink sensitivity.	Δεν βρέθηκε υπογραφή στο πλαίσιο. Μετακινήστε το πλαίσιο πάνω από την υπογραφή ή αυξήστε την ευαισθησία μελανιού.
+	Couldn't use the photo: {e}	Δεν ήταν δυνατή η χρήση της φωτογραφίας: {e}
+
+# PDF tab context menu (#1233)
+	Close Tab	Κλείσιμο καρτέλας
+	Reopen Closed Tab	Επαναφορά κλειστής καρτέλας
+	Reveal in Finder	Εμφάνιση στο Finder
+	Reveal in File Explorer	Εμφάνιση στη διαχείριση αρχείων
+	Other colour…	Άλλο χρώμα…
+	Recent colours	Πρόσφατα χρώματα
+	Reading colours	Χρώματα ανάγνωσης
+	Replace document colours	Αντικατάσταση χρωμάτων εγγράφου
+	Page background	Φόντο σελίδας
+	Only change the colour of black text or line art	Αλλαγή χρώματος μόνο για μαύρο κείμενο ή γραμμικά σχέδια
+	Change the colour of line art as well as text	Αλλαγή χρώματος και στα γραμμικά σχέδια, όχι μόνο στο κείμενο
+	Colours are remapped while rendering; the document itself never changes.	Τα χρώματα αντιστοιχίζονται εκ νέου κατά την απόδοση· το ίδιο το έγγραφο δεν αλλάζει ποτέ.
+	Black on white	Μαύρο σε λευκό
+	White on black	Λευκό σε μαύρο
+	Yellow on black	Κίτρινο σε μαύρο
+	Green on black	Πράσινο σε μαύρο
+	Couldn't follow linked PDF: {reason}	Δεν ήταν δυνατό να ανοίξει το συνδεδεμένο PDF: {reason}
+	The linked PDF opened, but its named destination was not applied.	Το συνδεδεμένο PDF άνοιξε, αλλά ο ονομασμένος προορισμός του δεν εφαρμόστηκε.
+	The linked PDF opened, but its page destination was out of range.	Το συνδεδεμένο PDF άνοιξε, αλλά ο προορισμός σελίδας του είναι εκτός εύρους.
+	Local cross-PDF links require the desktop app	Οι τοπικοί σύνδεσμοι μεταξύ PDF απαιτούν την εφαρμογή υπολογιστή
+	The existing action will be preserved.	Η υπάρχουσα ενέργεια θα διατηρηθεί.
+	This form's scripts are turned off because one ran too long. Reopen the document to run them again.	Τα σενάρια αυτής της φόρμας είναι απενεργοποιημένα, επειδή ένα από αυτά εκτελούνταν για πολύ ώρα. Ανοίξτε ξανά το έγγραφο για να εκτελεστούν ξανά.
+	Minimize	Ελαχιστοποίηση
+	Maximize	Μεγιστοποίηση
+	Restore	Επαναφορά
+	Use system title bar	Χρήση γραμμής τίτλου συστήματος
+	Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme.	Εμφάνιση απλής γραμμής τίτλου για τα κουμπιά του παραθύρου αντί για τη γραμμή καρτελών. Το GNOME δεν σχεδιάζει γραμμές τίτλου για τις εφαρμογές, οπότε αυτή δεν ακολουθεί το θέμα του.
+
+# Absolute local GoToR confirmation (#1364).
+	Allow	Να επιτραπεί
+	Only allow this if you trust the source document.	Επιτρέψτε το μόνο αν εμπιστεύεστε το έγγραφο προέλευσης.
+	Open this local PDF?	Να ανοίξει αυτό το τοπικό PDF;
+	This document is trying to open a local file:	Αυτό το έγγραφο προσπαθεί να ανοίξει ένα τοπικό αρχείο:
+	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
+	Move tag later	Μετακίνηση ετικέτας αργότερα
+	Mark as artifact	Σήμανση ως τεχνούργημα
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Αφαιρέστε αυτήν την ετικέτα φύλλου από τη σειρά ανάγνωσης και σημειώστε το άμεσο περιεχόμενό της ως τεχνούργημα
+	Mark content as artifact	Σήμανση περιεχομένου ως τεχνούργημα
+	Word count	Καταμέτρηση λέξεων
+	Current page only	Μόνο η τρέχουσα σελίδα
+	Exclude tagged tables	Εξαίρεση πινάκων με ετικέτες
+	Exclude tagged code blocks	Εξαίρεση μπλοκ κώδικα με ετικέτες
+	Exclude image/OCR text	Εξαίρεση κειμένου εικόνων/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Οι εξαιρέσεις χρησιμοποιούν ετικέτες PDF. Οι πίνακες και ο κώδικας χωρίς ετικέτες παραμένουν στην καταμέτρηση. Η εξαίρεση εικόνων αφαιρεί και το αόρατο κείμενο.
+	Words	Λέξεις
+	Characters	Χαρακτήρες
+	Characters without spaces	Χαρακτήρες χωρίς κενά
+	Pages counted	Σελίδες που καταμετρήθηκαν
+	Some pages contain no countable text. Scanned images need OCR first.	Ορισμένες σελίδες δεν περιέχουν κείμενο για καταμέτρηση. Οι σαρωμένες εικόνες χρειάζονται πρώτα OCR.
+	Some content could not be classified safely and was kept in the count.	Ορισμένο περιεχόμενο δεν ήταν δυνατό να ταξινομηθεί αξιόπιστα και παρέμεινε στην καταμέτρηση.
+	Counting words… {n} pages read	Καταμέτρηση λέξεων… αναγνώστηκαν {n} σελίδες
+	Word counting stopped unexpectedly.	Η καταμέτρηση λέξεων σταμάτησε απροσδόκητα.
+	Word count…	Καταμέτρηση λέξεων…
+@id	file.word_count	Καταμέτρηση λέξεων…
+	Standard	Τυπικές
+	Mobile	Κινητό
+	Merge image fragments	Συγχώνευση τμημάτων εικόνας
+	Optimizing… merging image fragments	Βελτιστοποίηση… συγχώνευση τμημάτων εικόνας

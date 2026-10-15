@@ -110,15 +110,22 @@ pub fn mode_tab(ui: &mut egui::Ui, label: &str, active: bool) -> Response {
     let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
     let (rect, resp) = ui.allocate_exact_size(vec2(w + 22.0, 48.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), active, label));
-    if resp.hovered() && !active {
-        ui.painter().rect_filled(rect.shrink2(vec2(2.0, 9.0)), CornerRadius::same(6), t.hover);
-    }
-    ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, font, if active { t.text } else { t.text_muted });
+    let press = theme::Press::track(ui, &resp);
+    let well = rect.shrink2(vec2(2.0, 9.0));
     if active {
-        let r = Rect::from_min_max(rect.left_bottom() + vec2(11.0, -3.0), rect.right_bottom() - vec2(11.0, 0.0));
-        ui.painter().rect_filled(r, CornerRadius::same(1), t.text);
+        if press.down > 0.01 {
+            ui.painter().rect_filled(well, CornerRadius::same(6), t.pressed.gamma_multiply(press.down));
+        }
+    } else {
+        press.wash(ui, well, 6, false);
     }
-    resp
+    let body = rect.translate(press.offset());
+    ui.painter().text(body.center(), Align2::CENTER_CENTER, label, font, if active { t.text } else { t.text_muted });
+    if active {
+        let r = Rect::from_min_max(rect.left_bottom() + vec2(10.0, -2.0), rect.right_bottom() - vec2(10.0, 0.0));
+        ui.painter().rect_filled(r, CornerRadius { nw: 1, ne: 1, sw: 0, se: 0 }, t.accent);
+    }
+    theme::hand(resp)
 }
 
 /// Rounded pill button; `primary` fills with the accent.
@@ -128,14 +135,15 @@ pub fn pill_button(ui: &mut egui::Ui, label: &str, primary: bool) -> Response {
     let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
     let (rect, resp) = ui.allocate_exact_size(vec2(w + 26.0, 28.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
+    let press = theme::Press::track(ui, &resp);
     let (fill, stroke, text) = if primary {
-        (if resp.hovered() { t.accent_text } else { t.accent }, Stroke::NONE, Color32::WHITE)
+        (press.fill(t.accent, t.accent_text, t.accent.lerp_to_gamma(Color32::BLACK, 0.22)), Stroke::NONE, Color32::WHITE)
     } else {
-        (if resp.hovered() { t.hover } else { t.card }, Stroke::new(1.2, t.text_muted), t.text)
+        (press.fill(t.card, t.hover, t.pressed), Stroke::new(1.0, t.border), t.text)
     };
     ui.painter().rect(rect, CornerRadius::same(14), fill, stroke, egui::StrokeKind::Inside);
-    ui.painter().text(rect.center(), Align2::CENTER_CENTER, label, font, text);
-    resp
+    ui.painter().text(rect.translate(press.offset()).center(), Align2::CENTER_CENTER, label, font, text);
+    theme::hand(resp)
 }
 
 /// Icon + label, transparent until hovered.
@@ -150,12 +158,12 @@ pub fn ghost_button_sized(ui: &mut egui::Ui, icon: &str, label: &str, height: f3
     let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
     let (rect, resp) = ui.allocate_exact_size(vec2(w + 38.0, height), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
-    if resp.hovered() {
-        ui.painter().rect_filled(rect, CornerRadius::same(6), t.hover);
-    }
-    icons::paint(ui, Rect::from_min_size(rect.min + vec2(6.0, (height - 18.0) / 2.0), vec2(18.0, 18.0)), icon, 17.0, t.icon);
-    ui.painter().text(rect.left_center() + vec2(30.0, 0.0), Align2::LEFT_CENTER, label, font, t.text);
-    resp
+    let press = theme::Press::track(ui, &resp);
+    press.wash(ui, rect, 6, false);
+    let body = rect.translate(press.offset());
+    icons::paint(ui, Rect::from_min_size(body.min + vec2(6.0, (height - 18.0) / 2.0), vec2(18.0, 18.0)), icon, 17.0, t.icon);
+    ui.painter().text(body.left_center() + vec2(30.0, 0.0), Align2::LEFT_CENTER, label, font, t.text);
+    theme::hand(resp)
 }
 
 /// A search-field lookalike that opens the command palette.
@@ -163,8 +171,10 @@ pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response 
     let t = Tokens::get(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), placeholder));
-    let fill = if resp.hovered() { t.hover } else { t.field };
-    ui.painter().rect(rect, CornerRadius::same(16), fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    let press = theme::Press::track(ui, &resp);
+    let fill = press.fill(t.field, t.hover, t.pressed);
+    let edge = t.border.lerp_to_gamma(t.text_muted, press.hover * 0.35);
+    ui.painter().rect(rect, CornerRadius::same(16), fill, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
     icons::paint(ui, Rect::from_min_size(rect.min + vec2(10.0, 8.0), vec2(16.0, 16.0)), "search", 15.0, t.text_muted);
     let shortcut = crate::commands::command_shortcut_label(ui.ctx(), "view.palette");
     let shortcut = ui.painter().layout_no_wrap(shortcut, theme::regular(11.5), t.text_faint);
@@ -276,6 +286,95 @@ pub fn row_text(ui: &egui::Ui, pos: egui::Pos2, text: impl Into<String>, font: e
     ui.painter().galley(rect.min, galley, color);
 }
 
+/// Text wrapped to the available width, for text people write (comments, replies). A paragraph
+/// in a right-to-left script (Persian, Arabic, Hebrew) reads right to left and sits against the
+/// right edge ([`crate::bidi::wrap`]); text without one is an ordinary wrapping label.
+/// `truncate` keeps the first line only, with an ellipsis where the text goes on.
+pub fn wrapped_text(ui: &mut egui::Ui, text: &str, font: egui::FontId, color: Color32, truncate: bool) -> Response {
+    if !crate::bidi::has_rtl(text) {
+        let mut label = egui::Label::new(egui::RichText::new(text).font(font).color(color)).wrap();
+        if truncate {
+            label = label.truncate();
+        }
+        return ui.add(label);
+    }
+    let width = ui.available_width().max(1.0);
+    let lines = wrapped_lines(ui, text, &font, width, truncate);
+    let galleys: Vec<_> = lines.iter().map(|line| (line.rtl, ui.painter().layout_no_wrap(line.text.clone(), font.clone(), color))).collect();
+    let height = galleys.iter().map(|(_, g)| g.size().y).sum();
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
+    // Painted text only: the accessibility name keeps the logical order.
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, text));
+    let mut y = rect.top();
+    for (rtl, galley) in galleys {
+        let x = if rtl { rect.right() - galley.size().x } else { rect.left() };
+        let h = galley.size().y;
+        ui.painter().galley(egui::pos2(x, y), galley, color);
+        y += h;
+    }
+    resp
+}
+
+const ELLIPSIS: &str = "\u{2026}";
+
+/// Wrapped right-to-left text kept between frames. Wrapping measures many candidate lines, so
+/// re-wrapping every comment on every frame would make a panel of long comments slow; the
+/// result depends only on the text, font, width, scale and collapsed state, so it is looked up.
+#[derive(Clone, Default)]
+struct WrapCache {
+    lines: std::collections::HashMap<u64, std::sync::Arc<[crate::bidi::Line]>>,
+}
+
+/// How many wrapped texts the cache holds before it starts over (each costs its text's size).
+const WRAP_CACHE_MAX: usize = 256;
+
+/// A collapsed comment shows one line, so no more than this many characters are wrapped for it:
+/// a long comment doesn't cost a full wrap just to show its start.
+const COLLAPSED_WRAP_CHARS: usize = 1024;
+
+/// The lines `wrapped_text` paints for a right-to-left `text`, from the cache when the same text
+/// was wrapped the same way before.
+fn wrapped_lines(ui: &egui::Ui, text: &str, font: &egui::FontId, width: f32, truncate: bool) -> std::sync::Arc<[crate::bidi::Line]> {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    (text, font, width.to_bits(), ui.ctx().pixels_per_point().to_bits(), truncate).hash(&mut hasher);
+    let key = hasher.finish();
+    let cache_id = egui::Id::new("pdfcraft-rtl-wrap-cache");
+    if let Some(hit) = ui.ctx().data_mut(|d| d.get_temp_mut_or_default::<WrapCache>(cache_id).lines.get(&key).cloned()) {
+        return hit;
+    }
+    // Collapsed: only the start is wrapped (cut at a char boundary, so the slice can't fail).
+    let (measured, cut) = match text.char_indices().nth(COLLAPSED_WRAP_CHARS) {
+        Some((at, _)) if truncate => (text.get(..at).unwrap_or(text), true),
+        _ => (text, false),
+    };
+    let measure = |f: &mut egui::epaint::text::FontsView<'_>, s: &str| f.layout_no_wrap(s.to_owned(), font.clone(), Color32::WHITE).size().x;
+    let mut lines = ui.fonts_mut(|f| {
+        let room = if truncate { width - measure(f, ELLIPSIS) } else { width };
+        crate::bidi::wrap(measured, |s| measure(f, s) <= room)
+    });
+    if truncate && (lines.len() > 1 || cut) {
+        lines.truncate(1);
+        if let Some(line) = lines.first_mut() {
+            // The ellipsis goes where the line's reading ends: the left of a right-to-left line.
+            if line.rtl {
+                line.text.insert_str(0, ELLIPSIS);
+            } else {
+                line.text.push_str(ELLIPSIS);
+            }
+        }
+    }
+    let lines: std::sync::Arc<[crate::bidi::Line]> = lines.into();
+    ui.ctx().data_mut(|d| {
+        let cache = &mut d.get_temp_mut_or_default::<WrapCache>(cache_id).lines;
+        if cache.len() >= WRAP_CACHE_MAX {
+            cache.clear();
+        }
+        cache.insert(key, lines.clone());
+    });
+    lines
+}
+
 /// Transient message at the bottom centre.
 pub fn toast(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let Some((msg, start)) = app.toast.clone() else { return };
@@ -331,6 +430,7 @@ const PROGRESS_HEIGHT: &str = "progress-notice-height";
 
 /// Draw [`PdfCraftApp::progress_notice`]: the label, a bar that eases towards the fraction with
 /// a light sweeping across it, the percentage and Cancel. Returns true when Cancel was clicked.
+/// With animation effects off ([`crate::motion`]) the bar steps to the fraction and has no sweep.
 pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
     let Some(p) = &app.progress_notice else { return false };
     let t = Tokens::get(ctx);
@@ -342,7 +442,8 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
         (Color32::from_rgb(0x2A, 0x2A, 0x2F), Color32::WHITE)
     };
     let fraction = if p.fraction.is_finite() { p.fraction.clamp(0.0, 1.0) } else { 0.0 };
-    let shown = ctx.animate_value_with_time(egui::Id::new("progress-notice-bar"), fraction, 0.3);
+    let animated = crate::motion::animated(ctx);
+    let shown = ctx.animate_value_with_time(egui::Id::new("progress-notice-bar"), fraction, if animated { 0.3 } else { 0.0 });
     let now = ctx.input(|i| i.time);
     let mut cancel = false;
     let area = egui::Area::new(egui::Id::new("progress-notice"))
@@ -374,12 +475,14 @@ pub fn progress_notice(app: &PdfCraftApp, ctx: &egui::Context) -> bool {
                     painter.rect_filled(done, CornerRadius::same(3), t.accent);
                     // A soft light sweeping along the filled part says the job is alive between
                     // updates.
-                    let band = 48.0;
-                    let x = done.left() - band + ((now * 160.0) % f64::from(done.width() + band)) as f32;
-                    let clip = painter.with_clip_rect(done);
-                    for (i, a) in [0.10_f32, 0.22, 0.10].into_iter().enumerate() {
-                        let r = Rect::from_min_size(egui::pos2(x + i as f32 * band / 3.0, done.top()), vec2(band / 3.0, done.height()));
-                        clip.rect_filled(r, CornerRadius::ZERO, Color32::WHITE.gamma_multiply(a));
+                    if animated {
+                        let band = 48.0;
+                        let x = done.left() - band + ((now * 160.0) % f64::from(done.width() + band)) as f32;
+                        let clip = painter.with_clip_rect(done);
+                        for (i, a) in [0.10_f32, 0.22, 0.10].into_iter().enumerate() {
+                            let r = Rect::from_min_size(egui::pos2(x + i as f32 * band / 3.0, done.top()), vec2(band / 3.0, done.height()));
+                            clip.rect_filled(r, CornerRadius::ZERO, Color32::WHITE.gamma_multiply(a));
+                        }
                     }
                 }
                 if p.cancellable {
@@ -445,19 +548,24 @@ pub fn split_pill(ui: &mut egui::Ui, icon: &str, label: &str, more: &str) -> (Re
     main.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
     arrow.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), more));
     let radius = CornerRadius::same(15);
-    ui.painter().rect(rect, radius, t.card, Stroke::new(1.2, t.text_muted), egui::StrokeKind::Inside);
+    ui.painter().rect(rect, radius, t.card, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     let left = CornerRadius { nw: 15, sw: 15, ne: 0, se: 0 };
     let right = CornerRadius { nw: 0, sw: 0, ne: 15, se: 15 };
-    for (r, resp, corners) in [(main_rect, &main, left), (more_rect, &arrow, right)] {
-        if resp.hovered() {
-            ui.painter().rect_filled(r.shrink(1.2), corners, t.hover);
+    let main_press = theme::Press::track(ui, &main);
+    let arrow_press = theme::Press::track(ui, &arrow);
+    for (r, press, corners) in [(main_rect, main_press, left), (more_rect, arrow_press, right)] {
+        let fill = press.fill(Color32::TRANSPARENT, t.hover, t.pressed);
+        if fill.a() > 0 {
+            ui.painter().rect_filled(r.shrink(1.2), corners, fill);
         }
     }
+    let body = rect.translate(main_press.offset());
+    let more_body = more_rect.translate(arrow_press.offset());
     ui.painter().vline(more_rect.left(), rect.y_range().shrink(7.0), Stroke::new(1.0, t.text_muted));
-    crate::icons::paint(ui, Rect::from_min_size(rect.min + vec2(12.0, 7.0), vec2(16.0, 16.0)), icon, 15.0, t.text);
-    ui.painter().text(rect.left_center() + vec2(34.0, 0.0), Align2::LEFT_CENTER, label, font, t.text);
-    crate::icons::paint(ui, Rect::from_center_size(more_rect.center(), vec2(14.0, 14.0)), "chevron-down", 13.0, t.text);
-    (main.on_hover_text(label), arrow.on_hover_text(more))
+    crate::icons::paint(ui, Rect::from_min_size(body.min + vec2(12.0, 7.0), vec2(16.0, 16.0)), icon, 15.0, t.text);
+    ui.painter().text(body.left_center() + vec2(34.0, 0.0), Align2::LEFT_CENTER, label, font, t.text);
+    crate::icons::paint(ui, Rect::from_center_size(more_body.center(), vec2(14.0, 14.0)), "chevron-down", 13.0, t.text);
+    (theme::hand(main).on_hover_text(label), theme::hand(arrow).on_hover_text(more))
 }
 
 /// A pill button with an icon (primary = filled accent).
@@ -467,15 +575,17 @@ pub fn icon_pill(ui: &mut egui::Ui, icon: &str, label: &str, primary: bool) -> R
     let w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), font.clone(), t.text).size().x);
     let (rect, resp) = ui.allocate_exact_size(vec2(w + 46.0, 30.0), Sense::click());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), label));
+    let press = theme::Press::track(ui, &resp);
     let (fill, stroke, text) = if primary {
-        (if resp.hovered() { t.accent_text } else { t.accent }, Stroke::NONE, Color32::WHITE)
+        (press.fill(t.accent, t.accent_text, t.accent.lerp_to_gamma(Color32::BLACK, 0.22)), Stroke::NONE, Color32::WHITE)
     } else {
-        (if resp.hovered() { t.hover } else { t.card }, Stroke::new(1.2, t.text_muted), t.text)
+        (press.fill(t.card, t.hover, t.pressed), Stroke::new(1.0, t.border), t.text)
     };
     ui.painter().rect(rect, CornerRadius::same(15), fill, stroke, egui::StrokeKind::Inside);
-    crate::icons::paint(ui, Rect::from_min_size(rect.min + vec2(12.0, 7.0), vec2(16.0, 16.0)), icon, 15.0, text);
-    ui.painter().text(rect.left_center() + vec2(34.0, 0.0), Align2::LEFT_CENTER, label, font, text);
-    resp
+    let body = rect.translate(press.offset());
+    crate::icons::paint(ui, Rect::from_min_size(body.min + vec2(12.0, 7.0), vec2(16.0, 16.0)), icon, 15.0, text);
+    ui.painter().text(body.left_center() + vec2(34.0, 0.0), Align2::LEFT_CENTER, label, font, text);
+    theme::hand(resp)
 }
 
 #[cfg(test)]
@@ -611,6 +721,84 @@ mod tests {
         app.notify("Saved");
         let again = toast_rect(&mut app, &ctx, 1280.0, &mut now);
         assert!((again.width() - short.width()).abs() < 1.0, "long notices must not impose a permanent minimum width");
+    }
+
+    /// The text shapes `wrapped_text` paints in a 120 pt wide column at x = 0.
+    fn wrapped_shapes(text: &str, truncate: bool) -> Vec<(Pos2, Rect, String)> {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(theme::font_definitions());
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let column = Rect::from_min_size(Pos2::ZERO, vec2(120.0, 400.0));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(column), |ui| {
+                wrapped_text(ui, text, theme::regular(13.0), Color32::WHITE, truncate);
+            });
+        });
+        let shapes = output
+            .shapes
+            .iter()
+            .filter_map(|shape| if let egui::Shape::Text(t) = &shape.shape { Some((t.pos, t.galley.rect, t.galley.job.text.clone())) } else { None })
+            .collect();
+        output.drop_without_applying_deltas();
+        shapes
+    }
+
+    /// Right-to-left text is wrapped once and looked up on later frames; the cache stays bounded
+    /// however many comments go by, and a collapsed comment of any length still shows one line.
+    #[test]
+    fn rtl_wrapping_is_cached_and_bounded() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(theme::font_definitions());
+        let cache_len =
+            |ctx: &egui::Context| ctx.data_mut(|d| d.get_temp_mut_or_default::<WrapCache>(egui::Id::new("pdfcraft-rtl-wrap-cache")).lines.len());
+        let persian = "این یک نظر طولانی به زبان فارسی است که باید در چند خط شکسته شود";
+        let long = persian.repeat(2_000);
+        let mut first = None;
+        for _ in 0..3 {
+            ctx.run_ui(egui::RawInput::default(), |ui| {
+                let lines = wrapped_lines(ui, persian, &theme::regular(13.0), 120.0, false);
+                assert!(lines.len() > 1);
+                if let Some(prev) = &first {
+                    assert!(std::sync::Arc::ptr_eq(prev, &lines), "the second frame reuses the first frame's wrap");
+                }
+                first = Some(lines);
+                let collapsed = wrapped_lines(ui, &long, &theme::regular(13.0), 120.0, true);
+                assert_eq!(collapsed.len(), 1);
+                assert!(collapsed[0].text.starts_with(ELLIPSIS), "{:?}", collapsed[0].text);
+            })
+            .drop_without_applying_deltas();
+        }
+        assert_eq!(cache_len(&ctx), 2, "one entry per text and layout");
+        ctx.run_ui(egui::RawInput::default(), |ui| {
+            for i in 0..WRAP_CACHE_MAX + 50 {
+                wrapped_lines(ui, &format!("{persian} {i}"), &theme::regular(13.0), 120.0, false);
+            }
+        })
+        .drop_without_applying_deltas();
+        assert!(cache_len(&ctx) <= WRAP_CACHE_MAX, "bounded: {}", cache_len(&ctx));
+    }
+
+    #[test]
+    fn rtl_comment_wraps_against_the_right_edge() {
+        let persian = "این یک نظر طولانی به زبان فارسی است که باید در چند خط شکسته شود";
+        let lines = wrapped_shapes(persian, false);
+        assert!(lines.len() > 1, "{lines:?}");
+        let right = lines.iter().map(|(pos, rect, _)| pos.x + rect.width()).fold(0.0, f32::max);
+        for (pos, rect, text) in &lines {
+            assert!(pos.x >= -0.5 && (pos.x + rect.width() - right).abs() < 0.5, "{text:?} at {pos:?} must be right-aligned");
+        }
+        assert!(right <= 120.5, "lines stay inside the column: {right}");
+        // The first words read on the first line, at the top.
+        let top = lines.iter().min_by(|a, b| a.0.y.total_cmp(&b.0.y)).unwrap();
+        assert!(top.2.contains("این"), "{top:?}");
+        // Collapsed: one line, its ellipsis on the left where right-to-left reading ends.
+        let collapsed = wrapped_shapes(persian, true);
+        assert_eq!(collapsed.len(), 1);
+        assert!(collapsed[0].2.starts_with('\u{2026}'), "{collapsed:?}");
+        // Text without right-to-left script is a plain label, as before.
+        let latin = wrapped_shapes("A short note", false);
+        assert_eq!(latin.len(), 1);
+        assert_eq!(latin[0].2, "A short note");
+        assert!(latin[0].0.x.abs() < 0.5);
     }
 
     #[test]

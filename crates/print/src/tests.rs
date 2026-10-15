@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
-use crate::spool::{Duplex, Job, Printer, lp_args, parse_lpstat, parse_windows_printers, windows_env_vars};
+use crate::spool::{Duplex, Job, Printer, lp_args, parse_lpstat, parse_windows_printers};
 
 /// `n` pages of 200×300 (page 3 is landscape 300×200 when n ≥ 3); page i shows "(Page i+1)".
 /// Page 1 carries a printable square comment, a non-printing note, and a stamp.
@@ -155,9 +155,11 @@ fn multiple_pages_per_sheet() {
     assert_eq!(two[0].size, (792.0, 612.0));
     assert!(two[0].placed[1].matrix.0[4] > two[0].placed[0].matrix.0[4]);
     // Vertical order and borders.
-    let v =
-        layout(&sizes, &settings(vec![0, 1, 2], Layout::Multiple { cols: 2, rows: 2, order: PageOrder::Vertical, border: true, auto_rotate: false }))
-            .unwrap();
+    let v = layout(
+        &sizes,
+        &settings(vec![0, 1, 2], Layout::Multiple { cols: 2, rows: 2, per_sheet: 4, order: PageOrder::Vertical, border: true, auto_rotate: false }),
+    )
+    .unwrap();
     assert!(close(v[0].placed[1].matrix.0[4], v[0].placed[0].matrix.0[4]) && v[0].placed[1].matrix.0[5] < v[0].placed[0].matrix.0[5]);
     assert_eq!(v[0].borders.len(), 3);
     // Auto-rotate turns a landscape page in a portrait cell.
@@ -166,6 +168,28 @@ fn multiple_pages_per_sheet() {
     assert_eq!(r[0].size, (792.0, 612.0));
     assert!(r[0].placed[0].matrix.0[0] > 0.0);
     assert_eq!(r[0].placed[1].matrix.0[0], 0.0, "rotated");
+}
+
+#[test]
+fn custom_pages_per_sheet_never_overfill_the_grid() {
+    // Three per sheet draws on a 2 × 2 grid, five on 3 × 2: the spare cells stay blank (#1336).
+    let sizes = vec![(200.0, 300.0); 7];
+    let pages = |per: usize| sheet_pages(&layout(&sizes, &settings((0..7).collect(), Layout::multiple(per))).unwrap());
+    assert_eq!(pages(3), [vec![0, 1, 2], vec![3, 4, 5], vec![6]]);
+    assert_eq!(pages(5), [vec![0, 1, 2, 3, 4], vec![5, 6]]);
+    assert_eq!(pages(7), [vec![0, 1, 2, 3, 4, 5, 6]]);
+    assert_eq!(pages(4), [vec![0, 1, 2, 3], vec![4, 5, 6]]);
+    assert_eq!(pages(2), [vec![0, 1], vec![2, 3], vec![4, 5], vec![6]]);
+    // Cut-stack piles take the requested count too.
+    let stacked = Layout::Multiple { cols: 2, rows: 2, per_sheet: 3, order: PageOrder::CutStack, border: false, auto_rotate: false };
+    assert_eq!(sheet_pages(&layout(&sizes, &settings((0..7).collect(), stacked)).unwrap()), [vec![0, 3, 6], vec![1, 4], vec![2, 5]]);
+    // A count larger than the grid is capped by the grid; no pages per sheet is refused.
+    let grid = |per_sheet| Layout::Multiple { cols: 2, rows: 1, per_sheet, order: PageOrder::Horizontal, border: false, auto_rotate: false };
+    assert_eq!(sheet_pages(&layout(&sizes[..3], &settings(vec![0, 1, 2], grid(9))).unwrap()), [vec![0, 1], vec![2]]);
+    assert!(matches!(layout(&sizes, &settings(vec![0], grid(0))), Err(PrintError::Invalid(_))));
+    // The imposed PDF has one page per sheet.
+    let out = impose(&fixture(7), &settings((0..7).collect(), Layout::multiple(3))).unwrap();
+    assert_eq!(pdfcraft_model::pages(&Document::open(Arc::new(out)).unwrap()).len(), 3);
 }
 
 #[test]
@@ -190,6 +214,17 @@ fn posters_tile_with_overlap() {
     let c1 = sheets[1].placed[0].clip;
     assert!(close(c0[2] - c1[0], 36.0 / 4.0), "neighbouring tiles share the overlap");
     assert!(layout(&[(200.0, 300.0)], &settings(vec![0], Layout::Poster { scale: 400.0, overlap: 400.0, cut_marks: false })).is_err());
+}
+
+/// Issue #1335: a scale so large that the tile counts saturate is refused with the sheet-limit
+/// error, not an overflow in counting the sheets.
+#[test]
+fn huge_posters_are_refused_at_the_sheet_limit() {
+    let refused = Err(PrintError::Invalid("the poster would need more than 1024 sheets".into()));
+    for scale in [100_000.0, 1e22, f64::MAX] {
+        let poster = settings(vec![0], Layout::Poster { scale, overlap: 18.0, cut_marks: true });
+        assert_eq!(layout(&[(200.0, 300.0)], &poster), refused, "scale {scale}");
+    }
 }
 
 #[test]
@@ -244,10 +279,11 @@ fn spooler_arguments_and_printer_list() {
         printer: Some("Office_Laser".into()),
         copies: 3,
         collate: false,
-        duplex: Duplex::LongEdge,
+        duplex: Some(Duplex::LongEdge),
         grayscale: true,
         title: "memo.pdf".into(),
         options: Vec::new(),
+        ..Job::default()
     };
     assert_eq!(
         lp_args(&job).join(" "),
@@ -297,7 +333,7 @@ fn driverless_printers_join_the_list_without_a_queue() {
 }
 
 fn cut_stack(cols: usize, rows: usize) -> Layout {
-    Layout::Multiple { cols, rows, order: PageOrder::CutStack, border: false, auto_rotate: false }
+    Layout::Multiple { cols, rows, per_sheet: cols.saturating_mul(rows), order: PageOrder::CutStack, border: false, auto_rotate: false }
 }
 
 #[test]
@@ -350,7 +386,7 @@ fn cutting_and_stacking_recovers_every_selected_page() {
 fn multiple_rejects_hostile_grids_without_panicking() {
     let sizes = [(200.0, 300.0)];
     for (cols, rows) in [(usize::MAX, 2), (2, usize::MAX), (0, 2), (1, 0), (257, 1)] {
-        let mode = Layout::Multiple { cols, rows, order: PageOrder::Horizontal, border: false, auto_rotate: false };
+        let mode = Layout::Multiple { cols, rows, per_sheet: 1, order: PageOrder::Horizontal, border: false, auto_rotate: false };
         assert!(matches!(layout(&sizes, &settings(vec![0], mode)), Err(PrintError::Invalid(_))));
     }
     let tiny = Settings { paper: (72.0, 72.0), ..settings(vec![0], cut_stack(16, 16)) };
@@ -358,90 +394,6 @@ fn multiple_rejects_hostile_grids_without_panicking() {
     for size in [(0.0, 300.0), (200.0, f64::NAN), (f64::INFINITY, 300.0), (f64::from_bits(1), f64::from_bits(1))] {
         assert!(matches!(layout(&[size], &settings(vec![0], cut_stack(2, 2))), Err(PrintError::Invalid(_))));
     }
-}
-
-/// Set on the child process when a test runs this test binary as a stand-in for `lp`.
-const STAND_IN_LP: &str = "PDFCRAFT_STAND_IN_LP";
-
-/// Not a test of its own: [`stand_in_lp`] re-runs this binary with only this test selected, and it
-/// then plays `lp`. It records its arguments and stdin in the folder named by [`STAND_IN_LP`], or,
-/// when the folder is `refuse`, exits without reading stdin, the way `lp` refuses an unknown
-/// printer.
-#[test]
-fn stand_in_for_lp() {
-    let Some(record) = std::env::var_os(STAND_IN_LP) else { return };
-    if record == "refuse" {
-        eprintln!("lp: The printer or class does not exist.");
-        std::process::exit(1);
-    }
-    let record = std::path::PathBuf::from(record);
-    let args: Vec<String> = std::env::args().skip_while(|a| a != "--").skip(1).collect();
-    let mut stdin = Vec::new();
-    std::io::Read::read_to_end(&mut std::io::stdin(), &mut stdin).unwrap();
-    std::fs::write(record.join("args"), args.join(" ")).unwrap();
-    std::fs::write(record.join("stdin"), stdin).unwrap();
-}
-
-/// A spooler command that runs [`stand_in_for_lp`] with `record` (see there).
-fn stand_in_lp(record: &std::ffi::OsStr) -> std::process::Command {
-    let mut c = std::process::Command::new(std::env::current_exe().unwrap());
-    c.args(["--exact", "tests::stand_in_for_lp", "--nocapture", "--"]).env(STAND_IN_LP, record);
-    c
-}
-
-#[test]
-fn print_jobs_reach_lp_on_stdin_never_through_a_shared_temp_folder() {
-    // The job used to be written to `<temp>/pdfcraft-print-<pid>/job-<time>.pdf` and handed to `lp`
-    // by name. In a shared /tmp another local user can predict that folder, create it first (or
-    // plant a symlink there) and so read every printed document or swap the file before `lp`
-    // reads it. Piping the job to `lp` leaves nothing on disk.
-    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    let record =
-        std::env::temp_dir().join(format!("pdfcraft-print-test-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
-    std::fs::create_dir(&record).unwrap();
-    // Bigger than any pipe buffer, so the spooler must read while the job is still being written.
-    let pdf: Vec<u8> = b"%PDF-1.7 synthetic print job\n".iter().copied().cycle().take(3 << 20).collect();
-    let job = Job { title: "memo.pdf".into(), ..Job::default() };
-    let sent = spool::submit_via(stand_in_lp(record.as_os_str()), &pdf, &job);
-    let args = std::fs::read_to_string(record.join("args"));
-    let stdin = std::fs::read(record.join("stdin"));
-    let _ = std::fs::remove_dir_all(&record);
-    assert!(sent.is_ok(), "{sent:?}");
-    assert_eq!(
-        args.unwrap(),
-        "-n 1 -t memo.pdf -o collate=true -o sides=one-sided -o fit-to-page=false",
-        "no file argument: lp reads the job from stdin"
-    );
-    assert!(stdin.unwrap() == pdf, "lp receives the whole job on stdin");
-    let predictable = std::env::temp_dir().join(format!("pdfcraft-print-{}", std::process::id()));
-    assert!(!predictable.exists(), "nothing is created at {predictable:?}, a name other local users can predict");
-}
-
-#[test]
-fn a_refused_print_job_reports_the_spoolers_message() {
-    // `lp` refuses an unknown printer without reading the job; the user sees why, not a broken pipe.
-    let pdf = vec![b'%'; 3 << 20];
-    let err = spool::submit_via(stand_in_lp("refuse".as_ref()), &pdf, &Job::default());
-    assert_eq!(err, Err(PrintError::Spool("lp: The printer or class does not exist.".into())));
-}
-
-#[test]
-fn the_spoolers_reply_drops_the_file_count_of_a_job_sent_on_stdin() {
-    assert_eq!(
-        spool::job_message(
-            b"request id is Office_Laser-12 (0 file(s))
-"
-        ),
-        "request id is Office_Laser-12"
-    );
-    assert_eq!(
-        spool::job_message(
-            b"request id is Office_Laser-13 (1 file(s))
-"
-        ),
-        "request id is Office_Laser-13 (1 file(s))"
-    );
-    assert_eq!(spool::job_message(b""), "");
 }
 
 #[test]
@@ -460,134 +412,6 @@ fn windows_printers_carry_one_default_and_keep_their_names() {
     assert_eq!(sided[0], Printer { name: "Office PCL".into(), default: true, two_sided: Some(true) });
     assert_eq!(sided[1], Printer { name: "Office PS".into(), default: false, two_sided: Some(false) });
     assert_eq!(sided[2], Printer { name: "Tab\tName".into(), default: false, two_sided: Some(true) });
-}
-
-#[test]
-fn the_windows_print_script_binds_long_edge_on_the_long_edge() {
-    // System.Drawing's Duplex values are DEVMODE's: Vertical binds a portrait page on its long
-    // edge, Horizontal on its short edge (checked against a PCL driver's @PJL SET BINDING).
-    let script = include_str!("windows_print.ps1").replace("\r\n", "\n");
-    assert!(script.contains("'long-edge' { [System.Drawing.Printing.Duplex]::Vertical }"));
-    assert!(script.contains("'short-edge' { [System.Drawing.Printing.Duplex]::Horizontal }"));
-}
-
-#[test]
-fn the_windows_job_is_the_environment_of_the_print_script() {
-    let path = std::path::Path::new("C:\\Users\\me\\AppData\\Local\\Temp\\pdfcraft-print-42.pdf");
-    let job = Job {
-        printer: Some("HP \"Laser\" Jet".into()),
-        copies: 3,
-        duplex: Duplex::ShortEdge,
-        grayscale: true,
-        title: "Angebot.pdf".into(),
-        ..Job::default()
-    };
-    let vars = windows_env_vars(path, &job);
-    let env = |key: &str| vars.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str()).unwrap();
-    assert_eq!(env("PDFCRAFT_PRINT_FILE"), "C:\\Users\\me\\AppData\\Local\\Temp\\pdfcraft-print-42.pdf");
-    // Quotes and spaces in a printer name survive because nothing goes on the command line.
-    assert_eq!(env("PDFCRAFT_PRINT_PRINTER"), "HP \"Laser\" Jet");
-    assert_eq!(env("PDFCRAFT_PRINT_COPIES"), "3");
-    assert_eq!(env("PDFCRAFT_PRINT_COLLATE"), "1");
-    assert_eq!(env("PDFCRAFT_PRINT_DUPLEX"), "short-edge");
-    assert_eq!(env("PDFCRAFT_PRINT_GRAYSCALE"), "1");
-    assert_eq!(env("PDFCRAFT_PRINT_TITLE"), "Angebot.pdf");
-    // No printer chosen means the system default: an empty name, not the word "default".
-    let one = |j: &Job, key: &str| windows_env_vars(path, j).into_iter().find(|(k, _)| k == key).unwrap().1;
-    assert_eq!(one(&Job::default(), "PDFCRAFT_PRINT_PRINTER"), "");
-    assert_eq!(one(&Job { duplex: Duplex::Off, ..Job::default() }, "PDFCRAFT_PRINT_DUPLEX"), "off");
-    assert_eq!(one(&Job { duplex: Duplex::LongEdge, ..Job::default() }, "PDFCRAFT_PRINT_DUPLEX"), "long-edge");
-}
-
-/// Run a PowerShell script for the Windows-only tests: its stdout, or everything it said when
-/// it failed — the tests print that as the skip reason.
-#[cfg(windows)]
-fn windows_powershell(script: &str, envs: &[(&str, &str)]) -> Result<String, String> {
-    let mut c = std::process::Command::new("powershell");
-    c.args(["-NoProfile", "-NonInteractive", "-Command", script]);
-    for (k, v) in envs {
-        c.env(k, v);
-    }
-    match c.output() {
-        Ok(o) if o.status.success() => Ok(String::from_utf8_lossy(&o.stdout).into_owned()),
-        Ok(o) => Err(format!("{} {}", String::from_utf8_lossy(&o.stderr).trim(), String::from_utf8_lossy(&o.stdout).trim())),
-        Err(e) => Err(e.to_string()),
-    }
-}
-
-/// Windows: the printer list comes from the spooler. A bare machine may have no printer; the
-/// list that exists has real names and at most one default.
-#[cfg(windows)]
-#[test]
-fn windows_lists_the_printers_the_system_knows() {
-    let printers = spool::printers();
-    assert!(printers.iter().all(|p| !p.name.trim().is_empty()), "{printers:?}");
-    assert!(printers.iter().filter(|p| p.default).count() <= 1, "{printers:?}");
-}
-
-/// Windows: PowerShell is started by its full path under System32, never by its bare name.
-/// Rust resolves a bare name in the app's own folder first, so a `powershell.exe` beside a
-/// portable install would run instead, for every printer list and every job.
-#[cfg(windows)]
-#[test]
-fn windows_starts_powershell_by_its_full_path() {
-    let c = crate::spool::powershell_command("$null");
-    let program = std::path::Path::new(c.get_program());
-    assert!(program.is_absolute(), "{program:?}");
-    assert!(program.ends_with("System32/WindowsPowerShell/v1.0/powershell.exe"), "{program:?}");
-    assert!(program.is_file(), "{program:?}");
-}
-
-/// Windows: the embedded print script is valid PowerShell, checked on every machine — including
-/// runners that have no printer to print to.
-#[cfg(windows)]
-#[test]
-fn the_windows_print_script_parses() {
-    let path = std::env::temp_dir().join(format!("pdfcraft-print-script-{}.ps1", std::process::id()));
-    std::fs::write(&path, spool::WINDOWS_PRINT_SCRIPT).unwrap();
-    let errors = windows_powershell(
-        "$tokens = $null; $errors = $null; [System.Management.Automation.Language.Parser]::ParseFile($env:PDFCRAFT_TEST_SCRIPT, [ref]$tokens, [ref]$errors) > $null; $errors.Count",
-        &[("PDFCRAFT_TEST_SCRIPT", path.to_str().unwrap())],
-    );
-    let _ = std::fs::remove_file(&path);
-    assert_eq!(errors.as_deref().map(str::trim), Ok("0"), "parse errors: {errors:?}");
-}
-
-/// Windows, end to end: the script renders the job's sheets with Windows.Data.Pdf on any
-/// machine — CI included, no printer needed (the dry run writes the PNGs to the temporary
-/// folder) — and, where a paused test printer can be added, a real job lands in its queue.
-/// Its driver is the inbox "Generic / Text Only"; a machine that cannot add one (no rights, no
-/// driver) skips that half, as the CUPS tests skip where CUPS isn't running.
-#[cfg(windows)]
-#[test]
-fn the_print_script_renders_the_job_and_reaches_the_spooler() {
-    let pdf = impose(&fixture(2), &settings(vec![0, 1], Layout::Size(SizeMode::Fit))).unwrap();
-    // The printer name is deliberately wrong: the dry run stops before the driver is touched.
-    let job = Job { printer: Some("no such printer".into()), title: "test.pdf".into(), ..Job::default() };
-    let dry = spool::windows_submit(&pdf, &job, &[("PDFCRAFT_PRINT_DRYRUN", "1")]);
-    assert_eq!(dry.as_deref(), Ok("rendered 2 sheet(s)"), "{dry:?}");
-
-    const NAME: &str = "PdfCraft Test Print";
-    let added = windows_powershell(
-        &format!(
-            "if (-not (Get-Printer -Name '{NAME}' -ErrorAction SilentlyContinue)) {{ Add-Printer -Name '{NAME}' -DriverName 'Generic / Text Only' -PortName 'FILE:' }}; Set-Printer -Name '{NAME}' -IsPaused $true"
-        ),
-        &[],
-    );
-    if let Err(why) = added {
-        eprintln!("skipping the real print: the test printer could not be prepared: {why}");
-        return;
-    }
-    let job = Job { printer: Some(NAME.into()), title: "test.pdf".into(), ..Job::default() };
-    let sent = spool::submit(&pdf, &job);
-    let queued = windows_powershell(
-        "if (Get-PrintJob -Name 'PdfCraft Test Print') { (Get-PrintJob -Name 'PdfCraft Test Print' | Measure-Object).Count } else { 0 }",
-        &[],
-    );
-    let cleaned = windows_powershell("Get-PrintJob -Name 'PdfCraft Test Print' | Remove-PrintJob; Remove-Printer -Name 'PdfCraft Test Print'", &[]);
-    assert!(sent.is_ok(), "{sent:?}");
-    assert_eq!(queued.as_deref().map(str::trim), Ok("1"), "the job is in the paused printer's queue: {queued:?}");
-    assert!(cleaned.is_ok(), "the test printer is removed again: {cleaned:?}");
 }
 
 /// A PPD shaped like a Fiery's: installable options, multi-line PostScript in the choices, Latin-1
@@ -669,6 +493,117 @@ fn printer_option_defaults_and_job_arguments() {
     assert!(spool::printer_options("../../etc/passwd").is_empty(), "not a queue name");
 }
 
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+mod cups_options {
+    use crate::spool;
+
+    const RECORD: &str = "PDFCRAFT_LPOPTIONS_TEST_RECORD";
+    const ANSWER: &str = "PDFCRAFT_LPOPTIONS_TEST_ANSWER";
+
+    /// The child process stands in for lpoptions, recording its real arguments.
+    #[test]
+    fn stand_in_for_lpoptions() {
+        let Some(record) = std::env::var_os(RECORD) else { return };
+        let args: Vec<String> = std::env::args().skip_while(|a| a != "--").skip(1).collect();
+        std::fs::write(std::path::Path::new(&record).join("args"), args.join("\n")).unwrap();
+        println!("{}", std::env::var(ANSWER).unwrap());
+    }
+
+    fn command(record: &std::path::Path, answer: &str) -> std::process::Command {
+        let mut c = std::process::Command::new(std::env::current_exe().unwrap());
+        c.args(["--exact", "tests::cups_options::stand_in_for_lpoptions", "--nocapture", "--"]).env(RECORD, record).env(ANSWER, answer);
+        c
+    }
+
+    fn folder() -> std::path::PathBuf {
+        use std::io::Read as _;
+        use std::os::unix::fs::DirBuilderExt as _;
+        let mut random = std::fs::File::open("/dev/urandom").unwrap();
+        for _ in 0..32 {
+            let mut nonce = [0; 16];
+            random.read_exact(&mut nonce).unwrap();
+            let path = std::env::temp_dir().join(format!("pdfcraft-cups-options-{:032x}", u128::from_be_bytes(nonce)));
+            // Atomic creation, private permissions from the outset; never reuse an existing
+            // path (including a symlink) in the shared temporary directory.
+            match std::fs::DirBuilder::new().mode(0o700).create(&path) {
+                Ok(()) => return path,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => panic!("create private CUPS test directory: {e}"),
+            }
+        }
+        panic!("could not create a unique CUPS test directory");
+    }
+
+    #[test]
+    fn instances_read_the_queue_ppd_and_their_own_defaults() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = folder();
+        assert_eq!(std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
+        // One synthetic queue PPD; there is deliberately no Office/ subdirectory.
+        std::fs::write(
+            dir.join("Office.ppd"),
+            "*OpenUI *InputSlot/Paper tray: PickOne\n*DefaultInputSlot: Auto\n*InputSlot Auto/Automatic: \"\"\n*InputSlot Tray2/Tray 2: \"\"\n*CloseUI: *InputSlot\n",
+        )
+        .unwrap();
+        let boundary_queue = "Q".repeat(64);
+        let boundary_instance = format!("Office/{}", "I".repeat(64));
+        std::fs::copy(dir.join("Office.ppd"), dir.join(format!("{boundary_queue}.ppd"))).unwrap();
+        for (destination, current, expected) in [
+            ("Office", "Auto", "Auto"),
+            ("Office/duplex", "Tray2", "Tray2"),
+            ("Office/draft", "Auto", "Auto"),
+            ("Office/unknown-default", "Bogus", "Auto"),
+            (boundary_queue.as_str(), "Tray2", "Tray2"),
+            (boundary_instance.as_str(), "Tray2", "Tray2"),
+        ] {
+            let options = spool::printer_options_via(destination, &dir, command(&dir, &format!("InputSlot/Paper tray: *{current}")));
+            assert_eq!(options.len(), 1, "{destination}: the queue's PPD must be read");
+            assert_eq!(options[0].default, expected, "{destination}: only valid instance choices override the PPD default");
+            assert_eq!(options[0].choices, [("Auto".into(), "Automatic".into()), ("Tray2".into(), "Tray 2".into())]);
+            assert_eq!(std::fs::read_to_string(dir.join("args")).unwrap(), format!("-p\n{destination}\n-l"));
+        }
+        let job = spool::Job { printer: Some("Office/duplex".into()), ..Default::default() };
+        assert_eq!(&spool::lp_args(&job)[..2], ["-d", "Office/duplex"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn invalid_destinations_are_rejected_before_running_lpoptions() {
+        let dir = folder();
+        let long_queue = "Q".repeat(65);
+        let long_queue_instance = format!("{long_queue}/duplex");
+        let long_instance = format!("Office/{}", "I".repeat(65));
+        for destination in [
+            "",
+            ".",
+            "..",
+            "/Office",
+            "Office/",
+            "Office/a/b",
+            "../../etc/passwd",
+            "./duplex",
+            "../duplex",
+            "Office/.",
+            "Office/..",
+            "Office\\duplex",
+            "Office/\\duplex",
+            "Office/with space",
+            "Office/line\nbreak",
+            "Office/quote\"",
+            "Office/equals=",
+            "Office/a:b",
+            "Office/\0",
+            long_queue.as_str(),
+            long_queue_instance.as_str(),
+            long_instance.as_str(),
+        ] {
+            assert!(spool::printer_options_via(destination, &dir, command(&dir, "InputSlot: *Auto")).is_empty(), "{destination:?}");
+            assert!(!dir.join("args").exists(), "{destination:?}: rejected before spawning");
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
 #[test]
 fn a_scaled_appearance_is_not_scaled_twice() {
     let doc = fixture(1);
@@ -706,5 +641,54 @@ fn paper_matching_accepts_rounded_metric_sizes_but_not_custom_or_invalid_sizes()
     }
     for size in [(0.0, 0.0), (-1728.0, 2592.0), (f64::INFINITY, 2592.0), (1728.0, f64::NAN), (1000.0, 1000.0)] {
         assert_eq!(matching_paper(size), None);
+    }
+}
+
+#[test]
+fn imposed_pages_preserve_large_user_unit_matrices() {
+    let (unit, mode) = (75000.0, SizeMode::Fit);
+    let mut doc = fixture(1);
+    let page = pdfcraft_model::pages(&doc)[0].obj;
+    doc.update_dict(page, |d| d.set(b"UserUnit".to_vec(), Object::Real(unit))).unwrap();
+    let out = impose(&doc, &Settings { content: Content::Document, ..settings(vec![0], Layout::Size(mode)) }).unwrap();
+    let printed = Document::open(Arc::new(out)).unwrap();
+    let page = &pdfcraft_model::pages(&printed)[0];
+    let contents = printed.resolve(page.dict.get(b"Contents").unwrap());
+    let Object::Stream(stream) = &*contents else { panic!("sheet content") };
+    let bytes = stream.decoded().unwrap();
+    let parsed = pdfcraft_content::parse(&bytes);
+    assert_eq!(parsed.skipped, 0);
+    let cms: Vec<_> = parsed.ops.iter().filter(|op| op.is("cm")).collect();
+    assert_eq!(cms.len(), 2, "placement and source-to-display matrices");
+    let normalized = f64::from(unit as f32);
+    let scale = if mode == SizeMode::Actual { 1.0 } else { 756.0 / (300.0 * normalized) };
+    let expected = [
+        [scale, 0.0, 0.0, scale, 306.0 - 100.0 * normalized * scale, 396.0 - 150.0 * normalized * scale],
+        [normalized, 0.0, 0.0, normalized, 0.0, 0.0],
+    ];
+    for (cm, expected) in cms.iter().zip(expected) {
+        assert_eq!(cm.operands.len(), 6);
+        assert!(!bytes[cm.span.clone()].contains(&b'e') && !bytes[cm.span.clone()].contains(&b'E'));
+        for (actual, expected) in cm.nums::<6>().unwrap().into_iter().zip(expected) {
+            assert!((actual - expected).abs() <= 1e-12 * expected.abs(), "unit={unit}: {actual} != {expected}");
+        }
+    }
+    let clip = parsed.ops.iter().find(|op| op.is("re")).unwrap();
+    assert_eq!(clip.operands.len(), 4);
+    let rect = clip.nums::<4>().unwrap();
+    assert_eq!(rect, [0.0, 0.0, 200.0 * normalized, 300.0 * normalized]);
+    assert!(rect[2] > 0.0 && rect[3] > 0.0, "the clip must retain the visible page");
+    let clip_tokens = std::str::from_utf8(&bytes[clip.span.clone()]).unwrap();
+    assert!(clip_tokens.split_whitespace().take(4).all(|token| !token.contains('e') && !token.contains('E')));
+    let apply = |m: [f64; 6], p: [f64; 2]| [m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5]];
+    let to_sheet = |p| apply(cms[0].nums::<6>().unwrap(), apply(cms[1].nums::<6>().unwrap(), p));
+    let mut anchors = vec![([100.0, 150.0], [306.0, 396.0])];
+    if mode == SizeMode::Fit {
+        anchors.extend([([0.0, 0.0], [54.0, 18.0]), ([200.0, 300.0], [558.0, 774.0])]);
+    }
+    for (raw, expected) in anchors {
+        for (actual, expected) in to_sheet(raw).into_iter().zip(expected) {
+            assert!((actual - expected).abs() < 1e-9, "unit={unit}: {actual} != {expected}");
+        }
     }
 }

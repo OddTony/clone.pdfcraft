@@ -5,6 +5,7 @@
 //! remains the compatibility fallback. When neither can inspect a renderable file, panels
 //! are empty and `warnings` says why.
 
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
@@ -28,6 +29,10 @@ const LOAD_STREAM_LIMIT: usize = 256 << 20;
 
 /// At most this many `/State` entries of a set-layer-visibility action are read.
 const MAX_LAYER_STATE: usize = 1024;
+
+/// File specifications retained from a remote-Go-To action are deliberately small.
+const MAX_REMOTE_FILE_SPEC_BYTES: usize = 4096;
+const MAX_REMOTE_DESTINATION_NAME_BYTES: usize = 1024;
 
 /// At most this many layers are read from all of `/RBGroups` together.
 const MAX_LAYER_GROUP_ENTRIES: usize = 4096;
@@ -172,6 +177,8 @@ impl PageInfo {
 #[derive(Clone, Debug)]
 pub struct Link {
     pub page: usize,
+    /// Zero-based position in the page's raw `/Annots` array.
+    pub index: usize,
     pub rect: [f32; 4],
     pub target: LinkTarget,
 }
@@ -188,7 +195,20 @@ pub enum LinkTarget {
         changes: Vec<(LayerOp, (u32, u16))>,
         preserve_rb: bool,
     },
+    /// A local-file remote Go-To action. The caller resolves `file` relative to the source path.
+    RemoteGoTo {
+        file: String,
+        destination: RemoteDestination,
+        new_window: Option<bool>,
+    },
     Other(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RemoteDestination {
+    Default,
+    Page { page: usize, view: DestView },
+    Named(String),
 }
 
 /// What a set-layer-visibility action does to a layer.
@@ -346,6 +366,13 @@ pub struct FontInfo {
     pub embedded: bool,
     pub subset: bool,
     pub encoding: Option<String>,
+    /// The face standing in for a program the document does not embed. `None` when the font is
+    /// embedded (nothing stands in) or when no face was available at all -- `substitution` then
+    /// says which of the two it is.
+    pub substitute: Option<String>,
+    /// Why a face was substituted, as a sentence for whoever has to act on it. `None` only when
+    /// the document's own glyphs are being shown.
+    pub substitution: Option<String>,
 }
 
 /// Check that `bytes` still open as the same document: the parser reads them and the page
@@ -473,13 +500,17 @@ struct Inspector<'a> {
     /// Named destinations (`/Names /Dests` tree), keyed by raw string bytes, built once.
     /// Looking each name up by walking the tree was O(links × names): minutes on manuals.
     named: HashMap<Vec<u8>, &'a Object>,
+    /// The page of each annotation (the first page that lists it), built when a field's widget
+    /// has no `/P`. Searching every page's `/Annots` for each such field was O(fields ×
+    /// annotations): a second on a form of 8,000 fields.
+    annotation_pages: OnceCell<HashMap<ObjectId, usize>>,
 }
 
 impl<'a> Inspector<'a> {
     fn new(doc: &'a dyn Structure) -> Self {
         let page_ids = doc.page_ids();
         let page_index = page_ids.iter().copied().enumerate().map(|(index, id)| (id, index)).collect();
-        let mut me = Self { doc, page_ids, page_index, named: HashMap::new() };
+        let mut me = Self { doc, page_ids, page_index, named: HashMap::new(), annotation_pages: OnceCell::new() };
         let mut named = HashMap::new();
         if let Some(tree) =
             doc.catalog().ok().and_then(|c| c.get(b"Names").ok()).and_then(|o| me.dict(o)).and_then(|n| n.get(b"Dests").ok()).and_then(|o| me.dict(o))
@@ -907,7 +938,7 @@ impl<'a> Inspector<'a> {
                     info.attachments.push(self.attachment(name, fs, AttachmentSource::Annotation { page, index }));
                 }
                 if subtype == "Link" {
-                    if let Some(link) = self.link(page, d) {
+                    if let Some(link) = self.link(page, index, d) {
                         if matches!(&link.target, LinkTarget::Other(s) if s == "JavaScript") {
                             info.has_javascript = true;
                         }
@@ -975,7 +1006,7 @@ impl<'a> Inspector<'a> {
         info.annotations.sort_by(|a, b| a.page.cmp(&b.page).then(b.rect[3].total_cmp(&a.rect[3])));
     }
 
-    fn link(&self, page: usize, d: &Dictionary) -> Option<Link> {
+    fn link(&self, page: usize, index: usize, d: &Dictionary) -> Option<Link> {
         let rect = rect4(self.resolve(d.get(b"Rect").ok()?));
         let target = if let Ok(dest) = d.get(b"Dest") {
             let (page, view) = self.dest(dest, 0)?;
@@ -991,11 +1022,72 @@ impl<'a> Inspector<'a> {
                     LinkTarget::Uri(a.get(b"URI").ok().and_then(|u| self.resolve(u).as_str().ok()).map(|b| String::from_utf8_lossy(b).into_owned())?)
                 }
                 Some("SetOCGState") => self.layer_state(a),
+                Some("GoToR") => self.remote_go_to(a).unwrap_or_else(|| LinkTarget::Other("GoToR".into())),
                 Some(other) => LinkTarget::Other(other.to_string()),
                 None => return None,
             }
         };
-        Some(Link { page, rect, target })
+        Some(Link { page, index, rect, target })
+    }
+
+    fn remote_go_to(&self, action: &Dictionary) -> Option<LinkTarget> {
+        if self.name(action, b"FS").as_deref() == Some("URL") {
+            return None;
+        }
+        let file = match self.resolve(action.get(b"F").ok()?) {
+            Object::String(bytes, _) => limited_pdf_string(bytes, MAX_REMOTE_FILE_SPEC_BYTES)?,
+            Object::Dictionary(spec) => {
+                if self.name(spec, b"FS").as_deref() == Some("URL") {
+                    return None;
+                }
+                spec.get(b"UF")
+                    .ok()
+                    .and_then(|o| self.pdf_text(o, MAX_REMOTE_FILE_SPEC_BYTES))
+                    .or_else(|| spec.get(b"F").ok().and_then(|o| self.pdf_text(o, MAX_REMOTE_FILE_SPEC_BYTES)))?
+            }
+            _ => return None,
+        };
+        if file.is_empty() {
+            return None;
+        }
+        let destination = match action.get(b"D") {
+            Err(_) => RemoteDestination::Default,
+            Ok(o) => match self.resolve(o) {
+                Object::Array(items) => {
+                    let page = items.first().and_then(|o| self.resolve(o).as_i64().ok()).and_then(|n| usize::try_from(n).ok())?;
+                    let kind = items.get(1).map(|o| self.resolve(o)).and_then(|o| o.as_name().ok());
+                    let operands: [Option<f32>; 4] = std::array::from_fn(|i| items.get(i + 2).and_then(|o| self.resolve(o).as_float().ok()));
+                    RemoteDestination::Page { page, view: DestView::from_operands(kind, &operands) }
+                }
+                Object::Name(name) if name.len() <= MAX_REMOTE_DESTINATION_NAME_BYTES => {
+                    let name = String::from_utf8_lossy(name).into_owned();
+                    if name.is_empty() || name.len() > MAX_REMOTE_DESTINATION_NAME_BYTES {
+                        return None;
+                    }
+                    RemoteDestination::Named(name)
+                }
+                Object::String(bytes, _) if bytes.len() <= MAX_REMOTE_DESTINATION_NAME_BYTES => {
+                    let name = text_string(bytes);
+                    if name.is_empty() || name.len() > MAX_REMOTE_DESTINATION_NAME_BYTES {
+                        return None;
+                    }
+                    RemoteDestination::Named(name)
+                }
+                _ => return None,
+            },
+        };
+        let new_window = match action.get(b"NewWindow").map(|o| self.resolve(o)) {
+            Ok(Object::Boolean(value)) => Some(*value),
+            _ => None,
+        };
+        Some(LinkTarget::RemoteGoTo { file, destination, new_window })
+    }
+
+    fn pdf_text(&self, o: &Object, max_bytes: usize) -> Option<String> {
+        match self.resolve(o) {
+            Object::String(bytes, _) => limited_pdf_string(bytes, max_bytes),
+            _ => None,
+        }
     }
 
     /// A set-OCG-state action: `/State` is `ON`, `OFF` or `Toggle`, each followed by the groups
@@ -1097,17 +1189,25 @@ impl<'a> Inspector<'a> {
         out.push(Field { name: full, kind, value, page, tooltip: self.text(d, b"TU"), has_actions, rect });
     }
 
+    /// The first page whose `/Annots` lists the field or one of its kids.
     fn find_widget_page(&self, field: &Object, kids: &[Object]) -> Option<usize> {
-        let targets: HashSet<ObjectId> =
-            std::iter::once(field).chain(kids.iter()).filter_map(|o| if let Object::Reference(id) = o { Some(*id) } else { None }).collect();
-        if targets.is_empty() {
-            return None;
+        let pages = self.annotation_pages.get_or_init(|| self.annotation_pages());
+        std::iter::once(field).chain(kids).filter_map(|o| if let Object::Reference(id) = o { pages.get(id).copied() } else { None }).min()
+    }
+
+    /// Each annotation listed in a page's `/Annots`, with the first page that lists it.
+    fn annotation_pages(&self) -> HashMap<ObjectId, usize> {
+        let mut pages = HashMap::new();
+        for (idx, &pid) in self.page_ids.iter().enumerate() {
+            let Some(annots) = self.doc.get_dictionary(pid).ok().and_then(|d| d.get(b"Annots").ok()) else { continue };
+            let Ok(annots) = self.resolve(annots).as_array() else { continue };
+            for a in annots {
+                if let Object::Reference(id) = a {
+                    pages.entry(*id).or_insert(idx);
+                }
+            }
         }
-        self.page_index.iter().find_map(|(&pid, &idx)| {
-            let annots = self.doc.get_dictionary(pid).ok()?.get(b"Annots").ok()?;
-            let arr = self.resolve(annots).as_array().ok()?;
-            arr.iter().any(|a| matches!(a, Object::Reference(id) if targets.contains(id))).then_some(idx)
-        })
+        pages
     }
 
     /// The topmost field above widget `id` (itself without a `/Parent`), or `None` when it or an
@@ -1210,20 +1310,38 @@ impl<'a> Inspector<'a> {
                     _ => None,
                 };
                 // Embedded: FontFile/2/3 in the descriptor (for Type0, in the descendant font).
-                let descriptor_of = |d: &Dictionary| d.get(b"FontDescriptor").ok().and_then(|o| self.dict(o)).cloned();
-                let desc = descriptor_of(f).or_else(|| {
-                    f.get(b"DescendantFonts")
-                        .ok()
-                        .and_then(|o| self.resolve(o).as_array().ok())
-                        .and_then(|a| a.first())
-                        .and_then(|o| self.dict(o))
-                        .and_then(descriptor_of)
-                });
+                let descriptor_of = |d: &'a Dictionary| d.get(b"FontDescriptor").ok().and_then(|o| self.dict(o));
+                let descendant =
+                    f.get(b"DescendantFonts").ok().and_then(|o| self.resolve(o).as_array().ok()).and_then(|a| a.first()).and_then(|o| self.dict(o));
+                let desc = descriptor_of(f).or_else(|| descendant.and_then(descriptor_of));
                 let embedded =
                     kind == "Type3" || desc.is_some_and(|d| d.get(b"FontFile").is_ok() || d.get(b"FontFile2").is_ok() || d.get(b"FontFile3").is_ok());
+                // What the substitution chain needs beyond the name: the descriptor flags, and for
+                // a composite font the script its descendant declares (ISO 32000-2 9.7.3).
+                let flags = desc
+                    .and_then(|d| d.get(b"Flags").ok())
+                    .and_then(|o| self.resolve(o).as_i64().ok())
+                    .and_then(|n| u32::try_from(n).ok())
+                    .unwrap_or(0);
+                let ordering =
+                    descendant.and_then(|d| d.get(b"CIDSystemInfo").ok()).and_then(|o| self.dict(o)).and_then(|c| self.text(c, b"Ordering"));
                 let subset = base.len() > 7 && base.as_bytes()[6] == b'+' && base[..6].bytes().all(|b| b.is_ascii_uppercase());
                 let name = if subset { base[7..].to_string() } else { base };
-                let info = FontInfo { name, kind, embedded, subset, encoding };
+                let chosen = pdfcraft_fonts::fallback::substitute(&pdfcraft_fonts::fallback::Request {
+                    base_font: &name,
+                    embedded,
+                    flags,
+                    ordering: ordering.as_deref(),
+                });
+                let info = FontInfo {
+                    name,
+                    kind,
+                    embedded,
+                    subset,
+                    encoding,
+                    substitute: chosen.face_name(),
+                    substitution: (!chosen.why.is_faithful()).then(|| chosen.why.note().to_owned()),
+                };
                 if seen.insert((info.name.clone(), info.kind.clone(), info.embedded)) {
                     out.push(info);
                 }
@@ -1258,6 +1376,14 @@ impl<'a> Inspector<'a> {
 /// ([`pdfcraft_cos::PdfString::to_text`]) so the panels and outline editing agree.
 fn text_string(bytes: &[u8]) -> String {
     pdfcraft_cos::PdfString::literal(bytes).to_text()
+}
+
+fn limited_pdf_string(bytes: &[u8], max_bytes: usize) -> Option<String> {
+    if bytes.len() > max_bytes {
+        return None;
+    }
+    let text = text_string(bytes);
+    (text.len() <= max_bytes).then_some(text)
 }
 
 /// Nests a pre-order list of `(depth, item)` into the outline tree.
@@ -1893,7 +2019,20 @@ trailer << /Root 1 0 R >>
             let expected: &[u8] = if a.name == "notes.txt" { b"hello notes" } else { b"a,b,c" };
             assert_eq!(data, expected, "{}", a.name);
         }
-        assert_eq!(info.fonts, vec![FontInfo { name: "Helvetica".into(), kind: "Type1".into(), embedded: false, subset: true, encoding: None }]);
+        // A non-embedded /Helvetica is reported as standing in for itself: the standard-14
+        // metrics are exact, so the substitution is named rather than left implicit.
+        assert_eq!(
+            info.fonts,
+            vec![FontInfo {
+                name: "Helvetica".into(),
+                kind: "Type1".into(),
+                embedded: false,
+                subset: true,
+                encoding: None,
+                substitute: Some("Helvetica".into()),
+                substitution: Some(pdfcraft_fonts::fallback::Why::NamedStandard14.note().into()),
+            }]
+        );
     }
 
     const LAYERS: &[u8] = b"%PDF-1.7
@@ -1934,6 +2073,70 @@ trailer << /Root 1 0 R >>
         let info = inspect(Arc::new(ORPHAN_FIELDS.to_vec()), None).expect("opens");
         let listed: Vec<_> = info.fields.iter().map(|f| (f.name.as_str(), f.value.as_deref(), f.page)).collect();
         assert_eq!(listed, [("alpha", Some("one"), Some(0)), ("beta", None, Some(0))], "{:?}", info.fields);
+    }
+
+    /// A `Structure` that counts the objects read through it.
+    struct CountingReads<'a> {
+        doc: &'a Document,
+        reads: std::cell::Cell<usize>,
+    }
+
+    impl Structure for CountingReads<'_> {
+        fn trailer(&self) -> &Dictionary {
+            &self.doc.trailer
+        }
+        fn get_object(&self, id: ObjectId) -> lopdf::Result<&Object> {
+            self.reads.set(self.reads.get() + 1);
+            self.doc.get_object(id)
+        }
+        fn encrypted(&self) -> bool {
+            false
+        }
+    }
+
+    /// Widgets without `/P` are placed on the page that lists them with one pass over the pages'
+    /// `/Annots`, not a search of every page per field: that was O(fields × annotations), a
+    /// second to open a form of 8,000 fields. A widget two pages list is on the first of them.
+    #[test]
+    fn widgets_without_a_page_entry_are_placed_in_one_pass() {
+        const PAGES: usize = 100;
+        const PER_PAGE: usize = 10;
+        let field = |p: usize, k: usize| 4 + PAGES + p * PER_PAGE + k;
+        let mut pdf = String::from("%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R /AcroForm 3 0 R >> endobj\n");
+        let kids: Vec<String> = (0..PAGES).map(|p| format!("{} 0 R", 4 + p)).collect();
+        pdf += &format!("2 0 obj << /Type /Pages /Kids [{}] /Count {PAGES} >> endobj\n", kids.join(" "));
+        let fields: Vec<String> = (0..PAGES).flat_map(|p| (0..PER_PAGE).map(move |k| format!("{} 0 R", field(p, k)))).collect();
+        pdf += &format!("3 0 obj << /Fields [{}] >> endobj\n", fields.join(" "));
+        for p in 0..PAGES {
+            let mut annots: Vec<String> = (0..PER_PAGE).map(|k| format!("{} 0 R", field(p, k))).collect();
+            // The last page lists the first page's first widget too.
+            if p == PAGES - 1 {
+                annots.push(format!("{} 0 R", field(0, 0)));
+            }
+            pdf += &format!("{} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Annots [{}] >> endobj\n", 4 + p, annots.join(" "));
+        }
+        for p in 0..PAGES {
+            for k in 0..PER_PAGE {
+                pdf += &format!("{} 0 obj << /Type /Annot /Subtype /Widget /FT /Tx /T (f{p}_{k}) /Rect [10 10 90 30] >> endobj\n", field(p, k));
+            }
+        }
+        pdf += "trailer << /Root 1 0 R >>\n%%EOF";
+        let doc = Document::load_mem(pdf.as_bytes()).expect("loads");
+        let counting = CountingReads { doc: &doc, reads: std::cell::Cell::new(0) };
+        let mut info = DocInfo {
+            pages: (0..PAGES)
+                .map(|_| PageInfo { width: 200.0, height: 200.0, crop: [0.0, 0.0, 200.0, 200.0], rotation: 0, label: String::new() })
+                .collect(),
+            ..Default::default()
+        };
+        Inspector::new(&counting).fill(&mut info);
+        let placed: Vec<_> = info.fields.iter().map(|f| (f.name.clone(), f.page)).collect();
+        let want: Vec<_> = (0..PAGES).flat_map(|p| (0..PER_PAGE).map(move |k| (format!("f{p}_{k}"), Some(p)))).collect();
+        assert_eq!(placed, want);
+        // A handful of reads per page and field; searching the pages for each field read the
+        // page dictionaries about 50,000 times.
+        let reads = counting.reads.get();
+        assert!(reads < 20 * (PAGES + PAGES * PER_PAGE), "{reads} object reads");
     }
 
     #[test]
@@ -1979,6 +2182,72 @@ trailer << /Root 1 0 R >>
                 LinkTarget::SetLayers { changes: vec![(On, (6, 0)), (Toggle, (5, 0)), (Toggle, (7, 0))], preserve_rb: false },
                 // An indirect /State; /PreserveRB defaults to true.
                 LinkTarget::SetLayers { changes: vec![(Off, (5, 0))], preserve_rb: true },
+            ]
+        );
+    }
+
+    #[test]
+    fn links_read_bounded_local_remote_go_to_actions() {
+        use DestView::{Fit, Xyz};
+        let too_long = "a".repeat(MAX_REMOTE_FILE_SPEC_BYTES + 1);
+        let wide_file = format!("<FEFF{}>", "4E00".repeat(1400));
+        let wide_name = format!("<FEFF{}>", "4E00".repeat(342));
+        let pdf = format!(
+            "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n\
+             2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >> endobj\n\
+             3 0 obj << /Type /Page /Parent 2 0 R /Annots [99 0 R 30 0 R 31 0 R 32 0 R 33 0 R 34 0 R 35 0 R 36 0 R 37 0 R 38 0 R 39 0 R 40 0 R 41 0 R] >> endobj\n\
+             30 0 obj << /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S /GoToR /F (chapters/remote.pdf) /D [2 /XYZ 10 20 1.5] /NewWindow true >> >> endobj\n\
+             31 0 obj << /Type /Annot /Subtype /Link /Rect [0 20 10 30] /A << /S /GoToR /F << /Type /Filespec /F (fallback.pdf) /UF <FEFF0066006F006F002E007000640066> >> /D [0 /Fit] /NewWindow false >> >> endobj\n\
+             32 0 obj << /Type /Annot /Subtype /Link /Rect [0 40 10 50] /A << /S /GoToR /F (remote.pdf) >> >> endobj\n\
+             33 0 obj << /Type /Annot /Subtype /Link /Rect [0 60 10 70] /A << /S /GoToR /F (chapter.pdf) /D (chapter) >> >> endobj\n\
+             34 0 obj << /Type /Annot /Subtype /Link /Rect [0 80 10 90] /A << /S /GoToR /FS /URL /F (https://example.com) /D [0 /Fit] >> >> endobj\n\
+             35 0 obj << /Type /Annot /Subtype /Link /Rect [0 100 10 110] /A << /S /GoToR /F ({too_long}) /D [0 /Fit] >> >> endobj\n\
+             36 0 obj << /Type /Annot /Subtype /Link /Rect [0 120 10 130] /A << /S /GoToR /F (chapter.pdf) /D /chapter >> >> endobj\n\
+             37 0 obj << /Type /Annot /Subtype /Link /Rect [0 140 10 150] /A << /S /GoToR /F (chapter.pdf) /D [-1 /Fit] >> >> endobj\n\
+             38 0 obj << /Type /Annot /Subtype /Link /Rect [0 160 10 170] /A << /S /GoToR /F (chapter.pdf) /D [1.5 /Fit] >> >> endobj\n\
+             39 0 obj << /Type /Annot /Subtype /Link /Rect [0 180 10 190] /A << /S /GoToR /F (chapter.pdf) /D [9223372036854775807 /Fit] >> >> endobj\n\
+             40 0 obj << /Type /Annot /Subtype /Link /Rect [0 200 10 210] /A << /S /GoToR /F << /Type /Filespec /UF {wide_file} >> /D [0 /Fit] >> >> endobj\n\
+             41 0 obj << /Type /Annot /Subtype /Link /Rect [0 220 10 230] /A << /S /GoToR /F (chapter.pdf) /D {wide_name} >> >> endobj\n\
+             trailer << /Root 1 0 R >>\n%%EOF"
+        );
+        let info = inspect(Arc::new(pdf.into_bytes()), None).expect("opens");
+        let targets: Vec<_> = info.links.iter().map(|l| (l.index, l.target.clone())).collect();
+        let huge_page_target = usize::try_from(i64::MAX)
+            .map(|page| LinkTarget::RemoteGoTo {
+                file: "chapter.pdf".into(),
+                destination: RemoteDestination::Page { page, view: Fit },
+                new_window: None,
+            })
+            .unwrap_or_else(|_| LinkTarget::Other("GoToR".into()));
+        assert_eq!(
+            targets,
+            [
+                (
+                    1,
+                    LinkTarget::RemoteGoTo {
+                        file: "chapters/remote.pdf".into(),
+                        destination: RemoteDestination::Page { page: 2, view: Xyz { left: Some(10.0), top: Some(20.0), zoom: Some(1.5) } },
+                        new_window: Some(true),
+                    }
+                ),
+                (
+                    2,
+                    LinkTarget::RemoteGoTo {
+                        file: "foo.pdf".into(),
+                        destination: RemoteDestination::Page { page: 0, view: Fit },
+                        new_window: Some(false),
+                    }
+                ),
+                (3, LinkTarget::RemoteGoTo { file: "remote.pdf".into(), destination: RemoteDestination::Default, new_window: None }),
+                (4, LinkTarget::RemoteGoTo { file: "chapter.pdf".into(), destination: RemoteDestination::Named("chapter".into()), new_window: None }),
+                (5, LinkTarget::Other("GoToR".into())),
+                (6, LinkTarget::Other("GoToR".into())),
+                (7, LinkTarget::RemoteGoTo { file: "chapter.pdf".into(), destination: RemoteDestination::Named("chapter".into()), new_window: None }),
+                (8, LinkTarget::Other("GoToR".into())),
+                (9, LinkTarget::Other("GoToR".into())),
+                (10, huge_page_target),
+                (11, LinkTarget::Other("GoToR".into())),
+                (12, LinkTarget::Other("GoToR".into())),
             ]
         );
     }
@@ -2364,5 +2633,99 @@ mod version_tests {
         assert_eq!(super::version_label("Pdf17"), "1.7");
         assert_eq!(super::version_label("V2_0"), "2.0");
         assert_eq!(super::version_label("Unknown"), "Unknown");
+    }
+}
+
+#[cfg(test)]
+mod substitution_tests {
+    use std::sync::Arc;
+
+    use super::{FontInfo, inspect};
+
+    /// One page naming four fonts the document does not embed: a Chinese CID font (Adobe-GB1), a
+    /// Japanese one (Adobe-Japan1), an unknown serif-flagged simple font, and an aliased
+    /// standard-14 name.
+    const NOT_EMBEDDED: &[u8] = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R /F2 6 0 R /F3 8 0 R /F4 9 0 R /F5 11 0 R >> >> >> endobj
+4 0 obj << /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [5 0 R] >> endobj
+5 0 obj << /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> >> endobj
+6 0 obj << /Type /Font /Subtype /Type0 /BaseFont /KozMinPro-Regular /Encoding /UniJIS-UCS2-H /DescendantFonts [7 0 R] >> endobj
+7 0 obj << /Type /Font /Subtype /CIDFontType0 /BaseFont /KozMinPro-Regular /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 4 >> >> endobj
+8 0 obj << /Type /Font /Subtype /TrueType /BaseFont /SomeHouseSerif /FontDescriptor 10 0 R >> endobj
+9 0 obj << /Type /Font /Subtype /TrueType /BaseFont /ArialMT >> endobj
+10 0 obj << /Type /FontDescriptor /FontName /SomeHouseSerif /Flags 34 >> endobj
+11 0 obj << /Type /Font /Subtype /TrueType /BaseFont /HouseGrotesk /FontDescriptor 12 0 R >> endobj
+12 0 obj << /Type /FontDescriptor /FontName /HouseGrotesk /Flags 33 >> endobj
+trailer << /Size 13 /Root 1 0 R >>
+%%EOF";
+
+    fn font<'a>(fonts: &'a [FontInfo], name: &str) -> &'a FontInfo {
+        fonts.iter().find(|f| f.name == name).unwrap_or_else(|| panic!("{name} listed; got {:?}", fonts.iter().map(|f| &f.name).collect::<Vec<_>>()))
+    }
+
+    #[test]
+    fn doc_info_says_which_face_stands_in_and_why() {
+        let info = inspect(Arc::new(NOT_EMBEDDED.to_vec()), None).expect("opens");
+
+        // The one that matters most to a user: a Chinese PDF that draws nothing. Before this,
+        // doc_info said only `embedded: false` and left them to guess.
+        let cjk = font(&info.fonts, "STSong-Light");
+        assert!(!cjk.embedded);
+        assert_eq!(cjk.substitute, None, "no licensed Chinese face, so nothing stands in");
+        let why = cjk.substitution.as_deref().unwrap_or_default();
+        assert!(why.contains("no licensed face") && why.contains("rather than the wrong glyphs"), "{why}");
+
+        // An aliased standard-14 name resolves to the real face, whose metrics are exact.
+        let arial = font(&info.fonts, "ArialMT");
+        assert_eq!(arial.substitute.as_deref(), Some("Helvetica"));
+        assert!(arial.substitution.as_deref().unwrap_or_default().contains("standard 14"));
+
+        // A house font whose name merely contains "Serif" gets Times -- reported as the guess it
+        // is, not as a standard-14 name, which would be untrue of a font nobody has heard of.
+        let serif = font(&info.fonts, "SomeHouseSerif");
+        assert_eq!(serif.substitute.as_deref(), Some("Times-Roman"));
+        assert!(serif.substitution.as_deref().unwrap_or_default().contains("hints at one"), "{serif:?}");
+
+        // No hint in the name at all, so the descriptor flags decide: 33 = fixed pitch + nonsymbolic.
+        let grotesk = font(&info.fonts, "HouseGrotesk");
+        assert_eq!(grotesk.substitute.as_deref(), Some("Courier"));
+        assert!(grotesk.substitution.as_deref().unwrap_or_default().contains("descriptor flags"), "{grotesk:?}");
+
+        // Japanese depends on the optional craft-fonts build input; either way it is reported,
+        // and never as a Latin face.
+        let jpan = font(&info.fonts, "KozMinPro-Regular");
+        assert!(jpan.substitution.is_some(), "a substitution is always explained");
+        match &jpan.substitute {
+            Some(face) => {
+                assert!(!face.starts_with("Helvetica") && !face.starts_with("Times"), "a Latin face is never a Japanese substitute: {face}")
+            }
+            None => assert!(jpan.substitution.as_deref().unwrap_or_default().contains("no licensed face")),
+        }
+
+        // Nothing claims to be embedded, so every font here carries a reason.
+        assert!(info.fonts.iter().all(|f| !f.embedded && f.substitution.is_some()), "{:?}", info.fonts);
+    }
+
+    /// An embedded font is reported as faithful: nothing stands in, and there is nothing to explain.
+    const EMBEDDED: &[u8] = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> >> endobj
+4 0 obj << /Type /Font /Subtype /TrueType /BaseFont /ABCDEF+SomeHouseSans /FontDescriptor 5 0 R >> endobj
+5 0 obj << /Type /FontDescriptor /FontName /ABCDEF+SomeHouseSans /Flags 32 /FontFile2 6 0 R >> endobj
+6 0 obj << /Length 4 >> stream
+test
+endstream endobj
+trailer << /Size 7 /Root 1 0 R >>
+%%EOF";
+
+    #[test]
+    fn an_embedded_font_reports_no_substitution_at_all() {
+        let info = inspect(Arc::new(EMBEDDED.to_vec()), None).expect("opens");
+        let f = font(&info.fonts, "SomeHouseSans");
+        assert!(f.embedded && f.subset, "{f:?}");
+        assert_eq!((f.substitute.as_deref(), f.substitution.as_deref()), (None, None), "the document's own glyphs are shown");
     }
 }

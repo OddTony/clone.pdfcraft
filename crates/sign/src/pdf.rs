@@ -485,6 +485,20 @@ struct Field {
     widgets: Vec<(Option<ObjRef>, Dict)>,
 }
 
+impl Field {
+    /// The signature dictionary in /V. A field without one is unsigned, whether /V is missing,
+    /// null or not a dictionary.
+    fn signature(&self, doc: &Document) -> Option<Dict> {
+        self.dict.get(b"V").map(|v| doc.resolve(v)).and_then(|v| v.as_dict().cloned())
+    }
+
+    /// True when /V holds something that is neither null nor a signature dictionary: signing the
+    /// field would overwrite a value we can't read as a signature.
+    fn has_foreign_value(&self, doc: &Document) -> bool {
+        self.dict.get(b"V").map(|v| doc.resolve(v)).is_some_and(|v| !matches!(*v, Object::Null) && v.as_dict().is_none())
+    }
+}
+
 /// Every signature field, depth first in `/Fields` order.
 fn sig_fields(doc: &Document) -> Vec<Field> {
     let mut out = Vec::new();
@@ -566,7 +580,7 @@ pub fn list_cached(doc: &Document, bytes: &[u8], trust: &TrustStore, cache: &Dig
             .filter(|r| r.len() == 4)
             .map(|r| [r[0].min(r[2]), r[1].min(r[3]), r[0].max(r[2]), r[1].max(r[3])]);
         let visible = rect.is_some_and(|r| r[2] - r[0] > 0.5 && r[3] - r[1] > 0.5);
-        let v = f.dict.get(b"V").map(|v| doc.resolve(v)).and_then(|v| v.as_dict().cloned());
+        let v = f.signature(doc);
         let mut info = SignatureInfo {
             field: f.name.clone(),
             signed: v.is_some(),
@@ -1206,6 +1220,18 @@ fn classify_changes(doc: &Document, old: Option<Document>, p: Option<u8>) -> Mod
             _ => false,
         }
     };
+    // A later cross-reference section may carry an entry this reader sets aside (an in-use entry
+    // at offset 0, a second entry for one object, a reserved entry type). The renderer may follow
+    // it and draw another object than the one compared below, so the page could show new content
+    // while every comparison here finds the signed object untouched. No writer has a reason to
+    // add such an entry after signing: it is never a permitted change.
+    for (_, num) in doc.xref_oddities().iter().filter(|o| !old.xref_oddities().contains(o)) {
+        let r = ObjRef { num: *num, generation: doc.generation(*num) };
+        let what = if old_content.contains(&r) || signed_pages.contains(&r) { kind::PAGE_CONTENT } else { kind::OTHER };
+        if !disallowed.contains(&what) {
+            disallowed.push(what);
+        }
+    }
     for num in doc.object_numbers() {
         if same_place(num) {
             continue;
@@ -1214,6 +1240,12 @@ fn classify_changes(doc: &Document, old: Option<Document>, p: Option<u8>) -> Mod
         let new = doc.get(r);
         let before = old.try_get(num).ok().filter(|o| !matches!(**o, Object::Null));
         if before.as_deref() == Some(&*new) {
+            // The same content at a new place. That is true for the renderer as well only when
+            // the entry locates the object itself: where this reader had to search for the
+            // object, another reader may arrive at a different one.
+            if !doc.is_edited(num) && !doc.xref_entry_is_exact(num) && !disallowed.contains(&kind::OTHER) {
+                disallowed.push(kind::OTHER);
+            }
             continue;
         }
         let what = match &*new {
@@ -1711,8 +1743,11 @@ fn sign_inner(
     let (widget, rect) = match existing {
         Some(f) => {
             let f = f?;
-            if f.dict.contains(b"V") {
+            if f.signature(&doc).is_some() {
                 return Err(SignError::Pdf(format!("the field {:?} is already signed", f.name)));
+            }
+            if f.has_foreign_value(&doc) {
+                return Err(SignError::Pdf(format!("the value of the field {:?} is not a signature", f.name)));
             }
             let fr = f.r.ok_or_else(|| SignError::Pdf("the field is not an indirect object".into()))?;
             doc.update_dict(fr, |d| d.set(b"V".to_vec(), Object::Ref(sig)))?;
