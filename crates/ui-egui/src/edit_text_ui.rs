@@ -1559,6 +1559,24 @@ mod tests {
     }
 
     #[test]
+    fn pristine_pdf_text_stays_in_the_source_renderer_until_the_first_edit() {
+        let (app, mut ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        ed.source = Some((doc.text_blocks(0).remove(0), doc.text_lines(0)));
+        assert!(ed.pristine_source_visible(), "opening a text block must keep original glyphs visible");
+
+        ed.text.push('x');
+        assert!(!ed.pristine_source_visible(), "typing must activate editable text rendering");
+
+        ed.text = ed.original.clone();
+        ed.font_resource = Some("F1".to_owned());
+        assert!(!ed.pristine_source_visible(), "a different selected font must activate preview");
+
+        ed.font_resource = None;
+        assert!(ed.pristine_source_visible(), "undo restores the original PDF glyph presentation");
+    }
+
+    #[test]
     fn text_background_is_cached_without_editing_and_released_on_cancel() {
         let (app, ed) = preview_app();
         let doc = app.session.get(app.views[0].id).unwrap();
