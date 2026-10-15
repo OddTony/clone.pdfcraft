@@ -928,6 +928,9 @@ pub fn tools() -> Vec<ToolDef> {
             .with(schema(json!({ "doc": doc(), "page": { "type": "integer", "minimum": 1 } }), &["doc", "page"])),
         t("accessibility_autotag_apply", "Automatically tag text-only PDF", "Write marked content, a Document structure element, paragraph tags and a parent tree for every text object in an untagged, text-only PDF. Refuses graphics, images, annotations, forms, existing tags and malformed streams before changing anything. Review all resulting roles; this does not certify accessibility. Undoable.")
             .with(schema(json!({ "doc": doc() }), &["doc"])),
+        t("accessibility_autotag_form_fields", "Tag form fields", "Write `/Form` tags, widget structure-parent keys, and a parent tree for all page widgets in an untagged AcroForm. Existing tag trees are refused for review. Text, figures, links, and other content are not tagged.")
+            .cmd("a11y.autotag_fields")
+            .with(schema(json!({ "doc": doc() }), &["doc"])),
         t("accessibility_check", "Check for accessibility", "Run the Accessibility Checker's full check (32 rules in 7 categories: document, page_content, forms, alternate_text, tables, lists, headings). Each rule is passed, failed (with findings and pages), manual (needs a person) or skipped. Findings on locatable figures, annotations and form widgets include bbox_user_space in PDF coordinates. Colour contrast is off unless all is true; rules (ids such as tagged-pdf, figures-alt-text) or categories narrow the check; pages limit the page rules.")
             .ro()
             .cmd("a11y.check")
@@ -941,6 +944,10 @@ pub fn tools() -> Vec<ToolDef> {
                 }),
                 &["doc"],
             )),
+        t("accessibility_find_untagged", "Find untagged content", "Find untagged painted page content, annotations, and form widgets. This focused check does not modify the PDF or claim that its other accessibility rules pass.")
+            .ro()
+            .cmd("a11y.find_untagged")
+            .with(schema(json!({ "doc": doc(), "pages": pages("to search (default: all)") }), &["doc"])),
         t("accessibility_report", "Accessibility report", "Run the full check and write the accessibility report (HTML) to path; returns the results too. Takes the same options as accessibility_check.")
             .destructive()
             .cmd("a11y.report")
