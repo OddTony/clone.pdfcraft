@@ -711,12 +711,11 @@ fn an_in_place_save_reports_a_required_rewrite_as_not_incremental() {
     }
 }
 
-/// Issue #1698: a save whose bytes don't reopen is refused before it touches the file. The
-/// catalog's `/Pages` is not a page tree, so the reader finds the page by scanning, while a
-/// full rewrite keeps only what the catalog reaches and drops it.
+/// The reader can recover this missing page tree. Saving must retain the recovered page
+/// and its content; rejection of invalid save bytes is covered by the writer unit guard.
 #[test]
-fn a_save_that_does_not_reopen_leaves_the_file_as_it_was() {
-    let dir = workdir("save-verify-before-write");
+fn a_recovered_page_tree_saves_and_reopens_without_losing_content() {
+    let dir = workdir("save-recovered-page-tree");
     let objs: [&[u8]; 4] = [
         b"<< /Type /Catalog /Pages 3 0 R >>",
         b"<< /Type /Page /MediaBox [0 0 200 300] /Contents 4 0 R >>",
@@ -743,10 +742,24 @@ fn a_save_that_does_not_reopen_leaves_the_file_as_it_was() {
     let opened = ok(&mut a, "doc_open", json!({ "path": "damaged.pdf" }));
     assert_eq!(opened["pages"], 1, "{opened}");
     let doc = opened["doc"].as_u64().unwrap();
-    let e = err(&mut a, "doc_save", json!({ "doc": doc, "full": true }));
-    assert!(e.to_string().contains("could not be reopened"), "{e}");
-    let on_disk = std::fs::read(dir.join("damaged.pdf")).unwrap();
-    assert!(on_disk == original, "the file was replaced by {} bytes that don't reopen", on_disk.len());
+    let info = ok(&mut a, "doc_info", json!({ "doc": doc }));
+    assert!(info["repairs"].as_array().unwrap().iter().any(|note| note.as_str().unwrap().contains("the page tree is missing")), "{info}");
+    assert_eq!(std::fs::read(dir.join("damaged.pdf")).unwrap(), original, "opening repairs only the in-memory document");
+    let before = png_pixels(&a.call("page_render", &json!({ "doc": doc, "page": 1, "dpi": 72 })).unwrap()[0]);
+    assert!(before.as_chunks::<4>().0.iter().any(|p| p[0] < 128 && p[1] < 128 && p[2] < 128), "the recovered line must be visible");
+
+    let saved = ok(&mut a, "doc_save", json!({ "doc": doc, "full": true }));
+    assert_eq!(saved["incremental"], false);
+    assert_eq!(saved["document"]["dirty"], false);
+    assert_ne!(std::fs::read(dir.join("damaged.pdf")).unwrap(), original);
+    ok(&mut a, "doc_close", json!({ "doc": doc }));
+    let reopened = ok(&mut a, "doc_open", json!({ "path": "damaged.pdf" }));
+    assert_eq!(reopened["pages"], 1);
+    let doc = reopened["doc"].as_u64().unwrap();
+    let after = png_pixels(&a.call("page_render", &json!({ "doc": doc, "page": 1, "dpi": 72 })).unwrap()[0]);
+    assert_eq!(after, before, "saving and reopening must preserve the recovered page's pixels");
+    let info = ok(&mut a, "doc_info", json!({ "doc": doc }));
+    assert!(!info["repairs"].as_array().unwrap().iter().any(|note| note.as_str().unwrap().contains("the page tree is missing")), "{info}");
 }
 
 /// organize.field-name-conflicts: combining files whose forms share a field name keeps the
@@ -4527,11 +4540,11 @@ fn signature_appearances(path: &Path) -> String {
 fn signing_with_translated_labels_through_tools() {
     let dir = workdir("signing-labels");
     let mut a = auto(&dir);
-    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret1", "path": "ada.p12" }));
+    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret12", "path": "ada.p12" }));
     let open = |a: &mut Automation| ok(a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
     let doc = open(&mut a);
     let args = |doc: u64, extra: Value, out: &str| {
-        let mut args = json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "page": 1, "rect": [10, 150, 190, 290], "reason": "Genehmigt", "location": "Berlin", "out": out });
+        let mut args = json!({ "doc": doc, "id": "ada.p12", "password": "secret12", "page": 1, "rect": [10, 150, 190, 290], "reason": "Genehmigt", "location": "Berlin", "out": out });
         for (k, v) in extra.as_object().unwrap() {
             args[k] = v.clone();
         }

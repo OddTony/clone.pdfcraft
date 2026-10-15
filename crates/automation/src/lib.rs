@@ -932,11 +932,22 @@ impl Automation {
         // A save that adds or removes encryption, or must not keep the old revision (Sanitize,
         // redaction), is rewritten in full even when an incremental save was asked for.
         let incremental = !full && bytes.starts_with(&self.doc(a)?.saved_bytes());
-        self.session.check_save(id, &bytes).map_err(failed)?;
-        write(&target, &bytes)?;
+        let path = self.write_checked_save(id, &target, &bytes, write)?;
+        Ok(json!({ "path": path, "bytes": bytes.len(), "incremental": incremental, "document": summary(self.doc(a)?) }))
+    }
+
+    fn write_checked_save(
+        &mut self,
+        id: DocId,
+        target: &Path,
+        bytes: &Arc<Vec<u8>>,
+        write: impl FnOnce(&Path, &[u8]) -> Result<()>,
+    ) -> Result<String> {
+        self.session.check_save(id, bytes).map_err(failed)?;
+        write(target, bytes)?;
         let path = target.to_string_lossy().into_owned();
         self.session.mark_saved(id, bytes.clone(), Some(path.clone())).map_err(failed)?;
-        Ok(json!({ "path": path, "bytes": bytes.len(), "incremental": incremental, "document": summary(self.doc(a)?) }))
+        Ok(path)
     }
 
     fn doc_revisions(&mut self, a: &Args) -> Result<Value> {
@@ -2956,6 +2967,54 @@ mod tests {
             }
             std::fs::remove_dir_all(dir).unwrap();
         }
+    }
+
+    #[test]
+    fn a_save_with_the_wrong_page_count_never_reaches_the_writer() {
+        let dir = staging_dir("save-page-count");
+        let target = dir.join("out.pdf");
+        let mut a = Automation::new().with_root(&dir).unwrap();
+        let id = search_document(&mut a, 2);
+        json(&mut a, "doc_save", json!({"doc": id.0, "path": "out.pdf"}));
+        let old = std::fs::read(&target).unwrap();
+        json(&mut a, "page_rotate", json!({"doc": id.0, "pages": [1], "degrees": 90}));
+        json(&mut a, "page_rotate", json!({"doc": id.0, "pages": [2], "degrees": 180}));
+        json(&mut a, "edit_undo", json!({"doc": id.0}));
+
+        // These bytes are a valid PDF, but not a valid save of this two-page document.
+        let other = search_document(&mut a, 1);
+        let candidate = a.session.save_full_bytes(other).unwrap();
+        a.session.check_save(other, &candidate).unwrap();
+        let args = json!({"doc": id.0});
+        let doc = a.doc(&Args(&args)).unwrap();
+        let before = summary(doc);
+        let live = doc.bytes.clone();
+        let saved = doc.saved_bytes();
+        assert!(doc.dirty);
+        assert!(doc.can_undo().is_some() && doc.can_redo().is_some());
+        let mut write_called = false;
+        let result = a.write_checked_save(id, &target, &candidate, |path, bytes| {
+            write_called = true;
+            write_atomic(path, bytes)
+        });
+        assert!(!write_called, "validation must precede any attempt to write");
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("the edit changed the page count from 2 to 1"), "{error}");
+        let doc = a.doc(&Args(&args)).unwrap();
+        assert_eq!(summary(doc), before, "rejection must preserve path, dirty state and undo/redo");
+        assert_eq!(doc.bytes, live);
+        assert_eq!(doc.saved_bytes(), saved);
+        assert_eq!(std::fs::read(&target).unwrap(), old);
+        assert_eq!(listing(&dir), ["out.pdf"]);
+
+        json(&mut a, "doc_save", args.clone());
+        let doc = a.doc(&Args(&args)).unwrap();
+        assert!(!doc.dirty);
+        assert_eq!(doc.info.pages.len(), 2);
+        let written = std::fs::read(&target).unwrap();
+        assert_ne!(written, old);
+        a.session.check_save(id, &Arc::new(written)).unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
