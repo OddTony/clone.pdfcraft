@@ -87,15 +87,26 @@ struct Tree {
     nodes: Vec<ObjRef>,
 }
 
+/// Whether a dictionary states a value: null, or a reference to nothing, counts as absent
+/// (§7.3.9–7.3.10), so a page with a dangling `/Resources` still inherits its node's.
+fn stated(reader: &mut ObjectReader, v: Option<&Object>) -> bool {
+    match v {
+        None | Some(Object::Null) => false,
+        Some(Object::Ref(r)) => !matches!(*reader.get(*r), Object::Null),
+        Some(_) => true,
+    }
+}
+
 /// Walk the page tree, never following `/Parent`, and move the inheritable attributes from the
-/// nodes onto each page. A dictionary or array a node passes down becomes one object its pages
-/// share rather than a copy on each.
+/// nodes onto each page. A value a node passes down, other than a number or a reference, becomes
+/// one object its pages share rather than a copy on each.
 fn page_tree(reader: &mut ObjectReader) -> Result<Tree, CosError> {
     let catalog = reader.document.root().map(|r| reader.get(r));
     let top =
         catalog.as_deref().and_then(Object::as_dict).and_then(|d| d.reference(b"Pages")).ok_or_else(|| refuse("the document has no page tree"))?;
     let mut tree = Tree { pages: Vec::new(), nodes: Vec::new() };
-    let mut seen = HashSet::new();
+    // The catalog can't be a page or a node either: it has its own place in the file.
+    let mut seen: HashSet<u32> = reader.document.root().map(|r| r.num).into_iter().collect();
     let mut stack: Vec<(ObjRef, Vec<(&'static [u8], Object)>)> = vec![(top, Vec::new())];
     while let Some((r, mut inherited)) = stack.pop() {
         // A page listed twice would need two places in the file.
@@ -109,7 +120,12 @@ fn page_tree(reader: &mut ObjectReader) -> Result<Tree, CosError> {
         let Some(d) = o.as_dict() else { continue }; // a broken kid, which readers skip too
         let node = d.name(b"Type") == Some(&b"Pages"[..]) || (d.contains(b"Kids") && d.name(b"Type") != Some(&b"Page"[..]));
         if !node {
-            let missing: Vec<_> = inherited.into_iter().filter(|(k, _)| !d.contains(k)).collect();
+            let mut missing = Vec::new();
+            for (k, v) in inherited {
+                if !stated(reader, d.get(k)) {
+                    missing.push((k, v));
+                }
+            }
             if !missing.is_empty() {
                 reader.document.update_dict(r, |page| missing.into_iter().for_each(|(k, v)| page.set(k.to_vec(), v)))?;
             }
@@ -119,14 +135,21 @@ fn page_tree(reader: &mut ObjectReader) -> Result<Tree, CosError> {
         tree.nodes.push(r);
         let mut moved = false;
         for key in INHERITED {
-            let Some(v) = d.get(key) else { continue };
+            moved |= d.contains(key);
+            let Some(v) = d.get(key).filter(|v| stated(reader, Some(v))) else { continue };
             let v = match v {
-                Object::Dict(_) | Object::Array(_) => Object::Ref(reader.document.add(v.clone())),
-                other => other.clone(),
+                Object::Bool(_) | Object::Int(_) | Object::Real(_) | Object::Ref(_) => v.clone(),
+                // Every kid on the stack carries what it inherits: never a copy of a large value.
+                other => {
+                    // Adding scans every object number once a file has used them all up.
+                    if reader.document.next_num() == u32::MAX {
+                        return Err(refuse("the document has no object numbers left"));
+                    }
+                    Object::Ref(reader.document.add(other.clone()))
+                }
             };
             inherited.retain(|(k, _)| *k != key);
             inherited.push((key, v));
-            moved = true;
         }
         // The pages state them now; qpdf's check rejects a node that still does.
         if moved {
@@ -829,5 +852,48 @@ mod tests {
             .build();
         let err = write_full(&Document::open(Arc::new(twice)).unwrap(), &opts()).unwrap_err();
         assert!(err.to_string().contains("twice"), "{err}");
+        // The catalog as its own page tree, or as a kid, would be written twice under one number.
+        for kids in ["/Pages 1 0 R", "/Pages 2 0 R"] {
+            let catalog = Pdf::new()
+                .obj(format!("<< /Type /Catalog {kids} >>"))
+                .obj("<< /Type /Pages /Kids [3 0 R 1 0 R] /Count 2 >>")
+                .obj("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>")
+                .build();
+            let err = write_full(&Document::open(Arc::new(catalog)).unwrap(), &opts()).unwrap_err();
+            assert!(err.to_string().contains("appears twice"), "{kids}: {err}");
+        }
+        // With every object number used, each new shared object would scan them all.
+        let exhausted = Pdf::new()
+            .obj("<< /Type /Catalog /Pages 2 0 R >>")
+            .obj("<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 10 10] >>")
+            .obj("<< /Type /Page /Parent 2 0 R >>")
+            .build();
+        let exhausted = String::from_utf8(exhausted).unwrap().replace("/Size 4 ", "/Size 4294967295 ");
+        let err = write_full(&Document::open(Arc::new(exhausted.into_bytes())).unwrap(), &opts()).unwrap_err();
+        assert!(err.to_string().contains("no object numbers left"), "{err}");
+    }
+
+    /// What a node passes down reaches its pages: once, however large, and in place of a value
+    /// the page states but that isn't there (a reference to nothing).
+    #[test]
+    fn inherited_values_reach_the_pages_once() {
+        let rotate = "x".repeat(10_000);
+        let bytes = Pdf::new()
+            .obj("<< /Type /Catalog /Pages 2 0 R >>")
+            .obj(format!("<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 /MediaBox [0 0 10 10] /Rotate ({rotate}) /Resources << /Font << /F1 6 0 R >> >> >>"))
+            .obj("<< /Type /Page /Parent 2 0 R /Resources 99 0 R >>")
+            .obj("<< /Type /Page /Parent 2 0 R >>")
+            .obj("<< /Type /Page /Parent 2 0 R >>")
+            .obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+            .build();
+        let out = write_full(&Document::open(Arc::new(bytes)).unwrap(), &opts()).unwrap();
+        let back = Document::open(Arc::new(out.clone())).unwrap();
+        for n in back.object_numbers() {
+            let page = back.get(ObjRef::new(n, 0));
+            let Some(d) = page.as_dict().filter(|d| d.name(b"Type") == Some(&b"Page"[..])) else { continue };
+            let resources = back.resolve(d.get(b"Resources").unwrap());
+            assert!(resources.as_dict().is_some_and(|r| r.contains(b"Font")), "page {n}: {resources:?}");
+        }
+        assert_eq!(out.windows(rotate.len()).filter(|w| *w == rotate.as_bytes()).count(), 1, "one shared copy");
     }
 }
