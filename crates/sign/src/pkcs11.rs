@@ -27,6 +27,7 @@ use cryptoki::slot::Slot;
 use cryptoki::types::AuthPin;
 
 use crate::keys::{DigestAlg, ExternalKey, PrivateKey, PublicKey};
+use crate::x509::build_chain;
 use crate::{Certificate, DigitalId, SignError, rsa_pad};
 
 /// Where KIR's CloudSigner installer puts its PKCS #11 module on macOS (mSzafir).
@@ -58,7 +59,10 @@ pub fn reference(certificate: &Certificate) -> String {
 #[derive(Clone, Debug)]
 pub struct TokenIdentity {
     pub certificate: Certificate,
-    /// The token's other certificates (its CAs), embedded in a signature as a file's chain is.
+    /// The CA certificates on the token that vouch for this one, issuer first, as far up as the
+    /// token has them. They are embedded in a signature as a file's chain is. Certificates of the
+    /// token's that aren't on the path are left out: CloudSigner lists a TLS server certificate and
+    /// a root that issued neither, and an issuer the token lacks stays missing.
     pub chain: Vec<Certificate>,
     /// The token's label ("mSzafir Token").
     pub token: String,
@@ -221,7 +225,7 @@ fn list_slot(ctx: &Pkcs11, path: &Path, slot: Slot, out: &mut Listing) -> Result
         if key_ids.is_empty() { !c.is_ca && c.key_usage.is_none_or(|u| u & 0b11 != 0) } else { !id.is_empty() && key_ids.iter().any(|k| k == id) }
     };
     let (mine, others): (Vec<_>, Vec<_>) = certs.into_iter().partition(|(id, c)| has_key(id, c));
-    let chain: Vec<Certificate> = others.into_iter().map(|(_, c)| c).collect();
+    let pool: Vec<Certificate> = others.into_iter().map(|(_, c)| c).collect();
     for (id, certificate) in mine {
         if certificate.public_key.store_signing_key().is_none() {
             let what = certificate.public_key.describe();
@@ -229,7 +233,9 @@ fn list_slot(ctx: &Pkcs11, path: &Path, slot: Slot, out: &mut Listing) -> Result
             out.problems.push(Problem { module: path.to_path_buf(), message });
             continue;
         }
-        out.ids.push(TokenIdentity { certificate, chain: chain.clone(), token: token.clone(), module: path.to_path_buf(), needs_pin, slot, id });
+        // The chain starts with the certificate itself.
+        let chain = build_chain(&certificate, &pool, None).into_iter().skip(1).cloned().collect();
+        out.ids.push(TokenIdentity { certificate, chain, token: token.clone(), module: path.to_path_buf(), needs_pin, slot, id });
     }
     Ok(())
 }

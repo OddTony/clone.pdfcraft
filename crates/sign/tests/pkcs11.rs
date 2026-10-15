@@ -98,8 +98,67 @@ impl ExternalKey for SetupKey {
     }
 }
 
-/// A key pair generated on the token with a self-signed certificate stored beside it.
-fn make_identity(session: Session, id: u8, cn: &str, rsa: bool, always_authenticate: bool) -> Session {
+/// A CA whose key stays in the test: it issues a token identity's certificate, and its own
+/// certificate is stored on the token beside it.
+struct Ca {
+    name: Name,
+    key: PrivateKey,
+    cert: Certificate,
+}
+
+impl Ca {
+    /// A root (no `issuer`) or an intermediate CA.
+    fn new(cn: &str, issuer: Option<&Ca>, serial: u8) -> Ca {
+        let key = PrivateKey::generate_p256().unwrap();
+        let name = Name::build(cn, "", "PdfCraft tests", "", "PL");
+        let cert = match issuer {
+            Some(i) => issue(&name, &key.public_key().spki(), &i.name, &i.key, true, serial),
+            None => issue(&name, &key.public_key().spki(), &name, &key, true, serial),
+        };
+        Ca { name, key, cert }
+    }
+}
+
+/// A v3 certificate for `spki`, signed with `issuer_key`: a CA's says so in its basic
+/// constraints, an end entity's has none to say.
+fn issue(name: &Name, spki: &[u8], issuer: &Name, issuer_key: &PrivateKey, ca: bool, serial: u8) -> Certificate {
+    let alg = issuer_key.preferred_digest();
+    let sig_alg = issuer_key.signature_algorithm(alg);
+    let constraints = if ca { der::seq(&[&der::boolean(true)]) } else { der::seq(&[]) };
+    let extensions = der::seq(&[&der::seq(&[&der::oid("2.5.29.19"), &der::boolean(true), &der::octets(&constraints)])]);
+    let validity = der::seq(&[&Time::from_unix(1_767_225_600).encode(), &Time::from_unix(1_924_992_000).encode()]);
+    let tbs = der::seq(&[
+        &der::explicit(0, &der::int(2)),
+        &der::uint(&[serial]),
+        &sig_alg,
+        &issuer.raw,
+        &validity,
+        &name.raw,
+        spki,
+        &der::explicit(3, &extensions),
+    ]);
+    let signature = issuer_key.sign(alg, &tbs).unwrap();
+    Certificate::parse(&der::seq(&[&tbs, &sig_alg, &der::bit_string(&signature)])).unwrap()
+}
+
+/// Stores a certificate on the token.
+fn store(session: &Session, id: u8, label: &str, cert: &Certificate) {
+    session
+        .create_object(&[
+            Attribute::Class(ObjectClass::CERTIFICATE),
+            Attribute::CertificateType(CertificateType::X_509),
+            Attribute::Token(true),
+            Attribute::Id(vec![id]),
+            Attribute::Label(label.as_bytes().to_vec()),
+            Attribute::Subject(cert.subject.raw.clone()),
+            Attribute::Value(cert.raw.clone()),
+        ])
+        .unwrap();
+}
+
+/// A key pair generated on the token with its certificate stored beside it: self-signed, or
+/// issued by `issuer`.
+fn make_identity(session: Session, id: u8, cn: &str, rsa: bool, always_authenticate: bool, issuer: Option<&Ca>) -> Session {
     let common = [Attribute::Token(true), Attribute::Id(vec![id]), Attribute::Label(cn.as_bytes().to_vec())];
     let mut public_t = common.to_vec();
     public_t.push(Attribute::Verify(true));
@@ -133,10 +192,14 @@ fn make_identity(session: Session, id: u8, cn: &str, rsa: bool, always_authentic
         let point = der::Tlv::parse_all(&point).unwrap().value.to_vec();
         PublicKey::P256(point)
     };
+    let spki = public_key.spki();
     let session = Mutex::new(session);
     let key = PrivateKey::external(public_key, Arc::new(SetupKey { session, key: private, rsa, always: always_authenticate }));
     let name = Name::build(cn, "", "PdfCraft tests", "", "PL");
-    let cert = Certificate::self_signed(&name, &key, Time::from_unix(1_767_225_600), 5, &[id]).unwrap();
+    let cert = match issuer {
+        Some(ca) => issue(&name, &spki, &ca.name, &ca.key, false, id),
+        None => Certificate::self_signed(&name, &key, Time::from_unix(1_767_225_600), 5, &[id]).unwrap(),
+    };
     drop(key);
     // The session went into the key; open another to store the certificate.
     let ctx = Pkcs11::new(std::env::var_os("PDFCRAFT_TEST_SOFTHSM_LIB").unwrap()).unwrap();
@@ -147,17 +210,7 @@ fn make_identity(session: Session, id: u8, cn: &str, rsa: bool, always_authentic
         Ok(()) | Err(CkError::Pkcs11(RvError::UserAlreadyLoggedIn, _)) => {}
         Err(e) => panic!("{e}"),
     }
-    session
-        .create_object(&[
-            Attribute::Class(ObjectClass::CERTIFICATE),
-            Attribute::CertificateType(CertificateType::X_509),
-            Attribute::Token(true),
-            Attribute::Id(vec![id]),
-            Attribute::Label(cn.as_bytes().to_vec()),
-            Attribute::Subject(cert.subject.raw.clone()),
-            Attribute::Value(cert.raw.clone()),
-        ])
-        .unwrap();
+    store(&session, id, cn, &cert);
     session
 }
 
@@ -221,9 +274,18 @@ fn softhsm_checks() {
     session.init_pin(&AuthPin::from(PIN.to_string())).unwrap();
     session.logout().unwrap();
     session.login(UserType::User, Some(&AuthPin::from(PIN.to_string()))).unwrap();
-    let session = make_identity(session, 1, "Token RSA", true, false);
-    let session = make_identity(session, 2, "Token ECDSA", false, false);
-    let session = make_identity(session, 3, "Token Always", true, true);
+    let session = make_identity(session, 1, "Token RSA", true, false, None);
+    let session = make_identity(session, 2, "Token ECDSA", false, false, None);
+    let session = make_identity(session, 3, "Token Always", true, true, None);
+    // One identity issued by an intermediate under a root, both on the token, beside a root
+    // that issued nothing here (as CloudSigner lists one).
+    let root = Ca::new("Token Root", None, 21);
+    let intermediate = Ca::new("Token Intermediate", Some(&root), 22);
+    let unrelated = Ca::new("Unrelated Root", None, 23);
+    let session = make_identity(session, 4, "Token Issued", true, false, Some(&intermediate));
+    for (id, ca) in [(11, &root), (12, &intermediate), (13, &unrelated)] {
+        store(&session, id, ca.name.common_name().unwrap(), &ca.cert);
+    }
     session.logout().unwrap();
     drop(session);
 
@@ -235,8 +297,13 @@ fn softhsm_checks() {
     // SoftHSM keeps objects in files named at random, so the order isn't fixed.
     let mut names: Vec<String> = listing.ids.iter().map(TokenIdentity::display_name).collect();
     names.sort();
-    assert_eq!(names, ["Token Always (PdfCraft test)", "Token ECDSA (PdfCraft test)", "Token RSA (PdfCraft test)"]);
+    assert_eq!(names, ["Token Always (PdfCraft test)", "Token ECDSA (PdfCraft test)", "Token Issued (PdfCraft test)", "Token RSA (PdfCraft test)"]);
     assert!(listing.ids.iter().all(|i| i.needs_pin && i.module == lib));
+    // Each identity's chain is its path up the token's CAs, issuer first; the unrelated root is
+    // in none, and a self-signed certificate has none.
+    let issued = listing.ids.iter().find(|i| i.certificate.subject.common_name() == Some("Token Issued")).unwrap();
+    assert_eq!(issued.chain, [intermediate.cert.clone(), root.cert.clone()]);
+    assert!(listing.ids.iter().filter(|i| i.certificate != issued.certificate).all(|i| i.chain.is_empty()));
     let named = |cn: &str| listing.ids.iter().find(|i| i.certificate.subject.common_name() == Some(cn)).unwrap().certificate.clone();
     let rsa = pkcs11::find(&modules, &pkcs11::reference(&named("Token RSA"))).unwrap();
     assert_eq!(rsa.certificate, named("Token RSA"));
@@ -255,6 +322,13 @@ fn softhsm_checks() {
         let signed = pdfcraft_sign::sign(&open(&fixture()), &digital_id, &opts("single")).unwrap();
         check(&signed, id);
     }
+
+    // Trusting only the root, the issued identity's signature is valid: the intermediate went
+    // into the signature with it.
+    let signed = pdfcraft_sign::sign(&open(&fixture()), &issued.open(Some(PIN)).unwrap(), &opts("chain")).unwrap();
+    let trust = TrustStore { certs: vec![root.cert.clone()] };
+    let s = signatures(&open(&signed), &signed, &trust).into_iter().find(|s| s.signed).expect("a signature");
+    assert_eq!(s.status, Status::Valid, "{:?}", s.details);
 
     // A batch: three documents sign together, each in its own session, once all three are at
     // their signing. One of them fails before it signs and must not hold the others back.

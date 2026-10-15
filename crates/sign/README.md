@@ -53,7 +53,9 @@ for s in signatures(&doc, &bytes, &trust) {                                // li
   for mSzafir qualified signatures (found where its macOS installer puts it, `known_modules`).
   Only modules the user chose are loaded: a module is code in the process. `list` reads the
   certificates on each token (a key hidden until login is taken to be there for a certificate
-  that may sign and isn't a CA's); `TokenIdentity::open` logs in with the PIN when the token
+  that may sign and isn't a CA's), and an identity's chain is only the token's CAs on its path,
+  issuer first (CloudSigner also lists a TLS server certificate and a root that issued neither);
+  `TokenIdentity::open` logs in with the PIN when the token
   sets `CKF_LOGIN_REQUIRED` without a protected authentication path (CloudSigner asks for its
   OTT code in its own window, so it gets none), and the key signs `CKM_RSA_PKCS` over a
   DigestInfo (what CloudSigner signs) or `CKM_ECDSA`; a key with
