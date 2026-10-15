@@ -2603,6 +2603,13 @@
 	Make properties default	Bruk egenskapene som standard
 	Pages selected	Valgte sider
 	Page properties	Sideegenskaper
+	Cut Image	Klipp ut bilde
+	Redact Image	Sladd bilde
+	Create Link…	Opprett lenke…
+	Recognize Text…	Gjenkjenn tekst…
+	Turn upside down (180°)	Snu opp ned (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 x 6 tommer etikett (101,6 x 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Beskjærer hver side til det trykte området, snur den rett vei og tilpasser den til arket uten å strekke. Én etikett per ark.
 
 # Words that need a different translation in one place (see tr_ctx).
 theme	Appearance	Utseende
