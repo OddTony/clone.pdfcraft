@@ -703,7 +703,8 @@ const COVER_SCAN_BYTES: usize = 1024 * 1024;
 ///
 /// Conservative: only a fill of a path that is one rectangle, unclipped and with no `gs` before it
 /// (which could make it translucent or blend it), counts; anything else painted first answers
-/// `false` (several rectangles can cancel out under either fill rule). The
+/// `false` (several rectangles can cancel out under either fill rule), and so does optional
+/// content (`/OC … BDC`), which may be hidden. The
 /// streams PdfCraft added (marks, added content) are skipped, a malformed page answers `false`, and at most
 /// [`COVER_SCAN_BYTES`] of content are decoded: a stream that would decode to more ends the
 /// reading there.
@@ -784,6 +785,8 @@ pub fn page_hides_background(doc: &Document, page: usize) -> bool {
                 _ => return false,
             },
             b"scn" if matches!(op.operands.last(), Some(Object::Name(_))) => return false,
+            // Optional content (a layer) may be hidden, and the fill with it.
+            b"BDC" if matches!(op.operands.first(), Some(Object::Name(n)) if n.as_slice() == b"OC") => return false,
             // Colour, line style and marked content change nothing that is painted.
             b"g" | b"G" | b"rg" | b"RG" | b"k" | b"K" | b"CS" | b"sc" | b"SC" | b"scn" | b"SCN" | b"w" | b"J" | b"j" | b"M" | b"d" | b"ri" | b"i"
             | b"BDC" | b"BMC" | b"EMC" | b"MP" | b"DP" | b"BX" | b"EX" => {}

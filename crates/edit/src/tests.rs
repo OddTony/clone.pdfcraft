@@ -4350,6 +4350,9 @@ fn page_hides_background_finds_a_page_sized_fill_first() {
     assert!(hides_in("/CS1 cs 1 sc 0 0 600 800 re f"), "a resource naming a device space");
     assert!(hides_in("/CS3 cs 1 1 1 scn 0 0 600 800 re f"), "an ICC-based space");
     assert!(!hides("cs 0 0 600 800 re f"), "cs without a name");
+    // A layer may be off, and the fill with it.
+    assert!(!hides("/OC /L1 BDC 1 g 0 0 600 800 re f EMC"), "inside optional content");
+    assert!(hides("/Span << /ActualText () >> BDC 1 g 0 0 600 800 re f EMC"), "other marked content is no layer");
     assert!(!hides("0 0 600 800 re n 0 0 1 1 re f"), "the page-sized path was ended unpainted");
     assert!(!hides("q Q Q Q"), "nothing painted");
     assert!(!hides(""), "no content");
