@@ -6,7 +6,8 @@
 //! the appearance's bounding box, transformed by its `/Matrix`, mapped onto `/Rect`). Hidden
 //! annotations are left alone; links are kept (they have no ink and stay clickable). Flattened
 //! comments take their pop-ups and replies with them; flattened widgets are removed from the
-//! form's field tree.
+//! form's field tree. An annotation whose appearance cannot be drawn is not flattened: it stays
+//! as it is, so no comment or field value is lost with nothing in its place.
 
 use std::collections::HashSet;
 
@@ -154,6 +155,8 @@ fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<us
             .unwrap_or_default();
         let mut gone: HashSet<ObjRef> = HashSet::new();
         let mut gone_inline: HashSet<usize> = HashSet::new();
+        // Selected, but nothing was drawn for it: it stays, pop-up and reply handling included.
+        let mut undrawn: HashSet<ObjRef> = HashSet::new();
         // A viewer draws many comments from their dictionary even when the file stores no
         // appearance (notes, FreeText, ink, stamps…). Build the appearance it would show, so
         // flattening keeps a comment that still has ink on screen instead of deleting it.
@@ -168,8 +171,9 @@ fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<us
             if flags & (HIDDEN | NO_VIEW) != 0 || appearance(doc, &d).is_some() {
                 continue;
             }
-            // A subtype this build cannot draw only fails here; it is still removed below. (Text
-            // the standard fonts can't draw was refused before anything changed: `undrawn_on`.)
+            // A subtype this build cannot draw fails here and is kept below, so the comment is
+            // not deleted with nothing drawn in its place. (Text the standard fonts can't draw
+            // was refused before anything changed: `undrawn_on`.)
             let _ = pdfcraft_annot::set_appearance(doc, r);
         }
         for (k, entry) in list.iter().enumerate() {
@@ -185,6 +189,7 @@ fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<us
                 continue;
             }
             let rect = nums(doc, d.get(b"Rect")).filter(|r| r.len() == 4).map(|r| [r[0].min(r[2]), r[1].min(r[3]), r[0].max(r[2]), r[1].max(r[3])]);
+            let mut drew = false;
             if let (Some(ap), Some(rect)) = (appearance(doc, d), rect) {
                 let form = doc.get(ap).as_dict().cloned().unwrap_or_default();
                 if let Some(m) = placement(doc, &form, rect) {
@@ -192,6 +197,22 @@ fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<us
                     content.push_str(&format!("q {} {} {} {} {} {} cm /{name} Do Q\n", n(m[0]), n(m[1]), n(m[2]), n(m[3]), n(m[4]), n(m[5])));
                     xobjects.set(name.into_bytes(), Object::Ref(ap));
                     drawn += 1;
+                    drew = true;
+                }
+            }
+            // A comment whose ink was not written into the page stays. Removing it would drop
+            // the annotation (a cloudy square this builder cannot draw, for example) with nothing
+            // left on the page. A widget stays when it has no appearance to draw at all (none
+            // stored, or none for its selected state): removing it would lose the field's value
+            // with nothing in its place (#1794). One whose appearance draws nothing (an empty
+            // stream) shows nothing anywhere, so flattening still removes it.
+            if !drew {
+                let no_appearance = appearance(doc, d).is_none();
+                if no_appearance && let Some(r) = entry.as_ref() {
+                    undrawn.insert(r);
+                }
+                if !widget || no_appearance {
+                    continue;
                 }
             }
             match entry.as_ref() {
@@ -209,9 +230,13 @@ fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<us
         if gone.is_empty() && gone_inline.is_empty() {
             continue;
         }
-        // Pop-ups and replies of what was flattened go too.
+        // Pop-ups and replies of what was flattened go too, except a reply that stayed because
+        // it could not be drawn: its content would go with nothing in its place.
         for entry in &list {
             let Some(r) = entry.as_ref() else { continue };
+            if undrawn.contains(&r) {
+                continue;
+            }
             let obj = doc.get(r);
             let Some(d) = obj.as_dict() else { continue };
             let points_at = |k: &[u8]| d.reference(k).is_some_and(|t| gone.contains(&t));
