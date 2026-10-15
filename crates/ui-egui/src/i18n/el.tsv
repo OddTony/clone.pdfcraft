@@ -65,6 +65,8 @@
 	Column select	Επιλογή στήλης
 	Full screen mode	Λειτουργία πλήρους οθόνης
 	Read mode	Λειτουργία ανάγνωσης
+	Next tab	Επόμενη καρτέλα
+	Previous tab	Προηγούμενη καρτέλα
 	Switch light / dark theme	Εναλλαγή φωτεινού / σκοτεινού θέματος
 	Comments panel	Πίνακας σχολίων
 	Form fields panel	Πίνακας πεδίων φόρμας
@@ -2362,3 +2364,6 @@ animation effects	Off	Ανενεργά
 	This document is trying to open a local file:	Αυτό το έγγραφο προσπαθεί να ανοίξει ένα τοπικό αρχείο:
 	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
 	Move tag later	Μετακίνηση ετικέτας αργότερα
+	Mark as artifact	Σήμανση ως τεχνούργημα
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Αφαιρέστε αυτήν την ετικέτα φύλλου από τη σειρά ανάγνωσης και σημειώστε το άμεσο περιεχόμενό της ως τεχνούργημα
+	Mark content as artifact	Σήμανση περιεχομένου ως τεχνούργημα

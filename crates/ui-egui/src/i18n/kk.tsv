@@ -54,6 +54,8 @@
 	Take a snapshot	Суретке түсіру
 	Full screen mode	Толық экран режимі
 	Read mode	Оқу режимі
+	Next tab	Келесі қойынды
+	Previous tab	Алдыңғы қойынды
 	Switch light / dark theme	Ашық / қараңғы теманы ауыстыру
 	Comments panel	Түсініктемелер панелі
 	Form fields panel	Форма өрістері панелі
@@ -2350,3 +2352,6 @@ animation effects	Off	Өшірулі
 	This document is trying to open a local file:	Бұл құжат жергілікті файлды ашуға әрекеттеніп жатыр:
 	Move tag earlier	Тегті ертерек жылжыту
 	Move tag later	Тегті кейінірек жылжыту
+	Mark as artifact	Артефакт ретінде белгілеу
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Осы жапырақ тегін оқу ретінен алып тастап, оның тікелей мазмұнын артефакт ретінде белгілеңіз
+	Mark content as artifact	Мазмұнды артефакт ретінде белгілеу

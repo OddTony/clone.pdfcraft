@@ -78,6 +78,8 @@
 	Column select	Виділення стовпця
 	Full screen mode	Повноекранний режим
 	Read mode	Режим читання
+	Next tab	Наступна вкладка
+	Previous tab	Попередня вкладка
 	Switch light / dark theme	Перемкнути світлу / темну тему
 	Comments panel	Панель коментарів
 	Form fields panel	Панель полів форми
@@ -2374,3 +2376,6 @@ animation effects	Off	Вимкнено
 	This document is trying to open a local file:	Цей документ намагається відкрити локальний файл:
 	Move tag earlier	Перемістити тег раніше
 	Move tag later	Перемістити тег пізніше
+	Mark as artifact	Позначити як артефакт
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Вилучіть цей кінцевий тег із порядку читання та позначте його безпосередній вміст як артефакт
+	Mark content as artifact	Позначити вміст як артефакт
