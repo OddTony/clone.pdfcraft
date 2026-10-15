@@ -1122,6 +1122,21 @@ fn repair_hebrew_mark_spacing(input: &str) -> String {
     out
 }
 
+#[cfg(test)]
+mod hebrew_editor_spacing_tests {
+    use super::repair_hebrew_mark_spacing;
+
+    #[test]
+    fn detached_hebrew_marks_attach_without_removing_real_word_spaces() {
+        assert_eq!(
+            repair_hebrew_mark_spacing("א ַנדערער דונא ַ, שטא ָט פּעסט"),
+            "אַנדערער דונאַ, שטאָט פּעסט"
+        );
+        assert_eq!(repair_hebrew_mark_spacing("שלום עולם"), "שלום עולם");
+        assert_eq!(repair_hebrew_mark_spacing("א ַ ב"), "אַ ב");
+    }
+}
+
 /// Joining independent text objects is safe only when they use the same text and graphics
 /// transforms and spacing. In particular, a nearby rotated label isn't part of this line.
 fn compatible_word(line: &TextLine, shown: &Shown) -> bool {
