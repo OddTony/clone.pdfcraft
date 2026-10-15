@@ -16,7 +16,7 @@ use pdfcraft_fonts::{
 };
 use unicode_bidi::{Level, ParagraphBidiInfo};
 
-use crate::{EditError, MarkKind, check, contents, n, page_list, place_tagged};
+use crate::{EditError, MarkKind, check, contents, matrix_number, n, page_list, place_tagged};
 
 const TAG: &str = "Added";
 
@@ -738,7 +738,16 @@ fn type3_shaped(doc: &mut Document, clusters: &[&ShapedCluster], outlines: &Hash
 /// move it.
 fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing: bool) -> Result<(Vec<u8>, Dict), EditError> {
     let mut res = Dict::new();
-    let mut out = format!("q {} {} {} {} {} {} cm\n", n(view[0]), n(view[1]), n(view[2]), n(view[3]), n(view[4]), n(view[5])).into_bytes();
+    let mut out = format!(
+        "q {} {} {} {} {} {} cm\n",
+        matrix_number(view[0]),
+        matrix_number(view[1]),
+        matrix_number(view[2]),
+        matrix_number(view[3]),
+        matrix_number(view[4]),
+        matrix_number(view[5])
+    )
+    .into_bytes();
     match c {
         Content::Text(t) => {
             let base = t.family.base_font(t.bold, t.italic);
