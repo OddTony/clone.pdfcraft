@@ -357,7 +357,7 @@ pub fn models(args: &[String]) -> Result<()> {
 
 /// The credits shipped beside the models (their licences require attribution).
 fn models_attribution(m: &Manifest) -> String {
-    let mut s = String::from("PdfCraft's text recognition (Scan & OCR) uses these models, unmodified.\n");
+    let mut s = String::from("PdfCraft's text recognition (Scan & OCR) uses these models.\n");
     for f in m.fetched.iter().filter(|f| f.kind == "model") {
         let _ = write!(
             s,

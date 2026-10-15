@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 7: Latin recognition model reads Western European accents; other scripts stay unread) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (gap 6: #1910 Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (gap 6: #1398 stamps read upright on rotated pages; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -148,9 +149,10 @@ update the numbers.
 - **Missing:** every other script and accented Latin; editable-text output; deskew, rotation,
   despeckle, background and camera clean-up; MRC compression; pluggable engines; OCR in the
   browser; scanner input.
-- **Evidence:** `ocr.ocr-languages` partial ("the models read only the Latin alphabet without
-  accents"); 19 of 26 OCR features planned; [#744](https://github.com/storytold/pdfcraft/issues/744)
-  (Dutch). Acrobat ships on-device recognition for dozens of languages.
+- **Evidence:** `ocr.ocr-languages` partial. `text-recognition-latin.rten` reads Western
+  European accents and the text layer keeps them (#2485, #744); without that file the original
+  model still writes `?`. 19 of 26 OCR features planned. Other scripts are unread. Acrobat
+  ships on-device recognition for dozens of languages.
 - **Impact:** scanned documents are a core Pro workflow outside English.
 - **Estimate:** 40–75 h, partly blocked on openly licensed models. **Doc:**
   [file-format-parity.md](file-format-parity.md).
@@ -366,6 +368,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | Gap 7: the Latin recognition model reads Western European accents; other scripts stay unread (#2485) |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |
 | 2026-10-13 | minor | Gap 6: Organize Pages selects and reveals the current page on open, including after an earlier grid selection elsewhere (#1910). Estimates unchanged. |
 | 2026-10-12 | minor | Gap 6: rubber stamps, explicit image rectangles and PDF-page stamps read upright on rotated pages (#1398). Estimates unchanged. |

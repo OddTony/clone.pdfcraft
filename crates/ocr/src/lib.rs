@@ -6,7 +6,10 @@
 //! into page content: invisible text (rendering mode 3) over each word, so the page becomes a
 //! searchable image (Acrobat's "Searchable Image (Exact)": the image is left untouched).
 //!
-//! The models read the Latin alphabet (English and other languages written without accents).
+//! The detection model is unchanged. Recognition prefers `text-recognition-latin.rten` when it
+//! is installed: a fine-tune that reads Western European accents (`é`, `à`, `ç`, `œ`, …) as well
+//! as the original alphabet. Without that file, recognition is the original model, which has no
+//! accented letters and writes `?` for them.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -17,14 +20,25 @@ pub use pdfcraft_fonts::helvetica_width;
 /// The model files, as named in ATTRIBUTION.toml.
 pub const DETECTION_MODEL: &str = "text-detection.rten";
 pub const RECOGNITION_MODEL: &str = "text-recognition.rten";
+/// Fine-tune of [`RECOGNITION_MODEL`] that adds Western European accents. Preferred when present.
+pub const RECOGNITION_LATIN_MODEL: &str = "text-recognition-latin.rten";
 
-/// The recognition model's alphabet, as it was trained (ocrs-models' `DEFAULT_ALPHABET`): its
-/// output classes follow this order. The ocrs crate's own copy has an `E` where the training had
-/// `€`, which made a scanned "€250" read as "E250".
+/// The original recognition model's alphabet (ocrs-models' `DEFAULT_ALPHABET`). Output classes
+/// follow this order. The ocrs crate's own copy has an `E` where the training had `€`, which
+/// made a scanned "€250" read as "E250".
 pub const ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~€ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-/// The languages the models read (ISO 639-1); all use the Latin alphabet without accents.
+/// [`RECOGNITION_LATIN_MODEL`]'s alphabet: [`ALPHABET`], then the 76 WinAnsi letters it was
+/// trained to add. Every character fits the text layer's Helvetica encoding.
+pub const LATIN_ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~€ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿŒœŠšŽžŸ£§°«»¿¡";
+
+/// The language shown in Recognize Text. The Latin model reads Western European letters either
+/// way; this list is not a filter.
 pub const LANGUAGES: &[(&str, &str)] = &[("en", "English")];
+
+/// Each side of a detected word grows by this fraction of its height before recognition.
+/// The detector only expands a box by 3 pixels, which cuts off accents on a large scan.
+const WORD_PAD_OF_HEIGHT: f32 = 0.25;
 
 #[derive(Debug, thiserror::Error)]
 pub enum OcrError {
@@ -45,13 +59,31 @@ pub enum OcrError {
 pub struct Models {
     pub detection: PathBuf,
     pub recognition: PathBuf,
+    /// The alphabet that matches [`Self::recognition`].
+    pub alphabet: &'static str,
 }
 
 impl Models {
-    /// The models in `dir`, if both files are there.
+    /// The models in `dir`. Detection is required. Recognition prefers the Latin fine-tune.
     pub fn in_dir(dir: &Path) -> Option<Models> {
-        let m = Models { detection: dir.join(DETECTION_MODEL), recognition: dir.join(RECOGNITION_MODEL) };
-        (m.detection.is_file() && m.recognition.is_file()).then_some(m)
+        let detection = dir.join(DETECTION_MODEL);
+        if !detection.is_file() {
+            return None;
+        }
+        let latin = dir.join(RECOGNITION_LATIN_MODEL);
+        let standard = dir.join(RECOGNITION_MODEL);
+        if latin.is_file() {
+            Some(Models { detection, recognition: latin, alphabet: LATIN_ALPHABET })
+        } else if standard.is_file() {
+            Some(Models { detection, recognition: standard, alphabet: ALPHABET })
+        } else {
+            None
+        }
+    }
+
+    /// Whether recognition can emit Western European accents (`é`, `à`, `ç`, …).
+    pub fn reads_accents(&self) -> bool {
+        self.alphabet.chars().any(|c| c == 'é')
     }
 
     /// Look for the models: `$PDFCRAFT_MODELS`, then where the release packages install them
@@ -114,7 +146,7 @@ impl Ocr {
         let params = ocrs::OcrEngineParams {
             detection_model: Some(load(&models.detection)?),
             recognition_model: Some(load(&models.recognition)?),
-            alphabet: Some(ALPHABET.into()),
+            alphabet: Some(models.alphabet.into()),
             ..Default::default()
         };
         let engine = ocrs::OcrEngine::new(params).map_err(|e| OcrError::Load("ocr engine".into(), e.to_string()))?;
@@ -141,6 +173,14 @@ impl Ocr {
         let source = ocrs::ImageSource::from_bytes(&rgb, (width, height)).map_err(|e| err(&e))?;
         let input = self.engine.prepare_input(source).map_err(|e| err(&e))?;
         let found = self.engine.detect_words(&input).map_err(|e| err(&e))?;
+        // 25% of the box height on every side, so an accent above the letters is inside the crop.
+        let found: Vec<_> = found
+            .into_iter()
+            .map(|word| {
+                let side = word.height() * WORD_PAD_OF_HEIGHT;
+                word.expanded(side * 2.0, side * 2.0)
+            })
+            .collect();
         let lines = self.engine.find_text_lines(&input, &found);
         let read = self.engine.recognize_text(&input, &lines).map_err(|e| err(&e))?;
         use ocrs::TextItem;
@@ -324,6 +364,11 @@ mod tests {
             }
             let models = found().unwrap_or_else(|| panic!("{name}: models in {} not found", models_dir.display()));
             assert_eq!(models.detection.canonicalize().unwrap(), models_dir.join(DETECTION_MODEL).canonicalize().unwrap(), "{name}");
+            assert!(!models.reads_accents(), "{name}: the original model has no accents");
+            std::fs::write(models_dir.join(RECOGNITION_LATIN_MODEL), b"latin").unwrap();
+            let latin = found().unwrap();
+            assert!(latin.reads_accents(), "{name}");
+            assert_eq!(latin.recognition.file_name().and_then(|n| n.to_str()), Some(RECOGNITION_LATIN_MODEL));
         }
         let _ = std::fs::remove_dir_all(&base);
     }
@@ -336,6 +381,34 @@ mod tests {
         // The euro sign follows the ASCII punctuation (class 44; 0 is the CTC blank), not a second E.
         assert_eq!(chars.iter().position(|&c| c == '€'), Some(43));
         assert_eq!(chars.iter().filter(|&&c| c == 'E').count(), 1);
+    }
+
+    /// #2485: the Latin model adds the letters a French scan needs, and the text layer can
+    /// store them. A `?` here is what Copy pastes.
+    #[test]
+    fn the_latin_alphabet_keeps_french_in_the_text_layer() {
+        let chars: Vec<char> = LATIN_ALPHABET.chars().collect();
+        assert_eq!(chars.len(), 172);
+        assert!(LATIN_ALPHABET.starts_with(ALPHABET));
+        for c in ['é', 'è', 'ê', 'ë', 'à', 'â', 'ç', 'ù', 'û', 'ô', 'î', 'ï', 'œ', 'Œ'] {
+            assert!(chars.contains(&c), "{c}");
+            assert_eq!(pdfcraft_fonts::first_undrawable(&c.to_string()), None, "{c} would be saved as ?");
+        }
+        let w = PlacedWord { text: "média août Français cœur".into(), origin: [0.0, 0.0], across: [80.0, 0.0], up: [0.0, 10.0] };
+        let layer = text_layer(&[w]);
+        let encoded = pdfcraft_fonts::win_ansi("média août Français cœur");
+        assert!(encoded.contains(&0xE9), "é is WinAnsi 0xE9");
+        assert!(layer.windows(encoded.len()).any(|w| w == encoded.as_slice()), "the layer must hold the accents, not '?'");
+        assert!(!layer.windows(6).any(|w| w == b"(m?dia"));
+    }
+
+    #[test]
+    fn word_padding_is_a_quarter_of_the_height_on_every_side() {
+        let height = 40.0_f32;
+        let side = height * WORD_PAD_OF_HEIGHT;
+        assert_eq!(side, 10.0);
+        // `RotatedRect::expanded` adds `side * 2` to the width and to the height.
+        assert_eq!((100.0 + side * 2.0, height + side * 2.0), (120.0, 60.0));
     }
 
     #[test]

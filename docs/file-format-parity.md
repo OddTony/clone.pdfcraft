@@ -1,6 +1,6 @@
 # File format parity
 
-> **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (XDP data row corrected; BigTIFF in Create PDF) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (OCR: Western European accents when the Latin recognition model is installed) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Every format Acrobat Pro reads or writes, and PdfCraft's support for it. Acrobat's list comes from
 its bundle's `Info.plist` `CFBundleDocumentTypes` (what it opens) and its public documentation
@@ -101,7 +101,7 @@ features total).
 |---|---|---|---|
 | Searchable image (invisible text layer) | yes | yes (Tr 3 text fitted to word boxes) | good for English |
 | Editable text and images output | yes | no | none |
-| Languages | dozens (Latin with accents, Cyrillic, Greek, CJK, Arabic, Hebrew, Indic) | Latin without accents only (ocrs models) | **basic** (#744) |
+| Languages | dozens (Latin with accents, Cyrillic, Greek, CJK, Arabic, Hebrew, Indic) | Western European accents when `text-recognition-latin.rten` is installed; otherwise unaccented Latin. No Cyrillic, Greek, CJK, Arabic, Hebrew or Indic | **basic** (#744, #2485) |
 | Deskew, rotation, despeckle, background and halo removal, descreen | yes | no | none |
 | Camera images (edges, perspective, whiteboard, card) | yes | no | none |
 | MRC (adaptive) compression, PDF/A output of scans | yes | no | none |
@@ -110,6 +110,7 @@ features total).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | OCR languages: the Latin recognition model reads Western European accents and the text layer keeps them (#2485). Other scripts are unchanged. |
 | 2026-10-12 | minor | XDP split into data (read and write for XFA forms, already shipped under `form.xfa-data`) and opening `.xdp` as a document (none). Create PDF reads BigTIFF; malformed GIF headers are no longer detected as images. |
 | 2026-10-11 | minor | #773: inferred tables have no invented borders; rotated or overlapping invoice pages use floating shapes and page sections. Full Office layout fidelity remains partial. |
 | 2026-10-11 | minor | Encrypted PDF row: written files open in Acrobat DC (#774, fixed by #836). FDF row: #807, #809 and #819 fixed |

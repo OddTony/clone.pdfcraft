@@ -4786,6 +4786,28 @@ fn ocr_tools_make_a_scan_searchable() {
     assert!(matches!(a.call("ocr_recognize", &json!({ "doc": scan, "language": "xx" })), Err(ToolError::InvalidArgs(_))));
 }
 
+/// #2485: a French scan stays French after Recognize Text, so Copy pastes `é` rather than `?`.
+#[test]
+fn ocr_recognize_keeps_french_accents() {
+    let dir = workdir("ocr-fr");
+    let mut a = auto(&dir);
+    let status = ok(&mut a, "ocr_status", json!({}));
+    if status["accents"] != true {
+        eprintln!("skipped: Latin recognition model not installed");
+        return;
+    }
+    let text = ok(&mut a, "doc_create", json!({ "from": "text", "text": "Café été à Noël" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "doc_export_images", json!({ "doc": text, "folder": "scan", "dpi": 200, "pages": [1] }));
+    let png = std::fs::read_dir(dir.join("scan")).unwrap().next().unwrap().unwrap().path();
+    let scan = ok(&mut a, "doc_create", json!({ "from": "images", "paths": [png.to_string_lossy()] }))["doc"].as_u64().unwrap();
+    let r = ok(&mut a, "ocr_recognize", json!({ "doc": scan }));
+    let got = r["pages"][0]["text"].as_str().unwrap_or("");
+    assert!(got.contains('é'), "{got}");
+    assert!(!got.contains("Caf?") && !got.contains('?'), "{got}");
+    let found = ok(&mut a, "text_find", json!({ "doc": scan, "query": "été" }))["count"].as_u64().unwrap();
+    assert_eq!(found, 1, "{r}");
+}
+
 /// #1028: `skip_text_pages: false` reads a picture on a page that has its own text, and the
 /// page's own words are left out (counted) instead of being added a second time.
 #[test]

@@ -3318,8 +3318,21 @@ licence = "CC-BY-SA-4.0"
 licence_url = "https://creativecommons.org/licenses/by-sa/4.0/legalcode.txt"
 licence_sha256 = "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5"
 kind = "model"
-usage = "Scan & OCR: reads the words it finds (cargo xtask models)"
+usage = "Scan & OCR: reads the words it finds when text-recognition-latin.rten is not installed (cargo xtask models)"
 sha256 = "e484866d4cce403175bd8d00b128feb08ab42e208de30e42cd9889d8f1735a6e"
+
+[[fetched]]
+file = "text-recognition-latin.rten"
+url = "https://github.com/mlkonrad/ocrs-models/releases/download/latin-v1/text-recognition-latin.rten"
+title = "Ocrs Latin text recognition model"
+author = "Martin Konrad, fine-tuned from Robert Knight's ocrs recognition model (trained on HierText by Google Research and Wikipedia text, all CC-BY-SA-4.0)"
+source = "https://github.com/mlkonrad/ocrs-models/releases/tag/latin-v1 (model card: https://github.com/mlkonrad/ocrs-models/blob/main/latin/README.md)"
+licence = "CC-BY-SA-4.0"
+licence_url = "https://creativecommons.org/licenses/by-sa/4.0/legalcode.txt"
+licence_sha256 = "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5"
+kind = "model"
+usage = "Scan & OCR: preferred recognition model; reads Western European accents (é, è, à, ç, œ, …) as well as the original alphabet (cargo xtask models)"
+sha256 = "15ff77952b7ec952849d162e36b8935ce289c4f08c8d59b4c7a12eedf945e1f4"
 
 [[build_input]]
 name = "craft-fonts"

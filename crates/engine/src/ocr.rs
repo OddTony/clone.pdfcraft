@@ -18,7 +18,8 @@ use crate::{DocId, Edit, EditError, Session};
 pub struct OcrSettings {
     /// Resolution pages are rendered at for recognition (Acrobat's "Downsample to" choices).
     pub dpi: f32,
-    /// Language code from [`LANGUAGES`] (the models read the Latin alphabet, whatever this says).
+    /// Language code from [`LANGUAGES`]. It does not filter letters: the Latin recognition
+    /// model reads Western European accents whichever code is set.
     pub language: String,
     /// Leave pages that already have text alone (Acrobat reports "page contains renderable
     /// text" and skips them). When `false`, such pages are read too (a picture on a page that
