@@ -146,6 +146,19 @@ impl Automation {
 
     pub(crate) fn content_update(&mut self, a: &Args) -> Result<Value> {
         let (page, index, content, ph) = self.item(a)?;
+        let to = match a.opt_int("to_page")? {
+            Some(n) => usize::try_from(n)
+                .ok()
+                .and_then(|n| n.checked_sub(1))
+                .filter(|n| *n < self.doc(a).map_or(0, |doc| doc.info.pages.len()))
+                .ok_or_else(|| bad("to_page must name an existing page (starting at 1)"))?,
+            None => page,
+        };
+        if to != page && a.get("image").is_some() {
+            return Err(bad("move the item and replace its image in separate operations"));
+        }
+        let ph =
+            if to == page { ph } else { self.doc(a)?.info.pages.get(to).ok_or_else(|| bad("the destination page no longer exists"))?.height as f64 };
         let mut content = match rect_arg(a, "rect")? {
             Some(r) => content.with_rect(to_display(r, ph)),
             None => content,
@@ -195,7 +208,14 @@ impl Automation {
                 }
             }
         }
-        self.apply(a, Edit::UpdateContent { page, index, content })
+        if to != page {
+            let mut out = self.apply(a, Edit::MoveContent { page, index, to, content })?;
+            out["page"] = json!(to + 1);
+            out["index"] = json!(self.doc(a)?.added().iter().filter(|item| item.page == to).count());
+            Ok(out)
+        } else {
+            self.apply(a, Edit::UpdateContent { page, index, content })
+        }
     }
 
     pub(crate) fn content_delete(&mut self, a: &Args) -> Result<Value> {

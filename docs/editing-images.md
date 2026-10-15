@@ -43,3 +43,14 @@ with the selected image; shared clips stay fixed without moving neighbouring tex
 the full placement rectangle used by `image_edit` and adds `visible_rect` for selection (null
 when fully clipped). `object_list` reports visible artwork bounds while keeping the original
 source indexes. A selection frame does not create, remove or enlarge the PDF's clipping path.
+
+## Images added with Add content
+
+An added image can be dragged onto another visible page. Releasing it transfers the item to
+that page, above its existing content, rather than moving it outside the source page's bounds.
+The transfer is one undoable edit and survives saving/reopening. Rotation, flips and cropping
+remain part of the item. This cross-page transfer applies to added content; existing Image/Form
+placements still move within their own page.
+
+Headlessly, use `content_update` with the item's source `page`/`index`, `to_page` and a `rect`
+in the destination's top-left-origin page coordinates. The result returns the new page and index.

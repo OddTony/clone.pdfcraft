@@ -3546,6 +3546,38 @@ fn printing_through_tools() {
 }
 
 #[test]
+fn added_images_move_between_pages_through_tools() {
+    let dir = workdir("content-transfer");
+    let mut png = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut png, 1, 1);
+        enc.set_color(png::ColorType::Rgb);
+        enc.write_header().unwrap().write_image_data(&[220, 30, 20]).unwrap();
+    }
+    std::fs::write(dir.join("red.png"), png).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"a.pdf"}))["doc"].as_u64().unwrap();
+    ok(&mut a, "page_add_image", json!({"doc":doc,"page":1,"path":"red.png","rect":[20,40,80,80]}));
+    let before = ok(&mut a, "content_list", json!({"doc":doc}));
+    for to in [0, -1, 999] {
+        assert!(a.call("content_update", &json!({"doc":doc,"page":1,"index":1,"to_page":to})).is_err());
+        assert_eq!(ok(&mut a, "content_list", json!({"doc":doc})), before);
+    }
+    let moved = ok(&mut a, "content_update", json!({"doc":doc,"page":1,"index":1,"to_page":2,"rect":[40,60,100,100]}));
+    assert_eq!(moved["page"], 2);
+    let items = ok(&mut a, "content_list", json!({"doc":doc}));
+    assert_eq!(items["count"], 1);
+    assert_eq!(items["items"][0]["page"], 2);
+    assert_eq!(items["items"][0]["rect"], json!([40.0, 60.0, 100.0, 100.0]));
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(ok(&mut a, "content_list", json!({"doc":doc})), before);
+    ok(&mut a, "edit_redo", json!({"doc":doc}));
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"moved.pdf"}));
+    let again = ok(&mut a, "doc_open", json!({"path":"moved.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "content_list", json!({"doc":again})), items);
+}
+
+#[test]
 fn adding_content_through_tools() {
     let dir = workdir("content");
     let mut png = Vec::new();
