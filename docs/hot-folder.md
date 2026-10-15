@@ -22,6 +22,8 @@ The follow-up integration includes main `3f044b62` (native Windows printing) and
 
 The 2026-10-14 follow-up integrates main `dc4d86ba`. Its safe server-test harness passes on Windows and Linux after correcting native path separators and case comparison; the previous helper fails the same Linux run. Selected automation, font, content and editor tests pass (1,385 passed, five ignored), plus 271 renderer tests. Print-dialog tests use synthetic printer sources after reproducing a crash during concurrent native printer enumeration; all eleven assertions pass in parallel with those fixtures. This does not certify native printer drivers.
 
+The 2026-10-15 integration incorporates main `d3a91c5c` and version 0.8.0. It retains the Hot Folder D-Bus build input while enabling the upstream qpdf/Poppler requirement in Linux CI. Local targeted tests pass: 164 automation/Hot Folder tests, 374 editor library tests (one ignored), and 83 support-tool tests. External oracle coverage is enforced by Linux CI; optional craft-fonts coverage is not claimed for the local run.
+
 The optional standalone application processes folders without keeping the PdfCraft editor open.
 It shares OCR, orientation correction, deskew and paper-edge detection with the engine. Its
 interface follows the primary system language when English, German, French, Dutch, Spanish,

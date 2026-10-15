@@ -149,6 +149,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-15 (M13, current main integration):** Integrated main `d3a91c5c` including version 0.8.0, validation before replacing saved PDFs, stale file-watcher protection and shared test/oracle support. Resolved Linux CI dependencies by retaining D-Bus development headers alongside qpdf/Poppler and mandatory Linux oracle checks. Aligned Hot Folder service dependency versions; service and packaging harness regressions remain intact. Targeted Windows tests pass: 164 automation/Hot Folder, 374 editor (one ignored), and 83 support-tool cases. Estimates unchanged.
+
 - **2026-10-14 (M13, service stop observation):** Corrected the Windows service lifecycle test to wait, for at most ten seconds, for both the worker marker and the actual SCM Stopped state plus probe status. The marker is written before the host joins its monitor and reports Stopped. Synthetic regressions reproduce the old premature failure and cover delayed completion in either order, timeouts and status-query errors. No service runtime behavior changed; estimates unchanged.
 
 - **2026-10-14 (M13, deterministic print fixture):** Reproduced the Windows CI printer-properties failure by gating discovery until after the synthetic queue selection. The fixture now sets `printer_picked`, matching the real combo interaction, so late discovery cannot reset its queue. Assertions are unchanged and the delayed response is consumed before checking driver options. No product behavior or readiness estimate changed.
