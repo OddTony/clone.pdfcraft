@@ -1,5 +1,7 @@
 # PdfCraft architecture
 
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M3: macOS native menus reuse the command registry, preserve text editing and guarded Close/Quit, and add native Window controls; estimates unchanged)
+
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (shared print spooler; Windows CI passes) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 How PdfCraft is built today. The design rationale and the planned crates live in
@@ -84,6 +86,9 @@ Every user-facing feature is reachable headlessly (`AGENTS.md` §3):
 
 - the **command registry** (`crates/engine/src/commands.rs`, 184 commands) generates menus,
   shortcuts and the command palette;
+- the macOS host owns `muda` menu objects in `apps/pdfcraft/src/native_menu.rs`; the
+  toolkit-free frontend bridge supplies live command state and focused editing events.
+  Native and keyboard commands share form-draft deferral; `craft-quit` keeps control of Quit;
 - the **automation tool table** (`crates/automation`, 141 tools) is shared by `pdfcraft-cli run`
   and the opt-in **MCP server** (stdio only; `pdfcraft-cli mcp`), confined to `--root`;
 - the opt-in **UI control channel** (`pdfcraft --control FILE`; loopback, per-launch token) lets an
@@ -109,4 +114,5 @@ built by `.github/workflows/release.yml` ([releasing.md](releasing.md)).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | M3 (@hajdukste): native macOS menus reuse registry commands, text editing and save guards; Window adds standard system actions. Full native view-control and windowless-app parity remain open; estimates unchanged. |
 | 2026-10-10 | major | Created from the code on main (crate list, `xtask/src/layers.rs`, crate READMEs, `vendor/README.md`) |

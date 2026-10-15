@@ -1,5 +1,7 @@
 # UI and interaction parity
 
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M3: macOS native menus reuse the command registry, preserve text editing and guarded Close/Quit, and add native Window controls; estimates unchanged)
+
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (column select #740, multi-object move #844, Shift-⌘-G #810 fixed) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 How PdfCraft's tools, panels, shortcuts and feel compare with Acrobat Pro's current interface (the
@@ -62,6 +64,7 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 
 | Item | Acrobat | PdfCraft | Status |
 |---|---|---|---|
+| macOS native menus | yes | File/Edit/View/Pages/Window/Help; live command state, text editing and native minimise | partial; view-local controls and windowless lifecycle remain |
 | Platform shortcuts for registered commands | yes | yes; ⌘ on macOS, Ctrl elsewhere (#695) | shipped; find bar still shows ⌘ on Windows (#746) |
 | Keyboard shortcuts reference | yes | yes | shipped |
 | Full keyboard operation of the app | yes | no | planned (`a11y.keyboard-only`, P0) |
@@ -81,5 +84,6 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-15 | minor | M3 (@hajdukste): native macOS menus reuse registry commands, text editing and save guards; Window adds standard system actions. Full native view-control and windowless-app parity remain open; estimates unchanged. |
 | 2026-10-11 | minor | Column select shipped (#740, PR #765); several objects move together on one page (#844, PR #907); Shift-⌘-G goes back (#810, PR #835) |
 | 2026-10-10 | major | Created from the command registry, automation tools, the View area of the checklist and open UI issues |

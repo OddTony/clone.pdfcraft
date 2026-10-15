@@ -1161,7 +1161,6 @@ source = "git+https://github.com/storytold/craft-libs?rev=f58bc1a3df490992d63339
 dependencies = [
  "dispatch2",
  "egui",
- "muda",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
 ]
@@ -3935,11 +3934,13 @@ dependencies = [
 name = "pdfcraft"
 version = "0.8.0"
 dependencies = [
+ "arboard",
  "craft-quit",
  "eframe",
  "egui",
  "fmv-macos-events",
  "log",
+ "muda",
  "pdfcraft-engine",
  "pdfcraft-ui-egui",
  "pollster 1.0.1",
