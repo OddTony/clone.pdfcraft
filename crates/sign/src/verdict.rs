@@ -11,10 +11,10 @@
 //!
 //! Slots are identified by content role, never by XObject name: the caption is the
 //! text layer still carrying the unverified template, and the icon is the one
-//! vector drawing that is not framing. Frames, borders and panels are rectangles
-//! however they are stroked, while the status mark is not, so a drawing made only
-//! of axis-aligned rectangles is decoration, never the icon. Only appearances
-//! that still carry the unverified caption are rewritten, so a file that already
+//! non-rectangular vector drawing, provided no image-only form could be the
+//! status glyph. Rectangular drawings are decoration, and an image-only form
+//! makes a remaining vector drawing ambiguous (it may be a rounded border).
+//! Only appearances that still carry the unverified caption are rewritten, so a file that already
 //! shows its verdict is left alone, as is anything with an unexpected shape.
 //! Every anomaly degrades to the previous behaviour (the raw appearance plus the
 //! UI's own verdict mark) rather than failing.
@@ -137,16 +137,17 @@ fn substitute_valid_state(doc: &mut Document, field: &str, shared: &HashMap<ObjR
 /// the text layer still carrying the unverified template, and the icon is the
 /// one vector drawing that is not framing. Names are never consulted: signers arrange
 /// `n0`–`n4` either way round, and only the content tells which slot is which.
-/// Singularity alone never qualifies a layer: backgrounds, borders and panels are
-/// rectangles however they are stroked, so a drawing made only of axis-aligned
-/// rectangles is decoration, not the status mark. When either slot is missing,
-/// repeated or framing-only, there is no slot and the caller falls back to the
-/// overlay badge.
+/// Rectangular drawings never qualify. An image-only form could be the glyph,
+/// leaving a rounded border as the sole vector candidate, so it vetoes selection.
+/// Missing, repeated or framing-only slots fall back to the overlay badge.
 fn find_slots(doc: &Document, layers: &[Layer]) -> Option<(LayerRef, LayerRef)> {
     let mut captions: Vec<&Layer> = Vec::new();
     let mut icons: Vec<&Layer> = Vec::new();
     for layer in layers {
         let (probe, decoded) = probe_layer(doc, layer);
+        if probe.is_form && !probe.has_text && has_only_image_xobjects(doc, &layer.dict) {
+            return None;
+        }
         if probe.has_text && layer_contains(&decoded, b"Not Verified") {
             captions.push(layer);
         }
@@ -156,6 +157,20 @@ fn find_slots(doc: &Document, layers: &[Layer]) -> Option<(LayerRef, LayerRef)> 
     }
     let ([caption], [icon]) = (captions.as_slice(), icons.as_slice()) else { return None };
     Some((LayerRef::of(icon), LayerRef::of(caption)))
+}
+
+/// An image-only form may carry the status glyph rather than decoration. Do not
+/// infer the role of another drawing in that case. Container forms with other
+/// forms among their resources still allow directly referenced photo backgrounds.
+fn has_only_image_xobjects(doc: &Document, dict: &Dict) -> bool {
+    let Some(resources) = dict.get(b"Resources").map(|r| doc.resolve(r)) else { return false };
+    let Some(xobjects) = resources.as_dict().and_then(|r| r.get(b"XObject")).map(|x| doc.resolve(x)) else { return false };
+    let Some(xobjects) = xobjects.as_dict() else { return false };
+    xobjects.iter().next().is_some()
+        && xobjects.iter().all(|(_, value)| {
+            let object = doc.resolve(value);
+            object.as_dict().and_then(|d| d.get(b"Subtype")).map(|s| doc.resolve(s)).is_some_and(|s| s.as_name() == Some(b"Image"))
+        })
 }
 
 // A layer reference with its dictionary, for rewriting.
@@ -1206,6 +1221,72 @@ mod tests {
         assert_eq!(decoded(doc, border), border_before);
         assert_eq!(decoded(doc, glyph), glyph_before);
         assert_eq!(decoded(doc, caption), caption_before);
+    }
+
+    #[test]
+    fn a_rounded_border_with_an_image_glyph_is_left_untouched() {
+        let doc = &mut open(layered_fixture());
+        // A raster status glyph leaves the rounded decorative frame as the sole
+        // non-rectangular drawing. That does not establish an icon slot.
+        let image = doc.add(Object::Stream(Stream::from_raw(
+            {
+                let mut d = Dict::new();
+                d.set(b"Type".to_vec(), Object::name("XObject"));
+                d.set(b"Subtype".to_vec(), Object::name("Image"));
+                d.set(b"Width".to_vec(), Object::Int(8));
+                d.set(b"Height".to_vec(), Object::Int(8));
+                d.set(b"ColorSpace".to_vec(), Object::name("DeviceRGB"));
+                d.set(b"BitsPerComponent".to_vec(), Object::Int(8));
+                d
+            },
+            vec![0u8; 8 * 8 * 3],
+        )));
+        let glyph = ObjRef::new(10, 0);
+        let (_, caption) = slots(doc, "Signature1");
+        let caption_before = decoded(doc, caption);
+        doc.set(
+            glyph,
+            Object::Stream(Stream::from_raw(
+                {
+                    let mut d = Dict::new();
+                    d.set(b"BBox".to_vec(), Object::Array(vec![Object::Int(0), Object::Int(0), Object::Int(50), Object::Int(30)]));
+                    let mut res = Dict::new();
+                    let mut xo = Dict::new();
+                    xo.set(b"im".to_vec(), Object::Ref(image));
+                    res.set(b"XObject".to_vec(), Object::Dict(xo));
+                    d.set(b"Resources".to_vec(), Object::Dict(res));
+                    d
+                },
+                b"q 20 0 0 20 5 5 cm /im Do Q".to_vec(),
+            )),
+        );
+        let border = ObjRef::new(12, 0);
+        let dict = match &*doc.resolve(&Object::Ref(border)) {
+            Object::Stream(s) => s.dict.clone(),
+            _ => panic!("border is a stream"),
+        };
+        doc.set(
+            border,
+            Object::Stream(Stream::from_raw(
+                stripped(&dict),
+                b"q 0 G 1 w 10 1 m 90 1 l 95 1 99 5 99 10 c 99 90 l 99 95 95 99 90 99 c 10 99 l 5 99 1 95 1 90 c 1 10 l 1 5 5 1 10 1 c h S Q"
+                    .to_vec(),
+            )),
+        );
+        let border_before = decoded(doc, border);
+        let glyph_before = decoded(doc, glyph);
+        let layers_before = all_layers(doc, "Signature1");
+        let bytes_before = pdfcraft_cos::write_full(doc, &pdfcraft_cos::SaveOptions::default()).unwrap();
+        let mut sigs = vec![verdict("Signature1", Status::Valid)];
+        let changed = show_valid_appearances(doc, &mut sigs);
+        assert_eq!(decoded(doc, border), border_before, "the rounded decoration must not become the checkmark");
+        assert_eq!(decoded(doc, glyph), glyph_before);
+        assert_eq!(decoded(doc, caption), caption_before);
+        assert_eq!(all_layers(doc, "Signature1"), layers_before, "every appearance layer is preserved");
+        assert_eq!(pdfcraft_cos::write_full(doc, &pdfcraft_cos::SaveOptions::default()).unwrap(), bytes_before);
+        assert!(!changed);
+        assert!(!sigs[0].verdict_shown, "an ambiguous icon keeps the overlay badge");
+        assert!(!has_substitutable_appearances(doc, &sigs));
     }
 
     #[test]
