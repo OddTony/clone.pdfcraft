@@ -65,6 +65,11 @@ pub struct Shortcut {
 }
 
 impl Shortcut {
+    /// A tool accelerator without modifiers; frontends leave it to focused text editors.
+    pub const fn plain(key: &'static str) -> Self {
+        Self { command: false, shift: false, mac_ctrl: false, key }
+    }
+
     /// ⌘ (Ctrl elsewhere) and `key`.
     pub const fn cmd(key: &'static str) -> Self {
         Self { command: true, shift: false, mac_ctrl: false, key }
@@ -121,11 +126,21 @@ pub struct CommandSpec {
     /// Top-level menu it appears in (`File`, `Edit`, `View`, `Pages`, `Help`), if any.
     pub menu: Option<&'static str>,
     pub shortcut: Option<Shortcut>,
+    /// An additional binding for the same command (for example U for Highlight).
+    pub alternate_shortcut: Option<Shortcut>,
     pub needs: Needs,
-    /// The shortcut also works while a text field has focus.
+    /// Modified shortcuts also work while a text field has focus. Plain tool accelerators
+    /// always stay with text editors, even when this is true for the command's primary binding.
     pub in_text: bool,
     /// Lucide icon name for palettes and toolbars.
     pub icon: &'static str,
+}
+
+impl CommandSpec {
+    /// Every binding, primary first, shared by help, palettes and input dispatch.
+    pub fn shortcuts(&self) -> impl Iterator<Item = Shortcut> + '_ {
+        self.shortcut.into_iter().chain(self.alternate_shortcut)
+    }
 }
 
 const fn c(
@@ -136,7 +151,7 @@ const fn c(
     needs: Needs,
     icon: &'static str,
 ) -> CommandSpec {
-    CommandSpec { id, label, menu, shortcut, needs, in_text: true, icon }
+    CommandSpec { id, label, menu, shortcut, alternate_shortcut: None, needs, in_text: true, icon }
 }
 
 /// Like `c`, but the shortcut is left to text fields while one has focus (⌘Z, ⌘A…).
@@ -148,7 +163,7 @@ const fn ct(
     needs: Needs,
     icon: &'static str,
 ) -> CommandSpec {
-    CommandSpec { id, label, menu, shortcut, needs, in_text: false, icon }
+    CommandSpec { id, label, menu, shortcut, alternate_shortcut: None, needs, in_text: false, icon }
 }
 
 use Needs::*;
@@ -235,9 +250,12 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("view.theme.light", "Light gray", None, None, Nothing, "sun"),
     c("view.theme.dark", "Dark gray", None, None, Nothing, "moon"),
     c("comment.list", "Comments panel", VIEW, None, Document, "message-square-text"),
-    c("comment.note", "Add a sticky note", None, None, Annotate, "sticky-note"),
-    c("comment.freetext", "Add a text box", None, None, Annotate, "type"),
-    c("comment.highlight", "Highlight text", None, None, Annotate, "highlighter"),
+    ct("comment.note", "Add a sticky note", None, Some(Shortcut::plain("S")), Annotate, "sticky-note"),
+    ct("comment.freetext", "Add a text box", None, Some(Shortcut::plain("T")), Annotate, "type"),
+    CommandSpec {
+        alternate_shortcut: Some(Shortcut::plain("U")),
+        ..c("comment.highlight", "Highlight text", None, Some(Shortcut::cmd_shift("H")), Annotate, "highlighter")
+    },
     c("comment.underline", "Underline text", None, None, Annotate, "underline"),
     c("comment.strikeout", "Strikethrough text", None, None, Annotate, "strikethrough"),
     c("comment.squiggly", "Squiggly underline text", None, None, Annotate, "spline"),
@@ -277,7 +295,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("form.tab_order.column", "Tab order: by columns", None, None, HasFields, "columns-3"),
     c("form.tab_order.structure", "Tab order: by document structure", None, None, HasFields, "list"),
     c("edit.text", "Add text", None, None, Modification, "type"),
-    c("edit.edit_text", "Edit text & images", None, None, Modification, "text-cursor-input"),
+    ct("edit.edit_text", "Edit text & images", None, Some(Shortcut::plain("E")), Modification, "text-cursor-input"),
     c("edit.link", "Add or edit links", None, None, Modification, "link-2"),
     c("edit.links_from_urls", "Create links from URLs", None, None, Modification, "link-2"),
     c("edit.remove_links", "Remove all links", None, None, Modification, "trash-2"),
@@ -440,7 +458,7 @@ mod tests {
         let mut keys = std::collections::HashSet::new();
         for c in COMMANDS {
             assert!(ids.insert(c.id), "duplicate id {}", c.id);
-            if let Some(s) = c.shortcut {
+            for s in c.shortcuts() {
                 assert!(keys.insert(s), "duplicate shortcut {} ({})", s.label(true), c.id);
             }
         }

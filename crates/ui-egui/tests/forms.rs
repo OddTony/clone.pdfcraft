@@ -49,6 +49,12 @@ fn typing_into_a_text_field_and_tabbing_on() {
     let mut h = harness();
     click_field(&mut h, "name", 0);
     assert!(h.state().views[0].forms.focus.is_some(), "the editor opened");
+    let tool = h.state().quick_tool;
+    for key in [egui::Key::S, egui::Key::T, egui::Key::U, egui::Key::E] {
+        h.key_press(key);
+        h.run_steps(2);
+        assert_eq!(h.state().quick_tool, tool, "tool accelerators must leave form typing alone");
+    }
     h.event(egui::Event::Text("Ada Lovelace".into()));
     h.run_steps(2);
     h.key_press(egui::Key::Tab);

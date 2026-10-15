@@ -19,7 +19,7 @@ mcp::McpServer::new(a).serve(stdin, stdout)?             // newline-delimited JS
 
 ## Conventions
 
-- Tool names are `snake_case` (`page_rotate`): MCP clients reject dots. `ToolDef::command` links a tool to the registry id it automates (`page.rotate`), and `command_list` reports the link.
+- Tool names are `snake_case` (`page_rotate`): MCP clients reject dots. `ToolDef::command` links a tool to the registry id it automates (`page.rotate`), and `command_list` reports the link, the primary `shortcut`, and any `alternate_shortcut`.
 - Pages and positions are **1-based**. Rectangles are PDF points with the origin at the top-left of the displayed page.
 - Unknown arguments are rejected, so typos fail loudly.
 - Tools that change a document return its summary (`doc`, `pages`, `dirty`, `undo`, `redo`, …).

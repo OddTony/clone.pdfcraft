@@ -1718,8 +1718,8 @@ milestone = "M4"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/ui-egui/tests/commands.rs::shortcuts_run_registered_commands", "crates/engine/src/commands.rs::shortcut_labels_follow_platform_conventions", "crates/ui-egui/tests/commands.rs::quit_shortcut_requires_exact_modifiers_and_preserves_unsaved_work", "crates/ui-egui/tests/signing.rs::ctrl_alt_q_types_an_email_without_quitting"]
-notes = "Quit requires exact Ctrl+Q/Cmd+Q modifiers and preserves unsaved-document confirmation. Ctrl+Alt+Q email input is covered with synthetic key/text events; native German keyboard-layout translation is not covered by that test (#1980)."
+evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/commands.rs::shortcuts_run_registered_commands", "crates/engine/src/commands.rs::shortcut_labels_follow_platform_conventions", "crates/ui-egui/tests/commands.rs::quit_shortcut_requires_exact_modifiers_and_preserves_unsaved_work", "crates/ui-egui/tests/signing.rs::ctrl_alt_q_types_an_email_without_quitting"]
+notes = "Annotation tools: Ctrl/Cmd+Shift+H or U for Highlight, S for Sticky note, T for Text box; E for Edit text & images. Plain keys yield to text editors, forms and overlays. Read mode requires its own modifiers. Quit requires exact Ctrl+Q/Cmd+Q modifiers and preserves unsaved-document confirmation. Ctrl+Alt+Q email input is covered with synthetic key/text events; native German keyboard-layout translation is not covered by that test (#1980)."
 
 [[feature]]
 id = "view.shortcuts-dialog"
@@ -1730,8 +1730,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["help.shortcuts"]
 tools = []
-evidence = ["crates/ui-egui/tests/commands.rs::the_shortcuts_dialog_lists_the_real_bindings"]
-notes = ""
+evidence = ["crates/ui-egui/tests/commands.rs::shortcuts_reference_groups_commands_by_function", "crates/ui-egui/tests/commands.rs::the_shortcuts_dialog_lists_the_real_bindings"]
+notes = "Help groups registered and view-local shortcuts by function into collapsible sections and lists primary and alternate keys."
 
 [[feature]]
 id = "view.menus-from-registry"
@@ -1866,8 +1866,8 @@ milestone = "M7"
 status = "partial"
 commands = ["edit.edit_text"]
 tools = ["text_lines", "text_paragraphs", "text_edit", "text_edit_layout", "text_font_files", "text_font_import", "text_fonts"]
-evidence = ["crates/edit/src/tests.rs::paragraphs_are_found_and_rewrapped", "crates/edit/src/tests.rs::text_lines_are_found_and_replaced_in_place", "crates/ui-egui/tests/editing.rs::editing_existing_text_in_place", "crates/automation/tests/automation.rs::editing_existing_text_through_tools", "crates/edit/src/tests.rs::a_line_whose_operator_starts_the_next_stream_can_be_edited", "crates/automation/tests/automation.rs::a_line_split_across_content_streams_is_listed_and_edited", "crates/ui-egui/tests/editing.rs::selected_text_formatting_keeps_the_rest_of_the_paragraph_and_reopens", "crates/edit/src/tests.rs::marked_paragraph_boundaries_and_cross_stream_transforms_survive_rewrite", "crates/automation/tests/automation.rs::explicit_font_and_disjoint_ranges_save_reopen_through_tools", "crates/edit/src/tests.rs::disjoint_style_ranges_preserve_unselected_runs_and_validate_utf8_atomically", "crates/engine/tests/document_fonts.rs::opentype_cff_document_font_preserves_program_codes_and_rendering_after_reopen", "crates/ui-egui/tests/editing.rs::cropped_images_do_not_intercept_text_and_stay_inside_each_page", "crates/automation/tests/automation.rs::clipped_image_bounds_and_text_edit_save_reopen_through_tools", "crates/edit/src/tests.rs::mixed_styles_and_matrix_sizes_form_visual_regions_without_merging_columns", "crates/edit/src/tests.rs::rich_region_edits_preserve_styles_positions_and_delete_all_runs_after_reopen", "crates/ui-egui/tests/editing.rs::one_editor_contains_mixed_styles_and_visual_rows", "crates/ui-egui/tests/editing.rs::inline_editor_preserves_source_font_and_previews_live_bounds", "crates/fonts/src/pdf.rs::mac_subset_cmap_uses_pdf_unicode_without_changing_source_program", "crates/automation/tests/automation.rs::mixed_visual_region_edit_preview_save_reopen_and_undo_through_tools", "crates/ui-egui/tests/ui.rs::the_edit_tab_turns_on_edit_text_and_images"]
-notes = "The Edit tab turns Edit text & images on at once, as in Acrobat (leaving the tab puts the tool down and applies an edit in progress); click a paragraph box and retype it in place (font reused or Helvetica substituted, colour and spacing kept, rewrapped); a page's /Contents pieces are parsed joined, so a line whose operands and operator sit in different pieces is listed and edited (lines and paragraphs still don't join across pieces; Edit image still parses each piece alone); drag a box to move it or its right-edge handle to rewrap it (edit.text-move-resize); per-character formatting changes are next Since #1116: mixed-style visual regions retain source rows, subset encodings, colour and baseline anchors in one textless-background editor. Explicit paragraph/heading scopes constrain grouping; compatible graphics planes permit cross-stream regions. Full matching document fonts complete absent subset glyphs; installed/file selection, TrueType/OpenType-CFF embedding and disjoint UTF-8 range styles have save/reopen coverage. Single-face OpenType shaping/bidi retains logical text through ToUnicode/ActualText. Legacy non-SFNT preview, mixed-font/style contextual runs, full structure-tree preservation and author intent in untagged PDFs remain limited; see docs/editing-existing-text.md"
+evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/edit/src/tests.rs::paragraphs_are_found_and_rewrapped", "crates/edit/src/tests.rs::text_lines_are_found_and_replaced_in_place", "crates/ui-egui/tests/editing.rs::editing_existing_text_in_place", "crates/automation/tests/automation.rs::editing_existing_text_through_tools", "crates/edit/src/tests.rs::a_line_whose_operator_starts_the_next_stream_can_be_edited", "crates/automation/tests/automation.rs::a_line_split_across_content_streams_is_listed_and_edited", "crates/ui-egui/tests/editing.rs::selected_text_formatting_keeps_the_rest_of_the_paragraph_and_reopens", "crates/edit/src/tests.rs::marked_paragraph_boundaries_and_cross_stream_transforms_survive_rewrite", "crates/automation/tests/automation.rs::explicit_font_and_disjoint_ranges_save_reopen_through_tools", "crates/edit/src/tests.rs::disjoint_style_ranges_preserve_unselected_runs_and_validate_utf8_atomically", "crates/engine/tests/document_fonts.rs::opentype_cff_document_font_preserves_program_codes_and_rendering_after_reopen", "crates/ui-egui/tests/editing.rs::cropped_images_do_not_intercept_text_and_stay_inside_each_page", "crates/automation/tests/automation.rs::clipped_image_bounds_and_text_edit_save_reopen_through_tools", "crates/edit/src/tests.rs::mixed_styles_and_matrix_sizes_form_visual_regions_without_merging_columns", "crates/edit/src/tests.rs::rich_region_edits_preserve_styles_positions_and_delete_all_runs_after_reopen", "crates/ui-egui/tests/editing.rs::one_editor_contains_mixed_styles_and_visual_rows", "crates/ui-egui/tests/editing.rs::inline_editor_preserves_source_font_and_previews_live_bounds", "crates/fonts/src/pdf.rs::mac_subset_cmap_uses_pdf_unicode_without_changing_source_program", "crates/automation/tests/automation.rs::mixed_visual_region_edit_preview_save_reopen_and_undo_through_tools", "crates/ui-egui/tests/ui.rs::the_edit_tab_turns_on_edit_text_and_images"]
+notes = "E selects Edit text & images outside text editors and overlays. The Edit tab turns Edit text & images on at once, as in Acrobat (leaving the tab puts the tool down and applies an edit in progress); click a paragraph box and retype it in place (font reused or Helvetica substituted, colour and spacing kept, rewrapped); a page's /Contents pieces are parsed joined, so a line whose operands and operator sit in different pieces is listed and edited (lines and paragraphs still don't join across pieces; Edit image still parses each piece alone); drag a box to move it or its right-edge handle to rewrap it (edit.text-move-resize); per-character formatting changes are next Since #1116: mixed-style visual regions retain source rows, subset encodings, colour and baseline anchors in one textless-background editor. Explicit paragraph/heading scopes constrain grouping; compatible graphics planes permit cross-stream regions. Full matching document fonts complete absent subset glyphs; installed/file selection, TrueType/OpenType-CFF embedding and disjoint UTF-8 range styles have save/reopen coverage. Single-face OpenType shaping/bidi retains logical text through ToUnicode/ActualText. Legacy non-SFNT preview, mixed-font/style contextual runs, full structure-tree preservation and author intent in untagged PDFs remain limited; see docs/editing-existing-text.md"
 
 [[feature]]
 id = "edit.text-reflow"
@@ -3572,8 +3572,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.note"]
 tools = ["comment_add"]
-evidence = ["crates/ui-egui/tests/comments.rs::sticky_note_composer_posts_and_returns_to_select", "crates/ui-egui/tests/comments.rs::the_comment_composer_shortcut_only_posts_the_focused_editor", "crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment"]
-notes = "our own Comment/Note icon drawings, with a pop-up; Ctrl+Enter (also Command+Enter) posts from the focused editor, Shift+Enter adds a newline"
+evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/comments.rs::sticky_note_composer_posts_and_returns_to_select", "crates/ui-egui/tests/comments.rs::the_comment_composer_shortcut_only_posts_the_focused_editor", "crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment"]
+notes = "S selects the Sticky note tool outside text editors and overlays. Our own Comment/Note icon drawings, with a pop-up; Ctrl+Enter (also Command+Enter) posts from the focused editor, Shift+Enter adds a newline"
 
 [[feature]]
 id = "comment.highlight"
@@ -3584,8 +3584,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.highlight"]
 tools = ["comment_add"]
-evidence = ["crates/ui-egui/tests/comments.rs::dragging_over_text_with_the_highlighter_highlights_it", "crates/ui-egui/tests/comments.rs::a_new_highlight_opens_its_note_for_typing", "crates/engine/src/tests.rs::highlight_multiplies_over_text"]
-notes = "drag over text, or pick the tool with text selected; a new highlight opens its note for typing in the Comments panel; agents can highlight by text search"
+evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/comments.rs::dragging_over_text_with_the_highlighter_highlights_it", "crates/ui-egui/tests/comments.rs::a_new_highlight_opens_its_note_for_typing", "crates/engine/src/tests.rs::highlight_multiplies_over_text"]
+notes = "Ctrl/Cmd+Shift+H or U selects Highlight. Drag over text, or pick the tool with text selected; a new highlight opens its note for typing in the Comments panel; agents can highlight by text search"
 
 [[feature]]
 id = "comment.underline"
@@ -3668,8 +3668,8 @@ milestone = "M5"
 status = "partial"
 commands = ["comment.freetext"]
 tools = ["comment_add"]
-evidence = ["crates/ui-egui/tests/comments.rs::sticky_note_composer_posts_and_returns_to_select", "crates/annot/src/tests.rs::text_box_text_and_colour_changes_are_drawn"]
-notes = "Helvetica text with colour, size and alignment; /RC (XHTML) and /DS are written and kept in step with edits; per-run formatting (bold/italic spans) is not yet"
+evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/comments.rs::sticky_note_composer_posts_and_returns_to_select", "crates/annot/src/tests.rs::text_box_text_and_colour_changes_are_drawn"]
+notes = "T selects Text box outside text editors and overlays. Helvetica text with colour, size and alignment; /RC (XHTML) and /DS are written and kept in step with edits; per-run formatting (bold/italic spans) is not yet"
 
 [[feature]]
 id = "comment.callout"

@@ -1168,6 +1168,11 @@ fn command_list_reports_enablement_and_tools() {
     assert_eq!(find("page.rotate")["tool"], "page_rotate");
     assert_eq!(find("page.rotate")["enabled"], true);
     assert_eq!(find("edit.undo")["enabled"], false);
+    assert_eq!(find("comment.highlight")["shortcut"], if cfg!(target_os = "macos") { "⇧⌘H" } else { "Ctrl+Shift+H" });
+    assert_eq!(find("comment.highlight")["alternate_shortcut"], "U");
+    for (id, key) in [("comment.note", "S"), ("comment.freetext", "T"), ("edit.edit_text", "E")] {
+        assert_eq!(find(id)["shortcut"], key);
+    }
     ok(&mut a, "page_rotate", json!({ "doc": doc, "pages": [1], "degrees": 90 }));
     let list = ok(&mut a, "command_list", json!({ "doc": doc }));
     let undo = list["commands"].as_array().unwrap().iter().find(|c| c["id"] == "edit.undo").unwrap().clone();

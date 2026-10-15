@@ -31,6 +31,53 @@ pub(crate) const SELECT_ALL: Shortcut = Shortcut::cmd("A");
 pub(crate) const PAGE_PREV: Shortcut = Shortcut::cmd("←");
 pub(crate) const PAGE_NEXT: Shortcut = Shortcut::cmd("→");
 
+/// Functional sections of Help ▸ Keyboard shortcuts, including view-local bindings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum ShortcutCategory {
+    File,
+    Edit,
+    Search,
+    Navigation,
+    View,
+    Pages,
+    Comments,
+    Tools,
+    General,
+}
+
+impl ShortcutCategory {
+    pub(crate) const ALL: [Self; 9] =
+        [Self::File, Self::Edit, Self::Search, Self::Navigation, Self::View, Self::Pages, Self::Comments, Self::Tools, Self::General];
+
+    pub(crate) fn title(self) -> &'static str {
+        match self {
+            Self::File => "File",
+            Self::Edit => "Edit",
+            Self::Search => "Search",
+            Self::Navigation => "Page navigation",
+            Self::View => "View",
+            Self::Pages => "Organize pages",
+            Self::Comments => "Comments",
+            Self::Tools => "Tools",
+            Self::General => "General",
+        }
+    }
+
+    pub(crate) fn for_command(id: &str) -> Self {
+        match id {
+            "edit.find" | "edit.advanced_search" | "view.palette" => Self::Search,
+            "view.previous_view" | "view.next_view" | "view.focus_page_input" | "view.next_tab" | "view.previous_tab" => Self::Navigation,
+            id if id.starts_with("file.") || id.starts_with("create.") || id.starts_with("print.") => Self::File,
+            id if id.starts_with("edit.") => Self::Edit,
+            id if id.starts_with("view.") => Self::View,
+            id if id.starts_with("page.") => Self::Pages,
+            id if id.starts_with("comment.") => Self::Comments,
+            id if id.starts_with("tools.") => Self::Tools,
+            _ => Self::General,
+        }
+    }
+}
+
 /// Whether shortcuts are written the macOS way (`⇧⌘S`) rather than `Ctrl+Shift+S`. egui knows the
 /// platform from the build target, and on the web from the browser's user agent.
 pub(crate) fn mac_shortcuts(ctx: &egui::Context) -> bool {
@@ -62,7 +109,12 @@ pub(crate) fn command_modifier_label(ctx: &egui::Context) -> &'static str {
 
 /// How a registered command's shortcut is written on this platform ("" without one).
 pub(crate) fn command_shortcut_label(ctx: &egui::Context, id: &str) -> String {
-    commands::command(id).and_then(|c| c.shortcut).map(|s| shortcut_label(ctx, s)).unwrap_or_default()
+    commands::command(id).map(|c| shortcuts_label(ctx, c)).unwrap_or_default()
+}
+
+/// Format all of a known command's bindings without another registry lookup.
+pub(crate) fn shortcuts_label(ctx: &egui::Context, spec: &CommandSpec) -> String {
+    spec.shortcuts().map(|s| shortcut_label(ctx, s)).collect::<Vec<_>>().join(" / ")
 }
 
 /// A translated tooltip with a `{key}` placeholder, filled with `s` as written on this platform:
@@ -697,10 +749,13 @@ impl PdfCraftApp {
         // while the field has yet to see the Escape and discard its draft.)
         let active = self.active_ids();
         let form_typing = active.and_then(|(i, _)| self.views.get(i)).is_some_and(|v| v.forms.focus.is_some());
-        let mut specs: Vec<&CommandSpec> = COMMANDS.iter().filter(|c| c.shortcut.is_some()).collect();
-        specs.sort_by_key(|c| std::cmp::Reverse(c.shortcut.map(|s| s.modifier_count()).unwrap_or(0)));
-        for spec in specs {
-            let Some(s) = spec.shortcut else { continue };
+        let mut specs: Vec<(&CommandSpec, Shortcut)> = COMMANDS.iter().flat_map(|c| c.shortcuts().map(move |s| (c, s))).collect();
+        specs.sort_by_key(|(_, s)| std::cmp::Reverse(s.modifier_count()));
+        for (spec, s) in specs {
+            let plain_tool = !s.command && !s.mac_ctrl;
+            if plain_tool && (typing || form_typing || self.palette_open || self.modal_open() || ctx.egui_wants_keyboard_input()) {
+                continue;
+            }
             let page_clipboard = matches!(spec.id, "page.copy" | "page.cut" | "page.paste");
             if page_clipboard
                 && (typing || form_typing || self.palette_open || !active.and_then(|(i, _)| self.views.get(i)).is_some_and(|v| v.organize))
@@ -746,9 +801,9 @@ impl PdfCraftApp {
                 }
                 // Consume both representations if a backend supplies both: one edit per key.
                 let mut key_pressed = false;
-                if spec.id.starts_with("page.") {
-                    // Page actions use letter keys: extra Alt/Shift must not turn typing (or
-                    // a different clipboard command) into an edit of the document.
+                if spec.id.starts_with("page.") || spec.id.starts_with("comment.") || spec.id == "edit.edit_text" || spec.id == "view.read_mode" {
+                    // Letter tool/page bindings require their exact modifiers. In particular,
+                    // Ctrl+H (Read mode) must leave Ctrl+Shift+H to Highlight on Windows/Linux.
                     input.events.retain(|event| {
                         let matched = matches!(event, egui::Event::Key { key: k, pressed: true, modifiers, .. }
                             if *k == key && modifiers.matches_exact(m));
@@ -836,7 +891,7 @@ pub(crate) fn registry_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui, menu: &str
             }
             continue;
         }
-        let shortcut = spec.shortcut.or((spec.id == "edit.copy").then_some(COPY)).map(|s| shortcut_label(ui.ctx(), s)).unwrap_or_default();
+        let shortcut = if spec.id == "edit.copy" { shortcut_label(ui.ctx(), COPY) } else { shortcuts_label(ui.ctx(), spec) };
         let enabled = app.command_enabled(spec);
         let resp = ui.add_enabled(enabled, egui::Button::new(label).shortcut_text(shortcut));
         if resp.clicked() {
