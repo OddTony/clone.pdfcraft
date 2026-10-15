@@ -4076,8 +4076,9 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.stamp"]
 tools = ["comment_add"]
-evidence = ["crates/annot/src/tests.rs::stamps_draw_their_label_and_by_line", "crates/ui-egui/tests/stamps.rs::choosing_and_placing_stamps", "crates/automation/tests/automation.rs::stamps_through_tools", "crates/engine/src/tests.rs::rubber_stamps_point_left_as_displayed_on_rotated_pages"]
-notes = "12 standard business stamps in PdfCraft's own design; ISO 32000 stamp names where defined. A stamp placed on a rotated page reads upright as the page is displayed (#1398)"
+evidence = ["crates/annot/src/tests.rs::stamps_draw_their_label_and_by_line", "crates/ui-egui/tests/stamps.rs::choosing_and_placing_stamps", "crates/automation/tests/automation.rs::stamps_through_tools", "crates/engine/src/tests.rs::rubber_stamps_point_left_as_displayed_on_rotated_pages", "crates/ui-egui/tests/stamps.rs::stamp_cursor_has_dark_ink_and_a_white_outline"]
+notes = "12 standard business stamps in PdfCraft's own design; ISO 32000 stamp names where defined. A stamp placed on a rotated page reads upright as the page is displayed (#1398) Stamp placement uses a black target with a white outline on light/dark pages (#2395)."
+
 
 [[feature]]
 id = "comment.stamps-sign-here"

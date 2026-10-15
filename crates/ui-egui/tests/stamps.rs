@@ -5,6 +5,51 @@ use egui_kittest::kittest::Queryable;
 use pdfcraft_ui_egui::{PdfCraftApp, QuickTool};
 
 #[test]
+fn stamp_cursor_has_dark_ink_and_a_white_outline() {
+    for dark_paper in [false, true] {
+        let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", "en").unwrap();
+            app.open_bytes("form.pdf", None, include_bytes!("data/form.pdf").to_vec()).unwrap();
+            app.set_option("zoom", "100").unwrap();
+            if dark_paper {
+                assert!(app.apply_edit(pdfcraft_engine::Edit::AddBackground {
+                    pages: vec![0],
+                    settings: pdfcraft_engine::Background { color: [0.0; 3], opacity: 1.0, ..Default::default() },
+                    replace: false,
+                    file: None,
+                }));
+            }
+            app.quick_tool = QuickTool::Stamp(pdfcraft_engine::StampKind::DynApproved);
+            app
+        });
+        for _ in 0..100 {
+            h.run_steps(2);
+            if !h.state().render_pending() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let page = h.state().views[0].page_screen_rect(0).unwrap();
+        let p = (page.min + egui::vec2(page.width() * 0.5, page.height() * 0.85)).round();
+        h.hover_at(p);
+        h.run_steps(2);
+        assert_eq!(h.output().platform_output.cursor_icon, egui::CursorIcon::None);
+        let shot = h.render().unwrap();
+        if let Ok(dir) = std::env::var("PDFCRAFT_SHOTS") {
+            shot.save(format!("{dir}/stamp-cursor-{}.png", if dark_paper { "dark" } else { "white" })).unwrap();
+        }
+        // Sample the left arm: kittest draws a synthetic arrow below/right of the pointer.
+        let dark = shot.get_pixel((p.x - 5.0) as u32, p.y as u32).0;
+        assert!(dark[0] < 80 && dark[1] < 80 && dark[2] < 80, "{dark:?}");
+        let outline = shot.get_pixel((p.x - 5.0) as u32, (p.y + 2.0) as u32).0;
+        assert!(outline[0] > 180 && outline[1] > 180 && outline[2] > 180, "{outline:?}");
+        let paper = shot.get_pixel((p.x - 20.0) as u32, p.y as u32).0;
+        assert_eq!(paper[0] < 80, dark_paper, "{paper:?}");
+    }
+}
+
+#[test]
 fn choosing_and_placing_stamps() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();

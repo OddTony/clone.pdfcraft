@@ -2797,7 +2797,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 && allowed
                 && let Some(p) = ui.input(|inp| inp.pointer.hover_pos()).filter(|p| xf.rect.contains(*p))
             {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                stamp_placement_cursor(ui, p);
                 if resp.clicked() {
                     // Centred on the click, upright as the page is shown.
                     let (vx, vy) = xf.screen_to_view(p);
@@ -2821,7 +2821,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 && allowed
                 && let Some(p) = ui.input(|inp| inp.pointer.hover_pos()).filter(|p| xf.rect.contains(*p))
             {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                stamp_placement_cursor(ui, p);
                 if resp.clicked() {
                     // Centred on the click at its natural size (the engine sizes it).
                     let (vx, vy) = xf.screen_to_view(p);
@@ -4898,6 +4898,19 @@ fn organize_grid(view: &mut DocView, info: &DocInfo, editable: bool, dirty: bool
     if let Some(p) = open_page {
         view.organize = false;
         view.go_to_page(p);
+    }
+}
+
+/// A contrasting placement target remains visible on both white paper and dark artwork,
+/// independently of the operating system's crosshair theme. Shared by built-in/custom stamps.
+fn stamp_placement_cursor(ui: &egui::Ui, p: Pos2) {
+    ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+    let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("stamp-placement-cursor")));
+    let arms = [[p - vec2(8.0, 0.0), p + vec2(8.0, 0.0)], [p - vec2(0.0, 8.0), p + vec2(0.0, 8.0)]];
+    for stroke in [Stroke::new(5.0, Color32::WHITE), Stroke::new(2.0, Color32::BLACK)] {
+        for arm in arms {
+            painter.line_segment(arm, stroke);
+        }
     }
 }
 
