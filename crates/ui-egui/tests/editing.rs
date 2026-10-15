@@ -768,6 +768,43 @@ fn the_last_session_reopens_its_files_pages_and_active_tab() {
 }
 
 #[test]
+fn the_last_session_comes_back_to_the_place_on_the_page() {
+    // #2310: not only the page but where on it the reader was, as they scrolled there.
+    let dir = TempPdfs::new("place");
+    let file = dir.file("long.pdf", 5);
+    let opened = file.clone();
+    let mut h = session_harness(move |app| app.open_path(&opened));
+    h.state_mut().views[0].go_to_page(2);
+    h.run_steps(4);
+    h.state_mut().views[0].key_scroll = 300.0;
+    h.run_steps(4);
+    let (page, top) = (h.state().views[0].current, h.state().views[0].position_in_page());
+    assert_eq!(page, 2, "still on page 3");
+    assert!(top > 0.05, "scrolled down into the page: {top}");
+    let settings = h.state().persist();
+
+    let reopen = |settings: String| {
+        let mut h = session_harness(move |app| {
+            app.restore(&settings);
+            app.reopen_last_files(&[]);
+        });
+        h.run_steps(4);
+        let v = &h.state().views[0];
+        (v.current, v.position_in_page())
+    };
+    let (again, back) = reopen(settings.clone());
+    assert_eq!(again, 2);
+    assert!((back - top).abs() < 0.01, "back at {back}, left at {top}");
+
+    // Settings from before the place was kept still reopen the page, at its top.
+    let mut old: serde_json::Value = serde_json::from_str(&settings).unwrap();
+    old["last_session"]["files"][0].as_object_mut().unwrap().remove("top");
+    let (again, back) = reopen(old.to_string());
+    assert_eq!(again, 2);
+    assert!(back.abs() < 0.05, "at the top of the page: {back}");
+}
+
+#[test]
 fn quitting_with_unsaved_changes_still_remembers_every_file() {
     let dir = TempPdfs::new("quit");
     let files = [dir.file("a.pdf", 1), dir.file("b.pdf", 1)];

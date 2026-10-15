@@ -589,6 +589,10 @@ pub struct DocView {
     /// in-flight ones cannot be cancelled mid-operator. Older tiles and the backdrop stay
     /// stretched meanwhile; fresh tiles go out once the pan settles.
     pub(crate) last_scroll: Vec2,
+    /// Where the window's top was within the current page when last drawn, as a fraction of the
+    /// page's height (what [`Self::goto`] takes): 0 at its top edge, 0.5 halfway down. Negative
+    /// when the window's top is still on the page before it (#2310).
+    top_in_page: f32,
     /// Side-by-side compare: scroll to here this frame, following the other half.
     pub(crate) sync_scroll: Option<Vec2>,
     /// The page widget's id, by which the Hand tool finds its drag before the pages are laid out.
@@ -791,6 +795,7 @@ impl DocView {
             last_scale: 0.0,
             sharp_hold_until: 0.0,
             last_scroll: Vec2::ZERO,
+            top_in_page: 0.0,
             sync_scroll: None,
             page_widget: None,
             pan_hold_until: 0.0,
@@ -1205,6 +1210,16 @@ impl DocView {
         self.reset_coarse_state();
         self.goto = Some((page, 0.0));
         self.current = page;
+    }
+
+    /// Where the reader is within the current page: the fraction of its height above the window's
+    /// top, as [`Self::goto`] takes it, so `goto = Some((current, position_in_page()))` comes back
+    /// to the same place (#2310). A jump not yet drawn counts as done.
+    pub fn position_in_page(&self) -> f32 {
+        match self.goto {
+            Some((page, frac)) if page == self.current => frac,
+            _ => self.top_in_page,
+        }
     }
 
     /// Go to a destination, a bookmark's or a link's (ISO 32000-2 §12.3.2.2): its page, scrolled
@@ -3737,6 +3752,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         (page, out.state.offset.y <= MARGIN - GAP + 1.0, out.state.offset.y >= max_y - 1.0)
     });
 
+    // The inverse of `goto` above, for coming back to this place later (#2310).
+    if let Some(r) = rects.get(view.current).filter(|r| r.height() > 0.0) {
+        let top = (out.state.offset.y + y_shift + GAP - r.top()) / r.height();
+        if top.is_finite() {
+            view.top_in_page = top;
+        }
+    }
     view.viewport_screen = out.inner_rect;
     view.auto_scroll.paint(ui, avail);
     if unobstructed && matches!(tool, QuickTool::Select | QuickTool::ColumnSelect) {
