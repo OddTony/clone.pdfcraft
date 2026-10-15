@@ -3312,15 +3312,45 @@ fn blended_backgrounds_show_on_pages_that_paint_themselves_white() {
     // A picture (red) blends the same way.
     let red = MarkFile { name: "cover.bmp".into(), bytes: Arc::new(bmp(4, 4, [0, 0, 255])), page: 0 };
     let picture = Background { multiply: true, ..Background::default() };
-    s.apply(id, Edit::AddBackground { pages: vec![0], settings: picture, replace: true, file: Some(red) }).unwrap();
+    s.apply(id, Edit::AddBackground { pages: vec![0], settings: picture.clone(), replace: true, file: Some(red) }).unwrap();
     // Square, fitted to the page: 200 × 200 from y = 50.
     let inside = pixel(&s, id, 0, 100, 60);
     assert!(inside[0] > 200 && inside[1] < 40 && inside[2] < 40, "the picture shows: {inside:?}");
     assert_eq!(pixel(&s, id, 0, 50, 150), [0, 0, 0, 255]);
+    // A PDF page as the picture, whose own content resets the blend mode (`/BM /Normal`): drawn
+    // as one group, the page's red still multiplies with the content under it.
+    let red_page = {
+        let content = "/Plain gs 1 0 0 rg 0 0 200 300 re f";
+        let objs = [
+            b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 300] >>".to_vec(),
+            b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /ExtGState << /Plain << /BM /Normal /ca 1 >> >> >> >>".to_vec(),
+            format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()).into_bytes(),
+        ];
+        let mut out = b"%PDF-1.7\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, obj) in objs.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+            out.extend_from_slice(obj);
+            out.extend_from_slice(b"\nendobj\n");
+        }
+        let xref = out.len();
+        out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+        for offset in offsets {
+            out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+        out
+    };
+    let file = MarkFile { name: "red.pdf".into(), bytes: Arc::new(red_page), page: 0 };
+    s.apply(id, Edit::AddBackground { pages: vec![0], settings: picture, replace: true, file: Some(file) }).unwrap();
+    assert_eq!(pixel(&s, id, 0, 5, 5), [255, 0, 0, 255], "the PDF page shows on the white");
+    assert_eq!(pixel(&s, id, 0, 50, 150), [0, 0, 0, 255], "and the content under it stays black");
     // Saved and reopened, it still draws blended.
     let saved = s.save_bytes(id).unwrap();
     let again = s.open("again.pdf", None, saved, None).unwrap();
-    assert_eq!(pixel(&s, again, 0, 100, 60), pixel(&s, id, 0, 100, 60));
+    assert_eq!(pixel(&s, again, 0, 5, 5), [255, 0, 0, 255]);
     assert_eq!(pixel(&s, again, 0, 50, 150), [0, 0, 0, 255]);
     assert_eq!(s.get(again).unwrap().marks(), [MarkKind::Background]);
 }

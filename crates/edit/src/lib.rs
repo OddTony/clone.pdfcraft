@@ -193,6 +193,33 @@ fn add_picture_resource(doc: &mut Document, page: &pdfcraft_model::Page, src: &M
     Ok(())
 }
 
+/// A PDF page picture as one isolated transparency group (ISO 32000-2 §11.4.7, §11.6.6): a
+/// form whose content draws `src`. A blend mode set where it is drawn then applies to the
+/// picture as a whole, composited once, and not to each of its elements, whose own `gs` (a
+/// `/BM /Normal`, say) would otherwise replace it. Images are one element already.
+fn as_group(doc: &mut Document, src: MarkSource) -> MarkSource {
+    if src.image {
+        return src;
+    }
+    let mut group = Dict::new();
+    group.set(b"Type".to_vec(), Object::name("Group"));
+    group.set(b"S".to_vec(), Object::name("Transparency"));
+    group.set(b"I".to_vec(), Object::Bool(true));
+    let mut xo = Dict::new();
+    xo.set(b"PCSrc".to_vec(), Object::Ref(src.xobject));
+    let mut res = Dict::new();
+    res.set(b"XObject".to_vec(), Object::Dict(xo));
+    let mut d = Dict::new();
+    d.set(b"Type".to_vec(), Object::name("XObject"));
+    d.set(b"Subtype".to_vec(), Object::name("Form"));
+    // The source form's /Matrix maps it to (0, 0)–size, so that is all the group covers.
+    d.set(b"BBox".to_vec(), Object::Array(vec![Object::Real(0.0), Object::Real(0.0), Object::Real(src.size.0), Object::Real(src.size.1)]));
+    d.set(b"Group".to_vec(), Object::Dict(group));
+    d.set(b"Resources".to_vec(), Object::Dict(res));
+    let xobject = doc.add(Object::Stream(Stream::flate(d, b"/PCSrc Do\n")));
+    MarkSource { xobject, ..src }
+}
+
 /// Values tokens need that come from outside the document.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Context {
@@ -388,8 +415,8 @@ enum Layer {
     /// Before everything (prepended).
     Behind,
     /// Right after the page's own (wrapped) content, under whatever was put on top of it
-    /// before: a blended background stays under headers, watermarks and added content. A page
-    /// with no content of its own gets it first.
+    /// before: a blended background stays under headers, watermarks and added content. On a
+    /// page with no content of its own it goes after the backgrounds that lead the list.
     OverContent,
     /// After everything (appended).
     OnTop,
@@ -419,11 +446,15 @@ fn place_tagged(doc: &mut Document, page: &pdfcraft_model::Page, tag: &str, cont
             list.push(close);
         }
         // Over the content: right after the wrapper's closing piece. Without a wrapper the page
-        // has no content of its own to sit over, so it goes first, under everything added.
+        // has no content of its own to sit over: it goes over the backgrounds that lead the
+        // list and under everything else added.
         let close = list.iter().rposition(|o| stream_tag(doc, o).as_deref() == Some("Wrap"));
         match (layer, close) {
             (Layer::OverContent, Some(c)) => list.insert(c.saturating_add(1), mark),
-            (Layer::OverContent, None) => list.insert(0, mark),
+            (Layer::OverContent, None) => {
+                let backgrounds = list.iter().take_while(|o| stream_tag(doc, o).as_deref() == Some(MarkKind::Background.tag())).count();
+                list.insert(backgrounds, mark)
+            }
             _ => list.push(mark),
         }
     }
@@ -635,18 +666,23 @@ pub fn add_background(doc: &mut Document, pages: &[usize], bg: &Background, repl
     }
     let gs = Gs { opacity: if bg.opacity.is_finite() { bg.opacity.clamp(0.0, 1.0) } else { 1.0 }, multiply: bg.multiply };
     let layer = if bg.multiply { Layer::OverContent } else { Layer::Behind };
+    // Blended, a PDF page is drawn as one group, so its own graphics states can't undo the blend.
+    let source = match bg.source {
+        Some(src) if bg.multiply => Some(as_group(doc, src)),
+        other => other,
+    };
     for &i in pages {
         let page = page_list(doc)[i].clone();
         let (w, h) = page.display_size(doc);
         let mut content = begin(MarkKind::Background, "Background", page.view_matrix(doc));
         content.push_str(&gs.op());
-        match &bg.source {
+        match &source {
             Some(src) => content.push_str(&picture(src, (w, h), bg.scale, 0.0, [0.0; 2])),
             None => content.push_str(&format!("{}\n0 0 {} {} re f\n", rgb(bg.color), n(w), n(h))),
         }
         content.push_str(END);
         add_resources(doc, &page, Some(gs), None)?;
-        if let Some(src) = &bg.source {
+        if let Some(src) = &source {
             add_picture_resource(doc, &page_list(doc)[i].clone(), src)?;
         }
         let page = &page_list(doc)[i];
@@ -697,6 +733,20 @@ pub fn page_hides_background(doc: &Document, page: usize) -> bool {
         pieces.push(data);
     }
     let crop = page.crop(doc);
+    // A Pattern colour space (named directly or through the page's /ColorSpace resources) can
+    // tile with transparent gaps, so a fill in one doesn't prove anything is covered.
+    let spaces = page.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict()?.get(b"ColorSpace").map(|c| doc.resolve(c)));
+    let is_pattern = |name: &[u8]| -> bool {
+        if name == b"Pattern" {
+            return true;
+        }
+        let space = spaces.as_deref().and_then(Object::as_dict).and_then(|d| d.get(name)).map(|s| doc.resolve(s));
+        match space.as_deref() {
+            Some(Object::Name(n)) => n.as_slice() == b"Pattern",
+            Some(Object::Array(a)) => a.first().map(|f| doc.resolve(f)).is_some_and(|f| matches!(&*f, Object::Name(n) if n.as_slice() == b"Pattern")),
+            _ => false,
+        }
+    };
     let (mut ctm, mut saved) = (Matrix::IDENTITY, Vec::new());
     let mut rects: Vec<[f64; 4]> = Vec::new();
     let mut other_path = false;
@@ -728,9 +778,15 @@ pub fn page_hides_background(doc: &Document, page: usize) -> bool {
                     _ => false,
                 };
             }
+            // The fill colour space: a pattern (or `scn` naming one) may not cover.
+            b"cs" => match op.operands.last() {
+                Some(Object::Name(n)) if !is_pattern(n) => {}
+                _ => return false,
+            },
+            b"scn" if matches!(op.operands.last(), Some(Object::Name(_))) => return false,
             // Colour, line style and marked content change nothing that is painted.
-            b"g" | b"G" | b"rg" | b"RG" | b"k" | b"K" | b"cs" | b"CS" | b"sc" | b"SC" | b"scn" | b"SCN" | b"w" | b"J" | b"j" | b"M" | b"d"
-            | b"ri" | b"i" | b"BDC" | b"BMC" | b"EMC" | b"MP" | b"DP" | b"BX" | b"EX" => {}
+            b"g" | b"G" | b"rg" | b"RG" | b"k" | b"K" | b"CS" | b"sc" | b"SC" | b"scn" | b"SCN" | b"w" | b"J" | b"j" | b"M" | b"d" | b"ri" | b"i"
+            | b"BDC" | b"BMC" | b"EMC" | b"MP" | b"DP" | b"BX" | b"EX" => {}
             // Clipping, a `gs`, or anything painted before a fill: not a plain covering fill.
             _ => return false,
         }

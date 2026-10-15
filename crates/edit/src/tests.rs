@@ -4252,10 +4252,15 @@ fn japanese_paragraphs_wrap_between_characters_without_closing_marks_at_a_row_st
 
 /// A one-page document (600 × 800) whose content is `content`.
 fn page_with(content: &str) -> Document {
+    page_with_resources(content, "<< >>")
+}
+
+/// [`page_with`], with the page's `/Resources`.
+fn page_with_resources(content: &str, resources: &str) -> Document {
     let objs = [
         "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
-        "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".into(),
+        format!("<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources {resources} >>"),
         format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
     ];
     let mut out = b"%PDF-1.7\n".to_vec();
@@ -4334,6 +4339,17 @@ fn page_hides_background_finds_a_page_sized_fill_first() {
     assert!(!hides("0.7 0.7 -0.7 0.7 0 0 cm 0 0 2000 2000 re f"), "turned by 45°");
     assert!(!hides("0 0 m 600 0 l 600 800 l 0 800 l h f"), "not rectangles");
     assert!(!hides("0 0 600 800 re S"), "stroked");
+    // Colour spaces: device and other plain spaces cover; a pattern can tile with gaps.
+    assert!(hides("/DeviceRGB cs 1 1 1 sc 0 0 600 800 re f"));
+    assert!(!hides("/Pattern cs /P0 scn 0 0 600 800 re f"), "a pattern");
+    assert!(!hides("/P0 scn 0 0 600 800 re f"), "scn naming a pattern");
+    let spaces = "<< /ColorSpace << /CS0 [/Pattern /DeviceRGB] /CS1 /DeviceGray /CS2 /Pattern /CS3 [/ICCBased 9 0 R] >> >>";
+    let hides_in = |content: &str| page_hides_background(&page_with_resources(content, spaces), 0);
+    assert!(!hides_in("/CS0 cs 1 1 1 /P0 scn 0 0 600 800 re f"), "an uncoloured pattern space");
+    assert!(!hides_in("/CS2 cs 0 0 600 800 re f"), "a resource naming Pattern");
+    assert!(hides_in("/CS1 cs 1 sc 0 0 600 800 re f"), "a resource naming a device space");
+    assert!(hides_in("/CS3 cs 1 1 1 scn 0 0 600 800 re f"), "an ICC-based space");
+    assert!(!hides("cs 0 0 600 800 re f"), "cs without a name");
     assert!(!hides("0 0 600 800 re n 0 0 1 1 re f"), "the page-sized path was ended unpainted");
     assert!(!hides("q Q Q Q"), "nothing painted");
     assert!(!hides(""), "no content");
@@ -4387,4 +4403,10 @@ fn blended_backgrounds_go_under_additions_on_a_page_with_no_content() {
     assert!(s[0].contains("/PCMark /Background") && s[1].contains("/PCMark /HeaderFooter"), "{s:?}");
     assert_eq!(remove_marks(&mut doc, &[2], MarkKind::Background).unwrap(), 1);
     assert_eq!(streams(&doc, 2).len(), 1);
+    // Over a background already behind it, not under it (which would hide the new one).
+    add_background(&mut doc, &[2], &Background { color: [1.0; 3], ..Background::default() }, false).unwrap();
+    add_background(&mut doc, &[2], &Background { color: [0.0, 0.0, 1.0], multiply: true, ..Background::default() }, false).unwrap();
+    let s = streams(&doc, 2);
+    assert_eq!(s.len(), 3, "{s:?}");
+    assert!(s[0].contains("/PCGS100 gs") && s[1].contains("/PCGSM100 gs") && s[2].contains("/PCMark /HeaderFooter"), "{s:?}");
 }
