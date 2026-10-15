@@ -4,6 +4,8 @@
 //! it to a new width. Click an image to select it: drag to move, drag a corner to resize (keeping
 //! its proportions), right-click for rotate, flip, replace, save and delete; Delete removes it.
 
+use crate::theme::ThemeContext as _;
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

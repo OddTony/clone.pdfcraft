@@ -94,6 +94,73 @@ fn a_root_left_out_grants_none_of_its_access() {
 }
 
 #[test]
+fn theme_operations_obey_separate_mcp_read_and_write_roots() {
+    let base = folders("themes");
+    let store_dir = base.join("out");
+    let store = store_dir.join("themes.json");
+    let created = Command::new(BIN)
+        .args(["run", "theme_create", "--root"])
+        .arg(&base)
+        .arg("store=out/themes.json")
+        .arg("name=Rooted theme")
+        .arg("base_theme_id=ocean")
+        .output()
+        .unwrap();
+    assert!(created.status.success(), "{}", String::from_utf8_lossy(&created.stderr));
+    let created: Value = serde_json::from_slice(&created.stdout).unwrap();
+    let id = created["id"].as_str().unwrap();
+    let store_arg = s(&store);
+    let original = std::fs::read(&store).unwrap();
+
+    // Read-only operations need only the read root; they do not require write authority for a lock.
+    let read_only = vec!["--automation-read-root".into(), s(&store_dir)];
+    let calls = [
+        ("theme_list", json!({"store":store_arg})),
+        ("theme_inspect", json!({"store":store_arg,"id":id})),
+        ("theme_export", json!({"store":store_arg,"id":id})),
+    ];
+    let (replies, _) = session(&read_only, &calls);
+    for reply in &replies {
+        assert_eq!(reply["result"]["isError"], false, "{replies:?}");
+    }
+    let listed: Value = serde_json::from_str(&text(&replies[0])).unwrap();
+    assert!(listed["themes"].as_array().unwrap().iter().any(|theme| theme["id"] == id));
+    let inspected: Value = serde_json::from_str(&text(&replies[1])).unwrap();
+    assert_eq!(inspected["id"], id);
+    let exported: Value = serde_json::from_str(&text(&replies[2])).unwrap();
+    assert_eq!(exported["id"], id.strip_prefix("custom:").unwrap());
+    assert_eq!(std::fs::read(&store).unwrap(), original);
+
+    // A write root alone does not authorize reading the library, even for a mutation.
+    let write_only = vec!["--automation-write-root".into(), s(&store_dir)];
+    let calls = [("theme_list", json!({"store":store_arg})), ("theme_rename", json!({"store":store_arg,"id":id,"name":"Denied write-only"}))];
+    let (replies, _) = session(&write_only, &calls);
+    for reply in &replies {
+        assert_eq!(reply["result"]["isError"], true, "{replies:?}");
+        assert!(text(reply).contains("read authority is absent"), "{replies:?}");
+    }
+    assert_eq!(std::fs::read(&store).unwrap(), original);
+
+    // A disjoint read root also cannot grant access through an authorized write root.
+    let disjoint = vec!["--automation-read-root".into(), s(&base.join("in")), "--automation-write-root".into(), s(&store_dir)];
+    let calls = [("theme_list", json!({"store":store_arg})), ("theme_rename", json!({"store":store_arg,"id":id,"name":"Denied disjoint read"}))];
+    let (replies, _) = session(&disjoint, &calls);
+    for reply in &replies {
+        assert_eq!(reply["result"]["isError"], true, "{replies:?}");
+        assert!(text(reply).contains("outside the read root"), "{replies:?}");
+    }
+    assert_eq!(std::fs::read(&store).unwrap(), original);
+
+    // With both roots authorizing the store, the mutation succeeds and persists.
+    let both = vec!["--automation-read-root".into(), s(&store_dir), "--automation-write-root".into(), s(&store_dir)];
+    let (replies, _) = session(&both, &[("theme_rename", json!({"store":store_arg,"id":id,"name":"Allowed rename"}))]);
+    assert_eq!(replies[0]["result"]["isError"], false, "{replies:?}");
+    assert_ne!(std::fs::read(&store).unwrap(), original);
+
+    let _ = std::fs::remove_dir_all(base);
+}
+
+#[test]
 fn no_flags_means_no_confinement() {
     let base = folders("none");
     let (replies, stderr) = session(&[], &[("doc_open", json!({"path": s(&base.join("outside/secret.pdf"))}))]);

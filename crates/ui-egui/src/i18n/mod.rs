@@ -1388,6 +1388,11 @@ mod tests {
         // Czech shares with English, and templates with no English words.
         const KEEP_AS_IS: &[&str] = &[
             "OK",
+            "Atelier",
+            "Editorial",
+            "Heritage",
+            "Executive",
+            "Sienna",
             "PDF/A…",
             "Microsoft Word (.docx)",
             "PostScript / EPS",
@@ -1500,6 +1505,12 @@ mod tests {
         }
         const KEEP_AS_IS: &[&str] = &[
             "OK",
+            // Preset display names are proper names in every catalog.
+            "Atelier",
+            "Editorial",
+            "Heritage",
+            "Executive",
+            "Sienna",
             "PDF/A…",
             "Microsoft Word (.docx)",
             "PostScript / EPS",
@@ -2492,6 +2503,12 @@ mod tests {
         let vi = Lang::from_code("vi").expect("vi registered");
         // Authoritative allowlist for intentional English-identical Vietnamese rows.
         const KEEP_AS_IS: &[&str] = &[
+            // Built-in theme names are proper names, shared with the other catalogs.
+            "Atelier",
+            "Editorial",
+            "Executive",
+            "Heritage",
+            "Sienna",
             "OK",
             "Digital ID",
             "ZIP",
@@ -2955,6 +2972,12 @@ mod tests {
         let (entries, errors) = parse_entries(uk.0.source, uk.0.plural_forms());
         assert!(errors.is_empty(), "{errors:?}");
         let keep = [
+            // Preset names are proper names, intentionally identical across catalogs.
+            "Atelier",
+            "Editorial",
+            "Heritage",
+            "Executive",
+            "Sienna",
             "OK",
             "PDF/A…",
             "Microsoft Word (.docx)",
@@ -3036,6 +3059,12 @@ mod tests {
         assert!(errors.is_empty(), "{errors:?}");
         let keep = [
             "OK",
+            // Preset display names are proper names in every catalog.
+            "Atelier",
+            "Editorial",
+            "Heritage",
+            "Executive",
+            "Sienna",
             "PDF/A…",
             "Microsoft Word (.docx)",
             "PostScript / EPS",

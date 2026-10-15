@@ -2,6 +2,8 @@
 //! (replaced blue, inserted green, deleted red), shades them on the newer document's pages, and
 //! offers a report or the differences as comments.
 
+use crate::theme::ThemeContext as _;
+
 use egui::{Align, Color32, Layout};
 use pdfcraft_engine::DocId;
 use pdfcraft_engine::compare::{Comparison, Kind};

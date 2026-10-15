@@ -2680,4 +2680,12 @@ key	Space	Space
 	Word count…	Đếm từ…
 	Words	Từ
 	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	“{name}” đã thay đổi trên đĩa sau khi được mở hoặc lưu lần cuối. Lưu lúc này sẽ thay thế phiên bản mới hơn đó bằng phiên bản này.
+# Application theme names (preset names retain their spelling).
+	Atelier	Atelier
+	Custom theme	Chủ đề tùy chỉnh
+	Editorial	Editorial
+	Executive	Executive
+	Heritage	Heritage
+	Paper & Ink	Giấy & Mực
+	Sienna	Sienna
 @id	file.word_count	Đếm từ…
