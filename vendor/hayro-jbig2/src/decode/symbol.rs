@@ -176,6 +176,8 @@ pub(crate) fn decode(
 
     let retained_contexts = if ctx.header.flags.bitmap_context_retained {
         Some(RetainedContexts {
+            template: ctx.header.flags.template,
+            refinement_template: ctx.header.flags.refinement_template,
             generic_region: ctx.a_ctx.generic_region_contexts,
             refinement_region: ctx.a_ctx.refinement_region_contexts,
         })
@@ -191,6 +193,8 @@ pub(crate) fn decode(
 
 #[derive(Debug, Clone)]
 pub(crate) struct RetainedContexts {
+    pub(crate) template: Template,
+    pub(crate) refinement_template: RefinementTemplate,
     pub(crate) generic_region: Vec<ArithmeticDecoderContext>,
     pub(crate) refinement_region: Vec<ArithmeticDecoderContext>,
 }
@@ -365,8 +369,8 @@ fn decode_aggregation_bitmap(
             delta_t_table: 0,
             refinement_width_table: 1,
             refinement_height_table: 1,
-            refinement_y_table: 1,
             refinement_x_table: 1,
+            refinement_y_table: 1,
             refinement_size_table: 0,
         })
     } else {
@@ -397,11 +401,18 @@ fn decode_aggregation_bitmap(
         refinement_at_pixels: ctx.header.refinement_at_pixels.clone(),
         num_instances: aggregation_instance_count,
         symbol_id_table,
+        segment_data_len: ctx.header.data.len(),
         data: &[], // Data comes from parent decoder context, not the header.
     };
 
     let decode_ctx = if use_huffman {
-        DecodeContext::new_huffman(&mut ctx.h_ctx.reader, &header, &[], ctx.standard_tables)?
+        DecodeContext::new_huffman(
+            &mut ctx.h_ctx.reader,
+            &header,
+            &[],
+            ctx.standard_tables,
+            &mut ctx.a_ctx.refinement_region_contexts,
+        )?
     } else {
         let contexts = ctx
             .a_ctx
@@ -504,6 +515,16 @@ impl<'a> ArithmeticContext<'a> {
         let (generic_region_contexts, refinement_region_contexts) =
             if header.flags.bitmap_context_used {
                 let ctx = input_contexts.ok_or(SymbolError::Invalid)?;
+
+                // "The values of [...] SDTEMPLATE, SDRTEMPLATE [...] must match the
+                // corresponding values from the symbol dictionary whose context
+                // values are being used." (7.4.2.2)
+                if ctx.template != header.flags.template
+                    || ctx.refinement_template != header.flags.refinement_template
+                {
+                    bail!(SymbolError::Invalid);
+                }
+
                 (ctx.generic_region.clone(), ctx.refinement_region.clone())
             } else {
                 let template = header.flags.template;

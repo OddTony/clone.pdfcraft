@@ -47,7 +47,12 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         },
     };
     let has_alpha = image.has_alpha();
-    let bitmap = image.decode().ok()?;
+    // PdfCraft patch: hayro-jpeg2000 0.4.x `decode` takes a decoder context and
+    // hands back the interleaved samples via `data_u8`. Upstream hayro-syntax
+    // adapted its jpx filter the same way; crates.io hayro-syntax 0.7.2 still
+    // had the pre-0.4 no-argument form.
+    let mut decoder_context = hayro_jpeg2000::DecoderContext::default();
+    let bitmap = image.decode(&mut decoder_context).ok()?.data_u8();
 
     let (mut data, mut alpha) = if !has_alpha {
         (bitmap, None)

@@ -72,17 +72,17 @@ version = "1"
 optional = true
 
 [dependencies.hayro-ccitt]
-version = "0.3.0"
+version = "0.4.0"
 optional = true
 default-features = false
 
 [dependencies.hayro-jbig2]
-version = "0.3.0"
+version = "0.3.1"
 optional = true
 default-features = false
 
 [dependencies.hayro-jpeg2000]
-version = "0.3.5"
+version = "0.4.1"
 optional = true
 default-features = false
 

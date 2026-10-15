@@ -12,15 +12,12 @@
 [package]
 edition = "2024"
 name = "hayro-jbig2"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Laurenz Stampfl <laurenz.stampfl@gmail.com>"]
 build = false
 exclude = [
     "/tests/",
-    "/manifest_*.json",
-    "/sync.py",
     "/generate_huffman_tables.py",
-    "/benches/",
 ]
 autolib = false
 autobins = false
@@ -58,11 +55,11 @@ name = "jbig2png"
 path = "examples/jbig2png.rs"
 
 [dependencies.fearless_simd]
-version = "0.4.0"
+version = "1.0.0"
 optional = true
 
 [dependencies.hayro-ccitt]
-version = "0.3.0"
+version = "0.4.0"
 default-features = false
 
 [dependencies.image]
@@ -70,28 +67,10 @@ version = "0.25"
 optional = true
 default-features = false
 
-[dev-dependencies.criterion]
-version = "0.5"
-features = ["html_reports"]
-
 [dev-dependencies.image]
 version = "0.25"
 features = ["png"]
 default-features = false
-
-[dev-dependencies.indicatif]
-version = "0.17"
-features = ["rayon"]
-
-[dev-dependencies.rayon]
-version = "1.11"
-
-[dev-dependencies.serde]
-version = "1"
-features = ["derive"]
-
-[dev-dependencies.serde_json]
-version = "1"
 
 [lints.clippy]
 collection_is_never_read = "warn"

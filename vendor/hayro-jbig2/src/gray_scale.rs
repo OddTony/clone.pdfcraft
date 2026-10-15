@@ -146,7 +146,7 @@ fn decode_arithmetic(
                             if (mask[word_idx] >> bit_pos) & 1 != 0 {
                                 // Still need to update the context.
                                 let _ = ($gather)(&mut gatherer, bitplane, x);
-                                gatherer.update_current_row(x, 0);
+
                                 continue;
                             }
                         }
@@ -155,8 +155,10 @@ fn decode_arithmetic(
                         let pixel = decoder.read_bit(&mut ctx.contexts[context as usize]);
                         let value = pixel as u8;
 
-                        bitplane.set_pixel(x, y, value);
-                        gatherer.update_current_row(x, value);
+                        if value != 0 {
+                            bitplane.set_pixel(x, y, value);
+                            gatherer.update_current_row(x, value);
+                        }
                     }
                 }
 
@@ -177,6 +179,7 @@ fn decode_arithmetic(
 ///
 /// The closure `decode_next` is called for each bitplane, receiving the bitplane
 /// index (`GSBPP`-1 down to 0) and a zeroed bitmap to decode into.
+#[inline(never)]
 fn decode_bitplanes<F>(
     width: u32,
     height: u32,

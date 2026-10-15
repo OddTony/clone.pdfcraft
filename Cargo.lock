@@ -1861,7 +1861,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1931,6 +1931,12 @@ name = "fearless_simd"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
+
+[[package]]
+name = "fearless_simd"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3296eb97d869113eaf148a6bdf01884e90b3828ad7ae2340b0f93362fc158611"
 
 [[package]]
 name = "ff"
@@ -2507,9 +2513,9 @@ dependencies = [
 
 [[package]]
 name = "hayro-ccitt"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f4d0e94ddd48749f06bbe4e5389fb9799a0c45bcaf00495042076ef05e3241a"
+checksum = "2866f0d976e76497480b853d5e258dab6e4b89ecfe991124e08f15dfa8fd03ad"
 
 [[package]]
 name = "hayro-cmap"
@@ -2540,19 +2546,19 @@ dependencies = [
 
 [[package]]
 name = "hayro-jbig2"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "fearless_simd",
+ "fearless_simd 1.1.0",
  "hayro-ccitt",
 ]
 
 [[package]]
 name = "hayro-jpeg2000"
-version = "0.3.5"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c75ab947623ef4ccaa7acf0579edf7cbb5a73838e3839a7be73335e522f433a1"
+checksum = "122c5f834c37a2260b9c851bb8be685cf539b2a8b94b704a931ef7d2525d5835"
 dependencies = [
- "fearless_simd",
+ "fearless_simd 1.1.0",
 ]
 
 [[package]]
@@ -4856,7 +4862,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5406,7 +5412,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5476,7 +5482,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6353,7 +6359,7 @@ dependencies = [
  "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6885,7 +6891,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3361bff7f7d82c0c496b92048db83846691f0e844cc28dee92b1c824291b55ee"
 dependencies = [
  "bytemuck",
- "fearless_simd",
+ "fearless_simd 0.4.1",
  "guillotiere",
  "hashbrown 0.17.1",
  "log",
@@ -6902,7 +6908,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19d672facaa2d697285a786cd9d44d614cd2ce54cdc022504bf339f8fff3b750"
 dependencies = [
  "bytemuck",
- "fearless_simd",
+ "fearless_simd 0.4.1",
  "guillotiere",
  "hashbrown 0.17.1",
  "log",
@@ -6919,7 +6925,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2e9aed918117e8152c9eddfd8362d73c465c23f26c44786aa331707b8a64fa2"
 dependencies = [
  "bytemuck",
- "fearless_simd",
+ "fearless_simd 0.4.1",
  "guillotiere",
  "log",
  "peniko",
@@ -7438,7 +7444,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
