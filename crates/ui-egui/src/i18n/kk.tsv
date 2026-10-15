@@ -9,6 +9,7 @@
 	Interface language	Интерфейс тілі
 	Identity	Жеке деректер
 	Name on new comments	Жаңа түсініктемелердегі аты
+	Hide hover previews for highlights without comment text	Түсініктеме мәтіні жоқ белгілеулер үшін меңзер алдын ала қарауын жасыру
 	Open…	Ашу…
 	Open Recent	Соңғы файлдарды ашу
 	Pin folder to Home…	Қалтаны Басты бетке бекіту…
@@ -2371,6 +2372,13 @@ animation effects	Off	Өшірулі
 	This document is trying to open a local file:	Бұл құжат жергілікті файлды ашуға әрекеттеніп жатыр:
 	Move tag earlier	Тегті ертерек жылжыту
 	Move tag later	Тегті кейінірек жылжыту
+	Turn upside down (180°)	Төңкеру (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 дюйм жапсырма (101,6 × 152,4 мм)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Әр бетті басылған аймағына дейін қиып, тік бұрып, созбай параққа сыйғызады. Әр параққа бір жапсырма.
+	Find untagged content	Тегтелмеген мазмұнды табу
+	No untagged content was found.	Тегтелмеген мазмұн табылмады.
+	Found {n} untagged content problems.	Тегтелмеген мазмұнға қатысты {n} мәселе табылды.
+	Tag form fields	Пішін өрістерін тегтеу
 	Mark as artifact	Артефакт ретінде белгілеу
 	Remove this leaf tag from reading order and mark its direct content as an artifact	Осы жапырақ тегін оқу ретінен алып тастап, оның тікелей мазмұнын артефакт ретінде белгілеңіз
 	Mark content as artifact	Мазмұнды артефакт ретінде белгілеу
