@@ -2536,8 +2536,76 @@
 	Move tag later	Flytt tagg senere
 	Next tab	Neste fane
 	Previous tab	Forrige fane
+	Hide hover previews for highlights without comment text	Skjul forhåndsvisning ved peking for uthevinger uten kommentartekst
+	Digitally signed by	Digitalt signert av
+	DN: 	DN: 
+	Reason: 	Årsak: 
+	Location: 	Sted: 
+	Date: 	Dato: 
+	The labels are in English: the signature's font can't draw them in this language.	Etikettene er på engelsk: signaturens skrift kan ikke tegne dem på dette språket.
+	Font size	Skriftstørrelse
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Fant ingen skrivere. Kontroller at skriveren er installert og at utskriftskøen kjører, og åpne Skriv ut på nytt.
+	Make Properties Default	Bruk egenskapene som standard
+	Scroll speed (mouse wheel and arrow keys)	Rullehastighet (musehjul og piltaster)
+	Save over the changed file?	Lagre over den endrede filen?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	«{name}» ble endret på disken etter at den ble åpnet eller sist lagret. Lagrer du nå, erstattes den nyere versjonen med denne.
+	Save anyway	Lagre likevel
+	Sending sheet {s} of {n} to {printer}…	Sender ark {s} av {n} til {printer}…
+	What takes up the space in this file, by kind of content.	Hva som tar plass i denne filen, etter innholdstype.
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Denne filen er endret på disken. Last inn på nytt viser den nye versjonen og forkaster ulagrede endringer; Lagre erstatter den med denne versjonen.
+	Set page transitions	Angi sideoverganger
+	The password must have at least 8 characters.	Passordet må ha minst 8 tegn.
+	Open in Full Screen mode?	Åpne i fullskjermmodus?
+	This document asks to open in Full Screen mode: the page fills the screen and nothing else shows. Press Esc at any time to leave it.	Dette dokumentet ber om å bli åpnet i fullskjermmodus: siden fyller hele skjermen, og ingenting annet vises. Trykk Esc når som helst for å avslutte.
+	Full Screen	Fullskjerm
+	Not now	Ikke nå
+	Find untagged content	Finn innhold uten tagger
+	No untagged content was found.	Fant ikke noe innhold uten tagger.
+	Found {n} untagged content problems.	Fant {n} problemer med innhold uten tagger.
+	Tag form fields	Tagg skjemafelt
+	Mark as artifact	Merk som artefakt
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Fjern denne taggen fra leserekkefølgen og merk innholdet dens som artefakt
+	Mark content as artifact	Merk innhold som artefakt
+	Word count	Ordtelling
+	Current page only	Bare gjeldende side
+	Exclude tagged tables	Utelat taggede tabeller
+	Exclude tagged code blocks	Utelat taggede kodeblokker
+	Exclude image/OCR text	Utelat bilde-/OCR-tekst
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Utelatelser bruker PDF-tagger. Tabeller og kode uten tagger telles fortsatt. Utelating av bilder fjerner også usynlig tekst.
+	Words	Ord
+	Characters	Tegn
+	Characters without spaces	Tegn uten mellomrom
+	Pages counted	Sider talt
+	Some pages contain no countable text. Scanned images need OCR first.	Noen sider inneholder ingen tekst som kan telles. Skannede bilder trenger tekstgjenkjenning først.
+	Some content could not be classified safely and was kept in the count.	Noe innhold kunne ikke klassifiseres sikkert og ble beholdt i tellingen.
+	Counting words… {n} pages read	Teller ord … {n} sider lest
+	Word counting stopped unexpectedly.	Ordtellingen stoppet uventet.
+	Word count…	Ordtelling…
+	Standard	Standard
+	Mobile	Mobil
+	Merge image fragments	Slå sammen bildefragmenter
+	Optimizing… merging image fragments	Optimaliserer … slår sammen bildefragmenter
+	Side by side	Side om side
+	New file only	Bare ny fil
+	Old file: {name}	Gammel fil: {name}
+	New file: {name}	Ny fil: {name}
+	Print as image	Skriv ut som bilde
+	Resolution:	Oppløsning:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Bruk dette når en skriver hopper over tekst, skyggelegging eller gjennomsiktighet. Utskriften er ikke lenger søkbar tekst; med Skriv ut i gråtoner blir bildene grå.
+	Crop Image	Beskjær bilde
+	Remove Crop	Fjern beskjæring
+	Trim the picture with its handles; Enter or Done applies	Beskjær bildet med håndtakene; Enter eller Ferdig bekrefter
+	Redaction mark appearance	Utseende på sladdemarkeringer
+	Outline colour:	Kantfarge:
+	Fill colour:	Fyllfarge:
+	Shown while the pointer is over a mark.	Vises mens pekeren er over en markering.
+	Opacity:	Gjennomsiktighet:
+	Make properties default	Bruk egenskapene som standard
+	Pages selected	Valgte sider
+	Page properties	Sideegenskaper
 
 # Words that need a different translation in one place (see tr_ctx).
+theme	Appearance	Utseende
 action wizard	Start	Start
 comment menu	Edit	Rediger
 animation effects	Off	Av
@@ -2582,6 +2650,9 @@ certificate	Key usage	Nøkkelbruk
 certificate	Self-signed	Selvsignert
 certificate	SHA-1 digest	SHA-1-sammendrag
 certificate	SHA-256 digest	SHA-256-sammendrag
+
+# Command ids (win over the English label for that menu item).
+@id	file.word_count	Ordtelling…
 
 # Plural forms: one (1) | other (0, 2, 3 ...).
 @plural	Delete {n} field|Delete {n} fields	Slett {n} felt|Slett {n} felt
