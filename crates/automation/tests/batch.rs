@@ -11,7 +11,8 @@ fn result(auto: &mut Automation, args: Value) -> Value {
 
 // Fresh fixtures include the current timestamp; retain their bytes for output comparisons.
 fn pdf() -> Vec<u8> {
-    Session::new().create_from_text("Original", "Original text").unwrap().as_ref().clone()
+    // Repeated byte comparisons must not depend on the wall clock crossing a second.
+    Session::new().with_clock(|| 1_700_000_000).create_from_text("Original", "Original text").unwrap().as_ref().clone()
 }
 
 #[test]
