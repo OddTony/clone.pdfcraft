@@ -4686,13 +4686,13 @@ fn printer_marks_are_added_from_the_dialog_and_removed() {
     h.run_steps(3);
     let doc = h.state().session.get(id).unwrap();
     assert_eq!(doc.can_undo(), Some("Add printer marks"));
-    assert!(doc.marks.contains(&pdfcraft_engine::MarkKind::PrinterMarks));
+    assert!(doc.marks().contains(&pdfcraft_engine::MarkKind::PrinterMarks));
     // No trim box: the whole page is the trim box, so the page grew 36 pt a side for the marks.
     assert!((doc.info.pages[0].width - (before + 72.0)).abs() < 0.5, "{} → {}", before, doc.info.pages[0].width);
     assert_eq!(h.state().toast.clone().unwrap().0, "Printer marks added");
     assert!(h.state_mut().execute("prepress.marks.remove"));
     h.run_steps(3);
     let doc = h.state().session.get(id).unwrap();
-    assert!(!doc.marks.contains(&pdfcraft_engine::MarkKind::PrinterMarks));
+    assert!(!doc.marks().contains(&pdfcraft_engine::MarkKind::PrinterMarks));
     assert_eq!(doc.can_undo(), Some("Remove printer marks"));
 }
