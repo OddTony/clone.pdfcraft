@@ -27,6 +27,7 @@ pub struct ShapedCluster {
 pub enum ShapedScript {
     Arabic,
     Thai,
+    Greek,
 }
 
 impl ShapedScript {
@@ -34,6 +35,7 @@ impl ShapedScript {
         match self {
             Self::Arabic => crate::document_arabic_font(),
             Self::Thai => crate::document_thai_font(),
+            Self::Greek => Some(&crate::INTER_FONT),
         }
     }
 }
@@ -41,9 +43,11 @@ impl ShapedScript {
 fn face(script: ShapedScript) -> Option<&'static (FontRef<'static>, ShaperData)> {
     static FACE: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
     static THAI: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
+    static GREEK: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
     let cache = match script {
         ShapedScript::Arabic => &FACE,
         ShapedScript::Thai => &THAI,
+        ShapedScript::Greek => &GREEK,
     };
     cache
         .get_or_init(|| {
@@ -70,6 +74,17 @@ pub fn thai_has(c: char) -> bool {
     face(ShapedScript::Thai).is_some_and(|(font, _)| font.charmap().map(c).is_some())
 }
 
+pub fn greek_has(c: char) -> bool {
+    let Some(bytes) = ShapedScript::Greek.font().map(|f| f.bytes) else { return false };
+    FontRef::new(bytes).ok().is_some_and(|font| font.charmap().map(c).is_some())
+}
+
+/// Shape Greek and other Inter-covered text with the bundled Inter face. Greek is left to right
+/// with no contextual joining; HarfBuzz supplies kerning and composes combining marks onto bases.
+pub fn shape_greek(text: &str) -> Result<Vec<ShapedCluster>, GlyphError> {
+    shape_script(text, false, ShapedScript::Greek)
+}
+
 /// Shape Thai with grapheme clusters so Sara Am decomposition and stacked marks keep their
 /// original Unicode text exactly once, including when wrapped or copied from the saved PDF.
 pub fn shape_thai(text: &str) -> Result<Vec<ShapedCluster>, GlyphError> {
@@ -86,11 +101,13 @@ fn shape_script(text: &str, rtl: bool, kind: ShapedScript) -> Result<Vec<ShapedC
     buffer.set_script(match kind {
         ShapedScript::Arabic => script::ARABIC,
         ShapedScript::Thai => script::THAI,
+        ShapedScript::Greek => script::LATIN,
     });
     // Preserve the historical Arabic per-character mapping; Thai marks stay with their base.
     buffer.set_cluster_level(match kind {
         ShapedScript::Arabic => BufferClusterLevel::Characters,
         ShapedScript::Thai => BufferClusterLevel::MonotoneGraphemes,
+        ShapedScript::Greek => BufferClusterLevel::MonotoneGraphemes,
     });
     let shaped = shaper.shape(buffer, ShapeOptions::new());
     // Clusters are byte offsets into `text`; a cluster shows the characters up to the next one.
@@ -215,6 +232,32 @@ mod tests {
         assert_eq!(shape_arabic("日", true), Err(GlyphError::Missing));
         assert_eq!(arabic_glyph(u32::MAX).map(|_| ()), Err(GlyphError::Missing));
         assert!(shape_arabic("", true).unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod greek_tests {
+    use super::*;
+
+    #[test]
+    fn greek_clusters_come_from_inter_and_stay_searchable() {
+        for text in ["Αα", "δεδεντικό", "ς", "Ά", "", " "] {
+            let clusters = shape_greek(text).unwrap();
+            assert_eq!(clusters.iter().map(|c| c.text.as_str()).collect::<String>(), text);
+            for c in clusters {
+                assert_eq!(c.script, ShapedScript::Greek);
+                assert!(c.advance.is_finite() && c.advance >= 0.0);
+                assert!(!c.glyphs.is_empty());
+                for (id, pos) in c.glyphs {
+                    assert!(pos.iter().all(|v| v.is_finite()));
+                    let g = shaped_glyph(c.script, id).unwrap();
+                    assert!(g.width.is_finite() && g.bbox.iter().all(|v| v.is_finite()));
+                }
+            }
+        }
+        assert!(greek_has('\u{03B1}') && !greek_has('\u{65E5}'));
+        assert_eq!(shape_greek('日'.to_string().as_str()), Err(GlyphError::Missing));
+        assert_eq!(shaped_glyph(ShapedScript::Greek, u32::MAX).map(|_| ()), Err(GlyphError::Missing));
     }
 }
 
