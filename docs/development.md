@@ -50,7 +50,7 @@ do not contact a desktop session bus. Page and document colours retain their exi
 ## Logs
 
 The desktop app writes its `log` records to standard error and to `logs/pdfcraft.log` in its
-settings folder, next to `app.ron`: Linux and FreeBSD `~/.local/share/pdfcraft/logs/` (or
+data folder: Linux and FreeBSD `~/.local/share/pdfcraft/logs/` (or
 `$XDG_DATA_HOME/pdfcraft/logs/`), macOS `~/Library/Application Support/PdfCraft/logs/`, Windows
 `%APPDATA%\PdfCraft\data\logs\`. In portable mode (a `portable.txt` file next to the executable, as
 the Windows portable zip ships) the settings folder is `PdfCraftData\` beside the executable, and
@@ -105,17 +105,31 @@ reach this retry instead of the uncaptured-error panic handler. This does not fi
 driver's shader compilation, and explicit `PDFCRAFT_RENDERER=wgpu` still disables the retry.
 `PDFCRAFT_RENDERER` skips it or chooses OpenGL from the start.
 
+## Preferences
+
+Linux and FreeBSD store `app.ron` in `$XDG_CONFIG_HOME/pdfcraft/`, or
+`~/.config/pdfcraft/` when that variable is unset, empty or relative. This follows the
+[XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/latest/).
+On first launch after upgrading, existing `app.ron` preferences are copied from the old
+data folder without replacing an existing configuration file. The old copy is retained;
+logs, crash recovery and digital IDs stay in their data locations. If migration fails,
+the app logs the failure and continues using the original preferences folder.
+The existing PrintCraft-to-PdfCraft migration runs first. macOS, Windows and portable
+copies retain their current preferences locations.
+
 ## Environment variables
 
 | Variable | Effect |
 |---|---|
 | `RUST_LOG` | Log levels for standard error and the log file (see [Logs](#logs)) |
 | `RUST_BACKTRACE` | `1` adds a backtrace to the report of an internal error |
-| `XDG_DATA_HOME` | Linux/FreeBSD: base of the settings folder (`pdfcraft/`), the log folder and crash recovery |
+| `XDG_CONFIG_HOME` | Linux/FreeBSD: absolute configuration base for `pdfcraft/app.ron`; defaults to `~/.config` |
+| `XDG_DATA_HOME` | Linux/FreeBSD: base of the log folder and crash recovery; previous preferences are migrated from here |
 | `WGPU_POWER_PREF` | GPU choice; by default PdfCraft draws on the GPU the Wayland compositor draws with (it says so through linux-dmabuf feedback), else the GPU that drives the primary display (Windows) or the built-in panel (Linux), else the low-power (integrated) GPU. The log says which one was chosen |
 | `WGPU_BACKEND` | Graphics backend; by default Windows uses Direct3D 12, falling back to OpenGL |
 | `WGPU_VALIDATION_INDIRECT_CALL` | `1` turns wgpu's check of indirect draw arguments back on. PdfCraft draws nothing indirectly and turns it off, since the compute shader the check needs fails to compile on some drivers (Metal on an Intel Iris Pro), which lost the device at start-up |
 | `PDFCRAFT_RENDERER` | `gl` starts with OpenGL (glow) and never loads wgpu; `wgpu` reports a wgpu failure instead of retrying with OpenGL; unset, wgpu is retried with OpenGL when it can't start (see [Renderer fallback](#renderer-fallback)) |
+| `PDFCRAFT_TITLEBAR` | Linux: `app` draws PdfCraft's own title bar (window buttons in the tab strip, in the order of GNOME's `button-layout`, and resize edges); `system` keeps the frame winit or the desktop draws; unset, PdfCraft draws its own when the Wayland compositor draws no frames (GNOME), and leaves it to the desktop otherwise (KDE, Sway, Hyprland, X11). Where PdfCraft draws it, Preferences ▸ Use system title bar switches back to winit's frame without a restart; `system` also hides that option |
 | `PDFCRAFT_BUILD_LABEL` | Build time: a label for a local or patched build (letters, digits, inner dots), shown after the version in `--version`, About and the log (`0.7.1 (titlebar)`). `packaging/linux/package.sh` also puts it in the file names and the .rpm/.deb release (`1.titlebar`), which upgrades over the release of the same version |
 | `CRAFT_FONTS_DIR` | Build time: a [craft-fonts](https://github.com/storytold/craft-fonts) checkout to embed (Japanese fonts) |
 | `PDFCRAFT_SYSTEM_FONTS` | `0` stops the desktop app from using an installed font for characters its embedded fonts lack (`cargo xtask screenshots` sets it) |
