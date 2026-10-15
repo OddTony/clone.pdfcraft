@@ -433,22 +433,6 @@ pub(super) fn rewrite_styled_block(
                 pdfcraft_fonts::embedding::face_key(&m.base_font) == pdfcraft_fonts::embedding::face_key(&source.base_font) && source_encodes(m, &s)
             }) {
                 name.clone()
-            } else if let Some(face) =
-                pdfcraft_fonts::embedding::matching_faces(&source.base_font).into_iter().find(|f| pdfcraft_fonts::embedding::covers(f.bytes, &s))
-            {
-                let key = face.name();
-                if let Some(name) = full_faces.get(&key) {
-                    name.clone()
-                } else {
-                    let name = pdfcraft_fonts::embedding::embed(doc, &mut fonts, face.bytes, face.family).map_err(EditError::Invalid)?;
-                    let font = fonts
-                        .get(name.as_bytes())
-                        .and_then(|f| doc.dict(f))
-                        .ok_or_else(|| EditError::Invalid("the full source font could not be loaded".into()))?;
-                    metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
-                    full_faces.insert(key, name.clone());
-                    name
-                }
             } else if let Some(bytes) = programs
                 .entry(source.font.clone())
                 .or_insert_with(|| source_program(doc, &fonts, &source.font).map(std::sync::Arc::new))
@@ -467,6 +451,22 @@ pub(super) fn rewrite_styled_block(
                         .get(name.as_bytes())
                         .and_then(|f| doc.dict(f))
                         .ok_or_else(|| EditError::Invalid("the source font could not be loaded".into()))?;
+                    metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
+                    full_faces.insert(key, name.clone());
+                    name
+                }
+            } else if let Some(face) =
+                pdfcraft_fonts::embedding::matching_faces(&source.base_font).into_iter().find(|f| pdfcraft_fonts::embedding::covers(f.bytes, &s))
+            {
+                let key = face.name();
+                if let Some(name) = full_faces.get(&key) {
+                    name.clone()
+                } else {
+                    let name = pdfcraft_fonts::embedding::embed(doc, &mut fonts, face.bytes, face.family).map_err(EditError::Invalid)?;
+                    let font = fonts
+                        .get(name.as_bytes())
+                        .and_then(|f| doc.dict(f))
+                        .ok_or_else(|| EditError::Invalid("the full source font could not be loaded".into()))?;
                     metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
                     full_faces.insert(key, name.clone());
                     name
