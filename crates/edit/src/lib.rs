@@ -3,7 +3,10 @@
 //!
 //! **How marks are stored.** Each mark is one content stream appended to (or, for content behind
 //! the page, prepended to; a blended background goes right after the page's own content) the
-//! page's `/Contents`, drawn in display space (after `/Rotate`) and
+//! page's `/Contents`. A normal background on a page that starts with a recognised white page
+//! fill goes between that fill and the rest of the page: the stream holding the fill is split
+//! there into two new streams with the same bytes (see `background.rs`). Marks are drawn in
+//! display space (after `/Rotate`) and
 //! wrapped in a marked-content artifact (§14.8.2.2) so readers and screen readers skip it:
 //! `/Artifact <</Type /Pagination /Subtype /Header /PCMark /HeaderFooter>> BDC … EMC`. The
 //! `/PCMark` entry (also in the stream dictionary) names the kind of mark, which is how Update and
@@ -807,7 +810,9 @@ pub fn page_hides_background(doc: &Document, page: usize) -> bool {
 }
 
 /// Remove marks of `kind` from `pages`; returns how many were removed. When no mark is left on
-/// top of a page, the q/Q wrapper goes too, restoring the original content list.
+/// top of a page, the q/Q wrapper goes too, restoring the original content list. A background
+/// placed above a white page fill is the exception: the two streams its insertion split the
+/// original into stay (same bytes, same rendering), so the list keeps one more piece.
 pub fn remove_marks(doc: &mut Document, pages: &[usize], kind: MarkKind) -> Result<usize, EditError> {
     let all = page_list(doc);
     check(pages, all.len())?;
