@@ -305,6 +305,58 @@ fn a_jpeg_that_can_not_be_cleared_safely_is_still_removed() {
 }
 
 #[test]
+fn a_cleared_image_carries_over_no_alternates_or_metadata() {
+    // An alternate version of the picture and an XMP packet (which can hold a thumbnail) still
+    // show what the mark covers: the cleared copy must not point at them, and after the full
+    // rewrite redaction forces, neither may stay in the file. Both the JPEG path and the
+    // lossless one, which share the copy's dictionary.
+    let alt = stream("/Type /XObject /Subtype /Image /Width 16 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", b"REDALTERNATEIMG!");
+    let xmp = stream("/Type /Metadata /Subtype /XML", b"<x:xmpmeta>REDXMPTHUMBNAIL</x:xmpmeta>");
+    let extra = "/Alternates [<< /Image 8 0 R /DefaultForPrinting true >>] /Metadata 9 0 R";
+    let jpeg = (
+        format!("/Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode {extra}"),
+        white_jpeg(16, 16, 1),
+    );
+    let raw = (format!("/Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray /BitsPerComponent 8 {extra}"), vec![255u8; 256]);
+    for (dict, data) in [jpeg, raw] {
+        let mut doc = one_page(b"q 100 0 0 100 0 0 cm /Im Do Q", "/XObject << /Im 7 0 R >>", vec![stream(&dict, &data), alt.clone(), xmp.clone()]);
+        mark(&mut doc, 0, &[[0.0, 0.0, 50.0, 100.0]], "");
+        let r = apply(&mut doc, None).unwrap();
+        assert_eq!((r.images_removed, r.images_cleared), (0, 1), "{dict}: {r:?}");
+        let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+        let has = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+        assert!(!has(b"REDALTERNATEIMG"), "{dict}: the alternate image survived the save");
+        assert!(!has(b"REDXMPTHUMBNAIL"), "{dict}: the image's metadata survived the save");
+        assert!(!has(b"/Alternates"), "{dict}: the cleared copy still lists alternates");
+    }
+}
+
+#[test]
+fn a_masked_jpeg_is_removed_whole() {
+    // A soft mask or stencil mask has samples of its own over the same area: clearing only the
+    // picture would leave them, so the image and its mask go (fail-closed), in the saved bytes
+    // too. A JPEG takes the same path as the lossless images here, colour-key /Mask included.
+    let mask = stream("/Type /XObject /Subtype /Image /Width 16 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", b"REDSOFTMASKDATA!");
+    let stencil = stream("/Type /XObject /Subtype /Image /Width 128 /Height 1 /ImageMask true /BitsPerComponent 1", b"REDSTENCILMASK!!");
+    for (key, obj) in [("/SMask 8 0 R", mask), ("/Mask 8 0 R", stencil)] {
+        let dict =
+            format!("/Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode {key}");
+        let mut doc = one_page(b"q 100 0 0 100 0 0 cm /Im Do Q", "/XObject << /Im 7 0 R >>", vec![stream(&dict, white_jpeg(16, 16, 1)), obj]);
+        mark(&mut doc, 0, &[[0.0, 0.0, 50.0, 100.0]], "");
+        let r = apply(&mut doc, None).unwrap();
+        assert_eq!((r.images_removed, r.images_cleared), (1, 0), "{key}: {r:?}");
+        let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+        let has = |needle: &[u8]| bytes.windows(needle.len()).any(|w| w == needle);
+        assert!(!has(b"REDSOFTMASKDATA") && !has(b"REDSTENCILMASK"), "{key}: the mask's samples survived the save");
+    }
+    let dict = "/Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode /Mask [250 255]";
+    let mut doc = one_page(b"q 100 0 0 100 0 0 cm /Im Do Q", "/XObject << /Im 7 0 R >>", vec![stream(dict, white_jpeg(16, 16, 1))]);
+    mark(&mut doc, 0, &[[0.0, 0.0, 50.0, 100.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!((r.images_removed, r.images_cleared), (1, 0), "colour-key mask: {r:?}");
+}
+
+#[test]
 fn vectors_are_removed_or_clipped_and_inline_images_go() {
     let src = b"0 g 10 10 20 20 re f 0 0 300 300 re f q 10 0 0 10 50 50 cm BI /W 1 /H 1 /CS /G /BPC 8 ID \x80 EI Q 1 0 0 RG 150 150 m 160 160 l S";
     let mut doc = one_page(src, "", vec![]);

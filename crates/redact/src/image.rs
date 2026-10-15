@@ -4,11 +4,11 @@
 //! the other lossless filters stay lossless (Flate); a grey or RGB JPEG, which is what scans and
 //! camera photos are, is re-encoded as a JPEG from its pixels, so nothing of the original stream
 //! (its covered pixels, or an EXIF thumbnail) is carried over. Images whose codec PdfCraft can't
-//! clear (CMYK JPEG, JPX, JBIG2, CCITT) return `None`, and the caller removes the whole image
-//! instead; that is fail-closed.
+//! clear (CMYK JPEG, JPX, JBIG2, CCITT), and images with a separate /SMask or /Mask, can't be
+//! cleared and the caller removes the whole image instead; that is fail-closed.
 
 use pdfcraft_content::{Matrix, overlaps};
-use pdfcraft_cos::{Document, Object, Stream};
+use pdfcraft_cos::{Dict, Document, Object, Stream};
 
 /// Most pixels an image may have to be cleared in place (larger ones are removed).
 const MAX_PIXELS: u64 = 64 << 20;
@@ -44,6 +44,17 @@ fn components(doc: &Document, s: &Stream) -> Option<usize> {
 #[allow(clippy::result_unit_err)]
 pub(crate) fn clear(doc: &Document, s: &Stream, ctm: &Matrix, rects: &[[f64; 4]]) -> Result<Option<Stream>, ()> {
     decode_and_clear(doc, s, ctm, rects).ok_or(())
+}
+
+/// The dictionary of a cleared copy of `s`. /Alternates are other versions of the same picture
+/// (covered pixels included) and /Metadata can carry an XMP thumbnail of it, so neither is
+/// carried over; /Length and /DecodeParms belong to the old samples.
+fn copy_dict(s: &Stream) -> Dict {
+    let mut dict = s.dict.clone();
+    for key in [&b"Length"[..], b"DecodeParms", b"Alternates", b"Metadata"] {
+        dict.remove(key);
+    }
+    dict
 }
 
 fn decode_and_clear(doc: &Document, s: &Stream, ctm: &Matrix, rects: &[[f64; 4]]) -> Option<Option<Stream>> {
@@ -100,11 +111,7 @@ fn decode_and_clear(doc: &Document, s: &Stream, ctm: &Matrix, rects: &[[f64; 4]]
     if cleared == 0 {
         return Some(None);
     }
-    let mut dict = s.dict.clone();
-    dict.remove(b"Length");
-    dict.remove(b"DecodeParms");
-    dict.remove(b"Alternates");
-    Some(Some(Stream::flate(dict, &data)))
+    Some(Some(Stream::flate(copy_dict(s), &data)))
 }
 
 /// A grey or RGB JPEG: decoded, cleared, and written as a new JPEG. CMYK and anything the decoder
@@ -137,10 +144,7 @@ fn clear_jpeg(doc: &Document, s: &Stream, ctm: &Matrix, rects: &[[f64; 4]]) -> O
     }
     let mut jpeg = Vec::new();
     image::ImageEncoder::write_image(image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, JPEG_QUALITY), &data, w, h, colour).ok()?;
-    let mut dict = s.dict.clone();
-    dict.remove(b"Length");
-    dict.remove(b"DecodeParms");
-    dict.remove(b"Alternates");
+    let mut dict = copy_dict(s);
     dict.set(b"Filter".to_vec(), Object::name("DCTDecode"));
     dict.set(b"Width".to_vec(), Object::Int(i64::from(w)));
     dict.set(b"Height".to_vec(), Object::Int(i64::from(h)));
