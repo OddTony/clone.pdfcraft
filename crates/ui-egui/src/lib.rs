@@ -27,6 +27,7 @@ mod actions_ui;
 mod appearance;
 pub mod canvas;
 mod chrome;
+pub mod cloud;
 mod combine_grid;
 mod image_pick;
 mod tags_ui;
@@ -773,6 +774,16 @@ pub struct PdfCraftApp {
     pub pending_link: Option<PendingLink>,
     /// An absolute GoToR target waiting for approval, before any target-file I/O (#1364).
     pub pending_remote_link: Option<PendingRemoteLink>,
+    /// Open and Save against cloud storage. Connected by the host application when a
+    /// CollabCraft service is configured; disconnected leaves the app local-only.
+    pub cloud: craft_ui::cloud::CloudFiles,
+    /// Share dialog state. Connected by the host; drawn from the title bar when sharing
+    /// is available. The dialog is the same across all Craft apps.
+    pub share: craft_ui::share::ShareDialog,
+    /// Who else has the document open. Drawn beside the account badge in the title bar.
+    /// Presence is viewer presence only: PdfCraft does not host real-time collaborative
+    /// text editing.
+    pub presence: craft_ui::presence::PresenceBar,
 }
 
 /// Where in a document a request to open an address came from.
@@ -1028,6 +1039,9 @@ impl PdfCraftApp {
             text_style: content_ui::default_style(),
             replace_draft: None,
             number_draft: NumberDraft { from: 1, to: 1, style: pdfcraft_engine::LabelStyle::Decimal, prefix: String::new(), start: 1 },
+            cloud: craft_ui::cloud::CloudFiles::new(),
+            share: craft_ui::share::ShareDialog::new(),
+            presence: craft_ui::presence::PresenceBar::new().badges_only(),
         }
     }
 
@@ -2842,6 +2856,8 @@ impl eframe::App for PdfCraftApp {
         self.process_file_requests();
         #[cfg(not(target_arch = "wasm32"))]
         self.process_picked();
+        // Drain answers from the cloud worker (Open, Save, account, listing).
+        cloud::pump(self, ctx);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {

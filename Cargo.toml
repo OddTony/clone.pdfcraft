@@ -13,7 +13,15 @@ repository = "https://github.com/storytold/pdfcraft"
 
 [workspace.dependencies]
 # Shared frontend components; engines remain independent of egui.
-craft-ui = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "5c874d51eeb3de70e735c8ce87a59a7dedd47675", features = ["serde"] }
+craft-ui = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "289d562cc6e8b567819aee51f759a78f41a65454", features = ["serde", "cloud"] }
+# Provider-neutral cloud types (Entry, Capability, Permission). Types and contracts only: the
+# crate opens no socket and names no provider, so this builds for the web too.
+craft-cloud = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "289d562cc6e8b567819aee51f759a78f41a65454" }
+# How the desktop and browser apps reach CollabCraft. No provider credential or URL compiled in.
+craft-cloud-client = { git = "https://github.com/wdunn001/collab-craft", rev = "80bfaec" }
+# The share dialog's backend: the half that opens a socket, kept here so only one session lives
+# in the process and a sign-in through Open/Save reaches the share dialog too.
+collabcraft-share = { git = "https://github.com/wdunn001/collab-craft", rev = "80bfaec" }
 # Shared system spooler; document composition remains in pdfcraft-print.
 craft-print = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "d991bf6792f8ade99c51358bf3c1d902c8cd96b5" }
 # internal
