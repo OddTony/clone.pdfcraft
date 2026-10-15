@@ -1113,7 +1113,16 @@ impl Document {
         if let Some(s) = self.objstms.lock().map_err(|_| CosError::Poisoned)?.get(&num) {
             return Ok(s.clone());
         }
-        let Object::Stream(s) = &*self.try_get(num)? else { return Err(CosError::MissingObject(num)) };
+        // A file entry that cannot place the stream (one that says it is itself compressed
+        // inside another stream, as in #2367, or points nowhere) is tried by the stream's own
+        // header, as a plain object with a wrong offset is. An edited or freed stream is what
+        // the overlay says it is: the file's copy must not come back.
+        let loaded = match self.try_get(num) {
+            Ok(o) if matches!(*o, Object::Stream(_)) => o,
+            _ if self.overlay.contains_key(&num) => return Err(CosError::MissingObject(num)),
+            _ => Arc::new(self.scan_for(num).map(|(id, o)| self.decrypted(id, o)).ok_or(CosError::MissingObject(num))?),
+        };
+        let Object::Stream(s) = &*loaded else { return Err(CosError::MissingObject(num)) };
         let n = s.dict.int(b"N").unwrap_or(0).clamp(0, 1_000_000) as usize;
         let first = s.dict.int(b"First").unwrap_or(0).max(0) as usize;
         let data = s.decoded_within(self.stream_limit)?;
@@ -2533,6 +2542,72 @@ mod tests {
         // The first revision opens on its own, without the update.
         let old = Document::open(Arc::new(bytes[..ends[0]].to_vec())).unwrap();
         assert!(old.get(ObjRef::new(1, 0)).as_dict().unwrap().get(b"Lang").is_none());
+    }
+
+    /// An object stream whose own cross-reference entry says it is compressed inside another
+    /// stream (which the format forbids, and which does not exist here: qpdf's
+    /// `xref-compressed-in-compressed.pdf`, #2367) could not be loaded, so every object in it
+    /// read as null and a full save wrote `/Outlines null`. The stream is now found by its own
+    /// header, as a plain object with a wrong offset is.
+    /// qpdf's `xref-compressed-in-compressed.pdf` in miniature: object 3 is an object stream
+    /// holding object 4, and the cross-reference stream says object 3 itself lives in stream 99.
+    fn compressed_in_compressed_fixture() -> Document {
+        let mut out = b"%PDF-1.5\n".to_vec();
+        let at = |out: &mut Vec<u8>, num: u32, body: &str| {
+            let off = out.len();
+            out.extend_from_slice(format!("{num} 0 obj\n{body}\nendobj\n").as_bytes());
+            off as u16
+        };
+        let o1 = at(&mut out, 1, "<< /Type /Catalog /Pages 2 0 R /Outlines 4 0 R >>");
+        let o2 = at(&mut out, 2, "<< /Type /Pages /Kids [] /Count 0 >>");
+        let inner = "<< /Type /Outlines /Count 0 >>";
+        at(&mut out, 3, &format!("<< /Type /ObjStm /N 1 /First 4 /Length {} >>\nstream\n4 0 {inner}\nendstream", 4 + inner.len()));
+        // /W [1 2 1]: object 3 is said to live in stream 99 (which does not exist), 4 in stream 3.
+        let rows: Vec<[u8; 4]> = vec![
+            [0, 0, 0, 255],
+            [1, 0, o1 as u8, 0],
+            [1, 0, o2 as u8, 0],
+            [2, 0, 99, 0],
+            [2, 0, 3, 0],
+            [1, (out.len() >> 8) as u8, out.len() as u8, 0],
+        ];
+        let rows: Vec<u8> = rows.concat();
+        let xref = out.len();
+        out.extend_from_slice(
+            format!("5 0 obj\n<< /Type /XRef /W [1 2 1] /Index [0 6] /Size 6 /Root 1 0 R /Length {} >>\nstream\n", rows.len()).as_bytes(),
+        );
+        out.extend_from_slice(&rows);
+        out.extend_from_slice(format!("\nendstream\nendobj\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+        Document::open(Arc::new(out)).unwrap()
+    }
+
+    #[test]
+    fn an_object_stream_marked_as_compressed_is_found_by_its_header() {
+        let doc = compressed_in_compressed_fixture();
+        assert_eq!(doc.revisions().len(), 1, "the chain itself reads: {:?}", doc.repair_log());
+        let outlines = doc.get(ObjRef::new(4, 0));
+        assert_eq!(outlines.as_dict().and_then(|d| d.name(b"Type")), Some(&b"Outlines"[..]), "{outlines:?}");
+        let saved = crate::write_full(&doc, &crate::SaveOptions::default()).unwrap();
+        let back = Document::open(Arc::new(saved)).unwrap();
+        let catalog = back.get(back.root().unwrap());
+        let outlines = back.resolve(catalog.as_dict().unwrap().get(b"Outlines").unwrap());
+        assert_eq!(outlines.as_dict().and_then(|d| d.name(b"Type")), Some(&b"Outlines"[..]), "the full save keeps it: {outlines:?}");
+    }
+
+    /// The header fallback is for file entries only: once the stream is freed (or replaced) in
+    /// the overlay, its objects must not come back from the file's copy of it.
+    #[test]
+    fn a_freed_object_stream_is_not_found_by_its_header() {
+        let doc = compressed_in_compressed_fixture();
+        assert!(doc.get(ObjRef::new(4, 0)).as_dict().is_some());
+        let mut edited = doc.clone();
+        edited.free(ObjRef::new(3, 0));
+        let fresh = edited.object_reader().document;
+        assert!(matches!(*fresh.get(ObjRef::new(4, 0)), Object::Null), "{:?}", fresh.get(ObjRef::new(4, 0)));
+        let mut replaced = doc.clone();
+        replaced.set(ObjRef::new(3, 0), Object::Int(0));
+        let fresh = replaced.object_reader().document;
+        assert!(matches!(*fresh.get(ObjRef::new(4, 0)), Object::Null), "{:?}", fresh.get(ObjRef::new(4, 0)));
     }
 
     #[test]
