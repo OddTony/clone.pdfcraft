@@ -46,6 +46,9 @@ fn harness() -> Harness<'static, PdfCraftApp> {
 
 /// Commands that open a native file picker can't run headless.
 /// (Create ▸ Clipboard reads the system clipboard: tests use `create_from_clip`.)
+/// CollabCraft cloud commands need a connected service; see `cloud_tests`.
+const CLOUD_SERVICE: &[&str] = &["file.open_cloud", "file.save_as_cloud"];
+
 const PICKERS: &[&str] = &[
     "file.open",
     "page.combine",
@@ -69,7 +72,7 @@ const PICKERS: &[&str] = &[
 #[test]
 fn every_registered_command_is_implemented() {
     for spec in COMMANDS {
-        if PICKERS.contains(&spec.id) {
+        if PICKERS.contains(&spec.id) || CLOUD_SERVICE.contains(&spec.id) {
             continue;
         }
         let mut app = PdfCraftApp::new();
