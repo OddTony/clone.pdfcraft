@@ -1325,6 +1325,25 @@ mod tests {
         assert!(append_editor_cmap(&mut broken, &std::collections::BTreeMap::from([(65, 1)])).is_none());
     }
 
+    #[test]
+    fn missing_cmap_directory_is_reconstructed_in_memory() {
+        use skrifa::{MetadataProvider as _, raw::TableProvider as _};
+        let mut subset = include_bytes!("../../../assets/fonts/Inter-Regular.ttf").to_vec();
+        let count = u16::from_be_bytes(subset[4..6].try_into().unwrap()) as usize;
+        let entry = (0..count).map(|i| 12 + i * 16)
+            .find(|i| &subset[*i..*i + 4] == b"cmap").unwrap();
+        subset[entry..entry + 4].copy_from_slice(b"XXX0");
+        let source = subset.clone();
+        let gid = skrifa::FontRef::new(&subset).unwrap().cmap().err();
+        assert!(gid.is_some(), "the deliberately removed cmap cannot parse");
+        let original = skrifa::FontRef::new(include_bytes!("../../../assets/fonts/Inter-Regular.ttf")).unwrap();
+        let glyph = original.charmap().map('A').unwrap().to_u32();
+        append_editor_cmap(&mut subset, &std::collections::BTreeMap::from([(u32::from('א'), glyph)])).unwrap();
+        let repaired = skrifa::FontRef::new(&subset).unwrap();
+        assert_eq!(repaired.charmap().map('א').unwrap().to_u32(), glyph);
+        assert_eq!(&source[entry..entry + 4], b"XXX0");
+    }
+
     fn metrics_with_flags(flags: Option<Object>) -> Metrics {
         let mut doc = Document::new_empty();
         let mut descriptor = Dict::new();
