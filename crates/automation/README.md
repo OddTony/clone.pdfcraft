@@ -194,6 +194,14 @@ unapplied with a warning.
 folders. The CLI also exposes it as `pdfcraft-cli batch`. See the
 [batch guide](../../docs/cli-batch.md) for examples, output protection, errors and limits.
 
+## Office documents
+
+`doc_create` with `from: "office"` and a `path` converts a Word, PowerPoint or Excel file natively
+(no external program) into a new, unsaved document, and adds an `office` object to the result:
+`kind`, `pages`, `escaped` (characters written as `[U+XXXX]`) and `notes` (what was approximated).
+`doc_create_multiple`, `doc_combine` and `doc_batch` convert Office files like images and text. See
+[Word, PowerPoint and Excel to PDF](../../docs/office-import.md).
+
 ## Viewer navigation history
 
 A running PdfCraft instance launched with `--control FILE` exposes its per-tab history through

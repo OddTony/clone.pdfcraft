@@ -4057,12 +4057,14 @@ name = "pdfcraft-create"
 version = "0.8.0"
 dependencies = [
  "encoding_rs",
+ "flate2",
  "hayro-syntax",
  "image",
  "pdfcraft-cos",
  "pdfcraft-fonts",
  "pdfcraft-model",
  "png 0.18.1",
+ "roxmltree",
  "thiserror 2.0.21",
  "tiff",
  "zune-jpeg",
@@ -4275,6 +4277,7 @@ dependencies = [
 name = "pdfcraft-redact"
 version = "0.8.0"
 dependencies = [
+ "image",
  "pdfcraft-annot",
  "pdfcraft-content",
  "pdfcraft-cos",
