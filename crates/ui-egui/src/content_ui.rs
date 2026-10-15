@@ -134,7 +134,7 @@ impl MoveBackground {
             *self = Self { key, ..Default::default() };
             if let Some((_, page, index)) = key {
                 self.renderer = doc.added_content_preview(page, index).ok().map(|p| p.renderer());
-                self.from = on_page(&doc.added, page).into_iter().find(|(i, _)| *i == index).map(|(_, a)| a.content.rect());
+                self.from = on_page(doc.added(), page).into_iter().find(|(i, _)| *i == index).map(|(_, a)| a.content.rect());
             }
         }
         if self.settling.is_some() {
