@@ -186,6 +186,7 @@ impl Automation {
             "page_render" => return self.page_render(&a).map(|c| vec![c]),
             "comment_image_preview" => return self.comment_image_preview(&a),
             "text_extract" => self.text_extract(&a)?,
+            "text_word_count" => self.text_word_count(&a)?,
             "text_find" => self.text_find(&a)?,
             "page_rotate" => {
                 let degrees = a.int("degrees")?;
@@ -352,7 +353,9 @@ impl Automation {
                 self.apply(&a, Edit::DuplicatePages { pages })?
             }
             "page_set_box" => self.page_set_box(&a)?,
+            "page_transition_set" => self.page_transition_set(&a)?,
             "doc_create" => self.doc_create(&a)?,
+            "xfa_to_static" => self.apply(&a, Edit::XfaToStatic)?,
             "doc_flatten" => {
                 let (comments, fields) = (a.opt_bool("comments")?.unwrap_or(true), a.opt_bool("fields")?.unwrap_or(true));
                 if !comments && !fields {
@@ -466,6 +469,15 @@ impl Automation {
                             ImageEdit::Move([u0[0].min(u1[0]) as f64, u0[1].min(u1[1]) as f64, u0[0].max(u1[0]) as f64, u0[1].max(u1[1]) as f64])
                         }
                         "rotate" => ImageEdit::Rotate(a.opt_int("quarters")?.unwrap_or(1) as i32),
+                        "crop" => {
+                            let r: Vec<f64> =
+                                a.get("rect").and_then(Value::as_array).map(|x| x.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+                            let r =
+                                <[f64; 4]>::try_from(r).map_err(|_| ToolError::InvalidArgs("crop needs rect: 4 numbers, the part to keep".into()))?;
+                            let info = &self.doc(&a)?.info.pages[page];
+                            let (u0, u1) = (info.view_to_user(r[0] as f32, r[1] as f32), info.view_to_user(r[2] as f32, r[3] as f32));
+                            ImageEdit::Crop([u0[0].min(u1[0]) as f64, u0[1].min(u1[1]) as f64, u0[0].max(u1[0]) as f64, u0[1].max(u1[1]) as f64])
+                        }
                         "flip_horizontal" => ImageEdit::Flip { horizontal: true },
                         "flip_vertical" => ImageEdit::Flip { horizontal: false },
                         "delete" => ImageEdit::Delete,
@@ -755,6 +767,7 @@ impl Automation {
             "accessibility_set_alt" => self.accessibility_set_alt(&a)?,
             "accessibility_tags" => self.accessibility_tags(&a)?,
             "accessibility_set_tag_property" => self.accessibility_set_tag_property(&a)?,
+            "accessibility_mark_tag_artifact" => self.accessibility_mark_tag_artifact(&a)?,
             "accessibility_move_tag" => self.accessibility_move_tag(&a)?,
             "sign_id_create" => self.sign_id_create(&a)?,
             "sign_document" => self.sign_document(&a)?,
@@ -879,6 +892,7 @@ impl Automation {
         // A save that adds or removes encryption, or must not keep the old revision (Sanitize,
         // redaction), is rewritten in full even when an incremental save was asked for.
         let incremental = !full && bytes.starts_with(&self.doc(a)?.saved_bytes());
+        self.session.check_save(id, &bytes).map_err(failed)?;
         write(&target, &bytes)?;
         let path = target.to_string_lossy().into_owned();
         self.session.mark_saved(id, bytes.clone(), Some(path.clone())).map_err(failed)?;
@@ -992,11 +1006,14 @@ impl Automation {
     }
 
     fn doc_optimize(&mut self, a: &Args) -> Result<Value> {
-        use pdfcraft_engine::optimize::{Compression, ImageSettings, Settings};
+        use pdfcraft_engine::optimize::{Compression, ImageSettings, Preset};
         let id = self.doc(a)?.id;
         let before = self.doc(a)?.bytes.len();
         let path = self.resolve(a.str("path")?, true)?;
-        let mut settings = Settings::default();
+        let mut settings = match a.opt_str("preset")? {
+            None => Preset::Standard.settings(),
+            Some(p) => Preset::from_name(p).ok_or_else(|| ToolError::InvalidArgs(format!("unknown preset {p:?} (standard, mobile)")))?.settings(),
+        };
         let images = |key: &str, base: ImageSettings| -> Result<ImageSettings> {
             let Some(v) = a.get(key) else { return Ok(base) };
             let mut s = base;
@@ -1024,6 +1041,7 @@ impl Automation {
         settings.color = images("color", settings.color)?;
         settings.gray = images("gray", settings.gray)?;
         for (key, flag) in [
+            ("merge_fragments", &mut settings.merge_fragments),
             ("discard_thumbnails", &mut settings.discard_thumbnails),
             ("discard_alternate_images", &mut settings.discard_alternate_images),
             ("discard_tags", &mut settings.discard_tags),
@@ -1056,6 +1074,8 @@ impl Automation {
             "path": path.to_string_lossy(),
             "bytes_before": before,
             "bytes_after": bytes.len(),
+            "merged_images": o.merged_images,
+            "fragments_merged": o.fragments_merged,
             "images": o.images,
             "images_resampled": o.images_resampled,
             "images_recompressed": o.images_recompressed,
@@ -1276,6 +1296,58 @@ impl Automation {
         let name = a.opt_str("name")?.map(str::to_owned).unwrap_or(name);
         let id = self.session.open_new(name, bytes).map_err(failed)?;
         Ok(summary(self.session.get(id).ok_or_else(|| failed("the document vanished"))?))
+    }
+
+    fn page_transition_set(&mut self, a: &Args) -> Result<Value> {
+        use pdfcraft_engine::{Transition, TransitionSpec};
+        let n = self.doc(a)?.info.pages.len();
+        let pages = match a.opt_ints("pages")? {
+            Some(_) => self.pages(a, "pages")?,
+            None => (0..n).collect(),
+        };
+        let transition = match a.opt_str("style")? {
+            None | Some("none") => None,
+            Some(style) => {
+                let mut t = Transition::new(style);
+                if let Some(d) = a.opt_num("duration")? {
+                    t.duration = d as f32;
+                }
+                if let Some(dm) = a.opt_str("dimension")? {
+                    t.horizontal = match dm {
+                        "horizontal" => true,
+                        "vertical" => false,
+                        other => return Err(ToolError::InvalidArgs(format!("dimension must be horizontal or vertical, not {other:?}"))),
+                    };
+                }
+                if let Some(m) = a.opt_str("motion")? {
+                    t.inward = match m {
+                        "inward" => true,
+                        "outward" => false,
+                        other => return Err(ToolError::InvalidArgs(format!("motion must be inward or outward, not {other:?}"))),
+                    };
+                }
+                match a.get("direction") {
+                    None => {}
+                    Some(Value::String(s)) if s == "none" => t.direction = None,
+                    Some(v) => {
+                        t.direction = Some(
+                            v.as_u64()
+                                .and_then(|d| u16::try_from(d).ok())
+                                .ok_or_else(|| ToolError::InvalidArgs("direction must be 0, 90, 180, 270, 315 or \"none\"".into()))?,
+                        );
+                    }
+                }
+                if let Some(s) = a.opt_num("scale")? {
+                    t.scale = s as f32;
+                }
+                if let Some(b) = a.opt_bool("opaque")? {
+                    t.opaque = b;
+                }
+                Some(t)
+            }
+        };
+        let display = a.opt_num("display")?.map(|s| s as f32);
+        self.apply(a, Edit::SetTransition { pages, spec: TransitionSpec { transition, display } })
     }
 
     fn page_set_box(&mut self, a: &Args) -> Result<Value> {
@@ -1756,6 +1828,28 @@ impl Automation {
         Ok(pages.iter().map(|p| (*p, results.get(p).cloned().unwrap_or_else(|| Err("text extraction returned no result".into())))).collect())
     }
 
+    fn text_word_count(&self, a: &Args) -> Result<Value> {
+        use pdfcraft_engine::word_count::{self, Counts, Options};
+        let doc = self.doc_to_copy(a)?;
+        let pages = match a.opt_ints("pages")? {
+            Some(_) => self.pages(a, "pages")?,
+            None => (0..doc.info.pages.len()).collect(),
+        };
+        let options = Options {
+            exclude_tables: a.opt_bool("exclude_tables")?.unwrap_or(false),
+            exclude_code: a.opt_bool("exclude_code")?.unwrap_or(false),
+            exclude_images: a.opt_bool("exclude_images")?.unwrap_or(false),
+        };
+        let report = word_count::count(doc.export_source(), &pages, options, |_| true).map_err(failed)?;
+        let counts = |c: Counts| json!({ "words": c.words, "characters": c.characters, "characters_without_spaces": c.characters_without_spaces });
+        Ok(json!({
+            "total": counts(report.total),
+            "pages": report.pages.into_iter().map(|(p, c)| json!({ "page": p + 1, "counts": counts(c) })).collect::<Vec<_>>(),
+            "pages_without_text": report.pages_without_text,
+            "unclassified_structure": report.unclassified_structure,
+        }))
+    }
+
     fn text_extract(&mut self, a: &Args) -> Result<Value> {
         let doc = self.doc_to_copy(a)?;
         let id = doc.id;
@@ -1907,8 +2001,17 @@ impl Automation {
             return Err(outside());
         }
         if !rest.is_empty() && !for_write {
-            // Missing, below a folder inside the root: say why, as the system reports it.
-            real = joined.canonicalize().map_err(|e| failed(format!("{path}: {e}")))?;
+            // Missing, below a folder inside the root: say where it was looked for, so a path
+            // written for another working directory can be corrected (#1890), and otherwise
+            // why, as the system reports it. `joined` is under the root, so naming it reveals
+            // nothing outside.
+            real = joined.canonicalize().map_err(|e| {
+                let (looked, root) = (joined.display(), root.display());
+                match e.kind() {
+                    std::io::ErrorKind::NotFound => failed(format!("{path} not found (looked for {looked}, --root {root})")),
+                    _ => failed(format!("{path}: {e} (looked for {looked}, --root {root})")),
+                }
+            })?;
             if !real.starts_with(root) {
                 return Err(outside()); // it appeared, as a link out, since the check above
             }
@@ -2208,6 +2311,13 @@ fn info(d: &Document) -> Value {
             },
         })).collect::<Vec<_>>(),
         "layers": i.layers.iter().map(|l| json!({ "name": l.name, "visible": l.visible })).collect::<Vec<_>>(),
+        // Full-screen presentation settings a page carries (ISO 32000-2 §12.4.4): only pages with
+        // a `/Trans` or `/Dur` appear; `style` is null for a display time alone.
+        "transitions": i.transitions.iter().map(|t| json!({
+            "page": page1(t.page), "style": t.style.map(pdfcraft_render::TransitionStyle::name), "duration": t.duration,
+            "horizontal": t.horizontal, "inward": t.inward, "direction": t.direction, "scale": t.scale, "opaque": t.opaque,
+            "display": t.display,
+        })).collect::<Vec<_>>(),
         "attachments": i.attachments.iter().map(|a| json!({ "name": a.name, "description": a.description, "size": a.size })).collect::<Vec<_>>(),
         // `substitute` names the face standing in for a program the document does not embed, and
         // `substitution` says why. Both are null for an embedded font: nothing stands in. A null
@@ -2222,9 +2332,11 @@ fn info(d: &Document) -> Value {
     })
 }
 
-/// A user-space rectangle on 0-based `page` in displayed-page coordinates; unchanged when the
-/// page is unknown (a malformed annotation that points at no page).
-fn view_rect(i: &pdfcraft_render::DocInfo, page: usize, rect: [f32; 4]) -> [f32; 4] {
+/// A user-space rectangle on 0-based `page` in displayed-page coordinates (points from the
+/// top-left of the page as displayed, y down, after `/Rotate`), the way every tool reports
+/// rectangles; unchanged when the page is unknown (a malformed annotation that points at no page).
+/// Public so `pdfcraft-cli` reports the same rectangles as the tools.
+pub fn view_rect(i: &pdfcraft_render::DocInfo, page: usize, rect: [f32; 4]) -> [f32; 4] {
     i.pages.get(page).map_or(rect, |p| comments::rect_to_view(p, rect))
 }
 
