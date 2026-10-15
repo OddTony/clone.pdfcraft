@@ -88,6 +88,9 @@ struct Tree {
     nodes: Vec<ObjRef>,
 }
 
+/// The inheritable attributes a node passes down to its kids.
+type Inherited = Vec<(&'static [u8], Object)>;
+
 /// Whether a dictionary states a value: null, or a reference to nothing, counts as absent
 /// (§7.3.9–7.3.10), so a page with a dangling `/Resources` still inherits its node's.
 fn stated(reader: &mut ObjectReader, v: Option<&Object>) -> bool {
@@ -108,7 +111,7 @@ fn page_tree(reader: &mut ObjectReader) -> Result<Tree, CosError> {
     let mut tree = Tree { pages: Vec::new(), nodes: Vec::new() };
     // The catalog can't be a page or a node either: it has its own place in the file.
     let mut seen: HashSet<u32> = reader.document.root().map(|r| r.num).into_iter().collect();
-    let mut stack: Vec<(ObjRef, Vec<(&'static [u8], Object)>)> = vec![(top, Vec::new())];
+    let mut stack: Vec<(ObjRef, Inherited)> = vec![(top, Vec::new())];
     while let Some((r, mut inherited)) = stack.pop() {
         // A page listed twice would need two places in the file.
         if !seen.insert(r.num) {
