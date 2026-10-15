@@ -1052,6 +1052,36 @@ fn combine_nests_source_bookmarks_and_keeps_attachments() {
     assert_eq!(keys, ["notes.txt", "notes.txt (2)"]);
 }
 
+/// Insert Pages from File brings the inserted file's bookmarks along (they used to be dropped),
+/// collapsed under one bookmark named after the file at its first inserted page, placed among the
+/// host's bookmarks where the pages went. Destinations follow the copies; named ones are resolved.
+#[test]
+fn inserting_a_file_brings_its_bookmarks_under_one_named_after_it() {
+    let mut host = open(fixture());
+    add_bookmark(&mut host, &[], 0, "Start", 0).unwrap();
+    add_bookmark(&mut host, &[], 1, "End", 2).unwrap();
+    insert_file_pages(&mut host, &doc_c(), "annex", &[0, 1], 1, FieldConflicts::Rename).unwrap();
+    let host = save_and_reopen(&host);
+    assert_eq!(labels(&host), ["Page 1", "C1", "C2", "Page 2", "Page 3"]);
+    let marks = bookmarks(&host);
+    assert_eq!(titles(&marks), ["Start", "annex[Chapter one[Section]]", "End"]);
+    let page_of = |title: &str| marks.iter().find(|b| b.title == title).and_then(|b| b.page);
+    assert_eq!((page_of("annex"), page_of("Chapter one"), page_of("Section"), page_of("End")), (Some(1), Some(1), Some(2), Some(4)));
+    assert!(!marks.iter().find(|b| b.title == "annex").unwrap().open, "the file's bookmarks start collapsed");
+    // Inserted last, after every bookmark; only the pages chosen keep a destination.
+    let mut host = open(fixture());
+    add_bookmark(&mut host, &[], 0, "Start", 0).unwrap();
+    insert_file_pages(&mut host, &doc_c(), "annex", &[0], 9, FieldConflicts::Rename).unwrap();
+    let marks = bookmarks(&host);
+    assert_eq!(titles(&marks), ["Start", "annex[Chapter one[Section]]"]);
+    assert_eq!(marks.iter().find(|b| b.title == "Section").unwrap().page, None, "its page was left out");
+    // A file without bookmarks adds none, and a host without an outline gets one only when needed.
+    let mut host = open(fixture());
+    insert_file_pages(&mut host, &doc_b(), "plain", &[0], 0, FieldConflicts::Rename).unwrap();
+    assert!(bookmarks(&host).is_empty());
+    assert!(!catalog(&host).contains(b"Outlines"));
+}
+
 #[test]
 fn combine_and_insert_share_identical_resources() {
     let a = doc_a();
@@ -2025,9 +2055,12 @@ fn extract_still_prunes_separate_resources_when_many_pages_share_a_type3_font() 
     assert_eq!(xobject_names(&part, 0), [b"ImA".to_vec()], "one shared font's direct resource graph is protected once");
 }
 
+// Both sides of the comparison go through the same pdftoppm, so the assertion is about our two
+// documents rather than about Poppler's output, and no Poppler version can change the verdict.
+// It skips where pdftoppm is absent and fails where PDFCRAFT_ORACLES_REQUIRED is set.
 #[test]
-#[ignore = "requires the external Poppler pdftoppm oracle"]
 fn extract_type3_shared_xobjects_matches_poppler_pixels() {
+    let pdftoppm = pdfcraft_oracle::or_skip!(pdfcraft_oracle::pdftoppm());
     let dir = std::env::temp_dir().join(format!("pdfcraft-type3-extract-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let fixtures = [
@@ -2042,7 +2075,7 @@ fn extract_type3_shared_xobjects_matches_poppler_pixels() {
         let render = |doc: &Document, name: &str| {
             let path = dir.join(format!("{i}-{name}.pdf"));
             std::fs::write(&path, write_full(doc, &SaveOptions::default()).unwrap()).unwrap();
-            let output = std::process::Command::new("pdftoppm").args(["-singlefile", "-r", "72", "-gray"]).arg(path).output().unwrap();
+            let output = pdftoppm.command().args(["-singlefile", "-r", "72", "-gray"]).arg(path).output().unwrap();
             assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
             assert!(output.stderr.is_empty(), "{}", String::from_utf8_lossy(&output.stderr));
             output.stdout
@@ -2440,4 +2473,44 @@ fn combine_field_conflicts_previews_each_file_in_order() {
     assert_eq!(preview[0], [], "the first file collides with nothing");
     assert_eq!(preview[1], [("Text1".to_string(), "Text1-1".to_string())]);
     assert_eq!(preview[2], [("Text1".to_string(), "Text1-2".to_string())], "the cascade continues past the earlier rename");
+}
+
+/// #1800: thousands of shallow objects, each referring to the next, used to recurse once per
+/// object and exhaust the stack. The copy is refused instead, and the destination is as it was;
+/// a chain within the budget and a short cycle copy as before.
+#[test]
+fn a_chain_of_objects_too_deep_to_copy_is_refused_and_leaves_the_destination_alone() {
+    fn chained(tail: &[String]) -> Document {
+        let mut b: Vec<String> = vec![
+            "<< /Type /Catalog /Pages 2 0 R >>".into(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>".into(),
+            "<< /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Foo 6 0 R >>".into(),
+            body("C1"),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into(),
+        ];
+        b.extend_from_slice(tail);
+        open(build(&b, "/Root 1 0 R"))
+    }
+    fn chain(n: usize) -> Document {
+        let mut tail: Vec<String> = (0..n).map(|i| format!("<< /Next {} 0 R >>", 7 + i)).collect();
+        tail.push("<< /End true >>".into());
+        chained(&tail)
+    }
+    // On a thread with less stack than any platform's main thread, so the budget is proven.
+    let run = std::thread::Builder::new()
+        .stack_size(512 << 10)
+        .spawn(|| {
+            let mut dst = open(fixture());
+            let before = (labels(&dst), dst.object_numbers());
+            let err = import_pages(&mut dst, &chain(20_000), &[0], 0).unwrap_err();
+            assert!(matches!(&err, OrganizeError::Invalid(m) if m.contains("levels deep")), "{err:?}");
+            assert_eq!((labels(&dst), dst.object_numbers()), before, "the destination is as it was");
+            import_pages(&mut dst, &chain(100), &[0], 0).unwrap();
+            let cycle = chained(&["<< /Next 7 0 R >>".into(), "<< /Next 6 0 R >>".into()]);
+            import_pages(&mut dst, &cycle, &[0], 0).unwrap();
+            assert_eq!(labels(&dst)[..3], ["C1", "C1", "Page 1"]);
+        })
+        .unwrap()
+        .join();
+    assert!(run.is_ok(), "the copy must not overflow the stack");
 }
