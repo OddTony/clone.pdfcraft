@@ -55,7 +55,7 @@ pdfcraft-cli edit   <in.pdf> --out out.pdf [--rotate 1,3:90] [--delete 2,4] [--m
                       [--insert-blank 1] [--title T] [--author A] [--full]
                       (options run in order; page numbers refer to the document after the earlier options)
 pdfcraft-cli combine <a.pdf> <b.pdf> … --out combined.pdf
-pdfcraft-cli extract <in.pdf> --pages 1,3,5 --out out.pdf
+pdfcraft-cli extract <in.pdf> --pages 1,3,5-8 --out out.pdf    (pages and ranges, in the order given)
 pdfcraft-cli split   <in.pdf> (--every N | --before 3,7) [--out-dir DIR]
 pdfcraft-cli check  <files or dirs…> [--timeout 20] [--dpi 36] [--json out.json]
 pdfcraft-cli audit  <file.pdf> [--password PW]            find faux redactions (fails when found)
@@ -161,15 +161,20 @@ fn audit(args: &[String]) -> Result<(), CliError> {
     validate_options("audit", args, AUDIT_OPTIONS)?;
     let path = *positional(args).first().ok_or("audit: missing file")?;
     let bytes = read(path)?;
-    let doc = pdfcraft_cos::Document::open_with_password(bytes, flag(args, "--password")).map_err(|e| format!("{path}: {e}"))?;
+    let password = flag(args, "--password");
+    let doc = pdfcraft_cos::Document::open_with_password(bytes.clone(), password).map_err(|e| format!("{path}: {e}"))?;
     let findings = pdfcraft_audit::audit_redactions(&doc).map_err(|e| format!("{path}: {e}"))?;
+    // Rectangles in points from the top-left of the displayed page, as `doc_audit_redactions`
+    // reports them; the page geometry is read only when there is something to place.
+    let info = if findings.is_empty() { None } else { Some(inspect(bytes, password).map_err(|e| format!("{path}: {e}"))?) };
     let items: Vec<serde_json::Value> = findings
         .into_iter()
         .map(|f| {
+            let rect = f.rect.map(|v| v as f32);
             serde_json::json!({
                 "page": f.page + 1,
                 "kind": f.kind.id(),
-                "rect": f.rect,
+                "rect": info.as_ref().map_or(rect, |i| pdfcraft_automation::view_rect(i, f.page, rect)),
                 "covered_text": f.covered_text,
             })
         })
@@ -376,9 +381,30 @@ fn text(args: &[String]) -> Result<(), CliError> {
     }
 }
 
-/// 1-based page list ("1,3,5") → 0-based indices.
+/// The most pages one `A-B` range may name: a bound on what a typed range can allocate.
+const MAX_RANGE: usize = 1_000_000;
+
+/// 1-based pages ("1,3,5-8": single pages and inclusive ranges, in the order given) → 0-based
+/// indices (#1923).
 fn page_list(s: &str) -> Result<Vec<usize>, String> {
-    s.split(',').map(|p| p.trim().parse::<usize>().ok().filter(|n| *n > 0).map(|n| n - 1).ok_or(format!("bad page number {p:?}"))).collect()
+    let number = |t: &str, item: &str| t.trim().parse::<usize>().ok().filter(|n| *n > 0).ok_or_else(|| format!("bad page number {item:?}"));
+    let mut out = Vec::new();
+    for item in s.split(',').map(str::trim) {
+        match item.split_once('-') {
+            Some((from, to)) => {
+                let (from, to) = (number(from, item)?, number(to, item)?);
+                if to < from {
+                    return Err(format!("bad page range {item:?}: it ends before it starts"));
+                }
+                if to - from >= MAX_RANGE {
+                    return Err(format!("bad page range {item:?}: more than {MAX_RANGE} pages"));
+                }
+                out.extend(from - 1..to);
+            }
+            None => out.push(number(item, item)? - 1),
+        }
+    }
+    Ok(out)
 }
 
 /// The options `edit` understands, for its "unknown option" message.

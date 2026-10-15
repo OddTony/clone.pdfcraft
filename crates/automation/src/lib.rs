@@ -186,6 +186,7 @@ impl Automation {
             "page_render" => return self.page_render(&a).map(|c| vec![c]),
             "comment_image_preview" => return self.comment_image_preview(&a),
             "text_extract" => self.text_extract(&a)?,
+            "text_word_count" => self.text_word_count(&a)?,
             "text_find" => self.text_find(&a)?,
             "page_rotate" => {
                 let degrees = a.int("degrees")?;
@@ -353,6 +354,7 @@ impl Automation {
             }
             "page_set_box" => self.page_set_box(&a)?,
             "doc_create" => self.doc_create(&a)?,
+            "xfa_to_static" => self.apply(&a, Edit::XfaToStatic)?,
             "doc_flatten" => {
                 let (comments, fields) = (a.opt_bool("comments")?.unwrap_or(true), a.opt_bool("fields")?.unwrap_or(true));
                 if !comments && !fields {
@@ -755,6 +757,7 @@ impl Automation {
             "accessibility_set_alt" => self.accessibility_set_alt(&a)?,
             "accessibility_tags" => self.accessibility_tags(&a)?,
             "accessibility_set_tag_property" => self.accessibility_set_tag_property(&a)?,
+            "accessibility_mark_tag_artifact" => self.accessibility_mark_tag_artifact(&a)?,
             "accessibility_move_tag" => self.accessibility_move_tag(&a)?,
             "sign_id_create" => self.sign_id_create(&a)?,
             "sign_document" => self.sign_document(&a)?,
@@ -858,6 +861,10 @@ impl Automation {
     }
 
     fn doc_save(&mut self, a: &Args) -> Result<Value> {
+        self.doc_save_with(a, write_atomic)
+    }
+
+    fn doc_save_with(&mut self, a: &Args, write: impl FnOnce(&Path, &[u8]) -> Result<()>) -> Result<Value> {
         let doc = self.doc(a)?;
         let id = doc.id;
         let target = match a.opt_str("path")? {
@@ -875,7 +882,8 @@ impl Automation {
         // A save that adds or removes encryption, or must not keep the old revision (Sanitize,
         // redaction), is rewritten in full even when an incremental save was asked for.
         let incremental = !full && bytes.starts_with(&self.doc(a)?.saved_bytes());
-        write_atomic(&target, &bytes)?;
+        self.session.check_save(id, &bytes).map_err(failed)?;
+        write(&target, &bytes)?;
         let path = target.to_string_lossy().into_owned();
         self.session.mark_saved(id, bytes.clone(), Some(path.clone())).map_err(failed)?;
         Ok(json!({ "path": path, "bytes": bytes.len(), "incremental": incremental, "document": summary(self.doc(a)?) }))
@@ -988,11 +996,14 @@ impl Automation {
     }
 
     fn doc_optimize(&mut self, a: &Args) -> Result<Value> {
-        use pdfcraft_engine::optimize::{Compression, ImageSettings, Settings};
+        use pdfcraft_engine::optimize::{Compression, ImageSettings, Preset};
         let id = self.doc(a)?.id;
         let before = self.doc(a)?.bytes.len();
         let path = self.resolve(a.str("path")?, true)?;
-        let mut settings = Settings::default();
+        let mut settings = match a.opt_str("preset")? {
+            None => Preset::Standard.settings(),
+            Some(p) => Preset::from_name(p).ok_or_else(|| ToolError::InvalidArgs(format!("unknown preset {p:?} (standard, mobile)")))?.settings(),
+        };
         let images = |key: &str, base: ImageSettings| -> Result<ImageSettings> {
             let Some(v) = a.get(key) else { return Ok(base) };
             let mut s = base;
@@ -1020,6 +1031,7 @@ impl Automation {
         settings.color = images("color", settings.color)?;
         settings.gray = images("gray", settings.gray)?;
         for (key, flag) in [
+            ("merge_fragments", &mut settings.merge_fragments),
             ("discard_thumbnails", &mut settings.discard_thumbnails),
             ("discard_alternate_images", &mut settings.discard_alternate_images),
             ("discard_tags", &mut settings.discard_tags),
@@ -1052,6 +1064,8 @@ impl Automation {
             "path": path.to_string_lossy(),
             "bytes_before": before,
             "bytes_after": bytes.len(),
+            "merged_images": o.merged_images,
+            "fragments_merged": o.fragments_merged,
             "images": o.images,
             "images_resampled": o.images_resampled,
             "images_recompressed": o.images_recompressed,
@@ -1752,6 +1766,28 @@ impl Automation {
         Ok(pages.iter().map(|p| (*p, results.get(p).cloned().unwrap_or_else(|| Err("text extraction returned no result".into())))).collect())
     }
 
+    fn text_word_count(&self, a: &Args) -> Result<Value> {
+        use pdfcraft_engine::word_count::{self, Counts, Options};
+        let doc = self.doc_to_copy(a)?;
+        let pages = match a.opt_ints("pages")? {
+            Some(_) => self.pages(a, "pages")?,
+            None => (0..doc.info.pages.len()).collect(),
+        };
+        let options = Options {
+            exclude_tables: a.opt_bool("exclude_tables")?.unwrap_or(false),
+            exclude_code: a.opt_bool("exclude_code")?.unwrap_or(false),
+            exclude_images: a.opt_bool("exclude_images")?.unwrap_or(false),
+        };
+        let report = word_count::count(doc.export_source(), &pages, options, |_| true).map_err(failed)?;
+        let counts = |c: Counts| json!({ "words": c.words, "characters": c.characters, "characters_without_spaces": c.characters_without_spaces });
+        Ok(json!({
+            "total": counts(report.total),
+            "pages": report.pages.into_iter().map(|(p, c)| json!({ "page": p + 1, "counts": counts(c) })).collect::<Vec<_>>(),
+            "pages_without_text": report.pages_without_text,
+            "unclassified_structure": report.unclassified_structure,
+        }))
+    }
+
     fn text_extract(&mut self, a: &Args) -> Result<Value> {
         let doc = self.doc_to_copy(a)?;
         let id = doc.id;
@@ -1903,8 +1939,17 @@ impl Automation {
             return Err(outside());
         }
         if !rest.is_empty() && !for_write {
-            // Missing, below a folder inside the root: say why, as the system reports it.
-            real = joined.canonicalize().map_err(|e| failed(format!("{path}: {e}")))?;
+            // Missing, below a folder inside the root: say where it was looked for, so a path
+            // written for another working directory can be corrected (#1890), and otherwise
+            // why, as the system reports it. `joined` is under the root, so naming it reveals
+            // nothing outside.
+            real = joined.canonicalize().map_err(|e| {
+                let (looked, root) = (joined.display(), root.display());
+                match e.kind() {
+                    std::io::ErrorKind::NotFound => failed(format!("{path} not found (looked for {looked}, --root {root})")),
+                    _ => failed(format!("{path}: {e} (looked for {looked}, --root {root})")),
+                }
+            })?;
             if !real.starts_with(root) {
                 return Err(outside()); // it appeared, as a link out, since the check above
             }
@@ -2218,9 +2263,11 @@ fn info(d: &Document) -> Value {
     })
 }
 
-/// A user-space rectangle on 0-based `page` in displayed-page coordinates; unchanged when the
-/// page is unknown (a malformed annotation that points at no page).
-fn view_rect(i: &pdfcraft_render::DocInfo, page: usize, rect: [f32; 4]) -> [f32; 4] {
+/// A user-space rectangle on 0-based `page` in displayed-page coordinates (points from the
+/// top-left of the page as displayed, y down, after `/Rotate`), the way every tool reports
+/// rectangles; unchanged when the page is unknown (a malformed annotation that points at no page).
+/// Public so `pdfcraft-cli` reports the same rectangles as the tools.
+pub fn view_rect(i: &pdfcraft_render::DocInfo, page: usize, rect: [f32; 4]) -> [f32; 4] {
     i.pages.get(page).map_or(rect, |p| comments::rect_to_view(p, rect))
 }
 
@@ -2306,13 +2353,24 @@ fn unused(dir: &Path, stem: &str) -> PathBuf {
     (2..10_000u32).map(|n| child(dir, &format!("{stem} ({n}).pdf"))).find(|p| !p.exists()).unwrap_or(first)
 }
 
-/// Write via a temporary file in the same directory, then rename over the target.
+/// Write and sync a temporary file in the same directory, then rename over the target.
+/// This flushes staged contents; it does not promise parent-directory durability after a
+/// power loss. Filesystems that refuse sync cause the save to fail before publication.
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     write_atomic_with(path, bytes, staging_suffixes())
 }
 
 /// [`write_atomic`], trying the staging names that `suffixes` give.
 fn write_atomic_with(path: &Path, bytes: &[u8], suffixes: impl IntoIterator<Item = u64>) -> Result<()> {
+    write_atomic_synced(path, bytes, suffixes, std::fs::File::sync_all)
+}
+
+fn write_atomic_synced(
+    path: &Path,
+    bytes: &[u8],
+    suffixes: impl IntoIterator<Item = u64>,
+    sync: impl FnOnce(&std::fs::File) -> std::io::Result<()>,
+) -> Result<()> {
     use std::io::Write;
     // A folder can't be replaced, and staging beside it could land outside the root: "." names
     // the root itself, whose parent isn't ours to write in.
@@ -2327,7 +2385,9 @@ fn write_atomic_with(path: &Path, bytes: &[u8], suffixes: impl IntoIterator<Item
     // Closed at the end of the block, before the rename.
     let written = {
         let mut file = file;
-        file.write_all(bytes)
+        // Surface delayed writeback failures before replacing the destination or marking
+        // a document clean. The handle is closed before rename (required on Windows).
+        file.write_all(bytes).and_then(|()| sync(&file))
     };
     if let Err(e) = written {
         let _ = std::fs::remove_file(&tmp);
@@ -2683,6 +2743,79 @@ mod tests {
             assert_eq!(read(&staged(&dir, s)), "PLANTED");
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_staging_sync_keeps_the_destination_and_cleans_up() {
+        for exists in [false, true] {
+            let dir = staging_dir(if exists { "sync-existing" } else { "sync-new" });
+            let target = dir.join("out.pdf");
+            if exists {
+                std::fs::write(&target, "OLD").unwrap();
+            }
+            let result = write_atomic_synced(&target, b"NEW", [1], |_| {
+                assert_eq!(std::fs::read(staged(&dir, 1)).unwrap(), b"NEW", "sync follows writing");
+                if exists {
+                    assert_eq!(read(&target), "OLD", "sync precedes publication");
+                }
+                Err(std::io::Error::other("injected storage sync failure"))
+            });
+            assert!(result.is_err(), "sync failure must refuse publication");
+            assert!(result.unwrap_err().to_string().contains("injected storage sync failure"));
+            if exists {
+                assert_eq!(read(&target), "OLD");
+                assert_eq!(listing(&dir), ["out.pdf"]);
+            } else {
+                assert!(!target.exists());
+                assert!(listing(&dir).is_empty());
+            }
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_failed_save_sync_keeps_the_document_dirty_and_can_be_retried() {
+        let dir = staging_dir("sync-dirty");
+        let target = dir.join("out.pdf");
+        let mut a = Automation::new().with_root(&dir).unwrap();
+        let id = search_document(&mut a, 2);
+        json(&mut a, "doc_save", json!({"doc": id.0, "path": "out.pdf"}));
+        let old = std::fs::read(&target).unwrap();
+        json(&mut a, "page_rotate", json!({"doc": id.0, "pages": [1], "degrees": 90}));
+        let args = json!({"doc": id.0});
+        let before = summary(a.doc(&Args(&args)).unwrap());
+        let result = a.doc_save_with(&Args(&args), |path, bytes| {
+            write_atomic_synced(path, bytes, [1], |_| Err(std::io::Error::other("injected storage sync failure")))
+        });
+        assert!(result.is_err());
+        let doc = a.doc(&Args(&args)).unwrap();
+        assert!(doc.dirty);
+        assert_eq!(summary(doc), before, "failed save must not reset history or saved state");
+        assert_eq!(std::fs::read(&target).unwrap(), old);
+        assert_eq!(listing(&dir), ["out.pdf"]);
+        json(&mut a, "doc_save", args.clone());
+        assert!(!a.doc(&Args(&args)).unwrap().dirty);
+        assert_ne!(std::fs::read(&target).unwrap(), old);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn successful_staging_sync_precedes_publication() {
+        let dir = staging_dir("sync-success");
+        let target = dir.join("out.pdf");
+        std::fs::write(&target, "OLD").unwrap();
+        let mut called = false;
+        write_atomic_synced(&target, b"NEW", [1], |file| {
+            called = true;
+            assert_eq!(read(&target), "OLD");
+            assert_eq!(std::fs::read(staged(&dir, 1)).unwrap(), b"NEW");
+            file.sync_all()
+        })
+        .unwrap();
+        assert!(called);
+        assert_eq!(read(&target), "NEW");
+        assert_eq!(listing(&dir), ["out.pdf"]);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     /// The names in a folder: what a test can see was left behind.
