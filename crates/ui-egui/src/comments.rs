@@ -1144,14 +1144,20 @@ fn select_input(
     consumed
 }
 
+/// Where a composer for marked text opens, in user space: at the right end of the last quad,
+/// level with its top (the origin for no quads).
+pub(crate) fn after_last_quad(quads: &[[f64; 8]]) -> [f64; 2] {
+    let last = quads.last().copied().unwrap_or_default();
+    [last[2].max(last[6]), last[1].max(last[3])]
+}
+
 /// Comment on the selected text, as in Google Drive's viewer and Acrobat's Add Note to Text: the
 /// composer opens beside the selection's last line, and posting highlights the text with the
 /// comment as its contents, in one undo step. Cancelling leaves the page as it was. Without a
 /// selection, nothing happens.
 pub(crate) fn comment_on_selection(view: &mut DocView, info: &DocInfo) {
     let Some((page, quads)) = view.selection_quads(info) else { return };
-    let last = quads.last().copied().unwrap_or_default();
-    let at = [last[2].max(last[6]), last[1].max(last[3])];
+    let at = after_last_quad(&quads);
     view.clear_selection();
     view.comments.text_quads = Some(quads);
     view.comments.composer = Some(Composer { page, at, kind: ComposerKind::TextComment, text: String::new(), focus: true });
@@ -1164,8 +1170,7 @@ pub(crate) fn page_after_text(resp: &egui::Response, cx: &PageCx<'_>, view: &mut
     if tool == CommentTool::ReplaceText && cx.allowed && (resp.drag_stopped() || resp.double_clicked()) {
         if let Some((page, quads)) = view.selection_quads(cx.info).filter(|(p, _)| *p == cx.page) {
             view.clear_selection();
-            let last = quads.last().copied().unwrap_or_default();
-            let at = [last[2].max(last[6]), last[1].max(last[3])];
+            let at = after_last_quad(&quads);
             view.comments.text_quads = Some(quads);
             view.comments.composer = Some(Composer { page, at, kind: ComposerKind::Replace, text: String::new(), focus: true });
         }
@@ -1618,6 +1623,17 @@ pub(crate) fn keys(ctx: &egui::Context, view: &mut DocView, tool: &mut QuickTool
 pub(crate) fn context_menu(ui: &mut egui::Ui, view: &mut DocView, info: &DocInfo, prefs: &CommentPrefs, allowed: bool) -> Option<CanvasAction> {
     let mut action = None;
     let selected = view.comments.selected.and_then(|(p, i)| info.annotations.iter().find(|a| a.page == p && a.index == i && a.in_reply_to.is_none()));
+    // Selected text comes first: a right-click on text that is already marked (underlined, say)
+    // also selects that markup, and the text still takes a comment of its own.
+    if view.selected_text().is_some_and(|t| !t.is_empty()) {
+        if ui.add_enabled(allowed, egui::Button::new(tl!("Add comment"))).clicked() {
+            comment_on_selection(view, info);
+            ui.close();
+        }
+        if selected.is_some() {
+            ui.separator();
+        }
+    }
     match selected {
         Some(a) => {
             let (page, index) = (a.page, a.index);
@@ -1686,10 +1702,6 @@ pub(crate) fn context_menu(ui: &mut egui::Ui, view: &mut DocView, info: &DocInfo
             }
         }
         None => {
-            if view.selected_text().is_some_and(|t| !t.is_empty()) && ui.add_enabled(allowed, egui::Button::new(tl!("Add comment"))).clicked() {
-                comment_on_selection(view, info);
-                ui.close();
-            }
             if let Some((page, at)) = view.comments.context_at
                 && ui.add_enabled(allowed, egui::Button::new(tl!("Add a sticky note here"))).clicked()
             {

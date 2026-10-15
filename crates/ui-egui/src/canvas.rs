@@ -3838,8 +3838,7 @@ fn selection_actions(
         SelectionAction::Markup(_) | SelectionAction::Replace => {}
     }
     let Some((page, quads)) = view.selection_quads(info) else { return false };
-    let last = quads.last().copied().unwrap_or_default();
-    let at = [last[2].max(last[6]), last[1].max(last[3])];
+    let at = comments::after_last_quad(&quads);
     view.clear_selection();
     match action {
         SelectionAction::Replace => {

@@ -1541,3 +1541,182 @@ fn text_box_properties_change_the_font_size() {
     assert_eq!(doc.comment_props(0, 0).unwrap().font_size, Some(30.0));
     assert_eq!(doc.can_undo(), Some("Change comment properties"));
 }
+
+/// One Helvetica page: `page_extra` goes in the page dictionary, `content` is its content stream.
+fn one_page(page_extra: &str, content: &str) -> Vec<u8> {
+    format!(
+        "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] {page_extra} /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+        content.len()
+    )
+    .into_bytes()
+}
+
+/// Comment on the selection of view 0 through the selection bar, typing `text`.
+fn comment_on_the_selection(h: &mut Harness<'static, PdfCraftApp>, text: &str) {
+    h.get_by_label("Add comment").click();
+    h.run_steps(2);
+    field(h, "Add a comment").type_text(text);
+    h.run_steps(2);
+    h.get_by_label("Post").click();
+    h.run_steps(3);
+    settle(h);
+}
+
+/// Review finding 1: a right-click on selected text that is already underlined selects the
+/// underline too, and the menu still offers Add comment for the text, ahead of the underline's
+/// own items. Posting comments on the selected text, not on the underline.
+#[test]
+fn right_clicking_selected_text_inside_markup_offers_a_comment_on_it() {
+    let mut h = harness(|_| {});
+    h.state_mut().views[0].select_text(0, 4, 14);
+    h.run_steps(3);
+    h.get_by_label("Underline").click();
+    h.run_steps(3);
+    settle(&mut h);
+    assert_eq!(comments(&h).len(), 1);
+    // Select "quick" inside the underlined words, then right-click on it.
+    h.state_mut().views[0].select_text(0, 4, 8);
+    h.run_steps(3);
+    let at = h.state().views[0].glyph_screen_pos(0, 6).expect("text layer");
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+        h.run_steps(1);
+    }
+    h.run_steps(2);
+    assert!(h.state().views[0].selected_text().is_some(), "right-clicking keeps the selection");
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 0)), "and selects the underline under it");
+    // The underline's menu is open, and offers Add comment besides the selection bar's.
+    let edit = h.get_by_label("Edit text…").rect();
+    let in_menu = h.query_all_by_label("Add comment").find(|n| (n.rect().left() - edit.left()).abs() < 2.0).map(|n| n.rect());
+    let item = in_menu.expect("the context menu offers Add comment");
+    assert!(item.top() < edit.top(), "before the underline's own items");
+    h.query_all_by_label("Add comment").find(|n| n.rect() == item).expect("menu item").click();
+    h.run_steps(2);
+    assert!(matches!(h.state().views[0].comments.composer.as_ref().map(|c| &c.kind), Some(pdfcraft_ui_egui::comments::ComposerKind::TextComment)));
+    field(&h, "Add a comment").type_text("Why quick?");
+    h.run_steps(2);
+    h.get_by_label("Post").click();
+    h.run_steps(3);
+    settle(&mut h);
+    let c = comments(&h);
+    assert_eq!(c.len(), 2, "a highlight is added; the underline stays");
+    assert_eq!((c[0].subtype.as_str(), c[0].contents.as_deref()), ("Underline", None));
+    assert_eq!((c[1].subtype.as_str(), c[1].contents.as_deref(), c[1].quads.len()), ("Highlight", Some("Why quick?"), 1));
+}
+
+/// A comment on text across two lines highlights each line: one quad per line, posted as one
+/// highlight.
+#[test]
+fn a_comment_on_two_lines_highlights_both() {
+    let pdf = one_page("", "BT /F1 14 Tf 20 150 Td (The quick brown fox) Tj 0 -30 Td (jumps over the dog) Tj ET");
+    let mut h = harness(move |app| {
+        app.open_bytes("two-lines.pdf", None, pdf).expect("opens");
+    });
+    let v = h.state().views.len() - 1;
+    // From "brown" on the first line to "jumps" on the second.
+    h.state_mut().views[v].select_text(0, 10, 24);
+    h.run_steps(3);
+    let selected = h.state().views[v].selected_text().expect("a selection");
+    assert!(selected.contains("brown") && selected.contains("jumps"), "{selected:?}");
+    comment_on_the_selection(&mut h, "Two lines");
+    let s = h.state();
+    let doc = s.session.get(s.views[v].id).expect("document");
+    let c = &doc.info.annotations;
+    assert_eq!(c.len(), 1);
+    assert_eq!((c[0].subtype.as_str(), c[0].contents.as_deref(), c[0].quads.len()), ("Highlight", Some("Two lines"), 2), "one quad per line");
+}
+
+/// On a turned page, and on one whose crop box does not start at the origin, the highlight lands
+/// on the selected words: their glyphs are inside it and the words around them are not.
+#[test]
+fn a_comment_on_selected_text_lands_on_it_on_turned_and_cropped_pages() {
+    for extra in ["/Rotate 90", "/CropBox [15 10 300 200]", "/Rotate 270 /CropBox [15 10 300 200]"] {
+        let pdf = one_page(extra, "BT /F1 14 Tf 20 150 Td (The quick brown fox) Tj ET");
+        let mut h = harness(move |app| {
+            app.open_bytes("turned.pdf", None, pdf).expect("opens");
+            app.set_option("zoom", "100").unwrap();
+        });
+        let v = h.state().views.len() - 1;
+        h.state_mut().views[v].select_text(0, 4, 8);
+        h.run_steps(3);
+        assert_eq!(h.state().views[v].selected_text().as_deref().map(str::trim), Some("quick"), "{extra}");
+        comment_on_the_selection(&mut h, "Here");
+        let s = h.state();
+        let view = &s.views[v];
+        let doc = s.session.get(view.id).expect("document");
+        let a = doc.info.annotations.first().expect("a highlight");
+        let page = doc.info.pages.first().expect("a page");
+        let r = view.page_screen_rect(0).expect("page on screen");
+        // The highlight's quads on screen.
+        let mut mark = egui::Rect::NOTHING;
+        for q in &a.quads {
+            for i in 0..4 {
+                let [x, y] = page.user_to_view(q[2 * i], q[2 * i + 1]);
+                mark.extend_with(pos2(r.left() + x / page.width * r.width(), r.top() + y / page.height * r.height()));
+            }
+        }
+        for g in 4..=8 {
+            let p = view.glyph_screen_pos(0, g).expect("glyph");
+            assert!(mark.expand(1.0).contains(p), "{extra}: glyph {g} at {p:?} outside {mark:?}");
+        }
+        for g in [1, 12] {
+            let p = view.glyph_screen_pos(0, g).expect("glyph");
+            assert!(!mark.contains(p), "{extra}: glyph {g} at {p:?} inside {mark:?}");
+        }
+    }
+}
+
+/// A document whose security forbids commenting offers Add comment disabled, in the selection
+/// bar and the context menu, and nothing is added.
+#[test]
+fn add_comment_is_disabled_where_commenting_is_forbidden() {
+    use egui_kittest::kittest::NodeT;
+    let mut doc = pdfcraft_cos::Document::open(std::sync::Arc::new(TEXT_FIXTURE.to_vec())).expect("fixture parses");
+    // Printing and copying allowed; commenting (bit 6) is not.
+    doc.set_encryption(&pdfcraft_cos::NewEncryption {
+        algorithm: pdfcraft_cos::Algorithm::Aes256,
+        user_password: "",
+        owner_password: "owner",
+        permissions: 0b1_0100,
+        encrypt_metadata: true,
+        seed: [7; 32],
+    })
+    .expect("encrypts");
+    let bytes = pdfcraft_cos::write_full(&doc, &Default::default()).expect("writes");
+    let mut h = harness(move |app| {
+        app.open_bytes("no-comments.pdf", None, bytes).expect("opens restricted");
+    });
+    let id = h.state().active_ids().expect("active document").1;
+    assert!(!h.state().session.get(id).expect("document").allows_annotation(), "commenting is forbidden");
+    let v = h.state().views.iter().position(|v| v.id == id).expect("view");
+    h.state_mut().views[v].select_text(0, 4, 8);
+    h.run_steps(3);
+    let bar = h.query_all_by_label("Add comment").next().expect("the selection bar offers Add comment");
+    assert!(bar.accesskit_node().is_disabled(), "disabled in the selection bar");
+    let at = h.state().views[v].glyph_screen_pos(0, 6).expect("text layer");
+    h.event(egui::Event::PointerMoved(at));
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE });
+        h.run_steps(1);
+    }
+    h.run_steps(2);
+    let items: Vec<_> = h.query_all_by_label("Add comment").collect();
+    assert_eq!(items.len(), 2, "the bar and the context menu");
+    assert!(items.iter().all(|n| n.accesskit_node().is_disabled()), "disabled in both");
+    for n in items {
+        n.click();
+    }
+    h.run_steps(3);
+    assert!(h.state().views[v].comments.composer.is_none(), "no composer opens");
+    assert!(h.state().session.get(id).expect("document").info.annotations.is_empty(), "nothing is added");
+}
