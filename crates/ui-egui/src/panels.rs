@@ -225,18 +225,21 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
                     17.0,
                     if ready { hue(g) } else { t.text_faint },
                 );
-                let (chip, fill, cfg) = match item.availability {
-                    Availability::Ready => (tl!("Ready"), Color32::from_rgb(0xDD, 0xF3, 0xE4), Color32::from_rgb(0x1E, 0x7B, 0x43)),
-                    Availability::Planned(m) => (m, t.pressed, t.text_muted),
-                    Availability::Provider => ("AI", t.pressed, t.text_muted),
+                let chip = availability_chip(item.availability);
+                let label_x = body.left_center() + vec2(34.0, 0.0);
+                // Left edge of whatever sits at the row's right end (chip or nothing).
+                let right_edge = if let Some(chip_label) = chip {
+                    let font = theme::semibold(9.5);
+                    let w = crate::widgets::text_width(ui, &chip_label, &font);
+                    let r = Rect::from_center_size(body.right_center() - vec2(w / 2.0 + 10.0, 0.0), vec2(w + 10.0, 16.0));
+                    row_label(ui, tl!(item.label), theme::regular(13.0), fg, label_x, r.left() - body.left() - 42.0);
+                    ui.painter().rect_filled(r, CornerRadius::same(4), t.pressed);
+                    ui.painter().text(r.center(), Align2::CENTER_CENTER, chip_label, font, t.text_muted);
+                    r.left()
+                } else {
+                    row_label(ui, tl!(item.label), theme::regular(13.0), fg, label_x, body.right() - body.left() - 44.0);
+                    body.right() - 4.0
                 };
-                let font = theme::semibold(9.5);
-                let chip_label = tl!(chip).to_string();
-                let w = crate::widgets::text_width(ui, &chip_label, &font);
-                let r = Rect::from_center_size(body.right_center() - vec2(w / 2.0 + 10.0, 0.0), vec2(w + 10.0, 16.0));
-                row_label(ui, tl!(item.label), theme::regular(13.0), fg, body.left_center() + vec2(34.0, 0.0), r.left() - body.left() - 42.0);
-                ui.painter().rect_filled(r, CornerRadius::same(4), fill);
-                ui.painter().text(r.center(), Align2::CENTER_CENTER, chip_label, font, cfg);
                 let resp = theme::hand(resp).on_hover_text(format!("{} — {}", tl!(item.label), item.command));
                 if item.actions.is_empty() {
                     if resp.clicked() {
@@ -244,7 +247,7 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
                     }
                 } else {
                     // A caret before the chip says the entry opens a menu (Add / Update / Remove).
-                    let c = r.left_center() - vec2(10.0, 0.0);
+                    let c = pos2(right_edge - 10.0, body.center().y);
                     ui.painter().add(egui::Shape::convex_polygon(
                         vec![c + vec2(-3.5, -2.0), c + vec2(3.5, -2.0), c + vec2(0.0, 2.5)],
                         fg,
@@ -1634,5 +1637,28 @@ mod bookmark_filter {
         // A child match keeps its parent: [0] and [0, 0].
         assert_eq!(outline_matches(&outline, &fold("KIŞ")).len(), 2);
         assert!(outline_matches(&outline, &fold("izmir")).is_empty());
+    }
+}
+
+/// The chip beside a tool in a tool group: none for a tool that works, "Coming soon" for one that
+/// isn't there yet, "AI" for one that needs a provider (#1839).
+fn availability_chip(a: Availability) -> Option<String> {
+    match a {
+        Availability::Ready => None,
+        Availability::Planned(_) => Some(tl!("Coming soon").to_string()),
+        Availability::Provider => Some("AI".to_string()),
+    }
+}
+
+#[cfg(test)]
+mod availability_chip_tests {
+    use super::{Availability, availability_chip};
+
+    #[test]
+    fn only_tools_not_ready_get_a_chip() {
+        crate::i18n::set_current(crate::i18n::Lang::EN);
+        assert_eq!(availability_chip(Availability::Ready), None);
+        assert_eq!(availability_chip(Availability::Planned("M10")).as_deref(), Some("Coming soon"));
+        assert_eq!(availability_chip(Availability::Provider).as_deref(), Some("AI"));
     }
 }
