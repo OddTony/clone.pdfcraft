@@ -257,6 +257,14 @@ enum Span {
     Column { page: usize, rect: [f32; 4] },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SelectionTextStatus {
+    None,
+    Loading,
+    Failed(usize),
+    Ready,
+}
+
 impl Selection {
     fn run(page: usize, anchor: usize, head: usize) -> Self {
         Self::between(Caret { page, glyph: anchor }, Caret { page, glyph: head })
@@ -980,6 +988,9 @@ impl DocView {
     /// when there is no selection; empty parts are left out.
     pub(crate) fn selection_quads(&self, info: &DocInfo) -> Option<Vec<(usize, Vec<[f64; 8]>)>> {
         let s = self.selection?;
+        if self.selection_text_status() != SelectionTextStatus::Ready {
+            return None;
+        }
         let mut out = Vec::new();
         for page_idx in s.pages() {
             let (Some(text), Some(page)) = (self.texts.get(&page_idx), info.pages.get(page_idx)) else { continue };
@@ -1133,6 +1144,9 @@ impl DocView {
     /// page break, so a cross-page selection copies as the document reads (#527).
     pub fn selected_text(&self) -> Option<String> {
         let s = self.selection?;
+        if self.selection_text_status() != SelectionTextStatus::Ready {
+            return None;
+        }
         let mut parts = Vec::new();
         for page in s.pages() {
             if let Some(t) = self.texts.get(&page) {
@@ -1143,6 +1157,18 @@ impl DocView {
             }
         }
         (!parts.is_empty()).then(|| parts.join("\n"))
+    }
+
+    fn selection_text_status(&self) -> SelectionTextStatus {
+        let Some(selection) = self.selection else { return SelectionTextStatus::None };
+        let mut loading = false;
+        for page in selection.pages() {
+            if page >= self.page_count || self.text_failed.contains(&page) {
+                return SelectionTextStatus::Failed(page);
+            }
+            loading |= !self.texts.contains_key(&page);
+        }
+        if loading { SelectionTextStatus::Loading } else { SelectionTextStatus::Ready }
     }
 
     pub fn thumb(&self, page: usize) -> Option<&TextureHandle> {
@@ -1691,7 +1717,20 @@ impl DocView {
         self.stale_thumbs.retain(|p| admitted.contains(p));
         self.retain_text_layers();
         // Visible main pages and thumbnails take precedence over background search work.
-        queue.extend(requests.into_iter().filter(|r| r.kind == RequestKind::Text));
+        let mut text_requests: Vec<_> = requests.into_iter().filter(|r| r.kind == RequestKind::Text).collect();
+        let mut requested_text_pages: HashSet<usize> = text_requests.iter().map(|r| r.page).collect();
+        if let Some(selection) = self.selection {
+            for page in selection.pages() {
+                if page < info.pages.len()
+                    && !self.texts.contains_key(&page)
+                    && !self.text_failed.contains(&page)
+                    && requested_text_pages.insert(page)
+                {
+                    text_requests.push(RenderRequest { page, kind: RequestKind::Text, tile: None, scale: 1.0, tag: TEXT_TAG, preview: false });
+                }
+            }
+        }
+        queue.extend(text_requests);
         queue
     }
 
@@ -5349,6 +5388,32 @@ trailer << /Root 1 0 R >>
             assert!(v.texts.contains_key(&p), "page {p} of the selection is pinned");
         }
         assert_eq!(v.selected_text().as_deref(), Some("x\nx\nx"), "stale cross-page selections still copy");
+    }
+
+    #[test]
+    fn cross_page_selection_requests_missing_text_and_never_uses_partial_data() {
+        let info = thumbnail_info(3);
+        let mut v = DocView::new(DocId(1), &info, ViewDefaults::default());
+        let text = Arc::new(PageText {
+            glyphs: vec![pdfcraft_render::TextGlyph { text: "x".into(), rect: [0.0, 0.0, 10.0, 10.0], quad: [[0.0, 0.0]; 4], direction: [1.0, 0.0] }],
+            line_of: vec![0],
+            space_before: vec![false],
+        });
+        v.select_text_range((0, 0), (2, 0));
+        v.texts.insert(0, text.clone());
+        v.texts.insert(2, text);
+
+        assert_eq!(v.selection_text_status(), SelectionTextStatus::Loading);
+        assert_eq!(v.selected_text(), None, "Copy waits for every covered page");
+        assert_eq!(v.selection_quads(&info), None, "marking waits for every covered page");
+
+        let requests = v.prepare_render_queue(&info, 1.0);
+        assert!(requests.iter().any(|r| r.page == 1 && r.kind == RequestKind::Text), "the unvisited middle page is requested for extraction");
+
+        v.text_failed.insert(1);
+        assert_eq!(v.selection_text_status(), SelectionTextStatus::Failed(1), "failed extraction remains explicit");
+        assert_eq!(v.selected_text(), None, "Copy never falls back to the loaded endpoints");
+        assert_eq!(v.selection_quads(&info), None, "marking never falls back to the loaded endpoints");
     }
 
     /// #527: editing any page under the selection clears it — the glyphs it points at are gone.

@@ -431,10 +431,6 @@ fn a_selection_drag_keeps_scrolling_over_the_gap_and_the_next_page() {
     assert_eq!(h.state().views[0].selected_text(), Some(held), "releasing keeps the selection");
 }
 
-    h.run_steps(2);
-    assert_eq!(h.state().views[0].selected_text(), Some(held), "releasing keeps the selection");
-}
-
 /// Issue #527: a drag that walks off the bottom of a page and onto the next one selects both,
 /// and Copy carries the pages in document order.
 #[test]
@@ -644,5 +640,4 @@ fn coalesced_primary_clicks_select_line_then_spaced_click_clears() {
         assert_eq!((doc.can_undo(), doc.can_redo()), (None, None));
         assert_eq!(doc.saved_bytes(), saved);
     }
-}
 }
