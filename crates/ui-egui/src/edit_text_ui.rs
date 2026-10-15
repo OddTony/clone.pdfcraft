@@ -1137,7 +1137,11 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
             .map(|line| (line.font, line.base_font))
             .collect();
         if !missing.is_empty() {
-            let mut roots = vec![std::path::PathBuf::from("/Library/Fonts")];
+            let mut roots = vec![
+                std::path::PathBuf::from("/Library/Fonts"),
+                std::path::PathBuf::from("/System/Library/Fonts"),
+                std::path::PathBuf::from("/System/Library/Fonts/Supplemental"),
+            ];
             if let Some(home) = std::env::var_os("HOME") {
                 roots.push(std::path::PathBuf::from(home).join("Library/Fonts"));
             }
@@ -1153,7 +1157,7 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
                     let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
                     if !meta.is_file() || meta.len() > (16 << 20) { continue; }
                     let Ok(bytes) = std::fs::read(&path) else { continue };
-                    let Ok((family, postscript)) = pdfcraft_fonts::embedding::names(&bytes) else { continue };
+                    let Ok((family, postscript)) = pdfcraft_fonts::embedding::display_names(&bytes) else { continue };
                     let matched: Vec<_> = missing.iter().filter(|(resource, source)| {
                         !families.contains_key(resource)
                             && [family.as_str(), postscript.as_str()].iter().any(|name| {
