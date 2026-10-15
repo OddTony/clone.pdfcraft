@@ -2228,6 +2228,75 @@ fn replace_pages_dialog_swaps_page_content() {
     assert_eq!(doc.can_undo(), Some("Replace page"));
 }
 
+/// Pages 1 and 3 are selected. OK replaces those two and leaves the unchecked page between them.
+#[test]
+fn replace_split_selection_keeps_the_unchecked_page() {
+    fn sized(n: usize, width: u32, height: u32, label: &str) -> Vec<u8> {
+        let mut objs: Vec<String> = vec!["<< /Type /Catalog /Pages 2 0 R >>".into()];
+        let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", 4 + 2 * i)).collect();
+        objs.push(format!("<< /Type /Pages /Kids [{}] /Count {n} /MediaBox [0 0 {width} {height}] >>", kids.join(" ")));
+        objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into());
+        for i in 0..n {
+            objs.push(format!("<< /Type /Page /Parent 2 0 R /Contents {} 0 R /Resources << /Font << /F1 3 0 R >> >> >>", 5 + 2 * i));
+            let body = format!("BT /F1 24 Tf 20 150 Td ({label} {}) Tj ET", i + 1);
+            objs.push(format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()));
+        }
+        let mut out = b"%PDF-1.7\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, o) in objs.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+        }
+        let xref = out.len();
+        out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+        for o in offsets {
+            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+        out
+    }
+    let open = |selected: &[usize], edited: bool| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("original.pdf", None, sized(3, 200, 300, "Original")).unwrap();
+        app.views[0].select_pages(selected);
+        app.start_replace("other.pdf".into(), sized(5, 400, 500, "Replacement"));
+        if edited {
+            app.replace_draft.as_mut().unwrap().range_edited = true;
+        }
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| app);
+        h.run_steps(2);
+        h
+    };
+    let sizes = |app: &PdfCraftApp| {
+        let doc = app.session.get(app.views[0].id).unwrap();
+        doc.info.pages.iter().map(|p| (p.width.round() as i32, p.height.round() as i32)).collect::<Vec<_>>()
+    };
+    let mut split = open(&[0, 2], false);
+    let draft = split.state().replace_draft.as_ref().unwrap();
+    assert_eq!((draft.from, draft.to, draft.pages.as_slice(), draft.range_edited), (1, 3, &[0usize, 2][..], false));
+    egui_kittest::kittest::Queryable::get_by_label(&split, "OK").click();
+    split.run_steps(3);
+    assert_eq!(texts_of(split.state(), 0), ["Replacement 1", "Original 2", "Replacement 2"]);
+    assert_eq!(sizes(split.state()), [(400, 500), (200, 300), (400, 500)]);
+    assert_eq!(split.state().session.get(split.state().views[0].id).unwrap().can_undo(), Some("Replace pages"));
+    split.state_mut().undo();
+    split.run_steps(2);
+    assert_eq!(texts_of(split.state(), 0), ["Original 1", "Original 2", "Original 3"]);
+    assert_eq!(sizes(split.state()), [(200, 300), (200, 300), (200, 300)]);
+
+    let mut span = open(&[0, 2], true);
+    egui_kittest::kittest::Queryable::get_by_label(&span, "OK").click();
+    span.run_steps(3);
+    assert_eq!(texts_of(span.state(), 0), ["Replacement 1", "Replacement 2", "Replacement 3"]);
+
+    let mut adjacent = open(&[1, 2], false);
+    egui_kittest::kittest::Queryable::get_by_label(&adjacent, "OK").click();
+    adjacent.run_steps(3);
+    assert_eq!(texts_of(adjacent.state(), 0), ["Original 1", "Replacement 1", "Replacement 2"]);
+    assert_eq!(sizes(adjacent.state()), [(200, 300), (400, 500), (400, 500)]);
+}
+
 #[test]
 fn extract_options_and_rotate_pages_dialog() {
     let dir = temp_path("extract-sep");
@@ -2481,6 +2550,51 @@ fn switching_from_a_narrow_editor_keeps_one_frame_and_a_wide_heading_on_one_line
         h.render().unwrap().save(path).unwrap();
     }
     assert!(!dirty(&h));
+}
+
+/// #2022: clicking straight into another text box while one is open for typing must apply the
+/// open paragraph first; the typed text used to be dropped with the editor that switched away.
+#[test]
+fn switching_straight_to_another_box_applies_the_open_paragraph() {
+    let bytes = source_font_fixture_with_text("BT /F1 24 Tf 20 220 Td (Top) Tj ET BT /F2 24 Tf 20 120 Td (Bottom) Tj ET");
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("boxes.pdf", None, bytes).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let r = h.state().views[0].page_screen_rect(0).expect("on screen");
+    let k = r.width() / 300.0;
+    let mut blocks = {
+        let s = h.state();
+        s.session.get(s.views[0].id).unwrap().text_blocks(0)
+    };
+    blocks.sort_by(|a, b| b.rect[1].partial_cmp(&a.rect[1]).unwrap_or(std::cmp::Ordering::Equal));
+    assert_eq!(blocks.iter().map(|b| b.text.as_str()).collect::<Vec<_>>(), ["Top", "Bottom"], "two editable boxes");
+    let center = |b: &pdfcraft_engine::TextBlock| {
+        egui::pos2(r.left() + ((b.rect[0] + b.rect[2]) / 2.0) as f32 * k, r.top() + (300.0 - (b.rect[1] + b.rect[3]) / 2.0) as f32 * k)
+    };
+    // Open the top box and type into it.
+    click_at(&mut h, center(&blocks[0]));
+    let ed = h.state().views[0].line_editor.clone().expect("the top box opens for typing");
+    assert_eq!(ed.text, "Top");
+    h.state_mut().views[0].line_editor.as_mut().unwrap().text = "Top edited".into();
+    h.run_steps(1);
+    // Click straight into the bottom box: the open paragraph is applied, and the bottom box opens.
+    click_at(&mut h, center(&blocks[1]));
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    assert_eq!(
+        doc.text_blocks(0).iter().map(|b| b.text.clone()).collect::<Vec<_>>(),
+        ["Top edited", "Bottom"],
+        "the typed text is applied, not dropped"
+    );
+    assert_eq!(doc.can_undo(), Some("Edit text"));
+    let ed = s.views[0].line_editor.clone().expect("the bottom box is now open");
+    assert_eq!(ed.text, "Bottom");
 }
 
 #[test]
