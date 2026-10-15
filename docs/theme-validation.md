@@ -320,3 +320,73 @@ this passing integrated validation. No tests were independently weakened,
 skipped or altered to obtain these results; upstream's correction and tests are
 included as part of its normal merge. Local WASM/Windows/FreeBSD runtime checks
 remain unavailable on this macOS host; fresh hosted CI must validate this HEAD.
+
+
+## 2026-10-15: current-main integration for PR #1090
+
+Normally merged upstream main dc41044ba78f6cef2ff4bdb14d19272f54ad6aea into
+the validated theme contribution at 2890d5d67f5dbe9d6bedebf408b3e18c32ffa749.
+All four maintainer-verified corrections and the theme-domain implementation
+remain intact. Shared suite themes and the PDFCraft/Launcher pilot remain separate follow-ups.
+
+Eleven conflict files were reconciled: attribution, lockfile, both roadmaps,
+CLI entry point, appearance cards, comment submission, two translation catalogs,
+persistent UI state and the Fields panel. Upstream CLI report/root handling,
+comment shortcuts, off-screen row optimization, settings migration, font
+fallbacks and new saved preferences were retained.
+
+Focused integration corrections:
+
+- Appearance cards retain upstream whole-card and radio-row selection while
+  previewing the active palette. An active preset/custom card selects the theme
+  it displays, rather than replacing it with the default Light/Dark theme.
+  The extended regression was observed failing with the incorrect default-mode
+  mapping, then passes for all six presets, a custom theme and saved preferences.
+- New upstream compare/edit-text code imports the ThemeContext trait required
+  by the palette adapter.
+- The theme automation adapter adopts main's separate read/write roots.
+  Listing, inspection and export require read authority only. Store mutations
+  require read and write authority, with explicit lock and legacy-path checks.
+  Two unit regressions and an MCP process regression were observed failing with
+  the old adapter, then pass with the corrected mapping. Denied mutations leave
+  the store unchanged; missing-store reads create no files or locks.
+- The new Vietnamese catalog includes all seven theme labels. Its intentional
+  unchanged preset names follow the other catalogs; all other untranslated
+  entries remain subject to the existing policy. New translations are
+  AI-assisted and have not received native-speaker review. Catalog hashes and
+  generated attribution are current.
+
+Final scoped validation (two Cargo build jobs, bounded runs, no workspace sweep):
+
+| Check | Result |
+|---|---|
+| Theme domain | 38 passed |
+| Complete UI crate | 1,264 passed, 5 ignored, zero failures across 41 result groups |
+| Automation crate and integrations | 235 passed |
+| Desktop unit tests | 66 passed, 1 ignored |
+| CLI theme/MCP/root/report suites | 18 passed |
+| Formatting and strict all-target Clippy | Passed for affected crates |
+| Native desktop, CLI and xtask builds | Passed on macOS ARM64 |
+| Assets, layers and parity | Passed |
+| Dependency policy | cargo deny passed under unchanged policy |
+
+Total: 1,621 scoped tests passed. Screenshot-only font opt-out was used for
+the visual render run; normal font discovery was retained for system-font unit tests.
+
+An isolated portable native app selected Light/Dark and all six named presets,
+persisted each selection, exposed all 31 palette colors, adopted a CLI-created
+custom theme while running, and retained its exact custom colors after restart.
+All 34 synthetic home/menu/document/preferences renders were inspected.
+No screenshots, fonts or new document assets were committed.
+
+Cargo's locked metadata validation succeeds. Compared with current main, the
+only additional resolved package identity is the internal pdfcraft-themes crate;
+all external versions/checksums match main. rustls is 0.23.46 from upstream #2342,
+and RUSTSEC-2026-0346 through -0349 are absent. Raw cargo audit reports only
+the inherited rsa 0.10.0-rc.18 / RUSTSEC-2023-0071 finding, identical to main;
+upstream's existing verification-only acceptance remains unchanged. No advisory
+exceptions or policy changes were added.
+
+Local WASM check was attempted and fails E0463 because the host lacks the
+wasm32-unknown-unknown core/std target libraries, independently reproduced with
+an empty Rust library. New hosted WASM and cross-platform results remain required.

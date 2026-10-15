@@ -79,9 +79,9 @@ fn preview(ui: &mut egui::Ui, p: &Tokens, width: f32) {
 }
 
 /// One theme card: its title, Active when it is what shows now, a preview of the chosen theme
-/// and the chosen theme name. Selection uses the shared appearance picker above.
-fn card(ui: &mut egui::Ui, t: &Tokens, title: &str, active: bool, shown: &Tokens, label: &str) {
-    egui::Frame::new()
+/// and the chosen theme name. Both the card and its radio row select the displayed theme.
+fn card(ui: &mut egui::Ui, t: &Tokens, title: &str, active: bool, shown: &Tokens, label: &str) -> bool {
+    let inner = egui::Frame::new()
         .fill(t.card)
         .stroke(egui::Stroke::new(1.0, if active { t.accent } else { t.border }))
         .corner_radius(6.0)
@@ -97,13 +97,16 @@ fn card(ui: &mut egui::Ui, t: &Tokens, title: &str, active: bool, shown: &Tokens
             ui.add_space(4.0);
             preview(ui, shown, ui.available_width());
             ui.add_space(4.0);
-            let _ = ui.add(widgets::radio(true, label));
+            ui.add(widgets::radio(true, label)).clicked()
         });
+    // The whole card picks its theme, not just the radio row.
+    let whole = inner.response.interact(egui::Sense::click()).on_hover_cursor(egui::CursorIcon::PointingHand);
+    inner.inner || whole.clicked()
 }
 
 /// The Appearance section of Preferences.
 pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
-    ui.label(RichText::new(tl!("Appearance")).font(theme::semibold(13.0)));
+    ui.label(RichText::new(tl_ctx!("theme", "Appearance")).font(theme::semibold(13.0)));
     ui.horizontal(|ui| {
         ui.label(tl!("Appearance mode"));
         egui::ComboBox::from_id_salt("appearance-mode").selected_text(mode_name(app, app.theme_preference)).show_ui(ui, |ui| {
@@ -138,12 +141,18 @@ pub fn preferences_section(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
     } else {
         tl!(app.theme_preference.label()).to_owned()
     };
+    let light_choice = if light_active && app.theme_preference != ThemePreference::System { app.theme_preference } else { ThemePreference::Light };
+    let dark_choice = if !light_active && app.theme_preference != ThemePreference::System { app.theme_preference } else { ThemePreference::Dark };
     ui.columns(2, |cols| {
         let [light, dark] = cols else { return };
         let light_palette = if light_active { active_palette } else { Tokens::for_kind(ThemeKind::Light) };
         let dark_palette = if light_active { Tokens::for_kind(ThemeKind::Dark) } else { active_palette };
-        card(light, t, tl!("Light theme"), light_active, &light_palette, if light_active { &active_label } else { tl!("Light gray") });
-        card(dark, t, tl!("Dark theme"), !light_active, &dark_palette, if light_active { tl!("Dark gray") } else { &active_label });
+        if card(light, t, tl!("Light theme"), light_active, &light_palette, if light_active { &active_label } else { tl!("Light gray") }) {
+            app.set_theme_preference(light_choice);
+        }
+        if card(dark, t, tl!("Dark theme"), !light_active, &dark_palette, if light_active { tl!("Dark gray") } else { &active_label }) {
+            app.set_theme_preference(dark_choice);
+        }
     });
 }
 
@@ -227,5 +236,56 @@ mod tests {
         assert_eq!(h.state().theme, ThemeKind::Dark);
         assert_eq!(h.state_mut().manage_theme("theme_inspect", &serde_json::json!({"id":custom["id"]})).unwrap()["palette"]["text"], "#fff4df");
         assert_eq!(h.query_all_by_label("Active").count(), 1);
+    }
+
+    /// Clicking a theme card, or its radio row, picks that theme, not only the mode combo box.
+    #[test]
+    fn clicking_a_theme_card_picks_that_theme() {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        let mut fonts = false;
+        let mut h = Harness::builder().with_size(egui::vec2(640.0, 400.0)).build_ui_state(
+            move |ui, app: &mut PdfCraftApp| {
+                if !fonts {
+                    ui.ctx().set_fonts(theme::font_definitions());
+                    fonts = true;
+                    return;
+                }
+                let t = Tokens::get(ui.ctx());
+                preferences_section(ui, app, &t);
+            },
+            app,
+        );
+        h.run();
+        h.get_by_label("Dark gray").click();
+        h.run();
+        assert_eq!((h.state().theme_preference, h.state().theme), (ThemePreference::Dark, ThemeKind::Dark));
+        // The card's title is not a widget of its own: the click lands on the card.
+        h.get_by_label("Light theme").click();
+        h.run();
+        assert_eq!((h.state().theme_preference, h.state().theme), (ThemePreference::Light, ThemeKind::Light));
+        let custom_id = "00000000-0000-4000-8000-000000000002";
+        h.state_mut()
+            .manage_theme(
+                "theme_create",
+                &serde_json::json!({
+                    "id": custom_id, "name": "Card custom", "base_theme_id": "ocean", "palette": {"text": "#fff4df"}
+                }),
+            )
+            .unwrap();
+        // An active card names and previews the selected preset/custom theme. Clicking it
+        // must select that displayed theme rather than replace it with the default mode.
+        let custom_preference = format!("custom:{custom_id}");
+        for id in ["catppuccin", "solarized", "forest", "ocean", "sunset", "paper-ink", custom_preference.as_str()] {
+            h.state_mut().set_option("theme", id).unwrap();
+            h.run();
+            let label = if h.state().theme == ThemeKind::Light { "Light theme" } else { "Dark theme" };
+            h.get_by_label(label).click();
+            h.run();
+            assert_eq!(h.state().theme_preference.id().as_ref(), id);
+            let mut restored = PdfCraftApp::new();
+            restored.restore(&h.state().persist());
+            assert_eq!(restored.theme_preference.id().as_ref(), id);
+        }
     }
 }

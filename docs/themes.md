@@ -133,6 +133,10 @@ Every tool requires `store`, a JSON file path. Relative paths resolve under
 inside that root. The parent folder must already exist. An explicit path avoids
 silently changing a user's desktop profile from a confined agent session.
 
+With MCP automation read/write roots, listing, inspection and export need read
+authority only. Changes to a store need both read and write authority for that
+store and its lock; migration also needs read authority for the legacy settings.
+
 | Tool | Other arguments | Result/purpose |
 |---|---|---|
 | `theme_list` | none | Built-ins/custom entries, active ID, revision, diagnostics |
