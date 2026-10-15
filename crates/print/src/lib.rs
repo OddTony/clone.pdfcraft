@@ -228,22 +228,49 @@ pub struct Settings {
     pub orientation: Orientation,
     pub layout: Layout,
     pub content: Content,
+    /// Print as image (Acrobat's Advanced Print Setup): every page rendered to a picture at this
+    /// resolution before it is placed on the paper. The engine does the rendering; `impose` is
+    /// then given the image-only document.
+    pub raster: Option<Raster>,
+}
+
+/// How pages are rendered when printing as image.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Raster {
+    /// Dots per inch, 72–600 (Acrobat offers 150, 300 and 600).
+    pub dpi: f64,
+    /// Render the pictures in grey, so the print-ready PDF itself is grayscale.
+    pub grayscale: bool,
+}
+
+impl Default for Raster {
+    fn default() -> Self {
+        Raster { dpi: 300.0, grayscale: false }
+    }
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { pages: Vec::new(), paper: PAPERS[0].1, orientation: Orientation::Auto, layout: Layout::default(), content: Content::default() }
+        Settings {
+            pages: Vec::new(),
+            paper: PAPERS[0].1,
+            orientation: Orientation::Auto,
+            layout: Layout::default(),
+            content: Content::default(),
+            raster: None,
+        }
     }
 }
 
 /// Common paper sizes (points, portrait).
-pub const PAPERS: [(&str, (f64, f64)); 18] = [
+pub const PAPERS: [(&str, (f64, f64)); 19] = [
     ("US Letter", (612.0, 792.0)),
     ("US Legal", (612.0, 1008.0)),
     ("Tabloid", (792.0, 1224.0)),
     ("A3", (841.89, 1190.55)),
     ("A4", (595.28, 841.89)),
     ("A5", (419.53, 595.28)),
+    ("A6", (297.64, 419.53)),
     ("ARCH A (9 x 12 in)", (648.0, 864.0)),
     ("ARCH B (12 x 18 in)", (864.0, 1296.0)),
     ("ARCH C (18 x 24 in)", (1296.0, 1728.0)),

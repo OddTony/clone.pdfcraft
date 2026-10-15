@@ -16,9 +16,16 @@ fn hue(g: &ToolGroup) -> Color32 {
 
 pub fn left_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
+    // Organize closed another way (the grid's Close, or a page opened from it) closes the tool too,
+    // as its panel's Close does, back to the workspace's own panel.
+    if app.left == LeftPanel::Tool("organize") && app.active.and_then(|i| app.views.get(i)).is_some_and(|v| !v.organize) {
+        app.left = crate::organize_panel::workspace_panel(app.mode);
+    }
     egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin { left: 14, right: 10, top: 12, bottom: 10 }).stroke(Stroke::new(1.0, t.divider)).show(
         ui,
         |ui| match app.left {
+            // Organize pages has its own panel whenever the grid shows (with a document open).
+            _ if app.active.is_some() && crate::organize_panel::showing(app) => crate::organize_panel::panel(app, ui, &t),
             LeftPanel::AllTools => all_tools(app, ui, &t),
             LeftPanel::Tool(id) => match catalog::group(id) {
                 Some(g) => tool_detail(app, ui, &t, g),
@@ -230,8 +237,32 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
                 row_label(ui, tl!(item.label), theme::regular(13.0), fg, body.left_center() + vec2(34.0, 0.0), r.left() - body.left() - 42.0);
                 ui.painter().rect_filled(r, CornerRadius::same(4), fill);
                 ui.painter().text(r.center(), Align2::CENTER_CENTER, chip_label, font, cfg);
-                if theme::hand(resp).on_hover_text(format!("{} — {}", tl!(item.label), item.command)).clicked() {
-                    run = Some(item.command);
+                let resp = theme::hand(resp).on_hover_text(format!("{} — {}", tl!(item.label), item.command));
+                if item.actions.is_empty() {
+                    if resp.clicked() {
+                        run = Some(item.command);
+                    }
+                } else {
+                    // A caret before the chip says the entry opens a menu (Add / Update / Remove).
+                    let c = r.left_center() - vec2(10.0, 0.0);
+                    ui.painter().add(egui::Shape::convex_polygon(
+                        vec![c + vec2(-3.5, -2.0), c + vec2(3.5, -2.0), c + vec2(0.0, 2.5)],
+                        fg,
+                        egui::Stroke::NONE,
+                    ));
+                    egui::Popup::menu(&resp).show(|ui| {
+                        ui.set_min_width(180.0);
+                        for (n, id) in item.actions.iter().enumerate() {
+                            let Some(spec) = pdfcraft_engine::commands::command(id) else { continue };
+                            // Add stays usable with no document open: it asks for a file first.
+                            let enabled = (n == 0 && app.active.is_none()) || app.command_enabled(spec);
+                            let label = crate::i18n::menu_label(spec.id, spec.label);
+                            if ui.add_enabled(enabled, egui::Button::new(label)).clicked() {
+                                run = Some(spec.id);
+                                ui.close();
+                            }
+                        }
+                    });
                 }
             }
         }

@@ -406,6 +406,42 @@ fn shapes_and_ink_are_drawn_by_dragging() {
     assert!((r[0] - 40.0).abs() < 3.0 && (r[1] - 40.0).abs() < 3.0 && (r[2] - 140.0).abs() < 3.0 && (r[3] - 100.0).abs() < 3.0, "{r:?}");
 }
 
+/// Press, drag and release a stroke, running only one frame after the release.
+fn stroke_without_settling(h: &mut Harness<'static, PdfCraftApp>, a: (f32, f32), b: (f32, f32)) {
+    let (from, to) = (at(h, a.0, a.1), at(h, b.0, b.1));
+    h.hover_at(from);
+    h.run_steps(1);
+    h.drag_at(from);
+    h.run_steps(1);
+    for k in 1..=4 {
+        h.hover_at(from + (to - from) * (k as f32 / 4.0));
+        h.run_steps(1);
+    }
+    h.drop_at(to);
+    h.run_steps(1);
+}
+
+/// #1858: on release the live stroke is replaced by the committed annotation, but the page
+/// raster that draws it arrives later. The stroke stays painted from its points meanwhile.
+#[test]
+fn a_released_pen_stroke_stays_drawn_until_the_page_raster_has_it() {
+    let mut h = harness(|app| app.set_option("quick", "ink").unwrap());
+    stroke_without_settling(&mut h, (40.0, 100.0), (140.0, 60.0));
+    assert_eq!(comments(&h).len(), 1, "the stroke is committed");
+    assert_eq!(h.state().views[0].comments.settling_len(), 1, "still drawn from its points");
+    settle(&mut h);
+    assert_eq!(h.state().views[0].comments.settling_len(), 0, "the raster draws it now");
+}
+
+#[test]
+fn undoing_a_pen_stroke_before_its_raster_leaves_no_ghost() {
+    let mut h = harness(|app| app.set_option("quick", "ink").unwrap());
+    stroke_without_settling(&mut h, (40.0, 100.0), (140.0, 60.0));
+    assert_eq!(h.state().views[0].comments.settling_len(), 1);
+    h.state_mut().undo();
+    assert_eq!(h.state().views[0].comments.settling_len(), 0);
+}
+
 #[test]
 fn pen_strokes_stay_unselected_so_writing_continues() {
     let mut h = harness(|app| app.set_option("quick", "ink").unwrap());
@@ -1180,4 +1216,35 @@ fn a_closed_comments_panel_stays_closed_when_picking_comment_tools() {
     assert!(h.state_mut().execute("comment.strikeout"));
     h.run_steps(2);
     assert_eq!(h.state().right, Some(RightPanel::Comments));
+}
+
+/// #1908: Comment properties of a text box has a Font size control; changing it redraws the box
+/// with the new /DA size as one undo step, and shapes without text have no such control.
+#[test]
+fn text_box_properties_change_the_font_size() {
+    use pdfcraft_engine::{Edit, NewAnnotation, Shape};
+    let mut h = harness(|_| {});
+    let tb = NewAnnotation {
+        page: 0,
+        shape: Shape::TextBox { rect: [40.0, 600.0, 240.0, 640.0], font_size: 12.0 },
+        style: Default::default(),
+        contents: "Hello".into(),
+        author: "Ada".into(),
+    };
+    h.state_mut().apply_edit(Edit::AddAnnotation(tb));
+    h.run_steps(2);
+    h.state_mut().open_comment_props(0, 0);
+    h.run_steps(2);
+    h.get_by_label("Font size");
+    {
+        let d = h.state_mut().comment_props.as_mut().expect("open");
+        assert_eq!(d.original.font_size, Some(12.0));
+        d.edited.font_size = Some(30.0);
+    }
+    h.get_by_label("OK").click();
+    h.run_steps(3);
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    assert_eq!(doc.comment_props(0, 0).unwrap().font_size, Some(30.0));
+    assert_eq!(doc.can_undo(), Some("Change comment properties"));
 }

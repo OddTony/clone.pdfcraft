@@ -86,6 +86,11 @@ impl PdfCraftApp {
         }
         commands::is_enabled(spec, &self.session, self.active_ids().map(|(_, id)| id))
             && (spec.needs != commands::Needs::TwoPageView || self.active.and_then(|i| self.views.get(i)).is_some_and(crate::DocView::cover_applies))
+            && match spec.id {
+                "view.previous_view" => self.active.and_then(|i| self.views.get(i)).is_some_and(|v| !v.back.is_empty()),
+                "view.next_view" => self.active.and_then(|i| self.views.get(i)).is_some_and(|v| !v.forward.is_empty()),
+                _ => true,
+            }
     }
 
     /// Run a registered command by id. Returns `false` when the id is unknown or the command
@@ -174,6 +179,7 @@ impl PdfCraftApp {
             "file.close_all" => self.close_all(),
             "file.revert" => self.dialog = Some(Dialog::Revert),
             "file.properties" => self.dialog = Some(Dialog::Properties(PropsTab::Description)),
+            "file.word_count" => self.dialog = Some(Dialog::WordCount),
             "protect.properties" => self.dialog = Some(Dialog::Properties(PropsTab::Security)),
             // A restricted document's security changes once its permissions password is entered.
             "protect.password" | "protect.remove" if self.active_ids().and_then(|(_, id)| self.session.get(id)).is_some_and(|d| d.can_unlock()) => {
@@ -266,6 +272,11 @@ impl PdfCraftApp {
                 }
             }
             "view.read_mode" => self.switch_mode(if self.mode == Mode::Read { Mode::AllTools } else { Mode::Read }, false),
+            "view.previous_view" | "view.next_view" => {
+                if let Some(v) = active.and_then(|i| self.views.get_mut(i)) {
+                    return v.view_history(id == "view.next_view");
+                }
+            }
             "view.next_tab" => self.step_tab(true),
             "view.previous_tab" => self.step_tab(false),
             "view.theme" => {
@@ -316,8 +327,12 @@ impl PdfCraftApp {
                 self.apply_edit(Edit::ResetForm { names: None });
             }
             "page.organize" => {
-                if let Some(i) = active {
-                    self.views[i].organize = !self.views[i].organize;
+                if let Some(v) = active.and_then(|i| self.views.get_mut(i)) {
+                    if v.organize {
+                        v.organize = false;
+                    } else {
+                        v.open_organize();
+                    }
                 }
             }
             "page.rotate" => {
@@ -449,7 +464,10 @@ impl PdfCraftApp {
                 self.redact_search.found = None;
                 self.dialog = Some(Dialog::RedactSearch);
             }
-            "redact.properties" => self.dialog = Some(Dialog::RedactProps),
+            "redact.properties" => {
+                self.redact_before = Some(self.redact_prefs.clone());
+                self.dialog = Some(Dialog::RedactProps);
+            }
             "redact.apply" => {
                 let marks = active.and_then(|i| self.session.get(self.views[i].id)).map_or(0, |d| d.redaction_marks());
                 if marks == 0 {
@@ -678,6 +696,10 @@ impl PdfCraftApp {
         specs.sort_by_key(|c| std::cmp::Reverse(c.shortcut.map(|s| s.modifier_count()).unwrap_or(0)));
         for spec in specs {
             let Some(s) = spec.shortcut else { continue };
+            // Keep the canvas's silent no-op when there is no previous/next view to visit.
+            if matches!(spec.id, "view.previous_view" | "view.next_view") && !self.command_enabled(spec) {
+                continue;
+            }
             if typing && !spec.in_text {
                 continue;
             }
@@ -758,14 +780,15 @@ const CREATE: &str = "@create";
 const EXPORT: &str = "@export";
 
 /// The File menu in Acrobat's order, one slice per section (separated): open and create; save;
-/// save as other and export; security; revert and close; properties; print.
+/// save as other and export; security; revert and close; properties (with Word count, which
+/// Acrobat lacks); print.
 const FILE_MENU: &[&[&str]] = &[
     &["file.open", "file.open_recent", "file.pin_folder", CREATE],
     &["file.save", "file.save_as"],
     &["optimize.reduce", "optimize.advanced", EXPORT],
     &["protect.password", "protect.remove", "protect.properties"],
     &["file.revert", "file.close", "file.close_all"],
-    &["file.properties"],
+    &["file.properties", "file.word_count"],
     &["print.dialog"],
 ];
 
