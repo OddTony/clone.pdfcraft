@@ -9,6 +9,7 @@ mod support;
 mod animate;
 mod bulk_fields;
 mod column_select;
+mod editor_taps;
 mod identity;
 mod layer_actions;
 mod links;
