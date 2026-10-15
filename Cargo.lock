@@ -3884,6 +3884,7 @@ dependencies = [
  "pdfcraft-engine",
  "pdfcraft-ui-egui",
  "pollster 1.0.1",
+ "raw-window-handle",
  "rustls-native-certs",
  "serde_json",
  "uds_windows",
@@ -3959,6 +3960,7 @@ dependencies = [
  "pdfcraft-automation",
  "pdfcraft-cos",
  "pdfcraft-engine",
+ "pdfcraft-platform",
  "pdfcraft-render",
  "rustix 1.1.5",
  "serde_json",
@@ -4067,6 +4069,7 @@ dependencies = [
  "pdfcraft-xfdf",
  "png 0.18.1",
  "thiserror 2.0.21",
+ "unicode-segmentation",
  "url",
 ]
 
@@ -4184,6 +4187,7 @@ version = "0.8.0"
 dependencies = [
  "async-channel",
  "futures-lite",
+ "rustix 1.1.5",
  "zbus",
 ]
 
@@ -4191,6 +4195,7 @@ dependencies = [
 name = "pdfcraft-preflight"
 version = "0.8.0"
 dependencies = [
+ "pdfcraft-content",
  "pdfcraft-cos",
  "pdfcraft-model",
 ]
@@ -4218,6 +4223,7 @@ dependencies = [
  "pdfcraft-forms",
  "pdfcraft-model",
  "pdfcraft-testkit",
+ "pdfcraft-xfa",
  "thiserror 2.0.21",
 ]
 
@@ -6881,8 +6887,6 @@ dependencies = [
 [[package]]
 name = "vello_common"
 version = "0.0.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3361bff7f7d82c0c496b92048db83846691f0e844cc28dee92b1c824291b55ee"
 dependencies = [
  "bytemuck",
  "fearless_simd",
