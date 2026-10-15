@@ -847,6 +847,12 @@
 	Windows store  ·  	Magazyn Windows  ·  
 	Issued by: 	Wystawca: 
 	, Expires: 	, Wygasa: 
+	Digitally signed by	Podpisany cyfrowo przez
+	DN: 	DN: 
+	Reason: 	Powód: 
+	Location: 	Lokalizacja: 
+	Date: 	Data: 
+	The labels are in English: the signature's font can't draw them in this language.	Etykiety są po angielsku: czcionka podpisu nie potrafi ich wyświetlić w tym języku.
 	No digital IDs yet.	Brak identyfikatorów cyfrowych.
 	Configure New Digital ID	Skonfiguruj nowy identyfikator cyfrowy
 	Remove "{name}" from this list? The file itself is not deleted.	Usunąć „{name}” z tej listy? Sam plik nie zostanie usunięty.
@@ -1130,6 +1136,7 @@
 	Custom text:	Własny tekst:
 	Font:	Czcionka:
 	Font size:	Rozmiar czcionki:
+	Font size	Rozmiar czcionki
 	Auto-size text to fit redaction region	Dopasuj rozmiar tekstu do utajnianego obszaru
 	Font colour:	Kolor czcionki:
 	Repeat overlay text	Powtarzaj tekst nakładany
@@ -2334,6 +2341,39 @@ animation effects	Off	Wyłączone
 	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
 	Move tag earlier	Przenieś znacznik wcześniej
 	Move tag later	Przenieś znacznik później
+	Mark as artifact	Oznacz jako artefakt
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Usuń ten znacznik liścia z kolejności odczytu i oznacz jego bezpośrednią zawartość jako artefakt
+	Mark content as artifact	Oznacz zawartość jako artefakt
+	Word count	Liczba słów
+	Current page only	Tylko bieżąca strona
+	Exclude tagged tables	Wyklucz oznaczone tabele
+	Exclude tagged code blocks	Wyklucz oznaczone bloki kodu
+	Exclude image/OCR text	Wyklucz tekst obrazów/OCR
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Wykluczenia używają znaczników PDF. Nieoznaczone tabele i kod nadal są uwzględniane. Wykluczenie obrazów usuwa również niewidoczny tekst.
+	Words	Słowa
+	Characters	Znaki
+	Characters without spaces	Znaki bez spacji
+	Pages counted	Policzone strony
+	Some pages contain no countable text. Scanned images need OCR first.	Niektóre strony nie zawierają tekstu do policzenia. Zeskanowane obrazy wymagają najpierw OCR.
+	Some content could not be classified safely and was kept in the count.	Części treści nie udało się wiarygodnie sklasyfikować, więc pozostała uwzględniona w liczbie.
+	Counting words… {n} pages read	Liczenie słów… odczytane strony: {n}
+	Word counting stopped unexpectedly.	Liczenie słów zostało nieoczekiwanie przerwane.
+	Word count…	Liczba słów…
+@id	file.word_count	Liczba słów…
+	Standard	Standardowe
+	Mobile	Urządzenie mobilne
+	Merge image fragments	Scal fragmenty obrazów
+	Optimizing… merging image fragments	Optymalizacja… scalanie fragmentów obrazów
+	Side by side	Obok siebie
+	New file only	Tylko nowy plik
+	Old file: {name}	Stary plik: {name}
+	New file: {name}	Nowy plik: {name}
+	Print as image	Drukuj jako obraz
+	Resolution:	Rozdzielczość:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Użyj, gdy drukarka pomija tekst, cieniowanie lub przezroczystość. Wydruk nie jest już tekstem do przeszukiwania; przy druku w skali szarości obrazy są szare.
+	Crop Image	Przytnij obraz
+	Remove Crop	Usuń przycięcie
+	Trim the picture with its handles; Enter or Done applies	Przytnij obraz uchwytami; Enter lub Gotowe stosuje
 	Redaction mark appearance	Wygląd znacznika redakcji
 	Outline colour:	Kolor obrysu:
 	Fill colour:	Kolor wypełnienia:
