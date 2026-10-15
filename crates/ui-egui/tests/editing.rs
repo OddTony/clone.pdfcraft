@@ -2650,14 +2650,14 @@ fn text_tool_clicking_source_text_edits_instead_of_adding_a_copy() {
     h.run_steps(4);
     assert!(h.state().views[0].content.draft.is_none(), "clicking source text must not start an added layer");
     assert_eq!(h.state().views[0].line_editor.as_ref().unwrap().text, "Page 1");
-    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().added.len(), 1, "the previous draft is kept");
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().added().len(), 1, "the previous draft is kept");
     h.key_press_modifiers(Modifiers::COMMAND, Key::A);
     h.event(egui::Event::Text("Replacement".into()));
     h.run_steps(3);
     h.key_press_modifiers(Modifiers::COMMAND, Key::Enter);
     h.run_steps(3);
     assert_eq!(page_texts(h.state()), ["Keep this note\nReplacement"]);
-    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().added.len(), 1, "editing the source adds no second layer");
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().added().len(), 1, "editing the source adds no second layer");
 }
 
 #[test]

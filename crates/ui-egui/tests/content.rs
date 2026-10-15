@@ -128,8 +128,8 @@ fn text_tool_single_click_retypes_added_text_without_another_item() {
             let bytes = state.session.save_bytes(state.views[0].id).unwrap();
             let mut reopened = pdfcraft_engine::Session::new();
             let id = reopened.open("again.pdf", None, bytes, None).unwrap();
-            assert_eq!(reopened.get(id).unwrap().added.len(), 1);
-            let pdfcraft_engine::AddedContent::Text(text) = &reopened.get(id).unwrap().added[0].content else { panic!() };
+            assert_eq!(reopened.get(id).unwrap().added().len(), 1);
+            let pdfcraft_engine::AddedContent::Text(text) = &reopened.get(id).unwrap().added()[0].content else { panic!() };
             assert_eq!(text.text, replacement);
         }
     }

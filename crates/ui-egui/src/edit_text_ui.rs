@@ -1459,7 +1459,7 @@ mod tests {
         let ctx = egui::Context::default();
         ctx.begin_pass(egui::RawInput { max_texture_side: Some(16384), ..Default::default() });
         let mut background = TextBackground::default();
-        background.prepare(&ctx, doc, Some(&ed), 8.0);
+        background.prepare(&ctx, doc, Some(&ed), None, 8.0);
         let expected = 8.0f32.min(crate::canvas::TILE_THRESHOLD / page.width.max(page.height));
         assert!(expected > crate::canvas::BASE_SIDE / page.width.max(page.height), "the test page needs the larger side");
         assert_eq!(background.tag, Some((expected * 1000.0) as u64));
@@ -1467,7 +1467,7 @@ mod tests {
         ctx.end_pass().textures_delta.clear();
         ctx.begin_pass(egui::RawInput { max_texture_side: Some(2048), ..Default::default() });
         let mut small = TextBackground::default();
-        small.prepare(&ctx, doc, Some(&ed), 8.0);
+        small.prepare(&ctx, doc, Some(&ed), None, 8.0);
         assert_eq!(small.tag, Some(((2048.0 / page.width.max(page.height)) * 1000.0) as u64));
         ctx.end_pass().textures_delta.clear();
     }
