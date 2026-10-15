@@ -101,11 +101,11 @@ fn the_stacked_notice_keeps_its_buttons_in_view() {
     assert!(!unlock.intersects(settings), "the buttons do not overlap: {unlock:?} {settings:?}");
 }
 
-/// #1913 (1182 x 556): the rail's top buttons and its page-navigation cluster must not overlap.
+/// #1913 (the minimum height): the rail's top buttons and its page-navigation cluster must not overlap.
 #[test]
 fn a_short_window_does_not_overlap_the_rail_clusters() {
     let h = {
-        let mut h = Harness::builder().with_size(egui::vec2(1182.0, 556.0)).build_eframe(|_cc| {
+        let mut h = Harness::builder().with_size(egui::vec2(1182.0, MIN_WINDOW_SIZE[1])).build_eframe(|_cc| {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
             app.open_bytes("a.pdf", None, fixture(2)).unwrap();
@@ -117,4 +117,12 @@ fn a_short_window_does_not_overlap_the_rail_clusters() {
     let tags = h.get_by_label("Tags").rect();
     let next = h.get_by_label("Previous page").rect();
     assert!(next.top() >= tags.bottom(), "page navigation sits below the rail buttons: {tags:?} vs {next:?}");
+    // The history buttons are the cluster's topmost buttons (above the page box).
+    let history = h.get_by_label_contains("Previous view").rect();
+    assert!(history.top() >= tags.bottom(), "view history sits below the rail buttons: {tags:?} vs {history:?}");
+    // The topmost thing in the cluster is the page box; the lowest is the zoom-out button.
+    let page_box = h.get_by_role(Role::TextInput).rect();
+    assert!(page_box.top() >= tags.bottom(), "the page box sits below the rail buttons: {tags:?} vs {page_box:?}");
+    let zoom_out = h.get_by_label_contains("Zoom out").rect();
+    assert!(zoom_out.top() >= history.bottom(), "zoom sits below view history: {history:?} vs {zoom_out:?}");
 }

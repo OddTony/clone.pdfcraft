@@ -648,8 +648,8 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     });
 }
 
-/// Height the rail's page-navigation cluster (zoom, fit, page box) needs; below it the rail scrolls.
-const RAIL_BOTTOM_H: f32 = 316.0;
+/// Height the rail's page-navigation cluster (zoom, fit, page, history buttons, page box) needs (360 pt measured); below it the rail scrolls.
+const RAIL_BOTTOM_H: f32 = 364.0;
 
 pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
