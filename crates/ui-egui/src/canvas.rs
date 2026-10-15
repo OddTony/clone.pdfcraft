@@ -3176,7 +3176,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     }
                     let clicks = if view.clicks > 2 && tool != QuickTool::Select { 1 } else { view.clicks };
                     if resp.dragged()
-                        && let Some(sel) = view.selection.as_mut().filter(|s| s.page == i)
+                        && let Some(sel) = view.selection.as_mut().filter(|s| s.covers(i))
                     {
                         match &mut sel.span {
                             // After a multi-click the drag extends by its unit (#1685), as in
@@ -3184,17 +3184,24 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                             // clicked, which holds the anchor whichever way the drag went.
                             Span::Run { anchor, head } if clicks >= 2 => {
                                 if let Some(h) = text.nearest(vx, vy)
-                                    && let Some((first, last)) = click_unit(&text, clicks, *anchor)
+                                    && let Some((first, last)) = click_unit(&text, clicks, anchor.glyph)
                                 {
                                     let (to_first, to_last) = click_unit(&text, clicks, h).unwrap_or((h, h));
-                                    (*anchor, *head) = if to_first < first { (last, to_first) } else { (first, to_last.max(last)) };
+                                    if to_first < first {
+                                        *anchor = Caret { page: anchor.page, glyph: last };
+                                        *head = Caret { page: i, glyph: to_first };
+                                    } else {
+                                        *anchor = Caret { page: anchor.page, glyph: first };
+                                        *head = Caret { page: i, glyph: to_last.max(last) };
+                                    }
                                 }
                             }
                             Span::Run { head, .. } => {
                                 if let Some(h) = text.nearest(vx, vy) {
-                                    *head = h;
+                                    *head = Caret { page: i, glyph: h };
                                 }
                             }
+                            Span::Column { .. } => {}
                         }
                         if resp.dragged()
                             && let Some(sel) = view.selection.as_mut()
@@ -3218,7 +3225,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     }
                     // A rectangle around no text selects nothing.
                     if resp.drag_stopped()
-                        && view.selection.is_some_and(|s| s.page == i && matches!(s.span, Span::Column { .. }) && s.text(&text).is_empty())
+                        && view.selection.is_some_and(|s| s.covers(i) && matches!(s.span, Span::Column { .. }) && s.text(i, &text).is_empty())
                     {
                         view.selection = None;
                     }
@@ -3922,10 +3929,11 @@ fn selection_actions(
         return false;
     }
     let Some(selection) = view.selection else { return false };
-    let Some(text) = view.texts.get(&selection.page) else { return false };
-    let Some(xf) = view.page_xform(selection.page) else { return false };
-    let Some(last) = selection.rects(text).last().copied() else { return false };
-    let selected = selection.text(text);
+    let Some(page) = selection.pages().last() else { return false };
+    let Some(text) = view.texts.get(&page) else { return false };
+    let Some(xf) = view.page_xform(page) else { return false };
+    let Some(last) = selection.rects(page, text).last().copied() else { return false };
+    let selected = selection.text(page, text);
     if selected.is_empty() {
         return false;
     }
@@ -3960,7 +3968,7 @@ fn selection_actions(
     if let SelectionAction::Copy = action {
         return true;
     }
-    let Some((page, quads)) = view.selection_quads(info) else { return false };
+    let Some((page, quads)) = view.selection_quads(info).and_then(|parts| parts.into_iter().last()) else { return false };
     let last = quads.last().copied().unwrap_or_default();
     let at = [last[2].max(last[6]), last[1].max(last[3])];
     view.clear_selection();
@@ -3969,9 +3977,6 @@ fn selection_actions(
             // A note is anchored where it is dropped and a replacement is typed per
             // annotation: both live on the selection's last page (#527), and the composer
             // shows exactly what they cover.
-            let Some((page, quads)) = parts.into_iter().find(|(p, _)| *p == end) else { return };
-            let last = quads.last().copied().unwrap_or_default();
-            let at = [last[2].max(last[6]), last[1].max(last[3])];
             if matches!(action, SelectionAction::Replace) {
                 view.comments.replace = Some(quads);
             }
