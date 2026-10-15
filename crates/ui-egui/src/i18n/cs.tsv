@@ -2506,3 +2506,11 @@ animation effects	Off	Vypnuto
 	Make properties default	Nastavit vlastnosti jako výchozí
 	Pages selected	Vybrané stránky
 	Page properties	Vlastnosti stránky
+# Fast Web View (linearized saving)
+	Saving	Ukládání
+	Save As optimizes for Fast Web View	Uložit jako optimalizuje pro rychlé zobrazení na webu
+	Save As writes a linearized file whose first page shows before the rest has downloaded. Save adds changes to the end of the file, which turns Fast Web View off.	Uložit jako zapíše linearizovaný soubor, jehož první stránka se zobrazí dřív, než se stáhne zbytek. Uložit přidává změny na konec souboru, čímž rychlé zobrazení na webu vypne.
+	Fast Web View	Rychlé zobrazení na webu
+	Saved {name}, optimized for Fast Web View	Uloženo: {name}, optimalizováno pro rychlé zobrazení na webu
+	Saved {name} without Fast Web View: {e}	Uloženo bez rychlého zobrazení na webu: {name} ({e})
+	Saved {name}. Fast Web View is off: Save adds the changes to the end of the file.	Uloženo: {name}. Rychlé zobrazení na webu je vypnuté: Uložit přidává změny na konec souboru.
