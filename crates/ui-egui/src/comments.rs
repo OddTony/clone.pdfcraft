@@ -1151,9 +1151,9 @@ pub(crate) fn after_last_quad(quads: &[[f64; 8]]) -> [f64; 2] {
     [last[2].max(last[6]), last[1].max(last[3])]
 }
 
-/// Comment on the selected text, as Acrobat's Add Note to Text does: the composer opens beside
-/// the selection's last line, and posting highlights the text with the comment as its contents,
-/// in one undo step. Cancelling leaves the page as it was. Without a selection, nothing happens.
+/// Comment on the selected text: the composer opens beside the selection's last line, and
+/// posting highlights the text with the comment as its contents, in one undo step. Cancelling
+/// leaves the page as it was. Without a selection, nothing happens.
 pub(crate) fn comment_on_selection(view: &mut DocView, info: &DocInfo) {
     let Some((page, quads)) = view.selection_quads(info) else { return };
     let at = after_last_quad(&quads);
