@@ -143,6 +143,9 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                 && !row_text.ends_with(char::is_whitespace)
                 && !line.text.starts_with(char::is_whitespace)
                 && line.frame_rect()[0] - prev.frame_rect()[2] > line.size * 0.12
+                // A separately positioned vowel mark isn't a new word even when
+                // the producer's advance/geometry looks like an inter-word gap.
+                && !line.text.chars().next().is_some_and(crate::bidi::is_hebrew_mark)
             {
                 row_text.push(' ');
                 block.editor_text.push(' ');
