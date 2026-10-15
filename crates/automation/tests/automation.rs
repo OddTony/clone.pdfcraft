@@ -3546,6 +3546,23 @@ fn printing_through_tools() {
 }
 
 #[test]
+fn paragraph_layout_is_kept_through_tools_after_save_and_reopen() {
+    let dir = workdir("paragraph-layout");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"a.pdf"}))["doc"].as_u64().unwrap();
+    let text = "The quick brown fox jumps over the lazy dog and keeps running through the field until it reaches the river at the end of the long summer day.";
+    ok(&mut a, "text_edit", json!({"doc":doc,"page":1,"paragraph":1,"size":12,"width":120,"align":"justify","text":text}));
+    let before = ok(&mut a, "text_lines", json!({"doc":doc,"page":1}));
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"layout.pdf"}));
+    let again = ok(&mut a, "doc_open", json!({"path":"layout.pdf"}))["doc"].as_u64().unwrap();
+    for draft in [text.replace("lazy", "sleepy"), text.into()] {
+        ok(&mut a, "text_edit", json!({"doc":again,"page":1,"paragraph":1,"text":draft}));
+    }
+    let after = ok(&mut a, "text_lines", json!({"doc":again,"page":1}));
+    assert_eq!(after["lines"], before["lines"]);
+}
+
+#[test]
 fn added_images_move_between_pages_through_tools() {
     let dir = workdir("content-transfer");
     let mut png = Vec::new();

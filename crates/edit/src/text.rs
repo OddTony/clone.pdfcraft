@@ -749,7 +749,8 @@ fn interpret(
             b"BMC" | b"BDC" if marked.len() < 256 => {
                 // Marked text paragraphs/headings are authoritative boundaries. Ignore
                 // artifacts and inner spans, which inherit their enclosing region.
-                let region = matches!(op.name(0), Some(b"P" | b"H" | b"H1" | b"H2" | b"H3" | b"H4" | b"H5" | b"H6" | b"LI" | b"TD" | b"TH"));
+                let region =
+                    matches!(op.name(0), Some(b"PCParagraph" | b"P" | b"H" | b"H1" | b"H2" | b"H3" | b"H4" | b"H5" | b"H6" | b"LI" | b"TD" | b"TH"));
                 marked.push(if region { Some(i) } else { marked.last().copied().flatten() });
                 let logical = op.operands.get(1).and_then(Object::as_dict).and_then(|d| d.get(b"ActualText")).and_then(|s| match s {
                     Object::String(s) if s.bytes.len() <= 4_000_000 => Some(s.to_text()),
@@ -1978,6 +1979,58 @@ pub struct RangeStyle {
     pub scale: Option<f64>,
 }
 
+/// Private marked-content properties preserve the container independently of its ink bounds.
+fn read_paragraph_layout(op: &Op) -> Option<(f64, f64, crate::added::Align)> {
+    if op.name(0) != Some(b"PCParagraph") {
+        return None;
+    }
+    let properties = op.operands.get(1)?.as_dict()?;
+    let width = properties.get(b"Width")?.as_f64()?;
+    let left = properties.get(b"Left")?.as_f64()?;
+    if !width.is_finite() || !(1.0..=14_400.0).contains(&width) || !left.is_finite() {
+        return None;
+    }
+    let align = match properties.name(b"Align")? {
+        b"Left" => crate::added::Align::Left,
+        b"Center" => crate::added::Align::Center,
+        b"Right" => crate::added::Align::Right,
+        b"Justify" => crate::added::Align::Justify,
+        _ => return None,
+    };
+    Some((width, left, align))
+}
+
+fn drop_paragraph_layout(ops: &[Op], scope: Option<usize>, drop: &mut std::collections::HashSet<usize>) {
+    let Some(start) = scope.filter(|i| ops.get(*i).and_then(read_paragraph_layout).is_some()) else { return };
+    let mut depth = 0usize;
+    for (i, op) in ops.iter().enumerate().skip(start) {
+        match op.op.as_slice() {
+            b"BMC" | b"BDC" => depth = depth.saturating_add(1),
+            b"EMC" => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    drop.extend([start, i]);
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn remember_paragraph_layout(ops: &mut Vec<Op>, width: f64, left: f64, align: crate::added::Align) {
+    let name = match align {
+        crate::added::Align::Left => "Left",
+        crate::added::Align::Center => "Center",
+        crate::added::Align::Right => "Right",
+        crate::added::Align::Justify => "Justify",
+    };
+    let properties =
+        Dict::from_iter([(b"Width".to_vec(), Object::Real(width)), (b"Left".to_vec(), Object::Real(left)), (b"Align".to_vec(), Object::name(name))]);
+    ops.insert(0, Op::new("BDC", vec![Object::name("PCParagraph"), Object::Dict(properties)]));
+    ops.push(Op::new("EMC", vec![]));
+}
+
 /// Rewrite paragraph `block` with new text (or its own) and formatting, rewrapped to its width.
 pub fn rewrite_block(doc: &mut Document, page: usize, block: usize, text: Option<&str>, style: &BlockStyle) -> Result<LineEdit, EditError> {
     rewrite_block_with_limit(doc, page, block, text, style, MAX_TYPE3_GLYPHS)
@@ -2007,12 +2060,29 @@ fn rewrite_block_from(
     max_glyphs: usize,
 ) -> Result<LineEdit, EditError> {
     let blocks = group_blocks(&lines);
-    let b = blocks.get(block).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no paragraph {}", page + 1, block + 1)))?;
+    let mut b = blocks.get(block).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no paragraph {}", page + 1, block + 1)))?;
+    if *style == BlockStyle::default() && text.is_none_or(|draft| draft == b.text || draft == b.editor_text) {
+        return Ok(LineEdit { substituted: None });
+    }
     let members: Vec<&TextLine> = b.lines.iter().map(|i| &lines[*i]).collect();
     let first = members.first().copied().ok_or_else(|| EditError::Invalid("the paragraph has no source runs".into()))?;
     let p = page_dict(doc, page)?;
     let mut res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let mut fonts_res = res.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
+    let streams = content_streams(doc, &p.dict);
+    let pieces = Pieces::join(&streams.iter().map(|(_, d)| d.as_slice()).collect::<Vec<_>>());
+    let ops = pieces.parse().ops;
+    let layout = first.scope.and_then(|i| ops.get(i)).and_then(read_paragraph_layout);
+    let mut effective = style.clone();
+    if let Some((width, left, align)) = layout {
+        effective.width = effective.width.or(Some(width));
+        effective.align = effective.align.or(Some(align));
+        if first.upright() {
+            b.rect[0] = left;
+            b.rect[2] = left + width;
+        }
+    }
+    let style = &effective;
     let registered_face = fonts_res.iter().any(|(name, _)| name.starts_with(b"PCFull"));
     // Hebrew is written back in drawing order (and with the Hebrew fallback face) by the
     // single-style path below; the styled region path does not reorder right-to-left runs.
@@ -2045,11 +2115,9 @@ fn rewrite_block_from(
                 && style.family.is_none()
                 && style.bold.is_none())
     {
-        return rewrite_styled_block(doc, page, &b, &lines, text, style);
+        return rewrite_styled_block(doc, page, &b, &lines, text, style, layout);
     }
-    let streams = content_streams(doc, &p.dict);
-    let pieces = Pieces::join(&streams.iter().map(|(_, d)| d.as_slice()).collect::<Vec<_>>());
-    let ops = pieces.parse().ops;
+
     // Explicit line breaks stay (#1443); within a line, runs of white space become one space.
     let text = text
         .unwrap_or(&b.text)
@@ -2071,6 +2139,9 @@ fn rewrite_block_from(
     }
     if let Some(sc) = style.scale {
         ts_state.scale = (sc / 100.0).clamp(0.1, 10.0);
+    }
+    if layout.is_some() {
+        ts_state.word_spacing = 0.0;
     }
     let o_state = ts_state.clone();
     let metrics = fonts_res.get(font_name.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned()).map(|d| Metrics::from_dict(doc, &d));
@@ -2220,7 +2291,16 @@ fn rewrite_block_from(
         state.fill = vec![Op::new("rg", vec![n(r), n(g), n(bl)])];
     }
     block_ops.extend(state.ops());
-    block_ops.push(Op::new("Tm", o.tm.iter().map(|v| n(*v)).collect()));
+    let mut origin = o.tm;
+    if let Some((_, left, _)) = layout.filter(|_| upright) {
+        let back = Matrix([o.ctm[0], o.ctm[1], o.ctm[2], o.ctm[3], 0.0, 0.0])
+            .invert()
+            .ok_or_else(|| EditError::Invalid("the paragraph has a singular transform".into()))?;
+        let (ax, ay) = back.apply(left - o.x, 0.0);
+        origin[4] += ax;
+        origin[5] += ay;
+    }
+    block_ops.push(Op::new("Tm", origin.iter().map(|v| n(*v)).collect()));
     // Alignment: each line's offset from the left edge, in text space.
     let offset = |line: &str| -> f64 {
         let free = (width - advance(line)).max(0.0) / k;
@@ -2314,9 +2394,13 @@ fn rewrite_block_from(
         block_ops.push(Op::new("Q", vec![]));
     }
     block_ops.push(Op::new("Q", vec![]));
+    if style.width.is_some() || style.align.is_some() {
+        remember_paragraph_layout(&mut block_ops, width, b.rect[0] + dx, align.unwrap_or_default());
+    }
     // The paragraph's operators go, and so does another drawing on the same baseline (a fake-bold
     // second copy, an invisible text layer): the new text is all that may show.
     let mut drop = coincident_ops(&lines, &members);
+    drop_paragraph_layout(&ops, first.scope, &mut drop);
     drop.extend(members.iter().flat_map(|l| l.ops.iter().copied()));
     // Text shown earlier in the same text object stays first: the paragraph then goes where it
     // was, between two halves of the text object, so it keeps its place in reading order.

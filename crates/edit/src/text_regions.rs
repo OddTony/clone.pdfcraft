@@ -248,6 +248,7 @@ pub(super) fn rewrite_styled_block(
     lines: &[TextLine],
     text: Option<&str>,
     style: &BlockStyle,
+    layout: Option<(f64, f64, crate::added::Align)>,
 ) -> Result<LineEdit, EditError> {
     let first = block.lines.first().and_then(|i| lines.get(*i)).ok_or_else(|| EditError::Invalid("the paragraph has no source runs".into()))?;
     let draft = match text {
@@ -276,6 +277,13 @@ pub(super) fn rewrite_styled_block(
     }
     let source_count = lines.len();
     let mut styled_lines = lines.to_vec();
+    let rejustify = style.align == Some(crate::added::Align::Justify) || layout.is_some_and(|(_, _, align)| align == crate::added::Align::Justify);
+    if rejustify {
+        // Justification belongs to the old layout, not the font's character advances.
+        for line in &mut styled_lines {
+            line.origin.state.word_spacing = 0.0;
+        }
+    }
     let mut styled_spans = Vec::new();
     let mut underlines = HashMap::new();
     let mut overrides = HashMap::new();
@@ -506,7 +514,8 @@ pub(super) fn rewrite_styled_block(
             ) * source.origin.state.scale
                 * across(source);
             let changed_face = style.resource.is_some() || overrides.get(&index).is_some_and(|r| r.family.is_some() || r.resource.is_some());
-            let factor = if nominal > 0.0 && !changed_face { ((source.rect[2] - source.rect[0]) / nominal).clamp(0.5, 2.0) } else { 1.0 };
+            let factor =
+                if nominal > 0.0 && !changed_face && !rejustify { ((source.rect[2] - source.rect[0]) / nominal).clamp(0.5, 2.0) } else { 1.0 };
             calibration.insert(index, factor);
         }
     }
@@ -707,6 +716,12 @@ pub(super) fn rewrite_styled_block(
         }
         let w = measured.get(row_index).copied().unwrap_or(0.0);
         let align = style.align.unwrap_or(if centered { crate::added::Align::Center } else { crate::added::Align::Left });
+        let spaces = row.iter().filter(|item| item.0 == ' ').count();
+        let justify_extra = if align == crate::added::Align::Justify && row_index + 1 < rows.len() && spaces > 0 {
+            (width - w).max(0.0) / spaces as f64
+        } else {
+            0.0
+        };
         let original_rect = block.rows.get(row_index).and_then(|row| row_rect(row, lines)).unwrap_or(block.rect);
         let left = if style.width.is_none() && style.align.is_none() { original_rect[0] } else { block.rect[0] };
         let available = if style.width.is_none() && style.align.is_none() { original_rect[2] - original_rect[0] } else { width };
@@ -769,7 +784,9 @@ pub(super) fn rewrite_styled_block(
                     block_ops.push(Op::new("Tm", matrix.map(n).to_vec()));
                     block_ops.push(Op::new("Tj", vec![Object::String(PdfString::literal(code.to_be_bytes().to_vec()))]));
                     block_ops.push(Op::new("ET", vec![]));
-                    extra += state.char_spacing * glyph.text.chars().count() as f64 + state.word_spacing * glyph.text.matches(' ').count() as f64;
+                    extra += state.char_spacing * glyph.text.chars().count() as f64
+                        + (state.word_spacing + justify_extra / across(source).max(1e-6) / state.scale.max(1e-6))
+                            * glyph.text.matches(' ').count() as f64;
                 }
                 block_ops.push(Op::new("EMC", vec![]));
                 segment_width = (shaped.advance * size + extra) * state.scale * source.origin.k;
@@ -777,14 +794,37 @@ pub(super) fn rewrite_styled_block(
                 block_ops.push(Op::new("BT", vec![]));
                 block_ops.extend(state.ops());
                 block_ops.push(Op::new("Tm", tm.iter().map(|v| n(*v)).collect()));
-                block_ops.extend(source_show(
-                    m,
-                    &string,
-                    size_of(source, item.1),
-                    source_space(doc, &fonts, m),
-                    state.char_spacing,
-                    state.word_spacing,
-                )?);
+                if justify_extra > 0.0 {
+                    // One TJ keeps the complete visual row together when the expanded word
+                    // gaps are too wide for geometry-based word grouping.
+                    let mut shown = Vec::new();
+                    for piece in string.split_inclusive(' ') {
+                        for op in
+                            source_show(m, piece, size_of(source, item.1), source_space(doc, &fonts, m), state.char_spacing, state.word_spacing)?
+                        {
+                            if op.is("Tj") {
+                                shown.extend(op.operands);
+                            } else if let Some(Object::Array(items)) = op.operands.first() {
+                                shown.extend(items.iter().cloned());
+                            }
+                        }
+                        if piece.ends_with(' ') {
+                            let shift = -1000.0 * justify_extra / size_of(source, item.1) / across(source).max(1e-6) / state.scale.max(1e-6);
+                            shown.push(n(shift));
+                        }
+                    }
+                    block_ops.push(Op::new("TJ", vec![Object::Array(shown)]));
+                } else {
+                    block_ops.extend(source_show(
+                        m,
+                        &string,
+                        size_of(source, item.1),
+                        source_space(doc, &fonts, m),
+                        state.char_spacing,
+                        state.word_spacing,
+                    )?);
+                }
+                segment_width += justify_extra * string.matches(' ').count() as f64;
                 block_ops.push(Op::new("ET", vec![]));
             }
             if underlines.get(&item.1).copied().or(style.underline) == Some(true) {
@@ -808,7 +848,11 @@ pub(super) fn rewrite_styled_block(
         };
     }
     block_ops.push(Op::new("Q", vec![]));
+    if style.width.is_some() || style.align.is_some() {
+        remember_paragraph_layout(&mut block_ops, width, block.rect[0] + dx, style.align.unwrap_or_default());
+    }
     let mut drop = coincident_ops(lines, &members);
+    drop_paragraph_layout(&ops, first.scope, &mut drop);
     drop.extend(members.iter().flat_map(|l| l.ops.iter().copied()));
     let o = &lead.origin;
     let start = lead.ops.first().copied().unwrap_or(o.bt_op);
