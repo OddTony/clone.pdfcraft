@@ -80,7 +80,9 @@ impl TextLine {
 pub struct TextEditorFont {
     pub resource: String,
     pub face: String,
-    pub bytes: Vec<u8>,
+    pub bytes: std::sync::Arc<Vec<u8>>,
+    /// Face within a collection, used only by the on-screen editor.
+    pub index: u32,
 }
 
 pub fn text_editor_fonts(doc: &Document, page: usize) -> Result<Vec<TextEditorFont>, EditError> {
@@ -99,7 +101,8 @@ pub fn text_editor_fonts(doc: &Document, page: usize) -> Result<Vec<TextEditorFo
         result.push(TextEditorFont {
             resource: String::from_utf8_lossy(name).into_owned(),
             face: Metrics::from_dict(doc, &font).base_font.rsplit('+').next().unwrap_or_default().to_owned(),
-            bytes,
+            bytes: std::sync::Arc::new(bytes),
+            index: 0,
         });
     }
     // The approved full face follows all source subsets in the editor's font stack. It can
@@ -111,7 +114,12 @@ pub fn text_editor_fonts(doc: &Document, page: usize) -> Result<Vec<TextEditorFo
                 continue;
             }
             budget -= full.bytes.len();
-            result.push(TextEditorFont { resource: format!("PCApproved{}", full.name()), face: face.clone(), bytes: full.bytes.to_vec() });
+            result.push(TextEditorFont {
+                resource: format!("PCApproved{}", full.name()),
+                face: face.clone(),
+                bytes: std::sync::Arc::new(full.bytes.to_vec()),
+                index: 0,
+            });
         }
     }
     Ok(result)

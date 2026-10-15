@@ -318,6 +318,45 @@ fn added_arabic_text_keeps_copy_search_and_editor_order_after_retyping_and_reope
 }
 
 #[test]
+fn gbk_text_edit_save_reopen_through_tools() {
+    use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream, write_full};
+    use std::sync::Arc;
+
+    let dir = workdir("gbk-text-edit");
+    let mut doc = Document::open(Arc::new(fixture(1))).unwrap();
+    let mut descendant = Dict::new();
+    descendant.set(b"Subtype".to_vec(), Object::name("CIDFontType2"));
+    let mut collection = Dict::new();
+    collection.set(b"Registry".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"Adobe".to_vec())));
+    collection.set(b"Ordering".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"GB1".to_vec())));
+    collection.set(b"Supplement".to_vec(), Object::Int(2));
+    descendant.set(b"CIDSystemInfo".to_vec(), Object::Dict(collection));
+    doc.update_dict(ObjRef::new(3, 0), |font| {
+        font.set(b"Subtype".to_vec(), Object::name("Type0"));
+        font.set(b"BaseFont".to_vec(), Object::name("SimSun"));
+        font.set(b"Encoding".to_vec(), Object::name("GBK-EUC-H"));
+        font.set(b"DescendantFonts".to_vec(), Object::Array(vec![Object::Dict(descendant)]));
+    })
+    .unwrap();
+    doc.set(ObjRef::new(5, 0), Object::Stream(Stream::from_raw(Dict::new(), b"BT /F1 12 Tf 20 150 Td <D6D0CEC4> Tj ET".to_vec())));
+    std::fs::write(dir.join("gbk.pdf"), write_full(&doc, &Default::default()).unwrap()).unwrap();
+
+    let mut a = auto(&dir);
+    let id = ok(&mut a, "doc_open", json!({"path":"gbk.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "text_paragraphs", json!({"doc":id,"page":1}))["paragraphs"][0]["editor_text"], "中文");
+    ok(&mut a, "text_edit", json!({"doc":id,"page":1,"paragraph":1,"text":"中文测试","width":120}));
+    let lines = ok(&mut a, "text_lines", json!({"doc":id,"page":1}));
+    assert_eq!(lines["lines"][0]["text"], "中文测试");
+    assert_eq!(lines["lines"][0]["font"], "SimSun");
+    ok(&mut a, "doc_save", json!({"doc":id,"path":"edited.pdf"}));
+    let bytes = std::fs::read(dir.join("edited.pdf")).unwrap();
+    assert!(bytes.len() < 16_000, "installed preview fonts must not be embedded");
+    let reopened = ok(&mut a, "doc_open", json!({"path":"edited.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "text_lines", json!({"doc":reopened,"page":1})), lines);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn arabic_actual_text_stays_logical_through_editor_tools_and_save_reopen() {
     use pdfcraft_cos::{Dict, Document, ObjRef, Object, SaveOptions, Stream, write_full};
     use std::sync::Arc;

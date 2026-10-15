@@ -6,6 +6,10 @@ use pdfcraft_render::{PageRenderer, RenderConfig, RenderPool, RenderRequest, Ren
 
 use crate::{Document, guard};
 
+#[derive(Clone, Default)]
+pub(crate) struct EditorFontsCache(Arc<std::sync::Mutex<Option<CachedFonts>>>);
+type CachedFonts = (pdfcraft_cos::SourceIdentity, usize, bool, Vec<pdfcraft_edit::text::TextEditorFont>);
+
 pub struct TextEditPreview {
     page: usize,
     bytes: Arc<Vec<u8>>,
@@ -47,10 +51,43 @@ impl Document {
         })?
     }
 
-    /// Embedded source faces for a text editor, bounded and validated as sfnt programs.
-    /// This is read-only; no source font is installed or exported.
+    /// Source faces and installed reading substitutes for an on-screen editor. Neither this
+    /// query nor its preview fonts changes the document or supplies an embedding input.
     pub fn text_editor_fonts(&self, page: usize) -> Vec<pdfcraft_edit::text::TextEditorFont> {
-        self.editor.as_ref().and_then(|e| pdfcraft_edit::text::text_editor_fonts(&e.cos, page).ok()).unwrap_or_default()
+        let Some(editor) = self.editor.as_ref() else { return Vec::new() };
+        let enabled = std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_none_or(|v| v != "0");
+        let source = (!editor.cos.is_modified()).then(|| editor.cos.source_identity());
+        if let Some(source) = &source
+            && let Ok(cache) = editor.editor_fonts.0.lock()
+            && let Some((identity, p, system, fonts)) = cache.as_ref()
+            && source == identity
+            && *p == page
+            && *system == enabled
+        {
+            return fonts.clone();
+        }
+        let mut fonts = self.editor.as_ref().and_then(|e| pdfcraft_edit::text::text_editor_fonts(&e.cos, page).ok()).unwrap_or_default();
+        // SimSun, KaiTi and SimHei together exceed 32 MiB. Bound the complete page catalogue,
+        // and cache it so the Format panel does not copy font programs on every frame.
+        let mut remaining = (64usize << 20).saturating_sub(fonts.iter().map(|f| f.bytes.len()).sum::<usize>());
+        let mut seen: std::collections::HashSet<_> = fonts.iter().map(|f| f.resource.clone()).collect();
+        for line in self.text_lines(page).into_iter().take(4096) {
+            if remaining == 0 || !seen.insert(line.font.clone()) {
+                continue;
+            }
+            if let Some((bytes, index)) = pdfcraft_render::installed_editor_preview(&line.base_font)
+                && bytes.len() <= remaining
+            {
+                remaining -= bytes.len();
+                fonts.push(pdfcraft_edit::text::TextEditorFont { resource: line.font, face: line.base_font, bytes: Arc::new(bytes), index });
+            }
+        }
+        if let Some(source) = source
+            && let Ok(mut cache) = editor.editor_fonts.0.lock()
+        {
+            *cache = Some((source, page, enabled, fonts.clone()));
+        }
+        fonts
     }
 
     /// Preparing the background never changes working bytes, dirty state or undo history.
