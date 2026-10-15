@@ -340,6 +340,26 @@ theme	Appearance	Giao diện
 	Check again	Kiểm tra lại
 	Check box is checked by default	Hộp kiểm được chọn theo mặc định
 	Check for updates	Kiểm tra bản cập nhật
+	Installed version: {v}	Phiên bản đã cài đặt: {v}
+	The release is not a published stable update. Try again later.	Bản phát hành này chưa phải là bản cập nhật ổn định đã được công bố. Hãy thử lại sau.
+	Available version: {v}	Phiên bản có sẵn: {v}
+	Package: {name}	Gói: {name}
+	Download size: {size}	Kích thước tải xuống: {size}
+	Installation type is unknown or this is a development build. Choose a package on the official release page.	Không xác định được loại cài đặt hoặc đây là bản dựng phát triển. Hãy chọn một gói trên trang phát hành chính thức.
+	No compatible package is available for this installation.	Không có gói tương thích cho bản cài đặt này.
+	The release has ambiguous packages. Choose a package on the official release page.	Bản phát hành có nhiều gói có thể phù hợp. Hãy chọn một gói trên trang phát hành chính thức.
+	Release notes	Ghi chú phát hành
+	No release notes were provided.	Không có ghi chú phát hành.
+	Downloads open in your browser. Installation is manual; nothing is installed automatically.	Tệp tải xuống sẽ mở trong trình duyệt. Bạn cần tự cài đặt; ứng dụng sẽ không tự động cài đặt.
+	Download package…	Tải gói xuống…
+	View release page…	Xem trang phát hành…
+	Remind Me Later	Nhắc tôi sau
+	Retry	Thử lại
+	{mib} MiB ({bytes} bytes)	{mib} MiB ({bytes} byte)
+	Flatpak manages this installation. Check for updates in your system software manager or with flatpak update.	Flatpak quản lý bản cài đặt này. Hãy kiểm tra cập nhật trong trình quản lý phần mềm hệ thống hoặc chạy flatpak update.
+	This installation is owned by a Debian package. Use your system software manager to update PdfCraft.	Bản cài đặt này do gói Debian quản lý. Hãy dùng trình quản lý phần mềm hệ thống để cập nhật PdfCraft.
+	This installation is owned by an RPM package. Use your system software manager to update PdfCraft.	Bản cài đặt này do gói RPM quản lý. Hãy dùng trình quản lý phần mềm hệ thống để cập nhật PdfCraft.
+	Use your system software manager to update PdfCraft.	Hãy dùng trình quản lý phần mềm hệ thống để cập nhật PdfCraft.
 	Check spelling	Kiểm tra chính tả
 	Check the pages	Kiểm tra các trang
 	Check the pages of {name}: {why}	Kiểm tra các trang của {name}: {why}
