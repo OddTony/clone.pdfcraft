@@ -1253,6 +1253,7 @@
 	Copy text	Metni kopyala
 	Properties…	Özellikler…
 	Make Current Properties Default	Geçerli Özellikleri Varsayılan Yap
+	Make Properties Default	Özellikleri Varsayılan Yap
 	More options	Diğer seçenekler
 	Sort by	Sırala
 	Author	Yazar
@@ -2183,6 +2184,7 @@ key	Space	Boşluk
 
 # Printing and multi-object selection
 	Looking for printers…	Yazıcılar aranıyor…
+	Sending sheet {s} of {n} to {printer}…	{n} yapraktan {s}. yaprak {printer} yazıcısına gönderiliyor…
 	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Yazıcı bulunamadı. Yazıcının yüklü olduğunu ve yazdırma biriktiricisinin çalıştığını denetleyip Yazdır'ı yeniden açın.
 	Sending to {printer}…	{printer} yazıcısına gönderiliyor…
 	Column select	Sütun seçimi

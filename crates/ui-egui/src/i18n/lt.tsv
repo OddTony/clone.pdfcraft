@@ -710,6 +710,7 @@
 	Low resolution	Maža raiška
 	Magnification	Didinimas
 	Make Current Properties Default	Dabartines savybes nustatyti kaip numatytąsias
+	Make Properties Default	Savybes nustatyti kaip numatytąsias
 	Margins	Paraštės
 	Mark Page Range	Pažymėti puslapių intervalą
 	Mark as comments	Pažymėti kaip komentarus
@@ -1047,6 +1048,7 @@
 	Selected pages	Pasirinkti puslapiai
 	Selection	Pasirinkimas
 	Sending to {printer}…	Siunčiama į {printer}…
+	Sending sheet {s} of {n} to {printer}…	Siunčiamas lapas {s} iš {n} į {printer}…
 	Sensitivity	Jautrumas
 	Sent to {printer}	Išsiųsta į {printer}
 	Sent to {printer}: {msg}	Išsiųsta į {printer}: {msg}
