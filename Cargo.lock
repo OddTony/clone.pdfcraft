@@ -4022,6 +4022,7 @@ dependencies = [
  "pdfcraft-engine",
  "pdfcraft-platform",
  "pdfcraft-render",
+ "proptest",
  "rustix 1.1.5",
  "serde_json",
  "winresource",

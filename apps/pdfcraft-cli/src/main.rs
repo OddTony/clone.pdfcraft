@@ -20,6 +20,8 @@
 #[cfg(feature = "mcp")]
 mod automation_args;
 mod batch;
+#[cfg(unix)]
+mod view;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -58,6 +60,12 @@ const USAGE: &str = concat!(
     "\
 pdfcraft-cli info   <file.pdf> [--password PW]            document summary as JSON
 pdfcraft-cli render <file.pdf> --page N [--dpi 96] --out x.png   (.png, .jpg, .tif or .pam)
+pdfcraft-cli view   <file.pdf> [--pages 1,3-5] [--fit page|width] [--pager | --no-pager]
+                      [--compression auto|fast|small] [--protocol auto|kitty] [--password PW]
+                                                           show pages in this terminal: kitty, Ghostty, WezTerm
+                                                           (kitty graphics protocol, tmux too; macOS, Linux and FreeBSD);
+                                                           more than a page opens a pager, two pages side by side when
+                                                           the window is wide enough
 pdfcraft-cli text   <file.pdf> [--page N]                  extracted text (pages separated by form feeds)
 pdfcraft-cli edit   <in.pdf> --out out.pdf [--rotate 1,3:90] [--delete 2,4] [--move 5:1]
                       [--insert-blank 1] [--title T] [--author A] [--full]
@@ -94,6 +102,10 @@ fn main() -> ExitCode {
         None => Err(format!("usage:\n{USAGE}").into()),
         Some("info") => info(&args[1..]),
         Some("render") => render(&args[1..]),
+        #[cfg(unix)]
+        Some("view") => view::run(&args[1..]),
+        #[cfg(not(unix))]
+        Some("view") => Err("view: needs a Unix terminal (macOS, Linux or FreeBSD); `render --out page.png` writes an image file".into()),
         Some("text") => text(&args[1..]),
         Some("edit") => edit(&args[1..]),
         Some("combine") => combine(&args[1..]),
@@ -392,7 +404,8 @@ fn text(args: &[String]) -> Result<(), CliError> {
     }
 }
 
-/// The most pages one `A-B` range may name: a bound on what a typed range can allocate.
+/// The most pages one `A-B` range, or a whole list, may name: a bound on what a typed list can
+/// allocate (repeating a range must not multiply it).
 const MAX_RANGE: usize = 1_000_000;
 
 /// 1-based pages ("1,3,5-8": single pages and inclusive ranges, in the order given) → 0-based
@@ -410,8 +423,12 @@ fn page_list(s: &str) -> Result<Vec<usize>, String> {
                 if to - from >= MAX_RANGE {
                     return Err(format!("bad page range {item:?}: more than {MAX_RANGE} pages"));
                 }
+                if out.len().saturating_add(to - from + 1) > MAX_RANGE {
+                    return Err(format!("bad page list: more than {MAX_RANGE} pages in all"));
+                }
                 out.extend(from - 1..to);
             }
+            None if out.len() >= MAX_RANGE => return Err(format!("bad page list: more than {MAX_RANGE} pages in all")),
             None => out.push(number(item, item)? - 1),
         }
     }
@@ -570,13 +587,19 @@ fn split(args: &[String]) -> Result<(), CliError> {
     Ok(())
 }
 
+/// `render` always writes a file; where `view` exists, the error points to it for the terminal.
+#[cfg(unix)]
+const RENDER_MISSING_OUT: &str = "render: missing --out (.png, .jpg, .tif or .pam); to show the page in this terminal, use `pdfcraft-cli view`";
+#[cfg(not(unix))]
+const RENDER_MISSING_OUT: &str = "render: missing --out (.png, .jpg, .tif or .pam)";
+
 fn render(args: &[String]) -> Result<(), CliError> {
     validate_options("render", args, RENDER_OPTIONS)?;
     let path = *positional(args).first().ok_or("render: missing file")?;
     let page: usize = flag(args, "--page").unwrap_or("1").parse().map_err(|_| "bad --page")?;
     let page_index = page.checked_sub(1).ok_or("--page must be at least 1")?;
     let dpi: f32 = flag(args, "--dpi").unwrap_or("96").parse().map_err(|_| "bad --dpi")?;
-    let out = flag(args, "--out").ok_or("render: missing --out (.png, .jpg, .tif or .pam)")?;
+    let out = flag(args, "--out").ok_or(RENDER_MISSING_OUT)?;
     // The file is what its name says (#248): a `.png` used to get a netpbm PAM stream.
     let format = match Path::new(out).extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
         Some("png") => Some(ImageFormat::Png),
@@ -1063,7 +1086,17 @@ fn current_uid() -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use super::control_file_problem;
+    use super::{MAX_RANGE, control_file_problem, page_list};
+
+    #[test]
+    fn a_page_list_is_bounded_in_all_not_just_per_range() {
+        assert_eq!(page_list("1,3-5"), Ok(vec![0, 2, 3, 4]));
+        let full = format!("1-{MAX_RANGE}");
+        assert_eq!(page_list(&full).map(|pages| pages.len()), Ok(MAX_RANGE));
+        // Repeating a range that is allowed on its own would multiply what it allocates.
+        assert!(page_list(&format!("{full},{full}")).is_err_and(|e| e.contains("in all")), "two full ranges");
+        assert!(page_list(&format!("{full},7")).is_err_and(|e| e.contains("in all")), "a full range and a page");
+    }
 
     #[test]
     fn a_control_file_must_be_yours_and_private() {

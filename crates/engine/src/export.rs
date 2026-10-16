@@ -138,7 +138,22 @@ pub fn encode_image(width: u32, height: u32, premultiplied: &[u8], format: Image
 
 /// Premultiplied RGBA → PNG (straight alpha).
 pub fn encode_png(width: u32, height: u32, premultiplied: &[u8]) -> Result<Vec<u8>, String> {
-    let mut rgba = premultiplied.to_vec();
+    encode_png_with(width, height, premultiplied, PngEffort::Small)
+}
+
+/// How hard PNG encoding works at making the file small. The pixels come out the same either way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PngEffort {
+    /// The png crate's default: the smaller file (what [`encode_png`] writes).
+    #[default]
+    Small,
+    /// Several times faster, about twice the bytes on a text page: for images shown at once,
+    /// where encoding time is felt and the bytes go no further than the screen.
+    Fast,
+}
+
+/// Premultiplied RGBA → straight RGBA, in place. A trailing partial pixel is left as it is.
+pub fn unpremultiply(rgba: &mut [u8]) {
     for px in rgba.as_chunks_mut::<4>().0 {
         let a = u32::from(px[3]);
         if a != 0 && a != 255 {
@@ -147,10 +162,19 @@ pub fn encode_png(width: u32, height: u32, premultiplied: &[u8]) -> Result<Vec<u
             }
         }
     }
+}
+
+/// Premultiplied RGBA → PNG (straight alpha), compressed with `effort`.
+pub fn encode_png_with(width: u32, height: u32, premultiplied: &[u8], effort: PngEffort) -> Result<Vec<u8>, String> {
+    let mut rgba = premultiplied.to_vec();
+    unpremultiply(&mut rgba);
     let mut out = Vec::new();
     let mut enc = png::Encoder::new(&mut out, width, height);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
+    if effort == PngEffort::Fast {
+        enc.set_compression(png::Compression::Fast);
+    }
     let mut w = enc.write_header().map_err(|e| e.to_string())?;
     w.write_image_data(&rgba).map_err(|e| e.to_string())?;
     w.finish().map_err(|e| e.to_string())?;
@@ -242,5 +266,48 @@ mod image_name_tests {
         assert_eq!(image_file_name("doc", &image(6), 3, 120), "doc_Page_007_Image_0003.png");
         assert_eq!(image_file_name("doc", &image(119), 4, 120), "doc_Page_120_Image_0004.png");
         assert_eq!(image_file_name("doc", &image(0), 1, 0), "doc_Page_1_Image_0001.png");
+    }
+}
+
+#[cfg(test)]
+mod png_tests {
+    use super::{PngEffort, encode_png, encode_png_with};
+
+    fn decode(png: &[u8]) -> (u32, u32, Vec<u8>) {
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png)).read_info().unwrap();
+        let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut pixels).unwrap();
+        pixels.truncate(info.buffer_size());
+        (info.width, info.height, pixels)
+    }
+
+    #[test]
+    fn fast_png_holds_the_same_pixels_as_small() {
+        // A page-like raster: white, with rows of dark "text", one half-transparent pixel.
+        let (w, h) = (64u32, 48u32);
+        let mut rgba = vec![255u8; (w * h * 4) as usize];
+        for y in (4..h).step_by(6) {
+            for x in 4..w - 4 {
+                let i = ((y * w + x) * 4) as usize;
+                rgba[i..i + 3].copy_from_slice(&[20, 20, 30]);
+            }
+        }
+        rgba[..4].copy_from_slice(&[64, 0, 0, 128]);
+        let small = encode_png(w, h, &rgba).unwrap();
+        assert_eq!(small, encode_png_with(w, h, &rgba, PngEffort::Small).unwrap());
+        let fast = encode_png_with(w, h, &rgba, PngEffort::Fast).unwrap();
+        assert_ne!(fast, small, "a different compression");
+        assert_eq!(decode(&fast), decode(&small));
+        // Straight alpha out: the premultiplied (64, 0, 0, 128) is (128, 0, 0, 128).
+        assert_eq!(decode(&fast).2[..4], [128, 0, 0, 128]);
+    }
+
+    #[test]
+    fn unpremultiply_leaves_opaque_clear_and_partial_pixels() {
+        let mut px = vec![64, 0, 200, 128, 10, 20, 30, 255, 0, 0, 0, 0, 255, 128, 0, 1, 9, 9];
+        super::unpremultiply(&mut px);
+        // Half-covered red doubles; opaque and clear stay; a channel past the alpha clamps; the
+        // two bytes after the last whole pixel are left alone.
+        assert_eq!(px, [128, 0, 255, 128, 10, 20, 30, 255, 0, 0, 0, 0, 255, 255, 0, 1, 9, 9]);
     }
 }
