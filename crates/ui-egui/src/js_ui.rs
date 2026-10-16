@@ -395,10 +395,13 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
             widgets::radio_value(ui, &mut app.animation_effects, choice, tl_ctx!("animation effects", choice.label()));
         }
     });
-    // Only where the app draws the title bar (GNOME on Wayland); elsewhere the desktop draws it.
+    // Only where the app draws the title bar (GNOME on Wayland, Windows); elsewhere the desktop draws it.
     if app.window_controls.is_some() {
-        ui.add(widgets::checkbox(&mut app.system_title_bar, tl!("Use system title bar")))
-            .on_hover_text(tl!("Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme."));
+        let checkbox = ui.add(widgets::checkbox(&mut app.system_title_bar, tl!("Use system title bar")));
+        // The tip is about GNOME; on Windows the label says it all (Windows' own title bar returns).
+        if !cfg!(target_os = "windows") {
+            checkbox.on_hover_text(tl!("Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme."));
+        }
     }
     ui.add_space(8.0);
     // Reading colours (Acrobat: Replace Document Colors): solid text and line-art paints are

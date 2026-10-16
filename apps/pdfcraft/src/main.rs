@@ -211,8 +211,18 @@ fn main() -> eframe::Result {
     }
     let files = rejoin_split_paths(files, |p| std::path::Path::new(p).is_file());
     let integrated = cfg!(target_os = "macos");
-    // GNOME on Wayland leaves the window frame to the app (src/decorations.rs).
-    let window_controls = if cfg!(any(target_os = "macos", target_os = "windows")) { None } else { decorations::app_drawn() };
+    // GNOME on Wayland leaves the window frame to the app (src/decorations.rs). On Windows the app
+    // draws it too, so the tab strip is the only bar across the top: Windows' caption buttons sit
+    // at its end (Preferences ▸ Use system title bar brings Windows' title bar back, and
+    // `PDFCRAFT_TITLEBAR=system` starts with it).
+    let window_controls = if cfg!(target_os = "macos") {
+        None
+    } else if cfg!(target_os = "windows") {
+        let system = std::env::var("PDFCRAFT_TITLEBAR").is_ok_and(|v| v.trim() == "system");
+        (!system).then(pdfcraft_ui_egui::window_controls::Layout::default)
+    } else {
+        decorations::app_drawn()
+    };
     migrate_legacy_folders();
     // The log file stays in the data folder; opened after the arguments (so `--version` leaves
     // no file behind) and after the PrintCraft migration (which a fresh folder would block).

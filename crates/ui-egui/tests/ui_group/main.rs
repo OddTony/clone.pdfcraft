@@ -8,6 +8,7 @@ mod support;
 
 mod animate;
 mod bulk_fields;
+mod chrome;
 mod column_select;
 mod identity;
 mod layer_actions;

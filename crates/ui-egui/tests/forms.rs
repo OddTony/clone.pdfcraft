@@ -825,6 +825,8 @@ fn overlay_clears_after_fresh_tiles_zoom_then_edit_and_rejected_edit() {
 
     // 3. Zoom then edit: zoom to another scale, let tiles settle, then edit.
     h.state_mut().views[0].zoom_step(true);
+    // Zooming keeps the middle of the view still; the fields are near the page's top, so bring it back.
+    h.state_mut().views[0].goto = Some((0, 0.0));
     for _ in 0..60 {
         h.run_steps(2);
         if !h.state().render_pending() {

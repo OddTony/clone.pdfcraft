@@ -2192,7 +2192,18 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
 /// keep this much of the previous screen in view.
 const KEY_SCROLL_LINE: f32 = 40.0;
 
+/// The document at `index`, with the right bars in a column at its right edge. Full screen is the
+/// page alone, and a comparison's two halves share the one column the frame gives them.
 pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
+    let comparing = app.active.is_some_and(|i| crate::compare_ui::side_by_side(app, i).is_some());
+    if app.full_screen || comparing {
+        document_page(app, index, ui);
+    } else {
+        crate::chrome::with_right_bar(app, ui, |app, ui| document_page(app, index, ui));
+    }
+}
+
+fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     // Keyboard scrolling applies to this frame's page view only, never later.
     let key_scroll = std::mem::take(&mut app.views[index].key_scroll);
@@ -4270,126 +4281,64 @@ fn notice_bar(ui: &mut egui::Ui, t: &Tokens, icon: &str, icon_color: Color32, te
     });
 }
 
-/// The floating quick-action bar at the left edge of the document area.
+/// The workspaces, in the order the left bar lists them, with their icons.
+const MODES: [(crate::Mode, &str, &str); 5] = [
+    (crate::Mode::AllTools, "layout-grid", "All tools"),
+    (crate::Mode::Read, "book-open", "Read"),
+    (crate::Mode::Edit, "pencil", "Edit"),
+    (crate::Mode::Convert, "file-output", "Convert"),
+    (crate::Mode::Sign, "signature", "E-Sign"),
+];
+
+/// The floating bar at the left edge of the document area: the workspaces, then the quick tools.
+/// It fades after a few seconds without use, and comes back on hover.
 fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let pos = area.left_top() + vec2(14.0, 14.0);
-    egui::Area::new(egui::Id::new("quick-bar")).order(egui::Order::Middle).fixed_pos(pos).show(ui.ctx(), |ui| {
-        egui::Frame::NONE
-            .fill(t.card)
-            .stroke(Stroke::new(1.0, t.border))
-            .corner_radius(CornerRadius::same(12))
-            .shadow(egui::Shadow { offset: [0, 4], blur: 16, spread: 0, color: Color32::from_black_alpha(if t.dark() { 100 } else { 28 }) })
-            .inner_margin(egui::Margin::same(6))
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
-                ui.vertical(|ui| {
-                    if icons::button(ui, "mouse-pointer-2", 32.0, app.quick_tool == QuickTool::Select, tl!("Select (V)")).clicked() {
-                        app.quick_tool = QuickTool::Select;
+    let id = egui::Id::new("quick-bar");
+    let opacity = crate::widgets::idle_opacity(ui.ctx(), id, false);
+    let shown = egui::Area::new(id).order(egui::Order::Middle).fixed_pos(pos).show(ui.ctx(), |ui| {
+        ui.multiply_opacity(opacity);
+        crate::widgets::floating_frame(&t).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.vertical(|ui| {
+                for (mode, icon, label) in MODES {
+                    if icons::button(ui, icon, 32.0, app.mode == mode, tl!(label)).clicked() {
+                        crate::chrome::defer_mode(ui.ctx(), mode);
                     }
-                    if icons::button(ui, "hand", 32.0, app.quick_tool == QuickTool::Hand, tl!("Hand (H)")).clicked() {
-                        app.quick_tool = QuickTool::Hand;
-                    }
-                    // Comment ▸, Highlight ▸, Draw ▸ (Acrobat's comment toolbar groups). Clicking a
-                    // group selects its last-used tool; clicking it again opens the flyout.
-                    for g in 0..comments::GROUPS.len() {
-                        let current = app.comment_prefs.group_tool[g];
-                        let active = matches!(app.quick_tool, QuickTool::Comment(t) if t.group() == g);
-                        let resp = icons::button(ui, current.icon(), 32.0, active, tl!(current.label()));
-                        // A small corner triangle marks the flyout.
-                        let r = resp.rect;
-                        let tri = [r.right_bottom() + vec2(-4.0, -4.0), r.right_bottom() + vec2(-9.0, -4.0), r.right_bottom() + vec2(-4.0, -9.0)];
-                        ui.painter().add(egui::Shape::convex_polygon(tri.to_vec(), if active { t.accent } else { t.text_faint }, Stroke::NONE));
-                        let open = (resp.clicked() && active) || resp.secondary_clicked();
-                        if resp.clicked() && !active {
-                            app.execute(current.command());
-                        }
-                        egui::Popup::menu(&resp)
-                            .open_memory(open.then_some(egui::SetOpenCommand::Toggle))
-                            .align(egui::RectAlign::RIGHT_START)
-                            .gap(6.0)
-                            .show(|ui| {
-                                for tool in comments::GROUPS[g] {
-                                    let on = app.quick_tool == QuickTool::Comment(*tool);
-                                    let (row, click) = ui.allocate_exact_size(vec2(180.0, 28.0), Sense::click());
-                                    let press = theme::Press::track(ui, &click);
-                                    press.wash(ui, row, 4, on);
-                                    let body = row.translate(press.offset());
-                                    icons::paint(ui, Rect::from_min_size(body.min + vec2(8.0, 6.0), vec2(16.0, 16.0)), tool.icon(), 16.0, t.text);
-                                    let reserve = if on { 28.0 } else { 8.0 };
-                                    crate::widgets::paint_left(
-                                        ui,
-                                        body.left_center() + vec2(34.0, 0.0),
-                                        tl!(tool.label()),
-                                        theme::regular(13.0),
-                                        t.text,
-                                        (row.width() - 34.0 - reserve).max(0.0),
-                                    );
-                                    if on {
-                                        icons::paint(
-                                            ui,
-                                            Rect::from_min_size(body.right_top() + vec2(-24.0, 7.0), vec2(14.0, 14.0)),
-                                            "check",
-                                            14.0,
-                                            t.accent,
-                                        );
-                                    }
-                                    let click = theme::hand(click);
-                                    let info = tl!(tool.label()).to_string();
-                                    click.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, info.clone()));
-                                    if click.clicked() {
-                                        app.execute(tool.command());
-                                        ui.close();
-                                    }
-                                }
-                            });
-                    }
-                    // Edit text & images, while the Edit workspace is open (Acrobat's Edit toolbar)
-                    // or the tool is in use.
-                    if app.mode == crate::Mode::Edit || app.quick_tool == QuickTool::EditText {
-                        let on = app.quick_tool == QuickTool::EditText;
-                        if icons::button(ui, "text-cursor-input", 32.0, on, tl!("Edit text & images")).clicked() {
-                            if on {
-                                app.put_down_edit_text();
-                            } else {
-                                app.quick_tool = QuickTool::EditText;
-                            }
-                        }
-                    }
-                    // Fill & Sign ▸ (text, marks, date, signature).
-                    let current_fill = match app.quick_tool {
-                        QuickTool::Fill(f) => Some(f),
-                        _ => None,
-                    };
-                    let shown = current_fill.unwrap_or(crate::fill_sign::FillTool::Text);
-                    let resp = icons::button(
-                        ui,
-                        if current_fill.is_some() { shown.icon() } else { "pen-line" },
-                        32.0,
-                        current_fill.is_some(),
-                        tl!("Fill & Sign"),
-                    );
+                }
+                ui.add_space(3.0);
+                let x = ui.max_rect().x_range();
+                let y = ui.cursor().top();
+                ui.painter().hline(x.shrink(4.0), y, Stroke::new(1.0, t.divider));
+                ui.add_space(5.0);
+                if icons::button(ui, "mouse-pointer-2", 32.0, app.quick_tool == QuickTool::Select, tl!("Select (V)")).clicked() {
+                    app.quick_tool = QuickTool::Select;
+                }
+                if icons::button(ui, "hand", 32.0, app.quick_tool == QuickTool::Hand, tl!("Hand (H)")).clicked() {
+                    app.quick_tool = QuickTool::Hand;
+                }
+                // Comment ▸, Highlight ▸, Draw ▸ (Acrobat's comment toolbar groups). Clicking a
+                // group selects its last-used tool; clicking it again opens the flyout.
+                for g in 0..comments::GROUPS.len() {
+                    let current = app.comment_prefs.group_tool[g];
+                    let active = matches!(app.quick_tool, QuickTool::Comment(t) if t.group() == g);
+                    let resp = icons::button(ui, current.icon(), 32.0, active, tl!(current.label()));
+                    // A small corner triangle marks the flyout.
                     let r = resp.rect;
                     let tri = [r.right_bottom() + vec2(-4.0, -4.0), r.right_bottom() + vec2(-9.0, -4.0), r.right_bottom() + vec2(-4.0, -9.0)];
-                    ui.painter().add(egui::Shape::convex_polygon(
-                        tri.to_vec(),
-                        if current_fill.is_some() { t.accent } else { t.text_faint },
-                        Stroke::NONE,
-                    ));
-                    if resp.clicked() && current_fill.is_none() {
-                        app.execute(shown.command());
+                    ui.painter().add(egui::Shape::convex_polygon(tri.to_vec(), if active { t.accent } else { t.text_faint }, Stroke::NONE));
+                    let open = (resp.clicked() && active) || resp.secondary_clicked();
+                    if resp.clicked() && !active {
+                        app.execute(current.command());
                     }
-                    let open = (resp.clicked() && current_fill.is_some()) || resp.secondary_clicked();
                     egui::Popup::menu(&resp)
                         .open_memory(open.then_some(egui::SetOpenCommand::Toggle))
                         .align(egui::RectAlign::RIGHT_START)
                         .gap(6.0)
                         .show(|ui| {
-                            for tool in crate::fill_sign::FILL_TOOLS {
-                                if matches!(tool, crate::fill_sign::FillTool::Signature | crate::fill_sign::FillTool::Initials) {
-                                    continue;
-                                }
-                                let on = current_fill == Some(tool);
+                            for tool in comments::GROUPS[g] {
+                                let on = app.quick_tool == QuickTool::Comment(*tool);
                                 let (row, click) = ui.allocate_exact_size(vec2(180.0, 28.0), Sense::click());
                                 let press = theme::Press::track(ui, &click);
                                 press.wash(ui, row, 4, on);
@@ -4421,49 +4370,121 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                                     ui.close();
                                 }
                             }
-                            ui.separator();
-                            if let Some(command) = crate::fill_sign::signature_entries(ui, app, &t) {
-                                app.execute(command);
-                                ui.close();
-                            }
                         });
-                    if matches!(current_fill, Some(crate::fill_sign::FillTool::Text | crate::fill_sign::FillTool::Date)) {
-                        ui.label(tl!("Font size:"));
-                        ui.add(
-                            egui::DragValue::new(&mut app.fill_text_size)
-                                .range(crate::fill_sign::MIN_TEXT_SIZE..=crate::fill_sign::MAX_TEXT_SIZE)
-                                .speed(0.25)
-                                .suffix(" pt"),
-                        );
-                    }
-                    if let QuickTool::Comment(tool) = app.quick_tool {
-                        let (r, _) = ui.allocate_exact_size(vec2(32.0, 9.0), Sense::hover());
-                        ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0, t.divider));
-                        if let Some(color) = comments::quick_bar_controls(ui, tool, &mut app.comment_prefs)
-                            && let Some((index, id)) = app.active_ids()
-                            && let Some((page, annotation)) = app.views.get(index).and_then(|view| view.comments.selected)
-                            && app.session.get(id).is_some_and(|doc| {
-                                doc.allows_annotation()
-                                    && doc
-                                        .info
-                                        .annotations
-                                        .iter()
-                                        .any(|a| a.page == page && a.index == annotation && a.in_reply_to.is_none() && comments::made_by(a, tool))
-                            })
-                        {
-                            app.apply_edit(Edit::StyleAnnotation {
-                                page,
-                                index: annotation,
-                                color: Some(color),
-                                opacity: None,
-                                width: None,
-                                endings: None,
-                            });
+                }
+                // Edit text & images, while the Edit workspace is open (Acrobat's Edit toolbar)
+                // or the tool is in use.
+                if app.mode == crate::Mode::Edit || app.quick_tool == QuickTool::EditText {
+                    let on = app.quick_tool == QuickTool::EditText;
+                    if icons::button(ui, "text-cursor-input", 32.0, on, tl!("Edit text & images")).clicked() {
+                        if on {
+                            app.put_down_edit_text();
+                        } else {
+                            app.quick_tool = QuickTool::EditText;
                         }
                     }
-                });
+                }
+                // Fill & Sign ▸ (text, marks, date, signature).
+                let current_fill = match app.quick_tool {
+                    QuickTool::Fill(f) => Some(f),
+                    _ => None,
+                };
+                let shown = current_fill.unwrap_or(crate::fill_sign::FillTool::Text);
+                let resp = icons::button(
+                    ui,
+                    if current_fill.is_some() { shown.icon() } else { "pen-line" },
+                    32.0,
+                    current_fill.is_some(),
+                    tl!("Fill & Sign"),
+                );
+                let r = resp.rect;
+                let tri = [r.right_bottom() + vec2(-4.0, -4.0), r.right_bottom() + vec2(-9.0, -4.0), r.right_bottom() + vec2(-4.0, -9.0)];
+                ui.painter().add(egui::Shape::convex_polygon(
+                    tri.to_vec(),
+                    if current_fill.is_some() { t.accent } else { t.text_faint },
+                    Stroke::NONE,
+                ));
+                if resp.clicked() && current_fill.is_none() {
+                    app.execute(shown.command());
+                }
+                let open = (resp.clicked() && current_fill.is_some()) || resp.secondary_clicked();
+                egui::Popup::menu(&resp).open_memory(open.then_some(egui::SetOpenCommand::Toggle)).align(egui::RectAlign::RIGHT_START).gap(6.0).show(
+                    |ui| {
+                        for tool in crate::fill_sign::FILL_TOOLS {
+                            if matches!(tool, crate::fill_sign::FillTool::Signature | crate::fill_sign::FillTool::Initials) {
+                                continue;
+                            }
+                            let on = current_fill == Some(tool);
+                            let (row, click) = ui.allocate_exact_size(vec2(180.0, 28.0), Sense::click());
+                            let press = theme::Press::track(ui, &click);
+                            press.wash(ui, row, 4, on);
+                            let body = row.translate(press.offset());
+                            icons::paint(ui, Rect::from_min_size(body.min + vec2(8.0, 6.0), vec2(16.0, 16.0)), tool.icon(), 16.0, t.text);
+                            let reserve = if on { 28.0 } else { 8.0 };
+                            crate::widgets::paint_left(
+                                ui,
+                                body.left_center() + vec2(34.0, 0.0),
+                                tl!(tool.label()),
+                                theme::regular(13.0),
+                                t.text,
+                                (row.width() - 34.0 - reserve).max(0.0),
+                            );
+                            if on {
+                                icons::paint(ui, Rect::from_min_size(body.right_top() + vec2(-24.0, 7.0), vec2(14.0, 14.0)), "check", 14.0, t.accent);
+                            }
+                            let click = theme::hand(click);
+                            let info = tl!(tool.label()).to_string();
+                            click.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, info.clone()));
+                            if click.clicked() {
+                                app.execute(tool.command());
+                                ui.close();
+                            }
+                        }
+                        ui.separator();
+                        if let Some(command) = crate::fill_sign::signature_entries(ui, app, &t) {
+                            app.execute(command);
+                            ui.close();
+                        }
+                    },
+                );
+                if matches!(current_fill, Some(crate::fill_sign::FillTool::Text | crate::fill_sign::FillTool::Date)) {
+                    ui.label(tl!("Font size:"));
+                    ui.add(
+                        egui::DragValue::new(&mut app.fill_text_size)
+                            .range(crate::fill_sign::MIN_TEXT_SIZE..=crate::fill_sign::MAX_TEXT_SIZE)
+                            .speed(0.25)
+                            .suffix(" pt"),
+                    );
+                }
+                if let QuickTool::Comment(tool) = app.quick_tool {
+                    let (r, _) = ui.allocate_exact_size(vec2(32.0, 9.0), Sense::hover());
+                    ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0, t.divider));
+                    if let Some(color) = comments::quick_bar_controls(ui, tool, &mut app.comment_prefs)
+                        && let Some((index, id)) = app.active_ids()
+                        && let Some((page, annotation)) = app.views.get(index).and_then(|view| view.comments.selected)
+                        && app.session.get(id).is_some_and(|doc| {
+                            doc.allows_annotation()
+                                && doc
+                                    .info
+                                    .annotations
+                                    .iter()
+                                    .any(|a| a.page == page && a.index == annotation && a.in_reply_to.is_none() && comments::made_by(a, tool))
+                        })
+                    {
+                        app.apply_edit(Edit::StyleAnnotation {
+                            page,
+                            index: annotation,
+                            color: Some(color),
+                            opacity: None,
+                            width: None,
+                            endings: None,
+                        });
+                    }
+                }
             });
+        });
     });
+    crate::widgets::note_idle_rect(ui.ctx(), id, shown.response.rect);
 }
 
 /// Where a page of `page` size (points, as shown: after its rotation) is drawn in the grid cell
