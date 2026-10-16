@@ -2,7 +2,7 @@
 
 use egui::{Align, Align2, Color32, CornerRadius, Layout, Rect, Sense, Stroke, vec2};
 
-use crate::canvas::{DocView, Fit, PageLayout};
+use crate::canvas::{DocView, Fit, PageLayout, page_count_hint};
 use crate::theme::{self, ThemePreference, Tokens};
 use crate::{Dialog, Mode, PdfCraftApp, PropsTab, RightPanel, icons, widgets, window_controls};
 
@@ -715,13 +715,16 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         view.view_history(forward);
                     }
                 }
-                ui.label(egui::RichText::new(page_count.to_string()).font(theme::regular(11.0)).color(t.text_muted));
+                // The label in the box, with the physical position as a secondary hint
+                // (`3 of 180`) where the two differ.
+                let current_label = labels.get(view.current).map(String::as_str);
+                ui.label(egui::RichText::new(page_count_hint(current_label.unwrap_or(""), view.current, page_count)).font(theme::regular(11.0)).color(t.text_muted));
                 let page_input_id = view.page_input_id();
                 // Consume replacement selection once, including when the editor has lost focus.
                 let reselect = std::mem::take(&mut view.page_input_reselect);
                 // Navigation updates the idle display, never the text being edited.
                 if !ui.memory(|m| m.has_focus(page_input_id)) {
-                    view.page_input = view.current_page_label(labels.get(view.current).map(String::as_str));
+                    view.page_input = view.current_page_label(current_label);
                 } else if reselect {
                     // The replacement changed the label while egui retained this editor's cursor.
                     let mut state = egui::TextEdit::load_state(ui.ctx(), page_input_id).unwrap_or_default();
@@ -748,7 +751,7 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         let typed = view.page_input.clone();
                         view.go_to_typed(&typed, &labels);
                     }
-                    view.page_input = view.current_page_label(labels.get(view.current).map(String::as_str));
+                    view.page_input = view.current_page_label(current_label);
                 }
             });
             if let Some(id) = page_display {
