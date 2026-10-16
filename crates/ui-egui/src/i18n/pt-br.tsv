@@ -2446,3 +2446,8 @@ animation effects	Off	Desativados
 	Make properties default	Tornar propriedades padrão
 	Pages selected	Páginas selecionadas
 	Page properties	Propriedades da página
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Largura da barra de rolagem do documento
+document scrollbar width	Standard	Padrão
+document scrollbar width	Wide	Larga

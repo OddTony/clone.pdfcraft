@@ -2431,3 +2431,8 @@ animation effects	Off	Ki
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
 	Pages selected	Kijelölt oldalak
 	Page properties	Oldaltulajdonságok
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Dokumentum görgetősávjának szélessége
+document scrollbar width	Standard	Normál
+document scrollbar width	Wide	Széles

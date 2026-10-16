@@ -2433,3 +2433,8 @@ animation effects	Off	Aus
 	Make properties default	Eigenschaften als Standard festlegen
 	Pages selected	Ausgewählte Seiten
 	Page properties	Seiteneigenschaften
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Breite der Dokument-Bildlaufleiste
+document scrollbar width	Standard	Standard
+document scrollbar width	Wide	Breit

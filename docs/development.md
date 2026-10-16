@@ -47,6 +47,25 @@ reconnect after a session-bus disconnection. Headless UI contexts use their supp
 do not contact a desktop session bus. Page and document colours retain their existing behavior.
 
 
+## Document scrollbar width
+
+Preferences ▸ Documents and view ▸ **Document scrollbar width** offers **Standard** (the
+existing 3-point floating handle, 8 points on hover, with an 8-point pointer target) and **Wide** (a
+16-point handle and pointer target). The choice applies immediately to open document views,
+including both sides of Compare, and is saved across launches. New installations and settings
+without this preference use Standard; malformed values are ignored. Dimensions are egui points
+and follow display/interface scaling. Sidebars, menus and dialogs keep their existing styles.
+Floating scrollbars reserve the same space in either mode, preserving page layout and position.
+
+The opt-in UI control channel can set it without opening Preferences:
+
+```sh
+pdfcraft-cli ui --control FILE set key=document_scrollbar_width value=wide
+```
+
+The accepted values are `standard` and `wide`; the saved JSON key is
+`document_scrollbar_width`. This is a UI appearance setting, with no document or engine state.
+
 ## Logs
 
 The desktop app writes its `log` records to standard error and to `logs/pdfcraft.log` in its

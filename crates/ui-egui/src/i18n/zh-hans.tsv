@@ -2396,3 +2396,8 @@ animation effects	Off	关
 	Make properties default	将属性设为默认
 	Pages selected	选定的页面
 	Page properties	页面属性
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	文档滚动条宽度
+document scrollbar width	Standard	标准
+document scrollbar width	Wide	宽

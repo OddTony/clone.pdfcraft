@@ -1669,3 +1669,17 @@ fn routine_continuous_scrolling_does_not_add_navigation_history() {
     assert!(h.state().views[0].back.is_empty());
     assert!(h.state().views[0].forward.is_empty());
 }
+
+#[test]
+fn control_document_scrollbar_width_is_live_and_persistent() {
+    use pdfcraft_ui_egui::scrollbar_width::DocumentScrollbarWidth;
+    let (mut h, c) = harness();
+    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["document_scrollbar_width"], "standard");
+    ok(&mut h, &c, "ui.set", json!({"key": "document_scrollbar_width", "value": "wide"}));
+    assert_eq!(h.state().document_scrollbar_width, DocumentScrollbarWidth::Wide);
+    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["document_scrollbar_width"], "wide");
+    assert!(call(&mut h, &c, "ui.set", json!({"key": "document_scrollbar_width", "value": "huge"})).is_err());
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&h.state().persist());
+    assert_eq!(restored.document_scrollbar_width, DocumentScrollbarWidth::Wide);
+}

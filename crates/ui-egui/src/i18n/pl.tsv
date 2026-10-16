@@ -2408,3 +2408,8 @@ animation effects	Off	Wyłączone
 	Make properties default	Ustaw właściwości jako domyślne
 	Pages selected	Zaznaczone strony
 	Page properties	Właściwości strony
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Szerokość paska przewijania dokumentu
+document scrollbar width	Standard	Standardowy
+document scrollbar width	Wide	Szeroki

@@ -2395,3 +2395,8 @@ animation effects	Off	Изключени
 	Make properties default	Задаване като свойства по подразбиране
 	Pages selected	Избрани страници
 	Page properties	Свойства на страницата
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Ширина на лентата за превъртане на документа
+document scrollbar width	Standard	Стандартна
+document scrollbar width	Wide	Широка

@@ -387,6 +387,12 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
             widgets::radio_value(ui, &mut app.scroll_speed, speed, tl_ctx!("scroll speed", speed.label()));
         }
     });
+    ui.horizontal(|ui| {
+        ui.label(tl!("Document scrollbar width"));
+        for width in crate::scrollbar_width::DocumentScrollbarWidth::ALL {
+            widgets::radio_value(ui, &mut app.document_scrollbar_width, width, tl_ctx!("document scrollbar width", width.label()));
+        }
+    });
     // Whether anything animates, the wheel's scrolling and zooming included; left alone it
     // follows the system's animation setting.
     ui.horizontal(|ui| {

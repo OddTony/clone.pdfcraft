@@ -2345,3 +2345,8 @@ animation effects	Off	Выкл
 	Make properties default	Сделать свойства стандартными
 	Pages selected	Выделенные страницы
 	Page properties	Свойства страницы
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Ширина полосы прокрутки документа
+document scrollbar width	Standard	Стандартная
+document scrollbar width	Wide	Широкая

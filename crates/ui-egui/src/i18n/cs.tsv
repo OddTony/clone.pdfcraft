@@ -2506,3 +2506,8 @@ animation effects	Off	Vypnuto
 	Make properties default	Nastavit vlastnosti jako výchozí
 	Pages selected	Vybrané stránky
 	Page properties	Vlastnosti stránky
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Šířka posuvníku dokumentu
+document scrollbar width	Standard	Standardní
+document scrollbar width	Wide	Široký

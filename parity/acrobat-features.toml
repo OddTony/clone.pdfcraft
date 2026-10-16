@@ -10142,3 +10142,15 @@ commands = []
 tools = []
 evidence = []
 notes = ""
+
+[[feature]]
+id = "misc.document-scrollbar-width"
+area = "N"
+title = "Configurable document scrollbar width"
+tier = "P2"
+milestone = "M3"
+status = "shipped"
+commands = ["app.preferences"]
+tools = []
+evidence = ["crates/ui-egui/tests/view.rs::document_scrollbar_defaults_and_persistence_are_safe", "crates/ui-egui/tests/view.rs::document_scrollbar_dimensions_and_other_scroll_areas_stay_local", "crates/ui-egui/tests/view.rs::wide_document_scrollbar_can_be_dragged_in_the_added_pointer_target", "crates/ui-egui/tests/view.rs::document_scrollbar_preference_changes_live_without_moving_the_document"]
+notes = "Preferences > Documents and view: Standard retains the existing 8 pt target and 3 pt floating handle; Wide uses 16 pt for both. Document-only local style, light/dark, follows display scale, persistent and live; ui.set document_scrollbar_width standard|wide. Missing: arbitrary numeric widths; no OS scrollbar-width preference detection."

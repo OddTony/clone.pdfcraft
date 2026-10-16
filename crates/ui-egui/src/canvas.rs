@@ -2680,7 +2680,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             scroll = scroll.vertical_scroll_offset((r.top() - y_shift + fy * r.height() - rel.y).clamp(0.0, max_y));
         }
     }
+    // Override only this document ScrollArea. Keep its id and floating allocation unchanged,
+    // so changing width cannot move the pages or discard their scroll position. Restore the
+    // parent UI before any later panels/overlays are built; global theme styles stay untouched.
+    let previous_scroll_style = ui.spacing().scroll;
+    app.document_scrollbar_width.apply(&mut ui.spacing_mut().scroll);
     let out = scroll.show_viewport(ui, |ui, viewport| {
+        // Embedded fields and menus keep the normal style too; only the outer bar is wide.
+        ui.spacing_mut().scroll = previous_scroll_style;
         // egui's drag responses accept every pointer button. Keep a wheel gesture from also
         // selecting text, drawing a mark, or panning with the Hand tool.
         if middle_gesture {
@@ -3575,6 +3582,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         });
         (wanted, visible_now)
     });
+    ui.spacing_mut().scroll = previous_scroll_style;
     view.single_edges = visible_pages.first().copied().filter(|_| !view.continuous).map(|page| {
         // At the top once the page's top edge shows where going to a page puts it (a gap
         // below the window's top). Within a point, as for wheel paging, so layout rounding
