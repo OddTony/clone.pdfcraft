@@ -1660,15 +1660,13 @@ mod tests {
         let tu = doc.add(Object::Stream(Stream::from_raw(Dict::new(), cmap.to_vec())));
         let f = font(&mut doc, vec![
             ("Subtype", Object::name("Type0")),
-            ("BaseFont", Object::name("ABCDEE+SampleHebrew")),
+            ("BaseFont", Object::name("SampleHebrew")),
             ("Encoding", Object::name("Identity-H")),
             ("ToUnicode", Object::Ref(tu)),
         ]);
-        // The synthetic font's missing descriptor is harmless for testing
-        // Unicode map lookup; it must not be mistaken for an absent glyph.
-        let mut m = Metrics::from_dict(&doc, &f);
-        m.subset = false;
-        m.sequence_reverse.insert('פ', vec![("פּ".to_owned(), 0x150)]);
+        // A synthetic full font has no subset outline filter. The sequence
+        // is automatically indexed from ToUnicode, not injected by the test.
+        let m = Metrics::from_dict(&doc, &f);
         assert_eq!(m.encode("פּ").as_deref(), Some(&[0x01, 0x50][..]));
         assert_eq!(m.encode("פּפ").as_deref(), Some(&[0x01, 0x50, 0x01, 0x20][..]));
         assert_eq!(m.decode(&[0x01, 0x50]), "פּ");
