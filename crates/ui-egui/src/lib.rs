@@ -1910,6 +1910,16 @@ impl PdfCraftApp {
         }
     }
 
+    /// Move an identified document one slot using the existing presentation-only move.
+    pub(crate) fn move_tab_by_id(&mut self, id: DocId, delta: isize) {
+        if !matches!(delta, -1 | 1) {
+            return;
+        }
+        let Some(from) = self.views.iter().position(|view| view.id == id) else { return };
+        let Some(to) = from.checked_add_signed(delta) else { return };
+        self.move_tab(from, to);
+    }
+
     pub fn active_ids(&self) -> Option<(usize, DocId)> {
         self.active.and_then(|i| self.views.get(i).map(|v| (i, v.id)))
     }

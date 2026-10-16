@@ -2644,3 +2644,7 @@ certificate	Key usage	Utilizzo chiave
 certificate	Self-signed	Autofirmato
 certificate	SHA-1 digest	Impronta SHA-1
 certificate	SHA-256 digest	Impronta SHA-256
+	Move Tab Left	Sposta scheda a sinistra
+	Move Tab Right	Sposta scheda a destra
+	This tab is already first	Questa scheda è già la prima
+	This tab is already last	Questa scheda è già l’ultima

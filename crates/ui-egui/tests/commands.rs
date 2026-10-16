@@ -156,6 +156,12 @@ fn every_registered_command_is_implemented() {
                 assert!(app.views[0].view_history(false));
             }
         }
+        if matches!(spec.id, "tab.move_left" | "tab.move_right") {
+            app.open_bytes("another.pdf", None, fixture(3)).unwrap();
+            if spec.id == "tab.move_right" {
+                app.active = Some(0);
+            }
+        }
         let dir = std::env::temp_dir().join(format!("pdfcraft-cmd-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         app.save_override = Some(dir.join("out.pdf").to_string_lossy().into_owned());

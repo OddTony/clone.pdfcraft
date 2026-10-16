@@ -57,6 +57,23 @@ fn harness_pages_at(pages: usize, width: f32, scale: f32) -> (Harness<'static, P
     (h, client)
 }
 
+fn harness_tabs() -> (Harness<'static, PdfCraftApp>, ControlClient) {
+    let slot: Arc<Mutex<Option<ControlClient>>> = Arc::default();
+    let s = slot.clone();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        *s.lock().unwrap() = Some(app.attach_control(&cc.egui_ctx));
+        for name in ["first.pdf", "second.pdf", "third.pdf"] {
+            app.open_bytes(name, None, fixture(1)).unwrap();
+        }
+        app
+    });
+    h.run_steps(4);
+    let client = slot.lock().unwrap().take().unwrap();
+    (h, client)
+}
+
 /// Send a request and run frames until it is answered.
 fn call(h: &mut Harness<'static, PdfCraftApp>, c: &ControlClient, method: &str, params: Value) -> Reply {
     let rx = c.send(method, params);
@@ -101,6 +118,29 @@ fn control_resize_reports_observed_dimensions_and_rejects_invalid_sizes() {
     assert_eq!(state["window"]["height"], 640.0);
     assert_eq!(state["documents"][0]["pages"], 5);
     assert_eq!(state["documents"][0]["dirty"], false);
+}
+
+#[test]
+fn tab_move_commands_are_available_through_opt_in_control() {
+    let (mut h, c) = harness_tabs();
+    let initial = ok(&mut h, &c, "ui.state", json!({}));
+    let active = initial["active"]["doc"].clone();
+    assert_eq!(
+        initial["documents"].as_array().unwrap().iter().map(|d| d["name"].as_str().unwrap()).collect::<Vec<_>>(),
+        ["first.pdf", "second.pdf", "third.pdf"]
+    );
+
+    let commands = ok(&mut h, &c, "ui.commands", json!({}));
+    assert!(commands["commands"].as_array().unwrap().iter().any(|command| command["id"] == "tab.move_left"));
+    assert!(call(&mut h, &c, "ui.command", json!({"id": "tab.move_right"})).is_err(), "the active last tab cannot move farther right");
+    ok(&mut h, &c, "ui.command", json!({"id": "tab.move_left"}));
+
+    let moved = ok(&mut h, &c, "ui.state", json!({}));
+    assert_eq!(moved["active"]["doc"], active);
+    assert_eq!(
+        moved["documents"].as_array().unwrap().iter().map(|d| d["name"].as_str().unwrap()).collect::<Vec<_>>(),
+        ["first.pdf", "third.pdf", "second.pdf"]
+    );
 }
 
 #[test]

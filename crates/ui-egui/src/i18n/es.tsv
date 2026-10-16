@@ -2572,3 +2572,7 @@ animation effects	Off	Desactivados
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Estás viendo la versión firmada de «{from}» (revisión {rev}). Es una instantánea: los cambios aquí no afectarán al original.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Estás viendo la revisión {rev} de «{from}». Es una instantánea: los cambios aquí no afectarán al original.
+	Move Tab Left	Mover pestaña a la izquierda
+	Move Tab Right	Mover pestaña a la derecha
+	This tab is already first	Esta pestaña ya es la primera
+	This tab is already last	Esta pestaña ya es la última

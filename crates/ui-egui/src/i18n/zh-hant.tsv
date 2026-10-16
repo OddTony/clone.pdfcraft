@@ -2382,3 +2382,7 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+	Move Tab Left	將分頁左移
+	Move Tab Right	將分頁右移
+	This tab is already first	此分頁已是第一個
+	This tab is already last	此分頁已是最後一個

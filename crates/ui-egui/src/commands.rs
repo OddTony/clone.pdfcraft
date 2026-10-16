@@ -80,6 +80,14 @@ impl PdfCraftApp {
     /// Whether a registered command can run now. The engine judges the document (security,
     /// contents, undo history); view state it can't see is checked here.
     pub(crate) fn command_enabled(&self, spec: &CommandSpec) -> bool {
+        // Ordering is window UI state, so the engine registry only requires an open document;
+        // this frontend disables a move at the corresponding edge of the strip.
+        if spec.id == "tab.move_left" {
+            return self.active.is_some_and(|index| index > 0 && index < self.views.len());
+        }
+        if spec.id == "tab.move_right" {
+            return self.active.is_some_and(|index| index.checked_add(1).is_some_and(|next| next < self.views.len()));
+        }
         // Undo and Redo act on the Combine files list while its tab shows.
         if self.combine_showing() && matches!(spec.needs, commands::Needs::Undo | commands::Needs::Redo) {
             return self.combine_can_undo(spec.needs == commands::Needs::Undo);
@@ -113,6 +121,14 @@ impl PdfCraftApp {
     fn execute_unguarded(&mut self, id: &str) -> bool {
         let Some(spec) = commands::command(id) else { return false };
         if !self.command_enabled(spec) {
+            if id == "tab.move_left" && self.active_ids().is_some() {
+                self.notify(tl!("This tab is already first"));
+                return false;
+            }
+            if id == "tab.move_right" && self.active_ids().is_some() {
+                self.notify(tl!("This tab is already last"));
+                return false;
+            }
             let why = match spec.needs {
                 commands::Needs::Undo => tl!("Nothing to undo").to_string(),
                 commands::Needs::Redo => tl!("Nothing to redo").to_string(),
@@ -176,6 +192,16 @@ impl PdfCraftApp {
             "file.close" => {
                 if let Some(i) = active {
                     self.request_close_tab(i);
+                }
+            }
+            "tab.move_left" => {
+                if let Some((_, id)) = self.active_ids() {
+                    self.move_tab_by_id(id, -1);
+                }
+            }
+            "tab.move_right" => {
+                if let Some((_, id)) = self.active_ids() {
+                    self.move_tab_by_id(id, 1);
                 }
             }
             "file.close_all" => self.close_all(),

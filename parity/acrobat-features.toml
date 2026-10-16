@@ -590,6 +590,18 @@ evidence = ["crates/ui-egui/tests/editing.rs::closing_a_dirty_tab_asks_and_cance
 notes = ""
 
 [[feature]]
+id = "viewer.tab-reorder"
+title = "Move document tabs with explicit commands and cancel drag placement"
+area = "B"
+tier = "P2"
+milestone = "M3"
+status = "partial"
+commands = ["tab.move_left", "tab.move_right"]
+tools = []
+evidence = ["crates/ui-egui/tests/tab_reordering.rs::directional_commands_move_the_active_tab_and_respect_boundaries_and_special_tabs", "crates/ui-egui/tests/tab_reordering.rs::canceled_drag_recovers_for_the_next_gesture", "crates/ui-egui/tests/control.rs::tab_move_commands_are_available_through_opt_in_control"]
+notes = "PR #1997 candidate, not merged. Reuses upstream's established drag reordering, marker and overflow code; adds adjacent movement through context menus, keyboard palette and opt-in UI control, plus cancellation guards. Window UI state has no standalone engine/MCP tab model. Hosted platform and manual input/accessibility validation remain outstanding."
+
+[[feature]]
 id = "core.dirty-indicator"
 title = "Unsaved-changes marker on document tabs"
 area = "A"
