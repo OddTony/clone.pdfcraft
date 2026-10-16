@@ -37,6 +37,22 @@ this works only when that build input actually contains the full face. This chan
 add a font binary or change the release font pin. Fonts shared by releases belong in
 `storytold/craft-fonts` under the repository's asset rules.
 
+For an existing Noto Sans Thai paragraph whose subset cannot shape the draft, the matching
+approved Thai face supplies positioned outlines, using the same Thai shaping as Add Text.
+It does not attempt to embed the shared variable font as a static program. Stacked vowels,
+tone marks and Sara Am keep their OpenType positions, including after save/reopen and repeated
+edits; logical text remains available for copying and searching. The inline editor also prefers
+that complete matching face when the subset lacks GPOS mark-positioning tables or Thai characters,
+so newly typed marks stay in the same shaping run as their base. A usable complete source program keeps precedence.
+This requires the optional Thai build input and applies to matching-family paragraph edits;
+other Thai families still need their complete source font, and mixed contextual styles retain
+the restrictions below. No font asset or release pin is changed.
+Thai shaping reuses the existing [HarfRust](https://github.com/harfbuzz/harfrust) shaper and
+the font's `mark`/`mkmk` GPOS anchors from the
+[OpenType Thai model](https://learn.microsoft.com/en-us/typography/script-development/thai).
+Vertical mark offsets are not guessed or hardcoded; GSUB `ccmp` substitution is optional for
+Thai and its absence alone no longer refuses a source face with usable positioning.
+
 Rewrapped Chinese and Japanese text, which has no spaces between words, may break between any
 two characters. A row never begins with closing punctuation, a closing bracket or quote, a small
 kana or the prolonged sound mark, and never ends with an opening bracket or quote or a currency

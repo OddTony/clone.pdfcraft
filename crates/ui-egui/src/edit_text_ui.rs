@@ -1129,6 +1129,7 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
     }
     for program in &programs {
         let Some(name) = families.get(&program.resource) else { continue };
+        let complete_thai = thai_subset_needs_layout(&program.bytes, &program.face);
         // Word-created PDFs often split one face into several subsets. Use all of the
         // document's matching subsets before falling back for newly inserted characters.
         let mut stack = vec![name.clone()];
@@ -1136,11 +1137,24 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
             programs
                 .iter()
                 .filter(|p| {
-                    pdfcraft_fonts::embedding::face_key(&p.face) == pdfcraft_fonts::embedding::face_key(&program.face)
-                        && p.resource != program.resource
+                    p.resource != program.resource
+                        && (pdfcraft_fonts::embedding::face_key(&p.face) == pdfcraft_fonts::embedding::face_key(&program.face)
+                            || complete_thai && p.resource.starts_with("PCApproved") && matching_thai_face(&p.face))
                 })
                 .filter_map(|p| families.get(&p.resource).cloned()),
         );
+        // A Thai subset can contain every typed character while lacking the layout tables
+        // that raise tone marks above vowels/Sara Am. It would win ordinary glyph fallback
+        // and keep those marks on one level. Prefer only its approved complete matching face;
+        // a complete source with usable tables, and every other family, keeps the existing order.
+        if complete_thai {
+            let approved: Vec<_> = programs
+                .iter()
+                .filter(|p| p.resource.starts_with("PCApproved") && matching_thai_face(&p.face))
+                .filter_map(|p| families.get(&p.resource))
+                .collect();
+            stack.sort_by_key(|name| !approved.contains(&name));
+        }
         if let Some(fallback) = definitions.families.get(&FontFamily::Proportional) {
             stack.extend(fallback.iter().cloned());
         }
@@ -1150,6 +1164,28 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
         ctx.set_fonts(definitions);
     }
     families
+}
+
+fn thai_subset_needs_layout(bytes: &[u8], face: &str) -> bool {
+    use skrifa::MetadataProvider;
+    if !matching_thai_face(face) {
+        return false;
+    }
+    let Some(thai) = pdfcraft_fonts::document_thai_font() else { return false };
+    let (Ok(source), Ok(full)) = (skrifa::FontRef::new(bytes), skrifa::FontRef::new(thai.bytes)) else { return true };
+    // New marks must be shaped with their base in one face, not picked individually from
+    // the fallback stack. A complete source keeps priority; an incomplete Thai cmap does not.
+    !pdfcraft_fonts::source_shaping::has_thai_layout(bytes)
+        || !full
+            .charmap()
+            .mappings()
+            .filter(|(cp, _)| matches!(*cp, 0x0e00..=0x0e7f))
+            .all(|(cp, _)| source.charmap().map(cp).is_some_and(|g| g.to_u32() != 0))
+}
+
+fn matching_thai_face(face: &str) -> bool {
+    let Some(thai) = pdfcraft_fonts::document_thai_font() else { return false };
+    pdfcraft_fonts::embedding::matching_faces(face).iter().any(|f| std::ptr::eq(*f, thai))
 }
 
 fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> egui::text::LayoutJob {
@@ -1443,6 +1479,103 @@ pub(crate) fn caret_color_on(fill: Color32) -> Color32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thai_editor_keeps_complete_sources_but_completes_new_marks_as_one_face() {
+        use skrifa::MetadataProvider;
+        let Some(thai) = pdfcraft_fonts::document_thai_font() else { return };
+        assert!(!thai_subset_needs_layout(thai.bytes, "NotoSansThai-Regular"));
+        // Keep valid GPOS, but remove mai tho from the Unicode map. Per-character fallback
+        // would put this newly typed tone in a different shaping run from its source base.
+        let full = skrifa::FontRef::new(thai.bytes).unwrap();
+        let mappings: Vec<_> = full.charmap().mappings().filter(|(cp, _)| *cp != 0x0e49).collect();
+        let mut cmap = vec![0, 0, 0, 1, 0, 3, 0, 10, 0, 0, 0, 12];
+        cmap.extend_from_slice(&12u16.to_be_bytes());
+        cmap.extend_from_slice(&0u16.to_be_bytes());
+        cmap.extend_from_slice(&u32::try_from(16 + mappings.len() * 12).unwrap().to_be_bytes());
+        cmap.extend_from_slice(&0u32.to_be_bytes());
+        cmap.extend_from_slice(&u32::try_from(mappings.len()).unwrap().to_be_bytes());
+        for (cp, id) in mappings {
+            for v in [cp, cp, id.to_u32()] {
+                cmap.extend_from_slice(&v.to_be_bytes());
+            }
+        }
+        let mut bytes = thai.bytes.to_vec();
+        while !bytes.len().is_multiple_of(4) {
+            bytes.push(0);
+        }
+        let offset = u32::try_from(bytes.len()).unwrap();
+        let count = u16::from_be_bytes([bytes[4], bytes[5]]) as usize;
+        let record = bytes[12..12 + count * 16].as_chunks_mut::<16>().0.iter_mut().find(|t| &t[..4] == b"cmap").unwrap();
+        record[8..12].copy_from_slice(&offset.to_be_bytes());
+        record[12..16].copy_from_slice(&u32::try_from(cmap.len()).unwrap().to_be_bytes());
+        bytes.extend(cmap);
+        assert!(pdfcraft_fonts::source_shaping::has_thai_layout(&bytes));
+        assert!(!pdfcraft_fonts::embedding::covers(&bytes, "้"));
+        assert!(thai_subset_needs_layout(&bytes, "NotoSansThai-Regular"));
+        assert!(!thai_subset_needs_layout(&bytes, "UnrelatedFamily"));
+    }
+
+    #[test]
+    fn thai_editor_uses_complete_matching_layout_for_stacked_marks() {
+        use pdfcraft_cos::{Dict, Document, Object, SaveOptions, Stream, write_full};
+        let Some(thai) = pdfcraft_fonts::document_thai_font() else { return };
+        // Synthetic subset: keep all outlines/cmap, remove only GSUB/GPOS. Existing characters
+        // still win ordinary glyph fallback, but the two upper marks no longer stack correctly.
+        let mut subset = thai.bytes.to_vec();
+        let count = u16::from_be_bytes([subset[4], subset[5]]) as usize;
+        let tables: Vec<_> =
+            subset[12..12 + count * 16].as_chunks::<16>().0.iter().filter(|t| &t[..4] != b"GSUB" && &t[..4] != b"GPOS").map(|t| t.to_vec()).collect();
+        subset[4..6].copy_from_slice(&(tables.len() as u16).to_be_bytes());
+        for (i, table) in tables.iter().enumerate() {
+            subset[12 + i * 16..28 + i * 16].copy_from_slice(table);
+        }
+        let (mut app, _) = preview_app();
+        let mut pdf = Document::open(app.session.get(app.views[0].id).unwrap().bytes.clone()).unwrap();
+        let page = pdfcraft_model::pages(&pdf).remove(0);
+        let resource = app.session.get(app.views[0].id).unwrap().text_lines(0)[0].font.clone();
+        let program = pdf.add(Object::Stream(Stream::from_raw(Dict::new(), subset)));
+        let descriptor =
+            Dict::from_iter([(b"FontFile2".to_vec(), Object::Ref(program)), (b"FontName".to_vec(), Object::name("ABCDEF+NotoSansThai-Regular"))]);
+        let font = Dict::from_iter([
+            (b"Type".to_vec(), Object::name("Font")),
+            (b"Subtype".to_vec(), Object::name("TrueType")),
+            (b"BaseFont".to_vec(), Object::name("ABCDEF+NotoSansThai-Regular")),
+            (b"FontDescriptor".to_vec(), Object::Dict(descriptor)),
+        ]);
+        let mut resources = pdf.dict(page.dict.get(b"Resources").unwrap()).unwrap();
+        let mut fonts = pdf.dict(resources.get(b"Font").unwrap()).unwrap();
+        fonts.set(resource.as_bytes().to_vec(), Object::Dict(font));
+        resources.set(b"Font".to_vec(), Object::Dict(fonts));
+        pdf.update_dict(page.obj, |p| p.set(b"Resources".to_vec(), Object::Dict(resources))).unwrap();
+        app.open_bytes("thai-preview.pdf", None, write_full(&pdf, &SaveOptions::default()).unwrap()).unwrap();
+        let doc = app.session.get(app.views.last().unwrap().id).unwrap();
+        let ctx = egui::Context::default();
+        ctx.begin_pass(Default::default());
+        let families = install_source_fonts(&ctx, doc, 0);
+        ctx.end_pass().textures_delta.clear();
+        ctx.begin_pass(Default::default());
+        let name = families.get(&resource).unwrap();
+        let family = FontFamily::Name(name.clone().into());
+        let definitions = ctx.fonts(|f| f.definitions().clone());
+        let stack = definitions.families.get(&family).unwrap();
+        let preferred = stack.first().unwrap();
+        assert!(definitions.font_data.get(preferred).unwrap().font.as_ref() == thai.bytes, "the editor must shape with the complete matching face");
+        let text = "กิ่ น้ำ น่ำ กี้ กึ้";
+        let actual = ctx.fonts_mut(|f| f.layout_no_wrap(text.into(), FontId::new(48.0, family), Color32::BLACK));
+        // Compare the mark offsets against the complete face alone, independently of the
+        // source-font stack; this also catches falling back one character at a time.
+        let expected_family = FontFamily::Name("thai-complete-only".into());
+        let mut expected_definitions = definitions.clone();
+        expected_definitions.families.insert(expected_family.clone(), vec![preferred.clone()]);
+        ctx.set_fonts(expected_definitions);
+        ctx.end_pass().textures_delta.clear();
+        ctx.begin_pass(Default::default());
+        let expected = ctx.fonts_mut(|f| f.layout_no_wrap(text.into(), FontId::new(48.0, expected_family), Color32::BLACK));
+        let offsets = |galley: &egui::Galley| galley.rows.iter().flat_map(|r| r.glyphs.iter().map(|g| g.uv_rect.offset)).collect::<Vec<_>>();
+        assert_eq!(offsets(&actual), offsets(&expected));
+        ctx.end_pass().textures_delta.clear();
+    }
 
     /// An app with one text document open, and an editor on its first paragraph.
     fn preview_app() -> (crate::PdfCraftApp, LineEditor) {

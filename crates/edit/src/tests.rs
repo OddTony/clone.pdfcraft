@@ -2814,6 +2814,36 @@ fn added_thai_text_wraps_clusters_and_survives_reopen() {
 }
 
 #[test]
+fn existing_thai_subset_uses_shaped_matching_face_without_embedding_variable_font() {
+    let Some(_) = pdfcraft_fonts::document_thai_font() else { return };
+    // Synthetic source subset: only one Thai letter is encoded. No binary fixture or font
+    // is committed; the complete, openly licensed matching face is the optional build input.
+    let mut doc = text_page("BT /F1 16 Tf 50 700 Td (A) Tj ET BT /F2 12 Tf 50 600 Td (ab) Tj ET");
+    let cmap =
+        doc.add(Object::Stream(Stream::flate(Dict::new(), b"1 begincodespacerange <00> <FF> endcodespacerange 1 beginbfchar <41> <0E19> endbfchar")));
+    doc.update_dict(pdfcraft_cos::ObjRef::new(5, 0), |f| {
+        f.set(b"BaseFont".to_vec(), Object::name("ABCDEF+NotoSansThai-Regular"));
+        f.set(b"ToUnicode".to_vec(), Object::Ref(cmap));
+    })
+    .unwrap();
+    let neighbour = text::text_lines(&doc, 0).unwrap()[1].clone();
+    // More than 240 distinct logical clusters requires several single-byte Type 3 resources.
+    let long: String =
+        "กขคงจฉชซญดตถทนบปผฝพฟมยรลวศษสหฬอฮ".chars().flat_map(|c| ["ิ่", "ิ้", "ี่", "ี้", "ึ่", "ึ้", "ื่", "ื้"].map(move |marks| format!("{c}{marks}"))).collect();
+    let draft = format!("{long} ผู้ใช้ ปู่ ๑๒๓");
+    let style = text::BlockStyle { width: Some(14_400.0), ..Default::default() };
+    text::rewrite_block(&mut doc, 0, 0, Some(&draft), &style).unwrap();
+    let mut doc = reopen(&doc);
+    assert_eq!(text::text_blocks(&doc, 0).unwrap()[0].editor_text, draft);
+    assert_eq!(text::text_lines(&doc, 0).unwrap()[0].baseline(), [50.0, 700.0]);
+    assert_eq!(text::text_lines(&doc, 0).unwrap().last().unwrap().text, neighbour.text);
+    assert_eq!(text::text_lines(&doc, 0).unwrap().last().unwrap().baseline(), neighbour.baseline());
+    let next = "Hello ผู้ใช้ น้ำ ๔๕๖";
+    text::rewrite_block(&mut doc, 0, 0, Some(next), &text::BlockStyle::default()).unwrap();
+    assert_eq!(text::text_blocks(&reopen(&doc), 0).unwrap()[0].editor_text, next);
+}
+
+#[test]
 fn group_moves_preserve_glyph_bytes_and_unselected_text_state() {
     for content in [
         "BT /F1 12 Tf 1.3 Tc 2 Tw 80 Tz 14 TL 1 0.2 -0.1 1 50 600 Tm (A\\101) Tj 1 0 0 rg (Neighbour) Tj T* (Next) Tj ET",

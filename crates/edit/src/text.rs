@@ -48,7 +48,7 @@ pub struct TextLine {
     pub decodable: bool,
     /// Whether the font requires visual-order Indic text.
     pub visual_order: bool,
-    /// The Japanese or Hebrew fallback face the font subsets, when the line is in one (see [`same_font`]).
+    /// The generated fallback face the font subsets, when the line is in one (see [`same_font`]).
     face: Option<String>,
     /// The content stream piece the line starts in, and its operators (indices into the page's
     /// streams parsed joined).
@@ -506,7 +506,7 @@ struct Ts {
     /// The operators that set the current fill colour (`g`, `rg`, `k`, or `cs` + `sc`/`scn`).
     fill: Vec<Op>,
     font: Option<(Vec<u8>, Rc<Metrics>)>,
-    /// The Japanese or Hebrew fallback face the font subsets, when the font is one (see [`is_type3_fallback`]).
+    /// The generated fallback face the font subsets, when the font is one (see [`is_type3_fallback`]).
     face: Option<String>,
     size: f64,
     char_spacing: f64,
@@ -1304,14 +1304,14 @@ const JAPANESE_FONT_NAME: &str = "PCJapanese";
 /// The `/Name` of the Type 3 fonts generated for Hebrew text.
 const HEBREW_FONT_NAME: &str = "PCHebrew";
 
-/// Whether `font` is one of those generated fonts (Japanese or Hebrew): a replacement longer than
+/// Whether `font` is one of those generated fonts (Japanese, Hebrew or Thai): a replacement longer than
 /// one of them is split across several, which read back as one line (see [`same_font`]).
 fn is_type3_fallback(font: &Dict) -> bool {
     font.name(b"Subtype") == Some(b"Type3")
-        && font.name(b"Name").is_some_and(|n| n == JAPANESE_FONT_NAME.as_bytes() || n == HEBREW_FONT_NAME.as_bytes())
+        && font.name(b"Name").is_some_and(|n| n == JAPANESE_FONT_NAME.as_bytes() || n == HEBREW_FONT_NAME.as_bytes() || n == b"PCThai")
 }
 
-/// Whether a run shown in `font` (a resource name, and the Japanese or Hebrew fallback face it subsets, if
+/// Whether a run shown in `font` (a resource name, and the generated fallback face it subsets, if
 /// any) continues `line`: the same font resource, or another subset of the same face.
 fn same_font(line: &TextLine, font: &[u8], face: Option<&str>) -> bool {
     line.font.as_bytes() == font || (line.face.is_some() && line.face.as_deref() == face)
