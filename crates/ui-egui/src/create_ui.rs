@@ -90,8 +90,28 @@ pub(crate) fn book_error(name: &str, e: &pdfcraft_engine::EditError) -> String {
 /// The paper reflowed books are set on: the system region's (US Letter in the United States,
 /// Puerto Rico, Canada and Mexico, A4 elsewhere); US Letter when the region can't be told.
 pub(crate) fn regional_paper() -> (f64, f64) {
-    let region = sys_locale::get_locale().and_then(|tag| pdfcraft_engine::region_of(&tag)).unwrap_or_else(|| "US".into());
+    let region = system_locale().and_then(|tag| pdfcraft_engine::region_of(&tag)).unwrap_or_else(|| "US".into());
     pdfcraft_engine::paper_for_region(&region)
+}
+
+/// The system's locale tag (`en-US`, `en_GB.UTF-8`), as `units::Unit::system` reads it: Windows
+/// asks the system (`sys-locale`, a Windows-only dependency), macOS reads `AppleLocale` (apps
+/// started from the Finder get no `LANG`), then the locale variables.
+fn system_locale() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    if let Some(tag) = sys_locale::get_locale() {
+        return Some(tag);
+    }
+    #[cfg(target_os = "macos")]
+    if let Ok(out) = std::process::Command::new("/usr/bin/defaults").args(["read", "-g", "AppleLocale"]).output()
+        && out.status.success()
+    {
+        let tag = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !tag.is_empty() {
+            return Some(tag);
+        }
+    }
+    ["LC_ALL", "LC_PAPER", "LANG"].iter().find_map(|var| std::env::var(var).ok().filter(|v| !v.is_empty()))
 }
 
 fn stem(name: &str) -> &str {
