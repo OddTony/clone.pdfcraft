@@ -428,12 +428,12 @@ fn an_empty_printer_list_says_none_were_found() {
 }
 
 /// The choices that describe how an office prints (two-sided, grayscale, collate, page sizing,
-/// comments & forms) survive a restart; the ones that describe one job (copies, pages) start
+/// comments & forms, a booklet's binding side) survive a restart; the ones that describe one job (copies, pages) start
 /// fresh. Settings are untrusted: an unknown name or a scale outside the dialog's range keeps
 /// the default (#2001).
 #[test]
 fn print_preferences_survive_a_restart_but_the_jobs_own_choices_reset() {
-    use pdfcraft_engine::print::{Content, SizeMode, spool::Duplex};
+    use pdfcraft_engine::print::{Binding, Content, SizeMode, spool::Duplex};
     use pdfcraft_ui_egui::PrintWhich;
     let open = |saved: Option<&str>| {
         let mut app = PdfCraftApp::new();
@@ -453,6 +453,7 @@ fn print_preferences_survive_a_restart_but_the_jobs_own_choices_reset() {
     d.size = SizeMode::Custom(62.5);
     d.custom_scale = 62.5;
     d.content = Content::Document;
+    d.binding = Binding::Right;
     d.copies = 5;
     d.which = PrintWhich::Range;
     d.range = "2-3".into();
@@ -466,12 +467,12 @@ fn print_preferences_survive_a_restart_but_the_jobs_own_choices_reset() {
     assert_eq!(d.size, SizeMode::Custom(62.5));
     assert_eq!(d.custom_scale, 62.5);
     assert_eq!(d.content, Content::Document);
+    assert_eq!(d.binding, Binding::Right, "a booklet's binding side is kept (#2707)");
     assert_eq!(d.copies, 1, "copies are this job's");
     assert_eq!(d.which, PrintWhich::All, "the page choice is this job's");
     assert_eq!(d.range, "");
 
-    let garbage =
-        r#"{"print": {"duplex": "sideways", "grayscale": "yes", "collate": null, "size": "custom", "custom_scale": 1e9, "comments_forms": 7}}"#;
+    let garbage = r#"{"print": {"duplex": "sideways", "grayscale": "yes", "collate": null, "size": "custom", "custom_scale": 1e9, "comments_forms": 7, "binding": "up"}}"#;
     let d = open(Some(garbage)).print_draft;
     assert_eq!(d.duplex, Duplex::Off);
     assert!(!d.grayscale);
@@ -479,6 +480,7 @@ fn print_preferences_survive_a_restart_but_the_jobs_own_choices_reset() {
     assert_eq!(d.custom_scale, 100.0, "a scale outside 1..=1000 keeps the default");
     assert_eq!(d.size, SizeMode::Custom(100.0), "custom is honoured with the default scale");
     assert_eq!(d.content, Content::DocumentAndMarkups);
+    assert_eq!(d.binding, Binding::Left);
     let d = open(Some(r#"{"print": 5}"#)).print_draft;
     assert_eq!(d.size, SizeMode::Fit);
 }
