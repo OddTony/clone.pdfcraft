@@ -319,6 +319,37 @@ fn the_printers_own_paper_sizes_are_offered_and_named_as_the_jobs_media() {
     assert_eq!((d.paper, d.paper_name().as_str(), d.media().as_deref()), (4, "A4", Some("A4")));
 }
 
+/// Opening the dialog again reads the printer's sizes again, even for the same printer: a label
+/// driver's one stock is whatever its settings say at the time, and that changes between prints.
+#[test]
+fn reopening_the_dialog_reads_the_printers_sizes_again() {
+    use pdfcraft_engine::print::{PAPERS, spool};
+    let mut h = harness();
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+    {
+        let d = &mut h.state_mut().print_draft;
+        d.printer = Some("Label_Queue".into());
+        d.printer_papers = Some((
+            "Label_Queue".into(),
+            vec![spool::PrinterPaper { key: "User0000000256".into(), label: "User defined".into(), size: (288.0, 396.0) }],
+        ));
+    }
+    h.run_steps(2);
+    h.state_mut().print_draft.paper = PAPERS.len();
+    h.run_steps(2);
+    assert_eq!(h.state().print_draft.media().as_deref(), Some("User0000000256"));
+    // Closed and opened again on the same printer: the list is read afresh (no such queue here,
+    // so it comes back empty and the size gives way to the first standard one), not kept.
+    h.state_mut().dialog = None;
+    assert!(h.state_mut().execute("print.dialog"));
+    h.state_mut().print_draft.printer = Some("Label_Queue".into());
+    h.run_steps(3);
+    let d = &h.state().print_draft;
+    assert_eq!(d.printer_papers, Some(("Label_Queue".to_string(), Vec::new())));
+    assert_eq!((d.paper, d.own_papers_listed().len(), d.media().as_deref()), (0, 0, Some("Letter")));
+}
+
 /// The desktop app lists printers in the background (PowerShell on Windows takes a second or
 /// more): the dialog opens at once, then preselects the default when the list arrives — unless
 /// the user has already picked a printer.

@@ -80,6 +80,9 @@ pub struct PrintDraft {
     /// The printer's own paper sizes and the printer they were read for
     /// ([`spool::printer_papers`]); `None` until a printer is chosen.
     pub printer_papers: Option<(String, Vec<spool::PrinterPaper>)>,
+    /// Whether `printer_papers` was read since the dialog opened: a driver's stock (a label
+    /// printer's one "User defined" size) changes between prints, so each opening reads again.
+    pub papers_read: bool,
     /// The sheet shown in the preview (0-based).
     pub sheet: usize,
     pub current_page: usize,
@@ -134,6 +137,7 @@ impl Default for PrintDraft {
             dpi: 300.0,
             paper: 0,
             printer_papers: None,
+            papers_read: false,
             sheet: 0,
             current_page: 0,
             driver_options: None,
@@ -385,6 +389,7 @@ impl PdfCraftApp {
             sheet: 0,
             selected,
             which,
+            papers_read: false,
             ..keep
         };
         self.dialog = Some(crate::Dialog::Print);
@@ -966,11 +971,12 @@ pub(crate) fn body(
                 ui.end_row();
                 ui.label(tl!("Paper:"));
                 // The printer's own sizes (a label printer's 4 × 6 in, an office printer's
-                // envelopes), read once per printer; Save as PDF and the browser have none. A
-                // size chosen on the last printer stays chosen when this one has it too, else
-                // the first standard size is chosen.
+                // envelopes), read when the dialog opens and when the printer changes (a label
+                // driver's one stock is whatever its settings say at the time); Save as PDF and
+                // the browser have none. A size chosen on the last printer stays chosen when
+                // this one has it too, else the first standard size is chosen.
                 let wanted = d.printer.clone().filter(|_| !browser);
-                if d.printer_papers.as_ref().map(|(read_for, _)| read_for) != wanted.as_ref() {
+                if !d.papers_read || d.printer_papers.as_ref().map(|(read_for, _)| read_for) != wanted.as_ref() {
                     // The size chosen so far: on the last printer's list when it was one of its own.
                     let size = match (d.paper.checked_sub(PAPERS.len()), &d.printer_papers) {
                         (Some(i), Some((_, last))) => last.get(i).map_or(PAPERS[0].1, |p| p.size),
@@ -980,6 +986,7 @@ pub(crate) fn body(
                         let papers = spool::printer_papers(&p);
                         (p, papers)
                     });
+                    d.papers_read = true;
                     d.paper = d.paper_index(size).unwrap_or(0);
                 }
                 let before = d.paper;
