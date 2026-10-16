@@ -69,16 +69,32 @@ fn bits_written_read_back() {
     assert_eq!(Bits::new(&[0xFF]).read(9), None, "reading past the end has no value");
 }
 
+/// A point on the cubic Bézier `p` at `t`.
+fn bezier(p: [[f64; 2]; 4], t: f64) -> [f64; 2] {
+    let b = [(1.0 - t).powi(3), 3.0 * t * (1.0 - t).powi(2), 3.0 * t * t * (1.0 - t), t.powi(3)];
+    [0, 1].map(|k| (0..4).map(|i| p[i][k] * b[i]).sum())
+}
+
 #[test]
-fn a_flat_coons_patch_has_the_inner_points_of_its_grid() {
+fn a_coons_patch_is_the_tensor_patch_with_its_inner_points() {
+    // A curved boundary away from the origin, so every weight on every boundary point counts.
     let mut net = [[[0.0; 2]; 4]; 4];
-    for (i, j) in BOUNDARY {
-        net[i][j] = [i as f64 * 2.0 + j as f64 * 0.5, j as f64 * 3.0 - i as f64];
+    for (n, (i, j)) in BOUNDARY.into_iter().enumerate() {
+        let wobble = (n as f64 * 1.7).sin() * 3.0;
+        net[i][j] = [20.0 + i as f64 * 10.0 + wobble, 40.0 + j as f64 * 12.0 - wobble * 0.5 + (i * j) as f64];
     }
     coons_inner(&mut net);
-    for (i, j) in INNER {
-        let want = [i as f64 * 2.0 + j as f64 * 0.5, j as f64 * 3.0 - i as f64];
-        assert!((net[i][j][0] - want[0]).abs() < 1e-12 && (net[i][j][1] - want[1]).abs() < 1e-12, "p{i}{j}: {:?}", net[i][j]);
+    // The Coons surface: the boundary curves blended in each direction, less the corners' blend.
+    let (c1, c2) = ([net[0][0], net[1][0], net[2][0], net[3][0]], [net[0][3], net[1][3], net[2][3], net[3][3]]);
+    let (d1, d2) = ([net[0][0], net[0][1], net[0][2], net[0][3]], [net[3][0], net[3][1], net[3][2], net[3][3]]);
+    for (u, v) in [(0.25, 0.5), (0.5, 0.5), (0.1, 0.9), (0.7, 0.3), (0.9, 0.05)] {
+        let (a, b, c, d) = (bezier(c1, u), bezier(c2, u), bezier(d1, v), bezier(d2, v));
+        let want: [f64; 2] = [0, 1].map(|k| {
+            (1.0 - v) * a[k] + v * b[k] + (1.0 - u) * c[k] + u * d[k]
+                - ((1.0 - u) * (1.0 - v) * net[0][0][k] + u * (1.0 - v) * net[3][0][k] + (1.0 - u) * v * net[0][3][k] + u * v * net[3][3][k])
+        });
+        let got = surface(&net, u, v);
+        assert!((got[0] - want[0]).abs() < 1e-9 && (got[1] - want[1]).abs() < 1e-9, "({u}, {v}): {got:?} against {want:?}");
     }
 }
 
