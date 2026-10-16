@@ -66,6 +66,8 @@ impl ShortcutCategory {
     pub(crate) fn for_command(id: &str) -> Self {
         match id {
             "edit.find" | "edit.advanced_search" | "view.palette" => Self::Search,
+            "view.select_tool" | "view.hand_tool" | "view.marquee_zoom" => Self::Tools,
+            "view.focus_next_region" | "view.focus_previous_region" | "view.next_page_item" | "view.previous_page_item" => Self::Navigation,
             "view.previous_view" | "view.next_view" | "view.focus_page_input" | "view.next_tab" | "view.previous_tab" => Self::Navigation,
             id if id.starts_with("file.") || id.starts_with("create.") || id.starts_with("print.") => Self::File,
             id if id.starts_with("edit.") => Self::Edit,
@@ -329,6 +331,22 @@ impl PdfCraftApp {
             "view.previous_view" | "view.next_view" => {
                 if let Some(v) = active.and_then(|i| self.views.get_mut(i)) {
                     return v.view_history(id == "view.next_view");
+                }
+            }
+            "view.focus_next_region" | "view.focus_previous_region" => self.focus_region(id == "view.focus_next_region"),
+            "view.next_page_item" | "view.previous_page_item" => {
+                self.step_page_item(id == "view.next_page_item");
+            }
+            "view.select_tool" | "view.hand_tool" => {
+                self.quick_tool = if id == "view.select_tool" { crate::QuickTool::Select } else { crate::QuickTool::Hand };
+                self.space_hand = None;
+            }
+            "comment.cycle_markup" | "comment.cycle_drawing" => {
+                use crate::{QuickTool, comments::CommentTool as T};
+                let tools = if id == "comment.cycle_markup" { [T::Highlight, T::Underline, T::StrikeOut] } else { [T::Line, T::Arrow, T::Rectangle] };
+                let next = tools.iter().position(|t| self.quick_tool == QuickTool::Comment(*t)).map_or(0, |i| (i + 1) % tools.len());
+                if let Some(tool) = tools.get(next) {
+                    return self.execute(tool.command());
                 }
             }
             "view.next_tab" => self.step_tab(true),
@@ -752,8 +770,8 @@ impl PdfCraftApp {
         let mut specs: Vec<(&CommandSpec, Shortcut)> = COMMANDS.iter().flat_map(|c| c.shortcuts().map(move |s| (c, s))).collect();
         specs.sort_by_key(|(_, s)| std::cmp::Reverse(s.modifier_count()));
         for (spec, s) in specs {
-            let plain_tool = !s.command && !s.mac_ctrl;
-            if plain_tool && (typing || form_typing || self.palette_open || self.modal_open() || ctx.egui_wants_keyboard_input()) {
+            let plain_tool = !s.command && !s.mac_ctrl && s.key.len() == 1;
+            if plain_tool && (typing || form_typing || self.palette_open || self.modal_open() || egui::Popup::is_any_open(ctx)) {
                 continue;
             }
             let page_clipboard = matches!(spec.id, "page.copy" | "page.cut" | "page.paste");
@@ -801,7 +819,13 @@ impl PdfCraftApp {
                 }
                 // Consume both representations if a backend supplies both: one edit per key.
                 let mut key_pressed = false;
-                if spec.id.starts_with("page.") || spec.id.starts_with("comment.") || spec.id == "edit.edit_text" || spec.id == "view.read_mode" {
+                if plain_tool
+                    || spec.id.starts_with("page.")
+                    || spec.id.starts_with("comment.")
+                    || spec.id.starts_with("view.focus_")
+                    || spec.id == "edit.edit_text"
+                    || spec.id == "view.read_mode"
+                {
                     // Letter tool/page bindings require their exact modifiers. In particular,
                     // Ctrl+H (Read mode) must leave Ctrl+Shift+H to Highlight on Windows/Linux.
                     input.events.retain(|event| {
@@ -816,7 +840,7 @@ impl PdfCraftApp {
                 key_pressed || native_pressed
             });
             if pressed {
-                if form_typing {
+                if form_typing || (typing && matches!(spec.id, "view.focus_next_region" | "view.focus_previous_region")) {
                     // A form field has the keyboard: let it take this frame's typing (and
                     // Escape) first, so ⌘S saves what's on screen (#166). Runs next frame, for
                     // this document only.

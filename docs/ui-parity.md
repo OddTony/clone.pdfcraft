@@ -1,5 +1,6 @@
 # UI and interaction parity
 
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (F6 region navigation, page-item traversal and tool cycles; full keyboard operation partial)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (categorized shortcut reference; annotation/editing tool bindings; estimates unchanged)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (column select #740, multi-object move #844, Shift-⌘-G #810 fixed) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
@@ -65,8 +66,8 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 |---|---|---|---|
 | Platform shortcuts for registered commands | yes | yes; ⌘ on macOS, Ctrl elsewhere (#695) | shipped; find bar still shows ⌘ on Windows (#746) |
 | Keyboard shortcuts reference | yes | collapsible functional categories, with primary and alternate bindings | shipped |
-| Annotation and editing tool keys | yes | Ctrl/Cmd+Shift+H or U: Highlight; S: Sticky note; T: Text box; E: Edit text & images. Plain keys leave text inputs, forms and overlays alone | shipped |
-| Full keyboard operation of the app | yes | no | planned (`a11y.keyboard-only`, P0) |
+| Annotation and editing tool keys | yes | Ctrl/Cmd+Shift+H: Highlight; U: Highlight/Underline/Strikeout cycle; D: Line/Arrow/Rectangle cycle; V/H/Z: Select/Hand/Marquee zoom; S: Sticky note; T: Text box; E: Edit text & images. Plain keys leave text inputs, forms and overlays alone | shipped |
+| Full keyboard operation of the app | yes | F6/Shift+F6 cycle visible document, toolbar and side-panel regions; Tab/Shift+Tab traverse page widgets and comments; Space/Enter activate focused items | partial (`a11y.keyboard-only`, P0); remaining controls and link traversal need coverage, screen-reader audit pending |
 | Shift-⌘-G finds previous | yes | yes (#810 fixed) | shipped |
 
 ## Dialogs and preferences
@@ -83,6 +84,7 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | F6 region focus and Tab traversal of widgets/comments, plus tool cycles. Full keyboard accessibility remains partial. |
 | 2026-10-15 | minor | Functional shortcut categories and annotation/editing tool keys, including Highlight without a Read mode conflict on Windows/Linux. Estimates unchanged. |
 | 2026-10-11 | minor | Column select shipped (#740, PR #765); several objects move together on one page (#844, PR #907); Shift-⌘-G goes back (#810, PR #835) |
 | 2026-10-10 | major | Created from the command registry, automation tools, the View area of the checklist and open UI issues |

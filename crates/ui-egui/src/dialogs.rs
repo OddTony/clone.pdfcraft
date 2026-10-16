@@ -1128,8 +1128,15 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         tl!("First / last page").to_string(),
                     ),
                     (C::Navigation, format!("← / →, {}", pair(PAGE_PREV, PAGE_NEXT)), tl!("Previous / next page").to_string()),
-                    (C::Tools, named("V"), tl!("Select (V)").to_string()),
-                    (C::Tools, named("H / Space (hold)"), tl!("Hand (H)").to_string()),
+                    (C::Tools, named("Space (hold)"), tl!("Hand (H)").to_string()),
+                    (
+                        C::Navigation,
+                        pair(
+                            pdfcraft_engine::commands::Shortcut::plain("Tab"),
+                            pdfcraft_engine::commands::Shortcut { shift: true, ..pdfcraft_engine::commands::Shortcut::plain("Tab") },
+                        ),
+                        tl!("Next / previous page item").to_string(),
+                    ),
                     (C::Pages, crate::i18n::key_name("Delete").to_string(), tl!("Delete selected pages (Organize)").to_string()),
                     (C::Pages, key(SELECT_ALL), tl!("Select all pages (Organize)").to_string()),
                 ]);

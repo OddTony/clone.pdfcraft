@@ -1718,8 +1718,8 @@ milestone = "M4"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/commands.rs::shortcuts_run_registered_commands", "crates/engine/src/commands.rs::shortcut_labels_follow_platform_conventions", "crates/ui-egui/tests/commands.rs::quit_shortcut_requires_exact_modifiers_and_preserves_unsaved_work", "crates/ui-egui/tests/signing.rs::ctrl_alt_q_types_an_email_without_quitting"]
-notes = "Annotation tools: Ctrl/Cmd+Shift+H or U for Highlight, S for Sticky note, T for Text box; E for Edit text & images. Plain keys yield to text editors, forms and overlays. Read mode requires its own modifiers. Quit requires exact Ctrl+Q/Cmd+Q modifiers and preserves unsaved-document confirmation. Ctrl+Alt+Q email input is covered with synthetic key/text events; native German keyboard-layout translation is not covered by that test (#1980)."
+evidence = ["crates/ui-egui/tests/keyboard.rs::tool_accelerators_select_and_cycle_without_extra_modifiers", "crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/commands.rs::shortcuts_run_registered_commands", "crates/engine/src/commands.rs::shortcut_labels_follow_platform_conventions", "crates/ui-egui/tests/commands.rs::quit_shortcut_requires_exact_modifiers_and_preserves_unsaved_work", "crates/ui-egui/tests/signing.rs::ctrl_alt_q_types_an_email_without_quitting"]
+notes = "Annotation tools: Ctrl/Cmd+Shift+H for Highlight; U cycles Highlight/Underline/Strikeout, D cycles Line/Arrow/Rectangle, V/H/Z select Select/Hand/Marquee Zoom, S Sticky note, T Text box and E Edit text & images. Plain keys yield to text editors, forms and overlays. Read mode requires its own modifiers. Quit requires exact Ctrl+Q/Cmd+Q modifiers and preserves unsaved-document confirmation. Ctrl+Alt+Q email input is covered with synthetic key/text events; native German keyboard-layout translation is not covered by that test (#1980)."
 
 [[feature]]
 id = "view.shortcuts-dialog"
@@ -3585,7 +3585,7 @@ status = "shipped"
 commands = ["comment.highlight"]
 tools = ["comment_add"]
 evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/comments.rs::dragging_over_text_with_the_highlighter_highlights_it", "crates/ui-egui/tests/comments.rs::a_new_highlight_opens_its_note_for_typing", "crates/engine/src/tests.rs::highlight_multiplies_over_text"]
-notes = "Ctrl/Cmd+Shift+H or U selects Highlight. Drag over text, or pick the tool with text selected; a new highlight opens its note for typing in the Comments panel; agents can highlight by text search"
+notes = "Ctrl/Cmd+Shift+H selects Highlight; U cycles Highlight, Underline and Strikeout. Drag over text, or pick the tool with text selected; a new highlight opens its note for typing in the Comments panel; agents can highlight by text search"
 
 [[feature]]
 id = "comment.underline"
@@ -8417,11 +8417,11 @@ title = "Full keyboard operation of the app"
 area = "M"
 tier = "P0"
 milestone = "M14"
-status = "planned"
-commands = []
-tools = []
-evidence = []
-notes = ""
+status = "partial"
+commands = ["view.focus_next_region", "view.focus_previous_region", "view.next_page_item", "view.previous_page_item"]
+tools = ["page_focus_targets"]
+evidence = ["crates/ui-egui/tests/keyboard.rs::f6_cycles_visible_regions_and_tab_enters_toolbar_controls", "crates/ui-egui/tests/keyboard.rs::tab_visits_fields_and_annotations_without_changing_values_and_wraps_backwards", "crates/ui-egui/tests/keyboard.rs::focused_checkbox_activates_with_space_and_undo_restores_it", "crates/automation/tests/automation.rs::page_focus_targets_follow_field_order_and_include_comments_without_editing"]
+notes = "F6/Shift+F6 move between visible document, toolbar and side panels. Tab/Shift+Tab traverse visible widgets in PDF tab order, then top-level comments on the current page. Space/Enter activate; focus alone never edits. Engine target discovery is available headlessly, and UI control exposes the focus commands and keys. Full app keyboard coverage, link traversal and a screen-reader audit remain incomplete."
 
 [[feature]]
 id = "a11y.checker"

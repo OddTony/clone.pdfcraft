@@ -206,6 +206,26 @@ impl Automation {
                 let edit = Edit::SetInfo { key: a.str("key")?.into(), value: a.str("value")?.into() };
                 self.apply(&a, edit)?
             }
+            "page_focus_targets" => {
+                let page = self.page(&a)?;
+                let targets: Vec<_> = self
+                    .doc(&a)?
+                    .page_focus_targets(page)
+                    .into_iter()
+                    .map(|target| {
+                        let address = match target.item {
+                            pdfcraft_engine::keyboard::PageItem::Field { name, widget } => {
+                                json!({"kind":"field", "name":name, "widget":widget.saturating_add(1)})
+                            }
+                            pdfcraft_engine::keyboard::PageItem::Annotation { index } => {
+                                json!({"kind":"annotation", "index":index.saturating_add(1)})
+                            }
+                        };
+                        json!({"item":address, "label":target.label, "editable":target.editable})
+                    })
+                    .collect();
+                json!({"page":page.saturating_add(1),"targets":targets})
+            }
             "page_render" => return self.page_render(&a).map(|c| vec![c]),
             "comment_image_preview" => return self.comment_image_preview(&a),
             "text_extract" => self.text_extract(&a)?,

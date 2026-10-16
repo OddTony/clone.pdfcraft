@@ -126,7 +126,7 @@ pub struct CommandSpec {
     /// Top-level menu it appears in (`File`, `Edit`, `View`, `Pages`, `Help`), if any.
     pub menu: Option<&'static str>,
     pub shortcut: Option<Shortcut>,
-    /// An additional binding for the same command (for example U for Highlight).
+    /// An additional binding for the same command.
     pub alternate_shortcut: Option<Shortcut>,
     pub needs: Needs,
     /// Modified shortcuts also work while a text field has focus. Plain tool accelerators
@@ -225,7 +225,13 @@ pub const COMMANDS: &[CommandSpec] = &[
     // In View ▸ Zoom with the view-local zoom keys, so `menu = None` keeps it out of the generated
     // View menu (where it would show twice). The palette and ⌘3 still run it.
     c("view.fit_visible", "Fit visible", None, Some(Shortcut::cmd("3")), Document, "scan"),
-    c("view.marquee_zoom", "Marquee zoom", VIEW, None, Document, "zoom-in"),
+    ct("view.marquee_zoom", "Marquee zoom", VIEW, Some(Shortcut::plain("Z")), Document, "zoom-in"),
+    ct("view.select_tool", "Select", VIEW, Some(Shortcut::plain("V")), Document, "mouse-pointer-2"),
+    ct("view.hand_tool", "Hand", VIEW, Some(Shortcut::plain("H")), Document, "hand"),
+    c("view.focus_next_region", "Next focus region", None, Some(Shortcut::plain("F6")), Nothing, "scan"),
+    c("view.focus_previous_region", "Previous focus region", None, Some(Shortcut { shift: true, ..Shortcut::plain("F6") }), Nothing, "scan"),
+    c("view.next_page_item", "Next page item", None, None, Document, "arrow-right"),
+    c("view.previous_page_item", "Previous page item", None, None, Document, "arrow-left"),
     // Acrobat's column select: drag a rectangle and select only the text inside it. Alt/Option-
     // drag with the Select tool does the same; this is the way in where the desktop takes
     // Alt-drag for moving windows (several Linux window managers).
@@ -252,10 +258,9 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("comment.list", "Comments panel", VIEW, None, Document, "message-square-text"),
     ct("comment.note", "Add a sticky note", None, Some(Shortcut::plain("S")), Annotate, "sticky-note"),
     ct("comment.freetext", "Add a text box", None, Some(Shortcut::plain("T")), Annotate, "type"),
-    CommandSpec {
-        alternate_shortcut: Some(Shortcut::plain("U")),
-        ..c("comment.highlight", "Highlight text", None, Some(Shortcut::cmd_shift("H")), Annotate, "highlighter")
-    },
+    c("comment.highlight", "Highlight text", None, Some(Shortcut::cmd_shift("H")), Annotate, "highlighter"),
+    ct("comment.cycle_markup", "Cycle text markup tools", None, Some(Shortcut::plain("U")), Annotate, "highlighter"),
+    ct("comment.cycle_drawing", "Cycle drawing tools", None, Some(Shortcut::plain("D")), Annotate, "pencil"),
     c("comment.underline", "Underline text", None, None, Annotate, "underline"),
     c("comment.strikeout", "Strikethrough text", None, None, Annotate, "strikethrough"),
     c("comment.squiggly", "Squiggly underline text", None, None, Annotate, "spline"),

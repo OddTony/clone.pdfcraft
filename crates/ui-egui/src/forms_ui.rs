@@ -42,6 +42,8 @@ pub struct Focus {
 
 #[derive(Clone, Debug, Default)]
 pub struct FormView {
+    /// A Tab step waiting until the draft has been validated by the engine.
+    pub(crate) tab_request: Option<bool>,
     pub focus: Option<Focus>,
     /// The draft whose edit is queued (`DocView::pending_edit`): if the field refuses the value,
     /// the editor reopens with it rather than losing the typing.
@@ -90,6 +92,43 @@ fn open_focus(f: &FormField, widget: usize) -> Focus {
         press: None,
         calendar: None,
         calendar_rect: None,
+    }
+}
+
+pub(crate) fn keyboard_focus(f: &FormField, widget: usize) -> Focus {
+    Focus { select_all: true, ..open_focus(f, widget) }
+}
+
+/// Activate a widget through the same edit/permission path for keyboard and pointer input.
+/// Merely tabbing to a widget never activates it or changes its value.
+pub(crate) fn activate_widget(view: &mut DocView, f: &FormField, widget: usize, allowed: bool) {
+    let Some(w) = f.widgets.get(widget).filter(|w| !w.hidden) else { return };
+    if !allowed {
+        view.forms.notice = Some(FormNotice::Security);
+        return;
+    }
+    if f.read_only() {
+        view.forms.notice = Some(FormNotice::ReadOnly(f.name.clone()));
+        return;
+    }
+    match f.kind {
+        FormFieldKind::CheckBox => {
+            view.forms.focus = None;
+            view.pending_edit = Some(Edit::SetFieldValue { name: f.name.clone(), value: FieldValue::Check(f.value.is_empty()) })
+        }
+        FormFieldKind::Radio => {
+            view.forms.focus = None;
+            let value = if f.value.first() == w.on_state.as_ref() && !f.has(field_flags::NO_TOGGLE_TO_OFF) { None } else { w.on_state.clone() };
+            if value.as_ref() != f.value.first() {
+                view.pending_edit = Some(Edit::SetFieldValue { name: f.name.clone(), value: FieldValue::Radio(value) });
+            }
+        }
+        FormFieldKind::PushButton => match &f.button {
+            Some(action) => view.forms.button = Some((f.name.clone(), action.clone())),
+            None => view.forms.notice = Some(FormNotice::NoAction(f.name.clone())),
+        },
+        FormFieldKind::Signature => view.sign.field = Some(f.name.clone()),
+        FormFieldKind::Text | FormFieldKind::Combo | FormFieldKind::List => view.forms.focus = Some(keyboard_focus(f, widget)),
     }
 }
 
@@ -154,23 +193,8 @@ pub(crate) fn page_input(
     }
     match f.kind {
         _ if f.read_only() => view.forms.notice = Some(FormNotice::ReadOnly(f.name.clone())),
-        FormFieldKind::PushButton => match &f.button {
-            Some(a) => view.forms.button = Some((f.name.clone(), a.clone())),
-            None => view.forms.notice = Some(FormNotice::NoAction(f.name.clone())),
-        },
-        FormFieldKind::Signature => view.sign.field = Some(f.name.clone()),
-        FormFieldKind::CheckBox => {
-            view.forms.focus = None;
-            view.pending_edit = Some(Edit::SetFieldValue { name: f.name.clone(), value: FieldValue::Check(f.value.is_empty()) });
-        }
-        FormFieldKind::Radio => {
-            view.forms.focus = None;
-            let on = w.on_state.clone();
-            // Clicking the selected button again turns it off unless the group forbids it.
-            let value = if f.value.first() == on.as_ref() && !f.has(field_flags::NO_TOGGLE_TO_OFF) { None } else { on };
-            if value.as_ref() != f.value.first() {
-                view.pending_edit = Some(Edit::SetFieldValue { name: f.name.clone(), value: FieldValue::Radio(value) });
-            }
+        FormFieldKind::PushButton | FormFieldKind::Signature | FormFieldKind::CheckBox | FormFieldKind::Radio => {
+            activate_widget(view, f, wi, allowed)
         }
         // The press already committed the previous field and opened this one (above), unless
         // press and release came in one frame. Committing again would re-run a validation that
@@ -634,31 +658,9 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, f
         view.forms.focus = None;
     }
     if let Some(forward) = next {
+        view.keyboard_item = Some((page, pdfcraft_engine::keyboard::PageItem::Field { name: f.name.clone(), widget: focus.widget }));
         commit(view, form);
-        let pending = view.pending_edit.take();
-        // The next widget that takes typing or a choice, in the document's tab order (each
-        // page's /Tabs: rows, columns or structure), wrapping.
-        let mut order: Vec<(usize, &FormField, usize)> = form
-            .iter()
-            .filter(|x| fillable(x) && matches!(x.kind, FormFieldKind::Text | FormFieldKind::Combo | FormFieldKind::List))
-            .flat_map(|x| x.widgets.iter().enumerate().filter(|(_, w)| w.page.is_some() && !w.hidden).map(move |(wi, w)| (w.tab, x, wi)))
-            .collect();
-        order.sort_by_key(|o| o.0);
-        if let Some(pos) = order
-            .iter()
-            .position(|(_, x, wi)| x.name == f.name && *wi == focus.widget)
-            .or_else(|| order.iter().position(|(_, x, _)| x.name == f.name))
-        {
-            let k = if forward { (pos + 1) % order.len() } else { (pos + order.len() - 1) % order.len() };
-            let (_, target, wi) = order[k];
-            view.forms.focus = Some(Focus { select_all: true, ..open_focus(target, wi) });
-            if let Some(p) = target.widgets[wi].page
-                && view.page_screen_rect(p).is_none()
-            {
-                view.go_to_page(p);
-            }
-        }
-        edit = edit.or(pending);
+        view.forms.tab_request = Some(forward);
     }
     edit.or_else(|| view.pending_edit.take())
 }

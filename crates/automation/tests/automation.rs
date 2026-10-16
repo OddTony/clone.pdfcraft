@@ -1169,7 +1169,8 @@ fn command_list_reports_enablement_and_tools() {
     assert_eq!(find("page.rotate")["enabled"], true);
     assert_eq!(find("edit.undo")["enabled"], false);
     assert_eq!(find("comment.highlight")["shortcut"], if cfg!(target_os = "macos") { "⇧⌘H" } else { "Ctrl+Shift+H" });
-    assert_eq!(find("comment.highlight")["alternate_shortcut"], "U");
+    assert!(find("comment.highlight")["alternate_shortcut"].is_null());
+    assert_eq!(find("comment.cycle_markup")["shortcut"], "U");
     for (id, key) in [("comment.note", "S"), ("comment.freetext", "T"), ("edit.edit_text", "E")] {
         assert_eq!(find(id)["shortcut"], key);
     }
@@ -1178,6 +1179,41 @@ fn command_list_reports_enablement_and_tools() {
     let undo = list["commands"].as_array().unwrap().iter().find(|c| c["id"] == "edit.undo").unwrap().clone();
     assert_eq!(undo["enabled"], true);
     assert_eq!(undo["label"], "Undo Rotate page");
+}
+
+#[test]
+fn page_focus_targets_follow_field_order_and_include_comments_without_editing() {
+    let root = workdir("keyboard-targets");
+    let mut a = auto(&root);
+    let doc = ok(&mut a, "doc_create", json!({"from":"blank","pages":2}))["doc"].as_u64().unwrap();
+    assert!(ok(&mut a, "page_focus_targets", json!({"doc":doc,"page":1}))["targets"].as_array().unwrap().is_empty());
+    for (name, kind, y) in [("bottom", "text", 150), ("top", "checkbox", 20)] {
+        ok(&mut a, "form_add_field", json!({"doc":doc,"page":1,"name":name,"type":kind,"rect":[20,y,100,y+20]}));
+    }
+    ok(&mut a, "form_tab_order", json!({"doc":doc,"pages":[1],"order":"row"}));
+    ok(&mut a, "form_set_props", json!({"doc":doc,"field":"top","read_only":true}));
+    let note = ok(&mut a, "comment_add", json!({"doc":doc,"page":1,"type":"note","at":[150,20],"contents":"Review"}));
+    ok(&mut a, "comment_reply", json!({"doc":doc,"id":note["comment"]["id"],"text":"Reply"}));
+    let before = ok(&mut a, "form_fields", json!({"doc":doc}));
+    let list = ok(&mut a, "page_focus_targets", json!({"doc":doc,"page":1}));
+    let targets = list["targets"].as_array().unwrap();
+    assert_eq!(targets.len(), 3);
+    assert_eq!(targets[0]["item"], json!({"kind":"field","name":"top","widget":1}));
+    assert_eq!(targets[0]["editable"], false, "read-only widgets remain discoverable");
+    assert_eq!(targets[1]["item"]["name"], "bottom");
+    assert_eq!(targets[2]["item"]["kind"], "annotation");
+    assert_eq!(targets[2]["label"], "Review");
+    assert_eq!(ok(&mut a, "form_fields", json!({"doc":doc})), before);
+    ok(&mut a, "comments_hide", json!({"doc":doc,"hidden":true}));
+    assert_eq!(ok(&mut a, "page_focus_targets", json!({"doc":doc,"page":1}))["targets"].as_array().unwrap().len(), 2);
+    ok(&mut a, "comments_hide", json!({"doc":doc,"hidden":false}));
+    assert_eq!(ok(&mut a, "page_focus_targets", json!({"doc":doc,"page":1})), list);
+    assert!(ok(&mut a, "page_focus_targets", json!({"doc":doc,"page":2}))["targets"].as_array().unwrap().is_empty());
+    assert!(a.call("page_focus_targets", &json!({"doc":doc,"page":0})).is_err());
+    assert!(a.call("page_focus_targets", &json!({"doc":doc,"page":3})).is_err());
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"targets.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"targets.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "page_focus_targets", json!({"doc":reopened,"page":1})), list);
 }
 
 // ---- MCP ---------------------------------------------------------------------------------------

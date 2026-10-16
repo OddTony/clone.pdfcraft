@@ -279,7 +279,7 @@ fn plain_tool_keys_leave_text_inputs_and_overlays_alone() {
             _ => unreachable!(),
         }
         h.run_steps(2);
-        for key in [Key::S, Key::T, Key::U, Key::E] {
+        for key in [Key::V, Key::H, Key::Z, Key::S, Key::T, Key::U, Key::D, Key::E] {
             h.key_press(key);
             h.run_steps(2);
             assert_eq!(h.state().quick_tool, previous, "{context} owns {key:?}");
@@ -310,7 +310,8 @@ fn shortcuts_reference_groups_commands_by_function() {
     h.get_by_label("File").click();
     h.run_steps(3);
     h.get_by_label("Save as");
-    h.get_by_label("Ctrl+Shift+H / U");
+    h.get_by_label("Ctrl+Shift+H");
+    h.get_by_label("Cycle text markup tools");
     h.get_by_label("Edit text & images");
 }
 

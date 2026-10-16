@@ -15,6 +15,7 @@ fn hue(g: &ToolGroup) -> Color32 {
 }
 
 pub fn left_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    app.keyboard.region(ui, crate::keyboard::Region::Tools, None);
     let t = Tokens::get(ui.ctx());
     // Organize closed another way (the grid's Close, or a page opened from it) closes the tool too,
     // as its panel's Close does, back to the workspace's own panel.
@@ -492,6 +493,7 @@ pub(crate) enum Nav {
 }
 
 pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    app.keyboard.region(ui, crate::keyboard::Region::Inspector, None);
     let t = Tokens::get(ui.ctx());
     let Some((index, id)) = app.active_ids() else { return };
     let Some(panel) = app.right else { return };

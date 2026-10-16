@@ -379,6 +379,8 @@ pub struct DocView {
     pub current: usize,
     pub organize: bool,
     pub highlight_fields: bool,
+    /// Item reached by Tab in the document canvas; independent of pointer selection.
+    pub keyboard_item: Option<(usize, pdfcraft_engine::keyboard::PageItem)>,
     pub page_input: String,
     /// Select the replacement page label once if its editor remains focused.
     pub(crate) page_input_reselect: bool,
@@ -690,6 +692,7 @@ impl DocView {
             rotation: 0,
             current: 0,
             organize: false,
+            keyboard_item: None,
             highlight_fields: defaults.highlight_fields,
             page_input: "1".into(),
             page_input_reselect: false,
@@ -797,6 +800,10 @@ impl DocView {
     /// The document's content or page list changed (an edit, undo or redo): drop caches and
     /// adopt the new page geometry, keeping the reader's place where possible.
     pub fn document_changed(&mut self, info: &DocInfo) {
+        // Annotation-array positions may now address a different comment.
+        if matches!(self.keyboard_item, Some((_, pdfcraft_engine::keyboard::PageItem::Annotation { .. }))) {
+            self.keyboard_item = None;
+        }
         self.invalidate_content();
         self.page_count = info.pages.len();
         self.page_heights = info.pages.iter().map(|p| p.height).collect();
@@ -961,6 +968,10 @@ impl DocView {
     /// Only `page` changed (a comment was added, edited or removed): re-render that page and
     /// re-read its text, keep everything else. Out-of-date tiles stay on screen until replacements arrive.
     pub fn page_changed(&mut self, page: usize) {
+        // Page-local edits may shift the annotation-array positions too.
+        if matches!(self.keyboard_item, Some((p, pdfcraft_engine::keyboard::PageItem::Annotation { .. })) if p == page) {
+            self.keyboard_item = None;
+        }
         if let Some(p) = self.pages.get_mut(&page) {
             p.tag = STALE_TAG;
         }
@@ -2150,7 +2161,7 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
     if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::F))) {
         view.open_find();
     }
-    if ctx.egui_wants_keyboard_input() {
+    if ctx.egui_wants_keyboard_input() && !crate::keyboard::document_focused(ctx) {
         return;
     }
     let cmd = |k| KeyboardShortcut::new(Modifiers::COMMAND, k);
@@ -2271,6 +2282,9 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
 const KEY_SCROLL_LINE: f32 = 40.0;
 
 pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
+    if app.active == Some(index) {
+        app.keyboard.region(ui, crate::keyboard::Region::Document, None);
+    }
     let t = Tokens::get(ui.ctx());
     // Keyboard scrolling applies to this frame's page view only, never later.
     let key_scroll = std::mem::take(&mut app.views[index].key_scroll);
@@ -3284,6 +3298,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 crate::redact_ui::paint(ui, painter, i, view);
             }
             comments::paint_page(ui, painter, &pcx, view);
+            crate::keyboard::paint_page_item(ui, painter, &xf, i, info, &form, view);
             if editing_content {
                 crate::content_ui::paint_page(ui, painter, &xf, i, info, &added, view);
             }
