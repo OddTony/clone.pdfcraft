@@ -315,6 +315,17 @@ struct Editor {
     appearances: AppearanceCache,
     /// The text blocks last computed for one page, reused while the document is unchanged.
     text_blocks: TextBlocksCache,
+    /// A signed file that opening appended revisions to (an XFA form's layout, the values from
+    /// its data, its open scripts): the file as it was read, which the signatures are validated
+    /// against until the user changes something or saves (#2759).
+    as_opened: Option<AsOpened>,
+}
+
+/// The file as read, before opening appended PdfCraft's own revisions to it.
+#[derive(Clone)]
+struct AsOpened {
+    cos: pdfcraft_cos::Document,
+    bytes: Arc<Vec<u8>>,
 }
 
 /// One page's text blocks ([`pdfcraft_edit::text_blocks`]) and the unmodified document state they
@@ -3211,9 +3222,16 @@ fn xfa_values_from_datasets(doc: &mut pdfcraft_cos::Document) -> Result<Vec<Stri
     Ok(changed)
 }
 
-/// Validate the signature fields of `cos` (written as `bytes`).
-fn signatures_of(cos: &pdfcraft_cos::Document, bytes: &[u8], trust: &TrustStore, cache: &pdfcraft_sign::DigestCache) -> Vec<SignatureInfo> {
-    pdfcraft_sign::pdf::list_cached(cos, bytes, trust, cache)
+/// Validate the signature fields of the editor's working state (written as `bytes`). While that
+/// state is still the file as opened plus only what opening appended, the file as read is
+/// validated instead: PdfCraft's own open-time revisions are not changes made since signing.
+fn signatures_of(editor: &Editor, bytes: &[u8], trust: &TrustStore, cache: &pdfcraft_sign::DigestCache) -> Vec<SignatureInfo> {
+    match &editor.as_opened {
+        Some(o) if !editor.cos.is_modified() && Arc::ptr_eq(editor.cos.bytes(), &editor.saved) => {
+            pdfcraft_sign::pdf::list_cached(&o.cos, &o.bytes, trust, cache)
+        }
+        _ => pdfcraft_sign::pdf::list_cached(&editor.cos, bytes, trust, cache),
+    }
 }
 
 impl Session {
@@ -3350,6 +3368,11 @@ impl Session {
                 (inspect(bytes.clone(), Some(&user))?, Some(user))
             }
             Err(e) => return Err(e),
+        };
+        // The file as read, for its signatures: opening an XFA form may append revisions below.
+        let as_read = match (&info.xfa, &cos) {
+            (Some(_), Ok(Ok(c))) => Some(AsOpened { cos: c.clone(), bytes: bytes.clone() }),
+            _ => None,
         };
         // A dynamic XFA form is a shell around an XML template; lay the template out into real
         // pages and fields so the rest of the engine works on it. The original bytes stay: the
@@ -3491,7 +3514,8 @@ impl Session {
         };
         // XFA notes survive the document being re-read after edits.
         let xfa_warnings: Vec<String> = if info.xfa.is_some() { info.warnings.clone() } else { Vec::new() };
-        let mut document = Self::build_document(&context.trust, name, path, bytes, info, cos, render_password, password, xfa);
+        let as_opened = as_read.filter(|o| !Arc::ptr_eq(&o.bytes, &bytes));
+        let mut document = Self::build_document(&context.trust, name, path, bytes, info, cos, render_password, password, xfa, as_opened);
         // A script that ran away on open turns the form's scripts off for this document.
         document.xfa_template = if ran_away { None } else { xfa_template };
         document.js_output.append(script_output);
@@ -3515,6 +3539,7 @@ impl Session {
         render_password: Option<String>,
         password: Option<&str>,
         xfa: Option<XfaLayout>,
+        as_opened: Option<AsOpened>,
     ) -> Document {
         let config = RenderConfig { password: render_password.as_deref().map(Arc::from), ..Default::default() };
         let (mut editor, read_only_reason) = match cos {
@@ -3531,6 +3556,7 @@ impl Session {
                         keys,
                         appearances: AppearanceCache::default(),
                         text_blocks: TextBlocksCache::default(),
+                        as_opened,
                     }),
                     None,
                 )
@@ -3539,7 +3565,13 @@ impl Session {
             Err(_) => (None, Some("the document structure could not be read for editing".into())),
         };
         let sig_cache = Arc::new(pdfcraft_sign::DigestCache::default());
-        let signatures = editor.as_ref().map(|e| signatures_of(&e.cos, &bytes, trust, &sig_cache)).unwrap_or_default();
+        let signatures = editor.as_ref().map(|e| signatures_of(e, &bytes, trust, &sig_cache)).unwrap_or_default();
+        // Only a signed file needs keeping as it was read.
+        if !signatures.iter().any(|s| s.signed)
+            && let Some(e) = editor.as_mut()
+        {
+            e.as_opened = None;
+        }
         let display = display_bytes(editor.as_mut(), &bytes);
         let renderer = RenderPool::new(display.clone(), render_threads(), config.clone());
         let (form, adopted) = editor
@@ -3875,7 +3907,7 @@ impl Session {
             doc.info.producer = info("Producer");
             doc.info.file_size = bytes.len();
             if !doc.signatures.is_empty() {
-                let signatures = signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache);
+                let signatures = signatures_of(editor, &bytes, &doc.trust, &doc.sig_cache);
                 doc.signatures = Arc::new(signatures);
             }
             doc.bytes = bytes;
@@ -3919,7 +3951,7 @@ impl Session {
         }
         doc.info.file_size = bytes.len();
         doc.form = form;
-        let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache) };
+        let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(editor, &bytes, &doc.trust, &doc.sig_cache) };
         doc.display = display_bytes(Some(editor), &bytes);
         doc.signatures = Arc::new(signatures);
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
@@ -3964,7 +3996,7 @@ impl Session {
             doc.marker_scan = OnceLock::new();
         }
         doc.info.file_size = bytes.len();
-        let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache) };
+        let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(editor, &bytes, &doc.trust, &doc.sig_cache) };
         doc.display = display_bytes(Some(editor), &bytes);
         doc.signatures = Arc::new(signatures);
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
@@ -4039,7 +4071,7 @@ impl Session {
         if invalidate_links {
             doc.links = OnceLock::new();
         }
-        let signatures = signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache);
+        let signatures = signatures_of(editor, &bytes, &doc.trust, &doc.sig_cache);
         doc.display = display_bytes(Some(editor), &bytes);
         doc.signatures = Arc::new(signatures);
         doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
@@ -4108,6 +4140,8 @@ impl Session {
                 pdfcraft_cos::Document::open_with_password(bytes.clone(), keys.reopen.as_deref()).map_err(|e| EditError::Reopen(e.to_string()))?;
             editor.saved = bytes;
             editor.saved_keys = keys;
+            // The saved file holds what opening appended: from now on it is the file.
+            editor.as_opened = None;
         }
         if let Some(p) = path {
             doc.name = std::path::Path::new(&p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.clone());
@@ -4783,7 +4817,7 @@ impl Session {
             let Some(editor) = doc.editor.as_mut() else { continue };
             // Keep verdict refresh and renderer refresh together. Viewer caches are
             // invalidated by the UI trust path; trust alone changes no document artwork.
-            let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(&editor.cos, &doc.bytes, &doc.trust, &doc.sig_cache) };
+            let signatures = if doc.signatures.is_empty() { Vec::new() } else { signatures_of(editor, &doc.bytes, &doc.trust, &doc.sig_cache) };
             doc.display = display_bytes(Some(editor), &doc.bytes);
             doc.signatures = Arc::new(signatures);
             doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
