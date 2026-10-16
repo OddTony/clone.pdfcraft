@@ -839,13 +839,13 @@ fn register_fields(dst: &mut Document, fields: &[ObjRef]) -> Result<(), Organize
 /// source declares (PDF/X: its output intents and identification, #263).
 pub fn extract_pages(src: &Document, pages: &[usize]) -> Result<Document, OrganizeError> {
     let mut out = Document::new_empty();
+    let mut labels = Vec::new();
+    let mut has_labels = false;
+    crate::labels::collect_page_labels(src, pages, 0, &mut labels, &mut has_labels)?;
     // One source: nothing to deduplicate. Its fields keep their names (a source with two
     // same-named field roots stays one field, as it was), so Extract and Split never rename.
     let imported = import_pages_mapped(&mut out, src, pages, 0, FieldConflicts::Merge)?;
-    let mut labels = Vec::new();
-    let mut has_labels = false;
-    crate::labels::collect_page_labels(src, pages, 0, &mut labels, &mut has_labels);
-    crate::labels::finish_page_labels(&mut out, &labels, has_labels);
+    crate::labels::finish_page_labels(&mut out, &labels, has_labels)?;
     for key in crate::INFO_KEYS {
         if let Some(v) = crate::info(src, key) {
             crate::set_info(&mut out, key, &v)?;
@@ -1009,7 +1009,7 @@ impl Combiner {
         };
         let at = crate::page_count(&self.out)?;
         let imported = import_pages_mapped(&mut self.out, src, &pages, at, self.field_conflicts)?;
-        crate::labels::collect_page_labels(src, &pages, at, &mut self.labels, &mut self.has_labels);
+        crate::labels::collect_page_labels(src, &pages, at, &mut self.labels, &mut self.has_labels)?;
         self.renamed_fields.extend(imported.renamed_fields);
         if let Some(first) = imported.pages.first() {
             let outline = source_outline(src, imported.page_map);
@@ -1042,7 +1042,7 @@ impl Combiner {
         // Sources often share fonts, images and profiles (or are the same file): store them once.
         let all: Vec<ObjRef> = out.object_numbers().into_iter().map(|n| ObjRef::new(n, out.generation(n))).collect();
         crate::dedupe::dedupe_resources(&mut out, &all, false);
-        crate::labels::finish_page_labels(&mut out, &labels, has_labels);
+        crate::labels::finish_page_labels(&mut out, &labels, has_labels)?;
         add_outline(&mut out, &marks)?;
         set_attachments(&mut out, attachments)?;
         Ok(CombineOutcome { doc: out, renamed_fields })
@@ -1130,7 +1130,7 @@ pub fn combine_grouped_with(runs: &[Run<'_>], conflicts: FieldConflicts) -> Resu
         if let Some((_, f)) = files.get(file)
             && let Some(pages) = f.pages.get(start..end)
         {
-            crate::labels::collect_page_labels(f.src, pages, at, &mut labels, &mut has_labels);
+            crate::labels::collect_page_labels(f.src, pages, at, &mut labels, &mut has_labels)?;
         }
     }
     rebuild(&mut out, &order)?;
@@ -1139,7 +1139,7 @@ pub fn combine_grouped_with(runs: &[Run<'_>], conflicts: FieldConflicts) -> Resu
     }
     let all: Vec<ObjRef> = out.object_numbers().into_iter().map(|n| ObjRef::new(n, out.generation(n))).collect();
     crate::dedupe::dedupe_resources(&mut out, &all, false);
-    crate::labels::finish_page_labels(&mut out, &labels, has_labels);
+    crate::labels::finish_page_labels(&mut out, &labels, has_labels)?;
     add_outline(&mut out, &marks)?;
     set_attachments(&mut out, attachments)?;
     Ok(CombineOutcome { doc: out, renamed_fields })

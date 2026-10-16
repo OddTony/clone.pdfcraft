@@ -1632,6 +1632,32 @@ fn extracting_splitting_and_combining_preserve_page_labels() {
     cyclic.update_dict(cyclic.root().unwrap(), |c| c.set(b"PageLabels".to_vec(), Object::Ref(tree))).unwrap();
     let extracted_cyclic = full_roundtrip(&extract_pages(&cyclic, &[0, 2]).unwrap());
     assert_eq!(crate::page_labels(&extracted_cyclic).unwrap(), ["1", "2"]);
+
+    // An empty prefix-only range falls back to physical page numbers in the source; extracting a
+    // later page covered by it preserves that physical page number across save/reopen.
+    let mut empty_prefix = doc_a();
+    crate::set_page_label_ranges(
+        &mut empty_prefix,
+        &[
+            LabelRange { start: 0, style: crate::LabelStyle::None, prefix: String::new(), first: 1 },
+            LabelRange { start: 2, style: LowerRoman, prefix: String::new(), first: 1 },
+        ],
+    )
+    .unwrap();
+    assert_eq!(crate::PageLabels::new(&empty_prefix).unwrap().label(1).unwrap(), "2");
+    let extracted_empty_prefix = full_roundtrip(&extract_pages(&empty_prefix, &[1]).unwrap());
+    assert_eq!(crate::PageLabels::new(&extracted_empty_prefix).unwrap().label(0).unwrap(), "2");
+
+    // Repeated non-continuing ranges that exceed the 4 MiB total-prefix limit or the range-count
+    // limit are refused rather than writing an unreadable tree or silently dropping labels.
+    let mut one = flat_doc(1);
+    crate::number_pages(&mut one, 0, 0, Decimal, &"x".repeat(1_000), 1).unwrap();
+    let err = extract_pages(&one, &vec![0; 4_195]).unwrap_err().to_string();
+    assert!(err.contains("decoded prefixes exceed 4 MiB in total"), "{err}");
+
+    crate::number_pages(&mut one, 0, 0, LowerRoman, "", 2).unwrap();
+    let err = extract_pages(&one, &vec![0; pdfcraft_cos::page_labels::MAX_LABEL_TREE_WORK]).unwrap_err().to_string();
+    assert!(err.contains("the number tree has too many entries"), "{err}");
 }
 
 #[test]

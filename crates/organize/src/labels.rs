@@ -360,11 +360,13 @@ pub fn set_page_label_ranges(doc: &mut Document, ranges: &[LabelRange]) -> Resul
         return Err(invalid_label("the number tree has too many entries"));
     }
     // Validate every range and all effective labels before changing any document object.
+    let mut prefix_left = MAX_PREFIX_TOTAL_BYTES;
     for r in ranges {
         if r.first == 0 || i64::try_from(r.start).is_err() {
             return Err(invalid_label("range starts and first numbers must be valid positive PDF integers"));
         }
         r.label(r.start)?;
+        prefix_left = prefix_left.checked_sub(r.prefix.len()).ok_or_else(|| invalid_label("decoded prefixes exceed 4 MiB in total"))?;
     }
     let mut sorted = ranges.to_vec();
     sorted.sort_by_key(|r| r.start);
@@ -450,8 +452,9 @@ pub fn number_pages(doc: &mut Document, from: usize, to: usize, style: LabelStyl
     }
     // Drop ranges that only continue the previous one.
     let mut merged: Vec<LabelRange> = Vec::new();
+    let mut prefix_left = MAX_PREFIX_TOTAL_BYTES;
     for r in ranges {
-        push_merged_range(&mut merged, r);
+        push_merged_range(&mut merged, &mut prefix_left, r)?;
     }
     // Plain 1, 2, 3 everywhere is what a document without labels shows: remove them.
     if merged.len() == 1 && merged[0] == default_range() {
@@ -460,7 +463,7 @@ pub fn number_pages(doc: &mut Document, from: usize, to: usize, style: LabelStyl
     set_page_label_ranges(doc, &merged)
 }
 
-fn push_merged_range(merged: &mut Vec<LabelRange>, r: LabelRange) {
+fn push_merged_range(merged: &mut Vec<LabelRange>, prefix_left: &mut usize, r: LabelRange) -> Result<(), OrganizeError> {
     let continues = merged.last().is_some_and(|p| {
         p.style == r.style
             && p.prefix == r.prefix
@@ -470,23 +473,42 @@ fn push_merged_range(merged: &mut Vec<LabelRange>, r: LabelRange) {
             }
     });
     if !continues {
+        if merged.len() + 1 >= MAX_LABEL_TREE_WORK {
+            return Err(invalid_label("the number tree has too many entries"));
+        }
+        *prefix_left = prefix_left.checked_sub(r.prefix.len()).ok_or_else(|| invalid_label("decoded prefixes exceed 4 MiB in total"))?;
         merged.push(r);
     }
+    Ok(())
 }
 
 /// Append the label ranges that `pages` (0-based indices in `src`) carry when placed at
 /// `dst_start` in an output document. Sets `has_labels` when `src` has `/PageLabels`.
-pub(crate) fn collect_page_labels(src: &Document, pages: &[usize], dst_start: usize, out: &mut Vec<LabelRange>, has_labels: &mut bool) {
+pub(crate) fn collect_page_labels(
+    src: &Document,
+    pages: &[usize],
+    dst_start: usize,
+    out: &mut Vec<LabelRange>,
+    has_labels: &mut bool,
+) -> Result<(), OrganizeError> {
     if pages.is_empty() {
-        return;
+        return Ok(());
     }
     let mut src_ranges = checked_ranges(src).unwrap_or_default();
     if !src_ranges.is_empty() {
         *has_labels = true;
     }
+    for r in &mut src_ranges {
+        // An empty prefix-only range shows each page's physical number in the source.
+        if r.style == LabelStyle::None && r.prefix.is_empty() {
+            r.style = LabelStyle::Decimal;
+            r.first = u32::try_from(r.start.saturating_add(1)).unwrap_or(1);
+        }
+    }
     if src_ranges.first().is_none_or(|r| r.start > 0) {
         src_ranges.insert(0, default_range());
     }
+    let mut prefix_left = MAX_PREFIX_TOTAL_BYTES.saturating_sub(out.iter().map(|r| r.prefix.len()).sum::<usize>());
     let mut i = 0;
     while i < pages.len() {
         let src_start = pages[i];
@@ -506,24 +528,30 @@ pub(crate) fn collect_page_labels(src: &Document, pages: &[usize], dst_start: us
                     first: u32::try_from(run_dst.saturating_add(1)).unwrap_or(1),
                 },
             };
-            push_merged_range(out, mapped);
+            push_merged_range(out, &mut prefix_left, mapped)?;
         }
         let src_end = src_start.saturating_add(len);
         for r in src_ranges.get(idx + 1..).unwrap_or_default() {
             if r.start >= src_end {
                 break;
             }
-            push_merged_range(out, LabelRange { start: run_dst + (r.start - src_start), style: r.style, prefix: r.prefix.clone(), first: r.first });
+            push_merged_range(
+                out,
+                &mut prefix_left,
+                LabelRange { start: run_dst + (r.start - src_start), style: r.style, prefix: r.prefix.clone(), first: r.first },
+            )?;
         }
         i += len;
     }
+    Ok(())
 }
 
 /// Write collected page label ranges to `dst` when at least one source carried `/PageLabels`.
-pub(crate) fn finish_page_labels(dst: &mut Document, ranges: &[LabelRange], has_labels: bool) {
+pub(crate) fn finish_page_labels(dst: &mut Document, ranges: &[LabelRange], has_labels: bool) -> Result<(), OrganizeError> {
     if has_labels && !ranges.is_empty() {
-        let _ = set_page_label_ranges(dst, ranges);
+        set_page_label_ranges(dst, ranges)?;
     }
+    Ok(())
 }
 
 #[cfg(test)]
