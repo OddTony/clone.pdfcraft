@@ -422,6 +422,17 @@ pub(super) fn rewrite_styled_block(
     // a Type 3 vowel glyph with its original base letter cannot position niqqud.
     // This is generic per-document font resolution, never a hardcoded PDF/font.
     let has_hebrew_marks = draft.chars().any(crate::bidi::is_hebrew_mark);
+    let uniform_hebrew_style = has_hebrew_marks && style.ranges.is_empty()
+        && block.lines.iter().filter_map(|i| lines.get(*i)).all(|line| {
+            pdfcraft_fonts::embedding::face_key(&line.base_font) == pdfcraft_fonts::embedding::face_key(&first.base_font)
+                && line.size == first.size && line.color == first.color
+                && line.bold == first.bold && line.italic == first.italic
+        });
+    if has_hebrew_marks && !uniform_hebrew_style {
+        return Err(EditError::Invalid(
+            "Hebrew points across incompatible source font/style runs need a uniform full-face paragraph".into(),
+        ));
+    }
     let shape_text: String = draft.chars().filter(|c| !matches!(c, '\n' | '\r')).collect();
     let source_can_shape = fonts.get(first.font.as_bytes())
         .and_then(|f| doc.resolve(f).as_dict().cloned())
@@ -449,12 +460,6 @@ pub(super) fn rewrite_styled_block(
     } else {
         None
     };
-    let uniform_hebrew_style = has_hebrew_marks && style.ranges.is_empty()
-        && block.lines.iter().filter_map(|i| lines.get(*i)).all(|line| {
-            pdfcraft_fonts::embedding::face_key(&line.base_font) == pdfcraft_fonts::embedding::face_key(&first.base_font)
-                && line.size == first.size && line.color == first.color
-                && line.bold == first.bold && line.italic == first.italic
-        });
     for (range, index) in styled_spans {
         let source = lines.get(index).unwrap_or(first);
         for ch in draft.get(range).unwrap_or_default().chars() {
