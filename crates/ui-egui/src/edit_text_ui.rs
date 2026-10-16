@@ -125,6 +125,7 @@ impl TextBackground {
         if self.received != Some(tag) {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
+        let mut render_error = None;
         if let Some(draft) = &self.draft_renderer {
             if self.draft_tag != Some(tag) {
                 draft.set_queue(vec![pdfcraft_render::RenderRequest { page, scale, tag, ..Default::default() }]);
@@ -132,9 +133,7 @@ impl TextBackground {
             }
             if let Some(output) = draft.try_recv() {
                 if let Some(error) = output.error {
-                    self.draft_renderer = None;
-                    self.draft_texture = None;
-                    self.draft_error = Some(error);
+                    render_error = Some(error);
                 } else if output.request.tag == tag {
                     self.draft_texture = Some(ctx.load_texture(
                         "text-editor-saved-pdf-preview",
@@ -144,9 +143,14 @@ impl TextBackground {
                     self.draft_received = Some(tag);
                 }
             }
-            if self.draft_received != Some(tag) {
+            if self.draft_received != Some(tag) && render_error.is_none() {
                 ctx.request_repaint_after(std::time::Duration::from_millis(16));
             }
+        }
+        if let Some(error) = render_error {
+            self.draft_renderer = None;
+            self.draft_texture = None;
+            self.draft_error = Some(error);
         }
     }
 
@@ -1647,7 +1651,14 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     let background_ready = view
         .line_editor
         .as_ref()
-        .is_some_and(|ed| view.text_background.ready(ed.page, ed.block) && !ed.source.as_ref().is_some_and(|(b, _)| b.invisible));
+        .is_some_and(|ed| {
+            (view.text_background.ready(ed.page, ed.block)
+                || view.text_background.ready_draft(ed.page, ed.block))
+                && !ed.source.as_ref().is_some_and(|(b, _)| b.invisible)
+        });
+    let draft_pdf_ready = view.line_editor.as_ref()
+        .is_some_and(|ed| view.text_background.ready_draft(ed.page, ed.block));
+    let draft_error = view.text_background.draft_error().map(str::to_owned);
     let draft_rect = view.text_background.draft_rect.map(|r| xf.user_rect(info, page, r.map(|v| v as f32)));
     let ed = view.line_editor.as_mut()?;
     if hold {
@@ -1693,6 +1704,12 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             // can differ from the PDF's. Keep every visible row inside the growing frame.
             let live = draft_rect.map_or(visible, |bounds| bounds.union(visible));
             ui.painter().rect_stroke(live.expand(2.0), CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
+            // Do not silently substitute the source font when the PDF rewrite
+            // rejects an unsupported glyph. The user sees the same error that
+            // Apply would return, while the original document stays untouched.
+            if let Some(error) = &draft_error {
+                ui.label(egui::RichText::new(error).color(Color32::from_rgb(184, 49, 49)).size(11.0));
+            }
             // On the frame, a press takes hold of the box (a click selects it, a drag moves it):
             // the pointer says so there, and reads as text inside.
             if let Some(p) = ui.input(|i| i.pointer.hover_pos())
@@ -1805,7 +1822,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                     }
                     // The logical input is transparent; paint visual bidi order
                     // separately without altering clipboard or saved PDF text.
-                    if !pristine_source {
+                    if !pristine_source && !draft_pdf_ready {
                         let visual = crate::bidi::visual_auto(&ed.text);
                         let job = editor_visual_job(ui, ed, &visual, scale, width);
                         let display = editor_galley_with_job(ui, ed, &visual, scale, width, job);
