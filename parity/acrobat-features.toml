@@ -8044,8 +8044,8 @@ milestone = "M10"
 status = "shipped"
 commands = ["print.dialog"]
 tools = ["doc_print"]
-evidence = ["crates/print/src/tests.rs::booklets_pair_pages_for_folding"]
-notes = "both/front/back, left/right binding"
+evidence = ["crates/print/src/tests.rs::booklets_pair_pages_for_folding", "crates/ui-egui/tests/print.rs::booklet_turns_on_two_sided_printing"]
+notes = "both/front/back, left/right binding; choosing Booklet (both sides) with Two-sided Off turns on flip on short edge"
 
 [[feature]]
 id = "print.poster"
