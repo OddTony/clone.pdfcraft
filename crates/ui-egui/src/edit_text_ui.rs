@@ -1708,7 +1708,13 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             // rejects an unsupported glyph. The user sees the same error that
             // Apply would return, while the original document stays untouched.
             if let Some(error) = &draft_error {
-                ui.label(egui::RichText::new(error).color(Color32::from_rgb(184, 49, 49)).size(11.0));
+                ui.painter().text(
+                    live.left_bottom() + egui::vec2(0.0, 5.0),
+                    egui::Align2::LEFT_TOP,
+                    error,
+                    egui::FontId::proportional(11.0),
+                    Color32::from_rgb(184, 49, 49),
+                );
             }
             // On the frame, a press takes hold of the box (a click selects it, a drag moves it):
             // the pointer says so there, and reads as text inside.
