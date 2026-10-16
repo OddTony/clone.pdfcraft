@@ -62,7 +62,7 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(14.0, 14.0);
                         for id in RECOMMENDED {
-                            let Some(g) = catalog::group(id) else { continue };
+                            let Some(g) = catalog::group(id).filter(|g| app.hidden_tools.shows(g.id)) else { continue };
                             let (rect, resp) = ui.allocate_exact_size(vec2(190.0, 104.0), Sense::click());
                             resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!(g.label)));
                             let press = theme::Press::track(ui, &resp);
