@@ -362,8 +362,7 @@ pub enum CheckStyle {
 }
 
 impl CheckStyle {
-    pub const ALL: [Self; 6] =
-        [Self::Check, Self::Circle, Self::Cross, Self::Diamond, Self::Square, Self::Star];
+    pub const ALL: [Self; 6] = [Self::Check, Self::Circle, Self::Cross, Self::Diamond, Self::Square, Self::Star];
 
     fn code(self) -> &'static str {
         match self {
@@ -391,11 +390,7 @@ impl CheckStyle {
     pub(crate) fn of_widget(doc: &Document, wd: &Dict, kind: FieldKind) -> Self {
         let mk = wd.get(b"MK").and_then(|m| doc.resolve(m).as_dict().cloned()).unwrap_or_default();
         let ca = mk.get(b"CA").and_then(|c| doc.resolve(c).as_string().map(|s| s.to_text()));
-        Self::ALL.into_iter().find(|s| ca.as_deref() == Some(s.code())).unwrap_or(if kind == FieldKind::Radio {
-            Self::Circle
-        } else {
-            Self::Check
-        })
+        Self::ALL.into_iter().find(|s| ca.as_deref() == Some(s.code())).unwrap_or(if kind == FieldKind::Radio { Self::Circle } else { Self::Check })
     }
 }
 

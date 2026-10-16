@@ -40,8 +40,7 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Self; 7] =
-        [Self::Document, Self::PageContent, Self::Forms, Self::AlternateText, Self::Tables, Self::Lists, Self::Headings];
+    pub const ALL: [Self; 7] = [Self::Document, Self::PageContent, Self::Forms, Self::AlternateText, Self::Tables, Self::Lists, Self::Headings];
 
     pub fn label(self) -> &'static str {
         match self {

@@ -428,9 +428,7 @@ pub enum Arrange {
 impl Arrange {
     pub fn label(self) -> &'static str {
         match self {
-            Self::AlignLeft | Self::AlignRight | Self::AlignTop | Self::AlignBottom | Self::AlignCenterH | Self::AlignCenterV => {
-                "Align fields"
-            }
+            Self::AlignLeft | Self::AlignRight | Self::AlignTop | Self::AlignBottom | Self::AlignCenterH | Self::AlignCenterV => "Align fields",
             Self::DistributeH | Self::DistributeV => "Distribute fields",
             Self::SameWidth | Self::SameHeight | Self::SameSize => "Match field sizes",
         }
