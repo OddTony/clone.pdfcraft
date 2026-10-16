@@ -218,6 +218,9 @@
 	Not evaluated: {list}	Не проверено: {list}
 	Only the first {n} of each kind are listed.	Показаны только первые {n} каждого вида.
 	The document has more objects than one check covers; the rest was not checked.	В документе больше объектов, чем охватывает одна проверка; остальное не проверено.
+	Checking the structure… {n} objects so far	Проверка структуры… пока {n} объектов
+	The check was cancelled.	Проверка отменена.
+	The check stopped unexpectedly.	Проверка неожиданно остановилась.
 	Detect form fields	Определить поля формы
 	Merge data files into spreadsheet…	Объединить файлы данных в электронную таблицу…
 	Flatten form fields	Расплющить поля формы

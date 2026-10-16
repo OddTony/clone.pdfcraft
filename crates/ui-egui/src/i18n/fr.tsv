@@ -198,6 +198,9 @@
 	Not evaluated: {list}	Non évalué : {list}
 	Only the first {n} of each kind are listed.	Seuls les {n} premiers de chaque type sont listés.
 	The document has more objects than one check covers; the rest was not checked.	Le document contient plus d'objets qu'une vérification n'en couvre ; le reste n'a pas été vérifié.
+	Checking the structure… {n} objects so far	Vérification de la structure… {n} objets pour l'instant
+	The check was cancelled.	La vérification a été annulée.
+	The check stopped unexpectedly.	La vérification s'est arrêtée de manière inattendue.
 	Detect form fields	Détecter les champs de formulaire
 	Merge data files into spreadsheet…	Fusionner des fichiers de données dans une feuille de calcul…
 	Flatten form fields	Aplatir les champs de formulaire

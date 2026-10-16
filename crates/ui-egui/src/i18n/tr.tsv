@@ -183,6 +183,9 @@
 	Not evaluated: {list}	Değerlendirilmedi: {list}
 	Only the first {n} of each kind are listed.	Her türden yalnızca ilk {n} tanesi listelenir.
 	The document has more objects than one check covers; the rest was not checked.	Belgede bir denetimin kapsadığından fazla nesne var; geri kalanı denetlenmedi.
+	Checking the structure… {n} objects so far	Yapı denetleniyor… şu ana kadar {n} nesne
+	The check was cancelled.	Denetim iptal edildi.
+	The check stopped unexpectedly.	Denetim beklenmedik biçimde durdu.
 	Detect form fields	Form alanlarını algıla
 	Merge data files into spreadsheet…	Veri dosyalarını elektronik tabloda birleştir…
 	Flatten form fields	Form alanlarını düzleştir

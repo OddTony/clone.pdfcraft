@@ -3,6 +3,9 @@
 //!
 //! The validator never parses a file; this adapts the editor's object layer to it, so what is
 //! checked is the document as it is now, unsaved edits included.
+//!
+//! A large document takes a second or more to check, so the UI checks a [`StructureJob`] on a
+//! worker thread: a snapshot of the object graph that the session can go on editing beside.
 
 use std::collections::HashMap;
 
@@ -20,9 +23,33 @@ impl crate::Document {
     /// object graph to check (it couldn't be read for editing).
     pub fn validate_structure(&self, options: &Options) -> Option<Report> {
         let cos = &self.editor.as_ref()?.cos;
-        let pages: HashMap<u32, usize> = pdfcraft_model::pages(cos).iter().enumerate().map(|(i, p)| (p.obj.num, i)).collect();
-        let source = CosSource { doc: cos, page_count: pages.len(), pages };
-        Some(pdfcraft_arlington::validate(&source, options))
+        Some(pdfcraft_arlington::validate(&CosSource::new(cos), options))
+    }
+
+    /// What validating the document as it is now needs, to check it anywhere (on a worker
+    /// thread): `None` when it has no object graph to check, as with [`Self::validate_structure`].
+    pub fn structure_job(&self, options: &Options) -> Option<StructureJob> {
+        // A clone of the object graph shares the file's bytes, its cross-reference index and its
+        // bounded parse caches (each behind an `Arc`), and copies only the unsaved edits, so it
+        // costs little however large the file, and later edits don't reach it.
+        let cos = self.editor.as_ref()?.cos.clone();
+        Some(StructureJob { cos, options: options.clone() })
+    }
+}
+
+/// A structure validation that runs apart from the session: the snapshot made by
+/// [`crate::Document::structure_job`] and the options.
+pub struct StructureJob {
+    cos: pdfcraft_cos::Document,
+    options: Options,
+}
+
+impl StructureJob {
+    /// Validate, calling `progress` every few hundred objects with how many have been checked;
+    /// `Ok(None)` when it returns `false`. A panic is returned as the error, so a worker thread
+    /// always reports back.
+    pub fn run(self, mut progress: impl FnMut(usize) -> bool) -> Result<Option<Report>, String> {
+        crate::guard(move || pdfcraft_arlington::validate_with_progress(&CosSource::new(&self.cos), &self.options, &mut progress))
     }
 }
 
@@ -30,6 +57,13 @@ struct CosSource<'a> {
     doc: &'a pdfcraft_cos::Document,
     pages: HashMap<u32, usize>,
     page_count: usize,
+}
+
+impl<'a> CosSource<'a> {
+    fn new(doc: &'a pdfcraft_cos::Document) -> Self {
+        let pages: HashMap<u32, usize> = pdfcraft_model::pages(doc).iter().enumerate().map(|(i, p)| (p.obj.num, i)).collect();
+        CosSource { doc, page_count: pages.len(), pages }
+    }
 }
 
 impl Source for CosSource<'_> {
@@ -162,6 +196,41 @@ mod tests {
         let after = check(&s);
         assert!(after.objects > before.objects, "the new document information is walked: {} then {}", before.objects, after.objects);
         assert!(after.is_valid(), "{:?}", after.findings.iter().map(Finding::message).collect::<Vec<_>>());
+    }
+
+    /// A job checks the document as it was when the job was made, wherever it runs, while the
+    /// session goes on editing; and it stops when asked to.
+    #[test]
+    fn a_job_checks_its_snapshot_off_the_session() {
+        fn sendable<T: Send + 'static>(t: T) -> T {
+            t
+        }
+        let mut s = Session::new();
+        let id = s.open("t.pdf", None, Arc::new(crate::tests::fixture(1)), None).expect("opens");
+        let job = |s: &Session| sendable(s.get(id).and_then(|d| d.structure_job(&Options::default())).expect("has an object graph"));
+        let before = job(&s);
+        let unedited = s.get(id).and_then(|d| d.validate_structure(&Options::default())).expect("checks");
+        s.apply(id, crate::Edit::SetInfo { key: "Title".into(), value: "Draft".into() }).expect("edits");
+        let after = job(&s);
+        let edited = s.get(id).and_then(|d| d.validate_structure(&Options::default())).expect("checks");
+        assert_ne!(unedited.objects, edited.objects, "the edit adds objects to check");
+
+        let worker = std::thread::spawn(move || before.run(|_| true));
+        assert_eq!(worker.join().expect("the worker reports back"), Ok(Some(unedited)), "the edit made later isn't in the snapshot");
+        assert_eq!(after.run(|_| true), Ok(Some(edited)), "a job made after the edit has it");
+
+        let big = s.open("big.pdf", None, Arc::new(crate::tests::fixture(300)), None).expect("opens");
+        let job = s.get(big).and_then(|d| d.structure_job(&Options::default())).expect("has an object graph");
+        let mut asked = 0;
+        assert_eq!(
+            job.run(|_| {
+                asked += 1;
+                false
+            }),
+            Ok(None),
+            "cancelled"
+        );
+        assert_eq!(asked, 1);
     }
 
     #[test]

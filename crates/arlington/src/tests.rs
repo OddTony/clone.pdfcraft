@@ -408,6 +408,60 @@ fn limits_stop_the_walk_and_keep_the_totals() {
     assert!(report.objects <= 10);
 }
 
+/// A source that counts the indirect objects visited (each is asked for its page once), to see
+/// where a walk stopped. Loads don't tell: a page tree node loads all its kids to type them.
+struct Counted<'a>(&'a MemSource, std::cell::Cell<usize>);
+
+impl Source for Counted<'_> {
+    fn trailer(&self) -> Object {
+        self.0.trailer()
+    }
+    fn get(&self, r: Ref) -> Option<Object> {
+        self.0.get(r)
+    }
+    fn header_version(&self) -> Option<Version> {
+        self.0.header_version()
+    }
+    fn page_index(&self, r: Ref) -> Option<usize> {
+        self.1.set(self.1.get() + 1);
+        self.0.page_index(r)
+    }
+}
+
+/// A worker reports how far it is, and the caller can stop it: the walk ends at the first
+/// `false`, without a report.
+#[test]
+fn progress_is_reported_and_stops_the_walk() {
+    let mut doc = minimal();
+    let kids: Vec<Object> = (10..5010).map(r).collect();
+    for n in 10..5010 {
+        doc.objects.insert(n, page(&[]));
+    }
+    set(&mut doc, 2, &[("Kids", Object::Array(kids)), ("Count", Object::Int(5000))]);
+    let whole = check(&doc);
+
+    let mut said = Vec::new();
+    let same = validate_with_progress(&doc, &Options::default(), &mut |n| {
+        said.push(n);
+        true
+    });
+    assert_eq!(same.as_ref(), Some(&whole), "progress changes nothing");
+    assert!(said.len() > 5, "progress is said along the way: {said:?}");
+    assert!(said.windows(2).all(|w| w[0] < w[1]) && said.last() < Some(&whole.objects), "{said:?} of {}", whole.objects);
+
+    let counted = Counted(&doc, std::cell::Cell::new(0));
+    let mut asked = 0;
+    let stopped = validate_with_progress(&counted, &Options::default(), &mut |_| {
+        asked += 1;
+        false
+    });
+    assert_eq!((stopped, asked), (None, 1), "the first `false` stops it");
+    assert!(counted.1.get() < 1000, "the rest of the 5,000 pages isn't visited: {}", counted.1.get());
+    let whole_walk = Counted(&doc, std::cell::Cell::new(0));
+    validate(&whole_walk, &Options::default());
+    assert!(whole_walk.1.get() > 5000, "a whole walk visits every page: {}", whole_walk.1.get());
+}
+
 #[test]
 fn deep_direct_nesting_is_bounded() {
     let mut doc = minimal();

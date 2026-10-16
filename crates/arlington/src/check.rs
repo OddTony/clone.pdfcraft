@@ -50,6 +50,9 @@ const MAX_CACHED: usize = 100_000;
 const MAX_INHERIT: usize = 64;
 /// Paths longer than this keep only their end.
 const MAX_PATH: usize = 160;
+/// Work items between two calls of [`validate_with_progress`]'s callback: often enough to stop
+/// within milliseconds, seldom enough to cost nothing.
+const PROGRESS_EVERY: usize = 512;
 
 /// The fields of a form, whose dictionaries are often merged with their widget annotation.
 const FIELD_TYPES: &[&str] = &["FieldTx", "FieldBtnPush", "FieldBtnCheckbox", "FieldBtnRadio", "FieldChoice", "FieldSig", "Field"];
@@ -145,6 +148,19 @@ struct Walker<'s> {
 
 /// Validate the document `src` against the Arlington model.
 pub fn validate(src: &dyn Source, opts: &Options) -> Report {
+    walk(src, opts, &mut |_| true).0
+}
+
+/// [`validate`], calling `progress` every few hundred objects with how many have been checked so
+/// far. When it returns `false` the walk stops and there is no report: for callers that validate
+/// on a worker thread and let the user cancel.
+pub fn validate_with_progress(src: &dyn Source, opts: &Options, progress: &mut dyn FnMut(usize) -> bool) -> Option<Report> {
+    let (report, finished) = walk(src, opts, progress);
+    finished.then_some(report)
+}
+
+/// The walk, and whether it finished (`false`: `progress` stopped it).
+fn walk(src: &dyn Source, opts: &Options, progress: &mut dyn FnMut(usize) -> bool) -> (Report, bool) {
     let model = model::model();
     let trailer = Arc::new(match src.trailer() {
         d @ Object::Dict(_) => d,
@@ -195,9 +211,15 @@ pub fn validate(src: &dyn Source, opts: &Options) -> Report {
         nesting: 0,
         newer: None,
     }));
+    let (mut popped, mut finished) = (0usize, true);
     while let Some(work) = w.queue.pop_front() {
         if w.objects >= opts.max_objects {
             w.stopped = true;
+            break;
+        }
+        popped = popped.wrapping_add(1);
+        if popped.is_multiple_of(PROGRESS_EVERY) && !progress(w.objects) {
+            finished = false;
             break;
         }
         match work {
@@ -209,7 +231,7 @@ pub fn validate(src: &dyn Source, opts: &Options) -> Report {
     not_checked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     let [errors, warnings, infos] = w.totals;
     let truncated = w.totals.iter().zip(&w.findings).any(|(t, f)| *t > f.len());
-    Report {
+    let report = Report {
         version,
         version_assumed: assumed,
         findings: w.findings.into_iter().flatten().collect(),
@@ -220,7 +242,8 @@ pub fn validate(src: &dyn Source, opts: &Options) -> Report {
         not_checked,
         stopped_early: w.stopped,
         truncated,
-    }
+    };
+    (report, finished)
 }
 
 impl Walker<'_> {

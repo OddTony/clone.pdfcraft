@@ -24,6 +24,8 @@ for f in &report.findings {        // errors first, then warnings, then informat
     f.message();                   // English; f.said(&words) through a translator (WORDINGS)
 }
 report.not_checked;                // rules written as predicates it does not evaluate, counted
+// On a worker: told how many objects are done every few hundred; `false` stops it (None).
+let report = pdfcraft_arlington::validate_with_progress(&source, &Options::default(), &mut |n| keep_going(n));
 ```
 
 `MemSource` holds a document in memory, for tests and fuzzing.

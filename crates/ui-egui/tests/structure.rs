@@ -1,6 +1,8 @@
 //! Standards ▸ Validate structure in the real shell (egui_kittest): the dialog lists where the
 //! document departs from the Arlington PDF Model, and a finding on a page turns to that page.
 
+use std::time::{Duration, Instant};
+
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_ui_egui::{Dialog, PdfCraftApp};
@@ -42,11 +44,25 @@ fn harness(language: &'static str) -> Harness<'static, PdfCraftApp> {
     h
 }
 
+/// The check runs on a worker thread: frames go on until its report arrives.
+fn until_checked(h: &mut Harness<'_, PdfCraftApp>) {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while h.state().structure_report().is_none() {
+        assert!(Instant::now() < deadline, "the check never reported back");
+        h.run_steps(1);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    h.run_steps(2);
+}
+
 #[test]
 fn validate_structure_lists_findings_and_turns_to_their_page() {
     let mut h = harness("en");
     assert!(h.state_mut().execute("standards.structure"));
-    h.run_steps(2);
+    // The command doesn't wait for the check: it is on a worker, and its report comes later.
+    assert!(h.state().structure_checking().is_some(), "a check is running");
+    assert!(h.state().structure_report().is_none());
+    until_checked(&mut h);
     assert_eq!(h.state().dialog, Some(Dialog::Structure));
     h.get_by_label("Errors (1)");
     h.get_by_label("Information (1)");
@@ -62,6 +78,7 @@ fn validate_structure_lists_findings_and_turns_to_their_page() {
     // The command shows the same report again while the document is unchanged.
     let checked = h.state().structure_report().unwrap().objects;
     assert!(h.state_mut().execute("standards.structure"));
+    assert_eq!(h.state().structure_checking(), None, "not checked again");
     h.run_steps(2);
     assert_eq!(h.state().structure_report().unwrap().objects, checked);
     h.get_by_label("Information (1)").click();
@@ -77,8 +94,21 @@ fn validate_structure_lists_findings_and_turns_to_their_page() {
 fn findings_are_said_in_spanish() {
     let mut h = harness("es");
     assert!(h.state_mut().execute("standards.structure"));
-    h.run_steps(2);
+    until_checked(&mut h);
     h.get_by_label("Validar estructura");
     h.get_by_label("Errores (1)");
     h.get_by_label("H en AnnotLink es /Glow, que no es uno de /N, /I, /O, /P");
+}
+
+/// The control channel's `set dialog structure` opens the dialog without the command; the
+/// dialog checks the document itself, and a check that's running shows how far it is.
+#[test]
+fn the_structure_dialog_opened_by_the_control_channel_checks_too() {
+    let mut h = harness("en");
+    h.state_mut().set_option("dialog", "structure").unwrap();
+    h.run_steps(1);
+    assert!(h.state().structure_checking().is_some() || h.state().structure_report().is_some(), "the dialog started a check");
+    until_checked(&mut h);
+    h.get_by_label("Errors (1)");
+    h.get_by_label("H in AnnotLink is /Glow, which is not one of /N, /I, /O, /P");
 }

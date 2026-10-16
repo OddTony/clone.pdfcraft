@@ -1174,6 +1174,9 @@
 	Not evaluated: {list}	未评估：{list}
 	Only the first {n} of each kind are listed.	每类仅列出前 {n} 项。
 	The document has more objects than one check covers; the rest was not checked.	文档的对象数超过单次检查的上限；其余部分未检查。
+	Checking the structure… {n} objects so far	正在检查结构… 已检查 {n} 个对象
+	The check was cancelled.	检查已取消。
+	The check stopped unexpectedly.	检查意外停止。
 	Create links from URLs	从 URL 创建链接
 	Detect form fields	检测表单域
 	Draw a cloud	画云形

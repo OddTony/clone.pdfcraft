@@ -1167,6 +1167,9 @@
 	Not evaluated: {list}	Неоценени: {list}
 	Only the first {n} of each kind are listed.	Показани са само първите {n} от всеки вид.
 	The document has more objects than one check covers; the rest was not checked.	Документът има повече обекти, отколкото обхваща една проверка; останалото не е проверено.
+	Checking the structure… {n} objects so far	Проверка на структурата… досега {n} обекта
+	The check was cancelled.	Проверката е отменена.
+	The check stopped unexpectedly.	Проверката спря неочаквано.
 	Create links from URLs	Създай връзки от URL адреси
 	Detect form fields	Открий полета на формуляр
 	Draw a cloud	Нарисувай облак

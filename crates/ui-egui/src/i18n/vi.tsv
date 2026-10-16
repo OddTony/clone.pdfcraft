@@ -1376,6 +1376,9 @@ theme	Appearance	Giao diện
 	Not evaluated: {list}	Chưa đánh giá: {list}
 	Only the first {n} of each kind are listed.	Chỉ liệt kê {n} mục đầu tiên của mỗi loại.
 	The document has more objects than one check covers; the rest was not checked.	Tài liệu có nhiều đối tượng hơn phạm vi một lần kiểm tra; phần còn lại chưa được kiểm tra.
+	Checking the structure… {n} objects so far	Đang kiểm tra cấu trúc… {n} đối tượng cho đến nay
+	The check was cancelled.	Đã hủy kiểm tra.
+	The check stopped unexpectedly.	Việc kiểm tra dừng đột ngột.
 # What Validate structure reports (arlington::WORDINGS).
 	{type} lacks the required entry {key}	{type} thiếu mục bắt buộc {key}
 	{key} in {type} is {found}, but must be {expected}	{key} trong {type} là {found}, nhưng phải là {expected}

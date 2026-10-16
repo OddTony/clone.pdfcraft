@@ -1111,6 +1111,9 @@
 	Not evaluated: {list}	Não avaliado: {list}
 	Only the first {n} of each kind are listed.	Apenas os primeiros {n} de cada tipo são listados.
 	The document has more objects than one check covers; the rest was not checked.	O documento tem mais objetos do que uma verificação cobre; o restante não foi verificado.
+	Checking the structure… {n} objects so far	Verificando a estrutura… {n} objetos até agora
+	The check was cancelled.	A verificação foi cancelada.
+	The check stopped unexpectedly.	A verificação parou inesperadamente.
 	Create links from URLs	Criar links a partir de URLs
 	Detect form fields	Detectar campos de formulário
 	Draw a cloud	Desenhar uma nuvem

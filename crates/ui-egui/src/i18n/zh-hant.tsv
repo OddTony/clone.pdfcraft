@@ -1118,6 +1118,9 @@
 	Not evaluated: {list}	未評估：{list}
 	Only the first {n} of each kind are listed.	每類僅列出前 {n} 項。
 	The document has more objects than one check covers; the rest was not checked.	文件的物件數超過單次檢驗的上限；其餘部分未檢驗。
+	Checking the structure… {n} objects so far	正在檢驗結構… 已檢驗 {n} 個物件
+	The check was cancelled.	檢驗已取消。
+	The check stopped unexpectedly.	檢驗意外停止。
 	Create links from URLs	從網址建立連結
 	Detect form fields	偵測表單欄位
 	Draw a cloud	繪製雲形

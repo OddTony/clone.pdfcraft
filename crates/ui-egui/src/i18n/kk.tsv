@@ -186,6 +186,9 @@
 	Not evaluated: {list}	Бағаланбаған: {list}
 	Only the first {n} of each kind are listed.	Әр түрден тек алғашқы {n} көрсетіледі.
 	The document has more objects than one check covers; the rest was not checked.	Құжаттағы нысандар бір тексеру қамтитын саннан көп; қалғаны тексерілмеді.
+	Checking the structure… {n} objects so far	Құрылым тексерілуде… әзірге {n} нысан
+	The check was cancelled.	Тексеру болдырылмады.
+	The check stopped unexpectedly.	Тексеру күтпеген жерден тоқтады.
 	Detect form fields	Форма өрістерін анықтау
 	Merge data files into spreadsheet…	Деректер файлдарын электронды кестеге біріктіру…
 	Flatten form fields	Форма өрістерін жазықтау

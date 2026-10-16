@@ -24,7 +24,7 @@ mod check;
 mod expr;
 mod model;
 
-pub use check::validate;
+pub use check::{validate, validate_with_progress};
 pub use model::Version;
 
 /// The commit of the Arlington PDF Model the embedded table comes from.

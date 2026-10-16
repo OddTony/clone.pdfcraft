@@ -198,6 +198,9 @@
 	Not evaluated: {list}	Nicht ausgewertet: {list}
 	Only the first {n} of each kind are listed.	Nur die ersten {n} jeder Art werden aufgeführt.
 	The document has more objects than one check covers; the rest was not checked.	Das Dokument hat mehr Objekte, als eine Prüfung abdeckt; der Rest wurde nicht geprüft.
+	Checking the structure… {n} objects so far	Struktur wird geprüft… bisher {n} Objekte
+	The check was cancelled.	Die Prüfung wurde abgebrochen.
+	The check stopped unexpectedly.	Die Prüfung wurde unerwartet beendet.
 	Detect form fields	Formularfelder erkennen
 	Merge data files into spreadsheet…	Datendateien in Tabelle zusammenführen…
 	Flatten form fields	Formularfelder reduzieren

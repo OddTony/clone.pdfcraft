@@ -1385,6 +1385,9 @@
 	Not evaluated: {list}	Neįvertinta: {list}
 	Only the first {n} of each kind are listed.	Rodomi tik pirmieji {n} kiekvienos rūšies.
 	The document has more objects than one check covers; the rest was not checked.	Dokumente yra daugiau objektų, nei aprėpia vienas patikrinimas; likusi dalis nepatikrinta.
+	Checking the structure… {n} objects so far	Tikrinama struktūra… kol kas {n} objektų
+	The check was cancelled.	Patikrinimas atšauktas.
+	The check stopped unexpectedly.	Patikrinimas netikėtai sustojo.
 # What Validate structure reports (arlington::WORDINGS).
 	{type} lacks the required entry {key}	{type} trūksta privalomo įrašo {key}
 	{key} in {type} is {found}, but must be {expected}	{key} objekte {type} yra {found}, bet turi būti {expected}

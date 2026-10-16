@@ -2164,6 +2164,9 @@
 	Not evaluated: {list}	Δεν αξιολογήθηκαν: {list}
 	Only the first {n} of each kind are listed.	Εμφανίζονται μόνο τα πρώτα {n} κάθε είδους.
 	The document has more objects than one check covers; the rest was not checked.	Το έγγραφο έχει περισσότερα αντικείμενα από όσα καλύπτει ένας έλεγχος· τα υπόλοιπα δεν ελέγχθηκαν.
+	Checking the structure… {n} objects so far	Έλεγχος δομής… {n} αντικείμενα ως τώρα
+	The check was cancelled.	Ο έλεγχος ακυρώθηκε.
+	The check stopped unexpectedly.	Ο έλεγχος σταμάτησε απροσδόκητα.
 	Detect form fields	Εντοπισμός πεδίων φόρμας
 	Merge data files into spreadsheet…	Συγχώνευση αρχείων δεδομένων σε υπολογιστικό φύλλο…
 	Flatten form fields	Ενσωμάτωση πεδίων φόρμας στο περιεχόμενο

@@ -342,6 +342,9 @@ key	Space	Mezerník
 	Not evaluated: {list}	Nevyhodnoceno: {list}
 	Only the first {n} of each kind are listed.	Uvedeno je jen prvních {n} od každého druhu.
 	The document has more objects than one check covers; the rest was not checked.	Dokument má víc objektů, než pokryje jedna kontrola; zbytek nebyl zkontrolován.
+	Checking the structure… {n} objects so far	Kontrola struktury… zatím {n} objektů
+	The check was cancelled.	Kontrola byla zrušena.
+	The check stopped unexpectedly.	Kontrola se neočekávaně zastavila.
 	Detect form fields	Rozpoznat formulářová pole
 	Merge data files into spreadsheet…	Sloučit datové soubory do tabulky…
 	Flatten form fields	Sloučit formulářová pole se stránkou

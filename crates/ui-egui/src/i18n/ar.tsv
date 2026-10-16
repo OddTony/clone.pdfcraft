@@ -224,6 +224,9 @@
 	Not evaluated: {list}	لم يُقيَّم: {list}
 	Only the first {n} of each kind are listed.	تُعرض أول {n} فقط من كل نوع.
 	The document has more objects than one check covers; the rest was not checked.	يحتوي المستند على كائنات أكثر مما يغطيه فحص واحد؛ لم يُفحص الباقي.
+	Checking the structure… {n} objects so far	جارٍ فحص البنية… {n} كائن حتى الآن
+	The check was cancelled.	أُلغي الفحص.
+	The check stopped unexpectedly.	توقف الفحص على نحو غير متوقع.
 	Detect form fields	اكتشاف حقول النموذج
 	Merge data files into spreadsheet…	دمج ملفات البيانات في جدول بيانات…
 	Flatten form fields	تسطيح حقول النموذج
