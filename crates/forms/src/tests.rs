@@ -2067,6 +2067,45 @@ fn page_shapes_closes_only_last_stroked_subpath_but_all_filled_subpaths() {
 }
 
 #[test]
+fn editing_button_export_values_preserves_selection_and_appearance() {
+    let mut doc = fixture();
+    set_value(&mut doc, "size", &FieldValue::Radio(Some("S".into()))).unwrap();
+    let before = field(&fields(&doc), "size").clone();
+    let appearances: Vec<_> = before.widgets.iter().map(|w| doc.get(w.obj).as_dict().unwrap().get(b"AP").cloned()).collect();
+    set_props(&mut doc, "size", &FieldProps { export_value: Some((0, "Small å".into())), ..Default::default() }).unwrap();
+    let after = field(&fields(&doc), "size").clone();
+    assert_eq!(after.value, before.value);
+    assert_eq!(after.default, before.default);
+    assert_eq!(after.widgets, before.widgets);
+    assert_eq!(after.export_of(0), Some("Small å"));
+    assert_eq!(after.export_of(1), before.export_of(1));
+    assert_eq!(after.export_values(), vec!["Small å"]);
+    assert_eq!(appearances, after.widgets.iter().map(|w| doc.get(w.obj).as_dict().unwrap().get(b"AP").cloned()).collect::<Vec<_>>());
+    let mut saved = reopen(&doc);
+    assert_eq!(field(&fields(&saved), "size").export_of(0), Some("Small å"));
+    set_value(&mut saved, "size", &FieldValue::Radio(Some("Small å".into()))).unwrap();
+    reset(&mut saved, None).unwrap();
+    assert_eq!(field(&fields(&saved), "size").value, before.default);
+
+    set_value(&mut doc, "agree", &FieldValue::Check(true)).unwrap();
+    set_props(&mut doc, "agree", &FieldProps { export_value: Some((0, "Accepted".into())), ..Default::default() }).unwrap();
+    let check = field(&fields(&doc), "agree").clone();
+    assert_eq!(check.value, vec!["Yes"]);
+    assert_eq!(check.export_values(), vec!["Accepted"]);
+    assert_eq!(field(&fields(&reopen(&doc)), "agree").export_of(0), Some("Accepted"));
+}
+
+#[test]
+fn invalid_button_export_edits_leave_document_unchanged() {
+    let mut doc = fixture();
+    let before = write_incremental(&doc, &SaveOptions::default()).unwrap();
+    for (field_name, index, value) in [("size", 99, "new"), ("size", 0, ""), ("size", 0, "Off"), ("size", 0, "L"), ("name", 0, "new")] {
+        assert!(set_props(&mut doc, field_name, &FieldProps { export_value: Some((index, value.into())), ..Default::default() }).is_err());
+        assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+    }
+}
+
+#[test]
 fn auto_text_size_fits_single_and_multiline_text() {
     use crate::appearance::auto_text_size;
     use pdfcraft_fonts::{helvetica_width, wrap_with};
@@ -2103,4 +2142,21 @@ fn document_scripts_read_each_name_tree_node_once() {
         "<< /S /JavaScript /JS (var ready = true;) >>".into(),
     ]);
     assert_eq!(document_scripts_named(&doc), [("init".to_string(), "var ready = true;".to_string())]);
+}
+
+#[test]
+fn locked_button_export_edits_leave_the_document_unchanged() {
+    for name in ["agree", "size"] {
+        let mut doc = fixture();
+        set_props(&mut doc, name, &FieldProps { locked: Some(true), ..Default::default() }).unwrap();
+        let before = write_incremental(&doc, &SaveOptions::default()).unwrap();
+        let error = set_props(
+            &mut doc,
+            name,
+            &FieldProps { export_value: Some((0, "Changed".into())), tooltip: Some("Must not change".into()), ..Default::default() },
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("locked"));
+        assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+    }
 }
