@@ -46,13 +46,13 @@ pub enum FieldType {
 impl FieldType {
     pub fn name(self) -> &'static str {
         match self {
-            FieldType::Text => "text",
-            FieldType::CheckBox => "checkbox",
-            FieldType::RadioButton => "radiobutton",
-            FieldType::ComboBox => "combobox",
-            FieldType::ListBox => "listbox",
-            FieldType::Button => "button",
-            FieldType::Signature => "signature",
+            Self::Text => "text",
+            Self::CheckBox => "checkbox",
+            Self::RadioButton => "radiobutton",
+            Self::ComboBox => "combobox",
+            Self::ListBox => "listbox",
+            Self::Button => "button",
+            Self::Signature => "signature",
         }
     }
 }
@@ -85,8 +85,8 @@ pub struct FieldState {
 }
 
 impl FieldState {
-    pub fn new(name: impl Into<String>, kind: FieldType, value: Vec<String>) -> FieldState {
-        FieldState {
+    pub fn new(name: impl Into<String>, kind: FieldType, value: Vec<String>) -> Self {
+        Self {
             name: name.into(),
             kind,
             value,
@@ -122,13 +122,13 @@ pub struct Event {
 
 impl Event {
     /// A field event (`event.type` = "Field").
-    pub fn field(name: &str, target: &str, value: &str) -> Event {
-        Event { name: name.into(), kind: "Field".into(), target: Some(target.into()), value: value.into(), change: String::new(), will_commit: true }
+    pub fn field(name: &str, target: &str, value: &str) -> Self {
+        Self { name: name.into(), kind: "Field".into(), target: Some(target.into()), value: value.into(), change: String::new(), will_commit: true }
     }
 
     /// A document event (`event.type` = "Doc"), e.g. Open or WillSave.
-    pub fn doc(name: &str) -> Event {
-        Event { name: name.into(), kind: "Doc".into(), target: None, value: String::new(), change: String::new(), will_commit: false }
+    pub fn doc(name: &str) -> Self {
+        Self { name: name.into(), kind: "Doc".into(), target: None, value: String::new(), change: String::new(), will_commit: false }
     }
 }
 
@@ -189,7 +189,7 @@ pub struct Limits {
 
 impl Default for Limits {
     fn default() -> Self {
-        Limits { loop_iterations: 1_000_000, recursion: 256 }
+        Self { loop_iterations: 1_000_000, recursion: 256 }
     }
 }
 

@@ -555,7 +555,7 @@ fn parse_cmap(data: &[u8]) -> (Vec<(usize, Vec<u8>, Vec<u8>)>, Vec<(u32, u32, u3
 impl Metrics {
     /// Metrics for text without a usable font (Helvetica-like).
     pub fn fallback() -> Self {
-        Metrics {
+        Self {
             codes: Codes::One,
             first: 0,
             widths: Vec::new(),
@@ -628,7 +628,7 @@ impl Metrics {
     }
 
     fn read_metrics(doc: &Document, font: &Dict) -> Self {
-        let mut m = Metrics::fallback();
+        let mut m = Self::fallback();
         m.std14 = None;
         let subtype = font.name(b"Subtype").unwrap_or(b"Type1").to_vec();
         let descriptor;

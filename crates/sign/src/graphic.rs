@@ -31,9 +31,9 @@ pub enum Graphic {
 impl std::fmt::Debug for Graphic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Graphic::Strokes(s) => write!(f, "Strokes({} strokes, {} points)", s.len(), s.iter().map(Vec::len).sum::<usize>()),
-            Graphic::Outlines(c) => write!(f, "Outlines({} contours, {} points)", c.len(), c.iter().map(Vec::len).sum::<usize>()),
-            Graphic::Image { width, height, rgba } => write!(f, "Image({width}x{height}, {} bytes)", rgba.len()),
+            Self::Strokes(s) => write!(f, "Strokes({} strokes, {} points)", s.len(), s.iter().map(Vec::len).sum::<usize>()),
+            Self::Outlines(c) => write!(f, "Outlines({} contours, {} points)", c.len(), c.iter().map(Vec::len).sum::<usize>()),
+            Self::Image { width, height, rgba } => write!(f, "Image({width}x{height}, {} bytes)", rgba.len()),
         }
     }
 }
@@ -71,14 +71,14 @@ fn fit(b: [f64; 4], area: [f64; 4]) -> (f64, f64, f64) {
 impl Graphic {
     fn check(&self) -> Result<(), SignError> {
         let points = match self {
-            Graphic::Strokes(s) => s.iter().map(Vec::len).sum::<usize>(),
-            Graphic::Outlines(c) => {
+            Self::Strokes(s) => s.iter().map(Vec::len).sum::<usize>(),
+            Self::Outlines(c) => {
                 if !c.iter().any(|c| c.len() > 2) {
                     return Err(bad("has no outline that encloses anything"));
                 }
                 c.iter().map(Vec::len).sum()
             }
-            Graphic::Image { width, height, rgba } => {
+            Self::Image { width, height, rgba } => {
                 if *width == 0 || *height == 0 || *width > MAX_SIDE || *height > MAX_SIDE || u64::from(*width) * u64::from(*height) > MAX_PIXELS {
                     return Err(bad(&format!("image is {width} x {height} pixels; at most {MAX_SIDE} per side and 16 megapixels")));
                 }
@@ -101,7 +101,7 @@ impl Graphic {
         self.check()?;
         let n = crate::pdf::fmt;
         match self {
-            Graphic::Strokes(strokes) => {
+            Self::Strokes(strokes) => {
                 let curves: Vec<Vec<[(f64, f64); 3]>> =
                     strokes.iter().map(|s| smooth_segments(&s.iter().map(|p| (p[0], p[1])).collect::<Vec<_>>())).collect();
                 // Curves stay within their points and control points.
@@ -130,7 +130,7 @@ impl Graphic {
                 c.push_str("Q\n");
                 Ok((c, None))
             }
-            Graphic::Outlines(contours) => {
+            Self::Outlines(contours) => {
                 let closed: Vec<&Vec<[f64; 2]>> = contours.iter().filter(|c| c.len() > 2).collect();
                 let b = bounds(closed.iter().copied().flatten())?;
                 let (k, x, y) = fit(b, area);
@@ -144,7 +144,7 @@ impl Graphic {
                 c.push_str("f*\nQ\n");
                 Ok((c, None))
             }
-            Graphic::Image { width, height, rgba } => {
+            Self::Image { width, height, rgba } => {
                 let (w, h) = (f64::from(*width), f64::from(*height));
                 let (k, x, y) = fit([0.0, 0.0, w, h], area);
                 let image = image_xobject(doc, *width, *height, rgba);

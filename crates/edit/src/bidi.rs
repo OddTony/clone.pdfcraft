@@ -94,11 +94,11 @@ struct Cluster {
 
 impl Cluster {
     /// The cluster with its base mirrored (marks stay as they are).
-    fn mirror(&self) -> Cluster {
+    fn mirror(&self) -> Self {
         let mut chars = self.text.chars();
         let mut text: String = chars.next().map(mirrored).into_iter().collect();
         text.extend(chars);
-        Cluster { text, class: self.class }
+        Self { text, class: self.class }
     }
 }
 

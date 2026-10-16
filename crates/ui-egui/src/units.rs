@@ -14,47 +14,47 @@ pub enum Unit {
 }
 
 impl Unit {
-    pub const ALL: [Unit; 4] = [Unit::Millimetres, Unit::Centimetres, Unit::Inches, Unit::Points];
+    pub const ALL: [Self; 4] = [Self::Millimetres, Self::Centimetres, Self::Inches, Self::Points];
 
     /// Units per PDF point.
     pub fn per_point(self) -> f64 {
         match self {
-            Unit::Points => 1.0,
-            Unit::Inches => 1.0 / 72.0,
-            Unit::Millimetres => 25.4 / 72.0,
-            Unit::Centimetres => 2.54 / 72.0,
+            Self::Points => 1.0,
+            Self::Inches => 1.0 / 72.0,
+            Self::Millimetres => 25.4 / 72.0,
+            Self::Centimetres => 2.54 / 72.0,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Unit::Points => "pt",
-            Unit::Inches => "in",
-            Unit::Millimetres => "mm",
-            Unit::Centimetres => "cm",
+            Self::Points => "pt",
+            Self::Inches => "in",
+            Self::Millimetres => "mm",
+            Self::Centimetres => "cm",
         }
     }
 
     /// Decimals worth showing: a tenth of a millimetre or point, a hundredth of an inch or centimetre.
     pub fn decimals(self) -> usize {
         match self {
-            Unit::Millimetres | Unit::Points => 1,
-            Unit::Inches | Unit::Centimetres => 2,
+            Self::Millimetres | Self::Points => 1,
+            Self::Inches | Self::Centimetres => 2,
         }
     }
 
     /// Drag speed for a value field in this unit.
     pub fn speed(self) -> f64 {
         match self {
-            Unit::Inches | Unit::Centimetres => 0.01,
-            Unit::Millimetres | Unit::Points => 0.5,
+            Self::Inches | Self::Centimetres => 0.01,
+            Self::Millimetres | Self::Points => 0.5,
         }
     }
 
     /// The unit the system's region measures in: inches in the United States, Liberia and
     /// Myanmar, millimetres everywhere else; inches when the region can't be told. Used on first
     /// start, before the user picks one in Preferences.
-    pub fn system() -> Unit {
+    pub fn system() -> Self {
         static SYSTEM: std::sync::OnceLock<Unit> = std::sync::OnceLock::new();
         *SYSTEM.get_or_init(|| detect().unwrap_or_default())
     }

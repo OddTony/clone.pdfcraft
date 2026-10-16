@@ -20,11 +20,11 @@ pub enum PageBox {
 impl PageBox {
     pub fn key(self) -> &'static [u8] {
         match self {
-            PageBox::Media => b"MediaBox",
-            PageBox::Crop => b"CropBox",
-            PageBox::Bleed => b"BleedBox",
-            PageBox::Trim => b"TrimBox",
-            PageBox::Art => b"ArtBox",
+            Self::Media => b"MediaBox",
+            Self::Crop => b"CropBox",
+            Self::Bleed => b"BleedBox",
+            Self::Trim => b"TrimBox",
+            Self::Art => b"ArtBox",
         }
     }
 

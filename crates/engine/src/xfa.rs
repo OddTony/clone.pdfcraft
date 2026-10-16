@@ -69,7 +69,7 @@ struct Clock {
 
 impl Clock {
     fn start(budget_ms: u64) -> Self {
-        Clock {
+        Self {
             #[cfg(not(target_arch = "wasm32"))]
             started: std::time::Instant::now(),
             budget_ms,

@@ -36,7 +36,7 @@ impl LoadGuard {
                 return None;
             }
             l.push(num);
-            Some(LoadGuard)
+            Some(Self)
         })
     }
 }
@@ -461,7 +461,7 @@ impl Document {
     /// A new document with an empty page tree (for split / extract / combine). It has no
     /// original bytes, so saving always writes a full file.
     pub fn new_empty() -> Self {
-        let mut doc = Document {
+        let mut doc = Self {
             data: Arc::new(Vec::new()),
             source_identity: Arc::new(()),
             entries: Arc::new(XrefIndex::empty()),
@@ -542,7 +542,7 @@ impl Document {
             Some(h) => String::from_utf8_lossy(&data[(h + 5).min(data.len())..(h + 8).min(data.len())]).trim().to_string(),
             None => "1.4".to_string(),
         };
-        let mut doc = Document {
+        let mut doc = Self {
             data,
             source_identity: Arc::new(()),
             entries: Arc::new(XrefIndex::empty()),
@@ -1204,7 +1204,7 @@ impl Document {
     /// incremental save must still append to this file (the last saved revision). Objects
     /// that already match are left untouched. Reads go through private readers so neither
     /// document's editing cache is filled.
-    pub fn overlay_changes_from(&mut self, current: &Document) -> Result<(), CosError> {
+    pub fn overlay_changes_from(&mut self, current: &Self) -> Result<(), CosError> {
         let saved_nums = self.object_numbers();
         let current_nums = current.object_numbers();
         let mut freed = Vec::new();
@@ -1299,7 +1299,7 @@ impl Document {
     /// Rebase this document on bytes written by the writer (after a save): edits become part of
     /// the file and the overlay is cleared, so the next incremental save appends only new edits.
     pub fn reopen_after_save(&self, bytes: Arc<Vec<u8>>) -> Result<Self, CosError> {
-        Document::open(bytes)
+        Self::open(bytes)
     }
 
     // ── cross-reference parsing ─────────────────────────────────────────────────────────────

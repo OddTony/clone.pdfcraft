@@ -27,9 +27,9 @@ pub enum Kind {
 impl Kind {
     pub fn label(self) -> &'static str {
         match self {
-            Kind::Inserted => "Inserted",
-            Kind::Deleted => "Deleted",
-            Kind::Replaced => "Replaced",
+            Self::Inserted => "Inserted",
+            Self::Deleted => "Deleted",
+            Self::Replaced => "Replaced",
         }
     }
 }

@@ -13,55 +13,55 @@ pub enum Family {
 }
 
 impl Family {
-    pub fn of(typeface: &str) -> Family {
+    pub fn of(typeface: &str) -> Self {
         let t = typeface.to_ascii_lowercase();
         if t.contains("courier") || t.contains("mono") {
-            Family::Courier
+            Self::Courier
         } else if t.contains("times")
             || t.contains("georgia")
             || t.contains("garamond")
             || t.contains("minion")
             || t.contains("serif") && !t.contains("sans")
         {
-            Family::Times
+            Self::Times
         } else {
-            Family::Helvetica
+            Self::Helvetica
         }
     }
 
     /// The PDF base font name for a face.
     pub fn base_font(self, bold: bool, italic: bool) -> &'static str {
         match (self, bold, italic) {
-            (Family::Helvetica, false, false) => "Helvetica",
-            (Family::Helvetica, true, false) => "Helvetica-Bold",
-            (Family::Helvetica, false, true) => "Helvetica-Oblique",
-            (Family::Helvetica, true, true) => "Helvetica-BoldOblique",
-            (Family::Courier, false, false) => "Courier",
-            (Family::Courier, true, false) => "Courier-Bold",
-            (Family::Courier, false, true) => "Courier-Oblique",
-            (Family::Courier, true, true) => "Courier-BoldOblique",
-            (Family::Times, false, false) => "Times-Roman",
-            (Family::Times, true, false) => "Times-Bold",
-            (Family::Times, false, true) => "Times-Italic",
-            (Family::Times, true, true) => "Times-BoldItalic",
+            (Self::Helvetica, false, false) => "Helvetica",
+            (Self::Helvetica, true, false) => "Helvetica-Bold",
+            (Self::Helvetica, false, true) => "Helvetica-Oblique",
+            (Self::Helvetica, true, true) => "Helvetica-BoldOblique",
+            (Self::Courier, false, false) => "Courier",
+            (Self::Courier, true, false) => "Courier-Bold",
+            (Self::Courier, false, true) => "Courier-Oblique",
+            (Self::Courier, true, true) => "Courier-BoldOblique",
+            (Self::Times, false, false) => "Times-Roman",
+            (Self::Times, true, false) => "Times-Bold",
+            (Self::Times, false, true) => "Times-Italic",
+            (Self::Times, true, true) => "Times-BoldItalic",
         }
     }
 
     /// The resource name used in content streams and `/DA` strings (Acrobat's conventions).
     pub fn resource_name(self, bold: bool, italic: bool) -> &'static str {
         match (self, bold, italic) {
-            (Family::Helvetica, false, false) => "Helv",
-            (Family::Helvetica, true, false) => "HeBo",
-            (Family::Helvetica, false, true) => "HeOb",
-            (Family::Helvetica, true, true) => "HeBO",
-            (Family::Courier, false, false) => "Cour",
-            (Family::Courier, true, false) => "CoBo",
-            (Family::Courier, false, true) => "CoOb",
-            (Family::Courier, true, true) => "CoBO",
-            (Family::Times, false, false) => "TiRo",
-            (Family::Times, true, false) => "TiBo",
-            (Family::Times, false, true) => "TiIt",
-            (Family::Times, true, true) => "TiBI",
+            (Self::Helvetica, false, false) => "Helv",
+            (Self::Helvetica, true, false) => "HeBo",
+            (Self::Helvetica, false, true) => "HeOb",
+            (Self::Helvetica, true, true) => "HeBO",
+            (Self::Courier, false, false) => "Cour",
+            (Self::Courier, true, false) => "CoBo",
+            (Self::Courier, false, true) => "CoOb",
+            (Self::Courier, true, true) => "CoBO",
+            (Self::Times, false, false) => "TiRo",
+            (Self::Times, true, false) => "TiBo",
+            (Self::Times, false, true) => "TiIt",
+            (Self::Times, true, true) => "TiBI",
         }
     }
 }
@@ -78,8 +78,8 @@ pub struct Face {
 }
 
 impl Face {
-    pub fn of(font: &Font) -> Face {
-        Face {
+    pub fn of(font: &Font) -> Self {
+        Self {
             family: Family::of(&font.typeface),
             bold: font.bold,
             italic: font.italic,
@@ -89,8 +89,8 @@ impl Face {
         }
     }
 
-    pub fn with_run(&self, run: &Run) -> Face {
-        Face {
+    pub fn with_run(&self, run: &Run) -> Self {
+        Self {
             family: self.family,
             bold: run.bold.unwrap_or(self.bold),
             italic: run.italic.unwrap_or(self.italic),

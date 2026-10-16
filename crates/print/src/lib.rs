@@ -74,12 +74,12 @@ impl PrintError {
     /// `Display`, which is what the command line and scripts report.
     pub fn said(&self, words: Words) -> String {
         match self {
-            PrintError::NoPages => words("there are no pages to print"),
-            PrintError::OutOfRange(n, count) => {
+            Self::NoPages => words("there are no pages to print"),
+            Self::OutOfRange(n, count) => {
                 say(&words("page {n} is out of range (1–{count})"), &[("{n}", n.to_string()), ("{count}", count.to_string())])
             }
             // The token goes in quoted, the way it is typed, as the error itself prints it.
-            PrintError::NotAPage(token) => say(&words("{page} is not a page number or label"), &[("{page}", format!("{token:?}"))]),
+            Self::NotAPage(token) => say(&words("{page} is not a page number or label"), &[("{page}", format!("{token:?}"))]),
             fault => fault.to_string(),
         }
     }
@@ -188,13 +188,13 @@ pub enum Layout {
 
 impl Default for Layout {
     fn default() -> Self {
-        Layout::Size(SizeMode::Fit)
+        Self::Size(SizeMode::Fit)
     }
 }
 
 impl Layout {
     /// Acrobat's pages-per-sheet choices as a grid (columns × rows on a portrait sheet).
-    pub fn multiple(per_sheet: usize) -> Layout {
+    pub fn multiple(per_sheet: usize) -> Self {
         let (cols, rows) = match per_sheet {
             2 => (1, 2),
             4 => (2, 2),
@@ -206,7 +206,7 @@ impl Layout {
                 (c, n.div_ceil(c).max(1))
             }
         };
-        Layout::Multiple { cols, rows, per_sheet: per_sheet.max(1), order: PageOrder::Horizontal, border: false, auto_rotate: true }
+        Self::Multiple { cols, rows, per_sheet: per_sheet.max(1), order: PageOrder::Horizontal, border: false, auto_rotate: true }
     }
 }
 
@@ -254,7 +254,7 @@ pub struct Raster {
 
 impl Default for Raster {
     fn default() -> Self {
-        Raster { dpi: 300.0, grayscale: false }
+        Self { dpi: 300.0, grayscale: false }
     }
 }
 
@@ -266,7 +266,7 @@ pub struct Crop {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings {
+        Self {
             pages: Vec::new(),
             paper: PAPERS[0].1,
             orientation: Orientation::Auto,

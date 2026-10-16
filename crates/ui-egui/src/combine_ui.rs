@@ -41,7 +41,7 @@ pub enum SortKey {
 }
 
 impl SortKey {
-    pub const ALL: [SortKey; 5] = [SortKey::Name, SortKey::Pages, SortKey::Size, SortKey::Modified, SortKey::Warnings];
+    pub const ALL: [Self; 5] = [Self::Name, Self::Pages, Self::Size, Self::Modified, Self::Warnings];
 
     fn index(self) -> usize {
         self as usize
@@ -49,22 +49,22 @@ impl SortKey {
 
     fn label(self) -> &'static str {
         match self {
-            SortKey::Name => tl!("File name"),
-            SortKey::Pages => tl!("Pages"),
-            SortKey::Size => tl!("Size"),
-            SortKey::Modified => tl!("Modified"),
-            SortKey::Warnings => tl!("Warnings"),
+            Self::Name => tl!("File name"),
+            Self::Pages => tl!("Pages"),
+            Self::Size => tl!("Size"),
+            Self::Modified => tl!("Modified"),
+            Self::Warnings => tl!("Warnings"),
         }
     }
 
     /// The narrowest the column may be dragged.
     fn min_width(self) -> f32 {
         match self {
-            SortKey::Name => 120.0,
-            SortKey::Pages => 110.0,
-            SortKey::Size => 60.0,
-            SortKey::Modified => 80.0,
-            SortKey::Warnings => 100.0,
+            Self::Name => 120.0,
+            Self::Pages => 110.0,
+            Self::Size => 60.0,
+            Self::Modified => 80.0,
+            Self::Warnings => 100.0,
         }
     }
 }
@@ -79,7 +79,7 @@ pub struct Columns {
 
 impl Default for Columns {
     fn default() -> Self {
-        Columns { order: SortKey::ALL, widths: None }
+        Self { order: SortKey::ALL, widths: None }
     }
 }
 
@@ -99,7 +99,7 @@ impl Columns {
             .ok()
             .filter(|w| w.iter().all(|x| x.is_finite()))
             .map(|w| std::array::from_fn(|i| w[i].clamp(SortKey::ALL[i].min_width(), 4000.0)));
-        Columns { order, widths }
+        Self { order, widths }
     }
 
     /// The widths to show: the user's, or the window's width shared out.
@@ -125,15 +125,15 @@ pub enum CombineView {
 impl CombineView {
     pub fn as_str(self) -> &'static str {
         match self {
-            CombineView::Grid => "grid",
-            CombineView::List => "list",
+            Self::Grid => "grid",
+            Self::List => "list",
         }
     }
 
     pub fn parse(s: &str) -> Option<Self> {
         match s {
-            "grid" => Some(CombineView::Grid),
-            "list" => Some(CombineView::List),
+            "grid" => Some(Self::Grid),
+            "list" => Some(Self::List),
             _ => None,
         }
     }

@@ -61,7 +61,7 @@ fn bad(what: &str) -> SignError {
 impl SignedData {
     /// Parse a `ContentInfo` holding SignedData. Bytes after it (a PDF placeholder's zero
     /// padding) are ignored.
-    pub fn parse(bytes: &[u8]) -> Result<SignedData, SignError> {
+    pub fn parse(bytes: &[u8]) -> Result<Self, SignError> {
         // CMS from DocuSign, Documenso, Windows and `openssl cms -stream` is BER (indefinite lengths,
         // segmented strings). Only its structure is read this way: certificates and signed
         // attributes are still verified over their own exact bytes.
@@ -111,7 +111,7 @@ impl SignedData {
         }
         let infos = signer_infos.ok_or_else(|| bad("no signerInfos"))?.children()?;
         let si = infos.first().ok_or_else(|| bad("no signer"))?;
-        Ok(SignedData { certificates, signer: parse_signer(si)?, content, quirks })
+        Ok(Self { certificates, signer: parse_signer(si)?, content, quirks })
     }
 
     /// The signer's certificate among those carried.

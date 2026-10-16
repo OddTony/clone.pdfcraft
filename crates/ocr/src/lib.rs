@@ -49,14 +49,14 @@ pub struct Models {
 
 impl Models {
     /// The models in `dir`, if both files are there.
-    pub fn in_dir(dir: &Path) -> Option<Models> {
-        let m = Models { detection: dir.join(DETECTION_MODEL), recognition: dir.join(RECOGNITION_MODEL) };
+    pub fn in_dir(dir: &Path) -> Option<Self> {
+        let m = Self { detection: dir.join(DETECTION_MODEL), recognition: dir.join(RECOGNITION_MODEL) };
         (m.detection.is_file() && m.recognition.is_file()).then_some(m)
     }
 
     /// Look for the models: `$PDFCRAFT_MODELS`, then where the release packages install them
     /// beside the executable ([`Models::dirs_beside_exe`]), then the source tree's `assets/models/`.
-    pub fn find() -> Option<Models> {
+    pub fn find() -> Option<Self> {
         Self::search_dirs().iter().find_map(|d| Self::in_dir(d))
     }
 
@@ -109,7 +109,7 @@ pub struct Ocr {
 }
 
 impl Ocr {
-    pub fn load(models: &Models) -> Result<Ocr, OcrError> {
+    pub fn load(models: &Models) -> Result<Self, OcrError> {
         let load = |p: &Path| rten::Model::load_file(p).map_err(|e| OcrError::Load(p.display().to_string(), e.to_string()));
         let params = ocrs::OcrEngineParams {
             detection_model: Some(load(&models.detection)?),
@@ -118,11 +118,11 @@ impl Ocr {
             ..Default::default()
         };
         let engine = ocrs::OcrEngine::new(params).map_err(|e| OcrError::Load("ocr engine".into(), e.to_string()))?;
-        Ok(Ocr { engine })
+        Ok(Self { engine })
     }
 
     /// Load the models found by [`Models::find`].
-    pub fn find() -> Result<Ocr, OcrError> {
+    pub fn find() -> Result<Self, OcrError> {
         Self::load(&Models::find().ok_or(OcrError::NoModels)?)
     }
 
@@ -175,12 +175,12 @@ pub struct PlacedWord {
 impl PlacedWord {
     /// Place a pixel-space word with `to_user`, which maps an image pixel (x right, y down) to
     /// user space.
-    pub fn place(word: &Word, to_user: impl Fn(f32, f32) -> [f64; 2]) -> PlacedWord {
+    pub fn place(word: &Word, to_user: impl Fn(f32, f32) -> [f64; 2]) -> Self {
         let [l, t, r, b] = word.rect;
         let o = to_user(l, b);
         let br = to_user(r, b);
         let tl = to_user(l, t);
-        PlacedWord { text: word.text.clone(), origin: o, across: [br[0] - o[0], br[1] - o[1]], up: [tl[0] - o[0], tl[1] - o[1]] }
+        Self { text: word.text.clone(), origin: o, across: [br[0] - o[0], br[1] - o[1]], up: [tl[0] - o[0], tl[1] - o[1]] }
     }
 }
 

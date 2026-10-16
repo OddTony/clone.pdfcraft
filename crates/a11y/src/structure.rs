@@ -256,10 +256,10 @@ impl Loc {
         })
     }
 
-    fn with(&self, step: Step) -> Loc {
+    fn with(&self, step: Step) -> Self {
         let mut path = self.path.clone();
         path.push(step);
-        Loc { owner: self.owner.clone(), path }
+        Self { owner: self.owner.clone(), path }
     }
 }
 
@@ -547,8 +547,8 @@ struct Table {
 }
 
 impl Table {
-    fn new(depth: usize) -> Table {
-        Table { depth, has_th: false, range: None, carry: Vec::new(), col: 0, cursor: 0, starts: Vec::new() }
+    fn new(depth: usize) -> Self {
+        Self { depth, has_th: false, range: None, carry: Vec::new(), col: 0, cursor: 0, starts: Vec::new() }
     }
 
     fn start_row(&mut self) {

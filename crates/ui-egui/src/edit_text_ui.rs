@@ -178,7 +178,7 @@ pub struct Extras {
 
 impl Default for Extras {
     fn default() -> Self {
-        Extras { underline: false, line_spacing: 0.0, char_spacing: 0.0, scale: 100.0 }
+        Self { underline: false, line_spacing: 0.0, char_spacing: 0.0, scale: 100.0 }
     }
 }
 

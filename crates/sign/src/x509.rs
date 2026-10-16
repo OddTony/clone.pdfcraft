@@ -21,7 +21,7 @@ pub struct Name {
 }
 
 impl Name {
-    fn parse(t: &Tlv<'_>) -> Result<Name, SignError> {
+    fn parse(t: &Tlv<'_>) -> Result<Self, SignError> {
         let mut attrs = Vec::new();
         for rdn in t.expect(tag::SEQUENCE, "Name")?.children()? {
             for atv in rdn.children()? {
@@ -31,7 +31,7 @@ impl Name {
                 }
             }
         }
-        Ok(Name { attrs, raw: t.raw.to_vec() })
+        Ok(Self { attrs, raw: t.raw.to_vec() })
     }
 
     fn get(&self, oid: &str) -> Option<&str> {
@@ -85,7 +85,7 @@ impl Name {
     }
 
     /// A name from its parts (empty ones left out), in the usual order.
-    pub fn build(cn: &str, ou: &str, o: &str, email: &str, country: &str) -> Name {
+    pub fn build(cn: &str, ou: &str, o: &str, email: &str, country: &str) -> Self {
         let mut rdns: Vec<Vec<u8>> = Vec::new();
         let mut attrs = Vec::new();
         let mut add = |oid: &str, enc: Vec<u8>, v: &str| {
@@ -103,7 +103,7 @@ impl Name {
         add(CN, der::utf8(cn.trim()), cn);
         add(EMAIL, der::ia5(email.trim()), email);
         let raw = der::tlv(tag::SEQUENCE, &rdns.concat());
-        Name { attrs, raw }
+        Self { attrs, raw }
     }
 }
 
@@ -284,7 +284,7 @@ impl Extensions {
 }
 
 impl Certificate {
-    pub fn parse(raw: &[u8]) -> Result<Certificate, SignError> {
+    pub fn parse(raw: &[u8]) -> Result<Self, SignError> {
         let cert = Tlv::parse_all(raw)?.expect(tag::SEQUENCE, "Certificate")?;
         let parts = cert.children()?;
         let [tbs, sig_alg, sig] = parts.as_slice() else { return Err(SignError::Malformed("Certificate".into())) };
@@ -332,7 +332,7 @@ impl Certificate {
             ocsp_urls,
             crl_urls,
         } = ext;
-        Ok(Certificate {
+        Ok(Self {
             raw: raw.to_vec(),
             tbs: tbs.raw.to_vec(),
             sig_alg: sig_alg.raw.to_vec(),
@@ -432,7 +432,7 @@ impl Certificate {
     /// A self-signed certificate for `key`: what Acrobat's "Create a new digital ID ▸ save to
     /// file" makes. Valid from `from` for `years`; usable for signing (digital signature and
     /// non-repudiation).
-    pub fn self_signed(name: &Name, key: &PrivateKey, from: Time, years: u32, serial: &[u8]) -> Result<Certificate, SignError> {
+    pub fn self_signed(name: &Name, key: &PrivateKey, from: Time, years: u32, serial: &[u8]) -> Result<Self, SignError> {
         let alg = key.preferred_digest();
         let sig_alg = key.signature_algorithm(alg);
         let until = Time { year: from.year + years, ..from };
@@ -465,7 +465,7 @@ impl Certificate {
         ]);
         let signature = key.sign(alg, &tbs)?;
         let cert = der::seq(&[&tbs, &sig_alg, &der::bit_string(&signature)]);
-        Certificate::parse(&cert)
+        Self::parse(&cert)
     }
 }
 

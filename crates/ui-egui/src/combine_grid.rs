@@ -115,7 +115,7 @@ struct Key {
 }
 
 impl Key {
-    fn same_page(&self, other: &Key) -> bool {
+    fn same_page(&self, other: &Self) -> bool {
         (self.source, self.auth, self.page) == (other.source, other.auth, other.page)
     }
 }

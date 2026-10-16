@@ -25,10 +25,10 @@ impl FieldEvent {
     /// `event.name`.
     pub fn name(self) -> &'static str {
         match self {
-            FieldEvent::Keystroke => "Keystroke",
-            FieldEvent::Validate => "Validate",
-            FieldEvent::Calculate => "Calculate",
-            FieldEvent::Format => "Format",
+            Self::Keystroke => "Keystroke",
+            Self::Validate => "Validate",
+            Self::Calculate => "Calculate",
+            Self::Format => "Format",
         }
     }
 }

@@ -133,19 +133,19 @@ pub enum OfficeFormat {
 impl OfficeFormat {
     pub fn extension(self) -> &'static str {
         match self {
-            OfficeFormat::Docx => "docx",
-            OfficeFormat::Pptx => "pptx",
-            OfficeFormat::Html => "html",
-            OfficeFormat::Rtf => "rtf",
+            Self::Docx => "docx",
+            Self::Pptx => "pptx",
+            Self::Html => "html",
+            Self::Rtf => "rtf",
         }
     }
 
-    pub fn from_extension(ext: &str) -> Option<OfficeFormat> {
+    pub fn from_extension(ext: &str) -> Option<Self> {
         match ext.to_ascii_lowercase().as_str() {
-            "docx" => Some(OfficeFormat::Docx),
-            "pptx" => Some(OfficeFormat::Pptx),
-            "html" | "htm" => Some(OfficeFormat::Html),
-            "rtf" => Some(OfficeFormat::Rtf),
+            "docx" => Some(Self::Docx),
+            "pptx" => Some(Self::Pptx),
+            "html" | "htm" => Some(Self::Html),
+            "rtf" => Some(Self::Rtf),
             _ => None,
         }
     }

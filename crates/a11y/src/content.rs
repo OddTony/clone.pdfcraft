@@ -25,8 +25,8 @@ pub(crate) struct Scan {
 const MAX_FORM_DEPTH: usize = 12;
 
 impl Scan {
-    pub fn run(doc: &Document, pages: &[Page], list: &[usize]) -> Scan {
-        let mut s = Scan::default();
+    pub fn run(doc: &Document, pages: &[Page], list: &[usize]) -> Self {
+        let mut s = Self::default();
         for &p in list {
             let Some(page) = pages.get(p) else { continue };
             let res = page.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();

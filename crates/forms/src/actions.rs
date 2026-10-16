@@ -17,44 +17,44 @@ pub enum Trigger {
 }
 
 impl Trigger {
-    pub const ALL: [Trigger; 6] = [Trigger::MouseUp, Trigger::MouseDown, Trigger::MouseEnter, Trigger::MouseExit, Trigger::OnFocus, Trigger::OnBlur];
+    pub const ALL: [Self; 6] = [Self::MouseUp, Self::MouseDown, Self::MouseEnter, Self::MouseExit, Self::OnFocus, Self::OnBlur];
 
     pub fn label(self) -> &'static str {
         match self {
-            Trigger::MouseUp => "Mouse Up",
-            Trigger::MouseDown => "Mouse Down",
-            Trigger::MouseEnter => "Mouse Enter",
-            Trigger::MouseExit => "Mouse Exit",
-            Trigger::OnFocus => "On Focus",
-            Trigger::OnBlur => "On Blur",
+            Self::MouseUp => "Mouse Up",
+            Self::MouseDown => "Mouse Down",
+            Self::MouseEnter => "Mouse Enter",
+            Self::MouseExit => "Mouse Exit",
+            Self::OnFocus => "On Focus",
+            Self::OnBlur => "On Blur",
         }
     }
 
     /// Snake-case id (agents).
     pub fn id(self) -> &'static str {
         match self {
-            Trigger::MouseUp => "mouse_up",
-            Trigger::MouseDown => "mouse_down",
-            Trigger::MouseEnter => "mouse_enter",
-            Trigger::MouseExit => "mouse_exit",
-            Trigger::OnFocus => "on_focus",
-            Trigger::OnBlur => "on_blur",
+            Self::MouseUp => "mouse_up",
+            Self::MouseDown => "mouse_down",
+            Self::MouseEnter => "mouse_enter",
+            Self::MouseExit => "mouse_exit",
+            Self::OnFocus => "on_focus",
+            Self::OnBlur => "on_blur",
         }
     }
 
-    pub fn from_id(id: &str) -> Option<Trigger> {
-        Trigger::ALL.into_iter().find(|t| t.id() == id)
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.id() == id)
     }
 
     /// The `/AA` key (`None`: Mouse Up lives in `/A`).
     fn key(self) -> Option<&'static [u8]> {
         match self {
-            Trigger::MouseUp => None,
-            Trigger::MouseDown => Some(b"D"),
-            Trigger::MouseEnter => Some(b"E"),
-            Trigger::MouseExit => Some(b"X"),
-            Trigger::OnFocus => Some(b"Fo"),
-            Trigger::OnBlur => Some(b"Bl"),
+            Self::MouseUp => None,
+            Self::MouseDown => Some(b"D"),
+            Self::MouseEnter => Some(b"E"),
+            Self::MouseExit => Some(b"X"),
+            Self::OnFocus => Some(b"Fo"),
+            Self::OnBlur => Some(b"Bl"),
         }
     }
 }
@@ -84,15 +84,15 @@ impl FieldAction {
     /// How the Actions tab lists it.
     pub fn describe(&self) -> String {
         match self {
-            FieldAction::JavaScript(_) => "Run a JavaScript".into(),
-            FieldAction::Uri(u) => format!("Open a web link: {u}"),
-            FieldAction::Reset(f) if f.is_empty() => "Reset a form".into(),
-            FieldAction::Reset(f) => format!("Reset a form: {}", f.join(", ")),
-            FieldAction::Named(n) => format!("Execute a menu item: {n}"),
-            FieldAction::GoTo(p) => format!("Go to a page view: page {}", p + 1),
-            FieldAction::ShowHide { fields, hide } => format!("{} a field: {}", if *hide { "Hide" } else { "Show" }, fields.join(", ")),
-            FieldAction::Submit(u) => format!("Submit a form: {u}"),
-            FieldAction::Other(s) => s.clone(),
+            Self::JavaScript(_) => "Run a JavaScript".into(),
+            Self::Uri(u) => format!("Open a web link: {u}"),
+            Self::Reset(f) if f.is_empty() => "Reset a form".into(),
+            Self::Reset(f) => format!("Reset a form: {}", f.join(", ")),
+            Self::Named(n) => format!("Execute a menu item: {n}"),
+            Self::GoTo(p) => format!("Go to a page view: page {}", p + 1),
+            Self::ShowHide { fields, hide } => format!("{} a field: {}", if *hide { "Hide" } else { "Show" }, fields.join(", ")),
+            Self::Submit(u) => format!("Submit a form: {u}"),
+            Self::Other(s) => s.clone(),
         }
     }
 }

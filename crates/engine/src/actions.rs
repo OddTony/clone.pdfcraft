@@ -34,76 +34,76 @@ pub enum Step {
 
 impl Step {
     /// Every step, with an empty argument where it takes one (for the step picker).
-    pub fn all() -> Vec<Step> {
+    pub fn all() -> Vec<Self> {
         vec![
-            Step::RecognizeText,
-            Step::ReduceFileSize,
-            Step::RemoveHiddenInformation,
-            Step::Sanitize,
-            Step::FlattenComments,
-            Step::FlattenFields,
-            Step::AddWatermark(String::new()),
-            Step::AddHeader(String::new()),
-            Step::AddFooter(String::new()),
-            Step::SetTitle(String::new()),
-            Step::DetectFormFields,
-            Step::RunJavaScript(String::new()),
+            Self::RecognizeText,
+            Self::ReduceFileSize,
+            Self::RemoveHiddenInformation,
+            Self::Sanitize,
+            Self::FlattenComments,
+            Self::FlattenFields,
+            Self::AddWatermark(String::new()),
+            Self::AddHeader(String::new()),
+            Self::AddFooter(String::new()),
+            Self::SetTitle(String::new()),
+            Self::DetectFormFields,
+            Self::RunJavaScript(String::new()),
         ]
     }
 
     /// A stable id (agents, saved actions).
     pub fn id(&self) -> &'static str {
         match self {
-            Step::RecognizeText => "recognize_text",
-            Step::ReduceFileSize => "reduce_file_size",
-            Step::RemoveHiddenInformation => "remove_hidden_information",
-            Step::Sanitize => "sanitize",
-            Step::FlattenComments => "flatten_comments",
-            Step::FlattenFields => "flatten_fields",
-            Step::AddWatermark(_) => "add_watermark",
-            Step::AddHeader(_) => "add_header",
-            Step::AddFooter(_) => "add_footer",
-            Step::SetTitle(_) => "set_title",
-            Step::DetectFormFields => "detect_form_fields",
-            Step::RunJavaScript(_) => "run_javascript",
+            Self::RecognizeText => "recognize_text",
+            Self::ReduceFileSize => "reduce_file_size",
+            Self::RemoveHiddenInformation => "remove_hidden_information",
+            Self::Sanitize => "sanitize",
+            Self::FlattenComments => "flatten_comments",
+            Self::FlattenFields => "flatten_fields",
+            Self::AddWatermark(_) => "add_watermark",
+            Self::AddHeader(_) => "add_header",
+            Self::AddFooter(_) => "add_footer",
+            Self::SetTitle(_) => "set_title",
+            Self::DetectFormFields => "detect_form_fields",
+            Self::RunJavaScript(_) => "run_javascript",
         }
     }
 
     pub fn label(&self) -> &'static str {
         match self {
-            Step::RecognizeText => "Recognize text",
-            Step::ReduceFileSize => "Reduce file size",
-            Step::RemoveHiddenInformation => "Remove hidden information",
-            Step::Sanitize => "Sanitize document",
-            Step::FlattenComments => "Flatten comments",
-            Step::FlattenFields => "Flatten form fields",
-            Step::AddWatermark(_) => "Add watermark",
-            Step::AddHeader(_) => "Add header",
-            Step::AddFooter(_) => "Add footer",
-            Step::SetTitle(_) => "Set document title",
-            Step::DetectFormFields => "Detect form fields",
-            Step::RunJavaScript(_) => "Run a JavaScript",
+            Self::RecognizeText => "Recognize text",
+            Self::ReduceFileSize => "Reduce file size",
+            Self::RemoveHiddenInformation => "Remove hidden information",
+            Self::Sanitize => "Sanitize document",
+            Self::FlattenComments => "Flatten comments",
+            Self::FlattenFields => "Flatten form fields",
+            Self::AddWatermark(_) => "Add watermark",
+            Self::AddHeader(_) => "Add header",
+            Self::AddFooter(_) => "Add footer",
+            Self::SetTitle(_) => "Set document title",
+            Self::DetectFormFields => "Detect form fields",
+            Self::RunJavaScript(_) => "Run a JavaScript",
         }
     }
 
     /// The step's text argument, if it takes one.
     pub fn arg(&self) -> Option<&str> {
         match self {
-            Step::AddWatermark(s) | Step::AddHeader(s) | Step::AddFooter(s) | Step::SetTitle(s) | Step::RunJavaScript(s) => Some(s),
+            Self::AddWatermark(s) | Self::AddHeader(s) | Self::AddFooter(s) | Self::SetTitle(s) | Self::RunJavaScript(s) => Some(s),
             _ => None,
         }
     }
 
     pub fn arg_mut(&mut self) -> Option<&mut String> {
         match self {
-            Step::AddWatermark(s) | Step::AddHeader(s) | Step::AddFooter(s) | Step::SetTitle(s) | Step::RunJavaScript(s) => Some(s),
+            Self::AddWatermark(s) | Self::AddHeader(s) | Self::AddFooter(s) | Self::SetTitle(s) | Self::RunJavaScript(s) => Some(s),
             _ => None,
         }
     }
 
     /// Build a step from its id and argument.
-    pub fn from_id(id: &str, arg: &str) -> Option<Step> {
-        let mut s = Step::all().into_iter().find(|s| s.id() == id)?;
+    pub fn from_id(id: &str, arg: &str) -> Option<Self> {
+        let mut s = Self::all().into_iter().find(|s| s.id() == id)?;
         if let Some(a) = s.arg_mut() {
             *a = arg.to_string();
         }

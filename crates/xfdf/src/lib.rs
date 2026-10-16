@@ -47,14 +47,14 @@ pub enum Format {
 }
 
 impl Format {
-    pub fn from_extension(ext: &str) -> Option<Format> {
+    pub fn from_extension(ext: &str) -> Option<Self> {
         Some(match ext.to_ascii_lowercase().as_str() {
-            "xfdf" => Format::Xfdf,
-            "fdf" => Format::Fdf,
-            "xml" => Format::Xml,
-            "xdp" => Format::Xdp,
-            "csv" => Format::Csv,
-            "txt" | "tab" | "tsv" => Format::Txt,
+            "xfdf" => Self::Xfdf,
+            "fdf" => Self::Fdf,
+            "xml" => Self::Xml,
+            "xdp" => Self::Xdp,
+            "csv" => Self::Csv,
+            "txt" | "tab" | "tsv" => Self::Txt,
             _ => return None,
         })
     }
@@ -400,7 +400,7 @@ fn xfdf_fields(doc: &Document, out: &mut String) {
     #[derive(Default)]
     struct Node {
         values: Vec<String>,
-        kids: Vec<(String, Node)>,
+        kids: Vec<(String, Self)>,
     }
     let mut root = Node::default();
     for f in pdfcraft_forms::fields(doc) {

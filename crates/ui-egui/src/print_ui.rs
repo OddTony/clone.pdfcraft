@@ -97,7 +97,7 @@ pub struct PrintDraft {
 
 impl Default for PrintDraft {
     fn default() -> Self {
-        PrintDraft {
+        Self {
             printers: Vec::new(),
             units: Default::default(),
             printers_loading: false,

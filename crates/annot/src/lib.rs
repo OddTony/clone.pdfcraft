@@ -58,10 +58,10 @@ pub enum Markup {
 impl Markup {
     fn subtype(self) -> &'static str {
         match self {
-            Markup::Highlight => "Highlight",
-            Markup::Underline => "Underline",
-            Markup::StrikeOut => "StrikeOut",
-            Markup::Squiggly => "Squiggly",
+            Self::Highlight => "Highlight",
+            Self::Underline => "Underline",
+            Self::StrikeOut => "StrikeOut",
+            Self::Squiggly => "Squiggly",
         }
     }
 }
@@ -82,13 +82,13 @@ pub enum NoteIcon {
 impl NoteIcon {
     pub fn name(self) -> &'static str {
         match self {
-            NoteIcon::Comment => "Comment",
-            NoteIcon::Note => "Note",
-            NoteIcon::Help => "Help",
-            NoteIcon::Insert => "Insert",
-            NoteIcon::Key => "Key",
-            NoteIcon::NewParagraph => "NewParagraph",
-            NoteIcon::Paragraph => "Paragraph",
+            Self::Comment => "Comment",
+            Self::Note => "Note",
+            Self::Help => "Help",
+            Self::Insert => "Insert",
+            Self::Key => "Key",
+            Self::NewParagraph => "NewParagraph",
+            Self::Paragraph => "Paragraph",
         }
     }
 
@@ -110,19 +110,19 @@ impl FillMark {
     /// The `/Name` of the stamp PdfCraft draws for it.
     pub fn name(self) -> &'static str {
         match self {
-            FillMark::Check => "PCCheck",
-            FillMark::Cross => "PCCross",
-            FillMark::Dot => "PCDot",
-            FillMark::Line => "PCLine",
+            Self::Check => "PCCheck",
+            Self::Cross => "PCCross",
+            Self::Dot => "PCDot",
+            Self::Line => "PCLine",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            FillMark::Check => "Checkmark",
-            FillMark::Cross => "Cross",
-            FillMark::Dot => "Dot",
-            FillMark::Line => "Line",
+            Self::Check => "Checkmark",
+            Self::Cross => "Cross",
+            Self::Dot => "Dot",
+            Self::Line => "Line",
         }
     }
 }
@@ -166,29 +166,29 @@ pub enum StampGroup {
 }
 
 impl StampKind {
-    pub const ALL: [StampKind; 22] = [
-        StampKind::DynApproved,
-        StampKind::DynConfidential,
-        StampKind::DynReceived,
-        StampKind::DynReviewed,
-        StampKind::DynRevised,
-        StampKind::Accepted,
-        StampKind::InitialHere,
-        StampKind::Rejected,
-        StampKind::SignHere,
-        StampKind::Witness,
-        StampKind::Approved,
-        StampKind::Completed,
-        StampKind::Confidential,
-        StampKind::Draft,
-        StampKind::Final,
-        StampKind::ForComment,
-        StampKind::ForPublicRelease,
-        StampKind::InformationOnly,
-        StampKind::NotApproved,
-        StampKind::NotForPublicRelease,
-        StampKind::PreliminaryResults,
-        StampKind::Void,
+    pub const ALL: [Self; 22] = [
+        Self::DynApproved,
+        Self::DynConfidential,
+        Self::DynReceived,
+        Self::DynReviewed,
+        Self::DynRevised,
+        Self::Accepted,
+        Self::InitialHere,
+        Self::Rejected,
+        Self::SignHere,
+        Self::Witness,
+        Self::Approved,
+        Self::Completed,
+        Self::Confidential,
+        Self::Draft,
+        Self::Final,
+        Self::ForComment,
+        Self::ForPublicRelease,
+        Self::InformationOnly,
+        Self::NotApproved,
+        Self::NotForPublicRelease,
+        Self::PreliminaryResults,
+        Self::Void,
     ];
 
     pub fn group(self) -> StampGroup {
@@ -453,16 +453,16 @@ pub enum AttachIcon {
 }
 
 impl AttachIcon {
-    pub const ALL: [AttachIcon; 4] = [AttachIcon::PushPin, AttachIcon::Paperclip, AttachIcon::Graph, AttachIcon::Tag];
+    pub const ALL: [Self; 4] = [Self::PushPin, Self::Paperclip, Self::Graph, Self::Tag];
     pub fn name(self) -> &'static str {
         match self {
-            AttachIcon::PushPin => "PushPin",
-            AttachIcon::Paperclip => "Paperclip",
-            AttachIcon::Graph => "Graph",
-            AttachIcon::Tag => "Tag",
+            Self::PushPin => "PushPin",
+            Self::Paperclip => "Paperclip",
+            Self::Graph => "Graph",
+            Self::Tag => "Tag",
         }
     }
-    pub fn from_name(n: &str) -> Option<AttachIcon> {
+    pub fn from_name(n: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|i| i.name().eq_ignore_ascii_case(n))
     }
 }
@@ -477,19 +477,19 @@ pub fn rect_quad(r: [f64; 4]) -> [f64; 8] {
 impl Shape {
     pub fn subtype(&self) -> &'static str {
         match self {
-            Shape::Note { .. } => "Text",
-            Shape::TextMarkup { kind, .. } => kind.subtype(),
-            Shape::Rectangle { .. } => "Square",
-            Shape::Oval { .. } => "Circle",
-            Shape::Line { .. } => "Line",
-            Shape::Ink { .. } | Shape::Signature { .. } => "Ink",
-            Shape::TextBox { .. } | Shape::Typewriter { .. } | Shape::Callout { .. } => "FreeText",
-            Shape::Mark { .. } | Shape::Stamp { .. } | Shape::CustomStamp { .. } | Shape::TypedSignature { .. } => "Stamp",
-            Shape::Redact { .. } => "Redact",
-            Shape::Polygon { .. } => "Polygon",
-            Shape::PolyLine { .. } => "PolyLine",
-            Shape::Caret { .. } => "Caret",
-            Shape::Attachment { .. } => "FileAttachment",
+            Self::Note { .. } => "Text",
+            Self::TextMarkup { kind, .. } => kind.subtype(),
+            Self::Rectangle { .. } => "Square",
+            Self::Oval { .. } => "Circle",
+            Self::Line { .. } => "Line",
+            Self::Ink { .. } | Self::Signature { .. } => "Ink",
+            Self::TextBox { .. } | Self::Typewriter { .. } | Self::Callout { .. } => "FreeText",
+            Self::Mark { .. } | Self::Stamp { .. } | Self::CustomStamp { .. } | Self::TypedSignature { .. } => "Stamp",
+            Self::Redact { .. } => "Redact",
+            Self::Polygon { .. } => "Polygon",
+            Self::PolyLine { .. } => "PolyLine",
+            Self::Caret { .. } => "Caret",
+            Self::Attachment { .. } => "FileAttachment",
         }
     }
 }
@@ -504,30 +504,30 @@ pub enum OverlayFont {
 }
 
 impl OverlayFont {
-    pub const ALL: [OverlayFont; 3] = [OverlayFont::Helvetica, OverlayFont::Times, OverlayFont::Courier];
+    pub const ALL: [Self; 3] = [Self::Helvetica, Self::Times, Self::Courier];
 
     pub fn name(self) -> &'static str {
         match self {
-            OverlayFont::Helvetica => "Helvetica",
-            OverlayFont::Times => "Times Roman",
-            OverlayFont::Courier => "Courier",
+            Self::Helvetica => "Helvetica",
+            Self::Times => "Times Roman",
+            Self::Courier => "Courier",
         }
     }
 
     /// The `/DA` font resource name (Acrobat's form font names).
     pub fn resource(self) -> &'static str {
         match self {
-            OverlayFont::Helvetica => "Helv",
-            OverlayFont::Times => "TiRo",
-            OverlayFont::Courier => "Cour",
+            Self::Helvetica => "Helv",
+            Self::Times => "TiRo",
+            Self::Courier => "Cour",
         }
     }
 
-    pub fn from_resource(n: &str) -> OverlayFont {
+    pub fn from_resource(n: &str) -> Self {
         match n {
-            "TiRo" | "Times-Roman" | "TimesRoman" => OverlayFont::Times,
-            "Cour" | "Courier" => OverlayFont::Courier,
-            _ => OverlayFont::Helvetica,
+            "TiRo" | "Times-Roman" | "TimesRoman" => Self::Times,
+            "Cour" | "Courier" => Self::Courier,
+            _ => Self::Helvetica,
         }
     }
 }
@@ -632,11 +632,11 @@ pub enum ReviewState {
 impl ReviewState {
     pub fn name(self) -> &'static str {
         match self {
-            ReviewState::None => "None",
-            ReviewState::Accepted => "Accepted",
-            ReviewState::Rejected => "Rejected",
-            ReviewState::Cancelled => "Cancelled",
-            ReviewState::Completed => "Completed",
+            Self::None => "None",
+            Self::Accepted => "Accepted",
+            Self::Rejected => "Rejected",
+            Self::Cancelled => "Cancelled",
+            Self::Completed => "Completed",
         }
     }
 

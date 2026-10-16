@@ -353,7 +353,7 @@ pub struct OutlineItem {
     pub page: Option<usize>,
     /// Where on `page` the bookmark goes ([`DestView::Top`] for a bookmark without a page).
     pub view: DestView,
-    pub children: Vec<OutlineItem>,
+    pub children: Vec<Self>,
     pub open: bool,
 }
 

@@ -39,9 +39,9 @@ pub enum MarkKind {
 impl MarkKind {
     fn tag(self) -> &'static str {
         match self {
-            MarkKind::HeaderFooter => "HeaderFooter",
-            MarkKind::Watermark => "Watermark",
-            MarkKind::Background => "Background",
+            Self::HeaderFooter => "HeaderFooter",
+            Self::Watermark => "Watermark",
+            Self::Background => "Background",
         }
     }
 }

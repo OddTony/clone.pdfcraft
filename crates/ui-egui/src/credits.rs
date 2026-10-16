@@ -53,13 +53,13 @@ pub enum NameMode {
 }
 
 impl NameMode {
-    pub const ALL: [NameMode; 3] = [NameMode::Username, NameMode::DisplayName, NameMode::RealName];
+    pub const ALL: [Self; 3] = [Self::Username, Self::DisplayName, Self::RealName];
 
     pub fn label(self) -> &'static str {
         match self {
-            NameMode::Username => "Username",
-            NameMode::DisplayName => "Display name",
-            NameMode::RealName => "Real name",
+            Self::Username => "Username",
+            Self::DisplayName => "Display name",
+            Self::RealName => "Real name",
         }
     }
 }
@@ -80,38 +80,38 @@ pub enum SortKey {
 }
 
 impl SortKey {
-    pub const ALL: [SortKey; 10] = [
-        SortKey::Name,
-        SortKey::Prs,
-        SortKey::Commits,
-        SortKey::LinesAdded,
-        SortKey::LinesDeleted,
-        SortKey::LinesDelta,
-        SortKey::BinaryAdded,
-        SortKey::BinaryDeleted,
-        SortKey::FirstCommit,
-        SortKey::LastCommit,
+    pub const ALL: [Self; 10] = [
+        Self::Name,
+        Self::Prs,
+        Self::Commits,
+        Self::LinesAdded,
+        Self::LinesDeleted,
+        Self::LinesDelta,
+        Self::BinaryAdded,
+        Self::BinaryDeleted,
+        Self::FirstCommit,
+        Self::LastCommit,
     ];
 
     /// Menu label and table header.
     pub fn label(self) -> (&'static str, &'static str) {
         match self {
-            SortKey::Name => ("Name (A–Z)", "Name"),
-            SortKey::Prs => ("Merged PRs", "PRs"),
-            SortKey::Commits => ("Commits", "Commits"),
-            SortKey::LinesAdded => ("Lines added", "+LOC"),
-            SortKey::LinesDeleted => ("Lines deleted", "−LOC"),
-            SortKey::LinesDelta => ("Line delta", "ΔLOC"),
-            SortKey::BinaryAdded => ("Binary assets added", "+Bin"),
-            SortKey::BinaryDeleted => ("Binary assets removed", "−Bin"),
-            SortKey::FirstCommit => ("First commit", "First"),
-            SortKey::LastCommit => ("Last commit", "Last"),
+            Self::Name => ("Name (A–Z)", "Name"),
+            Self::Prs => ("Merged PRs", "PRs"),
+            Self::Commits => ("Commits", "Commits"),
+            Self::LinesAdded => ("Lines added", "+LOC"),
+            Self::LinesDeleted => ("Lines deleted", "−LOC"),
+            Self::LinesDelta => ("Line delta", "ΔLOC"),
+            Self::BinaryAdded => ("Binary assets added", "+Bin"),
+            Self::BinaryDeleted => ("Binary assets removed", "−Bin"),
+            Self::FirstCommit => ("First commit", "First"),
+            Self::LastCommit => ("Last commit", "Last"),
         }
     }
 
     /// Names and dates read naturally oldest/A first; counts read biggest first.
     pub fn default_ascending(self) -> bool {
-        matches!(self, SortKey::Name | SortKey::FirstCommit | SortKey::LastCommit)
+        matches!(self, Self::Name | Self::FirstCommit | Self::LastCommit)
     }
 }
 
@@ -225,7 +225,7 @@ struct View {
 
 impl Default for View {
     fn default() -> Self {
-        View { names: NameMode::Username, key: SortKey::FirstCommit, ascending: true, table: false }
+        Self { names: NameMode::Username, key: SortKey::FirstCommit, ascending: true, table: false }
     }
 }
 

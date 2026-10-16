@@ -814,7 +814,7 @@ impl Slot {
                 return None;
             }
             match waiting.compare_exchange_weak(n, n.saturating_add(1), Ordering::AcqRel, Ordering::Acquire) {
-                Ok(_) => return Some(Slot(waiting.clone())),
+                Ok(_) => return Some(Self(waiting.clone())),
                 Err(now) => n = now,
             }
         }

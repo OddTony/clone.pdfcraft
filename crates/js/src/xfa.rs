@@ -32,12 +32,12 @@ pub enum XfaKind {
 impl XfaKind {
     pub(crate) fn class_name(self) -> &'static str {
         match self {
-            XfaKind::Form => "form",
-            XfaKind::Subform => "subform",
-            XfaKind::Field => "field",
-            XfaKind::ExclGroup => "exclGroup",
-            XfaKind::Draw => "draw",
-            XfaKind::Area => "area",
+            Self::Form => "form",
+            Self::Subform => "subform",
+            Self::Field => "field",
+            Self::ExclGroup => "exclGroup",
+            Self::Draw => "draw",
+            Self::Area => "area",
         }
     }
 }
@@ -63,7 +63,7 @@ pub struct XfaNode {
     pub occur_max: Option<usize>,
     /// This instance's index among its same-named siblings.
     pub index: usize,
-    pub children: Vec<XfaNode>,
+    pub children: Vec<Self>,
 }
 
 /// The event a script runs for.
@@ -232,12 +232,12 @@ pub(crate) struct XHost {
 impl XHost {
     /// The host for a script on `root` (the template's root subform), with `this` at the node
     /// named by `target`. `xfa.form` is a synthetic root whose child is the root subform.
-    pub(crate) fn new(root: XfaNode, target: &str, doc: &XfaDoc) -> XHost {
+    pub(crate) fn new(root: XfaNode, target: &str, doc: &XfaDoc) -> Self {
         let form = XfaNode { name: "form".into(), kind: Some(XfaKind::Form), children: vec![root], ..Default::default() };
         let mut nodes = Vec::new();
         flatten(&form, None, &mut nodes, 0);
         let current = nodes.iter().position(|n| n.som == target && n.kind != XfaKind::Form).unwrap_or(1.min(nodes.len().saturating_sub(1)));
-        XHost {
+        Self {
             nodes,
             effects: Vec::new(),
             console: Vec::new(),

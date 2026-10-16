@@ -254,7 +254,7 @@ impl PdfCraftApp {
             );
             return;
         }
-        let saved = move |app: &mut PdfCraftApp, place: String| {
+        let saved = move |app: &mut Self, place: String| {
             let (b, a) = (crate::panels::human_size(before), crate::panels::human_size(after));
             if after < before {
                 let pct = 100.0 * (1.0 - after as f64 / before.max(1) as f64);

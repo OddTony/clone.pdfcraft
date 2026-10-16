@@ -312,15 +312,15 @@ enum Space {
     Rgb,
     Cmyk,
     /// Base space, highest valid palette index, and lookup table.
-    Indexed(Box<Space>, u8, Vec<u8>),
+    Indexed(Box<Self>, u8, Vec<u8>),
 }
 
 impl Space {
     fn components(&self) -> usize {
         match self {
-            Space::Gray | Space::Indexed(..) => 1,
-            Space::Rgb => 3,
-            Space::Cmyk => 4,
+            Self::Gray | Self::Indexed(..) => 1,
+            Self::Rgb => 3,
+            Self::Cmyk => 4,
         }
     }
 }

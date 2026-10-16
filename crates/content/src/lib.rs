@@ -27,7 +27,7 @@ pub struct Op {
 
 impl Op {
     pub fn new(op: &str, operands: Vec<Object>) -> Self {
-        Op { op: op.as_bytes().to_vec(), operands, inline: None, span: 0..0 }
+        Self { op: op.as_bytes().to_vec(), operands, inline: None, span: 0..0 }
     }
 
     pub fn is(&self, op: &str) -> bool {
@@ -322,7 +322,7 @@ impl Pieces {
             data.push(b'\n');
             ends.push(data.len());
         }
-        Pieces { data, ends }
+        Self { data, ends }
     }
 
     /// The joined bytes (the spans of [`Pieces::parse`]'s operators index into them).
@@ -411,15 +411,15 @@ pub struct Matrix(pub [f64; 6]);
 
 impl Default for Matrix {
     fn default() -> Self {
-        Matrix::IDENTITY
+        Self::IDENTITY
     }
 }
 
 impl Matrix {
-    pub const IDENTITY: Matrix = Matrix([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    pub const IDENTITY: Self = Self([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
     pub fn translate(x: f64, y: f64) -> Self {
-        Matrix([1.0, 0.0, 0.0, 1.0, x, y])
+        Self([1.0, 0.0, 0.0, 1.0, x, y])
     }
 
     pub fn from_operands(v: &[Object]) -> Option<Self> {
@@ -430,14 +430,14 @@ impl Matrix {
         for (o, x) in m.iter_mut().zip(v) {
             *o = x.as_f64()?;
         }
-        Some(Matrix(m))
+        Some(Self(m))
     }
 
     /// `self` then `then` (`self × then` in PDF's row-vector convention).
-    pub fn then(&self, then: &Matrix) -> Matrix {
+    pub fn then(&self, then: &Self) -> Self {
         let [a, b, c, d, e, f] = self.0;
         let [a2, b2, c2, d2, e2, f2] = then.0;
-        Matrix([a * a2 + b * c2, a * b2 + b * d2, c * a2 + d * c2, c * b2 + d * d2, e * a2 + f * c2 + e2, e * b2 + f * d2 + f2])
+        Self([a * a2 + b * c2, a * b2 + b * d2, c * a2 + d * c2, c * b2 + d * d2, e * a2 + f * c2 + e2, e * b2 + f * d2 + f2])
     }
 
     pub fn apply(&self, x: f64, y: f64) -> (f64, f64) {
@@ -445,14 +445,14 @@ impl Matrix {
         (a * x + c * y + e, b * x + d * y + f)
     }
 
-    pub fn invert(&self) -> Option<Matrix> {
+    pub fn invert(&self) -> Option<Self> {
         let [a, b, c, d, e, f] = self.0;
         let det = a * d - b * c;
         if det.abs() < 1e-12 || !det.is_finite() {
             return None;
         }
         let (ia, ib, ic, id) = (d / det, -b / det, -c / det, a / det);
-        Some(Matrix([ia, ib, ic, id, -(e * ia + f * ic), -(e * ib + f * id)]))
+        Some(Self([ia, ib, ic, id, -(e * ia + f * ic), -(e * ib + f * id)]))
     }
 
     /// The bounding box of a rectangle `[x0 y0 x1 y1]` after this transform.

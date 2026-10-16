@@ -15,10 +15,10 @@ pub struct Rect {
 
 impl Rect {
     pub fn new(x0: f32, y0: f32, x1: f32, y1: f32) -> Self {
-        Rect { x0: x0.min(x1), y0: y0.min(y1), x1: x0.max(x1), y1: y0.max(y1) }
+        Self { x0: x0.min(x1), y0: y0.min(y1), x1: x0.max(x1), y1: y0.max(y1) }
     }
     pub fn xywh(x: f32, y: f32, w: f32, h: f32) -> Self {
-        Rect::new(x, y, x + w, y + h)
+        Self::new(x, y, x + w, y + h)
     }
     pub fn w(&self) -> f32 {
         self.x1 - self.x0
@@ -33,7 +33,7 @@ impl Rect {
     pub fn from_obj(obj: &Object) -> Option<Self> {
         let a = obj.as_array().ok()?;
         let v: Vec<f32> = a.iter().filter_map(|o| o.as_float().ok()).collect();
-        (v.len() == 4).then(|| Rect::new(v[0], v[1], v[2], v[3]))
+        (v.len() == 4).then(|| Self::new(v[0], v[1], v[2], v[3]))
     }
 }
 
@@ -61,21 +61,21 @@ impl Kind {
     /// Parse the `<kind>` segment of a marker URI.
     pub fn from_marker(s: &str) -> Option<Self> {
         Some(match s {
-            "highlight" => Kind::Highlight,
-            "underline" => Kind::Underline,
-            "strikeout" => Kind::StrikeOut,
-            "squiggly" => Kind::Squiggly,
-            "caret" => Kind::Caret,
-            "note" => Kind::Note,
-            "freetext" => Kind::FreeText,
-            "line" => Kind::Line,
-            "square" => Kind::Square,
-            "circle" => Kind::Circle,
-            "polygon" => Kind::Polygon,
-            "polyline" => Kind::PolyLine,
-            "ink" => Kind::Ink,
-            "stamp" => Kind::Stamp,
-            "attach" => Kind::Attachment,
+            "highlight" => Self::Highlight,
+            "underline" => Self::Underline,
+            "strikeout" => Self::StrikeOut,
+            "squiggly" => Self::Squiggly,
+            "caret" => Self::Caret,
+            "note" => Self::Note,
+            "freetext" => Self::FreeText,
+            "line" => Self::Line,
+            "square" => Self::Square,
+            "circle" => Self::Circle,
+            "polygon" => Self::Polygon,
+            "polyline" => Self::PolyLine,
+            "ink" => Self::Ink,
+            "stamp" => Self::Stamp,
+            "attach" => Self::Attachment,
             _ => return None,
         })
     }
@@ -100,7 +100,7 @@ pub struct Built {
 
 impl Annotator {
     pub fn new(fonts: Fonts, now: Stamp) -> Self {
-        Annotator { fonts, now, seq: 0 }
+        Self { fonts, now, seq: 0 }
     }
 
     /// Common markup-annotation entries.

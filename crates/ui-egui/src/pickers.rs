@@ -179,7 +179,7 @@ impl PdfCraftApp {
     ///
     /// `pick_override` answers instead of a native panel (tests and automation); the answer
     /// still arrives on a later frame, like a real pick.
-    pub(crate) fn ask(&mut self, ask: Ask, target: Option<DocId>, then: impl FnOnce(&mut PdfCraftApp, Vec<PathBuf>) + Send + 'static) -> bool {
+    pub(crate) fn ask(&mut self, ask: Ask, target: Option<DocId>, then: impl FnOnce(&mut Self, Vec<PathBuf>) + Send + 'static) -> bool {
         if self.pickers.showing.swap(true, Ordering::SeqCst) {
             self.notify_tr("Another file dialog is still open. Finish with it first.");
             return false;
@@ -224,7 +224,7 @@ impl PdfCraftApp {
     }
 
     /// [`Self::ask`] for one path: `then` gets the first chosen path.
-    pub(crate) fn ask_one(&mut self, ask: Ask, target: Option<DocId>, then: impl FnOnce(&mut PdfCraftApp, PathBuf) + Send + 'static) -> bool {
+    pub(crate) fn ask_one(&mut self, ask: Ask, target: Option<DocId>, then: impl FnOnce(&mut Self, PathBuf) + Send + 'static) -> bool {
         self.ask(ask, target, move |app, paths| {
             if let Some(path) = paths.into_iter().next() {
                 then(app, path);

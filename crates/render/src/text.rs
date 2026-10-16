@@ -426,7 +426,7 @@ fn merge(drawn: &[Drawn], text: String) -> Option<Drawn> {
 
 impl TextDevice {
     fn new() -> Self {
-        TextDevice {
+        Self {
             glyphs: Vec::new(),
             depth: 0,
             actual: None,
@@ -947,7 +947,7 @@ struct SegExtra {
 
 impl Seg {
     fn new(first: Run, bbox: [f32; 4], h: f32) -> Self {
-        Seg { first, extra: None, bbox, h }
+        Self { first, extra: None, bbox, h }
     }
 
     fn cy(&self) -> f32 {
@@ -958,7 +958,7 @@ impl Seg {
         std::iter::once(self.first).chain(self.extra.iter().flat_map(|e| e.more.iter().copied()))
     }
 
-    fn merge(&mut self, other: Seg) {
+    fn merge(&mut self, other: Self) {
         union(&mut self.bbox, &other.bbox);
         self.h = self.h.max(other.h);
         let extra = self.extra.get_or_insert_with(Default::default);

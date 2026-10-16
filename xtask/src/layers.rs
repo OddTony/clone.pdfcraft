@@ -20,9 +20,9 @@ pub enum Class {
 impl Class {
     fn layer(self) -> Option<u8> {
         match self {
-            Class::Layer(l) | Class::Standalone(l) => Some(l),
-            Class::Testkit => Some(7),
-            Class::Exempt => None,
+            Self::Layer(l) | Self::Standalone(l) => Some(l),
+            Self::Testkit => Some(7),
+            Self::Exempt => None,
         }
     }
 }
@@ -167,15 +167,15 @@ pub enum Violation {
 impl std::fmt::Display for Violation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Violation::Unregistered { krate } => {
+            Self::Unregistered { krate } => {
                 write!(f, "{krate}: unknown workspace crate; register it in xtask/src/layers.rs TABLE (plan/architecture.md §3)")
             }
-            Violation::Upward { krate, dep, from, to, kind } => {
+            Self::Upward { krate, dep, from, to, kind } => {
                 write!(f, "{krate} (L{from}) -> {dep} (L{to}) [{kind:?}]: may only depend on lower layers (or an allowed sideways edge)")
             }
-            Violation::StandaloneHasWorkspaceDep { krate, dep } => write!(f, "{krate}: standalone crate must not depend on workspace crate {dep}"),
-            Violation::TestkitAsNormalDep { krate, dep } => write!(f, "{krate}: {dep} may only be a dev-dependency"),
-            Violation::UiBelowL7 { krate, dep, layer } => {
+            Self::StandaloneHasWorkspaceDep { krate, dep } => write!(f, "{krate}: standalone crate must not depend on workspace crate {dep}"),
+            Self::TestkitAsNormalDep { krate, dep } => write!(f, "{krate}: {dep} may only be a dev-dependency"),
+            Self::UiBelowL7 { krate, dep, layer } => {
                 write!(f, "{krate} (L{layer}) depends on UI crate `{dep}`; UI toolkits are only allowed in L7+")
             }
         }

@@ -78,16 +78,16 @@ impl PartialEq for Tlv<'_> {
 
 impl<'a> Tlv<'a> {
     /// Parse one DER element at the start of `input`; returns it and the rest.
-    pub fn parse(input: &'a [u8]) -> Result<(Tlv<'a>, &'a [u8]), SignError> {
+    pub fn parse(input: &'a [u8]) -> Result<(Self, &'a [u8]), SignError> {
         Tlv::read(input, Form::Der, 0)
     }
 
     /// Parse one BER element at the start of `input`; returns it and the rest.
-    pub fn parse_ber(input: &'a [u8]) -> Result<(Tlv<'a>, &'a [u8]), SignError> {
+    pub fn parse_ber(input: &'a [u8]) -> Result<(Self, &'a [u8]), SignError> {
         Tlv::read(input, Form::Ber, 0)
     }
 
-    fn read(input: &'a [u8], form: Form, depth: usize) -> Result<(Tlv<'a>, &'a [u8]), SignError> {
+    fn read(input: &'a [u8], form: Form, depth: usize) -> Result<(Self, &'a [u8]), SignError> {
         let (&tag, rest) = input.split_first().ok_or_else(|| bad("truncated DER"))?;
         if tag & 0x1F == 0x1F {
             return Err(bad("multi-byte DER tags are not supported"));
@@ -123,16 +123,16 @@ impl<'a> Tlv<'a> {
     }
 
     /// Parse `input` as exactly one DER element.
-    pub fn parse_all(input: &'a [u8]) -> Result<Tlv<'a>, SignError> {
+    pub fn parse_all(input: &'a [u8]) -> Result<Self, SignError> {
         Tlv::only(input, Form::Der)
     }
 
     /// Parse `input` as exactly one BER element.
-    pub fn parse_all_ber(input: &'a [u8]) -> Result<Tlv<'a>, SignError> {
+    pub fn parse_all_ber(input: &'a [u8]) -> Result<Self, SignError> {
         Tlv::only(input, Form::Ber)
     }
 
-    fn only(input: &'a [u8], form: Form) -> Result<Tlv<'a>, SignError> {
+    fn only(input: &'a [u8], form: Form) -> Result<Self, SignError> {
         let (t, rest) = Tlv::read(input, form, 0)?;
         if !rest.is_empty() {
             return Err(bad("trailing bytes after DER element"));
@@ -147,7 +147,7 @@ impl<'a> Tlv<'a> {
     }
 
     /// The children of a constructed element, read with the same rules as their parent.
-    pub fn children(&self) -> Result<Vec<Tlv<'a>>, SignError> {
+    pub fn children(&self) -> Result<Vec<Self>, SignError> {
         let mut out = Vec::new();
         let mut rest = self.value;
         while !rest.is_empty() {
@@ -159,12 +159,12 @@ impl<'a> Tlv<'a> {
     }
 
     /// Check the tag, for a clear error.
-    pub fn expect(self, tag: u8, what: &str) -> Result<Tlv<'a>, SignError> {
+    pub fn expect(self, tag: u8, what: &str) -> Result<Self, SignError> {
         if self.tag == tag { Ok(self) } else { Err(bad(&format!("{what}: expected tag {tag:#04x}, found {:#04x}", self.tag))) }
     }
 
     /// The element inside an EXPLICIT tag.
-    pub fn inner(&self) -> Result<Tlv<'a>, SignError> {
+    pub fn inner(&self) -> Result<Self, SignError> {
         Tlv::only(self.value, self.form)
     }
 
@@ -298,11 +298,11 @@ pub struct Time {
 
 impl Time {
     /// From a PDF date (`D:YYYYMMDDHHmmSS±HH'mm'`), converted to UTC.
-    pub fn from_pdf(s: &str) -> Option<Time> {
+    pub fn from_pdf(s: &str) -> Option<Self> {
         let s = s.strip_prefix("D:").unwrap_or(s);
         let d = |r: std::ops::Range<usize>, default: u32| s.get(r).map_or(Some(default), |x| x.parse::<u32>().ok());
         let mut t =
-            Time { year: d(0..4, 0)?, month: d(4..6, 1)?, day: d(6..8, 1)?, hour: d(8..10, 0)?, minute: d(10..12, 0)?, second: d(12..14, 0)? };
+            Self { year: d(0..4, 0)?, month: d(4..6, 1)?, day: d(6..8, 1)?, hour: d(8..10, 0)?, minute: d(10..12, 0)?, second: d(12..14, 0)? };
         if t.year == 0 {
             return None;
         }
@@ -336,7 +336,7 @@ impl Time {
         days * 86_400 + self.hour as i64 * 3600 + self.minute as i64 * 60 + self.second as i64
     }
 
-    pub fn from_unix(t: i64) -> Time {
+    pub fn from_unix(t: i64) -> Self {
         let days = t.div_euclid(86_400);
         let secs = t.rem_euclid(86_400);
         let z = days + 719_468;
@@ -348,11 +348,11 @@ impl Time {
         let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
         let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
         let year = (yoe + era * 400 + if month <= 2 { 1 } else { 0 }) as u32;
-        Time { year, month, day, hour: (secs / 3600) as u32, minute: (secs % 3600 / 60) as u32, second: (secs % 60) as u32 }
+        Self { year, month, day, hour: (secs / 3600) as u32, minute: (secs % 3600 / 60) as u32, second: (secs % 60) as u32 }
     }
 
-    pub fn add_seconds(&self, s: i64) -> Time {
-        Time::from_unix(self.unix() + s)
+    pub fn add_seconds(&self, s: i64) -> Self {
+        Self::from_unix(self.unix() + s)
     }
 
     /// UTCTime before 2050, GeneralizedTime from then on (RFC 5280 §4.1.2.5).

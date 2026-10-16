@@ -21,7 +21,7 @@ enum Stop {
 
 impl From<EditError> for Stop {
     fn from(e: EditError) -> Self {
-        Stop::Build(e)
+        Self::Build(e)
     }
 }
 

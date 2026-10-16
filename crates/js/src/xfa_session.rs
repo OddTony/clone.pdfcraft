@@ -85,8 +85,8 @@ mod native {
     }
 
     impl XfaSession {
-        pub fn new(doc: XfaDoc) -> XfaSession {
-            XfaSession { doc, worker: None, dead: None }
+        pub fn new(doc: XfaDoc) -> Self {
+            Self { doc, worker: None, dead: None }
         }
 
         /// Why nothing more runs, once a script was abandoned.

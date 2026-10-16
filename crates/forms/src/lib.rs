@@ -627,12 +627,12 @@ pub enum TabOrder {
 }
 
 impl TabOrder {
-    fn of(name: Option<&[u8]>) -> TabOrder {
+    fn of(name: Option<&[u8]>) -> Self {
         match name {
-            Some(b"R") => TabOrder::Row,
-            Some(b"C") => TabOrder::Column,
-            Some(b"S") => TabOrder::Structure,
-            _ => TabOrder::Annotations,
+            Some(b"R") => Self::Row,
+            Some(b"C") => Self::Column,
+            Some(b"S") => Self::Structure,
+            _ => Self::Annotations,
         }
     }
 }

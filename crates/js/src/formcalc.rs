@@ -184,15 +184,15 @@ enum Expr {
     Null,
     Ident(String),
     /// `base.name`
-    Member(Box<Expr>, String),
+    Member(Box<Self>, String),
     /// `base[n]`, `base[*]`, `base[-n]`
-    Index(Box<Expr>, Idx),
+    Index(Box<Self>, Idx),
     /// `base..name`
-    Descend(Box<Expr>, String),
-    Call(Box<Expr>, Vec<Expr>),
-    Neg(Box<Expr>),
-    Not(Box<Expr>),
-    Bin(&'static str, Box<Expr>, Box<Expr>),
+    Descend(Box<Self>, String),
+    Call(Box<Self>, Vec<Self>),
+    Neg(Box<Self>),
+    Not(Box<Self>),
+    Bin(&'static str, Box<Self>, Box<Self>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -210,10 +210,10 @@ enum Stmt {
     Var(String, Option<Expr>),
     Assign(Expr, Expr),
     Expr(Expr),
-    If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
-    While(Expr, Vec<Stmt>),
-    For { var: String, from: Expr, to: Expr, up: bool, step: Option<Expr>, body: Vec<Stmt> },
-    Foreach { var: String, list: Vec<Expr>, body: Vec<Stmt> },
+    If(Vec<(Expr, Vec<Self>)>, Option<Vec<Self>>),
+    While(Expr, Vec<Self>),
+    For { var: String, from: Expr, to: Expr, up: bool, step: Option<Expr>, body: Vec<Self> },
+    Foreach { var: String, list: Vec<Expr>, body: Vec<Self> },
     Func { name: String, f: Rc<Func> },
     Return(Option<Expr>),
     Break,
@@ -680,7 +680,7 @@ enum Val {
     /// A form object, by index in the host.
     Node(usize),
     /// Several objects or values (`Row[*]`, `Row[*].Amount`).
-    List(Vec<Val>),
+    List(Vec<Self>),
     Host,
     Layout,
     Event,

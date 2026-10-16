@@ -51,25 +51,25 @@ pub enum CalcOp {
 impl CalcOp {
     pub fn code(self) -> &'static str {
         match self {
-            CalcOp::Sum => "SUM",
-            CalcOp::Product => "PRD",
-            CalcOp::Average => "AVG",
-            CalcOp::Minimum => "MIN",
-            CalcOp::Maximum => "MAX",
+            Self::Sum => "SUM",
+            Self::Product => "PRD",
+            Self::Average => "AVG",
+            Self::Minimum => "MIN",
+            Self::Maximum => "MAX",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            CalcOp::Sum => "sum (+)",
-            CalcOp::Product => "product (x)",
-            CalcOp::Average => "average",
-            CalcOp::Minimum => "minimum",
-            CalcOp::Maximum => "maximum",
+            Self::Sum => "sum (+)",
+            Self::Product => "product (x)",
+            Self::Average => "average",
+            Self::Minimum => "minimum",
+            Self::Maximum => "maximum",
         }
     }
 
-    pub const ALL: [CalcOp; 5] = [CalcOp::Sum, CalcOp::Product, CalcOp::Average, CalcOp::Minimum, CalcOp::Maximum];
+    pub const ALL: [Self; 5] = [Self::Sum, Self::Product, Self::Average, Self::Minimum, Self::Maximum];
 }
 
 /// The Calculate tab.
@@ -117,33 +117,33 @@ enum Arg {
     Num(f64),
     Str(String),
     Bool(bool),
-    List(Vec<Arg>),
+    List(Vec<Self>),
 }
 
 impl Arg {
     fn num(&self) -> Option<f64> {
         match self {
-            Arg::Num(n) => Some(*n),
-            Arg::Bool(b) => Some(f64::from(u8::from(*b))),
-            Arg::Str(s) => s.trim().parse().ok(),
-            Arg::List(_) => None,
+            Self::Num(n) => Some(*n),
+            Self::Bool(b) => Some(f64::from(u8::from(*b))),
+            Self::Str(s) => s.trim().parse().ok(),
+            Self::List(_) => None,
         }
     }
 
     fn string(&self) -> Option<String> {
         match self {
-            Arg::Str(s) => Some(s.clone()),
-            Arg::Num(n) => Some(n.to_string()),
+            Self::Str(s) => Some(s.clone()),
+            Self::Num(n) => Some(n.to_string()),
             _ => None,
         }
     }
 
     fn truthy(&self) -> bool {
         match self {
-            Arg::Bool(b) => *b,
-            Arg::Num(n) => *n != 0.0,
-            Arg::Str(s) => !s.is_empty(),
-            Arg::List(l) => !l.is_empty(),
+            Self::Bool(b) => *b,
+            Self::Num(n) => *n != 0.0,
+            Self::Str(s) => !s.is_empty(),
+            Self::List(l) => !l.is_empty(),
         }
     }
 }

@@ -195,7 +195,7 @@ struct TextState {
 
 impl TextState {
     fn of(ts: &Ts) -> Self {
-        TextState {
+        Self {
             font: ts.font.as_ref().map(|(n, _)| (String::from_utf8_lossy(n).into_owned(), ts.size)),
             char_spacing: ts.char_spacing,
             word_spacing: ts.word_spacing,
@@ -683,7 +683,7 @@ struct Pen {
 impl Pen {
     fn after(s: &Shown) -> Self {
         let (dir, _, end, across) = s.span();
-        Pen { bt: s.bt, dir, across, end, size: s.size.max(1.0) }
+        Self { bt: s.bt, dir, across, end, size: s.size.max(1.0) }
     }
 
     /// Whether `s` could continue the same line on geometry alone: on the same baseline, starting
@@ -720,7 +720,7 @@ impl Carry {
             rise: 0.0,
             render_mode: 0,
         };
-        Carry { ts, stack: Vec::new(), marked: Vec::new() }
+        Self { ts, stack: Vec::new(), marked: Vec::new() }
     }
 }
 

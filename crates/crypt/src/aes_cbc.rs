@@ -14,20 +14,20 @@ enum Cipher {
 impl Cipher {
     fn new(key: &[u8]) -> Self {
         if let Some(k) = key.first_chunk::<32>() {
-            Cipher::A256(Box::new(Aes256::new(&Array::from(*k))))
+            Self::A256(Box::new(Aes256::new(&Array::from(*k))))
         } else {
             let mut k = [0u8; 16];
             let n = key.len().min(16);
             k[..n].copy_from_slice(&key[..n]);
-            Cipher::A128(Box::new(Aes128::new(&Array::from(k))))
+            Self::A128(Box::new(Aes128::new(&Array::from(k))))
         }
     }
 
     fn encrypt(&self, block: &mut [u8; 16]) {
         let mut b = Array::from(*block);
         match self {
-            Cipher::A128(c) => c.encrypt_block(&mut b),
-            Cipher::A256(c) => c.encrypt_block(&mut b),
+            Self::A128(c) => c.encrypt_block(&mut b),
+            Self::A256(c) => c.encrypt_block(&mut b),
         }
         *block = b.into();
     }
@@ -35,8 +35,8 @@ impl Cipher {
     fn decrypt(&self, block: &mut [u8; 16]) {
         let mut b = Array::from(*block);
         match self {
-            Cipher::A128(c) => c.decrypt_block(&mut b),
-            Cipher::A256(c) => c.decrypt_block(&mut b),
+            Self::A128(c) => c.decrypt_block(&mut b),
+            Self::A256(c) => c.decrypt_block(&mut b),
         }
         *block = b.into();
     }

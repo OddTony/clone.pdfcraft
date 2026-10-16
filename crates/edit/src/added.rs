@@ -31,38 +31,38 @@ pub enum Family {
 impl Family {
     pub fn label(self) -> &'static str {
         match self {
-            Family::Helvetica => "Helvetica",
-            Family::Times => "Times",
-            Family::Courier => "Courier",
+            Self::Helvetica => "Helvetica",
+            Self::Times => "Times",
+            Self::Courier => "Courier",
         }
     }
 
     /// The standard-14 font name for this family and style.
     pub fn base_font(self, bold: bool, italic: bool) -> &'static str {
         match (self, bold, italic) {
-            (Family::Helvetica, false, false) => "Helvetica",
-            (Family::Helvetica, true, false) => "Helvetica-Bold",
-            (Family::Helvetica, false, true) => "Helvetica-Oblique",
-            (Family::Helvetica, true, true) => "Helvetica-BoldOblique",
-            (Family::Times, false, false) => "Times-Roman",
-            (Family::Times, true, false) => "Times-Bold",
-            (Family::Times, false, true) => "Times-Italic",
-            (Family::Times, true, true) => "Times-BoldItalic",
-            (Family::Courier, false, false) => "Courier",
-            (Family::Courier, true, false) => "Courier-Bold",
-            (Family::Courier, false, true) => "Courier-Oblique",
-            (Family::Courier, true, true) => "Courier-BoldOblique",
+            (Self::Helvetica, false, false) => "Helvetica",
+            (Self::Helvetica, true, false) => "Helvetica-Bold",
+            (Self::Helvetica, false, true) => "Helvetica-Oblique",
+            (Self::Helvetica, true, true) => "Helvetica-BoldOblique",
+            (Self::Times, false, false) => "Times-Roman",
+            (Self::Times, true, false) => "Times-Bold",
+            (Self::Times, false, true) => "Times-Italic",
+            (Self::Times, true, true) => "Times-BoldItalic",
+            (Self::Courier, false, false) => "Courier",
+            (Self::Courier, true, false) => "Courier-Bold",
+            (Self::Courier, false, true) => "Courier-Oblique",
+            (Self::Courier, true, true) => "Courier-BoldOblique",
         }
     }
 
-    fn from_base(base: &[u8]) -> (Family, bool, bool) {
+    fn from_base(base: &[u8]) -> (Self, bool, bool) {
         let s = String::from_utf8_lossy(base);
         let family = if s.starts_with("Times") {
-            Family::Times
+            Self::Times
         } else if s.starts_with("Courier") {
-            Family::Courier
+            Self::Courier
         } else {
-            Family::Helvetica
+            Self::Helvetica
         };
         (family, s.contains("Bold"), s.contains("Italic") || s.contains("Oblique"))
     }
@@ -78,18 +78,18 @@ impl Family {
     /// The standard-14 face this family means at the given style.
     pub fn std14(self, bold: bool, italic: bool) -> Std14 {
         match (self, bold, italic) {
-            (Family::Courier, false, false) => Std14::Courier,
-            (Family::Courier, true, false) => Std14::CourierBold,
-            (Family::Courier, false, true) => Std14::CourierOblique,
-            (Family::Courier, true, true) => Std14::CourierBoldOblique,
-            (Family::Times, false, false) => Std14::TimesRoman,
-            (Family::Times, true, false) => Std14::TimesBold,
-            (Family::Times, false, true) => Std14::TimesItalic,
-            (Family::Times, true, true) => Std14::TimesBoldItalic,
-            (Family::Helvetica, false, false) => Std14::Helvetica,
-            (Family::Helvetica, true, false) => Std14::HelveticaBold,
-            (Family::Helvetica, false, true) => Std14::HelveticaOblique,
-            (Family::Helvetica, true, true) => Std14::HelveticaBoldOblique,
+            (Self::Courier, false, false) => Std14::Courier,
+            (Self::Courier, true, false) => Std14::CourierBold,
+            (Self::Courier, false, true) => Std14::CourierOblique,
+            (Self::Courier, true, true) => Std14::CourierBoldOblique,
+            (Self::Times, false, false) => Std14::TimesRoman,
+            (Self::Times, true, false) => Std14::TimesBold,
+            (Self::Times, false, true) => Std14::TimesItalic,
+            (Self::Times, true, true) => Std14::TimesBoldItalic,
+            (Self::Helvetica, false, false) => Std14::Helvetica,
+            (Self::Helvetica, true, false) => Std14::HelveticaBold,
+            (Self::Helvetica, false, true) => Std14::HelveticaOblique,
+            (Self::Helvetica, true, true) => Std14::HelveticaBoldOblique,
         }
     }
 }
@@ -120,7 +120,7 @@ pub struct AddedText {
 
 impl Default for AddedText {
     fn default() -> Self {
-        AddedText {
+        Self {
             rect: [0.0; 4],
             text: String::new(),
             family: Family::Helvetica,
@@ -149,7 +149,7 @@ pub struct AddedImage {
 
 impl AddedImage {
     pub fn new(rect: [f64; 4], image: ObjRef) -> Self {
-        AddedImage { rect, image, rotation: 0, flip_h: false, flip_v: false, crop: [0.0; 4] }
+        Self { rect, image, rotation: 0, flip_h: false, flip_v: false, crop: [0.0; 4] }
     }
 
     /// The matrix from image space (the unit square) to display space: crop, flip, rotate,
@@ -183,25 +183,25 @@ pub enum Content {
 impl Content {
     pub fn rect(&self) -> [f64; 4] {
         match self {
-            Content::Text(t) => t.rect,
-            Content::Image(i) => i.rect,
+            Self::Text(t) => t.rect,
+            Self::Image(i) => i.rect,
         }
     }
 
     /// The same item with its box and text size scaled by `factor`.
-    fn scaled(self, factor: f64) -> Content {
+    fn scaled(self, factor: f64) -> Self {
         match self {
             _ if factor == 1.0 => self,
-            Content::Text(t) => Content::Text(AddedText { rect: t.rect.map(|v| v * factor), size: t.size * factor, ..t }),
-            Content::Image(i) => Content::Image(AddedImage { rect: i.rect.map(|v| v * factor), ..i }),
+            Self::Text(t) => Self::Text(AddedText { rect: t.rect.map(|v| v * factor), size: t.size * factor, ..t }),
+            Self::Image(i) => Self::Image(AddedImage { rect: i.rect.map(|v| v * factor), ..i }),
         }
     }
 
     /// The same item moved/resized to `rect` (text keeps its computed height).
-    pub fn with_rect(&self, rect: [f64; 4]) -> Content {
+    pub fn with_rect(&self, rect: [f64; 4]) -> Self {
         match self {
-            Content::Text(t) => Content::Text(AddedText { rect, ..t.clone() }),
-            Content::Image(i) => Content::Image(AddedImage { rect, ..i.clone() }),
+            Self::Text(t) => Self::Text(AddedText { rect, ..t.clone() }),
+            Self::Image(i) => Self::Image(AddedImage { rect, ..i.clone() }),
         }
     }
 }
