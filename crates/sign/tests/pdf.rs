@@ -2111,6 +2111,19 @@ fn one_signature_shows_on_several_pages() {
 }
 
 #[test]
+fn a_multi_page_counter_signature_is_signing() {
+    // The new field's kid widgets carry `/FT /Sig` only through `/Parent`.
+    let id = pkcs12::open(&data("ec-p256.p12"), "test").unwrap();
+    let first = pdfcraft_sign::sign(&open(&three_pages()), &id, &opts()).unwrap();
+    let also = vec![(1, [20.0, 100.0, 220.0, 150.0]), (2, [20.0, 100.0, 220.0, 150.0])];
+    let rect = Some([20.0, 200.0, 220.0, 250.0]);
+    let second = pdfcraft_sign::sign(&open(&first), &id, &SignOptions { rect, also, ..opts() }).unwrap();
+    let sigs = signatures(&open(&second), &second, &TrustStore::default());
+    let a = sigs.iter().find(|s| s.field == "Signature1").unwrap();
+    assert_eq!(a.modification, Modification::Allowed(vec![kind::SIGNATURE]), "{:?}", a.details);
+}
+
+#[test]
 fn other_pages_need_a_visible_new_signature_on_existing_pages() {
     let id = pkcs12::open(&data("ec-p256.p12"), "test").unwrap();
     let doc = open(&three_pages());

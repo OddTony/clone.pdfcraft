@@ -617,6 +617,10 @@ pub(crate) fn repeat_entry(ui: &mut egui::Ui, app: &mut crate::PdfCraftApp) -> b
         crate::widgets::radio_value(ui, &mut r.all, true, tl!("All pages"));
         crate::widgets::radio_value(ui, &mut r.all, false, tl!("Pages from"));
     });
+    // Like `PageRange::ui`: an untouched range opens as the whole document.
+    if r.from == 1 && r.to == 1 {
+        r.to = count;
+    }
     ui.add_enabled_ui(!r.all, |ui| {
         ui.horizontal(|ui| {
             ui.add(egui::DragValue::new(&mut r.from).range(1..=count));
