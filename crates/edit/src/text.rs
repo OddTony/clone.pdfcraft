@@ -2044,6 +2044,13 @@ pub(crate) fn rewrite_block_with_limit(
 }
 
 /// [`rewrite_block_with_limit`] with the page's [`text_lines`], read from `doc` as it is now.
+/// Vowelized Hebrew needs glyph shaping and mark offsets, never one Type 3
+/// glyph per Unicode character. Keep the text in logical Unicode order.
+fn needs_shaped_hebrew(text: &str) -> bool {
+    text.chars().any(crate::bidi::is_hebrew_mark)
+        && text.chars().any(crate::bidi::is_hebrew)
+}
+
 fn rewrite_block_from(
     doc: &mut Document,
     page: usize,
@@ -2080,8 +2087,7 @@ fn rewrite_block_from(
     // The legacy Type 3 writer places each character independently and rejects
     // combining marks. Keep ordinary legacy Hebrew behavior for now, but send
     // vowelized paragraphs through the shaped, Unicode-preserving writer.
-    let vowelized_hebrew = hebrew
-        && text.unwrap_or(&b.text).chars().any(crate::bidi::is_hebrew_mark)
+    let vowelized_hebrew = needs_shaped_hebrew(text.unwrap_or(&b.text))
         && style.ranges.is_empty()
         && style.resource.is_none()
         && style.family.is_none()
@@ -2651,6 +2657,14 @@ mod tests {
         // No face has them all: the best face stays, and names the missing glyph.
         assert_eq!(fallback_face(&faces, &['a', 'ф'], |_, ch| ch.is_ascii()).map(|f| f.family), Some("Mincho"));
         assert!(fallback_face(&[], &['a'], has).is_none());
+    }
+
+    #[test]
+    fn vowelized_hebrew_uses_the_shaping_writer_not_the_type3_fallback() {
+        assert!(needs_shaped_hebrew("אַנדערער דונאַ שטאָט"));
+        assert!(needs_shaped_hebrew("בְּרָכָה"));
+        assert!(!needs_shaped_hebrew("שלום"));
+        assert!(!needs_shaped_hebrew("English 123"));
     }
 
     #[test]
