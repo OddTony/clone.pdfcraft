@@ -345,6 +345,83 @@ fn precise_touchpad_wheel_scrolls_one_to_one() {
     assert!(drift.abs() < 2.0, "no easing tail after the swipe: drifted {drift}");
 }
 
+#[test]
+fn horizontal_scroll_turned_off_when_content_fits() {
+    // When the document fits horizontally within the window, horizontal scrolling is turned
+    // off so the centered page cannot drift off-center (#2803).
+    let mut h = harness_stepping(1.0 / 60.0, &[("layout", "continuous"), ("zoom", "100")]);
+    let at = h.state().views[0].viewport_rect().center();
+    h.hover_at(at);
+    h.run_steps(2);
+    let before_x = rect(&h, 0).expect("page 1 on screen").min.x;
+    // Attempt to scroll sideways via trackpad Point event.
+    h.event(egui::Event::MouseWheel {
+        unit: MouseWheelUnit::Point,
+        delta: egui::vec2(-100.0, 0.0),
+        phase: TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    });
+    h.run_steps(4);
+    let after_x = rect(&h, 0).expect("page 1 on screen").min.x;
+    assert!((after_x - before_x).abs() < 1.0, "horizontal scroll disabled when fitting: before {before_x}, after {after_x}");
+    // Attempt horizontal scroll via Shift + wheel.
+    h.event(egui::Event::MouseWheel {
+        unit: MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, -100.0),
+        phase: TouchPhase::Move,
+        modifiers: Modifiers::SHIFT,
+    });
+    h.run_steps(4);
+    let after_shift_x = rect(&h, 0).expect("page 1 on screen").min.x;
+    assert!((after_shift_x - before_x).abs() < 1.0, "Shift horizontal scroll disabled when fitting: before {before_x}, after {after_shift_x}");
+}
+
+#[test]
+fn horizontal_scroll_turned_off_during_vertical_scroll() {
+    // While scrolling vertically, horizontal jitter from touchpad wobble is suppressed so the
+    // view does not drift sideways (#2803).
+    let mut h = harness_stepping(1.0 / 60.0, &[("layout", "continuous"), ("zoom", "500")]);
+    let at = h.state().views[0].viewport_rect().center();
+    h.hover_at(at);
+    h.run_steps(2);
+    let before = rect(&h, 0).expect("page 1 on screen");
+    // Send a primarily vertical swipe with horizontal jitter (15 px sideways, -200 px vertical).
+    h.event(egui::Event::MouseWheel {
+        unit: MouseWheelUnit::Point,
+        delta: egui::vec2(15.0, -200.0),
+        phase: TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    });
+    h.run_steps(4);
+    let after = rect(&h, 0).expect("page 1 on screen");
+    let moved_y = before.min.y - after.min.y;
+    let moved_x = (after.min.x - before.min.x).abs();
+    assert!(moved_y > 190.0, "vertical scroll moved 1:1: {moved_y}");
+    assert!(moved_x < 1.0, "horizontal jitter was ignored during vertical scroll: moved_x {moved_x}");
+}
+
+#[test]
+fn horizontal_scroll_works_when_zoomed_and_scrolling_horizontally() {
+    // When the content overflows horizontally and the user deliberately scrolls horizontally,
+    // horizontal scroll operates as expected (#2803).
+    let mut h = harness_stepping(1.0 / 60.0, &[("layout", "continuous"), ("zoom", "500")]);
+    let at = h.state().views[0].viewport_rect().center();
+    h.hover_at(at);
+    h.run_steps(2);
+    let before = rect(&h, 0).expect("page 1 on screen");
+    // Primarily horizontal swipe.
+    h.event(egui::Event::MouseWheel {
+        unit: MouseWheelUnit::Point,
+        delta: egui::vec2(-100.0, 0.0),
+        phase: TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    });
+    h.run_steps(4);
+    let after = rect(&h, 0).expect("page 1 on screen");
+    let moved_x = before.min.x - after.min.x;
+    assert!(moved_x > 90.0, "horizontal scroll moved sideways when scrolled horizontally: {moved_x}");
+}
+
 /// Steps `frames` frames and returns how far the document scrolled down over them, from the
 /// pages on screen in each pair of consecutive frames (a page can leave the screen on the way).
 /// Only the non-macOS glide tests below use it, hence the matching gate.
