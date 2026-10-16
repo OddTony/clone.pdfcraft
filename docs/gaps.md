@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gap 22: linearized output packs object streams; estimate unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 22: linearized save (Fast Web View) shipped, `core.linearization`; gap 22 20–35 h → 15–28 h) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -357,8 +358,8 @@ update the numbers.
 
 - **Missing:** UTF-8 text strings, associated files (`/AF`), document parts, structure namespaces;
   deterministic save; structural validation against the Arlington model. Linearized save (Fast Web
-  View, Annex F) shipped as `core.linearization`; what it still lacks (object streams in linearized
-  output, optional hint tables, progressive loading of linearized files) is in its checklist notes.
+  View, Annex F) shipped as `core.linearization`, with object streams since 2026-10-16; what it still
+  lacks (optional hint tables, progressive loading of linearized files) is in its checklist notes.
 - **Estimate:** 15–28 h. **Doc:** [pdf-spec-parity.md](pdf-spec-parity.md).
 
 ### 23. Local AI provider
@@ -380,6 +381,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Gap 22: linearized output packs object streams with cross-reference streams (`core.linearization`), so that is no longer missing; estimate unchanged |
 | 2026-10-15 | minor | Gap 22: linearized save (Fast Web View, ISO 32000-2 Annex F) shipped as `core.linearization`, so the gap is PDF 2.0 extras and Arlington validation; estimate 20–35 h → 15–28 h |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |

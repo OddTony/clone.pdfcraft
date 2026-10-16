@@ -77,9 +77,13 @@ classic table any reader accepts.
 `write_linearized` is the Fast Web View rewrite (ISO 32000-2 Annex F): the same reachable objects,
 laid out first page first behind a linearization parameter dictionary and a first-page
 cross-reference section, with a primary hint stream (page offset, shared object and outline hint
-tables) saying where every page starts. It uses classic tables and no object streams, copies page
-attributes inherited from the page tree onto the pages, keeps the document's encryption, and
-refuses (`CosError::Linearize`) a document without pages or whose page tree lists a page twice.
+tables) saying where every page starts. Like `write_full` it packs non-stream objects into object
+streams with cross-reference streams by default (`SaveOptions::object_streams`; pages, the catalog
+and the encryption dictionary stay out), each part's objects in object streams of that part so the
+first page still arrives first, and writes classic tables with nothing packed when that is off. It
+copies page attributes inherited from the page tree onto the pages, keeps the document's
+encryption, and refuses (`CosError::Linearize`) a document without pages or whose page tree lists
+a page twice.
 `doc.linearization()` tells, on open, whether a file is linearized and still valid: an incremental
 update after it leaves the dictionary describing a file that no longer exists
 (`Linearization::Stale`).

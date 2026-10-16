@@ -144,8 +144,9 @@ pub struct SaveOptions {
     pub mod_date: Option<String>,
     /// Seed for a new file identifier when the document has none (deterministic in tests).
     pub id_seed: u64,
-    /// Full saves: pack non-stream objects into compressed object streams with a cross-reference
-    /// stream (PDF 1.5+, §7.5.7–7.5.8). Off writes a classic table that any reader accepts.
+    /// Full and linearized saves: pack non-stream objects into compressed object streams with
+    /// cross-reference streams (PDF 1.5+, §7.5.7–7.5.8; Annex F for linearized files). Off
+    /// writes classic tables that any reader accepts.
     pub object_streams: bool,
 }
 
@@ -156,14 +157,14 @@ impl Default for SaveOptions {
 }
 
 /// Objects per object stream (Acrobat and qpdf use 100–200).
-const OBJSTM_SIZE: usize = 100;
+pub(crate) const OBJSTM_SIZE: usize = 100;
 /// Keep a batch's serialized body small as well as limiting its object count. One object
 /// may exceed this target; it is emitted in its own object stream without retaining a batch.
 const OBJSTM_BYTES: usize = 8 * 1024 * 1024;
 
 /// Where an object lives, for the cross-reference section.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Row {
+pub(crate) enum Row {
     /// Free, with the generation the number gets when reused.
     Free(u16),
     /// At a byte offset.
@@ -480,7 +481,16 @@ pub(crate) fn write_xref_table(out: &mut Vec<u8>, offsets: &BTreeMap<u32, (u64, 
 /// A cross-reference stream section (§7.5.8) that takes object number `num`, ending the file.
 /// `out` holds the file from byte offset `base` on. Rows are Flate-compressed with the PNG Up
 /// predictor, and field widths fit the largest value.
-fn write_xref_stream(out: &mut Vec<u8>, base: u64, trailer: &mut Dict, mut rows: BTreeMap<u32, Row>, num: u32) {
+fn write_xref_stream(out: &mut Vec<u8>, base: u64, trailer: &mut Dict, rows: BTreeMap<u32, Row>, num: u32) {
+    let xref_at = write_xref_stream_object(out, base, trailer, rows, num, i64::from(num) + 1);
+    let _ = write!(out, "startxref\n{xref_at}\n%%EOF\n");
+}
+
+/// The cross-reference stream object of [`write_xref_stream`] with `/Size` `size`, without the
+/// `startxref` that names it (a linearized file's main section numbers the objects packed in its
+/// object streams after its cross-reference stream, and its last `startxref` names the
+/// first-page section): returns its offset.
+pub(crate) fn write_xref_stream_object(out: &mut Vec<u8>, base: u64, trailer: &mut Dict, mut rows: BTreeMap<u32, Row>, num: u32, size: i64) -> u64 {
     let xref_at = base + out.len() as u64;
     rows.insert(num, Row::InFile(xref_at, 0));
     if trailer.get(b"Prev").is_none() {
@@ -525,7 +535,7 @@ fn write_xref_stream(out: &mut Vec<u8>, base: u64, trailer: &mut Dict, mut rows:
     }
     let mut d = trailer.clone();
     d.set(b"Type".to_vec(), Object::name("XRef"));
-    d.set(b"Size".to_vec(), Object::Int(num as i64 + 1));
+    d.set(b"Size".to_vec(), Object::Int(size));
     d.set(b"W".to_vec(), Object::Array(vec![Object::Int(1), Object::Int(w2 as i64), Object::Int(w3 as i64)]));
     d.set(b"Index".to_vec(), Object::Array(index));
     let mut stream = Stream::flate(d, &data);
@@ -534,8 +544,8 @@ fn write_xref_stream(out: &mut Vec<u8>, base: u64, trailer: &mut Dict, mut rows:
     parms.set(b"Columns".to_vec(), Object::Int(cols as i64));
     stream.dict.set(b"DecodeParms".to_vec(), Object::Dict(parms));
     write_indirect(num, 0, &Object::Stream(stream), out);
-    let _ = write!(out, "startxref\n{xref_at}\n%%EOF\n");
-    trailer.set(b"Size".to_vec(), Object::Int(num as i64 + 1));
+    trailer.set(b"Size".to_vec(), Object::Int(size));
+    xref_at
 }
 
 pub(crate) fn stamp_mod_date(doc: &mut Document, opts: &SaveOptions) {

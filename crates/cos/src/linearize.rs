@@ -15,20 +15,20 @@
 //! 7. every other page: its page object followed by the objects only that page uses;
 //! 8. the objects more than one of those pages uses;
 //! 9. everything else: the page tree, thumbnails, bookmarks, document-level data;
-//! 11. the main cross-reference table and trailer, whose `startxref` names part 3.
+//! 11. the main cross-reference section, whose `startxref` names part 3.
 //!
 //! Part 10, the overflow hint stream, is never needed: everything is laid out before the hint
 //! tables are computed, and hint table offsets leave the hint stream out (F.4), so they never
 //! depend on its length.
 //!
 //! The save is a full rewrite, like [`crate::write_full`]: objects reachable from the trailer,
-//! renumbered, with classic cross-reference tables and no object streams (hint tables locate
-//! objects by file offset). Two things change shape without changing meaning, both required for
-//! a page to be readable from its own section: page attributes inherited from the page tree
-//! (`/Resources`, `/MediaBox`, `/CropBox`, `/Rotate`, Table 31) are copied onto every page that
-//! inherits them and removed from the tree, and a page with no `/Type` gets `/Type /Page`.
-//! [`Linearized`] counts both. Encrypted documents are linearized with their encryption: the
-//! hint stream is encrypted like any stream, the parameter dictionary holds only numbers.
+//! renumbered. Two things change shape without changing meaning, both required for a page to be
+//! readable from its own section: page attributes inherited from the page tree (`/Resources`,
+//! `/MediaBox`, `/CropBox`, `/Rotate`, Table 31) are copied onto every page that inherits them
+//! and removed from the tree, and a page with no `/Type` gets `/Type /Page`. [`Linearized`]
+//! counts both. Encrypted documents are linearized with their encryption: the hint stream and
+//! the object streams are encrypted like any stream, the parameter dictionary holds only
+//! numbers, and cross-reference streams are never encrypted (§7.6.2).
 //!
 //! Which part an object belongs to follows from who uses it. Every page, every catalog entry and
 //! every trailer entry is a *user*; walking from a user marks what it uses, without walking into
@@ -37,12 +37,24 @@
 //! other pages is shared; one used by the catalog entries needed at open goes in part 4;
 //! everything else is part 9.
 //!
+//! With [`SaveOptions::object_streams`] (the default) both cross-reference sections are
+//! cross-reference streams, and every object other than a stream, a page, the catalog and the
+//! encryption dictionary with what it references is packed into an object stream (PDF 1.5);
+//! without it the sections are classic tables and nothing is packed. Hint tables locate objects
+//! by file offset, so to them an object stream is one object, used by every user of an object in
+//! it, and the objects inside are never named. So each part packs its objects into object
+//! streams of its own, placed in that part: the first page's in part 6, each other page's in
+//! that page's run, shared ones in part 8; and none of part 9's holds objects of two later
+//! pages, which would make it shared. Each section numbers the objects it writes on its own
+//! first, in file order, then the objects packed in its object streams, which take its highest
+//! numbers (qpdf warns of an uncompressed object numbered after a compressed one).
+//!
 //! An incremental update appended to a linearized file leaves the parameter dictionary describing
 //! a file that no longer exists (`/L` no longer matches the length, and the newest
 //! cross-reference section is no longer the first-page one): readers then treat the file as an
 //! ordinary one (Annex F.2). [`Document::linearization`] reports that as [`Linearization::Stale`].
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;
 use std::sync::Arc;
 
@@ -51,8 +63,8 @@ use crate::document::{Document, ObjectReader, find};
 use crate::object::{Dict, ObjRef, Object, Stream};
 use crate::parser::{Lexer, parse_indirect_shared};
 use crate::writer::{
-    SaveOptions, collect_refs, ensure_id, prepared, renumber, reread, stamp_mod_date, trailer_key_rewritten, write_dict, write_indirect,
-    write_xref_table,
+    OBJSTM_SIZE, Row, SaveOptions, collect_refs, ensure_id, prepared, renumber, reread, serialize, stamp_mod_date, trailer_key_rewritten, write_dict,
+    write_indirect, write_xref_stream_object, write_xref_table,
 };
 
 /// Page attributes a page inherits from its ancestors in the page tree (ISO 32000-2 Table 31).
@@ -133,7 +145,8 @@ fn too_large() -> CosError {
 }
 
 /// Write the document linearized (Fast Web View, Annex F): a full rewrite with the first page's
-/// objects first and hint tables locating every page. See the module documentation.
+/// objects first and hint tables locating every page, with object streams and cross-reference
+/// streams when [`SaveOptions::object_streams`] is on. See the module documentation.
 ///
 /// Refused ([`CosError::Linearize`]) for a document without pages, a page tree that lists a page
 /// or branch twice or holds a page as a direct object, and a file past the 4 GB the hint tables
@@ -155,7 +168,7 @@ pub fn write_linearized(doc: &Document, opts: &SaveOptions) -> Result<Linearized
         Object::Dict(d) => d.clone(),
         _ => return Err(refuse("the document catalog is not a dictionary")),
     };
-    let parts = Parts::group(&graph, &tree, root, &catalog, &trailer_in)?;
+    let parts = Parts::group(&graph, &tree, root, &catalog, &trailer_in, opts.object_streams)?;
     let bytes = Layout::write(&mut reader, &graph, &tree, &parts, &trailer_in, opts)?;
     Ok(Linearized { bytes, pages_given_inherited: tree.given_inherited, pages_given_type: tree.given_type })
 }
@@ -460,18 +473,105 @@ impl Uses {
     }
 }
 
-/// The objects of each part in file order (graph indices), and what the hint tables need.
+/// What one place in a part holds, and what the hint tables count: an object written on its own,
+/// or an object stream of non-stream objects (graph indices).
+enum Unit {
+    Object(usize),
+    Packed(Vec<usize>),
+}
+
+impl Unit {
+    /// The objects it holds.
+    fn objects(&self) -> &[usize] {
+        match self {
+            Unit::Object(i) => std::slice::from_ref(i),
+            Unit::Packed(members) => members,
+        }
+    }
+}
+
+/// Which object streams an object may join: those of its own part, in part 7 of its own page,
+/// and in part 9 of the later page that uses it, if one does: an object stream two later pages
+/// use is shared.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Pack {
+    Open,
+    FirstPage,
+    Outline,
+    Page(usize),
+    Shared,
+    Other(Option<usize>),
+}
+
+/// Builds a part's units in file order. An object that is not packed is a unit of its own; one
+/// that is joins the open object stream of its kind, which sits where its first object would
+/// have, or starts the next.
+#[derive(Default)]
+struct Packer {
+    units: Vec<Unit>,
+    /// The unit of the open object stream of each kind.
+    open: HashMap<Pack, usize>,
+}
+
+impl Packer {
+    fn push(&mut self, i: usize, pack: Option<Pack>) {
+        let Some(kind) = pack else {
+            self.units.push(Unit::Object(i));
+            return;
+        };
+        if let Some(Unit::Packed(members)) = self.open.get(&kind).and_then(|&at| self.units.get_mut(at))
+            && members.len() < OBJSTM_SIZE
+        {
+            members.push(i);
+            return;
+        }
+        self.open.insert(kind, self.units.len());
+        self.units.push(Unit::Packed(vec![i]));
+    }
+}
+
+/// Pack a part's objects in order: its units, and for each position in `list` the number of
+/// units before it (and one more entry for the end), which maps a run of objects to its units.
+fn pack(list: &[usize], packing: &dyn Fn(usize) -> Option<Pack>) -> (Vec<Unit>, Vec<usize>) {
+    let mut packer = Packer::default();
+    let mut before = Vec::with_capacity(list.len().saturating_add(1));
+    for &i in list {
+        before.push(packer.units.len());
+        packer.push(i, packing(i));
+    }
+    before.push(packer.units.len());
+    let mut units = packer.units;
+    // An object stream that holds one object is larger than that object on its own.
+    for unit in &mut units {
+        if let Unit::Packed(members) = unit
+            && members.len() == 1
+            && let Some(&only) = members.first()
+        {
+            *unit = Unit::Object(only);
+        }
+    }
+    (units, before)
+}
+
+/// The units of the run of objects `start..start + count`, given [`pack`]'s positions.
+fn unit_run(before: &[usize], start: usize, count: usize) -> (usize, usize) {
+    let from = before.get(start).copied().unwrap_or(0);
+    let to = before.get(start.saturating_add(count)).copied().unwrap_or(from);
+    (from, to.saturating_sub(from))
+}
+
+/// The units of each part in file order, and what the hint tables need.
 struct Parts {
-    part4: Vec<usize>,
-    part6: Vec<usize>,
+    part4: Vec<Unit>,
+    part6: Vec<Unit>,
     /// Each later page's run in `part7`: (start, count), the page object first.
     page_runs: Vec<(usize, usize)>,
-    part7: Vec<usize>,
-    part8: Vec<usize>,
-    part9: Vec<usize>,
+    part7: Vec<Unit>,
+    part8: Vec<Unit>,
+    part9: Vec<Unit>,
     /// Shared objects (indices into part 6 followed by part 8) each later page uses.
     page_shared: Vec<Vec<u32>>,
-    /// The outline's objects as one run: where it starts in its part, how many, in part 6 or 9.
+    /// The outline's units as one run: where it starts in its part, how many, in part 6 or 9.
     outline: Option<OutlineRun>,
 }
 
@@ -483,7 +583,9 @@ struct OutlineRun {
 }
 
 impl Parts {
-    fn group(graph: &Graph, tree: &PageTree, root: ObjRef, catalog: &Dict, trailer: &Dict) -> Result<Parts, CosError> {
+    /// Group the objects into parts, and with `object_streams` pack each part's objects that can
+    /// be packed into object streams of that part.
+    fn group(graph: &Graph, tree: &PageTree, root: ObjRef, catalog: &Dict, trailer: &Dict, object_streams: bool) -> Result<Parts, CosError> {
         let nodes = &graph.nodes;
         let at = |r: &ObjRef| graph.index.get(r).copied();
         let mut uses = vec![Uses::default(); nodes.len()];
@@ -623,15 +725,73 @@ impl Parts {
             return Err(refuse("objects could not be grouped by page"));
         }
 
-        // Shared object identifiers: part 6 in order, then part 8 (F.4.2).
+        // What stays out of object streams besides streams and pages: the catalog (linearized
+        // files keep it out, as qpdf documents and does, and Acrobat refuses an encrypted file
+        // whose catalog is packed, #774), and the encryption dictionary with everything it
+        // references, which are read before anything can be decrypted (§7.5.7), as `write_full`.
+        let mut unpacked = vec![!object_streams; nodes.len()];
+        if let Some(catalog) = unpacked.get_mut(root_at) {
+            *catalog = true;
+        }
+        let mut walked = vec![false; nodes.len()];
+        let mut pending: Vec<usize> = trailer.reference(b"Encrypt").and_then(|r| at(&r)).into_iter().collect();
+        while let Some(i) = pending.pop() {
+            if let (Some(was_walked), Some(keep_out)) = (walked.get_mut(i), unpacked.get_mut(i))
+                && !*was_walked
+            {
+                *was_walked = true;
+                *keep_out = true;
+                pending.extend(nodes.get(i).map(|n| n.refs.as_slice()).unwrap_or_default());
+            }
+        }
+        let packing = |i: usize| -> Option<Pack> {
+            let node = nodes.get(i)?;
+            let u = uses.get(i)?;
+            if node.stream || node.page || unpacked.get(i).copied().unwrap_or(true) {
+                return None;
+            }
+            Some(match u.class() {
+                Class::Root => return None,
+                Class::Open => Pack::Open,
+                Class::Outline => Pack::Outline,
+                Class::FirstPrivate | Class::FirstShared => Pack::FirstPage,
+                Class::Private(n) => Pack::Page(n),
+                Class::Shared => Pack::Shared,
+                // At most one later page uses it, or it would be shared.
+                Class::Other => Pack::Other((u.pages > 0).then_some(u.page)),
+            })
+        };
+        let (part4, _) = pack(&part4, &packing);
+        let (part6, before6) = pack(&part6, &packing);
+        let (part7, before7) = pack(&part7, &packing);
+        let page_runs = page_runs.iter().map(|&(start, count)| unit_run(&before7, start, count)).collect();
+        let (part8, _) = pack(&part8, &packing);
+        let (part9, before9) = pack(&part9, &packing);
+        let outline = outline.map(|run| {
+            let (start, count) = unit_run(if run.in_first_page { &before6 } else { &before9 }, run.start, run.count);
+            OutlineRun { start, count, ..run }
+        });
+
+        // Shared object identifiers: part 6's units in order, then part 8's (F.4.2). A page that
+        // uses an object in an object stream uses the object stream.
         let mut shared_id: HashMap<usize, u32> = HashMap::new();
-        for (id, &i) in part6.iter().chain(&part8).enumerate() {
-            shared_id.insert(i, u32::try_from(id).map_err(|_| too_large())?);
+        for (id, unit) in part6.iter().chain(&part8).enumerate() {
+            let id = u32::try_from(id).map_err(|_| too_large())?;
+            unit.objects().iter().for_each(|&i| {
+                shared_id.insert(i, id);
+            });
         }
         let page_shared = page_lists
             .iter()
             .skip(1)
-            .map(|list| list.iter().filter(|&&i| uses.get(i).is_some_and(|u| u.users > 1)).filter_map(|i| shared_id.get(i).copied()).collect())
+            .map(|list| {
+                let mut listed = HashSet::new();
+                list.iter()
+                    .filter(|&&i| uses.get(i).is_some_and(|u| u.users > 1))
+                    .filter_map(|i| shared_id.get(i).copied())
+                    .filter(|id| listed.insert(*id))
+                    .collect()
+            })
             .collect();
         Ok(Parts { part4, part6, page_runs, part7, part8, part9, page_shared, outline })
     }
@@ -799,33 +959,100 @@ fn hint_tables(parts: &Parts, spans: &Spans, numbers: &[u32]) -> Result<(Vec<u8>
     Ok((w.out, s, o))
 }
 
-/// Serialize the objects of `list` (graph indices) under their new numbers into `out`, returning
-/// where each starts.
-fn write_objects(
+/// Give `units` the numbers from `next` on, in order: an object its own number, an object stream
+/// its number (the objects in it are numbered by [`number_packed`]). Returns the units' numbers.
+fn number_units(graph: &Graph, units: &[Unit], next: &mut usize, numbers: &mut HashMap<ObjRef, u32>) -> Result<Vec<u32>, CosError> {
+    let mut out = Vec::with_capacity(units.len());
+    for unit in units {
+        let num = number(*next)?;
+        *next = next.saturating_add(1);
+        if let Unit::Object(i) = unit
+            && let Some(node) = graph.nodes.get(*i)
+        {
+            numbers.insert(node.source, num);
+        }
+        out.push(num);
+    }
+    Ok(out)
+}
+
+/// Number the objects packed in `units`' object streams from `next` on.
+fn number_packed(graph: &Graph, units: &[Unit], next: &mut usize, numbers: &mut HashMap<ObjRef, u32>) -> Result<(), CosError> {
+    for unit in units {
+        if let Unit::Packed(members) = unit {
+            for node in members.iter().filter_map(|&i| graph.nodes.get(i)) {
+                numbers.insert(node.source, number(*next)?);
+                *next = next.saturating_add(1);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// An object as it is saved: with the page tree's edits, or read again.
+fn saved_object(reader: &mut ObjectReader, tree: &PageTree, node: &Node) -> Result<Arc<Object>, CosError> {
+    match tree.patches.get(&node.source) {
+        Some(o) => Ok(Arc::clone(o)),
+        None => reread(reader, node.source, node.stream),
+    }
+}
+
+/// Serialize `units` under their numbers into `out`, returning where each starts, and record in
+/// `packed` where each object packed in an object stream sits.
+fn write_units(
     reader: &mut ObjectReader,
     graph: &Graph,
     tree: &PageTree,
-    list: &[usize],
+    units: &[(&Unit, u32)],
     numbers: &HashMap<ObjRef, u32>,
     out: &mut Vec<u8>,
+    packed: &mut BTreeMap<u32, Row>,
 ) -> Result<Vec<u64>, CosError> {
-    let mut starts = Vec::with_capacity(list.len());
-    for &i in list {
-        let node = graph.nodes.get(i).ok_or_else(|| refuse("an object went missing while saving"))?;
-        let num = numbers.get(&node.source).copied().ok_or_else(|| refuse("an object went missing while saving"))?;
-        let object = match tree.patches.get(&node.source) {
-            Some(o) => Arc::clone(o),
-            None => reread(reader, node.source, node.stream)?,
-        };
-        let renumbered = renumber(&object, numbers);
+    let missing = || refuse("an object went missing while saving");
+    let mut starts = Vec::with_capacity(units.len());
+    for &(unit, num) in units {
         starts.push(out.len() as u64);
-        write_indirect(num, 0, &prepared(&reader.document, node.source.num, num, 0, &renumbered), out);
+        match unit {
+            Unit::Object(i) => {
+                let node = graph.nodes.get(*i).ok_or_else(missing)?;
+                let renumbered = renumber(&*saved_object(reader, tree, node)?, numbers);
+                write_indirect(num, 0, &prepared(&reader.document, node.source.num, num, 0, &renumbered), out);
+            }
+            Unit::Packed(members) => {
+                // An object stream (§7.5.7): pairs of object number and offset, then the objects.
+                // The objects are not encrypted on their own; the stream is (§7.6.2).
+                let mut header = Vec::new();
+                let mut objects = Vec::new();
+                for (k, &i) in members.iter().enumerate() {
+                    let node = graph.nodes.get(i).ok_or_else(missing)?;
+                    let member = numbers.get(&node.source).copied().ok_or_else(missing)?;
+                    let _ = write!(header, "{member} {} ", objects.len());
+                    serialize(&renumber(&*saved_object(reader, tree, node)?, numbers), &mut objects);
+                    objects.push(b'\n');
+                    packed.insert(member, Row::InStream(num, number(k)?));
+                }
+                let first = header.len();
+                header.extend_from_slice(&objects);
+                let mut d = Dict::new();
+                d.set(b"Type".to_vec(), Object::name("ObjStm"));
+                d.set(b"N".to_vec(), Object::Int(members.len() as i64));
+                d.set(b"First".to_vec(), Object::Int(first as i64));
+                let stream = Object::Stream(Stream::flate(d, &header));
+                write_indirect(num, 0, &prepared(&reader.document, u32::MAX, num, 0, &stream), out);
+            }
+        }
     }
     Ok(starts)
 }
 
 fn number(n: usize) -> Result<u32, CosError> {
     u32::try_from(n).map_err(|_| refuse("too many objects to save"))
+}
+
+/// Rows of a classic cross-reference table: only objects at an offset (nothing is packed when
+/// the sections are tables).
+fn table_rows(rows: &BTreeMap<u32, Row>) -> BTreeMap<u32, (u64, u16, bool)> {
+    rows.iter().filter_map(|(n, r)| if let Row::InFile(o, g) = *r { Some((*n, (o, g, true))) } else { None }).collect()
 }
 
 struct Layout;
@@ -839,48 +1066,63 @@ impl Layout {
         trailer_in: &Dict,
         opts: &SaveOptions,
     ) -> Result<Vec<u8>, CosError> {
-        // Numbers: the main section (parts 7–9) takes 1.., the first-page section the rest, in
-        // file order: the parameter dictionary, part 4, the hint stream, part 6.
-        let main: Vec<usize> = parts.part7.iter().chain(&parts.part8).chain(&parts.part9).copied().collect();
-        let lin_num = number(main.len() + 1)?;
+        let streams = opts.object_streams;
+        // Numbers: the main section (parts 7–9) takes 1.., the first-page section the rest. Each
+        // numbers what it writes on its own in file order (the first-page section: the parameter
+        // dictionary, its cross-reference stream, part 4, the hint stream, part 6), then the
+        // objects packed in its object streams: they take a section's highest numbers.
         let mut numbers: HashMap<ObjRef, u32> = HashMap::with_capacity(graph.nodes.len());
-        let mut assign = |list: &[usize], first: usize| -> Result<(), CosError> {
-            for (k, &i) in list.iter().enumerate() {
-                if let Some(node) = graph.nodes.get(i) {
-                    numbers.insert(node.source, number(first + k)?);
-                }
-            }
-            Ok(())
-        };
-        assign(&main, 1)?;
-        let first_section = lin_num as usize;
-        assign(&parts.part4, first_section + 1)?;
-        let hint_num = number(first_section + 1 + parts.part4.len())?;
-        assign(&parts.part6, hint_num as usize + 1)?;
-        let size = number(hint_num as usize + 1 + parts.part6.len())?;
+        let mut next = 1usize;
+        let nums7 = number_units(graph, &parts.part7, &mut next, &mut numbers)?;
+        let nums8 = number_units(graph, &parts.part8, &mut next, &mut numbers)?;
+        let nums9 = number_units(graph, &parts.part9, &mut next, &mut numbers)?;
+        let main_xref_num = number(next)?;
+        next = next.saturating_add(usize::from(streams));
+        for part in [&parts.part7, &parts.part8, &parts.part9] {
+            number_packed(graph, part, &mut next, &mut numbers)?;
+        }
+        let lin_num = number(next)?;
+        next = next.saturating_add(1);
+        let first_xref_num = number(next)?;
+        next = next.saturating_add(usize::from(streams));
+        let nums4 = number_units(graph, &parts.part4, &mut next, &mut numbers)?;
+        let hint_num = number(next)?;
+        next = next.saturating_add(1);
+        let nums6 = number_units(graph, &parts.part6, &mut next, &mut numbers)?;
+        for part in [&parts.part4, &parts.part6] {
+            number_packed(graph, part, &mut next, &mut numbers)?;
+        }
+        let size = number(next)?;
 
         // Serialize everything but the hint stream: part 4, then parts 6–9 (the body).
+        let mut packed = BTreeMap::new();
+        let part4_units: Vec<(&Unit, u32)> = parts.part4.iter().zip(nums4).collect();
         let mut part4 = Vec::new();
-        let part4_starts = write_objects(reader, graph, tree, &parts.part4, &numbers, &mut part4)?;
-        let body_list: Vec<usize> = parts.part6.iter().chain(&main).copied().collect();
+        let part4_starts = write_units(reader, graph, tree, &part4_units, &numbers, &mut part4, &mut packed)?;
+        let body_units: Vec<(&Unit, u32)> = (parts.part6.iter().zip(nums6))
+            .chain(parts.part7.iter().zip(nums7))
+            .chain(parts.part8.iter().zip(nums8))
+            .chain(parts.part9.iter().zip(nums9))
+            .collect();
         let mut body = Vec::new();
-        let body_starts = write_objects(reader, graph, tree, &body_list, &numbers, &mut body)?;
-        let body_numbers: Vec<u32> =
-            body_list.iter().map(|&i| graph.nodes.get(i).and_then(|n| numbers.get(&n.source)).copied().unwrap_or(0)).collect();
+        let body_starts = write_units(reader, graph, tree, &body_units, &numbers, &mut body, &mut packed)?;
+        let body_numbers: Vec<u32> = body_units.iter().map(|(_, n)| *n).collect();
 
         let version = reader.document.version().chars().take(3).collect::<String>();
-        let version = if version.as_str() < "1.2" { "1.2".to_string() } else { version };
+        // Object streams and cross-reference streams are PDF 1.5.
+        let least = if streams { "1.5" } else { "1.2" };
+        let version = if version.as_str() < least { least.to_string() } else { version };
         let mut header = Vec::new();
         let _ = writeln!(header, "%PDF-{version}");
         header.extend_from_slice(&[b'%', 0xE2, 0xE3, 0xCF, 0xD3, b'\n']);
 
-        let first_page_num = parts.part6.first().and_then(|&i| graph.nodes.get(i)).and_then(|n| numbers.get(&n.source)).copied().unwrap_or(0);
+        let n6 = parts.part6.len();
+        let first_page_num = body_numbers.first().copied().unwrap_or(0);
         let page_count = tree.pages.len();
         let lin_at = header.len() as u64;
         let lin_width = lin_object(lin_num, &LinValues::placeholder(first_page_num, page_count)).len();
+        let xref1_at = lin_at + lin_width as u64;
 
-        let xref1_count = size - lin_num;
-        let xref1_len = format!("xref\n{lin_num} {xref1_count}\n").len() + 20 * xref1_count as usize;
         let mut trailer = Dict::new();
         trailer.set(b"Size".to_vec(), Object::Int(i64::from(size)));
         for key in [&b"Root"[..], b"Info", b"Encrypt"] {
@@ -902,97 +1144,194 @@ impl Layout {
         if reader.document.output_security().0.is_none() {
             ensure_id(&mut trailer, opts, reader.document.bytes());
         }
-        let trailer1_len = first_trailer(&trailer, 0).len();
 
-        let part4_at = lin_at + lin_width as u64 + xref1_len as u64 + trailer1_len as u64;
-        let head_len = part4_at + part4.len() as u64;
-        // Hint table offsets and lengths leave the hint stream out; all of them fit in 32 bits
-        // when everything else does.
-        u32_of(head_len.saturating_add(body.len() as u64))?;
-
-        // Hint tables, with offsets as if the hint stream were absent (F.4).
-        let spans = Spans {
-            offsets: body_starts.iter().map(|s| head_len + s).collect(),
-            lengths: body_starts
-                .iter()
-                .zip(body_starts.iter().skip(1).chain(std::iter::once(&(body.len() as u64))))
-                .map(|(a, b)| b.saturating_sub(*a))
-                .collect(),
-        };
-        let (data, s, o) = hint_tables(parts, &spans, &body_numbers)?;
-        let mut hint_dict = Dict::new();
-        hint_dict.set(b"S".to_vec(), Object::Int(s as i64));
-        if let Some(o) = o {
-            hint_dict.set(b"O".to_vec(), Object::Int(o as i64));
-        }
-        let hint = Object::Stream(Stream::flate(hint_dict, &data));
-        let mut hint_obj = Vec::new();
-        write_indirect(hint_num, 0, &prepared(&reader.document, u32::MAX, hint_num, 0, &hint), &mut hint_obj);
-        let hint_at = head_len;
-        let hint_len = hint_obj.len() as u64;
-        let body_at = hint_at + hint_len;
-
-        // The main cross-reference table: object 0 and parts 7–9.
-        let main_at = body_at + body.len() as u64;
-        let n6 = parts.part6.len();
-        let mut rows = std::collections::BTreeMap::new();
-        for (k, start) in body_starts.iter().enumerate().skip(n6) {
-            if let Some(&num) = body_numbers.get(k) {
-                rows.insert(num, (body_at + start, 0u16, true));
+        // The first-page section's rows: the dictionary, part 4, the hint stream, part 6, the
+        // objects packed in parts 4 and 6, and its own cross-reference stream.
+        let first_rows = |part4_at: u64, hint_at: u64, body_at: u64| -> BTreeMap<u32, Row> {
+            let mut rows: BTreeMap<u32, Row> = packed.range(lin_num..).map(|(n, r)| (*n, *r)).collect();
+            rows.insert(lin_num, Row::InFile(lin_at, 0));
+            for (num, start) in part4_units.iter().map(|(_, n)| *n).zip(&part4_starts) {
+                rows.insert(num, Row::InFile(part4_at + start, 0));
             }
+            rows.insert(hint_num, Row::InFile(hint_at, 0));
+            for (num, start) in body_numbers.iter().zip(&body_starts).take(n6) {
+                rows.insert(*num, Row::InFile(body_at + start, 0));
+            }
+            if streams {
+                rows.insert(first_xref_num, Row::InFile(xref1_at, 0));
+            }
+            rows
+        };
+        let xref1_count = size.saturating_sub(lin_num) as usize;
+        // The first-page section is written before the offsets it holds are known, so its length
+        // must not depend on them: a table's entries are 20 bytes each, a stream's rows are
+        // unfiltered with a fixed width, the narrowest that holds every offset in them. Its
+        // length is measured with every offset and object stream number 0.
+        let placeholder: BTreeMap<u32, Row> = first_rows(0, 0, 0)
+            .into_iter()
+            .map(|(n, r)| match r {
+                Row::InStream(_, i) => (n, Row::InStream(0, i)),
+                Row::InFile(_, g) => (n, Row::InFile(0, g)),
+                free => (n, free),
+            })
+            .collect();
+        let widths: &[usize] = if streams { &[1, 2, 3, 4, 5, 6, 7, 8] } else { &[0] };
+        let mut laid_out = None;
+        for &w2 in widths {
+            let first_len = if streams {
+                first_xref_stream(first_xref_num, &trailer, &placeholder, w2, 0)?.len()
+            } else {
+                format!("xref\n{lin_num} {xref1_count}\n").len() + xref1_count.saturating_mul(20) + first_trailer(&trailer, 0).len()
+            };
+            let part4_at = xref1_at + first_len as u64;
+            let head_len = part4_at + part4.len() as u64;
+            // Hint table offsets and lengths leave the hint stream out; all of them fit in 32
+            // bits when everything else does.
+            u32_of(head_len.saturating_add(body.len() as u64))?;
+
+            // Hint tables, with offsets as if the hint stream were absent (F.4).
+            let spans = Spans {
+                offsets: body_starts.iter().map(|s| head_len + s).collect(),
+                lengths: body_starts
+                    .iter()
+                    .zip(body_starts.iter().skip(1).chain(std::iter::once(&(body.len() as u64))))
+                    .map(|(a, b)| b.saturating_sub(*a))
+                    .collect(),
+            };
+            let (data, s, o) = hint_tables(parts, &spans, &body_numbers)?;
+            let mut hint_dict = Dict::new();
+            hint_dict.set(b"S".to_vec(), Object::Int(s as i64));
+            if let Some(o) = o {
+                hint_dict.set(b"O".to_vec(), Object::Int(o as i64));
+            }
+            let hint = Object::Stream(Stream::flate(hint_dict, &data));
+            let mut hint_obj = Vec::new();
+            write_indirect(hint_num, 0, &prepared(&reader.document, u32::MAX, hint_num, 0, &hint), &mut hint_obj);
+            let body_at = head_len + hint_obj.len() as u64;
+            let rows = first_rows(part4_at, head_len, body_at);
+            if streams && rows.values().any(|r| field_bytes(row_fields(r).1) > w2) {
+                continue;
+            }
+            laid_out = Some((w2, first_len, part4_at, hint_obj, body_at, rows));
+            break;
+        }
+        let Some((w2, first_len, part4_at, hint_obj, body_at, first_rows)) = laid_out else { return Err(too_large()) };
+        let hint_at = part4_at + part4.len() as u64;
+
+        // The main section: object 0, parts 7–9 and the objects packed in them.
+        let main_at = body_at + body.len() as u64;
+        let mut main_rows: BTreeMap<u32, Row> = packed.range(..lin_num).map(|(n, r)| (*n, *r)).collect();
+        for (num, start) in body_numbers.iter().zip(&body_starts).skip(n6) {
+            main_rows.insert(*num, Row::InFile(body_at + start, 0));
         }
         let mut main_xref = Vec::new();
-        write_xref_table(&mut main_xref, &rows, true);
-        // /T: the white-space character in front of the entry for object 0.
-        let t = main_at + format!("xref\n0 {lin_num}").len() as u64;
-        let xref1_at = part4_at - trailer1_len as u64 - xref1_len as u64;
-        let mut main_trailer = Vec::new();
-        let _ = write!(main_trailer, "trailer\n<</Size {lin_num}>>\nstartxref\n{xref1_at}\n%%EOF\n");
-        let file_len = main_at + main_xref.len() as u64 + main_trailer.len() as u64;
+        let t = if streams {
+            write_xref_stream_object(&mut main_xref, main_at, &mut Dict::new(), main_rows, main_xref_num, i64::from(lin_num));
+            // /T: the main cross-reference stream (Table F.1).
+            main_at
+        } else {
+            write_xref_table(&mut main_xref, &table_rows(&main_rows), true);
+            let _ = write!(main_xref, "trailer\n<</Size {lin_num}>>\n");
+            // /T: the white-space character in front of the entry for object 0.
+            main_at + format!("xref\n0 {lin_num}").len() as u64
+        };
+        let _ = write!(main_xref, "startxref\n{xref1_at}\n%%EOF\n");
+        let file_len = main_at + main_xref.len() as u64;
         let first_page_end = body_at + body_starts.get(n6).copied().unwrap_or(body.len() as u64);
 
-        // The first-page cross-reference table: the dictionary, part 4, the hint stream, part 6.
-        let mut first_rows = std::collections::BTreeMap::new();
-        first_rows.insert(lin_num, (lin_at, 0u16, true));
-        for (k, start) in part4_starts.iter().enumerate() {
-            first_rows.insert(number(first_section + 1 + k)?, (part4_at + start, 0, true));
-        }
-        first_rows.insert(hint_num, (hint_at, 0, true));
-        for (k, start) in body_starts.iter().take(n6).enumerate() {
-            first_rows.insert(number(hint_num as usize + 1 + k)?, (body_at + start, 0, true));
-        }
-        let mut xref1 = Vec::new();
-        write_xref_table(&mut xref1, &first_rows, false);
-
-        let values = LinValues { file_len, hint_at, hint_len, first_page: first_page_num, first_page_end, pages: page_count, main_xref_entry: t };
+        let values = LinValues {
+            file_len,
+            hint_at,
+            hint_len: hint_obj.len() as u64,
+            first_page: first_page_num,
+            first_page_end,
+            pages: page_count,
+            main_xref_entry: t,
+        };
         let mut lin = lin_object(lin_num, &values);
-        if lin.len() > lin_width || xref1.len() != xref1_len {
+        let first_section = if streams {
+            first_xref_stream(first_xref_num, &trailer, &first_rows, w2, main_at)?
+        } else {
+            let mut xref1 = Vec::new();
+            write_xref_table(&mut xref1, &table_rows(&first_rows), false);
+            xref1.extend_from_slice(&first_trailer(&trailer, main_at));
+            xref1
+        };
+        if lin.len() > lin_width || first_section.len() != first_len {
             return Err(refuse("the first-page section did not keep its size"));
         }
         // Padding keeps the dictionary the width that was reserved for it.
         let pad = lin_width - lin.len();
         let close = lin.len().saturating_sub(b"\nendobj\n".len());
         lin.splice(close..close, std::iter::repeat_n(b' ', pad));
-        let trailer1 = first_trailer(&trailer, main_at);
-        if trailer1.len() != trailer1_len {
-            return Err(refuse("the first-page trailer did not keep its size"));
-        }
 
         let mut out = Vec::with_capacity(usize::try_from(file_len).unwrap_or(0));
         out.extend_from_slice(&header);
         out.extend_from_slice(&lin);
-        out.extend_from_slice(&xref1);
-        out.extend_from_slice(&trailer1);
+        out.extend_from_slice(&first_section);
         out.extend_from_slice(&part4);
         out.extend_from_slice(&hint_obj);
         out.extend_from_slice(&body);
         out.extend_from_slice(&main_xref);
-        out.extend_from_slice(&main_trailer);
         if out.len() as u64 != file_len || lin_at as usize + lin.len() > FIRST_KB {
             return Err(refuse("the layout did not add up"));
         }
         Ok(out)
     }
+}
+
+/// A cross-reference stream row's fields (§7.5.8.3, Table 18).
+fn row_fields(row: &Row) -> (u8, u64, u64) {
+    match *row {
+        Row::Free(g) => (0, 0, u64::from(g)),
+        Row::InFile(o, g) => (1, o, u64::from(g)),
+        Row::InStream(s, i) => (2, u64::from(s), u64::from(i)),
+    }
+}
+
+/// Bytes a cross-reference stream field needs to hold `v` (at least one).
+fn field_bytes(v: u64) -> usize {
+    (bits_for(v) as usize).div_ceil(8).max(1)
+}
+
+/// The first-page cross-reference stream (§7.5.8) of `rows`, which are numbered consecutively:
+/// the trailer's entries, `/Prev` (the main section's offset) padded like [`first_trailer`]'s,
+/// and the rows unfiltered with offsets `w2` bytes wide, so that its length depends on how many
+/// rows there are and never on the offsets in them. Like the classic first-page trailer, it is
+/// followed by a `startxref` of 0.
+fn first_xref_stream(num: u32, trailer: &Dict, rows: &BTreeMap<u32, Row>, w2: usize, prev: u64) -> Result<Vec<u8>, CosError> {
+    let w2 = w2.clamp(1, 8);
+    let first = rows.keys().next().copied().unwrap_or(num);
+    if rows.keys().zip(rows.keys().skip(1)).any(|(a, b)| a.checked_add(1) != Some(*b)) {
+        return Err(refuse("the first-page section's objects are not numbered consecutively"));
+    }
+    let w3 = rows.values().map(|r| field_bytes(row_fields(r).2)).max().unwrap_or(1);
+    let mut data = Vec::with_capacity(rows.len().saturating_mul(1 + w2 + w3));
+    for row in rows.values() {
+        let (kind, offset, index) = row_fields(row);
+        if field_bytes(offset) > w2 {
+            return Err(refuse("an offset does not fit the first-page cross-reference stream"));
+        }
+        data.push(kind);
+        data.extend(offset.to_be_bytes().iter().skip(8 - w2));
+        data.extend(index.to_be_bytes().iter().skip(8usize.saturating_sub(w3)));
+    }
+    let mut d = trailer.clone();
+    d.remove(b"Prev");
+    d.set(b"Type".to_vec(), Object::name("XRef"));
+    d.set(b"Index".to_vec(), Object::Array(vec![Object::Int(i64::from(first)), Object::Int(rows.len() as i64)]));
+    d.set(b"W".to_vec(), Object::Array(vec![Object::Int(1), Object::Int(w2 as i64), Object::Int(w3 as i64)]));
+    d.set(b"Length".to_vec(), Object::Int(data.len() as i64));
+    let mut dict = Vec::new();
+    write_dict(&d, &mut dict);
+    dict.truncate(dict.len().saturating_sub(2)); // reopen it after the last entry
+    let mut out = Vec::with_capacity(dict.len() + data.len() + 96);
+    let _ = writeln!(out, "{num} 0 obj");
+    out.extend_from_slice(&dict);
+    let _ = write!(out, "/Prev {prev:<WIDEST$}>>\nstream\n");
+    out.extend_from_slice(&data);
+    out.extend_from_slice(b"\nendstream\nendobj\nstartxref\n0\n%%EOF\n");
+    Ok(out)
 }
 
 /// The parameter dictionary's values (Table F.1).
@@ -1085,8 +1424,14 @@ impl Document {
             data.get(hint_at).is_some_and(u8::is_ascii_digit) && (hint_at == 0 || data.get(hint_at - 1).is_some_and(|b| crate::is_whitespace(*b)));
         let ends_there = data.get(..hint_end).is_some_and(|d| d.trim_ascii_end().ends_with(b"endobj"));
         let hint_is_stream = starts_there && ends_there && matches!(parse_indirect_shared(data, hint_at, &|_| None), Ok((_, Object::Stream(_))));
-        let entry_is_space = usize::try_from(main_entry).ok().and_then(|t| data.get(t)).is_some_and(|b| crate::is_whitespace(*b));
-        if !hint_is_stream || !entry_is_space {
+        // /T: the white-space in front of the main table's entry for object 0, or the main
+        // cross-reference stream (Table F.1; qpdf points at the white-space in front of it).
+        let main_section_there = usize::try_from(main_entry).ok().is_some_and(|t| {
+            data.get(t).is_some_and(|b| crate::is_whitespace(*b))
+                || ((t == 0 || data.get(t - 1).is_some_and(|b| crate::is_whitespace(*b)))
+                    && matches!(parse_indirect_shared(data, t, &|_| None), Ok((_, Object::Stream(s))) if s.dict.name(b"Type") == Some(b"XRef")))
+        });
+        if !hint_is_stream || !main_section_there {
             return Linearization::Stale(StaleReason::Parameters);
         }
         let Some(root) = self.root() else { return Linearization::Stale(StaleReason::Pages) };
@@ -1146,6 +1491,33 @@ mod tests {
         let parsed = Lexer::new(&short, b"trailer\n".len()).object().unwrap();
         assert_eq!(parsed.as_dict().and_then(|t| t.int(b"Prev")), Some(0));
         assert_eq!(parsed.as_dict().and_then(|t| t.int(b"Size")), Some(9));
+    }
+
+    #[test]
+    fn the_first_page_cross_reference_stream_keeps_its_length_whatever_the_offsets() {
+        let mut trailer = Dict::new();
+        trailer.set(b"Size".to_vec(), Object::Int(9));
+        trailer.set(b"ID".to_vec(), Object::Array(vec![Object::String(PdfString::literal(b"x".to_vec()))]));
+        let rows = |o: u64| BTreeMap::from([(5, Row::InFile(o, 0)), (6, Row::InStream(u32::try_from(o).unwrap(), 3)), (7, Row::InFile(o, 0))]);
+        let short = first_xref_stream(7, &trailer, &rows(0), 3, 0).unwrap();
+        let long = first_xref_stream(7, &trailer, &rows(0xFF_FFFF), 3, u64::MAX).unwrap();
+        assert_eq!(short.len(), long.len());
+        assert!(long.ends_with(b"endobj\nstartxref\n0\n%%EOF\n"));
+        let (r, object) = parse_indirect_shared(&Arc::new(long), 0, &|_| None).unwrap();
+        assert_eq!(r.num, 7);
+        let Object::Stream(s) = object else { panic!("a stream") };
+        assert_eq!(s.dict.name(b"Type"), Some(b"XRef".as_slice()));
+        assert!(s.dict.get(b"Filter").is_none(), "unfiltered");
+        let ints = |key: &[u8]| -> Vec<i64> { s.dict.get(key).unwrap().as_array().unwrap().iter().map(|v| v.as_int().unwrap()).collect() };
+        assert_eq!(ints(b"Index"), vec![5, 3]);
+        assert_eq!(ints(b"W"), vec![1, 3, 1]);
+        assert_eq!(s.dict.int(b"Size"), Some(9));
+        assert!(s.dict.get(b"ID").is_some() && s.dict.get(b"Prev").is_some());
+        assert_eq!(s.decoded().unwrap(), [1, 0xFF, 0xFF, 0xFF, 0, 2, 0xFF, 0xFF, 0xFF, 3, 1, 0xFF, 0xFF, 0xFF, 0]);
+        // An offset wider than its field is refused, never cut short; so are gaps in the numbers.
+        assert!(first_xref_stream(7, &trailer, &rows(1 << 24), 3, 0).is_err());
+        let gap = BTreeMap::from([(5, Row::InFile(1, 0)), (7, Row::InFile(2, 0))]);
+        assert!(first_xref_stream(7, &trailer, &gap, 3, 0).is_err());
     }
 
     #[test]

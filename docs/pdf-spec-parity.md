@@ -1,5 +1,6 @@
 # PDF specification and standards parity
 
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (Annex F: linearized output with object streams and cross-reference streams, `core.linearization`) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (Annex F: linearized save and detection, `core.linearization`) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (§12.4.4: page transitions and display times read) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
@@ -23,7 +24,7 @@ are borrowed; PDF 2.0 additions and most subset standards are missing. **150–2
 | §7.2–7.5 | Syntax, objects, file structure, xref tables and streams, object streams, hybrid files, incremental updates | full | **own**, tolerant, repairs damaged files | `crates/cos`; corpus 958 files; fuzzed nightly |
 | §7.4 | Stream filters: Flate, LZW, ASCII85, ASCIIHex, RunLength, predictors | full | **own** | `crates/filters` |
 | §7.4 | Image filters: DCT, JPX, JBIG2, CCITTFax | full | **borrowed** (decode only) | `core.image-filters` partial; own codecs M1.1/M1.2; no JBIG2/CCITT encoding (Optimizer) |
-| Annex F | Linearization (Fast Web View) | R W | **own**, read and write | `core.linearization`: parameter dictionary, first-page section, page offset, shared object and outline hint tables; validity detected on open; `qpdf --check-linearization` clean. Missing: object streams in linearized output, optional hint tables (thumbnails, named destinations…), progressive loading when reading |
+| Annex F | Linearization (Fast Web View) | R W | **own**, read and write | `core.linearization`: parameter dictionary, first-page section, page offset, shared object and outline hint tables; object streams and cross-reference streams (PDF 1.5), part by part, or classic tables; validity detected on open; `qpdf --check-linearization` clean in both layouts. Missing: optional hint tables (thumbnails, named destinations…), progressive loading when reading |
 | §7.6.4 | Standard security handler R2–R6 (RC4 40/128, AES-128, AES-256), crypt filters, `/EncryptMetadata`, SASLprep | full | **own**, read and write | `crates/crypt`; written files open in Acrobat DC since #836 (#774: Acrobat needs the catalog outside object streams) |
 | §7.6.5 | Public-key security handler | full | none | `core.open-public-key`, `protect.certificate-encryption` planned |
 | §7.6.2 | Unencrypted signature `/Contents` | yes | yes | signing encrypted documents (#753) |
@@ -131,6 +132,7 @@ are borrowed; PDF 2.0 additions and most subset standards are missing. **150–2
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Annex F: linearized output packs object streams with cross-reference streams (hint tables count an object stream as one object), classic tables still available |
 | 2026-10-15 | minor | Annex F: linearized save (Fast Web View) and detection on open, `core.linearization`; the row named §7.5.8 (cross-reference streams) and now names Annex F |
 | 2026-10-14 | minor | §12.4.4: `/Trans` and `/Dur` read into `DocInfo::transitions` and reported by `doc_info` |
 | 2026-10-11 | minor | §7.6.4: encrypted files we write open in Acrobat (#774, fixed by #836) |
