@@ -575,11 +575,23 @@ fn each_part_packs_its_objects_into_object_streams_of_its_own() {
             seen
         };
         let catalog = doc.get(doc.root().unwrap()).as_dict().cloned().unwrap();
-        let open_objects: HashSet<u32> = [&b"ViewerPreferences"[..], b"OpenAction", b"AcroForm", b"Threads"]
-            .iter()
-            .filter_map(|k| catalog.reference(k))
-            .flat_map(|r| used_by(&doc, r))
-            .collect();
+        // What the catalog entries needed at open use, whether they are direct or not.
+        fn refs(o: &Object, out: &mut Vec<ObjRef>) {
+            match o {
+                Object::Ref(r) => out.push(*r),
+                Object::Array(a) => a.iter().for_each(|x| refs(x, out)),
+                Object::Dict(d) => d.iter().for_each(|(_, v)| refs(v, out)),
+                _ => {}
+            }
+        }
+        let mut open_refs = Vec::new();
+        for key in [&b"ViewerPreferences"[..], b"OpenAction", b"AcroForm", b"Threads"] {
+            if let Some(value) = catalog.get(key) {
+                refs(value, &mut open_refs);
+            }
+        }
+        let is_page = |r: &ObjRef| doc.get(*r).as_dict().is_some_and(|d| d.name(b"Type") == Some(b"Page"));
+        let open_objects: HashSet<u32> = open_refs.into_iter().filter(|r| !is_page(r)).flat_map(|r| used_by(&doc, r)).collect();
         let shared: HashSet<u32> =
             (hint.shared_first_page..hint.shared_lengths.len() as u64).map(|id| hint.group_object(page_refs[0].num, id)).collect();
         let streams = packed(&doc);
