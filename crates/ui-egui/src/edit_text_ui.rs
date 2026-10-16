@@ -1436,6 +1436,53 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
     job
 }
 
+/// Render RTL text from visual Unicode runs without asking `edited_spans` to
+/// map visual string indices back into the logical source string. The previous
+/// code did so, yielding incorrect section boundaries and default-font fallback
+/// as soon as a character was typed. Keep the ORIGINAL source face for each row.
+fn editor_visual_job(
+    ui: &egui::Ui,
+    ed: &LineEditor,
+    visual: &str,
+    scale: f32,
+    width: f32,
+) -> egui::text::LayoutJob {
+    let original = editor_job(ui, ed, &ed.text, scale, width);
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap = original.wrap;
+    job.halign = original.halign;
+    let source = ed.source.as_ref();
+    for (row_index, row) in visual.split_inclusive('\n').enumerate() {
+        let line = source.and_then(|(block, lines)| {
+            block.rows.get(row_index).and_then(|r| r.first()).and_then(|i| lines.get(*i))
+        });
+        let mut look = line.map_or_else(
+            || ed.look.clone(),
+            |line| source_look(&line.base_font, line.size, line.color, line.bold, line.italic),
+        );
+        if ed.look.family != ed.look0.family { look.family = ed.look.family; }
+        if ed.look.bold != ed.look0.bold { look.bold = ed.look.bold; }
+        if ed.look.italic != ed.look0.italic { look.italic = ed.look.italic; }
+        if ed.look.size != ed.look0.size { look.size = ed.look.size; }
+        if ed.look.color != ed.look0.color { look.color = ed.look.color; }
+        let mut font = editor_font(&look, (look.size as f32 * scale).clamp(1.0, 300.0));
+        let original_face = ed.look.family == ed.look0.family
+            && ed.look.bold == ed.look0.bold && ed.look.italic == ed.look0.italic;
+        let embedded = line.and_then(|l| original_face.then(|| ed.fonts.get(&l.font)).flatten());
+        if let Some(name) = embedded {
+            font.family = FontFamily::Name(name.clone().into());
+        }
+        job.append(row, 0.0, egui::TextFormat {
+            font_id: font,
+            extra_letter_spacing: ed.extras.char_spacing as f32 * scale,
+            color: color32(look.color),
+            italics: look.italic && embedded.is_none(),
+            ..Default::default()
+        });
+    }
+    job
+}
+
 /// Align the editable galley's baselines to the source rows instead of egui's interface
 /// leading. Glyphs, meshes, caret and selection receive the same transform.
 fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> Arc<egui::Galley> {
@@ -1698,10 +1745,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                     // separately without altering clipboard or saved PDF text.
                     if !pristine_source {
                         let visual = crate::bidi::visual_auto(&ed.text);
-                        let mut job = editor_job(ui, ed, &visual, scale, width);
-                        for section in &mut job.sections {
-                            section.format.color = text_color;
-                        }
+                        let job = editor_visual_job(ui, ed, &visual, scale, width);
                         let display = editor_galley_with_job(ui, ed, &visual, scale, width, job);
                         ui.painter().galley(output.galley_pos, display, text_color);
                     }
@@ -1835,6 +1879,29 @@ mod tests {
             ed.text.push('x');
             let edited = editor_job(ui, &ed, &ed.text, 1.0, 400.0);
             assert!(edited.sections.iter().any(|s| s.format.color != Color32::TRANSPARENT));
+        });
+        output.drop_without_applying_deltas();
+    }
+
+    #[test]
+    fn live_rtl_preview_uses_original_font_after_text_changes() {
+        let (app, mut ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        let block = doc.text_blocks(0).remove(0);
+        let lines = doc.text_lines(0);
+        let resource = block.rows[0].first().and_then(|i| lines.get(*i))
+            .map(|l| l.font.clone()).expect("source font");
+        ed.source = Some((block, lines));
+        ed.fonts.insert(resource, "pdf-source-test".to_owned());
+        ed.text = "שלום עולם חדש".to_owned();
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::theme::font_definitions());
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let visual = crate::bidi::visual_auto(&ed.text);
+            let job = editor_visual_job(ui, &ed, &visual, 1.0, 500.0);
+            assert_eq!(job.text, visual.as_ref());
+            assert_eq!(job.sections.len(), 1);
+            assert_eq!(job.sections[0].format.font_id.family, FontFamily::Name("pdf-source-test".into()));
         });
         output.drop_without_applying_deltas();
     }
