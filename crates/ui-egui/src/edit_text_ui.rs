@@ -151,6 +151,8 @@ const MAX_OUTLINES: usize = 250;
 #[derive(Clone, Debug, PartialEq)]
 pub struct LineEditor {
     pub selection: Option<std::ops::Range<usize>>,
+    /// Physical mouse-selection anchor in logical Unicode character coordinates.
+    rtl_drag_anchor: Option<usize>,
     pub font_resource: Option<String>,
     pub page: usize,
     pub block: usize,
@@ -969,6 +971,7 @@ fn open_editor(
     let max_width = if l.rows.len() == 1 { (right - b.left()).max(b.width()) } else { b.width() };
     view.line_editor = Some(LineEditor {
         selection: None,
+        rtl_drag_anchor: None,
         font_resource: None,
         page,
         block,
@@ -1579,15 +1582,15 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                 let mut layouter =
                     |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| editor_galley(ui, &snapshot, text.as_str(), scale, wrap_width);
                 let input_id = egui::Id::new("edit-text-line-input");
-                let previous_cursor = egui::TextEditState::load(ctx, input_id)
-                    .and_then(|s| s.cursor.char_range())
-                    .and_then(|r| r.single())
-                    .map(|c| usize::from(c.index));
+                let previous_range = egui::TextEditState::load(ctx, input_id)
+                    .and_then(|s| s.cursor.char_range());
                 let opening = ed.focus;
                 if rtl_input {
                     // egui's built-in caret/selection use LTR hit testing. Paint the
                     // physical caret ourselves from Unicode bidi visual runs.
                     ui.visuals_mut().text_cursor.stroke.color = Color32::TRANSPARENT;
+                    ui.visuals_mut().selection.bg_fill = Color32::TRANSPARENT;
+                    ui.visuals_mut().selection.stroke.color = Color32::TRANSPARENT;
                 }
                 let mut output = egui::TextEdit::multiline(&mut ed.text)
                     .id(input_id)
@@ -1600,29 +1603,68 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                     .desired_rows(rows)
                     .show(ui);
                 if rtl_input {
-                    let mut corrected = None;
+                    let mut corrected: Option<egui::text::CCursorRange> = None;
                     // A physical click near the left end of an RTL line means the
                     // logical END of the text, not the beginning of the LTR buffer.
-                    if (output.response.clicked() || opening)
-                        && let Some(pointer) = ctx.input(|i| i.pointer.latest_pos())
-                        && output.response.rect.expand(4.0).contains(pointer)
+                    let pointer = ctx.input(|i| i.pointer.latest_pos());
+                    let physical = pointer.filter(|p| output.response.rect.expand(4.0).contains(*p))
+                        .and_then(|p| rtl_caret_at(&output.galley, p - output.galley_pos));
+                    let pressed = ctx.input(|i| i.pointer.primary_pressed());
+                    let down = ctx.input(|i| i.pointer.primary_down());
+                    if pressed && let Some(index) = physical {
+                        ed.rtl_drag_anchor = Some(index);
+                        corrected = Some(egui::text::CCursorRange::one(egui::text::CCursor::new(index)));
+                    } else if (output.response.dragged() || output.response.drag_stopped())
+                        && let (Some(anchor), Some(index)) = (ed.rtl_drag_anchor, physical)
                     {
-                        corrected = rtl_caret_at(&output.galley, pointer - output.galley_pos);
+                        let mut range = egui::text::CCursorRange::one(egui::text::CCursor::new(index));
+                        range.secondary = egui::text::CCursor::new(anchor);
+                        corrected = Some(range);
+                    } else if (output.response.clicked() || opening) && let Some(index) = physical {
+                        corrected = Some(egui::text::CCursorRange::one(egui::text::CCursor::new(index)));
                     } else if output.response.has_focus()
-                        && let Some(previous) = previous_cursor
-                        && !ctx.input(|i| i.modifiers.shift || i.modifiers.command || i.modifiers.alt)
+                        && let Some(previous) = previous_range
+                        && !ctx.input(|i| i.modifiers.command || i.modifiers.alt)
                     {
                         let left = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft));
                         let right = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight));
-                        if left != right {
-                            corrected = rtl_move_visual(&output.galley, previous, left);
+                        if left != right
+                            && let Some(index) = rtl_move_visual(&output.galley, usize::from(previous.primary.index), left)
+                        {
+                            let mut range = egui::text::CCursorRange::one(egui::text::CCursor::new(index));
+                            if ctx.input(|i| i.modifiers.shift) {
+                                range.secondary = previous.secondary;
+                            }
+                            corrected = Some(range);
                         }
                     }
-                    if let Some(index) = corrected {
-                        let range = egui::text::CCursorRange::one(egui::text::CCursor::new(index));
+                    if !down {
+                        ed.rtl_drag_anchor = None;
+                    }
+                    if let Some(range) = corrected {
                         output.state.cursor.set_char_range(Some(range));
                         output.state.clone().store(ctx, output.response.id);
                         output.cursor_range = Some(range);
+                    }
+                    // Highlight the selected logical grapheme clusters in physical
+                    // visual order, not egui's reversed LTR selection geometry.
+                    if let Some(range) = output.cursor_range.filter(|r| !r.is_empty()) {
+                        let selected = range.as_sorted_char_range();
+                        let start: usize = selected.start.into();
+                        let end: usize = selected.end.into();
+                        let stops = rtl_caret_stops(&output.galley);
+                        for pair in stops.windows(2) {
+                            let (a, b) = (pair[0], pair[1]);
+                            if a.y != b.y || b.x <= a.x { continue; }
+                            if a.index.min(b.index) >= start && a.index.max(b.index) <= end {
+                                let min = output.galley_pos + egui::vec2(a.x, a.y);
+                                ui.painter().rect_filled(
+                                    Rect::from_min_size(min, egui::vec2(b.x - a.x, ed.size.max(8.0))),
+                                    CornerRadius::ZERO,
+                                    Color32::from_rgba_premultiplied(35, 125, 235, 65),
+                                );
+                            }
+                        }
                     }
                     // The logical input is transparent; paint visual bidi order
                     // separately without altering clipboard or saved PDF text.
@@ -1710,6 +1752,7 @@ mod tests {
         let block = doc.text_blocks(0).remove(0);
         let ed = LineEditor {
             selection: None,
+            rtl_drag_anchor: None,
             font_resource: None,
             page: 0,
             block: 0,
