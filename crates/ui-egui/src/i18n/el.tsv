@@ -1539,6 +1539,7 @@
 	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	Εκτυπώστε στη μία όψη. Κρατήστε τα φύλλα με τη σωστή σειρά, κόψτε στις ενδείξεις και στοιβάξτε τις ομάδες από αριστερά προς τα δεξιά και από πάνω προς τα κάτω.
 	Real name	Πραγματικό όνομα
 	Remove saved {what}	Αφαίρεση αποθηκευμένου στοιχείου: {what}
+	Up to {n} can be saved. Remove one to add another.	Μπορείτε να αποθηκεύσετε έως {n}. Αφαιρέστε ένα για να προσθέσετε άλλο.
 	Reverse the order	Αντιστροφή σειράς
 	Run form script	Εκτέλεση δέσμης ενεργειών φόρμας
 	SHA-1 digest	Σύνοψη SHA-1

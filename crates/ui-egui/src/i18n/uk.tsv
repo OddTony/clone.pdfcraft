@@ -2160,6 +2160,7 @@ calendar date	December	грудня
 	Use {what}	Використати: {what}
 	Place saved {what}	Розмістити збережене: {what}
 	Remove saved {what}	Видалити збережене: {what}
+	Up to {n} can be saved. Remove one to add another.	Можна зберегти не більше {n} елементів. Видаліть один, щоб додати новий.
 	A link	Посилання
 	A button	Кнопка
 	A script	Сценарій

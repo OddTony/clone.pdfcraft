@@ -2183,6 +2183,7 @@
 	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	Imprimez en recto seul. Gardez les feuilles dans l'ordre, découpez aux repères, puis empilez les piles de gauche à droite et de haut en bas.
 	Redo {action}	Rétablir {action}
 	Remove saved {what}	Supprimer {what} (version enregistrée)
+	Up to {n} can be saved. Remove one to add another.	Vous pouvez en enregistrer {n} au maximum. Supprimez-en un pour en ajouter un autre.
 	Run form script	Exécuter le script du formulaire
 	SHA-1 digest	Empreinte SHA-1
 	SHA-256 digest	Empreinte SHA-256

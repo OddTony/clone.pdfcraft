@@ -910,15 +910,21 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 }
                 if apply {
                     let d = std::mem::take(&mut app.signature_draft);
-                    let tool = if d.initials {
-                        app.initials = d.saved();
-                        crate::fill_sign::FillTool::Initials
-                    } else {
-                        app.signature = d.saved();
-                        crate::fill_sign::FillTool::Signature
-                    };
-                    app.quick_tool = crate::QuickTool::Fill(tool);
-                    app.toast = None;
+                    let tool = if d.initials { crate::fill_sign::FillTool::Initials } else { crate::fill_sign::FillTool::Signature };
+                    if let Some(sig) = d.saved() {
+                        let label = crate::saved_signatures::clean_label(&d.label);
+                        match app.saved_list(d.initials).store(sig, label, d.target) {
+                            Ok(_) => {
+                                app.quick_tool = crate::QuickTool::Fill(tool);
+                                app.toast = None;
+                            }
+                            // Only if the list filled up while the dialog was open: nothing is dropped.
+                            Err(crate::saved_signatures::ListFull) => {
+                                let limit = crate::saved_signatures::MAX_SAVED_SIGNATURES.to_string();
+                                app.notify_fmt("Up to {n} can be saved. Remove one to add another.", &[("n", &limit)]);
+                            }
+                        }
+                    }
                 }
                 close = apply || cancel;
                 return;

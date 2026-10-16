@@ -1456,6 +1456,7 @@
 	Remove invalid links and bookmarks	Odstrani neveljavne povezave in zaznamke
 	Remove redaction marks	Odstrani oznake za počrnitev
 	Remove saved {what}	Odstrani shranjeno: {what}
+	Up to {n} can be saved. Remove one to add another.	Shranite lahko največ {n}. Odstranite enega, da dodate drugega.
 	Remove security	Odstrani zaščito
 	Remove unreferenced named destinations	Odstrani nereferencirane poimenovane cilje
 	Remove unused objects and merge identical ones	Odstrani neuporabljene objekte in združi enake

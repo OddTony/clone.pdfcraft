@@ -2123,6 +2123,7 @@ action wizard	Start	Iniciar
 	Use {what}	Usar {what}
 	Place saved {what}	Colocar {what} desde lo guardado
 	Remove saved {what}	Quitar {what} de lo guardado
+	Up to {n} can be saved. Remove one to add another.	Se pueden guardar hasta {n}. Quita uno para añadir otro.
 	A link	Un enlace
 	A button	Un botón
 	A script	Un script

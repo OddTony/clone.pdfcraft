@@ -2168,6 +2168,7 @@ action wizard	Start	Iniciar
 	Real name	Nome real
 	Redo {action}	Refazer {action}
 	Remove saved {what}	Remover item salvo: {what}
+	Up to {n} can be saved. Remove one to add another.	É possível salvar até {n}. Remova um para adicionar outro.
 	Reset page size	Redefinir o tamanho das páginas
 	Reset to printer defaults	Restaurar os padrões da impressora
 	Run form script	Executar script do formulário

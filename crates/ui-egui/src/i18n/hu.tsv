@@ -2138,6 +2138,7 @@ action wizard	Start	Indítás
 	Use {what}	{what} használata
 	Place saved {what}	Mentett {what} elhelyezése
 	Remove saved {what}	Mentett {what} eltávolítása
+	Up to {n} can be saved. Remove one to add another.	Legfeljebb {n} menthető. Törölj egyet, hogy újat adhass hozzá.
 	A link	Egy hivatkozás
 	A button	Egy gomb
 	A script	Egy szkript

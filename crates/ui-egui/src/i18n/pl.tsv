@@ -2133,6 +2133,7 @@
 	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	Drukuj jednostronnie. Zachowaj kolejność arkuszy, przetnij w miejscach oznaczeń, a następnie ułóż stosy od lewej do prawej i od góry do dołu.
 	Real name	Imię i nazwisko
 	Remove saved {what}	Usuń zapisane: {what}
+	Up to {n} can be saved. Remove one to add another.	Można zapisać najwyżej {n}. Usuń jeden, aby dodać kolejny.
 	Reverse the order	Odwróć kolejność
 	Run form script	Uruchom skrypt formularza
 	SHA-1 digest	Skrót SHA-1

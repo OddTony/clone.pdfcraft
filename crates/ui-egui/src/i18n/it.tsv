@@ -2165,6 +2165,7 @@
 	Redo {action}	Ripeti {action}
 	Remove from Recent	Rimuovi dai recenti
 	Remove saved {what}	Rimuovi l'elemento salvato: {what}
+	Up to {n} can be saved. Remove one to add another.	Se ne possono salvare al massimo {n}. Rimuovine uno per aggiungerne un altro.
 	Remove {name} from Recent	Rimuovi {name} dai recenti
 	Reopen the files that were open when PdfCraft last closed	Riapri i file aperti alla chiusura precedente di PdfCraft
 	Reset page size	Ripristina dimensione pagine

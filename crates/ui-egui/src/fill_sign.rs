@@ -86,6 +86,11 @@ pub struct SigDraft {
     pub initials: bool,
     /// Replacing an existing saved value.
     pub editing: bool,
+    /// The saved entry being changed (its session id, so the right one is changed even if the
+    /// list moves meanwhile); `None` adds a new one.
+    pub target: Option<u64>,
+    /// The name typed for the entry (blank for none).
+    pub label: String,
 }
 
 impl SigDraft {
@@ -101,6 +106,13 @@ impl SigDraft {
             SavedSig::Typed(text) => Self { text: text.clone(), initials, editing: true, ..Default::default() },
             SavedSig::Image(image) => Self { image: Some(image.clone()), image_mode: true, initials, editing: true, ..Default::default() },
         }
+    }
+
+    /// This draft changes the saved entry `id`, called `label`.
+    pub fn for_entry(mut self, id: u64, label: Option<&str>) -> Self {
+        self.target = Some(id);
+        self.label = label.unwrap_or_default().to_string();
+        self
     }
 
     /// Take back the last drawn stroke (and any dot-less empty one a bare click left behind it).
@@ -524,47 +536,99 @@ pub(crate) fn script_preview(text: &str, w: usize, h: usize) -> egui::ColorImage
 }
 
 /// Saved previews and add/remove controls, shared by the left panel and quick-tool picker.
+///
+/// Each kind lists its saved entries in the order they were added; the one in use is outlined. Clicking a card puts it in
+/// use and starts placing it; the pencil changes (and can rename) that entry, the cross removes it.
 pub(crate) fn signature_entries(ui: &mut egui::Ui, app: &mut crate::PdfCraftApp, t: &Tokens) -> Option<&'static str> {
+    use crate::saved_signatures::{MAX_SAVED_SIGNATURES, Pick};
     ui.set_width(ui.available_width().clamp(240.0, 248.0));
     let mut command = None;
-    for (i, (saved, what, use_id, change_id, remove_id)) in [
-        (app.signature.as_ref(), "signature", "sign.fill.signature", "sign.fill.signature.change", "sign.fill.signature.remove"),
-        (app.initials.as_ref(), "initials", "sign.fill.initials", "sign.fill.initials.change", "sign.fill.initials.remove"),
+    if app.saved_signature_previews.len() < 2 * MAX_SAVED_SIGNATURES {
+        app.saved_signature_previews.resize_with(2 * MAX_SAVED_SIGNATURES, || None);
+    }
+    for (kind, (what, use_id, change_id, remove_id)) in [
+        ("signature", "sign.fill.signature", "sign.fill.signature.change", "sign.fill.signature.remove"),
+        ("initials", "sign.fill.initials", "sign.fill.initials.change", "sign.fill.initials.remove"),
     ]
     .into_iter()
     .enumerate()
     {
+        let initials = kind == 1;
         let label = |template: &str| crate::i18n::fmt(tl!(template), &[("what", tl!(what))]);
-        let Some(saved) = saved else {
+        let cards = app.saved_list(initials).cards();
+        let several = cards.len() > 1;
+        // Cards after the first are told apart for screen readers by their name, else their number.
+        let named = |template: &str, pos: usize, name: &Option<String>| match (name, pos) {
+            (Some(name), _) => format!("{}: {name}", label(template)),
+            (None, 0) => label(template),
+            (None, pos) => format!("{} {}", label(template), pos.saturating_add(1)),
+        };
+        egui::ScrollArea::vertical().id_salt(("saved-cards", what)).max_height(4.0 * 56.0).auto_shrink([false, true]).show(ui, |ui| {
+            for (pos, card) in cards.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    let (rect, response) = ui.allocate_exact_size(vec2((ui.available_width() - 68.0).max(140.0), 52.0), Sense::click());
+                    let use_label = named("Use {what}", pos, &card.label);
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, use_label.clone()));
+                    let painter = ui.painter_at(rect);
+                    painter.rect_filled(rect, CornerRadius::same(4), Color32::WHITE);
+                    let outlined = several && card.in_use;
+                    let stroke =
+                        if outlined { Stroke::new(2.0, t.accent) } else { Stroke::new(1.0, if response.hovered() { t.accent } else { t.border }) };
+                    painter.rect_stroke(rect, CornerRadius::same(4), stroke, egui::StrokeKind::Inside);
+                    let mut art = rect.shrink(8.0);
+                    if let Some(name) = &card.label {
+                        art.max.y = rect.max.y - 17.0;
+                        // The card is white in every theme, so its text is dark in every theme.
+                        painter.text(
+                            rect.left_bottom() + vec2(8.0, -4.0),
+                            egui::Align2::LEFT_BOTTOM,
+                            name,
+                            egui::FontId::proportional(11.0),
+                            Color32::from_gray(90),
+                        );
+                    }
+                    let slot = kind * MAX_SAVED_SIGNATURES + pos;
+                    if let Some(cache) = app.saved_signature_previews.get_mut(slot) {
+                        paint_saved(ui, art, &card.sig, cache, &format!("saved-{what}"));
+                    }
+                    if outlined {
+                        crate::icons::paint(
+                            ui,
+                            egui::Rect::from_min_size(rect.right_top() + vec2(-17.0, 3.0), vec2(14.0, 14.0)),
+                            "check",
+                            13.0,
+                            t.accent,
+                        );
+                    }
+                    if response.on_hover_text(label("Place saved {what}")).clicked() && app.saved_list(initials).choose(card.id) {
+                        command = Some(use_id);
+                    }
+                    if crate::icons::button(ui, "pencil", 26.0, false, &named("Change {what}", pos, &card.label)).clicked() {
+                        app.saved_pick = Some(Pick::Entry(card.id));
+                        command = Some(change_id);
+                    }
+                    if crate::icons::button(ui, "x", 26.0, false, &named("Remove saved {what}", pos, &card.label)).clicked() {
+                        app.saved_pick = Some(Pick::Entry(card.id));
+                        command = Some(remove_id);
+                    }
+                });
+                ui.add_space(4.0);
+            }
+        });
+        if cards.is_empty() {
             if crate::widgets::ghost_button(ui, "plus", &label("Add {what}")).clicked() {
                 command = Some(use_id);
             }
-            continue;
-        };
-        ui.horizontal(|ui| {
-            let (rect, response) = ui.allocate_exact_size(vec2((ui.available_width() - 68.0).max(140.0), 52.0), Sense::click());
-            let use_label = label("Use {what}");
-            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, use_label.clone()));
-            let painter = ui.painter_at(rect);
-            painter.rect_filled(rect, CornerRadius::same(4), Color32::WHITE);
-            painter.rect_stroke(
-                rect,
-                CornerRadius::same(4),
-                Stroke::new(1.0, if response.hovered() { t.accent } else { t.border }),
-                egui::StrokeKind::Inside,
-            );
-            paint_saved(ui, rect.shrink(8.0), saved, &mut app.saved_signature_previews[i], &format!("saved-{what}"));
-            if response.on_hover_text(label("Place saved {what}")).clicked() {
-                command = Some(use_id);
-            }
-            if crate::icons::button(ui, "pencil", 26.0, false, &label("Change {what}")).clicked() {
+        } else if cards.len() < MAX_SAVED_SIGNATURES {
+            if crate::widgets::ghost_button(ui, "plus", &label("Add {what}")).clicked() {
+                app.saved_pick = Some(Pick::New);
                 command = Some(change_id);
             }
-            if crate::icons::button(ui, "x", 26.0, false, &label("Remove saved {what}")).clicked() {
-                command = Some(remove_id);
-            }
-        });
-        ui.add_space(4.0);
+        } else {
+            ui.add_enabled_ui(false, |ui| crate::widgets::ghost_button(ui, "plus", &label("Add {what}"))).inner.on_disabled_hover_text(
+                crate::i18n::fmt(tl!("Up to {n} can be saved. Remove one to add another."), &[("n", &MAX_SAVED_SIGNATURES.to_string())]),
+            );
+        }
     }
     command
 }
@@ -1051,6 +1115,14 @@ fn image_preview(ui: &egui::Ui, rect: egui::Rect, image: &SignatureImage, cache:
 
 fn pad_buttons(ui: &mut egui::Ui, d: &mut SigDraft) -> (bool, bool) {
     ui.add_space(10.0);
+    ui.horizontal(|ui| {
+        let l = ui.label(tl!("Name:"));
+        ui.add(
+            egui::TextEdit::singleline(&mut d.label).char_limit(crate::saved_signatures::MAX_LABEL_CHARS).desired_width(260.0).hint_text(tl!("Name")),
+        )
+        .labelled_by(l.id);
+    });
+    ui.add_space(6.0);
     let (mut apply, mut cancel) = (false, false);
     ui.horizontal(|ui| {
         if d.draw_tab() && ui.add_enabled(!d.strokes.is_empty(), egui::Button::new(tl!("Undo"))).clicked() {

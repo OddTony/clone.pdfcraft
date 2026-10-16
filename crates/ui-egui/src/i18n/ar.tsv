@@ -2160,6 +2160,7 @@ calendar date	December	ديسمبر
 	Use {what}	استخدام {what}
 	Place saved {what}	وضع {what} المحفوظ
 	Remove saved {what}	إزالة {what} المحفوظ
+	Up to {n} can be saved. Remove one to add another.	يمكن حفظ {n} كحد أقصى. أزل أحدها لإضافة آخر.
 	A link	رابط
 	A button	زر
 	A script	سكربت

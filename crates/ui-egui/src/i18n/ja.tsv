@@ -2154,6 +2154,7 @@
 	Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom.	片面印刷してください。用紙の順序を保ったままマークに沿って裁断し、できた束を左から右、上から下の順に重ねてください。
 	Real name	本名
 	Remove saved {what}	保存済みの{what}を削除
+	Up to {n} can be saved. Remove one to add another.	保存できるのは最大{n}件です。追加するには、どれか1件を削除してください。
 	Reverse the order	並び順を逆にする
 	Run form script	フォームのスクリプトを実行
 	SHA-1 digest	SHA-1 ダイジェスト

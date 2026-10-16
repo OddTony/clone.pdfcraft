@@ -2151,6 +2151,7 @@ action wizard	Start	Starten
 	Use {what}	{what} verwenden
 	Place saved {what}	Gespeicherte {what} platzieren
 	Remove saved {what}	Gespeicherte {what} entfernen
+	Up to {n} can be saved. Remove one to add another.	Es können höchstens {n} gespeichert werden. Entferne einen Eintrag, um einen neuen hinzuzufügen.
 	A link	Ein Link
 	A button	Eine Schaltfläche
 	A script	Ein Skript

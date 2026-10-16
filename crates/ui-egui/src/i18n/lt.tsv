@@ -2215,6 +2215,7 @@ comment menu	Edit	Redaguoti
 	Remove hidden information, metadata, scripts and embedded content, and rewrite the files.	Pašalinkite paslėptą informaciją, metaduomenis, scenarijus bei įdėtąjį turinį ir perrašykite failus.
 	Remove redaction marks	Pašalinti konfidencialios informacijos šalinimo žymas
 	Remove saved {what}	Pašalinti įrašytą {what}
+	Up to {n} can be saved. Remove one to add another.	Galima išsaugoti ne daugiau kaip {n}. Pašalinkite vieną, kad galėtumėte pridėti kitą.
 	Removed 1 hidden item. Save to remove them from the file.	Pašalintas 1 paslėptas elementas. Įrašykite, kad jis būtų pašalintas iš failo.
 	Removed 1 link	Pašalintas 1 saitas
 	Removed {n} hidden items. Save to remove them from the file.	Pašalinta paslėptų elementų: {n}. Įrašykite, kad jie būtų pašalinti iš failo.

@@ -2205,6 +2205,7 @@ comment menu	Edit	Sửa
 	Remove hidden information, metadata, scripts and embedded content, and rewrite the files.	Gỡ thông tin ẩn, siêu dữ liệu, script và nội dung nhúng, rồi ghi lại các tệp.
 	Remove redaction marks	Gỡ các dấu đánh dấu
 	Remove saved {what}	Xóa {what} đã lưu
+	Up to {n} can be saved. Remove one to add another.	Chỉ lưu được tối đa {n}. Hãy xóa một mục để thêm mục khác.
 	Removed 1 hidden item. Save to remove them from the file.	Đã gỡ 1 mục ẩn. Hãy lưu để xóa chúng khỏi tệp.
 	Removed 1 link	Đã gỡ 1 liên kết
 	Removed {n} hidden items. Save to remove them from the file.	Đã gỡ {n} mục ẩn. Hãy lưu để xóa chúng khỏi tệp.

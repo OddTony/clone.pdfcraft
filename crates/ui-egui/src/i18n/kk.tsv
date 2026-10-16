@@ -2082,6 +2082,7 @@ calendar date	December	Желтоқсан
 	Use {what}	Қолдану: {what}
 	Place saved {what}	Орналастыру: сақталған {what}
 	Remove saved {what}	Алып тастау: сақталған {what}
+	Up to {n} can be saved. Remove one to add another.	Ең көбі {n} сақтауға болады. Жаңасын қосу үшін біреуін алып тастаңыз.
 	A link	Сілтеме
 	A button	Түйме
 	A script	Сценарий

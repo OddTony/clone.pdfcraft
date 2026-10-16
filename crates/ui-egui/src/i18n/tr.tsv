@@ -2104,6 +2104,7 @@ action wizard	Start	Başlat
 	Use {what}	{what} kullan
 	Place saved {what}	Kayıtlı {what} yerleştir
 	Remove saved {what}	Kayıtlı {what} kaldır
+	Up to {n} can be saved. Remove one to add another.	En fazla {n} adet kaydedilebilir. Yenisini eklemek için birini kaldırın.
 	A link	Bir bağlantı
 	A button	Bir düğme
 	A script	Bir komut dosyası

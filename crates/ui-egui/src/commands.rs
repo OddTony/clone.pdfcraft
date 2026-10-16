@@ -599,14 +599,32 @@ impl PdfCraftApp {
                     &[("tool", &crate::i18n::in_sentence(tl!(tool.label())))],
                 );
             }
-            "sign.fill.signature.remove" => self.signature = None,
-            "sign.fill.initials.remove" => self.initials = None,
+            // Without a card picked, the entry in use (the next one takes its place).
+            "sign.fill.signature.remove" | "sign.fill.initials.remove" => {
+                let pick = self.saved_pick.take();
+                let mut list = self.saved_list(id == "sign.fill.initials.remove");
+                let target = match pick {
+                    Some(crate::saved_signatures::Pick::Entry(entry)) => Some(entry),
+                    _ => list.cards().first().map(|c| c.id),
+                };
+                if let Some(target) = target {
+                    list.remove(target);
+                }
+            }
+            // Without a card picked, the entry in use; `Pick::New` opens an empty pad to add one.
             "sign.fill.signature.change" | "sign.fill.initials.change" => {
                 let initials = id == "sign.fill.initials.change";
-                let saved = if initials { self.initials.as_ref() } else { self.signature.as_ref() };
-                self.signature_draft = saved.map_or_else(
-                    || crate::fill_sign::SigDraft::new(initials, &self.comment_prefs.author),
-                    |s| crate::fill_sign::SigDraft::from_saved(initials, s),
+                let pick = self.saved_pick.take();
+                let author = self.comment_prefs.author.clone();
+                let list = self.saved_list(initials);
+                let card = match pick {
+                    Some(crate::saved_signatures::Pick::New) => None,
+                    Some(crate::saved_signatures::Pick::Entry(entry)) => list.get(entry),
+                    None => list.cards().into_iter().next(),
+                };
+                self.signature_draft = card.map_or_else(
+                    || crate::fill_sign::SigDraft::new(initials, &author),
+                    |c| crate::fill_sign::SigDraft::from_saved(initials, &c.sig).for_entry(c.id, c.label.as_deref()),
                 );
                 self.dialog = Some(Dialog::Signature);
             }
@@ -614,7 +632,7 @@ impl PdfCraftApp {
                 let Some(tool) = crate::fill_sign::FillTool::from_command(fill) else { return false };
                 self.quick_tool = crate::QuickTool::Fill(tool);
                 let initials = tool == crate::fill_sign::FillTool::Initials;
-                if (tool == crate::fill_sign::FillTool::Signature && self.signature.is_none()) || (initials && self.initials.is_none()) {
+                if (tool == crate::fill_sign::FillTool::Signature || initials) && self.saved_list(initials).is_empty() {
                     self.signature_draft = crate::fill_sign::SigDraft::new(initials, &self.comment_prefs.author);
                     self.dialog = Some(Dialog::Signature);
                 }

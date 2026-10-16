@@ -2189,6 +2189,7 @@ calendar date	December	prosince
 	Use {what}	Použít {what}
 	Place saved {what}	Umístit uložené: {what}
 	Remove saved {what}	Odebrat uložené: {what}
+	Up to {n} can be saved. Remove one to add another.	Uložit lze nejvýše {n}. Jednu položku odeberte, abyste mohli přidat další.
 	A link	Odkaz
 	A button	Tlačítko
 	A script	Skript

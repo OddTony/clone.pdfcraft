@@ -101,6 +101,7 @@ mod panels;
 mod pickers;
 pub mod prepare;
 mod print_ui;
+pub mod saved_signatures;
 mod signature_drag;
 pub mod units;
 mod web_print;
@@ -770,12 +771,22 @@ pub struct PdfCraftApp {
     /// The saved Fill & Sign signature and initials (drawn or typed).
     pub signature: Option<fill_sign::SavedSig>,
     pub initials: Option<fill_sign::SavedSig>,
+    /// The names and session ids of the ones in use, and the other saved signatures and initials,
+    /// in the order they were added, with the place of the one in use (see `saved_signatures`).
+    pub signature_meta: saved_signatures::SavedMeta,
+    pub initials_meta: saved_signatures::SavedMeta,
+    pub other_signatures: Vec<saved_signatures::SavedEntry>,
+    pub other_initials: Vec<saved_signatures::SavedEntry>,
+    /// Which card a click in the saved-signature picker meant, for the `.change` and `.remove`
+    /// commands to take (they act on the one in use without it).
+    pub(crate) saved_pick: Option<saved_signatures::Pick>,
     /// The Create signature / initials dialog, and its typed preview.
     pub signature_draft: fill_sign::SigDraft,
     pub(crate) signature_preview: Option<(fill_sign::SavedSig, egui::TextureHandle)>,
     /// The Scan tab's photo, keyed by its version.
     pub(crate) signature_photo: Option<(u64, egui::TextureHandle)>,
-    pub(crate) saved_signature_previews: [Option<(fill_sign::SavedSig, egui::TextureHandle)>; 2],
+    /// One texture per picker card: signatures first, then initials.
+    pub(crate) saved_signature_previews: Vec<Option<(fill_sign::SavedSig, egui::TextureHandle)>>,
     /// What visible digital signatures show on their left, and its preview in Sign as.
     pub sign_graphic: sign_ui::SignGraphic,
     pub(crate) sign_graphic_preview: Option<(fill_sign::SavedSig, egui::TextureHandle)>,
@@ -1049,10 +1060,15 @@ impl PdfCraftApp {
             export_status: None,
             signature: None,
             initials: None,
+            signature_meta: Default::default(),
+            initials_meta: Default::default(),
+            other_signatures: Vec::new(),
+            other_initials: Vec::new(),
+            saved_pick: None,
             signature_draft: Default::default(),
             signature_preview: None,
             signature_photo: None,
-            saved_signature_previews: [None, None],
+            saved_signature_previews: Vec::new(),
             sign_graphic: sign_ui::SignGraphic::Name,
             sign_graphic_preview: None,
             #[cfg(target_arch = "wasm32")]
@@ -2279,6 +2295,7 @@ impl PdfCraftApp {
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
+        self.persist_saved_signatures(&mut v);
         v.to_string()
     }
 
@@ -2425,6 +2442,7 @@ impl PdfCraftApp {
         if let Ok(i) = serde_json::from_value::<fill_sign::SavedSig>(v["initials"].clone()) {
             self.initials = Some(i);
         }
+        self.restore_saved_signatures(&v);
         // An unreadable choice (a damaged image) falls back to the name.
         self.sign_graphic = serde_json::from_value(v["sign_graphic"].clone()).unwrap_or_default();
         if let Ok(ids) = serde_json::from_value::<Vec<DigitalIdEntry>>(v["digital_ids"].clone()) {

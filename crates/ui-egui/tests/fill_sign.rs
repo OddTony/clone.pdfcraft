@@ -2,7 +2,7 @@
 
 use egui::{Pos2, pos2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT as _, Queryable};
 use pdfcraft_ui_egui::fill_sign::{FillTool, SavedSig};
 use pdfcraft_ui_egui::{Dialog, PdfCraftApp, QuickTool};
 
@@ -1514,4 +1514,262 @@ fn photos_and_images_dropped_on_the_signature_pad_are_imported_not_opened() {
     assert!(h.state().toast.as_ref().unwrap().0.contains("Couldn't import"));
     assert_eq!(h.state().views.len(), tabs, "nothing opened behind the dialog");
     std::fs::remove_file(photo).unwrap();
+}
+
+// ---- The library of saved signatures and initials (#1288) ----
+
+fn typed(text: &str) -> SavedSig {
+    SavedSig::Typed(text.into())
+}
+
+fn open_fill_sign_panel(h: &mut Harness<'static, PdfCraftApp>) {
+    h.state_mut().left = pdfcraft_ui_egui::LeftPanel::Tool("fill_sign");
+    h.state_mut().left_open = true;
+    h.run_steps(3);
+}
+
+/// The saved signatures (or initials) in picker order, the one in use first.
+fn saved(h: &mut Harness<'static, PdfCraftApp>, initials: bool) -> Vec<(SavedSig, Option<String>)> {
+    h.state_mut().saved_list(initials).cards().into_iter().map(|c| (c.sig, c.label)).collect()
+}
+
+/// Add a signature through the picker's Add button and the pad, as a person would.
+fn add_signature(h: &mut Harness<'static, PdfCraftApp>, text: &str, name: &str) {
+    h.get_by_label("Add signature").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, Some(Dialog::Signature));
+    h.state_mut().signature_draft.text = text.into();
+    h.get_by_label("Name:").click();
+    h.run_steps(1);
+    h.event(egui::Event::Text(name.into()));
+    h.run_steps(2);
+    h.get_by_label("Apply").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, None);
+}
+
+#[test]
+fn several_signatures_are_added_named_chosen_changed_and_removed_in_the_picker() {
+    let mut h = harness();
+    h.state_mut().signature = Some(typed("Ada Lovelace"));
+    h.state_mut().initials = Some(typed("AL"));
+    open_fill_sign_panel(&mut h);
+
+    // Add two more, named; each new one is put in use.
+    add_signature(&mut h, "Ada L.", "Work");
+    add_signature(&mut h, "A. Lovelace", "Legal");
+    assert_eq!(
+        saved(&mut h, false),
+        [(typed("Ada Lovelace"), None), (typed("Ada L."), Some("Work".into())), (typed("A. Lovelace"), Some("Legal".into()))],
+        "creation order, new ones last"
+    );
+    assert_eq!(h.state().signature, Some(typed("A. Lovelace")), "the newest is in use");
+    assert_eq!(saved(&mut h, true), [(typed("AL"), None)], "initials are a separate list");
+
+    // Clicking a card puts it in use and starts placing it.
+    h.get_by_label("Use signature: Work").click();
+    h.run_steps(3);
+    assert_eq!(h.state().signature, Some(typed("Ada L.")));
+    assert_eq!(h.state().quick_tool, QuickTool::Fill(FillTool::Signature));
+    assert_eq!(saved(&mut h, false)[2], (typed("A. Lovelace"), Some("Legal".into())), "choosing does not reorder the cards");
+    assert_eq!(saved(&mut h, false)[1].0, typed("Ada L."));
+    click(&mut h, 40.0, 300.0);
+    assert_eq!(items(&h).len(), 1, "the chosen signature is the one placed");
+
+    // Change one that is not in use: it is edited in place, and renamed, without being put in use.
+    h.get_by_label("Change signature: Legal").click();
+    h.run_steps(3);
+    assert_eq!(h.state().signature_draft.text, "A. Lovelace");
+    assert_eq!(h.state().signature_draft.label, "Legal");
+    h.state_mut().signature_draft.text = "Augusta Ada".into();
+    h.state_mut().signature_draft.label = "  Contracts ".into();
+    h.get_by_label("Apply").click();
+    h.run_steps(3);
+    assert_eq!(
+        saved(&mut h, false),
+        [(typed("Ada Lovelace"), None), (typed("Ada L."), Some("Work".into())), (typed("Augusta Ada"), Some("Contracts".into()))]
+    );
+    assert_eq!(h.state().signature, Some(typed("Ada L.")), "changing another card does not put it in use");
+
+    // Remove one that is not in use, then the one in use (the previous card, as it was last).
+    h.get_by_label("Remove saved signature: Contracts").click();
+    h.run_steps(3);
+    assert_eq!(saved(&mut h, false).len(), 2);
+    h.get_by_label("Remove saved signature: Work").click();
+    h.run_steps(3);
+    assert_eq!(saved(&mut h, false), [(typed("Ada Lovelace"), None)]);
+    assert_eq!(h.state().signature, Some(typed("Ada Lovelace")));
+    assert_eq!(saved(&mut h, true), [(typed("AL"), None)], "initials untouched");
+
+    // All of it survives a restart.
+    let mut again = PdfCraftApp::new();
+    again.set_option("language", "en").unwrap();
+    again.restore(&h.state().persist());
+    assert_eq!(again.signature, Some(typed("Ada Lovelace")));
+    assert!(again.other_signatures.is_empty());
+}
+
+#[test]
+fn a_full_set_of_saved_signatures_disables_adding_another_and_keeps_every_entry() {
+    use pdfcraft_ui_egui::saved_signatures::{MAX_SAVED_SIGNATURES, SavedEntry};
+    let mut h = harness();
+    h.state_mut().signature = Some(typed("Sig 0"));
+    for i in 1..MAX_SAVED_SIGNATURES {
+        h.state_mut().other_signatures.push(SavedEntry::new(typed(&format!("Sig {i}")), None));
+    }
+    open_fill_sign_panel(&mut h);
+    // The picker scrolls; the Add button is below it and must be reached before it is checked.
+    h.get_by_label("Add signature").scroll_to_me();
+    h.run_steps(30);
+    assert!(h.get_by_label("Add signature").accesskit_node().is_disabled(), "no room for another");
+
+    // The same limit holds if the pad is applied anyway (the list filled while it was open).
+    h.state_mut().signature_draft = pdfcraft_ui_egui::fill_sign::SigDraft::new(false, "Extra");
+    h.state_mut().dialog = Some(Dialog::Signature);
+    h.run_steps(3);
+    h.get_by_label("Apply").click();
+    h.run_steps(3);
+    assert_eq!(saved(&mut h, false).len(), MAX_SAVED_SIGNATURES, "nothing added, nothing dropped");
+    assert!(saved(&mut h, false).iter().all(|(s, _)| *s != typed("Extra")));
+}
+
+#[test]
+fn an_entry_changed_in_the_pad_is_still_the_one_changed_if_the_list_moved_meanwhile() {
+    use pdfcraft_ui_egui::saved_signatures::SavedEntry;
+    let mut h = harness();
+    h.state_mut().signature = Some(typed("Ada"));
+    h.state_mut().other_signatures.push(SavedEntry::new(typed("Grace"), None));
+    open_fill_sign_panel(&mut h);
+    h.get_by_label("Change signature 2").click();
+    h.run_steps(3);
+    assert_eq!(h.state().signature_draft.text, "Grace");
+    // While the pad is open another command makes Grace the one in use.
+    let grace = h.state().signature_draft.target.expect("changing an entry");
+    assert!(h.state_mut().saved_list(false).choose(grace));
+    h.state_mut().signature_draft.text = "Grace H.".into();
+    h.get_by_label("Apply").click();
+    h.run_steps(3);
+    assert_eq!(saved(&mut h, false), [(typed("Ada"), None), (typed("Grace H."), None)], "changed in place, not added again");
+}
+
+#[test]
+fn settings_written_before_the_library_load_unchanged() {
+    // Exactly what older versions wrote: one signature (drawn, typed or image) and one initials.
+    let mut drawn = PdfCraftApp::new();
+    drawn.restore(r#"{"signature":[[[0.0,0.5],[1.0,0.5]]],"initials":{"Typed":"AL"},"sign_graphic":"Name"}"#);
+    assert_eq!(drawn.signature, Some(SavedSig::Drawn(vec![vec![[0.0, 0.5], [1.0, 0.5]]])));
+    assert_eq!(drawn.initials, Some(typed("AL")));
+    assert!(drawn.other_signatures.is_empty() && drawn.other_initials.is_empty());
+    assert_eq!(drawn.signature_meta.label, None);
+
+    let mut text = PdfCraftApp::new();
+    text.restore(r#"{"signature":null,"signature_text":"Ada Lovelace","signature_image":null}"#);
+    assert_eq!(text.signature, Some(typed("Ada Lovelace")));
+    assert_eq!(text.initials, None);
+    assert!(text.other_signatures.is_empty());
+}
+
+#[test]
+fn the_entry_in_use_is_still_saved_under_the_older_keys_and_the_library_round_trips() {
+    use pdfcraft_ui_egui::saved_signatures::SavedEntry;
+    let mut app = PdfCraftApp::new();
+    app.signature = Some(typed("Ada Lovelace"));
+    app.signature_meta.label = Some("Work".into());
+    app.other_signatures =
+        vec![SavedEntry::new(typed("Ada L."), Some("Home".into())), SavedEntry::new(SavedSig::Drawn(vec![vec![[0.0, 0.5], [1.0, 0.5]]]), None)];
+    app.initials = Some(typed("AL"));
+    app.other_initials = vec![SavedEntry::new(typed("A"), None)];
+    let settings = app.persist();
+
+    // An older version reads the entry in use from the keys it always has and ignores the rest.
+    let json: serde_json::Value = serde_json::from_str(&settings).unwrap();
+    assert_eq!(json["signature_text"], "Ada Lovelace");
+    assert_eq!(json["initials"], serde_json::json!({"Typed": "AL"}));
+
+    let mut again = PdfCraftApp::new();
+    again.restore(&settings);
+    assert_eq!(again.signature, Some(typed("Ada Lovelace")));
+    assert_eq!(again.signature_meta.label.as_deref(), Some("Work"));
+    assert_eq!(
+        again.saved_list(false).cards().into_iter().map(|c| (c.sig, c.label)).collect::<Vec<_>>(),
+        [
+            (typed("Ada Lovelace"), Some("Work".into())),
+            (typed("Ada L."), Some("Home".into())),
+            (SavedSig::Drawn(vec![vec![[0.0, 0.5], [1.0, 0.5]]]), None)
+        ]
+    );
+    assert_eq!(again.saved_list(true).cards().into_iter().map(|c| c.sig).collect::<Vec<_>>(), [typed("AL"), typed("A")]);
+}
+
+#[test]
+fn damaged_saved_entries_lose_only_themselves_and_the_limit_holds() {
+    use pdfcraft_ui_egui::saved_signatures::{MAX_LABEL_CHARS, MAX_SAVED_SIGNATURES};
+    let mut json = serde_json::json!({
+        "signature_text": "Ada Lovelace",
+        "other_signatures": [
+            {"sig": {"Typed": "Good one"}, "label": "  Keep  "},
+            {"sig": {"Typed": "   "}},
+            {"sig": {"Image": "!!not base64!!"}},
+            {"sig": {"Drawn": [[[0.0, 0.5], [1.0, 0.5]]]}, "label": 7},
+            "not an entry",
+            {"nothing": true},
+            {"sig": {"Typed": "Last good"}, "label": "x".repeat(500)},
+        ],
+        "other_initials": "not a list",
+        "initials": {"Typed": "AL"},
+    });
+    let mut app = PdfCraftApp::new();
+    app.restore(&json.to_string());
+    let list: Vec<_> = app.saved_list(false).cards().into_iter().map(|c| (c.sig, c.label)).collect();
+    assert_eq!(list.len(), 4, "the one in use and the three that read cleanly: {list:?}");
+    assert_eq!(list[1], (typed("Good one"), Some("Keep".into())));
+    assert_eq!(list[2].1, None, "a label that is not text is dropped, not the entry");
+    assert_eq!(list[3].1.as_ref().map(|l| l.chars().count()), Some(MAX_LABEL_CHARS));
+    assert_eq!(app.saved_list(true).len(), 1, "a damaged initials list leaves the one in use");
+
+    // A hand-edited file with far too many entries is cut at the limit.
+    let many: Vec<_> = (0..100).map(|i| serde_json::json!({"sig": {"Typed": format!("S{i}")}})).collect();
+    json["other_signatures"] = serde_json::Value::Array(many);
+    let mut app = PdfCraftApp::new();
+    app.restore(&json.to_string());
+    assert_eq!(app.saved_list(false).len(), MAX_SAVED_SIGNATURES);
+
+    // Others with nothing in use are promoted, so the tool can place something.
+    let mut app = PdfCraftApp::new();
+    app.restore(r#"{"other_signatures":[{"sig":{"Typed":"Only"},"label":"Solo"}]}"#);
+    assert_eq!(app.signature, Some(typed("Only")));
+    assert_eq!(app.signature_meta.label.as_deref(), Some("Solo"));
+    assert!(app.other_signatures.is_empty());
+}
+
+#[test]
+fn the_card_order_is_saved_and_a_damaged_or_missing_place_loses_no_entry() {
+    use pdfcraft_ui_egui::saved_signatures::SavedEntry;
+    let mut app = PdfCraftApp::new();
+    app.signature = Some(typed("C"));
+    app.other_signatures = vec![SavedEntry::new(typed("A"), None), SavedEntry::new(typed("B"), None), SavedEntry::new(typed("D"), None)];
+    app.signature_meta.slot = 2;
+    let settings = app.persist();
+    let order = |app: &mut PdfCraftApp| app.saved_list(false).cards().into_iter().map(|c| (c.sig, c.in_use)).collect::<Vec<_>>();
+    let mut again = PdfCraftApp::new();
+    again.restore(&settings);
+    assert_eq!(order(&mut again), [(typed("A"), false), (typed("B"), false), (typed("C"), true), (typed("D"), false)]);
+    // Older versions only read the entry in use, from the keys they always did.
+    let json: serde_json::Value = serde_json::from_str(&settings).unwrap();
+    assert_eq!(json["signature_text"], "C");
+
+    let mut json = json;
+    for bad in [serde_json::json!(99), serde_json::json!("x"), serde_json::json!(-1), serde_json::Value::Null] {
+        json["signature_slot"] = bad.clone();
+        let mut app = PdfCraftApp::new();
+        app.restore(&json.to_string());
+        let cards = order(&mut app);
+        assert_eq!(cards.len(), 4, "no entry lost with place {bad}");
+        assert_eq!(cards.iter().filter(|c| c.1).count(), 1);
+    }
+    // No place at all (an older file with a list): the one in use is first.
+    json.as_object_mut().unwrap().remove("signature_slot");
+    let mut app = PdfCraftApp::new();
+    app.restore(&json.to_string());
+    assert_eq!(order(&mut app)[0], (typed("C"), true));
 }
