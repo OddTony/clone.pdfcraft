@@ -48,7 +48,7 @@ pub struct TextLine {
     pub decodable: bool,
     /// Whether the font requires visual-order Indic text.
     pub visual_order: bool,
-    /// The Japanese or Hebrew fallback face the font subsets, when the line is in one (see [`same_font`]).
+    /// The generated fallback face the font subsets, when the line is in one (see [`same_font`]).
     face: Option<String>,
     /// The content stream piece the line starts in, and its operators (indices into the page's
     /// streams parsed joined).
@@ -78,13 +78,25 @@ impl TextLine {
     }
 }
 
-/// An embedded sfnt source face, read only for the inline editor. Bytes stay in memory and
-/// are never installed, copied into assets, or used as a font for another document.
+/// An editor font program: an embedded source face or an approved bundled choice.
+/// Source bytes stay in memory, never installed or copied into assets or another document.
 #[derive(Clone, Debug)]
 pub struct TextEditorFont {
     pub resource: String,
     pub face: String,
     pub bytes: Vec<u8>,
+}
+
+/// Reserved document-font choice for explicitly replacing text with the bundled Thai face.
+/// This is a selector, never a font resource written into a PDF.
+pub const BUILTIN_THAI_FONT: &str = "builtin:thai";
+
+fn builtin_thai_choice(fonts: &Dict) -> String {
+    let mut choice = BUILTIN_THAI_FONT.to_owned();
+    while fonts.contains(choice.as_bytes()) {
+        choice.push('_');
+    }
+    choice
 }
 
 pub fn text_editor_fonts(doc: &Document, page: usize) -> Result<Vec<TextEditorFont>, EditError> {
@@ -117,6 +129,13 @@ pub fn text_editor_fonts(doc: &Document, page: usize) -> Result<Vec<TextEditorFo
             budget -= full.bytes.len();
             result.push(TextEditorFont { resource: format!("PCApproved{}", full.name()), face: face.clone(), bytes: full.bytes.to_vec() });
         }
+    }
+    // A missing source family must not make the bundled Thai replacement undiscoverable.
+    // Offering it does not change the source; callers explicitly select this choice to replace it.
+    if let Some(thai) = pdfcraft_fonts::document_thai_font()
+        && thai.bytes.len() <= budget
+    {
+        result.push(TextEditorFont { resource: builtin_thai_choice(&fonts), face: thai.family.into(), bytes: thai.bytes.to_vec() });
     }
     Ok(result)
 }
@@ -506,7 +525,7 @@ struct Ts {
     /// The operators that set the current fill colour (`g`, `rg`, `k`, or `cs` + `sc`/`scn`).
     fill: Vec<Op>,
     font: Option<(Vec<u8>, Rc<Metrics>)>,
-    /// The Japanese or Hebrew fallback face the font subsets, when the font is one (see [`is_type3_fallback`]).
+    /// The generated fallback face the font subsets, when the font is one (see [`is_type3_fallback`]).
     face: Option<String>,
     size: f64,
     char_spacing: f64,
@@ -1304,14 +1323,14 @@ const JAPANESE_FONT_NAME: &str = "PCJapanese";
 /// The `/Name` of the Type 3 fonts generated for Hebrew text.
 const HEBREW_FONT_NAME: &str = "PCHebrew";
 
-/// Whether `font` is one of those generated fonts (Japanese or Hebrew): a replacement longer than
+/// Whether `font` is one of those generated fonts (Japanese, Hebrew or Thai): a replacement longer than
 /// one of them is split across several, which read back as one line (see [`same_font`]).
 fn is_type3_fallback(font: &Dict) -> bool {
     font.name(b"Subtype") == Some(b"Type3")
-        && font.name(b"Name").is_some_and(|n| n == JAPANESE_FONT_NAME.as_bytes() || n == HEBREW_FONT_NAME.as_bytes())
+        && font.name(b"Name").is_some_and(|n| n == JAPANESE_FONT_NAME.as_bytes() || n == HEBREW_FONT_NAME.as_bytes() || n == b"PCThai")
 }
 
-/// Whether a run shown in `font` (a resource name, and the Japanese or Hebrew fallback face it subsets, if
+/// Whether a run shown in `font` (a resource name, and the generated fallback face it subsets, if
 /// any) continues `line`: the same font resource, or another subset of the same face.
 fn same_font(line: &TextLine, font: &[u8], face: Option<&str>) -> bool {
     line.font.as_bytes() == font || (line.face.is_some() && line.face.as_deref() == face)
@@ -1939,7 +1958,7 @@ pub fn replace_block(doc: &mut Document, page: usize, block: usize, text: &str) 
 pub struct BlockStyle {
     /// Disjoint UTF-8 ranges in the replacement, each preserving unspecified source style.
     pub ranges: Vec<RangeStyle>,
-    /// Explicit page font resource (from register_text_font or the page font inventory).
+    /// Explicit page font resource, or a reserved bundled-font choice from the page font inventory.
     pub resource: Option<String>,
     /// A standard font family, bold, italic.
     pub family: Option<(crate::added::Family, bool, bool)>,

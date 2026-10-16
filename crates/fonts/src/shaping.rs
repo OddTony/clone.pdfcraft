@@ -239,13 +239,34 @@ mod thai_tests {
     use super::*;
 
     #[test]
+    fn thai_vowels_and_tones_occupy_separate_vertical_bands() {
+        if crate::document_thai_font().is_none() {
+            return;
+        }
+        for text in ["กิ่", "กี้", "กึ้", "น้ำ", "น่ำ", "น้ํา", "นํ้า"] {
+            let mut marks = Vec::new();
+            for cluster in shape_thai(text).unwrap() {
+                for (id, [_, y]) in cluster.glyphs {
+                    let g = shaped_glyph(ShapedScript::Thai, id).unwrap();
+                    if g.width == 0.0 && !g.contours.is_empty() {
+                        marks.push([g.bbox[1] + y, g.bbox[3] + y]);
+                    }
+                }
+            }
+            assert_eq!(marks.len(), 2, "{text}: vowel/Sara Am dot and tone");
+            marks.sort_by(|a, b| a[0].total_cmp(&b[0]));
+            assert!(marks[0][1] <= marks[1][0] + 0.005, "{text}: lower and upper marks overlap: {marks:?}");
+        }
+    }
+
+    #[test]
     fn thai_clusters_preserve_sara_am_and_stacked_marks() {
         if crate::document_thai_font().is_none() {
             assert_eq!(shape_thai("น้ำ"), Err(GlyphError::NoFont));
             assert!(!thai_has('ก'));
             return;
         }
-        for text in ["น้ำ", "กิ่", "ผู้ใช้", "ปู่", "เก้า", "สวัสดีภาษาไทย", "๑๒๓", ""]
+        for text in ["น้ำ", "น้ํา", "นํ้า", "กิ่", "ผู้ใช้", "ปู่", "เก้า", "สวัสดีภาษาไทย", "๑๒๓", ""]
         {
             let clusters = shape_thai(text).unwrap();
             assert_eq!(clusters.iter().map(|c| c.text.as_str()).collect::<String>(), text);

@@ -168,13 +168,65 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
     blocks
 }
 
+/// Whether the approved Thai face completes this source family, whose embedded subset cannot
+/// shape the replacement. A usable complete source program always takes precedence.
+fn matching_thai_outline(doc: &Document, fonts: &Dict, source: &TextLine, span: &str) -> bool {
+    let Some(face) = pdfcraft_fonts::document_thai_font() else { return false };
+    span.chars().any(|c| matches!(u32::from(c), 0x0e00..=0x0e7f))
+        && pdfcraft_fonts::embedding::matching_faces(&source.base_font).iter().any(|f| std::ptr::eq(*f, face))
+        && pdfcraft_fonts::embedding::covers(face.bytes, span)
+        && !fonts.get(source.font.as_bytes()).and_then(|f| doc.dict(f)).and_then(|f| pdfcraft_fonts::pdf::embedded_sfnt(doc, &f)).is_some_and(
+            |bytes| {
+                pdfcraft_fonts::embedding::validate(&bytes).is_ok()
+                    && pdfcraft_fonts::source_shaping::has_thai_layout(&bytes)
+                    && pdfcraft_fonts::embedding::covers(&bytes, span)
+                    && span.split('\n').all(|row| pdfcraft_fonts::source_shaping::shape(&bytes, row).is_ok())
+            },
+        )
+}
+
+/// Use the same Thai script selection and mark/cluster positioning as Add Text, including
+/// rows beginning with Latin or digits (guessing from their first character would select Latin).
+fn shape_thai_row(text: &str) -> Result<pdfcraft_fonts::source_shaping::ShapedRun, EditError> {
+    if text.len() > 262_144 || text.contains(['\n', '\r']) {
+        return Err(EditError::Invalid("shape one bounded text row at a time".into()));
+    }
+    let clusters =
+        pdfcraft_fonts::shape_thai(text).map_err(|e| EditError::Invalid(format!("the matching Thai font cannot shape this text ({e:?})")))?;
+    let mut glyphs = Vec::new();
+    let mut advance = 0.0;
+    for cluster in clusters {
+        for (i, (id, [x, y])) in cluster.glyphs.into_iter().enumerate() {
+            if glyphs.len() >= 65_534 {
+                return Err(EditError::Invalid("shaped row exceeds its geometry budget".into()));
+            }
+            glyphs.push(pdfcraft_fonts::source_shaping::ShapedGlyph {
+                id: id.into(),
+                position: [advance + x, y],
+                text: if i == 0 { cluster.text.clone() } else { String::new() },
+            });
+        }
+        advance += cluster.advance;
+    }
+    if !advance.is_finite() {
+        return Err(EditError::Invalid("shaped row exceeds its geometry budget".into()));
+    }
+    Ok(pdfcraft_fonts::source_shaping::ShapedRun { glyphs, advance })
+}
+
 /// Shape in the source or an explicitly registered matching full face. Never use interface fonts.
 fn shape_source(
     doc: &Document,
     fonts: &Dict,
+    outlined_thai: &std::collections::HashSet<String>,
     name: &str,
     text: &str,
 ) -> Result<Option<(Vec<u8>, pdfcraft_fonts::source_shaping::ShapedRun, String)>, EditError> {
+    if outlined_thai.contains(name) {
+        let face = pdfcraft_fonts::document_thai_font().ok_or_else(|| EditError::Invalid("the matching Thai face is unavailable".into()))?;
+        let shaped = shape_thai_row(text)?;
+        return Ok(Some((face.bytes.to_vec(), shaped, face.family.to_owned())));
+    }
     if !pdfcraft_fonts::source_shaping::required(text) {
         return Ok(None);
     }
@@ -196,7 +248,15 @@ fn shape_source(
             return Ok(Some((bytes, shaped, family)));
         }
     }
-    Err(EditError::Invalid("complex text needs the complete source TrueType/OpenType face; load that font before editing".into()))
+    let fallback = if text.chars().any(|c| matches!(u32::from(c), 0x0e00..=0x0e7f)) && pdfcraft_fonts::document_thai_font().is_some() {
+        "; or select Noto Sans Thai in the document-font menu to replace it"
+    } else {
+        ""
+    };
+    Err(EditError::Invalid(format!(
+        "complex text in {} needs its complete source TrueType/OpenType font; use Load font to keep it{fallback}",
+        family.rsplit('+').next().unwrap_or(&family)
+    )))
 }
 
 /// For each output row (a range of the draft's characters), whether it is exactly the source row
@@ -348,6 +408,7 @@ pub(super) fn rewrite_styled_block(
     let p = page_dict(doc, page)?;
     let mut res = p.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
     let mut fonts = res.get(b"Font").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
+    let thai_choice = builtin_thai_choice(&fonts);
     for line in lines.iter().filter(|line| line.font.starts_with("PCRange")) {
         let mut f = Dict::new();
         f.set(b"Type".to_vec(), Object::name("Font"));
@@ -393,15 +454,52 @@ pub(super) fn rewrite_styled_block(
     let mut fallback_names: std::collections::BTreeMap<(String, char), String> = std::collections::BTreeMap::new();
     let mut full_faces: HashMap<String, String> = HashMap::new();
     let mut programs: HashMap<String, Option<std::sync::Arc<Vec<u8>>>> = HashMap::new();
+    let mut outlined_thai = std::collections::HashSet::new();
     for (range, index) in styled_spans {
         let source = lines.get(index).unwrap_or(first);
-        for ch in draft.get(range).unwrap_or_default().chars() {
+        let span = draft.get(range).unwrap_or_default();
+        // Automatic completion stays in the same family and keeps usable source programs first.
+        // A bundled replacement for another family requires an explicit document-font choice.
+        // Interface fallback fonts never enter a PDF.
+        let selected_resource = overrides.get(&index).and_then(|r| r.resource.as_deref()).or(style.resource.as_deref());
+        let use_thai_outlines = if selected_resource == Some(thai_choice.as_str()) {
+            let face = pdfcraft_fonts::document_thai_font()
+                .ok_or_else(|| EditError::Invalid("the bundled Thai font is unavailable in this build; load a complete Thai font".into()))?;
+            if !pdfcraft_fonts::embedding::covers(face.bytes, span) {
+                return Err(EditError::Invalid(
+                    "Noto Sans Thai cannot show every character in this selection; choose a font that covers the text".into(),
+                ));
+            }
+            substituted = Some(face.family.to_owned());
+            true
+        } else {
+            selected_resource.is_none() && matching_thai_outline(doc, &fonts, source, span)
+        };
+        let outline_name = if use_thai_outlines {
+            // A draft-only name prevents this choice from affecting another style span that
+            // explicitly selects the original resource. It is never saved into the PDF.
+            let mut name = format!("PCOutlineThai{index}");
+            while metrics.contains_key(&name) {
+                name.push('_');
+            }
+            if let Some(m) = metrics.get(&source.font).or_else(|| source.origin.state.font.as_ref().and_then(|(name, _)| metrics.get(name))).cloned()
+            {
+                metrics.insert(name.clone(), m);
+            }
+            outlined_thai.insert(name.clone());
+            Some(name)
+        } else {
+            None
+        };
+        for ch in span.chars() {
             if ch == '\n' {
                 chars.push((ch, index, source.font.clone()));
                 continue;
             }
             let s = ch.to_string();
-            let name = if let Some(resource) = overrides.get(&index).and_then(|r| r.resource.as_ref()).or(style.resource.as_ref()) {
+            let name = if let Some(name) = &outline_name {
+                name.clone()
+            } else if let Some(resource) = overrides.get(&index).and_then(|r| r.resource.as_ref()).or(style.resource.as_ref()) {
                 if !metrics.get(resource).is_some_and(|m| source_encodes(m, &s)) {
                     return Err(EditError::Invalid(format!("the selected font resource {resource} cannot show U+{:04X}", u32::from(ch))));
                 }
@@ -538,7 +636,7 @@ pub(super) fn rewrite_styled_block(
             }
             let segment = items.get(at..end).unwrap_or_default();
             let string: String = segment.iter().map(|v| v.0).collect();
-            if let Some((_, shaped, _)) = shape_source(doc, &fonts, &item.2, &string)? {
+            if let Some((_, shaped, _)) = shape_source(doc, &fonts, &outlined_thai, &item.2, &string)? {
                 let source = lines.get(item.1).unwrap_or(first);
                 let scale =
                     overrides.get(&item.1).and_then(|r| r.scale).or(style.scale).map_or(source.origin.state.scale, |s| (s / 100.0).clamp(0.1, 10.0));
@@ -654,7 +752,7 @@ pub(super) fn rewrite_styled_block(
             }
             segment_advances.insert((row_index, at), row.get(at..end).unwrap_or_default().iter().map(&advance).sum::<f64>());
             let string: String = row.get(at..end).unwrap_or_default().iter().map(|v| v.0).collect();
-            if let Some((bytes, shaped, family)) = shape_source(doc, &fonts, &item.2, &string)? {
+            if let Some((bytes, shaped, family)) = shape_source(doc, &fonts, &outlined_thai, &item.2, &string)? {
                 shaped_runs.insert((row_index, at), (bytes, shaped, family));
             }
             at = end;
@@ -662,9 +760,20 @@ pub(super) fn rewrite_styled_block(
     }
     let mut glyph_resources = HashMap::new();
     for (key, (bytes, shaped, family)) in &shaped_runs {
-        let mappings: Vec<_> = shaped.glyphs.iter().map(|g| (g.text.clone(), g.id)).collect();
-        let resource = pdfcraft_fonts::embedding::embed_mapping(doc, &mut fonts, bytes, family, &mappings).map_err(EditError::Invalid)?;
-        glyph_resources.insert(*key, resource);
+        let name = rows.get(key.0).and_then(|row| row.get(key.1)).map(|c| &c.2);
+        let resources = if name.is_some_and(|n| outlined_thai.contains(n)) {
+            crate::added::thai_glyph_resources(doc, &mut fonts, shaped)?
+        } else {
+            let mappings: Vec<_> = shaped.glyphs.iter().map(|g| (g.text.clone(), g.id)).collect();
+            let resource = pdfcraft_fonts::embedding::embed_mapping(doc, &mut fonts, bytes, family, &mappings).map_err(EditError::Invalid)?;
+            (0..shaped.glyphs.len())
+                .map(|i| {
+                    let code = u16::try_from(i + 1).map_err(|_| EditError::Invalid("shaped glyph limit".into()))?;
+                    Ok((resource.clone(), code.to_be_bytes().to_vec()))
+                })
+                .collect::<Result<Vec<_>, EditError>>()?
+        };
+        glyph_resources.insert(*key, resources);
     }
     let n = pdfcraft_content::num;
     let mut block_ops = vec![Op::new("q", vec![])];
@@ -748,29 +857,41 @@ pub(super) fn rewrite_styled_block(
             tm[5] += ay;
             let mut segment_width = segment_advances.get(&(row_index, pos)).copied().unwrap_or(0.0);
             if let Some((_, shaped, _)) = shaped_runs.get(&(row_index, pos)) {
-                let resource = glyph_resources.get(&(row_index, pos)).ok_or_else(|| EditError::Invalid("shaped font is missing".into()))?;
+                let resources = glyph_resources.get(&(row_index, pos)).ok_or_else(|| EditError::Invalid("shaped font is missing".into()))?;
                 let mut properties = Dict::new();
                 properties.set(b"ActualText".to_vec(), Object::String(PdfString::text(&string)));
                 block_ops.push(Op::new("BDC", vec![Object::name("Span"), Object::Dict(properties)]));
-                state.font = Some((resource.clone(), size_of(source, item.1)));
                 // Absolute glyph matrices preserve marks and contextual positions; font-program
                 // codes are separate from Unicode and ToUnicode/ActualText keep logical text.
                 let size = size_of(source, item.1);
                 let mut extra = 0.0;
+                let thai = outlined_thai.contains(&item.2);
+                let mut cluster_spacing = 0.0;
                 for (i, glyph) in shaped.glyphs.iter().enumerate() {
+                    if thai && !glyph.text.is_empty() {
+                        // Thai cluster text belongs to its first glyph. Defer its spacing
+                        // until the next cluster so the vowel/tone glyphs stay on their base.
+                        extra += cluster_spacing;
+                        cluster_spacing =
+                            state.char_spacing * glyph.text.chars().count() as f64 + state.word_spacing * glyph.text.matches(' ').count() as f64;
+                    }
                     let mut matrix = tm;
                     let x = (glyph.position[0] * size + extra) * state.scale;
                     let y = glyph.position[1] * size;
                     matrix[4] += matrix[0] * x + matrix[2] * y;
                     matrix[5] += matrix[1] * x + matrix[3] * y;
-                    let code = u16::try_from(i + 1).map_err(|_| EditError::Invalid("shaped glyph limit".into()))?;
+                    let (resource, code) = resources.get(i).ok_or_else(|| EditError::Invalid("shaped glyph resource is missing".into()))?;
+                    state.font = Some((resource.clone(), size));
                     block_ops.push(Op::new("BT", vec![]));
                     block_ops.extend(state.ops());
                     block_ops.push(Op::new("Tm", matrix.map(n).to_vec()));
-                    block_ops.push(Op::new("Tj", vec![Object::String(PdfString::literal(code.to_be_bytes().to_vec()))]));
+                    block_ops.push(Op::new("Tj", vec![Object::String(PdfString::literal(code.clone()))]));
                     block_ops.push(Op::new("ET", vec![]));
-                    extra += state.char_spacing * glyph.text.chars().count() as f64 + state.word_spacing * glyph.text.matches(' ').count() as f64;
+                    if !thai {
+                        extra += state.char_spacing * glyph.text.chars().count() as f64 + state.word_spacing * glyph.text.matches(' ').count() as f64;
+                    }
                 }
+                extra += cluster_spacing;
                 block_ops.push(Op::new("EMC", vec![]));
                 segment_width = (shaped.advance * size + extra) * state.scale * source.origin.k;
             } else {

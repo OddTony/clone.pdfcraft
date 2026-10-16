@@ -5842,6 +5842,94 @@ fn thai_text_through_tools_saves_reopens_extracts_and_renders() {
 }
 
 #[test]
+fn explicit_bundled_thai_font_choice_layout_edit_undo_and_reopen() {
+    let dir = workdir("thai-font-choice");
+    std::fs::write(dir.join("source.pdf"), fixture(1)).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"source.pdf"}))["doc"].as_u64().unwrap();
+    let before = page_text(&mut a, doc);
+    let fonts = ok(&mut a, "text_fonts", json!({"doc":doc,"page":1}));
+    let choice = fonts["fonts"].as_array().unwrap().iter().find(|f| f["resource"] == "builtin:thai");
+    let args = json!({"doc":doc,"page":1,"paragraph":1,"text":"น้ำ กิ่ กี้ ผู้ใช้","font_resource":"builtin:thai"});
+    if pdfcraft_fonts::document_thai_font().is_none() {
+        assert!(choice.is_none());
+        assert!(a.call("text_edit", &args).is_err());
+        assert_eq!(page_text(&mut a, doc), before);
+        return;
+    }
+    assert_eq!(choice.unwrap()["preview_only"], false);
+    ok(&mut a, "text_edit_layout", args.clone());
+    assert_eq!(page_text(&mut a, doc), before);
+    ok(&mut a, "text_edit", args);
+    let edited = page_text(&mut a, doc);
+    assert!(edited[0].contains("น้ำ กิ่ กี้ ผู้ใช้"));
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(page_text(&mut a, doc), before);
+    ok(&mut a, "edit_redo", json!({"doc":doc}));
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"edited.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"edited.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, reopened), edited);
+    assert!(a.call("text_edit", &json!({"doc":reopened,"page":1,"paragraph":1,"text":"น้ำ 😀","font_resource":"builtin:thai"})).is_err());
+    assert_eq!(page_text(&mut a, reopened), edited);
+    let image = a.call("page_render", &json!({"doc":reopened,"page":1,"dpi":144})).unwrap();
+    assert!(image.iter().any(|c| matches!(c, Content::Png { .. })));
+}
+
+#[test]
+fn existing_thai_matching_face_edit_layout_undo_save_reopen_and_render() {
+    use pdfcraft_cos::{Document, ObjRef, Object, SaveOptions, write_full};
+    let dir = workdir("thai-existing");
+    let mut source = Document::open(std::sync::Arc::new(fixture(1))).unwrap();
+    // Synthetic source encoding lacks Thai; the approved matching family supplies the missing
+    // contextual glyphs. No fixture/font bytes are checked in.
+    source
+        .update_dict(ObjRef::new(3, 0), |f| {
+            f.set(b"BaseFont".to_vec(), Object::name("ABCDEF+NotoSansThai-Regular"));
+        })
+        .unwrap();
+    std::fs::write(dir.join("thai-source.pdf"), write_full(&source, &SaveOptions::default()).unwrap()).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path": "thai-source.pdf"}))["doc"].as_u64().unwrap();
+    let before = page_text(&mut a, doc);
+    let text = "น้ำ ผู้ใช้ ๑๒๓";
+    let args = json!({"doc": doc, "page": 1, "paragraph": 1, "text": text, "size": 12});
+    if pdfcraft_fonts::document_thai_font().is_none() {
+        assert!(a.call("text_edit", &args).is_err());
+        assert_eq!(page_text(&mut a, doc), before);
+        assert_eq!(ok(&mut a, "doc_info", json!({"doc": doc}))["document"]["dirty"], false);
+        return;
+    }
+    ok(&mut a, "text_edit_layout", args.clone());
+    assert_eq!(page_text(&mut a, doc), before, "layout is read-only");
+    ok(&mut a, "text_edit", args);
+    assert!(page_text(&mut a, doc)[0].contains(text));
+    ok(&mut a, "edit_undo", json!({"doc": doc}));
+    assert_eq!(page_text(&mut a, doc), before);
+    ok(&mut a, "edit_redo", json!({"doc": doc}));
+    assert!(page_text(&mut a, doc)[0].contains(text));
+    let render = |a: &mut Automation, doc| {
+        a.call("page_render", &json!({"doc": doc, "page": 1, "dpi": 144}))
+            .unwrap()
+            .into_iter()
+            .find_map(|c| match c {
+                Content::Png { data, .. } => Some(data),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let image = render(&mut a, doc);
+    ok(&mut a, "doc_save", json!({"doc": doc, "path": "thai-edited.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path": "thai-edited.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(render(&mut a, reopened), image);
+    assert!(page_text(&mut a, reopened)[0].contains(text));
+    ok(&mut a, "text_edit", json!({"doc": reopened, "page": 1, "paragraph": 1, "text": "ปู่ น้ำ ๔๕๖"}));
+    assert!(page_text(&mut a, reopened)[0].contains("ปู่ น้ำ ๔๕๖"));
+    let unchanged = page_text(&mut a, reopened);
+    assert!(a.call("text_edit", &json!({"doc": reopened, "page": 1, "paragraph": 1, "text": "น้ำ 😀"})).is_err());
+    assert_eq!(page_text(&mut a, reopened), unchanged, "an unavailable glyph leaves the edit intact");
+}
+
+#[test]
 fn hebrew_text_through_tools_saves_reopens_extracts_and_renders() {
     let dir = workdir("hebrew-content");
     let mut a = auto(&dir);
