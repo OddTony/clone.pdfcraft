@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (M7: matching Thai subset completion and stacked-mark editor layout; estimates unchanged)
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (M7: matching Thai subset completion, stacked marks and an explicit bundled Thai font choice; estimates unchanged)
 
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M2/gap 12: the Annex D.2 alias codes read as the ink they draw in both tables; the text oracle scores reading order; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -159,6 +159,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+
+- **2026-10-16 (M7, explicit Thai fallback):** The document-font menu and headless font inventory offer bundled Noto Sans Thai when the complete source face is unavailable. Replacement is explicit, needs no installed font, and preserves neighbouring source runs; errors identify the missing source family. Estimates unchanged.
 
 - **2026-10-16 (M7, Thai editing):** Existing Noto Sans Thai paragraphs use matching shaped outlines when their subset cannot shape the draft, avoiding variable-font embedding errors. The inline editor prefers complete matching layout tables for stacked vowels/tone marks. Regression coverage includes long rows, repeated edits, layout, undo/redo and save/reopen rendering; other Thai families and mixed contextual styles remain limited. Estimates unchanged.
 - **2026-10-15 (M2, gap 12):** `cargo xtask text-oracle` scores reading order as well as word F1: the longest common subsequence of the two word sequences over the longer one. F1 is a bag of words and cannot see order at all -- measuring #2431, a change that moves text and nothing else, it called 26 of the 29 files whose output changed identical, where the order score separated 18 improvements from 6 regressions. Reports, does not gate; a disagreement with Poppler, not a verdict. Estimates unchanged.
@@ -499,6 +501,7 @@ Newest first: the date, what moved, and the new overall estimate.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | M7: the existing document-font menu offers bundled Noto Sans Thai for explicit replacement when the complete source face is unavailable, without font installation; estimates unchanged. |
 | 2026-10-16 | minor | M7: matching Thai subset completion avoids variable-font embedding; complete matching preview tables preserve stacked marks. Other Thai families and mixed contextual styles remain limited; estimates unchanged. |
 | 2026-10-13 | minor | M9: separate page validation overlays preserve signature artwork, and snapshot tabs reuse instead of multiplying; baked captions remain unchanged (#79 open); estimates unchanged |
 | 2026-10-12 | minor | M6: valid AcroForm XML element names with original PDF field names preserved; saved-PDF collision and Unicode regressions. Estimates unchanged. |

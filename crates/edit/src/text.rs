@@ -78,13 +78,25 @@ impl TextLine {
     }
 }
 
-/// An embedded sfnt source face, read only for the inline editor. Bytes stay in memory and
-/// are never installed, copied into assets, or used as a font for another document.
+/// An editor font program: an embedded source face or an approved bundled choice.
+/// Source bytes stay in memory, never installed or copied into assets or another document.
 #[derive(Clone, Debug)]
 pub struct TextEditorFont {
     pub resource: String,
     pub face: String,
     pub bytes: Vec<u8>,
+}
+
+/// Reserved document-font choice for explicitly replacing text with the bundled Thai face.
+/// This is a selector, never a font resource written into a PDF.
+pub const BUILTIN_THAI_FONT: &str = "builtin:thai";
+
+fn builtin_thai_choice(fonts: &Dict) -> String {
+    let mut choice = BUILTIN_THAI_FONT.to_owned();
+    while fonts.contains(choice.as_bytes()) {
+        choice.push('_');
+    }
+    choice
 }
 
 pub fn text_editor_fonts(doc: &Document, page: usize) -> Result<Vec<TextEditorFont>, EditError> {
@@ -117,6 +129,13 @@ pub fn text_editor_fonts(doc: &Document, page: usize) -> Result<Vec<TextEditorFo
             budget -= full.bytes.len();
             result.push(TextEditorFont { resource: format!("PCApproved{}", full.name()), face: face.clone(), bytes: full.bytes.to_vec() });
         }
+    }
+    // A missing source family must not make the bundled Thai replacement undiscoverable.
+    // Offering it does not change the source; callers explicitly select this choice to replace it.
+    if let Some(thai) = pdfcraft_fonts::document_thai_font()
+        && thai.bytes.len() <= budget
+    {
+        result.push(TextEditorFont { resource: builtin_thai_choice(&fonts), face: thai.family.into(), bytes: thai.bytes.to_vec() });
     }
     Ok(result)
 }
@@ -1939,7 +1958,7 @@ pub fn replace_block(doc: &mut Document, page: usize, block: usize, text: &str) 
 pub struct BlockStyle {
     /// Disjoint UTF-8 ranges in the replacement, each preserving unspecified source style.
     pub ranges: Vec<RangeStyle>,
-    /// Explicit page font resource (from register_text_font or the page font inventory).
+    /// Explicit page font resource, or a reserved bundled-font choice from the page font inventory.
     pub resource: Option<String>,
     /// A standard font family, bold, italic.
     pub family: Option<(crate::added::Family, bool, bool)>,

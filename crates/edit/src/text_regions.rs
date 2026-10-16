@@ -248,7 +248,15 @@ fn shape_source(
             return Ok(Some((bytes, shaped, family)));
         }
     }
-    Err(EditError::Invalid("complex text needs the complete source TrueType/OpenType face; load that font before editing".into()))
+    let fallback = if text.chars().any(|c| matches!(u32::from(c), 0x0e00..=0x0e7f)) && pdfcraft_fonts::document_thai_font().is_some() {
+        "; or select Noto Sans Thai in the document-font menu to replace it"
+    } else {
+        ""
+    };
+    Err(EditError::Invalid(format!(
+        "complex text in {} needs its complete source TrueType/OpenType font; use Load font to keep it{fallback}",
+        family.rsplit('+').next().unwrap_or(&family)
+    )))
 }
 
 /// For each output row (a range of the draft's characters), whether it is exactly the source row
@@ -400,6 +408,7 @@ pub(super) fn rewrite_styled_block(
     let p = page_dict(doc, page)?;
     let mut res = p.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
     let mut fonts = res.get(b"Font").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
+    let thai_choice = builtin_thai_choice(&fonts);
     for line in lines.iter().filter(|line| line.font.starts_with("PCRange")) {
         let mut f = Dict::new();
         f.set(b"Type".to_vec(), Object::name("Font"));
@@ -449,12 +458,23 @@ pub(super) fn rewrite_styled_block(
     for (range, index) in styled_spans {
         let source = lines.get(index).unwrap_or(first);
         let span = draft.get(range).unwrap_or_default();
-        // Only complete the same Thai family, only when no face was explicitly selected,
-        // and keep a usable embedded source program first. Never export interface fallback
-        // fonts or change unrelated scripts' static-font embedding rules.
-        let use_thai_outlines = style.resource.is_none()
-            && overrides.get(&index).and_then(|r| r.resource.as_ref()).is_none()
-            && matching_thai_outline(doc, &fonts, source, span);
+        // Automatic completion stays in the same family and keeps usable source programs first.
+        // A bundled replacement for another family requires an explicit document-font choice.
+        // Interface fallback fonts never enter a PDF.
+        let selected_resource = overrides.get(&index).and_then(|r| r.resource.as_deref()).or(style.resource.as_deref());
+        let use_thai_outlines = if selected_resource == Some(thai_choice.as_str()) {
+            let face = pdfcraft_fonts::document_thai_font()
+                .ok_or_else(|| EditError::Invalid("the bundled Thai font is unavailable in this build; load a complete Thai font".into()))?;
+            if !pdfcraft_fonts::embedding::covers(face.bytes, span) {
+                return Err(EditError::Invalid(
+                    "Noto Sans Thai cannot show every character in this selection; choose a font that covers the text".into(),
+                ));
+            }
+            substituted = Some(face.family.to_owned());
+            true
+        } else {
+            selected_resource.is_none() && matching_thai_outline(doc, &fonts, source, span)
+        };
         let outline_name = if use_thai_outlines {
             // A draft-only name prevents this choice from affecting another style span that
             // explicitly selects the original resource. It is never saved into the PDF.
@@ -462,7 +482,8 @@ pub(super) fn rewrite_styled_block(
             while metrics.contains_key(&name) {
                 name.push('_');
             }
-            if let Some(m) = metrics.get(&source.font).cloned() {
+            if let Some(m) = metrics.get(&source.font).or_else(|| source.origin.state.font.as_ref().and_then(|(name, _)| metrics.get(name))).cloned()
+            {
                 metrics.insert(name.clone(), m);
             }
             outlined_thai.insert(name.clone());

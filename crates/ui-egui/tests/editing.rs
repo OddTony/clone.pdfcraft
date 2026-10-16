@@ -2601,6 +2601,45 @@ fn switching_straight_to_another_box_applies_the_open_paragraph() {
 }
 
 #[test]
+fn document_font_menu_offers_bundled_thai_without_an_installed_source_font() {
+    let mut h = harness(1, |_| {});
+    let id = h.state().views[0].id;
+    if !h.state().session.get(id).unwrap().text_editor_fonts(0).iter().any(|f| f.resource == "builtin:thai") {
+        return;
+    }
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let r = h.state().views[0].page_screen_rect(0).unwrap();
+    let at = egui::pos2(r.left() + 40.0 / 200.0 * r.width(), r.top() + 142.0 / 300.0 * r.height());
+    h.hover_at(at);
+    h.run_steps(1);
+    h.drag_at(at);
+    h.run_steps(1);
+    h.drop_at(at);
+    h.run_steps(3);
+    let text = "น้ำ กิ่ กี้";
+    h.state_mut().views[0].line_editor.as_mut().unwrap().text = text.into();
+    h.run_steps(1);
+    h.get_by_value("Keep source fonts").click();
+    h.run_steps(2);
+    h.get_by_label("Noto Sans Thai").click();
+    h.run_steps(5);
+    let doc = h.state().session.get(id).unwrap();
+    assert_eq!(doc.text_blocks(0)[0].editor_text, text);
+    assert!(doc.text_lines(0).iter().all(|l| l.base_font.contains("NotoSansThai")));
+    if let Ok(path) = std::env::var("PDFCRAFT_THAI_FALLBACK_SHOT") {
+        h.render().unwrap().save(path).unwrap();
+    }
+    let saved = h.state_mut().session.save_bytes(id).unwrap();
+    let mut session = pdfcraft_engine::Session::new();
+    let reopened = session.open("edited.pdf", None, saved, None).unwrap();
+    assert_eq!(session.get(reopened).unwrap().text_blocks(0)[0].editor_text, text);
+    h.state_mut().execute("edit.undo");
+    h.run_steps(2);
+    assert_eq!(h.state().session.get(id).unwrap().text_blocks(0)[0].editor_text, "Page 1");
+}
+
+#[test]
 fn editing_existing_text_in_place() {
     let mut h = harness(1, |_| {});
     assert!(h.state_mut().execute("edit.edit_text"));

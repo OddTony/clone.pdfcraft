@@ -5842,6 +5842,40 @@ fn thai_text_through_tools_saves_reopens_extracts_and_renders() {
 }
 
 #[test]
+fn explicit_bundled_thai_font_choice_layout_edit_undo_and_reopen() {
+    let dir = workdir("thai-font-choice");
+    std::fs::write(dir.join("source.pdf"), fixture(1)).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"source.pdf"}))["doc"].as_u64().unwrap();
+    let before = page_text(&mut a, doc);
+    let fonts = ok(&mut a, "text_fonts", json!({"doc":doc,"page":1}));
+    let choice = fonts["fonts"].as_array().unwrap().iter().find(|f| f["resource"] == "builtin:thai");
+    let args = json!({"doc":doc,"page":1,"paragraph":1,"text":"น้ำ กิ่ กี้ ผู้ใช้","font_resource":"builtin:thai"});
+    if pdfcraft_fonts::document_thai_font().is_none() {
+        assert!(choice.is_none());
+        assert!(a.call("text_edit", &args).is_err());
+        assert_eq!(page_text(&mut a, doc), before);
+        return;
+    }
+    assert_eq!(choice.unwrap()["preview_only"], false);
+    ok(&mut a, "text_edit_layout", args.clone());
+    assert_eq!(page_text(&mut a, doc), before);
+    ok(&mut a, "text_edit", args);
+    let edited = page_text(&mut a, doc);
+    assert!(edited[0].contains("น้ำ กิ่ กี้ ผู้ใช้"));
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(page_text(&mut a, doc), before);
+    ok(&mut a, "edit_redo", json!({"doc":doc}));
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"edited.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"edited.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, reopened), edited);
+    assert!(a.call("text_edit", &json!({"doc":reopened,"page":1,"paragraph":1,"text":"น้ำ 😀","font_resource":"builtin:thai"})).is_err());
+    assert_eq!(page_text(&mut a, reopened), edited);
+    let image = a.call("page_render", &json!({"doc":reopened,"page":1,"dpi":144})).unwrap();
+    assert!(image.iter().any(|c| matches!(c, Content::Png { .. })));
+}
+
+#[test]
 fn existing_thai_matching_face_edit_layout_undo_save_reopen_and_render() {
     use pdfcraft_cos::{Document, ObjRef, Object, SaveOptions, write_full};
     let dir = workdir("thai-existing");

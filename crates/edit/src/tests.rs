@@ -2814,6 +2814,60 @@ fn added_thai_text_wraps_clusters_and_survives_reopen() {
 }
 
 #[test]
+fn explicit_builtin_thai_replaces_an_unavailable_source_without_installing_a_font() {
+    let mut doc = text_page("BT /F1 16 Tf 50 700 Td (A) Tj ET BT /F2 12 Tf 50 600 Td (ab) Tj ET");
+    let cmap =
+        doc.add(Object::Stream(Stream::flate(Dict::new(), b"1 begincodespacerange <00> <FF> endcodespacerange 1 beginbfchar <41> <0E19> endbfchar")));
+    doc.update_dict(pdfcraft_cos::ObjRef::new(5, 0), |f| {
+        f.set(b"BaseFont".to_vec(), Object::name("ABCDEF+UnavailableThai"));
+        f.set(b"ToUnicode".to_vec(), Object::Ref(cmap));
+        f.set(b"FirstChar".to_vec(), Object::Int(65));
+        f.set(b"LastChar".to_vec(), Object::Int(65));
+        f.set(b"Widths".to_vec(), Object::Array(vec![Object::Int(600)]));
+    })
+    .unwrap();
+    let before = text::text_lines(&doc, 0).unwrap();
+    let choice = text::text_editor_fonts(&doc, 0).unwrap().into_iter().find(|f| f.resource == "builtin:thai");
+    let style = text::BlockStyle { resource: Some("builtin:thai".into()), ..Default::default() };
+    if pdfcraft_fonts::document_thai_font().is_none() {
+        assert!(choice.is_none());
+        assert!(text::rewrite_block(&mut doc, 0, 0, Some("น้ำ"), &style).is_err());
+        assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, before[0].text);
+        return;
+    }
+    assert!(choice.is_some(), "the document-font menu must offer a bundled Thai replacement");
+    let error = text::rewrite_block(&mut doc, 0, 0, Some("นน"), &text::BlockStyle::default()).unwrap_err().to_string();
+    assert!(error.contains("UnavailableThai") && error.contains("Noto Sans Thai"), "{error}");
+    let draft = "น้ำ กิ่ กี้ ผู้ใช้";
+    text::rewrite_block(&mut doc, 0, 0, Some(draft), &style).unwrap();
+    let mut doc = reopen(&doc);
+    assert_eq!(text::text_blocks(&doc, 0).unwrap()[0].editor_text, draft);
+    assert_eq!(text::text_lines(&doc, 0).unwrap().last().unwrap().text, before[1].text);
+    assert_eq!(text::text_lines(&doc, 0).unwrap().last().unwrap().baseline(), before[1].baseline());
+    text::rewrite_block(&mut doc, 0, 0, Some("น้ำ ปู่"), &text::BlockStyle::default()).unwrap();
+    assert_eq!(text::text_blocks(&reopen(&doc), 0).unwrap()[0].editor_text, "น้ำ ปู่");
+    // A selected range uses the same explicit choice; neighbouring source runs keep their face.
+    let mut selected = text_page("BT /F1 16 Tf 50 700 Td (Ab) Tj ET");
+    let style = text::BlockStyle {
+        ranges: vec![text::RangeStyle {
+            range: 0..1,
+            resource: Some("builtin:thai".into()),
+            family: None,
+            size: None,
+            color: None,
+            underline: None,
+            char_spacing: None,
+            scale: None,
+        }],
+        ..Default::default()
+    };
+    text::rewrite_block(&mut selected, 0, 0, Some("Ab"), &style).unwrap();
+    let lines = text::text_lines(&reopen(&selected), 0).unwrap();
+    assert!(lines.iter().any(|l| l.text == "A" && l.base_font.contains("NotoSansThai")));
+    assert!(lines.iter().any(|l| l.text == "b" && l.base_font == "Helvetica"));
+}
+
+#[test]
 fn existing_thai_subset_uses_shaped_matching_face_without_embedding_variable_font() {
     let Some(_) = pdfcraft_fonts::document_thai_font() else { return };
     // Synthetic source subset: only one Thai letter is encoded. No binary fixture or font
