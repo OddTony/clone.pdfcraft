@@ -2690,3 +2690,6 @@ theme	Appearance	იერსახე
 	Pages selected	მონიშნული გვერდები
 	Page properties	გვერდის თვისებები
 	The password must have at least 8 characters.	პაროლი მინიმუმ 8 სიმბოლოსგან უნდა შედგებოდეს.
+# Historical snapshot notice bar (View signed version / revisions)
+	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	თქვენ ათვალიერებთ „{from}“-ის ხელმოწერილ ვერსიას (რევიზია {rev}). ეს მომენტალური ასლია: აქ შეტანილი ცვლილებები ორიგინალზე არ აისახება.
+	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	თქვენ ათვალიერებთ „{from}“-ის რევიზიას {rev}. ეს მომენტალური ასლია: აქ შეტანილი ცვლილებები ორიგინალზე არ აისახება.
