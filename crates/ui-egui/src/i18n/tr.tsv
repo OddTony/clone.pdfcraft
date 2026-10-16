@@ -2381,6 +2381,10 @@ animation effects	Off	Kapalı
 	Show on other pages too	Diğer sayfalarda da göster
 	There are no other pages in that range.	Bu aralıkta başka sayfa yok.
 	Insert the USB token or smart card, then refresh to list its digital IDs.	USB belirtecini veya akıllı kartı takın, ardından dijital kimliklerini listelemek için yenileyin.
+
+# Historical snapshot notice bar (View signed version / View revision).
+	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	“{from}” belgesinin imzalanmış sürümünü (düzeltme {rev}) görüntülüyorsunuz. Bu bir anlık görüntüdür: buradaki değişiklikler özgün belgeyi etkilemez.
+	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	“{from}” belgesinin {rev}. düzeltmesini görüntülüyorsunuz. Bu bir anlık görüntüdür: buradaki değişiklikler özgün belgeyi etkilemez.
 	Turn upside down (180°)	Baş aşağı çevir (180°)
 	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 inç etiket (101,6 × 152,4 mm)
 	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Her sayfayı basılı alanına göre kırpar, dik çevirir ve germeden sayfaya sığdırır. Sayfa başına bir etiket.
