@@ -444,11 +444,15 @@ fn pager_shows_even_one_page() {
     assert!(view.finish().success());
 }
 
-/// A directory of the test's own, empty, for `view`'s temporary files.
+/// A directory of the test's own, empty, for `view`'s temporary files. Owner-only whatever the
+/// umask: `view` rightly refuses a parent that others can write to without the sticky bit, which
+/// a umask of 0002 (common on Linux) would make it.
 fn tmpdir(test: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
     let dir = std::env::temp_dir().join(format!("pdfcraft-cli-view-tmp-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
     dir
 }
 
