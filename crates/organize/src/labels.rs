@@ -451,20 +451,79 @@ pub fn number_pages(doc: &mut Document, from: usize, to: usize, style: LabelStyl
     // Drop ranges that only continue the previous one.
     let mut merged: Vec<LabelRange> = Vec::new();
     for r in ranges {
-        let continues = merged.last().is_some_and(|p| {
-            p.style == r.style
-                && p.prefix == r.prefix
-                && r.start.checked_sub(p.start).and_then(|n| u32::try_from(n).ok()).and_then(|n| p.first.checked_add(n)) == Some(r.first)
-        });
-        if !continues {
-            merged.push(r);
-        }
+        push_merged_range(&mut merged, r);
     }
     // Plain 1, 2, 3 everywhere is what a document without labels shows: remove them.
     if merged.len() == 1 && merged[0] == default_range() {
         merged.clear();
     }
     set_page_label_ranges(doc, &merged)
+}
+
+fn push_merged_range(merged: &mut Vec<LabelRange>, r: LabelRange) {
+    let continues = merged.last().is_some_and(|p| {
+        p.style == r.style
+            && p.prefix == r.prefix
+            && match r.style {
+                LabelStyle::None => p.first == r.first,
+                _ => r.start.checked_sub(p.start).and_then(|n| u32::try_from(n).ok()).and_then(|n| p.first.checked_add(n)) == Some(r.first),
+            }
+    });
+    if !continues {
+        merged.push(r);
+    }
+}
+
+/// Append the label ranges that `pages` (0-based indices in `src`) carry when placed at
+/// `dst_start` in an output document. Sets `has_labels` when `src` has `/PageLabels`.
+pub(crate) fn collect_page_labels(src: &Document, pages: &[usize], dst_start: usize, out: &mut Vec<LabelRange>, has_labels: &mut bool) {
+    if pages.is_empty() {
+        return;
+    }
+    let mut src_ranges = checked_ranges(src).unwrap_or_default();
+    if !src_ranges.is_empty() {
+        *has_labels = true;
+    }
+    if src_ranges.first().is_none_or(|r| r.start > 0) {
+        src_ranges.insert(0, default_range());
+    }
+    let mut i = 0;
+    while i < pages.len() {
+        let src_start = pages[i];
+        let mut len = 1;
+        while i + len < pages.len() && src_start.checked_add(len) == Some(pages[i + len]) {
+            len += 1;
+        }
+        let run_dst = dst_start + i;
+        let idx = src_ranges.partition_point(|r| r.start <= src_start).saturating_sub(1);
+        if let Some(first_range) = src_ranges.get(idx) {
+            let mapped = match first_range.number(src_start) {
+                Ok(first) => LabelRange { start: run_dst, style: first_range.style, prefix: first_range.prefix.clone(), first },
+                Err(_) => LabelRange {
+                    start: run_dst,
+                    style: LabelStyle::Decimal,
+                    prefix: String::new(),
+                    first: u32::try_from(run_dst.saturating_add(1)).unwrap_or(1),
+                },
+            };
+            push_merged_range(out, mapped);
+        }
+        let src_end = src_start.saturating_add(len);
+        for r in src_ranges.get(idx + 1..).unwrap_or_default() {
+            if r.start >= src_end {
+                break;
+            }
+            push_merged_range(out, LabelRange { start: run_dst + (r.start - src_start), style: r.style, prefix: r.prefix.clone(), first: r.first });
+        }
+        i += len;
+    }
+}
+
+/// Write collected page label ranges to `dst` when at least one source carried `/PageLabels`.
+pub(crate) fn finish_page_labels(dst: &mut Document, ranges: &[LabelRange], has_labels: bool) {
+    if has_labels && !ranges.is_empty() {
+        let _ = set_page_label_ranges(dst, ranges);
+    }
 }
 
 #[cfg(test)]
