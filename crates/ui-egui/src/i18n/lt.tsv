@@ -1946,14 +1946,18 @@ comment menu	Edit	Redaguoti
 	A colour space's ICC profile can't be used to convert its colour	Spalvų erdvės ICC profilio negalima naudoti jos spalvai konvertuoti
 	A colour space is nested too deeply to convert	Spalvų erdvė įdėta per giliai, kad būtų galima ją konvertuoti
 	The spot colour {} has an alternate that can't be converted to CMYK yet	Taškinė spalva {} turi alternatyvą, kurios dar negalima konvertuoti į CMYK
+	The tint transform of the spot colour {} can't be read or evaluated	Taškinės spalvos {} atspalvio transformacijos negalima perskaityti ar apskaičiuoti
+	The tint transform of the spot colour {} can't be resampled into CMYK exactly	Taškinės spalvos {} atspalvio transformacijos negalima tiksliai perskaičiuoti į CMYK
 	A pattern over RGB or device-independent colour can't be converted to CMYK yet	Rašto, paremto RGB arba nuo įrenginio nepriklausoma spalva, dar negalima konvertuoti į CMYK
-	{} colour can't be converted to CMYK yet	{} spalvos dar negalima konvertuoti į CMYK
+	A {} colour space's parameters can't be read	{} spalvų erdvės parametrų negalima perskaityti
 	A content stream can't be read, so its colour can't be converted	Turinio srauto negalima perskaityti, todėl jo spalvos negalima konvertuoti
 	A colour operator's operands don't match its colour space	Spalvos operatoriaus operandai neatitinka jo spalvų erdvės
 	A content stream is drawn with different resources in different places, so its colour can't be converted	Turinio srautas skirtingose vietose piešiamas su skirtingais ištekliais, todėl jo spalvos negalima konvertuoti
-	A shading in RGB or device-independent colour can't be converted to CMYK yet	Šešėliavimo RGB arba nuo įrenginio nepriklausoma spalva dar negalima konvertuoti į CMYK
-	A picture with other than 8 bits per component can't be converted to CMYK yet	Paveikslėlio, kurio komponentui tenka ne 8 bitai, dar negalima konvertuoti į CMYK
-	A picture with a decode array or a colour-key mask can't be converted to CMYK yet	Paveikslėlio su dekodavimo masyvu arba spalvos rakto kauke dar negalima konvertuoti į CMYK
+	A shading's colour function can't be read or evaluated	Šešėliavimo spalvos funkcijos negalima perskaityti ar apskaičiuoti
+	A shading's colour function can't be resampled into CMYK exactly	Šešėliavimo spalvos funkcijos negalima tiksliai perskaičiuoti į CMYK
+	A shading's data can't be read, so it can't be converted to CMYK	Šešėliavimo duomenų negalima perskaityti, todėl jo negalima konvertuoti į CMYK
+	A mesh shading's colours change too sharply between its corners to convert to CMYK exactly	Tinklelio šešėliavimo spalvos tarp kampų kinta per staigiai, kad būtų galima jas tiksliai konvertuoti į CMYK
+	A picture with a colour-key mask can't be converted to CMYK yet	Paveikslėlio su spalvos rakto kauke dar negalima konvertuoti į CMYK
 	A picture's data can't be read, so it can't be converted to CMYK	Paveikslėlio duomenų negalima perskaityti, todėl jo negalima konvertuoti į CMYK
 	A JPEG picture in CMYK can't be converted yet	JPEG paveikslėlio CMYK spalvomis dar negalima konvertuoti
 	An indexed colour space's table is too short to convert	Indeksuotos spalvų erdvės lentelė per trumpa, kad būtų galima ją konvertuoti

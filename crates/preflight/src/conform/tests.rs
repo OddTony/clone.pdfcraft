@@ -145,20 +145,356 @@ fn pdfx1a_converts_jpeg_pictures_and_writes_them_lossless() {
     assert!(near(&px[..4].iter().map(|v| f64::from(*v)).collect::<Vec<_>>(), &[0.0, 255.0, 255.0, 0.0], 24.0), "{:?}", &px[..4]);
 }
 
+/// The values a colour function gives at `x`.
+fn eval(doc: &Document, f: &Object, x: &[f64]) -> Vec<f64> {
+    crate::function::Functions::read(doc, f).unwrap_or_else(|| panic!("{f:?} reads")).eval(x).unwrap()
+}
+
+/// A resource dictionary's entry `key` → `name` on the first page.
+fn resource(doc: &Document, key: &[u8], name: &[u8]) -> Object {
+    let page = &pdfcraft_model::pages(doc)[0];
+    let list = walk::dict_of(doc, walk::dict_of(doc, page.dict.get(b"Resources")).get(key));
+    (*doc.resolve(list.get(name).unwrap())).clone()
+}
+
+/// Convert to PDF/X-1a:2003 through the synthetic press, and check the result verifies, before
+/// and after a save.
+fn convert_and_verify(doc: &mut Document) -> Vec<String> {
+    let fixed = pdfx(doc, pdfx::Level::X1a2003, &opts(Some(press()))).unwrap_or_else(|r| panic!("{r}"));
+    assert_eq!(pdfx::verify(doc, pdfx::Level::X1a2003), Vec::new());
+    let (saved, _) = reopen(doc);
+    assert_eq!(pdfx::verify(&saved, pdfx::Level::X1a2003), Vec::new());
+    fixed
+}
+
+/// sRGB red, green and blue as the naive press prints them.
+const RED: [f64; 4] = [0.0, 1.0, 1.0, 0.0];
+const GREEN: [f64; 4] = [1.0, 0.0, 1.0, 0.0];
+const BLUE: [f64; 4] = [1.0, 1.0, 0.0, 0.0];
+
+/// Illuminant A: a white far enough from D50 that colour not adapted from it prints visibly wrong
+/// (the red below would lose a quarter of its magenta, the blue gain a third of yellow).
+const A: &str = "/WhitePoint [1.0985 1 0.3558]";
+
+/// Colour in CalRGB, CalGray and Lab (under illuminant A and D50): set by content, in a picture
+/// and in an indexed space's table. The CalGray space is named `G`, which an inline picture would
+/// read as DeviceGray.
+fn calibrated_page() -> Document {
+    page(
+        b"/L cs 57.73 72.46 82.96 sc 0 0 10 10 re f /R cs 0 0 1 sc 0 10 10 10 re f /G cs 0.5 sc 0 20 10 10 re f \
+q 10 0 0 10 50 50 cm /Im0 Do Q q 10 0 0 10 70 50 cm /Im1 Do Q",
+        // sRGB's red in L*a*b* under A, and sRGB's primaries Bradford-adapted to A.
+        &format!(
+            "/ColorSpace << /L [/Lab << {A} >>] \
+             /R [/CalRGB << {A} /Gamma [2.2 2.2 2.2] /Matrix [0.5224 0.2568 0.0038 0.4959 0.7027 0.0546 0.0803 0.0405 0.2974] >>] \
+             /G [/CalGray << {A} /Gamma 2.2 >>] >> /XObject << /Im0 5 0 R /Im1 6 0 R >>"
+        ),
+        &[
+            // Red's L*a*b* under D50 in a table over [-128, 127]: 54.1, 81, 70.
+            stream(
+                "/Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 \
+                 /ColorSpace [/Indexed [/Lab << /WhitePoint [0.9642 1 0.8249] /Range [-128 127 -128 127] >>] 0 <8AD1C6>]",
+                &[0],
+            ),
+            // The same red as an 8-bit Lab picture over the default range [-100, 100].
+            stream(
+                "/Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace [/Lab << /WhitePoint [0.9642 1 0.8249] >>]",
+                &[138, 231, 217],
+            ),
+        ],
+    )
+}
+
+fn resource_list(doc: &Document) -> Vec<Vec<u8>> {
+    let page = &pdfcraft_model::pages(doc)[0];
+    walk::dict_of(doc, walk::dict_of(doc, page.dict.get(b"Resources")).get(b"ColorSpace")).iter().map(|(k, _)| k.clone()).collect()
+}
+
+#[test]
+fn pdfx1a_converts_lab_calrgb_and_calgray() {
+    let mut doc = calibrated_page();
+    convert_and_verify(&mut doc);
+    let ops = content_of(&doc, 0);
+    let fills: Vec<Vec<f64>> = ops.iter().filter(|o| o.is("sc")).map(|o| o.operands.iter().filter_map(Object::as_f64).collect()).collect();
+    assert!(ops.iter().filter(|o| o.is("cs")).all(|o| o.name(0) == Some(b"DeviceCMYK".as_slice())), "{ops:?}");
+    // Each `cs` sets its initial colour, then `sc` the one asked for.
+    assert_eq!(fills.len(), 6, "{fills:?}");
+    // sRGB red described in Lab under A, adapted to D50, prints as red.
+    assert!(near(&fills[1], &RED, 0.1), "Lab: {:?}", fills[1]);
+    // CalRGB with sRGB's primaries under A: blue.
+    assert!(near(&fills[3], &BLUE, 0.1), "CalRGB: {:?}", fills[3]);
+    // CalGray 0.5 at gamma 2.2 is sRGB's middle gray.
+    assert!(near(&fills[5], &[0.5, 0.5, 0.5, 0.0], 0.1), "CalGray: {:?}", fills[5]);
+    let Object::Stream(im0) = &*doc.get(pdfcraft_cos::ObjRef::new(5, 0)) else { panic!() };
+    let cs = im0.dict.get(b"ColorSpace").and_then(Object::as_array).unwrap();
+    assert_eq!(cs[1].as_name(), Some(b"DeviceCMYK".as_slice()));
+    let table: Vec<f64> = cs[3].as_string().unwrap().bytes.iter().map(|b| f64::from(*b) / 255.0).collect();
+    assert!(near(&table, &RED, 0.1), "{table:?}");
+    let Object::Stream(im1) = &*doc.get(pdfcraft_cos::ObjRef::new(6, 0)) else { panic!() };
+    assert_eq!(im1.dict.name(b"ColorSpace"), Some(b"DeviceCMYK".as_slice()));
+    let px: Vec<f64> = im1.decoded().unwrap().iter().map(|b| f64::from(*b) / 255.0).collect();
+    assert!(near(&px, &RED, 0.1), "{px:?}");
+    // The resources no longer list the spaces content no longer names.
+    assert!(resource_list(&doc).is_empty(), "{:?}", resource_list(&doc));
+}
+
+/// Gold, a Separation over RGB, and a DeviceN space of two inks over Lab with a calculator tint
+/// transform; Gold also as a picture's space and as an indexed space's base.
+fn spot_page() -> Document {
+    let gold = "[/Separation /Gold /DeviceRGB << /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [1 0.8 0] /N 1 >>]";
+    // (teal, rose) → L* = 100 − 40 teal, a* = 60 rose − 40 teal, b* = −30 teal.
+    let program = b"{ exch dup 40 mul 100 exch sub 3 1 roll dup 40 mul 3 -1 roll 60 mul exch sub exch -30 mul }";
+    page(
+        b"/Sp cs 1 sc 0 0 10 10 re f /Dn cs 0.5 1 sc 0 10 10 10 re f q 10 0 0 10 50 50 cm /Im0 Do Q q 10 0 0 10 70 50 cm /Im1 Do Q",
+        &format!(
+            "/ColorSpace << /Sp {gold} /Dn [/DeviceN [/Teal /Rose] [/Lab << /WhitePoint [0.9642 1 0.8249] >>] 5 0 R \
+             << /Colorants << /Teal [/Separation /Teal /DeviceRGB << /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [0 0.5 0.5] /N 1 >>] >> >>] >> \
+             /XObject << /Im0 6 0 R /Im1 7 0 R >>"
+        ),
+        &[
+            stream("/FunctionType 4 /Domain [0 1 0 1] /Range [0 100 -100 100 -100 100]", program),
+            stream(&format!("/Type /XObject /Subtype /Image /Width 2 /Height 1 /BitsPerComponent 8 /ColorSpace {gold}"), &[0, 255]),
+            stream(&format!("/Type /XObject /Subtype /Image /Width 2 /Height 1 /BitsPerComponent 8 /ColorSpace [/Indexed {gold} 1 <00FF>]"), &[0, 1]),
+        ],
+    )
+}
+
+#[test]
+fn pdfx1a_resamples_spot_colour_alternates_into_cmyk() {
+    let mut doc = spot_page();
+    let fixed = convert_and_verify(&mut doc);
+    assert!(fixed.iter().any(|f| f.starts_with("3: resampled a spot colour's tint transform into CMYK")), "{fixed:#?}");
+    // The tints content sets don't change.
+    let ops = content_of(&doc, 0);
+    let fills: Vec<Vec<f64>> = ops.iter().filter(|o| o.is("sc")).map(|o| o.operands.iter().filter_map(Object::as_f64).collect()).collect();
+    assert_eq!(fills, vec![vec![1.0], vec![0.5, 1.0]]);
+    let Object::Array(gold) = resource(&doc, b"ColorSpace", b"Sp") else { panic!() };
+    assert_eq!((gold[1].as_name(), gold[2].as_name()), (Some(b"Gold".as_slice()), Some(b"DeviceCMYK".as_slice())));
+    // Full Gold is RGB (1, 0.8, 0): no cyan, a little magenta, full yellow; no tint is white.
+    assert!(near(&eval(&doc, &gold[3], &[1.0]), &[0.0, 0.2, 1.0, 0.0], 0.1), "{:?}", eval(&doc, &gold[3], &[1.0]));
+    assert!(near(&eval(&doc, &gold[3], &[0.0]), &[0.0; 4], 0.05));
+    let Object::Array(dn) = resource(&doc, b"ColorSpace", b"Dn") else { panic!() };
+    assert_eq!(dn[2].as_name(), Some(b"DeviceCMYK".as_slice()));
+    assert!(near(&eval(&doc, &dn[3], &[0.0, 0.0]), &[0.0; 4], 0.05), "L* 100 is white");
+    // Full teal is L*a*b* (60, −40, −30): more cyan than magenta or yellow.
+    let teal = eval(&doc, &dn[3], &[1.0, 0.0]);
+    assert!(teal[0] > teal[1] + 0.2 && teal[0] > teal[2] + 0.2, "{teal:?}");
+    // The Separation space the attributes give Teal is rewritten too: RGB (0, 0.5, 0.5).
+    let colorants = dn[4].as_dict().and_then(|a| a.get(b"Colorants")).and_then(Object::as_dict).unwrap();
+    let teal_space = colorants.get(b"Teal").and_then(Object::as_array).unwrap();
+    assert_eq!(teal_space[2].as_name(), Some(b"DeviceCMYK".as_slice()));
+    assert!(near(&eval(&doc, &teal_space[3], &[1.0]), &[1.0, 0.5, 0.5, 0.0], 0.1), "{:?}", eval(&doc, &teal_space[3], &[1.0]));
+    // The picture's space, and the indexed space's base, written into them.
+    for (n, at) in [(6, None), (7, Some(1))] {
+        let Object::Stream(im) = &*doc.get(pdfcraft_cos::ObjRef::new(n, 0)) else { panic!() };
+        let cs = im.dict.get(b"ColorSpace").and_then(Object::as_array).unwrap();
+        let spot = match at {
+            Some(i) => cs[i].as_array().unwrap(),
+            None => cs,
+        };
+        assert_eq!(spot[2].as_name(), Some(b"DeviceCMYK".as_slice()), "{n}");
+        assert!(near(&eval(&doc, &spot[3], &[1.0]), &[0.0, 0.2, 1.0, 0.0], 0.1));
+    }
+    let Object::Stream(indexed) = &*doc.get(pdfcraft_cos::ObjRef::new(7, 0)) else { panic!() };
+    assert_eq!(indexed.decoded().unwrap(), vec![0, 1], "the indices stay");
+}
+
+/// The first vertex's or patch's first colour in a converted mesh shading (16-bit CMYK).
+fn first_mesh_colour(s: &Stream) -> [f64; 4] {
+    let bits = |k: &[u8]| s.dict.int(k).unwrap_or(0) as usize;
+    let points = match s.dict.int(b"ShadingType") {
+        Some(6) => 12,
+        Some(7) => 16,
+        _ => 1,
+    };
+    let skip = bits(b"BitsPerFlag") + points * 2 * bits(b"BitsPerCoordinate");
+    assert_eq!(bits(b"BitsPerComponent"), 16);
+    let data = s.decoded().unwrap();
+    let read = |at: usize| -> f64 {
+        let v = (0..16).fold(0u32, |v, b| (v << 1) | u32::from((data[(at + b) / 8] >> (7 - (at + b) % 8)) & 1));
+        f64::from(v) / 65535.0
+    };
+    [0, 1, 2, 3].map(|k| read(skip + 16 * k))
+}
+
+/// One of each kind of shading in RGB or device-independent colour.
+fn shading_page() -> Document {
+    let red = [255u8, 0, 0];
+    let mut free = Vec::new();
+    for (flag, x, y, c) in [(0u8, 0u8, 0u8, red), (0, 100, 0, [0, 255, 0]), (0, 0, 100, [0, 0, 255]), (1, 100, 100, [255, 255, 255])] {
+        free.extend([flag, x, y]);
+        free.extend(c);
+    }
+    let mut lattice = Vec::new();
+    for (x, y, c) in [(0u8, 0u8, red), (100, 0, [0, 255, 0]), (0, 100, [0, 0, 255]), (100, 100, [255, 255, 255])] {
+        lattice.extend([x, y]);
+        lattice.extend(c);
+    }
+    // A Coons patch: the boundary of a square, corners red, green, blue and white.
+    let square: [(u8, u8); 12] = [(0, 0), (0, 33), (0, 66), (0, 99), (33, 99), (66, 99), (99, 99), (99, 66), (99, 33), (99, 0), (66, 0), (33, 0)];
+    let corners = [red, [0, 255, 0], [0, 0, 255], [255, 255, 255]];
+    let mut coons = vec![0u8];
+    coons.extend(square.iter().flat_map(|(x, y)| [*x, *y]));
+    coons.extend(corners.iter().flatten());
+    let mut tensor = vec![0u8];
+    tensor.extend(square.iter().chain(&[(33, 33), (33, 66), (66, 66), (66, 33)]).flat_map(|(x, y)| [*x, *y]));
+    tensor.extend(corners.iter().flatten());
+    let mesh = |kind: u8, extra: &str| {
+        format!("/ShadingType {kind} /ColorSpace /DeviceRGB /BitsPerCoordinate 8 /BitsPerComponent 8 {extra} /Decode [0 255 0 255 0 1 0 1 0 1]")
+    };
+    let hard_stop = "<< /FunctionType 3 /Domain [0 1] /Bounds [0.5] /Encode [0 1 0 1] /Functions [\
+                     << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [1 0 0] /N 1 >> << /FunctionType 2 /Domain [0 1] /C0 [0 0 1] /C1 [0 0 1] /N 1 >>] >>";
+    page(
+        b"/Sh0 sh /Sh1 sh /Sh2 sh /Sh3 sh /Sh4 sh /Sh5 sh /Sh6 sh /Sh7 sh /Pattern cs /P0 scn 0 0 10 10 re f",
+        "/Shading << /Sh0 5 0 R /Sh1 6 0 R /Sh2 7 0 R /Sh3 8 0 R /Sh4 9 0 R /Sh5 10 0 R /Sh6 11 0 R /Sh7 12 0 R >> \
+         /Pattern << /P0 << /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 1 0] \
+         /Function << /FunctionType 2 /Domain [0 1] /C0 [0 1 0] /C1 [0 0 1] /N 1 >> >> >> >>",
+        &[
+            format!("<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 100 0] /Extend [true true] /Function {hard_stop} >>").into_bytes(),
+            b"<< /ShadingType 3 /ColorSpace [/ICCBased 13 0 R] /Coords [50 50 0 50 50 40] /Background [0 1 0] \
+              /Function << /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [0 1 0] /N 1 >> >>"
+                .to_vec(),
+            b"<< /ShadingType 1 /ColorSpace [/Lab << /WhitePoint [0.9642 1 0.8249] >>] /Domain [0 1 0 1] /Function 14 0 R >>".to_vec(),
+            stream(&mesh(4, "/BitsPerFlag 8"), &free),
+            stream(&mesh(6, "/BitsPerFlag 8"), &coons),
+            stream(&mesh(5, "/VerticesPerRow 2"), &lattice),
+            stream(&mesh(7, "/BitsPerFlag 8"), &tensor),
+            stream(
+                "/ShadingType 4 /ColorSpace /DeviceRGB /BitsPerCoordinate 8 /BitsPerComponent 8 /BitsPerFlag 8 /Decode [0 255 0 255 0 1] \
+                 /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >>",
+                &[0, 0, 0, 0, 0, 100, 0, 255, 0, 0, 100, 128],
+            ),
+            stream("/N 3", &crate::icc::srgb()),
+            // (x, y) → L* = 50 + 40 y, a* = 80 x − 40, b* = 0.
+            stream("/FunctionType 4 /Domain [0 1 0 1] /Range [0 100 -100 100 -100 100]", b"{ 40 mul 50 add exch 80 mul 40 sub 0 }"),
+        ],
+    )
+}
+
+#[test]
+fn pdfx1a_converts_shadings() {
+    let mut doc = shading_page();
+    let fixed = convert_and_verify(&mut doc);
+    assert!(fixed.iter().any(|f| f.starts_with("9: converted a shading to CMYK")), "{fixed:#?}");
+    let shading = |n: u32| (*doc.get(pdfcraft_cos::ObjRef::new(n, 0))).clone();
+    for n in 5..=12 {
+        let s = shading(n);
+        assert_eq!(s.as_dict().unwrap().name(b"ColorSpace"), Some(b"DeviceCMYK".as_slice()), "shading {n}");
+    }
+    // The axial shading's hard stop stays hard: red up to the middle, blue from it.
+    let axial = shading(5);
+    let f = axial.as_dict().unwrap().get(b"Function").unwrap();
+    for (t, want) in [(0.0, RED), (0.25, RED), (0.5f64.next_down(), RED), (0.5, BLUE), (1.0, BLUE)] {
+        assert!(near(&eval(&doc, f, &[t]), &want, 0.1), "{t}: {:?}", eval(&doc, f, &[t]));
+    }
+    // The radial shading's background.
+    let radial = shading(6);
+    let background: Vec<f64> =
+        radial.as_dict().unwrap().get(b"Background").and_then(Object::as_array).unwrap().iter().filter_map(Object::as_f64).collect();
+    assert!(near(&background, &GREEN, 0.1), "{background:?}");
+    // The function-based shading in Lab, at (1, 0.5): L*a*b* (70, 40, 0), a light pinkish red.
+    let lab = shading(7);
+    let at = eval(&doc, lab.as_dict().unwrap().get(b"Function").unwrap(), &[1.0, 0.5]);
+    assert!(at[1] > at[0] + 0.2 && at[1] > at[2], "{at:?}");
+    // Meshes: the first corner was red.
+    for n in [8, 9, 10, 11] {
+        let Object::Stream(s) = shading(n) else { panic!() };
+        assert!(near(&first_mesh_colour(&s), &RED, 0.1), "mesh {n}: {:?}", first_mesh_colour(&s));
+    }
+    // A mesh with a function keeps its data and gets a function into CMYK.
+    let Object::Stream(with_function) = shading(12) else { panic!() };
+    assert_eq!(with_function.decoded().unwrap(), vec![0, 0, 0, 0, 0, 100, 0, 255, 0, 0, 100, 128]);
+    assert!(near(&eval(&doc, with_function.dict.get(b"Function").unwrap(), &[1.0]), &BLUE, 0.1));
+    // The pattern's shading, written into it.
+    let Object::Dict(pattern) = resource(&doc, b"Pattern", b"P0") else { panic!() };
+    let inner = pattern.get(b"Shading").and_then(Object::as_dict).unwrap();
+    assert_eq!(inner.name(b"ColorSpace"), Some(b"DeviceCMYK".as_slice()));
+    assert!(near(&eval(&doc, inner.get(b"Function").unwrap(), &[0.0]), &GREEN, 0.1));
+}
+
+/// RGB pictures at 16, 4 (inverted by a decode array, rows padded) and 1 bits per component, and
+/// an inline 16-bit picture.
+fn depth_page() -> Document {
+    let mut content = b"q 10 0 0 10 0 0 cm /Im0 Do Q q 10 0 0 10 20 0 cm /Im1 Do Q q 10 0 0 10 40 0 cm /Im2 Do Q \
+q 10 0 0 10 60 0 cm BI /W 1 /H 1 /CS /RGB /BPC 16 ID "
+        .to_vec();
+    content.extend([0, 0, 0xFF, 0xFF, 0, 0]);
+    content.extend(b"\nEI Q");
+    page(
+        &content,
+        "/XObject << /Im0 5 0 R /Im1 6 0 R /Im2 7 0 R >>",
+        &[
+            stream(
+                "/Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 16",
+                &[0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF],
+            ),
+            // Red, white, blue under Decode [1 0 1 0 1 0]; each row 36 bits, padded to 5 bytes.
+            stream(
+                "/Type /XObject /Subtype /Image /Width 3 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 4 /Decode [1 0 1 0 1 0]",
+                &[0x0F, 0xF0, 0x00, 0xFF, 0x00, 0x0F, 0xF0, 0x00, 0xFF, 0x00],
+            ),
+            // Red, green, blue at one bit: 100 010 001.
+            stream("/Type /XObject /Subtype /Image /Width 3 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 1", &[0x88, 0x80]),
+        ],
+    )
+}
+
+#[test]
+fn pdfx1a_converts_pictures_of_every_depth() {
+    let mut doc = depth_page();
+    let fixed = convert_and_verify(&mut doc);
+    assert!(fixed.iter().any(|f| f.starts_with("Converted 0 colours, 4 pictures")), "{fixed:#?}");
+    let picture = |n: u32| {
+        let Object::Stream(s) = &*doc.get(pdfcraft_cos::ObjRef::new(n, 0)) else { panic!() };
+        assert_eq!((s.dict.name(b"ColorSpace"), s.dict.int(b"BitsPerComponent")), (Some(b"DeviceCMYK".as_slice()), Some(8)), "{n}");
+        assert!(s.dict.get(b"Decode").is_none());
+        s.decoded().unwrap().iter().map(|b| f64::from(*b) / 255.0).collect::<Vec<_>>()
+    };
+    let white = [0.0; 4];
+    assert!(near(&picture(5), &[RED, BLUE].concat(), 0.1), "{:?}", picture(5));
+    assert!(near(&picture(6), &[RED, white, BLUE, RED, white, BLUE].concat(), 0.1), "{:?}", picture(6));
+    assert!(near(&picture(7), &[RED, GREEN, BLUE].concat(), 0.1), "{:?}", picture(7));
+    let inline = content_of(&doc, 0).into_iter().find_map(|o| o.inline).unwrap();
+    assert_eq!((inline.0.name(b"CS"), inline.0.int(b"BPC")), (Some(b"DeviceCMYK".as_slice()), Some(8)));
+}
+
 #[test]
 fn pdfx1a_refuses_what_it_cannot_convert_and_changes_nothing() {
     let mut doc = page(
-        b"/Sh0 sh /Sp cs 1 sc 0 0 10 10 re f",
-        "/Shading << /Sh0 << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 1 0] /Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >> >> \
-         /ColorSpace << /Sp [/Separation /Gold /DeviceRGB << /FunctionType 2 /Domain [0 1] /C0 [1 1 1] /C1 [1 0.8 0] /N 1 >>] /L [/Lab << /WhitePoint [0.9642 1 0.8249] >>] >>",
-        &[],
+        b"/Sp cs 1 sc 0 0 10 10 re f /P cs 1 0 0 /Pat scn 0 0 5 5 re f /L cs 50 0 0 sc /IL cs 50 0 0 sc /Sh0 sh /Sh1 sh q 10 0 0 10 0 0 cm /Im0 Do Q",
+        "/ColorSpace << /Sp [/Separation /Gold /DeviceRGB 5 0 R] /P [/Pattern /DeviceRGB] /L [/Lab << /Range [-100 100 -100 100] >>] \
+         /IL [/ICCBased 11 0 R] >> \
+         /Pattern << /Pat 6 0 R >> /XObject << /Im0 7 0 R >> /Shading << /Sh0 8 0 R /Sh1 9 0 R >>",
+        &[
+            // A tint transform that jumps from blue to red halfway: no sampling comes close.
+            stream("/FunctionType 4 /Domain [0 1] /Range [0 1 0 1 0 1]", b"{ 0.5 gt { 1 0 0 } { 0 0 1 } ifelse }"),
+            stream("/PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >>", b"0 0 5 5 re f"),
+            stream(
+                "/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Mask [0 10 0 10 0 10]",
+                &[255, 0, 0],
+            ),
+            // A cubic sampled function isn't evaluated.
+            b"<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [0 0 1 0] /Function 10 0 R >>".to_vec(),
+            // A mesh whose vertices take 42 bits.
+            stream(
+                "/ShadingType 4 /ColorSpace /DeviceRGB /BitsPerCoordinate 8 /BitsPerComponent 8 /BitsPerFlag 2 /Decode [0 1 0 1 0 1 0 1 0 1]",
+                &[0; 12],
+            ),
+            stream("/FunctionType 0 /Domain [0 1] /Range [0 1 0 1 0 1] /Size [2] /BitsPerSample 8 /Order 3", &[0, 0, 0, 255, 255, 255]),
+            // An ICC-based space whose profile describes L*a*b*: its range isn't followed.
+            stream("/N 3 /Range [0 100 -128 127 -128 127]", &crate::icc::lab()),
+        ],
     );
     let refusal = pdfx(&mut doc, pdfx::Level::X1a2003, &opts(Some(press()))).unwrap_err();
     let m = messages(&refusal);
     for expected in [
-        "A shading in RGB or device-independent colour can't be converted to CMYK yet",
-        "The spot colour Gold has an alternate that can't be converted to CMYK yet",
-        "Lab colour can't be converted to CMYK yet",
+        "The tint transform of the spot colour Gold can't be resampled into CMYK exactly",
+        "A pattern over RGB or device-independent colour can't be converted to CMYK yet",
+        "A Lab colour space's parameters can't be read",
+        "A picture with a colour-key mask can't be converted to CMYK yet",
+        "A shading's colour function can't be read or evaluated",
+        "A shading's data can't be read, so it can't be converted to CMYK",
+        "A colour space's ICC profile can't be used to convert its colour",
     ] {
         assert!(m.iter().any(|x| x == expected), "{expected}: {m:#?}");
     }
@@ -509,6 +845,12 @@ fn qpdf_finds_the_converted_files_sound() {
         assert_eq!(pdfx::verify(&saved, level), Vec::new(), "{name}");
         let path = dir.join(format!("{name}.pdf"));
         std::fs::write(&path, bytes).unwrap();
+        written.push(path);
+    }
+    for (name, mut doc) in [("calibrated", calibrated_page()), ("spots", spot_page()), ("shadings", shading_page()), ("depths", depth_page())] {
+        pdfx(&mut doc, pdfx::Level::X1a2003, &opts(Some(press()))).unwrap_or_else(|r| panic!("{name}: {r}"));
+        let path = dir.join(format!("x1a-{name}.pdf"));
+        std::fs::write(&path, reopen(&doc).1).unwrap();
         written.push(path);
     }
     let mut doc = page(b"0 0 0 1 k 0 0 10 10 re f 1 0 0 rg 0 0 5 5 re f", "", &[]);

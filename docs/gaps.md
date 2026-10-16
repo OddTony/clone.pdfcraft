@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gap 9: Save as PDF/X-1a converts Lab, Cal, spot-colour alternates, shadings and pictures of any depth to CMYK; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gap 9: Save as PDF/X ships as partial for PDF/X-1a, -3 and -4, PDF/A gains levels u and a and CMYK output intents; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 9: Verify PDF/X ships as partial for PDF/X-1a, -3 and -4; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -177,7 +178,7 @@ update the numbers.
 
 - **Missing:** Preflight (profiles, single checks and fixups, results tree, reports, droplets);
   PDF/A-1 and PDF/A-4; PDF/X-4p/-5/-6 and PDF/X content checks beyond device colour; converting
-  shadings, Lab, Cal and spot-colour alternates to CMYK; embedding fonts that aren't embedded;
+  uncoloured patterns over RGB and colour-key masked pictures to CMYK; embedding fonts that aren't embedded;
   Unicode maps from embedded font programs and tags for PDF/A-u/-a (refused, not added);
   PDF/UA-1/2 verify; PDF/E, PDF/VT; transparency flattening; no shipped press profile (the user
   supplies the ICC file), and no comparison against veraPDF or an external PDF/X validator.
@@ -186,8 +187,9 @@ update the numbers.
   u and a; Save as PDF/A refuses rather than leave a file that fails, and gives CMYK documents
   the output intent of an ICC profile the user chooses); `optimize.pdfx-validate` and
   `optimize.pdfx-convert` partial (PDF/X-1a:2001/2003, PDF/X-3:2002/2003 and PDF/X-4 verified
-  from the CGATS PDF/X application notes; Save as PDF/X converts RGB and ICC-based colour to CMYK
-  through the output profile for PDF/X-1a, sets the output intent, identification, page boxes and
+  from the CGATS PDF/X application notes; Save as PDF/X converts RGB, ICC-based, CalGray, CalRGB
+  and Lab colour, spot-colour alternates, shadings and pictures of any depth to CMYK through the
+  output profile for PDF/X-1a, sets the output intent, identification, page boxes and
   PDF version, and refuses with reasons what it can't convert). Acrobat ships hundreds of built-in
   Preflight profiles.
 - **Impact:** blocks print shops, archives and accessibility compliance work.
@@ -389,6 +391,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Gap 9: Save as PDF/X-1a converts CalGray, CalRGB and Lab colour, the alternates of Separation and DeviceN spaces (resampled tint transforms), shadings (resampled functions; mesh shadings corner by corner, split where blending strays) and pictures at every bit depth and decode array, instead of refusing them; what can't be resampled within 1/255 of an ink still refuses. Estimates unchanged. |
 | 2026-10-16 | minor | Gap 9: Save as PDF/X (PDF/X-1a, -3 and -4, with conversion to CMYK through the output profile for PDF/X-1a) and PDF/A levels u and a are partial; Save as PDF/A refuses rather than write a file that fails, and offers a chosen ICC profile as the output intent of CMYK documents. Estimates unchanged. |
 | 2026-10-15 | minor | Gap 9: Verify PDF/X (PDF/X-1a, -3 and -4 structural rules, engine, tool and dialog) is partial; Save as PDF/X and PDF/UA remain. Estimates unchanged. |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |

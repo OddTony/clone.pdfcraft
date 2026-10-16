@@ -1936,14 +1936,18 @@ comment menu	Edit	Sửa
 	A colour space's ICC profile can't be used to convert its colour	Không thể dùng hồ sơ ICC của một không gian màu để chuyển màu của nó
 	A colour space is nested too deeply to convert	Một không gian màu lồng quá sâu để chuyển đổi
 	The spot colour {} has an alternate that can't be converted to CMYK yet	Màu pha {} có không gian thay thế chưa thể chuyển sang CMYK
+	The tint transform of the spot colour {} can't be read or evaluated	Không đọc hoặc tính được phép biến đổi sắc độ của màu pha {}
+	The tint transform of the spot colour {} can't be resampled into CMYK exactly	Không thể lấy mẫu lại chính xác phép biến đổi sắc độ của màu pha {} sang CMYK
 	A pattern over RGB or device-independent colour can't be converted to CMYK yet	Mẫu tô trên màu RGB hoặc màu không phụ thuộc thiết bị chưa thể chuyển sang CMYK
-	{} colour can't be converted to CMYK yet	Màu {} chưa thể chuyển sang CMYK
+	A {} colour space's parameters can't be read	Không đọc được tham số của một không gian màu {}
 	A content stream can't be read, so its colour can't be converted	Không đọc được một luồng nội dung nên không thể chuyển màu của nó
 	A colour operator's operands don't match its colour space	Toán hạng của một toán tử màu không khớp với không gian màu của nó
 	A content stream is drawn with different resources in different places, so its colour can't be converted	Một luồng nội dung được vẽ với tài nguyên khác nhau ở những nơi khác nhau nên không thể chuyển màu của nó
-	A shading in RGB or device-independent colour can't be converted to CMYK yet	Tô chuyển sắc bằng màu RGB hoặc màu không phụ thuộc thiết bị chưa thể chuyển sang CMYK
-	A picture with other than 8 bits per component can't be converted to CMYK yet	Ảnh không phải 8 bit mỗi thành phần chưa thể chuyển sang CMYK
-	A picture with a decode array or a colour-key mask can't be converted to CMYK yet	Ảnh có mảng giải mã hoặc mặt nạ khóa màu chưa thể chuyển sang CMYK
+	A shading's colour function can't be read or evaluated	Không đọc hoặc tính được hàm màu của một tô chuyển sắc
+	A shading's colour function can't be resampled into CMYK exactly	Không thể lấy mẫu lại chính xác hàm màu của một tô chuyển sắc sang CMYK
+	A shading's data can't be read, so it can't be converted to CMYK	Không đọc được dữ liệu của một tô chuyển sắc nên không thể chuyển sang CMYK
+	A mesh shading's colours change too sharply between its corners to convert to CMYK exactly	Màu của một tô chuyển sắc dạng lưới thay đổi quá đột ngột giữa các góc để chuyển chính xác sang CMYK
+	A picture with a colour-key mask can't be converted to CMYK yet	Ảnh có mặt nạ khóa màu chưa thể chuyển sang CMYK
 	A picture's data can't be read, so it can't be converted to CMYK	Không đọc được dữ liệu của một ảnh nên không thể chuyển sang CMYK
 	A JPEG picture in CMYK can't be converted yet	Ảnh JPEG ở CMYK chưa thể chuyển đổi
 	An indexed colour space's table is too short to convert	Bảng của một không gian màu chỉ mục quá ngắn để chuyển đổi

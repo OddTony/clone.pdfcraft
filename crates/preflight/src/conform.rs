@@ -21,8 +21,9 @@
 //!   reference-XObject links dropped (the proxies they stand for stay); with
 //!   [`Options::drop_unprinted`], annotations in the bleed that print nothing (links, hidden or
 //!   non-printing ones) removed;
-//! - colour: PDF/X-1a converts RGB and ICC-based colour to CMYK through the output profile (see
-//!   `recolour.rs` for what it can and can't); PDF/X-3 and -4 keep device-independent colour, and
+//! - colour: PDF/X-1a converts RGB and device-independent colour (ICC-based, CalGray, CalRGB,
+//!   Lab), and the spot colour alternates and shadings in them, to CMYK through the output profile
+//!   (see `recolour.rs` for what it can and can't); PDF/X-3 and -4 keep device-independent colour, and
 //!   device colour the printing condition's colour space doesn't hold gets a `Default` space: sRGB
 //!   for RGB, a gray profile for gray under an RGB condition;
 //! - the PDF version: PDF/X-1a:2001 and PDF/X-3:2002 are PDF 1.3, the 2003 levels PDF 1.4 and
@@ -175,14 +176,18 @@ pub const WORDINGS: &[&str] = &[
     "A colour space's ICC profile can't be used to convert its colour",
     "A colour space is nested too deeply to convert",
     "The spot colour {} has an alternate that can't be converted to CMYK yet",
+    "The tint transform of the spot colour {} can't be read or evaluated",
+    "The tint transform of the spot colour {} can't be resampled into CMYK exactly",
     "A pattern over RGB or device-independent colour can't be converted to CMYK yet",
-    "{} colour can't be converted to CMYK yet",
+    "A {} colour space's parameters can't be read",
     "A content stream can't be read, so its colour can't be converted",
     "A colour operator's operands don't match its colour space",
     "A content stream is drawn with different resources in different places, so its colour can't be converted",
-    "A shading in RGB or device-independent colour can't be converted to CMYK yet",
-    "A picture with other than 8 bits per component can't be converted to CMYK yet",
-    "A picture with a decode array or a colour-key mask can't be converted to CMYK yet",
+    "A shading's colour function can't be read or evaluated",
+    "A shading's colour function can't be resampled into CMYK exactly",
+    "A shading's data can't be read, so it can't be converted to CMYK",
+    "A mesh shading's colours change too sharply between its corners to convert to CMYK exactly",
+    "A picture with a colour-key mask can't be converted to CMYK yet",
     "A picture's data can't be read, so it can't be converted to CMYK",
     "A JPEG picture in CMYK can't be converted yet",
     "An indexed colour space's table is too short to convert",
@@ -770,6 +775,12 @@ impl Work {
         if s.colours + s.pictures + s.tables > 0 {
             self.fixed
                 .push(format!("Converted {} colours, {} pictures and {} colour tables to CMYK through {label}", s.colours, s.pictures, s.tables));
+        }
+        if s.spots > 0 {
+            self.fixed.push(format!("{}: resampled a spot colour's tint transform into CMYK through {label}", s.spots));
+        }
+        if s.shadings > 0 {
+            self.fixed.push(format!("{}: converted a shading to CMYK through {label}", s.shadings));
         }
         if s.spaces_removed > 0 {
             self.fixed.push(format!("{}: removed colour spaces content no longer uses", s.spaces_removed));
