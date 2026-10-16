@@ -17,14 +17,24 @@ pub enum FillTool {
     Check,
     Cross,
     Dot,
+    Circle,
     Line,
     Date,
     Signature,
     Initials,
 }
 
-pub const FILL_TOOLS: [FillTool; 8] =
-    [FillTool::Text, FillTool::Cross, FillTool::Check, FillTool::Dot, FillTool::Line, FillTool::Date, FillTool::Signature, FillTool::Initials];
+pub const FILL_TOOLS: [FillTool; 9] = [
+    FillTool::Text,
+    FillTool::Cross,
+    FillTool::Check,
+    FillTool::Dot,
+    FillTool::Circle,
+    FillTool::Line,
+    FillTool::Date,
+    FillTool::Signature,
+    FillTool::Initials,
+];
 
 /// A saved signature or initials: drawn strokes (normalised to the pad width, y up) or typed
 /// text (drawn in the script font), or a locally imported image.
@@ -350,6 +360,7 @@ impl FillTool {
             FillTool::Check => "sign.fill.check",
             FillTool::Cross => "sign.fill.cross",
             FillTool::Dot => "sign.fill.dot",
+            FillTool::Circle => "sign.fill.circle",
             FillTool::Line => "sign.fill.line",
             FillTool::Date => "sign.fill.date",
             FillTool::Signature => "sign.fill.signature",
@@ -367,6 +378,7 @@ impl FillTool {
             FillTool::Check => "Checkmark",
             FillTool::Cross => "Cross",
             FillTool::Dot => "Dot",
+            FillTool::Circle => "Circle",
             FillTool::Line => "Line",
             FillTool::Date => "Date",
             FillTool::Signature => "Sign",
@@ -380,6 +392,7 @@ impl FillTool {
             FillTool::Check => "check",
             FillTool::Cross => "x",
             FillTool::Dot => "circle-dot",
+            FillTool::Circle => "circle",
             FillTool::Line => "minus",
             FillTool::Date => "clock-3",
             FillTool::Signature | FillTool::Initials => "signature",
@@ -391,6 +404,7 @@ impl FillTool {
             FillTool::Check => Some(FillMark::Check),
             FillTool::Cross => Some(FillMark::Cross),
             FillTool::Dot => Some(FillMark::Dot),
+            FillTool::Circle => Some(FillMark::Circle),
             FillTool::Line => Some(FillMark::Line),
             _ => None,
         }
@@ -676,7 +690,7 @@ pub(crate) fn page_input(
         },
         mark => {
             let mark = mark.mark()?;
-            let (w, h) = if mark == FillMark::Line { (36.0, 4.0) } else { (12.0, 12.0) };
+            let (w, h) = mark.default_size();
             let rect = [at[0] - w / 2.0, at[1] - h / 2.0, at[0] + w / 2.0, at[1] + h / 2.0];
             Some(FillAction::Edit(Box::new(new(page, Shape::Mark { rect, mark }, String::new(), author))))
         }

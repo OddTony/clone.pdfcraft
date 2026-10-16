@@ -253,6 +253,7 @@
 	Fill & Sign: checkmark	Заполнить и подписать: галочка
 	Fill & Sign: cross	Заполнить и подписать: крестик
 	Fill & Sign: dot	Заполнить и подписать: точка
+	Fill & Sign: circle	Заполнить и подписать: круг
 	Fill & Sign: line	Заполнить и подписать: линия
 	Fill & Sign: date	Заполнить и подписать: дата
 	Fill & Sign: sign	Заполнить и подписать: подпись
@@ -1966,6 +1967,7 @@
 	Add checkmark	Добавить галочку
 	Add cross	Добавить крестик
 	Add dot	Добавить точку
+	Add circle	Добавить круг
 	Add signature	Добавить подпись
 	Add redaction mark	Добавить метку сокрытия
 	Add cloud	Добавить облако

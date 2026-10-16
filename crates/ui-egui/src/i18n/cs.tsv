@@ -376,6 +376,7 @@ key	Space	Mezerník
 	Fill & Sign: checkmark	Vyplnit a podepsat: zaškrtnutí
 	Fill & Sign: cross	Vyplnit a podepsat: křížek
 	Fill & Sign: dot	Vyplnit a podepsat: tečka
+	Fill & Sign: circle	Vyplnit a podepsat: kruh
 	Fill & Sign: line	Vyplnit a podepsat: čára
 	Fill & Sign: date	Vyplnit a podepsat: datum
 	Fill & Sign: sign	Vyplnit a podepsat: podpis
@@ -2012,6 +2013,7 @@ key	Space	Mezerník
 	Add checkmark	Přidat zaškrtnutí
 	Add cross	Přidat křížek
 	Add dot	Přidat tečku
+	Add circle	Přidat kruh
 	Add signature	Přidat podpis
 	Add redaction mark	Přidat značku začernění
 	Add cloud	Přidat obláček

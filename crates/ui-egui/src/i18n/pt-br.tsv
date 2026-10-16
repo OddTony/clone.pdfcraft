@@ -1120,6 +1120,7 @@
 	Fill & Sign: cross	Preencher e assinar: cruz
 	Fill & Sign: date	Preencher e assinar: data
 	Fill & Sign: dot	Preencher e assinar: ponto
+	Fill & Sign: circle	Preencher e assinar: círculo
 	Fill & Sign: initials	Preencher e assinar: rubrica
 	Fill & Sign: line	Preencher e assinar: linha
 	Fill & Sign: sign	Preencher e assinar: assinar
@@ -1789,6 +1790,7 @@
 	Add connected lines	Adicionar linhas conectadas
 	Add cross	Adicionar cruz
 	Add dot	Adicionar ponto
+	Add circle	Adicionar círculo
 	Add drawing	Adicionar desenho
 	Add field	Adicionar campo
 	Add file attachment	Adicionar anexo de arquivo

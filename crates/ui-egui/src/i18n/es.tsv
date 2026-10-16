@@ -256,6 +256,7 @@
 	Fill & Sign: checkmark	Rellenar y firmar: marca de verificación
 	Fill & Sign: cross	Rellenar y firmar: cruz
 	Fill & Sign: dot	Rellenar y firmar: punto
+	Fill & Sign: circle	Rellenar y firmar: círculo
 	Fill & Sign: line	Rellenar y firmar: línea
 	Fill & Sign: date	Rellenar y firmar: fecha
 	Fill & Sign: sign	Rellenar y firmar: firmar
@@ -1981,6 +1982,7 @@ action wizard	Start	Iniciar
 	Add checkmark	Añadir marca de verificación
 	Add cross	Añadir cruz
 	Add dot	Añadir punto
+	Add circle	Añadir círculo
 	Add signature	Añadir firma
 	Add redaction mark	Añadir marca de censura
 	Add cloud	Añadir nube

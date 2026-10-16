@@ -548,10 +548,11 @@ impl Automation {
                     "check" => FillMark::Check,
                     "cross" => FillMark::Cross,
                     "dot" => FillMark::Dot,
+                    "circle" => FillMark::Circle,
                     "line" => FillMark::Line,
                     other => return Err(ToolError::InvalidArgs(format!("unknown type {other:?}"))),
                 };
-                let (w, h) = if mark == FillMark::Line { (36.0, 4.0) } else { (12.0, 12.0) };
+                let (w, h) = mark.default_size();
                 (Shape::Mark { rect: [at[0] - w / 2.0, at[1] - h / 2.0, at[0] + w / 2.0, at[1] + h / 2.0], mark }, String::new())
             }
         };

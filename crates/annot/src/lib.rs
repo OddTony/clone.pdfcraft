@@ -97,12 +97,14 @@ impl NoteIcon {
     }
 }
 
-/// Fill & Sign marks (Acrobat's ✓, ✕, ●, ─).
+/// Fill & Sign marks (Acrobat's ✓, ✕, ●, ◯, ─).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FillMark {
     Check,
     Cross,
     Dot,
+    /// An open ring, drawn around an answer to circle it.
+    Circle,
     Line,
 }
 
@@ -113,6 +115,7 @@ impl FillMark {
             FillMark::Check => "PCCheck",
             FillMark::Cross => "PCCross",
             FillMark::Dot => "PCDot",
+            FillMark::Circle => "PCCircle",
             FillMark::Line => "PCLine",
         }
     }
@@ -122,7 +125,18 @@ impl FillMark {
             FillMark::Check => "Checkmark",
             FillMark::Cross => "Cross",
             FillMark::Dot => "Dot",
+            FillMark::Circle => "Circle",
             FillMark::Line => "Line",
+        }
+    }
+
+    /// The size a new mark is placed at, in points (width, height): a line is long and thin, a
+    /// circle wide enough to ring a short word, the others square.
+    pub fn default_size(self) -> (f64, f64) {
+        match self {
+            FillMark::Line => (36.0, 4.0),
+            FillMark::Circle => (36.0, 18.0),
+            FillMark::Check | FillMark::Cross | FillMark::Dot => (12.0, 12.0),
         }
     }
 }
@@ -735,7 +749,7 @@ pub fn is_fill_sign(doc: &Document, d: &Dict) -> bool {
         return true;
     }
     if subtype == b"Stamp" {
-        if matches!(d.name(b"Name"), Some(b"PCCheck" | b"PCCross" | b"PCDot" | b"PCLine" | b"PCTypedSignature")) {
+        if matches!(d.name(b"Name"), Some(b"PCCheck" | b"PCCross" | b"PCDot" | b"PCCircle" | b"PCLine" | b"PCTypedSignature")) {
             return true;
         }
         if matches!(d.name(b"Name"), Some(b"PCCustomSignature" | b"PCCustomInitials"))

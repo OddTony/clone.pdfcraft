@@ -1127,6 +1127,7 @@
 	Fill & Sign: cross	填寫與簽署：叉號
 	Fill & Sign: date	填寫與簽署：日期
 	Fill & Sign: dot	填寫與簽署：圓點
+	Fill & Sign: circle	填寫與簽署：圓形
 	Fill & Sign: initials	填寫與簽署：姓名縮寫
 	Fill & Sign: line	填寫與簽署：直線
 	Fill & Sign: sign	填寫與簽署：簽名
@@ -1965,6 +1966,7 @@
 	Add checkmark	新增勾選記號
 	Add cross	新增叉號
 	Add dot	新增圓點
+	Add circle	新增圓形
 	Add signature	新增簽名
 	Add redaction mark	新增遮蔽標記
 	Add cloud	新增雲形

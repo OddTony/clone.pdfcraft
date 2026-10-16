@@ -221,6 +221,7 @@
 	Fill & Sign: checkmark	Толтыру және қол қою: құсбелгі
 	Fill & Sign: cross	Толтыру және қол қою: крест
 	Fill & Sign: dot	Толтыру және қол қою: нүкте
+	Fill & Sign: circle	Толтыру және қол қою: шеңбер
 	Fill & Sign: line	Толтыру және қол қою: сызық
 	Fill & Sign: date	Толтыру және қол қою: күн
 	Fill & Sign: sign	Толтыру және қол қою: қол қою
@@ -1889,6 +1890,7 @@
 	Add checkmark	Белгі қосу
 	Add cross	X белгісін қосу
 	Add dot	Нүкте қосу
+	Add circle	Шеңбер қосу
 	Add signature	Қолтаңба қосу
 	Add redaction mark	Жасыру белгісін қосу
 	Add cloud	Бұлт қосу

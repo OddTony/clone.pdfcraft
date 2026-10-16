@@ -1442,6 +1442,7 @@
 	Fill & Sign: cross	Pildyti ir pasirašyti: kryželis
 	Fill & Sign: date	Pildyti ir pasirašyti: data
 	Fill & Sign: dot	Pildyti ir pasirašyti: taškas
+	Fill & Sign: circle	Pildyti ir pasirašyti: apskritimas
 	Fill & Sign: initials	Pildyti ir pasirašyti: inicialai
 	Fill & Sign: line	Pildyti ir pasirašyti: linija
 	Fill & Sign: remove saved initials	Pildyti ir pasirašyti: pašalinti įrašytus inicialus
@@ -1822,6 +1823,7 @@ comment menu	Edit	Redaguoti
 	Add connected lines	Pridėti sujungtas linijas
 	Add cross	Pridėti kryželį
 	Add dot	Pridėti tašką
+	Add circle	Pridėti apskritimą
 	Add drawing	Pridėti piešinį
 	Add field	Pridėti lauką
 	Add file attachment	Pridėti failo priedą

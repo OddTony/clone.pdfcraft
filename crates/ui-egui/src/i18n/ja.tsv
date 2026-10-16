@@ -260,6 +260,7 @@
 	Fill & Sign: checkmark	入力と署名：チェックマーク
 	Fill & Sign: cross	入力と署名：× 印
 	Fill & Sign: dot	入力と署名：点
+	Fill & Sign: circle	入力と署名：円形
 	Fill & Sign: line	入力と署名：直線
 	Fill & Sign: date	入力と署名：日付
 	Fill & Sign: sign	入力と署名：署名
@@ -1978,6 +1979,7 @@
 	Add checkmark	チェックマークを追加
 	Add cross	バツ印を追加
 	Add dot	点を追加
+	Add circle	円形を追加
 	Add signature	署名を追加
 	Add redaction mark	墨消しマークを追加
 	Add cloud	雲形を追加

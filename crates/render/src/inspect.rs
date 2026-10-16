@@ -380,8 +380,8 @@ pub struct Annotation {
     pub locked: bool,
     /// `/IT`, the intent: `FreeTextCallout`, `PolygonCloud`, `FreeTextTypeWriter`…
     pub intent: Option<String>,
-    /// A Fill & Sign mark: typed text, a check, cross, dot or line, or a typed, drawn or picture
-    /// signature or initials (the rules of `pdfcraft_annot::is_fill_sign`).
+    /// A Fill & Sign mark: typed text, a check, cross, dot, circle or line, or a typed, drawn or
+    /// picture signature or initials (the rules of `pdfcraft_annot::is_fill_sign`).
     pub fill_sign: bool,
 }
 
@@ -766,7 +766,7 @@ impl<'a> Inspector<'a> {
         match subtype {
             "FreeText" => self.name(d, b"IT").as_deref() == Some("FreeTextTypeWriter"),
             "Stamp" => match self.name(d, b"Name").as_deref() {
-                Some("PCCheck" | "PCCross" | "PCDot" | "PCLine" | "PCTypedSignature") => true,
+                Some("PCCheck" | "PCCross" | "PCDot" | "PCCircle" | "PCLine" | "PCTypedSignature") => true,
                 Some("PCCustomSignature" | "PCCustomInitials") => yes(b"PCPictureImage"),
                 _ => false,
             },

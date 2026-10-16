@@ -124,6 +124,25 @@ fn text_marks_and_date() {
     assert!(v.iter().any(|(t, _)| t == "Stamp"));
 }
 
+/// #2396: Circle is a Fill & Sign tool. Its command picks it, it stays picked for the next answer,
+/// and each click places one ring wide enough to circle a short word.
+#[test]
+fn circle_marks_are_placed_and_repeatable() {
+    let mut h = harness();
+    assert!(h.state_mut().execute("sign.fill.circle"));
+    assert_eq!(h.state().quick_tool, QuickTool::Fill(FillTool::Circle));
+    click(&mut h, 50.0, 350.0);
+    click(&mut h, 120.0, 350.0);
+    assert_eq!(h.state().quick_tool, QuickTool::Fill(FillTool::Circle), "circles stay repeatable");
+    let s = h.state();
+    let circles: Vec<_> = s.session.get(s.views[0].id).unwrap().info.annotations.iter().filter(|a| a.subtype == "Stamp").collect();
+    assert_eq!(circles.len(), 2, "{:?}", items(&h));
+    for c in circles {
+        assert!(c.fill_sign, "{c:?}");
+        assert!((c.rect[2] - c.rect[0] - 36.0).abs() < 0.01 && (c.rect[3] - c.rect[1] - 18.0).abs() < 0.01, "{:?}", c.rect);
+    }
+}
+
 /// The open type box, found as the focused text input.
 fn type_box_rect(h: &Harness<'static, PdfCraftApp>) -> egui::Rect {
     h.query_all_by_role(egui::accesskit::Role::TextInput).find(|n| n.is_focused()).expect("an open type box").rect()
