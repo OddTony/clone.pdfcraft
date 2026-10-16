@@ -2165,6 +2165,7 @@ fn watermarks_move_from_the_page_centre_through_tools() {
     ok(&mut a, "doc_watermark", json!({ "doc": doc, "pages": [1], "text": "DRAFT", "offset_y": 1e300, "replace": true }));
     assert!(matches!(a.call("doc_watermark", &json!({ "doc": doc, "text": "X", "offset_x": "left" })), Err(ToolError::InvalidArgs(_))));
     assert!(matches!(a.call("doc_watermark", &json!({ "doc": doc, "text": "X", "opacity": -1 })), Err(ToolError::InvalidArgs(_))));
+    assert!(matches!(a.call("doc_background", &json!({ "doc": doc, "color": "yellow", "opacity": -1 })), Err(ToolError::InvalidArgs(_))));
 }
 
 #[test]
