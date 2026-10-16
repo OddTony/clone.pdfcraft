@@ -406,11 +406,12 @@ pub fn show(app: &mut crate::PdfCraftApp, ui: &mut egui::Ui) {
         |ui, panel| match panel {
             Panel::Canvas => {
                 ui.painter().rect_filled(ui.max_rect(), 0.0, t.pasteboard);
+                // The document area keeps the right bars' column itself; these pages get it here.
                 match app.active {
-                    None if app.combine_showing() => crate::combine_ui::page(app, ui),
-                    None => crate::home::show(app, ui),
+                    None if app.combine_showing() => crate::chrome::with_right_bar(app, ui, crate::combine_ui::page),
+                    None => crate::chrome::with_right_bar(app, ui, crate::home::show),
                     Some(index) => match crate::compare_ui::side_by_side(app, index) {
-                        Some((old, new)) => crate::compare_ui::compare_area(app, old, new, ui),
+                        Some((old, new)) => crate::chrome::with_right_bar(app, ui, |app, ui| crate::compare_ui::compare_area(app, old, new, ui)),
                         None => crate::canvas::document_area(app, index, ui),
                     },
                 }

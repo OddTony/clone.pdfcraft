@@ -13,6 +13,52 @@ const FIELD_MIN_HEIGHT: f32 = 30.0;
 const DIALOG_PAD_X: i8 = 20;
 const DIALOG_PAD_Y: i8 = 16;
 
+/// How long the floating bars and the tab strip stay fully opaque after they were last hovered or
+/// used, in seconds.
+pub const IDLE_AFTER: f64 = 5.0;
+/// How far idle chrome fades: faint enough to leave the page alone, still there to find.
+pub const IDLE_OPACITY: f32 = 0.3;
+
+/// The opacity for chrome that fades when idle. `id` names the bar; the rect it last recorded with
+/// [`note_idle_rect`] is what counts as hovering it. `busy` keeps it opaque while something of its
+/// own is in use (a focused field, a dragged tab); an open menu or popup anywhere does too.
+pub fn idle_opacity(ctx: &egui::Context, id: egui::Id, busy: bool) -> f32 {
+    let now = ctx.input(|i| i.time);
+    let rect = ctx.data(|d| d.get_temp::<Rect>(id.with("idle-rect")));
+    let pointer = ctx.input(|i| i.pointer.hover_pos());
+    let hovered = matches!((rect, pointer), (Some(r), Some(p)) if r.contains(p));
+    let key = id.with("idle-since");
+    let since = if hovered || busy || egui::Popup::is_any_open(ctx) {
+        ctx.data_mut(|d| d.insert_temp(key, now));
+        now
+    } else {
+        ctx.data_mut(|d| *d.get_temp_mut_or_insert_with(key, || now))
+    };
+    let elapsed = (now - since).max(0.0);
+    let awake = elapsed < IDLE_AFTER;
+    if awake {
+        // Wake once more when the bar is due to fade, even if nothing else repaints.
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64((IDLE_AFTER - elapsed).clamp(0.0, IDLE_AFTER) + 0.05));
+    }
+    let shown = ctx.animate_bool_with_time(id.with("idle-fade"), awake, 0.4);
+    IDLE_OPACITY + (1.0 - IDLE_OPACITY) * shown
+}
+
+/// Where the bar `id` was drawn this frame, for [`idle_opacity`] to tell when it is hovered.
+pub fn note_idle_rect(ctx: &egui::Context, id: egui::Id, rect: Rect) {
+    ctx.data_mut(|d| d.insert_temp(id.with("idle-rect"), rect));
+}
+
+/// The card a floating bar sits on: the left tool bar and the right bar.
+pub fn floating_frame(t: &Tokens) -> egui::Frame {
+    egui::Frame::NONE
+        .fill(t.card)
+        .stroke(Stroke::new(1.0, t.border))
+        .corner_radius(CornerRadius::same(12))
+        .shadow(egui::Shadow { offset: [0, 4], blur: 16, spread: 0, color: Color32::from_black_alpha(if t.dark() { 100 } else { 28 }) })
+        .inner_margin(egui::Margin::same(6))
+}
+
 fn dialog_frame(ctx: &egui::Context) -> egui::Frame {
     let t = Tokens::get(ctx);
     egui::Frame::new()
@@ -164,34 +210,6 @@ pub fn ghost_button_sized(ui: &mut egui::Ui, icon: &str, label: &str, height: f3
     icons::paint(ui, Rect::from_min_size(body.min + vec2(6.0, (height - 18.0) / 2.0), vec2(18.0, 18.0)), icon, 17.0, t.icon);
     ui.painter().text(body.left_center() + vec2(30.0, 0.0), Align2::LEFT_CENTER, label, font, t.text);
     theme::hand(resp)
-}
-
-/// A search-field lookalike that opens the command palette.
-pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response {
-    let t = Tokens::get(ui.ctx());
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, 32.0), Sense::click());
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), placeholder));
-    let press = theme::Press::track(ui, &resp);
-    let fill = press.fill(t.field, t.hover, t.pressed);
-    let edge = t.border.lerp_to_gamma(t.text_muted, press.hover * 0.35);
-    ui.painter().rect(rect, CornerRadius::same(16), fill, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
-    icons::paint(ui, Rect::from_min_size(rect.min + vec2(10.0, 8.0), vec2(16.0, 16.0)), "search", 15.0, t.text_muted);
-    let shortcut = crate::commands::command_shortcut_label(ui.ctx(), "view.palette");
-    let shortcut = ui.painter().layout_no_wrap(shortcut, theme::regular(11.5), t.text_faint);
-    let shortcut_pos = rect.right_center() - vec2(12.0 + shortcut.size().x, shortcut.size().y * 0.5);
-    // Reserve the measured shortcut width in every language; long translations are elided
-    // within the remaining space rather than painted underneath the shortcut.
-    let text_right = (shortcut_pos.x - 10.0).max(rect.left());
-    let text_left = (rect.left() + 34.0).min(text_right);
-    let text_rect = Rect::from_min_max(egui::pos2(text_left, rect.top()), egui::pos2(text_right, rect.bottom()));
-    let mut job = egui::text::LayoutJob::simple_singleline(placeholder.to_owned(), theme::regular(13.0), t.text_faint);
-    job.wrap = egui::text::TextWrapping { max_width: text_rect.width(), max_rows: 1, break_anywhere: true, ..Default::default() };
-    let text = ui.fonts_mut(|f| f.layout_job(job));
-    let elided = text.elided;
-    ui.painter().with_clip_rect(text_rect).galley(egui::pos2(text_left, rect.center().y - text.size().y * 0.5), text, t.text_faint);
-    ui.painter().with_clip_rect(rect).galley(shortcut_pos, shortcut, t.text_faint);
-    let resp = resp.on_hover_cursor(egui::CursorIcon::Text);
-    if elided { resp.on_hover_text(placeholder) } else { resp }
 }
 
 pub fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> Response {
@@ -519,22 +537,6 @@ pub fn artcraft_mark(ui: &mut egui::Ui, size: f32) -> Response {
     )
 }
 
-/// Buttons for every community link (`pdfcraft_engine::links`), Discord first and prominent.
-/// Returns the registry command of the one clicked.
-pub fn community_links(ui: &mut egui::Ui) -> Option<&'static str> {
-    let mut clicked = None;
-    ui.horizontal_wrapped(|ui| {
-        ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
-        for (i, l) in pdfcraft_engine::links::LINKS.iter().enumerate() {
-            let resp = if i == 0 { icon_pill(ui, l.icon, tl!("Join our Discord"), true) } else { icon_pill(ui, l.icon, tl!(l.label), false) };
-            if resp.on_hover_text(l.url).clicked() {
-                clicked = Some(l.command);
-            }
-        }
-    });
-    clicked
-}
-
 /// [`icon_pill`] with a ▾ part at its end that opens a menu of related choices. Returns the
 /// main button's response and the ▾'s (give it to `egui::Popup::menu`).
 pub fn split_pill(ui: &mut egui::Ui, icon: &str, label: &str, more: &str) -> (Response, Response) {
@@ -593,34 +595,52 @@ mod tests {
     use super::*;
     use egui::Pos2;
 
+    /// Runs one frame at `time` seconds with the pointer at `pointer`, and returns the opacity the
+    /// bar `id` gets in it.
+    fn idle_frame(ctx: &egui::Context, time: f64, pointer: Option<Pos2>, busy: bool) -> f32 {
+        let mut input = egui::RawInput { time: Some(time), ..Default::default() };
+        input.events.push(match pointer {
+            Some(p) => egui::Event::PointerMoved(p),
+            None => egui::Event::PointerGone,
+        });
+        let mut opacity = 0.0;
+        let id = egui::Id::new("idle-test-bar");
+        let output = ctx.run_ui(input, |ui| {
+            opacity = idle_opacity(ui.ctx(), id, busy);
+            note_idle_rect(ui.ctx(), id, Rect::from_min_size(Pos2::new(0.0, 0.0), vec2(40.0, 200.0)));
+        });
+        output.drop_without_applying_deltas();
+        opacity
+    }
+
+    fn opaque(opacity: f32) -> bool {
+        (opacity - 1.0).abs() < 1e-3
+    }
+
+    /// Floating chrome stays opaque for five seconds after its last use, then fades; hovering it
+    /// brings it straight back, and so does anything of its own being in use.
     #[test]
-    fn search_placeholder_never_overlaps_the_shortcut() {
-        let previous = crate::i18n::current();
-        for (code, expected) in [("en", "Ctrl+K"), ("de", "Strg+K")] {
-            crate::i18n::set_current(crate::i18n::Lang::from_code(code).unwrap());
-            for width in [260.0, 160.0, 90.0] {
-                let ctx = egui::Context::default();
-                ctx.set_os(egui::os::OperatingSystem::Nix);
-                ctx.set_fonts(theme::font_definitions());
-                let placeholder = "Werkzeuge und Befehle suchen";
-                let output = ctx.run_ui(egui::RawInput::default(), |ui| {
-                    search_box(ui, placeholder, width);
-                });
-                let text_shapes: Vec<_> = output
-                    .shapes
-                    .iter()
-                    .filter_map(|shape| if let egui::Shape::Text(text) = &shape.shape { Some((shape.clip_rect, text)) } else { None })
-                    .collect();
-                let (clip, hint) = text_shapes.iter().find(|(_, text)| text.galley.job.text == placeholder).unwrap();
-                let (_, shortcut) = text_shapes.iter().find(|(_, text)| text.galley.job.text.contains('K')).unwrap();
-                assert_eq!(shortcut.galley.job.text, expected);
-                assert!(clip.right() <= shortcut.pos.x - 9.0, "hint must leave a gap before the shortcut at width {width}");
-                assert!(hint.galley.elided, "the long original German hint must be elided at width {width}");
-                assert_eq!(hint.galley.rows.len(), 1);
-                output.drop_without_applying_deltas();
-            }
-        }
-        crate::i18n::set_current(previous);
+    fn idle_chrome_fades_after_five_seconds_and_wakes_on_hover() {
+        let ctx = egui::Context::default();
+        let away = Some(Pos2::new(300.0, 300.0));
+        let over = Some(Pos2::new(20.0, 100.0));
+        assert!(opaque(idle_frame(&ctx, 0.0, away, false)), "opaque at first");
+        assert!(opaque(idle_frame(&ctx, 4.9, away, false)), "still opaque before five seconds");
+        // Past five seconds, and past the fade's own 0.4 s.
+        idle_frame(&ctx, 5.1, away, false);
+        let faded = idle_frame(&ctx, 6.0, away, false);
+        assert!((faded - IDLE_OPACITY).abs() < 1e-3, "faded to {faded}");
+        // Hovering wakes it (the fade back takes its 0.4 s too).
+        idle_frame(&ctx, 6.1, over, false);
+        let woken = idle_frame(&ctx, 7.0, over, false);
+        assert!(opaque(woken), "woke to {woken}");
+        // The clock starts again from the last hover.
+        assert!(opaque(idle_frame(&ctx, 11.9, away, false)));
+        idle_frame(&ctx, 12.1, away, false);
+        assert!(idle_frame(&ctx, 13.0, away, false) < 0.5, "fades five seconds after the hover ended");
+        // In use (a focused field, a dragged tab) counts as active even with the pointer away.
+        idle_frame(&ctx, 13.1, None, true);
+        assert!(opaque(idle_frame(&ctx, 14.0, None, true)));
     }
 
     /// View ▸ Page display mixes radio buttons and checkboxes. With the theme's 6 px widget radius

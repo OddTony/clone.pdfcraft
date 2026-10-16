@@ -1,7 +1,9 @@
 //! pdfcraft-ui-egui — the first PdfCraft shell (L7).
 //!
-//! Layout grammar follows plan/acrobat/02-ui-ux.md §1: tab strip, mode bar, left tool panel,
-//! floating quick-action bar, document area, right panel + right rail with page navigation.
+//! Layout grammar follows plan/acrobat/02-ui-ux.md §1, pared down for full-window reading: one tab
+//! strip (Home, Menu, tabs, window buttons), left tool panel, a floating bar at the left with the
+//! workspaces (Acrobat's mode bar) and quick tools, document area, right panel, and floating bars
+//! at the right with search, document actions, the panels' buttons and page navigation.
 //! Everything here is presentation: documents, rendering and the tool catalogue live in
 //! `pdfcraft-engine`.
 
@@ -3107,6 +3109,8 @@ impl eframe::App for PdfCraftApp {
                     }
                 },
             );
+            // The left bar floats over the page here too.
+            chrome::apply_bar_choices(self, &ctx);
             dialogs::show(self, &ctx);
             // Notices too: a refused field value or a failed save must be seen in full screen.
             self.show_progress(&ctx);
@@ -3119,10 +3123,8 @@ impl eframe::App for PdfCraftApp {
             window_controls::resize_edges(&ctx);
         }
         chrome::tab_strip(self, ui);
-        chrome::mode_bar(self, ui);
         if self.active.is_some() {
-            chrome::right_rail(self, ui);
-            // Read mode hides the tools, not the navigation panes: the rail stays visible
+            // Read mode hides the tools, not the navigation panes: the right bar stays visible
             // there, so its buttons (Bookmarks, Page thumbnails, ...) must open their panels.
             // Outside Read mode the docking workspace draws the inspector.
             if self.mode == Mode::Read && self.right.is_some() {
@@ -3135,13 +3137,15 @@ impl eframe::App for PdfCraftApp {
             }
         }
         let t = theme::Tokens::get(&ctx);
+        chrome::note_inspector(self, &ctx);
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
             if self.mode == Mode::Read {
                 match self.active {
-                    None if self.combine_showing() => combine_ui::page(self, ui),
-                    None => home::show(self, ui),
+                    // The document area keeps the right bars' column itself; these pages get it here.
+                    None if self.combine_showing() => chrome::with_right_bar(self, ui, combine_ui::page),
+                    None => chrome::with_right_bar(self, ui, home::show),
                     Some(index) => match compare_ui::side_by_side(self, index) {
-                        Some((old, new)) => compare_ui::compare_area(self, old, new, ui),
+                        Some((old, new)) => chrome::with_right_bar(self, ui, |app, ui| compare_ui::compare_area(app, old, new, ui)),
                         None => canvas::document_area(self, index, ui),
                     },
                 }
@@ -3149,6 +3153,7 @@ impl eframe::App for PdfCraftApp {
                 docking::show(self, ui);
             }
         });
+        chrome::apply_bar_choices(self, &ctx);
         self.process_pending_edits();
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);

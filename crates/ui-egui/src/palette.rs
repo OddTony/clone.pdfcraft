@@ -7,6 +7,15 @@ use pdfcraft_engine::catalog::{Availability, TOOL_GROUPS};
 use crate::theme::{self, Tokens};
 use crate::{PdfCraftApp, icons};
 
+/// Where the button that toggles the palette was last drawn (the right bar's search button).
+const TOGGLE_RECT: &str = "palette-toggle-rect";
+
+/// Record where the palette's toggle button is, so a press on it doesn't count as a click
+/// outside the palette (which would close it, only for the button's click to open it again).
+pub fn note_toggle_rect(ctx: &egui::Context, rect: Rect) {
+    ctx.data_mut(|data| data.insert_temp(egui::Id::new(TOGGLE_RECT), rect));
+}
+
 struct Hit {
     /// The tool panel to open (tools and catalogue items); `None` for plain commands.
     group: Option<&'static str>,
@@ -132,9 +141,13 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
 
     let previous_rect = ctx.data(|data| data.get_temp::<Rect>(palette_rect_id));
 
+    let toggle = ctx.data(|data| data.get_temp::<Rect>(egui::Id::new(TOGGLE_RECT)));
     let outside_click = ctx.input(|input| {
         input.pointer.button_pressed(egui::PointerButton::Primary)
-            && input.pointer.interact_pos().is_some_and(|pos| previous_rect.is_some_and(|rect| !rect.contains(pos)))
+            && input
+                .pointer
+                .interact_pos()
+                .is_some_and(|pos| previous_rect.is_some_and(|rect| !rect.contains(pos)) && !toggle.is_some_and(|rect| rect.contains(pos)))
     });
 
     if outside_click {
@@ -143,6 +156,7 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
         return;
     }
     let mut chosen: Option<(Option<&'static str>, Option<&'static str>)> = None;
+    let mut closed = false;
     let area_response = egui::Area::new(egui::Id::new("palette"))
         .order(egui::Order::Foreground)
         .pivot(Align2::CENTER_TOP)
@@ -152,13 +166,19 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 ui.set_width(560.0);
                 ui.horizontal(|ui| {
                     ui.add(icons::image("search", 18.0, t.text_muted));
+                    // The field leaves room for the close button after it.
+                    let close_size = 26.0;
+                    let field_width = (ui.available_width() - close_size - 2.0 * ui.spacing().item_spacing.x).max(0.0);
                     let r = ui.add(
                         egui::TextEdit::singleline(&mut app.palette_query)
                             .hint_text(tl!("Search tools and commands…"))
                             .frame(egui::Frame::NONE)
                             .font(theme::regular(15.0))
-                            .desired_width(f32::INFINITY),
+                            .desired_width(field_width),
                     );
+                    if icons::button(ui, "x", close_size, false, tl!("Close")).clicked() {
+                        closed = true;
+                    }
                     // Enter runs the selected hit while the field is focused or relinquishing focus.
                     if (r.has_focus() || r.lost_focus())
                         && ui.input(|i| i.key_pressed(egui::Key::Enter))
@@ -211,6 +231,12 @@ pub fn show(app: &mut PdfCraftApp, ctx: &egui::Context) {
     ctx.data_mut(|data| {
         data.insert_temp(palette_rect_id, area_response.response.rect);
     });
+
+    if closed {
+        app.palette_open = false;
+        app.palette_query.clear();
+        return;
+    }
 
     if let Some((command, group)) = chosen {
         app.palette_open = false;

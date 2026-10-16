@@ -342,8 +342,8 @@ fn a_drop_that_changes_nothing_or_lands_outside_the_grid_leaves_no_undo_step() {
 fn arrow_keys_move_by_card_and_by_row_and_shift_extends() {
     let files: Vec<(String, usize)> = (0..9).map(|i| (format!("f{i}.pdf"), 1)).collect();
     let named: Vec<(&str, usize)> = files.iter().map(|(n, p)| (n.as_str(), *p)).collect();
-    // Narrow enough for several rows.
-    let mut h = grid_of(named.iter().map(|(n, p)| (*n, fixture(*p))).collect(), vec2(760.0, 1200.0));
+    // Narrow enough for several rows (the grid is 64 narrower than the window: the right bars' column).
+    let mut h = grid_of(named.iter().map(|(n, p)| (*n, fixture(*p))).collect(), vec2(824.0, 1200.0));
     let top = card(&h, "f0.pdf").top();
     let cols = (0..9).filter(|i| (card(&h, &format!("f{i}.pdf")).top() - top).abs() < 1.0).count();
     assert!((2..9).contains(&cols), "several cards per row and several rows ({cols} per row)");

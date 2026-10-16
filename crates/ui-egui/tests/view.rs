@@ -1245,6 +1245,9 @@ fn returning_to_a_visited_zoom_reuses_its_cached_tiles() {
     assert!(lost.is_empty(), "returning to a visited zoom dropped its cached tiles {lost:?} (had {before:?}, now {after:?})");
 }
 
+/// How far apart two pixel-snapped positions of the same unmoved point can be.
+const SNAP_SLACK: f32 = 1.0 + 1e-3;
+
 #[test]
 fn sidebar_collapse_and_resize_preserves_scroll_position() {
     use pdfcraft_ui_egui::canvas::Fit;
@@ -1288,7 +1291,9 @@ fn sidebar_collapse_and_resize_preserves_scroll_position() {
     let rect_after = v.page_screen_rect(2).expect("page 2 still on screen");
     let vp_after = v.viewport_rect();
     let rel_y_after = rect_after.min.y - vp_after.min.y;
-    assert!((rel_y_after - rel_y_before).abs() < 1.0, "page 2 scroll position preserved: before {rel_y_before}, after {rel_y_after}");
+    // Page rects are snapped to whole pixels (each by up to half a pixel), so two positions of a
+    // page that kept its place can still differ by one pixel.
+    assert!((rel_y_after - rel_y_before).abs() <= SNAP_SLACK, "page 2 scroll position preserved: before {rel_y_before}, after {rel_y_after}");
 
     // Reopen bookmarks panel: available width decreases, so fit-width zoom decreases.
     h.state_mut().set_option("panel", "bookmarks").unwrap();
@@ -1305,7 +1310,10 @@ fn sidebar_collapse_and_resize_preserves_scroll_position() {
     let rect_reopened = v.page_screen_rect(2).expect("page 2 still on screen");
     let vp_reopened = v.viewport_rect();
     let rel_y_reopened = rect_reopened.min.y - vp_reopened.min.y;
-    assert!((rel_y_reopened - rel_y_before).abs() < 1.0, "page 2 scroll position preserved on reopen: before {rel_y_before}, after {rel_y_reopened}");
+    assert!(
+        (rel_y_reopened - rel_y_before).abs() <= SNAP_SLACK,
+        "page 2 scroll position preserved on reopen: before {rel_y_before}, after {rel_y_reopened}"
+    );
 }
 
 /// Synthetic unequal-height spreads, generated without font or image assets.

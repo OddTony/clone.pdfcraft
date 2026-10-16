@@ -6,6 +6,10 @@
 //! minimize, maximize and close buttons in the desktop's order (GNOME's `button-layout`), and
 //! thin zones along the window's edges resize it. Desktops with server-side decorations (KDE,
 //! Sway, Hyprland, X11) keep their own frame and never get here.
+//!
+//! Windows draws the frame too, so the tab strip is the window's only bar at the top (more of the
+//! window for the page): its buttons are Windows' flat caption buttons in the top-right corner,
+//! and Preferences ▸ Use system title bar brings Windows' own title bar back.
 
 use crate::theme::Tokens;
 use egui::viewport::ResizeDirection;
@@ -71,22 +75,58 @@ pub const BUTTON: f32 = 24.0;
 pub const GAP: f32 = 6.0;
 /// Between the window buttons and the rest of the strip.
 pub const SIDE_GAP: f32 = 10.0;
+/// A Windows caption button's width; it is as tall as the strip.
+pub const WINDOWS_BUTTON: f32 = 46.0;
+
+/// How the window buttons look: the desktop's own style, so they read as its buttons.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Style {
+    /// GNOME: round washes with symbolic glyphs, a gap between them.
+    Adwaita,
+    /// Windows: flat rectangles the strip's height, side by side in the window's top-right
+    /// corner; Close turns red under the pointer.
+    Windows,
+}
+
+impl Style {
+    /// The style of the desktop the app runs on.
+    pub const fn native() -> Self {
+        if cfg!(target_os = "windows") { Style::Windows } else { Style::Adwaita }
+    }
+
+    /// Whether the buttons sit flush with the window's edge, with no margin around them.
+    pub const fn flush(self) -> bool {
+        matches!(self, Style::Windows)
+    }
+}
 
 /// The width `buttons` take in the strip, including the gap to the rest of it.
 pub fn width(buttons: &[Button]) -> f32 {
-    match buttons.len() {
-        0 => 0.0,
-        n => n as f32 * BUTTON + (n - 1) as f32 * GAP + SIDE_GAP,
+    width_in(Style::native(), buttons)
+}
+
+/// [`width`] for buttons drawn in `style`.
+pub fn width_in(style: Style, buttons: &[Button]) -> f32 {
+    match (style, buttons.len()) {
+        (_, 0) => 0.0,
+        (Style::Adwaita, n) => n as f32 * BUTTON + (n - 1) as f32 * GAP + SIDE_GAP,
+        (Style::Windows, n) => n as f32 * WINDOWS_BUTTON + SIDE_GAP,
     }
 }
 
 /// Draw the window buttons for one end of the strip, in reading order, inside a horizontal
 /// layout running left to right; the caller adds [`SIDE_GAP`] where the strip continues.
+/// Windows-style buttons are as tall as the space the layout gives them.
 pub fn buttons(ui: &mut egui::Ui, buttons: &[Button]) {
+    let style = Style::native();
     let t = Tokens::get(ui.ctx());
     let maximized = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+    let size = match style {
+        Style::Adwaita => Vec2::splat(BUTTON),
+        Style::Windows => Vec2::new(WINDOWS_BUTTON, ui.available_height().max(BUTTON)),
+    };
     for (n, &button) in buttons.iter().enumerate() {
-        if n > 0 {
+        if n > 0 && style == Style::Adwaita {
             ui.add_space(GAP);
         }
         let label = match button {
@@ -95,11 +135,14 @@ pub fn buttons(ui: &mut egui::Ui, buttons: &[Button]) {
             Button::Maximize => tl!("Maximize"),
             Button::Close => tl!("Close"),
         };
-        let (rect, response) = ui.allocate_exact_size(Vec2::splat(BUTTON), Sense::click());
+        let (rect, response) = ui.allocate_exact_size(size, Sense::click());
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
         let response = response.on_hover_text(label);
         if ui.is_rect_visible(rect) {
-            paint(ui.painter(), rect, button, maximized, &t, &response);
+            match style {
+                Style::Adwaita => paint(ui.painter(), rect, button, maximized, &t, &response),
+                Style::Windows => paint_windows(ui.painter(), rect, button, maximized, &t, &response),
+            }
         }
         if response.clicked() {
             let command = match button {
@@ -149,6 +192,54 @@ fn paint(painter: &egui::Painter, rect: Rect, button: Button, maximized: bool, t
         Button::Close => {
             painter.line_segment([at(4.0, 4.0), at(11.0, 11.0)], stroke);
             painter.line_segment([at(11.0, 4.0), at(4.0, 11.0)], stroke);
+        }
+    }
+}
+
+/// The red Windows gives Close under the pointer, and a darker one while pressed.
+const CLOSE_HOVER: Color32 = Color32::from_rgb(0xc4, 0x2b, 0x1c);
+const CLOSE_PRESSED: Color32 = Color32::from_rgb(0x9b, 0x22, 0x16);
+
+/// Windows' look: a flat wash over the whole button on hover (red for Close), and a 10-point
+/// glyph of hairlines in its middle.
+fn paint_windows(painter: &egui::Painter, rect: Rect, button: Button, maximized: bool, t: &Tokens, response: &egui::Response) {
+    let (down, hovered) = (response.is_pointer_button_down_on(), response.hovered());
+    let fill = match (button, down, hovered) {
+        (Button::Close, true, _) => CLOSE_PRESSED,
+        (Button::Close, false, true) => CLOSE_HOVER,
+        (_, true, _) => t.text.gamma_multiply(0.14),
+        (_, false, true) => t.text.gamma_multiply(0.08),
+        _ => Color32::TRANSPARENT,
+    };
+    if fill.a() > 0 {
+        painter.rect_filled(rect, 0.0, fill);
+    }
+    if response.has_focus() {
+        painter.rect_stroke(rect.shrink(1.0), 0.0, Stroke::new(1.0, t.accent), egui::StrokeKind::Inside);
+    }
+    let color = if button == Button::Close && (down || hovered) { Color32::WHITE } else { t.text };
+    let stroke = Stroke::new(1.0, color);
+    // The glyph's 10-point square, its corners on pixel centres so lines stay crisp.
+    let c = rect.center();
+    let at = |x: f32, y: f32| Pos2::new((c.x - 5.0 + x).round() + 0.5, (c.y - 5.0 + y).round() + 0.5);
+    match button {
+        Button::Minimize => {
+            painter.line_segment([at(0.0, 5.0), at(10.0, 5.0)], stroke);
+        }
+        Button::Maximize if maximized => {
+            // Restore: a window in front of another, offset up and to the right.
+            painter.rect_stroke(Rect::from_two_pos(at(0.0, 2.0), at(8.0, 10.0)), 0.0, stroke, egui::StrokeKind::Middle);
+            painter.line_segment([at(2.0, 2.0), at(2.0, 0.0)], stroke);
+            painter.line_segment([at(2.0, 0.0), at(10.0, 0.0)], stroke);
+            painter.line_segment([at(10.0, 0.0), at(10.0, 8.0)], stroke);
+            painter.line_segment([at(10.0, 8.0), at(8.0, 8.0)], stroke);
+        }
+        Button::Maximize => {
+            painter.rect_stroke(Rect::from_two_pos(at(0.0, 0.0), at(10.0, 10.0)), 0.0, stroke, egui::StrokeKind::Middle);
+        }
+        Button::Close => {
+            painter.line_segment([at(0.0, 0.0), at(10.0, 10.0)], stroke);
+            painter.line_segment([at(10.0, 0.0), at(0.0, 10.0)], stroke);
         }
     }
 }
@@ -254,10 +345,21 @@ mod tests {
     }
 
     #[test]
+    fn windows_buttons_are_flush_rectangles_without_gaps() {
+        use super::{SIDE_GAP, Style, WINDOWS_BUTTON, width_in};
+        assert_eq!(width_in(Style::Windows, &[]), 0.0);
+        assert_eq!(width_in(Style::Windows, &Layout::default().right), 3.0 * WINDOWS_BUTTON + SIDE_GAP);
+        assert!(Style::Windows.flush() && !Style::Adwaita.flush());
+        assert_eq!(Style::native() == Style::Windows, cfg!(target_os = "windows"));
+    }
+
+    #[test]
     fn widths_cover_the_buttons_and_their_gaps() {
-        assert_eq!(super::width(&[]), 0.0);
-        assert_eq!(super::width(&[Button::Close]), super::BUTTON + super::SIDE_GAP);
-        assert_eq!(super::width(&Layout::default().right), 3.0 * super::BUTTON + 2.0 * super::GAP + super::SIDE_GAP);
+        use super::{Style, width_in};
+        let width = |buttons: &[Button]| width_in(Style::Adwaita, buttons);
+        assert_eq!(width(&[]), 0.0);
+        assert_eq!(width(&[Button::Close]), super::BUTTON + super::SIDE_GAP);
+        assert_eq!(width(&Layout::default().right), 3.0 * super::BUTTON + 2.0 * super::GAP + super::SIDE_GAP);
     }
 
     #[test]
