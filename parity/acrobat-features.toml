@@ -1295,11 +1295,11 @@ title = "Highlight the current bookmark"
 area = "B"
 tier = "P2"
 milestone = "M4"
-status = "planned"
+status = "shipped"
 commands = []
 tools = []
-evidence = []
-notes = ""
+evidence = ["crates/ui-egui/tests/bookmarks.rs::the_current_bookmark_follows_the_page", "crates/ui-egui/tests/bookmarks.rs::a_collapsed_bookmark_stands_for_the_current_one_inside_it", "crates/ui-egui/src/panels.rs::a_page_between_two_bookmarks_belongs_to_the_earlier_one", "crates/ui-egui/src/panels.rs::a_bookmark_without_a_destination_is_never_the_current_one", "crates/render/src/inspect.rs::only_a_go_to_action_gives_a_bookmark_its_page"]
+notes = "Always on: the Bookmarks panel highlights the last bookmark, in document order, whose destination is on the current page or before it; a collapsed bookmark stands for a current one folded inside it. Bookmarks without a destination, or whose action is not GoTo, are skipped. Missing: Acrobat's Options toggle to turn it off. A view state, so no automation tool."
 
 [[feature]]
 id = "view.attachments-panel"

@@ -650,12 +650,14 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         if info.outline.is_empty() {
                             empty(ui, &t, "bookmark", "This document has no bookmarks.");
                         }
+                        let highlight = current_bookmark(&info.outline, view.current);
                         let mut ctx = OutlineCtx {
                             nav: &mut nav,
                             action: &mut bm_action,
                             rename: &mut bm_rename,
                             editable: bm_editable,
                             current: view.current,
+                            highlight: highlight.as_deref(),
                             expand: bm_expand,
                             matches: &bookmark_matches,
                             searching: !bookmark_query.is_empty(),
@@ -887,12 +889,35 @@ fn outline_matches(items: &[OutlineItem], query: &str) -> std::collections::Hash
     matches
 }
 
+/// The bookmark of `page`, as Acrobat's Highlight Current Bookmark marks it: the last one in
+/// document order whose destination is on that page or an earlier one. A bookmark with no
+/// destination in this file is skipped. Runs every frame the panel shows, so the walk reuses
+/// one path buffer instead of allocating one per bookmark.
+fn current_bookmark(items: &[OutlineItem], page: usize) -> Option<Vec<usize>> {
+    let mut found: Option<Vec<usize>> = None;
+    let mut path = Vec::new();
+    let mut pending: Vec<(usize, usize, &OutlineItem)> = items.iter().enumerate().rev().map(|(i, item)| (0, i, item)).collect();
+    while let Some((depth, i, item)) = pending.pop() {
+        path.truncate(depth);
+        path.push(i);
+        if item.page.is_some_and(|p| p <= page) {
+            let f = found.get_or_insert_with(Vec::new);
+            f.clear();
+            f.extend_from_slice(&path);
+        }
+        pending.extend(item.children.iter().enumerate().rev().map(|(ci, c)| (depth + 1, ci, c)));
+    }
+    found
+}
+
 struct OutlineCtx<'a> {
     nav: &'a mut Option<Nav>,
     action: &'a mut Option<BmAction>,
     rename: &'a mut Option<(Vec<usize>, String)>,
     editable: bool,
     current: usize,
+    /// Path of the current page's bookmark ([`current_bookmark`]).
+    highlight: Option<&'a [usize]>,
     /// Expand all (`Some(usize::MAX)`), collapse all (`Some(0)`) or expand to a depth, this frame.
     expand: Option<usize>,
     matches: &'a std::collections::HashSet<Vec<usize>>,
@@ -982,8 +1007,11 @@ fn outline_item(ui: &mut egui::Ui, t: &Tokens, info: &DocInfo, item: &OutlineIte
         let galley = ui.fonts_mut(|f| f.layout(item.title.clone(), font, t.text, wrap_w));
         let h = (galley.size().y + 12.0).max(28.0);
         let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click());
-        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &item.title));
-        theme::Press::track(ui, &resp).wash(ui, rect, 6, false);
+        // A current bookmark folded away is shown by the collapsed row holding it, the one
+        // the reader can see.
+        let current = cx.highlight.is_some_and(|c| c == path || (!open && c.starts_with(path)));
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, current, &item.title));
+        theme::Press::track(ui, &resp).wash(ui, rect, 6, current);
         let x0 = rect.left() + indent;
         if !item.children.is_empty() {
             let tri = Rect::from_min_size(pos2(x0, rect.top() + 6.0), vec2(16.0, 16.0));
@@ -1659,5 +1687,34 @@ mod bookmark_filter {
         // A child match keeps its parent: [0] and [0, 0].
         assert_eq!(outline_matches(&outline, &fold("KIŞ")).len(), 2);
         assert!(outline_matches(&outline, &fold("izmir")).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod current_bookmark {
+    use super::current_bookmark;
+    use pdfcraft_render::OutlineItem;
+
+    fn item(title: &str, page: Option<usize>, children: Vec<OutlineItem>) -> OutlineItem {
+        OutlineItem { title: title.into(), page, view: pdfcraft_render::DestView::Top, children, open: true }
+    }
+
+    #[test]
+    fn a_page_between_two_bookmarks_belongs_to_the_earlier_one() {
+        let outline = [item("One", Some(1), vec![]), item("Two", Some(4), vec![item("Two a", Some(6), vec![])]), item("Three", Some(9), vec![])];
+        assert_eq!(current_bookmark(&outline, 0), None, "before the first bookmark");
+        assert_eq!(current_bookmark(&outline, 1), Some(vec![0]));
+        assert_eq!(current_bookmark(&outline, 3), Some(vec![0]));
+        assert_eq!(current_bookmark(&outline, 4), Some(vec![1]));
+        assert_eq!(current_bookmark(&outline, 7), Some(vec![1, 0]));
+        assert_eq!(current_bookmark(&outline, 20), Some(vec![2]));
+    }
+
+    #[test]
+    fn a_bookmark_without_a_destination_is_never_the_current_one() {
+        // Last in document order, so it would win if a missing page counted as any page.
+        let outline = [item("Chapter", Some(2), vec![]), item("Website", None, vec![])];
+        assert_eq!(current_bookmark(&outline, 0), None);
+        assert_eq!(current_bookmark(&outline, 5), Some(vec![0]));
     }
 }

@@ -925,7 +925,11 @@ impl<'a> Inspector<'a> {
                 .get(b"Dest")
                 .ok()
                 .and_then(|dest| self.dest(dest, 0))
-                .or_else(|| d.get(b"A").ok().and_then(|a| self.dict(a)).and_then(|a| a.get(b"D").ok()).and_then(|dest| self.dest(dest, 0)));
+                // Only a GoTo's /D is a place in this file: a GoToR's names a page of another one.
+                .or_else(|| {
+                    let a = d.get(b"A").ok().and_then(|a| self.dict(a)).filter(|a| self.name(a, b"S").as_deref() == Some("GoTo"))?;
+                    a.get(b"D").ok().and_then(|dest| self.dest(dest, 0))
+                });
             let (page, view) = dest.map_or((None, DestView::Top), |(p, v)| (Some(p), v));
             match d.get(b"First").ok() {
                 Some(child) if depth < OUTLINE_DEPTH => levels.push(Some(child)),
@@ -2750,6 +2754,21 @@ trailer << /Root 1 0 R >>
         assert_eq!(listed(&["<< /Title (A) /Parent 4 0 R /First 6 0 R >>", "<< /Title (B) /Parent 5 0 R /First 5 0 R >>"]), ["A[B]"]);
         assert_eq!(listed(&["<< /Title (A) /Parent 4 0 R /Next 99 0 R >>"]), ["A"]);
         assert_eq!(listed(&["<< /Title (A) /Parent 4 0 R /Next 6 0 R >>", "42"]), ["A"]);
+    }
+
+    #[test]
+    fn only_a_go_to_action_gives_a_bookmark_its_page() {
+        // A GoToR's /D names a page of another file: read as this file's page, clicking the
+        // bookmark jumped to the wrong place and the panel took it for the current one.
+        let items = [
+            "<< /Title (Here) /Parent 4 0 R /Next 6 0 R /A << /S /GoTo /D [3 0 R /Fit] >> >>",
+            "<< /Title (Remote) /Parent 4 0 R /Next 7 0 R /A << /S /GoToR /F (other.pdf) /D [0 /Fit] >> >>",
+            "<< /Title (Web) /Parent 4 0 R /A << /S /URI /URI (https://example.com) /D [3 0 R /Fit] >> >>",
+        ];
+        let items: Vec<String> = items.iter().map(|s| s.to_string()).collect();
+        let info = inspect(Arc::new(outline_file(&items)), None).expect("opens");
+        let pages: Vec<_> = info.outline.iter().map(|o| (o.title.as_str(), o.page)).collect();
+        assert_eq!(pages, [("Here", Some(0)), ("Remote", None), ("Web", None)]);
     }
 
     #[test]
