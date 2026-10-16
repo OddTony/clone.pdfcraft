@@ -82,9 +82,11 @@ pub enum Auth {
     User,
 }
 
-/// Permission bits from `/P` (§7.6.4.2, Table 22). Owners have every permission.
+/// Effective permission flags (§7.6.4.2, Table 22). Owners have every permission.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Permissions {
+    /// Permission flags with revision 2 permissions mapped to bits 9 through 12.
+    /// The encryption dictionary retains the original `/P` value.
     pub bits: i32,
     pub owner: bool,
 }
@@ -204,7 +206,12 @@ impl SecurityHandler {
     }
 
     pub fn permissions(&self) -> Permissions {
-        Permissions { bits: self.dict.p, owner: self.auth == Auth::Owner }
+        let mut bits = self.dict.p;
+        if self.dict.r == 2 {
+            // R2 reserves bits 9-12. Their effective rights follow bits 6, 5, 4, 3.
+            bits = (bits & !0xF00) | ((bits & 0x20) << 3) | ((bits & 0x10) << 5) | ((bits & 0x08) << 7) | ((bits & 0x04) << 9);
+        }
+        Permissions { bits, owner: self.auth == Auth::Owner }
     }
 
     pub fn dict(&self) -> &EncryptDict {
@@ -596,8 +603,10 @@ fn expand(seed: &[u8; 32], label: &[u8], n: usize) -> Vec<u8> {
 
 /// Build the `/Encrypt` values and an authenticated (owner) handler for a new encryption.
 pub fn create(params: &NewEncryption, id0: &[u8]) -> Result<SecurityHandler, CryptError> {
-    // Bits 7–8 and 13–32 must be 1; bits 1–2 must be 0 (§7.6.4.2).
-    let p = (params.permissions | !0xFFF | 0xC0) & !0x3;
+    // R2 reserves bits 7-32; later revisions reserve bits 7-8 and 13-32.
+    // Reserved bits must be 1, and bits 1-2 must be 0 (§7.6.4.2).
+    let reserved = if params.algorithm == Algorithm::Rc4_40 { !0x3F } else { !0xFFF | 0xC0 };
+    let p = (params.permissions | reserved) & !0x3;
     let mut d = EncryptDict { filter: b"Standard".to_vec(), p, encrypt_metadata: params.encrypt_metadata, ..Default::default() };
     let user = prepared_password(params.algorithm, params.user_password);
     let owner = prepared_password(params.algorithm, params.owner_password);
