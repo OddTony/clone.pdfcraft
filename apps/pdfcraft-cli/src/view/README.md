@@ -89,9 +89,10 @@ rendered a page for a kitty with 18 × 46 px cells at under half its resolution,
 `ESC [ 6 ; <height> ; <width> t` in about 3 ms. The query is followed by the device attributes
 query, which every terminal answers, so one that doesn't know the first ends the wait at once;
 then the 10 × 20 assumed stands. An answer arriving late reaches the pager as an unknown CSI
-sequence, which is no key. Inside tmux, `#{client_cell_width}` and `#{client_cell_height}` give
-the cell instead. The answer isn't asked again, so changing the font size in a session that
-reports no pixels shows only on the next start.
+sequence, which is no key, even cut in two (see the terminal's answers below). Inside tmux,
+`#{client_cell_width}` and `#{client_cell_height}` give the cell instead. The answer isn't asked
+again, so changing the font size in a session that reports no pixels shows only on the next
+start.
 
 ## Directly, or inside tmux
 
@@ -151,8 +152,10 @@ one never gets this answer by mistake.
 
 Any other answer is dropped. An answer must never be read as keys: its `ESC` would be the Esc
 key, which quits, and its letters keys. One cut off between reads waits for the rest, up to 512
-bytes and 1 s. At the end, the pager waits up to 100 ms after its last placements, so no late answer lands
-on the shell's command line.
+bytes and 1 s, and is dropped whole if the rest doesn't come. So does any escape sequence cut off
+past its `ESC`, a late cell size or a key over SSH alike. Only an `ESC` alone, with nothing after
+it for 50 ms, is the Esc key. At the end, the pager waits up to 100 ms after its last placements,
+so no late answer lands on the shell's command line.
 
 ## What tmux loses, and how the pager notices
 

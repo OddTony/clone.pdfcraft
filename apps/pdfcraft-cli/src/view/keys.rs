@@ -1,8 +1,9 @@
 //! Keys from a terminal in raw mode: bytes in, keys out. Pure, and total over any bytes.
 //!
-//! The terminal's answers to graphics commands arrive among the keys, as `ESC _ G … ESC \`
-//! (the kitty graphics protocol). They are never keys: one that says an image is missing is
-//! [`Key::Missing`], and the rest are dropped.
+//! The terminal's answers arrive among the keys: to graphics commands as `ESC _ G … ESC \` (the
+//! kitty graphics protocol), and to `view`'s questions as CSI sequences (the cell size, device
+//! attributes), late ones included. They are never keys, even cut in two: one that says an image
+//! is missing is [`Key::Missing`], and the rest are dropped.
 
 /// A key the pager knows. Anything else is dropped.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -34,9 +35,9 @@ pub(crate) const MAX_ANSWER: usize = 512;
 const ANSWER: &[u8] = b"\x1b_G";
 
 /// Decode `bytes` into keys, and say how many bytes were used. An escape sequence cut off at the
-/// end is left for the next read, unless `flush`: then a lone ESC is the Escape key (the user
-/// pressed Esc and nothing followed). A graphics answer cut off always waits for the rest, so
-/// none of it is ever taken for keys.
+/// end is left for the next read, whole: past its ESC it is no key, however long the rest takes
+/// (the caller drops what never completes). Only a lone ESC at the end can be a key, the Escape
+/// key, and is when `flush` (the user pressed Esc and nothing followed).
 pub(crate) fn decode(bytes: &[u8], flush: bool) -> (Vec<Key>, usize) {
     let mut keys = Vec::new();
     let mut i = 0usize;
@@ -47,11 +48,11 @@ pub(crate) fn decode(bytes: &[u8], flush: bool) -> (Vec<Key>, usize) {
                 Some(found) => found,
                 None => break,
             },
-            // The start of what may be an answer waits too, unless nothing more came.
-            0x1b if ANSWER.starts_with(rest) && !flush => break,
+            // The start of what may be an answer waits too.
+            0x1b if rest == b"\x1b_" => break,
             0x1b => match escape(rest) {
                 Some(found) => found,
-                None if flush => (Some(Key::Escape), 1),
+                None if flush && rest.len() == 1 => (Some(Key::Escape), 1),
                 None => break,
             },
             b'\r' | b'\n' => (Some(Key::Enter), 1),
@@ -168,10 +169,41 @@ mod tests {
         assert_eq!(decode(b"j\x1b[", false), (vec![Key::Char('j')], 1));
         assert_eq!(decode(b"\x1b[6", false), (vec![], 0));
         assert_eq!(decode(b"\x1bO", false), (vec![], 0));
-        // Nothing followed: it was the Esc key.
+        // Nothing followed a lone ESC: it was the Esc key.
         assert_eq!(decode(b"\x1b", true), (vec![Key::Escape], 1));
+        assert_eq!(decode(b"j\x1b", true), (vec![Key::Char('j'), Key::Escape], 2));
+        // Past the ESC, a sequence waits for the rest even when nothing more came yet: it is no
+        // Esc (which quits), nor its bytes keys.
+        assert_eq!(decode(b"j\x1b[", true), (vec![Key::Char('j')], 1));
+        assert_eq!(decode(b"\x1b[6;", true), (vec![], 0));
+        assert_eq!(decode(b"\x1bO", true), (vec![], 0));
         // Esc typed before another key.
         assert_eq!(keys(b"\x1bq"), [Key::Escape, Key::Char('q')]);
+    }
+
+    #[test]
+    fn a_reply_cut_anywhere_past_its_esc_is_never_keys() {
+        // A late cell size and device attributes, as the terminal answers `view`'s question, and
+        // both together; each cut in two, the first part read alone with nothing more to come.
+        // (Not cut just past an ESC: an ESC alone with nothing after it is the Esc key, which is
+        // what the pager waits a while to tell.)
+        let cell = b"\x1b[6;25;14t".as_slice();
+        let attributes = b"\x1b[?62;22c".as_slice();
+        for reply in [cell, attributes, &[cell, attributes].concat()] {
+            for cut in (2..reply.len()).filter(|&cut| reply[cut - 1] != 0x1b) {
+                let (first, used) = decode(&reply[..cut], true);
+                let pending = [&reply[used..cut], &reply[cut..]].concat();
+                let (rest, all) = decode(&pending, true);
+                assert_eq!((first, rest, all), (vec![], vec![], pending.len()), "{:?} cut at {cut}", String::from_utf8_lossy(reply));
+            }
+        }
+        // A key cut in two, as over SSH, is the key.
+        let page_down = b"\x1b[6~".as_slice();
+        for cut in 2..page_down.len() {
+            let (first, used) = decode(&page_down[..cut], true);
+            let pending = [&page_down[used..cut], &page_down[cut..]].concat();
+            assert_eq!((first, decode(&pending, true)), (vec![], (vec![Key::PageDown], pending.len())), "cut at {cut}");
+        }
     }
 
     #[test]
@@ -191,9 +223,11 @@ mod tests {
         // Too long to be an answer: dropped whole.
         let long = [b"\x1b_Gi=1;".as_slice(), &[b'q'; MAX_ANSWER]].concat();
         assert_eq!(decode(&long, false), (vec![], long.len()));
-        // Its first bytes wait for the rest; with nothing more, they were Esc and _ typed together.
+        // Its first bytes wait for the rest, even when nothing more came yet.
         assert_eq!(decode(b"j\x1b_", false), (vec![Key::Char('j')], 1));
-        assert_eq!(keys(b"\x1b_"), [Key::Escape, Key::Char('_')]);
+        assert_eq!(decode(b"j\x1b_", true), (vec![Key::Char('j')], 1));
+        // Esc and _ typed together, then another key: Esc, and the keys.
+        assert_eq!(keys(b"\x1b_j"), [Key::Escape, Key::Char('_'), Key::Char('j')]);
     }
 
     #[test]
@@ -208,8 +242,12 @@ mod tests {
             let (_, used) = decode(&bytes, flush);
             proptest::prop_assert!(used <= bytes.len());
             if flush {
-                // All of it, but for a graphics answer still arriving.
-                proptest::prop_assert!(used == bytes.len() || bytes[used..].starts_with(ANSWER));
+                // All of it, but for an escape sequence still arriving past its ESC: never a lone
+                // ESC, and short unless it is a graphics answer.
+                let rest = &bytes[used..];
+                proptest::prop_assert!(
+                    rest.is_empty() || (rest.len() > 1 && rest[0] == 0x1b && (rest.starts_with(ANSWER) || rest.len() < MAX_SEQUENCE + 2))
+                );
             }
         }
     }

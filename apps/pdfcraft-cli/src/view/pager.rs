@@ -39,7 +39,8 @@ use super::{Doc, FALLBACK_SIZE, Output, QUIET, Terminal, checked, png, printable
 const TICK: Duration = Duration::from_millis(200);
 /// How often renders in progress are checked on.
 const POLL: Duration = Duration::from_millis(10);
-/// How long a cut-off escape sequence waits for the rest before it counts as the Esc key.
+/// How long a lone ESC waits for more before it counts as the Esc key. A longer escape sequence
+/// cut off waits for the rest up to [`PENDING_LIMIT`], and is never a key.
 const ESCAPE_WAIT: Duration = Duration::from_millis(50);
 /// Rows `j`, `k`, the arrows and Enter scroll.
 const STEP: u16 = 3;
@@ -152,7 +153,7 @@ pub(super) fn run(tty: &Tty, doc: &Doc, name: &str, terminal: &Terminal, pages: 
         }
         let mut redraw = false;
         if !pending.is_empty() {
-            // When nothing more arrived, a cut-off escape sequence was the Esc key.
+            // When nothing more arrived, a lone ESC was the Esc key.
             let (keys, used) = keys::decode(&pending, read.is_none());
             pending.drain(..used.min(pending.len()));
             // What is left is the start of something cut off: it gets a while to complete.

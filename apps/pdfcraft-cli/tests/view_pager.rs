@@ -333,6 +333,38 @@ fn an_image_the_terminal_dropped_is_sent_again_and_its_answers_are_never_keys() 
     assert!(view.finish().success());
 }
 
+#[test]
+fn a_reply_cut_in_two_is_never_keys_and_esc_still_quits() {
+    if !pty_works() {
+        return;
+    }
+    let pdf = fixture("cut", 3);
+    let mut view = Session::start(&pdf, &["--protocol", "kitty"], 80, 60);
+    // Settled: page 1 shown, and every page sent.
+    view.wait_until("pages 1-3 sent", |t| t.contains(" page 1/3 ") && t.contains("q quit") && transmitted(t) == 3);
+    // A late cell size and device attributes, as over a slow connection: each cut past its CSI
+    // prefix, the rest coming later than an Esc waits for more. Neither part is a key: the ESC
+    // isn't Esc (which quits), nor are the digits a page number.
+    for (first, rest) in [("\x1b[6;", "25;14t"), ("\x1b[", "?62;c")] {
+        view.press(first);
+        std::thread::sleep(Duration::from_millis(250));
+        assert!(view.child.try_wait().unwrap().is_none(), "{first:?} quit the pager");
+        view.press(rest);
+        std::thread::sleep(Duration::from_millis(250));
+        assert!(view.child.try_wait().unwrap().is_none(), "{first:?} then {rest:?} quit the pager");
+    }
+    assert!(!view.text().contains("go to page"), "a reply typed a page number");
+    // A key cut in two the same way is the key: Page Down.
+    view.press("\x1b[6");
+    std::thread::sleep(Duration::from_millis(250));
+    view.press("~");
+    view.wait_until("page 2 shown", |t| t.contains(" page 2/3 "));
+    // Esc on its own still quits.
+    view.press("\x1b");
+    assert!(view.finish().success());
+    assert!(view.text().contains("\x1b[?1049l"), "the alternate screen was left");
+}
+
 /// The `i=` value at the start of a transmission.
 fn view_id(transmission: &str) -> String {
     transmission.trim_start_matches("a=t,f=100,t=d,q=2,i=").chars().take_while(char::is_ascii_digit).collect()
