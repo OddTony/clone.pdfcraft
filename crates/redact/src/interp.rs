@@ -92,9 +92,13 @@ pub(crate) struct Scope<'a> {
     /// repositioning gap past 0.15 heights becomes a space — and splits at kept glyphs, at codes
     /// with no Unicode meaning, and at page end.
     pub removed_fragments: Vec<String>,
+    /// Comparison alternatives for ambiguous forward TJ gaps; the canonical runs above stay
+    /// unspaced so intra-word kerning retains its original interpretation.
+    pub kerned_fragments: Vec<crate::metadata::KernedFragment>,
     /// The run being collected: its text, and where its last removed glyph's advance ended in
     /// device space with that glyph's height (`None` = no open run).
     run: String,
+    run_gaps: Vec<usize>,
     run_end: Option<((f64, f64), f64)>,
     fonts: HashMap<Vec<u8>, Rc<Metrics>>,
     used_names: Vec<Vec<u8>>,
@@ -111,7 +115,9 @@ impl<'a> Scope<'a> {
             hidden_layers: Vec::new(),
             layer_blocks: 0,
             removed_fragments: Vec::new(),
+            kerned_fragments: Vec::new(),
             run: String::new(),
+            run_gaps: Vec::new(),
             run_end: None,
             fonts: HashMap::new(),
             used_names: Vec::new(),
@@ -177,19 +183,32 @@ impl<'a> Scope<'a> {
     pub(crate) fn flush_run(&mut self) {
         self.run_end = None;
         if !self.run.is_empty() {
+            if !self.run_gaps.is_empty() {
+                self.kerned_fragments.push(crate::metadata::KernedFragment { text: self.run.clone(), gaps: std::mem::take(&mut self.run_gaps) });
+            }
             self.removed_fragments.push(std::mem::take(&mut self.run));
         }
     }
 
     /// A removed glyph: `kerned` says a `TJ` number displaced the text since the last removed
-    /// glyph — spacing inside one text run, which joins with no space and no split (a kern is not
-    /// a word gap). Otherwise the glyph continues the open run when it starts where the last
+    /// glyph: the canonical run joins with no space or split. A forward gap may also represent
+    /// a word space, recorded separately for metadata comparison. Otherwise the glyph continues
+    /// the open run when it starts where the last
     /// one's advance landed — device space, within 1.5 glyph heights, so text drawn one glyph per
     /// operator still collects as one run — and a gap past 0.15 heights is a word gap (a real
     /// space, or the joined text would not match the value it was drawn from). Degenerate
     /// (zero-height) glyphs and non-finite positions never join.
     fn removed_glyph(&mut self, text: &str, origin: (f64, f64), end: (f64, f64), height: f64, kerned: bool) {
         if kerned && self.run_end.is_some() {
+            if let Some(((x, y), previous_height)) = self.run_end {
+                let (dx, dy) = (origin.0 - x, origin.1 - y);
+                let h = previous_height.max(height);
+                let gap = dx.hypot(dy);
+                let forward = dx * (end.0 - origin.0) + dy * (end.1 - origin.1);
+                if h.is_finite() && h > 0.0 && gap.is_finite() && gap > 0.15 * h && forward.is_finite() && forward > 0.0 {
+                    self.run_gaps.push(self.run.len());
+                }
+            }
             self.run.push_str(text);
             self.run_end = Some((end, height));
             return;

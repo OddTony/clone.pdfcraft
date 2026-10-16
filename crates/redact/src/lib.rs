@@ -17,7 +17,6 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
@@ -25,6 +24,7 @@ use pdfcraft_cos::{Dict, Document, ObjRef, Object, Stream};
 pub mod codes;
 mod image;
 mod interp;
+mod metadata;
 mod overlay;
 pub mod patterns;
 pub mod sanitize;
@@ -33,6 +33,7 @@ mod tags;
 mod tests;
 
 use interp::{Mode, Scope, process};
+use metadata::{KernedFragment, normalize, packet_hit};
 
 pub type Rgb = [f64; 3];
 
@@ -349,6 +350,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
         pdfcraft_forms::fields(doc).into_iter().flat_map(|f| f.widgets.iter().map(|w| (w.obj, f.name.clone())).collect::<Vec<_>>()).collect();
     // The text the marks removed (maximal runs), for the metadata pass below.
     let mut fragments: Vec<String> = Vec::new();
+    let mut kerned = Vec::new();
 
     for &(pi, page_marks) in &groups {
         let page = pdfcraft_model::pages(doc).swap_remove(pi);
@@ -362,6 +364,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
             let out = process(doc, &mut scope, &data, &resources, pdfcraft_content::Matrix::IDENTITY);
             scope.flush_run();
             fragments.append(&mut scope.removed_fragments);
+            kerned.append(&mut scope.kerned_fragments);
             out
         };
         // Fail closed: the interpreter lays vertical-writing text out horizontally, so it cannot
@@ -528,7 +531,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
     }
     // 6. Metadata: what the marks removed must not survive in `/Info` or XMP either (#2448).
     //    Before the full-save flag, so the previous revision's metadata leaves the file too.
-    clear_marked_metadata(doc, &fragments, &mut report)?;
+    clear_marked_metadata(doc, &fragments, &kerned, &mut report)?;
     // The previous revision still holds the removed content: the next save must rewrite.
     doc.require_full_save();
     Ok(report)
@@ -538,95 +541,9 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
 /// past 100 kB — the same cap `pdfcraft_organize` reads packets with).
 const MAX_METADATA: usize = 16 << 20;
 
-/// `s` with XML entity references resolved: the five named ones and numeric character
-/// references. XMP stores values escaped (`AT&T` as `AT&amp;T`), so removed text has to be
-/// looked for in an unescaped view of a packet too. Anything malformed stays as it stands.
-fn xml_unescape(s: &str) -> Cow<'_, str> {
-    if !s.contains('&') {
-        return Cow::Borrowed(s);
-    }
-    let bytes = s.as_bytes();
-    let mut out = String::with_capacity(s.len());
-    let mut i = 0;
-    while i < s.len() {
-        if bytes[i] == b'&'
-            && let Some(end) = s[i..].find(';').map(|e| i + e).filter(|e| *e - i <= 12)
-        {
-            let ent = &s[i + 1..end];
-            let c = match ent {
-                "amp" => Some('&'),
-                "lt" => Some('<'),
-                "gt" => Some('>'),
-                "quot" => Some('"'),
-                "apos" => Some('\''),
-                _ => ent
-                    .strip_prefix("#x")
-                    .and_then(|h| u32::from_str_radix(h, 16).ok())
-                    .or_else(|| ent.strip_prefix('#').and_then(|d| d.parse::<u32>().ok()))
-                    .and_then(char::from_u32),
-            };
-            if let Some(c) = c {
-                out.push(c);
-                i = end + 1;
-                continue;
-            }
-        }
-        match s[i..].chars().next() {
-            Some(c) => {
-                out.push(c);
-                i += c.len_utf8();
-            }
-            None => break,
-        }
-    }
-    Cow::Owned(out)
-}
-
-/// Does the XMP packet `text` hold removed text? Scanned whole, raw and entity-unescaped, for a
-/// removed run; and value by value — each tag's text and each quoted attribute, unescaped — for
-/// a value that is only part of one (a name inside a redacted sentence). Structure is read from
-/// the raw text, where an escaped `&lt;` is not a tag, before each value is unescaped.
-fn packet_hit(text: &str, hit: &impl Fn(&str) -> bool) -> bool {
-    hit(text) || hit(&xml_unescape(text)) || xml_chunks(text).into_iter().any(|c| hit(&xml_unescape(c)))
-}
-
-/// The places an XML packet can hold a value: the text between tags and the quoted attribute
-/// values inside them, as they stand (the caller unescapes). Lenient: malformed markup just
-/// yields fewer places.
-fn xml_chunks(xmp: &str) -> Vec<&str> {
-    let mut out = Vec::new();
-    let mut rest = xmp;
-    while let Some(open) = rest.find('<') {
-        if open > 0 {
-            out.push(&rest[..open]);
-        }
-        // A tag with no `>` ends the scan; the tail is then text.
-        let Some(rel) = rest[open..].find('>') else { break };
-        let tag = &rest[open + 1..open + rel];
-        rest = &rest[open + rel + 1..];
-        let bytes = tag.as_bytes();
-        let mut i = 0;
-        while i < tag.len() {
-            let q = bytes[i];
-            if (q == b'"' || q == b'\'') && i > 0 && bytes[i - 1] == b'=' {
-                let value = &tag[i + 1..];
-                let len = value.find(q as char).unwrap_or(value.len());
-                out.push(&value[..len]);
-                i += len + 2;
-            } else {
-                i += 1;
-            }
-        }
-    }
-    if !rest.is_empty() {
-        out.push(rest);
-    }
-    out
-}
-
 /// The metadata half of redaction (#2448): a string the marks took off the pages must not stay
 /// in the document information dictionary or the XMP metadata. Runs of removed text two
-/// characters or longer are matched case-insensitively (a single clipped glyph is no evidence a
+/// characters or longer are matched case-insensitively with collapsed whitespace (a single clipped glyph is no evidence a
 /// secret was removed, and would clear unrelated entries that merely contain that character).
 ///
 /// Per entry first, so unrelated values survive: each `/Info` string entry whose value contains
@@ -635,13 +552,14 @@ fn xml_chunks(xmp: &str) -> Vec<&str> {
 /// which also removes the XMP property mirroring it and leaves the rest of the packet byte for
 /// byte. Then, wholesale where per-entry editing cannot reach: every catalog and page
 /// `/Metadata` stream is kept only when it decodes, reads as UTF-8, and holds no removed run or
-/// part of one (raw, entity-unescaped, or value by value — custom schemas escape their values);
+/// part of one in decoded XML values (markup names and namespace declarations are excluded);
 /// a trailer `/Info` that is a direct dictionary — the one shape an entry clear cannot edit —
 /// is removed whole when it still matches. Matching errs towards clearing; text that leaves no
 /// searchable run (image text, one surviving piece) needs `sanitize`'s metadata category to be
 /// provably gone.
-fn clear_marked_metadata(doc: &mut Document, fragments: &[String], report: &mut Report) -> Result<(), RedactError> {
-    let needles: Vec<String> = fragments.iter().map(|f| f.trim().to_lowercase()).filter(|f| f.chars().count() >= 2).collect();
+fn clear_marked_metadata(doc: &mut Document, fragments: &[String], kerned: &[KernedFragment], report: &mut Report) -> Result<(), RedactError> {
+    let needles: Vec<String> = fragments.iter().map(|f| normalize(f)).filter(|f| f.chars().count() >= 2).collect();
+    let kerned: Vec<_> = kerned.iter().map(KernedFragment::normalized).filter(|f| f.text.chars().count() >= 2).collect();
     if needles.is_empty() {
         return Ok(());
     }
@@ -649,9 +567,11 @@ fn clear_marked_metadata(doc: &mut Document, fragments: &[String], report: &mut 
     // direction never matches a value under two characters: one shared character is no evidence
     // a secret was removed.
     let hit = |v: &str| {
-        let v = v.to_lowercase();
+        let v = normalize(v);
         let part = v.trim();
-        needles.iter().any(|n| v.contains(n.as_str())) || (part.chars().count() >= 2 && needles.iter().any(|n| n.contains(part)))
+        needles.iter().any(|n| v.contains(n.as_str()))
+            || (part.chars().count() >= 2 && needles.iter().any(|n| n.contains(part)))
+            || (part.chars().count() >= 2 && kerned.iter().any(|n| n.matches(part)))
     };
 
     // 1. Entry by entry: the value goes, and with it the XMP property that mirrors the entry.

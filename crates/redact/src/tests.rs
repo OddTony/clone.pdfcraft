@@ -6,6 +6,9 @@ use pdfcraft_testkit::{Pdf, stream_obj as stream};
 
 use super::*;
 
+#[path = "metadata_tests.rs"]
+mod metadata_tests;
+
 fn pdf(objs: Vec<Vec<u8>>) -> Document {
     Document::open(Arc::new(Pdf::new().objs(objs).build())).unwrap()
 }

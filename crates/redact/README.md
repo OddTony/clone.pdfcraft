@@ -48,14 +48,19 @@ as many generators do, still collects as one run — whenever the next removed g
 1.5 glyph heights of where the last one's advance (character and word spacing included) landed
 in device space; a repositioning gap past 0.15 heights becomes a space, and kept glyphs, codes
 with no Unicode meaning, and page ends still split runs.
-After verification, each `/Info` string entry whose value contains a fragment (lowercased, two
-characters or more) — or
-is contained in one, for a value shorter than the run; the author of a whole redacted sentence
-is removed text too — is cleared with its mirrored XMP property; then every catalog and page
-`/Metadata` stream is checked in its raw bytes **and** in an entity-unescaped view of them (XMP
-stores `AT&T` as `AT&amp;T`), and value by value (each tag's text, each quoted attribute),
-and removed whole when a fragment or part of one survives there — custom schemas cannot be
-edited per-entry — or when the stream cannot be decoded and read as UTF-8 within 16 MiB. A
+Forward `TJ` displacements can also encode word spacing. Those gaps are optional spaces during
+metadata comparison, retaining the unspaced interpretation for intra-word kerning. Mixed kerns
+and word gaps are compared without enumerating combinations; literal spaces remain required.
+After verification, fragments and values are lowercased with internal whitespace collapsed.
+Each `/Info` string entry containing a complete fragment of two characters or more — or whose
+complete value is contained in a fragment — is cleared with its mirrored XMP property. The
+author of a whole redacted sentence is removed text too. Then every catalog and page
+`/Metadata` stream is parsed as XML and checked value by value (decoded text, comments and
+attribute values). Tag names, attribute names, namespace declarations and processing instructions
+are not values. XML entities and CDATA are decoded by the parser. A packet is removed whole
+when a fragment or part of one survives in a value — custom schemas cannot be
+edited per-entry — or when the stream cannot be decoded and read as UTF-8 within 16 MiB or parsed
+as XML. DTDs are unsupported and take this conservative whole-packet fallback. A
 trailer `/Info` that is a direct dictionary (the one shape an entry clear cannot edit) is
 removed whole when it still matches. All of this happens before the forced full save, so the
 previous revision's bytes leave the file.
@@ -65,7 +70,8 @@ The match errs towards clearing, in both directions:
 - **over-clearing**: a fully redacted common word is a fragment, and an unrelated entry or packet
   merely containing it goes too; glyphs removed under *different* marks also join when they land
   within 1.5 em of each other in stream order, so two one-letter removals can form a two-character
-  needle; the wholesale fallback drops a whole stream for one custom-schema hit;
+  needle; the wholesale fallback drops a whole stream for one custom-schema hit. A short complete
+  XML value such as language `en` or version `1.7` can still match part of a longer removed run;
 - **under-matching**: text inside images never becomes a fragment, runs shorter than two
   characters are ignored, fragments split at gaps wider than 1.5 em and carry narrower
   repositioning gaps as spaces, so a value that spells the same text with or without one of those
@@ -74,6 +80,13 @@ The match errs towards clearing, in both directions:
   generators still leave one-character runs, and codes with no Unicode meaning still split
   them — and `/Metadata` on component objects (images, fonts, form XObjects) is not scanned — the
   same scope as Remove hidden information.
+
+Matching still requires a complete removed fragment inside a value, or a complete value inside
+a fragment. Partial phrases such as Title `Case: James Bond` after redacting `JAMES BOND IS A SPY`,
+reordered names such as `Smith, John` versus `John Smith`, and Unicode normalization remain
+unsupported. No word-term deletion is performed: unrelated Subject `Spy stories` stays. Fragment
+count/length and matching-work limits are unchanged; the 16 MiB stream limit is not a bound on
+total metadata-matching work.
 
 Remove hidden information (metadata category, `doc_remove_hidden`) is therefore the certain
 follow-up when a document's metadata must be provably free of the redacted text.
