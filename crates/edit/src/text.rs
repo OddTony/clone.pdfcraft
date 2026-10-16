@@ -2076,9 +2076,17 @@ fn rewrite_block_from(
         return Err(EditError::Invalid("formatting part of turned text, or choosing a document font for it, isn't supported yet".into()));
     }
     let visual_indic = members.iter().any(|line| line.visual_order);
-    if upright
-        && !hebrew
-        && !visual_indic
+    // Hebrew with niqqud must use OpenType shaping (glyph IDs and mark offsets).
+    // The legacy Type 3 writer places each character independently and rejects
+    // combining marks. Keep ordinary legacy Hebrew behavior for now, but send
+    // vowelized paragraphs through the shaped, Unicode-preserving writer.
+    let vowelized_hebrew = hebrew
+        && text.unwrap_or(&b.text).chars().any(crate::bidi::is_hebrew_mark)
+        && style.ranges.is_empty()
+        && style.resource.is_none()
+        && style.family.is_none()
+        && style.bold.is_none();
+    let styled_non_hebrew = !hebrew
         && (!style.ranges.is_empty()
             || style.resource.is_some()
             || (text.is_some_and(|draft| {
@@ -2090,8 +2098,8 @@ fn rewrite_block_from(
                 || b.rows.iter().any(|row| row.len() > 1)
                 || members.iter().any(|line| line.font != first.font || line.size != first.size || line.color != first.color))
                 && style.family.is_none()
-                && style.bold.is_none())
-    {
+                && style.bold.is_none());
+    if upright && !visual_indic && (vowelized_hebrew || styled_non_hebrew) {
         return rewrite_styled_block(doc, page, &b, &lines, text, style);
     }
     let streams = content_streams(doc, &p.dict);
