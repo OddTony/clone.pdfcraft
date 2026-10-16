@@ -86,9 +86,16 @@ pub(crate) struct Scope<'a> {
     /// Content removed from hidden layers (blocks and XObjects).
     pub layer_blocks: usize,
     /// Redaction (apply mode): the text of each maximal run of removed glyphs, for the metadata
-    /// pass. A run joins across `TJ` kerning numbers and splits at kept glyphs, at codes with no
-    /// Unicode meaning, and at operator ends.
+    /// pass. A run joins across `TJ` kerning numbers (spacing inside one text run: no space, no
+    /// split) and across operators when the next removed glyph starts within 1.5 glyph heights
+    /// of where the last one's advance (spacing included) landed in device space — a
+    /// repositioning gap past 0.15 heights becomes a space — and splits at kept glyphs, at codes
+    /// with no Unicode meaning, and at page end.
     pub removed_fragments: Vec<String>,
+    /// The run being collected: its text, and where its last removed glyph's advance ended in
+    /// device space with that glyph's height (`None` = no open run).
+    run: String,
+    run_end: Option<((f64, f64), f64)>,
     fonts: HashMap<Vec<u8>, Rc<Metrics>>,
     used_names: Vec<Vec<u8>>,
     depth: usize,
@@ -104,6 +111,8 @@ impl<'a> Scope<'a> {
             hidden_layers: Vec::new(),
             layer_blocks: 0,
             removed_fragments: Vec::new(),
+            run: String::new(),
+            run_end: None,
             fonts: HashMap::new(),
             used_names: Vec::new(),
             depth: 0,
@@ -162,6 +171,47 @@ impl<'a> Scope<'a> {
             let oy = b[3].min(r[3]) - b[1].max(r[1]);
             ox > mx && oy > my
         })
+    }
+
+    /// End the run of removed text being collected (nothing when it is empty).
+    pub(crate) fn flush_run(&mut self) {
+        self.run_end = None;
+        if !self.run.is_empty() {
+            self.removed_fragments.push(std::mem::take(&mut self.run));
+        }
+    }
+
+    /// A removed glyph: `kerned` says a `TJ` number displaced the text since the last removed
+    /// glyph — spacing inside one text run, which joins with no space and no split (a kern is not
+    /// a word gap). Otherwise the glyph continues the open run when it starts where the last
+    /// one's advance landed — device space, within 1.5 glyph heights, so text drawn one glyph per
+    /// operator still collects as one run — and a gap past 0.15 heights is a word gap (a real
+    /// space, or the joined text would not match the value it was drawn from). Degenerate
+    /// (zero-height) glyphs and non-finite positions never join.
+    fn removed_glyph(&mut self, text: &str, origin: (f64, f64), end: (f64, f64), height: f64, kerned: bool) {
+        if kerned && self.run_end.is_some() {
+            self.run.push_str(text);
+            self.run_end = Some((end, height));
+            return;
+        }
+        if let Some(((lx, ly), lh)) = self.run_end
+            && lh > 0.0
+            && height > 0.0
+        {
+            let gap = (origin.0 - lx).hypot(origin.1 - ly);
+            let h = lh.max(height);
+            if gap.is_finite() && h.is_finite() && gap <= 1.5 * h {
+                if gap > 0.15 * h && !self.run.ends_with(char::is_whitespace) {
+                    self.run.push(' ');
+                }
+                self.run.push_str(text);
+                self.run_end = Some((end, height));
+                return;
+            }
+        }
+        self.flush_run();
+        self.run.push_str(text);
+        self.run_end = Some((end, height));
     }
 }
 
@@ -352,6 +402,11 @@ struct Glyph {
     /// Advance in unscaled text space (before `Th`).
     advance: f64,
     hit: bool,
+    /// The glyph in device space: its origin, where its advance (spacing included) lands the
+    /// next glyph, and its height — for joining removed text into runs.
+    origin: (f64, f64),
+    end: (f64, f64),
+    height: f64,
 }
 
 /// Process a scope's content streams (state flows from one stream to the next).
@@ -642,14 +697,6 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
     // Redaction only: collect what is removed, for the metadata pass. Hidden-text sanitising
     // (empty regions or a page box) collects nothing.
     let collect = scope.mode == Mode::Apply && !scope.rects.is_empty() && scope.hidden_text.is_none();
-    // The removed text of this one show() call: joined across `TJ` kerning numbers, split by
-    // kept glyphs and codes with no Unicode meaning.
-    let mut frag = String::new();
-    let flush = |frag: &mut String, scope: &mut Scope<'_>| {
-        if !frag.is_empty() {
-            scope.removed_fragments.push(std::mem::take(frag));
-        }
-    };
     let push_num = |out: &mut Vec<Object>, v: f64| {
         if v == 0.0 {
             return;
@@ -662,6 +709,10 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
         }
         out.push(num(v));
     };
+    // A `TJ` number displaced the text since the last removed glyph: the glyph after it joins
+    // the run with no space and no split. Set by the number, spent by the next glyph drawn (so
+    // it never reaches the next operator).
+    let mut kerned = false;
     for item in items {
         match item {
             Object::String(s) => {
@@ -675,6 +726,14 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
                     let b = trm.bbox([0.0, f.descent, w0, f.ascent]);
                     let origin = trm.apply(0.0, 0.0);
                     let advance = w0 * size + spacing;
+                    // Where this glyph's advance lands the next one (device space, spacing
+                    // included, so character spacing is never read as a word gap), and the
+                    // glyph's height there: `trm.apply(x, 0)` maps text space through
+                    // `tm.apply(size·Th·x, rise)`, so `advance / size` is exactly the next
+                    // origin while nothing repositions the text in between.
+                    let top = trm.apply(0.0, 1.0);
+                    let height = (top.0 - origin.0).hypot(top.1 - origin.1);
+                    let end = if size != 0.0 { trm.apply(advance / size, 0.0) } else { origin };
                     let hit = match scope.hidden_text {
                         // Invisible (Tr 3) and clip-only (Tr 7) text, or text wholly off the page.
                         Some(page) => {
@@ -683,7 +742,7 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
                         }
                         None => scope.glyph_hit(b, origin),
                     };
-                    glyphs.push(Glyph { bytes: pos..pos + len, advance, hit });
+                    glyphs.push(Glyph { bytes: pos..pos + len, advance, hit, origin, end, height });
                     *tm = Matrix::translate(advance * gs.scale, 0.0).then(tm);
                     pos += len;
                 }
@@ -696,9 +755,12 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
                             if t.is_empty() {
                                 // A code the font gives no meaning: the run cannot be known to
                                 // continue through it, so each side matches on its own.
-                                flush(&mut frag, scope);
+                                scope.flush_run();
+                                kerned = false;
                             } else {
-                                frag.push_str(&t);
+                                let k = kerned;
+                                kerned = false;
+                                scope.removed_glyph(&t, g.origin, g.end, g.height, k);
                             }
                         }
                         if !run.is_empty() {
@@ -710,8 +772,9 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
                         }
                     } else {
                         if collect {
-                            flush(&mut frag, scope);
+                            scope.flush_run();
                         }
+                        kerned = false;
                         run.extend_from_slice(&bytes[g.bytes.clone()]);
                     }
                 }
@@ -723,11 +786,11 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
                 if let Some(v) = other.as_f64() {
                     *tm = Matrix::translate(-v / 1000.0 * size * gs.scale, 0.0).then(tm);
                     push_num(&mut out, v);
+                    kerned = true;
                 }
             }
         }
     }
-    flush(&mut frag, scope);
     (out, removed)
 }
 

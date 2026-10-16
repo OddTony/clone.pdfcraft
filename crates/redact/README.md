@@ -42,9 +42,14 @@ leave it unredacted.
 ## Metadata redaction (#2448)
 
 What the marks removed must not survive in metadata either. The interpreter decodes every glyph
-run it cuts out into *fragments*: maximal runs that join across `TJ` kerning numbers and split at
-kept glyphs, at codes with no Unicode meaning, and at operator ends. After verification, each
-`/Info` string entry whose value contains a fragment (lowercased, two characters or more) — or
+run it cuts out into *fragments*: maximal runs that join across `TJ` kerning numbers (spacing
+inside one text run: no space, no split) **and operators** — text drawn one glyph per operator,
+as many generators do, still collects as one run — whenever the next removed glyph starts within
+1.5 glyph heights of where the last one's advance (character and word spacing included) landed
+in device space; a repositioning gap past 0.15 heights becomes a space, and kept glyphs, codes
+with no Unicode meaning, and page ends still split runs.
+After verification, each `/Info` string entry whose value contains a fragment (lowercased, two
+characters or more) — or
 is contained in one, for a value shorter than the run; the author of a whole redacted sentence
 is removed text too — is cleared with its mirrored XMP property; then every catalog and page
 `/Metadata` stream is checked in its raw bytes **and** in an entity-unescaped view of them (XMP
@@ -58,12 +63,17 @@ previous revision's bytes leave the file.
 The match errs towards clearing, in both directions:
 
 - **over-clearing**: a fully redacted common word is a fragment, and an unrelated entry or packet
-  merely containing it goes too; the wholesale fallback drops a whole stream for one
-  custom-schema hit;
+  merely containing it goes too; glyphs removed under *different* marks also join when they land
+  within 1.5 em of each other in stream order, so two one-letter removals can form a two-character
+  needle; the wholesale fallback drops a whole stream for one custom-schema hit;
 - **under-matching**: text inside images never becomes a fragment, runs shorter than two
-  characters are ignored, fragments do not join across operators, and `/Metadata` on component
-  objects (images, fonts, form XObjects) is not scanned — the same scope as Remove hidden
-  information.
+  characters are ignored, fragments split at gaps wider than 1.5 em and carry narrower
+  repositioning gaps as spaces, so a value that spells the same text with or without one of those
+  spaces matches only the spelling the run collected — only glyphs shown in stream order at
+  adjacent positions join, so overprint-interleaved, character-batched or logical-order RTL
+  generators still leave one-character runs, and codes with no Unicode meaning still split
+  them — and `/Metadata` on component objects (images, fonts, form XObjects) is not scanned — the
+  same scope as Remove hidden information.
 
 Remove hidden information (metadata category, `doc_remove_hidden`) is therefore the certain
 follow-up when a document's metadata must be provably free of the redacted text.

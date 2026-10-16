@@ -360,6 +360,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
         let out = {
             let mut scope = Scope::new(&rects, Mode::Apply, &mut report);
             let out = process(doc, &mut scope, &data, &resources, pdfcraft_content::Matrix::IDENTITY);
+            scope.flush_run();
             fragments.append(&mut scope.removed_fragments);
             out
         };

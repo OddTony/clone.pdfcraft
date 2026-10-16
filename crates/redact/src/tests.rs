@@ -784,6 +784,124 @@ fn a_direct_info_dictionary_holding_redacted_text_is_removed_whole() {
     assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("topsecret"), "no trace in the saved file");
 }
 
+/// PR #2598: many generators draw text one glyph per operator (`(T) Tj 5 0 Td (O) Tj …`). The
+/// removed text must join by position — where each glyph's advance landed — or every fragment is
+/// a single character, the two-character floor filters them all, and the `/Title` repeating the
+/// removed text survives.
+#[test]
+fn glyphs_one_operator_at_a_time_still_clear_metadata() {
+    let content = b"BT /F1 10 Tf 10 100 Td (T) Tj 5 0 Td (O) Tj 5 0 Td (P) Tj 5 0 Td (S) Tj 5 0 Td (E) Tj 5 0 Td (C) Tj 5 0 Td (R) Tj 5 0 Td (E) Tj 5 0 Td (T) Tj ET";
+    let mut doc = meta_doc(content, &[("Title", "TOPSECRET"), ("Author", "Ada")], None, None);
+    assert_eq!(under(&mut doc, 0, &[[10.0, 95.0, 55.0, 110.0]]), 9, "the nine glyphs are under the mark");
+    mark(&mut doc, 0, &[[10.0, 95.0, 55.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.info_entries_cleared, 1, "the glyph-per-operator Title: {r:?}");
+    let doc = reopen(&doc);
+    assert_eq!(info_value(&doc, "Title"), None, "the entry repeating removed text is gone");
+    assert_eq!(info_value(&doc, "Author").as_deref(), Some("Ada"), "unrelated entries stay");
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("topsecret"), "no trace in the saved file");
+}
+
+/// PR #2598: a positional word gap between removed glyphs becomes a real space, so the joined run
+/// still matches the value it was drawn from (without the space it would read "topsecretplan").
+#[test]
+fn positional_word_gaps_join_into_spaces() {
+    let mut doc =
+        meta_doc(b"BT /F1 10 Tf 10 100 Td (TOPSECRET) Tj 47.5 0 Td (PLAN) Tj ET", &[("Title", "TopSecret plan"), ("Author", "Ada")], None, None);
+    // TOPSECRET spans x 10–55 and PLAN starts at 57.5: a 2.5 pt gap at 10 pt text.
+    assert_eq!(under(&mut doc, 0, &[[10.0, 95.0, 80.0, 110.0]]), 13, "both words are under the mark");
+    mark(&mut doc, 0, &[[10.0, 95.0, 80.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.info_entries_cleared, 1, "the joined run must carry the gap as a space: {r:?}");
+    let doc = reopen(&doc);
+    assert_eq!(info_value(&doc, "Title"), None, "the entry repeating removed text is gone");
+    assert_eq!(info_value(&doc, "Author").as_deref(), Some("Ada"), "unrelated entries stay");
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("topsecret"), "no trace in the saved file");
+}
+
+/// PR #2598, the surgical half: joining glyphs across operators must not make matching any less
+/// surgical. "JAMES BOND IS A SPY" drawn one glyph per operator joins into one run; the author
+/// contained in it still goes, the unrelated Subject still stays.
+#[test]
+fn glyph_per_operator_removal_stays_surgical() {
+    // Nineteen glyphs (spaces included), each `(x) Tj 5 0 Td` continuing exactly where the last
+    // glyph's advance ended.
+    let mut src = String::from("BT /F1 10 Tf 10 100 Td");
+    for c in "JAMES BOND IS A SPY".chars() {
+        src.push_str(&format!(" ({c}) Tj 5 0 Td"));
+    }
+    src.push_str(" ET");
+    let mut doc = meta_doc(src.as_bytes(), &[("Author", "James Bond"), ("Subject", "Spy stories")], None, None);
+    assert_eq!(under(&mut doc, 0, &[[10.0, 95.0, 105.0, 110.0]]), 19, "the whole phrase is nineteen glyphs");
+    mark(&mut doc, 0, &[[10.0, 95.0, 105.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.info_entries_cleared, 1, "the Author entry: {r:?}");
+    let doc = reopen(&doc);
+    assert_eq!(info_value(&doc, "Author"), None, "the shorter value is part of the removed text");
+    assert_eq!(info_value(&doc, "Subject").as_deref(), Some("Spy stories"), "an unrelated value stays");
+}
+
+/// Character spacing must not read as a word gap: a run ends where the interpreter's own advance
+/// (Tc and Tw included) lands, so tracked text still forms one run. With the bare glyph width as
+/// the end, `2 Tc` would put a synthetic space between every pair.
+#[test]
+fn tracked_text_still_forms_one_run() {
+    let mut doc = meta_doc(b"BT /F1 10 Tf 2 Tc 10 100 Td (TOPSECRET) Tj ET", &[("Title", "TOPSECRET"), ("Author", "Ada")], None, None);
+    // Advances are 7 pt each (5 pt glyph + 2 Tc): the nine glyphs span x 10–73.
+    assert_eq!(under(&mut doc, 0, &[[10.0, 95.0, 75.0, 110.0]]), 9, "the tracked glyphs are under the mark");
+    mark(&mut doc, 0, &[[10.0, 95.0, 75.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.info_entries_cleared, 1, "tracking is not a word gap: {r:?}");
+    let doc = reopen(&doc);
+    assert_eq!(info_value(&doc, "Title"), None, "the entry repeating removed text is gone");
+    assert_eq!(info_value(&doc, "Author").as_deref(), Some("Ada"), "unrelated entries stay");
+}
+
+/// A `TJ` kern number is spacing inside one text run, not a word gap: the displaced glyphs join
+/// with no space and no split, so a kerned intra-word value (`[(TOP) -200 (SECRET)] TJ` with
+/// `/Title (TOPSECRET)`) still clears — as it did before the positional joining, which must only
+/// infer spaces where text was repositioned between operators.
+#[test]
+fn kerned_intra_word_text_still_forms_one_run() {
+    let mut doc = meta_doc(b"BT /F1 10 Tf 10 100 Td [(TOP) -200 (SECRET)] TJ ET", &[("Title", "TOPSECRET"), ("Author", "Ada")], None, None);
+    // The -200 kern moves the second half 2 pt along: the six+three glyphs span x 10–57.
+    assert_eq!(under(&mut doc, 0, &[[10.0, 95.0, 60.0, 110.0]]), 9, "the kerned glyphs are under the mark");
+    mark(&mut doc, 0, &[[10.0, 95.0, 60.0, 110.0]], "");
+    let r = apply(&mut doc, None).unwrap();
+    assert_eq!(r.info_entries_cleared, 1, "a kern displacement is not a word gap: {r:?}");
+    let doc = reopen(&doc);
+    assert_eq!(info_value(&doc, "Title"), None, "the entry repeating removed text is gone");
+    assert_eq!(info_value(&doc, "Author").as_deref(), Some("Ada"), "unrelated entries stay");
+}
+
+/// The joining itself, on the interpreter: a run continues across operators whenever the next
+/// removed glyph starts where the last one's advance landed (a `Td` can land there as easily as
+/// a `TJ` number), a positional word gap becomes a space, a `TJ` kern joins with no space, and
+/// anything further away starts a new run.
+#[test]
+fn runs_join_by_position_across_operators() {
+    let mut doc = one_page(
+        b"BT /F1 10 Tf 10 100 Td (BLU) Tj 15 0 Td (E) Tj 5 0 Td [(F) -300 (IN)] TJ ( 7) Tj ET BT /F1 10 Tf 10 200 Td (Gary) Tj ET",
+        "",
+        vec![],
+    );
+    let page = pdfcraft_model::pages(&doc).swap_remove(0);
+    let (_, data) = page_streams(&doc, &page.dict, 0).unwrap();
+    let res = page.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
+    let mut rep = Report::default();
+    let rects = [[0.0, 90.0, 300.0, 120.0], [0.0, 190.0, 300.0, 220.0]];
+    let mut scope = Scope::new(&rects, Mode::Apply, &mut rep);
+    process(&mut doc, &mut scope, &data, &res, pdfcraft_content::Matrix::IDENTITY);
+    scope.flush_run();
+    assert_eq!(
+        scope.removed_fragments,
+        ["BLUEFIN 7", "Gary"],
+        "one run across four operators, the kern joined with no space, the far line its own run"
+    );
+}
+
 /// Issue #2448: a non-ASCII title is stored as UTF-16BE (`PdfString::text`), and the removed
 /// run's Euro sign is only known through the font's ToUnicode map; the match still has to find it.
 #[test]
