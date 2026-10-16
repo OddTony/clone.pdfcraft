@@ -738,7 +738,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 return false;
             }
             if over_page {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
             }
             if resp.drag_started()
                 && pressed_here
@@ -797,7 +797,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 return false;
             }
             if over_page {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
             }
             let finish = resp.double_clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter));
             // Backspace (or Delete) takes back the last point, e.g. after a wrong click; Undo does too.
@@ -857,7 +857,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 return false;
             }
             if over_page {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
             }
             if resp.drag_started()
                 && pressed_here
@@ -891,7 +891,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 return false;
             }
             if over_page {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
             }
             if resp.clicked()
                 && over_page
@@ -907,7 +907,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 return false;
             }
             if over_page {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Text);
             }
             if resp.clicked()
                 && over_page
@@ -926,7 +926,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, cx: &PageCx<'_>, 
                 return false;
             }
             if over_page {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
             }
             if resp.clicked()
                 && over_page
@@ -1033,15 +1033,18 @@ fn select_input(
     let mut consumed = false;
     if let Some(p) = pointer {
         if let Some(h) = handle_at(p) {
-            ui.ctx().set_cursor_icon(match h {
-                (0, _) => egui::CursorIcon::ResizeVertical,
-                (_, 0) => egui::CursorIcon::ResizeHorizontal,
-                (-1, -1) | (1, 1) => egui::CursorIcon::ResizeNwSe,
-                _ => egui::CursorIcon::ResizeNeSw,
-            });
+            crate::canvas_cursor::set(
+                ui,
+                match h {
+                    (0, _) => egui::CursorIcon::ResizeVertical,
+                    (_, 0) => egui::CursorIcon::ResizeHorizontal,
+                    (-1, -1) | (1, 1) => egui::CursorIcon::ResizeNwSe,
+                    _ => egui::CursorIcon::ResizeNeSw,
+                },
+            );
         } else if let Some(a) = cx.hit(p) {
             let movable = cx.allowed && !is_markup(&a.subtype);
-            ui.ctx().set_cursor_icon(if movable { egui::CursorIcon::Move } else { egui::CursorIcon::PointingHand });
+            crate::canvas_cursor::set(ui, if movable { egui::CursorIcon::Move } else { egui::CursorIcon::PointingHand });
         }
     }
     if resp.drag_started()

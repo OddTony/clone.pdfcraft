@@ -132,7 +132,7 @@ pub(crate) fn page_input(
     let mut hover = None;
     let mut snap = None;
     if let Some(pos) = pos {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
         let (vx, vy) = xf.screen_to_view(pos);
         let [x, y] = info.view_to_user(vx, vy);
         let mut point = [f64::from(x), f64::from(y)];

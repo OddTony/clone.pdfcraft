@@ -63,7 +63,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, p
     let origin = ui.input(|i| i.pointer.press_origin());
     if !allowed {
         if pointer.is_some_and(|p| xf.rect.contains(p)) {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
+            crate::canvas_cursor::set(ui, egui::CursorIcon::NotAllowed);
         }
         return;
     }
@@ -93,7 +93,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, p
     let Some(q) = view.camera.as_mut().filter(|q| q.page == page) else { return };
     let near = pointer.is_some_and(|p| q.corners.iter().any(|&c| screen(xf, c).distance(p) <= GRAB));
     if let Some(i) = q.grab {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Grabbing);
         if let Some(p) = pointer {
             let (x, y) = xf.screen_to_view(p);
             if let Some(c) = q.corners.get_mut(i) {
@@ -104,7 +104,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, p
             q.grab = None;
         }
     } else if near {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Grab);
     }
 }
 

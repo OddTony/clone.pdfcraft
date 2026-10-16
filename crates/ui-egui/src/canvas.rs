@@ -2705,9 +2705,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         if hand {
             if resp.dragged() {
                 ui.scroll_with_delta(resp.drag_delta());
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Grabbing);
             } else if resp.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Grab);
             }
         }
         let origin = resp_rect.min - vec2(0.0, y_shift);
@@ -2897,7 +2897,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 && allowed
                 && let Some(p) = ui.input(|inp| inp.pointer.hover_pos()).filter(|p| xf.rect.contains(*p))
             {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
                 if resp.clicked() {
                     // Centred on the click, upright as the page is shown.
                     let (vx, vy) = xf.screen_to_view(p);
@@ -2921,7 +2921,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 && allowed
                 && let Some(p) = ui.input(|inp| inp.pointer.hover_pos()).filter(|p| xf.rect.contains(*p))
             {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
                 if resp.clicked() {
                     // Centred on the click at its natural size (the engine sizes it).
                     let (vx, vy) = xf.screen_to_view(p);
@@ -3150,9 +3150,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     // drawn with a glyph, or set on printed text, shows the hand, not the I-beam.
                     let cursor_free = !over_link && !over_field;
                     if column && cursor_free {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                        crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
                     } else if over_text && cursor_free {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+                        crate::canvas_cursor::set(ui, egui::CursorIcon::Text);
                     }
                     let press_here = ui
                         .input(|inp| {
@@ -3333,7 +3333,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 for l in info.links.iter().filter(|l| l.page == i) {
                     let sr = xf.user_rect(info, i, l.rect);
                     if sr.contains(p) {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        crate::canvas_cursor::set(ui, egui::CursorIcon::PointingHand);
                         let label = match &l.target {
                             LinkTarget::Page(n, _) => {
                                 crate::i18n::fmt(tl!("Go to page {p}"), &[("p", info.pages.get(*n).map(|p| p.label.as_str()).unwrap_or("?"))])

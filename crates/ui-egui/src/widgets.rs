@@ -190,7 +190,7 @@ pub fn search_box(ui: &mut egui::Ui, placeholder: &str, width: f32) -> Response 
     let elided = text.elided;
     ui.painter().with_clip_rect(text_rect).galley(egui::pos2(text_left, rect.center().y - text.size().y * 0.5), text, t.text_faint);
     ui.painter().with_clip_rect(rect).galley(shortcut_pos, shortcut, t.text_faint);
-    let resp = resp.on_hover_cursor(egui::CursorIcon::Text);
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
     if elided { resp.on_hover_text(placeholder) } else { resp }
 }
 

@@ -358,7 +358,7 @@ pub(crate) fn page_input(
         .map(|(_, a)| screen_rect(xf, info, page, a.content.rect()));
     let corner = selected_rect.and_then(|r| handles(r).into_iter().find(|(c, ..)| c.distance(p) <= 6.0));
     if adding_text && hit.is_none() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Text);
         if resp.clicked() {
             // Text that can't be drawn stays where it is being typed (#125).
             if cv.hold_blocked() {
@@ -384,9 +384,9 @@ pub(crate) fn page_input(
         return consumed;
     }
     if let Some((_, left, top)) = corner {
-        ui.ctx().set_cursor_icon(if left == top { egui::CursorIcon::ResizeNwSe } else { egui::CursorIcon::ResizeNeSw });
+        crate::canvas_cursor::set(ui, if left == top { egui::CursorIcon::ResizeNwSe } else { egui::CursorIcon::ResizeNeSw });
     } else if hit.is_some() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Move);
     }
     if resp.drag_started() {
         let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(p);
