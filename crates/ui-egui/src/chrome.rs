@@ -81,9 +81,9 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 // their narrowest; then arrows either side say so and step through them.
                 let mut natural: Vec<f32> = Vec::with_capacity(app.views.len() + 1);
                 // (The main pane's tabs: split view's second pane has a strip of its own.)
-                for v in app.views.iter().filter(|v| v.place() == Place::Main) {
-                    if let Some(doc) = app.session.get(v.id) {
-                        natural.push(tab_natural_width(ui, &t, &doc.display_name()));
+                for i in app.tabs_in(Place::Main) {
+                    if let Some(name) = crate::canvas::tab_label(app, i) {
+                        natural.push(tab_natural_width(ui, &t, &name));
                     }
                 }
                 if app.combine_tab.open {
@@ -129,7 +129,8 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             let mut dragged = None;
                             for i in app.tabs_in(Place::Main) {
                                 let Some(doc) = app.session.get(app.views[i].id) else { continue };
-                                let (name, dirty) = (doc.display_name(), doc.dirty);
+                                let Some(name) = crate::canvas::tab_label(app, i) else { continue };
+                                let dirty = doc.dirty;
                                 // A tab showing the document's title names its file on hover.
                                 let file = (name != doc.name).then_some(doc.name.as_str());
                                 let response = tab(
@@ -385,11 +386,7 @@ pub(crate) fn pane_tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui, strip: Re
     let inner = Rect::from_min_max(strip.min + vec2(6.0, 2.0), strip.max - vec2(6.0, 0.0));
     let mut row = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(Layout::left_to_right(Align::Max)).id_salt(("tab-row", place)));
     row.spacing_mut().item_spacing.x = 4.0;
-    let natural: Vec<f32> = tabs
-        .iter()
-        .filter_map(|&i| app.views.get(i).and_then(|v| app.session.get(v.id)))
-        .map(|d| tab_natural_width(&row, &t, &d.display_name()))
-        .collect();
+    let natural: Vec<f32> = tabs.iter().filter_map(|&i| crate::canvas::tab_label(app, i)).map(|name| tab_natural_width(&row, &t, &name)).collect();
     let cap = tab_cap(&natural, row.available_width(), 4.0, TAB_MIN_WIDTH);
     let mut close = None;
     let mut action = None;
@@ -398,7 +395,8 @@ pub(crate) fn pane_tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui, strip: Re
     for &i in &tabs {
         let Some(view) = app.views.get(i) else { continue };
         let Some(doc) = app.session.get(view.id) else { continue };
-        let (name, dirty) = (doc.display_name(), doc.dirty);
+        let Some(name) = crate::canvas::tab_label(app, i) else { continue };
+        let dirty = doc.dirty;
         let file = (name != doc.name).then(|| doc.name.clone());
         let id = row.id().with(("pane-tab", view.view_key()));
         let response = tab(&mut row, id, &t, "file-text", &name, file.as_deref(), dirty, front == Some(i), &mut close, i, cap, inner.height(), true);
