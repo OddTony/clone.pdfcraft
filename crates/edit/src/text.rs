@@ -2087,7 +2087,22 @@ fn rewrite_block_from(
     // The legacy Type 3 writer places each character independently and rejects
     // combining marks. Keep ordinary legacy Hebrew behavior for now, but send
     // vowelized paragraphs through the shaped, Unicode-preserving writer.
+    // The existing source CID font may encode the entire Unicode replacement,
+    // including multi-scalar glyphs (Hebrew base+dagesh). If so, keep that exact
+    // original face. Only invoke the shaped fallback when the source is genuinely
+    // missing a requested glyph; previously every vowelized edit defaulted to
+    // replacing the whole paragraph's font.
+    let source_covers_draft = fonts_res
+        .get(first.font.as_bytes())
+        .and_then(|font| doc.resolve(font).as_dict().cloned())
+        .map(|font| Metrics::from_dict(doc, &font))
+        .is_some_and(|m| {
+            let logical = text.unwrap_or(&b.text).replace('\n', " ");
+            let visual = crate::bidi::to_visual(&logical);
+            source_encodes(&m, &visual)
+        });
     let vowelized_hebrew = needs_shaped_hebrew(text.unwrap_or(&b.text))
+        && !source_covers_draft
         && style.ranges.is_empty()
         && style.resource.is_none()
         && style.family.is_none()
