@@ -1582,7 +1582,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                 let mut layouter =
                     |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| editor_galley(ui, &snapshot, text.as_str(), scale, wrap_width);
                 let input_id = egui::Id::new("edit-text-line-input");
-                let previous_range = egui::TextEditState::load(ctx, input_id)
+                let previous_range = egui::text_edit::TextEditState::load(ctx, input_id)
                     .and_then(|s| s.cursor.char_range());
                 let opening = ed.focus;
                 if rtl_input {
