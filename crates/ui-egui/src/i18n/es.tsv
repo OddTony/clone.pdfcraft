@@ -2569,6 +2569,9 @@ animation effects	Off	Desactivados
 	Pages selected	Páginas seleccionadas
 	Page properties	Propiedades de página
 
+# Historical snapshot notice bar (View signed version / View revision).
+	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Estás viendo la versión firmada de «{from}» (revisión {rev}). Es una instantánea: los cambios aquí no afectarán al original.
+	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Estás viendo la revisión {rev} de «{from}». Es una instantánea: los cambios aquí no afectarán al original.
 # RFC 3161 time server: Preferences ▸ Signatures and Sign as (#888)
 	Time server	Servidor de hora
 	None (use this computer's clock)	Ninguno (usar el reloj de este ordenador)
