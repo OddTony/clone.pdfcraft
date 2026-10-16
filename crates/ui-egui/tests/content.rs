@@ -585,3 +585,35 @@ fn released_text_does_not_jump_back_before_the_page_is_redrawn() {
     let (old, new) = ink_at(&mut h, from, to);
     assert!(new > 20 && old == 0, "the redrawn page has the text in its new place ({old} old, {new} new)");
 }
+
+/// Edit image ▸ Behind text and images moves the selected image under the page content, which
+/// moves it in the page's list of added items: the selection follows it.
+#[test]
+fn putting_an_image_behind_the_text_keeps_it_selected() {
+    let mut h = harness();
+    let png = |shade: u8| {
+        let mut png = Vec::new();
+        let mut enc = png::Encoder::new(&mut png, 30, 20);
+        enc.set_color(png::ColorType::Rgb);
+        let mut w = enc.write_header().unwrap();
+        w.write_image_data(&[shade; 1800]).unwrap();
+        drop(w);
+        png
+    };
+    h.state_mut().add_image("first.png".into(), png(90));
+    h.run_steps(3);
+    h.state_mut().add_image("second.png".into(), png(200));
+    h.run_steps(3);
+    assert_eq!(h.state().views[0].content.selected, Some((0, 1)));
+    let second = added(&h)[1].obj;
+    h.get_by_label("Behind text and images").click();
+    h.run_steps(3);
+    let a = added(&h);
+    assert_eq!(a[0].obj, second, "behind the page content, it comes first");
+    assert!(matches!(&a[0].content, pdfcraft_engine::AddedContent::Image(i) if i.behind));
+    assert_eq!(h.state().views[0].content.selected, Some((0, 0)), "and stays selected");
+    {
+        let s = h.state();
+        assert_eq!(s.session.get(s.views[0].id).unwrap().can_undo(), Some("Edit content"));
+    }
+}

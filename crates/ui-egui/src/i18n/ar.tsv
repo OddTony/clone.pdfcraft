@@ -819,6 +819,7 @@
 	Multiplies the background with the page: white areas show it and text stays dark.	تُضرَب الخلفية في الصفحة: تظهر في المناطق البيضاء ويبقى النص داكنًا.
 	This page has an opaque background of its own, so the background is blended with its content.	لهذه الصفحة خلفية معتمة خاصة بها، لذلك تُدمج الخلفية مع محتواها.
 	This page has an opaque background of its own, which hides anything behind it. Choose Blend with page content.	لهذه الصفحة خلفية معتمة خاصة بها تُخفي كل ما خلفها. اختر «دمج مع محتوى الصفحة».
+	This page has an opaque background of its own, which hides the image behind it.	لهذه الصفحة خلفية معتمة خاصة بها تُخفي الصورة الموضوعة خلفها.
 	Offset from centre	الإزاحة عن المركز
 	From colour	من لون
 	Page Range Options	خيارات نطاق الصفحات

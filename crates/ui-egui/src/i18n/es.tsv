@@ -813,6 +813,7 @@
 	Multiplies the background with the page: white areas show it and text stays dark.	Multiplica el fondo con la página: las zonas blancas lo muestran y el texto sigue oscuro.
 	This page has an opaque background of its own, so the background is blended with its content.	Esta página tiene un fondo opaco propio, así que el fondo se mezcla con su contenido.
 	This page has an opaque background of its own, which hides anything behind it. Choose Blend with page content.	Esta página tiene un fondo opaco propio que oculta todo lo que hay detrás. Elija «Mezclar con el contenido de la página».
+	This page has an opaque background of its own, which hides the image behind it.	Esta página tiene un fondo opaco propio que oculta la imagen que hay detrás.
 	Offset from centre	Desplazamiento desde el centro
 	From colour	A partir de un color
 	Page Range Options	Opciones de intervalo de páginas

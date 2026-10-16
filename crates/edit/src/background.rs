@@ -116,16 +116,25 @@ pub(super) fn supported(doc: &Document, page: usize) -> bool {
     boundary(doc, &page, &list).is_some()
 }
 
-/// Split just the stream containing the boundary, retaining its bytes in two fragments.
-/// Do not keep a reference to the original: it could retain text after a later redaction and
-/// full save. Removing the background leaves the fragments as ordinary page content.
-pub(super) fn place(doc: &mut Document, page: &pdfcraft_model::Page, content: &[u8]) -> Result<bool, EditError> {
+/// Where content placed under the page foreground goes: the page's content list with the stream
+/// holding a recognised white fill split right after it, and the index to insert at there, past
+/// the streams `under` says belong below the new one (earlier additions keep their order).
+/// `None`: no recognised fill, nothing changed.
+///
+/// Only the stream containing the boundary is split, into two new streams with its bytes. No
+/// reference to the original is kept: it could retain text after a later redaction and full save.
+/// Removing what was inserted leaves the two pieces as ordinary page content.
+pub(super) fn slot(
+    doc: &mut Document,
+    page: &pdfcraft_model::Page,
+    under: impl Fn(&Document, &Object) -> bool,
+) -> Result<Option<(Vec<Object>, usize)>, EditError> {
     let mut list = contents(doc, page)?;
-    let Some(at) = boundary(doc, page, &list) else { return Ok(false) };
-    let Some(original) = list.get(at.index).cloned().filter(|o| o.as_ref().is_some()) else { return Ok(false) };
+    let Some(at) = boundary(doc, page, &list) else { return Ok(None) };
+    let Some(original) = list.get(at.index).cloned().filter(|o| o.as_ref().is_some()) else { return Ok(None) };
     let resolved = doc.resolve(&original);
-    let Object::Stream(stream) = &*resolved else { return Ok(false) };
-    let (Some(prefix), Some(suffix)) = (at.bytes.get(..at.offset), at.bytes.get(at.offset..)) else { return Ok(false) };
+    let Object::Stream(stream) = &*resolved else { return Ok(None) };
+    let (Some(prefix), Some(suffix)) = (at.bytes.get(..at.offset), at.bytes.get(at.offset..)) else { return Ok(None) };
     let mut insert = at.index.saturating_add(1);
     if !suffix.is_empty() {
         let tail = Object::Ref(doc.add(Object::Stream(Stream::flate(stream.dict.clone(), suffix))));
@@ -135,11 +144,19 @@ pub(super) fn place(doc: &mut Document, page: &pdfcraft_model::Page, content: &[
         }
         list.insert(insert, tail);
     }
-    // Repeated additions keep their chronological order above the same white fill.
-    while list.get(insert).is_some_and(|o| stream_tag(doc, o).as_deref() == Some("Background")) {
+    while list.get(insert).is_some_and(|o| under(doc, o)) {
         insert = insert.saturating_add(1);
     }
-    let mark = Object::Ref(doc.add(Object::Stream(Stream::flate(tagged("Background"), content))));
+    Ok(Some((list, insert)))
+}
+
+/// Put a normal background above a recognised white fill; `false` when the page has none.
+pub(super) fn place(doc: &mut Document, page: &pdfcraft_model::Page, content: &[u8]) -> Result<bool, EditError> {
+    // Repeated backgrounds keep their chronological order above the same white fill.
+    let Some((mut list, insert)) = slot(doc, page, |doc, o| stream_tag(doc, o).as_deref() == Some(MarkKind::Background.tag()))? else {
+        return Ok(false);
+    };
+    let mark = Object::Ref(doc.add(Object::Stream(Stream::flate(tagged(MarkKind::Background.tag()), content))));
     list.insert(insert, mark);
     doc.update_dict(page.obj, |d| d.set(b"Contents".to_vec(), Object::Array(list)))?;
     Ok(true)

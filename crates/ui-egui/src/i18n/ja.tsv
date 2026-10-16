@@ -820,6 +820,7 @@
 	Multiplies the background with the page: white areas show it and text stays dark.	背景をページと乗算します。白い部分に背景が表示され、文字は濃いままです。
 	This page has an opaque background of its own, so the background is blended with its content.	このページには独自の不透明な背景があるため、背景をページの内容と合成します。
 	This page has an opaque background of its own, which hides anything behind it. Choose Blend with page content.	このページには独自の不透明な背景があり、その後ろにあるものはすべて隠れます。「ページの内容と合成」を選択してください。
+	This page has an opaque background of its own, which hides the image behind it.	このページには独自の不透明な背景があり、その後ろにある画像は隠れます。
 	Offset from centre	中心からのオフセット
 	From colour	色を指定
 	Page Range Options	ページ範囲のオプション

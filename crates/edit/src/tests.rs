@@ -4501,3 +4501,94 @@ fn background_under_content_selects_placement_for_each_page() {
     assert!(streams(&doc, 0)[1].contains("/PCMark /Background"));
     assert!(streams(&doc, 2)[0].contains("/PCMark /Background"));
 }
+
+/// A 1 × 1 gray image XObject for added-image tests.
+fn gray_image(doc: &mut Document) -> pdfcraft_cos::ObjRef {
+    let mut d = Dict::new();
+    d.set(b"Type".to_vec(), Object::name("XObject"));
+    d.set(b"Subtype".to_vec(), Object::name("Image"));
+    d.set(b"Width".to_vec(), Object::Int(1));
+    d.set(b"Height".to_vec(), Object::Int(1));
+    d.set(b"ColorSpace".to_vec(), Object::name("DeviceGray"));
+    d.set(b"BitsPerComponent".to_vec(), Object::Int(8));
+    doc.add(Object::Stream(Stream::from_raw(d, vec![128])))
+}
+
+fn behind_image(rect: [f64; 4], image: pdfcraft_cos::ObjRef) -> Content {
+    Content::Image(AddedImage { behind: true, ..AddedImage::new(rect, image) })
+}
+
+/// An image behind the text goes where a normal background goes, above the page's white fill,
+/// and over the backgrounds there; later ones go over earlier ones.
+#[test]
+fn images_behind_text_go_above_a_white_fill_and_over_backgrounds() {
+    let mut doc = page_with("q 1 g 0 0 600 800 re f Q\n1 0 0 rg 20 20 50 50 re f");
+    let original = streams(&doc, 0);
+    let (a, b) = (gray_image(&mut doc), gray_image(&mut doc));
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    assert_eq!(add_content(&mut doc, 0, &behind_image([10.0, 10.0, 110.0, 60.0], a)).unwrap(), 0);
+    add_content(&mut doc, 0, &behind_image([10.0, 10.0, 110.0, 60.0], b)).unwrap();
+    // A background added afterwards still goes under the images.
+    add_background(&mut doc, &[0], &Background { color: [0.0, 0.0, 1.0], ..Background::default() }, false).unwrap();
+    let s = streams(&doc, 0);
+    assert_eq!(s.len(), 6, "{s:?}");
+    assert!(s[0].contains("600 800 re f Q"), "{s:?}");
+    assert!(s[1].contains("/PCMark /Background") && s[2].contains("/PCMark /Background"), "{s:?}");
+    assert!(s[3].contains(&format!("/PCImg{} Do", a.num)) && s[4].contains(&format!("/PCImg{} Do", b.num)), "{s:?}");
+    assert!(s[5].contains("1 0 0 rg"), "the original foreground stays on top: {s:?}");
+    // Something added on top wraps the page's content, images behind it included.
+    let text = AddedText { rect: [72.0, 600.0, 300.0, 700.0], text: "On top".into(), ..AddedText::default() };
+    add_content(&mut doc, 0, &Content::Text(text)).unwrap();
+    let s = streams(&doc, 0);
+    assert!(s.last().unwrap().contains("(On top) Tj") && s[4].contains(&format!("/PCImg{} Do", a.num)), "{s:?}");
+    let doc2 = reopen(&doc);
+    let all = list_added(&doc2);
+    assert_eq!(all.len(), 3);
+    assert!(matches!(&all[0].content, Content::Image(i) if i.behind && i.image == a), "{all:?}");
+    assert!(matches!(&all[1].content, Content::Image(i) if i.behind && i.image == b));
+    // Removing everything leaves the original bytes, in the two pieces of the split.
+    let mut doc = doc2;
+    for _ in 0..3 {
+        delete_content(&mut doc, 0, 0).unwrap();
+    }
+    remove_marks(&mut doc, &[0], MarkKind::Background).unwrap();
+    assert_eq!(streams(&doc, 0).concat(), original.concat());
+}
+
+/// Without a recognised white fill an image behind the text goes behind the whole page, over
+/// what was put there before; changing its layer moves it, keeping the same stream.
+#[test]
+fn images_behind_text_fall_back_behind_the_page_and_change_layers() {
+    let mut doc = page_with("0 g 20 20 50 50 re f");
+    assert!(!page_has_white_background(&doc, 0));
+    let (a, b) = (gray_image(&mut doc), gray_image(&mut doc));
+    add_background(&mut doc, &[0], &Background::default(), false).unwrap();
+    assert_eq!(add_content(&mut doc, 0, &Content::Image(AddedImage::new([0.0, 0.0, 50.0, 50.0], a))).unwrap(), 0);
+    // Behind, the new item comes first in drawing order: index 0, before the one on top.
+    assert_eq!(add_content(&mut doc, 0, &behind_image([0.0, 0.0, 50.0, 50.0], b)).unwrap(), 0);
+    let s = streams(&doc, 0);
+    assert!(s[0].contains("/PCMark /Background") && s[1].contains(&format!("/PCImg{} Do", b.num)), "{s:?}");
+    assert!(s.iter().position(|x| x.contains("0 g 20 20 50 50 re f")).unwrap() > 1, "{s:?}");
+    assert!(s.last().unwrap().contains(&format!("/PCImg{} Do", a.num)), "{s:?}");
+    let all = list_added(&doc);
+    assert!(matches!(&all[0].content, Content::Image(i) if i.image == b && i.behind), "{all:?}");
+    let (front, back) = (all[1].obj, all[0].obj);
+    // To the back: after the item already there.
+    update_content(&mut doc, 0, 1, &behind_image([0.0, 0.0, 50.0, 50.0], a)).unwrap();
+    let s = streams(&doc, 0);
+    assert!(s[1].contains(&format!("/PCImg{} Do", b.num)) && s[2].contains(&format!("/PCImg{} Do", a.num)), "{s:?}");
+    assert_eq!(list_added(&doc).iter().map(|x| x.obj).collect::<Vec<_>>(), [back, front], "the same streams");
+    // And back on top.
+    update_content(&mut doc, 0, 0, &Content::Image(AddedImage::new([0.0, 0.0, 50.0, 50.0], b))).unwrap();
+    let s = streams(&doc, 0);
+    assert!(s.last().unwrap().contains(&format!("/PCImg{} Do", b.num)), "{s:?}");
+    let all = list_added(&doc);
+    assert_eq!(all.iter().map(|x| x.obj).collect::<Vec<_>>(), [front, back]);
+    assert!(matches!(&all[1].content, Content::Image(i) if !i.behind));
+    // A page with no content: behind goes under what was added on top.
+    let mut doc = fixture();
+    let c = gray_image(&mut doc);
+    add_content(&mut doc, 2, &Content::Image(AddedImage::new([0.0, 0.0, 50.0, 50.0], c))).unwrap();
+    add_content(&mut doc, 2, &behind_image([0.0, 0.0, 50.0, 50.0], c)).unwrap();
+    assert!(matches!(&list_added(&doc)[0].content, Content::Image(i) if i.behind));
+}

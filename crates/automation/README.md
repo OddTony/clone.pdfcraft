@@ -224,3 +224,15 @@ segmentation of scanned pages or arbitrary artwork.
 and removing either mode are undoable. Removing a normal background leaves the original
 content bytes in separate streams. No restoration references retain obsolete content, so a
 later redaction and full save can remove the original source objects.
+
+## Images behind the page content
+
+`page_add_image` and `content_update` take `behind` for an added image. `true` puts it
+under the page's own text and images, in the same place a normal background goes: after a
+recognised leading white page fill, and over any backgrounds already there. Later images
+placed behind go over earlier ones. On a page without a recognised fill the image goes
+behind the whole page instead. When that page paints an opaque fill of its own, the image is
+hidden and the result includes `hidden_behind: true`. `false` puts the image back on top.
+Changing the layer moves the item in its page's `content_list` order, and so changes its
+index. Removing an image placed after a white fill leaves the original content bytes in two
+separate streams, as for backgrounds.

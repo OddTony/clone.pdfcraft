@@ -433,8 +433,13 @@ fn place(doc: &mut Document, page: &pdfcraft_model::Page, kind: MarkKind, conten
 
 /// Put content on a page, tagged `tag` (see [`place`]).
 fn place_tagged(doc: &mut Document, page: &pdfcraft_model::Page, tag: &str, content: Vec<u8>, layer: Layer) -> Result<(), EditError> {
-    let mut list = contents(doc, page)?;
     let mark = Object::Ref(doc.add(Object::Stream(Stream::flate(tagged(tag), &content))));
+    place_object(doc, page, mark, layer)
+}
+
+/// Put an existing content stream `mark` on a page at `layer` (see [`place_tagged`]).
+fn place_object(doc: &mut Document, page: &pdfcraft_model::Page, mark: Object, layer: Layer) -> Result<(), EditError> {
+    let mut list = contents(doc, page)?;
     if layer == Layer::Behind {
         list.insert(0, mark);
     } else {

@@ -776,6 +776,7 @@
 	Multiplies the background with the page: white areas show it and text stays dark.	Фонды бетпен көбейтеді: ақ аймақтарда фон көрінеді, мәтін қою болып қалады.
 	This page has an opaque background of its own, so the background is blended with its content.	Бұл беттің өз мөлдір емес фоны бар, сондықтан фон оның мазмұнымен араластырылады.
 	This page has an opaque background of its own, which hides anything behind it. Choose Blend with page content.	Бұл беттің өз мөлдір емес фоны бар, ол артындағының бәрін жасырады. «Бет мазмұнымен араластыру» опциясын таңдаңыз.
+	This page has an opaque background of its own, which hides the image behind it.	Бұл беттің өз мөлдір емес фоны бар, ол артындағы суретті жасырады.
 	From colour	Түстен
 	Page Range Options	Беттер ауқымының параметрлері
 	Preview: page {p} of {n}	Алдын ала қарау: {n} беттің {p}-сі

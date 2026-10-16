@@ -1626,12 +1626,14 @@ pub enum Edit {
         text: AddedText,
     },
     /// Edit a PDF ▸ Add content ▸ Image: an image file placed at `rect` (display space), or at
-    /// its natural size centred on the page (shrunk to fit).
+    /// its natural size centred on the page (shrunk to fit). `behind`: under the page's own text
+    /// and images instead of on top (see [`AddedImage::behind`]).
     AddImage {
         page: usize,
         rect: Option<[f64; 4]>,
         name: String,
         bytes: Arc<Vec<u8>>,
+        behind: bool,
     },
     /// Move, resize, retype or reformat an added item (`index` among the page's added items).
     UpdateContent {
@@ -2573,7 +2575,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         Edit::AddText { page, text } => {
             pdfcraft_edit::add_content(doc, *page, &AddedContent::Text(text.clone()))?;
         }
-        Edit::AddImage { page, rect, name, bytes } => {
+        Edit::AddImage { page, rect, name, bytes, behind } => {
             let (image, natural) = embed_image(doc, name, bytes)?;
             let rect = match rect {
                 Some(r) => *r,
@@ -2585,7 +2587,8 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
                     [(pw - w) / 2.0, (ph - h) / 2.0, (pw + w) / 2.0, (ph + h) / 2.0]
                 }
             };
-            pdfcraft_edit::add_content(doc, *page, &AddedContent::Image(pdfcraft_edit::AddedImage::new(rect, image)))?;
+            let item = pdfcraft_edit::AddedImage { behind: *behind, ..pdfcraft_edit::AddedImage::new(rect, image) };
+            pdfcraft_edit::add_content(doc, *page, &AddedContent::Image(item))?;
         }
         Edit::UpdateContent { page, index, content } => pdfcraft_edit::update_content(doc, *page, *index, content)?,
         Edit::DeleteContent { page, index } => pdfcraft_edit::delete_content(doc, *page, *index)?,

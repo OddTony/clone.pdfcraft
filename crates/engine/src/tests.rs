@@ -2465,7 +2465,7 @@ fn added_text_and_images_render_and_stay_editable() {
         let mut w = enc.write_header().unwrap();
         w.write_image_data(&[0u8; 600]).unwrap();
     }
-    s.apply(id, Edit::AddImage { page: 0, rect: None, name: "dot.png".into(), bytes: Arc::new(png) }).unwrap();
+    s.apply(id, Edit::AddImage { page: 0, rect: None, name: "dot.png".into(), bytes: Arc::new(png), behind: false }).unwrap();
     let d = s.get(id).unwrap();
     assert_eq!(d.added().len(), 2);
     assert_eq!(d.added()[1].content.rect(), [90.0, 145.0, 110.0, 155.0], "20×10 px at 72 dpi, centred on 200×300");
@@ -2495,7 +2495,8 @@ fn added_images_rotate_flip_and_crop_as_drawn() {
     }
     let (mut s, id) = session_with(1);
     // A 100×100 box at (50, 100) on the 200×300 page.
-    s.apply(id, Edit::AddImage { page: 0, rect: Some([50.0, 100.0, 150.0, 200.0]), name: "rb.png".into(), bytes: Arc::new(png) }).unwrap();
+    s.apply(id, Edit::AddImage { page: 0, rect: Some([50.0, 100.0, 150.0, 200.0]), name: "rb.png".into(), bytes: Arc::new(png), behind: false })
+        .unwrap();
     let colour_at = |s: &Session, x: u32, y_from_top: u32| -> [u8; 3] {
         let doc = s.get(id).unwrap();
         let mut r = pdfcraft_render::PageRenderer::new(doc.bytes.clone(), Default::default());
@@ -5022,7 +5023,11 @@ fn mixed_object_moves_are_one_undo_step_and_survive_save_reopen() {
     let image = image::RgbImage::from_pixel(12, 8, image::Rgb([240, 20, 20]));
     let mut png = std::io::Cursor::new(Vec::new());
     image.write_to(&mut png, image::ImageFormat::Png).unwrap();
-    s.apply(id, Edit::AddImage { page: 0, rect: Some([40.0, 40.0, 80.0, 70.0]), name: "red.png".into(), bytes: Arc::new(png.into_inner()) }).unwrap();
+    s.apply(
+        id,
+        Edit::AddImage { page: 0, rect: Some([40.0, 40.0, 80.0, 70.0]), name: "red.png".into(), bytes: Arc::new(png.into_inner()), behind: false },
+    )
+    .unwrap();
     let saved = s.save_bytes(id).unwrap();
     s.mark_saved(id, saved.clone(), None).unwrap();
     let before = s.get(id).unwrap().editable_objects(0).unwrap();
@@ -5113,8 +5118,17 @@ fn group_moves_preserve_rotated_added_content_raster_geometry() {
     let image = image::RgbImage::from_fn(20, 10, |x, _| image::Rgb(if x < 10 { [240, 20, 20] } else { [20, 20, 240] }));
     let mut png = std::io::Cursor::new(Vec::new());
     image.write_to(&mut png, image::ImageFormat::Png).unwrap();
-    s.apply(id, Edit::AddImage { page: 0, rect: Some([40.0, 40.0, 80.0, 70.0]), name: "quadrants.png".into(), bytes: Arc::new(png.into_inner()) })
-        .unwrap();
+    s.apply(
+        id,
+        Edit::AddImage {
+            page: 0,
+            rect: Some([40.0, 40.0, 80.0, 70.0]),
+            name: "quadrants.png".into(),
+            bytes: Arc::new(png.into_inner()),
+            behind: false,
+        },
+    )
+    .unwrap();
     let AddedContent::Image(mut image) = s.get(id).unwrap().added()[1].content.clone() else { panic!() };
     image.flip_h = true;
     image.crop = [0.1, 0.0, 0.2, 0.0];
@@ -5923,4 +5937,30 @@ fn background_under_content_preserves_coloured_and_white_foreground() {
     s.apply(again, Edit::RemoveMarks { kind: MarkKind::Background }).unwrap();
     assert_eq!(pixel(&s, again, 0, 5, 5), [255, 255, 255, 255]);
     assert_eq!(pixel(&s, again, 0, 50, 150), [255, 0, 0, 255]);
+}
+
+/// An image behind the text shows on a page that paints itself white and stays under its text,
+/// through a change of layer, undo, saving and reopening.
+#[test]
+fn images_behind_text_show_under_the_text_of_a_white_page() {
+    let (blue, black, white) = ([0, 0, 255, 255], [0, 0, 0, 255], [255, 255, 255, 255]);
+    let mut s = Session::new();
+    let id = s.open("white.pdf", None, Arc::new(white_backed_page()), None).unwrap();
+    let bytes = Arc::new(bmp(2, 2, [255, 0, 0]));
+    s.apply(id, Edit::AddImage { page: 0, rect: Some([0.0, 100.0, 200.0, 200.0]), name: "blue.bmp".into(), bytes, behind: true }).unwrap();
+    assert_eq!(pixel(&s, id, 0, 5, 150), blue, "the image shows over the white fill");
+    assert_eq!(pixel(&s, id, 0, 50, 150), black, "and the text stays on top of it");
+    assert_eq!(pixel(&s, id, 0, 5, 5), white);
+    let AddedContent::Image(img) = s.get(id).unwrap().added()[0].content.clone() else { panic!("an image") };
+    assert!(img.behind);
+    let front = AddedContent::Image(AddedImage { behind: false, ..img });
+    s.apply(id, Edit::UpdateContent { page: 0, index: 0, content: front }).unwrap();
+    assert_eq!(pixel(&s, id, 0, 50, 150), blue, "on top, it covers the text");
+    s.undo(id).unwrap();
+    assert_eq!(pixel(&s, id, 0, 50, 150), black);
+    let saved = s.save_bytes(id).unwrap();
+    let again = s.open("again.pdf", None, saved, None).unwrap();
+    assert_eq!(pixel(&s, again, 0, 5, 150), blue);
+    assert_eq!(pixel(&s, again, 0, 50, 150), black);
+    assert!(matches!(&s.get(again).unwrap().added()[0].content, AddedContent::Image(i) if i.behind));
 }
