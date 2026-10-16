@@ -359,3 +359,61 @@ fn multiple_files_past_a_thousand_are_all_used() {
     let doc = app.session.get(app.views[0].id).unwrap();
     assert_eq!(doc.info.pages.len(), 1001, "every picked file is used, in order");
 }
+
+/// #2871: all three user-facing entry points share native DOCX conversion.
+#[test]
+fn docx_opens_inserts_and_combines_as_pdf_pages() {
+    use pdfcraft_engine::{Session, export::Exporter};
+    use pdfcraft_ui_egui::FilePurpose;
+    let source = Session::new();
+    let pdf = source.create_from_text("Report", "Native DOCX import").unwrap();
+    let text = "Çç Ğğ İı Öö Şş Üü İstanbul Iğdır Şişli";
+    let mut zip = pdfcraft_export::Zip::default();
+    let xml = format!(
+        r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"#
+    );
+    zip.add("word/document.xml", xml.as_bytes(), true);
+    let docx = zip.finish();
+    let mut app = PdfCraftApp::new();
+    app.set_option("language", "en").unwrap();
+    app.open_bytes("Report.DOCX", Some("/tmp/Report.DOCX".into()), docx.clone()).unwrap();
+    let id = app.views[0].id;
+    let converted = app.session.get(id).unwrap();
+    assert_eq!(converted.name, "Report.pdf");
+    assert!(converted.path.is_none() && converted.dirty);
+    assert_eq!(converted.info.pages.len(), 1);
+    assert_eq!(Exporter::new(converted).text(0).unwrap().trim(), text);
+    app.insert_pages_from("report.docx", docx.clone());
+    assert_eq!(app.session.get(id).unwrap().info.pages.len(), 2);
+    assert_eq!(Exporter::new(app.session.get(id).unwrap()).text(1).unwrap().trim(), text);
+    app.session.undo(id).unwrap();
+    assert_eq!(app.session.get(id).unwrap().info.pages.len(), 1);
+    app.session.redo(id).unwrap();
+    assert_eq!(app.session.get(id).unwrap().info.pages.len(), 2);
+    app.open_combine_tab();
+    app.use_files(FilePurpose::Combine, vec![("report.docx".into(), docx), ("existing.pdf".into(), pdf.to_vec())]);
+    assert_eq!(app.combine_draft.len(), 2);
+    assert_eq!(app.combine_draft[0].pages, 1);
+    assert!(app.combine_draft[0].problem.is_none());
+    assert!(app.combine_draft[0].notes.iter().any(|n| n.contains("layout may differ")));
+    app.combine_staged();
+    let combined = app.session.docs().last().unwrap();
+    assert_eq!(combined.info.pages.len(), 2);
+    assert_eq!(Exporter::new(combined).text(0).unwrap().trim(), text);
+    assert_eq!(Exporter::new(combined).text(1).unwrap().trim(), "Native DOCX import");
+    let before = app.session.docs().len();
+    assert!(app.open_bytes("broken.docx", None, b"PK\x03\x04".to_vec()).is_err());
+    assert_eq!(app.session.docs().len(), before);
+    if let Ok(path) = std::env::var("PDFCRAFT_DOCX_IMPORT_SHOT") {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| app);
+        h.run_steps(8);
+        let start = std::time::Instant::now();
+        while h.state().render_pending() && start.elapsed() < std::time::Duration::from_secs(20) {
+            h.run_steps(2);
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+        h.run_steps(3);
+        assert!(!h.state().render_pending(), "the screenshot must show the converted pages");
+        h.render().unwrap().save(path).unwrap();
+    }
+}

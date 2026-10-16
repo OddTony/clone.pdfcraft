@@ -85,3 +85,7 @@ family (`sign`, `sign_with_timestamp`, `timestamp_document`, `embed_ltv`).
 `doc.text_edit_preview(page, block)` prepares a read-only page background with the selected
 paragraph’s glyphs removed, preserving text positioning, images and colours. It shares the
 working document’s render configuration and never enters the undo history.
+
+`create_from_docx(name, bytes)` returns validated PDF bytes and `DocxReport`.
+`OpenContext::convert_docx` exposes the same guarded operation to the desktop open worker;
+`convert_to_pdf` and `as_pdf` also accept DOCX. See [conversion limits](../../docs/docx-import.md).

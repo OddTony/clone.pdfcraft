@@ -670,3 +670,28 @@ fn startup_files_wait_for_absolute_link_consent_and_preparation() {
     assert_eq!(app.active, Some(1), "the user's approved navigation keeps focus");
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn docx_native_open_converts_before_committing_the_selected_tool() {
+    use pdfcraft_engine::{Session, compare::OfficeFormat};
+    let mut source = Session::new();
+    let pdf = source.create_from_text("Word", "Native worker DOCX").unwrap();
+    let id = source.open_new("source.pdf", pdf).unwrap();
+    let bytes = source.get(id).unwrap().export_office(OfficeFormat::Docx);
+    let mut harness = tool_open_harness();
+    let file = tool_open_file("docx-conversion", "docx", &bytes);
+    let held = HeldToolOpen::install(&mut harness);
+    choose_export_tool(&mut harness, &file);
+    held.wait_started();
+    assert!(harness.state().views.is_empty(), "conversion has not committed yet");
+    harness.state_mut().open_bytes("other.pdf", None, fixture(1)).unwrap();
+    assert_eq!(harness.state().views.len(), 1, "another tab stays live while conversion waits");
+    held.complete(&mut harness);
+    let app = harness.state();
+    let id = app.active_ids().unwrap().1;
+    let doc = app.session.get(id).unwrap();
+    assert!(doc.name.ends_with(".pdf") && doc.dirty && doc.path.is_none());
+    assert_eq!(doc.info.pages.len(), 1);
+    assert!(matches!(app.dialog, Some(crate::Dialog::Export(_))));
+    assert_eq!(std::fs::read(&file.0).unwrap(), bytes);
+}

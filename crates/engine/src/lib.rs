@@ -51,7 +51,7 @@ pub use pdfcraft_organize::LabelStyle;
 pub use pdfcraft_organize::view::{InitialView, Layout as InitialLayout, Magnification, Navigation};
 
 pub use pdfcraft_cos::Algorithm;
-pub use pdfcraft_create::{CONVERTIBLE, CreateError, ImageResolution, SourceKind, decode_text, source_kind};
+pub use pdfcraft_create::{CONVERTIBLE, CreateError, DocxReport, IMAGE_TEXT_EXTENSIONS, ImageResolution, SourceKind, decode_text, source_kind};
 pub use pdfcraft_edit::added::{text_rect as added_text_rect, text_width as added_text_width};
 pub use pdfcraft_edit::{
     Added, AddedImage, AddedText, Align as TextAlign, Background, Content as AddedContent, Family as FontFamily, HeaderFooter, MarkKind, Watermark,
@@ -2913,6 +2913,19 @@ pub struct PreparedDocument {
 }
 
 impl OpenContext {
+    /// Convert DOCX away from the UI thread, retaining the conversion report.
+    pub fn convert_docx(&self, name: &str, bytes: &[u8]) -> Result<(Arc<Vec<u8>>, DocxReport), EditError> {
+        convert_docx(name, bytes, self.now)
+    }
+
+    /// Prepare newly created PDF bytes as an unsaved document, away from the owning thread.
+    pub fn prepare_new(&self, name: impl Into<String>, bytes: Arc<Vec<u8>>) -> Result<PreparedDocument, OpenError> {
+        let mut prepared = self.prepare_open(name, None, bytes, None)?;
+        prepared.document.dirty = true;
+        prepared.document.generation = prepared.document.generation.saturating_add(1);
+        Ok(prepared)
+    }
+
     /// Prepare a document without mutating the session that supplied this context.
     pub fn prepare_open(
         &self,
@@ -4225,6 +4238,11 @@ impl Session {
         self.write_new(&pdfcraft_create::from_text(title, text, pdfcraft_create::LETTER, 11.0)?)
     }
 
+    /// Convert a DOCX into a new PDF, with explicit font/layout caveats and approximation notes.
+    pub fn create_from_docx(&self, name: &str, bytes: &[u8]) -> Result<(Arc<Vec<u8>>, DocxReport), EditError> {
+        convert_docx(name, bytes, self.now())
+    }
+
     /// [`Self::create_from_text`] for a report PdfCraft writes from documents (comment summaries,
     /// compare reports), which can quote any language: characters Helvetica can't draw are written
     /// as `[U+XXXX]`, and the report's first line says so, rather than the report being refused.
@@ -4233,11 +4251,11 @@ impl Session {
         self.write_new(&doc)
     }
 
-    /// Convert a file Create understands (an image or plain text) to PDF bytes; a PDF is checked
+    /// Convert a file Create understands (an image, plain text or DOCX) to PDF bytes; a PDF is checked
     /// (it must open and allow copying pages) and returned as it is.
     pub fn convert_to_pdf(&self, name: &str, bytes: &Arc<Vec<u8>>) -> Result<(SourceKind, Arc<Vec<u8>>), EditError> {
         let Some(kind) = source_kind(name, bytes) else {
-            return Err(EditError::Source(format!("{name}: this file type can't be converted; use a PDF, an image or a .txt file")));
+            return Err(EditError::Source(format!("{name}: this file type can't be converted; use a PDF, an image, a .txt file or a .docx file")));
         };
         let title = name.rsplit_once('.').map_or(name, |(s, _)| s);
         // Image decoders read untrusted bytes: a panic in one must not take the app down.
@@ -4245,6 +4263,7 @@ impl Session {
             SourceKind::Pdf => open_source(name, bytes).map(|_| bytes.clone()),
             SourceKind::Image => self.create_from_images(&[(name.to_string(), bytes.to_vec())]),
             SourceKind::Text => self.create_from_text(title, &decode_text(bytes)),
+            SourceKind::Docx => self.create_from_docx(name, bytes).map(|(pdf, _)| pdf),
         })
         .map_err(|_| EditError::Source(format!("{name}: the file could not be read")))?;
         Ok((kind, created?))
@@ -4256,7 +4275,7 @@ impl Session {
     pub fn as_pdf(&self, name: &str, bytes: &Arc<Vec<u8>>) -> Result<Arc<Vec<u8>>, EditError> {
         let pdf = match source_kind(name, bytes) {
             Some(SourceKind::Pdf) => true,
-            Some(SourceKind::Image | SourceKind::Text) => false,
+            Some(SourceKind::Image | SourceKind::Text | SourceKind::Docx) => false,
             None => name.to_ascii_lowercase().ends_with(".pdf"),
         };
         if pdf { Ok(bytes.clone()) } else { self.convert_to_pdf(name, bytes).map(|(_, pdf)| pdf) }
@@ -5101,4 +5120,17 @@ pub fn filter_pages(info: &pdfcraft_render::DocInfo, pages: &[usize], parity: Pa
             }
         })
         .collect()
+}
+
+/// The same guarded conversion and output validation for Session and the background OpenContext.
+fn convert_docx(name: &str, bytes: &[u8], now: Option<i64>) -> Result<(Arc<Vec<u8>>, DocxReport), EditError> {
+    guard(|| {
+        let (doc, report) = pdfcraft_create::from_docx(name, bytes)?;
+        let opts = SaveOptions { mod_date: now.map(pdfcraft_cos::pdf_date), ..SaveOptions::default() };
+        let pdf = Arc::new(write_full(&doc, &opts).map_err(|e| EditError::Write(e.to_string()))?);
+        pdfcraft_cos::Document::open(pdf.clone()).map_err(|e| EditError::Reopen(e.to_string()))?;
+        pdfcraft_render::check_pages(pdf.clone(), None, report.pages).map_err(|e| EditError::Reopen(e.to_string()))?;
+        Ok((pdf, report))
+    })
+    .map_err(|_| EditError::Source(format!("{name}: DOCX conversion failed unexpectedly")))?
 }

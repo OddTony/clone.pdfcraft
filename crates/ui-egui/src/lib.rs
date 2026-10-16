@@ -1218,6 +1218,18 @@ impl PdfCraftApp {
             open_worker::ResultKind::Failed(reason) => {
                 self.notify_fmt("Couldn't open {name}: {reason}", &[("name", &pending.name), ("reason", &reason)]);
             }
+            open_worker::ResultKind::Docx { bytes, prepared, report } => {
+                let name = format!("{}.pdf", pending.name.rsplit_once('.').map_or(pending.name.as_str(), |(s, _)| s));
+                match self.finish_open(&name, None, bytes.len(), *prepared, pending.activate) {
+                    Ok(_) => {
+                        self.notify_error(report.notice());
+                        if let Some(command) = pending.then {
+                            self.execute(command);
+                        }
+                    }
+                    Err(error) => self.notify_fmt("Couldn't open {name}: {e}", &[("name", &pending.name), ("e", &error)]),
+                }
+            }
             open_worker::ResultKind::Conversion(bytes) => match self.open_converted(&pending.name, &bytes) {
                 Some(Ok(())) => {
                     if let Some(command) = pending.then {
@@ -1838,7 +1850,10 @@ impl PdfCraftApp {
     /// The File ▸ Open picker: PDFs, and images and text that become PDFs.
     #[cfg(not(target_arch = "wasm32"))]
     fn open_picker() -> rfd::AsyncFileDialog {
-        rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE)
+        rfd::AsyncFileDialog::new()
+            .add_filter("PDF", &["pdf"])
+            .add_filter("DOCX", &["docx"])
+            .add_filter(tl!("Images and text (converted to PDF)"), &create_ui::IMAGE_TEXT_EXTENSIONS)
     }
 
     pub fn open_dialog(&mut self) {
@@ -1846,7 +1861,10 @@ impl PdfCraftApp {
         #[cfg(not(target_arch = "wasm32"))]
         self.pick(
             pickers::PickFor::Open,
-            rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).add_filter(tl!("Images and text (converted to PDF)"), &create_ui::CONVERTIBLE),
+            rfd::AsyncFileDialog::new()
+                .add_filter("PDF", &["pdf"])
+                .add_filter("DOCX", &["docx"])
+                .add_filter(tl!("Images and text (converted to PDF)"), &create_ui::IMAGE_TEXT_EXTENSIONS),
             true,
         );
         // Browsers pick files asynchronously; the bytes arrive through `inbox`.
@@ -1857,7 +1875,8 @@ impl PdfCraftApp {
             wasm_bindgen_futures::spawn_local(async move {
                 if let Some(h) = rfd::AsyncFileDialog::new()
                     .add_filter("PDF", &["pdf"])
-                    .add_filter(tl!("Images and text"), &create_ui::CONVERTIBLE)
+                    .add_filter("DOCX", &["docx"])
+                    .add_filter(tl!("Images and text"), &create_ui::IMAGE_TEXT_EXTENSIONS)
                     .pick_file()
                     .await
                 {
