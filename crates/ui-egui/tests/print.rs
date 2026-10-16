@@ -19,6 +19,20 @@ fn harness() -> Harness<'static, PdfCraftApp> {
     h
 }
 
+/// Opens Print and waits for the background printer list: until it arrives no printer is
+/// known, so the dialog says it is looking and hides Save as PDF (#160). Slow CI machines
+/// otherwise race the fixed step counts below.
+fn open_print(h: &mut Harness<'static, PdfCraftApp>) -> bool {
+    let opened = h.state_mut().execute("print.dialog");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while h.state().print_draft.printers_loading && std::time::Instant::now() < deadline {
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(!h.state().print_draft.printers_loading, "the printer list arrived");
+    opened
+}
+
 #[test]
 fn current_print_page_saves_the_viewed_page_when_labels_restart() {
     // Five distinct painted pages, labelled i, ii, iii, 1, 2.
@@ -59,7 +73,7 @@ fn current_print_page_saves_the_viewed_page_when_labels_restart() {
     for (current, expected) in [[255, 0, 0], [0, 255, 0]].into_iter().enumerate() {
         h.state_mut().set_option("page", &(current + 1).to_string()).unwrap();
         h.run_steps(3);
-        assert!(h.state_mut().execute("print.dialog"));
+        assert!(open_print(&mut h));
         h.run_steps(3);
         h.get_by_label("Current page").click();
         h.run_steps(3);
@@ -87,7 +101,7 @@ fn current_print_page_saves_the_viewed_page_when_labels_restart() {
 #[test]
 fn print_dialog_lays_out_sheets_and_saves_a_pdf() {
     let mut h = harness();
-    assert!(h.state_mut().execute("print.dialog"));
+    assert!(open_print(&mut h));
     h.run_steps(3);
     assert_eq!(h.state().dialog, Some(Dialog::Print));
     h.get_by_label("Pages to Print".to_uppercase().as_str());
@@ -120,7 +134,7 @@ fn print_dialog_prints_the_selected_pages() {
     h.run_steps(3);
     let tab = h.state().views.len() - 1;
     // Nothing picked: the whole document, and no "Selected pages" choice.
-    assert!(h.state_mut().execute("print.dialog"));
+    assert!(open_print(&mut h));
     h.run_steps(3);
     assert_eq!(h.state().print_draft.which, PrintWhich::All);
     assert!(h.query_by_label_contains("Selected pages").is_none());
@@ -129,7 +143,7 @@ fn print_dialog_prints_the_selected_pages() {
     h.run_steps(2);
     // Pages 2 and 4 picked.
     h.state_mut().views[tab].select_pages(&[1, 3]);
-    assert!(h.state_mut().execute("print.dialog"));
+    assert!(open_print(&mut h));
     h.run_steps(3);
     assert_eq!(h.state().print_draft.which, PrintWhich::Selected);
     h.get_by_label("Selected pages (2)");
@@ -147,7 +161,7 @@ fn print_dialog_prints_the_selected_pages() {
     let _ = std::fs::remove_file(out);
     // The selection gone, the remembered choice falls back to the whole document.
     h.state_mut().views[tab].select_pages(&[]);
-    assert!(h.state_mut().execute("print.dialog"));
+    assert!(open_print(&mut h));
     h.run_steps(3);
     assert_eq!(h.state().print_draft.which, PrintWhich::All);
     assert!(h.state().print_draft.selected.is_empty());
@@ -156,7 +170,7 @@ fn print_dialog_prints_the_selected_pages() {
 #[test]
 fn invalid_ranges_are_explained_in_the_preview() {
     let mut h = harness();
-    h.state_mut().execute("print.dialog");
+    open_print(&mut h);
     h.run_steps(2);
     h.state_mut().print_draft.which = pdfcraft_ui_egui::PrintWhich::Range;
     h.state_mut().print_draft.range = "7".into();
@@ -171,7 +185,7 @@ fn cut_stack_dialog_previews_saves_and_refuses_duplex() {
     // Ten source pages, generated using the headless engine.
     let bytes = h.state().session.create_blank(200.0, 300.0, 10).unwrap();
     h.state_mut().open_bytes("numbered.pdf", None, bytes.as_ref().clone()).unwrap();
-    h.state_mut().execute("print.dialog");
+    open_print(&mut h);
     h.run_steps(3);
     h.get_by_label("Multiple").click();
     h.run_steps(2);
@@ -208,7 +222,7 @@ fn cut_stack_dialog_previews_saves_and_refuses_duplex() {
 #[test]
 fn a_failed_save_as_pdf_keeps_the_dialog_open() {
     let mut h = harness();
-    assert!(h.state_mut().execute("print.dialog"));
+    assert!(open_print(&mut h));
     h.run_steps(3);
     h.state_mut().print_draft.printer = None;
     // A folder that doesn't exist: the write fails.
@@ -356,7 +370,7 @@ fn architectural_page_can_be_matched_at_100_percent() {
         app
     });
     h.run_steps(4);
-    assert!(h.state_mut().execute("print.dialog"));
+    assert!(open_print(&mut h));
     h.run_steps(3);
     h.get_by_label("PDF page: 36.00 × 24.00 in");
     h.get_by_label("Match page at 100%").click();
@@ -373,7 +387,7 @@ fn architectural_page_can_be_matched_at_100_percent() {
 #[test]
 fn custom_page_cannot_silently_match_a_standard_paper() {
     let mut h = harness();
-    assert!(h.state_mut().execute("print.dialog"));
+    assert!(open_print(&mut h));
     h.run_steps(3);
     // The 300 x 400 pt fixture is not a standard sheet.
     assert!(pdfcraft_engine::print::matching_paper((300.0, 400.0)).is_none());
@@ -416,7 +430,7 @@ fn a_printer_without_two_sided_printing_points_to_its_properties() {
 #[test]
 fn print_as_image_is_an_advanced_choice_that_saves_pictures() {
     let mut h = harness();
-    assert!(h.state_mut().execute("print.dialog"));
+    assert!(open_print(&mut h));
     h.run_steps(3);
     h.get_by_label("Advanced".to_uppercase().as_str()).click();
     h.run_steps(2);
