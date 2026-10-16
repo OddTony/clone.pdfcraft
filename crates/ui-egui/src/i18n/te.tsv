@@ -2341,3 +2341,10 @@ animation effects	Off	ఆఫ్
 	Make properties default	లక్షణాలను డిఫాల్ట్‌గా చేయి
 	Pages selected	ఎంచుకున్న పేజీలు
 	Page properties	పేజీ లక్షణాలు
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	తెర / ఇమెయిల్
+	Reduce	తగ్గించు
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	తెరలు, ఇమెయిల్ కోసం చిన్న ఫైళ్లు. 225 ppi కంటే ఎక్కువ ఉన్న చిత్రాలు 150 ppiకి, JPEG నాణ్యత 60తో తగ్గుతాయి; రేఖా చిత్రాల్లో వివరాలు పోవచ్చు.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	ఎక్కువ నాణ్యత, సాధారణంగా పెద్ద ఫైళ్లు. 450 ppi కంటే ఎక్కువ ఉన్న JPEG ఫోటోలు 300 ppiకి, నాణ్యత 85తో తగ్గుతాయి. నష్టం లేని గ్రాఫిక్స్, మాస్క్ ఉన్న చిత్రాలు తమ పిక్సెల్‌లను అలాగే ఉంచుతాయి.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	ఎక్కువ చిత్ర నాణ్యతతో ఫైలు పరిమాణం పెరుగుతుంది. చిన్నదైతేనే ప్రతిని సేవ్ చేస్తుంది.

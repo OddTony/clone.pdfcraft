@@ -1,7 +1,7 @@
 //! Optimize PDF ▸ Advanced optimization (Acrobat's PDF Optimizer): Images, Discard Objects,
 //! Discard User Data and Clean Up panels. The result is saved as a copy, like Reduce File Size.
 //!
-//! The optimization (this dialog's, or Reduce File Size's fixed choices) runs on a worker thread
+//! The optimization (this dialog's, or Reduce File Size's selected quality) runs on a worker thread
 //! and shows its progress in a notice with a bar and a Cancel button; the copy is saved once it
 //! is done.
 
@@ -52,7 +52,7 @@ pub struct OptimizeProgress {
 /// Optimizer's notice lists what it did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OptimizeKind {
-    /// Reduce File Size (Acrobat's defaults).
+    /// Reduce File Size (the confirmed quality).
     Reduce,
     /// Optimize PDF ▸ Advanced optimization (the dialog's choices).
     Advanced,
@@ -117,13 +117,13 @@ fn image_row(ui: &mut egui::Ui, id: &str, title: &str, s: &mut ImageSettings) {
     ui.horizontal(|ui| {
         ui.label(tl!("Compression"));
         let label = match s.compression {
-            Compression::Jpeg(_) => "JPEG",
+            Compression::Jpeg(_) | Compression::JpegOnly(_) => "JPEG",
             Compression::Flate => tl!("ZIP"),
             Compression::Retain => tl!("Retain existing"),
         };
         egui::ComboBox::from_id_salt((id, "compression")).selected_text(label).show_ui(ui, |ui| {
             let q = match s.compression {
-                Compression::Jpeg(q) => q,
+                Compression::Jpeg(q) | Compression::JpegOnly(q) => q,
                 _ => 60,
             };
             ui.selectable_value(&mut s.compression, Compression::Jpeg(q), "JPEG");
@@ -243,6 +243,33 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut OptimizeDraft, t: &Tokens) -> (boo
     (ok, cancel)
 }
 
+/// Small quality chooser. The app commits the draft only when Reduce is pressed.
+pub(crate) fn reduce_body(ui: &mut egui::Ui, quality: &mut pdfcraft_engine::optimize::ReduceQuality, t: &Tokens) -> (bool, bool) {
+    use pdfcraft_engine::optimize::ReduceQuality;
+    ui.label(egui::RichText::new(tl!("Reduce file size…")).font(theme::semibold(18.0)));
+    ui.add_space(8.0);
+    widgets::radio_value(ui, quality, ReduceQuality::Screen, tl!("Screen / email"));
+    widgets::radio_value(ui, quality, ReduceQuality::Print, tl!("Print"));
+    ui.add_space(8.0);
+    ui.label(match quality {
+        ReduceQuality::Screen => tl!("Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail."),
+        ReduceQuality::Print => tl!("Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels."),
+    });
+    ui.label(
+        egui::RichText::new(tl!("Higher image quality trades off against smaller file size. A copy is saved only if it is smaller."))
+            .small()
+            .color(t.text_muted),
+    );
+    ui.add_space(12.0);
+    let mut reduce = false;
+    let mut cancel = false;
+    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        reduce = widgets::pill_button(ui, tl!("Reduce"), true).clicked();
+        cancel = widgets::pill_button(ui, tl!("Cancel"), false).clicked();
+    });
+    (reduce, cancel)
+}
+
 /// Audit Space Usage: how the file's bytes are spent now, by kind of content (not what
 /// optimizing would save).
 pub(crate) fn audit_body(ui: &mut egui::Ui, rows: &[pdfcraft_engine::optimize::SpaceUse], t: &Tokens) -> bool {
@@ -297,6 +324,15 @@ pub(crate) fn audit_body(ui: &mut egui::Ui, rows: &[pdfcraft_engine::optimize::S
 }
 
 impl PdfCraftApp {
+    pub(crate) fn reduce_with_draft(&mut self) {
+        if self.optimize_run.is_some() {
+            self.notify_tr("Optimization is already running");
+            return;
+        }
+        self.reduce_quality = self.reduce_quality_draft;
+        self.start_optimize(OptimizeKind::Reduce, &self.reduce_quality.settings(), &[]);
+    }
+
     /// Optimize PDF with the dialog's choices on a worker thread; the copy is saved when done.
     pub fn optimize_with_draft(&mut self) {
         let (settings, discard) = (self.optimize_draft.settings.clone(), self.optimize_draft.discard.clone());
@@ -437,6 +473,33 @@ mod tests {
     }
 
     #[test]
+    fn failed_cancelled_and_non_beneficial_reductions_leave_the_original_untouched() {
+        let mut app = PdfCraftApp::new();
+        app.open_bytes("notes.txt", None, b"Keep these notes".to_vec()).unwrap();
+        let (_, doc) = app.active_ids().unwrap();
+        let original = app.session.get(doc).unwrap().bytes.clone();
+        let dir = std::env::temp_dir().join(format!("pdfcraft-reduce-failure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("original.pdf");
+        std::fs::write(&path, original.as_ref()).unwrap();
+        app.save_override = Some(path.to_string_lossy().into_owned());
+        for result in
+            [Err(EditError::Cancelled), Err(EditError::Optimize("synthetic failure".into())), Ok((original.clone(), OptimizeReport::default()))]
+        {
+            app.optimize_run = Some(OptimizeRun {
+                doc,
+                kind: OptimizeKind::Reduce,
+                progress: Arc::new(Mutex::new(OptimizeProgress { result: Some(result), ..Default::default() })),
+            });
+            app.poll_optimize();
+            assert!(app.optimize_run.is_none());
+            assert_eq!(std::fs::read(&path).unwrap(), *original);
+            assert_eq!(app.session.get(doc).unwrap().bytes, original);
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn a_second_run_is_refused_while_one_is_going() {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
@@ -445,5 +508,12 @@ mod tests {
         app.optimize_run = Some(OptimizeRun { doc, kind: OptimizeKind::Reduce, progress: Arc::default() });
         app.optimize_with_draft();
         assert_eq!(app.toast.as_ref().map(|t| t.0.as_str()), Some("Optimization is already running"));
+        let progress = app.optimize_run.as_ref().unwrap().progress.clone();
+        app.reduce_file_size();
+        assert!(app.dialog.is_none(), "a busy optimizer doesn't open another chooser");
+        app.reduce_quality_draft = pdfcraft_engine::optimize::ReduceQuality::Print;
+        app.reduce_with_draft();
+        assert_eq!(app.reduce_quality, pdfcraft_engine::optimize::ReduceQuality::Screen);
+        assert!(Arc::ptr_eq(&app.optimize_run.as_ref().unwrap().progress, &progress));
     }
 }

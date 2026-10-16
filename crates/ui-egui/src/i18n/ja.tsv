@@ -2432,3 +2432,10 @@ animation effects	Off	オフ
 	Make properties default	プロパティをデフォルトに設定
 	Pages selected	選択したページ
 	Page properties	ページのプロパティ
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	画面 / メール
+	Reduce	縮小
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	画面表示やメール向けの小さなファイル。225 ppi を超える画像を 150 ppi、JPEG 品質 60 に縮小します。線画の細部が失われる場合があります。
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	高画質で、通常はファイルが大きくなります。450 ppi を超える JPEG 写真を 300 ppi、品質 85 に縮小します。可逆圧縮の図版とマスク付き画像は元のピクセルを保持します。
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	画質を高くするとファイルは大きくなります。元より小さくなる場合のみコピーを保存します。

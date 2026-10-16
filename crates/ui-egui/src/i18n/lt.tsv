@@ -2683,3 +2683,10 @@ key	Space	Tarpas
 	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neįrašyti pakeitimai bus prarasti.
 theme	Appearance	Išvaizda
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Ekranas / el. paštas
+	Reduce	Sumažinti
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Mažesni failai ekranams ir el. paštui. Vaizdai, kurių raiška viršija 225 ppi, sumažinami iki 150 ppi, JPEG kokybė 60; linijiniai brėžiniai gali prarasti detales.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Aukštesnė kokybė, paprastai didesni failai. JPEG nuotraukos, kurių raiška viršija 450 ppi, sumažinamos iki 300 ppi, kokybė 85. Be nuostolių suglaudinta grafika ir vaizdai su kaukėmis išlaiko savo pikselius.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	Aukštesnė vaizdų kokybė reiškia didesnius failus. Kopija išsaugoma tik jei ji mažesnė.

@@ -1022,3 +1022,179 @@ fn images_are_not_resampled_when_some_uses_could_not_be_measured() {
     let refs = pdfcraft_annot::page_refs(&doc).unwrap();
     assert_eq!(effective_resolutions(&doc, &refs)[&img], f64::INFINITY);
 }
+
+// Contributor-original generated fixtures; no external images or documents.
+fn quality_fixture(kind: &str, n: usize) -> (Document, ObjRef, ObjRef, Vec<u8>) {
+    let mut doc = Document::new_empty();
+    let photo = image(&mut doc, 1200, 800, n, true, None);
+    let drawing = image(&mut doc, 1200, 800, n, false, None);
+    let px: Vec<u8> = (0..1200 * 800)
+        .flat_map(|i| {
+            // Dense, sharp technical hatching with deterministic irregular short segments.
+            let x = (i % 1200) as u32;
+            let y = (i / 1200) as u32;
+            let h = x.wrapping_mul(0x9e3779b9) ^ y.wrapping_mul(0x85ebca6b);
+            let edge = x % 200 < 4 || y % 160 < 4 || (x % 200).abs_diff(y % 160) < 3;
+            let v = if edge || (h ^ (h >> 13)).is_multiple_of(5) { 0 } else { 255 };
+            vec![v; n]
+        })
+        .collect();
+    let old = stream(&doc, drawing);
+    doc.set(drawing, Object::Stream(Stream::flate(old.dict, &px)));
+    let content = match kind {
+        "jpeg" => "q 144 0 0 96 0 0 cm /P Do Q",
+        "drawing" => "q 144 0 0 96 0 0 cm /D Do Q",
+        _ => "q 144 0 0 96 0 0 cm /P Do Q q 144 0 0 96 180 0 cm /D Do Q BT /F1 12 Tf 20 200 Td (Searchable text) Tj ET",
+    };
+    let xobjects = match kind {
+        "jpeg" => vec![("P", photo)],
+        "drawing" => vec![("D", drawing)],
+        _ => vec![("P", photo), ("D", drawing)],
+    };
+    let p = page(&mut doc, &xobjects, content);
+    let mut fd = Dict::new();
+    fd.set(b"Type".to_vec(), Object::name("Font"));
+    fd.set(b"Subtype".to_vec(), Object::name("Type1"));
+    fd.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
+    let font = doc.add(Object::Dict(fd));
+    doc.update_dict(p, |d| {
+        let mut res = d.get(b"Resources").unwrap().as_dict().unwrap().clone();
+        let mut fonts = Dict::new();
+        fonts.set(b"F1".to_vec(), Object::Ref(font));
+        res.set(b"Font".to_vec(), Object::Dict(fonts));
+        d.set(b"Resources".to_vec(), Object::Dict(res));
+    })
+    .unwrap();
+    // Valid page link and bookmark, so cleanup must retain both.
+    let dest = Object::Array(vec![Object::Ref(p), Object::name("Fit")]);
+    let mut link = Dict::new();
+    link.set(b"Subtype".to_vec(), Object::name("Link"));
+    link.set(b"Rect".to_vec(), Object::Array(vec![0.into(), 0.into(), 20.into(), 20.into()]));
+    link.set(b"Dest".to_vec(), dest.clone());
+    let link = doc.add(Object::Dict(link));
+    doc.update_dict(p, |d| d.set(b"Annots".to_vec(), Object::Array(vec![Object::Ref(link)]))).unwrap();
+    let outlines = doc.add(Object::Null);
+    let mut item = Dict::new();
+    item.set(b"Title".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"Diagram".to_vec())));
+    item.set(b"Dest".to_vec(), dest);
+    item.set(b"Parent".to_vec(), Object::Ref(outlines));
+    let item = doc.add(Object::Dict(item));
+    let mut tree = Dict::new();
+    tree.set(b"Type".to_vec(), Object::name("Outlines"));
+    tree.set(b"First".to_vec(), Object::Ref(item));
+    tree.set(b"Last".to_vec(), Object::Ref(item));
+    tree.set(b"Count".to_vec(), Object::Int(1));
+    doc.set(outlines, Object::Dict(tree));
+    doc.update_dict(doc.root().unwrap(), |d| d.set(b"Outlines".to_vec(), Object::Ref(outlines))).unwrap();
+    (doc, photo, drawing, px)
+}
+
+#[test]
+fn reduce_quality_baseline() {
+    for kind in ["jpeg", "drawing", "mixed"] {
+        let (mut doc, _, drawing, px) = quality_fixture(kind, 3);
+        let source = write_full(&doc, &SaveOptions::default()).unwrap();
+        if let Ok(dir) = std::env::var("PDFCRAFT_QUALITY_FIXTURES") {
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(std::path::Path::new(&dir).join(format!("{kind}.pdf")), &source).unwrap();
+        }
+        let before = source.len();
+        optimize(&mut doc, &Settings::default()).unwrap();
+        let after = write_full(&doc, &SaveOptions::default()).unwrap().len();
+        let d = stream(&doc, drawing);
+        let same = d.dict.name(b"Filter") == Some(b"FlateDecode") && d.decoded().unwrap() == px;
+        eprintln!("baseline {kind}: {before} -> {after} bytes; drawing filter {:?}, pixels unchanged {same}", d.dict.name(b"Filter"));
+        if kind != "jpeg" {
+            assert!(!same, "baseline exposes lossy conversion");
+        }
+    }
+}
+
+#[test]
+fn print_preserves_line_art_pixels_and_document_structure() {
+    use pdfcraft_optimize::ReduceQuality;
+    for n in [1, 3] {
+        let (mut doc, photo, drawing, px) = quality_fixture("mixed", n);
+        let original = stream(&doc, drawing);
+        let settings = ReduceQuality::Print.settings();
+        let before = write_full(&doc, &SaveOptions::default()).unwrap();
+        let report = optimize(&mut doc, &settings).unwrap();
+        assert!(stream(&doc, drawing) == original, "lossless stream stays intact");
+        assert_eq!(stream(&doc, drawing).decoded().unwrap(), px, "exact samples, no JPEG tolerance");
+        assert_eq!(stream(&doc, photo).dict.int(b"Width"), Some(600));
+        assert_eq!(stream(&doc, photo).dict.int(b"Height"), Some(400));
+        assert_eq!(report.invalid_links + report.invalid_bookmarks, 0);
+        let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+        eprintln!("print mixed {n} components: {} -> {} bytes", before.len(), bytes.len());
+        let reopened = Document::open(Arc::new(bytes.clone())).unwrap();
+        let pages = pdfcraft_annot::page_refs(&reopened).unwrap();
+        assert_eq!(pages.len(), 1);
+        let resources = reopened.resolve(reopened.get(pages[0]).as_dict().unwrap().get(b"Resources").unwrap());
+        let xobjects = reopened.resolve(resources.as_dict().unwrap().get(b"XObject").unwrap());
+        let saved = reopened.resolve(xobjects.as_dict().unwrap().get(b"D").unwrap());
+        let Object::Stream(saved) = &*saved else { panic!("drawing must remain an image stream") };
+        assert_eq!(saved.dict.name(b"Filter"), Some(&b"FlateDecode"[..]));
+        assert_eq!(saved.decoded().unwrap(), px, "saved and reopened line art has identical samples");
+        assert_eq!(reopened.get(pages[0]).as_dict().unwrap().get(b"Annots").unwrap().as_array().unwrap().len(), 1);
+        let catalog = reopened.get(reopened.root().unwrap());
+        let tree = reopened.get(catalog.as_dict().unwrap().reference(b"Outlines").unwrap());
+        let item = reopened.get(tree.as_dict().unwrap().reference(b"First").unwrap());
+        assert!(item.as_dict().unwrap().contains(b"Dest"));
+        let bytes = Arc::new(bytes);
+        let info = pdfcraft_render::inspect(bytes.clone(), None).unwrap();
+        assert_eq!((info.pages.len(), info.links.len(), info.outline.len()), (1, 1, 1));
+        let mut renderer = pdfcraft_render::PageRenderer::new(bytes, Default::default());
+        let rendered =
+            renderer.render(pdfcraft_render::RenderRequest { page: 0, kind: pdfcraft_render::RequestKind::Text, scale: 1.0, ..Default::default() });
+        assert!(rendered.error.is_none(), "{:?}", rendered.error);
+        assert!(rendered.text.unwrap().plain_text().contains("Searchable text"));
+    }
+}
+
+#[test]
+fn reduce_presets_are_independent_of_standard_and_mobile() {
+    use pdfcraft_optimize::{Preset, ReduceQuality};
+    assert_eq!(ReduceQuality::Screen.settings(), Settings::default());
+    let screen = ReduceQuality::Screen.settings();
+    assert_eq!((screen.color.target_ppi, screen.color.above_ppi, screen.color.compression), (150.0, 225.0, Compression::Jpeg(60)));
+    assert_eq!(screen.color, screen.gray);
+    assert_eq!(Preset::Standard.settings(), Settings::default());
+    assert_eq!(Preset::Mobile.settings().color, ImageSettings::MOBILE);
+    let print = ReduceQuality::Print.settings();
+    assert_eq!((print.color.target_ppi, print.color.above_ppi), (300.0, 450.0));
+    assert_eq!(print.color.compression, Compression::JpegOnly(85));
+    assert_eq!(print.color, print.gray);
+    assert!(!print.merge_fragments);
+}
+
+#[test]
+fn print_threshold_and_masked_jpegs() {
+    use pdfcraft_optimize::ReduceQuality;
+    let mut doc = Document::new_empty();
+    let boundary = image(&mut doc, 450, 450, 3, true, None);
+    let source_boundary = stream(&doc, boundary);
+    let above = image(&mut doc, 451, 451, 3, true, None);
+    let mask = image(&mut doc, 600, 600, 1, false, None);
+    let masked = image(&mut doc, 600, 600, 3, true, Some(mask));
+    let original = stream(&doc, masked);
+    let original_mask = stream(&doc, mask);
+    page(
+        &mut doc,
+        &[("A", boundary), ("B", above), ("C", masked)],
+        "q 72 0 0 72 0 0 cm /A Do Q q 72 0 0 72 100 0 cm /B Do Q q 72 0 0 72 200 0 cm /C Do Q",
+    );
+    optimize(&mut doc, &ReduceQuality::Print.settings()).unwrap();
+    assert_eq!(stream(&doc, boundary).dict.int(b"Width"), Some(450));
+    assert_eq!(stream(&doc, above).dict.int(b"Width"), Some(300));
+    assert_eq!(stream(&doc, masked), original);
+    assert_eq!(stream(&doc, mask), original_mask);
+    // JPEG is lossy: validate the requested encoder quality, not pixel equality.
+    let decoded = image::load_from_memory_with_format(&source_boundary.raw, image::ImageFormat::Jpeg).unwrap().into_rgb8();
+    let mut expected = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut expected, 85).encode(decoded.as_raw(), 450, 450, image::ExtendedColorType::Rgb8).unwrap();
+    assert_eq!(stream(&doc, boundary).raw.as_ref(), expected);
+    let recompressed = image::load_from_memory_with_format(&expected, image::ImageFormat::Jpeg).unwrap().into_rgb8();
+    let mean_error =
+        decoded.as_raw().iter().zip(recompressed.as_raw()).map(|(a, b)| f64::from(a.abs_diff(*b))).sum::<f64>() / decoded.as_raw().len() as f64;
+    assert!(mean_error < 8.0, "JPEG uses a sample tolerance, unlike lossless pixel equality: {mean_error}");
+}

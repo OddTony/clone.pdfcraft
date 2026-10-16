@@ -223,10 +223,15 @@ impl PdfCraftApp {
         }
     }
 
-    /// Reduce File Size: write a compacted copy with images downsampled (the open document is
-    /// unchanged). It runs in the background with a progress bar, like the PDF Optimizer.
+    /// Choose quality before reducing a copy. Only confirmation starts the existing
+    /// background workflow; cancelling leaves the saved quality and document unchanged.
     pub(crate) fn reduce_file_size(&mut self) {
-        self.start_optimize(crate::optimize_ui::OptimizeKind::Reduce, &pdfcraft_engine::optimize::Settings::default(), &[]);
+        if self.optimize_run.is_some() {
+            self.notify_tr("Optimization is already running");
+            return;
+        }
+        self.reduce_quality_draft = self.reduce_quality;
+        self.dialog = Some(crate::Dialog::ReduceQuality);
     }
 
     /// Save an optimized copy (Reduce File Size, Optimize PDF) next to the original, reporting

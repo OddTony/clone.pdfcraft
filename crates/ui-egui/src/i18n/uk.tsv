@@ -2454,3 +2454,10 @@ animation effects	Off	Вимкнено
 	Make properties default	Зробити властивості типовими
 	Pages selected	Вибрані сторінки
 	Page properties	Властивості сторінки
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Екран / пошта
+	Reduce	Зменшити
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Менші файли для екранів і пошти. Зображення понад 225 ppi зменшуються до 150 ppi, JPEG із якістю 60; креслення можуть втратити деталі.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Вища якість, зазвичай більші файли. Фотографії JPEG понад 450 ppi зменшуються до 300 ppi, якість 85. Графіка без втрат і зображення з масками зберігають свої пікселі.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	Вища якість зображень означає більші файли. Копія зберігається лише тоді, коли вона менша.

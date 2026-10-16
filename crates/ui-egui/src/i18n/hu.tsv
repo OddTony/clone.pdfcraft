@@ -2431,3 +2431,10 @@ animation effects	Off	Ki
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
 	Pages selected	Kijelölt oldalak
 	Page properties	Oldaltulajdonságok
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Képernyő / e-mail
+	Reduce	Csökkentés
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Kisebb fájlok képernyőhöz és e-mailhez. A 225 ppi feletti képek 150 ppi felbontásra csökkennek, JPEG 60-as minőséggel; a vonalas rajzok részleteket veszíthetnek.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Jobb minőség, általában nagyobb fájlok. A 450 ppi feletti JPEG-fotók 300 ppi felbontásra csökkennek, 85-ös minőséggel. A veszteségmentes grafikák és a maszkolt képek megőrzik képpontjaikat.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	A jobb képminőség nagyobb fájlmérettel jár. Másolat csak akkor készül, ha kisebb.

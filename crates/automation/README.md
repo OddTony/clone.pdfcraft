@@ -209,3 +209,13 @@ behavior. Back/Forward
 returns to page tops, does not restore zoom, does not switch documents, and is not saved across
 restarts. Standalone engine/MCP sessions have no viewport, so they do not have a separate
 navigation-history tool; use the opt-in UI control channel to navigate the displayed document.
+
+### Reduce File Size quality
+
+`doc_reduce` accepts optional `quality: "screen" | "print"`. Omitted or `"screen"`
+uses the existing 150/225 ppi, JPEG 60 behavior. `"print"` uses 300/450 ppi and
+JPEG 85 for supported unmasked JPEGs, preserves lossless image pixels and disables
+fragment merging. Masked JPEGs and unsupported codecs stay unchanged. Both modes
+write only a smaller copy and leave the open document unchanged. This parameter
+is independent of the advanced `doc_optimize` Standard/Mobile presets; there is no
+lossless quality option (PR #1282). Unknown quality names are rejected.

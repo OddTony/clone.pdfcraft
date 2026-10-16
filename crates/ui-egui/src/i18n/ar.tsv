@@ -2709,3 +2709,10 @@ certificate	Version	الإصدار
 	Make properties default	جعل الخصائص افتراضية
 	Pages selected	الصفحات المحددة
 	Page properties	خصائص الصفحة
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	الشاشة / البريد الإلكتروني
+	Reduce	تقليل
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	ملفات أصغر للشاشات والبريد الإلكتروني. تُخفض الصور التي تتجاوز 225 بكسل لكل بوصة إلى 150، بجودة JPEG ‏60؛ قد تفقد الرسومات الخطية بعض التفاصيل.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	جودة أعلى وملفات أكبر عادةً. تُخفض صور JPEG التي تتجاوز 450 بكسل لكل بوصة إلى 300، بجودة 85. تحتفظ الرسومات المضغوطة دون فقد والصور ذات الأقنعة ببكسلاتها.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	زيادة جودة الصور تعني ملفات أكبر. لا تُحفظ نسخة إلا إذا كانت أصغر.

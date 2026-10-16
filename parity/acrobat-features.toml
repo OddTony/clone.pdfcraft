@@ -7229,15 +7229,15 @@ notes = "Adobe cloud; LibreOffice sidecar instead"
 
 [[feature]]
 id = "optimize.reduce-file-size"
-title = "Reduce file size (one click)"
+title = "Reduce file size (quality chooser)"
 area = "K"
 tier = "P0"
 milestone = "M11"
 status = "shipped"
 commands = ["optimize.reduce"]
 tools = ["doc_reduce"]
-evidence = ["crates/ui-egui/tests/create.rs::reduce_file_size_writes_a_compact_copy", "crates/ui-egui/tests/create.rs::reduce_file_size_saves_nothing_when_the_file_is_already_small", "crates/engine/src/tests.rs::create_and_reduce", "crates/automation/tests/automation.rs::creating_and_reducing_through_tools", "crates/automation/tests/automation.rs::optimizing_through_tools", "crates/optimize/tests/optimize.rs::an_identity_decode_array_does_not_stop_reduce"]
-notes = "images above 225 ppi to 150 ppi JPEG medium (after merging page pictures printed as one-pixel strips into one image), thumbnails dropped, resources merged, object streams; scanner images with the default decode array are included; a copy that isn't smaller is not saved (\"already as small as it can be made\"); runs in the background with a progress bar and Cancel"
+evidence = ["crates/optimize/tests/optimize.rs::print_preserves_line_art_pixels_and_document_structure", "crates/ui-egui/tests/create.rs::reduce_chooser_cancel_and_confirmed_quality_survive_restart", "crates/automation/tests/automation.rs::reduce_quality_is_optional_and_validated_through_tools", "crates/ui-egui/tests/create.rs::reduce_file_size_writes_a_compact_copy", "crates/ui-egui/tests/create.rs::reduce_file_size_saves_nothing_when_the_file_is_already_small", "crates/engine/src/tests.rs::create_and_reduce", "crates/automation/tests/automation.rs::creating_and_reducing_through_tools", "crates/automation/tests/automation.rs::optimizing_through_tools", "crates/optimize/tests/optimize.rs::an_identity_decode_array_does_not_stop_reduce"]
+notes = "Screen / email (default, unchanged) and Print quality chooser; only confirmed quality persists. Print: unmasked JPEGs to 300 ppi above 450, quality 85; lossless images keep exact samples and resolution; no fragment merging. Masked JPEGs and unsupported codecs stay unchanged. Keep image quality deferred to #1282; no size estimates. Existing Screen behavior: images above 225 ppi to 150 ppi JPEG medium (after merging page pictures printed as one-pixel strips into one image), thumbnails dropped, resources merged, object streams; scanner images with the default decode array are included; a copy that isn't smaller is not saved (\"already as small as it can be made\"); runs in the background with a progress bar and Cancel"
 
 [[feature]]
 id = "optimize.compatibility-level"
