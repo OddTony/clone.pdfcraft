@@ -665,6 +665,7 @@ impl Metrics {
             visual_order: false,
             code_len: 1,
             explicit_reverse: (32..127u8).map(|c| (char::from(c), u32::from(c))).collect(),
+            sequence_reverse: HashMap::new(),
             outlined_cids: Vec::new(),
         }
     }
