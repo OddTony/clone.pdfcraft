@@ -1375,14 +1375,16 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             }
             let native_width = ui.fonts_mut(|f| f.layout_no_wrap(line.text.clone(), font.clone(), Color32::BLACK).size().x);
             let target_width = ((line.rect[2] - line.rect[0]) * look.size / line.size.max(0.01)) as f32 * scale;
-            let spacing = if original_face { (target_width - native_width) / line.text.chars().count().saturating_sub(1).max(1) as f32 } else { 0.0 };
+            let spacing = if original_face && !text.chars().any(is_combining_for_cursor) {
+                (target_width - native_width) / line.text.chars().count().saturating_sub(1).max(1) as f32
+            } else { 0.0 };
             job.append(
                 text.get(range).unwrap_or_default(),
                 0.0,
                 egui::TextFormat {
                     font_id: font,
                     extra_letter_spacing: spacing + ed.extras.char_spacing as f32 * scale,
-                    color: if ed.pristine_source_visible() { Color32::TRANSPARENT } else { color32(look.color) },
+                    color: if ed.pristine_source_visible() || editor_rtl(&ed.text) { Color32::TRANSPARENT } else { color32(look.color) },
                     italics: look.italic && !embedded,
                     ..Default::default()
                 },
@@ -1406,7 +1408,14 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
 /// Align the editable galley's baselines to the source rows instead of egui's interface
 /// leading. Glyphs, meshes, caret and selection receive the same transform.
 fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> Arc<egui::Galley> {
-    let mut job = editor_job(ui, ed, text, scale, width);
+    let job = editor_job(ui, ed, text, scale, width);
+    editor_galley_with_job(ui, ed, text, scale, width, job)
+}
+
+fn editor_galley_with_job(
+    ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32,
+    mut job: egui::text::LayoutJob,
+) -> Arc<egui::Galley> {
     let centered = job.halign == egui::Align::Center;
     // PDF source rows have physical left and right edges. For an RTL paragraph,
     // retain the source right edge rather than treating its varying left edge
@@ -1519,6 +1528,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     let font = editor_font(&ed.look, ed.size);
     let text_color = color32(ed.look.color);
     let pristine_source = ed.pristine_source_visible();
+    let rtl_input = editor_rtl(&ed.text);
     let mut done = None;
     egui::Area::new(egui::Id::new("edit-text-line")).order(egui::Order::Foreground).fixed_pos(Pos2::new(ed.rect.left(), ed.rect.top())).show(
         ctx,
@@ -1568,8 +1578,19 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                 let snapshot = ed.clone();
                 let mut layouter =
                     |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| editor_galley(ui, &snapshot, text.as_str(), scale, wrap_width);
-                let output = egui::TextEdit::multiline(&mut ed.text)
-                    .id(egui::Id::new("edit-text-line-input"))
+                let input_id = egui::Id::new("edit-text-line-input");
+                let previous_cursor = egui::TextEditState::load(ctx, input_id)
+                    .and_then(|s| s.cursor.char_range())
+                    .and_then(|r| r.single())
+                    .map(|c| usize::from(c.index));
+                let opening = ed.focus;
+                if rtl_input {
+                    // egui's built-in caret/selection use LTR hit testing. Paint the
+                    // physical caret ourselves from Unicode bidi visual runs.
+                    ui.visuals_mut().text_cursor.stroke.color = Color32::TRANSPARENT;
+                }
+                let mut output = egui::TextEdit::multiline(&mut ed.text)
+                    .id(input_id)
                     .font(font.clone())
                     .margin(egui::Margin::ZERO)
                     .layouter(&mut layouter)
@@ -1578,6 +1599,54 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                     .desired_width(width)
                     .desired_rows(rows)
                     .show(ui);
+                if rtl_input {
+                    let mut corrected = None;
+                    // A physical click near the left end of an RTL line means the
+                    // logical END of the text, not the beginning of the LTR buffer.
+                    if (output.response.clicked() || opening)
+                        && let Some(pointer) = ctx.input(|i| i.pointer.latest_pos())
+                        && output.response.rect.expand(4.0).contains(pointer)
+                    {
+                        corrected = rtl_caret_at(&output.galley, pointer - output.galley_pos);
+                    } else if output.response.has_focus()
+                        && let Some(previous) = previous_cursor
+                        && !ctx.input(|i| i.modifiers.shift || i.modifiers.command || i.modifiers.alt)
+                    {
+                        let left = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft));
+                        let right = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight));
+                        if left != right {
+                            corrected = rtl_move_visual(&output.galley, previous, left);
+                        }
+                    }
+                    if let Some(index) = corrected {
+                        let range = egui::text::CCursorRange::one(egui::text::CCursor::new(index));
+                        output.state.cursor.set_char_range(Some(range));
+                        output.state.clone().store(ctx, output.response.id);
+                        output.cursor_range = Some(range);
+                    }
+                    // The logical input is transparent; paint visual bidi order
+                    // separately without altering clipboard or saved PDF text.
+                    if !pristine_source {
+                        let visual = crate::bidi::visual_auto(&ed.text);
+                        let mut job = editor_job(ui, ed, &visual, scale, width);
+                        for section in &mut job.sections {
+                            section.format.color = text_color;
+                        }
+                        let display = editor_galley_with_job(ui, ed, &visual, scale, width, job);
+                        ui.painter().galley(output.galley_pos, display, text_color);
+                    }
+                    if output.response.has_focus()
+                        && let Some(cursor) = output.cursor_range.and_then(|r| r.single())
+                        && let Some(stop) = rtl_caret_location(&output.galley, usize::from(cursor.index))
+                    {
+                        let pos = output.galley_pos + stop.to_vec2();
+                        let height = ed.size.max(8.0);
+                        ui.painter().line_segment(
+                            [pos, pos + egui::vec2(0.0, height)],
+                            Stroke::new(1.4, if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE }),
+                        );
+                    }
+                }
                 if let Some(cursor) = output.cursor_range {
                     let selected = cursor.as_sorted_char_range();
                     let byte = |index| ed.text.char_indices().nth(index).map_or(ed.text.len(), |(at, _)| at);
