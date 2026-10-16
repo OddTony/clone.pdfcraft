@@ -3571,9 +3571,9 @@ tier = "P0"
 milestone = "M5"
 status = "shipped"
 commands = ["comment.note"]
-tools = ["comment_add"]
-evidence = ["crates/ui-egui/tests/comments.rs::sticky_note_composer_posts_and_returns_to_select", "crates/ui-egui/tests/comments.rs::the_comment_composer_shortcut_only_posts_the_focused_editor", "crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment"]
-notes = "our own Comment/Note icon drawings, with a pop-up; Ctrl+Enter (also Command+Enter) posts from the focused editor, Shift+Enter adds a newline"
+tools = ["comment_add", "comment_edit"]
+evidence = ["crates/ui-egui/tests/comments.rs::sticky_note_composer_posts_and_returns_to_select", "crates/ui-egui/tests/comments.rs::the_comment_composer_shortcut_only_posts_the_focused_editor", "crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment", "crates/engine/src/tests/annotation_resize.rs::review_resizes_render_and_keep_native_identity_through_history_and_save", "crates/automation/tests/automation/annotation_resize.rs::review_resize_through_tools_retains_identity_ink_and_single_step_history"]
+notes = "our own Comment/Note icon drawings, with a pop-up; Ctrl+Enter (also Command+Enter) posts from the focused editor, Shift+Enter adds a newline. Engine ResizeAnnotation/comment_edit rect can resize the icon while preserving its original appearance and flags; no new GUI resize handles for notes"
 
 [[feature]]
 id = "comment.highlight"
@@ -3583,9 +3583,9 @@ tier = "P0"
 milestone = "M5"
 status = "shipped"
 commands = ["comment.highlight"]
-tools = ["comment_add"]
-evidence = ["crates/ui-egui/tests/comments.rs::dragging_over_text_with_the_highlighter_highlights_it", "crates/ui-egui/tests/comments.rs::a_new_highlight_opens_its_note_for_typing", "crates/engine/src/tests.rs::highlight_multiplies_over_text"]
-notes = "drag over text, or pick the tool with text selected; a new highlight opens its note for typing in the Comments panel; agents can highlight by text search"
+tools = ["comment_add", "comment_edit"]
+evidence = ["crates/ui-egui/tests/comments.rs::dragging_over_text_with_the_highlighter_highlights_it", "crates/ui-egui/tests/comments.rs::a_new_highlight_opens_its_note_for_typing", "crates/engine/src/tests.rs::highlight_multiplies_over_text", "crates/annot/src/resize_tests.rs::resize_highlight_scales_every_quad_and_keeps_identity", "crates/automation/tests/automation/annotation_resize.rs::review_resize_through_tools_retains_identity_ink_and_single_step_history"]
+notes = "drag over text, or pick the tool with text selected; a new highlight opens its note for typing in the Comments panel; agents can highlight by text search. Engine ResizeAnnotation/comment_edit rect scales multiline/oblique quads with native history; no new GUI resize handles for highlights"
 
 [[feature]]
 id = "comment.underline"
@@ -3607,9 +3607,9 @@ tier = "P0"
 milestone = "M5"
 status = "shipped"
 commands = ["comment.strikeout"]
-tools = ["comment_add"]
-evidence = ["crates/ui-egui/tests/comments.rs::a_selection_made_first_is_marked_when_a_tool_is_picked", "crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment"]
-notes = ""
+tools = ["comment_add", "comment_edit"]
+evidence = ["crates/ui-egui/tests/comments.rs::a_selection_made_first_is_marked_when_a_tool_is_picked", "crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment", "crates/annot/src/resize_tests.rs::resize_strikeout_and_redact_marks_scale_their_quads", "crates/automation/tests/automation/annotation_resize.rs::review_resize_through_tools_retains_identity_ink_and_single_step_history"]
+notes = "Engine ResizeAnnotation/comment_edit rect scales review quads with native history; no new GUI resize handles for strikethroughs"
 
 [[feature]]
 id = "comment.squiggly"
@@ -5548,8 +5548,8 @@ milestone = "M8"
 status = "shipped"
 commands = ["redact.mark"]
 tools = ["redact_mark"]
-evidence = ["crates/ui-egui/tests/ui_group/redact.rs::marking_applying_and_clearing", "crates/automation/tests/automation.rs::redacting_through_tools", "crates/redact/src/tests.rs::glyphs_under_a_mark_go_and_the_rest_stays_put"]
-notes = "drag across text (or select first) with the Redact tool"
+evidence = ["crates/ui-egui/tests/ui_group/redact.rs::marking_applying_and_clearing", "crates/automation/tests/automation.rs::redacting_through_tools", "crates/redact/src/tests.rs::glyphs_under_a_mark_go_and_the_rest_stays_put", "crates/engine/src/tests/annotation_resize.rs::resizing_redaction_changes_only_review_until_apply_then_removes_the_new_target", "crates/automation/tests/automation/annotation_resize.rs::review_resize_through_tools_retains_identity_ink_and_single_step_history"]
+notes = "drag across text (or select first) with the Redact tool. Engine ResizeAnnotation/comment_edit rect resizes review marks without removing content; explicit ApplyRedactions subsequently uses the new geometry. Native history retains the mark identity; no new GUI resize handles for redaction marks"
 
 [[feature]]
 id = "protect.redact-area"

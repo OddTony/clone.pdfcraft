@@ -45,8 +45,18 @@ deterministic; the engine supplies them.
   cloudy borders or callouts, instead of leaving a stale appearance.
 - Replies get the parent's `/Rect` and an empty appearance: they appear in comment lists but
   never paint a second icon.
-- Resizing a stamp changes its `/Rect` and preserves its original appearance and resources;
-  viewers scale that appearance into the new rectangle. Locked stamps refuse the edit.
+- Resizing a stamp or note icon changes its `/Rect` and preserves its original appearance,
+  resources and flags; viewers scale the appearance into the new rectangle. Locked comments
+  refuse the edit.
+- Highlights, strikethroughs and redaction review marks resize all `/QuadPoints` with one affine
+  map from the original enclosing `/Rect`, preserving multiline and oblique geometry and native
+  identity. Invalid/degenerate source rectangles, malformed coordinates, quads outside their
+  enclosing rectangle, and more than 1,000,000 coordinates are refused without repair or mutation.
+  Appearances are regenerated under the same foreign-text protections as restyling. A legal
+  rectangle-only redaction mark keeps/scales its existing normal appearance; one without a normal
+  appearance is refused. Resizing never removes page content: applying redactions is separate.
+  These capabilities are available through `set_rect` / engine `ResizeAnnotation` / automation
+  `comment_edit`; this change does not add GUI resize handles for these types.
 - Picture stamps (a natural-size or explicit-rectangle image, a PDF page, or an image
   signature) and PdfCraft's rubber stamps counterrotate their appearance on rotated pages, so
   the picture or label reads upright as the page is displayed. Restyling a picture stamp keeps
