@@ -1423,9 +1423,9 @@ fn editor_galley_with_job(
     // PDF source rows have physical left and right edges. For an RTL paragraph,
     // retain the source right edge rather than treating its varying left edge
     // as the paragraph anchor.
-    let rtl = text.chars().find(|c| c.is_alphabetic()).is_some_and(|c| {
-        matches!(u32::from(c), 0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFC)
-    });
+    // Use the logical paragraph's base direction. A visualized RTL row can
+    // begin with a Latin/number run on the left and must still align right.
+    let rtl = editor_rtl(&ed.text);
     job.halign = egui::Align::LEFT;
     let mut galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
     let Some((block, lines)) = &ed.source else { return galley };
