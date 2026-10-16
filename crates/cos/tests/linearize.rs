@@ -188,6 +188,13 @@ fn qpdf_finds_no_linearization_errors() {
 #[test]
 fn qpdf_agrees_on_objects_reached_in_awkward_ways() {
     let qpdf = pdfcraft_oracle::or_skip!(pdfcraft_oracle::qpdf());
+    // qpdf 11 places objects shared by open outlines and pages differently from qpdf 12, whose
+    // checks these rules follow (Ubuntu 24.04 ships 11.9).
+    let major = qpdf.version().split_whitespace().last().and_then(|v| v.split('.').next()?.parse::<u32>().ok());
+    if major.is_none_or(|m| m < 12) {
+        eprintln!("skipping: needs qpdf 12 or later, found {:?}", qpdf.version());
+        return;
+    }
     let failures: Vec<String> = awkward()
         .into_iter()
         .filter_map(|(name, bytes)| {
