@@ -1769,6 +1769,50 @@ mod tests {
     }
 
     #[test]
+    fn rtl_caret_hit_testing_uses_physical_order_without_reversing_text() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::theme::font_definitions());
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let galley = ui.fonts_mut(|f| f.layout_no_wrap(
+                "שלום".to_owned(), egui::FontId::proportional(20.0), Color32::BLACK,
+            ));
+            let stops = rtl_caret_stops(&galley);
+            assert!(!stops.is_empty());
+            let y = stops[0].y;
+            let min_x = stops.iter().map(|s| s.x).fold(f32::INFINITY, f32::min);
+            let max_x = stops.iter().map(|s| s.x).fold(f32::NEG_INFINITY, f32::max);
+            assert_eq!(rtl_caret_at(&galley, egui::vec2(min_x - 2.0, y)), Some(4));
+            assert_eq!(rtl_caret_at(&galley, egui::vec2(max_x + 2.0, y)), Some(0));
+            assert_eq!(rtl_move_visual(&galley, 4, false), Some(3));
+            assert_eq!(rtl_move_visual(&galley, 0, true), Some(1));
+
+            let vowelized = ui.fonts_mut(|f| f.layout_no_wrap(
+                "אַ".to_owned(), egui::FontId::proportional(20.0), Color32::BLACK,
+            ));
+            let stops = rtl_caret_stops(&vowelized);
+            assert!(stops.iter().all(|s| s.index != 1), "caret must not split a Hebrew base and its niqqud");
+        });
+        output.drop_without_applying_deltas();
+    }
+
+    #[test]
+    fn mixed_hebrew_latin_caret_stops_remain_valid_unicode_indices() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::theme::font_definitions());
+        let text = "שלום Invoice 123";
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let galley = ui.fonts_mut(|f| f.layout_no_wrap(
+                text.to_owned(), egui::FontId::proportional(18.0), Color32::BLACK,
+            ));
+            let stops = rtl_caret_stops(&galley);
+            assert!(stops.iter().all(|s| s.index <= text.chars().count()));
+            assert!(stops.iter().any(|s| s.index == 0));
+            assert!(stops.iter().any(|s| s.index == text.chars().count()));
+        });
+        output.drop_without_applying_deltas();
+    }
+
+    #[test]
     fn text_background_is_cached_without_editing_and_released_on_cancel() {
         let (app, ed) = preview_app();
         let doc = app.session.get(app.views[0].id).unwrap();
