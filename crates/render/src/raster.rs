@@ -25,6 +25,7 @@ use hayro::hayro_interpret::font::{FontData, FontQuery};
 use hayro::hayro_interpret::hayro_cmap::CidFamily;
 use hayro::hayro_interpret::{InterpreterSettings, InterpreterWarning};
 use hayro::hayro_syntax::Pdf;
+use hayro::hayro_syntax::page::Page;
 use hayro::vello_cpu::color::AlphaColor;
 use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::{RenderCache, RenderSettings, render_into, render_size};
@@ -221,7 +222,7 @@ pub enum RenderWarning {
 pub struct RenderStats {
     /// Number of parser construction attempts.
     pub parser_builds: u64,
-    /// Number of pixel page interpretations, including tiled requests.
+    /// Number of page interpretations for pixels or SVG, including tiled requests.
     pub page_interpretations: u64,
     /// Number of render requests accepted for processing.
     pub render_requests: u64,
@@ -312,12 +313,7 @@ fn render_page<'a>(
         };
     }
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let pages = pdf.pages();
-        let page = pages.get(req.page).ok_or_else(|| format!("page {} does not exist", req.page + 1))?;
-        let (w, h) = page.render_dimensions();
-        if !(w.is_finite() && h.is_finite()) || w < 0.5 || h < 0.5 {
-            return Err(format!("page {} has an empty or invalid page box ({w}×{h} pt)", req.page + 1));
-        }
+        let (page, w, h) = drawable_page(pdf, req.page)?;
         // Reading colours: the page clears to the setting's background, and solid text and
         // line-art paints are remapped (images and patterns never are). Off renders as before.
         let (bg_color, color_replacement) = match reading.params {
@@ -377,6 +373,16 @@ fn render_page<'a>(
         Ok(Err(e)) => Err((e, false)),
         Err(panic) => Err((format!("renderer crashed on page {}: {}", req.page + 1, panic_message(&panic)), true)),
     }
+}
+
+/// Page `page` and its size in points, refusing a page box that is empty or not finite.
+fn drawable_page(pdf: &Pdf, page: usize) -> Result<(&Page<'_>, f32, f32), String> {
+    let p = pdf.pages().get(page).ok_or_else(|| format!("page {} does not exist", page.saturating_add(1)))?;
+    let (w, h) = p.render_dimensions();
+    if !(w.is_finite() && h.is_finite()) || w < 0.5 || h < 0.5 {
+        return Err(format!("page {} has an empty or invalid page box ({w}×{h} pt)", page.saturating_add(1)));
+    }
+    Ok((p, w, h))
 }
 
 fn finish(req: RenderRequest, start: Stopwatch, r: Result<Output, (String, bool)>, warnings: Vec<RenderWarning>) -> RenderedPage {
@@ -439,6 +445,24 @@ impl PageRenderer {
         self.stats.text_interpretations = self.stats.text_interpretations.saturating_add(1);
         catch_unwind(AssertUnwindSafe(|| crate::text::extract_page_filtered(pdf, page, &self.settings, filter)))
             .map_err(|e| format!("text extraction failed: {}", panic_message(&e)))?
+    }
+
+    /// One page as a standalone SVG document over white, sized like `render` from the crop box
+    /// and rotation. Text is drawn as glyph outlines, so it is not selectable. Never panics.
+    pub fn svg(&mut self, page: usize) -> Result<String, String> {
+        let pdf = self.pdf.as_ref().ok_or("the document could not be parsed")?;
+        self.stats.page_interpretations = self.stats.page_interpretations.saturating_add(1);
+        let r = catch_unwind(AssertUnwindSafe(|| {
+            let (p, _, _) = drawable_page(pdf, page)?;
+            let white = hayro_svg::SvgRenderSettings { bg_color: [255, 255, 255, 255] };
+            Ok(hayro_svg::convert(p, &hayro_svg::RenderCache::new(), &self.settings, &white))
+        }));
+        r.unwrap_or_else(|panic| {
+            // A fresh parser, as `render` takes after a crash.
+            self.pdf = parse(&self.bytes, self.config.password.as_deref());
+            self.stats.parser_builds = self.stats.parser_builds.saturating_add(1);
+            Err(format!("SVG export crashed on page {}: {}", page.saturating_add(1), panic_message(&panic)))
+        })
     }
 
     /// Render one page. Never panics.
@@ -2754,6 +2778,56 @@ trailer << /Root 1 0 R >>
         let mut g = PageRenderer::new(Arc::new(b"not a pdf at all".to_vec()), RenderConfig::default());
         assert_eq!(g.page_count(), 0);
         assert!(g.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() }).error.is_some());
+    }
+
+    /// A one-page document with the page attributes `page` (boxes, rotation), the content stream
+    /// `content` and Helvetica as `/F1`.
+    fn svg_page(page: &str, content: &str) -> PageRenderer {
+        let pdf = format!(
+            "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R {page} /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+            content.len()
+        );
+        PageRenderer::new(Arc::new(pdf.into_bytes()), RenderConfig::default())
+    }
+
+    #[test]
+    fn svg_export_sizes_the_page_from_its_crop_box_and_rotation() {
+        let mut r = svg_page("/MediaBox [0 0 200 100]", "");
+        let svg = r.svg(0).expect("an SVG");
+        assert!(svg.starts_with("<svg viewBox=\"0 0 200 100\" width=\"200\" height=\"100\" "), "{svg}");
+        assert!(svg.contains("xmlns=\"http://www.w3.org/2000/svg\"") && svg.contains("background-color: rgba(255, 255, 255, 255)"), "{svg}");
+        assert_eq!(r.stats().page_interpretations, 1);
+        let rotated = svg_page("/MediaBox [0 0 200 100] /Rotate 90", "").svg(0).expect("an SVG");
+        assert!(rotated.starts_with("<svg viewBox=\"0 0 100 200\" width=\"100\" height=\"200\" "), "{rotated}");
+        let cropped = svg_page("/MediaBox [0 0 200 100] /CropBox [10 10 110 60]", "").svg(0).expect("an SVG");
+        assert!(cropped.starts_with("<svg viewBox=\"0 0 100 50\" width=\"100\" height=\"50\" "), "{cropped}");
+    }
+
+    #[test]
+    fn svg_export_draws_shapes_as_paths_and_text_as_outlines() {
+        let svg = svg_page("/MediaBox [0 0 200 100]", "0 0 1 rg 10 10 30 20 re f BT /F1 12 Tf 20 70 Td (Hello) Tj ET").svg(0).expect("an SVG");
+        assert!(svg.lines().any(|l| l.trim_start().starts_with("<path d=\"M") && l.contains("fill=\"#0000ff\"")), "the blue rectangle: {svg}");
+        // Each glyph is a `<use>` of its outline path, never SVG text.
+        assert!(svg.contains("<use ") && !svg.contains("<text"), "{svg}");
+    }
+
+    #[test]
+    fn svg_export_of_a_missing_page_garbage_or_an_infinite_page_box_is_an_error() {
+        assert!(svg_page("/MediaBox [0 0 200 100]", "").svg(9).is_err_and(|e| e.contains("page 10 does not exist")));
+        let mut garbage = PageRenderer::new(Arc::new(b"not a pdf at all".to_vec()), RenderConfig::default());
+        assert!(garbage.svg(0).is_err());
+        // A width past f32 range. (A zero-size box is no error: hayro draws it at A4 size.)
+        let infinite = svg_page(&format!("/MediaBox [0 0 1{} 100]", "0".repeat(45)), "").svg(0);
+        assert!(infinite.is_err_and(|e| e.contains("empty or invalid page box")));
     }
 
     #[test]
