@@ -192,6 +192,41 @@ fn read_mode_rail_buttons_open_their_panels() {
     h.get_by_label("Alpha section");
 }
 
+/// The rail's panel buttons and its page navigation never overlap (#2891). A 1080 px tall
+/// window is 720 pt at 150 % interface size and 540 pt at 200 %, both too short for the two
+/// groups: the rail scrolls instead of drawing one over the other.
+#[test]
+fn a_short_rail_scrolls_instead_of_overlapping_its_controls() {
+    use egui::accesskit::Role;
+    use egui_kittest::kittest::by;
+    for scale in ["150%", "200%"] {
+        let mut h = Harness::builder().with_size(egui::vec2(1920.0, 1080.0)).build_eframe(move |_cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", "en").unwrap();
+            app.set_option("ui-scale", scale).unwrap();
+            app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens");
+            app
+        });
+        h.run_steps(6);
+        let tags = h.get_by_label("Tags").rect();
+        let in_rail = |r: &egui::Rect| r.center().x > tags.left() - 4.0 && r.center().x < tags.right() + 4.0;
+        let rail: Vec<(String, egui::Rect)> = h
+            .query_all(by().predicate(|n| matches!(n.role(), Role::Button | Role::TextInput | Role::Label)))
+            .map(|n| (n.accesskit_node().label().unwrap_or_default(), n.rect()))
+            .filter(|(_, r)| in_rail(r))
+            .collect();
+        for label in ["Tags", "Signatures", "Zoom out", "Next page", "Previous view", "Page display"] {
+            assert!(rail.iter().any(|(l, _)| l.starts_with(label)), "{scale}: the rail has {label}: {rail:?}");
+        }
+        for (i, (a, ra)) in rail.iter().enumerate() {
+            for (b, rb) in &rail[i + 1..] {
+                let o = ra.intersect(*rb);
+                assert!(o.width() <= 0.5 || o.height() <= 0.5, "{scale}: {a:?} {ra:?} overlaps {b:?} {rb:?}");
+            }
+        }
+    }
+}
+
 /// A document that asks to open in Full Screen mode (`/PageMode /FullScreen`) is asked about
 /// first, as in Acrobat: "Not now" leaves the window as it is, "Full Screen" enters it.
 #[test]
