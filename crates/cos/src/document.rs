@@ -1115,11 +1115,14 @@ impl Document {
         }
         // A file entry that cannot place the stream (one that says it is itself compressed
         // inside another stream, as in #2367, or points nowhere) is tried by the stream's own
-        // header, as a plain object with a wrong offset is. An edited or freed stream is what
-        // the overlay says it is: the file's copy must not come back.
+        // header, as a plain object with a wrong offset is. An edited or freed stream, in the
+        // overlay or in a saved revision's table, is what that says it is: the file's copy
+        // must not come back.
         let loaded = match self.try_get(num) {
             Ok(o) if matches!(*o, Object::Stream(_)) => o,
-            _ if self.overlay.contains_key(&num) => return Err(CosError::MissingObject(num)),
+            _ if self.overlay.contains_key(&num) || matches!(self.xref_entry(num), Some(XrefEntry::Free { .. })) => {
+                return Err(CosError::MissingObject(num));
+            }
             _ => Arc::new(self.scan_for(num).map(|(id, o)| self.decrypted(id, o)).ok_or(CosError::MissingObject(num))?),
         };
         let Object::Stream(s) = &*loaded else { return Err(CosError::MissingObject(num)) };
@@ -2608,6 +2611,27 @@ mod tests {
         replaced.set(ObjRef::new(3, 0), Object::Int(0));
         let fresh = replaced.object_reader().document;
         assert!(matches!(*fresh.get(ObjRef::new(4, 0)), Object::Null), "{:?}", fresh.get(ObjRef::new(4, 0)));
+    }
+
+    /// The same once the free is saved: the revision's table says the stream is free, and
+    /// neither reading the file back nor rewriting it in full brings its objects back.
+    #[test]
+    fn a_container_freed_in_a_saved_revision_is_not_found_by_its_header() {
+        let mut edited = compressed_in_compressed_fixture();
+        edited.free(ObjRef::new(3, 0));
+        let incremental = crate::write_incremental(&edited, &crate::SaveOptions::default()).unwrap();
+        let reopened = Document::open(Arc::new(incremental)).unwrap();
+        assert_eq!(reopened.revisions().len(), 2);
+        assert!(matches!(reopened.xref_entry(3), Some(XrefEntry::Free { .. })));
+        assert!(matches!(*reopened.get(ObjRef::new(4, 0)), Object::Null), "{:?}", reopened.get(ObjRef::new(4, 0)));
+        for object_streams in [true, false] {
+            let opts = crate::SaveOptions { object_streams, ..Default::default() };
+            let full = crate::write_full(&reopened, &opts).unwrap();
+            let back = Document::open(Arc::new(full)).unwrap();
+            let catalog = back.get(back.root().unwrap());
+            let outlines = catalog.as_dict().unwrap().get(b"Outlines").map(|o| back.resolve(o));
+            assert!(outlines.as_ref().is_none_or(|o| matches!(**o, Object::Null)), "the full save keeps it out: {outlines:?}");
+        }
     }
 
     #[test]
