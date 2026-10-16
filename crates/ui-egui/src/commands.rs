@@ -157,6 +157,7 @@ impl PdfCraftApp {
                     self.notify(error);
                 }
             }
+            "view.cursor_coordinates" => self.cursor_coordinates = !self.cursor_coordinates,
             "file.open" => self.open_dialog(),
             "file.open_recent" => match self.recent.first().map(|r| r.path.clone()) {
                 // The palette runs commands without a submenu: open the most recent file.

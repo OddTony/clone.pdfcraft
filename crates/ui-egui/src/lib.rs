@@ -517,6 +517,8 @@ pub struct PdfCraftApp {
     /// The user closed the right panel, so opening a document leaves it closed instead of
     /// showing its comments or bookmarks (#1590). Remembered across restarts.
     pub right_panel_closed: bool,
+    /// The Cursor coordinates panel is shown (View ▸ Show/Hide). Remembered across restarts.
+    pub cursor_coordinates: bool,
     pub quick_tool: QuickTool,
     /// The tool to go back to when Space, held for a temporary Hand, is released.
     space_hand: Option<QuickTool>,
@@ -907,6 +909,7 @@ impl PdfCraftApp {
             right_before_read: None,
             comments_panel_closed: false,
             right_panel_closed: false,
+            cursor_coordinates: false,
             quick_tool: QuickTool::Select,
             space_hand: None,
             comment_prefs: Default::default(),
@@ -2308,6 +2311,7 @@ impl PdfCraftApp {
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
+        v["cursor_coordinates"] = serde_json::Value::Bool(self.cursor_coordinates);
         v.to_string()
     }
 
@@ -2373,6 +2377,9 @@ impl PdfCraftApp {
         }
         if let Some(closed) = v["right_panel_closed"].as_bool() {
             self.right_panel_closed = closed;
+        }
+        if let Some(on) = v["cursor_coordinates"].as_bool() {
+            self.cursor_coordinates = on;
         }
         if let Some(defaults) = v["default_zoom"].as_str().and_then(|zoom| self.view_defaults.with_zoom(zoom)) {
             self.view_defaults = defaults;

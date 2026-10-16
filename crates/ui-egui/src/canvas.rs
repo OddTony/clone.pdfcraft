@@ -2694,6 +2694,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let prefs = &app.comment_prefs;
     let redact_mark = (app.redact_prefs.hover_fill, app.redact_prefs.opacity);
     let units = app.units;
+    let show_cursor_coordinates = app.cursor_coordinates;
     let allowed = doc.allows_annotation();
     let can_copy = doc.allows_copying();
     let mut copy_selected = false;
@@ -3824,6 +3825,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     find_bar(view, info.pages.len(), avail, ui, &t);
     page_size_hint(view, info, units, avail, unobstructed, ui, &t);
+    if show_cursor_coordinates {
+        cursor_coordinates(view, units, avail, unobstructed, ui, &t);
+    }
     if tool == QuickTool::EnhanceCamera {
         crate::camera_ui::bar(ui.ctx(), view, avail, &t, can_modify);
     }
@@ -4234,6 +4238,51 @@ fn page_size_hint(view: &DocView, info: &DocInfo, units: crate::units::Unit, are
                 .inner_margin(egui::Margin::symmetric(8, 4))
                 .show(ui, |ui| {
                     ui.add(egui::Label::new(egui::RichText::new(text).color(t.text)).selectable(false));
+                });
+        });
+}
+
+/// Where `p` is on the page `xf` draws, in points from the top-left corner of the page as it is
+/// shown (y down), as Acrobat's Cursor Coordinates count: the crop box, /Rotate and /UserUnit are
+/// in view space already, and the axes turn with View ▸ Rotate View so x grows to the right on
+/// screen. `None` off the page.
+pub(crate) fn cursor_coords(xf: &PageXform, p: Pos2) -> Option<[f32; 2]> {
+    if !xf.rect.contains(p) {
+        return None;
+    }
+    let (pw, ph) = if xf.rot.is_multiple_of(180) { (xf.pw, xf.ph) } else { (xf.ph, xf.pw) };
+    let (x, y) = PageXform { rot: 0, pw, ph, ..*xf }.screen_to_view(p);
+    Some([x, y])
+}
+
+/// View ▸ Show/Hide ▸ Cursor coordinates: where the pointer is on the page under it, in the
+/// Preferences unit, floating at the bottom-right of the document area (the page size takes the
+/// bottom-left). Dashes while the pointer is off every page, never a stale value.
+fn cursor_coordinates(view: &DocView, units: crate::units::Unit, area: Rect, unobstructed: bool, ui: &mut egui::Ui, t: &Tokens) {
+    let at = ui
+        .input(|i| i.pointer.hover_pos())
+        .filter(|p| unobstructed && area.contains(*p))
+        .and_then(|p| view.screen_xforms.iter().find_map(|(_, xf)| cursor_coords(xf, p)));
+    let (k, d, unit) = (units.per_point(), units.decimals(), units.label());
+    let [x, y] = match at {
+        Some([x, y]) => [x, y].map(|v| format!("{:.d$} {unit}", f64::from(v) * k)),
+        None => ["—".to_string(), "—".to_string()],
+    };
+    egui::Area::new(egui::Id::new("cursor-coordinates"))
+        .order(egui::Order::Foreground)
+        .interactable(false)
+        .pivot(egui::Align2::RIGHT_BOTTOM)
+        .fixed_pos(area.right_bottom() + vec2(-14.0, -14.0))
+        .show(ui.ctx(), |ui| {
+            egui::Frame::NONE
+                .fill(t.card)
+                .stroke(Stroke::new(1.0, t.border))
+                .corner_radius(CornerRadius::same(6))
+                .inner_margin(egui::Margin::symmetric(8, 4))
+                .show(ui, |ui| {
+                    for line in [format!("X: {x}"), format!("Y: {y}")] {
+                        ui.add(egui::Label::new(egui::RichText::new(line).color(t.text).monospace()).selectable(false));
+                    }
                 });
         });
 }
@@ -5221,6 +5270,24 @@ mod tests {
         assert!(!in_size_hint_zone(area, pos2(400.0, 440.0)), "bottom-right");
         assert!(!in_size_hint_zone(area, pos2(50.0, 440.0)), "outside");
         assert!(!in_size_hint_zone(area, pos2(f32::NAN, 440.0)));
+    }
+
+    #[test]
+    fn cursor_coordinates_count_from_the_top_left_of_the_page_on_screen() {
+        // A 200 × 100 pt page drawn at 2 px per point.
+        let xf = |rot: u16, size: Vec2| PageXform { rect: Rect::from_min_size(pos2(10.0, 20.0), size), rot, pw: 200.0, ph: 100.0 };
+        let wide = xf(0, vec2(400.0, 200.0));
+        assert_eq!(cursor_coords(&wide, pos2(10.0, 20.0)), Some([0.0, 0.0]));
+        assert_eq!(cursor_coords(&wide, pos2(410.0, 220.0)), Some([200.0, 100.0]));
+        assert_eq!(cursor_coords(&wide, pos2(110.0, 40.0)), Some([50.0, 10.0]));
+        // Rotate View a quarter: the page stands 100 × 200 on screen, and x still grows to the right.
+        let turned = xf(90, vec2(200.0, 400.0));
+        assert_eq!(cursor_coords(&turned, pos2(10.0, 20.0)), Some([0.0, 0.0]));
+        assert_eq!(cursor_coords(&turned, pos2(110.0, 40.0)), Some([50.0, 10.0]));
+        assert_eq!(cursor_coords(&turned, pos2(210.0, 420.0)), Some([100.0, 200.0]));
+        assert_eq!(cursor_coords(&wide, pos2(9.0, 40.0)), None, "left of the page");
+        assert_eq!(cursor_coords(&wide, pos2(110.0, 221.0)), None, "below the page");
+        assert_eq!(cursor_coords(&wide, pos2(f32::NAN, 40.0)), None);
     }
 
     use super::*;
