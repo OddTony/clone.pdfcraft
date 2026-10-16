@@ -118,6 +118,7 @@
 	Add content	Dodaj vsebino
 	Add cross	Dodaj X
 	Add dot	Dodaj piko
+	Add circle	Dodaj krog
 	Add drawing	Dodaj risbo
 	Add field	Dodaj polje
 	Add file attachment	Dodaj priponko
@@ -792,6 +793,7 @@
 	Fill & Sign: cross	Izpolni in podpiši: križec
 	Fill & Sign: date	Izpolni in podpiši: datum
 	Fill & Sign: dot	Izpolni in podpiši: pika
+	Fill & Sign: circle	Izpolni in podpiši: krog
 	Fill & Sign: initials	Izpolni in podpiši: začetnice
 	Fill & Sign: line	Izpolni in podpiši: črta
 	Fill & Sign: remove saved initials	Izpolni in podpiši: odstrani shranjene začetnice

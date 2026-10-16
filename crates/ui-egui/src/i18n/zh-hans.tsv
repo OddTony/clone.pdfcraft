@@ -1183,6 +1183,7 @@
 	Fill & Sign: cross	填写与签名：叉号
 	Fill & Sign: date	填写与签名：日期
 	Fill & Sign: dot	填写与签名：圆点
+	Fill & Sign: circle	填写与签名：圆形
 	Fill & Sign: initials	填写与签名：姓名首字母
 	Fill & Sign: line	填写与签名：直线
 	Fill & Sign: sign	填写与签名：签名
@@ -1927,6 +1928,7 @@
 	Add connected lines	添加折线
 	Add cross	添加叉号
 	Add dot	添加圆点
+	Add circle	添加圆形
 	Add drawing	添加绘图
 	Add field	添加字段
 	Add file attachment	添加文件附件

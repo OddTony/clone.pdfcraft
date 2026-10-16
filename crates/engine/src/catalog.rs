@@ -109,6 +109,7 @@ pub static TOOL_GROUPS: &[ToolGroup] = &[
                 item("Checkmark", "check", "sign.fill.check", Ready),
                 item("Cross", "x", "sign.fill.cross", Ready),
                 item("Dot", "circle-dot", "sign.fill.dot", Ready),
+                item("Circle", "circle", "sign.fill.circle", Ready),
                 item("Line", "minus", "sign.fill.line", Ready),
                 item("Date", "clock-3", "sign.fill.date", Ready),
                 item("Signature", "signature", "sign.fill.signature", Ready),

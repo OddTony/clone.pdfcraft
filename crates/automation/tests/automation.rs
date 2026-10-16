@@ -2755,6 +2755,31 @@ fn fill_and_sign_through_tools() {
     assert!(matches!(a.call("fill_sign_add", &json!({ "doc": doc, "page": 1, "type": "text", "at": [1, 1] })), Err(ToolError::InvalidArgs(_))));
 }
 
+/// #2396: `fill_sign_add` places a circle centred on `at`, 36 × 18 pt (wide enough to ring a
+/// short word), saved as PdfCraft's `/PCCircle` mark.
+#[test]
+fn fill_sign_circle_through_tools() {
+    let dir = workdir("fill-circle");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "fill_sign_add", json!({ "doc": doc, "page": 1, "type": "circle", "at": [100, 100] }));
+    let list = ok(&mut a, "comment_list", json!({ "doc": doc }));
+    assert_eq!(list["count"], 1, "{list}");
+    let c = &list["comments"][0];
+    assert_eq!(c["type"], "Stamp", "{c}");
+    let r: Vec<f64> = c["rect"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-3;
+    assert!(near((r[2] - r[0]).abs(), 36.0) && near((r[3] - r[1]).abs(), 18.0), "{c}");
+    assert!(near((r[0] + r[2]) / 2.0, 100.0) && near((r[1] + r[3]) / 2.0, 100.0), "centred on `at`: {c}");
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "circled.pdf" }));
+    let saved = std::fs::read(dir.join("circled.pdf")).unwrap();
+    let pdf = pdfcraft_cos::Document::open(std::sync::Arc::new(saved)).unwrap();
+    let page = pdfcraft_model::pages(&pdf).remove(0);
+    let annotations = pdf.resolve(page.dict.get(b"Annots").unwrap());
+    let annotation = pdf.resolve(annotations.as_array().unwrap().first().unwrap());
+    assert_eq!(annotation.as_dict().unwrap().name(b"Name"), Some(&b"PCCircle"[..]));
+}
+
 #[test]
 fn fill_sign_text_font_size_is_saved_and_validated() {
     let dir = workdir("fill-sign-text-size");

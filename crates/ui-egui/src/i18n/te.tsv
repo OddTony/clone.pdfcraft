@@ -237,6 +237,7 @@ comment menu	Edit	సవరించు
 	Fill & Sign: checkmark	నింపడం & సంతకం: టిక్ గుర్తు
 	Fill & Sign: cross	నింపడం & సంతకం: క్రాస్ గుర్తు
 	Fill & Sign: dot	నింపడం & సంతకం: చుక్క
+	Fill & Sign: circle	నింపడం & సంతకం: వృత్తం
 	Fill & Sign: line	నింపడం & సంతకం: గీత
 	Fill & Sign: date	నింపడం & సంతకం: తేదీ
 	Fill & Sign: sign	నింపడం & సంతకం: సంతకం చేయి
@@ -1885,6 +1886,7 @@ action wizard	Start	ప్రారంభించు
 	Add checkmark	టిక్ గుర్తు జోడించు
 	Add cross	క్రాస్ గుర్తు జోడించు
 	Add dot	చుక్క జోడించు
+	Add circle	వృత్తం జోడించు
 	Add signature	సంతకం జోడించు
 	Add redaction mark	రెడాక్షన్ గుర్తు జోడించు
 	Add cloud	క్లౌడ్ జోడించు

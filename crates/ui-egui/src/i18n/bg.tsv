@@ -1176,6 +1176,7 @@
 	Fill & Sign: cross	Попълни и подпиши: кръстче
 	Fill & Sign: date	Попълни и подпиши: дата
 	Fill & Sign: dot	Попълни и подпиши: точка
+	Fill & Sign: circle	Попълни и подпиши: кръг
 	Fill & Sign: initials	Попълни и подпиши: инициали
 	Fill & Sign: line	Попълни и подпиши: линия
 	Fill & Sign: sign	Попълни и подпиши: подпиши
@@ -1917,6 +1918,7 @@
 	Add connected lines	Добави свързани линии
 	Add cross	Добави кръстче
 	Add dot	Добави точка
+	Add circle	Добави кръг
 	Add drawing	Добави рисунка
 	Add field	Добави поле
 	Add file attachment	Добави прикачен файл

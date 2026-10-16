@@ -519,6 +519,32 @@ fn fill_and_sign_items_are_drawn() {
     assert!(set_style(&mut doc, 1, 0, Some([0.0; 3]), None, None, None, &meta("")).is_err());
 }
 
+/// #2396: the Circle mark is an open ring (stroked, never filled) so what it circles shows
+/// through, inset by half its line width so the stroke stays inside the box. It reads back as a
+/// Fill & Sign item and restyles like the other marks.
+#[test]
+fn fill_sign_circle_is_an_open_ring_inside_its_box() {
+    let mut doc = fixture();
+    let shape = Shape::Mark { rect: [100.0, 600.0, 130.0, 616.0], mark: FillMark::Circle };
+    let style = Style::default_for(&shape);
+    let new = NewAnnotation { page: 1, shape, style, contents: String::new(), author: "Ada".into() };
+    let i = add_annotation(&mut doc, &new, &meta("c")).unwrap();
+    let doc = reopen(&doc);
+    let d = &list(&doc, 1)[i];
+    assert_eq!(d.name(b"Subtype"), Some(&b"Stamp"[..]));
+    assert_eq!(d.name(b"Name"), Some(&b"PCCircle"[..]));
+    assert_eq!(text(d, b"Subj"), "Circle");
+    assert!(is_fill_sign(&doc, d));
+    let ap = ap_content(&doc, d);
+    assert!(ap.contains(" c\n") && ap.trim_end().ends_with('S'), "a stroked curve: {ap}");
+    assert!(!ap.contains("\nf\n"), "not filled: {ap}");
+    // A 30 × 16 box gets a 1.28 pt line, so the ring's right-most point is 0.64 pt inside x = 130.
+    assert!(ap.contains("1.28 w\n") && ap.contains("129.36 608 m\n"), "{ap}");
+    let mut doc = doc;
+    set_style(&mut doc, 1, i, Some([0.0, 0.0, 1.0]), None, None, None, &meta("")).unwrap();
+    assert!(ap_content(&doc, &list(&doc, 1)[i]).contains("0 0 1 RG"), "restyled");
+}
+
 #[test]
 fn author_subject_and_note_icon_change() {
     let mut doc = fixture();

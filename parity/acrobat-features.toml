@@ -5273,15 +5273,15 @@ notes = "typewriter FreeText, 10 pt Helvetica. Reads across as displayed on page
 
 [[feature]]
 id = "form.fill-sign-marks"
-title = "Fill & Sign: check, cross, dot, line marks"
+title = "Fill & Sign: check, cross, dot, circle, line marks"
 area = "F"
 tier = "P0"
 milestone = "M5"
 status = "shipped"
-commands = ["sign.fill.check", "sign.fill.cross", "sign.fill.dot", "sign.fill.line"]
+commands = ["sign.fill.check", "sign.fill.cross", "sign.fill.dot", "sign.fill.circle", "sign.fill.line"]
 tools = ["fill_sign_add"]
-evidence = ["crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/annot/src/tests.rs::fill_and_sign_items_are_drawn"]
-notes = "PdfCraft-drawn stamps"
+evidence = ["crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/annot/src/tests.rs::fill_and_sign_items_are_drawn", "crates/annot/src/tests.rs::fill_sign_circle_is_an_open_ring_inside_its_box", "crates/ui-egui/tests/fill_sign.rs::circle_marks_are_placed_and_repeatable", "crates/automation/tests/automation.rs::fill_sign_circle_through_tools"]
+notes = "PdfCraft-drawn stamps. The circle (#2396) is an open ring, placed 36 × 18 pt so it rings a short word, inset by half its line so the stroke stays in its box"
 
 [[feature]]
 id = "form.fill-sign-date"

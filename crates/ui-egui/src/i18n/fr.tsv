@@ -233,6 +233,7 @@
 	Fill & Sign: checkmark	Remplir et signer : coche
 	Fill & Sign: cross	Remplir et signer : croix
 	Fill & Sign: dot	Remplir et signer : point
+	Fill & Sign: circle	Remplir et signer : cercle
 	Fill & Sign: line	Remplir et signer : ligne
 	Fill & Sign: date	Remplir et signer : date
 	Fill & Sign: sign	Remplir et signer : signer
@@ -1896,6 +1897,7 @@
 	Add checkmark	Ajouter une coche
 	Add cross	Ajouter une croix
 	Add dot	Ajouter un point
+	Add circle	Ajouter un cercle
 	Add signature	Ajouter une signature
 	Add redaction mark	Ajouter une marque de biffure
 	Add cloud	Ajouter un nuage

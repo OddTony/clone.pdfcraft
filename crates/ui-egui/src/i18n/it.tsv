@@ -257,6 +257,7 @@
 	Fill & Sign: checkmark	Compila e firma: segno di spunta
 	Fill & Sign: cross	Compila e firma: croce
 	Fill & Sign: dot	Compila e firma: punto
+	Fill & Sign: circle	Compila e firma: cerchio
 	Fill & Sign: line	Compila e firma: linea
 	Fill & Sign: date	Compila e firma: data
 	Fill & Sign: sign	Compila e firma: firma
@@ -1971,6 +1972,7 @@
 	Add checkmark	Aggiungi segno di spunta
 	Add cross	Aggiungi croce
 	Add dot	Aggiungi punto
+	Add circle	Aggiungi cerchio
 	Add signature	Aggiungi firma
 	Add redaction mark	Aggiungi segno di oscuramento
 	Add cloud	Aggiungi nuvola

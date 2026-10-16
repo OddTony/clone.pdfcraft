@@ -1433,6 +1433,7 @@ theme	Appearance	Giao diện
 	Fill & Sign: cross	Điền & Ký: dấu chéo
 	Fill & Sign: date	Điền & Ký: ngày
 	Fill & Sign: dot	Điền & Ký: dấu chấm
+	Fill & Sign: circle	Điền & Ký: hình tròn
 	Fill & Sign: initials	Điền & Ký: chữ viết tắt
 	Fill & Sign: line	Điền & Ký: đường thẳng
 	Fill & Sign: remove saved initials	Điền & Ký: xóa chữ viết tắt đã lưu
@@ -1812,6 +1813,7 @@ comment menu	Edit	Sửa
 	Add connected lines	Thêm các đường nối liền
 	Add cross	Thêm dấu chéo
 	Add dot	Thêm dấu chấm
+	Add circle	Thêm hình tròn
 	Add drawing	Thêm bản vẽ
 	Add field	Thêm trường
 	Add file attachment	Thêm tệp đính kèm

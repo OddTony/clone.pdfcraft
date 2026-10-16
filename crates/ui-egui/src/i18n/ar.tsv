@@ -260,6 +260,7 @@
 	Fill & Sign: checkmark	تعبئة وتوقيع: علامة صح
 	Fill & Sign: cross	تعبئة وتوقيع: علامة خطأ
 	Fill & Sign: dot	تعبئة وتوقيع: نقطة
+	Fill & Sign: circle	تعبئة وتوقيع: دائرة
 	Fill & Sign: line	تعبئة وتوقيع: خط
 	Fill & Sign: date	تعبئة وتوقيع: تاريخ
 	Fill & Sign: sign	تعبئة وتوقيع: توقيع
@@ -1965,6 +1966,7 @@
 	Add checkmark	إضافة علامة صح
 	Add cross	إضافة علامة خطأ
 	Add dot	إضافة نقطة
+	Add circle	إضافة دائرة
 	Add signature	إضافة توقيع
 	Add redaction mark	إضافة علامة حجب
 	Add cloud	إضافة سحابة

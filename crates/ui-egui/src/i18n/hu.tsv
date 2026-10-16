@@ -231,6 +231,7 @@
 	Fill & Sign: checkmark	Kitöltés és aláírás: pipa
 	Fill & Sign: cross	Kitöltés és aláírás: kereszt
 	Fill & Sign: dot	Kitöltés és aláírás: pont
+	Fill & Sign: circle	Kitöltés és aláírás: kör
 	Fill & Sign: line	Kitöltés és aláírás: vonal
 	Fill & Sign: date	Kitöltés és aláírás: dátum
 	Fill & Sign: sign	Kitöltés és aláírás: aláírás
@@ -1886,6 +1887,7 @@
 	Add checkmark	Pipa hozzáadása
 	Add cross	Kereszt hozzáadása
 	Add dot	Pont hozzáadása
+	Add circle	Kör hozzáadása
 	Add signature	Aláírás hozzáadása
 	Add redaction mark	Kitakarásjelölés hozzáadása
 	Add cloud	Felhő hozzáadása

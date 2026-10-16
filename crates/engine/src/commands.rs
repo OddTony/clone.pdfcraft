@@ -309,6 +309,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("sign.fill.check", "Fill & Sign: checkmark", None, None, Annotate, "check"),
     c("sign.fill.cross", "Fill & Sign: cross", None, None, Annotate, "x"),
     c("sign.fill.dot", "Fill & Sign: dot", None, None, Annotate, "circle-dot"),
+    c("sign.fill.circle", "Fill & Sign: circle", None, None, Annotate, "circle"),
     c("sign.fill.line", "Fill & Sign: line", None, None, Annotate, "minus"),
     c("sign.fill.date", "Fill & Sign: date", None, None, Annotate, "clock-3"),
     c("sign.fill.signature", "Fill & Sign: sign", None, None, Annotate, "signature"),

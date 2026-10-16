@@ -256,6 +256,7 @@
 	Fill & Sign: checkmark	Wypełnij i podpisz: znacznik wyboru
 	Fill & Sign: cross	Wypełnij i podpisz: krzyżyk
 	Fill & Sign: dot	Wypełnij i podpisz: kropka
+	Fill & Sign: circle	Wypełnij i podpisz: okrąg
 	Fill & Sign: line	Wypełnij i podpisz: linia
 	Fill & Sign: date	Wypełnij i podpisz: data
 	Fill & Sign: sign	Wypełnij i podpisz: podpis
@@ -1959,6 +1960,7 @@
 	Add checkmark	Dodaj znacznik wyboru
 	Add cross	Dodaj krzyżyk
 	Add dot	Dodaj kropkę
+	Add circle	Dodaj okrąg
 	Add signature	Dodaj podpis
 	Add redaction mark	Dodaj oznaczenie do utajnienia
 	Add cloud	Dodaj chmurkę

@@ -627,6 +627,16 @@ pub fn build(d: &Dict) -> Option<Stream> {
                     c.push_str(&ellipse(x0 + w / 2.0 - r, y0 + h / 2.0 - r, x0 + w / 2.0 + r, y0 + h / 2.0 + r));
                     c.push_str("f\n");
                 }
+                b"PCCircle" => {
+                    // An open ring, inset by half its line width so the stroke stays inside
+                    // the box and whatever it circles shows through.
+                    let lw = (w.min(h) * 0.08).clamp(0.5, 2.0);
+                    let inset = lw / 2.0;
+                    c.push_str(&rg_stroke(col));
+                    c.push_str(&format!("{} w\n", n(lw)));
+                    c.push_str(&ellipse(x0 + inset, y0 + inset, x1 - inset, y1 - inset));
+                    c.push_str("S\n");
+                }
                 b"PCLine" => c.push_str(&format!(
                     "{}{} w 1 J\n{} {} m {} {} l S\n",
                     rg_stroke(col),

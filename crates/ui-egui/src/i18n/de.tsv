@@ -233,6 +233,7 @@
 	Fill & Sign: checkmark	Ausfüllen und unterschreiben: Häkchen
 	Fill & Sign: cross	Ausfüllen und unterschreiben: Kreuz
 	Fill & Sign: dot	Ausfüllen und unterschreiben: Punkt
+	Fill & Sign: circle	Ausfüllen und unterschreiben: Kreis
 	Fill & Sign: line	Ausfüllen und unterschreiben: Linie
 	Fill & Sign: date	Ausfüllen und unterschreiben: Datum
 	Fill & Sign: sign	Ausfüllen und unterschreiben: Unterschreiben
@@ -1901,6 +1902,7 @@
 	Add checkmark	Häkchen hinzufügen
 	Add cross	Kreuz hinzufügen
 	Add dot	Punkt hinzufügen
+	Add circle	Kreis hinzufügen
 	Add signature	Unterschrift hinzufügen
 	Add redaction mark	Schwärzungsmarkierung hinzufügen
 	Add cloud	Wolke hinzufügen

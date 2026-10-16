@@ -258,6 +258,7 @@
 	Fill & Sign: checkmark	Заповнення й підпис: позначка
 	Fill & Sign: cross	Заповнення й підпис: хрестик
 	Fill & Sign: dot	Заповнення й підпис: крапка
+	Fill & Sign: circle	Заповнення й підпис: коло
 	Fill & Sign: line	Заповнення й підпис: лінія
 	Fill & Sign: date	Заповнення й підпис: дата
 	Fill & Sign: sign	Заповнення й підпис: підпис
@@ -1963,6 +1964,7 @@
 	Add checkmark	Додати позначку
 	Add cross	Додати хрестик
 	Add dot	Додати крапку
+	Add circle	Додати коло
 	Add signature	Додати підпис
 	Add redaction mark	Додати позначку вилучення
 	Add cloud	Додати хмару

@@ -218,6 +218,7 @@
 	Fill & Sign: checkmark	Doldur ve İmzala: onay işareti
 	Fill & Sign: cross	Doldur ve İmzala: çarpı
 	Fill & Sign: dot	Doldur ve İmzala: nokta
+	Fill & Sign: circle	Doldur ve İmzala: daire
 	Fill & Sign: line	Doldur ve İmzala: çizgi
 	Fill & Sign: date	Doldur ve İmzala: tarih
 	Fill & Sign: sign	Doldur ve İmzala: imzala
@@ -1861,6 +1862,7 @@
 	Add checkmark	Onay işareti ekle
 	Add cross	Çarpı ekle
 	Add dot	Nokta ekle
+	Add circle	Daire ekle
 	Add signature	İmza ekle
 	Add redaction mark	Karartma işareti ekle
 	Add cloud	Bulut ekle
