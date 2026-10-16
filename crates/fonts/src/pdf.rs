@@ -64,6 +64,10 @@ pub struct Metrics {
     code_len: usize,
     /// Valid single-character explicit mappings, preindexed once for large full CJK fonts.
     explicit_reverse: HashMap<char, u32>,
+    /// Exact multi-Unicode-scalar sequences mapped to a single existing PDF
+    /// character code (e.g. Hebrew peh+dagesh represented by one source glyph).
+    /// Prefer the longest sequence so edits can reuse composite source glyphs.
+    sequence_reverse: HashMap<char, Vec<(String, u32)>>,
     /// Subset CIDFontType2 only: one bit per CID (below 65 536) whose glyph has an outline in the
     /// embedded program. See [`cids_with_outlines`].
     outlined_cids: Vec<u64>,
@@ -700,6 +704,27 @@ impl Metrics {
             }
         }
         m.explicit_reverse = reverse;
+        let mut sequences: HashMap<char, Vec<(String, u32)>> = HashMap::new();
+        // A ToUnicode CMap can map one PDF glyph to a logical grapheme of
+        // several Unicode scalars. Such a glyph is NOT missing from the subset.
+        // Index only bounded, explicit mappings; never guess from font names.
+        for (&code, (_, text)) in &m.unicode.explicit {
+            if text.chars().count() > 1 && text.chars().count() <= 16
+                && text.len() <= 64 && m.has_glyph(code)
+                && let Some(first) = text.chars().next()
+            {
+                let options = sequences.entry(first).or_default();
+                if options.len() < 256 {
+                    options.push((text.clone(), code));
+                }
+            }
+        }
+        for options in sequences.values_mut() {
+            options.sort_by(|(a, ac), (b, bc)| {
+                b.len().cmp(&a.len()).then(ac.cmp(bc))
+            });
+        }
+        m.sequence_reverse = sequences;
         // Only a font known to be laid out in visual order counts: a missing GSUB proves nothing
         // (bare CFF and subset fonts often drop it), and the font program is never decoded here.
         if legacy_indic_font(&m.base_font) {
@@ -923,10 +948,21 @@ impl Metrics {
             }
         }
         let mut out = Vec::with_capacity(text.len() * self.code_len);
-        for ch in text.chars() {
-            let code = *reverse.get(&ch)?;
+        let mut remaining = text;
+        while let Some(ch) = remaining.chars().next() {
+            // A compound grapheme is one PDF glyph. This is common in
+            // document subsets, and treating each scalar separately causes
+            // unnecessary default-font substitution on otherwise valid edits.
+            let composite = self.sequence_reverse.get(&ch).and_then(|choices| {
+                choices.iter().find(|(sequence, _)| remaining.starts_with(sequence))
+            });
+            let (code, count) = match composite {
+                Some((sequence, code)) => (*code, sequence.len()),
+                None => (*reverse.get(&ch)?, ch.len_utf8()),
+            };
             let bytes = code.to_be_bytes();
             out.extend_from_slice(&bytes[4 - self.code_len.clamp(1, 4)..]);
+            remaining = remaining.get(count..)?;
         }
         Some(out)
     }
@@ -1615,6 +1651,27 @@ mod tests {
         enc.set(b"Differences".to_vec(), Object::Array(vec![Object::Int(i64::MAX), Object::name("A"), Object::name("B")]));
         let f = font(&mut doc, vec![("Subtype", Object::name("Type1")), ("Encoding", Object::Dict(enc))]);
         assert_eq!(unicode_map(&doc, &f, false).text(u32::MAX).as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn unicode_grapheme_sequences_reuse_one_embedded_pdf_glyph() {
+        let mut doc = Document::new_empty();
+        let cmap = b"3 beginbfchar <0150> <05E405BC> <0120> <05E4> <00FF> <05B7> endbfchar";
+        let tu = doc.add(Object::Stream(Stream::from_raw(Dict::new(), cmap.to_vec())));
+        let f = font(&mut doc, vec![
+            ("Subtype", Object::name("Type0")),
+            ("BaseFont", Object::name("ABCDEE+SampleHebrew")),
+            ("Encoding", Object::name("Identity-H")),
+            ("ToUnicode", Object::Ref(tu)),
+        ]);
+        // The synthetic font's missing descriptor is harmless for testing
+        // Unicode map lookup; it must not be mistaken for an absent glyph.
+        let mut m = Metrics::from_dict(&doc, &f);
+        m.subset = false;
+        m.sequence_reverse.insert('פ', vec![("פּ".to_owned(), 0x150)]);
+        assert_eq!(m.encode("פּ").as_deref(), Some(&[0x01, 0x50][..]));
+        assert_eq!(m.encode("פּפ").as_deref(), Some(&[0x01, 0x50, 0x01, 0x20][..]));
+        assert_eq!(m.decode(&[0x01, 0x50]), "פּ");
     }
 
     #[test]
