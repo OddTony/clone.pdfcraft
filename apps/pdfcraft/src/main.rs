@@ -58,13 +58,23 @@ const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256
 /// The app was called PrintCraft before; settings saved then are under this key.
 const LEGACY_STORAGE_KEY: &str = "printcraft";
 
+/// eframe's per-user folder for `app_id`. eframe has none on iOS; there it is
+/// `~/Library/Application Support/<app_id>` inside the app's container, as on macOS.
+fn storage_dir(app_id: &str) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "ios")]
+    return std::env::home_dir().filter(|h| h.is_absolute()).map(|h| h.join("Library/Application Support").join(app_id));
+    #[cfg(not(target_os = "ios"))]
+    eframe::storage_dir(app_id)
+}
+
 /// The preferences folder (`app.ron`, docs/development.md). In portable mode
 /// it is `PdfCraftData` beside the executable (#157). XDG desktops use the configuration base;
-/// other platforms retain eframe's PdfCraft folder. Logs and recovery stay in the data folder.
+/// other platforms (iOS included, whose container can't hold `~/.config`) retain the PdfCraft
+/// storage folder. Logs and recovery stay in the data folder.
 fn settings_dir() -> Option<std::path::PathBuf> {
-    let legacy = eframe::storage_dir("PdfCraft");
+    let legacy = storage_dir("PdfCraft");
     match settings::directory(
-        cfg!(all(unix, not(target_os = "macos"))),
+        cfg!(all(unix, not(any(target_os = "macos", target_os = "ios")))),
         pdfcraft_ui_egui::portable::data_dir(),
         legacy.clone(),
         std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from),
@@ -86,7 +96,7 @@ fn migrate_legacy_folders() {
     if pdfcraft_ui_egui::portable::data_dir().is_some() {
         return;
     }
-    let mut moves = vec![(eframe::storage_dir("PrintCraft"), eframe::storage_dir("PdfCraft"))];
+    let mut moves = vec![(storage_dir("PrintCraft"), storage_dir("PdfCraft"))];
     // Recovery lives in the settings folder except on Windows, where it is under %LOCALAPPDATA%.
     if cfg!(windows) {
         let local = std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty()).map(std::path::PathBuf::from);
@@ -218,7 +228,7 @@ fn main() -> eframe::Result {
     // no file behind) and after the PrintCraft migration (which a fresh folder would block).
     // Records logged until now are written to it first.
     if let (Some(logger), Some(dir)) =
-        (logger, pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| eframe::storage_dir("PdfCraft")))
+        (logger, pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| storage_dir("PdfCraft")))
     {
         match logger.attach_dir(&dir.join("logs")) {
             Ok(path) => log::info!("PdfCraft {}, log file {}", pdfcraft_engine::build_info::version(), path.display()),
@@ -244,7 +254,10 @@ fn main() -> eframe::Result {
     let apple_events = apple_events::AppleEvents::install();
     // Set once the app is created, which is after the renderer has started.
     let started = Rc::new(Cell::new(false));
-    let first = if choice == RendererChoice::Gl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
+    let first = match GL {
+        Some(gl) if choice == RendererChoice::Gl => gl,
+        _ => eframe::Renderer::Wgpu,
+    };
     let result = eframe::run_native(
         "PdfCraft",
         native_options(launch.integrated, launch.window_controls.is_some(), first),
@@ -259,13 +272,16 @@ fn main() -> eframe::Result {
     match result {
         // Only a renderer that couldn't start: without a window or display at all, OpenGL can't
         // help either, and winit's own error says more.
-        Err(e @ eframe::Error::Wgpu(_)) if retry_with_gl(choice, started.get()) => {
+        Err(e @ eframe::Error::Wgpu(_))
+            if let Some(gl) = GL
+                && retry_with_gl(choice, started.get()) =>
+        {
             // Old or unusual GPUs and drivers (#461, #435, #392) can't give wgpu a device; OpenGL
             // usually still works there, so that's better than quitting.
             log::error!("the GPU renderer (wgpu) didn't start: {e}. Starting with OpenGL instead; set PDFCRAFT_RENDERER=gl to skip wgpu.");
             eframe::run_native(
                 "PdfCraft",
-                native_options(launch.integrated, launch.window_controls.is_some(), eframe::Renderer::Glow),
+                native_options(launch.integrated, launch.window_controls.is_some(), gl),
                 app_creator(
                     launch,
                     started,
@@ -278,6 +294,14 @@ fn main() -> eframe::Result {
         other => other,
     }
 }
+
+/// The OpenGL renderer, where eframe has one. iOS draws with wgpu (Metal) only: glutin, which
+/// eframe's OpenGL renderer needs, has no iOS backend, so `PDFCRAFT_RENDERER=gl` and the fallback
+/// don't apply there.
+#[cfg(not(target_os = "ios"))]
+const GL: Option<eframe::Renderer> = Some(eframe::Renderer::Glow);
+#[cfg(target_os = "ios")]
+const GL: Option<eframe::Renderer> = None;
 
 /// Which renderer to start with, from `PDFCRAFT_RENDERER`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -361,6 +361,11 @@ fn detect_system_lang() -> Lang {
     if let Some(l) = windows_ui_language().as_deref().and_then(first_supported) {
         return l;
     }
+    // iOS apps get no LANG either: the Settings ▸ Language & Region list, through `sys-locale`.
+    #[cfg(target_os = "ios")]
+    if let Some(l) = sys_locale::get_locales().find_map(|tag| lang_from_tag(&tag)) {
+        return l;
+    }
     Lang::EN
 }
 

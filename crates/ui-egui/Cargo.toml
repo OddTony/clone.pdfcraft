@@ -59,6 +59,10 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 # the tree through pdfcraft-cli.
 rustix = { version = "1", features = ["fs"] }
 
+[target.'cfg(target_os = "ios")'.dependencies]
+# Auto interface language: the iOS preferred languages (CFLocale), without starting a process.
+sys-locale = "0.3"
+
 [target.'cfg(windows)'.dependencies]
 # Auto interface language: the Windows display language, without starting a process.
 sys-locale = "0.3"

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template: packaging/ios/package.sh substitutes @VERSION@ (full, e.g. 0.2.0-rc.1),
+     @SHORT_VERSION@ (numeric X.Y.Z), @BUILD_SHA@, @BUNDLE_ID@, @PLATFORM@ (iphoneos or
+     iphonesimulator), @SUPPORTED_PLATFORM@ (iPhoneOS or iPhoneSimulator) and @MIN_IOS@. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>PdfCraft</string>
+  <key>CFBundleName</key>
+  <string>PdfCraft</string>
+  <key>CFBundleExecutable</key>
+  <string>PdfCraft</string>
+  <key>CFBundleIdentifier</key>
+  <string>@BUNDLE_ID@</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@SHORT_VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@SHORT_VERSION@</string>
+  <key>PdfCraftVersion</key>
+  <string>@VERSION@</string>
+  <key>PdfCraftBuildCommit</key>
+  <string>@BUILD_SHA@</string>
+  <key>CFBundleSupportedPlatforms</key>
+  <array><string>@SUPPORTED_PLATFORM@</string></array>
+  <key>DTPlatformName</key>
+  <string>@PLATFORM@</string>
+  <key>LSRequiresIPhoneOS</key>
+  <true/>
+  <!-- Must match IPHONEOS_DEPLOYMENT_TARGET in package.sh. iOS 15: UIDocumentPickerViewController's
+       content-type initialiser and UTType (14), UIWindowScene.keyWindow (15). -->
+  <key>MinimumOSVersion</key>
+  <string>@MIN_IOS@</string>
+  <!-- 1 iPhone, 2 iPad. The interface is the desktop one; it is at home on an iPad and cramped
+       on an iPhone in portrait. -->
+  <key>UIDeviceFamily</key>
+  <array><integer>1</integer><integer>2</integer></array>
+  <key>UIRequiredDeviceCapabilities</key>
+  <array><string>arm64</string><string>metal</string></array>
+  <!-- An empty launch screen (plain background) until the first frame is drawn. -->
+  <key>UILaunchScreen</key>
+  <dict/>
+  <key>UIApplicationSupportsIndirectInputEvents</key>
+  <true/>
+  <key>UIStatusBarHidden</key>
+  <true/>
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+  <!-- The app's Documents folder shows in the Files app (On My iPhone/iPad ▸ PdfCraft): files
+       opened through the picker are kept there (vendor/rfd/src/backend/ios.rs), and it is where
+       saves start. -->
+  <key>UIFileSharingEnabled</key>
+  <true/>
+  <key>LSSupportsOpeningDocumentsInPlace</key>
+  <true/>
+  <key>CFBundleIcons</key>
+  <dict>
+    <key>CFBundlePrimaryIcon</key>
+    <dict>
+      <key>CFBundleIconName</key>
+      <string>AppIcon</string>
+    </dict>
+  </dict>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright © the PdfCraft authors. MIT OR Apache-2.0.</string>
+</dict>
+</plist>
