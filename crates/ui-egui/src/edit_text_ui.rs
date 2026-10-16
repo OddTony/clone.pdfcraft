@@ -32,11 +32,19 @@ pub(crate) struct TextBackground {
     received: Option<u64>,
     draft_key: Option<(String, pdfcraft_engine::BlockStyle)>,
     draft_rect: Option<[f64; 4]>,
+    /// A PDF-rendered temporary edit. Unlike egui, this uses the same glyph
+    /// mapping, shaping and positioning as the saved document.
+    draft_renderer: Option<pdfcraft_render::RenderPool>,
+    draft_texture: Option<egui::TextureHandle>,
+    draft_tag: Option<u64>,
+    draft_received: Option<u64>,
+    draft_error: Option<String>,
 }
 
 impl TextBackground {
     pub fn pending(&self) -> bool {
-        self.renderer.is_some() && self.received != self.tag
+        (self.renderer.is_some() && self.received != self.tag)
+            || (self.draft_renderer.is_some() && self.draft_received != self.draft_tag)
     }
 
     pub fn prepare(
@@ -65,6 +73,19 @@ impl TextBackground {
             let draft_key = (ed.text.clone(), ed.style());
             if self.draft_key.as_ref() != Some(&draft_key) {
                 self.draft_rect = doc.text_edit_layout(ed.page, ed.block, &ed.text, &draft_key.1).ok().and_then(|layout| layout.draft_rect);
+                // A draft raster is immutable and belongs to this exact text
+                // and formatting state. Drop it immediately after any keystroke.
+                self.draft_renderer = None;
+                self.draft_texture = None;
+                self.draft_tag = None;
+                self.draft_received = None;
+                self.draft_error = None;
+                if ed.has_changes() {
+                    match doc.text_edit_draft_preview(ed.page, ed.block, &ed.text, &draft_key.1) {
+                        Ok(preview) => self.draft_renderer = Some(preview.renderer()),
+                        Err(e) => self.draft_error = Some(e),
+                    }
+                }
                 self.draft_key = Some(draft_key);
             }
         }
@@ -104,6 +125,40 @@ impl TextBackground {
         if self.received != Some(tag) {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
+        if let Some(draft) = &self.draft_renderer {
+            if self.draft_tag != Some(tag) {
+                draft.set_queue(vec![pdfcraft_render::RenderRequest { page, scale, tag, ..Default::default() }]);
+                self.draft_tag = Some(tag);
+            }
+            if let Some(output) = draft.try_recv() {
+                if let Some(error) = output.error {
+                    self.draft_renderer = None;
+                    self.draft_texture = None;
+                    self.draft_error = Some(error);
+                } else if output.request.tag == tag {
+                    self.draft_texture = Some(ctx.load_texture(
+                        "text-editor-saved-pdf-preview",
+                        crate::canvas::texture_image([output.width as usize, output.height as usize], output.rgba),
+                        egui::TextureOptions::LINEAR,
+                    ));
+                    self.draft_received = Some(tag);
+                }
+            }
+            if self.draft_received != Some(tag) {
+                ctx.request_repaint_after(std::time::Duration::from_millis(16));
+            }
+        }
+    }
+
+    pub fn ready_draft(&self, page: usize, block: usize) -> bool {
+        self.key.is_some_and(|(_, p, target)| (p, target) == (page, TextTarget::Block(block)))
+            && self.draft_texture.is_some()
+            && self.draft_tag == self.draft_received
+            && self.draft_error.is_none()
+    }
+
+    pub fn draft_error(&self) -> Option<&str> {
+        self.draft_error.as_deref()
     }
 
     pub fn ready(&self, page: usize, block: usize) -> bool {
@@ -128,12 +183,19 @@ impl TextBackground {
         if editor.is_some_and(|ed| ed.page == page && ed.pristine_source_visible()) {
             return;
         }
-        let ready = editor.is_some_and(|ed| ed.page == page && self.ready(page, ed.block))
-            || draft.is_some_and(|d| d.page == page && d.index.is_some_and(|index| self.ready_added(page, index)));
+        let use_draft = editor.is_some_and(|ed| {
+            ed.page == page && ed.has_changes() && self.ready_draft(page, ed.block)
+        });
+        let ready = editor.is_some_and(|ed| {
+            ed.page == page && (self.ready(page, ed.block) || self.ready_draft(page, ed.block))
+        }) || draft.is_some_and(|d| {
+            d.page == page && d.index.is_some_and(|index| self.ready_added(page, index))
+        });
         if !ready {
             return;
         }
-        let Some(tex) = &self.texture else { return };
+        let tex = if use_draft { self.draft_texture.as_ref() } else { self.texture.as_ref() };
+        let Some(tex) = tex else { return };
         // Font metrics can underestimate the actual glyph ink. Paint the complete textless
         // page so overhanging glyphs cannot remain outside the estimated source rectangle.
         let painter = painter.with_clip_rect(painter.clip_rect().intersect(xf.rect));
