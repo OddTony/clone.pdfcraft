@@ -322,17 +322,21 @@ fn ask(tty: &Tty, query: &[u8], done: impl Fn(&[u8]) -> bool) -> Result<Vec<u8>,
     Ok(reply)
 }
 
-/// Inside tmux: ask tmux which terminal its client runs in (`TERM` names tmux itself), and make
-/// sure the pane passes escape codes through.
+/// Inside tmux: ask tmux which terminal its client runs in (`TERM` names tmux itself), and
+/// whether the pane passes escape codes through. When it doesn't, `view` stops, and leaves the
+/// setting as it is ([`tmux::passthrough`]).
 fn tmux_terminal(protocol: Protocol) -> Result<Terminal, CliError> {
-    if protocol == Protocol::Auto && !std::io::stdout().is_terminal() {
+    let to_terminal = std::io::stdout().is_terminal();
+    if protocol == Protocol::Auto && !to_terminal {
         return Err(NOT_A_TERMINAL.into());
     }
     let client = tmux::client();
     let colour = tmux_colour(protocol, &client)?;
-    match tmux::ensure_passthrough() {
-        Ok(true) => note("view: turned on tmux's allow-passthrough for this pane, so images reach the terminal"),
-        Ok(false) => {}
+    match tmux::passthrough() {
+        Ok(true) => {}
+        // Nothing would show. Written elsewhere, the output may yet be shown where it is on.
+        Ok(false) if to_terminal => return Err(format!("view: {}", tmux::passthrough_off()).into()),
+        Ok(false) => note(&format!("warning: view: {}", tmux::passthrough_off())),
         Err(e) => note(&format!("warning: view: couldn't check tmux's allow-passthrough ({e}); images may not show")),
     }
     let cell = client.ok().and_then(|c| c.cell).map(|(w, h)| Cell { w: f32::from(w), h: f32::from(h) });

@@ -44,18 +44,31 @@ fn parse_client(out: &str) -> Client {
     Client { termname, rgb, cell }
 }
 
-/// Make sure tmux passes this pane's escape codes through: `allow-passthrough` must be `on` or
-/// `all` (tmux 3.3 and later drop them otherwise). Turns it on for this pane only when it is off,
-/// and says whether it did.
-pub(crate) fn ensure_passthrough() -> Result<bool, String> {
+/// Whether tmux passes this pane's escape codes through: `allow-passthrough` must be `on` or
+/// `all` (tmux 3.3 and later drop them otherwise). `view` only asks. The setting lets any program
+/// in the pane write to the terminal past tmux, so it is the user's to change
+/// ([`passthrough_off`]).
+pub(crate) fn passthrough() -> Result<bool, String> {
     let pane = this_pane();
-    let target = target(pane.as_deref());
-    let show = tmux(&[&["show-options", "-Ap"][..], &target, &["allow-passthrough"]].concat())?;
-    if passthrough_allowed(&show) {
-        return Ok(false);
-    }
-    tmux(&[&["set-option", "-p"][..], &target, &["allow-passthrough", "on"]].concat())?;
-    Ok(true)
+    let show = tmux(&[&["show-options", "-Ap"][..], &target(pane.as_deref()), &["allow-passthrough"]].concat())?;
+    Ok(passthrough_allowed(&show))
+}
+
+/// What to tell the user when this pane's `allow-passthrough` is off: how to turn it on.
+pub(crate) fn passthrough_off() -> String {
+    passthrough_off_for(this_pane().as_deref())
+}
+
+/// [`passthrough_off`] for `pane`, which the command names when it is a pane id (`%3`): run from
+/// the shell, tmux's current pane is the session's active one, which may be another.
+fn passthrough_off_for(pane: Option<&str>) -> String {
+    let pane_id = pane.filter(|p| p.strip_prefix('%').is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())));
+    let target = pane_id.map(|p| format!(" -t {p}")).unwrap_or_default();
+    format!(
+        "tmux's allow-passthrough is off for this pane, so tmux would drop the images. Turn it on for this pane with \
+         `tmux set -p{target} allow-passthrough on`, or for every pane with `set -g allow-passthrough on` in ~/.tmux.conf \
+         (it lets programs in the pane send escape codes past tmux)"
+    )
 }
 
 /// The pane `view` runs in, as tmux names it in `TMUX_PANE`.
@@ -357,5 +370,15 @@ mod tests {
         assert!(!passthrough_allowed("allow-passthrough* off\n"));
         assert!(!passthrough_allowed(""));
         assert!(!passthrough_allowed("unknown option: allow-passthrough"));
+    }
+
+    #[test]
+    fn passthrough_off_says_how_to_turn_it_on_for_this_pane() {
+        assert!(passthrough_off_for(Some("%12")).contains("`tmux set -p -t %12 allow-passthrough on`"));
+        assert!(passthrough_off_for(None).contains("`tmux set -p allow-passthrough on`"));
+        // Anything but a pane id is left out of a command the user may paste.
+        for pane in ["%", "%1; rm -rf ~", "12", ""] {
+            assert!(passthrough_off_for(Some(pane)).contains("`tmux set -p allow-passthrough on`"), "{pane:?}");
+        }
     }
 }

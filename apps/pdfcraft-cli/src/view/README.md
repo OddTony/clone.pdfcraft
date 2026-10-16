@@ -104,8 +104,11 @@ a placement.
 Inside tmux, tmux keeps its own copy of the screen and knows nothing of images:
 
 - **Passthrough.** Every escape code goes inside `ESC P tmux; … ESC \`, with each ESC doubled.
-  tmux passes it on only when the pane's `allow-passthrough` is `on` or `all`; `view` turns it on
-  for its own pane when it is off.
+  tmux passes it on only when the pane's `allow-passthrough` is `on` or `all`. `view` only asks
+  (`show-options -Ap`): the option lets any program in the pane write to the terminal past tmux,
+  so it is the user's. When it is off, `view` stops with the command that turns it on, naming the
+  pane: run from the shell without `-t`, tmux sets it on the session's active pane, which may be
+  another. Output to a file only gets a warning, since it may be shown where it is on.
 - **Unicode placeholders.** A page is a virtual placement (`U=1`) plus rows of U+10EEEE cells that
   tmux stores as text, so pages scroll with the pane and survive window switches. The image id is
   in the cells' foreground colour: 24-bit when tmux reports `RGB` for the terminal, the 256-colour

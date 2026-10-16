@@ -137,10 +137,10 @@ supported yet: Windows Terminal speaks sixel, not the kitty protocol.
 `view` works inside tmux 3.3 and later when tmux runs in a terminal that speaks the protocol:
 
 - tmux doesn't know about images, so the escape codes go through tmux's passthrough. tmux only
-  lets them through when the pane's `allow-passthrough` option is `on` or `all`. If it is off,
-  `view` turns it on **for its own pane only** (`tmux set-option -p allow-passthrough on`) and says
-  so on stderr. To turn it on for every pane yourself, add `set -g allow-passthrough on` to
-  `~/.tmux.conf`.
+  lets them through when the pane's `allow-passthrough` option is `on` or `all`. The option lets
+  any program in the pane send escape codes past tmux, so `view` never changes it. If it is off,
+  `view` stops and says how to turn it on: for every pane, add `set -g allow-passthrough on` to
+  `~/.tmux.conf`; for one pane, run the `tmux set -p -t <pane> allow-passthrough on` it shows.
 - Pages are drawn with the protocol's *Unicode placeholders*: special characters that tmux stores
   as text, which the terminal draws as the image. The page scrolls with the pane, and survives
   switching windows and panes. Placeholders number at most 297 rows and columns, so inside tmux a

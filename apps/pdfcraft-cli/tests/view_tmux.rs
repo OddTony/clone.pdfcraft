@@ -1,4 +1,5 @@
-//! `view --pager` inside tmux, end to end: every page on screen must reach the terminal.
+//! `view` inside tmux, end to end: every page on screen must reach the terminal, and the pane's
+//! `allow-passthrough` is left as it was.
 //!
 //! tmux throws output away when it decides its terminal can't keep up, and images sent through
 //! its passthrough go with it for good (it redraws its text, not what passed through). A screen
@@ -71,16 +72,33 @@ fn fixture(test: &str, pages: usize) -> PathBuf {
 }
 
 /// A private tmux server, and the script(1) processes its clients run under; all go at the end,
-/// the server's socket too (tmux leaves it behind when killed).
+/// the server's socket too (tmux leaves it behind when killed). It starts with `config`.
 struct Server {
     socket: String,
+    config: PathBuf,
     path: Option<PathBuf>,
     clients: Vec<Child>,
 }
 
 impl Server {
+    fn new(test: &str, config: PathBuf) -> Self {
+        Server { socket: format!("pdfcraft-cli-test-{test}-{}", std::process::id()), config, path: None, clients: Vec::new() }
+    }
+
+    /// A tmux command, outside any tmux the tests run in: its output when it succeeds.
+    fn run(&self, args: &[&str]) -> Option<Vec<u8>> {
+        let out = Command::new("tmux").arg("-L").arg(&self.socket).args(args).env_remove("TMUX").env_remove("TMUX_PANE").output().ok()?;
+        out.status.success().then_some(out.stdout)
+    }
+
     fn tmux(&self, args: &[&str]) -> Vec<u8> {
-        Command::new("tmux").arg("-L").arg(&self.socket).args(args).output().map(|o| o.stdout).unwrap_or_default()
+        self.run(args).unwrap_or_default()
+    }
+
+    /// Note where the server's socket is, once it runs, to remove it at the end.
+    fn started(&mut self) {
+        let path = PathBuf::from(String::from_utf8_lossy(&self.tmux(&["display-message", "-p", "#{socket_path}"])).trim());
+        self.path = path.file_name().is_some_and(|name| *name == *self.socket).then_some(path);
     }
 
     /// A client on a new pseudo-terminal, running `line` (a tmux command); what tmux writes to its
@@ -89,7 +107,7 @@ impl Server {
         // Any terminal type tmux knows will do: `view` is told the protocol, and tmux passes the
         // escape codes through whatever it thinks the terminal is. xterm-256color is in every
         // terminfo database; kitty's own entry isn't.
-        let line = format!("stty rows 58 cols 200 && exec tmux -L {} -f /dev/null {line}", self.socket);
+        let line = format!("stty rows 58 cols 200 && exec tmux -L {} -f '{}' {line}", self.socket, self.config.display());
         let mut client = script(&line)
             .env_remove("TMUX")
             .env_remove("TMUX_PANE")
@@ -143,22 +161,23 @@ fn start(test: &str) -> Option<(Server, Arc<Mutex<Vec<u8>>>)> {
         return None;
     }
     let pdf = fixture(test, 12);
-    let socket = format!("pdfcraft-cli-test-{test}-{}", std::process::id());
+    // Passthrough on, as `view` needs and leaves to the user.
+    let config = pdf.with_file_name("tmux.conf");
+    std::fs::write(&config, "set -g allow-passthrough on\n").unwrap();
     let view = format!("'{BIN}' view '{}' --protocol kitty", pdf.display());
-    let mut server = Server { socket, path: None, clients: Vec::new() };
+    let mut server = Server::new(test, config);
     // A wide window: two pages side by side, and a screenful of placeholder cells per flip.
     let output = server.client(&format!("new-session -s view \"{view}\""));
     // A tmux that can't start here (say, a terminal type it doesn't know) isn't `view`'s failure.
     let deadline = Instant::now() + Duration::from_secs(20);
-    while !Command::new("tmux").arg("-L").arg(&server.socket).arg("has-session").output().is_ok_and(|o| o.status.success()) {
+    while server.run(&["has-session"]).is_none() {
         if Instant::now() > deadline {
             eprintln!("warning: skipped: tmux didn't start here");
             return None;
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    let path = PathBuf::from(String::from_utf8_lossy(&server.tmux(&["display-message", "-p", "#{socket_path}"])).trim());
-    server.path = path.file_name().is_some_and(|name| *name == *server.socket).then_some(path);
+    server.started();
     // The first pages on screen.
     let deadline = Instant::now() + Duration::from_secs(60);
     while arrived(&output.lock().unwrap()).len() < 2 {
@@ -263,4 +282,78 @@ fn a_terminal_that_attaches_later_gets_the_pages_too() {
     let second = server.client("attach-session -t view");
     all_arrive(&server, &second, "in the second terminal");
     server.tmux(&["send-keys", "-t", "view:0", "q"]);
+}
+
+#[test]
+fn an_off_allow_passthrough_is_left_as_it_was() {
+    if Command::new("tmux").arg("-V").stdin(Stdio::null()).output().is_err() {
+        eprintln!("warning: skipped: no tmux here");
+        return;
+    }
+    let pdf = fixture("passthrough", 2);
+    let dir = pdf.parent().unwrap().to_path_buf();
+    // tmux's own defaults, under which `allow-passthrough` is off. No client: `view` runs in
+    // panes of a detached session, and is told the protocol.
+    let mut server = Server::new("passthrough", PathBuf::from("/dev/null"));
+    if server.run(&["-f", "/dev/null", "new-session", "-d", "-s", "pt", "sleep 600"]).is_none() {
+        eprintln!("warning: skipped: tmux didn't start here");
+        return;
+    }
+    server.started();
+    let global = server.run(&["show-options", "-g", "allow-passthrough"]);
+    if global.is_none() {
+        eprintln!("warning: skipped: this tmux has no allow-passthrough (before 3.3, it passes everything)");
+        return;
+    }
+    // The pane's own setting, if any, and whether stdout goes to a file: `view` stops where
+    // nothing would show, and goes on otherwise; never does the pane's setting change.
+    let cases = [
+        ("inherited off", None, false),
+        ("off for the pane", Some("off"), false),
+        ("inherited off, to a file", None, true),
+        ("on for the pane", Some("on"), false),
+    ];
+    for (n, (what, own, to_file)) in cases.into_iter().enumerate() {
+        let file = |name: &str| dir.join(format!("{name}-{n}")).display().to_string();
+        let out = if to_file { format!(" >'{}'", file("out")) } else { String::new() };
+        // The pane waits for its setting before `view` runs.
+        let line = format!(
+            "while [ ! -e '{go}' ]; do sleep 0.1; done; '{BIN}' view '{pdf}' --protocol kitty --no-pager 2>'{err}'{out}; \
+             echo $? >'{status}.tmp'; mv '{status}.tmp' '{status}'; exec sleep 600",
+            go = file("go"),
+            pdf = pdf.display(),
+            err = file("err"),
+            status = file("status"),
+        );
+        let pane = server.tmux(&["new-window", "-d", "-P", "-F", "#{pane_id}", "-t", "pt", "sh", "-c", &line]);
+        let pane = String::from_utf8_lossy(&pane).trim().to_string();
+        assert!(pane.starts_with('%'), "{what}: no pane");
+        if let Some(value) = own {
+            server.tmux(&["set-option", "-p", "-t", &pane, "allow-passthrough", value]);
+        }
+        let setting = || String::from_utf8_lossy(&server.tmux(&["show-options", "-p", "-t", &pane, "allow-passthrough"])).into_owned();
+        let before = setting();
+        assert_eq!(before.is_empty(), own.is_none(), "{what}: {before:?}");
+        std::fs::write(file("go"), "").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let status = loop {
+            if let Ok(status) = std::fs::read_to_string(file("status")) {
+                break status.trim().to_string();
+            }
+            assert!(Instant::now() < deadline, "{what}: view didn't finish");
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        let err = std::fs::read_to_string(file("err")).unwrap_or_default();
+        assert_eq!(setting(), before, "{what}: the pane's setting changed; {err}");
+        let on = own == Some("on");
+        assert_eq!(status == "0", on || to_file, "{what}: exit {status}; {err}");
+        if !on {
+            // It says how to turn it on, for this very pane.
+            assert!(err.contains(&format!("`tmux set -p -t {pane} allow-passthrough on`")), "{what}: {err}");
+        }
+        if to_file {
+            assert!(std::fs::metadata(file("out")).is_ok_and(|m| m.len() > 0), "{what}: nothing written");
+        }
+    }
+    assert_eq!(server.run(&["show-options", "-g", "allow-passthrough"]), global, "the global setting changed");
 }
