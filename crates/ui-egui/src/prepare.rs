@@ -142,7 +142,19 @@ impl FieldDefaults {
         self.0.iter().find(|(t, ..)| *t == tool).map(|(_, l, s)| (*l, *s))
     }
 
+    /// Kept within what an Appearance-tab edit accepts: a field read from a file can say
+    /// `/BS /W 15` or `/MK /BC [2 0 0]`, and a default out of range would make every new field
+    /// of that tool fail.
     pub fn set(&mut self, tool: FieldTool, look: FieldLook, size: f64) {
+        let unit = |c: [f64; 3]| c.map(|v| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 });
+        let look = FieldLook {
+            border: look.border.map(unit),
+            fill: look.fill.map(unit),
+            width: if look.width.is_finite() { look.width.clamp(0.0, 12.0) } else { 1.0 },
+            text: unit(look.text),
+            ..look
+        };
+        let size = if size.is_finite() { size.clamp(0.0, 300.0) } else { 0.0 };
         self.0.retain(|(t, ..)| *t != tool);
         self.0.push((tool, look, size));
     }

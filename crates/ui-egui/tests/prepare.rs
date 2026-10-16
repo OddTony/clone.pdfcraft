@@ -7,11 +7,15 @@ use egui_kittest::kittest::Queryable;
 use pdfcraft_ui_egui::{PdfCraftApp, QuickTool};
 
 fn harness() -> Harness<'static, PdfCraftApp> {
-    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|cc| {
+    harness_with(include_bytes!("data/form.pdf").to_vec())
+}
+
+fn harness_with(pdf: Vec<u8>) -> Harness<'static, PdfCraftApp> {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |cc| {
         cc.egui_ctx.options_mut(|options| options.warn_on_id_clash = true);
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
-        app.open_bytes("form.pdf", None, include_bytes!("data/form.pdf").to_vec()).unwrap();
+        app.open_bytes("form.pdf", None, pdf).unwrap();
         app.set_option("zoom", "150").unwrap();
         app
     });
@@ -688,4 +692,37 @@ fn field_defaults_are_saved_with_the_settings() {
     for tool in [FieldTool::Combo, FieldTool::List, FieldTool::Date] {
         assert_eq!(restarted.field_defaults.get(tool), None, "{tool:?}");
     }
+}
+
+/// A field read from a file can carry values the Appearance tab refuses (`/BS /W 15`, a colour
+/// component of 2): as a default they are kept in range, so new fields can still be made.
+#[test]
+fn out_of_range_properties_are_clamped_as_defaults() {
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 300 400] >>",
+        "<< /Type /Page /Parent 2 0 R /Annots [4 0 R] >>",
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (wide) /Rect [20 300 200 330] /P 3 0 R /DA (/Helv 0 Tf 0 g) /BS << /W 15 /S /S >> /MK << /BC [2 0 0] >> >>",
+    ];
+    let mut pdf = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.extend(format!("{} 0 obj\n{o}\nendobj\n", i + 1).bytes());
+    }
+    let xref = pdf.len();
+    pdf.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).bytes());
+    for o in offsets {
+        pdf.extend(format!("{o:010} 00000 n \n").bytes());
+    }
+    pdf.extend(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).bytes());
+    let mut h = harness_with(pdf);
+    assert_eq!(look_of(&h, "wide").width, 15.0, "the file's own value");
+    assert!(h.state_mut().execute("form.prepare"));
+    h.run_steps(3);
+    h.state_mut().make_field_default("wide", 0);
+    let text = place(&mut h, "form.add.text", (40.0, 200.0), (200.0, 222.0));
+    assert_ne!(text, "wide", "the new field is made");
+    let l = look_of(&h, &text);
+    assert_eq!((l.width, l.border), (12.0, Some([1.0, 0.0, 0.0])));
 }

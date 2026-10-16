@@ -3597,8 +3597,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     field_menu = Some(FieldMenu::Duplicate(name.clone()));
                     ui.close();
                 }
-                // Changes no document, so a locked or read-only one allows it too.
-                if view.prepare.also.is_empty() && ui.button(tl!("Use Current Properties as New Defaults")).clicked() {
+                // Changes no document, so a locked field allows it too.
+                if view.prepare.also.is_empty()
+                    && ui
+                        .add_enabled(doc.field_widget_look(&name, wi).is_some(), egui::Button::new(tl!("Use Current Properties as New Defaults")))
+                        .clicked()
+                {
                     field_menu = Some(FieldMenu::MakeDefault(name.clone(), wi));
                     ui.close();
                 }
