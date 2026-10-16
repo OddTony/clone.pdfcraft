@@ -3,7 +3,8 @@
 //! Usage: `pdfcraft [options] [files…]`
 //! `--create-images [images…]` stages the images in one PDF and asks for the page DPI.
 //! `--combine [files…]` lists the files in Combine files (the file manager's "Combine files" entry,
-//! #585); with a PdfCraft already running, they join its list.
+//! #585); with a PdfCraft already running, they join its list. On macOS the entry is a Finder Quick
+//! Action that opens a list of the selected files with the app (`finder_combine`).
 //!
 //! View options (applied after the files open; also the seed of the UI control channel):
 //! `--page N  --zoom 150  --layout single|continuous|two-up|two-page  --continuous on|off  --panel comments|bookmarks|pages|fields|layers|attachments|none
@@ -35,6 +36,7 @@ use pdfcraft_ui_egui::PdfCraftApp;
 mod apple_events;
 mod compositor_gpu;
 mod decorations;
+mod finder_combine;
 mod logging;
 #[cfg(target_os = "windows")]
 mod motion;
@@ -400,6 +402,8 @@ fn app_creator<'a>(
         #[cfg(target_os = "macos")]
         {
             app.os_events = Some(apple_events.connect(&cc.egui_ctx));
+            // Finder's "Combine files in PdfCraft" Quick Action (#585), written or refreshed for this version.
+            finder_combine::install(APP_ID);
             // winit's Quit (⌘Q) ends the process without asking about unsaved changes (#1136). This
             // menu's Quit closes the window instead, so `guard_quit` asks, as for the close button.
             if let Err(e) = craft_quit::install_app_menu(&cc.egui_ctx, "PdfCraft") {
