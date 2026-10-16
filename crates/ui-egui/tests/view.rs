@@ -1381,3 +1381,32 @@ fn two_up_scroll_end_reaches_an_unpaired_final_page() {
 fn two_up_scroll_end_with_cover_reaches_a_taller_left_page() {
     assert_final_spread_bottom_reachable(&[400, 400, 400, 400, 100], true);
 }
+
+#[test]
+fn single_page_wheel_turn_renders_new_page_immediately_without_empty_frame() {
+    // #2841: in single-page mode, turning the page with the wheel must immediately layout
+    // and draw the new page in the same frame without flashing an empty background.
+    let mut h = harness_stepping(1.0 / 60.0, &[("layout", "single"), ("zoom", "50")]);
+    let at = h.state().views[0].viewport_rect().center();
+    h.hover_at(at);
+    h.run_steps(4);
+    assert_eq!(h.state().views[0].current, 0);
+    assert!(rect(&h, 0).is_some());
+
+    // Single notch down to turn page
+    h.event(wheel(MouseWheelUnit::Line, -1.0, TouchPhase::Move));
+    h.step();
+
+    assert_eq!(h.state().views[0].current, 1, "page turns to page 2");
+    assert!(rect(&h, 1).is_some(), "page 2 is immediately laid out on screen in the first frame (no empty background flash)");
+}
+
+#[test]
+fn single_page_mode_prefetches_adjacent_pages() {
+    // #2841: non-continuous views prefetch adjacent pages so they are already rendered
+    // when turning pages.
+    let h = harness(&[("layout", "single"), ("zoom", "50")]);
+    assert_eq!(h.state().views[0].current, 0);
+    assert!(h.state().views[0].page_raster(1).is_some(), "adjacent page 1 was prefetched and rendered while on page 0");
+}
+
