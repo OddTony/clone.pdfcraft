@@ -343,6 +343,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
 
     // The text of the removed glyphs, for the metadata check at the end.
     let mut removed_text: Vec<String> = Vec::new();
+    let mut removed_cut = false;
     let widget_owner: Vec<(ObjRef, String)> =
         pdfcraft_forms::fields(doc).into_iter().flat_map(|f| f.widgets.iter().map(|w| (w.obj, f.name.clone())).collect::<Vec<_>>()).collect();
 
@@ -358,6 +359,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
             let out = process(doc, &mut scope, &data, &resources, pdfcraft_content::Matrix::IDENTITY);
             scope.flush();
             removed_text.append(&mut scope.removed_text);
+            removed_cut |= scope.removed_cut;
             out
         };
         // Fail closed: the interpreter lays vertical-writing text out horizontally, so it cannot
@@ -564,7 +566,7 @@ pub fn apply(doc: &mut Document, pages: Option<&[usize]>) -> Result<Report, Reda
         return Err(RedactError::Residue(residue));
     }
     // 6. The document's metadata must not keep what the pages no longer show (#2448).
-    report.metadata = metadata::scrub(doc, &removed_text)?;
+    report.metadata = metadata::scrub(doc, &removed_text, !removed_cut)?;
     // The previous revision still holds the removed content: the next save must rewrite.
     doc.require_full_save();
     Ok(report)
