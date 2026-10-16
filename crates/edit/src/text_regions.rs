@@ -433,8 +433,12 @@ pub(super) fn rewrite_styled_block(
             "Hebrew points across incompatible source font/style runs need a uniform full-face paragraph".into(),
         ));
     }
-    let shape_text: String = draft.chars().filter(|c| !matches!(c, '\n' | '\r')).collect();
-    let source_can_shape = fonts.get(first.font.as_bytes())
+    let shape_text: String = if has_hebrew_marks {
+        draft.chars().filter(|c| !matches!(c, '\n' | '\r')).collect()
+    } else {
+        String::new()
+    };
+    let source_can_shape = has_hebrew_marks && fonts.get(first.font.as_bytes())
         .and_then(|f| doc.resolve(f).as_dict().cloned())
         .and_then(|font| pdfcraft_fonts::pdf::embedded_sfnt(doc, &font))
         .is_some_and(|bytes| {
