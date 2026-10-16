@@ -2693,6 +2693,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     };
     let prefs = &app.comment_prefs;
     let redact_mark = (app.redact_prefs.hover_fill, app.redact_prefs.opacity);
+    let field_defaults = &app.field_defaults;
     let units = app.units;
     let allowed = doc.allows_annotation();
     let can_copy = doc.allows_copying();
@@ -3073,7 +3074,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     QuickTool::Field(f) => Some(f),
                     _ => None,
                 };
-                let o = crate::prepare::page_input(ui, &resp, &xf, i, info, &form, field_tool, can_modify, view);
+                let o = crate::prepare::page_input(ui, &resp, &xf, i, info, &form, field_tool, field_defaults, can_modify, view);
                 field_props |= o.properties;
                 field_placed |= o.placed;
                 (o.consumed || field_tool.is_some(), false)
@@ -3596,6 +3597,11 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     field_menu = Some(FieldMenu::Duplicate(name.clone()));
                     ui.close();
                 }
+                // Changes no document, so a locked or read-only one allows it too.
+                if view.prepare.also.is_empty() && ui.button(tl!("Use Current Properties as New Defaults")).clicked() {
+                    field_menu = Some(FieldMenu::MakeDefault(name.clone(), wi));
+                    ui.close();
+                }
                 ui.separator();
                 let delete = if view.prepare.also.is_empty() { "Delete" } else { "Delete selected fields" };
                 if ui.add_enabled(can_modify, egui::Button::new(tl!(delete))).clicked() {
@@ -3939,10 +3945,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if let Some((name, w)) = field_props {
         app.open_field_props(&name, w);
     }
-    if let Some(FieldMenu::Duplicate(name)) = field_menu {
-        let pages = app.session.get(app.views[index].id).map_or(1, |d| d.info.pages.len());
-        app.duplicate_draft = Some(crate::DuplicateDraft { name, all: true, from: 1, to: pages });
-        app.dialog = Some(crate::Dialog::DuplicateField);
+    match field_menu {
+        Some(FieldMenu::Duplicate(name)) => {
+            let pages = app.session.get(app.views[index].id).map_or(1, |d| d.info.pages.len());
+            app.duplicate_draft = Some(crate::DuplicateDraft { name, all: true, from: 1, to: pages });
+            app.dialog = Some(crate::Dialog::DuplicateField);
+        }
+        Some(FieldMenu::MakeDefault(name, widget)) => app.make_field_default(&name, widget),
+        Some(FieldMenu::Properties) | None => {}
     }
     if let Some((page, rect)) = app.views[index].links.open_new.take() {
         app.open_link_props(page, Some(rect), None);
@@ -4338,6 +4348,8 @@ fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: 
 enum FieldMenu {
     Properties,
     Duplicate(String),
+    /// Use Current Properties as New Defaults: the field and the right-clicked widget.
+    MakeDefault(String, usize),
 }
 
 /// What the notice bar's buttons ask for.
