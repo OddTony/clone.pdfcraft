@@ -1,6 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
-> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gaps 9 and 11: PDF/UA-1 verification against the Matterhorn Protocol, PDF/UA-2 in part; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gaps 9 and 11: PDF/UA verification checks the font conditions, 83 of 87 machine conditions; gap 9 65–115 h → 60–110 h) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (gap 6: #1910 Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -37,7 +37,7 @@ update the numbers.
 | 6 | Open-issue backlog of wrong results in shipped features | stability | 45–80 | this file |
 | 7 | OCR reads only unaccented Latin | feature | 40–75 | [file-format-parity.md](file-format-parity.md) |
 | 8 | Office export weak, Office import absent | file format | 55–100 | [file-format-parity.md](file-format-parity.md) |
-| 9 | No Preflight; PDF/A and PDF/UA partial; PDF/X absent | standards | 65–115 | [pdf-spec-parity.md](pdf-spec-parity.md) |
+| 9 | No Preflight; PDF/A and PDF/UA partial; PDF/X absent | standards | 60–110 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 10 | Signatures: no PKCS #11, timestamp servers or online revocation | feature, hardware | 40–70 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 11 | Accessibility: checker only, no tagging tools | feature | 40–70 | [target-app-parity.md](target-app-parity.md) |
 | 12 | No measured fidelity harness against Acrobat | quality | (in 2) | [target-app-parity.md](target-app-parity.md) |
@@ -176,17 +176,20 @@ update the numbers.
 
 - **Missing:** Preflight (profiles, single checks and fixups, results tree, reports, droplets);
   PDF/A-1, PDF/A-4 and conformance levels a/u; PDF/X verify and convert; the rest of PDF/UA
-  verification (33 of the Matterhorn Protocol's 87 machine conditions, mostly the font-program
-  ones, and PDF/UA-2's own rules) and Save as PDF/UA; PDF/E, PDF/VT; output-intent choice;
-  transparency flattening.
+  verification (4 of the Matterhorn Protocol's 87 machine conditions, media clips and printer's
+  marks; the font checks that need the Adobe Glyph List or the predefined CMaps' data, which
+  PdfCraft doesn't hold; PDF/UA-2's own rules) and Save as PDF/UA; PDF/E, PDF/VT; output-intent
+  choice; transparency flattening.
 - **Evidence:** 12 Preflight features and 9 standards features planned; `optimize.pdfa-validate`,
   `optimize.pdfa-convert` partial (2b/3b structural rules; CMYK documents get no output intent).
-  `optimize.pdfua-validate` partial (2026-10-15): Verify PDF/UA reports every Matterhorn 1.1
+  `optimize.pdfua-validate` partial (2026-10-16): Verify PDF/UA reports every Matterhorn 1.1
   condition as failed (with clause and page, tag or object), passed, needing a manual check (47)
-  or not checked (33); PDF/UA-2 checks its identification, PDF 2.0 and the conditions it keeps.
+  or not checked (4, and any font condition a file's fonts don't let PdfCraft decide); the font
+  conditions read each font's CMap, ToUnicode map and embedded program. PDF/UA-2 checks its
+  identification, PDF 2.0 and the conditions it keeps.
   Acrobat ships hundreds of built-in Preflight profiles.
 - **Impact:** blocks print shops, archives and accessibility compliance work.
-- **Estimate:** 65–115 h. **Doc:** [pdf-spec-parity.md](pdf-spec-parity.md).
+- **Estimate:** 60–110 h. **Doc:** [pdf-spec-parity.md](pdf-spec-parity.md).
 
 ### 10. Signatures: no PKCS #11, timestamp servers or online revocation
 
@@ -210,8 +213,8 @@ update the numbers.
   ParentTree Nums array is extended),
   visual Tags, Order and Content panels, Reading Order tool, table editor, Make Accessible action,
   Read Out Loud; full keyboard operation of PdfCraft itself and a screen-reader audit.
-- **Evidence:** all 32 checker rules, PDF/UA verification in the same panel (54 of the
-  Matterhorn Protocol's machine conditions, the human ones listed for review), figure alt text,
+- **Evidence:** all 32 checker rules, PDF/UA verification in the same panel (83 of the
+  Matterhorn Protocol's 87 machine conditions, the human ones listed for review), figure alt text,
   tag property and sibling order edits, and a bounded auto-tag preview exist. Apply writes valid structure and parent-tree links for
   text-only files; it refuses mixed content and existing tags;
   `a11y.keyboard-only` (P0) planned, `a11y.app-screen-reader` partial.
@@ -385,6 +388,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Gaps 9 and 11: PDF/UA verification checks the font conditions (Matterhorn checkpoint 31 but the licence one, and 17-003), reading each font's CMap, ToUnicode map and embedded program: 83 of 87 machine conditions. Gap 9 65–115 h → 60–110 h; what's left needs the Adobe Glyph List or predefined CMap data, or is PDF/UA-2's own. |
 | 2026-10-15 | minor | Gaps 9 and 11: PDF/UA-1 verification against the Matterhorn Protocol (54 of 87 machine conditions; human ones listed for review), PDF/UA-2 in part. Estimates unchanged: the font-program conditions, PDF/UA-2's own rules and Save as PDF/UA remain. |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |

@@ -387,8 +387,8 @@ fn pdfua_verify_reports_conditions_with_their_clause_and_place() {
     // A person's judgement is listed as manual, never as passed; unchecked machine conditions too.
     assert_eq!(r["counts"]["manual"], 47);
     assert!(r["manual"].as_array().unwrap().iter().any(|m| m["condition"] == "09-001"));
-    assert!(r["not_checked"].as_array().unwrap().iter().any(|m| m["condition"] == "31-011"));
-    assert!(!r["passed"].as_array().unwrap().iter().any(|id| id == "09-001" || id == "31-011"));
+    assert!(r["not_checked"].as_array().unwrap().iter().any(|m| m["condition"] == "28-014"));
+    assert!(!r["passed"].as_array().unwrap().iter().any(|id| id == "09-001" || id == "28-014"));
     let total: u64 = ["failed", "passed", "manual", "not_checked"].iter().map(|k| r["counts"][*k].as_u64().unwrap()).sum();
     assert_eq!(total, 135);
     // PDF/UA-2 on request: the file declares part 1 and is PDF 1.7.

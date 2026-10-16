@@ -46,6 +46,21 @@ struct Within {
     tagged: bool,
     /// Marked content tagged /Artifact.
     artifact: bool,
+    /// The innermost MCID of the page's own content stream around it: the one its structure
+    /// element names with the page. Not one of a form XObject's own, nor inside an artifact.
+    mcid: Option<i64>,
+}
+
+/// Told about each string a text-showing operator shows, by [`Scan::run_with`].
+pub(crate) trait Shown {
+    /// `bytes` are shown in `font` on page `page`; `rendered` unless in text render mode 3
+    /// (invisible), and inside the page content's marked content `mcid`, if any.
+    fn show(&mut self, page: usize, font: ObjRef, bytes: &[u8], rendered: bool, mcid: Option<i64>);
+}
+
+/// Shows nothing to anyone: a scan only for what [`Scan`] keeps.
+impl Shown for () {
+    fn show(&mut self, _: usize, _: ObjRef, _: &[u8], _: bool, _: Option<i64>) {}
 }
 
 impl Within {
@@ -65,12 +80,17 @@ struct TextState {
 
 impl Scan {
     pub fn run(doc: &Document, pages: &[Page], list: &[usize]) -> Scan {
+        Scan::run_with(doc, pages, list, &mut ())
+    }
+
+    /// [`Scan::run`], telling `shown` about every string the content shows.
+    pub fn run_with(doc: &Document, pages: &[Page], list: &[usize], shown: &mut dyn Shown) -> Scan {
         let mut s = Scan::default();
         for &p in list {
             let Some(page) = pages.get(p) else { continue };
             let res = page.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
             let data = page_content(doc, &page.dict);
-            let mut w = Walk { doc, scan: &mut s, page: p, forms: HashSet::new() };
+            let mut w = Walk { doc, scan: &mut s, shown: &mut *shown, page: p, forms: HashSet::new() };
             w.content(&data, &res, Within::default(), TextState::default(), None, 0);
         }
         s
@@ -99,6 +119,7 @@ fn page_content(doc: &Document, page: &Dict) -> Vec<u8> {
 struct Walk<'a> {
     doc: &'a Document,
     scan: &'a mut Scan,
+    shown: &'a mut dyn Shown,
     page: usize,
     forms: HashSet<ObjRef>,
 }
@@ -128,22 +149,30 @@ impl Walk<'_> {
                 b"BMC" => {
                     let artifact = op.name(0) == Some(b"Artifact");
                     artifacts_in_tagged += usize::from(artifact && within.tagged);
-                    stack.push(Within { tagged: within.tagged, artifact: within.artifact || artifact });
+                    let mcid = within.mcid.filter(|_| !artifact);
+                    stack.push(Within { tagged: within.tagged, artifact: within.artifact || artifact, mcid });
                 }
                 b"BDC" => {
                     let artifact = op.name(0) == Some(b"Artifact");
-                    let mcid = !artifact
-                        && match op.operands.get(1) {
-                            Some(Object::Dict(d)) => d.contains(b"MCID"),
-                            Some(Object::Name(n)) => {
-                                props.get(n).map(|x| self.doc.resolve(x)).and_then(|x| x.as_dict().map(|d| d.contains(b"MCID"))).unwrap_or(false)
-                            }
-                            _ => false,
-                        };
+                    let properties = match op.operands.get(1) {
+                        Some(Object::Dict(d)) => Some(d.clone()),
+                        Some(Object::Name(n)) => props.get(n).map(|x| self.doc.resolve(x)).and_then(|x| x.as_dict().cloned()),
+                        _ => None,
+                    };
+                    let id = properties.as_ref().and_then(|d| d.get(b"MCID")).map(|m| self.doc.resolve(m)).and_then(|m| m.as_int());
+                    let mcid = !artifact && properties.as_ref().is_some_and(|d| d.contains(b"MCID"));
                     has_mcid |= mcid;
                     artifacts_in_tagged += usize::from(artifact && within.tagged);
                     tagged_in_artifacts += usize::from(mcid && within.artifact);
-                    stack.push(Within { tagged: within.tagged || mcid, artifact: within.artifact || artifact });
+                    // A form XObject's own MCIDs belong to its stream, not to the page.
+                    let page_mcid = if artifact {
+                        None
+                    } else if mcid {
+                        id.filter(|_| form.is_none())
+                    } else {
+                        within.mcid
+                    };
+                    stack.push(Within { tagged: within.tagged || mcid, artifact: within.artifact || artifact, mcid: page_mcid });
                 }
                 b"EMC" => {
                     stack.pop();
@@ -152,10 +181,23 @@ impl Walk<'_> {
                     self.scan.has_text = true;
                     self.scan.painted = true;
                     untagged += usize::from(!inside);
-                    if text.mode != 3
-                        && let Some(font) = text.font
-                    {
+                    let Some(font) = text.font else { continue };
+                    let rendered = text.mode != 3;
+                    if rendered {
                         self.scan.rendered_fonts.entry(self.page).or_default().insert(font);
+                    }
+                    // `"` takes its string third, after the two spacings.
+                    let shown = match op.op.as_slice() {
+                        b"\"" => op.operands.get(2),
+                        _ => op.operands.first(),
+                    };
+                    let strings: Vec<&[u8]> = match shown {
+                        Some(Object::String(s)) => vec![&s.bytes],
+                        Some(Object::Array(items)) => items.iter().filter_map(|x| x.as_string().map(|s| s.bytes.as_slice())).collect(),
+                        _ => Vec::new(),
+                    };
+                    for s in strings {
+                        self.shown.show(self.page, font, s, rendered, within.mcid);
                     }
                 }
                 b"Tf" => {

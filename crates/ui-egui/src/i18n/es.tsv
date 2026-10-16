@@ -2309,6 +2309,37 @@ action wizard	Start	Iniciar
 	A form XObject with marked content (MCIDs) is drawn {n} times	Un XObject de formulario con contenido marcado (MCID) se dibuja {n} veces
 	Font {} on page {p} isn't embedded	La fuente {} de la página {p} no está incrustada
 	Font (unnamed) on page {p} isn't embedded	Una fuente sin nombre de la página {p} no está incrustada
+	Font {} on page {p}: its CMap and CIDFont name different registries (CIDSystemInfo Registry)	Fuente {} de la página {p}: su CMap y su CIDFont indican registros distintos (CIDSystemInfo Registry)
+	Font {} on page {p}: its CMap and CIDFont name different orderings (CIDSystemInfo Ordering)	Fuente {} de la página {p}: su CMap y su CIDFont indican ordenaciones distintas (CIDSystemInfo Ordering)
+	Font {} on page {p}: its CIDFont's Supplement is lower than its CMap's	Fuente {} de la página {p}: el Supplement de su CIDFont es menor que el de su CMap
+	Font {} on page {p}: its CIDToGIDMap is neither a stream nor Identity	Fuente {} de la página {p}: su CIDToGIDMap no es un flujo ni Identity
+	Font {} on page {p} has no CIDToGIDMap	La fuente {} de la página {p} no tiene CIDToGIDMap
+	Font {} on page {p}: its CMap {cmap} is neither predefined nor embedded	Fuente {} de la página {p}: su CMap {cmap} no está predefinido ni incrustado
+	Font {} on page {p} has no CMap (Encoding)	La fuente {} de la página {p} no tiene CMap (Encoding)
+	Font {} on page {p}: its CMap's WMode differs from the one in the CMap stream	Fuente {} de la página {p}: el WMode de su CMap no coincide con el del flujo del CMap
+	Font {} on page {p}: its CMap uses CMap {cmap}, which isn't predefined	Fuente {} de la página {p}: su CMap usa el CMap {cmap}, que no está predefinido
+	Font {} on page {p}: its CMap uses an embedded CMap, not a predefined one	Fuente {} de la página {p}: su CMap usa un CMap incrustado, no uno predefinido
+	Font {} on page {p} draws a glyph its font program lacks (code {code})	La fuente {} de la página {p} dibuja un glifo que su programa de fuente no tiene (código {code})
+	Font {} on page {p}: its CharSet leaves out glyph {glyph}, which the font program has	Fuente {} de la página {p}: su CharSet omite el glifo {glyph}, que el programa de fuente tiene
+	Font {} on page {p}: its CharSet lists glyph {glyph}, which the font program lacks	Fuente {} de la página {p}: su CharSet incluye el glifo {glyph}, que el programa de fuente no tiene
+	Font {} on page {p}: its CIDSet leaves out CID {cid}, which the font program has	Fuente {} de la página {p}: su CIDSet omite el CID {cid}, que el programa de fuente tiene
+	Font {} on page {p}: its CIDSet lists CID {cid}, which the font program lacks	Fuente {} de la página {p}: su CIDSet incluye el CID {cid}, que el programa de fuente no tiene
+	Font {} on page {p}: code {code} is {w} wide in the font dictionary but {fw} in the font program	Fuente {} de la página {p}: el código {code} mide {w} de ancho en el diccionario de la fuente pero {fw} en el programa de fuente
+	Font {} on page {p}: its TrueType program has no Unicode (3,1) or Mac Roman (1,0) cmap	Fuente {} de la página {p}: su programa TrueType no tiene un cmap Unicode (3,1) ni Mac Roman (1,0)
+	Font {} on page {p}: no Unicode or Mac Roman cmap of its program finds glyph {glyph} (code {code})	Fuente {} de la página {p}: ningún cmap Unicode ni Mac Roman de su programa encuentra el glifo {glyph} (código {code})
+	Font {} on page {p} is a non-symbolic TrueType font with no Encoding	La fuente {} de la página {p} es una fuente TrueType no simbólica sin Encoding
+	Font {} on page {p}: its Encoding dictionary has no BaseEncoding	Fuente {} de la página {p}: su diccionario Encoding no tiene BaseEncoding
+	Font {} on page {p}: its encoding {enc} is neither MacRomanEncoding nor WinAnsiEncoding	Fuente {} de la página {p}: su codificación {enc} no es MacRomanEncoding ni WinAnsiEncoding
+	Font {} on page {p}: its Differences name glyph {glyph}, which isn't in the Adobe Glyph List	Fuente {} de la página {p}: sus Differences nombran el glifo {glyph}, que no está en la Adobe Glyph List
+	Font {} on page {p} has Differences, but its program has no Unicode (3,1) cmap	La fuente {} de la página {p} tiene Differences, pero su programa no tiene un cmap Unicode (3,1)
+	Font {} on page {p} is a symbolic TrueType font with an Encoding entry	La fuente {} de la página {p} es una fuente TrueType simbólica con una entrada Encoding
+	Font {} on page {p}: its TrueType program has no cmap	Fuente {} de la página {p}: su programa TrueType no tiene cmap
+	Font {} on page {p}: its TrueType program has several cmaps but no Symbol (3,0) one	Fuente {} de la página {p}: su programa TrueType tiene varios cmap, pero ninguno Symbol (3,0)
+	Font {} on page {p} has no ToUnicode map, and no exception lets it go without one	La fuente {} de la página {p} no tiene mapa ToUnicode, y ninguna excepción la exime de tenerlo
+	Font {} on page {p}: its ToUnicode map maps code {code} to U+0000	Fuente {} de la página {p}: su mapa ToUnicode asigna el código {code} a U+0000
+	Font {} on page {p}: its ToUnicode map maps code {code} to {u}	Fuente {} de la página {p}: su mapa ToUnicode asigna el código {code} a {u}
+	Font {} on page {p} draws the .notdef glyph (code {code})	La fuente {} de la página {p} dibuja el glifo .notdef (código {code})
+	Font {} on page {p}: code {code} in a formula can't be mapped to Unicode	Fuente {} de la página {p}: el código {code} de una fórmula no se puede asignar a Unicode
 	The default optional content configuration (D) has no Name	La configuración predeterminada de contenido opcional (D) no tiene Name
 	An optional content configuration has an AS entry	Una configuración de contenido opcional tiene una entrada AS
 	Optional content configuration {n} has no Name	La configuración de contenido opcional {n} no tiene Name

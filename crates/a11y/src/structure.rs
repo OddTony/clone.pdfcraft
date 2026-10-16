@@ -220,6 +220,10 @@ pub(crate) trait Visitor {
 
     /// An object reference (OBJR) to `obj` sits directly in the innermost of the `open` elements.
     fn object_reference(&mut self, _open: &[Frame], _obj: ObjRef) {}
+
+    /// Marked content `mcid` of page `page`'s own content stream sits directly in the innermost
+    /// of the `open` elements. Marked content in another stream (an MCR with /Stm) is not told.
+    fn marked_content(&mut self, _open: &[Frame], _page: Option<usize>, _mcid: i64) {}
 }
 
 /// The dictionary (or stream) that `/StructTreeRoot` names in the catalog, when there is one.
@@ -338,7 +342,10 @@ impl Walker<'_> {
             Object::Array(items) if !items.is_empty() => {
                 self.tasks.push(Task::Items { loc: loc.clone(), next: 0, len: items.len(), depth: depth + 1, page });
             }
-            Object::Int(_) => self.mark_content(),
+            Object::Int(mcid) => {
+                self.mark_content();
+                v.marked_content(&self.frames, page, *mcid);
+            }
             Object::Ref(r) => self.reference(*r, depth, page, v),
             Object::Dict(_) => self.dict(loc, depth, page, None, v),
             _ => {}
@@ -361,7 +368,16 @@ impl Walker<'_> {
     fn dict<V: Visitor>(&mut self, loc: &Loc, depth: usize, page: Option<usize>, object: Option<ObjRef>, v: &mut V) {
         let Some(d) = loc.value().and_then(|o| o.as_dict()) else { return };
         match d.name(b"Type") {
-            Some(b"MCR") => return self.mark_content(),
+            Some(b"MCR") => {
+                self.mark_content();
+                let mcid = d.get(b"MCID").map(|m| self.doc.resolve(m)).and_then(|m| m.as_int());
+                if let Some(mcid) = mcid
+                    && !d.contains(b"Stm")
+                {
+                    v.marked_content(&self.frames, self.page_of(d).or(page), mcid);
+                }
+                return;
+            }
             Some(b"OBJR") => {
                 self.mark_content();
                 let obj = d.get(b"Obj").and_then(Object::as_ref);

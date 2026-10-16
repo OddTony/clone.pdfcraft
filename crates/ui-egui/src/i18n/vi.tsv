@@ -1688,6 +1688,37 @@ theme	Appearance	Giao diện
 	A form XObject with marked content (MCIDs) is drawn {n} times	Một XObject biểu mẫu có nội dung được đánh dấu (MCID) được vẽ {n} lần
 	Font {} on page {p} isn't embedded	Phông chữ {} trên trang {p} chưa được nhúng
 	Font (unnamed) on page {p} isn't embedded	Phông chữ (không tên) trên trang {p} chưa được nhúng
+	Font {} on page {p}: its CMap and CIDFont name different registries (CIDSystemInfo Registry)	Phông chữ {} trên trang {p}: CMap và CIDFont của nó ghi các registry khác nhau (CIDSystemInfo Registry)
+	Font {} on page {p}: its CMap and CIDFont name different orderings (CIDSystemInfo Ordering)	Phông chữ {} trên trang {p}: CMap và CIDFont của nó ghi các ordering khác nhau (CIDSystemInfo Ordering)
+	Font {} on page {p}: its CIDFont's Supplement is lower than its CMap's	Phông chữ {} trên trang {p}: Supplement của CIDFont thấp hơn của CMap
+	Font {} on page {p}: its CIDToGIDMap is neither a stream nor Identity	Phông chữ {} trên trang {p}: CIDToGIDMap của nó không phải là luồng cũng không phải Identity
+	Font {} on page {p} has no CIDToGIDMap	Phông chữ {} trên trang {p} không có CIDToGIDMap
+	Font {} on page {p}: its CMap {cmap} is neither predefined nor embedded	Phông chữ {} trên trang {p}: CMap {cmap} của nó không được định nghĩa sẵn cũng không được nhúng
+	Font {} on page {p} has no CMap (Encoding)	Phông chữ {} trên trang {p} không có CMap (Encoding)
+	Font {} on page {p}: its CMap's WMode differs from the one in the CMap stream	Phông chữ {} trên trang {p}: WMode của CMap khác với WMode trong luồng CMap
+	Font {} on page {p}: its CMap uses CMap {cmap}, which isn't predefined	Phông chữ {} trên trang {p}: CMap của nó dùng CMap {cmap}, vốn không được định nghĩa sẵn
+	Font {} on page {p}: its CMap uses an embedded CMap, not a predefined one	Phông chữ {} trên trang {p}: CMap của nó dùng một CMap được nhúng, không phải CMap định nghĩa sẵn
+	Font {} on page {p} draws a glyph its font program lacks (code {code})	Phông chữ {} trên trang {p} vẽ một glyph mà chương trình phông chữ không có (mã {code})
+	Font {} on page {p}: its CharSet leaves out glyph {glyph}, which the font program has	Phông chữ {} trên trang {p}: CharSet của nó bỏ sót glyph {glyph}, mà chương trình phông chữ có
+	Font {} on page {p}: its CharSet lists glyph {glyph}, which the font program lacks	Phông chữ {} trên trang {p}: CharSet của nó liệt kê glyph {glyph}, mà chương trình phông chữ không có
+	Font {} on page {p}: its CIDSet leaves out CID {cid}, which the font program has	Phông chữ {} trên trang {p}: CIDSet của nó bỏ sót CID {cid}, mà chương trình phông chữ có
+	Font {} on page {p}: its CIDSet lists CID {cid}, which the font program lacks	Phông chữ {} trên trang {p}: CIDSet của nó liệt kê CID {cid}, mà chương trình phông chữ không có
+	Font {} on page {p}: code {code} is {w} wide in the font dictionary but {fw} in the font program	Phông chữ {} trên trang {p}: mã {code} rộng {w} trong từ điển phông chữ nhưng {fw} trong chương trình phông chữ
+	Font {} on page {p}: its TrueType program has no Unicode (3,1) or Mac Roman (1,0) cmap	Phông chữ {} trên trang {p}: chương trình TrueType của nó không có cmap Unicode (3,1) hay Mac Roman (1,0)
+	Font {} on page {p}: no Unicode or Mac Roman cmap of its program finds glyph {glyph} (code {code})	Phông chữ {} trên trang {p}: không cmap Unicode hay Mac Roman nào của chương trình tìm thấy glyph {glyph} (mã {code})
+	Font {} on page {p} is a non-symbolic TrueType font with no Encoding	Phông chữ {} trên trang {p} là phông TrueType không ký hiệu nhưng không có Encoding
+	Font {} on page {p}: its Encoding dictionary has no BaseEncoding	Phông chữ {} trên trang {p}: từ điển Encoding của nó không có BaseEncoding
+	Font {} on page {p}: its encoding {enc} is neither MacRomanEncoding nor WinAnsiEncoding	Phông chữ {} trên trang {p}: bảng mã {enc} của nó không phải MacRomanEncoding cũng không phải WinAnsiEncoding
+	Font {} on page {p}: its Differences name glyph {glyph}, which isn't in the Adobe Glyph List	Phông chữ {} trên trang {p}: Differences của nó đặt tên glyph {glyph}, vốn không có trong Adobe Glyph List
+	Font {} on page {p} has Differences, but its program has no Unicode (3,1) cmap	Phông chữ {} trên trang {p} có Differences, nhưng chương trình của nó không có cmap Unicode (3,1)
+	Font {} on page {p} is a symbolic TrueType font with an Encoding entry	Phông chữ {} trên trang {p} là phông TrueType ký hiệu có mục Encoding
+	Font {} on page {p}: its TrueType program has no cmap	Phông chữ {} trên trang {p}: chương trình TrueType của nó không có cmap
+	Font {} on page {p}: its TrueType program has several cmaps but no Symbol (3,0) one	Phông chữ {} trên trang {p}: chương trình TrueType của nó có nhiều cmap nhưng không có cmap Symbol (3,0)
+	Font {} on page {p} has no ToUnicode map, and no exception lets it go without one	Phông chữ {} trên trang {p} không có bảng ToUnicode, và không ngoại lệ nào cho phép thiếu bảng đó
+	Font {} on page {p}: its ToUnicode map maps code {code} to U+0000	Phông chữ {} trên trang {p}: bảng ToUnicode của nó ánh xạ mã {code} sang U+0000
+	Font {} on page {p}: its ToUnicode map maps code {code} to {u}	Phông chữ {} trên trang {p}: bảng ToUnicode của nó ánh xạ mã {code} sang {u}
+	Font {} on page {p} draws the .notdef glyph (code {code})	Phông chữ {} trên trang {p} vẽ glyph .notdef (mã {code})
+	Font {} on page {p}: code {code} in a formula can't be mapped to Unicode	Phông chữ {} trên trang {p}: mã {code} trong một công thức không thể ánh xạ sang Unicode
 	The default optional content configuration (D) has no Name	Cấu hình nội dung tùy chọn mặc định (D) không có Name
 	An optional content configuration has an AS entry	Một cấu hình nội dung tùy chọn có mục AS
 	Optional content configuration {n} has no Name	Cấu hình nội dung tùy chọn {n} không có Name

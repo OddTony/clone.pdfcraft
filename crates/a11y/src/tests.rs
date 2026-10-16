@@ -961,7 +961,7 @@ fn sentences(source: &str) -> Vec<String> {
 #[test]
 fn wordings_are_complete() {
     let mut missing = Vec::new();
-    for source in [include_str!("content.rs"), include_str!("structure.rs"), include_str!("pdfua/checks.rs")] {
+    for source in [include_str!("content.rs"), include_str!("structure.rs"), include_str!("pdfua/checks.rs"), include_str!("pdfua/fonts.rs")] {
         for sentence in sentences(source) {
             if !WORDINGS.contains(&sentence.as_str()) {
                 missing.push(sentence);

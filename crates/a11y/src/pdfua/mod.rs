@@ -2,9 +2,10 @@
 //! with the page or object at fault.
 //!
 //! [`verify`] reports on every condition in [`CONDITIONS`]. A condition software can decide is
-//! Passed or Failed when PdfCraft checks it, and Not checked when it doesn't yet; one that only a
-//! person can judge is Needs manual check. Nothing is reported as passed that was not looked at, so
-//! a report without failures still leaves the manual and unchecked conditions to someone.
+//! Passed or Failed when PdfCraft checks it, and Not checked when it doesn't yet, or can't for this
+//! file (a font program that doesn't parse, say); one that only a person can judge is Needs manual
+//! check. Nothing is reported as passed that was not looked at, so a report without failures still
+//! leaves the manual and unchecked conditions to someone.
 //!
 //! The checks read the document only. Several are the Accessibility Checker's own rules, whose
 //! findings are failure conditions as they stand (untagged content, figures without alternate
@@ -14,14 +15,15 @@
 //! PDF version, and the PDF/UA-1 conditions whose requirement PDF/UA-2 keeps unchanged. The others
 //! are reported as not checked, and no clause of ISO 14289-2 is cited.
 //!
-//! The checks themselves are in `checks`, the condition table in `conditions`, and the readers of
-//! the XMP packet and the XFA form in `xmp`.
+//! The checks themselves are in `checks` and, for fonts, `fonts`; the condition table is in
+//! `conditions`, and the readers of the XMP packet and the XFA form in `xmp`.
 
 mod checks;
 mod conditions;
+mod fonts;
 mod xmp;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use pdfcraft_cos::Document;
 
@@ -136,7 +138,7 @@ pub enum Outcome {
     Failed,
     /// Only a person can judge it.
     Manual,
-    /// Software could decide it, but PdfCraft doesn't check it (yet).
+    /// Software could decide it, but PdfCraft doesn't check it (yet), or couldn't for this file.
     NotChecked,
 }
 
@@ -204,10 +206,35 @@ impl UaReport {
 #[derive(Default)]
 struct Collected {
     by_id: HashMap<&'static str, (Vec<Finding>, usize)>,
+    /// Conditions a check couldn't decide for this file. Without a failure, they are not checked.
+    undecided: HashSet<&'static str>,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests only: one condition whose checks are switched off on this thread, its findings and
+    /// its undecided marks dropped, so a test can see that some other test notices it gone (see
+    /// `tests::every_font_condition_is_seen_by_a_test`).
+    static SWITCHED_OFF: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
+}
+
+/// Whether `id`'s checks are switched off on this thread.
+#[cfg(test)]
+fn switched_off(id: &str) -> bool {
+    SWITCHED_OFF.with(|off| off.get() == Some(id))
+}
+
+/// Outside tests no condition is ever switched off.
+#[cfg(not(test))]
+fn switched_off(_: &str) -> bool {
+    false
 }
 
 impl Collected {
     fn add(&mut self, id: &'static str, finding: Finding) {
+        if switched_off(id) {
+            return;
+        }
         let (kept, total) = self.by_id.entry(id).or_default();
         *total = total.saturating_add(1);
         if kept.len() < MAX_FINDINGS {
@@ -217,6 +244,9 @@ impl Collected {
 
     /// Findings counted elsewhere: the first of them, and how many there were in all.
     fn extend(&mut self, id: &'static str, findings: Vec<Finding>, total: usize) {
+        if switched_off(id) {
+            return;
+        }
         let (kept, all) = self.by_id.entry(id).or_default();
         let total = total.max(findings.len());
         *all = all.saturating_add(total);
@@ -250,6 +280,18 @@ impl Collected {
     fn failed(&self, id: &str) -> bool {
         self.by_id.get(id).is_some_and(|(_, total)| *total > 0)
     }
+
+    /// A check couldn't decide `id` for something in the file: unless it fails elsewhere, the
+    /// condition is not checked rather than passed.
+    fn undecided(&mut self, id: &'static str) {
+        if !switched_off(id) {
+            self.undecided.insert(id);
+        }
+    }
+
+    fn is_undecided(&self, id: &str) -> bool {
+        self.undecided.contains(id)
+    }
 }
 
 /// Verify `doc` against `part` of PDF/UA.
@@ -264,6 +306,7 @@ pub fn verify(doc: &Document, part: Part) -> UaReport {
                 How::Human => Outcome::Manual,
                 How::Machine if !condition.checked_for(part) => Outcome::NotChecked,
                 How::Machine if c.failed(condition.id) => Outcome::Failed,
+                How::Machine if c.is_undecided(condition.id) => Outcome::NotChecked,
                 How::Machine => Outcome::Passed,
             };
             let findings = if outcome == Outcome::Failed { c.take(condition.id) } else { Vec::new() };
@@ -273,5 +316,7 @@ pub fn verify(doc: &Document, part: Part) -> UaReport {
     UaReport { part, declared, results }
 }
 
+#[cfg(test)]
+mod testfont;
 #[cfg(test)]
 mod tests;

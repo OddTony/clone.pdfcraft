@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use pdfcraft_cos::{Dict, Document, ObjRef, Object};
 use pdfcraft_model::Page;
 
+use super::fonts::{self, Codes};
 use super::xmp::{metadata, xfa_requires_dynamic_render, xmp_has_language, xmp_value};
 use super::{Collected, Part};
 use crate::content::{self, Scan};
@@ -94,9 +95,12 @@ pub(super) const NO_LANGUAGE: &str = "The document sets no language (Lang), and 
 pub(super) fn run(doc: &Document, part: Part, c: &mut Collected) -> Option<u8> {
     let pages = pdfcraft_model::pages(doc);
     let all: Vec<usize> = (0..pages.len()).collect();
-    let scan = Scan::run(doc, &pages, &all);
     let cat = content::catalog(doc);
     let doc_lang = content::text_of(doc, &cat, b"Lang").is_some();
+    // The tags first, so the content scan knows which marked content is a formula's.
+    let Tree { found, raw_types, owners, any_lang, formulas, .. } = Tree::run(doc, &pages, doc_lang);
+    let mut codes = Codes::new(doc, formulas);
+    let scan = Scan::run_with(doc, &pages, &all, &mut codes);
     let xmp = metadata(doc, &cat);
     let declared = xmp.as_deref().and_then(|x| xmp_value(x, "pdfuaid:part")).and_then(|p| p.trim().parse::<u8>().ok());
 
@@ -120,7 +124,6 @@ pub(super) fn run(doc: &Document, part: Part, c: &mut Collected) -> Option<u8> {
         c.add("01-005", Finding::plain(None, "The document isn't tagged, so none of its content is"));
     }
     document(doc, part, &cat, xmp.as_deref(), declared, c);
-    let Tree { found, raw_types, owners, any_lang, .. } = Tree::run(doc, &pages, doc_lang);
     if !doc_lang {
         language(doc, &cat, xmp.as_deref(), scan.has_text, any_lang, &found, c);
     }
@@ -135,6 +138,7 @@ pub(super) fn run(doc: &Document, part: Part, c: &mut Collected) -> Option<u8> {
     }
     annotations(doc, &pages, &owners, doc_lang, c);
     page_content(doc, &scan, c);
+    fonts::check(doc, &scan.fonts, &codes, c);
     document_objects(doc, &cat, c);
     declared
 }
@@ -332,6 +336,8 @@ struct Tree {
     note_ids: HashSet<Vec<u8>>,
     plain_heading: bool,
     numbered_heading: bool,
+    /// (page, MCID) of the marked content in Formula elements, and in what they hold.
+    formulas: HashSet<(usize, i64)>,
 }
 
 impl Tree {
@@ -347,6 +353,7 @@ impl Tree {
             note_ids: HashSet::new(),
             plain_heading: false,
             numbered_heading: false,
+            formulas: HashSet::new(),
         };
         structure::walk(doc, pages, &mut tree);
         if tree.plain_heading && tree.numbered_heading {
@@ -443,6 +450,15 @@ impl Visitor for Tree {
         if self.owners.len() < MAX_KEPT && !self.owners.contains_key(&obj) {
             let lang = self.open.last().is_some_and(|o| o.lang);
             self.owners.insert(obj, Owner { ty: e.ty.clone(), alt: e.alt, lang });
+        }
+    }
+
+    fn marked_content(&mut self, open: &[Frame], page: Option<usize>, mcid: i64) {
+        if let Some(page) = page
+            && self.formulas.len() < MAX_KEPT
+            && open.iter().any(|f| f.ty.as_slice() == b"Formula")
+        {
+            self.formulas.insert((page, mcid));
         }
     }
 }
