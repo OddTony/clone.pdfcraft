@@ -1241,6 +1241,92 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
     families
 }
 
+/// Physical caret stops for RTL text. The egui TextEdit buffer stays in
+/// logical Unicode order; only hit testing and caret painting use this map.
+#[derive(Clone, Copy, Debug)]
+struct RtlCaretStop { index: usize, x: f32, y: f32 }
+
+fn editor_rtl(text: &str) -> bool {
+    unicode_bidi::get_base_direction(text) == unicode_bidi::Direction::Rtl
+}
+
+fn is_combining_for_cursor(c: char) -> bool {
+    matches!(c as u32,
+        0x0300..=0x036F | 0x0591..=0x05BD | 0x05BF | 0x05C1..=0x05C2
+        | 0x05C4..=0x05C5 | 0x05C7 | 0x0610..=0x061A
+        | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06ED | 0xFE20..=0xFE2F)
+}
+
+fn rtl_caret_stops(galley: &egui::Galley) -> Vec<RtlCaretStop> {
+    use unicode_bidi::{BidiInfo, Level};
+    let mut stops = Vec::new();
+    let mut offset = 0_usize;
+    for placed in &galley.rows {
+        let glyphs = &placed.row.glyphs;
+        let line: String = glyphs.iter().map(|g| g.chr).collect();
+        if line.is_empty() {
+            stops.push(RtlCaretStop { index: offset, x: placed.pos.x, y: placed.pos.y });
+            offset += usize::from(placed.ends_with_newline);
+            continue;
+        }
+        // A base and its niqqud are one caret cluster.
+        // Entries: (byte start, logical char start, logical char end, width).
+        let mut clusters: Vec<(usize, usize, usize, f32)> = Vec::new();
+        let mut byte = 0;
+        for (i, glyph) in glyphs.iter().enumerate() {
+            if is_combining_for_cursor(glyph.chr) && let Some(last) = clusters.last_mut() {
+                last.2 = i + 1;
+                last.3 += glyph.advance_width.max(0.0);
+            } else {
+                clusters.push((byte, i, i + 1, glyph.advance_width.max(0.0)));
+            }
+            byte += glyph.chr.len_utf8();
+        }
+        let info = BidiInfo::new(&line, Some(Level::rtl()));
+        let Some(para) = info.paragraphs.first() else { continue };
+        let (levels, runs) = info.visual_runs(para, 0..line.len());
+        let mut x = placed.pos.x;
+        for run in runs {
+            let rtl = levels.get(run.start).is_some_and(Level::is_rtl);
+            let mut indices: Vec<_> = clusters.iter().enumerate()
+                .filter(|(_, c)| run.contains(&c.0)).map(|(i, _)| i).collect();
+            if rtl { indices.reverse(); }
+            for i in indices {
+                let (_, start, end, width) = clusters[i];
+                stops.push(RtlCaretStop { index: offset + if rtl { end } else { start }, x, y: placed.pos.y });
+                x += width;
+                stops.push(RtlCaretStop { index: offset + if rtl { start } else { end }, x, y: placed.pos.y });
+            }
+        }
+        offset += glyphs.len() + usize::from(placed.ends_with_newline);
+    }
+    stops
+}
+
+fn rtl_caret_at(galley: &egui::Galley, pointer: egui::Vec2) -> Option<usize> {
+    rtl_caret_stops(galley).into_iter().min_by(|a, b| {
+        let distance = |s: &RtlCaretStop| {
+            (pointer.y - s.y).abs() * 10_000.0 + (pointer.x - s.x).abs()
+        };
+        distance(a).total_cmp(&distance(b))
+    }).map(|s| s.index)
+}
+
+fn rtl_caret_location(galley: &egui::Galley, index: usize) -> Option<egui::Pos2> {
+    rtl_caret_stops(galley).into_iter().find(|s| s.index == index)
+        .map(|s| egui::pos2(s.x, s.y))
+}
+
+fn rtl_move_visual(galley: &egui::Galley, index: usize, left: bool) -> Option<usize> {
+    let stops = rtl_caret_stops(galley);
+    let at = stops.iter().position(|s| s.index == index)?;
+    if left {
+        stops.get(..at)?.iter().rev().find(|s| s.index != index).map(|s| s.index)
+    } else {
+        stops.get(at + 1..)?.iter().find(|s| s.index != index).map(|s| s.index)
+    }
+}
+
 fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     // An unchanged PDF row already has an authoritative line break. Do not rewrap it
