@@ -58,8 +58,8 @@ milestone = "M1"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/ui-egui/tests/ui.rs::garbage_input_is_rejected_without_panicking", "crates/cos/src/parser.rs::garbage_never_panics", "crates/render/src/raster.rs::missing_page_and_garbage_input_fail_gracefully"]
-notes = "fuzzed nightly (M1.10)"
+evidence = ["crates/render/tests/damaged_arrays.rs::streaming_content_reader_retains_streams_after_unparseable_slots", "crates/render/tests/damaged_arrays.rs::resolved_entries_do_not_split_overflowing_references_into_numbers", "crates/ui-egui/tests/ui.rs::garbage_input_is_rejected_without_panicking", "crates/cos/src/parser.rs::garbage_never_panics", "crates/render/src/raster.rs::missing_page_and_garbage_input_fail_gracefully"]
+notes = "fuzzed nightly (M1.10); lexically accepted but unparseable page-tree/content array slots are recorded and skipped without the raw-iterator panic (#2660). Strict positional arrays and other consumers retain their existing behavior."
 
 [[feature]]
 id = "core.repair-log"

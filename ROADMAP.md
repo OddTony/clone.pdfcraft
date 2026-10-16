@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M2 #2660: refresh array recovery on main `98cbd38`; reviewed code and regressions unchanged; estimates unchanged)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7: the Edit text caret is as tall as the row it is on; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M6: CSV tab-containing headers; estimates unchanged)
 > **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M3, #3149: discard render demand after page geometry changes and check the GPU texture limit before upload; estimates unchanged)
@@ -14,7 +15,6 @@
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M6: preserve XML/XFDF attribute whitespace; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M1: raw-deflate fallback preserves decoding-limit errors; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-16 | **Last updated:** 2026-10-16 | **Change:** minor (M10 #1201 partial: lossless image Decode; estimates unchanged) | **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (M2 #2660: retain readable pages and content after unreadable array entries, with recovery warnings; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M3 #2080 candidate: explicit search jumps join per-tab history; rail and control-channel Back/Forward; estimates unchanged)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M4 #1910: Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -181,6 +181,10 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 - **2026-10-15 (M1, #2267 refresh):** Integrated upstream `99941daa` while retaining the raw-deflate fallback correction and all upstream progress. Only independent documentation conflicts required resolution; focused production and test files are unchanged from the previously green CI head. Estimates unchanged.
 - **2026-10-16 (M10, #1201 partial):** Lossless image export applies each component's Decode pair. Indexed values round and clip before palette lookup. Color-key masks keep raw samples. The existing 16-bit precision limit remains. JPEG and mask Decode, ICC transforms, and calibrated colors remain outside this fix. Estimates unchanged.
 - **2026-10-16 (M3, #2739):** Wrapped revision buttons stay above Binding in Document Properties. A synthetic regression checks control bounds and opens a saved revision at two viewport widths. Estimates unchanged.
+
+- **2026-10-18 (M2, #2660 refresh):** Rebased PR #2683 onto main `98cbd38`, retaining upstream roadmap entries and combining the repair/save evidence with the damaged-array regressions. The recovering iterator, page/content readers and nine regressions are unchanged from `266fb97`; upstream custom-property and OpenAction inspection is retained. Recovery scope and estimates are unchanged.
+
+- **2026-10-16 (M2, #2660 review):** Resolved structural-array entries now advance over a complete syntactic slot before parsing it. A bare `+` accepted by validation is recorded and skipped without the raw-iterator panic, and partially parsed overflowing references cannot split into extra entries. Regressions cover both content readers, inspection, exact pixels, slot counts, valid signed numbers and first/middle/last positions. Positional arrays remain strict. Estimates unchanged.
 
 - **2026-10-16 (M2, #2660):** Refreshed PR #2683 on current main, retaining upstream renderer and signature updates. Rechecked scoped Rust/WebAssembly gates and the headless damaged-array replay. Recovery scope and estimates are unchanged.
 
@@ -535,12 +539,14 @@ Newest first: the date, what moved, and the new overall estimate.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | M2 #2660: rebase PR #2683 onto main `98cbd38`, retain upstream progress, and preserve the reviewed recovery code and nine synthetic regressions. Scope and estimates unchanged. |
 | 2026-10-15 | minor | M7: the Edit text caret is as tall as the row it is on in a region with several sizes; estimates unchanged. |
 | 2026-10-18 | minor | M4, PR #1919 review: repeated page indices apply each rotation to the latest page-local value, preserving indirect/inherited angles. Synthetic adjacent/interleaved duplicates retain siblings and page contents through incremental and full saves. Estimates unchanged. |
 | 2026-10-18 | minor | M3, #3149: page replacement cancels render demand collected for the previous geometry; all viewer raster upload paths reject empty or oversized textures before cache eviction. Synthetic regressions reproduce the reported 1880×2350 upload at a 2048 limit, retain cached images and unsaved edits, and resume bounded backdrops and tiles. Estimates unchanged. |
 | 2026-10-15 | minor | M6: Plain AcroForm XML imports retain all direct text around comments and processing instructions, including CDATA and character references. Estimates unchanged. |
 | 2026-10-13 | minor | M6: XML/XFDF attribute whitespace survives form and comment export/import; estimates unchanged |
 | 2026-10-14 | minor | M1: raw-deflate fallback preserves decoding-limit errors in strict and tolerant decoding; synthetic filter and COS stream regressions. Estimates unchanged. |
+| 2026-10-16 | minor | M2 #2660 review: consume and parse each structural-array slot within its own bounds; bare plus signs no longer reach the raw iterator panic. Direct-reader, inspection and pixel regressions. Estimates unchanged. |
 | 2026-10-16 | minor | M2 #2660: refresh array recovery on current main, preserve upstream renderer/signature changes, and rerun scoped tests, wasm and headless replay. Estimates unchanged. |
 | 2026-10-15 | minor | M2 #2660: recover later readable pages/content and report skipped array slots; synthetic parser/render regressions. Estimates unchanged. |
 | 2026-10-13 | minor | M9: separate page validation overlays preserve signature artwork, and snapshot tabs reuse instead of multiplying; baked captions remain unchanged (#79 open); estimates unchanged |

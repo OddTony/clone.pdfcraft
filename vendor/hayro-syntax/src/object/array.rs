@@ -7,6 +7,7 @@ use crate::reader::Reader;
 use crate::reader::{Readable, ReaderContext, ReaderExt, Skippable};
 use alloc::vec::Vec;
 use core::fmt::{Debug, Formatter};
+use core::iter::from_fn;
 use core::marker::PhantomData;
 use smallvec::SmallVec;
 
@@ -55,9 +56,36 @@ impl<'a> Array<'a> {
         T: ObjectLike<'a> + 'a,
     {
         let ctx = self.ctx.clone();
-        self.raw_iter().map(move |entry| match entry {
-            MaybeRef::Ref(r) => ctx.xref().get_with::<T>(r.into(), &ctx),
-            MaybeRef::NotRef(object) => object.cast::<T>(),
+        let mut reader = Reader::new(self.data);
+        from_fn(move || {
+            reader.skip_white_spaces_and_comments();
+            if reader.at_end() {
+                return None;
+            }
+
+            // PdfCraft patch: validation accepts some slots (notably `+`) that
+            // object parsing rejects. Advance over the complete syntactic slot
+            // first, then parse within those bounds, without raw_iter's unwrap.
+            let bytes = if ctx.in_content_stream() {
+                reader.skip::<Object<'a>>(true)?
+            } else {
+                reader.skip::<MaybeRef<Object<'a>>>(false)?
+            };
+            if bytes.is_empty() {
+                return None;
+            }
+            let mut slot = Reader::new(bytes);
+            let entry = slot.read_with_context::<MaybeRef<Object<'a>>>(&ctx);
+            slot.skip_white_spaces_and_comments();
+            if !slot.at_end() {
+                // A partial parse (e.g. an overflowing reference read as a number)
+                // must not escape the slot or change the following entries.
+                return Some(None);
+            }
+            Some(entry.and_then(|entry| match entry {
+                MaybeRef::Ref(r) => ctx.xref().get_with::<T>(r.into(), &ctx),
+                MaybeRef::NotRef(object) => object.cast::<T>(),
+            }))
         })
     }
 
