@@ -706,8 +706,8 @@ fn redacted_text_is_cleared_from_info_and_xmp_on_apply() {
     assert!(xmp.contains("Writer 1.0"), "the rest of the packet stays: {xmp}");
     let page = &pdfcraft_model::pages(&doc)[0];
     assert!(page.dict.get(b"Metadata").is_some(), "a clean page-level stream stays");
-    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
-    assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("topsecret"), "no trace in the saved file");
+    assert_no_secret(&doc, b"TOPSECRET");
+    assert_no_secret(&doc, b"TopSecret");
 }
 
 /// Issue #2448, review follow-up: a value SHORTER than the removed run is still removed text —
@@ -731,7 +731,8 @@ fn a_value_inside_a_longer_removed_run_is_cleared_too() {
     let cat = doc.get(doc.root().unwrap()).as_dict().cloned().unwrap();
     assert!(!cat.contains(b"Metadata"), "the custom-schema value took the packet with it");
     let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
-    assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("james bond"), "no trace in the saved file");
+    assert_no_secret(&doc, b"JAMES BOND");
+    assert_no_secret(&doc, b"James Bond");
     let reread = Document::open(Arc::new(bytes)).unwrap();
     assert_eq!(info_value(&reread, "Subject").as_deref(), Some("Spy stories"), "unrelated metadata survives in the saved file");
 }
@@ -758,10 +759,9 @@ fn an_xmp_stream_holding_redacted_text_is_removed_whole() {
     assert!(!cat.contains(b"Metadata"), "the escaped secret took the catalog stream with it");
     let page = &pdfcraft_model::pages(&doc)[0];
     assert!(page.dict.get(b"Metadata").is_none(), "the page-level stream went too");
-    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
-    let text = String::from_utf8_lossy(&bytes).to_lowercase();
-    assert!(!text.contains("secret&plan") && !text.contains("secret&amp;plan"), "no escaped trace in the saved file");
-    assert!(!text.contains("othertext"), "the page-level secret is gone too");
+    assert_no_secret(&doc, b"SECRET&PLAN");
+    assert_no_secret(&doc, b"SECRET&amp;PLAN");
+    assert_no_secret(&doc, b"OTHERTEXT");
 }
 
 /// Issue #2448: a trailer `/Info` that is a direct dictionary is the one shape an entry-by-entry
@@ -783,8 +783,8 @@ fn a_direct_info_dictionary_holding_redacted_text_is_removed_whole() {
     if let Some(d) = &info {
         assert!(!d.contains(b"Title") && !d.contains(b"Author"), "nothing of it came back: {d:?}");
     }
-    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
-    assert!(!String::from_utf8_lossy(&bytes).to_lowercase().contains("topsecret"), "no trace in the saved file");
+    assert_no_secret(&doc, b"TOPSECRET");
+    assert_no_secret(&doc, b"TopSecret");
 }
 
 /// PR #2598: many generators draw text one glyph per operator (`(T) Tj 5 0 Td (O) Tj …`). The
@@ -936,7 +936,7 @@ fn utf16_info_entries_holding_redacted_text_are_cleared() {
     assert_eq!(info_value(&doc, "Author").as_deref(), Some("Ada"), "unrelated entries stay");
     let needle: Vec<u8> = "SECRET€".encode_utf16().flat_map(u16::to_be_bytes).collect();
     let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
-    assert!(!bytes.windows(needle.len()).any(|w| w == needle), "no UTF-16BE trace in the saved file");
+    assert_no_secret(&doc, &needle);
     // A full write may pack /Info into a compressed object stream, so survival is checked by
     // reading the file back, not by scanning its bytes.
     let reread = Document::open(Arc::new(bytes)).unwrap();
@@ -1217,16 +1217,38 @@ fn tags_lose_what_redaction_removed() {
 }
 
 fn assert_no_secret(doc: &Document, secret: &[u8]) {
-    let saved = reopen(doc);
-    for (r, object) in saved.scan_objects() {
+    assert!(!secret_is_present(doc, secret), "secret remains in reopened objects or decoded streams");
+}
+
+fn secret_is_present(doc: &Document, secret: &[u8]) -> bool {
+    let bytes = write_full(doc, &SaveOptions::default()).unwrap();
+    let saved = Document::open(Arc::new(bytes)).unwrap();
+    let has = |bytes: &[u8]| bytes.windows(secret.len()).any(|w| w == secret);
+    for (_, object) in saved.scan_objects() {
         let mut bytes = Vec::new();
         pdfcraft_cos::serialize(&object, &mut bytes);
-        assert!(!bytes.windows(secret.len()).any(|w| w == secret), "secret remains in object {r:?}");
-        if let Object::Stream(s) = &*object {
-            let data = s.decoded().unwrap();
-            assert!(!data.windows(secret.len()).any(|w| w == secret), "secret remains in stream {r:?}");
+        if has(&bytes) {
+            return true;
+        }
+        if let Object::Stream(s) = &*object
+            && has(&s.decoded().unwrap())
+        {
+            return true;
+        }
+        // Serialization can escape PDF string bytes (notably UTF-16BE). Inspect strings in
+        // reopened arrays/dictionaries directly as well, without following reference cycles.
+        let mut pending = vec![&*object];
+        while let Some(value) = pending.pop() {
+            match value {
+                Object::String(s) if has(&s.bytes) => return true,
+                Object::Array(a) => pending.extend(a),
+                Object::Dict(d) => pending.extend(d.iter().map(|(_, value)| value)),
+                Object::Stream(s) => pending.extend(s.dict.iter().map(|(_, value)| value)),
+                _ => {}
+            }
         }
     }
+    false
 }
 
 #[test]

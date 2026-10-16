@@ -95,6 +95,10 @@ pub(crate) struct Scope<'a> {
     /// Comparison alternatives for ambiguous forward TJ gaps; the canonical runs above stay
     /// unspaced so intra-word kerning retains its original interpretation.
     pub kerned_fragments: Vec<crate::metadata::KernedFragment>,
+    /// These totals travel with the fragments across pages. Once exceeded, collection stops
+    /// and apply removes all document/page metadata rather than matching truncated evidence.
+    pub metadata_bytes: usize,
+    pub metadata_limited: bool,
     /// The run being collected: its text, and where its last removed glyph's advance ended in
     /// device space with that glyph's height (`None` = no open run).
     run: String,
@@ -116,6 +120,8 @@ impl<'a> Scope<'a> {
             layer_blocks: 0,
             removed_fragments: Vec::new(),
             kerned_fragments: Vec::new(),
+            metadata_bytes: 0,
+            metadata_limited: false,
             run: String::new(),
             run_gaps: Vec::new(),
             run_end: None,
@@ -183,11 +189,38 @@ impl<'a> Scope<'a> {
     pub(crate) fn flush_run(&mut self) {
         self.run_end = None;
         if !self.run.is_empty() {
+            if self.removed_fragments.len() >= crate::metadata::MAX_FRAGMENTS {
+                self.limit_metadata();
+                return;
+            }
             if !self.run_gaps.is_empty() {
                 self.kerned_fragments.push(crate::metadata::KernedFragment { text: self.run.clone(), gaps: std::mem::take(&mut self.run_gaps) });
             }
             self.removed_fragments.push(std::mem::take(&mut self.run));
         }
+    }
+
+    fn limit_metadata(&mut self) {
+        self.metadata_limited = true;
+        self.removed_fragments.clear();
+        self.kerned_fragments.clear();
+        self.run.clear();
+        self.run_gaps.clear();
+        self.run_end = None;
+    }
+
+    fn append_removed(&mut self, text: &str) {
+        if self.metadata_limited {
+            return;
+        }
+        let run_bytes = self.run.len().saturating_add(text.len());
+        let total = self.metadata_bytes.saturating_add(text.len());
+        if run_bytes > crate::metadata::MAX_RUN_BYTES || total > crate::metadata::MAX_FRAGMENT_BYTES {
+            self.limit_metadata();
+            return;
+        }
+        self.run.push_str(text);
+        self.metadata_bytes = total;
     }
 
     /// A removed glyph: `kerned` says a `TJ` number displaced the text since the last removed
@@ -199,6 +232,9 @@ impl<'a> Scope<'a> {
     /// space, or the joined text would not match the value it was drawn from). Degenerate
     /// (zero-height) glyphs and non-finite positions never join.
     fn removed_glyph(&mut self, text: &str, origin: (f64, f64), end: (f64, f64), height: f64, kerned: bool) {
+        if self.metadata_limited || text.is_empty() {
+            return;
+        }
         if kerned && self.run_end.is_some() {
             if let Some(((x, y), previous_height)) = self.run_end {
                 let (dx, dy) = (origin.0 - x, origin.1 - y);
@@ -209,7 +245,7 @@ impl<'a> Scope<'a> {
                     self.run_gaps.push(self.run.len());
                 }
             }
-            self.run.push_str(text);
+            self.append_removed(text);
             self.run_end = Some((end, height));
             return;
         }
@@ -221,15 +257,15 @@ impl<'a> Scope<'a> {
             let h = lh.max(height);
             if gap.is_finite() && h.is_finite() && gap <= 1.5 * h {
                 if gap > 0.15 * h && !self.run.ends_with(char::is_whitespace) {
-                    self.run.push(' ');
+                    self.append_removed(" ");
                 }
-                self.run.push_str(text);
+                self.append_removed(text);
                 self.run_end = Some((end, height));
                 return;
             }
         }
         self.flush_run();
-        self.run.push_str(text);
+        self.append_removed(text);
         self.run_end = Some((end, height));
     }
 }

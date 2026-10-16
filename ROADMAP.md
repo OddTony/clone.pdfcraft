@@ -158,6 +158,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-16 (M8, PR #2598 review follow-up):** Match processing-instruction data without matching targets; bound fragment collection and total metadata comparison/decoding work, removing scoped metadata on exhaustion. Saved-secret regressions inspect reopened objects and decoded streams, with a compressed positive control. Whole-run matching policy and estimates unchanged.
 - **2026-10-16 (M8, PR #2598):** Metadata comparison handles ambiguous TJ word gaps without breaking intra-word kerning, collapses whitespace, and matches decoded XML values rather than markup names. Partial/reordered-name matching and resource limits are unchanged. Estimates unchanged.
 
 - **2026-10-16 (M5, PR #2598 CI):** Pen preview regressions hold raster delivery while checking pending strokes, then wait for delivery by state. Adapted narrowly from #2812; no fullscreen or redaction behavior change. Estimates unchanged.

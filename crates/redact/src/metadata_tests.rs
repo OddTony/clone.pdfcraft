@@ -1,4 +1,4 @@
-//! Metadata comparison regressions for PR #2598 comment 6213443550.
+//! Metadata comparison regressions for PR #2598 comments 6213443550 and 6216325944.
 use super::*;
 
 fn packet(payload: &str, attributes: &str) -> String {
@@ -139,5 +139,164 @@ fn optional_tj_spaces_preserve_literal_boundaries_and_complete_value_matching() 
         let src = format!("BT /F1 10 Tf 10 100 Td [(James){kern}(Bond)]TJ ET");
         let saved = redact_all(src.as_bytes(), "Author", "James Bond", None);
         assert_eq!(info_value(&saved, "Author").as_deref(), Some("James Bond"), "zero/backward kern {kern} is not a word gap");
+    }
+}
+
+#[test]
+fn processing_instruction_data_is_metadata_but_its_target_is_not() {
+    for (payload, removed) in [
+        ("<?audit James Bond?><z:clean>Harmless</z:clean>", true),
+        ("<?JamesBond harmless?><z:clean>Harmless</z:clean>", false),
+        ("<?audit?><z:clean>Harmless</z:clean>", false),
+    ] {
+        let packet = packet(payload, "");
+        let src = if removed { b"BT /F1 10 Tf 10 100 Td (James Bond)Tj ET".as_slice() } else { b"BT /F1 10 Tf 10 100 Td (JamesBond)Tj ET" };
+        let saved = redact_all(src, "Author", "Ada", Some(&packet));
+        assert_eq!(xmp_text(&saved).is_none(), removed, "{payload}");
+    }
+}
+
+#[test]
+fn excessive_removed_text_clears_metadata_instead_of_truncating_needles() {
+    // The explicit character spacing keeps every synthetic glyph at the same origin.
+    // Each repositioning separates runs without making a huge page or a large fixture file.
+    for (label, run_len, runs) in [("run length", 16_385, 1), ("run count", 2, 1_025), ("total bytes", 16_384, 17)] {
+        let mut src = String::from("BT /F1 10 Tf -5 Tc ");
+        let run = "A".repeat(run_len);
+        for i in 0..runs {
+            let x = if i % 2 == 0 { 10 } else { 200 };
+            src.push_str(&format!("1 0 0 1 {x} 100 Tm ({run})Tj "));
+        }
+        src.push_str("ET");
+        let clean = packet("<z:clean>Harmless</z:clean>", "");
+        let mut doc = meta_doc(src.as_bytes(), &[("Author", "Ada"), ("Subject", "Spy stories")], Some(&clean), Some(&clean));
+        let rects = [[0.0, 0.0, 300.0, 300.0]];
+        mark(&mut doc, 0, &rects, "");
+        let report = apply(&mut doc, None).unwrap();
+        assert!(report.metadata_cleared_on_limit, "{label}");
+        assert_eq!(report.glyphs, run_len * runs, "{label}");
+        let saved = reopen(&doc);
+        assert_eq!(info_value(&saved, "Author"), None, "{label}: incomplete evidence must clear all metadata");
+        assert_eq!(info_value(&saved, "Subject"), None, "{label}");
+        assert!(xmp_text(&saved).is_none(), "{label}");
+        assert!(pdfcraft_model::pages(&saved)[0].dict.get(b"Metadata").is_none(), "{label}");
+        assert_eq!((report.info_entries_cleared, report.xmp_removed), (2, 2), "{label}");
+        assert_no_secret(&doc, b"Ada");
+        assert_no_secret(&doc, b"Spy stories");
+        assert_no_secret(&doc, b"Harmless");
+    }
+}
+
+#[test]
+fn repetitive_optional_gap_matching_has_a_shared_fail_closed_work_limit() {
+    let run = format!("{}b", "a".repeat(4_096));
+    let value = format!("{}c", "a".repeat(4_096));
+    let clean = packet("<z:clean>Harmless</z:clean>", "");
+    let mut doc = meta_doc(b"", &[("Title", &value), ("Author", "Ada")], Some(&clean), Some(&clean));
+    let mut report = Report::default();
+    let pattern = KernedFragment { text: run.clone(), gaps: vec![1] };
+    clear_marked_metadata(&mut doc, &[run], &[pattern], &mut report).unwrap();
+    assert!(report.metadata_cleared_on_limit);
+    let saved = reopen(&doc);
+    assert_eq!(info_value(&saved, "Title"), None, "exhaustion must not be treated as no match");
+    assert_eq!(info_value(&saved, "Author"), None, "the exhausted budget applies to the whole operation");
+    assert!(xmp_text(&saved).is_none());
+    assert!(pdfcraft_model::pages(&saved)[0].dict.get(b"Metadata").is_none());
+}
+
+#[test]
+fn compressed_metadata_is_visible_to_the_secret_scan() {
+    let mut doc = meta_doc(b"", &[("Title", "HIDDEN-COMPRESSED-TITLE")], None, None);
+    let r = doc.trailer().reference(b"Info").unwrap();
+    doc.update_dict(r, |d| {
+        d.set(b"Subject".to_vec(), Object::String(pdfcraft_cos::PdfString { bytes: vec![0xFE, 0xFF, 0, b'S', 0, b'E', 0, b'C'], hex: false }));
+    })
+    .unwrap();
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(!bytes.windows(b"HIDDEN-COMPRESSED-TITLE".len()).any(|w| w == b"HIDDEN-COMPRESSED-TITLE"), "the control really is compressed");
+    assert!(secret_is_present(&doc, b"HIDDEN-COMPRESSED-TITLE"));
+    assert!(secret_is_present(&doc, &[0, b'S', 0, b'E', 0, b'C']), "PDF string bytes must be read before serialization escapes them");
+}
+
+#[test]
+fn fragment_collection_limit_is_shared_across_selected_pages() {
+    let src = format!("BT /F1 10 Tf {} ET", "1 0 0 1 10 100 Tm (AB)Tj 1 0 0 1 200 100 Tm (AB)Tj ".repeat(300));
+    for selected in [vec![0], vec![0, 1]] {
+        let clean = packet("<z:clean>Harmless</z:clean>", "");
+        let mut doc = meta_doc(src.as_bytes(), &[("Author", "Ada"), ("Subject", "Spy stories")], Some(&clean), Some(&clean));
+        let first = pdfcraft_model::pages(&doc).swap_remove(0);
+        let second = doc.add(Object::Dict(first.dict));
+        let pages = doc.get(doc.root().unwrap()).as_dict().unwrap().reference(b"Pages").unwrap();
+        doc.update_dict(pages, |d| {
+            d.set(b"Kids".to_vec(), Object::Array(vec![Object::Ref(first.obj), Object::Ref(second)]));
+            d.set(b"Count".to_vec(), Object::Int(2));
+        })
+        .unwrap();
+        for pi in &selected {
+            mark(&mut doc, *pi, &[[0.0, 0.0, 300.0, 300.0]], "");
+        }
+        let report = apply(&mut doc, Some(&selected)).unwrap();
+        let saved = reopen(&doc);
+        assert_eq!(report.metadata_cleared_on_limit, selected.len() == 2);
+        assert_eq!(info_value(&saved, "Author").is_none(), selected.len() == 2);
+        assert_eq!(xmp_text(&saved).is_none(), selected.len() == 2);
+        assert_eq!(report.glyphs, 1_200 * selected.len());
+        if selected.len() == 2 {
+            assert_eq!((report.info_entries_cleared, report.xmp_removed), (2, 3));
+            assert!(pdfcraft_model::pages(&saved).iter().all(|p| p.dict.get(b"Metadata").is_none()));
+        }
+    }
+}
+
+#[test]
+fn a_later_packet_exhausts_the_same_budget_and_retires_earlier_clean_metadata() {
+    let run = format!("{}b", "a".repeat(4_096));
+    let value = format!("{}c", "a".repeat(4_096));
+    let clean = packet("<z:clean>Harmless</z:clean>", "");
+    let costly = packet(&format!("<z:value>{value}</z:value>"), "");
+    let mut doc = meta_doc(b"", &[("Author", "Ada")], Some(&clean), Some(&costly));
+    let mut report = Report::default();
+    let pattern = KernedFragment { text: run.clone(), gaps: vec![1] };
+    clear_marked_metadata(&mut doc, &[run], &[pattern], &mut report).unwrap();
+    assert!(report.metadata_cleared_on_limit);
+    assert_eq!((report.info_entries_cleared, report.xmp_removed), (1, 2));
+    let saved = reopen(&doc);
+    assert_eq!(info_value(&saved, "Author"), None);
+    assert!(xmp_text(&saved).is_none());
+    assert!(pdfcraft_model::pages(&saved)[0].dict.get(b"Metadata").is_none());
+}
+
+#[test]
+fn exact_collection_boundaries_keep_unrelated_metadata() {
+    for (run_len, runs) in [(16_384, 1), (2, 1_024), (16_384, 16)] {
+        let run = "A".repeat(run_len);
+        let mut src = String::from("BT /F1 10 Tf -5 Tc ");
+        for i in 0..runs {
+            src.push_str(&format!("1 0 0 1 {} 100 Tm ({run})Tj ", if i % 2 == 0 { 10 } else { 200 }));
+        }
+        src.push_str("ET");
+        let mut doc = meta_doc(src.as_bytes(), &[("Author", "Someone")], None, None);
+        mark(&mut doc, 0, &[[0.0, 0.0, 300.0, 300.0]], "");
+        let report = apply(&mut doc, None).unwrap();
+        assert!(!report.metadata_cleared_on_limit, "{run_len} bytes by {runs} runs");
+        assert_eq!(info_value(&reopen(&doc), "Author").as_deref(), Some("Someone"));
+    }
+}
+
+#[test]
+fn metadata_values_and_packet_decoding_share_the_operation_allowance() {
+    for packet_limit in [false, true] {
+        let large = "Z".repeat(if packet_limit { 2 << 20 } else { (1 << 20) + 1 });
+        let clean = packet("<z:clean>Harmless</z:clean>", "");
+        let costly = packet(&format!("<z:value>{large}</z:value>"), "");
+        let mut doc = meta_doc(b"", &[("Title", if packet_limit { "Ada" } else { &large })], Some(&clean), Some(&costly));
+        let mut report = Report::default();
+        clear_marked_metadata(&mut doc, &["AB".into()], &[], &mut report).unwrap();
+        assert!(report.metadata_cleared_on_limit);
+        assert_eq!((report.info_entries_cleared, report.xmp_removed), (1, 2));
+        let saved = reopen(&doc);
+        assert_eq!(info_value(&saved, "Title"), None);
+        assert!(xmp_text(&saved).is_none());
+        assert!(pdfcraft_model::pages(&saved)[0].dict.get(b"Metadata").is_none());
     }
 }

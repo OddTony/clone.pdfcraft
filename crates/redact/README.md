@@ -55,9 +55,9 @@ After verification, fragments and values are lowercased with internal whitespace
 Each `/Info` string entry containing a complete fragment of two characters or more — or whose
 complete value is contained in a fragment — is cleared with its mirrored XMP property. The
 author of a whole redacted sentence is removed text too. Then every catalog and page
-`/Metadata` stream is parsed as XML and checked value by value (decoded text, comments and
-attribute values). Tag names, attribute names, namespace declarations and processing instructions
-are not values. XML entities and CDATA are decoded by the parser. A packet is removed whole
+`/Metadata` stream is parsed as XML and checked value by value (decoded text, comments,
+attribute values and processing-instruction data). Tag names, attribute names, namespace declarations
+and processing-instruction targets are excluded. XML entities and CDATA are decoded by the parser. A packet is removed whole
 when a fragment or part of one survives in a value — custom schemas cannot be
 edited per-entry — or when the stream cannot be decoded and read as UTF-8 within 16 MiB or parsed
 as XML. DTDs are unsupported and take this conservative whole-packet fallback. A
@@ -84,9 +84,28 @@ The match errs towards clearing, in both directions:
 Matching still requires a complete removed fragment inside a value, or a complete value inside
 a fragment. Partial phrases such as Title `Case: James Bond` after redacting `JAMES BOND IS A SPY`,
 reordered names such as `Smith, John` versus `John Smith`, and Unicode normalization remain
-unsupported. No word-term deletion is performed: unrelated Subject `Spy stories` stays. Fragment
-count/length and matching-work limits are unchanged; the 16 MiB stream limit is not a bound on
-total metadata-matching work.
+unsupported. A whole removed `James Bond` still matches `Case: James Bond`; the unsupported case
+is a subphrase of a longer removed run. No word-term deletion is performed: unrelated Subject
+`Spy stories` stays during selective matching.
+
+Collection is limited across all selected pages to 1,024 runs, 16 KiB per run and 256 KiB of
+run text in total, checked before appending (optional-gap copies have the same bounds).
+Metadata comparison has one shared budget of 8 Mi work units, including failed prefix attempts
+in repetitive text, value normalization, key scanning and XML inspection. Each prefix character
+costs 16 units, including its optional-gap lookup; scanning a string costs its byte length,
+and normalization/XML input costs four units per byte. A value is limited to 1 MiB and an
+information dictionary to 1,024 entries. Encoded packet bytes are charged before decoding, which
+is limited before allocation by the remaining allowance as well as the existing 16 MiB ceiling.
+Decoding failures conservatively exhaust the allowance because the decoder does not expose
+consumed work. These are bounds on this metadata
+pass, not on the whole PDF or the process's memory.
+
+If collection, a value or the shared work/decoding allowance exceeds its limit, the pass removes
+**all** `/Info` and catalog/page `/Metadata`, including unrelated values and earlier clean packets.
+It never silently truncates needles or treats unfinished matching as clean. The library report's
+`metadata_cleared_on_limit` records this conservative fallback, alongside the actual removal counts;
+the normal full rewrite removes retired objects. This does not expand the scan to component-level
+metadata or change the partial-name matching policy.
 
 Remove hidden information (metadata category, `doc_remove_hidden`) is therefore the certain
 follow-up when a document's metadata must be provably free of the redacted text.
