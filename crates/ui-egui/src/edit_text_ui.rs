@@ -1285,7 +1285,8 @@ fn rtl_caret_stops(galley: &egui::Galley) -> Vec<RtlCaretStop> {
             }
             byte += glyph.chr.len_utf8();
         }
-        let info = BidiInfo::new(&line, Some(Level::rtl()));
+        let base = if editor_rtl(&galley.job.text) { Level::rtl() } else { Level::ltr() };
+        let info = BidiInfo::new(&line, Some(base));
         let Some(para) = info.paragraphs.first() else { continue };
         let (levels, runs) = info.visual_runs(para, 0..line.len());
         let mut x = placed.pos.x;
@@ -1387,7 +1388,7 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
                 egui::TextFormat {
                     font_id: font,
                     extra_letter_spacing: spacing + ed.extras.char_spacing as f32 * scale,
-                    color: if ed.pristine_source_visible() || editor_rtl(&ed.text) { Color32::TRANSPARENT } else { color32(look.color) },
+                    color: if ed.pristine_source_visible() || crate::bidi::has_rtl(&ed.text) { Color32::TRANSPARENT } else { color32(look.color) },
                     italics: look.italic && !embedded,
                     ..Default::default()
                 },
@@ -1399,7 +1400,7 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             0.0,
             egui::TextFormat {
                 font_id: editor_font(&ed.look, ed.size),
-                color: if editor_rtl(&ed.text) { Color32::TRANSPARENT } else { color32(ed.look.color) },
+                color: if crate::bidi::has_rtl(&ed.text) { Color32::TRANSPARENT } else { color32(ed.look.color) },
                 italics: ed.look.italic,
                 ..Default::default()
             },
@@ -1531,7 +1532,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     let font = editor_font(&ed.look, ed.size);
     let text_color = color32(ed.look.color);
     let pristine_source = ed.pristine_source_visible();
-    let rtl_input = editor_rtl(&ed.text);
+    let rtl_input = crate::bidi::has_rtl(&ed.text);
     let mut done = None;
     egui::Area::new(egui::Id::new("edit-text-line")).order(egui::Order::Foreground).fixed_pos(Pos2::new(ed.rect.left(), ed.rect.top())).show(
         ctx,
