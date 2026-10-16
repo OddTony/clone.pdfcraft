@@ -122,7 +122,8 @@ pub struct InterpreterSettings {
     pub preview: bool,
     /// PdfCraft patch (34): draw one ink's separation instead of the composite page (see
     /// [`Plate`](crate::color::Plate)). Soft masks still draw in colour: a mask's luminosity
-    /// comes from its group's colours, not from any plate.
+    /// comes from its group's colours, not from any plate. Patch 32: the plate's `simulation`
+    /// converts process colour to an output intent's CMYK.
     pub plate: Option<crate::color::Plate>,
     /// PdfCraft patch (34): told about each spot ink a paint uses (colours, images, shadings
     /// and uncoloured patterns), whether or not `plate` is set.

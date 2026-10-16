@@ -6500,17 +6500,26 @@ fn a_root_less_write_output_is_atomic_too() {
 /// the middle 40 × 40 pt, and a 4-colour rich black (260%) in the top-left 20 × 20 pt.
 fn output_preview_pdf() -> Vec<u8> {
     let content = "0 0 0 1 k 0 0 100 100 re f 0.6 0.5 0.5 1 k 0 80 20 20 re f /GS1 gs /CS0 cs 0.5 scn 30 30 40 40 re f";
-    let objs = [
-        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << /ColorSpace << /CS0 [/Separation /Gold /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.3 1 0] /N 1 >>] >> /ExtGState << /GS1 << /op true >> >> >> >>".into(),
-        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+    inks_pdf(content, "", &[])
+}
+
+/// A 100 × 100 pt page with `content`, a spot colour `/CS0` (Gold) and an overprinting
+/// `/GS1`, more catalog entries in `catalog`, and `extra` objects numbered from 5.
+fn inks_pdf(content: &str, catalog: &str, extra: &[Vec<u8>]) -> Vec<u8> {
+    let mut objs: Vec<Vec<u8>> = vec![
+        format!("<< /Type /Catalog /Pages 2 0 R {catalog} >>").into_bytes(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << /ColorSpace << /CS0 [/Separation /Gold /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.3 1 0] /N 1 >>] >> /ExtGState << /GS1 << /op true >> >> >> >>".to_vec(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()).into_bytes(),
     ];
+    objs.extend_from_slice(extra);
     let mut out = b"%PDF-1.7\n".to_vec();
     let mut offsets = Vec::new();
     for (i, o) in objs.iter().enumerate() {
         offsets.push(out.len());
-        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(o);
+        out.extend_from_slice(b"\nendobj\n");
     }
     let xref = out.len();
     out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
@@ -6535,6 +6544,7 @@ fn output_preview_through_tools() {
     assert_eq!(r["inks"][4]["kind"], "spot");
     assert_eq!(r["inks"][3]["max"], 100.0);
     assert_eq!(r["overprint"], true);
+    assert_eq!(r["simulation"], json!({ "label": "device formulas", "method": "device_formulas", "reason": "the document has no output intent" }));
     assert_eq!((r["width"].as_u64(), r["height"].as_u64()), (Some(100), Some(100)), "72 dpi by default");
     // The spot colour overprints the black: both print in the middle.
     assert_eq!(r["points"][0]["inks"]["Black"], 100.0, "{r}");
@@ -6587,5 +6597,37 @@ fn output_preview_through_tools() {
     }
     let tool = tools().into_iter().find(|t| t.name == "print_output_preview").unwrap();
     assert!(tool.read_only && tool.command == Some("prepress.output_preview"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[path = "../../render/tests/support/synthetic_icc.rs"]
+mod synthetic_icc;
+
+#[test]
+fn output_preview_separates_through_the_output_intent() {
+    let dir = workdir("output-preview-intent");
+    let profile = synthetic_icc::cmyk_profile("PdfCraft synthetic press", true);
+    let mut stream = format!("<< /N 4 /Length {} >>\nstream\n", profile.len()).into_bytes();
+    stream.extend_from_slice(&profile);
+    stream.extend_from_slice(b"\nendstream");
+    let intent = "/OutputIntents [<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (Synthetic 1) /DestOutputProfile 5 0 R >>]";
+    std::fs::write(dir.join("press.pdf"), inks_pdf("0.5 0.5 0.5 rg 0 0 100 100 re f", intent, &[stream])).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "press.pdf" }))["doc"].as_u64().unwrap();
+    let r = ok(&mut a, "print_output_preview", json!({ "doc": doc, "page": 1, "points": [[50, 50]] }));
+    let expected = json!({
+        "label": "PdfCraft synthetic press",
+        "method": "output_intent",
+        "profile": "PdfCraft synthetic press",
+        "condition": "Synthetic 1",
+        "rendering_intent": "RelativeColorimetric",
+    });
+    assert_eq!(r["simulation"], expected, "{r}");
+    // The press prints a neutral gray with equal inks (`synthetic_icc`), not on black alone.
+    let press = synthetic_icc::btoa(synthetic_icc::srgb_gray_lightness(0.5), 0.0, 0.0);
+    for (ink, want) in ["Cyan", "Magenta", "Yellow", "Black"].into_iter().zip(press) {
+        let got = r["points"][0]["inks"][ink].as_f64().unwrap();
+        assert!((got - want * 100.0).abs() <= 2.0, "{ink}: {got}% where the press prints {:.1}%: {r}", want * 100.0);
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

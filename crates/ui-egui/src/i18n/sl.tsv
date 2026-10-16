@@ -2446,3 +2446,6 @@ animation effects	Off	Izklopljeni
 	Page maximum: {n}%	Največ na strani: {n} %
 	Point at the page to read its ink coverage.	Pokažite na stran, da preberete pokritost s črnili.
 	Highlight coverage above	Označi pokritost nad
+	Simulation: {profile}	Simulacija: {profile}
+	Simulation: device formulas	Simulacija: formule naprave
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Ni uporabnega izhodnega namena CMYK: barve RGB in barve na osnovi CIE se ločijo po formulah naprave iz ISO 32000.

@@ -160,7 +160,14 @@ impl TilingPattern<'_> {
                 self.non_stroking_paint
                     .for_plate(plate, overprint, overprint_mode);
         }
-        self.cache_key = hash128(&(self.cache_key, &plate.ink, plate.overprint, overprint));
+        let simulation = plate.simulation.as_ref().map(|s| s.digest());
+        self.cache_key = hash128(&(
+            self.cache_key,
+            &plate.ink,
+            plate.overprint,
+            overprint,
+            simulation,
+        ));
     }
 }
 

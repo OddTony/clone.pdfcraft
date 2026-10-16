@@ -2582,3 +2582,6 @@ animation effects	Off	Desactivados
 	Page maximum: {n}%	Máximo de la página: {n}%
 	Point at the page to read its ink coverage.	Señala la página para ver la cobertura de tinta.
 	Highlight coverage above	Resaltar la cobertura por encima de
+	Simulation: {profile}	Simulación: {profile}
+	Simulation: device formulas	Simulación: fórmulas de dispositivo
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	No hay un propósito de salida CMYK utilizable: los colores RGB y los basados en CIE se separan con las fórmulas de dispositivo de ISO 32000.

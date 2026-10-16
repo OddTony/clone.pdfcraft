@@ -2447,3 +2447,6 @@ animation effects	Off	Ανενεργά
 	Page maximum: {n}%	Μέγιστο σελίδας: {n}%
 	Point at the page to read its ink coverage.	Δείξτε τη σελίδα για να δείτε την κάλυψη μελανιού.
 	Highlight coverage above	Επισήμανση κάλυψης άνω του
+	Simulation: {profile}	Προσομοίωση: {profile}
+	Simulation: device formulas	Προσομοίωση: τύποι συσκευής
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Δεν υπάρχει χρησιμοποιήσιμο προφίλ εξόδου CMYK: τα χρώματα RGB και τα χρώματα βάσει CIE διαχωρίζονται με τους τύπους συσκευής του ISO 32000.

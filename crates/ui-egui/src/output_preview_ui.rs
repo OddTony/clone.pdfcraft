@@ -1,13 +1,14 @@
 //! Print production ▸ Output preview: while the panel is open, the pages on screen show what
 //! their inks print (each page separated into plates on a worker thread, then composed back),
 //! the panel lists the inks with a switch each, reads every ink's coverage under the pointer,
-//! and warns where the total area coverage passes a limit.
+//! and warns where the total area coverage passes a limit. It names what the process plates
+//! simulate: the output intent's CMYK profile, or the device formulas.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, mpsc};
 
 use egui::{Color32, Rect, Sense, vec2};
-use pdfcraft_render::{Coverage, Separations};
+use pdfcraft_render::{Coverage, Separations, Simulation};
 
 use crate::canvas::PageXform;
 use crate::theme::{self, Tokens};
@@ -209,6 +210,19 @@ fn row(ui: &mut egui::Ui, t: &Tokens, label: &str, value: Option<String>, value_
     });
 }
 
+/// What the process plates simulate: the output intent's profile, or the device formulas.
+fn simulation_row(ui: &mut egui::Ui, t: &Tokens, simulation: &Simulation) {
+    let text = match simulation {
+        Simulation::OutputIntent { profile, .. } => crate::i18n::fmt(tl!("Simulation: {profile}"), &[("profile", profile)]),
+        Simulation::DeviceFormulas { .. } => tl!("Simulation: device formulas").to_string(),
+    };
+    let label = ui.label(egui::RichText::new(text).font(theme::regular(12.5)).color(t.text_muted));
+    if matches!(simulation, Simulation::DeviceFormulas { .. }) {
+        label.on_hover_text(tl!("No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas."));
+    }
+    ui.add_space(6.0);
+}
+
 /// The panel body. `current` is the page shown as current.
 pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, op: &mut OutputPreview, current: usize) {
     let warning = crate::combine_ui::WARNING;
@@ -236,6 +250,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, op: &mut OutputPreview, curre
             return;
         }
     };
+    simulation_row(ui, t, &s.simulation);
     ui.label(egui::RichText::new(tl!("Inks")).font(theme::semibold(13.0)).color(t.text_muted));
     for (i, ink) in s.inks.iter().enumerate() {
         let name = ink.name().to_string();

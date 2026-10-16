@@ -7,19 +7,28 @@
 //! leaves the film as it is (ISO 32000-2 §8.6.7). Clipping, anti-aliasing, soft masks,
 //! transparency groups and blending stay the renderer's own, so a plate is the page as drawn,
 //! one ink at a time. Which inks a colour specifies, and with what tint, follows the colour
-//! space: DeviceCMYK and four-component ICC colours are separated as they are; gray paints
-//! black only; RGB and CIE-based colours go through sRGB and ISO 32000-2 §10.4.2.4 (black
-//! generation and undercolour removal the identity); `Separation` and `DeviceN` colorants paint
-//! their own plates (the process names the process plates, `All` every plate, `None` nothing).
-//! See the crate README for what is approximated.
+//! space: `Separation` and `DeviceN` colorants paint their own plates (the process names the
+//! process plates, `All` every plate, `None` nothing); DeviceCMYK is separated as it is and
+//! DeviceGray paints black only.
+//!
+//! **Process colour from other spaces** converts to the CMYK of the page's printing condition
+//! when the document says what that is: an output intent (ISO 32000-2 §14.11.5) whose
+//! destination profile is CMYK with PCS-to-device tables. RGB, CIE-based and ICCBased colours,
+//! and ICCBased CMYK in another profile, then go through that profile, relative colorimetric
+//! (vendored patch 35, `color::CmykSimulation`). Without one they go through sRGB and the device
+//! formulas of §10.4.2.4 (black generation and undercolour removal the identity), and
+//! ICCBased CMYK is taken as it is. [`Separations::simulation`] says which was used. See the
+//! crate README for what is approximated.
 
 use std::collections::HashSet;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 
 use hayro::hayro_interpret::InterpreterSettings;
-use hayro::hayro_interpret::color::{Ink, InkSinkFn, Plate, cmyk_to_srgb8};
+use hayro::hayro_interpret::color::{CmykSimulation, Ink, InkSinkFn, NoSimulation, Plate, cmyk_to_srgb8};
 use hayro::hayro_syntax::Pdf;
+use hayro::hayro_syntax::object::dict::keys::{DEST_OUTPUT_PROFILE, OUTPUT_CONDITION, OUTPUT_CONDITION_IDENTIFIER, OUTPUT_INTENTS, S};
+use hayro::hayro_syntax::object::{Array, Dict, Name, Stream, String as PdfText};
 use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::{RenderCache, RenderSettings, render_into, render_size};
 
@@ -38,6 +47,46 @@ pub const MAX_PLATE_PIXELS: f32 = 4.0e6;
 /// The scale [`PageRenderer::page_inks`] renders at to find the inks a page uses.
 const DISCOVERY_SCALE: f32 = 0.1;
 
+/// Output intents looked at per page: each can cost a profile's decoding and parsing.
+const MAX_OUTPUT_INTENTS: usize = 16;
+
+/// Decoding limit for an output intent's profile (moxcms reads at most 10 MB of one).
+const MAX_PROFILE_BYTES: usize = 16 << 20;
+
+/// The longest output condition kept, in characters.
+const MAX_CONDITION: usize = 160;
+
+/// How process colour that isn't CMYK already became CMYK on the process plates.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Simulation {
+    /// Through the CMYK profile of an output intent (ISO 32000-2 §14.11.5), relative
+    /// colorimetric.
+    OutputIntent {
+        /// The profile's description, else the intent's output condition.
+        profile: String,
+        /// The intent's `/OutputConditionIdentifier` (a registered name such as `FOGRA39`).
+        condition: Option<String>,
+        /// The profile has no colorimetric tables, so its perceptual ones were used.
+        perceptual: bool,
+    },
+    /// By the ISO 32000-2 §10.4.2 device formulas, black generation and undercolour removal
+    /// the identity; ICCBased CMYK taken as it is.
+    DeviceFormulas {
+        /// Why no output intent was used.
+        reason: &'static str,
+    },
+}
+
+impl Simulation {
+    /// What is simulated, as the panel shows it: the profile, or "device formulas".
+    pub fn label(&self) -> &str {
+        match self {
+            Self::OutputIntent { profile, .. } => profile,
+            Self::DeviceFormulas { .. } => "device formulas",
+        }
+    }
+}
+
 /// An ink as Output Preview lists it: a process ink or a spot colour, and how it looks.
 #[derive(Clone, Debug, PartialEq)]
 pub struct InkInfo {
@@ -51,14 +100,15 @@ pub struct InkInfo {
 }
 
 impl InkInfo {
-    fn process(ink: Ink) -> Self {
-        let swatch = match ink {
-            Ink::Cyan => cmyk_rgb([255, 0, 0, 0]),
-            Ink::Magenta => cmyk_rgb([0, 255, 0, 0]),
-            Ink::Yellow => cmyk_rgb([0, 0, 255, 0]),
-            _ => cmyk_rgb([0, 0, 0, 255]),
+    /// A process ink, its swatch through `profile` (the simulated printing condition) if any.
+    fn process(ink: Ink, profile: Option<&CmykSimulation>) -> Self {
+        let solid = match ink {
+            Ink::Cyan => [255, 0, 0, 0],
+            Ink::Magenta => [0, 255, 0, 0],
+            Ink::Yellow => [0, 0, 255, 0],
+            _ => [0, 0, 0, 255],
         };
-        Self { ink, swatch, appearance: Arc::from(Vec::new()) }
+        Self { ink, swatch: cmyk_rgb(solid, profile), appearance: Arc::from(Vec::new()) }
     }
 
     /// The ink's name: `Cyan` … `Black`, or the spot colour's own name.
@@ -72,10 +122,16 @@ impl InkInfo {
     }
 }
 
-/// One CMYK colour in sRGB through the profile pages are drawn with; black if it fails.
-fn cmyk_rgb(cmyk: [u8; 4]) -> [u8; 3] {
+/// CMYK pixels as sRGB: through `profile` (the simulated printing condition) if any and it
+/// converts, else through the profile pages are drawn with. `None` if neither does.
+fn cmyk_to_rgb(cmyk: &[u8], rgb: &mut [u8], profile: Option<&CmykSimulation>) -> Option<()> {
+    profile.and_then(|p| p.cmyk_to_srgb8(cmyk, rgb)).or_else(|| cmyk_to_srgb8(cmyk, rgb))
+}
+
+/// One CMYK colour in sRGB (see [`cmyk_to_rgb`]); black if it fails.
+fn cmyk_rgb(cmyk: [u8; 4], profile: Option<&CmykSimulation>) -> [u8; 3] {
     let mut rgb = [0; 3];
-    match cmyk_to_srgb8(&cmyk, &mut rgb) {
+    match cmyk_to_rgb(&cmyk, &mut rgb, profile) {
         Some(()) => rgb,
         None => [0; 3],
     }
@@ -114,6 +170,12 @@ pub struct Separations {
     pub inks: Vec<InkInfo>,
     /// Spot inks the page uses past [`MAX_SPOT_INKS`]: listed, not separated.
     pub unseparated: Vec<String>,
+    /// How process colour from other spaces became CMYK: through the output intent's
+    /// profile, or by the device formulas.
+    pub simulation: Simulation,
+    /// The output intent's printing condition, when [`simulation`](Self::simulation) used it:
+    /// the composite and the process swatches show the inks through it.
+    profile: Option<CmykSimulation>,
     /// One plate per ink, in `inks` order: the ink's tint per pixel, 0 (none) to 255 (solid),
     /// row-major.
     plates: Vec<Vec<u8>>,
@@ -197,7 +259,8 @@ impl Separations {
     }
 
     /// What the enabled inks print, as opaque premultiplied RGBA8: the process plates through
-    /// the CMYK profile pages are drawn with, each spot ink multiplied over them by its own
+    /// the simulated printing condition's profile (relative colorimetric), or without one the
+    /// CMYK profile pages are drawn with, each spot ink multiplied over them by its own
     /// appearance (how a spot ink printed over others is usually simulated). Pixels whose total
     /// coverage is above `warn`'s limit are painted in `warn`'s colour instead.
     pub fn composite(&self, enabled: &[bool], warn: Option<(f32, [u8; 3])>) -> Pixels {
@@ -214,7 +277,7 @@ impl Separations {
             }
         }
         let mut rgb = vec![255_u8; n.saturating_mul(3)];
-        if cmyk_to_srgb8(&cmyk, &mut rgb).is_none() {
+        if cmyk_to_rgb(&cmyk, &mut rgb, self.profile.as_ref()).is_none() {
             rgb.fill(255);
         }
         drop(cmyk);
@@ -324,7 +387,87 @@ fn plate_scale(w: f32, h: f32, scale: f32) -> f32 {
     if s.is_finite() && s > 0.0 { s } else { f32::MIN_POSITIVE }
 }
 
+/// A text string entry of `dict`, without control characters and at most [`MAX_CONDITION`]
+/// characters long; `None` when it is missing or blank.
+fn text_entry(dict: &Dict<'_>, key: &[u8]) -> Option<String> {
+    let s = dict.get::<PdfText<'_>>(key)?;
+    let text: String = pdfcraft_cos::PdfString::literal(s.as_bytes()).to_text().chars().filter(|c| !c.is_control()).take(MAX_CONDITION).collect();
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// Why an output intent's profile can't be simulated, as [`Simulation::DeviceFormulas`]
+/// says it.
+fn no_simulation(why: NoSimulation) -> &'static str {
+    match why {
+        NoSimulation::Unreadable => "the output intent's profile could not be read",
+        NoSimulation::NotCmyk => "the output intent's profile is not CMYK",
+        NoSimulation::NoPcsToDevice => "the output intent's profile has no PCS-to-device (BToA) tables",
+    }
+}
+
+/// The printing condition page `page` of `pdf` is separated for (ISO 32000-2 §14.11.5): of the
+/// page's own `/OutputIntents` (PDF 2.0), else the document catalog's, the first output intent
+/// whose `/DestOutputProfile` is a CMYK profile with PCS-to-device tables, a `GTS_PDFX` intent
+/// (made for print) before the others. Without one, the device formulas and why. May panic
+/// in a hostile profile's parsing; [`PageRenderer::simulation`] catches it.
+fn output_intent(pdf: &Pdf, page: usize) -> (Option<CmykSimulation>, Simulation) {
+    let formulas = |reason| (None, Simulation::DeviceFormulas { reason });
+    /// The output intent dictionaries of `intents`, at most [`MAX_OUTPUT_INTENTS`].
+    fn list<'a>(intents: Option<Array<'a>>) -> Vec<Dict<'a>> {
+        intents.iter().flat_map(|a| a.iter::<Dict<'a>>()).take(MAX_OUTPUT_INTENTS).collect()
+    }
+    let xref = pdf.xref();
+    let mut listed = list(pdf.pages().get(page).and_then(|p| p.raw().get::<Array<'_>>(OUTPUT_INTENTS)));
+    if listed.is_empty() {
+        listed = list(xref.get::<Dict<'_>>(xref.root_id()).and_then(|catalog| catalog.get::<Array<'_>>(OUTPUT_INTENTS)));
+    }
+    if listed.is_empty() {
+        return formulas("the document has no output intent");
+    }
+    // A stable sort: the PDF/X intent first, the others in their order.
+    listed.sort_by_key(|d| d.get::<Name<'_>>(S).is_none_or(|s| s.as_ref() != b"GTS_PDFX"));
+    let mut reason = None;
+    for intent in &listed {
+        let Some(stream) = intent.get::<Stream<'_>>(DEST_OUTPUT_PROFILE) else { continue };
+        let simulated = stream.decoded_within(MAX_PROFILE_BYTES).map_err(|_| NoSimulation::Unreadable).and_then(|bytes| CmykSimulation::new(&bytes));
+        match simulated {
+            Ok(profile) => {
+                let condition = text_entry(intent, OUTPUT_CONDITION_IDENTIFIER);
+                let name = profile
+                    .description()
+                    .map(str::to_string)
+                    .or_else(|| text_entry(intent, OUTPUT_CONDITION))
+                    .or_else(|| condition.clone())
+                    .unwrap_or_else(|| "unnamed CMYK profile".to_string());
+                let simulation = Simulation::OutputIntent { profile: name, condition, perceptual: profile.perceptual() };
+                return (Some(profile), simulation);
+            }
+            Err(why) => {
+                reason.get_or_insert(no_simulation(why));
+            }
+        }
+    }
+    formulas(reason.unwrap_or("no output intent embeds its destination profile"))
+}
+
 impl PageRenderer {
+    /// The printing condition page `page` is separated for (see [`output_intent`]). Never
+    /// panics: a panic while reading a profile reads as an unreadable profile, and the
+    /// document is parsed again.
+    fn simulation(&mut self, page: usize) -> (Option<CmykSimulation>, Simulation) {
+        let Some(pdf) = self.pdf.as_ref() else {
+            return (None, Simulation::DeviceFormulas { reason: "the document could not be parsed" });
+        };
+        match catch_unwind(AssertUnwindSafe(|| output_intent(pdf, page))) {
+            Ok(found) => found,
+            Err(_) => {
+                self.reparse();
+                (None, Simulation::DeviceFormulas { reason: no_simulation(NoSimulation::Unreadable) })
+            }
+        }
+    }
+
     /// Page `page`'s size as rendered, in points.
     fn page_size(&self, page: usize) -> Result<(f32, f32), String> {
         let pdf = self.pdf.as_ref().ok_or("the document could not be parsed")?;
@@ -338,7 +481,8 @@ impl PageRenderer {
     /// only a soft mask uses are left out (masks don't print). Never panics.
     pub fn page_inks(&mut self, page: usize) -> Result<Vec<InkInfo>, String> {
         let spots = self.discover_spots(page, DISCOVERY_SCALE)?;
-        let mut inks: Vec<InkInfo> = Ink::PROCESS.into_iter().map(InkInfo::process).collect();
+        let (profile, _) = self.simulation(page);
+        let mut inks: Vec<InkInfo> = Ink::PROCESS.into_iter().map(|ink| InkInfo::process(ink, profile.as_ref())).collect();
         inks.extend(spots);
         Ok(inks)
     }
@@ -363,7 +507,9 @@ impl PageRenderer {
 
     /// Separate page `page` at `scale` device pixels per point (reduced to the renderer's caps
     /// and [`MAX_PLATE_PIXELS`]): one plate per ink of [`page_inks`](Self::page_inks).
-    /// `overprint` honours the overprint parameters as a separating device does. Never panics.
+    /// `overprint` honours the overprint parameters as a separating device does. Process colour
+    /// converts through the page's output intent when it has a usable one
+    /// ([`Separations::simulation`]). Never panics.
     pub fn separate(&mut self, page: usize, scale: f32, overprint: bool) -> Result<Separations, String> {
         let (w, h) = self.page_size(page)?;
         let scale = plate_scale(w, h, scale);
@@ -372,7 +518,8 @@ impl PageRenderer {
         let mut spots = self.discover_spots(page, DISCOVERY_SCALE.min(scale))?;
         let unseparated: Vec<String> = spots.iter().skip(MAX_SPOT_INKS).map(|i| i.name().to_string()).collect();
         spots.truncate(MAX_SPOT_INKS);
-        let mut inks: Vec<InkInfo> = Ink::PROCESS.into_iter().map(InkInfo::process).collect();
+        let (profile, simulation) = self.simulation(page);
+        let mut inks: Vec<InkInfo> = Ink::PROCESS.into_iter().map(|ink| InkInfo::process(ink, profile.as_ref())).collect();
         inks.extend(spots);
 
         let pdf = self.pdf.as_ref().ok_or("the document could not be parsed")?;
@@ -383,7 +530,8 @@ impl PageRenderer {
         // image cache, and shadings and patterns on a plate are keyed by it.
         let cache = RenderCache::new();
         for info in &inks {
-            let settings = InterpreterSettings { plate: Some(Plate { ink: info.ink.clone(), overprint }), ink_sink: None, ..self.settings.clone() };
+            let plate = Plate { ink: info.ink.clone(), overprint, simulation: profile.clone() };
+            let settings = InterpreterSettings { plate: Some(plate), ink_sink: None, ..self.settings.clone() };
             match render_whole(pdf, &cache, &settings, page, scale) {
                 Ok((pw, ph, pixels)) => {
                     if size.is_some_and(|s| s != (pw, ph)) {
@@ -408,9 +556,16 @@ impl PageRenderer {
             return Err(e);
         }
         let (width, height) = size.unwrap_or((0, 0));
-        Ok(Separations { page, width, height, scale, overprint, inks, unseparated, plates })
+        Ok(Separations { page, width, height, scale, overprint, inks, unseparated, simulation, profile, plates })
     }
 }
+
+/// Synthetic ICC profiles for the tests. Declared here rather than inside `tests`: a `#[path]`
+/// inside an inline module is relative to `src/separations/tests/`, which doesn't exist, and
+/// only Windows resolves `..` through a missing directory.
+#[cfg(test)]
+#[path = "../tests/support/synthetic_icc.rs"]
+mod synthetic_icc;
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
@@ -421,11 +576,17 @@ mod tests {
     /// A 40 × 40 pt page with `content` and `resources`, and `objects` numbered from 5 (each a
     /// whole object body: a dictionary, or a dictionary and its stream).
     fn page_pdf(content: &str, resources: &str, objects: &[Vec<u8>]) -> Vec<u8> {
+        pdf_with("", "", content, resources, objects)
+    }
+
+    /// As [`page_pdf`], with more entries in the catalog and the page dictionary.
+    fn pdf_with(catalog: &str, page: &str, content: &str, resources: &str, objects: &[Vec<u8>]) -> Vec<u8> {
         let mut out = b"%PDF-1.7\n".to_vec();
-        out.extend_from_slice(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n");
+        out.extend_from_slice(format!("1 0 obj << /Type /Catalog /Pages 2 0 R {catalog} >> endobj\n").as_bytes());
         out.extend_from_slice(b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n");
         out.extend_from_slice(
-            format!("3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 40 40] /Contents 4 0 R /Resources << {resources} >> >> endobj\n").as_bytes(),
+            format!("3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 40 40] /Contents 4 0 R /Resources << {resources} >> {page} >> endobj\n")
+                .as_bytes(),
         );
         out.extend_from_slice(format!("4 0 obj << /Length {} >> stream\n{content}\nendstream endobj\n", content.len()).as_bytes());
         for (i, body) in objects.iter().enumerate() {
@@ -670,8 +831,8 @@ mod tests {
         let pdf = page_pdf("1 0 0 0 k 0 0 40 40 re f /M1 gs 0 1 0 0 k 10 10 20 20 re f", resources, &[]);
         let mixed = rgb(&separate(pdf.clone(), true).composite(&[], None), 20, 20);
         let knocked = rgb(&separate(pdf, false).composite(&[], None), 20, 20);
-        assert!(close(mixed, cmyk_rgb([255, 255, 0, 0])), "blue where magenta overprints cyan: {mixed:?}");
-        assert!(close(knocked, cmyk_rgb([0, 255, 0, 0])), "magenta without overprint simulation: {knocked:?}");
+        assert!(close(mixed, cmyk_rgb([255, 255, 0, 0], None)), "blue where magenta overprints cyan: {mixed:?}");
+        assert!(close(knocked, cmyk_rgb([0, 255, 0, 0], None)), "magenta without overprint simulation: {knocked:?}");
     }
 
     #[test]
@@ -703,5 +864,188 @@ mod tests {
         assert!(s.coverage_at(40, 0, &[]).is_none(), "past the right edge");
         assert!(s.pixel_at(1.0, 0.5).is_none() && s.pixel_at(f32::NAN, 0.0).is_none());
         assert_eq!(s.pixel_at(0.999, 0.0), Some((39, 0)));
+    }
+
+    // Separating through an output intent's profile (vendored patch 35).
+
+    const PRESS: &str = "PdfCraft synthetic press";
+
+    /// The synthetic CMYK profile (`tests/support/synthetic_icc.rs`) as a stream object.
+    fn press_profile() -> Vec<u8> {
+        stream("/N 4", &synthetic_icc::cmyk_profile(PRESS, true))
+    }
+
+    /// An output intent of subtype `kind` whose destination profile is object `profile`.
+    fn intent(kind: &str, profile: usize) -> String {
+        format!("<< /Type /OutputIntent /S /{kind} /OutputConditionIdentifier (Synthetic 1) /DestOutputProfile {profile} 0 R >>")
+    }
+
+    /// A page with `content` and `resources` whose document prints on the synthetic press (its
+    /// output intent's profile is object 5), with `objects` from 6.
+    fn pressed(content: &str, resources: &str, objects: &[Vec<u8>]) -> Vec<u8> {
+        let mut all = vec![press_profile()];
+        all.extend_from_slice(objects);
+        pdf_with(&format!("/OutputIntents [{}]", intent("GTS_PDFX", 5)), "", content, resources, &all)
+    }
+
+    /// What the synthetic press prints for CIE L*a*b*, in whole percent.
+    fn press(l: f64, a: f64, b: f64) -> Vec<u32> {
+        synthetic_icc::btoa(l, a, b).iter().map(|v| (v * 100.0).round() as u32).collect()
+    }
+
+    /// Whether every ink is within `tolerance` percent of `expected`.
+    fn near(got: &[u32], expected: &[u32], tolerance: u32) -> bool {
+        got.len() == expected.len() && got.iter().zip(expected).all(|(g, e)| g.abs_diff(*e) <= tolerance)
+    }
+
+    #[test]
+    fn rgb_separates_through_the_output_intents_cmyk_profile() {
+        let content = "0.5 0.5 0.5 rg 0 0 40 40 re f";
+        let s = separate(pressed(content, "", &[]), true);
+        assert_eq!(s.simulation, Simulation::OutputIntent { profile: PRESS.into(), condition: Some("Synthetic 1".into()), perceptual: false });
+        assert_eq!(s.simulation.label(), PRESS);
+        // The press prints a neutral with equal inks, where the device formulas put it on
+        // black alone.
+        let gray = press(synthetic_icc::srgb_gray_lightness(0.5), 0.0, 0.0);
+        assert!(near(&at(&s, 20, 20), &gray, 2), "{:?}, the press prints {gray:?}", at(&s, 20, 20));
+        let plain = separate(page_pdf(content, "", &[]), true);
+        assert_eq!(at(&plain, 20, 20), [0, 0, 0, 50]);
+        assert_eq!(plain.simulation, Simulation::DeviceFormulas { reason: "the document has no output intent" });
+        assert_eq!(plain.simulation.label(), "device formulas");
+    }
+
+    #[test]
+    fn without_a_usable_cmyk_output_intent_process_colour_uses_the_device_formulas() {
+        let whole = synthetic_icc::cmyk_profile(PRESS, true);
+        let cases = [
+            (stream("/N 1", &synthetic_icc::gray_profile("Gray")), "the output intent's profile is not CMYK"),
+            (stream("/N 4", &synthetic_icc::cmyk_profile("Proofing only", false)), "the output intent's profile has no PCS-to-device (BToA) tables"),
+            (stream("/N 4", b"not a profile"), "the output intent's profile could not be read"),
+            (stream("/N 4", &whole[..300]), "the output intent's profile could not be read"),
+            (b"<< /N 4 >>".to_vec(), "no output intent embeds its destination profile"),
+        ];
+        for (profile, reason) in cases {
+            let pdf = pdf_with(&format!("/OutputIntents [{}]", intent("GTS_PDFX", 5)), "", "0.5 0.5 0.5 rg 0 0 40 40 re f", "", &[profile]);
+            let s = separate(pdf, true);
+            assert_eq!(s.simulation, Simulation::DeviceFormulas { reason }, "{reason}");
+            assert_eq!(at(&s, 20, 20), [0, 0, 0, 50], "{reason}");
+        }
+    }
+
+    #[test]
+    fn cmyk_in_the_output_intents_own_profile_passes_through_and_other_cmyk_converts() {
+        let cgats = include_bytes!("../../../vendor/hayro-interpret/assets/CGATS001Compat-v2-micro.icc");
+        // Object 5 is the press profile, 6 a copy of it, 7 another CMYK profile.
+        let resources = "/ColorSpace << /Same [/ICCBased 5 0 R] /Copy [/ICCBased 6 0 R] /Other [/ICCBased 7 0 R] >>";
+        let content = "0.2 0.4 0.6 0.8 k 0 0 10 40 re f /Same cs 0.1 0.3 0.5 0.7 scn 10 0 10 40 re f \
+                       /Copy cs 0.1 0.3 0.5 0.7 scn 20 0 10 40 re f /Other cs 0 0 0 1 scn 30 0 10 40 re f";
+        let s = separate(pressed(content, resources, &[press_profile(), stream("/N 4", cgats)]), true);
+        assert_eq!(at(&s, 5, 20), [20, 40, 60, 80], "DeviceCMYK is the press's own CMYK");
+        assert_eq!(at(&s, 15, 20), [10, 30, 50, 70], "ICC CMYK in the output intent's profile");
+        assert_eq!(at(&s, 25, 20), [10, 30, 50, 70], "the same profile in another stream");
+        let other = at(&s, 35, 20);
+        assert!(other.iter().all(|v| *v > 70), "black alone in another profile is a four-ink black on this press: {other:?}");
+        let plain = separate(page_pdf(content, resources, &[press_profile(), press_profile(), stream("/N 4", cgats)]), true);
+        assert_eq!(at(&plain, 35, 20), [0, 0, 0, 100], "without an output intent ICC CMYK is taken as it is");
+    }
+
+    #[test]
+    fn device_gray_stays_on_the_black_plate_under_an_output_intent() {
+        assert_eq!(at(&separate(pressed("0.25 g 0 0 40 40 re f", "", &[]), true), 20, 20), [0, 0, 0, 75]);
+    }
+
+    #[test]
+    fn cie_and_icc_colours_convert_through_the_profile_relative_to_their_white() {
+        let resources = "/ColorSpace << /D50 [/Lab << /WhitePoint [0.9642 1 0.8249] >>] /D65 [/Lab << /WhitePoint [0.9505 1 1.089] >>] /Gray [/ICCBased 6 0 R] >>";
+        let content = "/D50 cs 50 20 -10 scn 0 0 10 40 re f /D65 cs 100 0 0 scn 10 0 10 40 re f /Gray cs 0.5 scn 20 0 10 40 re f";
+        let s = separate(pressed(content, resources, &[stream("/N 1", &synthetic_icc::gray_profile("Gray 2.2"))]), true);
+        assert!(near(&at(&s, 5, 20), &press(50.0, 20.0, -10.0), 2), "Lab: {:?}", at(&s, 5, 20));
+        assert_eq!(at(&s, 15, 20), [0, 0, 0, 0], "a Lab space's own white prints as paper, whatever its white point");
+        let lightness = 116.0 * 0.5_f64.powf(2.2).cbrt() - 16.0;
+        assert!(near(&at(&s, 25, 20), &press(lightness, 0.0, 0.0), 2), "ICC gray: {:?}", at(&s, 25, 20));
+    }
+
+    #[test]
+    fn images_convert_through_the_output_intent_sample_by_sample() {
+        let rgb =
+            stream("/Type /XObject /Subtype /Image /Width 2 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB", &[128, 128, 128, 255, 255, 255]);
+        // More samples than palette entries: the palette is separated once.
+        let indexed = stream(
+            "/Type /XObject /Subtype /Image /Width 4 /Height 1 /BitsPerComponent 8 /ColorSpace [/Indexed /DeviceRGB 1 <808080FFFFFF>]",
+            &[0, 0, 1, 1],
+        );
+        let content = "q 40 0 0 20 0 20 cm /Im1 Do Q q 40 0 0 20 0 0 cm /Im2 Do Q";
+        let s = separate(pressed(content, "/XObject << /Im1 6 0 R /Im2 7 0 R >>", &[rgb, indexed]), true);
+        let gray = press(synthetic_icc::srgb_gray_lightness(128.0 / 255.0), 0.0, 0.0);
+        for y in [10, 30] {
+            assert!(near(&at(&s, 10, y), &gray, 2), "y = {y}: {:?}, the press prints {gray:?}", at(&s, 10, y));
+            assert_eq!(at(&s, 30, y), [0, 0, 0, 0], "y = {y}: white prints no ink");
+        }
+    }
+
+    #[test]
+    fn the_composite_and_process_swatches_show_the_inks_through_the_output_intent() {
+        let s = separate(pressed("0.5 0.5 0.5 rg 0 0 40 40 re f", "", &[]), true);
+        // The press's two tables invert each other, so the gray it prints shows as that gray.
+        let shown = rgb(&s.composite(&[], None), 20, 20);
+        assert!(shown.iter().all(|c| c.abs_diff(128) <= 4), "{shown:?}");
+        // Through the profile pages are drawn with, those four inks would show far darker.
+        let tints: Vec<u8> = (0..4).map(|k| s.plate(k).unwrap()[20 * 40 + 20]).collect();
+        let drawn = cmyk_rgb([tints[0], tints[1], tints[2], tints[3]], None);
+        assert!(drawn.iter().all(|c| *c < 100), "{drawn:?}");
+        // Cyan on this press is L* 75, a* −60, b* −30: a light greenish blue.
+        let cyan = s.inks[0].swatch;
+        assert!(cyan[0] < 60 && cyan[1] > 170 && cyan[2] > 200, "{cyan:?}");
+        assert_eq!(renderer(pressed("", "", &[])).page_inks(0).unwrap()[0].swatch, cyan);
+        assert_ne!(renderer(page_pdf("", "", &[])).page_inks(0).unwrap()[0].swatch, cyan);
+    }
+
+    #[test]
+    fn a_pages_own_output_intents_replace_the_catalogs_and_pdfx_comes_first() {
+        let other = || stream("/N 4", &synthetic_icc::cmyk_profile("Other press", true));
+        let content = "0.5 0.5 0.5 rg 0 0 40 40 re f";
+        let catalog = |list: &str| format!("/OutputIntents [{list}]");
+        let pdf = pdf_with(&catalog(&format!("{} {}", intent("GTS_PDFA1", 6), intent("GTS_PDFX", 5))), "", content, "", &[press_profile(), other()]);
+        assert_eq!(separate(pdf, true).simulation.label(), PRESS, "the PDF/X intent, though listed second");
+        let page = catalog(&intent("GTS_PDFX", 6));
+        let pdf = pdf_with(&catalog(&intent("GTS_PDFX", 5)), &page, content, "", &[press_profile(), other()]);
+        assert_eq!(separate(pdf, true).simulation.label(), "Other press", "the page's own intent (PDF 2.0)");
+        let gray = stream("/N 1", &synthetic_icc::gray_profile("Gray"));
+        let pdf = pdf_with(&catalog(&intent("GTS_PDFX", 5)), &page, content, "", &[press_profile(), gray]);
+        assert_eq!(separate(pdf, true).simulation, Simulation::DeviceFormulas { reason: "the output intent's profile is not CMYK" });
+        let pdf = pdf_with(&catalog(&intent("GTS_PDFX", 5)), "/OutputIntents []", content, "", &[press_profile()]);
+        assert_eq!(separate(pdf, true).simulation.label(), PRESS, "a page's empty list leaves the catalog's");
+        // A profile without a description is named by its output condition.
+        let pdf = pdf_with(&catalog(&intent("GTS_PDFX", 5)), "", content, "", &[stream("/N 4", &synthetic_icc::cmyk_profile("", true))]);
+        assert_eq!(separate(pdf, true).simulation.label(), "Synthetic 1");
+    }
+
+    #[test]
+    fn hostile_output_intents_and_profiles_fall_back_to_the_device_formulas() {
+        let content = "0.5 0.5 0.5 rg 0 0 40 40 re f";
+        let catalogs = [
+            "/OutputIntents 7",
+            "/OutputIntents [1 (x) /Y]",
+            "/OutputIntents [<< /DestOutputProfile 99 0 R >>]",
+            "/OutputIntents [<< /S /GTS_PDFX /DestOutputProfile 5 0 R >>]",
+        ];
+        for catalog in catalogs {
+            let pdf = pdf_with(catalog, "", content, "", &[stream("/N 4 /Filter /FlateDecode", b"not deflate")]);
+            let s = renderer(pdf).separate(0, 1.0, true).expect("separates");
+            assert!(matches!(s.simulation, Simulation::DeviceFormulas { .. }), "{catalog}: {:?}", s.simulation);
+            assert_eq!(at(&s, 20, 20), [0, 0, 0, 50], "{catalog}");
+        }
+        // Every byte of the profile's header and tag table, and bytes through its tables,
+        // changed in turn: the page separates, by the profile or by the formulas.
+        let whole = synthetic_icc::cmyk_profile(PRESS, true);
+        let positions = (0..whole.len().min(256)).chain((256..whole.len()).step_by(997));
+        for at_byte in positions {
+            for value in [0x00, 0x7F, 0xFF] {
+                let mut bent = whole.clone();
+                bent[at_byte] = value;
+                let pdf = pdf_with(&format!("/OutputIntents [{}]", intent("GTS_PDFX", 5)), "", content, "", &[stream("/N 4", &bent)]);
+                assert!(renderer(pdf).separate(0, 0.25, true).is_ok(), "byte {at_byte} set to {value:#x}");
+            }
+        }
     }
 }

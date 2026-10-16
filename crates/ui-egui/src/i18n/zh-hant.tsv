@@ -2391,3 +2391,6 @@ animation effects	Off	關
 	Page maximum: {n}%	頁面最大值：{n}%
 	Point at the page to read its ink coverage.	將指標移到頁面上即可查看油墨覆蓋率。
 	Highlight coverage above	醒目提示覆蓋率高於
+	Simulation: {profile}	模擬：{profile}
+	Simulation: device formulas	模擬：裝置公式
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	沒有可用的 CMYK 輸出目的：RGB 與基於 CIE 的色彩依 ISO 32000 裝置公式分色。

@@ -1,26 +1,38 @@
 //! Print production ▸ Output preview: the panel lists the page's inks and reads their coverage
-//! under the pointer, with and without overprint simulation.
+//! under the pointer, with and without overprint simulation, and names what the process plates
+//! simulate.
 
 use egui::Pos2;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use pdfcraft_ui_egui::{PdfCraftApp, RightPanel};
 
+#[path = "../../../render/tests/support/synthetic_icc.rs"]
+mod synthetic_icc;
+
 /// One 300 × 400 pt page: solid black, and a spot colour ("Gold" at 50%) overprinting it in a
 /// 100 × 100 pt square in the middle.
 fn fixture() -> Vec<u8> {
+    pdf("", &[])
+}
+
+/// The fixture's page with more catalog entries in `catalog` and `extra` objects from 5.
+fn pdf(catalog: &str, extra: &[Vec<u8>]) -> Vec<u8> {
     let content = "0 0 0 1 k 0 0 300 400 re f /GS1 gs /CS0 cs 0.5 scn 100 150 100 100 re f";
-    let objs = [
-        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /ColorSpace << /CS0 [/Separation /Gold /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.3 1 0] /N 1 >>] >> /ExtGState << /GS1 << /op true >> >> >> >>".into(),
-        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+    let mut objs: Vec<Vec<u8>> = vec![
+        format!("<< /Type /Catalog /Pages 2 0 R {catalog} >>").into_bytes(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /ColorSpace << /CS0 [/Separation /Gold /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0.3 1 0] /N 1 >>] >> /ExtGState << /GS1 << /op true >> >> >> >>".to_vec(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()).into_bytes(),
     ];
+    objs.extend_from_slice(extra);
     let mut out = b"%PDF-1.7\n".to_vec();
     let mut offs = Vec::new();
     for (i, o) in objs.iter().enumerate() {
         offs.push(out.len());
-        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(o);
+        out.extend_from_slice(b"\nendobj\n");
     }
     let x = out.len();
     out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
@@ -31,11 +43,24 @@ fn fixture() -> Vec<u8> {
     out
 }
 
+/// The fixture printing on the synthetic press of `synthetic_icc`, its catalog's output intent.
+fn pressed() -> Vec<u8> {
+    let profile = synthetic_icc::cmyk_profile("PdfCraft synthetic press", true);
+    let mut stream = format!("<< /N 4 /Length {} >>\nstream\n", profile.len()).into_bytes();
+    stream.extend_from_slice(&profile);
+    stream.extend_from_slice(b"\nendstream");
+    pdf("/OutputIntents [<< /Type /OutputIntent /S /GTS_PDFX /DestOutputProfile 5 0 R >>]", &[stream])
+}
+
 fn harness() -> Harness<'static, PdfCraftApp> {
-    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+    harness_with(fixture())
+}
+
+fn harness_with(document: Vec<u8>) -> Harness<'static, PdfCraftApp> {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
-        app.open_bytes("inks.pdf", None, fixture()).unwrap();
+        app.open_bytes("inks.pdf", None, document).unwrap();
         // Not 100%: the zoom box would read "100%", like an ink.
         app.set_option("zoom", "125").unwrap();
         app
@@ -80,6 +105,7 @@ fn output_preview_lists_inks_and_reads_coverage_under_the_pointer() {
     for ink in ["Cyan", "Magenta", "Yellow", "Black"] {
         assert_eq!(count(&h, ink), 1, "{ink}");
     }
+    assert_eq!(count(&h, "Simulation: device formulas"), 1, "the document has no output intent");
     // The spot colour overprints the black: both print under the pointer (Black 100%, Gold
     // 50%, 150% in total).
     let p = middle(&h);
@@ -95,4 +121,14 @@ fn output_preview_lists_inks_and_reads_coverage_under_the_pointer() {
     // Switching an ink off leaves it out of the total, and its own coverage still reads.
     h.get_by_label("Gold").click();
     wait_until(&mut h, Some(p), "Gold left out", |h| count(h, "50%") == 1 && count(h, "0%") == 5);
+}
+
+#[test]
+fn output_preview_names_the_output_intent_it_simulates() {
+    let mut h = harness_with(pressed());
+    h.state_mut().run_command("prepress.output_preview");
+    h.run_steps(2);
+    wait_until(&mut h, None, "the separation", |h| count(h, "Gold") == 1);
+    assert_eq!(count(&h, "Simulation: PdfCraft synthetic press"), 1);
+    assert_eq!(count(&h, "Simulation: device formulas"), 0);
 }

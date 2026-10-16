@@ -2441,3 +2441,6 @@ animation effects	Off	オフ
 	Page maximum: {n}%	ページ最大値: {n}%
 	Point at the page to read its ink coverage.	ページにポインターを合わせるとインキ量が表示されます。
 	Highlight coverage above	次を超えるインキ量を強調表示
+	Simulation: {profile}	シミュレーション: {profile}
+	Simulation: device formulas	シミュレーション: デバイス変換式
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	使用できる CMYK 出力インテントがありません。RGB と CIE ベースのカラーは ISO 32000 のデバイス変換式で色分解されます。

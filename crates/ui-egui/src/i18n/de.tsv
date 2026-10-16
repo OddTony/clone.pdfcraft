@@ -2442,3 +2442,6 @@ animation effects	Off	Aus
 	Page maximum: {n}%	Seitenmaximum: {n} %
 	Point at the page to read its ink coverage.	Zeigen Sie auf die Seite, um den Farbauftrag abzulesen.
 	Highlight coverage above	Farbauftrag hervorheben über
+	Simulation: {profile}	Simulation: {profile}
+	Simulation: device formulas	Simulation: Geräteformeln
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Kein verwendbarer CMYK-Output-Intent: RGB- und CIE-basierte Farben werden nach den Geräteformeln von ISO 32000 separiert.

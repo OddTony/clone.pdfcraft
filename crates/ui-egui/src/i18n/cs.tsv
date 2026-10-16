@@ -2515,3 +2515,6 @@ animation effects	Off	Vypnuto
 	Page maximum: {n}%	Maximum strany: {n} %
 	Point at the page to read its ink coverage.	Najeďte ukazatelem na stranu a zobrazí se krytí barvami.
 	Highlight coverage above	Zvýraznit krytí nad
+	Simulation: {profile}	Simulace: {profile}
+	Simulation: device formulas	Simulace: vzorce zařízení
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Žádný použitelný výstupní záměr CMYK: barvy RGB a barvy založené na CIE se separují podle vzorců zařízení z ISO 32000.

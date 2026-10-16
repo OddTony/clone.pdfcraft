@@ -2404,3 +2404,6 @@ animation effects	Off	Изключени
 	Page maximum: {n}%	Максимум на страницата: {n}%
 	Point at the page to read its ink coverage.	Посочете страницата, за да видите покритието с мастило.
 	Highlight coverage above	Открояване на покритие над
+	Simulation: {profile}	Симулация: {profile}
+	Simulation: device formulas	Симулация: формули на устройството
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Няма използваемо CMYK изходно намерение: цветовете RGB и тези, базирани на CIE, се разделят по формулите на устройството от ISO 32000.

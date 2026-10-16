@@ -2439,3 +2439,6 @@ animation effects	Off	Өшірулі
 	Page maximum: {n}%	Беттегі ең жоғары мән: {n}%
 	Point at the page to read its ink coverage.	Бояу жабынын көру үшін бетті көрсетіңіз.
 	Highlight coverage above	Мына мәннен жоғары жабынды бөлектеу
+	Simulation: {profile}	Үлгілеу: {profile}
+	Simulation: device formulas	Үлгілеу: құрылғы формулалары
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Пайдалануға болатын CMYK шығыс профилі жоқ: RGB және CIE негізіндегі түстер ISO 32000 құрылғы формулаларымен бөлінеді.

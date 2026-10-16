@@ -2441,3 +2441,6 @@ animation effects	Off	Désactivés
 	Page maximum: {n}%	Maximum de la page : {n} %
 	Point at the page to read its ink coverage.	Pointez la page pour lire la couverture d'encre.
 	Highlight coverage above	Surligner la couverture au-delà de
+	Simulation: {profile}	Simulation : {profile}
+	Simulation: device formulas	Simulation : formules du périphérique
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Aucune intention de sortie CMJN utilisable : les couleurs RVB et fondées sur CIE sont séparées selon les formules de périphérique de l'ISO 32000.

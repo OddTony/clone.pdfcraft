@@ -2695,3 +2695,6 @@ key	Space	Space
 	Page maximum: {n}%	Mức tối đa của trang: {n}%
 	Point at the page to read its ink coverage.	Trỏ vào trang để xem độ phủ mực.
 	Highlight coverage above	Tô sáng độ phủ vượt quá
+	Simulation: {profile}	Mô phỏng: {profile}
+	Simulation: device formulas	Mô phỏng: công thức thiết bị
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Không có mục đích đầu ra CMYK dùng được: màu RGB và màu dựa trên CIE được tách theo công thức thiết bị của ISO 32000.

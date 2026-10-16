@@ -2718,3 +2718,6 @@ certificate	Version	الإصدار
 	Page maximum: {n}%	الحد الأقصى للصفحة: {n}%
 	Point at the page to read its ink coverage.	أشر إلى الصفحة لقراءة تغطية الحبر.
 	Highlight coverage above	تمييز التغطية الأعلى من
+	Simulation: {profile}	المحاكاة: {profile}
+	Simulation: device formulas	المحاكاة: صيغ الجهاز
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	لا يوجد هدف إخراج CMYK صالح للاستخدام: تُفصل ألوان RGB والألوان المستندة إلى CIE وفق صيغ الجهاز في ISO 32000.

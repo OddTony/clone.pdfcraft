@@ -1,7 +1,7 @@
 //! Output Preview (Print production ▸ Output preview): a page's inks, their coverage, total
 //! area coverage against a limit, and the page as its inks print it, overprinting included.
 
-use pdfcraft_render::Separations;
+use pdfcraft_render::{Separations, Simulation};
 use serde_json::{Value, json};
 
 use crate::{Args, Automation, Content, Result, ToolError, encode_png, failed};
@@ -101,6 +101,21 @@ impl Automation {
     }
 }
 
+/// How process colour from other spaces became CMYK: `label` is what the panel shows after
+/// "Simulation:" (the output intent's profile, or "device formulas").
+fn simulation(s: &Simulation) -> Value {
+    match s {
+        Simulation::OutputIntent { profile, condition, perceptual } => json!({
+            "label": s.label(),
+            "method": "output_intent",
+            "profile": profile,
+            "condition": condition,
+            "rendering_intent": if *perceptual { "Perceptual" } else { "RelativeColorimetric" },
+        }),
+        Simulation::DeviceFormulas { reason } => json!({ "label": s.label(), "method": "device_formulas", "reason": reason }),
+    }
+}
+
 /// The tool's JSON: inks, total area coverage and the coverage at `points`.
 fn report(s: &Separations, enabled: &[bool], limit: f32, points: &[[f64; 2]]) -> Value {
     let scale = f64::from(s.scale);
@@ -148,6 +163,7 @@ fn report(s: &Separations, enabled: &[bool], limit: f32, points: &[[f64; 2]]) ->
         "height": s.height,
         "dpi": (scale * 72.0 * 10.0).round() / 10.0,
         "overprint": s.overprint,
+        "simulation": simulation(&s.simulation),
         "inks": inks,
         "unseparated": s.unseparated,
         "total_area_coverage": { "max": max, "limit": limit, "above_area": pct(above_area) },

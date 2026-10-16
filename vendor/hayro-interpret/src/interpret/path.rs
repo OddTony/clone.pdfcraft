@@ -224,7 +224,7 @@ fn plate_paint<'a>(
                 InkUse::Unspecified if plate.overprint && overprint => return untouched(),
                 InkUse::Paints | InkUse::Unspecified => {}
             }
-            std::sync::Arc::make_mut(&mut s.shading).for_plate(&plate.ink);
+            std::sync::Arc::make_mut(&mut s.shading).for_plate(plate);
         }
         Pattern::Tiling(t) => t.for_plate(plate, overprint, overprint_mode),
     }
