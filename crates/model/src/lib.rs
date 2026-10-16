@@ -20,8 +20,9 @@ pub struct Page {
 
 fn rect(doc: &Document, o: Option<&Object>) -> Option<[f64; 4]> {
     let o = doc.resolve(o?);
-    let v: Vec<f64> = o.as_array()?.iter().filter_map(|x| doc.resolve(x).as_f64()).collect();
-    (v.len() == 4 && v.iter().all(|x| x.is_finite())).then(|| [v[0].min(v[2]), v[1].min(v[3]), v[0].max(v[2]), v[1].max(v[3])])
+    let v: Vec<f64> =
+        o.as_array()?.iter().filter_map(|x| doc.resolve(x).as_f64()).filter(|x| !x.is_nan()).map(|x| x.clamp(f64::MIN, f64::MAX)).collect();
+    (v.len() == 4).then(|| [v[0].min(v[2]), v[1].min(v[3]), v[0].max(v[2]), v[1].max(v[3])])
 }
 
 impl Page {
@@ -53,8 +54,12 @@ impl Page {
     /// The displayed size (width, height) in points, after `/UserUnit` and `/Rotate`.
     pub fn display_size(&self, doc: &Document) -> (f64, f64) {
         let c = self.crop(doc);
+        let raw_w = (c[2] - c[0]).min(f64::MAX);
+        let raw_h = (c[3] - c[1]).min(f64::MAX);
+        let max_raw = raw_w.max(raw_h);
         let u = self.user_unit(doc);
-        let (w, h) = ((c[2] - c[0]) * u, (c[3] - c[1]) * u);
+        let u = if max_raw > 0.0 && (max_raw * u).is_infinite() { f64::MAX / max_raw } else { u };
+        let (w, h) = (raw_w * u, raw_h * u);
         if self.rotation(doc) % 180 == 0 { (w, h) } else { (h, w) }
     }
 
@@ -339,9 +344,22 @@ mod tests {
             ("", "/UserUnit -2", 1.0),
             ("", "/UserUnit /Two", 1.0),
             ("", "/UserUnit 100000", MAX_USER_UNIT),
+            ("", "/UserUnit 1e20", MAX_USER_UNIT),
+            ("", "/UserUnit 1e400", MAX_USER_UNIT),
         ] {
             let d = doc_with(0, pages_attrs, page_attrs);
             assert_eq!(pages(&d)[0].user_unit(&d), unit, "{pages_attrs} {page_attrs}");
         }
+        for page_attrs in
+            ["/MediaBox [0 0 1e30 1e30] /CropBox [0 0 1e30 1e30]", "/MediaBox [0 0 1e400 1e400] /CropBox [0 0 1e400 1e400] /UserUnit 1e20"]
+        {
+            let d = doc_with(0, "", page_attrs);
+            let p = &pages(&d)[0];
+            let (w, h) = p.display_size(&d);
+            assert!(w.is_finite() && w >= 1e30 && h.is_finite() && h >= 1e30, "{page_attrs}: ({w}, {h})");
+        }
+        let d = doc_with(0, "", "/MediaBox [0 0 1e305 2e305] /CropBox [0 0 1e305 2e305] /UserUnit 75000");
+        let (w, h) = pages(&d)[0].display_size(&d);
+        assert!(w.is_finite() && h.is_finite() && (h / w - 2.0).abs() < 1e-12, "({w}, {h})");
     }
 }
