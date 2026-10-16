@@ -2603,7 +2603,8 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         | QuickTool::Link
         | QuickTool::SignArea { .. }
         | QuickTool::MarqueeZoom
-        | QuickTool::Snapshot => false,
+        | QuickTool::Snapshot
+        | QuickTool::ReadingOrder => false,
     };
     let prefs = &app.comment_prefs;
     let redact_mark = (app.redact_prefs.hover_fill, app.redact_prefs.opacity);
@@ -2680,6 +2681,11 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             scroll = scroll.vertical_scroll_offset((r.top() - y_shift + fy * r.height() - rel.y).clamp(0.0, max_y));
         }
     }
+    // The Tags panel highlights its tag's content, and a click on content selects its tag; the
+    // Reading Order tool shows and selects regions.
+    let tags_open = app.right == Some(RightPanel::Tags);
+    let tags_state = &mut app.tags_state;
+    let reading_order = &mut app.reading_order;
     let out = scroll.show_viewport(ui, |ui, viewport| {
         // egui's drag responses accept every pointer button. Keep a wheel gesture from also
         // selecting text, drawing a mark, or panning with the Hand tool.
@@ -3090,6 +3096,25 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 !others_own_pointer && (text_used || image_used)
             };
             let on_link = tool == QuickTool::Link && can_modify && crate::link_ui::page_input(ui, &resp, &xf, i, info, &doc_links, view);
+            let on_reading = tool == QuickTool::ReadingOrder && crate::reading_order_ui::page_input(ui, &resp, &xf, i, info, doc, reading_order);
+            if let Some(tag) = reading_order.picked.take() {
+                let tags = tags_state.tags(doc);
+                tags_state.select(doc.id, &tags, tag);
+            }
+            if tags_open
+                && tool == QuickTool::Select
+                && tags_state.highlighting()
+                && resp.clicked()
+                && let Some(p) = pointer.filter(|p| xf.rect.contains(*p))
+                && let Some(page_info) = info.pages.get(i)
+            {
+                let (vx, vy) = xf.screen_to_view(p);
+                let [ux, uy] = page_info.view_to_user(vx, vy);
+                if let Some(tag) = doc.tag_at(i, f64::from(ux), f64::from(uy)) {
+                    let tags = tags_state.tags(doc);
+                    tags_state.select(doc.id, &tags, tag);
+                }
+            }
             if tool == QuickTool::Select
                 && resp.secondary_clicked()
                 && can_modify
@@ -3098,7 +3123,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             {
                 view.links.context = Some((i, l.index));
             }
-            let consumed = on_objects || on_edit_text || on_link || on_content || boxing || on_field || comments::page_input(ui, &resp, &pcx, view);
+            let consumed = on_objects
+                || on_edit_text
+                || on_link
+                || on_reading
+                || on_content
+                || boxing
+                || on_field
+                || comments::page_input(ui, &resp, &pcx, view);
 
             let preview_target =
                 (matches!(tool, QuickTool::Select | QuickTool::Fill(_)) && !comments_hidden).then_some(view.comments.selected).flatten();
@@ -3295,6 +3327,16 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             }
             if tool == QuickTool::Link {
                 crate::link_ui::paint(ui, painter, &xf, i, info, &doc_links, view);
+            }
+            if tool == QuickTool::ReadingOrder {
+                crate::reading_order_ui::paint(ui, painter, &xf, i, info, doc, reading_order);
+            }
+            if tags_open && let Some(tag) = tags_state.highlighted(doc.id) {
+                for b in tags_state.boxes(doc, tag, i).iter() {
+                    let sr = xf.user_rect(info, i, [b[0] as f32, b[1] as f32, b[2] as f32, b[3] as f32]).expand(1.5);
+                    painter.rect_filled(sr, CornerRadius::same(2), t.accent.gamma_multiply(0.16));
+                    painter.rect_stroke(sr, CornerRadius::same(2), Stroke::new(1.5, t.accent), egui::StrokeKind::Outside);
+                }
             }
             if preparing {
                 crate::prepare::paint_page(ui, painter, &xf, i, info, &form, view);

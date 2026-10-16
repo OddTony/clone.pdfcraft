@@ -2636,7 +2636,6 @@ key	Space	Tarpas
 	Found {n} untagged content problems.	Rasta nepažymėto turinio problemų: {n}.
 	Tag form fields	Žymėti formos laukus
 	Mark as artifact	Pažymėti kaip artefaktą
-	Remove this leaf tag from reading order and mark its direct content as an artifact	Pašalinkite šią lapo žymą iš skaitymo tvarkos ir pažymėkite jos tiesioginį turinį kaip artefaktą
 	Mark content as artifact	Pažymėti turinį kaip artefaktą
 	Word count	Žodžių skaičius
 	Current page only	Tik dabartinis puslapis
@@ -2683,3 +2682,15 @@ key	Space	Tarpas
 	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neįrašyti pakeitimai bus prarasti.
 theme	Appearance	Išvaizda
+	Highlight content	Paryškinti turinį
+	Mark everything in this tag as an artifact and remove the tag from reading order	Pažymėti visą šios žymos turinį kaip artefaktą ir pašalinti žymą iš skaitymo tvarkos
+	Move into previous tag	Perkelti į ankstesnę žymą
+	Move out of parent tag	Perkelti iš pirminės žymos
+	New tag	Nauja žyma
+	Delete tag	Ištrinti žymą
+	Remove tag, keep its contents	Pašalinti žymą, paliekant jos turinį
+	Draw a rectangle on the page or click content, then choose its tag.	Nubrėžkite stačiakampį puslapyje arba spustelėkite turinį, tada pasirinkite jo žymą.
+	Tag annotation	Pažymėti anotaciją
+	Untagged content	Nepažymėtas turinys
+	Annotation	Anotacija
+	Tag content as {type}	Pažymėti turinį kaip {type}

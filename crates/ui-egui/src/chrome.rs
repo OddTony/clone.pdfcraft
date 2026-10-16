@@ -605,6 +605,7 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     (RightPanel::Signatures, tl!("Signatures")),
                     (RightPanel::Accessibility, tl!("Accessibility Checker")),
                     (RightPanel::Tags, tl!("Tags")),
+                    (RightPanel::ReadingOrder, tl!("Fix reading order")),
                     (RightPanel::Search, tl!("Search")),
                     (RightPanel::Compare, tl!("Compare")),
                 ] {
