@@ -75,7 +75,10 @@ pub struct PrintDraft {
     /// Print as image (Acrobat's Advanced Print Setup) at `dpi`.
     pub as_image: bool,
     pub dpi: f64,
+    /// A [`PAPERS`] index, or [`CUSTOM_PAPER`] for `custom_paper`.
     pub paper: usize,
+    /// The Custom size paper, in points (width, height).
+    pub custom_paper: (f64, f64),
     /// The sheet shown in the preview (0-based).
     pub sheet: usize,
     pub current_page: usize,
@@ -129,6 +132,7 @@ impl Default for PrintDraft {
             as_image: false,
             dpi: 300.0,
             paper: 0,
+            custom_paper: PAPERS[0].1,
             sheet: 0,
             current_page: 0,
             driver_options: None,
@@ -142,7 +146,26 @@ impl Default for PrintDraft {
     }
 }
 
+/// The Paper list's last entry, after [`PAPERS`]: a size typed in.
+pub const CUSTOM_PAPER: usize = PAPERS.len();
+
 impl PrintDraft {
+    /// The paper's size in points (width, height).
+    pub fn paper_size(&self) -> (f64, f64) {
+        PAPERS.get(self.paper).map_or(self.custom_paper, |p| p.1)
+    }
+
+    /// Choose the paper of this size: the standard one it matches, else Custom size.
+    pub fn set_paper_size(&mut self, size: (f64, f64)) {
+        match print::matching_paper(size) {
+            Some(i) => self.paper = i,
+            None => {
+                self.custom_paper = (size.0.min(size.1), size.0.max(size.1));
+                self.paper = CUSTOM_PAPER;
+            }
+        }
+    }
+
     /// The engine settings for this draft (page count and labels from the document).
     pub fn settings(&self, count: usize, labels: &[String]) -> Result<print::Settings, String> {
         if self.handling == Handling::Multiple && self.order == PageOrder::CutStack && self.duplex != spool::Duplex::Off {
@@ -179,7 +202,7 @@ impl PrintDraft {
         };
         Ok(print::Settings {
             pages,
-            paper: PAPERS[self.paper.min(PAPERS.len() - 1)].1,
+            paper: self.paper_size(),
             orientation: self.orientation,
             layout,
             content: self.content,
@@ -204,7 +227,13 @@ impl PrintDraft {
             }
             .into_iter()
             // The sheet the PDF was laid out on, not the queue's default paper.
-            .chain(print::cups_media(self.paper).map(|m| ("media".to_string(), m.to_string())))
+            .chain(
+                match PAPERS.get(self.paper) {
+                    Some(_) => print::cups_media(self.paper).map(str::to_string),
+                    None => print::cups_custom_media(self.custom_paper),
+                }
+                .map(|m| ("media".to_string(), m)),
+            )
             .collect(),
         }
     }
@@ -904,11 +933,18 @@ pub(crate) fn body(
                 });
                 ui.end_row();
                 ui.label(tl!("Paper:"));
-                let paper_name = PAPERS.get(d.paper).map_or("US Letter", |p| p.0);
+                let paper_name = PAPERS.get(d.paper).map_or("Custom size", |p| p.0);
                 let before = d.paper;
                 egui::ComboBox::from_id_salt("paper").selected_text(tl!(paper_name)).width(260.0).show_ui(ui, |ui| {
                     for (i, (name, _)) in PAPERS.iter().enumerate() {
                         ui.selectable_value(&mut d.paper, i, tl!(name));
+                    }
+                    // Starts from the paper chosen before, to be changed from there.
+                    if ui.selectable_label(d.paper == CUSTOM_PAPER, tl!("Custom size")).clicked() && d.paper != CUSTOM_PAPER {
+                        let (w, h) = d.paper_size();
+                        d.custom_paper = (w.min(h), w.max(h));
+                        d.paper = CUSTOM_PAPER;
+                        d.sheet = 0;
                     }
                 });
                 // Label stock gets the label layout (cut, turned upright, fitted).
@@ -917,6 +953,32 @@ pub(crate) fn body(
                     d.sheet = 0;
                 }
                 ui.end_row();
+                if d.paper == CUSTOM_PAPER {
+                    ui.label("");
+                    ui.horizontal(|ui| {
+                        let (units, k) = (d.units, d.units.per_point());
+                        // From an inch (the smallest sheet the layout takes) to 5 m (a banner roll).
+                        let field = |ui: &mut egui::Ui, v: &mut f64| {
+                            ui.add(
+                                egui::DragValue::new(v)
+                                    .range(72.0 * k..=14_173.0 * k)
+                                    .speed(units.speed())
+                                    .fixed_decimals(units.decimals())
+                                    .suffix(format!(" {}", units.label())),
+                            )
+                        };
+                        let (mut w, mut h) = (d.custom_paper.0 * k, d.custom_paper.1 * k);
+                        ui.label(tl!("Width:"));
+                        let rw = field(ui, &mut w);
+                        ui.label(tl!("Height:"));
+                        let rh = field(ui, &mut h);
+                        if rw.changed() || rh.changed() {
+                            d.custom_paper = (w / k, h / k);
+                            d.sheet = 0;
+                        }
+                    });
+                    ui.end_row();
+                }
             });
             // Windows says which drivers can't print two-sided as they're asked; they keep their
             // own setting, even when Two-sided is Off.
@@ -937,11 +999,9 @@ pub(crate) fn body(
             if let Some(&source) = sizes.get(d.current_page) {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(crate::i18n::fmt(tl!("PDF page: {size}"), &[("size", &d.units.size(source.0, source.1))]));
-                    let matched = print::matching_paper(source);
-                    if ui.add_enabled(matched.is_some(), egui::Button::new(tl!("Match page at 100%"))).clicked()
-                        && let Some(paper) = matched
-                    {
-                        d.paper = paper;
+                    // A page of no standard size gets a Custom size paper of its own size.
+                    if ui.button(tl!("Match page at 100%")).clicked() {
+                        d.set_paper_size(source);
                         d.handling = Handling::Size;
                         d.size = SizeMode::Actual;
                         d.orientation = Orientation::Auto;
