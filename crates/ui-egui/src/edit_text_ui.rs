@@ -1263,27 +1263,54 @@ fn is_combining_for_cursor(c: char) -> bool {
 fn rtl_caret_stops(galley: &egui::Galley) -> Vec<RtlCaretStop> {
     use unicode_bidi::{BidiInfo, Level};
     let mut stops = Vec::new();
-    let mut offset = 0_usize;
-    for placed in &galley.rows {
+    let source_rows: Vec<&str> = galley.job.text.split('\n').collect();
+    let explicit_rows = source_rows.len() == galley.rows.len();
+    let mut consumed = 0_usize; // Unicode characters, NOT shaped glyphs.
+    let total = galley.job.text.chars().count();
+    for (row_index, placed) in galley.rows.iter().enumerate() {
         let glyphs = &placed.row.glyphs;
-        let line: String = glyphs.iter().map(|g| g.chr).collect();
+        // egui's HarfBuzz-backed shaper may emit more than one visual glyph for
+        // one Unicode scalar. Never derive logical cursor indices from glyph
+        // indices: this caused 4-letter Hebrew words to return index 7.
+        let line = if explicit_rows {
+            source_rows.get(row_index).copied().unwrap_or_default().to_owned()
+        } else if galley.rows.len() == 1 {
+            galley.job.text.clone()
+        } else {
+            // Soft-wrapped rows have no source newline. Consume a bounded number
+            // of Unicode characters, leaving the last row the remaining text.
+            let remaining: String = galley.job.text.chars().skip(consumed).collect();
+            let length = if row_index + 1 == galley.rows.len() {
+                remaining.chars().count()
+            } else {
+                glyphs.len().min(remaining.chars().count())
+            };
+            remaining.chars().take(length).collect()
+        };
+        let n_chars = line.chars().count();
         if line.is_empty() {
-            stops.push(RtlCaretStop { index: offset, x: placed.pos.x, y: placed.pos.y });
-            offset += usize::from(placed.ends_with_newline);
+            stops.push(RtlCaretStop { index: consumed.min(total), x: placed.pos.x, y: placed.pos.y });
+            consumed += usize::from(placed.ends_with_newline);
             continue;
         }
-        // A base and its niqqud are one caret cluster.
-        // Entries: (byte start, logical char start, logical char end, width).
+        let exact_widths = glyphs.len() == n_chars;
+        let average_width = placed.row.size.x.max(0.0) / n_chars.max(1) as f32;
+        // (UTF-8 byte start, Unicode char start, Unicode char end, advance).
         let mut clusters: Vec<(usize, usize, usize, f32)> = Vec::new();
-        let mut byte = 0;
-        for (i, glyph) in glyphs.iter().enumerate() {
-            if is_combining_for_cursor(glyph.chr) && let Some(last) = clusters.last_mut() {
-                last.2 = i + 1;
-                last.3 += glyph.advance_width.max(0.0);
+        for (i, (byte, ch)) in line.char_indices().enumerate() {
+            let width = if exact_widths {
+                glyphs.get(i).map_or(average_width, |g| g.advance_width.max(0.0))
             } else {
-                clusters.push((byte, i, i + 1, glyph.advance_width.max(0.0)));
+                // If glyph shaping expanded/combined clusters, absolute glyph
+                // indices are unrelated to Unicode character indices.
+                average_width
+            };
+            if is_combining_for_cursor(ch) && let Some(last) = clusters.last_mut() {
+                last.2 = i + 1;
+                last.3 += width;
+            } else {
+                clusters.push((byte, i, i + 1, width));
             }
-            byte += glyph.chr.len_utf8();
         }
         let base = if editor_rtl(&galley.job.text) { Level::rtl() } else { Level::ltr() };
         let info = BidiInfo::new(&line, Some(base));
@@ -1297,12 +1324,12 @@ fn rtl_caret_stops(galley: &egui::Galley) -> Vec<RtlCaretStop> {
             if rtl { indices.reverse(); }
             for i in indices {
                 let (_, start, end, width) = clusters[i];
-                stops.push(RtlCaretStop { index: offset + if rtl { end } else { start }, x, y: placed.pos.y });
+                stops.push(RtlCaretStop { index: consumed + if rtl { end } else { start }, x, y: placed.pos.y });
                 x += width;
-                stops.push(RtlCaretStop { index: offset + if rtl { start } else { end }, x, y: placed.pos.y });
+                stops.push(RtlCaretStop { index: consumed + if rtl { start } else { end }, x, y: placed.pos.y });
             }
         }
-        offset += glyphs.len() + usize::from(placed.ends_with_newline);
+        consumed += n_chars + usize::from(placed.ends_with_newline);
     }
     stops
 }
