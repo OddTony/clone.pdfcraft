@@ -261,7 +261,8 @@ pub fn import_pages_with(
 /// under one new bookmark titled `title` (the file's name) at its first inserted page, as Combine
 /// Files does for each file. That bookmark goes among the top-level bookmarks where the pages went:
 /// before the first one that points after them. Bookmarks to pages left out lose their destination;
-/// a file without bookmarks adds none.
+/// a file without bookmarks adds none. Catalog attachments are merged with the destination's
+/// attachments, with duplicate name-tree keys renamed, as in Combine Files.
 pub fn insert_file_pages(
     dst: &mut Document,
     src: &Document,
@@ -280,6 +281,15 @@ pub fn insert_file_pages(
     {
         let after = at.min(crate::page_count(dst)?.saturating_sub(imported.pages.len())).saturating_add(imported.pages.len());
         insert_file_bookmark(dst, &Mark { title: title.to_string(), page: *first, outline }, after)?;
+    }
+    if !imported.pages.is_empty() {
+        let mut incoming = Vec::new();
+        collect_attachments(dst, src, &mut incoming)?;
+        if !incoming.is_empty() {
+            let mut attachments = attachment_entries(dst);
+            attachments.append(&mut incoming);
+            set_attachments(dst, attachments)?;
+        }
     }
     Ok(ImportOutcome { pages: imported.pages, renamed_fields: imported.renamed_fields })
 }
@@ -1125,20 +1135,24 @@ pub fn combine_grouped_with(runs: &[Run<'_>], conflicts: FieldConflicts) -> Resu
     Ok(CombineOutcome { doc: out, renamed_fields })
 }
 
-/// Copy a source's document-level attachments (`/Names /EmbeddedFiles`) into `dst`.
-fn collect_attachments(dst: &mut Document, src: &Document, out: &mut Vec<(Vec<u8>, Object)>) -> Result<(), OrganizeError> {
+fn attachment_entries(src: &Document) -> Vec<(Vec<u8>, Object)> {
     let Some(tree) = src
         .root()
         .and_then(|r| src.get(r).as_dict().cloned())
         .and_then(|c| c.get(b"Names").map(|n| src.resolve(n)))
         .and_then(|n| n.as_dict().and_then(|d| d.get(b"EmbeddedFiles").cloned()))
     else {
-        return Ok(());
+        return Vec::new();
     };
     let mut entries = Vec::new();
     name_tree_entries(src, &tree, 0, &mut entries);
+    entries
+}
+
+/// Copy a source's document-level attachments (`/Names /EmbeddedFiles`) into `dst`.
+fn collect_attachments(dst: &mut Document, src: &Document, out: &mut Vec<(Vec<u8>, Object)>) -> Result<(), OrganizeError> {
     let mut copier = Copier::new(src, HashMap::new(), HashMap::new());
-    for (k, v) in entries {
+    for (k, v) in attachment_entries(src) {
         let v = copier.copy_value(dst, &v, None)?;
         out.push((k, v));
     }
@@ -1155,7 +1169,13 @@ fn set_attachments(dst: &mut Document, mut entries: Vec<(Vec<u8>, Object)>) -> R
         let base = k.clone();
         let mut n = 2;
         while !seen.insert(k.clone()) {
-            *k = [base.as_slice(), format!(" ({n})").as_bytes()].concat();
+            *k = base.clone();
+            let suffix = format!(" ({n})");
+            match base.get(..2) {
+                Some([0xfe, 0xff]) => k.extend(suffix.encode_utf16().flat_map(u16::to_be_bytes)),
+                Some([0xff, 0xfe]) => k.extend(suffix.encode_utf16().flat_map(u16::to_le_bytes)),
+                _ => k.extend_from_slice(suffix.as_bytes()),
+            }
             n += 1;
         }
     }
@@ -1169,14 +1189,10 @@ fn set_attachments(dst: &mut Document, mut entries: Vec<(Vec<u8>, Object)>) -> R
     tree.set(b"Names".to_vec(), Object::Array(names));
     let tree = dst.add(tree);
     let root = dst.root().ok_or(OrganizeError::NoPageTree)?;
-    dst.update_dict(root, |c| {
-        let mut n = match c.get(b"Names") {
-            Some(Object::Dict(d)) => d.clone(),
-            _ => Dict::new(),
-        };
-        n.set(b"EmbeddedFiles".to_vec(), Object::Ref(tree));
-        c.set(b"Names".to_vec(), Object::Dict(n));
-    })?;
+    let catalog = dst.get(root);
+    let mut names = catalog.as_dict().and_then(|c| c.get(b"Names")).map(|n| dst.resolve(n)).and_then(|n| n.as_dict().cloned()).unwrap_or_default();
+    names.set(b"EmbeddedFiles".to_vec(), Object::Ref(tree));
+    dst.update_dict(root, |c| c.set(b"Names".to_vec(), Object::Dict(names)))?;
     Ok(())
 }
 
