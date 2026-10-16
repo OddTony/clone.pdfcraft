@@ -3,6 +3,7 @@
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M2/gap 12: the Annex D.2 alias codes read as the ink they draw in both tables; the text oracle scores reading order; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M7 #1540: vector paths selected, moved, resized, recoloured and deleted; page objects aligned, distributed and arranged; checklist recounted by hand, ≈ 67% → ≈ 69% tier-weighted; readiness not re-judged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M3 #2080 candidate: explicit search jumps join per-tab history; rail and control-channel Back/Forward; estimates unchanged)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M4 #1910: Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -53,8 +54,8 @@ and add a line to the [progress log](#progress-log); when a gap closes, remove i
 
 | | Value | Kind |
 |---|---|---|
-| **Feature breadth** | **≈ 67%** tier-weighted (56.9% unweighted: 423 shipped + 74 partial of 808; P0 94.2%) | measured, `parity/acrobat-features.toml` |
-| Feature breadth, mainstream practitioner | ≈ 70% tier-weighted (63.2% unweighted; P0 95.3%) | measured ([split](docs/target-app-parity.md#mainstream-practitioner-vs-full-acrobat-pro)) |
+| **Feature breadth** | **≈ 69%** tier-weighted (58.6% unweighted: 432 shipped + 89 partial of 813; P0 94.2%) | measured, `parity/acrobat-features.toml` (counted by hand 2026-10-13) |
+| Feature breadth, mainstream practitioner | ≈ 70% tier-weighted (63.2% unweighted; P0 95.3%) | measured 2026-10-10 ([split](docs/target-app-parity.md#mainstream-practitioner-vs-full-acrobat-pro)) |
 | **Ready for real work**, full Acrobat Pro | **≈ 50%** (45–53%) | estimated, weighted sum over [dimensions](#by-dimension) |
 | **Ready for real work**, mainstream practitioner | **≈ 55%** (50–60%) | estimated ([split](docs/target-app-parity.md#mainstream-practitioner-vs-full-acrobat-pro)) |
 | **Ready for real work**, essentials user | **≈ 66%** (60–70%) | estimated ([method](docs/target-app-parity.md#essentials-user)) |
@@ -82,7 +83,7 @@ Hours are calibrated as in [Effort and calibration](docs/target-app-parity.md#ef
 
 | Dimension | Ready | Weight | Remaining (h) | Doc |
 |---|---|---|---|---|
-| Features (14 areas) | ≈ 49% depth · 67% breadth | 40% | 610–1,100 | [target-app-parity.md](docs/target-app-parity.md#by-feature-area) |
+| Features (14 areas) | ≈ 49% depth · 69% breadth | 40% | 610–1,100 | [target-app-parity.md](docs/target-app-parity.md#by-feature-area) |
 | UI/UX fidelity | ≈ 55% | 10% | 30–60 | [ui-parity.md](docs/ui-parity.md) |
 | File formats and conversion | ≈ 40% | 12% | 120–220 (within features) | [file-format-parity.md](docs/file-format-parity.md) |
 | PDF specification and standards | ≈ 60% | 8% | 150–260 (within features) | [pdf-spec-parity.md](docs/pdf-spec-parity.md) |
@@ -99,19 +100,19 @@ Hours are calibrated as in [Effort and calibration](docs/target-app-parity.md#ef
 
 | Area | Breadth (measured) | Ready (estimated) | Remaining (h) |
 |---|---|---|---|
-| A Core model and fidelity | 76.8% | 70% | 25–45 |
-| B View and navigation | 62.5% | 55% | 110–190 |
-| C Content editing | 53.3% | 30% | 100–180 |
-| D Organize pages | 61.2% | 70% | 12–25 |
+| A Core model and fidelity | 77.2% | 70% | 25–45 |
+| B View and navigation | 62.8% | 55% | 110–190 |
+| C Content editing | 61.5% | 30% | 100–180 |
+| D Organize pages | 63.0% | 70% | 12–25 |
 | E Comments and review | 77.7% | 70% | 12–25 |
 | F Forms and JavaScript | 78.5% | 65% | 40–75 |
-| G Protect, redact, sanitize | 58.5% | 55% | 15–30 |
+| G Protect, redact, sanitize | 58.3% | 55% | 15–30 |
 | H Digital signatures | 62.2% | 45% | 40–70 |
-| I Scan and OCR | 23.1% | 15% | 40–75 |
-| J Create and export | 39.7% | 25% | 55–100 |
+| I Scan and OCR | 32.7% | 15% | 40–75 |
+| J Create and export | 41.2% | 25% | 55–100 |
 | K Optimize and standards | 34.5% | 20% | 65–115 |
 | L Print | 39.7% | 35% | 30–55 |
-| M Accessibility | 63.1% | 30% | 40–70 |
+| M Accessibility | 68.9% | 30% | 40–70 |
 | N Automation, preferences, misc | 30.0% | 35% | 25–45 |
 
 What's strong and missing in each: [target-app-parity.md](docs/target-app-parity.md#by-feature-area).
@@ -206,6 +207,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 - **2026-10-14 (community, M7, #128 Hebrew in Add text):** Add text and `page_add_text` draw Hebrew with the craft-fonts Hebr face (Noto Sans Hebrew), through the same shaped path as Arabic and Thai: right-to-left display order with numbers and Latin in place, points and cantillation kept on their letter as one Type 3 glyph, ToUnicode and per-line ActualText so extraction, search and the editor get typing order. Builds without the face refuse Hebrew rather than write `?`. Regular style only. Estimates unchanged.
 - **2026-10-14 (M9, #1787):** Changes after signing are judged by the role an object held when signed for a page's resources too: a rewritten font, XObject, graphics state or resources dictionary is page content however its new version is labelled, so a `/FT` or `/Subtype /Widget` added by the attacker no longer reads as a permitted form fill. A category dictionary that only gained a name is judged as before.
 - **2026-10-13 (M3, native-opening candidate):** Chosen tools survive preparation, conversion and password retries; startup intake waits for pending preparation. Regression tests cover completion, cancellation and document identity. Estimates unchanged.
+- **2026-10-13 (M7, vector editing, #1540):** Vector paths are page objects in Edit text & images. A click on a path's painted shape selects it and a drag moves it; Shift-click and the marquee add paths to a selection of text, images and added items; corner handles resize one path; Delete or Backspace removes paths and images together; Fill colour and Stroke colour swatches recolour the selected paths. Right-clicking the selection arranges one path or image (Bring to front, Bring forward, Send backward, Send to back) among the objects it overlaps, and aligns (left, centre, right, top, middle, bottom) or distributes any mix of objects in the page's orientation. Each is one undo step and rewrites only the content streams it changes; `object_list` reports paths with their colours, and `object_resize`, `object_recolour`, `object_delete`, `object_align` and `object_arrange` do the same through automation. Limits: recolour writes DeviceRGB, resizing scales the stroke with the path, pattern-painted paths don't move, clipping paths, paths in text objects and Form internals aren't selectable, and text and added items aren't arranged. `edit.vector-edit`, `edit.arrange-objects` and `edit.align-distribute-objects` shipped; the checklist recounted by hand comes to 432 shipped + 89 partial of 813 (58.6%, ≈ 69% tier-weighted), most of the change since 2026-10-10 from other features. Readiness and hours not re-judged.
 - **2026-10-13 (community, M3, #531 touchpad momentum):** On Wayland a two-finger swipe keeps gliding after the fingers lift and slows to a stop, measured from the gesture's last 0.1 s and decaying with a 0.35 s time constant through the #759 1:1 path. Any wheel input, click, key, zoom or edge ends it (fingers resting on the touchpad don't yet: the vendored winit binds no Wayland hold gestures); single-page paging, macOS (which sends its own momentum), the web, and Animation effects Off never glide. Unit tests for the physics and two headless view tests. Estimates unchanged.
 - **2026-10-13 (M3, native-open admission):** Later prepared replies stay queued while a modal or native picker owns the foreground. Picker completion, cancellation and abandonment wake retained opens. Regressions cover recipient ownership, exactly-once admission, source/history preservation and one-shot repaint requests. Estimates unchanged.
 - **2026-10-13 (M6, choice indices):** Multi-select choice fields write ascending `/I` option indices while preserving the caller's `/V` order. Synthetic forms and headless engine regressions cover reverse selection and save/reopen. Estimates unchanged.
@@ -496,6 +498,7 @@ Newest first: the date, what moved, and the new overall estimate.
 | Date | Change | Summary |
 |---|---|---|
 | 2026-10-13 | minor | M9: separate page validation overlays preserve signature artwork, and snapshot tabs reuse instead of multiplying; baked captions remain unchanged (#79 open); estimates unchanged |
+| 2026-10-13 | minor | M7 #1540: vector editing, align, distribute and arrange shipped; checklist recounted by hand (58.6% unweighted, ≈ 69% tier-weighted, area breadths); readiness and hours not re-judged |
 | 2026-10-12 | minor | M6: valid AcroForm XML element names with original PDF field names preserved; saved-PDF collision and Unicode regressions. Estimates unchanged. |
 | 2026-10-12 | minor | M6: preserve carriage returns in exported CSV field names and values; saved-PDF round-trip coverage. Estimates unchanged. |
 | 2026-10-13 | minor | M4: Insert-from-file preserves source bookmarks; integration tests retained with current main. Estimates unchanged. |
