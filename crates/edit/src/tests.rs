@@ -2313,11 +2313,27 @@ fn the_graphics_state_carries_over_between_content_streams() {
 /// One page whose font draws a few Hebrew letters (ToUnicode): A ב, B ד, C י, D ו, E ק, F ש,
 /// G ל, H ם. Content streams draw Hebrew in visual order, so "בדיוק" is `(EDCBA)`.
 fn hebrew_page(content: &str) -> Document {
-    let cmap = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapType 2 def \
-                1 begincodespacerange <00> <FF> endcodespacerange 9 beginbfchar \
-                <20> <0020> <41> <05D1> <42> <05D3> <43> <05D9> <44> <05D5> <45> <05E7> <46> <05E9> <47> <05DC> <48> <05DD> \
-                endbfchar endcmap CMapName currentdict /CMap defineresource pop end end";
-    // Widths for codes 32..=72: a space, then the eight letters at 65..=72.
+    letters_page("FakeHebrew", &["05D1", "05D3", "05D9", "05D5", "05E7", "05E9", "05DC", "05DD"], content)
+}
+
+/// One page whose font draws a few Arabic letters (ToUnicode), each in a single form, as a subset
+/// with no shaping tables does: A ا, B ل, C م, D ر, E ح, F ب. Drawn in visual order, "مرحبا" is
+/// `(AFEDC)`.
+fn arabic_page(content: &str) -> Document {
+    letters_page("FakeArabic", &["0627", "0644", "0645", "0631", "062D", "0628"], content)
+}
+
+/// One page whose subset font `name` maps a space and codes A, B, … to `letters` (UTF-16 hex).
+fn letters_page(name: &str, letters: &[&str], content: &str) -> Document {
+    let entries: String = letters.iter().zip(b'A'..).map(|(u, code)| format!("<{code:02X}> <{u}> ")).collect();
+    let cmap = format!(
+        "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapType 2 def \
+         1 begincodespacerange <00> <FF> endcodespacerange {} beginbfchar <20> <0020> {entries}\
+         endbfchar endcmap CMapName currentdict /CMap defineresource pop end end",
+        letters.len() + 1
+    );
+    // Widths for codes 32..=72: a space, then up to eight letters at 65..=72.
+    assert!(letters.len() <= 8, "the font's widths stop at code 72");
     let widths: Vec<&str> = (32..=72)
         .map(|c| {
             if c == 32 {
@@ -2335,7 +2351,7 @@ fn hebrew_page(content: &str) -> Document {
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".into(),
         format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
         format!(
-            "<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+FakeHebrew /FirstChar 32 /LastChar 72 /Widths [{}] /ToUnicode 6 0 R >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+{name} /FirstChar 32 /LastChar 72 /Widths [{}] /ToUnicode 6 0 R >>",
             widths.join(" ")
         ),
         format!("<< /Length {} >>\nstream\n{cmap}\nendstream", cmap.len()),
@@ -2477,6 +2493,63 @@ fn hebrew_letters_the_page_font_lacks_use_the_hebrew_face() {
     let mut doc = hebrew_page("BT /F1 12 Tf 300 700 Td (EDCBA) Tj ET");
     assert_eq!(text::replace_block(&mut doc, 0, 0, "עברית מלאה").unwrap().substituted.as_deref(), Some("Noto Sans Hebrew Type3"));
     assert_eq!(text::text_blocks(&reopen(&doc), 0).unwrap()[0].text, "עברית מלאה");
+}
+
+/// The Type 3 glyphs of the page's generated Arabic fonts (`PCEdAr…`) that read back as `text`.
+fn arabic_glyphs_reading(doc: &Document, text: &str) -> usize {
+    let hex: String = text.encode_utf16().map(|u| format!("{u:04X}")).collect();
+    let p = pdfcraft_model::pages(doc).swap_remove(0);
+    let res = doc.resolve(p.dict.get(b"Resources").unwrap());
+    let fonts = doc.resolve(res.as_dict().unwrap().get(b"Font").unwrap());
+    let mut count = 0;
+    for (_, font) in fonts.as_dict().unwrap().iter().filter(|(name, _)| name.starts_with(b"PCEdAr")) {
+        let font = doc.resolve(font);
+        let pdfcraft_cos::Object::Stream(s) = &*doc.resolve(font.as_dict().unwrap().get(b"ToUnicode").unwrap()) else { panic!("ToUnicode stream") };
+        let cmap = String::from_utf8(s.decoded().unwrap()).unwrap();
+        count += cmap.matches(&format!("> <{hex}>")).count();
+    }
+    count
+}
+
+/// #2878 (and #1039, #2274): Arabic typed into a paragraph whose subset font lacks a letter (here
+/// س) failed with "the BIZ UDPGothic fallback font has no glyph for U+0633", because the letter
+/// went to the Japanese face. It is now shaped with the craft-fonts Arabic face, so its letters
+/// join, and it keeps the paragraph's right edge and reads back as typed. A build without that
+/// face says so and changes nothing.
+#[test]
+fn arabic_letters_the_page_font_lacks_are_shaped_with_the_arabic_face() {
+    let mut doc = arabic_page("BT /F1 12 Tf 300 700 Td (AFEDC) Tj ET");
+    assert_eq!(text::text_blocks(&doc, 0).unwrap()[0].text, "مرحبا");
+    let before = page_content_bytes(&doc, 0);
+    let right = text::text_lines(&doc, 0).unwrap()[0].rect[2];
+    let typed = "مرحبا سلام";
+    // A single line isn't shaped: it is refused with what to do instead, and nothing changes.
+    let line = text::replace_line(&mut doc, 0, 0, typed);
+    let Err(EditError::Invalid(msg)) = line else { panic!("expected a clear error, got {line:?}") };
+    let expected = if pdfcraft_fonts::document_arabic_font().is_some() { "whole paragraph" } else { "Arabic font" };
+    assert!(msg.contains(expected), "{msg}");
+    assert_eq!(page_content_bytes(&doc, 0), before);
+    let edit = text::replace_block(&mut doc, 0, 0, typed);
+    if pdfcraft_fonts::document_arabic_font().is_none() {
+        let Err(EditError::Invalid(msg)) = edit else { panic!("expected a clear error, got {edit:?}") };
+        assert!(msg.contains("Arabic font") && msg.contains("CRAFT_FONTS_DIR"), "{msg}");
+        assert_eq!(page_content_bytes(&doc, 0), before);
+        eprintln!("built without a craft-fonts Arab face: the shaped path is checked with CRAFT_FONTS_DIR");
+        return;
+    }
+    assert_eq!(edit.unwrap().substituted.as_deref(), Some("Noto Sans Arabic"));
+    let doc = reopen(&doc);
+    let block = text::text_blocks(&doc, 0).unwrap().swap_remove(0);
+    assert_eq!(block.editor_text, typed);
+    // Joined, not letter by letter: م starts مرحبا and ends سلام, two forms of one letter.
+    assert_eq!(arabic_glyphs_reading(&doc, "م"), 2);
+    // Right to left: it grows from the paragraph's right edge, not past it.
+    assert!((block.rect[2] - right).abs() < 0.5, "right edge {right} → {:?}", block.rect);
+
+    // Editing it again (now drawn with the Arabic face) and saving again keeps it.
+    let mut doc = doc;
+    text::replace_block(&mut doc, 0, 0, "سلام").unwrap();
+    assert_eq!(text::text_blocks(&reopen(&doc), 0).unwrap()[0].editor_text, "سلام");
 }
 
 /// #2013: the dialog asks `first_undrawable` before offering OK, so it must refuse exactly what

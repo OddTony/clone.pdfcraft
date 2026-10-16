@@ -525,6 +525,51 @@ fn arabic_ligature_actual_text_is_one_editable_word_through_save_reopen() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
+/// #2878: Arabic typed into a paragraph whose font lacks some of its letters (ع, ي and ك here)
+/// failed to save, because those letters went to the Japanese fallback face. They are shaped with
+/// the craft-fonts Arabic face, and the edit saves, reopens, extracts and is found as typed.
+#[test]
+fn arabic_letters_the_page_font_lacks_save_reopen_and_stay_searchable() {
+    use pdfcraft_cos::{Dict, Document, ObjRef, Object, SaveOptions, Stream, write_full};
+    use std::sync::Arc;
+
+    let dir = workdir("arabic-edit-fallback");
+    let mut doc = Document::open(Arc::new(fixture(1))).unwrap();
+    // Synthetic glyph codes: A س, B ل, C ا, D م; "سلام" is drawn in visual order, (DCBA).
+    let cmap = "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapType 2 def \
+                1 begincodespacerange <00> <FF> endcodespacerange 4 beginbfchar \
+                <41> <0633> <42> <0644> <43> <0627> <44> <0645> \
+                endbfchar endcmap CMapName currentdict /CMap defineresource pop end end";
+    let unicode = doc.add(Object::Stream(Stream::flate(Dict::new(), cmap.as_bytes())));
+    doc.update_dict(ObjRef::new(3, 0), |d| d.set(b"ToUnicode".to_vec(), Object::Ref(unicode))).unwrap();
+    // Near the right edge: a right-to-left line grows to the left.
+    doc.set(ObjRef::new(5, 0), Object::Stream(Stream::flate(Dict::new(), b"BT /F1 24 Tf 110 150 Td (DCBA) Tj ET")));
+    std::fs::write(dir.join("arabic.pdf"), write_full(&doc, &SaveOptions::default()).unwrap()).unwrap();
+
+    let mut a = auto(&dir);
+    let id = ok(&mut a, "doc_open", json!({"path":"arabic.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, id), ["سلام"]);
+    let render = a.call("page_render", &json!({"doc":id,"page":1,"dpi":72})).unwrap();
+    let typed = "سلام عليكم";
+    let edit = json!({"doc":id,"page":1,"paragraph":1,"text":typed});
+    if pdfcraft_fonts::document_arabic_font().is_none() {
+        let message = err(&mut a, "text_edit", edit).to_string();
+        assert!(message.contains("Arabic font") && message.contains("CRAFT_FONTS_DIR"), "{message}");
+        assert_eq!(a.call("page_render", &json!({"doc":id,"page":1,"dpi":72})).unwrap(), render);
+        eprintln!("set CRAFT_FONTS_DIR to exercise Arabic letters the page's font lacks");
+        std::fs::remove_dir_all(dir).unwrap();
+        return;
+    }
+    ok(&mut a, "text_edit", edit);
+    assert_ne!(a.call("page_render", &json!({"doc":id,"page":1,"dpi":72})).unwrap(), render);
+    ok(&mut a, "doc_save", json!({"doc":id,"path":"edited.pdf"}));
+    let re = ok(&mut a, "doc_open", json!({"path":"edited.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, re), [typed]);
+    assert_eq!(ok(&mut a, "text_lines", json!({"doc":re,"page":1}))["lines"][0]["text"], typed);
+    assert_eq!(ok(&mut a, "text_find", json!({"doc":re,"query":"عليكم"}))["matches"].as_array().unwrap().len(), 1);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 /// Each of these writes to its required `path` and replaces an existing file there, so the MCP
 /// annotations must not tell clients the call is read-only or harmless (#130).
 #[test]
