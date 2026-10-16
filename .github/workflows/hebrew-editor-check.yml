@@ -46,3 +46,4 @@ jobs:
           cargo test --locked --lib -p pdfcraft-ui-egui live_rtl_preview_uses_original_font_after_text_changes
           cargo test --locked --lib -p pdfcraft-fonts unicode_grapheme_sequences_reuse_one_embedded_pdf_glyph
           cargo test --locked --lib -p pdfcraft-edit vowelized_hebrew_uses_the_shaping_writer_not_the_type3_fallback
+          cargo test --locked --lib -p pdfcraft-engine edited_pdf_preview_matches_apply_save_render
