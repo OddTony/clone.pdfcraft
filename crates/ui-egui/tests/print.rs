@@ -427,6 +427,22 @@ fn an_empty_printer_list_says_none_were_found() {
     assert!(!h.get_by_role_and_label(Role::Button, "Save as PDF").accesskit_node().is_disabled());
 }
 
+/// After the Print dialog opens: frames until its printer list has loaded (its arrival changes
+/// the dialog's rows, even an empty list, which adds the "no printers" line), then a few more so
+/// the dialog has settled where it stays. A click before then can land where a control was
+/// (windows-latest CI).
+fn settle(h: &mut Harness<'static, PdfCraftApp>) {
+    for _ in 0..500 {
+        h.run_steps(1);
+        if !h.state().print_draft.printers_loading {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert!(!h.state().print_draft.printers_loading, "the printer list loaded");
+    h.run_steps(8);
+}
+
 /// Page setup: a paper size of one's own joins the Paper list (Custom…), the paper is kept for
 /// the printer when "Remember this paper for …" is ticked at Print time, starts the dialog next
 /// time, survives a restart with the settings, and is forgotten when unticked; Remove takes a
@@ -437,7 +453,7 @@ fn custom_papers_and_the_paper_remembered_for_a_printer() {
     // No printers here: Save as PDF is the dialog's printer, now and when it opens again.
     h.state_mut().printer_source = Some(std::sync::Arc::new(Vec::new));
     assert!(h.state_mut().execute("print.dialog"));
-    h.run_steps(3);
+    settle(&mut h);
     assert_eq!(h.state().print_draft.printer, None);
     h.get_by_label("Custom…").click();
     h.run_steps(2);
@@ -460,6 +476,7 @@ fn custom_papers_and_the_paper_remembered_for_a_printer() {
     assert!(h.state().print_draft.remember_paper, "ticked");
     let out = std::env::temp_dir().join(format!("pdfcraft-print-paper-test-{}.pdf", std::process::id()));
     h.state_mut().save_override = Some(out.to_string_lossy().into_owned());
+    h.run_steps(8);
     h.get_by_label("Save as PDF").click();
     h.run_steps(3);
     assert_eq!(h.state().dialog, None);
@@ -472,7 +489,7 @@ fn custom_papers_and_the_paper_remembered_for_a_printer() {
     // Next time the dialog starts with it.
     h.state_mut().print_draft.paper = 0;
     assert!(h.state_mut().execute("print.dialog"));
-    h.run_steps(3);
+    settle(&mut h);
     assert_eq!((h.state().print_draft.paper_name().as_str(), h.state().print_draft.remember_paper), ("Label 4×6", true));
     // And after a restart.
     let settings = h.state().persist();
@@ -483,14 +500,17 @@ fn custom_papers_and_the_paper_remembered_for_a_printer() {
     // Unticked at Print time, the paper is forgotten for Save as PDF.
     h.get_by_label("Remember this paper for Save as PDF").click();
     h.run_steps(1);
+    assert!(!h.state().print_draft.remember_paper, "unticked");
     h.state_mut().save_override = Some(out.to_string_lossy().into_owned());
+    h.run_steps(8);
     h.get_by_label("Save as PDF").click();
     h.run_steps(3);
+    assert_eq!(h.state().dialog, None, "saved");
     let _ = std::fs::remove_file(&out);
     assert!(h.state().print_draft.remembered_paper.is_empty());
     // Remove takes the custom size off the list.
     assert!(h.state_mut().execute("print.dialog"));
-    h.run_steps(3);
+    settle(&mut h);
     let custom = h.state().print_draft.paper_count() - 1;
     h.state_mut().print_draft.paper = custom;
     h.run_steps(2);
