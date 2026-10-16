@@ -73,6 +73,9 @@ struct Item {
     rect: Option<[f64; 4]>,
     parents: Parents,
     nesting: usize,
+    /// The version already reported for the key or link that led here: what it leads to is at
+    /// least as new, so its own keys aren't reported again up to that version.
+    newer: Option<Version>,
 }
 
 /// A node of a name or number tree whose leaves have one of `links` as their type.
@@ -88,6 +91,7 @@ struct TreeItem {
     page: Option<usize>,
     parents: Parents,
     depth: usize,
+    newer: Option<Version>,
 }
 
 /// The object being checked, and where it is.
@@ -100,6 +104,7 @@ struct Here<'a> {
     rect: Option<[f64; 4]>,
     parents: &'a [Arc<Object>],
     nesting: usize,
+    newer: Option<Version>,
 }
 
 /// A value with references followed.
@@ -188,6 +193,7 @@ pub fn validate(src: &dyn Source, opts: &Options) -> Report {
         rect: None,
         parents: Vec::new(),
         nesting: 0,
+        newer: None,
     }));
     while let Some(work) = w.queue.pop_front() {
         if w.objects >= opts.max_objects {
@@ -299,7 +305,7 @@ impl Walker<'_> {
     // ── objects ────────────────────────────────────────────────────────────────────────────
 
     fn visit(&mut self, item: Item) {
-        let Item { value, ty, path, holder, page, rect, parents, nesting } = item;
+        let Item { value, ty, path, holder, page, rect, parents, nesting, newer } = item;
         let (obj, holder, mut page, nesting) = match value {
             Object::Ref(r) => {
                 if !self.seen.insert((r.num, ty)) {
@@ -322,7 +328,7 @@ impl Walker<'_> {
             page = self.src.page_index(*p);
         }
         let rect = if def.name.starts_with("Annot") { obj.get(b"Rect").and_then(|r| self.rect(r)) } else { None }.or(rect);
-        let here = Here { def, obj: &obj, path: &path, holder, page, rect, parents: &parents, nesting };
+        let here = Here { def, obj: &obj, path: &path, holder, page, rect, parents: &parents, nesting, newer };
         match (&*obj, def.shape) {
             (Object::Dict(_) | Object::Stream(_), Shape::Dict) => self.check_dict(&here),
             (Object::Array(items), Shape::Array) => self.check_array(&here, items),
@@ -383,12 +389,21 @@ impl Walker<'_> {
     fn check_array(&mut self, here: &Here, items: &[Object]) {
         let def = here.def;
         let len = items.len();
+        // `N*` rows: a set of elements repeated from the first such index on.
+        let repeats: Vec<&'static Row> = def.rows.iter().filter(|r| matches!(r.kind, KeyKind::Repeat(_))).collect();
+        let first = repeats.iter().filter_map(|r| if let KeyKind::Repeat(n) = r.kind { Some(n) } else { None }).min();
+        // The row of the repeating set the next element starts looking at.
+        let mut at = 0;
         for (i, v) in items.iter().enumerate() {
             if i >= MAX_ELEMENTS {
                 self.note("elements past the limit");
                 break;
             }
-            match def.row_for_index(i) {
+            let row = match first {
+                Some(first) if i >= first && !def.rows.iter().any(|r| r.kind == KeyKind::Index(i)) => self.repeat_row(&repeats, &mut at, v),
+                _ => def.row_for_index(i),
+            };
+            match row {
                 Some(row) => self.check_value(here, row, &i.to_string(), v, true),
                 None => {
                     let max = def.rows.iter().filter(|r| matches!(r.kind, KeyKind::Index(_))).count();
@@ -411,17 +426,40 @@ impl Walker<'_> {
                 self.check_absent(here, row, row.key, None);
             }
         }
-        // `N*` rows marked required come in whole sets.
-        let repeats: Vec<&Row> = def.rows.iter().filter(|r| matches!(r.kind, KeyKind::Repeat(_))).collect();
-        let first = repeats.iter().filter_map(|r| if let KeyKind::Repeat(n) = r.kind { Some(n) } else { None }).min();
+        // A set whose rows are all required comes whole (INTERNAL_GRAMMAR.md, column Key); one
+        // with optional rows may leave them out.
         if let Some(first) = first
-            && repeats.iter().any(|r| r.required == "TRUE")
-            && len > first
             && !repeats.is_empty()
+            && repeats.iter().all(|r| r.required == "TRUE")
+            && len > first
             && !(len - first).is_multiple_of(repeats.len())
         {
             self.report(here, Severity::Error, Rule::ArrayLength, "", W_SETS, vec![("count", len.to_string()), ("n", repeats.len().to_string())]);
         }
+    }
+
+    /// The row of the repeating set `repeats` that element `v` is, `*at` being the row after the
+    /// previous element's. A row not marked required may be left out, as an attribute object's
+    /// revision number is: when `v` doesn't fit it, the rows after it are tried, up to the next
+    /// required one. When none fits, `v` is checked against the row it should have been.
+    fn repeat_row(&self, repeats: &[&'static Row], at: &mut usize, v: &Object) -> Option<&'static Row> {
+        let n = repeats.len();
+        let start = at.checked_rem(n)?;
+        let value = self.resolve(v);
+        let fits = |row: &'static Row| value.object().is_none_or(|o| pick_alt(row, o, self.version).is_some());
+        for step in 0..n {
+            let k = start.saturating_add(step) % n;
+            let row = repeats.get(k).copied()?;
+            if fits(row) {
+                *at = k.saturating_add(1);
+                return Some(row);
+            }
+            if row.required == "TRUE" {
+                break;
+            }
+        }
+        *at = start.saturating_add(1);
+        repeats.get(start).copied()
     }
 
     /// A key the object doesn't have (or whose value is null, or a reference to nothing).
@@ -449,10 +487,21 @@ impl Walker<'_> {
         if required != Some(true) {
             return;
         }
-        if row.inheritable && self.inherited(here.obj, row.key.as_bytes()) {
+        if row.inheritable && (self.inherited(here.obj, row.key.as_bytes()) || self.form_default(here, row.key)) {
             return;
         }
         self.report(here, Severity::Error, Rule::Required, key, W_REQUIRED, Vec::new());
+    }
+
+    /// A field's /DA and /Q inherit, at the end of the /Parent chain, from the interactive form
+    /// dictionary's document-wide defaults (ISO 32000-2, the form dictionary's DA and Q).
+    fn form_default(&self, here: &Here, key: &str) -> bool {
+        if !FIELD_TYPES.contains(&here.def.name) || !matches!(key, "DA" | "Q") {
+            return false;
+        }
+        let path: Vec<String> = ["trailer", "Root", "AcroForm", key].into_iter().map(String::from).collect();
+        let ctx = Ctx { w: self, holder: here.obj, parents: &[], current: None };
+        matches!(ctx.find(&path), Found::Present(_))
     }
 
     /// Whether an ancestor (`/Parent`, as for pages) supplies `key`.
@@ -489,9 +538,21 @@ impl Walker<'_> {
             return self.check_absent(here, row, key, None);
         }
         let version = self.version;
+        // What the value leads to is at least as new as anything said of it here.
+        let mut newer = here.newer;
         match row.since {
             Since::Version(v) if v > version => {
-                self.report(here, Severity::Warning, Rule::Version, key, W_SINCE, vec![("since", v.to_string()), ("version", version.to_string())]);
+                if !covers(newer, v) {
+                    self.report(
+                        here,
+                        Severity::Warning,
+                        Rule::Version,
+                        key,
+                        W_SINCE,
+                        vec![("since", v.to_string()), ("version", version.to_string())],
+                    );
+                }
+                newer = newer.max(Some(v));
             }
             Since::ExtensionOr(v) if v > version => self.note("Extension"),
             Since::Extension => self.note("Extension"),
@@ -515,23 +576,28 @@ impl Walker<'_> {
             return;
         };
         match alt.gate {
-            Gate::Since(v) | Gate::Only(v) if v > version => self.report(
-                here,
-                Severity::Warning,
-                Rule::Version,
-                key,
-                W_TYPE_SINCE,
-                vec![("found", alt.basic.as_str().to_string()), ("since", v.to_string()), ("version", version.to_string())],
-            ),
+            Gate::Since(v) | Gate::Only(v) if v > version => {
+                if !covers(newer, v) {
+                    self.report(
+                        here,
+                        Severity::Warning,
+                        Rule::Version,
+                        key,
+                        W_TYPE_SINCE,
+                        vec![("found", alt.basic.as_str().to_string()), ("since", v.to_string()), ("version", version.to_string())],
+                    );
+                }
+                newer = newer.max(Some(v));
+            }
             Gate::Extension => self.note("Extension"),
             _ => {}
         }
         self.check_indirect(here, alt, key, reference.is_some());
         self.check_format(here, alt, key, value);
-        self.check_possible(here, alt, key, value);
+        self.check_possible(here, alt, key, value, newer);
         self.check_special(here, alt, key, value);
         match alt.basic {
-            Basic::Array | Basic::Dictionary | Basic::Stream if !alt.links.is_empty() => self.follow(here, alt, key, raw, value, reference),
+            Basic::Array | Basic::Dictionary | Basic::Stream if !alt.links.is_empty() => self.follow(here, alt, key, raw, value, reference, newer),
             Basic::NameTree | Basic::NumberTree if !alt.links.is_empty() && (here.nesting < MAX_NESTING || reference.is_some()) => {
                 self.queue.push_back(Work::Tree(TreeItem {
                     node: raw.clone(),
@@ -544,6 +610,7 @@ impl Walker<'_> {
                     page: here.page,
                     parents: parents_of(here),
                     depth: 0,
+                    newer,
                 }));
             }
             _ => {}
@@ -551,7 +618,8 @@ impl Walker<'_> {
     }
 
     /// Queue `value` for checking as whichever of `alt`'s linked types it is.
-    fn follow(&mut self, here: &Here, alt: &Alt, key: &str, raw: &Object, value: &Object, reference: Option<Ref>) {
+    #[allow(clippy::too_many_arguments)]
+    fn follow(&mut self, here: &Here, alt: &Alt, key: &str, raw: &Object, value: &Object, reference: Option<Ref>, mut newer: Option<Version>) {
         if reference.is_none() && here.nesting >= MAX_NESTING {
             self.note("nesting past the limit");
             return;
@@ -561,14 +629,17 @@ impl Walker<'_> {
                 if let Gate::Since(v) | Gate::Only(v) = gate
                     && v > self.version
                 {
-                    self.report(
-                        here,
-                        Severity::Warning,
-                        Rule::Version,
-                        key,
-                        W_TYPE_SINCE,
-                        vec![("found", ty.to_string()), ("since", v.to_string()), ("version", self.version.to_string())],
-                    );
+                    if !covers(newer, v) {
+                        self.report(
+                            here,
+                            Severity::Warning,
+                            Rule::Version,
+                            key,
+                            W_TYPE_SINCE,
+                            vec![("found", ty.to_string()), ("since", v.to_string()), ("version", self.version.to_string())],
+                        );
+                    }
+                    newer = newer.max(Some(v));
                 }
                 self.queue.push_back(Work::Object(Item {
                     value: raw.clone(),
@@ -579,6 +650,7 @@ impl Walker<'_> {
                     rect: here.rect,
                     parents: parents_of(here),
                     nesting: here.nesting + 1,
+                    newer,
                 }));
             }
             Pick::Ambiguous(names) => {
@@ -612,7 +684,7 @@ impl Walker<'_> {
             _ => t.holder,
         };
         let parents: Parents = std::iter::once(node.clone()).chain(t.parents.iter().take(2).cloned()).collect();
-        let here = Here { def, obj: &node, path: &t.path, holder, page: t.page, rect: None, parents: &t.parents, nesting: 0 };
+        let here = Here { def, obj: &node, path: &t.path, holder, page: t.page, rect: None, parents: &t.parents, nesting: 0, newer: t.newer };
         if node.entries().is_none() {
             self.report(
                 &here,
@@ -641,6 +713,7 @@ impl Walker<'_> {
                     page: t.page,
                     parents: t.parents.clone(),
                     depth: t.depth + 1,
+                    newer: t.newer,
                 }));
             }
         }
@@ -683,6 +756,7 @@ impl Walker<'_> {
                     rect: None,
                     parents: parents.clone(),
                     nesting: 0,
+                    newer: t.newer,
                 })),
                 Pick::Ambiguous(names) => {
                     let shown: Vec<&str> = names.iter().take(6).copied().collect();
@@ -737,8 +811,8 @@ impl Walker<'_> {
         let bad = match (alt.basic, value) {
             (Basic::Rectangle, Object::Array(a)) => (a.len() != 4 || !self.all_numbers(a)).then(|| format!("an array of {} elements", a.len())),
             (Basic::Matrix, Object::Array(a)) => (a.len() != 6 || !self.all_numbers(a)).then(|| format!("an array of {} elements", a.len())),
-            (Basic::StringAscii, Object::String { bytes, .. }) => (!bytes.is_ascii()).then(|| "a string with non-ASCII bytes".to_string()),
-            (Basic::Date, Object::String { bytes, .. }) => (!is_date(bytes)).then(|| show(value)),
+            (Basic::StringAscii, Object::String { .. }) => (!well_formed(alt.basic, value)).then(|| "a string with non-ASCII bytes".to_string()),
+            (Basic::Date, Object::String { .. }) => (!well_formed(alt.basic, value)).then(|| show(value)),
             _ => None,
         };
         if let Some(found) = bad {
@@ -752,7 +826,7 @@ impl Walker<'_> {
         a.iter().all(|v| self.resolve(v).object().and_then(number).is_some())
     }
 
-    fn check_possible(&mut self, here: &Here, alt: &'static Alt, key: &str, value: &Object) {
+    fn check_possible(&mut self, here: &Here, alt: &'static Alt, key: &str, value: &Object, newer: Option<Version>) {
         let list = alt.possible.trim();
         if list.is_empty() {
             return;
@@ -802,7 +876,7 @@ impl Walker<'_> {
                 matched = true;
                 let shown = show(value);
                 match *gate {
-                    Gate::Since(v) | Gate::Only(v) if version < v => self.report(
+                    Gate::Since(v) | Gate::Only(v) if version < v && !covers(newer, v) => self.report(
                         here,
                         Severity::Warning,
                         Rule::Version,
@@ -918,16 +992,18 @@ impl Walker<'_> {
         self.quiet.set(true);
         let scored: Vec<(i64, bool)> = candidates.iter().map(|(g, d)| self.score(*g, d, value)).collect();
         self.quiet.set(false);
+        // A candidate the object contradicts is out however well its other keys fit: a widget
+        // merged with its text field shares more keys with a free-text annotation than with
+        // AnnotWidget, but its /Subtype says what it is.
         let mut best: Option<(usize, i64)> = None;
-        for (i, (s, _)) in scored.iter().enumerate() {
-            if best.is_none_or(|(_, b)| *s > b) {
+        for (i, (s, contradicted)) in scored.iter().enumerate() {
+            if !contradicted && best.is_none_or(|(_, b)| *s > b) {
                 best = Some((i, *s));
             }
         }
-        let Some((i, _)) = best else { return Pick::Nothing };
-        match (candidates.get(i), scored.get(i)) {
-            (Some((g, d)), Some((_, false))) => Pick::Type(d.name, *g),
-            _ => Pick::Ambiguous(candidates.iter().map(|(_, d)| d.name).collect()),
+        match best.and_then(|(i, _)| candidates.get(i)) {
+            Some((g, d)) => Pick::Type(d.name, *g),
+            None => Pick::Ambiguous(candidates.iter().map(|(_, d)| d.name).collect()),
         }
     }
 
@@ -1018,10 +1094,27 @@ fn fixed_values(alt: &Alt) -> Option<Vec<&'static str>> {
     Some(out)
 }
 
-/// The alternative of `row` whose type fits `value`, preferring one the file's version admits.
+/// The alternative of `row` whose type fits `value`, preferring one the file's version admits and,
+/// for a string, one whose format it has: an annotation's /M is `date;string-text`, so a string
+/// that is no date is text, not a malformed date.
 fn pick_alt(row: &'static Row, value: &Object, version: Version) -> Option<&'static Alt> {
     let fits = |a: &&Alt| accepts(a.basic, value);
-    row.alts.iter().filter(fits).find(|a| a.gate.admits(version)).or_else(|| row.alts.iter().find(fits))
+    let formed = |a: &&Alt| fits(a) && well_formed(a.basic, value);
+    row.alts
+        .iter()
+        .filter(formed)
+        .find(|a| a.gate.admits(version))
+        .or_else(|| row.alts.iter().filter(fits).find(|a| a.gate.admits(version)))
+        .or_else(|| row.alts.iter().find(fits))
+}
+
+/// Whether a string has the format its type asks for: a date (ISO 32000-2 §7.9.4), ASCII.
+fn well_formed(basic: Basic, o: &Object) -> bool {
+    match (basic, o) {
+        (Basic::Date, Object::String { bytes, .. }) => is_date(bytes),
+        (Basic::StringAscii, Object::String { bytes, .. }) => bytes.is_ascii(),
+        _ => true,
+    }
 }
 
 fn accepts(basic: Basic, o: &Object) -> bool {
@@ -1147,6 +1240,11 @@ fn is_date(bytes: &[u8]) -> bool {
         }
         _ => false,
     }
+}
+
+/// Whether a version already reported (`newer`) says all there is to say of something from `v`.
+fn covers(newer: Option<Version>, v: Version) -> bool {
+    newer.is_some_and(|n| v <= n)
 }
 
 fn parents_of(here: &Here) -> Parents {

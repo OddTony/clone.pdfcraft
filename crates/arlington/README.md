@@ -35,12 +35,12 @@ first, so a finding's path is the shortest one to it. For each object:
 
 | Column | Check | Severity |
 |---|---|---|
-| Required | a required key or array element is missing (inherited page attributes are looked up through `/Parent`) | error |
+| Required | a required key or array element is missing (inherited attributes are looked up through `/Parent`, and a field's `/DA` and `/Q` in the form's document-wide defaults) | error |
 | Type | the value's type is one the row allows; rectangles have four numbers, matrices six | error |
 | Type (`date`, `string-ascii`) | the string is a date (ISO 32000-2 §7.9.4) / ASCII | warning / error |
 | PossibleValues | the value is one of the listed values, or meets the `fn:Eval` rule; `fn:RequiredValue` | error |
 | IndirectReference | `TRUE` / `fn:MustBeIndirect` values are references; `fn:MustBeDirect` ones are not | error |
-| SinceVersion | the key, type or value is not newer than the file's PDF version (header, or the catalog's `/Version` when later) | warning |
+| SinceVersion | the key, type or value is not newer than the file's PDF version (header, or the catalog's `/Version` when later); what a newer key leads to isn't reported again | warning |
 | DeprecatedIn, `fn:Deprecated` | the key or value is not deprecated in the file's version | warning |
 | SpecialCase | `fn:Eval(...)` rules hold | warning |
 | Link | the object fits one of the types its key links to | warning when none fits |
@@ -48,12 +48,16 @@ first, so a finding's path is the shortest one to it. For each object:
 
 Name and number trees are walked to their leaves, and the leaves checked against the tree's
 linked types. Arrays with too many elements, and repeating arrays not in whole sets, are reported.
+A repeating set with optional members (an attribute object, optionally followed by its revision
+number) is matched in order, an optional member the element doesn't fit being left out; only a set
+whose members are all required has to come whole.
 
 **Which type a linked object is** is read off the object: among the candidates in the Link column,
 the one whose fixed values (`/Type`, `/Subtype`, `/S`, an array's first elements) and
-special-case rules the object meets, and whose keys it has. When every candidate is contradicted
-by the object (an action with an `/S` no action type has), the object is reported once as fitting
-none and is not checked further, rather than checked against a wrong type.
+special-case rules the object meets, and whose keys it has. A candidate the object contradicts
+(a required fixed value it doesn't have) is out however many of its keys the object has. When
+every candidate is contradicted (an action with an `/S` no action type has), the object is
+reported once as fitting none and is not checked further, rather than checked against a wrong type.
 
 ### Predicates
 
@@ -95,3 +99,5 @@ attributed in `ATTRIBUTION.toml` and its notice is in `NOTICE`. Behaviour follow
   (the walk sees the merged trailer), and the linearization dictionary.
 - Extensions are not tracked: a key or value only valid under an extension is not judged.
 - A comparison with another Arlington implementation, run as an external process on a corpus.
+  The pdf.js corpus has been run (see `core.arlington-validation` in `parity/`) and its false
+  positives fixed, but nothing was compared with a second validator.

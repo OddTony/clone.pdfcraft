@@ -156,6 +156,29 @@ fn newer_and_deprecated_keys_are_warnings() {
     assert!(report.is_valid(), "warnings only");
 }
 
+/// What a newer key leads to is as new as the key, so its own keys aren't reported again: in a
+/// PDF 1.3 file the catalog's /Metadata is from PDF 1.4, and every key of the metadata stream is
+/// too ("Length in Metadata is from PDF 1.4" would say nothing more). A key newer still is
+/// reported. pdf.js devicen.pdf, issue12706.pdf, bug1708040.pdf.
+#[test]
+fn keys_inside_a_newer_object_are_not_reported_again() {
+    let mut doc = minimal();
+    doc.version = Version::parse("1.3");
+    let metadata = |extra: &[(&str, Object)]| {
+        let mut e = vec![("Type", name("Metadata")), ("Subtype", name("XML")), ("Length", Object::Int(0))];
+        e.extend(extra.iter().cloned());
+        Object::Stream(entries(&e))
+    };
+    doc.objects.insert(4, metadata(&[]));
+    set(&mut doc, 1, &[("Metadata", r(4))]);
+    let report = check(&doc);
+    assert_eq!(problems(&report), vec!["trailer/Root: Metadata in Catalog is from PDF 1.4, later than the file's PDF 1.3".to_string()]);
+    doc.objects.insert(4, metadata(&[("DL", Object::Int(0))]));
+    let report = check(&doc);
+    assert_eq!(report.warnings, 2, "{:?}", problems(&report));
+    assert_eq!(find(&report, Rule::Version, "DL").map(|f| f.message()), Some("DL in Metadata is from PDF 1.5, later than the file's PDF 1.3".into()));
+}
+
 #[test]
 fn the_catalog_version_overrides_an_older_header() {
     let mut doc = minimal();
@@ -266,6 +289,89 @@ fn widgets_merged_with_their_field_are_not_unknown_keys() {
     assert!(find(&report, Rule::UnknownKey, "Rect").is_none(), "{:?}", report.findings);
 }
 
+/// A text field merged with its widget (pdf.js issue21068.pdf): its field keys (/FT, /DA, /Q,
+/// /MaxLen) are unknown to AnnotWidget, so a candidate its /Subtype rules out may score higher.
+/// The widget is the only candidate the object doesn't contradict, so it is the type.
+#[test]
+fn a_contradicted_candidate_never_wins_on_score() {
+    let mut doc = minimal();
+    doc.version = Version::parse("1.6");
+    doc.objects.insert(3, page(&[("Annots", Object::Array(vec![r(4)]))]));
+    doc.objects.insert(
+        4,
+        dict(&[
+            ("AP", dict(&[("N", r(5))])),
+            ("DA", text("/Helv 12 Tf 0 g")),
+            ("F", Object::Int(4)),
+            ("FT", name("Tx")),
+            ("Ff", Object::Int(29_360_128)),
+            ("MK", dict(&[("BC", ints(&[0, 0, 0]))])),
+            ("MaxLen", Object::Int(10)),
+            ("P", r(3)),
+            ("Q", Object::Int(2)),
+            ("Rect", ints(&[205, 623, 355, 645])),
+            ("Subtype", name("Widget")),
+            ("T", text("Text3")),
+            ("Type", name("Annot")),
+        ]),
+    );
+    doc.objects.insert(
+        5,
+        Object::Stream(entries(&[
+            ("BBox", ints(&[0, 0, 150, 22])),
+            ("Length", Object::Int(0)),
+            ("Resources", dict(&[])),
+            ("Subtype", name("Form")),
+            ("Type", name("XObject")),
+        ])),
+    );
+    set(&mut doc, 1, &[("AcroForm", dict(&[("Fields", Object::Array(vec![r(4)])), ("DA", text("/Helv 0 Tf 0 g"))]))]);
+    let report = check(&doc);
+    assert_eq!(problems(&report), Vec::<String>::new());
+}
+
+/// A text field's default appearance comes from the form's document-wide /DA when no field up
+/// its /Parent chain has one (ISO 32000-2, the interactive form dictionary's DA; pdf.js
+/// resetform_parent.pdf and bug1922766.pdf).
+#[test]
+fn a_fields_appearance_string_may_come_from_the_form() {
+    let mut doc = minimal();
+    doc.objects.insert(3, page(&[("Annots", Object::Array(vec![r(5)]))]));
+    doc.objects.insert(4, dict(&[("FT", name("Tx")), ("T", text("a")), ("Kids", Object::Array(vec![r(5)]))]));
+    doc.objects.insert(5, dict(&[("Subtype", name("Widget")), ("Rect", ints(&[0, 0, 10, 10])), ("Parent", r(4)), ("P", r(3))]));
+    let form = |da: bool| {
+        let mut e = vec![("Fields", Object::Array(vec![r(4)]))];
+        if da {
+            e.push(("DA", text("/Helv 0 Tf 0 g")));
+        }
+        dict(&e)
+    };
+    set(&mut doc, 1, &[("AcroForm", form(true))]);
+    assert_eq!(problems(&check(&doc)), Vec::<String>::new());
+    // Nowhere at all is an error.
+    set(&mut doc, 1, &[("AcroForm", form(false))]);
+    assert!(find(&check(&doc), Rule::Required, "DA").is_some());
+}
+
+/// Each attribute object of a structure element may be followed by a revision number, and each
+/// class name too; neither has to be (`0*` required, `1*` not; ISO 32000-2 §14.7.2, the
+/// structure element's /A and /C). pdf.js 160F-2019.pdf, issue21346.pdf, bug1997343.pdf.
+#[test]
+fn optional_members_of_a_repeating_set_may_be_left_out() {
+    let mut doc = minimal();
+    doc.objects.insert(4, dict(&[("Type", name("StructTreeRoot")), ("K", r(5))]));
+    let attributes = Object::Array(vec![dict(&[("O", name("Layout"))]), dict(&[("O", name("List"))]), Object::Int(0)]);
+    let classes = Object::Array(vec![name("Cls1"), name("Cls2"), Object::Int(1)]);
+    doc.objects.insert(5, dict(&[("S", name("P")), ("P", r(4)), ("A", attributes), ("C", classes)]));
+    set(&mut doc, 1, &[("StructTreeRoot", r(4))]);
+    assert_eq!(problems(&check(&doc)), Vec::<String>::new());
+    // A revision number where an attribute object must be is still wrong.
+    set(&mut doc, 5, &[("A", Object::Array(vec![Object::Int(0), dict(&[("O", name("Layout"))])]))]);
+    let report = check(&doc);
+    assert_eq!(problems(&report).len(), 1, "{:?}", problems(&report));
+    assert!(find(&report, Rule::Type, "0").is_some(), "{:?}", problems(&report));
+}
+
 #[test]
 fn cycles_end() {
     let mut doc = minimal();
@@ -330,6 +436,24 @@ fn findings_say_their_words_through_a_translator() {
     for w in WORDINGS {
         assert!(w.contains("{type}"), "{w}");
     }
+}
+
+/// An annotation's /M is a date or any text string (`date;string-text`: ISO 32000-2 Table 166
+/// says it should be a date, and that a string in any format is to be accepted), so a string that
+/// is no date is text, not a malformed date. pdf.js inks.pdf, issue14438.pdf.
+#[test]
+fn a_value_takes_the_alternative_whose_format_it_has() {
+    let mut doc = minimal();
+    let annot = |m: &str| dict(&[("Subtype", name("Text")), ("Rect", ints(&[0, 0, 10, 10])), ("M", text(m))]);
+    doc.objects.insert(3, page(&[("Annots", Object::Array(vec![r(4)]))]));
+    doc.objects.insert(4, annot("D:-001-1-1-1-1-1-00'30'"));
+    assert_eq!(problems(&check(&doc)), Vec::<String>::new());
+    doc.objects.insert(4, annot("D:20240101120000Z"));
+    assert_eq!(problems(&check(&doc)), Vec::<String>::new());
+    // Where a date is the only choice, the malformed one is still reported.
+    set(&mut doc, 3, &[("LastModified", text("D:-001-1-1-1-1-1-00'30'")), ("PieceInfo", dict(&[]))]);
+    let report = check(&doc);
+    assert_eq!(find(&report, Rule::Type, "LastModified").map(|f| f.severity), Some(Severity::Warning), "{:?}", problems(&report));
 }
 
 #[test]
