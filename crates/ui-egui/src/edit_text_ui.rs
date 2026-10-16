@@ -1399,7 +1399,7 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             0.0,
             egui::TextFormat {
                 font_id: editor_font(&ed.look, ed.size),
-                color: color32(ed.look.color),
+                color: if editor_rtl(&ed.text) { Color32::TRANSPARENT } else { color32(ed.look.color) },
                 italics: ed.look.italic,
                 ..Default::default()
             },
