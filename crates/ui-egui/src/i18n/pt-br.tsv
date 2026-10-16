@@ -1905,6 +1905,17 @@
 	Save as PDF/UA	Salvar como PDF/UA
 	Save as PDF/X	Salvar como PDF/X
 	Verify PDF/X	Verificar PDF/X
+	Choose ICC profile…	Escolher perfil ICC…
+	ICC profile: {name}	Perfil ICC: {name}
+	Can't save as {level}; nothing was changed:	Não é possível salvar como {level}; nada foi alterado:
+	Saved {name} and verified it: it conforms to {level}.	{name} foi salvo e verificado: está em conformidade com {level}.
+	Saved {name}, but verifying it found {n} problems.	{name} foi salvo, mas a verificação encontrou {n} problemas.
+	Converted to {level} ({n} changes)	Convertido para {level} ({n} alterações)
+	Output intent profile:	Perfil da intenção de saída:
+	None: sRGB for RGB and gray documents	Nenhum: sRGB para documentos RGB e em tons de cinza
+	Printing condition:	Condição de impressão:
+	Flatten comments and form fields	Nivelar comentários e campos de formulário
+	Couldn't read the ICC profile {name}: {e}	Não foi possível ler o perfil ICC {name}: {e}
 	Select a file for the stamp	Selecionar um arquivo para o carimbo
 	Select Icon	Selecionar ícone
 	Set bookmark destination	Definir destino do marcador

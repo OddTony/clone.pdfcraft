@@ -162,6 +162,11 @@ impl PdfCraftApp {
                 self.handle_js(id, out);
                 true
             }
+            // Save as PDF/A or PDF/X lists why in its dialog.
+            Err(pdfcraft_engine::EditError::Refused(r)) => {
+                self.conversion_refused(r);
+                false
+            }
             Err(e) => {
                 let message = if matches!(edit, Edit::MoveObjects { .. }) { crate::object_ui::move_error(&e) } else { e.to_string() };
                 self.notify_fmt("{label} failed: {e}", &[("label", &crate::i18n::edit_label(&label)), ("e", &message)]);

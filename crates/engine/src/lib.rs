@@ -406,6 +406,9 @@ pub struct Document {
     /// What the last successful [`Session::apply`] wrote that its fonts can't draw: kept as typed,
     /// drawn with `?` in its place (see [`TextNotice`]). The interface shows it; tools return it.
     pub edit_notices: Vec<TextNotice>,
+    /// What the last successful Save as PDF/A or PDF/X ([`Edit::ConvertPdfA`],
+    /// [`Edit::ConvertPdfX`]) changed, in English; empty after any other edit.
+    pub converted: Vec<String>,
 }
 
 /// Text an edit stored as typed but drew with `?` in place of `ch`, because the font it is drawn
@@ -1525,10 +1528,25 @@ pub enum Edit {
         event: String,
         script: Option<String>,
     },
-    /// Standards ▸ Save as PDF/A: fix what can be fixed for `level` (metadata, output intent,
-    /// forbidden actions, annotation flags, …).
+    /// Standards ▸ Save as PDF/A: convert to `level` (metadata, output intent, forbidden actions,
+    /// annotation flags, …), or refuse with what stands in the way ([`EditError::Refused`]) and
+    /// change nothing. `condition`: an ICC profile for the output intent (how a document with
+    /// CMYK device colour gets one).
     ConvertPdfA {
         level: pdfcraft_preflight::Level,
+        condition: Option<pdfcraft_preflight::output::OutputCondition>,
+    },
+    /// Standards ▸ Save as PDF/X: convert to `level` (output intent, identification, page boxes,
+    /// colour, …), or refuse with what stands in the way ([`EditError::Refused`]) and change
+    /// nothing. `condition`: the printing condition (by default the document's own PDF/X output
+    /// intent, else for PDF/X-1a and -3 FOGRA39, named without a profile; PDF/X-4 and converting
+    /// colour need a profile). `flatten`: flatten
+    /// comments and form fields first, and take links and annotations that print nothing out of
+    /// the bleed (PDF/X allows no annotations there).
+    ConvertPdfX {
+        level: pdfcraft_preflight::pdfx::Level,
+        condition: Option<pdfcraft_preflight::output::OutputCondition>,
+        flatten: bool,
     },
     /// What a script (button or console) changed in form fields: values, read-only, required
     /// and visibility.
@@ -1991,7 +2009,8 @@ impl Edit {
             Edit::ApplyScriptChanges { .. } => Label::of("Run JavaScript"),
             Edit::XfaEvent { .. } => Label::of("Run form script"),
             // The level is the standard's own name ("PDF/A-2b"), so it goes in as it stands.
-            Edit::ConvertPdfA { level } => Label::with("Save as {level}", level.label()),
+            Edit::ConvertPdfA { level, .. } => Label::with("Save as {level}", level.label()),
+            Edit::ConvertPdfX { level, .. } => Label::with("Save as {level}", level.label()),
             Edit::SetFieldScript { name, .. } => Label::with("Edit script of {name}", name.as_str()),
             Edit::SetDocumentScript { script: None, .. } => Label::of("Delete document JavaScript"),
             Edit::SetDocumentScript { .. } => Label::of("Edit document JavaScript"),
@@ -2187,6 +2206,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::SetDocumentScript { .. }
         | Edit::SetFieldScript { .. }
         | Edit::ConvertPdfA { .. }
+        | Edit::ConvertPdfX { .. }
         | Edit::EditTextLine { .. }
         | Edit::EditTextBlock { .. }
         | Edit::RegisterTextFont { .. }
@@ -2227,6 +2247,10 @@ struct EditCtx {
     /// Fields the edit renamed to keep imported names separate (old → new), for the repair
     /// log and the undo label.
     renamed_fields: Vec<(String, String)>,
+    /// The document's name (Save as PDF/X titles an untitled document with it).
+    name: String,
+    /// What a Save as PDF/A or PDF/X changed.
+    converted: Vec<String>,
 }
 
 impl EditCtx {
@@ -2253,6 +2277,8 @@ impl EditCtx {
             seed,
             count: 0,
             renamed_fields: Vec::new(),
+            name: String::new(),
+            converted: Vec::new(),
         }
     }
 
@@ -2486,8 +2512,27 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
                 None => pdfcraft_forms::recalculate(doc)?,
             };
         }
-        Edit::ConvertPdfA { level } => {
-            pdfcraft_preflight::convert(doc, *level).map_err(|e| EditError::Invalid(e.to_string()))?;
+        Edit::ConvertPdfA { level, condition } => {
+            let opts = pdfcraft_preflight::conform::Options { condition: condition.clone(), now: cx.date.clone(), ..Default::default() };
+            cx.converted = pdfcraft_preflight::conform::pdfa(doc, *level, &opts).map_err(EditError::Refused)?;
+        }
+        Edit::ConvertPdfX { level, condition, flatten } => {
+            let flattened = if *flatten {
+                let pages: Vec<usize> = (0..pdfcraft_model::pages(doc).len()).collect();
+                pdfcraft_edit::flatten(doc, &pages, true, true)?
+            } else {
+                0
+            };
+            let opts = pdfcraft_preflight::conform::Options {
+                condition: condition.clone(),
+                drop_unprinted: *flatten,
+                title: (!cx.name.is_empty()).then(|| cx.name.clone()),
+                now: cx.date.clone(),
+            };
+            let mut converted =
+                if flattened > 0 { vec![format!("{flattened}: flattened comments and form fields into the page")] } else { Vec::new() };
+            converted.extend(pdfcraft_preflight::conform::pdfx(doc, *level, &opts).map_err(EditError::Refused)?);
+            cx.converted = converted;
         }
         Edit::SetDocumentScript { name, script } => pdfcraft_forms::set_document_script(doc, name, script.as_deref())?,
         Edit::AddOcrText { page, words } => {
@@ -2761,6 +2806,17 @@ pub fn guard<T>(f: impl FnOnce() -> T) -> Result<T, String> {
     })
 }
 
+/// How to write `doc` at `now` (seconds since the epoch). A document that declares PDF/X or
+/// PDF/A is written as its standard allows: no object streams before PDF 1.5 (PDF/X-1a and -3
+/// are PDF 1.3 and 1.4), and no modification date stamped into its document information alone,
+/// which would set it apart from the metadata's (ISO 19005-2 6.6.3 has them agree).
+fn save_options(doc: &pdfcraft_cos::Document, now: Option<i64>) -> SaveOptions {
+    match pdfcraft_preflight::conform::max_version(doc) {
+        Some(version) => SaveOptions { mod_date: None, object_streams: version >= "1.5", ..SaveOptions::default() },
+        None => SaveOptions { mod_date: now.map(pdfcraft_cos::pdf_date), ..SaveOptions::default() },
+    }
+}
+
 /// Parse another PDF to copy pages from.
 fn open_source(name: &str, bytes: &Arc<Vec<u8>>) -> Result<pdfcraft_cos::Document, EditError> {
     open_source_with(name, bytes, None)
@@ -2871,6 +2927,9 @@ pub enum EditError {
     Signed,
     #[error("{0}")]
     Invalid(String),
+    /// Save as PDF/A or PDF/X found what stands in the way; the document is unchanged.
+    #[error("{0}")]
+    Refused(pdfcraft_preflight::conform::Refusal),
 }
 
 impl From<pdfcraft_sign::SignError> for EditError {
@@ -3590,6 +3649,7 @@ impl Session {
             fonts_stale: false,
             xfa_warnings: Vec::new(),
             edit_notices: Vec::new(),
+            converted: Vec::new(),
         }
     }
 
@@ -3604,6 +3664,7 @@ impl Session {
         let js_off = self.js_off;
         let doc = self.doc_mut(id)?;
         doc.edit_notices.clear();
+        doc.converted.clear();
         let name = doc.name.clone();
         let is_xfa = doc.info.xfa.is_some();
         let mut cx = EditCtx::new(now, doc.generation ^ (id.0 << 48));
@@ -3611,6 +3672,7 @@ impl Session {
             cx.xfa = doc.xfa_template.clone();
         }
         cx.pages = doc.info.pages.len();
+        cx.name = name.clone();
         cx.today = today;
         let reason = doc.read_only_reason.clone().unwrap_or_default();
         let signed = doc.is_signed();
@@ -3769,6 +3831,7 @@ impl Session {
         doc.dirty = true;
         doc.generation += 1;
         doc.edit_notices = notices;
+        doc.converted = std::mem::take(&mut cx.converted);
         if !cx.xfa_removed.is_empty() {
             let removed: Vec<String> = cx.xfa_removed.iter().map(|n| format!("{XFA_REMOVED_PREFIX}{n}")).collect();
             doc.xfa_warnings.retain(|w| w.starts_with(XFA_REMOVED_PREFIX));
@@ -4057,7 +4120,7 @@ impl Session {
         if !editor.cos.is_modified() && on_saved {
             return Ok(editor.saved.clone());
         }
-        let opts = SaveOptions { mod_date: self.now().map(pdfcraft_cos::pdf_date), ..SaveOptions::default() };
+        let opts = save_options(&editor.cos, self.now());
         // A restored snapshot can be based on an earlier revision. Append to the last saved
         // file so that revision stays in the chain. A full rewrite (redaction, new encryption,
         // a reconstructed file) still writes the current graph on its own.
@@ -4083,7 +4146,7 @@ impl Session {
             return Err(EditError::Signed);
         }
         let editor = doc.editor.as_ref().ok_or_else(|| EditError::ReadOnly(doc.read_only_reason.clone().unwrap_or_default()))?;
-        let opts = SaveOptions { mod_date: self.now().map(pdfcraft_cos::pdf_date), ..SaveOptions::default() };
+        let opts = save_options(&editor.cos, self.now());
         guard(|| write_full(&editor.cos, &opts)).map_err(EditError::Write)?.map(Arc::new).map_err(|e| EditError::Write(e.to_string()))
     }
 

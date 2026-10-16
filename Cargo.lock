@@ -4004,6 +4004,7 @@ dependencies = [
  "pdfcraft-organize",
  "pdfcraft-platform",
  "pdfcraft-render",
+ "pdfcraft-testkit",
  "pdfcraft-xfa",
  "png 0.18.1",
  "serde_json",
@@ -4255,9 +4256,16 @@ dependencies = [
 name = "pdfcraft-preflight"
 version = "0.8.0"
 dependencies = [
+ "image",
+ "moxcms",
  "pdfcraft-content",
  "pdfcraft-cos",
+ "pdfcraft-crypt",
+ "pdfcraft-filters",
+ "pdfcraft-fonts",
  "pdfcraft-model",
+ "pdfcraft-oracle",
+ "pdfcraft-testkit",
 ]
 
 [[package]]
@@ -4371,6 +4379,7 @@ dependencies = [
  "pdfcraft-model",
  "pdfcraft-platform",
  "pdfcraft-render",
+ "pdfcraft-testkit",
  "pdfcraft-xfa",
  "png 0.18.1",
  "pollster 1.0.1",

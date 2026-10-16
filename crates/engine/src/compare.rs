@@ -28,6 +28,11 @@ impl crate::Document {
         self.editor.as_ref().map(|e| pdfcraft_preflight::pdfx::verify(&e.cos, level))
     }
 
+    /// The printing condition the document's PDF/X output intent names, if PdfCraft can use it.
+    pub fn pdfx_condition(&self) -> Option<pdfcraft_preflight::output::OutputCondition> {
+        self.editor.as_ref().and_then(|e| pdfcraft_preflight::conform::printing_condition(&e.cos))
+    }
+
     /// The PDF/X level the document declares, if it is one PdfCraft verifies.
     pub fn pdfx_declared(&self) -> Option<pdfcraft_preflight::pdfx::Level> {
         self.editor.as_ref().and_then(|e| pdfcraft_preflight::pdfx::declared(&e.cos))

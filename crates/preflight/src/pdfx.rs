@@ -92,7 +92,7 @@ impl Level {
 
     /// What `GTS_PDFXVersion` says for this level (CGATS notes 2.3; PDF/X-1a:2001 is a
     /// conformance level of PDF/X-1:2001).
-    fn version_key(self) -> &'static str {
+    pub(crate) fn version_key(self) -> &'static str {
         match self {
             Level::X1a2001 => "PDF/X-1:2001",
             Level::X1a2003 => "PDF/X-1a:2003",
@@ -103,12 +103,12 @@ impl Level {
     }
 
     /// PDF/X-1a carries CMYK and spot colour only (CGATS notes table 1, 3.3).
-    fn cmyk_only(self) -> bool {
+    pub(crate) fn cmyk_only(self) -> bool {
         matches!(self, Level::X1a2001 | Level::X1a2003)
     }
 
     /// PDF/X-4 is the first level that allows transparency and JBIG2 (CGATS notes 2.8, 2.25).
-    fn is_x4(self) -> bool {
+    pub(crate) fn is_x4(self) -> bool {
         self == Level::X4
     }
 }
