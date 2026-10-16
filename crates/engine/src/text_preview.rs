@@ -67,6 +67,31 @@ impl Document {
         self.editor.as_ref().and_then(|e| pdfcraft_edit::text::text_editor_fonts(&e.cos, page).ok()).unwrap_or_default()
     }
 
+    /// Render the exact pending PDF text rewrite on an isolated COS clone.
+    /// The live editor uses this instead of approximating RTL word order,
+    /// glyph mapping and mark positions with egui's UI font shaper.
+    /// Apply/Save uses the same rewrite_block path, so a successful preview
+    /// matches the resulting PDF (apart from view scaling/antialiasing).
+    pub fn text_edit_draft_preview(
+        &self,
+        page: usize,
+        block: usize,
+        text: &str,
+        style: &pdfcraft_edit::BlockStyle,
+    ) -> Result<TextEditPreview, String> {
+        guard(|| {
+            let editor = self.editor.as_ref().ok_or("the document can't be read")?;
+            let mut cos = editor.cos.clone();
+            pdfcraft_edit::text::rewrite_block(&mut cos, page, block, Some(text), style)
+                .map_err(|e| e.to_string())?;
+            let bytes = Arc::new(
+                pdfcraft_cos::write_incremental(&cos, &pdfcraft_cos::SaveOptions::default())
+                    .map_err(|e| e.to_string())?,
+            );
+            Ok(TextEditPreview { page, bytes, config: self.config.clone() })
+        })?
+    }
+
     /// Preparing the background never changes working bytes, dirty state or undo history.
     pub fn text_edit_preview(&self, page: usize, block: usize) -> Result<TextEditPreview, String> {
         guard(|| {
