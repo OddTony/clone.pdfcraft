@@ -10,7 +10,7 @@
 //! otherwise it is set in Helvetica (WinAnsi), and the result says the font was substituted.
 //! Reflowing a paragraph to a new width is not done here (see `edit.text-reflow`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use pdfcraft_content::{Matrix, Op, Pieces, parse, serialize_ops};
@@ -1602,6 +1602,21 @@ fn type3_encode(fallback: &Type3Fallback, text: &str) -> Option<Vec<(String, Vec
     runs.into_iter().map(|(font, bytes)| Some((fallback.names.get(font)?.clone(), bytes))).collect()
 }
 
+/// Consecutive source/fallback runs, without allocating a list of input-derived runs.
+fn source_fallback_runs<'a>(mut text: &'a str, source_chars: Option<&'a HashSet<char>>) -> impl Iterator<Item = (bool, &'a str)> + 'a {
+    std::iter::from_fn(move || {
+        let first = text.chars().next()?;
+        let source = source_chars.is_some_and(|chars| chars.contains(&first));
+        let end = source_chars
+            .and_then(|chars| text.char_indices().find(|(_, ch)| chars.contains(ch) != source).map(|(offset, _)| offset))
+            .unwrap_or(text.len());
+        // char_indices supplies UTF-8 boundaries; get also handles an invalid range safely.
+        let run = text.get(..end)?;
+        text = text.get(end..)?;
+        Some((source, run))
+    })
+}
+
 /// The source font's own TrueType/OpenType program, when the document embeds a complete one whose
 /// licence allows editable embedding. A subset (an `ABCDEF+` name) is left out: a character can keep
 /// its mapping there after the subsetter dropped its outline.
@@ -2077,6 +2092,16 @@ fn rewrite_block_from(
     let visual_indic = metrics.as_ref().is_some_and(|m| m.visual_order) || first.visual_order;
     let indic_text = if visual_indic { crate::indic::to_visual(&flat) } else { flat.clone() };
     let reuse = style.family.is_none() && style.bold.is_none() && metrics.as_ref().is_some_and(|m| source_encodes(m, &indic_text));
+    // A single new script must not replace all the Latin already drawable in the source face.
+    // Keep this on the single-style path: its fallback writer batches missing glyphs instead
+    // of making a separate font for every character (#2592). Explicit font changes and the
+    // existing turned/RTL/visual-order paths keep their previous selection.
+    let source_chars: HashSet<char> = metrics
+        .as_ref()
+        .filter(|_| !reuse && upright && !hebrew && !visual_indic && style.family.is_none() && style.bold.is_none() && needs_type3(&flat))
+        .map(|m| flat.chars().filter(|ch| source_encodes(m, &ch.to_string())).collect())
+        .unwrap_or_default();
+    let partial_reuse = !source_chars.is_empty();
     let space = metrics.as_ref().map_or(0.33, |m| source_space(doc, &fonts_res, m));
     // The chosen style also determines the real Japanese fallback outlines and advances.
     let (family, bold, italic) = style.family.unwrap_or((source_family(&b.base_font), b.bold, b.italic));
@@ -2128,7 +2153,12 @@ fn rewrite_block_from(
     } else {
         None
     };
-    let type3 = if !reuse && needs_type3(&flat) { Some(type3_font(doc, &mut fonts_res, &flat, family, bold, max_glyphs)?) } else { None };
+    let type3 = if !reuse && needs_type3(&flat) {
+        let missing: String = flat.chars().filter(|ch| !source_chars.contains(ch)).collect();
+        Some(type3_font(doc, &mut fonts_res, &missing, family, bold, max_glyphs)?)
+    } else {
+        None
+    };
     let advance = |s: &str| -> f64 {
         let t = match (&metrics, reuse) {
             (Some(m), true) => {
@@ -2138,12 +2168,24 @@ fn rewrite_block_from(
             _ if let Some(fallback) = &type3 => {
                 // Each character's count in `s`, from one pass over `s`.
                 let mut counts: HashMap<char, usize> = HashMap::new();
+                let mut source_advance = 0.0;
+                let mut fallback_count = 0usize;
                 for c in s.chars() {
-                    let count = counts.entry(c).or_insert(0);
-                    *count = count.saturating_add(1);
+                    if source_chars.contains(&c)
+                        && let Some(m) = &metrics
+                    {
+                        // Tw is normalized to zero below; justification adds its own space
+                        // adjustments. Measure the source run in that same drawing state.
+                        source_advance += source_width(m, &c.to_string(), size, space, o_state.char_spacing, 0.0);
+                    } else {
+                        let count = counts.entry(c).or_insert(0);
+                        *count = count.saturating_add(1);
+                        fallback_count = fallback_count.saturating_add(1);
+                    }
                 }
-                fallback.widths.iter().map(|(ch, width)| counts.get(ch).copied().unwrap_or(0) as f64 * width * size).sum::<f64>()
-                    + s.chars().count() as f64 * o_state.char_spacing
+                source_advance
+                    + fallback.widths.iter().map(|(ch, width)| counts.get(ch).copied().unwrap_or(0) as f64 * width * size).sum::<f64>()
+                    + fallback_count as f64 * o_state.char_spacing
             }
             _ => std_width(s, size) + s.chars().count() as f64 * o_state.char_spacing,
         };
@@ -2267,16 +2309,22 @@ fn rewrite_block_from(
         // Stretched without word spacing: shown up to and including each space, then moved on.
         let pieces = if stretch > 0.0 { visual.split_inclusive(' ').collect() } else { vec![visual.as_str()] };
         for piece in pieces {
-            if let Some(metrics) = metrics.as_ref().filter(|_| reuse) {
-                let indic_piece = if metrics.visual_order { crate::indic::to_visual(piece) } else { piece.to_owned() };
-                block_ops.extend(source_show(metrics, &indic_piece, size, space, o_state.char_spacing, tw)?);
-            } else {
-                for (font, bytes) in encode(piece).ok_or_else(|| EditError::Invalid(format!("\"{line}\" can't be shown")))? {
-                    if font != shown_font {
-                        block_ops.push(Op::new("Tf", vec![Object::name(&font), n(size)]));
-                        shown_font = font;
+            for (source, run) in source_fallback_runs(piece, partial_reuse.then_some(&source_chars)) {
+                if let Some(metrics) = metrics.as_ref().filter(|_| reuse || source) {
+                    if shown_font != font_name {
+                        block_ops.push(Op::new("Tf", vec![Object::name(&font_name), n(size)]));
+                        shown_font.clone_from(&font_name);
                     }
-                    block_ops.push(Op::new("Tj", vec![Object::String(PdfString::literal(bytes))]));
+                    let indic_piece = if metrics.visual_order { crate::indic::to_visual(run) } else { run.to_owned() };
+                    block_ops.extend(source_show(metrics, &indic_piece, size, space, o_state.char_spacing, tw)?);
+                } else {
+                    for (font, bytes) in encode(run).ok_or_else(|| EditError::Invalid(format!("\"{line}\" can't be shown")))? {
+                        if font != shown_font {
+                            block_ops.push(Op::new("Tf", vec![Object::name(&font), n(size)]));
+                            shown_font = font;
+                        }
+                        block_ops.push(Op::new("Tj", vec![Object::String(PdfString::literal(bytes))]));
+                    }
                 }
             }
             if stretch > 0.0 && piece.ends_with(' ') {

@@ -1064,6 +1064,90 @@ fn japanese_fallback_reports_the_face_after_save_and_reopen() {
 }
 
 #[test]
+fn mixed_script_paragraph_keeps_the_source_font_without_an_explicit_line_break() {
+    if without_craft_fonts("mixed_script_paragraph_keeps_the_source_font_without_an_explicit_line_break") {
+        return;
+    }
+    let original = "The quick brown fox jumps over the lazy dog";
+    let ending = "and keeps running through the long field.";
+    let draft = format!("{original} шалом {ending}");
+    let mut doc = text_page(&format!("BT /F1 12 Tf 14.4 TL 72 700 Td ({original}) Tj T* ({ending}) Tj ET"));
+    let font = doc.get(pdfcraft_cos::ObjRef::new(5, 0)).as_ref().clone();
+    text::replace_block(&mut doc, 0, 0, &draft).unwrap();
+    let doc = reopen(&doc);
+    assert_eq!(doc.get(pdfcraft_cos::ObjRef::new(5, 0)).as_ref(), &font);
+    let lines = text::text_lines(&doc, 0).unwrap();
+    assert!(lines.iter().any(|l| l.base_font == "Helvetica" && l.text.contains("The quick brown fox")), "{lines:#?}");
+    for line in &lines {
+        if line.text.chars().any(|ch| ch.is_ascii_alphabetic()) {
+            assert_eq!(line.base_font, "Helvetica", "Latin must retain its source font: {line:?}");
+        }
+    }
+    assert!(lines.iter().any(|l| l.text.contains("шалом") && l.base_font != "Helvetica"));
+    assert_eq!(text::text_blocks(&doc, 0).unwrap()[0].text.split_whitespace().collect::<Vec<_>>(), draft.split_whitespace().collect::<Vec<_>>());
+    let fallback = page_font_programs(&doc).into_iter().filter(|(subtype, _)| subtype == b"Type3").count();
+    assert_eq!(fallback, 1, "the new letters share one fallback font");
+}
+
+#[test]
+fn mixed_script_runs_use_source_and_fallback_advances_for_alignment() {
+    if without_craft_fonts("mixed_script_runs_use_source_and_fallback_advances_for_alignment") {
+        return;
+    }
+    for (resource, prefix, suffix) in [("F1", "abc", "def"), ("F2", "ab", "ab"), ("F1", "abc ", "def")] {
+        // Rewriting normalizes Tw; measuring a source space must use that same state.
+        let mut doc = text_page(&format!("BT /{resource} 12 Tf 5 Tw 72 700 Td ({prefix}) Tj ET"));
+        let draft = format!("{prefix}шалом{suffix}");
+        let style = text::BlockStyle {
+            width: Some(300.0),
+            align: Some(added::Align::Center),
+            char_spacing: Some(1.25),
+            scale: Some(80.0),
+            ..Default::default()
+        };
+        text::rewrite_block(&mut doc, 0, 0, Some(&draft), &style).unwrap();
+        let doc = reopen(&doc);
+        let lines = text::text_lines(&doc, 0).unwrap();
+        assert_eq!(text::text_blocks(&doc, 0).unwrap()[0].text, draft);
+        assert_eq!((lines[0].font.as_str(), lines[2].font.as_str()), (resource, resource));
+        let page = pdfcraft_model::pages(&doc).remove(0);
+        let resources = doc.dict(page.dict.get(b"Resources").unwrap()).unwrap();
+        let fonts = doc.dict(resources.get(b"Font").unwrap()).unwrap();
+        let advances: Vec<f64> = lines
+            .iter()
+            .zip([prefix, "шалом", suffix])
+            .map(|(line, part)| {
+                let font = doc.dict(fonts.get(line.font.as_bytes()).unwrap()).unwrap();
+                let m = pdfcraft_fonts::pdf::Metrics::from_dict(&doc, &font);
+                let bytes = m.encode(part).unwrap();
+                (m.codes(&bytes).iter().map(|(c, _)| m.width(*c) * 12.0).sum::<f64>() + part.chars().count() as f64 * 1.25) * 0.8
+            })
+            .collect();
+        let mut x = 72.0 + (300.0 - advances.iter().sum::<f64>()) / 2.0;
+        for (line, width) in lines.iter().zip(advances) {
+            assert!((line.baseline()[0] - x).abs() < 0.01, "{resource}: {line:?}, expected {x}");
+            x += width;
+        }
+    }
+}
+
+#[test]
+fn mixed_script_paragraph_batches_only_missing_glyphs_and_refuses_atomically() {
+    let mut doc = text_page("BT /F1 12 Tf 72 700 Td (Latin text) Tj ET");
+    let before = write_full(&doc, &Default::default()).unwrap();
+    if pdfcraft_fonts::document_japanese_font().is_none() {
+        assert!(text::replace_block(&mut doc, 0, 0, "Latin шалом text").is_err());
+        assert_eq!(write_full(&doc, &Default::default()).unwrap(), before);
+        return;
+    }
+    text::rewrite_block_with_limit(&mut doc, 0, 0, Some("Latin шалом text"), &Default::default(), 2).unwrap();
+    assert_eq!(page_font_programs(&doc).iter().filter(|(subtype, _)| subtype == b"Type3").count(), 3);
+    let before = write_full(&doc, &Default::default()).unwrap();
+    assert!(text::replace_block(&mut doc, 0, 0, "Latin \u{FDFD} text").is_err());
+    assert_eq!(write_full(&doc, &Default::default()).unwrap(), before);
+}
+
+#[test]
 fn cyrillic_in_a_serif_line_falls_back_to_a_face_that_has_it() {
     if without_craft_fonts("cyrillic_in_a_serif_line_falls_back_to_a_face_that_has_it") {
         return;
@@ -1081,7 +1165,13 @@ fn cyrillic_in_a_serif_line_falls_back_to_a_face_that_has_it() {
         } else {
             text::replace_line(&mut doc, 0, 0, replacement).unwrap();
         }
-        assert_eq!(text::text_lines(&reopen(&doc), 0).unwrap()[0].text, replacement);
+        let doc = reopen(&doc);
+        if paragraph {
+            assert_eq!(text::text_blocks(&doc, 0).unwrap()[0].text, replacement);
+            assert!(text::text_lines(&doc, 0).unwrap().iter().any(|l| l.text.contains("world") && l.base_font == "Times-Roman"));
+        } else {
+            assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, replacement);
+        }
     }
 }
 
