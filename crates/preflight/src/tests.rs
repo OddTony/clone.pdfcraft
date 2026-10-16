@@ -371,3 +371,20 @@ fn device_colour_in_forms_patterns_and_glyphs_is_found() {
         assert!(declared(&doc).output_intents.is_empty(), "{what}: an sRGB output intent was added to a CMYK document: {:?}", r.fixed);
     }
 }
+
+#[test]
+fn xmp_packet_drops_xml_illegal_characters_from_info() {
+    let doc = build(
+        &[
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [] /Count 0 >>",
+            "<< /Title <410142> /Author <410142> /Subject <410142> /Keywords <410142> /Producer <410142> /Creator <410142> >>",
+        ],
+        "/Info 3 0 R",
+    );
+    let packet = xmp::packet(&doc, Level::A2b);
+    let bad: Vec<char> =
+        packet.chars().filter(|c| matches!(c, '\u{0}'..='\u{8}' | '\u{b}' | '\u{c}' | '\u{e}'..='\u{1f}' | '\u{fffe}' | '\u{ffff}')).collect();
+    assert!(bad.is_empty(), "XMP packet holds XML-illegal control chars {bad:?}");
+    assert_eq!(xmp::value(&packet, "dc:title").as_deref(), Some("AB"));
+}
