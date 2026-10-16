@@ -224,3 +224,6 @@ jobs:
           cargo test --locked --lib -p pdfcraft-fonts read_only_installed_font_name_and_coverage_do_not_require_export
           cargo test --locked --lib -p pdfcraft-ui-egui pristine_pdf_text_stays_in_the_source_renderer_until_the_first_edit
           cargo test --locked --lib -p pdfcraft-ui-egui opening_a_source_paragraph_never_paints_its_reconstructed_glyphs
+          cargo test --locked --lib -p pdfcraft-ui-egui rtl_caret_hit_testing_uses_physical_order_without_reversing_text
+          cargo test --locked --lib -p pdfcraft-ui-egui mixed_hebrew_latin_caret_stops_remain_valid_unicode_indices
+          cargo test --locked --lib -p pdfcraft-edit vowelized_hebrew_uses_the_shaping_writer_not_the_type3_fallback
