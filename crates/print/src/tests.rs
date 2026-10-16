@@ -534,6 +534,7 @@ fn printer_papers_come_from_the_ppd() {
         ],
         "a *PageSize label names a size, its own label wins, sizes stay as the driver feeds them; placeholders, repeats, translations, impossible sizes and malformed lines are left out"
     );
+    assert_eq!(papers.iter().map(|p| p.default).collect::<Vec<_>>(), [true, false, false, false, false], "the *DefaultPageSize one is the default");
     assert_eq!(spool::paper_of_size(&papers, (432.0, 288.0)), Some(1), "the other way round too");
     assert_eq!(spool::paper_of_size(&papers, (612.4, 792.4)), Some(0), "within half a point");
     // A label fed either way is different stock: the exact way round wins when both exist.

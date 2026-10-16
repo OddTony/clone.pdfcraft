@@ -265,7 +265,7 @@ fn the_printers_own_paper_sizes_are_offered_and_named_as_the_jobs_media() {
     let mut h = harness();
     assert!(h.state_mut().execute("print.dialog"));
     h.run_steps(3);
-    let paper = |key: &str, label: &str, size: (f64, f64)| spool::PrinterPaper { key: key.into(), label: label.into(), size };
+    let paper = |key: &str, label: &str, size: (f64, f64)| spool::PrinterPaper { key: key.into(), label: label.into(), size, default: false };
     {
         let d = &mut h.state_mut().print_draft;
         d.units = pdfcraft_ui_egui::units::Unit::Inches;
@@ -279,12 +279,19 @@ fn the_printers_own_paper_sizes_are_offered_and_named_as_the_jobs_media() {
                 paper("EnvDL", "DL Envelope", (311.81, 623.62)),
             ],
         ));
+        // US Letter, whatever size the machine's default printer started the dialog on.
+        d.paper = 0;
     }
     h.run_steps(2);
-    // Letter is a standard size already: not listed twice, but chosen as the printer's keyword.
+    // Letter is a standard size too: listed again under the driver's name, and the standard
+    // entry is chosen as the printer's keyword.
     assert_eq!(
         h.state().print_draft.own_papers_listed(),
-        [(PAPERS.len() + 1, "2.25 x 4 in (2.25 × 4.00 in)".to_string()), (PAPERS.len() + 2, "DL Envelope (4.33 × 8.66 in)".to_string())]
+        [
+            (PAPERS.len(), "US Letter (8.50 × 11.00 in)".to_string()),
+            (PAPERS.len() + 1, "2.25 x 4 in (2.25 × 4.00 in)".to_string()),
+            (PAPERS.len() + 2, "DL Envelope (4.33 × 8.66 in)".to_string())
+        ]
     );
     assert_eq!(h.state().print_draft.media().as_deref(), Some("Letter"));
     // The Paper combo shows its choice as its value; opened, the printer's sizes end the list
@@ -319,6 +326,27 @@ fn the_printers_own_paper_sizes_are_offered_and_named_as_the_jobs_media() {
     assert_eq!((d.paper, d.paper_name().as_str(), d.media().as_deref()), (4, "A4", Some("A4")));
 }
 
+/// Once a printer's sizes are read, the dialog starts on the printer's default size when the
+/// driver reports one (the stock a label printer is set up for, under the driver's own name),
+/// else keeps the size chosen so far when the printer has it, else the first standard size.
+#[test]
+fn the_printers_default_size_is_chosen_when_its_sizes_are_read() {
+    use pdfcraft_engine::print::{PAPERS, spool};
+    use pdfcraft_ui_egui::PrintDraft;
+    let paper = |key: &str, size: (f64, f64), default: bool| spool::PrinterPaper { key: key.into(), label: key.into(), size, default };
+    let mut d = PrintDraft { printer: Some("Label_Queue".into()), units: pdfcraft_ui_egui::units::Unit::Inches, ..Default::default() };
+    d.printer_papers = Some(("Label_Queue".into(), vec![paper("Letter", (612.0, 792.0), false), paper("User defined", (288.0, 432.0), true)]));
+    assert_eq!(d.default_own_paper(), Some(PAPERS.len() + 1));
+    assert_eq!(d.paper_after_read((612.0, 792.0)), PAPERS.len() + 1, "the printer's default over the size chosen so far");
+    d.paper = d.paper_after_read((0.0, 0.0));
+    assert_eq!((d.paper_name().as_str(), d.media().as_deref()), ("User defined (4.00 × 6.00 in)", Some("User defined")));
+    assert_eq!(d.own_papers_listed().len(), 2, "the printer's sizes are all listed, a standard one too");
+    d.printer_papers = Some(("Label_Queue".into(), vec![paper("Letter", (612.0, 792.0), false), paper("w162h288", (162.0, 288.0), false)]));
+    assert_eq!(d.default_own_paper(), None);
+    assert_eq!(d.paper_after_read((288.0, 162.0)), PAPERS.len() + 1, "else the size chosen so far, when the printer has it");
+    assert_eq!(d.paper_after_read((100.0, 100.0)), 0, "else the first standard size");
+}
+
 /// Opening the dialog again reads the printer's sizes again, even for the same printer: a label
 /// driver's one stock is whatever its settings say at the time, and that changes between prints.
 #[test]
@@ -332,7 +360,7 @@ fn reopening_the_dialog_reads_the_printers_sizes_again() {
         d.printer = Some("Label_Queue".into());
         d.printer_papers = Some((
             "Label_Queue".into(),
-            vec![spool::PrinterPaper { key: "User0000000256".into(), label: "User defined".into(), size: (288.0, 396.0) }],
+            vec![spool::PrinterPaper { key: "User0000000256".into(), label: "User defined".into(), size: (288.0, 396.0), default: true }],
         ));
     }
     h.run_steps(2);

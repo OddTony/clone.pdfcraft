@@ -65,8 +65,10 @@ For example, `doc_print` with `paper: "ARCH D"`, `layout: "actual"`,
 
 **The printer's own sizes.** After the standard sizes, the Paper menu lists the sizes the
 chosen printer's driver offers (`spool::printer_papers`: on CUPS the queue PPD's
-`*PaperDimension` entries, named by their `*PageSize` labels), each with its size, leaving
-out those that are a standard size already. The job names the chosen sheet as its `media`
+`*PaperDimension` entries, named by their `*PageSize` labels), each under the driver's name
+with its size, a standard size too. The dialog starts on the printer's default size when the
+driver reports one (`*DefaultPageSize`: the stock a label printer is set up for), reading the
+sizes again each time it opens. The job names the chosen sheet as its `media`
 by the printer's own keyword (`w288h432` for a label printer's 4 × 6 in; `Letter` for a
 standard size the printer has), else by the CUPS name of the standard size, so the spooler
 feeds that sheet rather than the queue's default. Headless: `printer_papers` lists them and

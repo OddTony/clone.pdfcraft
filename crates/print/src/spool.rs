@@ -76,6 +76,10 @@ pub struct PrinterPaper {
     /// Width and height in points as the driver feeds it: a label's width is across the feed,
     /// so a 2.25 × 1.25 in label and a 1.25 × 2.25 in one are different stock.
     pub size: (f64, f64),
+    /// Whether it is the driver's current default (CUPS: the PPD's `*DefaultPageSize`): the
+    /// stock a label printer is set up for, an office printer's tray paper. The Print dialog
+    /// starts on it.
+    pub default: bool,
 }
 
 /// The paper sizes a printer's driver offers (CUPS: its PPD's `*PaperDimension` entries, in the
@@ -106,8 +110,9 @@ const MAX_PAPERS: usize = 400;
 
 /// The paper sizes a PPD offers: its `*PaperDimension key/label: "width height"` entries in
 /// file order and as written, each named by its own label, else its `*PageSize` label, else the
-/// keyword. Custom-size placeholders, translations (`*fr.PaperDimension`), repeated keywords and
-/// sizes outside 1 pt to 200 in are left out. Lenient: malformed lines are skipped.
+/// keyword, the `*DefaultPageSize` one marked as the default. Custom-size placeholders,
+/// translations (`*fr.PaperDimension`), repeated keywords and sizes outside 1 pt to 200 in are
+/// left out. Lenient: malformed lines are skipped.
 pub fn parse_ppd_papers(ppd: &str) -> Vec<PrinterPaper> {
     let keyword = |s: &str| !s.is_empty() && s.len() <= 64 && s.bytes().all(|b| b.is_ascii_graphic() && !matches!(b, b'/' | b':' | b'=' | b'"'));
     // `*Prefix key/label: value` → (key, label, value), the label falling back to the key.
@@ -129,6 +134,11 @@ pub fn parse_ppd_papers(ppd: &str) -> Vec<PrinterPaper> {
             names.entry(key).or_insert(label);
         }
     }
+    let default_key = ppd
+        .lines()
+        .find_map(|line| line.trim_end_matches('\r').strip_prefix("*DefaultPageSize:").map(str::trim))
+        .filter(|k| keyword(k))
+        .map(str::to_string);
     let fits = |v: f64| v.is_finite() && (1.0..=MAX_PAPER_SIDE).contains(&v);
     let mut out: Vec<PrinterPaper> = Vec::new();
     for line in ppd.lines() {
@@ -145,7 +155,8 @@ pub fn parse_ppd_papers(ppd: &str) -> Vec<PrinterPaper> {
             continue;
         }
         let label = if label == key { names.get(&key).cloned().unwrap_or(label) } else { label };
-        out.push(PrinterPaper { key, label, size: (w, h) });
+        let default = default_key.as_deref() == Some(key.as_str());
+        out.push(PrinterPaper { key, label, size: (w, h), default });
     }
     out
 }

@@ -41,7 +41,7 @@ impl Automation {
         let printer = a.str("printer")?;
         let list: Vec<Value> = spool::printer_papers(printer)
             .into_iter()
-            .map(|p| json!({ "key": p.key, "label": p.label, "width": p.size.0, "height": p.size.1 }))
+            .map(|p| json!({ "key": p.key, "label": p.label, "width": p.size.0, "height": p.size.1, "default": p.default }))
             .collect();
         Ok(json!({ "printer": printer, "count": list.len(), "papers": list }))
     }
@@ -128,7 +128,10 @@ impl Automation {
         };
         // The sheet, and the index of the standard size or of the printer's own it was named by.
         let (paper, standard, chosen) = match a.opt_str("paper")? {
-            None => (PAPERS[0].1, Some(0), None),
+            // None named: the printer's default size when its driver reports one, else US Letter.
+            None => {
+                own.iter().position(|q| q.default).and_then(|i| own.get(i).map(|q| (q.size, None, Some(i)))).unwrap_or((PAPERS[0].1, Some(0), None))
+            }
             Some(p) => {
                 let standard = PAPERS.iter().position(|(n, _)| {
                     n.eq_ignore_ascii_case(p)

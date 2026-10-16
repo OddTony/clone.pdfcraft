@@ -227,15 +227,28 @@ impl PrintDraft {
     }
 
     /// The printer's own sizes the Paper list offers after the standard ones, as (index,
-    /// label): those that aren't a standard size already, each with its size in the
-    /// preferences' unit.
+    /// label): all of them, each under the driver's name with its size in the preferences'
+    /// unit (one that is a standard size too is listed again, so what the driver calls it, a
+    /// label driver's "User defined", can be chosen and seen).
     pub fn own_papers_listed(&self) -> Vec<(usize, String)> {
         self.own_papers()
             .iter()
             .enumerate()
-            .filter(|(_, p)| print::matching_paper(p.size).is_none())
             .map(|(i, p)| (PAPERS.len() + i, format!("{} ({})", p.label, self.units.size(p.size.0, p.size.1))))
             .collect()
+    }
+
+    /// The Paper list index of the printer's default size, when its driver reports one.
+    pub fn default_own_paper(&self) -> Option<usize> {
+        self.own_papers().iter().position(|p| p.default).map(|i| PAPERS.len() + i)
+    }
+
+    /// The paper to choose once the printer's sizes are read: the printer's default size when
+    /// its driver reports one (the stock a label printer is set up for, an office printer's
+    /// tray paper), else the size chosen so far when this printer has it, else the first
+    /// standard size.
+    pub fn paper_after_read(&self, size: (f64, f64)) -> usize {
+        self.default_own_paper().or_else(|| self.paper_index(size)).unwrap_or(0)
     }
 
     /// The chosen paper's size (points, portrait); a stale index reads as the first size.
@@ -973,8 +986,9 @@ pub(crate) fn body(
                 // The printer's own sizes (a label printer's 4 × 6 in, an office printer's
                 // envelopes), read when the dialog opens and when the printer changes (a label
                 // driver's one stock is whatever its settings say at the time); Save as PDF and
-                // the browser have none. A size chosen on the last printer stays chosen when
-                // this one has it too, else the first standard size is chosen.
+                // the browser have none. The printer's default size is chosen when it reports
+                // one; else a size chosen on the last printer stays chosen when this one has it
+                // too, else the first standard size.
                 let wanted = d.printer.clone().filter(|_| !browser);
                 if !d.papers_read || d.printer_papers.as_ref().map(|(read_for, _)| read_for) != wanted.as_ref() {
                     // The size chosen so far: on the last printer's list when it was one of its own.
@@ -987,7 +1001,7 @@ pub(crate) fn body(
                         (p, papers)
                     });
                     d.papers_read = true;
-                    d.paper = d.paper_index(size).unwrap_or(0);
+                    d.paper = d.paper_after_read(size);
                 }
                 let before = d.paper;
                 let own = d.own_papers_listed();
