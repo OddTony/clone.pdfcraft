@@ -8,7 +8,8 @@
 //! - `event`: `value`, `change`, `willCommit`, `rc`, `name`, `type`, `target`, `targetName`.
 //! - the document (`this`, also the global object): `getField`, `numFields`,
 //!   `getNthFieldName`, `numPages`, `pageNum`, `documentFileName`, `info`, `resetForm`,
-//!   `calculateNow`, `print`, `submitForm`, `mailDoc`.
+//!   `calculateNow`, `print`, `submitForm`, `mailDoc`, and `addField` / `removeField` (dynamic
+//!   fields: the caller creates and deletes them, see [`Request::AddField`]).
 //! - Field objects: `name`, `type`, `value`, `valueAsString`, `defaultValue`, `readonly`,
 //!   `required`, `display`, `hidden`, `numItems`, `getItemAt`, `currentValueIndices`,
 //!   `isBoxChecked`, `checkThisBox`, `exportValues`, `charLimit`, `textColor`, `fillColor`,
@@ -159,6 +160,18 @@ pub enum Request {
     Beep,
     /// `app.execMenuItem("SaveAs")` (XFA forms' Save buttons).
     SaveAs,
+    /// `this.addField(name, type, page, coords)`: a new field on `page` (0-based) in `rect`
+    /// ([x0, y0, x1, y1], normalized) in rotated user space. A radio button joins the group of
+    /// that name when there is one; `export` is its on state.
+    AddField {
+        name: String,
+        kind: FieldType,
+        page: usize,
+        rect: [f64; 4],
+        export: Option<String>,
+    },
+    /// `this.removeField(name)`.
+    RemoveField(String),
 }
 
 /// What running a script did.
@@ -486,6 +499,117 @@ fn get_nth_field_name(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsRes
     let i = arg(args, 0).to_number(ctx)?;
     let name = host(ctx)?.borrow().fields.get(i.max(0.0) as usize).map(|f| f.name.clone());
     Ok(name.map_or(JsValue::null(), |n| s(&n)))
+}
+
+/// The most fields one script may add: each is a full form edit, and a loop could otherwise
+/// grow the document without bound.
+pub const MAX_ADDED_FIELDS: usize = 1000;
+
+/// `field.type` → the kind, for `addField`'s `cFieldType`.
+fn field_type(name: &str) -> Option<FieldType> {
+    [FieldType::Text, FieldType::CheckBox, FieldType::RadioButton, FieldType::ComboBox, FieldType::ListBox, FieldType::Button, FieldType::Signature]
+        .into_iter()
+        .find(|k| k.name() == name)
+}
+
+/// `this.addField(cName, cFieldType, nPageNum, oCoords)`, or one object with those keys: the new
+/// field's object. `oCoords` is [upper-left x, upper-left y, lower-right x, lower-right y] in
+/// rotated user space. A name in use is refused, except that a radio button joins the radio
+/// group of that name.
+fn add_field(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let (name, kind, page, coords) = match args.first().and_then(JsValue::as_object) {
+        Some(o) if args.len() == 1 && !o.is_array() => {
+            let o = o.clone();
+            (
+                o.get(js_string!("cName"), ctx)?,
+                o.get(js_string!("cFieldType"), ctx)?,
+                o.get(js_string!("nPageNum"), ctx)?,
+                o.get(js_string!("oCoords"), ctx)?,
+            )
+        }
+        _ => (arg(args, 0), arg(args, 1), arg(args, 2), arg(args, 3)),
+    };
+    let name = text(&name, ctx)?.trim().to_string();
+    let type_name = text(&kind, ctx)?;
+    let kind = field_type(&type_name).ok_or_else(|| error(format!("addField: unknown field type {type_name:?}")))?;
+    let num_pages = host(ctx)?.borrow().doc.num_pages;
+    let p = page.to_number(ctx)?;
+    if !(p.is_finite() && p >= 0.0 && p.fract() == 0.0 && p < num_pages as f64) {
+        return Err(error(format!("addField: page {p} does not exist (the document has {num_pages})")));
+    }
+    // In range [0, num_pages), so the cast is exact.
+    let page = p as usize;
+    let quad = coords.as_object().filter(|o| o.is_array()).map(|o| JsArray::from_object(o.clone())).transpose()?;
+    let quad = quad.ok_or_else(|| error("addField: oCoords must be an array of four numbers"))?;
+    if quad.length(ctx)? != 4 {
+        return Err(error("addField: oCoords must be an array of four numbers"));
+    }
+    let mut c = [0.0f64; 4];
+    for (i, v) in (0u64..).zip(c.iter_mut()) {
+        *v = quad.get(i, ctx)?.to_number(ctx)?;
+    }
+    if !c.iter().all(|v| v.is_finite()) {
+        return Err(error("addField: oCoords must be finite numbers"));
+    }
+    let rect = [c[0].min(c[2]), c[1].min(c[3]), c[0].max(c[2]), c[1].max(c[3])];
+    if rect[2] - rect[0] < 4.0 || rect[3] - rect[1] < 4.0 {
+        return Err(error("addField: the field is too small (at least 4 points each way)"));
+    }
+    if name.is_empty() {
+        return Err(error("addField: the field needs a name"));
+    }
+    if name.contains('.') {
+        return Err(error(format!("addField: PdfCraft can't create a field with a period in its name yet ({name})")));
+    }
+    let mut h = host(ctx)?.borrow_mut();
+    let added = h.requests.iter().filter(|r| matches!(r, Request::AddField { .. })).count();
+    if added >= MAX_ADDED_FIELDS {
+        return Err(error(format!("addField: a script can add at most {MAX_ADDED_FIELDS} fields")));
+    }
+    let prefix = format!("{name}.");
+    if h.fields.iter().any(|f| f.name.starts_with(&prefix)) {
+        return Err(error(format!("addField: {name} already names a group of fields")));
+    }
+    let existing = h.fields.iter().position(|f| f.name == name);
+    let export = match existing.and_then(|i| h.fields.get_mut(i)) {
+        // Another button for an existing radio group, with an export value of its own.
+        Some(f) if kind == FieldType::RadioButton && f.kind == FieldType::RadioButton => {
+            let taken = |e: &String| f.options.iter().any(|o| &o.0 == e);
+            let export = (f.options.len() + 1..).map(|n| format!("Choice{n}")).find(|e| !taken(e)).unwrap_or_default();
+            f.options.push((export.clone(), export.clone()));
+            Some(export)
+        }
+        Some(_) => return Err(error(format!("addField: a field named {name} already exists"))),
+        None => {
+            let mut f = FieldState::new(name.clone(), kind, Vec::new());
+            let export = match kind {
+                FieldType::RadioButton => Some("Choice1".to_string()),
+                _ => None,
+            };
+            // A new check box's on state is Acrobat's "Yes"; a radio button's is its export.
+            let on = if kind == FieldType::CheckBox { Some("Yes".to_string()) } else { export.clone() };
+            f.options.extend(on.map(|o| (o.clone(), o)));
+            h.fields.push(f);
+            export
+        }
+    };
+    h.requests.push(Request::AddField { name: name.clone(), kind, page, rect, export });
+    drop(h);
+    Ok(field_object(ctx, &name).into())
+}
+
+/// `this.removeField(cName)`: the field and all its widgets leave the document. An unknown name
+/// does nothing.
+fn remove_field(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let name = text(&arg(args, 0), ctx)?;
+    let mut h = host(ctx)?.borrow_mut();
+    if let Some(i) = h.fields.iter().position(|f| f.name == name) {
+        h.fields.remove(i);
+        // Indices after the removed field move down by one.
+        h.changed = h.changed.iter().filter(|c| **c != i).map(|c| if *c > i { c - 1 } else { *c }).collect();
+        h.requests.push(Request::RemoveField(name));
+    }
+    Ok(JsValue::undefined())
 }
 
 fn reset_form(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -891,8 +1015,10 @@ fn color_object(ctx: &mut Context) -> JsObject {
 }
 
 fn install(ctx: &mut Context) -> JsResult<()> {
-    let globals: [(&str, usize, NativeFunction); 9] = [
+    let globals: [(&str, usize, NativeFunction); 11] = [
         ("getField", 1, NativeFunction::from_fn_ptr(get_field)),
+        ("addField", 4, NativeFunction::from_fn_ptr(add_field)),
+        ("removeField", 1, NativeFunction::from_fn_ptr(remove_field)),
         ("getNthFieldName", 1, NativeFunction::from_fn_ptr(get_nth_field_name)),
         ("resetForm", 1, NativeFunction::from_fn_ptr(reset_form)),
         ("print", 1, NativeFunction::from_fn_ptr(print)),

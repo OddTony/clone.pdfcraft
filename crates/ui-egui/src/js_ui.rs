@@ -67,7 +67,8 @@ impl PdfCraftApp {
                     &[("u", &u)],
                 ),
                 Request::SaveAs => self.run_command("file.save_as"),
-                Request::Focus(_) | Request::Beep | Request::Reset(_) => {}
+                // The engine applies resets and added or removed fields as edits.
+                Request::Focus(_) | Request::Beep | Request::Reset(_) | Request::AddField { .. } | Request::RemoveField(_) => {}
             }
         }
         if let Some(a) = out.alerts.last() {

@@ -657,6 +657,8 @@ fn request_json(r: &pdfcraft_engine::js::Request) -> Value {
         R::Focus(f) => json!({ "focus": f }),
         R::Beep => json!({ "beep": true }),
         R::SaveAs => json!({ "save_as": true }),
+        R::AddField { name, .. } => json!({ "add_field": name }),
+        R::RemoveField(n) => json!({ "remove_field": n }),
     }
 }
 

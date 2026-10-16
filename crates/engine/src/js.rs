@@ -83,6 +83,46 @@ pub fn field_state(doc: &pdfcraft_cos::Document, f: &Field) -> pdfcraft_js::Fiel
     s
 }
 
+/// What `this.addField` asks for, as Prepare a form creates it: empty choice lists, an
+/// uncaptioned button, and a radio button in the group the field names.
+fn new_field(kind: pdfcraft_js::FieldType, name: &str, export: Option<&str>) -> pdfcraft_forms::NewField {
+    use pdfcraft_forms::NewField;
+    use pdfcraft_js::FieldType as T;
+    match kind {
+        T::Text => NewField::Text { multiline: false },
+        T::CheckBox => NewField::CheckBox,
+        T::RadioButton => NewField::Radio { group: Some(name.to_string()), export: export.unwrap_or("Choice1").to_string() },
+        T::ComboBox => NewField::Combo { options: Vec::new(), editable: false },
+        T::ListBox => NewField::List { options: Vec::new(), multi: false },
+        T::Button => NewField::Button { caption: String::new() },
+        T::Signature => NewField::Signature,
+    }
+}
+
+/// A rectangle in rotated user space (the page as displayed: x right and y up from the displayed
+/// page's lower-left corner, which sits at the crop box's lower-left coordinates) → user space.
+/// Unrotated pages use user space unchanged, as `this.addField`'s coordinates do in Acrobat.
+fn rotated_to_user(info: &pdfcraft_render::PageInfo, r: [f64; 4]) -> [f64; 4] {
+    if !matches!(info.rotation, 90 | 180 | 270) {
+        return r;
+    }
+    let [cx0, cy0, cx1, cy1] = info.crop.map(f64::from);
+    let (cw, ch) = ((cx1 - cx0).max(1e-3), (cy1 - cy0).max(1e-3));
+    let (dw, dh) = if info.rotation == 180 { (cw, ch) } else { (ch, cw) };
+    let point = |x: f64, y: f64| {
+        // Fractions of the displayed page from its top-left corner, y down.
+        let (a, b) = ((x - cx0) / dw, 1.0 - (y - cy0) / dh);
+        let (u, v) = match info.rotation {
+            90 => (b, 1.0 - a),
+            180 => (1.0 - a, 1.0 - b),
+            _ => (1.0 - b, a),
+        };
+        [cx0 + u * cw, cy1 - v * ch]
+    };
+    let (p, q) = (point(r[0], r[1]), point(r[2], r[3]));
+    [p[0].min(q[0]), p[1].min(q[1]), p[0].max(q[0]), p[1].max(q[1])]
+}
+
 /// The changes a script made, against the fields as they were.
 fn changes(before: &[pdfcraft_js::FieldState], after: &[pdfcraft_js::FieldState]) -> Vec<FieldChange> {
     after
@@ -132,7 +172,17 @@ impl Scripts for JsRunner {
     fn run(&mut self, event: FieldEvent, script: &str, target: &Field, value: &str, fields: &[Field]) -> ScriptResult {
         let states: Vec<_> = fields.iter().map(|f| field_state(&self.cos, f)).collect();
         let ev = pdfcraft_js::Event::field(event.name(), &target.name, value);
-        let o = pdfcraft_js::run(script, &ev, &self.doc, &states, &self.doc_scripts, Limits::default());
+        let mut o = pdfcraft_js::run(script, &ev, &self.doc, &states, &self.doc_scripts, Limits::default());
+        // A form edit is under way: adding or removing fields would change the form beneath it.
+        let structural = |r: &Request| matches!(r, Request::AddField { .. } | Request::RemoveField(_));
+        if o.requests.iter().any(structural) {
+            o.requests.retain(|r| !structural(r));
+            self.output.errors.push(format!(
+                "{} script for {}: addField and removeField work in button, link and console scripts, not here",
+                event.name(),
+                target.name
+            ));
+        }
         self.output.absorb(&o);
         if o.error.is_some() {
             // As in Acrobat, a failing script leaves the value alone (the error goes to the console).
@@ -206,6 +256,7 @@ impl Session {
             });
         }
         let runner = JsRunner::new(&cos, &doc.name);
+        let pages = doc.info.pages.clone();
         let fields = pdfcraft_forms::fields(&cos);
         let states: Vec<_> = fields.iter().map(|f| field_state(&cos, f)).collect();
         let event = match target {
@@ -213,8 +264,26 @@ impl Session {
             None => pdfcraft_js::Event::doc("Console"),
         };
         let mut o = pdfcraft_js::run(script, &event, &runner.doc, &states, &runner.doc_scripts, Limits::default());
-        let after: Vec<_> = states.iter().map(|s| o.changed.iter().find(|c| c.name == s.name).unwrap_or(s).clone()).collect();
-        let changes = changes(&states, &after);
+        // Fields the script added or removed, in the order it did so (before their properties).
+        let mut edits = Vec::new();
+        let mut added: Vec<&str> = Vec::new();
+        for r in &o.requests {
+            match r {
+                Request::AddField { name, kind, page, rect, export } => {
+                    let rect = pages.get(*page).map_or(*rect, |info| rotated_to_user(info, *rect));
+                    edits.push(Edit::AddField { page: *page, rect, kind: new_field(*kind, name, export.as_deref()), name: Some(name.clone()) });
+                    added.push(name);
+                }
+                Request::RemoveField(name) => edits.push(Edit::DeleteField { name: name.clone() }),
+                _ => {}
+            }
+        }
+        // A field the script added starts from a new field's state, not from one it replaced.
+        let mut before: Vec<_> = states.iter().filter(|s| !added.contains(&s.name.as_str())).cloned().collect();
+        before.extend(
+            o.changed.iter().filter(|c| added.contains(&c.name.as_str())).map(|c| pdfcraft_js::FieldState::new(c.name.clone(), c.kind, Vec::new())),
+        );
+        let changes = changes(&before, &o.changed);
         let resets: Vec<Vec<String>> = o
             .requests
             .iter()
@@ -223,8 +292,7 @@ impl Session {
                 _ => None,
             })
             .collect();
-        o.requests.retain(|r| !matches!(r, Request::Reset(_)));
-        let mut edits = Vec::new();
+        o.requests.retain(|r| !matches!(r, Request::Reset(_) | Request::AddField { .. } | Request::RemoveField(_)));
         if !changes.is_empty() {
             edits.push(Edit::ApplyScriptChanges { changes });
         }
@@ -361,5 +429,31 @@ impl Session {
         }
         self.apply(id, Edit::Batch { label: "Detect form fields".into(), edits })?;
         Ok(names)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rotated_to_user;
+
+    fn page(rotation: u16) -> pdfcraft_render::PageInfo {
+        let (width, height) = if rotation.is_multiple_of(180) { (612.0, 792.0) } else { (792.0, 612.0) };
+        pdfcraft_render::PageInfo { width, height, label: "1".into(), crop: [0.0, 0.0, 612.0, 792.0], rotation }
+    }
+
+    fn near(a: [f64; 4], b: [f64; 4]) -> bool {
+        a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-3)
+    }
+
+    #[test]
+    fn add_field_coordinates_follow_the_displayed_page() {
+        let r = [72.0, 520.0, 272.0, 540.0];
+        assert_eq!(rotated_to_user(&page(0), r), r, "unrotated: user space");
+        // Near the displayed top-left corner of a page turned a quarter clockwise, which is
+        // user space's origin; the field runs up the page, as it is displayed across it.
+        for (rotation, want) in [(90, [72.0, 72.0, 92.0, 272.0]), (180, [340.0, 252.0, 540.0, 272.0]), (270, [520.0, 520.0, 540.0, 720.0])] {
+            let got = rotated_to_user(&page(rotation), r);
+            assert!(near(got, want), "{rotation}: {got:?}");
+        }
     }
 }
