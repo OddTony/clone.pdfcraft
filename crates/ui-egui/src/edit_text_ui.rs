@@ -1980,7 +1980,12 @@ mod tests {
         ed.fonts.insert(resource, "pdf-source-test".to_owned());
         ed.text = "שלום עולם חדש".to_owned();
         let ctx = egui::Context::default();
-        ctx.set_fonts(crate::theme::font_definitions());
+        let mut defs = crate::theme::font_definitions();
+        // Source fonts are registered by install_source_fonts in the real
+        // editor. This isolated test needs the same named family binding.
+        let proportional = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+        defs.families.insert(FontFamily::Name("pdf-source-test".into()), proportional);
+        ctx.set_fonts(defs);
         let output = ctx.run_ui(egui::RawInput::default(), |ui| {
             let visual = crate::bidi::visual_auto(&ed.text);
             let job = editor_visual_job(ui, &ed, &visual, 1.0, 500.0);
