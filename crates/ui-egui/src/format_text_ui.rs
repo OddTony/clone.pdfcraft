@@ -50,6 +50,9 @@ const SIZES: [f64; 14] = [8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24
 const LINE_SPACINGS: [f64; 7] = [1.0, 1.15, 1.2, 1.5, 2.0, 2.5, 3.0];
 const SCALES: [f64; 8] = [50.0, 75.0, 90.0, 100.0, 110.0, 125.0, 150.0, 200.0];
 const CHAR_SPACINGS: [f64; 8] = [-1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0, 5.0];
+/// What can be typed: horizontal scale in percent, character spacing in points.
+const SCALE_RANGE: std::ops::RangeInclusive<f64> = 10.0..=400.0;
+const CHAR_SPACING_RANGE: std::ops::RangeInclusive<f64> = -5.0..=50.0;
 
 /// A number as the lists show it: no trailing zeros ("1.2", "100", "-0.5").
 fn number(v: f64) -> String {
@@ -210,20 +213,15 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, look: &mut AddedText, extras:
                     .on_disabled_hover_text(tip);
             });
         });
+        // Any value the engine takes can be typed; the lists hold the common ones.
         ui.horizontal(|ui| {
-            labelled_icon(ui, t, "move-horizontal", tl!("Horizontal scale"));
-            egui::ComboBox::from_id_salt("format-scale").selected_text(number(e.scale)).width(half).show_ui(ui, |ui| {
-                for v in SCALES {
-                    ui.selectable_value(&mut e.scale, v, number(v));
-                }
-            });
+            let label = labelled_icon(ui, t, "move-horizontal", tl!("Horizontal scale"));
+            let scale = Number { value: &mut e.scale, range: SCALE_RANGE, speed: 1.0, suffix: " %" };
+            number_with_presets(ui, "format-scale", scale, &SCALES, half, label.id);
             ui.add_space(8.0);
-            labelled_icon(ui, t, "arrow-left-right", tl!("Character spacing"));
-            egui::ComboBox::from_id_salt("format-char-spacing").selected_text(number(e.char_spacing)).width(half).show_ui(ui, |ui| {
-                for v in CHAR_SPACINGS {
-                    ui.selectable_value(&mut e.char_spacing, v, number(v));
-                }
-            });
+            let label = labelled_icon(ui, t, "arrow-left-right", tl!("Character spacing"));
+            let spacing = Number { value: &mut e.char_spacing, range: CHAR_SPACING_RANGE, speed: 0.1, suffix: " pt" };
+            number_with_presets(ui, "format-char-spacing", spacing, &CHAR_SPACINGS, half, label.id);
         });
     });
 
@@ -249,13 +247,38 @@ fn flyout(ui: &egui::Ui, t: &Tokens, resp: egui::Response) -> egui::Response {
     resp
 }
 
-/// An icon naming the list beside it, for screen readers too.
-fn labelled_icon(ui: &mut egui::Ui, t: &Tokens, icon: &str, label: &str) {
+/// An icon naming the list beside it, for screen readers too. Returns it, for the control it
+/// labels.
+fn labelled_icon(ui: &mut egui::Ui, t: &Tokens, icon: &str, label: &str) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 26.0), Sense::hover());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), label));
     let tint = if ui.is_enabled() { t.icon } else { t.text_faint };
     icons::paint(ui, Rect::from_center_size(rect.center(), vec2(18.0, 18.0)), icon, 17.0, tint);
-    let _ = resp.on_hover_text(label);
+    resp.on_hover_text(label)
+}
+
+/// A value typed in a number field: what it edits, what may be typed, and how it reads.
+struct Number<'a> {
+    value: &'a mut f64,
+    range: std::ops::RangeInclusive<f64>,
+    speed: f64,
+    suffix: &'static str,
+}
+
+/// A number field with a list of common values beside it, in `width` all told: type any value
+/// in its range, or pick one.
+fn number_with_presets(ui: &mut egui::Ui, id: &str, n: Number<'_>, presets: &[f64], width: f32, label: egui::Id) {
+    const LIST: f32 = 20.0;
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        let field = egui::DragValue::new(&mut *n.value).range(n.range).speed(n.speed).max_decimals(2).suffix(n.suffix);
+        ui.add_sized([(width - LIST - 2.0).max(30.0), 22.0], field).labelled_by(label);
+        egui::ComboBox::from_id_salt(id).selected_text("").width(LIST).show_ui(ui, |ui| {
+            for &v in presets {
+                ui.selectable_value(&mut *n.value, v, number(v));
+            }
+        });
+    });
 }
 
 /// The text colour as a square swatch that opens the palette.
