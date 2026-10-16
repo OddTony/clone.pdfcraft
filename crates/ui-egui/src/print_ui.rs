@@ -93,6 +93,10 @@ pub struct PrintDraft {
     pub crops: Vec<Option<print::Crop>>,
     /// The pages `crops` were read for, so a changed page selection reads them again.
     pub crop_pages: Option<Vec<usize>>,
+    /// The document's pages (0-based, ascending) that draw with Type 3 fonts, read when the
+    /// dialog opens where they print as images ([`spool::TYPE3_AS_IMAGE`]), so the dialog can
+    /// say so; empty elsewhere.
+    pub type3_pages: Vec<usize>,
 }
 
 impl Default for PrintDraft {
@@ -138,6 +142,7 @@ impl Default for PrintDraft {
             label_flip: false,
             crops: Vec::new(),
             crop_pages: None,
+            type3_pages: Vec::new(),
         }
     }
 }
@@ -184,8 +189,16 @@ impl PrintDraft {
             layout,
             content: self.content,
             raster: self.as_image.then_some(print::Raster { dpi: self.dpi, grayscale: self.grayscale }),
+            type3_raster: self.type3_as_image().then_some(print::Raster { dpi: self.dpi, grayscale: self.grayscale }),
             crops: self.crops.clone(),
         })
+    }
+
+    /// Whether the pages that draw with Type 3 fonts go to the printer as pictures, at the
+    /// Resolution chosen for Print as image: on Windows printers (#2684), unless every page
+    /// already does.
+    pub fn type3_as_image(&self) -> bool {
+        spool::TYPE3_AS_IMAGE && self.printer.is_some() && !self.as_image
     }
 
     pub fn job(&self, title: &str) -> spool::Job {
@@ -291,7 +304,7 @@ fn default_printer(printers: &[spool::Printer]) -> Option<String> {
 
 impl PdfCraftApp {
     pub fn open_print(&mut self) {
-        let Some((i, _)) = self.active_ids() else { return };
+        let Some((i, id)) = self.active_ids() else { return };
         let (printers, printers_loading) = match self.printer_source.clone() {
             // The list from the last time the dialog opened, until the fresh one arrives.
             #[cfg(not(target_arch = "wasm32"))]
@@ -304,6 +317,14 @@ impl PdfCraftApp {
         let default = default_printer(&printers);
         let current = self.views[i].current;
         let selected: Vec<usize> = self.views[i].selected.iter().copied().collect();
+        // Where the pages that draw with Type 3 fonts print as images, the dialog says so (#2684).
+        // Every printed choice is covered: the page content and every annotation that prints.
+        let type3_pages = if spool::TYPE3_AS_IMAGE {
+            let count = self.session.get(id).map_or(0, |d| d.info.pages.len());
+            self.session.print_type3_pages(id, &(0..count).collect::<Vec<_>>(), Content::DocumentAndMarkups)
+        } else {
+            Vec::new()
+        };
         let keep = std::mem::take(&mut self.print_draft);
         // Picked pages are what Print is for (Acrobat's "Selected pages"); without any, a choice
         // left over from another document falls back to the whole document.
@@ -315,6 +336,7 @@ impl PdfCraftApp {
         self.print_draft = PrintDraft {
             crops: Vec::new(),
             crop_pages: None,
+            type3_pages,
             printers,
             printers_loading,
             printer_picked: false,
@@ -499,6 +521,16 @@ impl PdfCraftApp {
             }
         };
         let name = doc.name.clone();
+        if settings.type3_raster.is_some() {
+            let pages = self.session.print_type3_pages(id, &settings.pages, settings.content);
+            if !pages.is_empty() {
+                let list: Vec<String> = pages.iter().map(|p| p.saturating_add(1).to_string()).collect();
+                log::info!(
+                    "printing page(s) {} as images: they use Type 3 fonts, which the Windows print component can crash on (#2684)",
+                    list.join(", ")
+                );
+            }
+        }
         let bytes = match self.session.print_pdf(id, &settings) {
             Ok(b) => b,
             Err(e) => {
@@ -924,6 +956,16 @@ pub(crate) fn body(
                 && p.two_sided == Some(false)
             {
                 ui.label(egui::RichText::new(tl!("This printer's driver doesn't take two-sided settings from other programs, so its own setting applies. Change it in Properties…")).small().color(t.text_muted));
+            }
+            // Pages with Type 3 fonts go to a Windows printer as pictures (#2684).
+            if settings.as_ref().is_ok_and(|s| s.type3_raster.is_some() && s.pages.iter().any(|p| d.type3_pages.binary_search(p).is_ok())) {
+                ui.label(
+                    egui::RichText::new(tl!(
+                        "Pages that use Type 3 fonts print as images, because Windows can close PdfCraft while printing them. The other pages print as usual."
+                    ))
+                    .small()
+                    .color(t.text_muted),
+                );
             }
             if d.printer.as_deref() == Some(crate::web_print::BROWSER_PRINTER) {
                 ui.label(egui::RichText::new(tl!("Copies, two-sided printing and colour are chosen in the browser's print dialog.")).small().color(t.text_muted));

@@ -24,8 +24,10 @@ pub mod range;
 pub mod spool;
 #[cfg(test)]
 mod tests;
+mod type3;
 
 pub use range::{Subset, select_listed, select_pages};
+pub use type3::type3_pages;
 
 /// What can go wrong when printing.
 ///
@@ -241,6 +243,12 @@ pub struct Settings {
     /// resolution before it is placed on the paper. The engine does the rendering; `impose` is
     /// then given the image-only document.
     pub raster: Option<Raster>,
+    /// Print only the pages that draw with Type 3 fonts ([`type3_pages`]) as pictures at this
+    /// resolution; the other pages go as they are. Windows' print component can bring the whole
+    /// app down on some Type 3 text (#2684), so the Print dialog asks for this for Windows
+    /// printers ([`spool::TYPE3_AS_IMAGE`]). [`Settings::raster`], when set, already makes every
+    /// page a picture. The engine does the rendering; `impose_with_pictures` places the pictures.
+    pub type3_raster: Option<Raster>,
 }
 
 /// How pages are rendered when printing as image.
@@ -273,6 +281,7 @@ impl Default for Settings {
             layout: Layout::default(),
             content: Content::default(),
             raster: None,
+            type3_raster: None,
             crops: Vec::new(),
         }
     }
@@ -797,9 +806,53 @@ fn page_form(doc: &mut Document, index: usize, content: Content) -> Result<ObjRe
     Ok(doc.add(Object::Stream(Stream::flate(d, &body))))
 }
 
+/// A Form XObject holding page `index` as `picture` (an image XObject of the page as displayed,
+/// already showing what prints of it), in the page's user space like [`page_form`]: the picture
+/// is drawn over the displayed page and turned back into user space, so the sheet places it
+/// exactly where the page itself would go.
+fn picture_form(doc: &mut Document, index: usize, picture: &Stream) -> Result<ObjRef, PrintError> {
+    let pages = pdfcraft_model::pages(doc);
+    let count = pages.len();
+    let page = pages.into_iter().nth(index).ok_or(PrintError::OutOfRange(index.saturating_add(1), count))?;
+    let crop = page.crop(doc);
+    let (w, h) = page.display_size(doc);
+    let [a, b, c, d, e, f] = page.view_matrix(doc);
+    let image = doc.add(Object::Stream(picture.clone()));
+    let body = format!(
+        "q {} {} {} {} {} {} cm {} 0 0 {} 0 0 cm /PCPrPicture Do Q\n",
+        geometry_number(a),
+        geometry_number(b),
+        geometry_number(c),
+        geometry_number(d),
+        geometry_number(e),
+        geometry_number(f),
+        geometry_number(w),
+        geometry_number(h)
+    );
+    let mut xobjects = Dict::new();
+    xobjects.set(b"PCPrPicture".to_vec(), Object::Ref(image));
+    let mut res = Dict::new();
+    res.set(b"XObject".to_vec(), Object::Dict(xobjects));
+    let mut form = Dict::new();
+    form.set(b"Type".to_vec(), Object::name("XObject"));
+    form.set(b"Subtype".to_vec(), Object::name("Form"));
+    form.set(b"BBox".to_vec(), Object::Array(crop.iter().map(|v| Object::Real(*v)).collect()));
+    form.set(b"Resources".to_vec(), Object::Dict(res));
+    Ok(doc.add(Object::Stream(Stream::flate(form, body.as_bytes()))))
+}
+
 /// Build the print-ready PDF for `settings`. Encryption is not carried over (the file goes to a
 /// printer or is the user's own copy); callers must check the print permission first.
 pub fn impose(src: &Document, settings: &Settings) -> Result<Vec<u8>, PrintError> {
+    impose_with_pictures(src, settings, &std::collections::HashMap::new())
+}
+
+/// [`impose`], with some pages printed as pictures: `pictures` maps a page (0-based) to an image
+/// XObject (`/Subtype /Image`) of it as displayed, drawn in its place instead of its content and
+/// annotations, so the picture must already show the annotations that print. The other pages go
+/// as they are. This is how [`Settings::type3_raster`] keeps Type 3 text away from the Windows
+/// print component; the engine renders the pictures.
+pub fn impose_with_pictures(src: &Document, settings: &Settings, pictures: &std::collections::HashMap<usize, Stream>) -> Result<Vec<u8>, PrintError> {
     let pages = pdfcraft_model::pages(src);
     let sizes: Vec<(f64, f64)> = pages.iter().map(|p| p.display_size(src)).collect();
     let sheets = layout(&sizes, settings)?;
@@ -816,7 +869,10 @@ pub fn impose(src: &Document, settings: &Settings) -> Result<Vec<u8>, PrintError
             let form = match forms.get(&pl.page) {
                 Some(f) => *f,
                 None => {
-                    let f = page_form(&mut doc, pl.page, settings.content)?;
+                    let f = match pictures.get(&pl.page) {
+                        Some(picture) => picture_form(&mut doc, pl.page, picture)?,
+                        None => page_form(&mut doc, pl.page, settings.content)?,
+                    };
                     forms.insert(pl.page, f);
                     f
                 }

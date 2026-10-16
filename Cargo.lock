@@ -4004,6 +4004,7 @@ dependencies = [
  "pdfcraft-organize",
  "pdfcraft-platform",
  "pdfcraft-render",
+ "pdfcraft-testkit",
  "pdfcraft-xfa",
  "png 0.18.1",
  "serde_json",
@@ -4125,6 +4126,7 @@ dependencies = [
  "pdfcraft-redact",
  "pdfcraft-render",
  "pdfcraft-sign",
+ "pdfcraft-testkit",
  "pdfcraft-xfa",
  "pdfcraft-xfdf",
  "png 0.18.1",
@@ -4268,6 +4270,7 @@ dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
  "pdfcraft-model",
+ "pdfcraft-testkit",
  "thiserror 2.0.21",
 ]
 
@@ -4371,6 +4374,7 @@ dependencies = [
  "pdfcraft-model",
  "pdfcraft-platform",
  "pdfcraft-render",
+ "pdfcraft-testkit",
  "pdfcraft-xfa",
  "png 0.18.1",
  "pollster 1.0.1",
