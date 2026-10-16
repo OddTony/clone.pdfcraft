@@ -1,6 +1,6 @@
 # UI and interaction parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-11 · **Change:** minor (column select #740, multi-object move #844, Shift-⌘-G #810 fixed) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-16 · **Change:** minor (choose the tools All tools lists) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 How PdfCraft's tools, panels, shortcuts and feel compare with Acrobat Pro's current interface (the
 2023+ "new Acrobat": All tools pane on the left, quick-action toolbar, Home view). Behaviour is
@@ -26,7 +26,7 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 |---|---|---|---|
 | Home view (recent files, recommended tools) | yes | yes | shipped |
 | All tools pane, tool sets | yes | yes, with milestone badges | shipped |
-| Quick-action toolbar, customisable | yes | fixed | partial (`view.customize-quick-tools` planned) |
+| Quick-action toolbar, customisable | yes | toolbar fixed; Preferences chooses the tools All tools, ⌘K and Home list | partial (`view.customize-quick-tools`) |
 | Command search | "Search tools" | command palette (⌘K), matches translated and English labels | shipped |
 | Document tabs | yes | yes, with unsaved marker | shipped |
 | Multiple windows, drag a tab out | yes | no | planned |
@@ -75,11 +75,12 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 | Document Properties (description, security, fonts, initial view, custom, advanced) | yes | all but Custom and XMP | partial |
 | Field Properties (General, Appearance, Position, Options, Actions, Format, Validate, Calculate, Signed) | yes | all but Signed | partial |
 | Comment properties and properties bar | yes | yes | shipped |
-| Preferences | ≈ 20 pages | Interface language, Documents and view, Identity, Fill & Sign, JavaScript | partial (gap 19) |
+| Preferences | ≈ 20 pages | Interface language, Tools shown in All tools, Documents and view, Identity, Fill & Sign, JavaScript | partial (gap 19) |
 
 ## Revision history
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Preferences ▸ Tools shown in All tools: a preset or a checkbox per tool hides it from All tools, ⌘K and Home; menus, mode tabs and shortcuts keep it (`view.customize-quick-tools` partial) |
 | 2026-10-11 | minor | Column select shipped (#740, PR #765); several objects move together on one page (#844, PR #907); Shift-⌘-G goes back (#810, PR #835) |
 | 2026-10-10 | major | Created from the command registry, automation tools, the View area of the checklist and open UI issues |
