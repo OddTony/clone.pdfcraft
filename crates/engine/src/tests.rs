@@ -30,6 +30,31 @@ pub(crate) fn fixture(n: usize) -> Vec<u8> {
     out
 }
 
+#[test]
+fn edited_pdf_preview_matches_apply_save_render() {
+    let (mut session, id) = session_with(1);
+    let original = session.get(id).unwrap().bytes.clone();
+    let preview = session.get(id).unwrap().text_edit_draft_preview(
+        0, 0, "Page 42", &pdfcraft_edit::BlockStyle::default(),
+    ).expect("draft PDF must be writable");
+    let image = preview.render_background(1.0).expect("draft PDF must render");
+    assert_eq!(session.get(id).unwrap().bytes, original, "preview must not modify the document");
+
+    session.apply(id, Edit::EditTextBlock {
+        page: 0,
+        block: 0,
+        text: "Page 42".to_owned(),
+        style: pdfcraft_edit::BlockStyle::default(),
+    }).expect("apply must accept the same draft");
+    let document = session.get(id).unwrap();
+    let mut renderer = pdfcraft_render::PageRenderer::new(document.bytes.clone(), document.config.clone());
+    let applied = renderer.render(pdfcraft_render::RenderRequest { page: 0, scale: 1.0, ..Default::default() });
+    assert!(applied.error.is_none(), "{:?}", applied.error);
+    assert_eq!(image.width, applied.width);
+    assert_eq!(image.height, applied.height);
+    assert_eq!(image.rgba, applied.rgba, "live preview and saved PDF must render identically");
+}
+
 fn session_with(n: usize) -> (Session, DocId) {
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let id = s.open("fixture.pdf", None, Arc::new(fixture(n)), None).expect("opens");
