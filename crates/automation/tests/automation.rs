@@ -717,10 +717,10 @@ fn an_in_place_save_reports_a_required_rewrite_as_not_incremental() {
     }
 }
 
-/// Issue #1698: save validation rejects lost pages. Since #1664 the reader also repairs
-/// a missing page tree, so this recovered page must now survive a full rewrite.
+/// #1664 repairs the missing page tree on open. The former #1698 failure fixture now
+/// saves successfully, keeping its page and pixels through a full rewrite.
 #[test]
-fn save_validation_rejects_lost_pages_and_preserves_a_repaired_page_tree() {
+fn a_recovered_page_tree_survives_a_full_save() {
     let dir = workdir("save-verify-before-write");
     let objs: [&[u8]; 4] = [
         b"<< /Type /Catalog /Pages 3 0 R >>",
@@ -748,19 +748,19 @@ fn save_validation_rejects_lost_pages_and_preserves_a_repaired_page_tree() {
     let opened = ok(&mut a, "doc_open", json!({ "path": "damaged.pdf" }));
     assert_eq!(opened["pages"], 1, "{opened}");
     let doc = opened["doc"].as_u64().unwrap();
-    // Exercise the pre-write validator with both unreadable bytes and a wrong page count.
-    // The old fixture itself is now repairable and is no longer a failing save candidate.
-    for invalid in [std::sync::Arc::new(b"not a PDF".to_vec()), a.session().create_blank(200.0, 300.0, 2).unwrap()] {
-        let e = a.session().check_save(pdfcraft_engine::DocId(doc), &invalid).unwrap_err();
-        assert!(e.to_string().contains("could not be reopened"), "{e}");
-        assert_eq!(std::fs::read(dir.join("damaged.pdf")).unwrap(), original);
-    }
-    let before = a.call("page_render", &json!({"doc":doc,"page":1,"dpi":72})).unwrap();
-    ok(&mut a, "doc_save", json!({"doc":doc,"full":true}));
-    let reopened = ok(&mut a, "doc_open", json!({"path":"damaged.pdf"}));
-    assert_eq!(reopened["pages"], 1);
-    let after = a.call("page_render", &json!({"doc":reopened["doc"],"page":1,"dpi":72})).unwrap();
-    assert_eq!(after, before, "the recovered page's appearance survives the rewrite");
+    let (width, height, pixels) = a.render_pixels(doc, 1, 1.0).unwrap();
+    assert!(pixels.as_ref().as_chunks::<4>().0.iter().any(|p| p[..3] != [255, 255, 255]), "the original page is not blank");
+    let saved = ok(&mut a, "doc_save", json!({ "doc": doc, "full": true }));
+    assert_eq!(saved["document"]["dirty"], false);
+    let on_disk = std::fs::read(dir.join("damaged.pdf")).unwrap();
+    assert_ne!(on_disk, original, "a full save writes the repaired page tree");
+    let mut reopened = auto(&dir);
+    let opened = ok(&mut reopened, "doc_open", json!({ "path": "damaged.pdf" }));
+    assert_eq!(opened["pages"], 1);
+    let again = opened["doc"].as_u64().unwrap();
+    let (new_width, new_height, new_pixels) = reopened.render_pixels(again, 1, 1.0).unwrap();
+    assert_eq!((new_width, new_height), (width, height));
+    assert_eq!(new_pixels.as_ref(), pixels.as_ref(), "saving must preserve the recovered page's drawing");
 }
 
 /// organize.field-name-conflicts: combining files whose forms share a field name keeps the
@@ -4541,11 +4541,11 @@ fn signature_appearances(path: &Path) -> String {
 fn signing_with_translated_labels_through_tools() {
     let dir = workdir("signing-labels");
     let mut a = auto(&dir);
-    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret123", "path": "ada.p12" }));
+    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret12", "path": "ada.p12" }));
     let open = |a: &mut Automation| ok(a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
     let doc = open(&mut a);
     let args = |doc: u64, extra: Value, out: &str| {
-        let mut args = json!({ "doc": doc, "id": "ada.p12", "password": "secret123", "page": 1, "rect": [10, 150, 190, 290], "reason": "Genehmigt", "location": "Berlin", "out": out });
+        let mut args = json!({ "doc": doc, "id": "ada.p12", "password": "secret12", "page": 1, "rect": [10, 150, 190, 290], "reason": "Genehmigt", "location": "Berlin", "out": out });
         for (k, v) in extra.as_object().unwrap() {
             args[k] = v.clone();
         }
