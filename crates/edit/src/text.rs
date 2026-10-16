@@ -2043,7 +2043,6 @@ pub(crate) fn rewrite_block_with_limit(
     rewrite_block_from(doc, page, lines, block, text, style, max_glyphs)
 }
 
-/// [`rewrite_block_with_limit`] with the page's [`text_lines`], read from `doc` as it is now.
 /// Vowelized Hebrew needs glyph shaping and mark offsets, never one Type 3
 /// glyph per Unicode character. Keep the text in logical Unicode order.
 fn needs_shaped_hebrew(text: &str) -> bool {
@@ -2051,6 +2050,7 @@ fn needs_shaped_hebrew(text: &str) -> bool {
         && text.chars().any(crate::bidi::is_hebrew)
 }
 
+/// [`rewrite_block_with_limit`] with the page's [`text_lines`], read from `doc` as it is now.
 fn rewrite_block_from(
     doc: &mut Document,
     page: usize,
@@ -2068,8 +2068,8 @@ fn rewrite_block_from(
     let mut res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let mut fonts_res = res.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
     let registered_face = fonts_res.iter().any(|(name, _)| name.starts_with(b"PCFull"));
-    // Hebrew is written back in drawing order (and with the Hebrew fallback face) by the
-    // single-style path below; the styled region path does not reorder right-to-left runs.
+    // Ordinary unvowelized Hebrew retains the legacy drawing-order path;
+    // vowelized Hebrew takes the shaping-aware path below when its style permits.
     let hebrew = text.unwrap_or(&b.text).chars().any(crate::bidi::is_hebrew);
     if hebrew && (!style.ranges.is_empty() || style.resource.is_some()) {
         return Err(EditError::Invalid(
