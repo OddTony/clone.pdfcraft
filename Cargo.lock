@@ -4257,7 +4257,10 @@ version = "0.8.0"
 dependencies = [
  "pdfcraft-content",
  "pdfcraft-cos",
+ "pdfcraft-filters",
  "pdfcraft-model",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

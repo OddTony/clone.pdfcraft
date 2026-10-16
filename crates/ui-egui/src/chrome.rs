@@ -607,6 +607,7 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     (RightPanel::Tags, tl!("Tags")),
                     (RightPanel::Search, tl!("Search")),
                     (RightPanel::Compare, tl!("Compare")),
+                    (RightPanel::Preflight, tl!("Preflight")),
                 ] {
                     if ui.add(widgets::radio(app.right == Some(p), tl!(label))).clicked() {
                         app.choose_right_panel(Some(p));
@@ -624,6 +625,7 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let Some(doc) = app.session.get(id) else { return };
     let has_signatures = doc.is_signed();
     let has_check = app.a11y.report.as_ref().is_some_and(|(d, _)| *d == id);
+    let has_preflight = app.preflight.results.as_ref().is_some_and(|(d, _)| *d == id);
     let (has_comments, has_outline, has_fields, has_layers, has_files) = (
         !doc.info.annotations.is_empty(),
         !doc.info.outline.is_empty(),
@@ -659,6 +661,9 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             rail_button(ui, RightPanel::Signatures, "signature", "Signatures", has_signatures);
             if has_check {
                 rail_button(ui, RightPanel::Accessibility, "accessibility", "Accessibility Checker", false);
+            }
+            if has_preflight {
+                rail_button(ui, RightPanel::Preflight, "file-check", "Preflight", false);
             }
             rail_button(ui, RightPanel::Tags, "tag", "Tags", false);
 

@@ -1,4 +1,4 @@
-//! pdfcraft-preflight — Standards: PDF/A (L4).
+//! pdfcraft-preflight — Standards and Preflight: PDF/A, PDF/X and profiles of checks (L4).
 //!
 //! [`verify`] checks a document against the parts of ISO 19005-2/-3 (PDF/A-2b, PDF/A-3b) that can
 //! be decided from the object graph:
@@ -20,11 +20,15 @@
 //! returns what remains. Fonts that aren't embedded can't be fixed here.
 //!
 //! [`pdfx::verify`] checks a document against PDF/X-1a, PDF/X-3 and PDF/X-4 (ISO 15930).
+//!
+//! [`profiles`] is Preflight: profiles of checks with severities (the verifiers above, print
+//! checks and the Accessibility Checker), run over a document, with results, reports and fixups.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod icc;
 pub mod pdfx;
+pub mod profiles;
 mod xmp;
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};

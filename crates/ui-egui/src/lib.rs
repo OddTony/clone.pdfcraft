@@ -58,6 +58,7 @@ mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
 mod optimize_ui;
+mod preflight_ui;
 mod search_ui;
 mod sign_ui;
 mod stamps_ui;
@@ -204,6 +205,8 @@ pub enum RightPanel {
     Search,
     /// Compare files: the differences.
     Compare,
+    /// Print production ▸ Preflight: profiles, results and fixups.
+    Preflight,
 }
 
 /// Quick-action bar tools (the vertical floating strip).
@@ -677,6 +680,8 @@ pub struct PdfCraftApp {
     pub js_console: js_ui::JsConsole,
     pub doc_js: js_ui::DocJsDraft,
     pub a11y: a11y_ui::A11yState,
+    /// Print production ▸ Preflight: the chosen profile and the last results.
+    pub preflight: preflight_ui::PreflightState,
     pub(crate) tags_state: tags_ui::State,
     /// Rules skipped by hand, for the document they were skipped in.
     pub a11y_skipped: std::collections::HashSet<(DocId, pdfcraft_engine::a11y::Rule)>,
@@ -1000,6 +1005,7 @@ impl PdfCraftApp {
             js_console: Default::default(),
             doc_js: Default::default(),
             a11y: a11y_ui::A11yState::default(),
+            preflight: preflight_ui::PreflightState::default(),
             tags_state: Default::default(),
             a11y_skipped: Default::default(),
             alt_draft: Default::default(),
@@ -2492,9 +2498,34 @@ impl PdfCraftApp {
                     "tags" => Some(RightPanel::Tags),
                     "search" => Some(RightPanel::Search),
                     "compare" => Some(RightPanel::Compare),
+                    "preflight" => Some(RightPanel::Preflight),
                     "none" => None,
                     other => return Err(format!("unknown panel {other}")),
                 }
+            }
+            // Print production ▸ Preflight: run a profile (or a single check, `check:<id>`) over
+            // the active document; then select a hit, `CHECK:HIT` (0-based, as the panel lists them).
+            ("preflight", _) => {
+                if pdfcraft_engine::preflight::find(value).is_none() {
+                    return Err(format!("unknown preflight profile {value}"));
+                }
+                self.preflight.profile = value.to_string();
+                self.run_preflight();
+            }
+            ("preflight-hit", _) => {
+                let (check, hit) =
+                    value.split_once(':').and_then(|(c, h)| Some((c.parse().ok()?, h.parse().ok()?))).ok_or("preflight-hit: CHECK:HIT")?;
+                let found = self
+                    .preflight
+                    .results
+                    .as_ref()
+                    .and_then(|(_, r)| r.checks.get(check))
+                    .is_some_and(|c: &pdfcraft_engine::preflight::CheckResult| c.hits.len() > hit);
+                if !found {
+                    return Err(format!("no preflight hit {value}"));
+                }
+                let index = self.active.ok_or("no document")?;
+                self.preflight_action(index, preflight_ui::PanelAction::Select(check, hit));
             }
             ("mode", _) => {
                 let mode = Mode::parse(value).unwrap_or(Mode::AllTools);
