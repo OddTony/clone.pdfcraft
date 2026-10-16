@@ -17,6 +17,9 @@ jobs:
     name: Compile editor and run RTL regression tests
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      # Save compiled crates even when an experimental regression fails.
+      CACHE_ON_FAILURE: "true"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -40,10 +43,13 @@ jobs:
 
       - name: RTL caret and niqqud regression tests
         run: |
-          set -euo pipefail
-          cargo test --locked --lib -p pdfcraft-ui-egui rtl_caret_hit_testing_uses_physical_order_without_reversing_text
-          cargo test --locked --lib -p pdfcraft-ui-egui mixed_hebrew_latin_caret_stops_remain_valid_unicode_indices
-          cargo test --locked --lib -p pdfcraft-ui-egui live_rtl_preview_uses_original_font_after_text_changes
-          cargo test --locked --lib -p pdfcraft-fonts unicode_grapheme_sequences_reuse_one_embedded_pdf_glyph
-          cargo test --locked --lib -p pdfcraft-edit vowelized_hebrew_uses_the_shaping_writer_not_the_type3_fallback
-          cargo test --locked --lib -p pdfcraft-engine edited_pdf_preview_matches_apply_save_render
+          set -uo pipefail
+          failed=0
+          run_check() { "$@" || failed=1; }
+          run_check cargo test --locked --lib -p pdfcraft-ui-egui rtl_caret_hit_testing_uses_physical_order_without_reversing_text
+          run_check cargo test --locked --lib -p pdfcraft-ui-egui mixed_hebrew_latin_caret_stops_remain_valid_unicode_indices
+          run_check cargo test --locked --lib -p pdfcraft-ui-egui live_rtl_preview_uses_original_font_after_text_changes
+          run_check cargo test --locked --lib -p pdfcraft-fonts unicode_grapheme_sequences_reuse_one_embedded_pdf_glyph
+          run_check cargo test --locked --lib -p pdfcraft-edit vowelized_hebrew_uses_the_shaping_writer_not_the_type3_fallback
+          run_check cargo test --locked --lib -p pdfcraft-engine edited_pdf_preview_matches_apply_save_render
+          exit "$failed"
