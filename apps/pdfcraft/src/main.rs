@@ -32,6 +32,7 @@ use pdfcraft_ui_egui::PdfCraftApp;
 #[cfg(target_os = "macos")]
 mod apple_events;
 mod cloud;
+mod esign_host;
 mod compositor_gpu;
 mod logging;
 #[cfg(target_os = "windows")]
@@ -414,6 +415,9 @@ fn app_creator<'a>(
         }
         // The share dialog's backend: connects the same session as Open/Save.
         app.share.connect(collabcraft_share::CollabCraft::from_fn(cloud::client));
+        if let Some(backend) = esign_host::service(cc.egui_ctx.clone()) {
+            pdfcraft_ui_egui::esign::set_backend(&mut app.esign, backend);
+        }
         Ok(Box::new(app))
     })
 }
