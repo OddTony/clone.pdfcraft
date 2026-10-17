@@ -3,13 +3,44 @@
 
 pub use craft_print::{
     Duplex, HANDLED_OPTIONS, HAS_PRINTER_PREFERENCES, Job, Printer, PrinterOption, Scaling, lp_args, lpstat_command, parse_lpoptions, parse_lpstat,
-    parse_lpstat_e, parse_ppd, parse_windows_printers, ppd_text, printers, printers_parsed,
+    parse_lpstat_e, parse_ppd, parse_windows_printers, ppd_text, printers_parsed,
 };
+
+/// The portal is an operation, not an enumerated printer. Native packages retain CUPS.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Backend {
+    Native,
+    Portal,
+}
+
+pub fn backend() -> Backend {
+    #[cfg(target_os = "linux")]
+    {
+        select_backend(true, std::path::Path::new("/.flatpak-info").is_file(), std::env::var_os("FLATPAK_ID").is_some_and(|id| !id.is_empty()))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Backend::Native
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn select_backend(linux: bool, flatpak_info: bool, flatpak_id: bool) -> Backend {
+    if linux && (flatpak_info || flatpak_id) { Backend::Portal } else { Backend::Native }
+}
+
+/// Flatpak deliberately does not query CUPS. The UI offers the system dialog separately.
+pub fn printers() -> Vec<Printer> {
+    if backend() == Backend::Portal { Vec::new() } else { craft_print::printers() }
+}
 
 /// The driver's job options for a printer (CUPS: its PPD, with the queue's current defaults);
 /// empty when it has none or on other platforms. Reads files and runs `lpoptions`, so call it
 /// when the user asks, not every frame.
 pub fn printer_options(printer: &str) -> Vec<PrinterOption> {
+    if backend() == Backend::Portal {
+        return Vec::new();
+    }
     #[cfg(all(unix, not(target_arch = "wasm32")))]
     {
         printer_options_via(printer, std::path::Path::new("/etc/cups/ppd"), std::process::Command::new("lpoptions"))
@@ -56,15 +87,48 @@ pub(crate) fn printer_options_via(printer: &str, ppd_dir: &std::path::Path, mut 
 }
 
 pub fn submit(pdf: &[u8], job: &Job) -> Result<String, crate::PrintError> {
-    craft_print::submit(pdf, job).map_err(|e| crate::PrintError::Spool(e.to_string()))
+    submit_with_progress(pdf, job, &mut |_, _| {})
 }
 
 /// [`submit`], told `(sent, sheets)` as each sheet reaches the spooler (Windows; CUPS takes the
 /// whole PDF at once and reports nothing).
 pub fn submit_with_progress(pdf: &[u8], job: &Job, progress: &mut dyn FnMut(usize, usize)) -> Result<String, crate::PrintError> {
+    #[cfg(target_os = "linux")]
+    if backend() == Backend::Portal {
+        if job.printer.as_deref().is_some_and(|p| p != "system-dialog")
+            || job.copies != 1
+            || job.duplex.is_some()
+            || job.grayscale
+            || job.scaling != Scaling::Exact
+            || !job.options.is_empty()
+        {
+            return Err(crate::PrintError::Spool(
+                "Flatpak printing accepts a finished PDF; choose printer, copies, duplex, colour and paper in the system dialog".into(),
+            ));
+        }
+        return match crate::portal::submit(pdf, &job.title, "", &Default::default())? {
+            crate::portal::Outcome::Accepted => Ok("Accepted by the system print service; physical completion is not reported".into()),
+            crate::portal::Outcome::Cancelled => Err(crate::PrintError::Spool("Printing cancelled".into())),
+        };
+    }
     craft_print::submit_with_progress(pdf, job, progress).map_err(|e| crate::PrintError::Spool(e.to_string()))
 }
 
 pub fn open_printer_preferences(printer: &str) -> Result<(), crate::PrintError> {
+    if backend() == Backend::Portal {
+        return Err(crate::PrintError::Spool("Choose printer settings in the system print dialog".into()));
+    }
     craft_print::open_printer_preferences(printer).map_err(|e| crate::PrintError::Spool(e.to_string()))
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use super::*;
+    #[test]
+    fn sandbox_selection_keeps_native_packages_and_other_platforms() {
+        assert_eq!(select_backend(true, false, false), Backend::Native);
+        assert_eq!(select_backend(true, true, false), Backend::Portal);
+        assert_eq!(select_backend(true, false, true), Backend::Portal);
+        assert_eq!(select_backend(false, true, true), Backend::Native);
+    }
 }

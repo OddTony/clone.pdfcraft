@@ -356,6 +356,9 @@ impl Editor {
     }
 }
 
+/// Owned, permission-checked composition work suitable for a background thread.
+pub type PrintTask = Box<dyn FnOnce() -> Result<Vec<u8>, EditError> + Send>;
+
 pub struct Document {
     pub id: DocId,
     pub name: String,
@@ -4308,37 +4311,49 @@ impl Session {
 
     /// The print-ready PDF for `settings` (sheets laid out for the paper; see `pdfcraft-print`).
     pub fn print_pdf(&self, id: DocId, settings: &print::Settings) -> Result<Vec<u8>, EditError> {
+        self.print_task(id, settings)?()
+    }
+
+    /// Snapshot permission-checked print inputs so parsing, imposition and rasterization can
+    /// run off the GUI thread. Closing or editing the document cannot change an in-flight job.
+    pub fn print_task(&self, id: DocId, settings: &print::Settings) -> Result<PrintTask, EditError> {
         let doc = self.get(id).ok_or(EditError::NoDocument)?;
         if !doc.allows_printing() {
             return Err(EditError::NotPermitted("printing"));
         }
-        // Print as image: the pages used become pictures first, then the picture document is
-        // imposed in their place (its page k is the k-th distinct source page used).
-        if let Some(raster) = &settings.raster {
-            let mut distinct: Vec<usize> = Vec::new();
-            for &p in &settings.pages {
-                if !distinct.contains(&p) {
-                    distinct.push(p);
+        let settings = settings.clone();
+        let raster_source = settings.raster.as_ref().map(|_| doc.export_source());
+        let edited = doc.editor.as_ref().map(|e| e.cos.clone());
+        let bytes = doc.bytes.clone();
+        let password = doc.password.clone();
+        Ok(Box::new(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if let (Some(raster), Some(source)) = (&settings.raster, raster_source) {
+                    let mut distinct = Vec::new();
+                    for &p in &settings.pages {
+                        if !distinct.contains(&p) {
+                            distinct.push(p);
+                        }
+                    }
+                    let hide_comments = matches!(settings.content, print::Content::Document | print::Content::FormFieldsOnly);
+                    let bytes = print_raster::rasterize(&source, &distinct, raster, hide_comments).map_err(EditError::Print)?;
+                    let pictures = pdfcraft_cos::Document::open(Arc::new(bytes)).map_err(|e| EditError::Print(e.to_string()))?;
+                    let remapped = print::Settings {
+                        pages: settings.pages.iter().map(|p| distinct.iter().position(|d| d == p).unwrap_or(0)).collect(),
+                        content: print::Content::Document,
+                        raster: None,
+                        ..settings.clone()
+                    };
+                    return pdfcraft_print::impose(&pictures, &remapped).map_err(|e| EditError::Print(e.to_string()));
                 }
-            }
-            let hide_comments = matches!(settings.content, print::Content::Document | print::Content::FormFieldsOnly);
-            let bytes = print_raster::rasterize(doc, &distinct, raster, hide_comments).map_err(EditError::Print)?;
-            let pictures = pdfcraft_cos::Document::open(Arc::new(bytes)).map_err(|e| EditError::Print(e.to_string()))?;
-            let remapped = print::Settings {
-                pages: settings.pages.iter().map(|p| distinct.iter().position(|d| d == p).unwrap_or(0)).collect(),
-                content: print::Content::Document,
-                raster: None,
-                ..settings.clone()
-            };
-            return pdfcraft_print::impose(&pictures, &remapped).map_err(|e| EditError::Print(e.to_string()));
-        }
-        let cos = match doc.editor.as_ref() {
-            Some(e) => e.cos.clone(),
-            None => {
-                pdfcraft_cos::Document::open_with_password(doc.bytes.clone(), doc.password.as_deref()).map_err(|e| EditError::Write(e.to_string()))?
-            }
-        };
-        pdfcraft_print::impose(&cos, settings).map_err(|e| EditError::Print(e.to_string()))
+                let cos = match edited {
+                    Some(cos) => cos,
+                    None => pdfcraft_cos::Document::open_with_password(bytes, password.as_deref()).map_err(|e| EditError::Write(e.to_string()))?,
+                };
+                pdfcraft_print::impose(&cos, &settings).map_err(|e| EditError::Print(e.to_string()))
+            }))
+            .map_err(|_| EditError::Print("Could not prepare the document for printing".into()))?
+        }))
     }
 
     /// For each page, whether its text mostly runs bottom-to-top ([`pdfcraft_print::text_reads_up`]);

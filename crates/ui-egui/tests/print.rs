@@ -426,3 +426,34 @@ fn an_empty_printer_list_says_none_were_found() {
     h.get_by_label_contains("No printers were found");
     assert!(!h.get_by_role_and_label(Role::Button, "Save as PDF").accesskit_node().is_disabled());
 }
+
+/// Isolate Flatpak's environment from the other native UI tests.
+#[test]
+#[cfg(target_os = "linux")]
+fn flatpak_offers_system_printing_without_cups() {
+    if std::env::var_os("PDFCRAFT_PORTAL_TEST_CHILD").is_some() {
+        let mut h = harness();
+        h.state_mut().printer_source = Some(std::sync::Arc::new(Vec::new));
+        assert!(h.state_mut().execute("print.dialog"));
+        h.run_steps(8);
+        h.get_by_value("System print dialog…").click();
+        h.run_steps(2);
+        h.get_by_label("Save as PDF").click();
+        h.run_steps(2);
+        let out = std::env::temp_dir().join(format!("pdfcraft-flatpak-save-{}.pdf", std::process::id()));
+        h.state_mut().save_override = Some(out.to_string_lossy().into_owned());
+        h.get_by_label("Save as PDF").click();
+        h.run_steps(4);
+        assert!(std::fs::read(&out).unwrap().starts_with(b"%PDF-"));
+        std::fs::remove_file(out).unwrap();
+        return;
+    }
+    let result = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "flatpak_offers_system_printing_without_cups", "--nocapture"])
+        .env("PDFCRAFT_PORTAL_TEST_CHILD", "1")
+        .env("FLATPAK_ID", "ai.storyteller.pdfcraft")
+        .env("PATH", "/nonexistent")
+        .output()
+        .unwrap();
+    assert!(result.status.success(), "{}\n{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+}
