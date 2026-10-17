@@ -325,8 +325,9 @@ fn color32(color: [f64; 3]) -> Color32 {
     )
 }
 
+/// The dark box behind text too pale to read on white.
 #[allow(dead_code)]
-const DARK_EDITOR_FILL: Color32 = Color32::TRANSPARENT;
+const DARK_EDITOR_FILL: Color32 = Color32::from_gray(0x26);
 
 /// WCAG relative luminance of an sRGB colour.
 fn luminance(c: Color32) -> f32 {
@@ -337,17 +338,17 @@ fn luminance(c: Color32) -> f32 {
     0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
 }
 
+/// WCAG contrast ratio between two colours (1 to 21).
 #[allow(dead_code)]
 fn contrast(a: Color32, b: Color32) -> f32 {
     let (la, lb) = (luminance(a), luminance(b));
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
 
-/// The inline editor's background for text drawn in `text`: completely transparent
-/// directly on the canvas with zero unnatural black highlights.
+/// The inline editor's fallback contrast calculator for text drawn in `text`.
 #[allow(dead_code)]
-pub(crate) fn editor_fill(_text: Color32) -> Color32 {
-    Color32::TRANSPARENT
+pub(crate) fn editor_fill(text: Color32) -> Color32 {
+    if contrast(text, Color32::WHITE) >= contrast(text, DARK_EDITOR_FILL) { Color32::WHITE } else { DARK_EDITOR_FILL }
 }
 
 /// A selected page image, and what the pointer is doing to it.

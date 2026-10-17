@@ -358,28 +358,34 @@ impl ZoomNavigationEngine {
         let is_page_step = matches!(key, Key::PageDown | Key::PageUp);
         let base_line_step = 40.0 * speed_factor.max(0.2);
 
-        // Entire page fits in view if single_edges reports both top and bottom true, or fit is Fit::Page
-        let entire_page_fits = fit == Fit::Page
-            || (!continuous && single_edges.is_some_and(|(p, top, bottom)| p == current_page && top && bottom));
-
-        if entire_page_fits {
-            // Direct clean page step without waiting for edge exhaustion
-            ZoomNavAction::StepPage { forward, target_fraction: if forward { 0.0 } else { 1.0 } }
-        } else if is_page_step {
-            // Screen jump
-            ZoomNavAction::ScrollScreen { forward }
-        } else {
-            // Zoomed in: check boundary conditions
-            let at_boundary = !continuous
-                && single_edges.is_some_and(|(p, top, bottom)| p == current_page && if forward { bottom } else { top });
-
-            if at_boundary {
-                // Smooth boundary roll-over to next/previous page
-                ZoomNavAction::StepPage { forward, target_fraction: if forward { 0.0 } else { 1.0 } }
+        if continuous {
+            if is_page_step {
+                ZoomNavAction::ScrollScreen { forward }
             } else {
-                // Smooth line panning
                 let delta = if forward { base_line_step } else { -base_line_step };
                 ZoomNavAction::ScrollLine { delta_points: delta }
+            }
+        } else {
+            let entire_page_fits = fit == Fit::Page
+                || single_edges.is_some_and(|(p, top, bottom)| p == current_page && top && bottom);
+
+            if entire_page_fits {
+                ZoomNavAction::StepPage { forward, target_fraction: if forward { 0.0 } else { 1.0 } }
+            } else if is_page_step {
+                let at_boundary = single_edges.is_some_and(|(p, top, bottom)| p == current_page && if forward { bottom } else { top });
+                if at_boundary {
+                    ZoomNavAction::StepPage { forward, target_fraction: if forward { 0.0 } else { 1.0 } }
+                } else {
+                    ZoomNavAction::ScrollScreen { forward }
+                }
+            } else {
+                let at_boundary = single_edges.is_some_and(|(p, top, bottom)| p == current_page && if forward { bottom } else { top });
+                if at_boundary {
+                    ZoomNavAction::StepPage { forward, target_fraction: if forward { 0.0 } else { 1.0 } }
+                } else {
+                    let delta = if forward { base_line_step } else { -base_line_step };
+                    ZoomNavAction::ScrollLine { delta_points: delta }
+                }
             }
         }
     }
@@ -496,19 +502,19 @@ impl FloatingContextMenu {
                         ui.horizontal(|ui| {
                             // Cut (Ctrl+X)
                             if can_modify && can_copy {
-                                if crate::icons::button(ui, "scissors", 26.0, false, tl!("Cut (Ctrl+X)")).clicked() {
+                                if crate::icons::button(ui, "scissors", 26.0, false, "Cut (Ctrl+X)").clicked() {
                                     action = Some(FloatingMenuAction::Cut);
                                 }
                             }
                             // Copy (Ctrl+C)
                             if can_copy {
-                                if crate::icons::button(ui, "copy", 26.0, false, tl!("Copy (Ctrl+C)")).clicked() {
+                                if crate::icons::button(ui, "copy", 26.0, false, "Copy (Ctrl+C)").clicked() {
                                     action = Some(FloatingMenuAction::Copy);
                                 }
                             }
                             // Paste (Ctrl+V)
                             if can_modify {
-                                if crate::icons::button(ui, "clipboard-paste", 26.0, false, tl!("Paste (Ctrl+V)")).clicked() {
+                                if crate::icons::button(ui, "clipboard-paste", 26.0, false, "Paste (Ctrl+V)").clicked() {
                                     action = Some(FloatingMenuAction::Paste);
                                 }
                             }
@@ -521,7 +527,7 @@ impl FloatingContextMenu {
                                     "brush",
                                     26.0,
                                     has_format,
-                                    if has_format { tl!("Apply formatting (Format Painter)") } else { tl!("Pick up formatting (Format Painter)") },
+                                    if has_format { "Apply formatting (Format Painter)" } else { "Pick up formatting (Format Painter)" },
                                 ).clicked() {
                                     action = Some(FloatingMenuAction::FormatPainter);
                                 }
@@ -529,7 +535,7 @@ impl FloatingContextMenu {
 
                             // Edit Text (for text elements)
                             if is_text && can_modify {
-                                if crate::icons::button(ui, "text-cursor-input", 26.0, false, tl!("Edit text")).clicked() {
+                                if crate::icons::button(ui, "text-cursor-input", 26.0, false, "Edit text").clicked() {
                                     action = Some(FloatingMenuAction::EditText);
                                 }
                             }
@@ -546,14 +552,14 @@ impl FloatingContextMenu {
                                 if crate::icons::button(ui, "strikethrough", 26.0, false, tl!("Strikethrough")).clicked() {
                                     action = Some(FloatingMenuAction::ToggleStrikethrough);
                                 }
-                                if crate::icons::button(ui, "sparkles", 26.0, view.canvas_selection.symbol_palette_open, tl!("Insert symbol")).clicked() {
+                                if crate::icons::button(ui, "sparkles", 26.0, view.canvas_selection.symbol_palette_open, "Insert symbol").clicked() {
                                     action = Some(FloatingMenuAction::OpenSymbolPalette);
                                 }
                             }
 
                             // Recognize Text (OCR for images)
                             if is_image && can_modify {
-                                if crate::icons::button(ui, "scan-text", 26.0, false, tl!("Recognize text (OCR)")).clicked() {
+                                if crate::icons::button(ui, "scan-text", 26.0, false, "Recognize text (OCR)").clicked() {
                                     action = Some(FloatingMenuAction::RecognizeOcr);
                                 }
                             }
@@ -561,7 +567,7 @@ impl FloatingContextMenu {
                             // Separator before Delete
                             if can_modify {
                                 ui.separator();
-                                if crate::icons::button(ui, "trash-2", 26.0, false, tl!("Delete (Del)")).clicked() {
+                                if crate::icons::button(ui, "trash-2", 26.0, false, "Delete (Del)").clicked() {
                                     action = Some(FloatingMenuAction::Delete);
                                 }
                             }

@@ -2252,45 +2252,53 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
     // ⌘Page Down / ⌘Page Up, or plain Page Down / Page Up in single-page view.
     let command = ctx.input(|i| i.modifiers.command);
     let scrolls = view.continuous;
-    if key(Key::ArrowRight) || (key(Key::PageDown) && (command || !scrolls)) {
-        view.step_page(true);
-    }
-    if key(Key::ArrowLeft) || (key(Key::PageUp) && (command || !scrolls)) {
-        view.step_page(false);
-    }
-    // ↓ / ↑ scroll or step pages intelligently based on current zoom and fit conditions.
-    if !command {
-        for k in [Key::ArrowDown, Key::ArrowUp, Key::PageDown, Key::PageUp] {
-            if !key(k) {
-                continue;
-            }
-            let nav_action = crate::canvas_selection::ZoomNavigationEngine::evaluate_navigation_step(
-                k,
-                view.fit,
-                view.continuous,
-                view.zoom,
-                view.single_edges,
-                view.current,
-                speed.factor(),
-                view.viewport_h,
-            );
-            match nav_action {
-                crate::canvas_selection::ZoomNavAction::StepPage { forward, target_fraction } => {
-                    let before = view.current;
-                    view.step_page(forward);
-                    if !forward && view.current != before && target_fraction > 0.0 {
-                        view.goto = Some((view.current, target_fraction));
+    let key_nav = |k| {
+        ctx.input(|i| {
+            i.key_pressed(k)
+                || i.events.iter().any(|e| matches!(e, egui::Event::Key { key: pk, pressed: true, .. } if *pk == k))
+        })
+    };
+    if view.line_editor.is_none() {
+        if key_nav(Key::ArrowRight) || (key_nav(Key::PageDown) && (command || !scrolls)) {
+            view.step_page(true);
+        }
+        if key_nav(Key::ArrowLeft) || (key_nav(Key::PageUp) && (command || !scrolls)) {
+            view.step_page(false);
+        }
+        // ↓ / ↑ scroll or step pages intelligently based on current zoom and fit conditions.
+        if !command {
+            for k in [Key::ArrowDown, Key::ArrowUp, Key::PageDown, Key::PageUp] {
+                if !key_nav(k) {
+                    continue;
+                }
+                let nav_action = crate::canvas_selection::ZoomNavigationEngine::evaluate_navigation_step(
+                    k,
+                    view.fit,
+                    view.continuous,
+                    view.zoom,
+                    view.single_edges,
+                    view.current,
+                    speed.factor(),
+                    view.viewport_h,
+                );
+                match nav_action {
+                    crate::canvas_selection::ZoomNavAction::StepPage { forward, target_fraction } => {
+                        let before = view.current;
+                        view.step_page(forward);
+                        if !forward && view.current != before && target_fraction > 0.0 {
+                            view.goto = Some((view.current, target_fraction));
+                        }
+                        view.single_edges = None;
                     }
-                    view.single_edges = None;
+                    crate::canvas_selection::ZoomNavAction::ScrollLine { delta_points } => {
+                        view.key_scroll += delta_points;
+                    }
+                    crate::canvas_selection::ZoomNavAction::ScrollScreen { forward } => {
+                        let screen = (view.viewport_h - KEY_SCROLL_LINE).max(KEY_SCROLL_LINE);
+                        view.key_scroll += if forward { screen } else { -screen };
+                    }
+                    crate::canvas_selection::ZoomNavAction::None => {}
                 }
-                crate::canvas_selection::ZoomNavAction::ScrollLine { delta_points } => {
-                    view.key_scroll += delta_points;
-                }
-                crate::canvas_selection::ZoomNavAction::ScrollScreen { forward } => {
-                    let screen = (view.viewport_h - KEY_SCROLL_LINE).max(KEY_SCROLL_LINE);
-                    view.key_scroll += if forward { screen } else { -screen };
-                }
-                crate::canvas_selection::ZoomNavAction::None => {}
             }
         }
     }
@@ -2613,6 +2621,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     let sharp_held = now_scale < view.sharp_hold_until;
     view.current_scale_tag = tag;
+    if view.pending_text_open.is_some() || view.line_editor.is_some() {
+        app.quick_tool = QuickTool::EditText;
+    }
     let hand = app.quick_tool == QuickTool::Hand;
     let tool = app.quick_tool;
     // Text selection runs for the Select tool and for the markup tools (highlight…).
@@ -3996,9 +4007,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         }
     }
 
-    // Barcode & QR Code Scanner HUD
+    // Barcode & QR Code Scanner HUD & Generator Panel
     if let Some(hud_edit) = crate::barcode_hud::BarcodeScannerHud::show(ui, view, info, can_modify) {
         view.pending_edit = Some(hud_edit);
+    }
+    if let Some(panel_edit) = crate::barcode_hud::BarcodeScannerHud::show_panel(ui, view, doc, info, can_modify) {
+        view.pending_edit = Some(panel_edit);
     }
 
     // Floating Symbol Insertion Palette
@@ -4038,7 +4052,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // One crop, then back to selecting (as Acrobat does).
     let cropped = view.pending_edit.as_ref().is_some_and(|e| matches!(e, pdfcraft_engine::Edit::SetPageBox { .. }));
     let mut tool = app.quick_tool;
-    if floating_action == Some(crate::canvas_selection::FloatingMenuAction::EditText) {
+    if floating_action == Some(crate::canvas_selection::FloatingMenuAction::EditText) || view.pending_text_open.is_some() {
         tool = QuickTool::EditText;
         app.quick_tool = QuickTool::EditText;
     }
@@ -4266,17 +4280,40 @@ fn selection_actions(
     let at = [last[2].max(last[6]), last[1].max(last[3])];
     view.clear_selection();
     match action {
-        SelectionAction::Note | SelectionAction::Replace => {
-            if matches!(action, SelectionAction::Replace) {
-                view.comments.replace = Some(quads);
-            }
+        SelectionAction::Note => {
             view.comments.composer = Some(comments::Composer {
                 page,
                 at,
-                kind: if matches!(action, SelectionAction::Replace) { comments::ComposerKind::Replace } else { comments::ComposerKind::Note },
+                kind: comments::ComposerKind::Note,
                 text: String::new(),
                 focus: true,
             });
+        }
+        SelectionAction::Replace => {
+            let mut target_box = None;
+            if !quads.is_empty() {
+                let mut min_x = f64::MAX;
+                let mut min_y = f64::MAX;
+                let mut max_x = f64::MIN;
+                let mut max_y = f64::MIN;
+                for q in &quads {
+                    min_x = min_x.min(q[0].min(q[6]));
+                    min_y = min_y.min(q[1].min(q[3]));
+                    max_x = max_x.max(q[2].max(q[4]));
+                    max_y = max_y.max(q[5].max(q[7]));
+                }
+                target_box = Some([min_x, min_y, max_x, max_y]);
+            }
+            let block_idx = if let (Some(tb), Some((_, lines))) = (target_box, view.edit_lines.get(&page)) {
+                lines.iter().position(|b| {
+                    !(b.rect[2] < tb[0] || b.rect[0] > tb[2] || b.rect[3] < tb[1] || b.rect[1] > tb[3])
+                }).unwrap_or(0)
+            } else {
+                0
+            };
+            view.pending_text_open = Some((page, block_idx));
+            view.canvas_selection.clear();
+            ui.ctx().request_repaint();
         }
         SelectionAction::Markup(tool) => {
             // Every markup button carries a markup tool; anything else adds nothing.
@@ -4808,6 +4845,15 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                                 app.put_down_edit_text();
                             } else {
                                 app.quick_tool = QuickTool::EditText;
+                            }
+                        }
+                    }
+                    // QR & Barcode Tools (Scanner & Generator)
+                    if let Some((tab_idx, _)) = app.active_ids() {
+                        let is_panel_open = app.views.get(tab_idx).map_or(false, |v| v.barcode_hud.panel_open);
+                        if icons::button(ui, "scan", 32.0, is_panel_open, "QR & Barcode Tools").clicked() {
+                            if let Some(v) = app.views.get_mut(tab_idx) {
+                                v.barcode_hud.panel_open = !v.barcode_hud.panel_open;
                             }
                         }
                     }
