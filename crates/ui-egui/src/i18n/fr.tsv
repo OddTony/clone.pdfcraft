@@ -2432,3 +2432,8 @@ animation effects	Off	Désactivés
 	Make properties default	Définir comme propriétés par défaut
 	Pages selected	Pages sélectionnées
 	Page properties	Propriétés de la page
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Largeur de la barre de défilement du document
+document scrollbar width	Standard	Standard
+document scrollbar width	Wide	Large

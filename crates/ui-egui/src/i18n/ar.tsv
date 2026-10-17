@@ -2709,3 +2709,8 @@ certificate	Version	الإصدار
 	Make properties default	جعل الخصائص افتراضية
 	Pages selected	الصفحات المحددة
 	Page properties	خصائص الصفحة
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	عرض شريط تمرير المستند
+document scrollbar width	Standard	قياسي
+document scrollbar width	Wide	عريض

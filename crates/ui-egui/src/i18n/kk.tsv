@@ -2430,3 +2430,8 @@ animation effects	Off	Өшірулі
 	Make properties default	Қасиеттерді әдепкі ету
 	Pages selected	Таңдалған беттер
 	Page properties	Бет қасиеттері
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Құжаттың айналдыру жолағының ені
+document scrollbar width	Standard	Стандартты
+document scrollbar width	Wide	Кең

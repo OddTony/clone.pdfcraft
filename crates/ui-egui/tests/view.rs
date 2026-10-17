@@ -1381,3 +1381,180 @@ fn two_up_scroll_end_reaches_an_unpaired_final_page() {
 fn two_up_scroll_end_with_cover_reaches_a_taller_left_page() {
     assert_final_spread_bottom_reachable(&[400, 400, 400, 400, 100], true);
 }
+
+/// The actual document scrollbar's egui interaction rect, exposed through AccessKit.
+fn document_scrollbar(h: &Harness<'static, PdfCraftApp>) -> egui::Rect {
+    use egui_kittest::kittest::Queryable;
+    let viewport = h.state().views[0].viewport_rect();
+    h.query_all_by_role(egui::accesskit::Role::ScrollBar)
+        .map(|n| n.rect())
+        .find(|r| r.height() > r.width() && (r.right() - viewport.right()).abs() < 1.0)
+        .expect("document vertical scrollbar")
+}
+
+#[test]
+fn document_scrollbar_defaults_and_persistence_are_safe() {
+    use pdfcraft_ui_egui::scrollbar_width::DocumentScrollbarWidth;
+    assert_eq!(DocumentScrollbarWidth::default(), DocumentScrollbarWidth::Standard);
+    let mut app = PdfCraftApp::new();
+    assert_eq!(app.document_scrollbar_width, DocumentScrollbarWidth::Standard);
+    for width in ["standard", "wide"] {
+        app.set_option("document_scrollbar_width", width).unwrap();
+        let saved = app.persist();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&saved).unwrap()["document_scrollbar_width"], width);
+        let mut restored = PdfCraftApp::new();
+        restored.restore(&saved);
+        assert_eq!(restored.document_scrollbar_width, app.document_scrollbar_width);
+    }
+    for invalid in [
+        "{}",
+        r#"{"document_scrollbar_width":"unknown","units":"cm"}"#,
+        r#"{"document_scrollbar_width":16}"#,
+        r#"{"document_scrollbar_width":null}"#,
+        r#"{"document_scrollbar_width":{}}"#,
+        "broken json",
+    ] {
+        let mut restored = PdfCraftApp::new();
+        restored.restore(invalid);
+        assert_eq!(restored.document_scrollbar_width, DocumentScrollbarWidth::Standard, "{invalid}");
+    }
+    app.set_option("document_scrollbar_width", "wide").unwrap();
+    assert!(app.set_option("document_scrollbar_width", "huge").is_err());
+    app.restore(r#"{"document_scrollbar_width":"unknown"}"#);
+    assert_eq!(app.document_scrollbar_width, DocumentScrollbarWidth::Wide, "invalid settings keep the current valid choice");
+}
+
+#[test]
+fn document_scrollbar_dimensions_and_other_scroll_areas_stay_local() {
+    use egui::accesskit::Role;
+    use egui_kittest::kittest::Queryable;
+    for theme in ["light", "dark"] {
+        for scale in [1.0, 1.5] {
+            let mut h = harness(&[("layout", "continuous"), ("zoom", "100")]);
+            h.state_mut().set_option("theme", theme).unwrap();
+            h.set_size(egui::vec2(1400.0, 600.0));
+            h.set_pixels_per_point(scale);
+            h.state_mut().set_option("left", "open").unwrap();
+            h.run_steps(8);
+            let original = h.ctx.global_style().spacing.scroll;
+            assert!(original.floating);
+            assert_eq!((original.bar_width, original.floating_width), (8.0, 3.0));
+            let viewport = h.state().views[0].viewport_rect();
+            assert_eq!(document_scrollbar(&h).width(), 8.0, "unset preference retains the existing target");
+            // Hover the scroll area, away from the bar, so its unexpanded handle is painted.
+            h.hover_at(viewport.center());
+            h.run_steps(8);
+            for (choice, target, painted) in [("standard", 8.0, 3.0), ("wide", 16.0, 16.0), ("standard", 8.0, 3.0)] {
+                let other_bars: Vec<_> =
+                    h.query_all_by_role(Role::ScrollBar).map(|n| n.rect()).filter(|r| r.right() <= viewport.left() + 1.0).collect();
+                assert!(!other_bars.is_empty(), "the tools sidebar has a scrollbar");
+                h.state_mut().set_option("document_scrollbar_width", choice).unwrap();
+                h.run_steps(8);
+                let bar = document_scrollbar(&h);
+                assert_eq!(bar.width(), target, "{choice}, {theme}, scale={scale}");
+                assert_eq!(h.state().views[0].viewport_rect(), viewport, "floating bars don't change layout");
+                assert!(
+                    h.output().shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Rect(r)
+                    if (r.rect.right() - bar.right()).abs() < 1.0
+                        && (r.rect.width() - painted).abs() < 0.1 && r.rect.height() > 20.0)),
+                    "painted scrollbar width {painted}: {choice}, {theme}, scale={scale}"
+                );
+                assert_eq!(h.ctx.global_style().spacing.scroll, original, "global style unchanged");
+                assert_eq!(
+                    h.query_all_by_role(Role::ScrollBar).map(|n| n.rect()).filter(|r| r.right() <= viewport.left() + 1.0).collect::<Vec<_>>(),
+                    other_bars,
+                    "sidebar unchanged"
+                );
+                h.state_mut().set_option("dialog", "preferences").unwrap();
+                h.run_steps(8);
+                // Preferences has its own long scroll area; every non-document bar is still 8 pt.
+                let bars: Vec<_> = h
+                    .query_all_by_role(Role::ScrollBar)
+                    .map(|n| n.rect())
+                    .filter(|r| r.height() > r.width() && (r.right() - viewport.right()).abs() >= 1.0)
+                    .collect();
+                assert!(!bars.is_empty());
+                assert!(bars.iter().all(|r| r.width() == 8.0), "dialog/sidebar bars: {bars:?}");
+                h.state_mut().set_option("dialog", "none").unwrap();
+                h.run_steps(8);
+            }
+        }
+    }
+}
+
+#[test]
+fn wide_document_scrollbar_can_be_dragged_in_the_added_pointer_target() {
+    for choice in ["standard", "wide"] {
+        let mut h = harness(&[("layout", "continuous"), ("zoom", "100")]);
+        h.state_mut().set_option("document_scrollbar_width", choice).unwrap();
+        h.run_steps(4);
+        let bar = document_scrollbar(&h);
+        let from = egui::pos2(bar.right() - 12.0, bar.top() + 35.0);
+        let to = from + egui::vec2(0.0, 80.0);
+        let before = rect(&h, 0).unwrap();
+        h.hover_at(from);
+        h.run_steps(2);
+        h.event(egui::Event::PointerButton { pos: from, button: egui::PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
+        h.run_steps(1);
+        h.hover_at(to);
+        h.run_steps(2);
+        h.event(egui::Event::PointerButton { pos: to, button: egui::PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+        h.run_steps(2);
+        let moved = before.top() - rect(&h, 0).unwrap().top();
+        if choice == "wide" {
+            assert!(moved > 80.0, "dragging inside the new 16 pt target scrolls: {moved}");
+        } else {
+            assert!(moved.abs() < 1.0, "the same point is outside Standard's 8 pt target: {moved}");
+        }
+    }
+}
+
+#[test]
+fn document_scrollbar_preference_changes_live_without_moving_the_document() {
+    use egui_kittest::kittest::Queryable;
+    let mut h = harness_stepping(1.0 / 60.0, &[("layout", "continuous"), ("zoom", "100")]);
+    let at = h.state().views[0].viewport_rect().center();
+    h.hover_at(at);
+    h.run_steps(2);
+    h.event(wheel(MouseWheelUnit::Point, -100.0, TouchPhase::Move));
+    h.run_steps(4);
+    let before = rect(&h, 0).unwrap();
+    h.state_mut().set_option("dialog", "preferences").unwrap();
+    h.run_steps(4);
+    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Wide").scroll_to_me();
+    h.run_steps(8);
+    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Wide").click();
+    h.run_steps(4);
+    h.state_mut().set_option("dialog", "none").unwrap();
+    h.run_steps(4);
+    assert_eq!(document_scrollbar(&h).width(), 16.0);
+    assert_eq!(rect(&h, 0).unwrap(), before, "live switch preserves scroll and zoom");
+    let saved = h.state().persist();
+    h.state_mut().set_option("document_scrollbar_width", "standard").unwrap();
+    h.state_mut().restore(&saved);
+    h.run_steps(4);
+    assert_eq!(document_scrollbar(&h).width(), 16.0, "saved choice reaches the real scroll area");
+    h.hover_at(at);
+    h.run_steps(2);
+    h.event(wheel(MouseWheelUnit::Point, -100.0, TouchPhase::Move));
+    h.run_steps(4);
+    let moved = before.top() - rect(&h, 0).unwrap().top();
+    assert!((moved - 100.0).abs() < 2.0, "touchpad remains 1:1: {moved}");
+    h.state_mut().set_option("page", "3").unwrap();
+    h.run_steps(4);
+    assert!(rect(&h, 2).unwrap().intersects(h.state().views[0].viewport_rect()));
+    h.state_mut().set_option("zoom", "500").unwrap();
+    h.run_steps(4);
+    let at = h.state().views[0].viewport_rect().center();
+    h.hover_at(at);
+    h.run_steps(2);
+    let before = rect(&h, 2).unwrap();
+    h.event(egui::Event::MouseWheel {
+        unit: MouseWheelUnit::Point,
+        delta: egui::vec2(-100.0, 0.0),
+        phase: TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    });
+    h.run_steps(4);
+    assert!((before.left() - rect(&h, 2).unwrap().left() - 100.0).abs() < 2.0, "horizontal scrolling at zoom remains 1:1");
+}

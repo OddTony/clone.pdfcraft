@@ -2428,3 +2428,8 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+
+# Document scrollbar width (#2056).
+	Document scrollbar width	Belge kaydırma çubuğu genişliği
+document scrollbar width	Standard	Standart
+document scrollbar width	Wide	Geniş
