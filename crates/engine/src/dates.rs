@@ -406,13 +406,14 @@ pub fn date_language(code: &str) -> Option<&'static DateLanguage> {
 }
 
 /// The characters of `text` that Fill & Sign can't write into a PDF yet, each once. Its text is
-/// drawn in Helvetica with WinAnsi encoding (Western European letters), so anything else (`ř`,
-/// Japanese, Chinese) would become `?` in the file.
+/// drawn in Helvetica with WinAnsi encoding (Western European letters), and Korean as outlines of
+/// the craft-fonts Korean face when the build has one, so anything else (`ř`, Japanese, Chinese)
+/// would become `?` in the file.
 pub fn unwritable(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars() {
         let mut buf = [0u8; 4];
-        if c != '?' && pdfcraft_fonts::win_ansi(c.encode_utf8(&mut buf)) == b"?" && !out.contains(c) {
+        if c != '?' && pdfcraft_fonts::first_unoutlinable(c.encode_utf8(&mut buf)).is_some() && !out.contains(c) {
             out.push(c);
         }
     }
@@ -574,7 +575,7 @@ impl Session {
         match unwritable(&text) {
             bad if bad.is_empty() => Ok(text),
             bad => Err(format!(
-                "\"{text}\" can't be written into the PDF yet: Fill & Sign text is Western European only ({bad}); pick a numeric format such as dd.mm.yyyy"
+                "\"{text}\" can't be written into the PDF yet: Fill & Sign text is Western European (and Korean) only ({bad}); pick a numeric format such as dd.mm.yyyy"
             )),
         }
     }
@@ -773,5 +774,13 @@ mod tests {
         assert!(e.contains("火曜日") && e.contains("can't be written into the PDF yet"), "{e}");
         assert!(s.today_text_for_pdf(Some("dd.mm.yyyy"), Some("ja")).is_ok(), "numbers are fine in any language");
         assert!(s.today_text_for_pdf(Some("yyyy\\年mm\\月"), Some("ja")).unwrap_err().contains("年月"));
+        // Korean is drawn with the craft-fonts Korean face, when the build has one.
+        let korean = s.today_text_for_pdf(Some("yyyy년 m월 d일"), None);
+        if pdfcraft_fonts::document_korean_fonts_for_style(false, false).is_empty() {
+            assert!(korean.unwrap_err().contains("can't be written into the PDF yet"));
+        } else {
+            assert_eq!(korean.as_deref(), Ok("2023년 11월 14일"));
+            assert_eq!(unwritable("2026년 10월 8일 목요일"), "");
+        }
     }
 }
