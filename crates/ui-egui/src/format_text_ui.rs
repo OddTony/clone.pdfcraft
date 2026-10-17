@@ -7,7 +7,7 @@
 //!
 //! The icons are Lucide's (AGENTS.md §1); only the arrangement follows Acrobat.
 
-use egui::{Color32, CornerRadius, Rect, Sense, Stroke, vec2};
+use egui::{Align, Color32, CornerRadius, Layout, Rect, Sense, Stroke, vec2};
 use pdfcraft_engine::{AddedText, FontFamily, TextAlign};
 
 use crate::edit_text_ui::Extras;
@@ -50,6 +50,16 @@ const SIZES: [f64; 14] = [8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24
 const LINE_SPACINGS: [f64; 7] = [1.0, 1.15, 1.2, 1.5, 2.0, 2.5, 3.0];
 const SCALES: [f64; 8] = [50.0, 75.0, 90.0, 100.0, 110.0, 125.0, 150.0, 200.0];
 const CHAR_SPACINGS: [f64; 8] = [-1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0, 5.0];
+/// A row's height: the tallest control in it (the 30 pt icon buttons). Every control is centred
+/// on the row, whatever its own height, so lists, swatches and buttons line up (#3037).
+const ROW: f32 = 30.0;
+/// The gap between a row's controls.
+const GAP: f32 = 6.0;
+/// The icon naming a list or field ([`labelled_icon`]).
+const LABEL_ICON: f32 = 22.0;
+/// The button beside a number field that opens its list of common values: just an arrow, so the
+/// field keeps the room its value needs.
+const PRESET_LIST: f32 = 22.0;
 /// What can be typed: horizontal scale in percent, character spacing in points.
 const SCALE_RANGE: std::ops::RangeInclusive<f64> = 10.0..=400.0;
 const CHAR_SPACING_RANGE: std::ops::RangeInclusive<f64> = -5.0..=50.0;
@@ -116,8 +126,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, look: &mut AddedText, extras:
     ui.add_space(4.0);
 
     // Size and colour | bullets, numbering and alignment.
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
+    row(ui, |ui| {
         let _ = egui::ComboBox::from_id_salt("format-size")
             .selected_text(number(look.size))
             .width(64.0)
@@ -166,8 +175,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, look: &mut AddedText, extras:
 
     // Bold, italic, underline, superscript, subscript.
     let mut extras = extras;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.0;
+    row(ui, |ui| {
         if icons::button(ui, "bold", 30.0, look.bold, tl!("Bold")).clicked() {
             look.bold = !look.bold;
         }
@@ -186,12 +194,13 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, look: &mut AddedText, extras:
         planned(ui, "subscript", tl!("Subscript"));
     });
 
-    // Line and paragraph spacing; horizontal scale and character spacing.
-    let half = ((ui.available_width() - 2.0 * 28.0 - 16.0) / 2.0).max(40.0);
+    // Line and paragraph spacing; horizontal scale and character spacing: two columns, each an
+    // icon and its control, `half` wide.
+    let half = ((ui.available_width() - 2.0 * LABEL_ICON - 8.0 - 3.0 * GAP) / 2.0).max(40.0);
     ui.add_enabled_ui(extras.is_some(), |ui| {
         let mut fallback = Extras::default();
         let e = extras.as_deref_mut().unwrap_or(&mut fallback);
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             labelled_icon(ui, t, "arrow-up-down", tl!("Line spacing"));
             let own = tl!("Auto").to_string();
             let shown = if e.line_spacing == 0.0 { own.clone() } else { number(e.line_spacing) };
@@ -214,14 +223,14 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, look: &mut AddedText, extras:
             });
         });
         // Any value the engine takes can be typed; the lists hold the common ones.
-        ui.horizontal(|ui| {
+        row(ui, |ui| {
             let label = labelled_icon(ui, t, "move-horizontal", tl!("Horizontal scale"));
             let scale = Number { value: &mut e.scale, range: SCALE_RANGE, speed: 1.0, suffix: " %" };
-            number_with_presets(ui, "format-scale", scale, &SCALES, half, label.id);
+            number_with_presets(ui, scale, &SCALES, half, (label.id, tl!("Horizontal scale")));
             ui.add_space(8.0);
             let label = labelled_icon(ui, t, "arrow-left-right", tl!("Character spacing"));
             let spacing = Number { value: &mut e.char_spacing, range: CHAR_SPACING_RANGE, speed: 0.1, suffix: " pt" };
-            number_with_presets(ui, "format-char-spacing", spacing, &CHAR_SPACINGS, half, label.id);
+            number_with_presets(ui, spacing, &CHAR_SPACINGS, half, (label.id, tl!("Character spacing")));
         });
     });
 
@@ -229,6 +238,20 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, look: &mut AddedText, extras:
     ui.add_space(6.0);
     ui.separator();
     out
+}
+
+/// One row of the panel, [`ROW`] high, its controls [`GAP`] apart and centred on it.
+fn row<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let size = vec2(ui.available_width(), ROW);
+    ui.allocate_ui_with_layout(size, Layout::left_to_right(Align::Center), |ui| {
+        ui.spacing_mut().item_spacing.x = GAP;
+        // A list lays itself out from the default control height and grows downward, which leaves
+        // it below the row's middle; at a list's own height it is centred like the rest.
+        let list = ui.text_style_height(&egui::TextStyle::Button) + 2.0 * ui.spacing().button_padding.y;
+        ui.spacing_mut().interact_size.y = ui.spacing().interact_size.y.max(list);
+        add(ui)
+    })
+    .inner
 }
 
 /// A control PdfCraft doesn't have yet: its icon, disabled, saying so when hovered.
@@ -250,7 +273,7 @@ fn flyout(ui: &egui::Ui, t: &Tokens, resp: egui::Response) -> egui::Response {
 /// An icon naming the list beside it, for screen readers too. Returns it, for the control it
 /// labels.
 fn labelled_icon(ui: &mut egui::Ui, t: &Tokens, icon: &str, label: &str) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 26.0), Sense::hover());
+    let (rect, resp) = ui.allocate_exact_size(vec2(LABEL_ICON, 26.0), Sense::hover());
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), label));
     let tint = if ui.is_enabled() { t.icon } else { t.text_faint };
     icons::paint(ui, Rect::from_center_size(rect.center(), vec2(18.0, 18.0)), icon, 17.0, tint);
@@ -265,17 +288,21 @@ struct Number<'a> {
     suffix: &'static str,
 }
 
-/// A number field with a list of common values beside it, in `width` all told: type any value
-/// in its range, or pick one.
-fn number_with_presets(ui: &mut egui::Ui, id: &str, n: Number<'_>, presets: &[f64], width: f32, label: egui::Id) {
-    const LIST: f32 = 20.0;
+/// A number field with an arrow beside it that lists common values, in `width` all told: type any
+/// value in its range, or pick one. Both are named by `label`: the icon before them and its text.
+fn number_with_presets(ui: &mut egui::Ui, n: Number<'_>, presets: &[f64], width: f32, label: (egui::Id, &str)) {
     ui.scope(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         let field = egui::DragValue::new(&mut *n.value).range(n.range).speed(n.speed).max_decimals(2).suffix(n.suffix);
-        ui.add_sized([(width - LIST - 2.0).max(30.0), 22.0], field).labelled_by(label);
-        egui::ComboBox::from_id_salt(id).selected_text("").width(LIST).show_ui(ui, |ui| {
+        let height = ui.spacing().interact_size.y;
+        ui.add_sized([(width - PRESET_LIST - 2.0).max(30.0), height], field).labelled_by(label.0);
+        let list = icons::button(ui, "chevron-down", PRESET_LIST, false, label.1);
+        egui::Popup::menu(&list).show(|ui| {
             for &v in presets {
-                ui.selectable_value(&mut *n.value, v, number(v));
+                if ui.selectable_label(*n.value == v, number(v)).clicked() {
+                    *n.value = v;
+                    ui.close();
+                }
             }
         });
     });

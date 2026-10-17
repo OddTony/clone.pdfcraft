@@ -2592,7 +2592,7 @@ milestone = "M7"
 status = "shipped"
 commands = ["edit.edit_text"]
 tools = ["text_edit"]
-evidence = ["crates/edit/src/tests.rs::paragraphs_take_new_formatting", "crates/ui-egui/tests/editing.rs::the_format_panel_restyles_the_paragraph_being_edited", "crates/automation/tests/automation.rs::editing_existing_text_through_tools", "crates/ui-egui/tests/content.rs::format_text_panel_sets_alignment_and_lists_planned_controls_disabled"]
+evidence = ["crates/edit/src/tests.rs::paragraphs_take_new_formatting", "crates/ui-egui/tests/editing.rs::the_format_panel_restyles_the_paragraph_being_edited", "crates/automation/tests/automation.rs::editing_existing_text_through_tools", "crates/ui-egui/tests/content.rs::format_text_panel_sets_alignment_and_lists_planned_controls_disabled", "crates/ui-egui/tests/content.rs::format_text_rows_line_up_and_fit_the_panel"]
 notes = "Edit a PDF ▸ Format text, laid out as Acrobat's panel, for the paragraph being edited and for added text: font (the source font kept, the document's fonts, families, installed or loaded font files), size, colour, alignment, bold and italic, line spacing, horizontal scale and character spacing; each change applies at once as one undo step, keeping the paragraph open. Shown disabled with a Planned tooltip until they exist: bulleted and numbered lists (edit.lists), superscript and subscript (edit.text-super-subscript), paragraph spacing, and underline on added text."
 
 [[feature]]
