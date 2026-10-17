@@ -31,6 +31,7 @@ macro_rules! tl_ctx {
 mod a11y_ui;
 mod actions_ui;
 mod appearance;
+pub mod bookmark_ui;
 pub mod canvas;
 mod chrome;
 mod combine_grid;
@@ -752,8 +753,6 @@ pub struct PdfCraftApp {
     pub window_title: String,
     /// The UI control channel, when enabled (`--control`; off by default).
     control: Option<control::Control>,
-    /// A bookmark being renamed in the Bookmarks panel: (path, text so far).
-    pub bookmark_rename: Option<(Vec<usize>, String)>,
     /// Number pages dialog settings (1-based pages).
     pub number_draft: NumberDraft,
     pub(crate) word_count_draft: word_count_ui::Draft,
@@ -1037,7 +1036,6 @@ impl PdfCraftApp {
             fonts_ready: false,
             fonts_cjk: theme::CjkPreference::Default,
             control: None,
-            bookmark_rename: None,
             last_opened_url: None,
             pending_link: None,
             pending_full_screen: None,
@@ -3074,6 +3072,7 @@ impl eframe::App for PdfCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         i18n::set_current(i18n::Lang::from_pref(&self.language));
+        self.sync_bookmarks();
         // Fonts registered via set_fonts only take effect next frame; named families would panic now.
         if !self.fonts_ready {
             ctx.request_repaint();

@@ -41,6 +41,8 @@ impl PdfCraftApp {
     /// Apply an edit to the active document. Returns `true` on success; failures are shown.
     pub fn apply_edit(&mut self, edit: Edit) -> bool {
         let Some((i, id)) = self.active_ids() else { return false };
+        self.sync_bookmarks();
+        let mut bookmarks_after = self.session.get(id).map(|d| self.views[i].bookmarks.prepared(&edit, &d.info.outline)).unwrap_or_default();
         let label = edit.label();
         let (form_before, page_count_before, had_xfa) = if let Some(d) = self.session.get(id) {
             (Some(std::sync::Arc::clone(&d.form)), d.info.pages.len(), d.xfa.is_some())
@@ -52,6 +54,8 @@ impl PdfCraftApp {
                 let Some(doc) = self.session.get(id) else { return true };
                 let info = &doc.info;
                 let view = &mut self.views[i];
+                bookmarks_after.accept_generation(doc.edit_generation());
+                view.bookmarks = bookmarks_after;
                 if !matches!(edit, Edit::AddAnnotation(_)) {
                     // Only a new drawing waits on its raster; any other edit may remove or move it.
                     view.comments.settling.clear();
@@ -1030,47 +1034,80 @@ pub(crate) fn download(name: &str, bytes: &[u8]) -> Result<(), String> {
 }
 
 impl PdfCraftApp {
+    /// Clear stale paths and cancel drags when their document or panel loses activation.
+    pub(crate) fn sync_bookmarks(&mut self) {
+        let active = self.active_ids().map(|(_, id)| id);
+        for view in &mut self.views {
+            if let Some(doc) = self.session.get(view.id) {
+                view.bookmarks.sync(doc.edit_generation(), &doc.info.outline);
+                if active != Some(view.id)
+                    || self.right != Some(crate::RightPanel::Bookmarks)
+                    || !doc.allows_assembly()
+                    || doc.read_only_reason.is_some()
+                {
+                    view.bookmarks.drag = None;
+                }
+            } else {
+                view.bookmarks = Default::default();
+            }
+        }
+    }
+
     /// Carry out a Bookmarks-panel action as an undoable edit.
     pub fn bookmark_action(&mut self, action: crate::panels::BmAction) {
+        use crate::bookmark_ui::at;
         use crate::panels::BmAction as A;
+        self.sync_bookmarks();
         let Some((i, id)) = self.active_ids() else { return };
+        let Some(doc) = self.session.get(id) else { return };
+        if !doc.allows_assembly() || doc.read_only_reason.is_some() {
+            return;
+        }
         let current = self.views[i].current;
-        let parent_of = |p: &[usize]| p[..p.len() - 1].to_vec();
+        let movement = action.clone();
         let edit = match action {
             A::New => {
-                let n = self.session.get(id).map_or(0, |d| d.info.outline.len());
-                self.apply_edit(Edit::AddBookmark { parent: vec![], index: n, title: "Untitled".into(), page: current });
-                // Like Acrobat: the new bookmark starts in rename mode.
-                self.bookmark_rename = Some((vec![n], "Untitled".into()));
-                self.right = Some(crate::RightPanel::Bookmarks);
+                let (parent, index) = self.views[i].bookmarks.insertion(&doc.info.outline);
+                let mut path = parent.clone();
+                path.push(index);
+                if self.apply_edit(Edit::AddBookmark { parent, index, title: "Untitled".into(), page: current }) {
+                    self.views[i].bookmarks.selected = Some(path.clone());
+                    self.views[i].bookmarks.rename = Some((path, "Untitled".into()));
+                    self.right = Some(crate::RightPanel::Bookmarks);
+                }
                 return;
             }
             A::StartRename(path) => {
-                let title = self.session.get(id).and_then(|d| bookmark_at(&d.info.outline, &path)).map(|b| b.title.clone()).unwrap_or_default();
-                self.bookmark_rename = Some((path, title));
+                if let Some(item) = at(&doc.info.outline, &path) {
+                    self.views[i].bookmarks.selected = Some(path.clone());
+                    self.views[i].bookmarks.rename = Some((path, item.title.clone()));
+                }
                 return;
             }
             A::Rename(path, title) => Edit::RenameBookmark { path, title },
             A::SetToCurrentPage(path) => Edit::SetBookmarkPage { path, page: current },
             A::Delete(path) => Edit::DeleteBookmark { path },
-            A::MoveUp(path) => {
-                let at = path[path.len() - 1].saturating_sub(1);
-                Edit::MoveBookmark { to_parent: parent_of(&path), from: path, index: at }
-            }
-            A::MoveDown(path) => {
-                let at = path[path.len() - 1] + 1;
-                Edit::MoveBookmark { to_parent: parent_of(&path), from: path, index: at }
-            }
-            A::Indent(path) => {
-                let mut to_parent = parent_of(&path);
-                to_parent.push(path[path.len() - 1].saturating_sub(1));
-                Edit::MoveBookmark { from: path, to_parent, index: usize::MAX }
-            }
-            A::Outdent(path) => {
-                let parent = parent_of(&path);
-                let grand = parent_of(&parent);
-                let at = parent[parent.len() - 1] + 1;
-                Edit::MoveBookmark { from: path, to_parent: grand, index: at }
+            A::Drop { from, to_parent, index } => Edit::MoveBookmark { from, to_parent, index },
+            A::MoveUp(path) | A::MoveDown(path) | A::Indent(path) | A::Outdent(path) => {
+                let Some((&index, parent)) = path.split_last() else { return };
+                if at(&doc.info.outline, &path).is_none() {
+                    return;
+                }
+                // The action is matched again to keep path handling shared and checked.
+                match movement {
+                    A::MoveUp(_) if index > 0 => Edit::MoveBookmark { from: path.clone(), to_parent: parent.to_vec(), index: index - 1 },
+                    A::MoveDown(_) => Edit::MoveBookmark { from: path.clone(), to_parent: parent.to_vec(), index: index.saturating_add(1) },
+                    A::Indent(_) if index > 0 => {
+                        let mut to_parent = parent.to_vec();
+                        to_parent.push(index - 1);
+                        Edit::MoveBookmark { from: path, to_parent, index: usize::MAX }
+                    }
+                    A::Outdent(_) => {
+                        let Some((&parent_index, grand)) = parent.split_last() else { return };
+                        Edit::MoveBookmark { from: path.clone(), to_parent: grand.to_vec(), index: parent_index.saturating_add(1) }
+                    }
+                    _ => return,
+                }
             }
             A::FromStructure => {
                 self.right = Some(crate::RightPanel::Bookmarks);
@@ -1079,12 +1116,6 @@ impl PdfCraftApp {
         };
         self.apply_edit(edit);
     }
-}
-
-fn bookmark_at<'a>(items: &'a [pdfcraft_render::OutlineItem], path: &[usize]) -> Option<&'a pdfcraft_render::OutlineItem> {
-    let (first, rest) = path.split_first()?;
-    let item = items.get(*first)?;
-    if rest.is_empty() { Some(item) } else { bookmark_at(&item.children, rest) }
 }
 
 #[cfg(test)]

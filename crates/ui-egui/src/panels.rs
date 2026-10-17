@@ -492,6 +492,7 @@ pub(crate) enum Nav {
 }
 
 pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    app.sync_bookmarks();
     let t = Tokens::get(ui.ctx());
     let Some((index, id)) = app.active_ids() else { return };
     let Some(panel) = app.right else { return };
@@ -507,7 +508,10 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let mut sig_action: Option<crate::sign_ui::PanelAction> = None;
     let mut a11y_action: Option<crate::a11y_ui::PanelAction> = None;
     let mut compare_action: Option<crate::compare_ui::PanelAction> = None;
-    let mut bm_rename = app.bookmark_rename.clone();
+    let mut bm_rename = app.views[index].bookmarks.rename.clone();
+    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        app.views[index].bookmarks.drag = None;
+    }
     let bm_editable = app.session.get(id).is_some_and(|d| d.allows_assembly() && d.read_only_reason.is_none());
     // Prepare a form is open: the Fields panel orders tabs.
     let preparing = app.is_preparing();
@@ -631,7 +635,11 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         ancestor.pop();
                     }
                 }
-                egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| match panel {
+                let mut scroll = egui::ScrollArea::vertical().auto_shrink([false, false]);
+                if panel == RightPanel::Bookmarks {
+                    scroll = scroll.id_salt(("bookmarks", id.0));
+                }
+                scroll.show(ui, |ui| match panel {
                     RightPanel::Comments => {
                         if let Some(e) = crate::comments_panel::show(ui, &t, info, view, prefs, comment_allowed, &mut nav) {
                             panel_edit = Some(e);
@@ -641,11 +649,19 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         if info.outline.is_empty() {
                             empty(ui, &t, "bookmark", "This document has no bookmarks.");
                         }
+                        if !bookmark_query.is_empty() || bm_rename.is_some() || modal || info.outline_more {
+                            view.bookmarks.drag = None;
+                        }
                         let mut ctx = OutlineCtx {
+                            selected: &mut view.bookmarks.selected,
+                            expanded: &mut view.bookmarks.expanded,
+                            drag: &mut view.bookmarks.drag,
+                            drop: None,
+                            hovered_inside: false,
                             nav: &mut nav,
                             action: &mut bm_action,
                             rename: &mut bm_rename,
-                            editable: bm_editable,
+                            editable: bm_editable && !modal,
                             current: view.current,
                             expand: bm_expand,
                             matches: &bookmark_matches,
@@ -657,6 +673,12 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         for (i, item) in info.outline.iter().enumerate() {
                             outline_item(ui, &t, info, item, &[i], info.outline.len(), &mut ctx);
                         }
+                        // Root append space also permits lifting a nested item to the root.
+                        let (end, _) = ui.allocate_exact_size(vec2(ui.available_width(), 32.0), Sense::hover());
+                        if let Some(last) = info.outline.len().checked_sub(1) {
+                            bookmark_target(ui, &t, info, &[last], end, crate::bookmark_ui::Placement::After, &mut ctx);
+                        }
+                        finish_bookmark_drag(ui, &mut ctx);
                         if info.outline_more {
                             ui.label(tl!("Some bookmarks are not shown here: the panel lists a limited number, nested a limited depth."));
                         }
@@ -795,7 +817,7 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if let Some((p, i)) = app.views.get_mut(index).and_then(|v| v.comments.props_request.take()) {
         app.open_comment_props(p, i);
     }
-    app.bookmark_rename = bm_rename;
+    app.views[index].bookmarks.rename = bm_rename;
     if let Some(a) = bm_action {
         app.bookmark_action(a);
     }
@@ -849,6 +871,12 @@ pub enum BmAction {
     Outdent(Vec<usize>),
     /// Bookmarks from the tagged headings, under a new first "Untitled" bookmark.
     FromStructure,
+    /// A validated drag destination, using the existing engine operation.
+    Drop {
+        from: Vec<usize>,
+        to_parent: Vec<usize>,
+        index: usize,
+    },
 }
 
 /// Matching titles plus their ancestors, keeping document paths rather than filtered indexes.
@@ -877,6 +905,11 @@ fn outline_matches(items: &[OutlineItem], query: &str) -> std::collections::Hash
 }
 
 struct OutlineCtx<'a> {
+    selected: &'a mut Option<Vec<usize>>,
+    expanded: &'a mut std::collections::HashMap<Vec<usize>, bool>,
+    drag: &'a mut Option<crate::bookmark_ui::Drag>,
+    drop: Option<pdfcraft_engine::Edit>,
+    hovered_inside: bool,
     nav: &'a mut Option<Nav>,
     action: &'a mut Option<BmAction>,
     rename: &'a mut Option<(Vec<usize>, String)>,
@@ -921,9 +954,13 @@ fn outline_item(ui: &mut egui::Ui, t: &Tokens, info: &DocInfo, item: &OutlineIte
     let indent = depth as f32 * 16.0;
     let id = ui.id().with(("outline", path));
     if let Some(levels) = cx.expand {
-        ui.data_mut(|d| d.insert_temp(id, depth < levels));
+        cx.expanded.insert(path.to_vec(), depth < levels);
     }
-    let mut open = cx.searching || ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(item.open || depth == 0);
+    let renaming_child = cx.rename.as_ref().is_some_and(|(p, _)| p.starts_with(path) && p.len() > path.len());
+    if renaming_child {
+        cx.expanded.insert(path.to_vec(), true);
+    }
+    let mut open = cx.searching || renaming_child || cx.expanded.get(path).copied().unwrap_or(item.open || depth == 0);
     let x_text = indent + 20.0;
     if let Some((rpath, text)) = cx.rename.as_mut()
         && rpath.as_slice() == path
@@ -970,16 +1007,40 @@ fn outline_item(ui: &mut egui::Ui, t: &Tokens, info: &DocInfo, item: &OutlineIte
         let wrap_w = (ui.available_width() - indent - 20.0 - label_w - 12.0).max(60.0);
         let galley = ui.fonts_mut(|f| f.layout(item.title.clone(), font, t.text, wrap_w));
         let h = (galley.size().y + 12.0).max(28.0);
-        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click());
-        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &item.title));
-        theme::Press::track(ui, &resp).wash(ui, rect, 6, false);
+        let sense = if cx.editable && !cx.searching && !info.outline_more { Sense::click_and_drag() } else { Sense::click() };
+        let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), sense);
+        let selected = cx.selected.as_deref() == Some(path);
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, &item.title));
+        theme::Press::track(ui, &resp).wash(ui, rect, 6, selected);
+        if resp.clicked() || resp.secondary_clicked() {
+            *cx.selected = Some(path.to_vec());
+        }
+        if resp.drag_started_by(egui::PointerButton::Primary) && cx.editable && !cx.searching && !info.outline_more {
+            *cx.selected = Some(path.to_vec());
+            *cx.rename = None;
+            *cx.drag = Some(crate::bookmark_ui::Drag { source: path.to_vec(), hover: None });
+        }
+        if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
+            let placement = if p.y < rect.top() + rect.height() * 0.25 {
+                crate::bookmark_ui::Placement::Before
+            } else if p.y > rect.bottom() - rect.height() * 0.25 {
+                crate::bookmark_ui::Placement::After
+            } else {
+                crate::bookmark_ui::Placement::Inside
+            };
+            bookmark_target(ui, t, info, path, rect, placement, cx);
+            if cx.drag.as_ref().and_then(|d| d.hover.as_ref()).is_some_and(|(target, since)| target == path && ui.input(|i| i.time) - since >= 0.6) {
+                open = true;
+                cx.expanded.insert(path.to_vec(), true);
+            }
+        }
         let x0 = rect.left() + indent;
         if !item.children.is_empty() {
             let tri = Rect::from_min_size(pos2(x0, rect.top() + 6.0), vec2(16.0, 16.0));
             icons::paint(ui, tri, if open { "chevron-down" } else { "chevron-right" }, 14.0, t.text_muted);
             if !cx.searching && ui.interact(tri, id.with("tri"), Sense::click()).clicked() {
                 open = !open;
-                ui.data_mut(|d| d.insert_temp(id, open));
+                cx.expanded.insert(path.to_vec(), open);
             }
         }
         ui.painter().galley(pos2(x0 + 20.0, rect.top() + 6.0), galley, t.text);
@@ -1028,6 +1089,74 @@ fn outline_item(ui: &mut egui::Ui, t: &Tokens, info: &DocInfo, item: &OutlineIte
             outline_item(ui, t, info, c, &p, item.children.len(), cx);
         }
     }
+}
+
+/// Only a row under the pointer AND inside the scrolling viewport can accept a drop.
+fn bookmark_target(
+    ui: &egui::Ui,
+    t: &Tokens,
+    info: &DocInfo,
+    path: &[usize],
+    rect: Rect,
+    placement: crate::bookmark_ui::Placement,
+    cx: &mut OutlineCtx<'_>,
+) {
+    let Some(drag) = cx.drag.as_mut() else { return };
+    let Some(p) = ui.input(|i| i.pointer.interact_pos()) else { return };
+    if !rect.contains(p) || !ui.clip_rect().contains(p) {
+        return;
+    }
+    let Some(edit) = crate::bookmark_ui::drop_edit(&info.outline, &drag.source, path, placement) else { return };
+    cx.drop = Some(edit);
+    let left = rect.left() + path.len().saturating_sub(1) as f32 * 16.0;
+    match placement {
+        crate::bookmark_ui::Placement::Inside => {
+            cx.hovered_inside = true;
+            let time = ui.input(|i| i.time);
+            if drag.hover.as_ref().is_none_or(|(target, _)| target != path) {
+                drag.hover = Some((path.to_vec(), time));
+            }
+            let highlight = Rect::from_min_max(pos2(left + 16.0, rect.top()), rect.max);
+            ui.painter().rect_stroke(highlight, CornerRadius::same(4), Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
+        }
+        crate::bookmark_ui::Placement::Before | crate::bookmark_ui::Placement::After => {
+            let y = if matches!(placement, crate::bookmark_ui::Placement::Before) { rect.top() } else { rect.bottom() };
+            ui.painter().line_segment([pos2(left, y), pos2(rect.right(), y)], Stroke::new(2.0, t.accent));
+            ui.painter().circle_filled(pos2(left, y), 3.0, t.accent);
+        }
+    }
+}
+
+fn finish_bookmark_drag(ui: &mut egui::Ui, cx: &mut OutlineCtx<'_>) {
+    let Some(drag) = cx.drag.as_mut() else { return };
+    if !cx.hovered_inside {
+        drag.hover = None;
+    }
+    if ui.input(|i| i.pointer.button_released(egui::PointerButton::Primary)) {
+        if let Some(pdfcraft_engine::Edit::MoveBookmark { from, to_parent, index }) = cx.drop.take() {
+            *cx.action = Some(BmAction::Drop { from, to_parent, index });
+        }
+        *cx.drag = None;
+        return;
+    }
+    if !ui.input(|i| i.pointer.primary_down()) {
+        *cx.drag = None;
+        return;
+    }
+    if let Some(p) = ui.input(|i| i.pointer.interact_pos()) {
+        let clip = ui.clip_rect();
+        if clip.contains(p) {
+            let delta = if p.y < clip.top() + 32.0 {
+                10.0
+            } else if p.y > clip.bottom() - 32.0 {
+                -10.0
+            } else {
+                0.0
+            };
+            ui.scroll_with_delta(vec2(0.0, delta));
+        }
+    }
+    ui.ctx().request_repaint();
 }
 
 /// The page thumbnails. A click goes to the page; ⌘/Ctrl-click and ⇧-click pick several pages

@@ -368,6 +368,7 @@ pub(crate) fn snapshot_tab_name(title: &str, file_name: &str, snapshot: &Snapsho
 }
 
 pub struct DocView {
+    pub bookmarks: crate::bookmark_ui::BookmarkState,
     pub id: DocId,
     pub zoom: f32,
     pub fit: Fit,
@@ -786,6 +787,7 @@ impl DocView {
             sign: Default::default(),
             org_drag: None,
             panel_drag: None,
+            bookmarks: Default::default(),
             marquee: None,
             marquee_done: None,
             fill_text: None,

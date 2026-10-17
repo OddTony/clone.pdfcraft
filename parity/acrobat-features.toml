@@ -3244,8 +3244,8 @@ milestone = "M4"
 status = "shipped"
 commands = ["bookmark.add"]
 tools = ["bookmark_add"]
-evidence = ["crates/ui-egui/tests/bookmarks.rs::new_rename_reorder_indent_delete_and_undo", "crates/organize/src/tests.rs::bookmarks_add_rename_move_delete", "crates/engine/src/tests.rs::bookmark_edits_show_in_the_viewer_undo_and_save", "crates/automation/tests/automation.rs::bookmarks_through_tools"]
-notes = ""
+evidence = ["crates/ui-egui/tests/bookmarks.rs::new_rename_reorder_indent_delete_and_undo", "crates/organize/src/tests.rs::bookmarks_add_rename_move_delete", "crates/engine/src/tests.rs::bookmark_edits_show_in_the_viewer_undo_and_save", "crates/automation/tests/automation.rs::bookmarks_through_tools", "crates/ui-egui/tests/bookmarks.rs::creation_uses_selected_sibling_page_and_rename_focus_for_toolbar_and_shortcut", "crates/ui-egui/tests/bookmarks.rs::selection_and_rename_are_per_document_and_follow_moves_and_deletions", "crates/ui-egui/tests/bookmarks.rs::baseline_selected_root_inserts_after_selection"]
+notes = "Creates after the selected bookmark at its hierarchy level, otherwise at the root end; selects the new bookmark and focuses inline rename. Selection and rename are document-local and stale paths are cleared after undo, reload or external mutation."
 
 [[feature]]
 id = "organize.bookmark-rename"
@@ -3280,8 +3280,8 @@ milestone = "M4"
 status = "shipped"
 commands = []
 tools = ["bookmark_move"]
-evidence = ["crates/ui-egui/tests/bookmarks.rs::new_rename_reorder_indent_delete_and_undo", "crates/organize/src/tests.rs::bookmarks_add_rename_move_delete", "crates/engine/src/tests.rs::bookmark_edits_show_in_the_viewer_undo_and_save", "crates/automation/tests/automation.rs::bookmarks_through_tools"]
-notes = ""
+evidence = ["crates/ui-egui/tests/bookmarks.rs::new_rename_reorder_indent_delete_and_undo", "crates/organize/src/tests.rs::bookmarks_add_rename_move_delete", "crates/engine/src/tests.rs::bookmark_edits_show_in_the_viewer_undo_and_save", "crates/automation/tests/automation.rs::bookmarks_through_tools", "crates/ui-egui/tests/bookmarks.rs::real_drag_reorders_siblings_once_and_undo_redo_restore_the_tree", "crates/ui-egui/tests/bookmarks.rs::real_drag_moves_a_subtree_into_a_later_parent_and_back_to_root", "crates/ui-egui/tests/bookmarks.rs::invalid_noop_and_cancelled_ui_drags_never_edit", "crates/ui-egui/tests/bookmarks.rs::dragging_near_the_edge_scrolls_and_reorders_a_large_synthetic_tree", "crates/ui-egui/tests/bookmarks.rs::ui_bookmark_changes_save_reopen_with_order_hierarchy_and_destinations", "crates/ui-egui/tests/bookmarks.rs::expansion_state_follows_a_moved_parent_instead_of_its_old_path"]
+notes = "Sidebar drag/drop supports before, after and last-child placement, subtree movement, edge scrolling and 600 ms hover expansion. One successful drop uses the existing undoable MoveBookmark edit. Reordering is disabled during bookmark search and when the sidebar outline is truncated (10,000 items / 33 levels); use bookmark_move for those files. Existing context-menu moves remain available."
 
 [[feature]]
 id = "organize.bookmark-set-destination"
