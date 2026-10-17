@@ -2,7 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (M10 #2269: exported images keep the page's CMYK and ICC colours; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (M10, #2269 follow-up: exported CalGray, CalRGB and Lab images keep the page's colours; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M3 #2080 candidate: explicit search jumps join per-tab history; rail and control-channel Back/Forward; estimates unchanged)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M4 #1910: Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -157,6 +157,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+- **2026-10-17 (M10, #2269 follow-up):** Exported CalGray, CalRGB and Lab images come out in the colours the page shows. CalGray and CalRGB images were written as device grey and RGB, without their gamma, white point, black point or matrix: a CalGray image with the default gamma 1 came out 78 levels darker than the page draws it, and CalRGB images were up to 83 levels off. Lab images weren't exported at all. They now convert through the renderer's own conversion (vendored hayro-interpret patch 41, `pdfcraft_render::CieSpace`), including `/Indexed` palettes over them, 16-bit and inverted samples and `/Matte` colours. CalGray and CalRGB JPEGs are written as PNG in those colours. Lab JPEGs are still written as they are. Estimates unchanged.
 - **2026-10-16 (M10, #2269):** Exported images come out in the colours the page shows. Export all images, Save Image As and Word export converted CMYK with (1 − c)(1 − k) instead of the renderer's CMYK profile (cyan ink came out as (0, 255, 255) where the page draws (0, 174, 239)) and ignored ICC profiles (an Adobe RGB or Display P3 image came out as if it were sRGB). They now convert through the renderer's own conversion (vendored hayro-interpret patch 39, `pdfcraft_render::cmyk_to_srgb` and `IccProfile`), and CMYK JPEGs and JPEGs with an ICC profile the file doesn't carry are written as PNG in those colours. CalGray, CalRGB and Lab images are still missing. Estimates unchanged.
 - **2026-10-15 (M2, gap 12):** `cargo xtask text-oracle` scores reading order as well as word F1: the longest common subsequence of the two word sequences over the longer one. F1 is a bag of words and cannot see order at all -- measuring #2431, a change that moves text and nothing else, it called 26 of the 29 files whose output changed identical, where the order score separated 18 improvements from 6 regressions. Reports, does not gate; a disagreement with Poppler, not a verdict. Estimates unchanged.
 - **2026-10-15 (M2, #2305 follow-up):** WinAnsiEncoding 0xA0 and 0xAD and MacRomanEncoding 0xCA extract as the ordinary space and hyphen Annex D.2 names them, in the vendored hayro tables (patch 30) as well as `crates/fonts`, so search, copy and redaction see characters that were hidden behind U+00A0 and U+00AD. Across the pdf.js corpus the soft hyphens we extract fall 117 to 13 and the non-breaking spaces 30 to 26; the rest come from `/ToUnicode`. An explicit `/Differences` name keeps its glyph list value, as pdftotext does. Estimates unchanged.
@@ -496,6 +497,7 @@ Newest first: the date, what moved, and the new overall estimate.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-17 | minor | M10, #2269 follow-up: Export all images, Save Image As and Word export convert CalGray, CalRGB and Lab images to sRGB as the page draws them (vendored hayro patch 41). Estimates unchanged. |
 | 2026-10-16 | minor | M10 #2269: Export all images, Save Image As and Word export convert CMYK and ICCBased images to sRGB as the page draws them (vendored hayro patch 39). Estimates unchanged. |
 | 2026-10-13 | minor | M9: separate page validation overlays preserve signature artwork, and snapshot tabs reuse instead of multiplying; baked captions remain unchanged (#79 open); estimates unchanged |
 | 2026-10-12 | minor | M6: valid AcroForm XML element names with original PDF field names preserved; saved-PDF collision and Unicode regressions. Estimates unchanged. |

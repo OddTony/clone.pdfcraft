@@ -1153,6 +1153,183 @@ fn exported_images_show_the_colours_the_page_draws() {
     }
 }
 
+/// A `[/CalGray …]`, `[/CalRGB …]` or `[/Lab …]` colour space with these dictionary entries.
+fn cie_space(family: &str, entries: Vec<(&str, Object)>) -> Object {
+    let mut d = Dict::new();
+    for (key, value) in entries {
+        d.set(key.as_bytes().to_vec(), value);
+    }
+    Object::Array(vec![Object::name(family), Object::Dict(d)])
+}
+
+fn reals(v: &[f64]) -> Object {
+    Object::Array(v.iter().map(|&x| Object::Real(x)).collect())
+}
+
+#[test]
+fn calibrated_and_lab_images_export_in_the_colours_the_page_draws() {
+    // CalGray and CalRGB images were exported as device grey and RGB, their gamma, white point
+    // and matrix left out (a CalGray image with the default gamma 1 came out far darker than
+    // the page shows it), and Lab images weren't exported at all. Each image is drawn and
+    // exported; the colours must agree.
+    let d65 = || reals(&[0.9505, 1.0, 1.089]);
+    let d50 = || reals(&[0.9642, 1.0, 0.8249]);
+    let cal_gray = move || cie_space("CalGray", vec![("WhitePoint", d65())]);
+    let matrix = || reals(&[0.4497, 0.2446, 0.0252, 0.3163, 0.672, 0.1412, 0.1845, 0.0833, 0.9227]);
+    let cal_rgb = move || cie_space("CalRGB", vec![("WhitePoint", d65()), ("Gamma", reals(&[1.8, 1.8, 1.8])), ("Matrix", matrix())]);
+    let range = || Object::Array([-128, 127, -128, 127].map(Object::Int).to_vec());
+    let lab = move || cie_space("Lab", vec![("WhitePoint", d50()), ("Range", range())]);
+    let px = [200, 60, 30];
+    let indexed = |base: Object, entry: &[u8]| {
+        let table = [&vec![0; entry.len()][..], entry].concat();
+        flat(Object::Array(vec![Object::name("Indexed"), base, Object::Int(1), Object::String(PdfString::literal(table))]), 8, &[1])
+    };
+    let matted = |doc: &mut Document, space: Object, matte: Object, px: &[u8]| {
+        let mut m = image_dict(4, 2, "DeviceGray", 8);
+        m.set(b"Matte".to_vec(), matte);
+        let m = doc.add(Object::Stream(Stream::from_raw(m, vec![128; 8])));
+        let mut s = flat(space, 8, px);
+        s.dict.set(b"SMask".to_vec(), Object::Ref(m));
+        s
+    };
+    type Build = Box<dyn FnOnce(&mut Document) -> Stream>;
+    let cases: Vec<(&str, &str, Build)> = vec![
+        ("CalGray, gamma 1", "png", Box::new(move |_| flat(cal_gray(), 8, &[90]))),
+        (
+            "CalGray with a gamma and a black point",
+            "png",
+            Box::new(move |_| {
+                let entries = vec![("WhitePoint", d50()), ("BlackPoint", reals(&[0.01; 3])), ("Gamma", Object::Real(2.2))];
+                flat(cie_space("CalGray", entries), 8, &[90])
+            }),
+        ),
+        ("CalRGB", "png", Box::new(move |_| flat(cal_rgb(), 8, &px))),
+        ("CalRGB, only a white point", "png", Box::new(move |_| flat(cie_space("CalRGB", vec![("WhitePoint", d50())]), 8, &px))),
+        ("Lab", "png", Box::new(move |_| flat(lab(), 8, &px))),
+        ("Lab, the default range", "png", Box::new(move |_| flat(cie_space("Lab", vec![("WhitePoint", d65())]), 8, &px))),
+        ("16-bit Lab", "png", Box::new(move |_| flat(lab(), 16, &px.iter().flat_map(|&c| (u16::from(c) * 257).to_be_bytes()).collect::<Vec<_>>()))),
+        (
+            "Lab stored inverted with an inverting /Decode",
+            "png",
+            Box::new(move |_| {
+                let mut s = flat(lab(), 8, &px.map(|c| 255 - c));
+                s.dict.set(b"Decode".to_vec(), Object::Array([100, 0, 127, -128, 127, -128].map(Object::Int).to_vec()));
+                s
+            }),
+        ),
+        ("an indexed image over CalRGB", "png", Box::new(move |_| indexed(cal_rgb(), &px))),
+        ("an indexed image over Lab", "png", Box::new(move |_| indexed(lab(), &px))),
+        (
+            // The matte is L*, a* and b* values: white.
+            "Lab with a soft mask and its /Matte",
+            "png",
+            Box::new(move |doc| matted(doc, lab(), Object::Array([100, 0, 0].map(Object::Int).to_vec()), &[230, 140, 120])),
+        ),
+        ("CalRGB with a soft mask and its /Matte", "png", Box::new(move |doc| matted(doc, cal_rgb(), reals(&[1.0, 1.0, 1.0]), &[230, 200, 180]))),
+        (
+            "a CalRGB JPEG",
+            "png",
+            Box::new(move |_| {
+                let mut s = dct(Stream::from_raw(image_dict(8, 8, "DeviceRGB", 8), flat_rgb_jpeg(px, None)), 8, None);
+                s.dict.set(b"ColorSpace".to_vec(), cal_rgb());
+                s
+            }),
+        ),
+        (
+            "a CalGray JPEG",
+            "png",
+            Box::new(move |_| {
+                let mut jpeg = Vec::new();
+                image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 100).encode(&[90; 64], 8, 8, image::ExtendedColorType::L8).unwrap();
+                let mut s = dct(Stream::from_raw(image_dict(8, 8, "DeviceGray", 8), jpeg), 8, None);
+                s.dict.set(b"ColorSpace".to_vec(), cal_gray());
+                s
+            }),
+        ),
+        (
+            // Neither the page nor the export reads an entry of too few or too many numbers,
+            // or of something else: each takes its default.
+            "CalRGB entries that aren't as many numbers as they should be",
+            "png",
+            Box::new(move |_| {
+                let entries = vec![
+                    ("WhitePoint", reals(&[0.9505, 1.0])),
+                    ("Gamma", Object::Array(vec![Object::Real(1.8), Object::name("x"), Object::Real(1.8)])),
+                    ("Matrix", reals(&[1.0; 10])),
+                    ("BlackPoint", Object::Real(0.1)),
+                ];
+                flat(cie_space("CalRGB", entries), 8, &px)
+            }),
+        ),
+        (
+            "CalRGB entries given by reference",
+            "png",
+            Box::new(move |doc| {
+                let white = doc.add(d50());
+                let gamma = doc.add(Object::Real(2.2));
+                let entries = vec![("WhitePoint", Object::Ref(white)), ("Gamma", Object::Array(vec![Object::Ref(gamma); 3])), ("Matrix", matrix())];
+                let space = doc.add(cie_space("CalRGB", entries));
+                flat(Object::Ref(space), 8, &px)
+            }),
+        ),
+    ];
+    // Every case that disagrees, reported together.
+    let mut wrong = Vec::new();
+    for (what, extension, build) in cases {
+        let mut doc = from_images(&[("flat.png".into(), png_bytes(false))]).unwrap();
+        with_image(&mut doc, build);
+        if let Some((_, _, why)) = extract_images(&doc, &[0], 0).skipped.first() {
+            wrong.push(format!("{what}: not exported ({why})"));
+            continue;
+        }
+        let (drawn, exported, ext) = drawn_and_exported(&doc);
+        if !close(drawn, exported) || ext != extension {
+            wrong.push(format!("{what}: the page draws {drawn:?}, the export has {exported:?} as {ext}"));
+        }
+    }
+    assert!(wrong.is_empty(), "\n{}", wrong.join("\n"));
+}
+
+#[test]
+fn lab_jpegs_are_written_as_is_or_reported() {
+    // Lab JPEGs aren't decoded yet. One without transparency is written as the file it is (as
+    // other JPEGs PdfCraft can't convert); one with a soft mask is reported.
+    let jpeg = flat_rgb_jpeg([200, 60, 30], None);
+    for masked in [false, true] {
+        let mut doc = from_images(&[("flat.png".into(), png_bytes(false))]).unwrap();
+        with_image(&mut doc, |doc| {
+            let mut s = dct(Stream::from_raw(image_dict(8, 8, "DeviceRGB", 8), jpeg.clone()), 8, None);
+            s.dict.set(b"ColorSpace".to_vec(), cie_space("Lab", vec![("WhitePoint", reals(&[0.9505, 1.0, 1.089]))]));
+            if masked {
+                let m = doc.add(Object::Stream(Stream::from_raw(image_dict(8, 8, "DeviceGray", 8), vec![128; 64])));
+                s.dict.set(b"SMask".to_vec(), Object::Ref(m));
+            }
+            s
+        });
+        let out = extract_images(&doc, &[0], 0);
+        if masked {
+            assert!(out.images.is_empty() && out.skipped[0].2.contains("Lab JPEG"), "{out:?}");
+        } else {
+            let image = &out.images[0];
+            assert!(image.extension == "jpg" && image.data == jpeg, "written as a {} of {} bytes", image.extension, image.data.len());
+        }
+    }
+}
+
+#[test]
+fn damaged_calibrated_and_lab_spaces_are_reported() {
+    for space in [
+        Object::Array(vec![Object::name("CalRGB")]),
+        Object::Array(vec![Object::name("Lab"), Object::Int(5)]),
+        Object::Array(vec![Object::name("CalGray"), reals(&[1.0, 1.0, 1.0])]),
+    ] {
+        let mut doc = from_images(&[("flat.png".into(), png_bytes(false))]).unwrap();
+        with_image(&mut doc, |_| flat(space.clone(), 8, &[90, 90, 90]));
+        let out = extract_images(&doc, &[0], 0);
+        assert!(out.images.is_empty() && out.skipped[0].2.contains("damaged"), "{space:?}: {out:?}");
+    }
+}
+
 #[test]
 fn jpegs_that_carry_the_profile_the_page_uses_are_written_unchanged() {
     // A colour-managed viewer shows such a file in the page's colours, and an image made into a

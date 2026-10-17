@@ -17,7 +17,7 @@ mod structure;
 pub mod text;
 pub mod transition;
 
-pub use colour::{IccProfile, cmyk_to_srgb};
+pub use colour::{CieSpace, IccProfile, cmyk_to_srgb};
 pub use inspect::{
     Annotation, Attachment, AttachmentSource, DestView, DocInfo, Field, FieldKind, FontInfo, Layer, LayerOp, Link, LinkTarget, OutlineItem, PageInfo,
     PageTransition, RemoteDestination, TransitionStyle, Xfa, attachment_data, check_pages, inspect, pretty_date,
