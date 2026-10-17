@@ -656,6 +656,20 @@ fn clear_marked_metadata(doc: &mut Document, fragments: &[String], kerned: &[Ker
             return clear_metadata_on_limit(doc, report);
         }
         if matches {
+            if let Some(root) = doc.root()
+                && let Some(meta) = doc.get(root).as_dict().and_then(|d| d.get(b"Metadata").cloned())
+            {
+                let within_budget = match &*doc.resolve(&meta) {
+                    Object::Stream(s) => {
+                        work.charge(s.raw.len())
+                            && s.decoded_within(MAX_METADATA.min(work.decode_limit())).is_ok_and(|bytes| work.charge(bytes.len().saturating_mul(4)))
+                    }
+                    _ => false,
+                };
+                if !within_budget {
+                    return clear_metadata_on_limit(doc, report);
+                }
+            }
             pdfcraft_organize::set_info(doc, &key, "").map_err(|e| pdfcraft_edit::EditError::Invalid(e.to_string()))?;
             // A trailer `/Info` that is a direct dictionary is quietly left alone (only the
             // wholesale step below can take it); count what really went.

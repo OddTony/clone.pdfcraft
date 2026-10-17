@@ -117,7 +117,7 @@ pub(crate) fn packet_hit(text: &str, hit: &impl Fn(&str) -> bool) -> bool {
     let Ok(doc) = roxmltree::Document::parse(text) else { return true };
     doc.descendants().any(|node| {
         ((node.is_text() || node.is_comment()) && node.text().is_some_and(hit))
-            || node.pi().and_then(|pi| pi.value).is_some_and(hit)
+            || node.pi().filter(|pi| pi.target != "xpacket").and_then(|pi| pi.value).is_some_and(hit)
             || node.attributes().any(|attribute| hit(attribute.value()))
     })
 }

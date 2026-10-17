@@ -154,6 +154,13 @@ fn processing_instruction_data_is_metadata_but_its_target_is_not() {
         let saved = redact_all(src, "Author", "Ada", Some(&packet));
         assert_eq!(xmp_text(&saved).is_none(), removed, "{payload}");
     }
+    let wrapped =
+        format!("<?xpacket begin='\u{feff}' id='W5M0MpCehiHzreSzNTczkc9d'?>{}<?xpacket end='w'?>", packet("<z:clean>Harmless</z:clean>", ""));
+    for word in ["begin", "end", "W5M0MpCehiHzreSzNTczkc9d"] {
+        let src = format!("BT /F1 10 Tf 10 100 Td ({word})Tj ET");
+        let saved = redact_all(src.as_bytes(), "Author", "Ada", Some(&wrapped));
+        assert_eq!(xmp_text(&saved).as_deref(), Some(wrapped.as_str()), "xpacket wrapper must survive redacting '{word}'");
+    }
 }
 
 #[test]
