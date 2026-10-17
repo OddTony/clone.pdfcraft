@@ -120,7 +120,11 @@ theme	Appearance	Giao diện
 	Reduce file size…	Giảm kích thước tệp…
 	Optimize PDF…	Tối ưu hóa PDF…
 	Protect using password…	Bảo vệ bằng mật khẩu…
+	Require a password to	Yêu cầu mật khẩu để
+	Protect PDF with a password	Bảo vệ PDF bằng mật khẩu
 	Remove security	Gỡ bảo mật
+	Protection takes effect when you save the PDF.	Bảo vệ có hiệu lực khi bạn lưu tệp PDF.
+	Apply protection	Áp dụng bảo vệ
 	Security properties…	Thuộc tính bảo mật…
 	Organize pages	Sắp xếp trang
 	Rotate pages…	Xoay trang…
@@ -258,6 +262,7 @@ theme	Appearance	Giao diện
 	Alignment:	Căn lề:
 	All	Tất cả
 	All document contents	Toàn bộ nội dung tài liệu
+	All contents except metadata	Toàn bộ nội dung trừ siêu dữ liệu
 	All document contents except metadata	Toàn bộ nội dung tài liệu trừ siêu dữ liệu
 	All open documents	Tất cả tài liệu đang mở
 	All pages	Tất cả các trang
@@ -395,6 +400,7 @@ theme	Appearance	Giao diện
 	Compare Files	So sánh tệp
 	Compare this file with an older version: Compare files… in All tools.	So sánh tệp này với phiên bản cũ hơn: So sánh tệp… trong Tất cả công cụ.
 	Compatibility	Tương thích
+	Advanced settings	Cài đặt nâng cao
 	Compress document structure (object streams)	Nén cấu trúc tài liệu (luồng đối tượng)
 	Compression	Nén
 	Configure New Digital ID	Cấu hình Digital ID mới
@@ -626,6 +632,7 @@ theme	Appearance	Giao diện
 	Hide layer	Ẩn lớp
 	Hide menu bar	Ẩn thanh trình đơn
 	Hide password	Ẩn mật khẩu
+	Hide confirm password	Ẩn mật khẩu xác nhận
 	Hide toolbars	Ẩn thanh công cụ
 	Hide window controls	Ẩn các nút điều khiển cửa sổ
 	High Resolution	Độ phân giải cao
@@ -858,7 +865,13 @@ theme	Appearance	Giao diện
 	Paper:	Giấy:
 	Part of	Một phần của
 	Password	Mật khẩu
+	Passwords do not match.	Mật khẩu không khớp.
+	Enter a password.	Hãy nhập mật khẩu.
+	Confirm your password.	Hãy xác nhận mật khẩu của bạn.
+	Confirm password	Xác nhận mật khẩu
 	Password required	Yêu cầu mật khẩu
+	Password required to view the PDF.	Cần mật khẩu để xem tệp PDF.
+	Open the document	Mở tài liệu
 	Password security	Bảo mật bằng mật khẩu
 	Password-protected	Được bảo vệ bằng mật khẩu
 	Paste after	Dán sau
@@ -872,6 +885,7 @@ theme	Appearance	Giao diện
 	PdfCraft {v} is available.	PdfCraft {v} đã có sẵn.
 	Percentage	Phần trăm
 	Permissions password	Mật khẩu quyền hạn
+	Password required to change editing permissions.	Cần mật khẩu để thay đổi quyền chỉnh sửa.
 	Permitted actions after certifying	Các hành động được phép sau khi chứng nhận
 	Photo	Ảnh
 	Pick a tool in the quick bar, or type above.	Chọn một công cụ trên thanh nhanh, hoặc nhập ở phía trên.
@@ -906,6 +920,7 @@ theme	Appearance	Giao diện
 	Printer properties	Thuộc tính máy in
 	Printer:	Máy in:
 	Printing allowed	Cho phép in
+	Restrict editing	Hạn chế chỉnh sửa
 	Privacy	Quyền riêng tư
 	Properties…	Thuộc tính…
 	Protect Using Password	Bảo vệ bằng mật khẩu
@@ -1067,6 +1082,7 @@ theme	Appearance	Giao diện
 	Show layer	Hiện lớp
 	Show less	Hiện ít hơn
 	Show password	Hiện mật khẩu
+	Show confirm password	Hiện mật khẩu xác nhận
 	Show the accessibility report	Hiện báo cáo trợ năng
 	Show this dialog when the Checker starts	Hiện hộp thoại này khi Trình kiểm tra khởi động
 	Show {n} more	Hiện thêm {n}
@@ -2025,6 +2041,7 @@ comment menu	Edit	Sửa
 	Embedded Files	Tệp nhúng
 	Embedded files must be PDF/A files themselves (use PDF/A-3 for others)	Các tệp nhúng phải tự là tệp PDF/A (dùng PDF/A-3 cho các tệp khác)
 	Encryption	Mã hóa
+	Content to encrypt	Nội dung cần mã hóa
 	Endpoint	Điểm cuối
 	Erase	Tẩy
 	Eraser	Cục tẩy
@@ -2067,6 +2084,7 @@ comment menu	Edit	Sửa
 	Import {name}	Nhập {name}
 	Importing data arrives on the web with file pickers for data files	Việc nhập dữ liệu sẽ có trên web cùng với bộ chọn tệp dữ liệu
 	Incorrect password. Try again.	Mật khẩu không đúng. Hãy thử lại.
+	Add at least one letter, number, or punctuation mark to your password.	Hãy thêm ít nhất một chữ cái, chữ số hoặc dấu câu vào mật khẩu.
 	Insert pages from {name}	Chèn trang từ {name}
 	Insert pages from {name} — 1 field renamed	Chèn trang từ {name} — 1 trường được đổi tên
 	Insert pages from {name} — fields renamed	Chèn trang từ {name} — các trường được đổi tên
@@ -2114,6 +2132,7 @@ comment menu	Edit	Sửa
 	Merged {n} files into {path}	Đã gộp {n} tệp vào {path}
 	Merging data files needs the desktop app	Việc gộp tệp dữ liệu yêu cầu ứng dụng máy tính
 	Metadata	Siêu dữ liệu
+	Metadata includes details such as title and author.	Siêu dữ liệu gồm các thông tin như tiêu đề và tác giả.
 	Midpoint	Điểm giữa
 	Minimum	Tối thiểu
 	Models	Mô hình
@@ -2578,6 +2597,7 @@ certificate	SHA-256 digest	Giá trị băm SHA-256
 	— (protection is applied when you save)	— (việc bảo vệ được áp dụng khi bạn lưu)
 	“{name}” has security restrictions. Enter its permissions password to lift them.	“{name}” có các hạn chế bảo mật. Hãy nhập mật khẩu quyền hạn của nó để gỡ bỏ chúng.
 	“{name}” is protected. Enter a password to open it.	“{name}” được bảo vệ. Hãy nhập mật khẩu để mở.
+	Enter the password to open this PDF.	Nhập mật khẩu để mở tệp PDF này.
 @plural	{n} page|{n} pages	{n} trang
 @plural	{n} file|{n} files	{n} tệp
 @plural	{n} field|{n} fields	{n} trường

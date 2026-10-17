@@ -2010,7 +2010,9 @@ fn password_prompt_opens_and_security_tab_reports_the_details() {
         app
     });
     h.run_steps(4);
-    h.get_by_label_contains("is protected");
+    h.get_by_label("Enter the password to open this PDF.");
+    h.get_by_label("secret.pdf");
+    h.get_by_label("Show password");
     let field = h.get_by_role(Role::PasswordInput);
     field.focus();
     field.type_text("pw");
@@ -2024,6 +2026,80 @@ fn password_prompt_opens_and_security_tab_reports_the_details() {
     h.run_steps(3);
     h.get_by_label("AES, 256-bit");
     h.get_by_label("User password");
+}
+
+#[test]
+fn opening_password_can_be_revealed_and_retried_without_losing_the_existing_document() {
+    let mut h = Harness::builder().with_size(egui::vec2(1000.0, 760.0)).build_eframe(|_| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("existing.pdf", None, fixture(1)).unwrap();
+        app.open_bytes("secret.pdf", None, protected("pw", "owner", -1)).unwrap();
+        app
+    });
+    h.run_steps(8);
+    let existing = h.state().views[0].id;
+    assert!(h.get_by_role_and_label(Role::PasswordInput, "Password").is_focused());
+    h.get_by_role_and_label(Role::PasswordInput, "Password").type_text("wrong");
+    h.run_steps(2);
+    h.get_by_label("Show password").focus();
+    h.run_steps(1);
+    h.key_press(Key::Enter);
+    h.run_steps(2);
+    assert_eq!(h.state().password_prompt.as_ref().unwrap().input, "wrong");
+    assert!(h.state().password_prompt.as_ref().unwrap().error.is_none(), "Enter on reveal must not submit");
+    assert!(h.get_by_role_and_label(Role::TextInput, "Password").is_focused());
+    h.get_by_label("Hide password").click();
+    h.run_steps(2);
+    let card: egui::Rect = h.ctx.data(|d| d.get_temp(egui::Id::new("password").with("card"))).unwrap();
+    h.query_all_by_label("Open").find(|node| card.contains_rect(node.rect())).unwrap().click();
+    support::wait_until(&mut h, "wrong password retry", |app| app.password_prompt.as_ref().is_some_and(|p| p.error.is_some()));
+    h.run_steps(4);
+    h.get_by_label("Incorrect password. Try again.");
+    assert_eq!(h.state().views.len(), 1);
+    assert_eq!(h.state().views[0].id, existing);
+    assert!(h.query_by_label("Show password").is_some(), "revealed input is masked again on retry");
+    let field = h.get_by_role_and_label(Role::PasswordInput, "Password");
+    field.click();
+    h.run_steps(2);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, Key::A);
+    h.run_steps(1);
+    h.get_by_role_and_label(Role::PasswordInput, "Password").type_text("pw");
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    support::wait_until(&mut h, "opened encrypted document", |app| app.password_prompt.is_none() && app.views.len() == 2);
+    assert!(h.state().views.iter().any(|v| v.id == existing));
+}
+
+#[test]
+fn opening_password_filename_keeps_the_suffix_and_dialog_width_in_both_themes() {
+    let name = format!("{}_2026_final_v03.pdf", "Labai_ilgas_įvairių_dokumentų_pavadinimas_".repeat(50));
+    for theme in ["light", "dark"] {
+        for width in [1000.0, 420.0] {
+            let name = name.clone();
+            let mut h = Harness::builder().with_size(egui::vec2(width, 760.0)).build_eframe(move |_| {
+                let mut app = PdfCraftApp::new();
+                app.set_option("language", "en").unwrap();
+                app.set_option("theme", theme).unwrap();
+                app.open_bytes("existing.pdf", None, fixture(1)).unwrap();
+                app.open_bytes(&name, None, protected("pw", "owner", -1)).unwrap();
+                app
+            });
+            h.run_steps(16);
+            let card: egui::Rect = h.ctx.data(|d| d.get_temp(egui::Id::new("password").with("card"))).unwrap();
+            assert!(card.width() <= 488.0 + 1.0, "{card:?}");
+            assert!(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 760.0)).contains_rect(card));
+            let filename = h.get_by_label_contains("2026_final_v03.pdf");
+            assert!(card.contains_rect(filename.rect()));
+            for label in ["Password", "Show password", "Open", "Cancel"] {
+                assert!(h.query_all_by_label(label).any(|node| card.contains_rect(node.rect())), "{label}");
+            }
+            h.get_by_label("Cancel").click();
+            h.run_steps(3);
+            assert!(h.state().password_prompt.is_none());
+            assert_eq!(h.state().views.len(), 1);
+        }
+    }
 }
 
 /// #785: the notice's message used to be laid out before its buttons, so in a narrow document

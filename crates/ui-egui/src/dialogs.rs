@@ -52,7 +52,6 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut number_now: Option<Edit> = None;
     let mut apply_number = false;
     let mut link_command: Option<&'static str> = None;
-    let mut protect_now = false;
     let mut boxes_now = false;
     let mut marks_now = false;
     let mut export_now = false;
@@ -85,6 +84,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
             Dialog::Print => 820.0,
             Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
             Dialog::About => 780.0,
+            Dialog::Protect => crate::protect::content_width(ctx),
             _ => 520.0,
         });
         match dialog {
@@ -998,9 +998,19 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Protect => {
-                let (apply, cancel) = crate::protect::body(ui, app, &t);
-                protect_now = apply;
-                close = apply || cancel;
+                match crate::protect::body(ui, app, &t) {
+                    crate::protect::Action::Cancel => close = true,
+                    crate::protect::Action::Remove if app.apply_edit(pdfcraft_engine::Edit::RemoveProtection) => {
+                        app.notify_tr("Security will be removed when you save");
+                        close = true;
+                    }
+                    // A refused edit keeps the dialog and what was typed, so it can be retried.
+                    crate::protect::Action::Apply if app.apply_edit(app.protect_draft.edit()) => {
+                        app.notify_tr("Password protection will be applied when you save");
+                        close = true;
+                    }
+                    _ => {}
+                }
                 return;
             }
             Dialog::NumberPages => {
@@ -1365,10 +1375,6 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
         app.apply_edit(edit);
         app.boxes_draft.seeded = None;
     }
-    if protect_now && app.apply_edit(app.protect_draft.edit()) {
-        app.protect_draft = Default::default();
-        app.notify_tr("Password protection will be applied when you save");
-    }
     if apply_number && let Some(edit) = number_now {
         app.apply_edit(edit);
     }
@@ -1380,7 +1386,12 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     // Protect / Remove security replace the Properties dialog.
     let replaces = link_command.is_some_and(|c| c.starts_with("protect.")) || open_revision.is_some();
-    if modal.should_close() || close || replaces {
+    // A click beside the Protect dialog must not silently throw away a typed password.
+    let keep_typed = dialog == Dialog::Protect && modal.backdrop_response.clicked() && app.protect_draft.has_input();
+    if (modal.should_close() && !keep_typed) || close || replaces {
+        if dialog == Dialog::Protect {
+            app.protect_draft = Default::default();
+        }
         app.dialog = None;
         app.props_draft = None;
         app.view_draft = None;
@@ -1720,11 +1731,102 @@ fn password_modal(
     answer.or(modal.should_close().then_some(PasswordAnswer::Cancel))
 }
 
+/// Fit a filename by its rendered width, retaining its trailing identifier and extension.
+fn password_filename(name: &str, fits: impl Fn(&str) -> bool) -> String {
+    // Bound text measurements for hostile file names; keep both ends before measuring.
+    let count = name.chars().count();
+    if count <= 256 && fits(name) {
+        return name.to_string();
+    }
+    let mut tail = count.min(20);
+    let suffix = loop {
+        let suffix: String = name.chars().rev().take(tail).collect::<Vec<_>>().into_iter().rev().collect();
+        if tail <= 4 || fits(&format!("…{suffix}")) {
+            break suffix;
+        }
+        tail -= 1;
+    };
+    let (mut low, mut high) = (0, count.saturating_sub(tail).min(236));
+    while low < high {
+        let mid = low + (high - low).div_ceil(2);
+        let head: String = name.chars().take(mid).collect();
+        if fits(&format!("{head}…{suffix}")) {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+    format!("{}…{suffix}", name.chars().take(low).collect::<String>())
+}
+
+/// Opening a protected PDF: the file, a labelled revealable field, and an inline retry error.
+fn open_password_modal(ctx: &egui::Context, prompt: &mut crate::PasswordPrompt) -> Option<PasswordAnswer> {
+    let t = Tokens::get(ctx);
+    let state_id = egui::Id::new("open-password-state");
+    let (mut visible, focused) = ctx.data(|d| d.get_temp::<(bool, bool)>(state_id)).unwrap_or_default();
+    let mut answer = None;
+    let modal = widgets::show_modal(ctx, "password", |ui| {
+        ui.set_width((ctx.content_rect().width() - 96.0).clamp(200.0, 448.0));
+        ui.spacing_mut().item_spacing = egui::vec2(8.0, 0.0);
+        ui.horizontal(|ui| {
+            ui.add(crate::icons::image("lock", 22.0, t.accent_text));
+            ui.add(egui::Label::new(egui::RichText::new(tl!("Password required")).font(theme::semibold(22.0))).wrap());
+        });
+        ui.add_space(20.0);
+        egui::Frame::new().fill(if t.dark() { t.pressed } else { t.hover }).corner_radius(8).inner_margin(12).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.add(crate::icons::image("file-text", 20.0, t.icon));
+                let font = theme::semibold(14.0);
+                let width = ui.available_width();
+                let shown =
+                    password_filename(&prompt.name, |name| ui.fonts_mut(|f| f.layout_no_wrap(name.into(), font.clone(), t.text).size().x <= width));
+                let label = ui.add(egui::Label::new(egui::RichText::new(shown).font(font)).truncate());
+                ctx.accesskit_node_builder(label.id, |node| node.set_description(prompt.name.clone()));
+                label.on_hover_text(&prompt.name);
+            });
+        });
+        ui.add_space(12.0);
+        ui.add(
+            egui::Label::new(egui::RichText::new(tl!("Enter the password to open this PDF.")).font(theme::regular(14.0)).color(t.text_muted)).wrap(),
+        );
+        ui.add_space(24.0);
+        let field = crate::protect::Secret { label: "Password", id: "open-password-input", show: "Show password", hide: "Hide password" };
+        let response = crate::protect::secret_field(ui, &t, &field, &mut prompt.input, &mut visible, prompt.error.as_deref());
+        if !focused {
+            response.request_focus();
+        }
+        if (response.has_focus() || response.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            answer = Some(PasswordAnswer::Submit);
+        }
+        ui.add_space(24.0);
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 40.0), Layout::right_to_left(Align::Center), |ui| {
+            if widgets::pill_button_sized(ui, tl!("Open"), true, 40.0).clicked() {
+                answer = Some(PasswordAnswer::Submit);
+            }
+            if widgets::pill_button_sized(ui, tl!("Cancel"), false, 40.0).clicked() {
+                answer = Some(PasswordAnswer::Cancel);
+            }
+        });
+    });
+    let answer = answer.or(modal.should_close().then_some(PasswordAnswer::Cancel));
+    ctx.data_mut(|d| {
+        if answer.is_some() {
+            d.remove::<(bool, bool)>(state_id);
+        } else {
+            d.insert_temp(state_id, (visible, true));
+        }
+    });
+    answer
+}
+
 /// Password prompt for encrypted documents (Acrobat: "Password" dialog on open).
 fn password(app: &mut PdfCraftApp, ctx: &egui::Context) {
-    let Some(prompt) = app.password_prompt.as_mut() else { return };
-    let message = crate::i18n::fmt(tl!("“{name}” is protected. Enter a password to open it."), &[("name", &prompt.name)]);
-    match password_modal(ctx, "password", tl!("Password required"), message, &mut prompt.input, prompt.error.as_deref(), tl!("Open")) {
+    let Some(prompt) = app.password_prompt.as_mut() else {
+        ctx.data_mut(|d| d.remove::<(bool, bool)>(egui::Id::new("open-password-state")));
+        return;
+    };
+    match open_password_modal(ctx, prompt) {
         Some(PasswordAnswer::Submit) => {
             let pw = prompt.input.clone();
             app.submit_password(Some(pw));
@@ -1746,5 +1848,24 @@ fn unlock(app: &mut PdfCraftApp, ctx: &egui::Context) {
         }
         Some(PasswordAnswer::Cancel) => app.submit_unlock(None),
         None => {}
+    }
+}
+
+#[cfg(test)]
+mod password_filename_tests {
+    use super::password_filename;
+
+    #[test]
+    fn filename_fits_keeps_unicode_and_extension_and_bounds_measurements() {
+        let fits = |s: &str| s.chars().count() <= 40;
+        assert_eq!(password_filename("short.pdf", fits), "short.pdf");
+        let long = format!("{}_2026_final_v03.pdf", "日本語_įvairūs_".repeat(100));
+        let shown = password_filename(&long, |s| {
+            assert!(s.chars().count() <= 257);
+            fits(s)
+        });
+        assert!(fits(&shown) && shown.ends_with("2026_final_v03.pdf") && shown.contains('…'));
+        let narrow = password_filename(&long, |s| s.chars().count() <= 8);
+        assert!(narrow.chars().count() <= 8 && narrow.ends_with(".pdf"));
     }
 }
