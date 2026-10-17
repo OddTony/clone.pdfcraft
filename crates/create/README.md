@@ -23,3 +23,7 @@ Layer L4. Create a PDF (Acrobat's Create a PDF tool), execution plan M10.2:
   line says so (`ESCAPED_NOTE`).
 
 Every function returns a `pdfcraft_cos::Document`; the caller writes it.
+
+- `from_docx(name, bytes)`: native DOCX conversion returning a document and `DocxReport`.
+  Font substitutions, code-point escapes and unsupported content are explicit. See
+  [DOCX import and its limits](../../docs/docx-import.md). No converter process is needed.

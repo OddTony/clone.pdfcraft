@@ -20,6 +20,7 @@ pub(crate) enum Input {
 
 pub(crate) enum ResultKind {
     Conversion(Arc<Vec<u8>>),
+    Docx { bytes: Arc<Vec<u8>>, prepared: Box<PreparedDocument>, report: pdfcraft_engine::DocxReport },
     Prepared { bytes: Arc<Vec<u8>>, result: Box<Result<PreparedDocument, OpenError>> },
     ReadFailed(String),
     RemoteFailed(String),
@@ -175,6 +176,18 @@ fn prepare(job: Job) -> ResultKind {
         },
         Input::Bytes(bytes) => bytes.clone(),
     };
+    if pdfcraft_engine::source_kind(&job.name, &bytes) == Some(SourceKind::Docx) {
+        return match job.context.convert_docx(&job.name, &bytes) {
+            Ok((bytes, report)) => {
+                let name = format!("{}.pdf", job.name.rsplit_once('.').map_or(job.name.as_str(), |(stem, _)| stem));
+                match job.context.prepare_new(name, bytes.clone()) {
+                    Ok(prepared) => ResultKind::Docx { bytes, prepared: Box::new(prepared), report },
+                    Err(error) => ResultKind::Failed(error.to_string()),
+                }
+            }
+            Err(error) => ResultKind::Failed(error.to_string()),
+        };
+    }
     if matches!(pdfcraft_engine::source_kind(&job.name, &bytes), Some(SourceKind::Image | SourceKind::Text)) {
         return ResultKind::Conversion(bytes);
     }

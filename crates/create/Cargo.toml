@@ -20,6 +20,10 @@ zune-jpeg = "0.5"
 thiserror = { workspace = true }
 # Already in the graph through lopdf; used only to read plain-text files (decode_text).
 encoding_rs = "0.8"
+# DOCX packages are deflated XML; both libraries are already in the dependency graph.
+flate2 = { workspace = true }
+roxmltree = "0.20"
+unicode-normalization = "0.1"
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "jpeg"] }

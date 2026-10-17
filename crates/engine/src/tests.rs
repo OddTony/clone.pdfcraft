@@ -1049,8 +1049,8 @@ fn a_page_with_a_form_field_shown_twice_keeps_one_field() {
 #[test]
 fn files_that_cannot_be_converted_are_refused_clearly() {
     let s = Session::new();
-    let err = s.convert_to_pdf("report.docx", &Arc::new(b"PK\x03\x04".to_vec())).unwrap_err();
-    assert_eq!(err, EditError::Source("report.docx: this file type can't be converted; use a PDF, an image or a .txt file".into()));
+    let err = s.convert_to_pdf("report.odt", &Arc::new(b"PK\x03\x04".to_vec())).unwrap_err();
+    assert_eq!(err, EditError::Source("report.odt: this file type can't be converted; use a PDF, an image, a .txt file or a .docx file".into()));
     assert!(matches!(s.convert_to_pdf("empty", &Arc::new(Vec::new())), Err(EditError::Source(_))));
     // Damaged inputs of a known type fail with an error, not a panic.
     assert!(s.convert_to_pdf("bad.png", &Arc::new(b"\x89PNG\r\n\x1a\nnope".to_vec())).is_err());
@@ -1071,8 +1071,8 @@ fn files_for_combine_are_made_into_pdfs_and_pdfs_pass_through() {
     assert!(Arc::ptr_eq(&s.as_pdf("old.PDF", &headless).unwrap(), &headless));
     assert!(s.as_pdf("scan.jpg", &Arc::new(jpeg_bytes())).unwrap().starts_with(b"%PDF-"));
     assert!(s.as_pdf("notes.txt", &Arc::new(b"hello".to_vec())).unwrap().starts_with(b"%PDF-"));
-    let err = s.as_pdf("report.docx", &Arc::new(b"PK\x03\x04".to_vec())).unwrap_err();
-    assert!(matches!(err, EditError::Source(m) if m.starts_with("report.docx: this file type can't be converted")));
+    let err = s.as_pdf("report.odt", &Arc::new(b"PK\x03\x04".to_vec())).unwrap_err();
+    assert!(matches!(err, EditError::Source(m) if m.starts_with("report.odt: this file type can't be converted")));
 }
 
 fn protected(user: &str, owner: &str, permissions: i32) -> Arc<Vec<u8>> {
@@ -5800,4 +5800,38 @@ fn cropping_an_existing_image_clips_it_and_moves_with_it() {
     assert!(v.iter().zip(shown.iter()).all(|(a, b)| (a - b).abs() < 0.01), "{v:?} vs {shown:?}");
     // No area, or a box off the image, is refused.
     assert!(s.apply(id, Edit::EditPageImage { page: 0, index: 0, change: ImageEdit::Crop([10.0, 10.0, 10.0, 50.0]) }).is_err());
+}
+
+#[test]
+fn docx_converts_combines_and_inserts_without_changing_the_source() {
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("source.pdf", None, Arc::new(fixture(2)), None).unwrap();
+    let source = Arc::new(s.get(id).unwrap().export_office(compare::OfficeFormat::Docx));
+    let original = source.to_vec();
+    let (kind, pdf) = s.convert_to_pdf("Report.DOCX", &source).unwrap();
+    assert_eq!(kind, SourceKind::Docx);
+    assert_eq!(source.as_slice(), original);
+    let (_, report) = s.open_context().convert_docx("Report.DOCX", &source).unwrap();
+    assert_eq!(report.pages, 2);
+    let converted = s.open_new("Report.pdf", pdf.clone()).unwrap();
+    let d = s.get(converted).unwrap();
+    assert!(d.dirty && d.path.is_none());
+    let text = page_texts(&s, converted);
+    assert!(text[0].contains("Page 1") && text[1].contains("Page 2"), "{text:?}");
+    s.apply(
+        id,
+        Edit::InsertPagesFrom { name: "Report.docx".into(), bytes: pdf, pages: Some(vec![1]), at: 1, field_conflicts: FieldConflicts::Rename },
+    )
+    .unwrap();
+    assert_eq!(s.get(id).unwrap().info.pages.len(), 3);
+    s.undo(id).unwrap();
+    assert_eq!(s.get(id).unwrap().info.pages.len(), 2);
+    s.redo(id).unwrap();
+    assert_eq!(s.get(id).unwrap().info.pages.len(), 3);
+    let converted = s.as_pdf("Report.docx", &source).unwrap();
+    let combined = s.combine_ranges(&[("Word".into(), converted, None), ("PDF".into(), Arc::new(fixture(1)), None)]).unwrap();
+    let combined = s.open_new("combined.pdf", combined).unwrap();
+    assert_eq!(s.get(combined).unwrap().info.pages.len(), 3);
+    assert_eq!(source.as_slice(), original);
+    assert!(s.convert_to_pdf("broken.docx", &Arc::new(b"PK\x03\x04".to_vec())).unwrap_err().to_string().contains("broken.docx"));
 }

@@ -885,6 +885,14 @@ impl Automation {
         let path = self.resolve(a.str("path")?, false)?;
         let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if pdfcraft_engine::source_kind(&name, &bytes) == Some(pdfcraft_engine::SourceKind::Docx) {
+            let (pdf, report) = self.session.create_from_docx(&name, &bytes).map_err(failed)?;
+            let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let id = self.session.open_new(format!("{stem}.pdf"), pdf).map_err(failed)?;
+            let mut result = summary(self.session.get(id).ok_or_else(|| failed("the document vanished"))?);
+            result["conversion"] = docx_report(&report);
+            return Ok(result);
+        }
         let id = self.session.open(name, Some(path.to_string_lossy().into_owned()), Arc::new(bytes), a.opt_str("password")?).map_err(failed)?;
         let doc = self.session.get(id).ok_or_else(|| failed("the document vanished"))?;
         Ok(summary(doc))
@@ -1305,6 +1313,18 @@ impl Automation {
     }
 
     fn doc_create(&mut self, a: &Args) -> Result<Value> {
+        if a.str("from")? == "docx" {
+            let path = self.resolve(a.str("path")?, false)?;
+            let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
+            let source = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let (pdf, report) = self.session.create_from_docx(&source, &bytes).map_err(failed)?;
+            let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = a.opt_str("name")?.map(str::to_owned).unwrap_or_else(|| format!("{stem}.pdf"));
+            let id = self.session.open_new(name, pdf).map_err(failed)?;
+            let mut result = summary(self.session.get(id).ok_or_else(|| failed("the document vanished"))?);
+            result["conversion"] = docx_report(&report);
+            return Ok(result);
+        }
         let (name, bytes) = match a.str("from")? {
             "blank" => {
                 let n = a.opt_int("pages")?.unwrap_or(1).clamp(1, 10_000) as usize;
@@ -1509,7 +1529,18 @@ impl Automation {
         let bytes = std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?;
         let pages = a.opt_ints("pages")?.map(|p| one_based(&p)).transpose()?;
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        self.apply(a, Edit::InsertPagesFrom { name, bytes: Arc::new(bytes), pages, at, field_conflicts: pdfcraft_organize::FieldConflicts::Rename })
+        let (bytes, report) = if pdfcraft_engine::source_kind(&name, &bytes) == Some(pdfcraft_engine::SourceKind::Docx) {
+            let (pdf, report) = self.session.create_from_docx(&name, &bytes).map_err(failed)?;
+            (pdf, Some(report))
+        } else {
+            (self.session.as_pdf(&name, &Arc::new(bytes)).map_err(failed)?, None)
+        };
+        let mut result =
+            self.apply(a, Edit::InsertPagesFrom { name, bytes, pages, at, field_conflicts: pdfcraft_organize::FieldConflicts::Rename })?;
+        if let Some(report) = report {
+            result["conversion"] = docx_report(&report);
+        }
+        Ok(result)
     }
 
     /// Write freshly created bytes to `out` and/or open them as a new document.
@@ -1655,6 +1686,7 @@ impl Automation {
         };
         let mut sources: Vec<CombineSource> = Vec::new();
         let mut firsts: Vec<(u64, PathBuf, usize)> = Vec::new();
+        let mut conversions = Vec::new();
         for (i, (p, range)) in paths.into_iter().zip(ranges).enumerate() {
             let path = self.resolve(p, false)?;
             let group = groups.as_ref().and_then(|g| g.get(i).copied().flatten());
@@ -1673,7 +1705,15 @@ impl Automation {
                     let bytes = Arc::new(std::fs::read(&path).map_err(|e| failed(format!("{}: {e}", path.display())))?);
                     // Images and text files are made into PDFs first (#569), as in the Combine files tab.
                     let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                    self.session.as_pdf(&file_name, &bytes).map_err(failed)?
+                    if pdfcraft_engine::source_kind(&file_name, &bytes) == Some(pdfcraft_engine::SourceKind::Docx) {
+                        let (pdf, report) = self.session.create_from_docx(&file_name, &bytes).map_err(failed)?;
+                        let mut conversion = docx_report(&report);
+                        conversion["path"] = json!(p);
+                        conversions.push(conversion);
+                        pdf
+                    } else {
+                        self.session.as_pdf(&file_name, &bytes).map_err(failed)?
+                    }
                 }
             };
             let name = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -1701,6 +1741,9 @@ impl Automation {
         }
         .map_err(failed)?;
         let mut result = self.deliver(a, "Combined", combined.bytes)?;
+        if !conversions.is_empty() {
+            result["conversions"] = json!(conversions);
+        }
         if !combined.renamed_fields.is_empty() {
             result["renamed_fields"] = json!(combined.renamed_fields.iter().map(|(old, new)| json!([old, new])).collect::<Vec<_>>());
         }
@@ -2367,6 +2410,10 @@ fn security(d: &Document) -> Value {
 }
 
 /// What every tool that changes a document returns.
+fn docx_report(report: &pdfcraft_engine::DocxReport) -> Value {
+    json!({ "format": "docx", "pages": report.pages, "escaped": report.escaped, "notes": report.notes, "notice": report.notice() })
+}
+
 fn summary(d: &Document) -> Value {
     json!({
         "doc": d.id.0,

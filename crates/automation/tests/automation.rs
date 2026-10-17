@@ -788,7 +788,7 @@ fn combine_takes_images_and_text_files() {
     std::fs::write(dir.join("scan.png"), png).unwrap();
     std::fs::write(dir.join("notes.txt"), "Some notes").unwrap();
     std::fs::write(dir.join("broken.png"), b"\x89PNG\r\n\x1a\nbroken").unwrap();
-    std::fs::write(dir.join("report.docx"), b"PK\x03\x04").unwrap();
+    std::fs::write(dir.join("report.odt"), b"PK\x03\x04").unwrap();
     let mut a = auto(&dir);
     let combined = ok(&mut a, "doc_combine", json!({ "paths": ["a.pdf", "scan.png", "notes.txt"], "pages": [null, null, "1"], "open": true }));
     let doc = combined["document"]["doc"].as_u64().unwrap();
@@ -798,7 +798,7 @@ fn combine_takes_images_and_text_files() {
     let titles: Vec<&str> = marks.as_array().unwrap().iter().map(|b| b["title"].as_str().unwrap()).collect();
     assert_eq!(titles, ["a", "scan", "notes"]);
     // A file that can't be made into a PDF stops the combine, and says which.
-    for bad in ["broken.png", "report.docx"] {
+    for bad in ["broken.png", "report.odt"] {
         let refused = a.call("doc_combine", &json!({ "paths": ["a.pdf", bad] }));
         assert!(matches!(&refused, Err(ToolError::Failed(e)) if e.contains(bad)), "{bad}: {refused:?}");
     }
@@ -3027,7 +3027,7 @@ fn creating_from_multiple_files_through_tools() {
     }
     std::fs::write(dir.join("scan.png"), png).unwrap();
     std::fs::write(dir.join("notes.txt"), "hello").unwrap();
-    std::fs::write(dir.join("report.docx"), b"PK\x03\x04").unwrap();
+    std::fs::write(dir.join("report.odt"), b"PK\x03\x04").unwrap();
     let mut a = auto(&dir);
 
     // Combine: every file converted, in the order given, with a bookmark per file.
@@ -3047,8 +3047,8 @@ fn creating_from_multiple_files_through_tools() {
     assert_eq!(titles, ["notes", "a", "scan"]);
     assert!(dir.join("all.pdf").is_file());
     // A file that can't be converted fails the whole combine, naming it.
-    let err = a.call("doc_create_multiple", &json!({ "paths": ["a.pdf", "report.docx"] })).unwrap_err();
-    assert!(matches!(&err, ToolError::Failed(m) if m.contains("report.docx") && m.contains("can't be converted")), "{err}");
+    let err = a.call("doc_create_multiple", &json!({ "paths": ["a.pdf", "report.odt"] })).unwrap_err();
+    assert!(matches!(&err, ToolError::Failed(m) if m.contains("report.odt") && m.contains("can't be converted")), "{err}");
     assert!(matches!(a.call("doc_create_multiple", &json!({ "paths": [] })), Err(ToolError::InvalidArgs(_))));
     assert!(matches!(a.call("doc_create_multiple", &json!({ "paths": ["a.pdf"], "mode": "zip" })), Err(ToolError::InvalidArgs(_))));
     assert!(matches!(a.call("doc_create_multiple", &json!({ "paths": ["a.pdf"], "mode": "separate" })), Err(ToolError::InvalidArgs(_))));
@@ -3057,7 +3057,7 @@ fn creating_from_multiple_files_through_tools() {
     // existing file is never overwritten.
     std::fs::create_dir_all(dir.join("out")).unwrap();
     std::fs::write(dir.join("out/notes.pdf"), b"mine").unwrap();
-    let args = json!({ "paths": ["notes.txt", "report.docx", "a.pdf", "scan.png", "missing.txt"], "mode": "separate", "out_dir": "out" });
+    let args = json!({ "paths": ["notes.txt", "report.odt", "a.pdf", "scan.png", "missing.txt"], "mode": "separate", "out_dir": "out" });
     let made = ok(&mut a, "doc_create_multiple", args);
     let files = made["files"].as_array().unwrap();
     assert!(files[0]["output"].as_str().unwrap().ends_with("notes (2).pdf"), "{files:?}");
@@ -6494,4 +6494,81 @@ fn a_root_less_write_output_is_atomic_too() {
     let e = free.write_output(&dir.join("new").to_string_lossy(), &[4]).unwrap_err();
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn docx_open_insert_combine_and_root_confinement() {
+    let dir = workdir("docx-import");
+    let mut a = auto(&dir);
+    let base = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "doc_export_office", json!({ "doc": base, "path": "report.docx" }));
+    let original = std::fs::read(dir.join("report.docx")).unwrap();
+    let opened = ok(&mut a, "doc_open", json!({ "path": "report.docx" }));
+    assert_eq!(opened["pages"], 3);
+    assert_eq!(opened["name"], "report.pdf");
+    assert_eq!(opened["dirty"], true);
+    assert_eq!(opened["conversion"]["format"], "docx");
+    let converted = opened["doc"].as_u64().unwrap();
+    assert!(a.call("doc_save", &json!({ "doc": converted })).is_err(), "Save requires a PDF destination");
+    ok(&mut a, "doc_save", json!({ "doc": converted, "path": "converted.pdf" }));
+    let inserted = ok(&mut a, "page_insert_file", json!({ "doc": base, "path": "report.docx", "pages": [2], "at": 1 }));
+    assert!(inserted["conversion"]["notice"].as_str().unwrap().contains("layout may differ"));
+    assert_eq!(page_text(&mut a, base).len(), 4);
+    ok(&mut a, "edit_undo", json!({ "doc": base }));
+    assert_eq!(page_text(&mut a, base).len(), 3);
+    let combined = ok(&mut a, "doc_combine", json!({ "paths": ["b.pdf", "report.docx"], "out": "combined.pdf", "open": true }));
+    let cid = combined["document"]["doc"].as_u64().unwrap();
+    let text = page_text(&mut a, cid);
+    assert_eq!(text.len(), 5);
+    assert!(text[2].contains("Page 1") && text[4].contains("Page 3"));
+    let created = ok(&mut a, "doc_create", json!({ "from": "docx", "path": "report.docx", "name": "Custom.pdf" }));
+    assert_eq!(created["name"], "Custom.pdf");
+    let outside = dir.with_extension("docx");
+    std::fs::write(&outside, &original).unwrap();
+    let escape = format!("../{}", outside.file_name().unwrap().to_string_lossy());
+    for (tool, args) in [
+        ("doc_open", json!({ "path": escape })),
+        ("page_insert_file", json!({ "doc": base, "path": escape, "at": 1 })),
+        ("doc_create", json!({ "from": "docx", "path": escape })),
+    ] {
+        let error = a.call(tool, &args).unwrap_err().to_string();
+        assert!(error.contains("outside"), "{tool}: {error}");
+    }
+    let error = a.call("doc_combine", &json!({ "paths": ["b.pdf", escape] })).unwrap_err().to_string();
+    assert!(error.contains("outside"), "{error}");
+    std::fs::remove_file(outside).unwrap();
+    std::fs::write(dir.join("broken.docx"), b"PK\x03\x04").unwrap();
+    let before = page_text(&mut a, base);
+    assert!(a.call("page_insert_file", &json!({ "doc": base, "path": "broken.docx", "at": 1 })).is_err());
+    assert_eq!(page_text(&mut a, base), before);
+    assert_eq!(std::fs::read(dir.join("report.docx")).unwrap(), original);
+}
+
+/// Turkish text remains Unicode through every DOCX entry point and a PDF save/reopen.
+#[test]
+fn turkish_docx_open_insert_combine_and_save_preserve_text() {
+    let dir = workdir("turkish-docx");
+    let text = "Çç Ğğ İı Öö Şş Üü İstanbul Iğdır Şişli";
+    let xml = format!(
+        r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"#
+    );
+    let mut zip = pdfcraft_export::Zip::default();
+    zip.add("word/document.xml", xml.as_bytes(), true);
+    let source = zip.finish();
+    std::fs::write(dir.join("Türkçe.docx"), &source).unwrap();
+    let mut a = auto(&dir);
+    let opened = ok(&mut a, "doc_open", json!({ "path": "Türkçe.docx" }));
+    assert_eq!(opened["conversion"]["escaped"], 0);
+    let id = opened["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, id), [text]);
+    ok(&mut a, "doc_save", json!({ "doc": id, "path": "Türkçe.pdf" }));
+    let reopened = ok(&mut a, "doc_open", json!({ "path": "Türkçe.pdf" }))["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, reopened), [text]);
+    let inserted = ok(&mut a, "page_insert_file", json!({ "doc": reopened, "path": "Türkçe.docx", "at": 2 }));
+    assert_eq!(inserted["conversion"]["escaped"], 0);
+    assert_eq!(page_text(&mut a, reopened), [text, text]);
+    let combined = ok(&mut a, "doc_combine", json!({ "paths": ["Türkçe.docx", "Türkçe.pdf"], "out": "combined.pdf", "open": true }));
+    let cid = combined["document"]["doc"].as_u64().unwrap();
+    assert_eq!(page_text(&mut a, cid), [text, text]);
+    assert_eq!(std::fs::read(dir.join("Türkçe.docx")).unwrap(), source);
 }

@@ -1,5 +1,8 @@
 # File format parity
 
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (#2871: partial native DOCX import candidate; full Office fidelity remains open).
+
+
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-12 · **Change:** minor (XDP data row corrected; BigTIFF in Create PDF) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Every format Acrobat Pro reads or writes, and PdfCraft's support for it. Acrobat's list comes from
@@ -68,7 +71,7 @@ features total).
 | Plain text | yes | yes | good | `create.from-text` |
 | Clipboard (image or text) | yes | yes | good | `create.from-clipboard` |
 | Screenshot | yes | no | none | `create.from-screenshot` planned |
-| Word, Excel, PowerPoint (and Visio, Publisher on Windows) | yes | no | none | `create.from-office` planned (LibreOffice sidecar) |
+| Word, Excel, PowerPoint (and Visio, Publisher on Windows) | yes | DOCX candidate | partial | Native DOCX import for #2871; font substitution and layout limits; Turkish letters use embedded Inter; other Office inputs absent. See [DOCX import](docx-import.md). |
 | HTML file, web page URL | yes | no | none | `create.from-html`, `create.from-web-page` planned |
 | RTF | yes | no | none | |
 | PostScript / EPS (Distiller) | yes | no | none | `create.distiller` planned (P3) |
