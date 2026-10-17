@@ -9,8 +9,8 @@ add a language: [localization.md](localization.md). Summary in [ROADMAP.md](../R
 ## How this was measured
 
 Coverage percentages below retain their existing measurement snapshots; this Arabic
-update does not recompute language scores or readiness estimates. As of 2026-10-16,
-the merged Arabic catalog has **2,670 distinct translated keys**. Comment and PDF
+update does not recompute language scores or readiness estimates. As of 2026-10-17,
+the merged Arabic catalog has **2,671 distinct translated keys**. Comment and PDF
 text editors use logical bidi buffers; search/form and mirrored-layout limits remain.
 
 - **Strings translated** is measured: the catalogs in `crates/ui-egui/src/i18n/<code>.tsv`, counted

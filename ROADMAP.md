@@ -1,5 +1,7 @@
 # PdfCraft roadmap
 
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (M14: synchronize Arabic editing candidate with upstream link/file-name translations and refresh catalog attribution; estimates unchanged)
+
 > **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (M14: integrate current upstream catalogs and parity corrections into the Arabic editing candidate; estimates unchanged)
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
