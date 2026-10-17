@@ -468,7 +468,9 @@ mod tests {
         let mut h = harness();
         let begun = Instant::now();
         let held = hold(&mut h);
-        h.run_steps(3);
+        // The worker counts its first objects once its thread runs, which on a slow runner takes
+        // more than a frame or two: wait for the count, not for a number of frames.
+        until(&mut h, "the first count", |app| app.structure_checking() == Some(42));
         assert!(begun.elapsed() < Duration::from_secs(5), "frames waited for the check: {:?}", begun.elapsed());
         h.get_by_label("Checking the structure… 42 objects so far");
         assert_eq!(h.state().structure_checking(), Some(42));
