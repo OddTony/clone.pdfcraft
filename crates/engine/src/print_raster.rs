@@ -8,18 +8,17 @@ use pdfcraft_create::ImageResolution;
 use pdfcraft_print::Raster;
 use pdfcraft_render::{PRINT_TAG, PageRenderer, RenderRequest};
 
-use crate::Document;
+use crate::export::ExportSource;
 use crate::export::encode_png;
 
-/// `doc`'s pages `pages` (0-based, each once, in the order given) as an image-only PDF, one
+/// `src`'s pages `pages` (0-based, each once, in the order given) as an image-only PDF, one
 /// page per entry, the size of the source page as displayed. Pages too large for the renderer
 /// at `raster.dpi` render at the largest resolution it allows.
-pub fn rasterize(doc: &Document, pages: &[usize], raster: &Raster, hide_comments: bool) -> Result<Vec<u8>, String> {
+pub fn rasterize(src: &ExportSource, pages: &[usize], raster: &Raster, hide_comments: bool) -> Result<Vec<u8>, String> {
     let dpi = raster.dpi.clamp(72.0, 600.0);
-    let src = doc.export_source();
     let mut config = src.config.clone();
     config.hide_comments = hide_comments;
-    let mut renderer = PageRenderer::new(src.bytes, config);
+    let mut renderer = PageRenderer::new(src.bytes.clone(), config);
     let mut images: Vec<(String, Vec<u8>)> = Vec::with_capacity(pages.len());
     let mut used: Option<f64> = None;
     for &page in pages {

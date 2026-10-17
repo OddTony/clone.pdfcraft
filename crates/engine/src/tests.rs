@@ -5801,3 +5801,19 @@ fn cropping_an_existing_image_clips_it_and_moves_with_it() {
     // No area, or a box off the image, is refused.
     assert!(s.apply(id, Edit::EditPageImage { page: 0, index: 0, change: ImageEdit::Crop([10.0, 10.0, 10.0, 50.0]) }).is_err());
 }
+
+#[test]
+fn print_task_keeps_a_permission_checked_snapshot_after_document_closes() {
+    let (mut session, id) = session_with(4);
+    let settings = print::Settings { pages: vec![3, 1], layout: print::Layout::multiple(2), ..Default::default() };
+    let expected = session.print_pdf(id, &settings).unwrap();
+    let task = session.print_task(id, &settings).unwrap();
+    session.close(id);
+    let actual = std::thread::spawn(task).join().unwrap().unwrap();
+    assert_eq!(actual, expected);
+    let mut printed = Session::new();
+    let printed_id = printed.open("snapshot.pdf", None, Arc::new(actual), None).unwrap();
+    assert_eq!(printed.get(printed_id).unwrap().info.pages.len(), 1);
+    let texts = page_texts(&printed, printed_id);
+    assert!(texts[0].contains("Page 4") && texts[0].contains("Page 2"));
+}
