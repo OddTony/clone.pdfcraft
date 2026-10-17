@@ -736,6 +736,11 @@ pub fn right_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                         ui.add(egui::Label::new(egui::RichText::new(meta).color(t.text_faint).small()).truncate());
                                     });
                                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                        if let pdfcraft_render::AttachmentSource::Document { key } = &a.source
+                                            && icons::button(ui, "trash-2", 28.0, false, tl!("Delete")).clicked()
+                                        {
+                                            panel_edit = Some(pdfcraft_engine::Edit::DetachFile { name: key.clone() });
+                                        }
                                         if icons::button(ui, "file-down", 28.0, false, tl!("Save attachment…")).clicked() {
                                             attachment_action = Some((ai, false));
                                         }

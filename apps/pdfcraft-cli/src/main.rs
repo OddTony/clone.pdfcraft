@@ -320,6 +320,7 @@ fn info(args: &[String]) -> Result<(), CliError> {
         "xfa_layout": xfa_layout,
         "bookmarks": info.outline.len(), "annotations": info.annotations.len(), "fields": info.fields.len(),
         "links": info.links.len(), "layers": info.layers.len(), "attachments": info.attachments.len(),
+        "attachment_files": info.attachments.iter().map(|a| serde_json::json!({ "name": a.name, "size": a.size, "description": a.description })).collect::<Vec<_>>(),
         "transitions": info.transitions.len(),
         "page_labels": info.pages.iter().take(8).map(|p| p.label.clone()).collect::<Vec<_>>(),
         "warnings": info.warnings,
@@ -419,7 +420,7 @@ fn page_list(s: &str) -> Result<Vec<usize>, String> {
 }
 
 /// The options `edit` understands, for its "unknown option" message.
-const EDIT_OPTIONS: &str = "--out, --password, --full, --rotate, --delete, --move, --insert-blank, --title, --author";
+const EDIT_OPTIONS: &str = "--out, --password, --full, --rotate, --delete, --move, --insert-blank, --title, --author, --attach, --attach-desc, --detach";
 
 /// Apply page and metadata edits through the engine and save (incrementally unless `--full`).
 ///
@@ -432,6 +433,8 @@ fn edit(args: &[String]) -> Result<(), CliError> {
     let mut out: Option<&str> = None;
     let mut password: Option<&str> = None;
     let mut full = false;
+    let mut attach: Vec<&str> = Vec::new();
+    let mut attach_desc = String::new();
     let mut edits = Vec::new();
     let mut i = 0;
     while let Some(arg) = args.get(i).map(String::as_str) {
@@ -470,6 +473,9 @@ fn edit(args: &[String]) -> Result<(), CliError> {
                 let at: usize = value.parse().map_err(|_| "bad position")?;
                 edits.push(Edit::InsertBlankPage { at: at.checked_sub(1).ok_or("--insert-blank must be at least 1")?, width: 612.0, height: 792.0 });
             }
+            "--attach" => attach.push(value),
+            "--attach-desc" => attach_desc = value.to_string(),
+            "--detach" => edits.push(Edit::DetachFile { name: value.into() }),
             "--title" => edits.push(Edit::SetInfo { key: "Title".into(), value: value.into() }),
             "--author" => edits.push(Edit::SetInfo { key: "Author".into(), value: value.into() }),
             other => return Err(format!("edit: unknown option {other:?} (expected one of: {EDIT_OPTIONS})").into()),
@@ -478,6 +484,10 @@ fn edit(args: &[String]) -> Result<(), CliError> {
     }
     let path = path.ok_or("edit: missing file")?;
     let out = out.ok_or("edit: missing --out")?;
+    for file in attach {
+        let name = Path::new(file).file_name().map_or_else(|| file.to_string(), |n| n.to_string_lossy().into_owned());
+        edits.push(Edit::AttachFile { name, bytes: read(file)?, description: attach_desc.clone() });
+    }
     let mut session = Session::new();
     let id = session.open(path, Some(path.to_string()), read(path)?, password).map_err(|e| e.to_string())?;
     for e in edits {

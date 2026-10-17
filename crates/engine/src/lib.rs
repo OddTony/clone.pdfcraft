@@ -1289,6 +1289,17 @@ pub enum Edit {
         /// How a form field whose name the document already uses is kept separate.
         field_conflicts: pdfcraft_organize::FieldConflicts,
     },
+    /// Attach a file to the document (Edit a PDF ▸ Attach file): `bytes` under `name` in the
+    /// catalog's `/Names /EmbeddedFiles` tree (ISO 32000-2 §7.11.4).
+    AttachFile {
+        name: String,
+        bytes: Arc<Vec<u8>>,
+        description: String,
+    },
+    /// Remove the document-level attachment filed under `name`.
+    DetachFile {
+        name: String,
+    },
     /// Add a bookmark to `page` as child `index` of the bookmark at `parent` (`[]` = top level).
     AddBookmark {
         parent: Vec<usize>,
@@ -1795,6 +1806,8 @@ pub const EDIT_LABELS: &[&str] = &[
     "Insert pages from {name} — 1 field renamed",
     "Insert pages from {name} — fields renamed",
     "Add bookmark",
+    "Attach {name}",
+    "Remove attachment {name}",
     "Rename bookmark",
     "Delete bookmark",
     "Move bookmark",
@@ -1932,6 +1945,8 @@ impl Edit {
                 _ => Label::with("Change {key}", key.as_str()),
             },
             Edit::InsertPagesFrom { name, .. } => Label::with("Insert pages from {name}", name.as_str()),
+            Edit::AttachFile { name, .. } => Label::with("Attach {name}", name.as_str()),
+            Edit::DetachFile { name } => Label::with("Remove attachment {name}", name.as_str()),
             Edit::AddBookmark { .. } => Label::of("Add bookmark"),
             Edit::RenameBookmark { .. } => Label::of("Rename bookmark"),
             Edit::DeleteBookmark { .. } => Label::of("Delete bookmark"),
@@ -2147,6 +2162,8 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
             }
         }
         Edit::SetInfo { .. }
+        | Edit::AttachFile { .. }
+        | Edit::DetachFile { .. }
         | Edit::AddHeaderFooter { .. }
         | Edit::AddWatermark { .. }
         | Edit::AddBackground { .. }
@@ -2320,6 +2337,10 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             let outcome = pdfcraft_organize::insert_file_pages(doc, &src, &title, &pages, *at, *field_conflicts)?;
             cx.renamed_fields = outcome.renamed_fields;
         }
+        Edit::AttachFile { name, bytes, description } => {
+            pdfcraft_organize::attach_file(doc, name, bytes, description, cx.date.as_deref())?;
+        }
+        Edit::DetachFile { name } => pdfcraft_organize::detach_file(doc, name)?,
         Edit::AddBookmark { parent, index, title, page } => {
             pdfcraft_organize::add_bookmark(doc, parent, *index, title, *page)?;
         }

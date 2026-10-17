@@ -696,6 +696,26 @@ impl crate::PdfCraftApp {
         self.notify_tr("Adding images arrives on the web with file pickers for images");
     }
 
+    /// Edit a PDF ▸ Add content ▸ Attach file: pick any file and embed it in the document (the
+    /// Attachments panel lists it).
+    pub fn attach_file_dialog(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let target = self.active_ids().map(|(_, id)| id);
+            let dialog = rfd::AsyncFileDialog::new().set_title(tl!("Attach a file"));
+            self.ask_one(crate::pickers::Ask::File(dialog), target, move |app, p| match std::fs::read(&p) {
+                Ok(data) => {
+                    let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    app.apply_edit(Edit::AttachFile { name, bytes: std::sync::Arc::new(data), description: String::new() });
+                    app.choose_right_panel(Some(crate::RightPanel::Attachments));
+                }
+                Err(e) => app.notify_fmt("Couldn't read {name}: {e}", &[("name", &p.display().to_string()), ("e", &e.to_string())]),
+            });
+        }
+        #[cfg(target_arch = "wasm32")]
+        self.notify_tr("Attaching files arrives on the web with file pickers");
+    }
+
     /// Edit text & images ▸ Replace Image: pick a file to draw in a page image's place.
     pub(crate) fn replace_page_image_dialog(&mut self, page: usize, index: usize) {
         #[cfg(not(target_arch = "wasm32"))]
