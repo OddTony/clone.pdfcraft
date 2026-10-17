@@ -3,8 +3,10 @@
 //! Usage: `pdfcraft [options] [files…]`
 //! `--create-images [images…]` stages the images in one PDF and asks for the page DPI.
 //! `--combine [files…]` lists the files in Combine files (the file manager's "Combine files" entry,
-//! #585); with a PdfCraft already running, they join its list. On macOS the entry is a Finder Quick
-//! Action that opens a list of the selected files with the app (`finder_combine`).
+//! #585); with a PdfCraft already running, they join its list on Windows and Linux (macOS has
+//! no single-instance hand-off, so there a second `--combine` launch opens a window of its own).
+//! On macOS the file manager's entry is a Finder Quick Action that opens a list of the selected
+//! files with the app, running or not (`finder_combine`).
 //!
 //! View options (applied after the files open; also the seed of the UI control channel):
 //! `--page N  --zoom 150  --layout single|continuous|two-up|two-page  --continuous on|off  --panel comments|bookmarks|pages|fields|layers|attachments|none
