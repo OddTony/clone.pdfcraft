@@ -28,6 +28,7 @@ mod measure;
 mod printing;
 mod reading;
 mod redact;
+mod search;
 mod signing;
 mod text_cache;
 mod tools;
@@ -118,6 +119,8 @@ pub struct Automation {
     renderers: HashMap<DocId, (Arc<Vec<u8>>, PageRenderer)>,
     /// Extracted page text, under one memory budget across all open documents.
     texts: TextCache,
+    all_find: Option<search::Continuation>,
+    all_find_serial: u64,
 }
 
 impl Default for Automation {
@@ -128,7 +131,15 @@ impl Default for Automation {
 
 impl Automation {
     pub fn new() -> Self {
-        Self { session: Session::new(), root: None, roots: None, renderers: HashMap::new(), texts: TextCache::default() }
+        Self {
+            session: Session::new(),
+            root: None,
+            roots: None,
+            renderers: HashMap::new(),
+            texts: TextCache::default(),
+            all_find: None,
+            all_find_serial: 0,
+        }
     }
 
     /// Confine every path the tools read or write to `root` (relative paths resolve inside it).
@@ -211,6 +222,7 @@ impl Automation {
             "text_extract" => self.text_extract(&a)?,
             "text_word_count" => self.text_word_count(&a)?,
             "text_find" => self.text_find(&a)?,
+            "text_find_all" => self.text_find_all(&a)?,
             "page_rotate" => {
                 let degrees = a.int("degrees")?;
                 if degrees % 90 != 0 {
@@ -2505,21 +2517,19 @@ fn encode_png(width: u32, height: u32, premultiplied: &[u8]) -> Result<Vec<u8>> 
     Ok(out)
 }
 
+fn extract_text_page(r: &mut PageRenderer, p: usize) -> std::result::Result<Arc<PageText>, String> {
+    let out = r.render(RenderRequest { page: p, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, preview: false });
+    pdfcraft_engine::search::extracted_text(out)
+}
+
 /// Extract the text of `pages` (0-based) with one renderer per worker thread.
 fn extract_parallel(bytes: &Arc<Vec<u8>>, password: Option<Arc<str>>, pages: &[usize]) -> PageTexts {
-    let extract = |r: &mut PageRenderer, p: usize| {
-        let out = r.render(RenderRequest { page: p, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, preview: false });
-        match out.error {
-            Some(e) => Err(e),
-            None => Ok(out.text.unwrap_or_default()),
-        }
-    };
     let config = RenderConfig { password, ..Default::default() };
     let workers = if cfg!(target_arch = "wasm32") { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get()).min(8) };
     // Small jobs aren't worth a second parse of the document.
     if workers == 1 || pages.len() < 8 {
         let mut r = PageRenderer::new(bytes.clone(), config);
-        return pages.iter().map(|p| (*p, extract(&mut r, *p))).collect();
+        return pages.iter().map(|p| (*p, extract_text_page(&mut r, *p))).collect();
     }
     let next = std::sync::atomic::AtomicUsize::new(0);
     let mut out: PageTexts = std::thread::scope(|s| {
@@ -2531,7 +2541,7 @@ fn extract_parallel(bytes: &Arc<Vec<u8>>, password: Option<Arc<str>>, pages: &[u
                     loop {
                         let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         let Some(p) = pages.get(i) else { break };
-                        done.push((*p, extract(&mut r, *p)));
+                        done.push((*p, extract_text_page(&mut r, *p)));
                     }
                     done
                 })

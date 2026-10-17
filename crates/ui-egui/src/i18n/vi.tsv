@@ -2685,3 +2685,12 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+
+# AI-assisted additions for the feature integration with main; native review welcome.
+	Current document	Tài liệu hiện tại
+	Open tabs and edits update the search automatically.	Các thẻ đang mở và các chỉnh sửa sẽ tự động cập nhật kết quả tìm kiếm.
+	Results shown: {n} · Documents: {d}	Kết quả hiển thị: {n} · Tài liệu: {d}
+	Search complete.	Đã tìm kiếm xong.
+	Selecting a result applies this query to the destination’s Find.	Khi chọn một kết quả, truy vấn này sẽ được áp dụng cho chức năng Tìm trong tài liệu đích.
+	Showing the first 2,000 results — more matches may exist.	Đang hiển thị 2.000 kết quả đầu tiên — có thể còn kết quả khác.
+	{n} pages could not be searched; results are incomplete.	Không thể tìm kiếm trong {n} trang; kết quả chưa đầy đủ.

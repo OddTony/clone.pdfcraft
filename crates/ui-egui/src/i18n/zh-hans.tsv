@@ -2345,6 +2345,14 @@ animation effects	Off	关
 	Move tag earlier	将标签前移
 	Move tag later	将标签后移
 
+# Search across open documents; contributor-original translations.
+	Current document	当前文档
+	Open tabs and edits update the search automatically.	打开的标签页和编辑内容会自动更新搜索。
+	Selecting a result applies this query to the destination’s Find.	选择结果会将此查询应用于目标文档的查找。
+	Results shown: {n} · Documents: {d}	显示结果：{n} · 文档：{d}
+	Showing the first 2,000 results — more matches may exist.	显示前 2,000 个结果 — 可能还有更多匹配项。
+	Search complete.	搜索完成。
+	{n} pages could not be searched; results are incomplete.	无法搜索 {n} 页；结果不完整。
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	您正在查看“{from}”的已签名版本（修订版本 {rev}）。这是快照：在此处所做的更改不会影响原始文档。
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	您正在查看“{from}”的修订版本 {rev}。这是快照：在此处所做的更改不会影响原始文档。

@@ -85,3 +85,14 @@ family (`sign`, `sign_with_timestamp`, `timestamp_document`, `embed_ltv`).
 `doc.text_edit_preview(page, block)` prepares a read-only page background with the selected
 paragraph’s glyphs removed, preserving text positioning, images and colours. It shares the
 working document’s render configuration and never enters the undo history.
+
+
+## Session text search
+
+`search::Snapshot` captures an open document's working bytes, stable id, edit generation and
+text-relevant display choices. `search::Scan` searches snapshots in their supplied order with
+the existing PageText matcher, capped snippets/results and page-specific warnings. Native
+extraction and matching run on one coordinator plus one RenderPool worker; cancellation waits
+for retired work before starting another job. Frontends poll progress without activating views.
+WebAssembly uses the renderer's existing inline fallback. `search::hits_skipping` adapts the
+same matcher for bounded headless continuation without retaining skipped match vectors.

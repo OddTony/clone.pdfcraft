@@ -414,8 +414,9 @@ impl PdfCraftApp {
                 if let Some(i) = self.active {
                     let f = self.views[i].find.get_or_insert_with(Default::default);
                     f.in_panel = true;
-                    f.focus = true;
+                    f.focus = !self.global_search.all;
                     self.choose_right_panel(Some(crate::RightPanel::Search));
+                    self.global_search.request_focus();
                 }
             }
             "a11y.report" => self.show_accessibility_report(),

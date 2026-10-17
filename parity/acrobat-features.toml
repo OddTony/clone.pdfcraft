@@ -1441,9 +1441,9 @@ tier = "P1"
 milestone = "M3"
 status = "shipped"
 commands = ["edit.advanced_search"]
-tools = ["text_find"]
-evidence = ["crates/ui-egui/tests/viewer.rs::advanced_search_lists_results_with_context"]
-notes = "Search panel (⇧⌘F): every match grouped by page with its context, whole words / case options, click to go; shares the find bar's search (closing the panel moves it to the bar)"
+tools = ["text_find", "text_find_all"]
+evidence = ["crates/ui-egui/tests/viewer.rs::advanced_search_lists_results_with_context", "crates/ui-egui/tests/control.rs::advanced_search_scope_and_cross_tab_navigation_use_the_control_interface", "crates/automation/tests/automation.rs::text_find_all_searches_working_documents_and_continues_without_skips"]
+notes = "Search panel: current document (default) or all open tabs, grouped document/page/context results, exact-ID cross-tab Find navigation, current working revisions including OCR layers. Native extraction and matching are bounded background work; 2000 retained results, virtual rows, cancellation, revision/query invalidation and partial-page warnings. text_find_all offers bounded continuations over the same session. Web retains the existing inline renderer fallback; folder search, Boolean queries and indexes remain missing."
 
 [[feature]]
 id = "view.advanced-search"
@@ -1453,9 +1453,9 @@ tier = "P1"
 milestone = "M12"
 status = "partial"
 commands = ["edit.advanced_search"]
-tools = ["text_find"]
-evidence = ["crates/ui-egui/tests/viewer.rs::advanced_search_lists_results_with_context"]
-notes = "in the current document, as a side panel; searching other open documents, folders and indexes is still to come"
+tools = ["text_find", "text_find_all"]
+evidence = ["crates/ui-egui/tests/viewer.rs::advanced_search_lists_results_with_context", "crates/ui-egui/tests/control.rs::advanced_search_scope_and_cross_tab_navigation_use_the_control_interface", "crates/automation/tests/automation.rs::text_find_all_searches_working_documents_and_continues_without_skips"]
+notes = "Search panel: current document (default) or all open tabs, grouped document/page/context results, exact-ID cross-tab Find navigation, current working revisions including OCR layers. Native extraction and matching are bounded background work; 2000 retained results, virtual rows, cancellation, revision/query invalidation and partial-page warnings. text_find_all offers bounded continuations over the same session. Web retains the existing inline renderer fallback; folder search, Boolean queries and indexes remain missing."
 
 [[feature]]
 id = "view.search-folder"

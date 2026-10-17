@@ -6419,6 +6419,84 @@ fn absolute_gotor_consent_does_not_bypass_validation_or_passwords() {
 }
 
 #[test]
+fn text_find_all_searches_working_documents_and_continues_without_skips() {
+    let dir = workdir("find-all");
+    // An unopened file exists in the permitted root and must never join the search.
+    let synthetic = pdfcraft_engine::Session::new().create_from_text("unopened", "invoice").unwrap();
+    std::fs::write(dir.join("unopened.pdf"), synthetic.as_slice()).unwrap();
+    let mut a = auto(&dir);
+    let mut ids = Vec::new();
+    for (name, pages) in [("same.pdf", 5), ("same.pdf", 3), ("empty.pdf", 4)] {
+        ids.push(ok(&mut a, "doc_create", json!({"from": "blank", "name": name, "pages": pages}))["doc"].as_u64().unwrap());
+    }
+    for (doc, page, text) in [
+        (ids[0], 2, "the invoice invoice INVOICE invoices"),
+        (ids[0], 5, "please review the invoice details"),
+        (ids[1], 3, "fattura già ricevuta: invoice, caffè"),
+    ] {
+        ok(&mut a, "page_add_text", json!({"doc": doc, "page": page, "text": text, "at": [20, 40], "size": 12}));
+    }
+    let before: Vec<_> = a.session().docs().iter().map(|d| (d.bytes.clone(), d.edit_generation(), d.dirty)).collect();
+    let found = ok(&mut a, "text_find_all", json!({"query": "invoice"}));
+    assert_eq!(found["count"], 6);
+    assert_eq!(found["complete"], true);
+    assert_eq!(found["warning_count"], 0);
+    let positions: Vec<_> = found["matches"].as_array().unwrap().iter().map(|m| (m["doc"].as_u64().unwrap(), m["page"].as_u64().unwrap())).collect();
+    assert_eq!(positions, vec![(ids[0], 2), (ids[0], 2), (ids[0], 2), (ids[0], 2), (ids[0], 5), (ids[1], 3)]);
+    assert!(found["matches"][4]["context"]["before"].as_str().unwrap().contains("review"));
+    assert!(!found["matches"][0]["rects"].as_array().unwrap().is_empty());
+    assert_eq!(found["matches"][0]["name"], found["matches"][5]["name"]);
+    let mut args = json!({"query": "invoice", "limit": 1});
+    let mut gathered = Vec::new();
+    loop {
+        let part = ok(&mut a, "text_find_all", args);
+        assert!(part["count"].as_u64().unwrap() <= 1);
+        gathered.extend(part["matches"].as_array().unwrap().iter().cloned());
+        match part.get("next") {
+            Some(next) => args = next.clone(),
+            None => {
+                assert_eq!(part["complete"], true);
+                break;
+            }
+        }
+    }
+    assert_eq!(gathered, *found["matches"].as_array().unwrap());
+    assert_eq!(ok(&mut a, "text_find_all", json!({"query": "invoice", "whole_words": true}))["count"], 5);
+    assert_eq!(ok(&mut a, "text_find_all", json!({"query": "invoice", "case_sensitive": true, "whole_words": true}))["count"], 4);
+    assert_eq!(ok(&mut a, "text_find_all", json!({"query": "CAFFÈ"}))["count"], 1);
+    assert_eq!(ok(&mut a, "text_find_all", json!({"query": "già ricevuta"}))["count"], 1);
+    assert_eq!(ok(&mut a, "text_find_all", json!({"query": "  "}))["count"], 0);
+    assert_eq!(ok(&mut a, "text_find_all", json!({"query": "absent"}))["complete"], true);
+    for ((bytes, generation, dirty), doc) in before.iter().zip(a.session().docs()) {
+        assert!(std::sync::Arc::ptr_eq(bytes, &doc.bytes));
+        assert_eq!((*generation, *dirty), (doc.edit_generation(), doc.dirty));
+    }
+    assert!(a.call("text_find_all", &json!({"query":"x", "limit":2001})).is_err());
+    assert!(a.call("text_find_all", &json!({"query":"x", "limit":0})).is_err());
+    assert!(tools().iter().any(|t| t.name == "text_find_all" && t.read_only));
+    assert_eq!(a.session().docs().len(), 3);
+}
+
+#[test]
+fn text_find_all_rejects_stale_continuations_after_session_or_query_changes() {
+    let mut a = Automation::new();
+    let id = ok(&mut a, "doc_create", json!({"from":"text", "text":"invoice invoice"}))["doc"].as_u64().unwrap();
+    let first = ok(&mut a, "text_find_all", json!({"query":"invoice", "limit":1}));
+    let next = first["next"].clone();
+    let mut changed = next.clone();
+    changed["whole_words"] = json!(true);
+    assert!(a.call("text_find_all", &changed).is_err());
+    ok(&mut a, "page_add_text", json!({"doc":id, "page":1, "text":"edited", "at":[20,300]}));
+    assert!(a.call("text_find_all", &next).is_err());
+    let first = ok(&mut a, "text_find_all", json!({"query":"invoice", "limit":1}));
+    ok(&mut a, "doc_create", json!({"from":"blank"}));
+    assert!(a.call("text_find_all", &first["next"]).is_err());
+    let first = ok(&mut a, "text_find_all", json!({"query":"invoice", "limit":1}));
+    ok(&mut a, "doc_close", json!({"doc":id, "discard_changes":true}));
+    assert!(a.call("text_find_all", &first["next"]).is_err());
+}
+
+#[test]
 fn finding_untagged_content_limits_results_to_content_annotations_and_widgets() {
     let dir = workdir("find-untagged");
     std::fs::write(dir.join("field.pdf"), form_pdf("name")).unwrap();

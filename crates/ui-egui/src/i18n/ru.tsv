@@ -2294,6 +2294,14 @@ animation effects	Off	Выкл
 	Move tag earlier	Переместить тег раньше
 	Move tag later	Переместить тег позже
 
+# Search across open documents; contributor-original translations.
+	Current document	Текущий документ
+	Open tabs and edits update the search automatically.	Открытые вкладки и правки автоматически обновляют поиск.
+	Selecting a result applies this query to the destination’s Find.	Выбор результата применяет этот запрос к поиску в целевом документе.
+	Results shown: {n} · Documents: {d}	Показано результатов: {n} · Документы: {d}
+	Showing the first 2,000 results — more matches may exist.	Показаны первые 2 000 результатов — возможны другие совпадения.
+	Search complete.	Поиск завершён.
+	{n} pages could not be searched; results are incomplete.	Не удалось выполнить поиск на {n} страницах; результаты неполные.
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Вы просматриваете подписанную версию документа «{from}» (ревизия {rev}). Это снимок: изменения здесь не затронут оригинал.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Вы просматриваете ревизию {rev} документа «{from}». Это снимок: изменения здесь не затронут оригинал.

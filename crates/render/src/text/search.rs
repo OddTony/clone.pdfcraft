@@ -3,6 +3,10 @@ use super::{PageText, fold_case};
 use std::ops::Range;
 
 pub(super) fn find(page: &PageText, query: &str, sensitive: bool, whole_words: bool, limit: usize) -> Vec<Range<usize>> {
+    find_skipping(page, query, sensitive, whole_words, limit, 0)
+}
+
+pub(super) fn find_skipping(page: &PageText, query: &str, sensitive: bool, whole_words: bool, limit: usize, mut skip: usize) -> Vec<Range<usize>> {
     if limit == 0 {
         return Vec::new();
     }
@@ -53,7 +57,11 @@ pub(super) fn find(page: &PageText, query: &str, sensitive: bool, whole_words: b
             if let Some((_, first)) = chars.get(start)
                 && let Some(last) = owner.checked_add(1)
             {
-                hits.push(*first..last);
+                if skip > 0 {
+                    skip = skip.saturating_sub(1);
+                } else {
+                    hits.push(*first..last);
+                }
                 if hits.len() == limit {
                     break;
                 }

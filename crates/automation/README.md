@@ -110,7 +110,6 @@ claude mcp add pdfcraft -- pdfcraft-cli mcp --root <dir>
 3. Handle it in `Automation::call`, validating pages and positions with the existing helpers.
 4. Add an end-to-end test in `tests/automation.rs`. `tool_table_is_well_formed` checks names, schemas and command links.
 
-
 ## Moving several page objects
 
 `object_list {doc, page}` inventories recognised paragraphs, Image/Form artwork and added items
@@ -194,6 +193,44 @@ unapplied with a warning.
 folders. The CLI also exposes it as `pdfcraft-cli batch`. See the
 [batch guide](../../docs/cli-batch.md) for examples, output protection, errors and limits.
 
+## Search all open documents
+
+`text_find_all` searches only documents already open in this automation session, including their
+current unsaved working revisions. It does not open files, scan folders, or run OCR. The existing
+Unicode/whitespace matcher supplies case-sensitive and whole-word options; `text_find` is unchanged.
+
+```json
+{"tool":"text_find_all","args":{"query":"invoice","whole_words":true,"limit":500}}
+```
+
+Results follow session document order, page order and text order. Each match has `doc` (stable
+session id), `name` (display name), `generation`, a **1-based** `page`, `text`, `glyph_range`
+(half-open, 0-based glyph indices), `match_index` (0-based occurrence within the page), `rects` (top-left-origin page points), and
+`context: {before, after}`. Duplicate display names remain distinct by `doc`.
+
+`limit` is 1-2000, default 500; queries are at most 4096 UTF-8 bytes. Document labels are capped at 1024 UTF-8 bytes plus an ellipsis. Each context segment and
+matched-text field is capped at 512 UTF-8 bytes (`text_truncated` indicates shortened matched
+text). Geometry is limited to 256 rectangles from the first 4096 matched glyphs;
+`geometry_truncated` flags shortened geometry, while `glyph_range` remains complete.
+Extraction processes one page at a time with one lazy parser per document. Default display
+settings use the existing shared bounded text cache; layer/comment display overrides bypass it
+to preserve the cache semantics of text_find. Changing those overrides invalidates continuations.
+
+If `next` is present, pass that entire object as the next call's arguments. Do not edit its
+opaque `continuation`. Continuations are tied to this search and every open document's revision;
+opening, closing, editing, undo/redo, reload or a new search invalidates old continuations. A
+changed query or matching option is rejected; start a new search by omitting `continuation`.
+The response's `count` describes this batch, not an exact session-wide total.
+
+`complete` is false while more matches exist or any reached page failed. `truncated` identifies
+match-limit continuation. `warnings` supplies up to 100 `{doc,page,error,error_truncated}` items
+per call; errors are capped at 1024 UTF-8 bytes. `warning_count` counts this call's failed pages,
+`warnings_truncated` reports omitted warning details, and `total_warning_count` also includes
+prior batches in this continuation. A last batch can therefore remain incomplete without `next`.
+Clients must inspect warnings as well as follow continuations. Empty/whitespace queries are a
+complete empty search. Search never changes document content or unsaved state.
+If the renderer cuts off page content at its safety limit, that page is reported as failed,
+and its partial text is not cached as a successful extraction. Other pages remain searchable.
 ## Viewer navigation history
 
 A running PdfCraft instance launched with `--control FILE` exposes its per-tab history through

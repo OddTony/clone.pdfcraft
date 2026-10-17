@@ -903,6 +903,31 @@ fn an_earlier_revision_opens_from_document_properties() {
 }
 
 #[test]
+fn advanced_search_searches_inactive_tabs_and_navigates() {
+    let mut h = harness();
+    let target = h.state().views[0].id;
+    assert!(h.state_mut().execute("edit.advanced_search"));
+    h.run_steps(2);
+    h.get_by_label("All open documents").click();
+    h.run_steps(2);
+    h.get_by_label("What word or phrase would you like to search for?").type_text("Page 4");
+    for _ in 0..3000 {
+        h.run_steps(2);
+        if h.query_by_label_contains("Page 4 pages PAGE").is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.get_by_label_contains("Page 4 pages PAGE").click();
+    h.run_steps(3);
+    let app = h.state();
+    let v = &app.views[app.active.unwrap()];
+    assert_eq!(v.id, target);
+    assert_eq!(v.current, 3);
+    assert!(v.find.as_ref().unwrap().current.is_some());
+}
+
+#[test]
 fn advanced_search_lists_results_with_context() {
     let mut h = harness();
     let i = h.state().active.unwrap();

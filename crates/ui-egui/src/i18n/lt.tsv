@@ -2625,6 +2625,14 @@ key	Space	Tarpas
 	Move tag earlier	Perkelti žymą anksčiau
 	Move tag later	Perkelti žymą vėliau
 
+# Search across open documents; contributor-original translations.
+	Current document	Dabartinis dokumentas
+	Open tabs and edits update the search automatically.	Atverti skirtukai ir pakeitimai automatiškai atnaujina paiešką.
+	Selecting a result applies this query to the destination’s Find.	Pasirinkus rezultatą ši užklausa pritaikoma tikslinio dokumento paieškai.
+	Results shown: {n} · Documents: {d}	Rodomi rezultatai: {n} · Dokumentai: {d}
+	Showing the first 2,000 results — more matches may exist.	Rodomi pirmieji 2 000 rezultatų — gali būti daugiau atitikmenų.
+	Search complete.	Paieška baigta.
+	{n} pages could not be searched; results are incomplete.	Nepavyko ieškoti {n} puslapiuose; rezultatai neišsamūs.
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Jūs peržiūrite pasirašytą „{from}“ versiją ({rev} versija). Tai momentinė kopija: čia atlikti pakeitimai originalo nepaveiks.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Jūs peržiūrite „{from}“ {rev} versiją. Tai momentinė kopija: čia atlikti pakeitimai originalo nepaveiks.

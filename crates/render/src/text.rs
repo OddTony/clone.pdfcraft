@@ -127,6 +127,18 @@ impl PageText {
         search::find(self, needle, case_sensitive, whole_words, limit)
     }
 
+    /// Skip accepted matches without retaining them, preserving the shared matcher semantics.
+    pub fn find_opts_skipping(
+        &self,
+        needle: &str,
+        case_sensitive: bool,
+        whole_words: bool,
+        limit: usize,
+        skip: usize,
+    ) -> Vec<std::ops::Range<usize>> {
+        search::find_skipping(self, needle, case_sensitive, whole_words, limit, skip)
+    }
+
     /// Glyph ranges of the matches a character matcher finds in the page text (words and lines
     /// separated by one space, original case). Used for pattern search (Search & Redact).
     pub fn find_with(&self, matcher: impl Fn(&[char]) -> Vec<std::ops::Range<usize>>) -> Vec<std::ops::Range<usize>> {
@@ -1526,6 +1538,42 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn bounded_find_continuations_preserve_existing_unicode_and_word_semantics() {
+        let text = super::PageText {
+            glyphs: vec![super::TextGlyph {
+                text: "caffè Caffè category caffè".into(),
+                rect: [0., 0., 1., 1.],
+                quad: [[0., 0.]; 4],
+                direction: [1., 0.],
+            }],
+            line_of: vec![0],
+            space_before: vec![false],
+        };
+        for query in ["caffè", "CAFFÈ", "cat", "category", "caffè Caffè", ""] {
+            for sensitive in [false, true] {
+                for whole in [false, true] {
+                    let all = text.find_opts(query, sensitive, whole);
+                    for skip in 0..=all.len() + 1 {
+                        for limit in [0, 1, 2, 100] {
+                            let expected = all.iter().skip(skip).take(limit).cloned().collect::<Vec<_>>();
+                            assert_eq!(text.find_opts_skipping(query, sensitive, whole, limit, skip), expected);
+                        }
+                    }
+                    assert!(text.find_opts_skipping(query, sensitive, whole, 1, usize::MAX).is_empty());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn continued_find_accepts_missing_optional_layout_metadata() {
+        let glyph = |text: &str| super::TextGlyph { text: text.into(), rect: [0., 0., 1., 1.], quad: [[0., 0.]; 4], direction: [1., 0.] };
+        let text = super::PageText { glyphs: vec![glyph("ab"), glyph("ab")], ..Default::default() };
+        assert_eq!(text.find_opts_skipping("ab", false, false, 1, 1), vec![1..2]);
+        assert!(text.find_opts_skipping("ab", false, false, 1, usize::MAX).is_empty());
+    }
+
     use super::*;
 
     #[test]

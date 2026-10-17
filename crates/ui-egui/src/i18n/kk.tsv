@@ -2379,6 +2379,14 @@ animation effects	Off	Өшірулі
 	Move tag earlier	Тегті ертерек жылжыту
 	Move tag later	Тегті кейінірек жылжыту
 
+# Search across open documents; contributor-original translations.
+	Current document	Ағымдағы құжат
+	Open tabs and edits update the search automatically.	Ашық қойындылар мен өзгертулер іздеуді автоматты түрде жаңартады.
+	Selecting a result applies this query to the destination’s Find.	Нәтижені таңдау осы сұрауды мақсатты құжаттың іздеуіне қолданады.
+	Results shown: {n} · Documents: {d}	Көрсетілген нәтижелер: {n} · Құжаттар: {d}
+	Showing the first 2,000 results — more matches may exist.	Алғашқы 2 000 нәтиже көрсетілді — басқа сәйкестіктер болуы мүмкін.
+	Search complete.	Іздеу аяқталды.
+	{n} pages could not be searched; results are incomplete.	{n} бетте іздеу мүмкін болмады; нәтижелер толық емес.
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Сіз „{from}“ құжатының қол қойылған нұсқасын ({rev} нұсқа) қарап отырсыз. Бұл сақталған көшірме: мұндағы өзгерістер түпнұсқаға әсер етпейді.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Сіз „{from}“ құжатының {rev} нұсқасын қарап отырсыз. Бұл сақталған көшірме: мұндағы өзгерістер түпнұсқаға әсер етпейді.

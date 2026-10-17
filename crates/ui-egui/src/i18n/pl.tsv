@@ -2360,6 +2360,15 @@ animation effects	Off	Wyłączone
 	This document is trying to open a local file:	Ten dokument próbuje otworzyć plik lokalny:
 	Move tag earlier	Przenieś znacznik wcześniej
 	Move tag later	Przenieś znacznik później
+
+# Search across open documents; contributor-original translations.
+	Current document	Bieżący dokument
+	Open tabs and edits update the search automatically.	Otwarte karty i zmiany automatycznie aktualizują wyszukiwanie.
+	Selecting a result applies this query to the destination’s Find.	Wybranie wyniku stosuje to zapytanie do wyszukiwania w dokumencie docelowym.
+	Results shown: {n} · Documents: {d}	Wyświetlone wyniki: {n} · Dokumenty: {d}
+	Showing the first 2,000 results — more matches may exist.	Wyświetlono pierwsze 2000 wyników — mogą istnieć dalsze dopasowania.
+	Search complete.	Wyszukiwanie zakończone.
+	{n} pages could not be searched; results are incomplete.	Nie można było przeszukać {n} stron; wyniki są niepełne.
 	Turn upside down (180°)	Obróć do góry nogami (180°)
 	4 x 6 in label (101.6 x 152.4 mm)	Etykieta 4 × 6 cali (101,6 × 152,4 mm)
 	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Przycina każdą stronę do zadrukowanego obszaru, obraca ją pionowo i dopasowuje do arkusza bez rozciągania. Jedna etykieta na arkusz.

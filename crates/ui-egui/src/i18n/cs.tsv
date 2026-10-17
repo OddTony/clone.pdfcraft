@@ -2455,6 +2455,14 @@ animation effects	Off	Vypnuto
 	Move tag earlier	Přesunout značku dříve
 	Move tag later	Přesunout značku později
 
+# Search across open documents; contributor-original translations.
+	Current document	Aktuální dokument
+	Open tabs and edits update the search automatically.	Otevřené karty a úpravy automaticky aktualizují hledání.
+	Selecting a result applies this query to the destination’s Find.	Výběr výsledku použije tento dotaz při hledání v cílovém dokumentu.
+	Results shown: {n} · Documents: {d}	Zobrazené výsledky: {n} · Dokumenty: {d}
+	Showing the first 2,000 results — more matches may exist.	Zobrazeno prvních 2 000 výsledků — mohou existovat další shody.
+	Search complete.	Hledání dokončeno.
+	{n} pages could not be searched; results are incomplete.	{n} stránek nebylo možné prohledat; výsledky jsou neúplné.
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Prohlížíte si podepsanou verzi dokumentu „{from}“ (revize {rev}). Je to snímek: změny zde neovlivní originál.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Prohlížíte si revizi {rev} dokumentu „{from}“. Je to snímek: změny zde neovlivní originál.

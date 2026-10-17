@@ -1579,6 +1579,62 @@ fn click_and_drag_refuse_coordinates_that_overflow_like_move() {
 }
 
 #[test]
+fn advanced_search_scope_and_cross_tab_navigation_use_the_control_interface() {
+    let (mut h, c) = harness_pages(2);
+    h.state_mut().open_bytes("doc.pdf", None, fixture(5)).unwrap();
+    let target = h.state().views[1].id;
+    ok(&mut h, &c, "ui.command", json!({"id":"view.previous_tab"}));
+    ok(&mut h, &c, "ui.command", json!({"id":"edit.advanced_search"}));
+    h.run_steps(3);
+    ok(&mut h, &c, "ui.click", json!({"label":"All open documents"}));
+    h.run_steps(3);
+    // Scope selection focuses its actual text input; ui.type sends normal keyboard text.
+    ok(&mut h, &c, "ui.type", json!({"text":"Page 4"}));
+    for _ in 0..3000 {
+        h.run_steps(2);
+        if h.query_by_label_contains("… Page 4 …").is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let widgets = ok(&mut h, &c, "ui.inspect", json!({"query":"… Page 4 …", "role":"Button"}));
+    ok(&mut h, &c, "ui.click", json!({"id":widgets["widgets"][0]["id"]}));
+    for _ in 0..3000 {
+        h.run_steps(2);
+        let app = h.state();
+        let v = &app.views[app.active.unwrap()];
+        if v.id == target && v.glyph_screen_pos(3, 0).is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.run_steps(3);
+    let app = h.state();
+    let v = &app.views[app.active.unwrap()];
+    assert_eq!(v.id, target);
+    assert_eq!(v.current, 3);
+    let f = v.find.as_ref().unwrap();
+    let (page, range) = &f.matches[f.current.unwrap()];
+    assert_eq!(*page, 3);
+    assert!(v.glyph_screen_pos(*page, range.start).is_some());
+    for _ in 0..3000 {
+        h.run_steps(2);
+        if h.query_by_label("Search complete.").is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    h.get_by_label("Search complete.");
+    if let Ok(dir) = std::env::var("PDFCRAFT_SEARCH_SHOTS") {
+        h.render().unwrap().save(format!("{dir}/search-all-navigation.png")).unwrap();
+    }
+    ok(&mut h, &c, "ui.click", json!({"label":"Current document"}));
+    h.run_steps(3);
+    h.get_by_label("What word or phrase would you like to search for?");
+    assert_eq!(h.state().views[h.state().active.unwrap()].find.as_ref().unwrap().query, "Page 4");
+}
+
+#[test]
 fn page_size_shows_while_the_pointer_is_in_the_bottom_left_quadrant() {
     let (mut h, _c) = harness();
     let area = h.state().views[0].viewport_rect();

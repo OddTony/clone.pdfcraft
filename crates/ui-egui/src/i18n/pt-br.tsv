@@ -2395,6 +2395,14 @@ animation effects	Off	Desativados
 	Move tag earlier	Mover tag para antes
 	Move tag later	Mover tag para depois
 
+# Search across open documents; contributor-original translations.
+	Current document	Documento atual
+	Open tabs and edits update the search automatically.	As abas abertas e as edições atualizam a pesquisa automaticamente.
+	Selecting a result applies this query to the destination’s Find.	Selecionar um resultado aplica esta consulta à busca do documento de destino.
+	Results shown: {n} · Documents: {d}	Resultados exibidos: {n} · Documentos: {d}
+	Showing the first 2,000 results — more matches may exist.	Exibindo os primeiros 2.000 resultados — pode haver mais correspondências.
+	Search complete.	Pesquisa concluída.
+	{n} pages could not be searched; results are incomplete.	Não foi possível pesquisar em {n} páginas; os resultados estão incompletos.
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Você está vendo a versão assinada de “{from}” (revisão {rev}). É um instantâneo: as alterações aqui não afetarão o original.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Você está vendo a revisão {rev} de “{from}”. É um instantâneo: as alterações aqui não afetarão o original.

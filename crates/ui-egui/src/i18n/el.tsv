@@ -2390,6 +2390,15 @@ animation effects	Off	Ανενεργά
 	This document is trying to open a local file:	Αυτό το έγγραφο προσπαθεί να ανοίξει ένα τοπικό αρχείο:
 	Move tag earlier	Μετακίνηση ετικέτας νωρίτερα
 	Move tag later	Μετακίνηση ετικέτας αργότερα
+
+# Search across open documents; contributor-original translations.
+	Current document	Τρέχον έγγραφο
+	Open tabs and edits update the search automatically.	Οι ανοιχτές καρτέλες και οι αλλαγές ενημερώνουν αυτόματα την αναζήτηση.
+	Selecting a result applies this query to the destination’s Find.	Η επιλογή αποτελέσματος εφαρμόζει αυτό το ερώτημα στην εύρεση του εγγράφου προορισμού.
+	Results shown: {n} · Documents: {d}	Εμφανιζόμενα αποτελέσματα: {n} · Έγγραφα: {d}
+	Showing the first 2,000 results — more matches may exist.	Εμφανίζονται τα πρώτα 2.000 αποτελέσματα — ενδέχεται να υπάρχουν κι άλλες αντιστοιχίες.
+	Search complete.	Η αναζήτηση ολοκληρώθηκε.
+	{n} pages could not be searched; results are incomplete.	Δεν ήταν δυνατή η αναζήτηση σε {n} σελίδες· τα αποτελέσματα είναι ελλιπή.
 	Turn upside down (180°)	Αναποδογύρισμα (180°)
 	4 x 6 in label (101.6 x 152.4 mm)	Ετικέτα 4 × 6 in (101,6 × 152,4 mm)
 	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Περικόπτει κάθε σελίδα στην τυπωμένη περιοχή της, την ισιώνει και την προσαρμόζει στο φύλλο χωρίς παραμόρφωση. Μία ετικέτα ανά φύλλο.

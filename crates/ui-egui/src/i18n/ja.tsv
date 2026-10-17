@@ -2381,6 +2381,14 @@ animation effects	Off	オフ
 	Move tag earlier	タグを前へ移動
 	Move tag later	タグを後へ移動
 
+# Search across open documents; contributor-original translations.
+	Current document	現在の文書
+	Open tabs and edits update the search automatically.	開いているタブや編集内容に応じて検索を自動更新します。
+	Selecting a result applies this query to the destination’s Find.	結果を選ぶと、移動先の文書の検索にこの検索語句が適用されます。
+	Results shown: {n} · Documents: {d}	表示結果: {n} 件 · 文書: {d} 個
+	Showing the first 2,000 results — more matches may exist.	最初の 2,000 件を表示しています — ほかにも一致する箇所がある可能性があります。
+	Search complete.	検索が完了しました。
+	{n} pages could not be searched; results are incomplete.	{n} ページを検索できませんでした。結果は不完全です。
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	「{from}」の署名済みバージョン（リビジョン {rev}）を表示しています。これはスナップショットであり、ここでの変更は元の文書に影響しません。
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	「{from}」のリビジョン {rev} を表示しています。これはスナップショットであり、ここでの変更は元の文書に影響しません。

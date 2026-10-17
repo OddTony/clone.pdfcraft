@@ -2254,6 +2254,15 @@ animation effects	Off	關
 	This document is trying to open a local file:	此文件正嘗試開啟本機檔案：
 	Move tag earlier	將標記前移
 	Move tag later	將標記後移
+
+# Search across open documents; contributor-original translations.
+	Current document	目前文件
+	Open tabs and edits update the search automatically.	開啟的分頁與編輯內容會自動更新搜尋。
+	Selecting a result applies this query to the destination’s Find.	選取結果會將此查詢套用至目標文件的尋找。
+	Results shown: {n} · Documents: {d}	顯示結果：{n} · 文件：{d}
+	Showing the first 2,000 results — more matches may exist.	顯示前 2,000 個結果 — 可能還有更多相符項目。
+	Search complete.	搜尋完成。
+	{n} pages could not be searched; results are incomplete.	無法搜尋 {n} 頁；結果不完整。
 	Turn upside down (180°)	上下顛倒 (180°)
 	4 x 6 in label (101.6 x 152.4 mm)	4 × 6 英吋標籤 (101.6 × 152.4 公釐)
 	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	將每頁裁切至其列印區域，轉正後不拉伸地符合紙張。每張紙一個標籤。

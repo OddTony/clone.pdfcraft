@@ -1095,6 +1095,15 @@ impl DocView {
         }
     }
 
+    /// Request fresh text for a search result, including a previously failed page.
+    pub(crate) fn retry_text(&mut self, page: usize) {
+        self.texts.remove(&page);
+        self.text_failed.remove(&page);
+        // Its previous result may have arrived since the last queue submission. Identical
+        // demand must be submitted again after that consumed result is discarded.
+        self.last_queue.clear();
+    }
+
     /// Go to match `i` (the Search panel's results).
     pub fn go_to_match(&mut self, i: usize) {
         let Some(f) = self.find.as_mut() else { return };
@@ -5088,6 +5097,40 @@ fn grayscale(mut img: egui::ColorImage) -> egui::ColorImage {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn search_navigation_retries_text_received_in_the_previous_queue() {
+        let session = pdfcraft_engine::Session::new();
+        let bytes = session.create_from_text("synthetic", "invoice").unwrap();
+        let info = pdfcraft_render::inspect(bytes.clone(), None).unwrap();
+        let mut view = DocView::new(DocId(1), &info, ViewDefaults::default());
+        let pool = RenderPool::new(bytes, 1, Default::default());
+        let ctx = egui::Context::default();
+        let request = RenderRequest { page: 0, kind: RequestKind::Text, tile: None, scale: 1.0, tag: TEXT_TAG, preview: false };
+        view.frame_queue = vec![request];
+        view.finish_render_frame(&ctx, &info, &pool);
+        for _ in 0..1000 {
+            view.receive(&ctx, &pool);
+            if view.texts.contains_key(&0) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(view.texts.contains_key(&0));
+        // Selecting a global result discards this text before the next queue update.
+        // The resulting demand is identical, but its previous result was already consumed.
+        view.retry_text(0);
+        view.frame_queue = vec![request];
+        view.finish_render_frame(&ctx, &info, &pool);
+        for _ in 0..1000 {
+            view.receive(&ctx, &pool);
+            if view.texts.contains_key(&0) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(view.texts.contains_key(&0), "navigation must requeue consumed text demand");
+    }
+
     #[test]
     fn page_size_hint_zone_is_the_bottom_left_quadrant() {
         let area = Rect::from_min_max(pos2(100.0, 50.0), pos2(500.0, 450.0));

@@ -32,6 +32,7 @@ pub mod print_raster;
 pub mod printcheck;
 mod scan_colours;
 mod scan_fields;
+pub mod search;
 pub mod signature_image;
 pub mod signature_scan;
 pub mod text_fonts;

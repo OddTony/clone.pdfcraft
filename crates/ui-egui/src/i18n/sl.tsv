@@ -2386,6 +2386,14 @@ animation effects	Off	Izklopljeni
 	Move tag earlier	Premakni oznako prej
 	Move tag later	Premakni oznako pozneje
 
+# Search across open documents; contributor-original translations.
+	Current document	Trenutni dokument
+	Open tabs and edits update the search automatically.	Odprti zavihki in spremembe samodejno posodobijo iskanje.
+	Selecting a result applies this query to the destination’s Find.	Izbira rezultata uporabi to poizvedbo pri iskanju v ciljnem dokumentu.
+	Results shown: {n} · Documents: {d}	Prikazani rezultati: {n} · Dokumenti: {d}
+	Showing the first 2,000 results — more matches may exist.	Prikazanih je prvih 2.000 rezultatov — morda obstajajo dodatna ujemanja.
+	Search complete.	Iskanje je končano.
+	{n} pages could not be searched; results are incomplete.	Iskanje na {n} straneh ni bilo mogoče; rezultati so nepopolni.
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Ogledate si podpisano različico dokumenta „{from}“ (revizija {rev}). To je posnetek: spremembe tukaj ne bodo vplivale na izvirnik.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Ogledate si revizijo {rev} dokumenta „{from}“. To je posnetek: spremembe tukaj ne bodo vplivale na izvirnik.
