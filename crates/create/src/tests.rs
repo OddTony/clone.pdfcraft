@@ -1186,6 +1186,34 @@ fn jpegs_that_carry_the_profile_the_page_uses_are_written_unchanged() {
 }
 
 #[test]
+fn device_jpegs_are_written_without_the_profile_the_page_ignores() {
+    // The page draws a DeviceRGB or DeviceGray JPEG's samples as they are, whatever ICC profile
+    // the JPEG file carries, and a viewer would draw them through that profile (with Adobe RGB,
+    // (30, 160, 60) showed as (0, 161, 47)). The file is written without its APP2 ICC_PROFILE
+    // segments, however many, and keeps every other byte: an APP2 that isn't a profile stays.
+    let rgb = flat_rgb_jpeg([30, 160, 60], None);
+    let mut gray = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut gray, 100).encode(&[90; 64], 8, 8, image::ExtendedColorType::L8).unwrap();
+    let adobe = adobe_rgb();
+    let (head, tail) = adobe.split_at(adobe.len() / 2);
+    // An APP2 segment that isn't a profile (an MPF index), after SOI.
+    let mpf = |jpeg: &[u8]| [&jpeg[..2], &[0xFF, 0xE2, 0, 8], b"MPF\0", &[0, 0], &jpeg[2..]].concat();
+    for (what, space, written, expected) in [
+        ("DeviceRGB with an Adobe RGB profile", "DeviceRGB", with_icc(&rgb, &adobe), rgb.clone()),
+        ("DeviceRGB with the profile in two chunks", "DeviceRGB", with_icc(&with_icc(&rgb, tail), head), rgb.clone()),
+        ("DeviceRGB with a profile and another APP2", "DeviceRGB", mpf(&with_icc(&rgb, &adobe)), mpf(&rgb)),
+        ("DeviceGray with a grey profile", "DeviceGray", with_icc(&gray, &icc_profile(b"GRAY")), gray.clone()),
+        ("DeviceRGB without a profile", "DeviceRGB", rgb.clone(), rgb.clone()),
+    ] {
+        let mut doc = from_images(&[("flat.png".into(), png_bytes(false))]).unwrap();
+        with_image(&mut doc, |_| dct(Stream::from_raw(image_dict(8, 8, space, 8), written), 8, None));
+        let reopened = Document::open(Arc::new(write_full(&doc, &SaveOptions::default()).unwrap())).unwrap();
+        let image = &extract_images(&reopened, &[0], 0).images[0];
+        assert_eq!((image.extension, &image.data), ("jpg", &expected), "{what}");
+    }
+}
+
+#[test]
 fn damaged_and_mismatched_icc_profiles_export_as_the_page_draws_them() {
     // A profile the renderer can't read, or one for other components than /N says: the export
     // follows the page (the device space of /N components when the profile is unreadable), and

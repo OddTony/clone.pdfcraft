@@ -116,7 +116,12 @@ fn image(doc: &Document, s: &Stream) -> Result<(&'static str, Vec<u8>), String> 
         Some(b"DCTDecode" | b"DCT") if !jpeg => return Err("JPEG images inside other filters can't be exported yet".into()),
         _ => {}
     }
-    let as_is = || Ok(("jpg", s.raw.to_vec()));
+    // The JPEG file as it is in the PDF. The page draws a grey or RGB JPEG's samples as they are
+    // and ignores an ICC profile inside the file, which a viewer would apply: it is left out.
+    let as_is = || {
+        let device = matches!(space(doc, s.dict.get(b"ColorSpace")), Ok(Space::Gray | Space::Rgb));
+        Ok(("jpg", if device { without_icc_profile(&s.raw).unwrap_or_else(|| s.raw.to_vec()) } else { s.raw.to_vec() }))
+    };
     let (w, h) = (s.dict.int(b"Width").unwrap_or(0), s.dict.int(b"Height").unwrap_or(0));
     let Some((w, h)) = size(w, h) else {
         return match () {
@@ -207,9 +212,10 @@ fn size(w: i64, h: i64) -> Option<(usize, usize)> {
 }
 
 /// Whether a JPEG file written as is shows the colours the page draws it in: grey or RGB
-/// samples the page shows as they are, or samples in an ICC profile that the file carries
-/// itself (inverted, for CMYK, as JPEG files store CMYK). Image viewers convert CMYK in their
-/// own way, never the page's, so a DeviceCMYK JPEG is always decoded.
+/// samples the page shows as they are (written without any ICC profile in the file, which the
+/// page ignores), or samples in an ICC profile that the file carries itself (inverted, for
+/// CMYK, as JPEG files store CMYK). Image viewers convert CMYK in their own way, never the
+/// page's, so a DeviceCMYK JPEG is always decoded.
 fn shown_as_drawn(space: &Space, inverted: bool, data: &[u8]) -> bool {
     match space {
         Space::Gray | Space::Rgb => true,
@@ -217,6 +223,49 @@ fn shown_as_drawn(space: &Space, inverted: bool, data: &[u8]) -> bool {
             (!matches!(**device, Space::Cmyk) || inverted) && crate::jpeg("", data).ok().and_then(|j| j.icc).as_deref() == Some(&profile[..])
         }
         Space::Cmyk | Space::Indexed(..) => false,
+    }
+}
+
+/// A JPEG file without its ICC profile (the APP2 `ICC_PROFILE` segments, however many chunks it
+/// is split into), every other byte copied as it is, the scans included. `None` when the
+/// segments before the first scan can't be read.
+fn without_icc_profile(data: &[u8]) -> Option<Vec<u8>> {
+    if data.get(..2)? != [0xFF, 0xD8] {
+        return None;
+    }
+    let mut out = Vec::with_capacity(data.len());
+    out.extend_from_slice(data.get(..2)?);
+    let mut i = 2;
+    loop {
+        // A marker: 0xFF, any number of 0xFF fill bytes, then its code.
+        let start = i;
+        if *data.get(i)? != 0xFF {
+            return None;
+        }
+        while data.get(i + 1) == Some(&0xFF) {
+            i += 1;
+        }
+        let marker = *data.get(i + 1)?;
+        i += 2;
+        match marker {
+            // The first scan (or the end): the rest is entropy-coded data and later segments.
+            0xDA | 0xD9 => {
+                out.extend_from_slice(data.get(start..)?);
+                return Some(out);
+            }
+            // Markers without a length.
+            0x01 | 0xD0..=0xD8 => out.extend_from_slice(data.get(start..i)?),
+            _ => {
+                let len = usize::from(u16::from_be_bytes([*data.get(i)?, *data.get(i + 1)?]));
+                let end = i.checked_add(len)?;
+                let segment = data.get(i.checked_add(2)?..end)?;
+                let icc = marker == 0xE2 && segment.starts_with(b"ICC_PROFILE\0");
+                if !icc {
+                    out.extend_from_slice(data.get(start..end)?);
+                }
+                i = end;
+            }
+        }
     }
 }
 
