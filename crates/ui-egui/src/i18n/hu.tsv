@@ -2381,6 +2381,11 @@ animation effects	Off	Ki
 	Move tag earlier	Címke korábbra helyezése
 	Move tag later	Címke későbbre helyezése
 
+	Ink	Tinta
+
+	Dark ink	Sötét tinta
+
+	Light ink	Világos tinta
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	A(z) „{from}“ aláírt változatát (a {rev}. változatot) tekinti meg. Ez egy pillanatkép: az itteni módosítások nem érintik az eredetit.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	A(z) „{from}“ {rev}. változatát tekinti meg. Ez egy pillanatkép: az itteni módosítások nem érintik az eredetit.

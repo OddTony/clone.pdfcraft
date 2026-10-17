@@ -2382,6 +2382,11 @@ animation effects	Off	Désactivés
 	Move tag earlier	Déplacer la balise plus tôt
 	Move tag later	Déplacer la balise plus tard
 
+	Ink	Encre
+
+	Dark ink	Encre foncée
+
+	Light ink	Encre claire
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Vous consultez la version signée de «{from}» (révision {rev}). Il s'agit d'un instantané : les modifications effectuées ici n'affecteront pas l'original.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Vous consultez la révision {rev} de «{from}». Il s'agit d'un instantané : les modifications effectuées ici n'affecteront pas l'original.

@@ -2295,6 +2295,11 @@ animation effects	Off	Выкл
 	Move tag earlier	Переместить тег раньше
 	Move tag later	Переместить тег позже
 
+	Ink	Чернила
+
+	Dark ink	Тёмные чернила
+
+	Light ink	Светлые чернила
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Вы просматриваете подписанную версию документа «{from}» (ревизия {rev}). Это снимок: изменения здесь не затронут оригинал.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Вы просматриваете ревизию {rev} документа «{from}». Это снимок: изменения здесь не затронут оригинал.
