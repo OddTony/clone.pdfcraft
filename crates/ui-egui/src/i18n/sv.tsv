@@ -2594,3 +2594,83 @@ certificate	SHA-256 digest	SHA-256-sammandrag
 @plural	{n} file|{n} files	{n} fil|{n} filer
 @plural	{n} comment|{n} comments	{n} kommentar|{n} kommentarer
 @plural	{n} result|{n} results	{n} resultat|{n} resultat
+	Hide hover previews for highlights without comment text	Dölj hoverförhandsvisningar för markeringar utan kommentarstext
+	Set page transitions	Ställ in sidövergångar
+	What takes up the space in this file, by kind of content.	Vad som tar upp utrymmet i den här filen, efter innehållstyp.
+	Digitally signed by	Digitalt signerat av
+	DN: 	DN: 
+	Reason: 	Reason: 
+	Location: 	Location: 
+	Date: 	Date: 
+	The labels are in English: the signature's font can't draw them in this language.	Etiketterna är på engelska: signaturens typsnitt kan inte rita dem på det här språket.
+	Font size	Teckenstorlek
+	Make Properties Default	Gör egenskaper till standard
+	Save over the changed file?	Spara över den ändrade filen?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	»{name}« har ändrats på disken efter att den öppnades eller senast sparades. Att spara nu ersätter den nyare versionen med den här.
+	Save anyway	Spara ändå
+	Sending sheet {s} of {n} to {printer}…	Ark {s} av {n} skickas till {printer}…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Inga skrivare hittades. Kontrollera att skrivaren är installerad och att utskriftskön körs, och öppna Skriv ut igen.
+	Collapse all pages	Fäll ihop alla sidor
+	Expand all pages	Fäll ut alla sidor
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Den här filen har ändrats på disken. Läs om visar den nya versionen och slänger dina osparade ändringar; Spara ersätter den med den här versionen.
+	Scroll speed (mouse wheel and arrow keys)	Rullningshastighet (mushjul och piltangenter)
+	Cut Image	Klipp bild
+	Redact Image	Maskera bild
+	Create Link…	Skapa länk…
+	Recognize Text…	Känn igen text…
+	Open in Full Screen mode?	Öppna i helskärmsläge?
+	This document asks to open in Full Screen mode: the page fills the screen and nothing else shows. Press Esc at any time to leave it.	Det här dokumentet vill öppnas i helskärmsläge: sidan fyller skärmen och inget annat visas. Tryck Esc när som helst för att lämna det.
+	Full Screen	Helskärm
+	Not now	Inte nu
+	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Du ser den signerade versionen av »{from}« (revision {rev}). Det är en ögonblicksbild: ändringar här påverkar inte originalet.
+	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Du ser revision {rev} av »{from}«. Det är en ögonblicksbild: ändringar här påverkar inte originalet.
+	Turn upside down (180°)	Vänd upp och ner (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Etikett 4 x 6 tum (101,6 x 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Klipper varje sida till sitt tryckta område, vänder den upprätt och anpassar den till arket utan sträckning. En etikett per ark.
+	Find untagged content	Hitta otaggat innehåll
+	No untagged content was found.	Inget otaggat innehåll hittades.
+	Found {n} untagged content problems.	Hittade {n} problem med otaggat innehåll.
+	Tag form fields	Tagga formulärfält
+	Mark as artifact	Markera som artefakt
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Ta bort den här lövnoden från läsningsordningen och markera dess direkta innehåll som en artefakt
+	Mark content as artifact	Markera innehåll som artefakt
+	Word count	Ordantal
+	Current page only	Endast den aktuella sidan
+	Exclude tagged tables	Uteslut taggade tabeller
+	Exclude tagged code blocks	Uteslut taggade kodblock
+	Exclude image/OCR text	Uteslut bild-/OCR-text
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Uteslutningar använder PDF-taggar. Otaggade tabeller och kod räknas fortfarande med. Bilduteslutning tar också bort osynlig text.
+	Words	Ord
+	Characters	Tecken
+	Characters without spaces	Tecken utan mellanslag
+	Pages counted	Sidor räknade
+	Some pages contain no countable text. Scanned images need OCR first.	Vissa sidor innehåller ingen räknebar text. Skannade bilder kräver OCR först.
+	Some content could not be classified safely and was kept in the count.	Viss innehåll kunde inte klassificeras säkert och har lämnats kvar i räkningen.
+	Counting words… {n} pages read	Räknar ord… {n} sidor lästa
+	Word counting stopped unexpectedly.	Ordräkningen avbröts oväntat.
+	Word count…	Räkna ord…
+@id	file.word_count	Räkna ord…
+	Standard	Standard
+	Mobile	Mobil
+	Merge image fragments	Sammanfoga bildfragment
+	Optimizing… merging image fragments	Optimerar… sammanfogar bildfragment
+	Side by side	Sida vid sida
+	New file only	Endast ny fil
+	Old file: {name}	Gammal fil: {name}
+	New file: {name}	Ny fil: {name}
+	Print as image	Skriv ut som bild
+	Resolution:	Upplösning:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Använd det när en skrivare hoppar över text, skraffering eller transparens. Utskriften är inte längre sökbar text; med Skriv ut i gråskala är bilderna grå.
+	Crop Image	Beskär bild
+	Remove Crop	Ta bort beskärning
+	Trim the picture with its handles; Enter or Done applies	Trimma bilden med dess handtag; Enter eller Utförd tillämpar
+	Redaction mark appearance	Utseende på maskeringsmärke
+	Outline colour:	Konturfärg:
+	Fill colour:	Fyllnadsfärg:
+	Shown while the pointer is over a mark.	Visas medan pekaren är över ett märke.
+	Opacity:	Opacitet:
+	Make properties default	Gör egenskaper till standard
+	Pages selected	Sidor markerade
+	Page properties	Sidegenskaper
+	The password must have at least 8 characters.	Lösenordet måste ha minst 8 tecken.
+theme	Appearance	Utseende

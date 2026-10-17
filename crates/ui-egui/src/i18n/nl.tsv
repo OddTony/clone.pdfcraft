@@ -2594,3 +2594,83 @@ certificate	SHA-256 digest	SHA-256-hash
 @plural	{n} file|{n} files	{n} bestand|{n} bestanden
 @plural	{n} comment|{n} comments	{n} opmerking|{n} opmerkingen
 @plural	{n} result|{n} results	{n} resultaat|{n} resultaten
+	Hide hover previews for highlights without comment text	Zweefvoorbeelden verbergen voor markeringen zonder kommentaartekst
+	Set page transitions	Pagina-overgangen instellen
+	What takes up the space in this file, by kind of content.	Wat de ruimte in dit bestand inneemt, per soort inhoud.
+	Digitally signed by	Digitaal ondertekend door
+	DN: 	DN: 
+	Reason: 	Reason: 
+	Location: 	Location: 
+	Date: 	Date: 
+	The labels are in English: the signature's font can't draw them in this language.	De labels zijn in het Engels: het lettertype van de handtekening kan ze niet in deze taal weergeven.
+	Font size	Lettergrootte
+	Make Properties Default	Eigenschappen standaard maken
+	Save over the changed file?	Opslaan over het gewijzigde bestand?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	„{name}” is na het openen of de laatste keer opslaan gewijzigd op de schijf. Nu opslaan vervangt die nieuwere versie door deze.
+	Save anyway	Toch opslaan
+	Sending sheet {s} of {n} to {printer}…	Vel {s} van {n} wordt naar {printer} verzonden…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Er zijn geen printers gevonden. Controleer of de printer is geïnstalleerd en de printspooler draait, en open Afdrukken opnieuw.
+	Collapse all pages	Alle pagina's samenvouwen
+	Expand all pages	Alle pagina's uitvouwen
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Dit bestand is gewijzigd op de schijf. Herladen toont de nieuwe versie en laat je niet-opgeslagen wijzigingen vallen; Opslaan vervangt het door deze versie.
+	Scroll speed (mouse wheel and arrow keys)	Scrollsnelheid (muiswiel en pijltjestoetsen)
+	Cut Image	Afbeelding bijsnijden
+	Redact Image	Afbeelding redigeren
+	Create Link…	Koppeling maken…
+	Recognize Text…	Tekst herkennen…
+	Open in Full Screen mode?	Openen in volledig scherm?
+	This document asks to open in Full Screen mode: the page fills the screen and nothing else shows. Press Esc at any time to leave it.	Dit document vraagt om in volledig scherm te openen: de pagina vult het scherm en verder wordt niets getoond. Druk op Esc om dit te verlaten.
+	Full Screen	Volledig scherm
+	Not now	Niet nu
+	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Je bekijkt de ondertekende versie van „{from}” (revisie {rev}). Het is een momentopname: wijzigingen hier beïnvloeden het origineel niet.
+	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Je bekijkt revisie {rev} van „{from}”. Het is een momentopname: wijzigingen hier beïnvloeden het origineel niet.
+	Turn upside down (180°)	Ondersteboven draaien (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Label 4 x 6 inch (101,6 x 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Elke pagina wordt bijgesneden tot het gedrukte gebied, recht gezet en zonder rek op het vel geplaatst. Eén label per vel.
+	Find untagged content	Ongemarkeerde inhoud zoeken
+	No untagged content was found.	Er is geen ongemarkeerde inhoud gevonden.
+	Found {n} untagged content problems.	Er zijn {n} problemen met ongemarkeerde inhoud gevonden.
+	Tag form fields	Formuliervelden markeren
+	Mark as artifact	Markeren als artefact
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Deze eindtag uit de leesvolgorde halen en de directe inhoud als artefact markeren
+	Mark content as artifact	Inhoud markeren als artefact
+	Word count	Aantal woorden
+	Current page only	Alleen de huidige pagina
+	Exclude tagged tables	Gemarkeerde tabellen uitsluiten
+	Exclude tagged code blocks	Gemarkeerde codeblokken uitsluiten
+	Exclude image/OCR text	Afbeeldings-/OCR-tekst uitsluiten
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Uitsluitingen gebruiken PDF-tags. Ongemarkeerde tabellen en code blijven meegerekend. Bij uitsluiting van afbeeldingen verdwijnt ook onzichtbare tekst.
+	Words	Woorden
+	Characters	Tekens
+	Characters without spaces	Tekens zonder spaties
+	Pages counted	Pagina's geteld
+	Some pages contain no countable text. Scanned images need OCR first.	Sommige pagina's bevatten geen te tellen tekst. Gescande afbeeldingen hebben eerst OCR nodig.
+	Some content could not be classified safely and was kept in the count.	Sommige inhoud kon niet veilig worden geclassificeerd en is meegeteld.
+	Counting words… {n} pages read	Woorden tellen… {n} pagina's gelezen
+	Word counting stopped unexpectedly.	Het tellen van woorden is onverwacht gestopt.
+	Word count…	Woorden tellen…
+@id	file.word_count	Woorden tellen…
+	Standard	Standaard
+	Mobile	Mobiel
+	Merge image fragments	Afbeeldingsfragmenten samenvoegen
+	Optimizing… merging image fragments	Optimaliseren… afbeeldingsfragmenten samenvoegen
+	Side by side	Naast elkaar
+	New file only	Alleen nieuw bestand
+	Old file: {name}	Oud bestand: {name}
+	New file: {name}	Nieuw bestand: {name}
+	Print as image	Als afbeelding afdrukken
+	Resolution:	Resolutie:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Gebruik dit als een printer tekst, arcering of transparantie overslaat. De afdruk is geen doorzoekbare tekst meer; bij Afdrukken in grijstinten zijn de afbeeldingen grijs.
+	Crop Image	Afbeelding bijsnijden tot kader
+	Remove Crop	Kader verwijderen
+	Trim the picture with its handles; Enter or Done applies	Bijsteken met de handgrepen; Enter of Klaar past toe
+	Redaction mark appearance	Vormgeving van redactiemarkering
+	Outline colour:	Contourkleur:
+	Fill colour:	Vulkleur:
+	Shown while the pointer is over a mark.	Zichtbaar terwijl de aanwijzer op een markering staat.
+	Opacity:	Dekking:
+	Make properties default	Eigenschappen standaard maken
+	Pages selected	Pagina's geselecteerd
+	Page properties	Pagina-eigenschappen
+	The password must have at least 8 characters.	Het wachtwoord moet minstens 8 tekens hebben.
+theme	Appearance	Vormgeving

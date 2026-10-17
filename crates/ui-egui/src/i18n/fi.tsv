@@ -2594,3 +2594,83 @@ certificate	SHA-256 digest	SHA-256-tiiviste
 @plural	{n} file|{n} files	{n} tiedosto|{n} tiedostoa
 @plural	{n} comment|{n} comments	{n} kommentti|{n} kommenttia
 @plural	{n} result|{n} results	{n} tulos|{n} tulosta
+	Hide hover previews for highlights without comment text	Piilota osoitin esikatselut korostuksista ilman kommenttitekstiä
+	Set page transitions	Aseta sivusiirtymät
+	What takes up the space in this file, by kind of content.	Mitä tämän tiedoston tila sisältää, sisältötyypeittäin.
+	Digitally signed by	Digitaalisesti allekirjoittanut
+	DN: 	DN: 
+	Reason: 	Reason: 
+	Location: 	Location: 
+	Date: 	Date: 
+	The labels are in English: the signature's font can't draw them in this language.	Merkinnät ovat englanniksi: allekirjoituksen fontti ei osaa piirtää niitä tällä kielellä.
+	Font size	Fonttikoko
+	Make Properties Default	Tee ominaisuuksista oletus
+	Save over the changed file?	Tallennetaanko muuttuneen tiedoston päälle?
+	“{name}” changed on disk after it was opened or last saved. Saving now replaces that newer version with this one.	”{name}” muuttui levyllä sen jälkeen, kun se avattiin tai tallennettiin viimeksi. Tallentaminen nyt korvaa tuon uudemman version tällä.
+	Save anyway	Tallenna silti
+	Sending sheet {s} of {n} to {printer}…	Lähetetään arkki {s} / {n} tulostimelle {printer}…
+	No printers were found. Check that the printer is installed and the print spooler is running, then open Print again.	Tulostimia ei löytynyt. Varmista, että tulostin on asennettu ja tulostusjono käynnissä, ja avaa Tulostus uudelleen.
+	Collapse all pages	Pienennä kaikki sivut
+	Expand all pages	Laajenna kaikki sivut
+	This file changed on disk. Reload shows the new version and drops your unsaved changes; Save replaces it with this version.	Tämä tiedosto muuttui levyllä. Lataaminen uudelleen näyttää uuden version ja hylkää tallentamattomat muutokset; Tallentaminen korvaa sen tällä versiolla.
+	Scroll speed (mouse wheel and arrow keys)	Vieritysnopeus (hiiren rulla ja nuolinäppäimet)
+	Cut Image	Leikkaa kuva
+	Redact Image	Peitä kuva
+	Create Link…	Luo linkki…
+	Recognize Text…	Tunnista teksti…
+	Open in Full Screen mode?	Avataanko koko näytön tilassa?
+	This document asks to open in Full Screen mode: the page fills the screen and nothing else shows. Press Esc at any time to leave it.	Tämä asiakirja pyytää avaamaan koko näytön tilassa: sivu täyttää näytön eikä mitään muuta näy. Poistu milloin tahansa Esc-näppäimellä.
+	Full Screen	Koko näyttö
+	Not now	Ei nyt
+	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Katsot allekirjoitettua versiota tiedostosta ”{from}” (versio {rev}). Se on tilannevedos: täällä tehdyt muutokset eivät vaikuta alkuperäiseen.
+	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Katsot versiota {rev} tiedostosta ”{from}”. Se on tilannevedos: täällä tehdyt muutokset eivät vaikuta alkuperäiseen.
+	Turn upside down (180°)	Käännä ylösalaisin (180°)
+	4 x 6 in label (101.6 x 152.4 mm)	Etiketti 4 x 6 tuumaa (101,6 x 152,4 mm)
+	Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet.	Leikkaa jokaisen sivun sen painoalueeseen, kääntää sen pystyyn ja sovittaa sen arkkiin venyttämättä. Yksi etiketti per arkki.
+	Find untagged content	Etsi tagittaista sisältöä
+	No untagged content was found.	Tagitonta sisältöä ei löytynyt.
+	Found {n} untagged content problems.	Löytyi {n} ongelmaa tagittömässä sisällössä.
+	Tag form fields	Tagita lomakekentät
+	Mark as artifact	Merkitse artefaktiksi
+	Remove this leaf tag from reading order and mark its direct content as an artifact	Poista tämä lehtitag lukujärjestyksestä ja merkitse sen suora sisältö artefaktiksi
+	Mark content as artifact	Merkitse sisältö artefaktiksi
+	Word count	Sanamäärä
+	Current page only	Vain nykyinen sivu
+	Exclude tagged tables	Poissulje tagitetut taulukot
+	Exclude tagged code blocks	Poissulje tagitetut koodilohkot
+	Exclude image/OCR text	Poissulje kuva-/OCR-teksti
+	Exclusions use PDF tags. Untagged tables and code remain included. Image exclusion also removes invisible text.	Poissulkemiset käyttävät PDF-tageja. Tagittomat taulukot ja koodi pysyvät mukana. Kuvien poissulkeminen poistaa myös näkymättömän tekstin.
+	Words	Sanat
+	Characters	Merkkiä
+	Characters without spaces	Merkkiä ilman välilyöntejä
+	Pages counted	Sivuja laskettu
+	Some pages contain no countable text. Scanned images need OCR first.	Osa sivuista ei sisällä laskettavaa tekstiä. Skannatut kuvat tarvitsevat ensin OCR:n.
+	Some content could not be classified safely and was kept in the count.	Osa sisällöstä ei voitu luokitella turvallisesti, ja se jäi mukaan laskentaan.
+	Counting words… {n} pages read	Lasketaan sanoja… {n} sivua luettu
+	Word counting stopped unexpectedly.	Sanalaskenta pysähtyi odottamatta.
+	Word count…	Laske sanat…
+@id	file.word_count	Laske sanat…
+	Standard	Vakio
+	Mobile	Mobiili
+	Merge image fragments	Yhdistä kuvan osat
+	Optimizing… merging image fragments	Optimoidaan… yhdistetään kuvan osia
+	Side by side	Vierekkäin
+	New file only	Vain uusi tiedosto
+	Old file: {name}	Vanha tiedosto: {name}
+	New file: {name}	Uusi tiedosto: {name}
+	Print as image	Tulosta kuvana
+	Resolution:	Resoluutio:
+	Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey.	Käytä, kun tulostin ohittaa tekstiä, varjostusta tai läpinäkyvyyttä. Tuloste ei ole enää haettavaa tekstiä; harmaasävytulostuksessa kuvat ovat harmaita.
+	Crop Image	Rajaa kuva
+	Remove Crop	Poista rajaus
+	Trim the picture with its handles; Enter or Done applies	Säädä kuvaa kahvoilla; Enter tai Valmis vahvistaa
+	Redaction mark appearance	Peitemerkinnän ulkoasu
+	Outline colour:	Ääriviivan väri:
+	Fill colour:	Täyttöväri:
+	Shown while the pointer is over a mark.	Näkyy, kun osoitin on merkinnän päällä.
+	Opacity:	Läpinäkyvyys:
+	Make properties default	Tee ominaisuuksista oletus
+	Pages selected	Sivuja valittu
+	Page properties	Sivun ominaisuudet
+	The password must have at least 8 characters.	Salasanassa on oltava vähintään 8 merkkiä.
+theme	Appearance	Ulkoasu
