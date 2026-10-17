@@ -3017,9 +3017,67 @@ impl eframe::App for PdfCraftApp {
                 OsEvent::Open(_) => {}
                 // Like closing the window: `guard_quit` asks about unsaved changes.
                 OsEvent::Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
-                OsEvent::Command(cmd) => {
-                    self.execute(&cmd);
-                }
+                OsEvent::Command(cmd) => match cmd.as_str() {
+                    "view.zoom.actual_size" => {
+                        if let Some(i) = self.active {
+                            self.views[i].set_zoom(1.0);
+                        }
+                    }
+                    "view.zoom.page_level" => {
+                        if let Some(i) = self.active {
+                            self.views[i].set_fit(crate::canvas::Fit::Page);
+                        }
+                    }
+                    "view.zoom.fit_width" => {
+                        if let Some(i) = self.active {
+                            self.views[i].set_fit(crate::canvas::Fit::Width);
+                        }
+                    }
+                    "view.zoom.fit_height" => {
+                        if let Some(i) = self.active {
+                            self.views[i].set_fit(crate::canvas::Fit::Height);
+                        }
+                    }
+                    "view.zoom.in" => {
+                        if let Some(i) = self.active {
+                            self.views[i].zoom_step(true);
+                        }
+                    }
+                    "view.zoom.out" => {
+                        if let Some(i) = self.active {
+                            self.views[i].zoom_step(false);
+                        }
+                    }
+                    "view.rotate_view.cw" => {
+                        if let Some(i) = self.active {
+                            self.views[i].rotate_view(true);
+                        }
+                    }
+                    "view.rotate_view.ccw" => {
+                        if let Some(i) = self.active {
+                            self.views[i].rotate_view(false);
+                        }
+                    }
+                    "panel.comments" => self.choose_right_panel(Some(RightPanel::Comments)),
+                    "panel.bookmarks" => self.choose_right_panel(Some(RightPanel::Bookmarks)),
+                    "panel.pages" => self.choose_right_panel(Some(RightPanel::Pages)),
+                    "panel.fields" => self.choose_right_panel(Some(RightPanel::Fields)),
+                    "panel.layers" => self.choose_right_panel(Some(RightPanel::Layers)),
+                    "panel.attachments" => self.choose_right_panel(Some(RightPanel::Attachments)),
+                    "panel.signatures" => self.choose_right_panel(Some(RightPanel::Signatures)),
+                    "panel.accessibility" => self.choose_right_panel(Some(RightPanel::Accessibility)),
+                    "panel.tags" => self.choose_right_panel(Some(RightPanel::Tags)),
+                    "panel.search" => self.choose_right_panel(Some(RightPanel::Search)),
+                    "panel.compare" => self.choose_right_panel(Some(RightPanel::Compare)),
+                    "mode.all_tools" => self.switch_mode(Mode::AllTools, true),
+                    "mode.read" => self.switch_mode(Mode::Read, true),
+                    "mode.edit" => self.switch_mode(Mode::Edit, true),
+                    "mode.convert" => self.switch_mode(Mode::Convert, true),
+                    "mode.sign" => self.switch_mode(Mode::Sign, true),
+                    other => {
+                        self.execute(other);
+                    }
+                },
             }
         }
         if let Some((_, id)) = self.active_ids() {
