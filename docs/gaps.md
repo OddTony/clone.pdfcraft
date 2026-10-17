@@ -1,7 +1,7 @@
 # Where PdfCraft falls short of Acrobat Pro
 
-> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gap 18: Output Preview separates process colour through the CMYK output intent profile; hayro-interpret patch 35; estimate 20–40 → 18–38 h) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
-> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 18: Output Preview — separations, total area coverage and overprint preview — partial; hayro-interpret plate patch 34) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gap 18: Output Preview separates process colour through the CMYK output intent profile; hayro-interpret patch 36; estimate 20–40 → 18–38 h) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 18: Output Preview — separations, total area coverage and overprint preview — partial; hayro-interpret plate patch 35) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (gap 6: #1910 Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -339,8 +339,8 @@ update the numbers.
   spot inks mix multiplicatively in the composite, and overprint preview is in the panel only,
   not in the ordinary view, print or export.
 - **Evidence:** Output Preview, separations with area coverage, total area coverage and overprint
-  preview are `partial` (one plate per ink through hayro-interpret patch 34, colour-managed
-  through the output intent by patch 35, a right-hand panel and `print_output_preview`;
+  preview are `partial` (one plate per ink through hayro-interpret patch 35, colour-managed
+  through the output intent by patch 36, a right-hand panel and `print_output_preview`;
   `crates/render/README.md`); the other 13 of the 17 M11 print-production features are planned
   (L area).
 - **Estimate:** 18–38 h (part of the L area's 30–55). **Doc:** [target-app-parity.md](target-app-parity.md).
@@ -390,8 +390,8 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-16 | minor | Gap 18: Output Preview separates RGB, CIE-based and ICC colours, and ICC CMYK in another profile, through the CMYK output intent profile (relative colorimetric, hayro-interpret patch 35) and soft-proofs the composite through it; choosing a simulation profile, other rendering intents and black point compensation remain; estimate 20–40 → 18–38 h. Gap 2: 35 hayro-interpret patches |
-| 2026-10-15 | minor | Gap 18: Output Preview (separations with area coverage, total area coverage, overprint preview) partial through hayro-interpret plate patch 34; colour management, Ink Manager and the other print-production tools remain; estimate 25–45 → 20–40 h. Gap 2: 34 hayro-interpret patches |
+| 2026-10-16 | minor | Gap 18: Output Preview separates RGB, CIE-based and ICC colours, and ICC CMYK in another profile, through the CMYK output intent profile (relative colorimetric, hayro-interpret patch 36) and soft-proofs the composite through it; choosing a simulation profile, other rendering intents and black point compensation remain; estimate 20–40 → 18–38 h. Gap 2: 35 hayro-interpret patches |
+| 2026-10-15 | minor | Gap 18: Output Preview (separations with area coverage, total area coverage, overprint preview) partial through hayro-interpret plate patch 35; colour management, Ink Manager and the other print-production tools remain; estimate 25–45 → 20–40 h. Gap 2: 34 hayro-interpret patches |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |
 | 2026-10-13 | minor | Gap 6: Organize Pages selects and reveals the current page on open, including after an earlier grid selection elsewhere (#1910). Estimates unchanged. |

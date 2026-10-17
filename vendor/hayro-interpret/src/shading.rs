@@ -139,8 +139,8 @@ pub struct Shading {
 }
 
 impl Shading {
-    /// PdfCraft patch (34): the shading drawn as `plate`'s plate, through its simulation
-    /// (patch 35).
+    /// PdfCraft patch (35): the shading drawn as `plate`'s plate, through its simulation
+    /// (patch 36).
     pub(crate) fn for_plate(&mut self, plate: &crate::color::Plate) {
         self.color_space = self
             .color_space

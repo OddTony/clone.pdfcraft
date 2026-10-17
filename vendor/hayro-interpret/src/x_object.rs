@@ -227,7 +227,7 @@ pub(crate) fn draw_image_xobject<'a, 'b>(
         return;
     }
 
-    // PdfCraft patch (34): report the image's spot inks, and draw it on a plate. An image
+    // PdfCraft patch (35): report the image's spot inks, and draw it on a plate. An image
     // without a colour space takes one from its data (JPEG, JPEG 2000): gray, RGB or CMYK,
     // all process colour. Images paint with the non-stroking overprint parameter.
     let raster_cs = if x_object.is_mask {
@@ -339,12 +339,12 @@ pub(crate) struct ImageXObject<'a> {
     stream: Stream<'a>,
     transfer_function: Option<ActiveTransferFunction>,
     warning_sink: WarningSinkFn,
-    /// PdfCraft patch (34): the plate the image is drawn on, if any.
+    /// PdfCraft patch (35): the plate the image is drawn on, if any.
     plate: Option<Plate>,
 }
 
 impl<'a> ImageXObject<'a> {
-    /// PdfCraft patch (34): the image drawn on `plate`. Not cached (the cache holds colour
+    /// PdfCraft patch (35): the image drawn on `plate`. Not cached (the cache holds colour
     /// decodes), and without a transfer function (see `get_paint`).
     fn for_plate(&self, plate: &Plate) -> Self {
         Self {
@@ -639,7 +639,7 @@ fn decode_context<'a>(
                 })
         })
         .unwrap_or(ColorSpace::device_gray());
-    // PdfCraft patch (34): on a plate, every sample converts to the ink's film.
+    // PdfCraft patch (35): on a plate, every sample converts to the ink's film.
     let color_space = match &obj.plate {
         Some(plate) => color_space.plate(plate.ink.clone(), plate.simulation.clone()),
         None => color_space,

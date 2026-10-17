@@ -179,8 +179,8 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-16 | minor | M11: Output Preview separations colour-managed through the CMYK output intent profile (hayro-interpret patch 35); choosing a simulation profile remains. Estimates unchanged. |
-| 2026-10-15 | minor | M11: Output Preview — separations with area coverage, total area coverage and overprint preview — partial (hayro-interpret plate patch 34, Output preview panel, `print_output_preview`). Estimates unchanged. |
+| 2026-10-16 | minor | M11: Output Preview separations colour-managed through the CMYK output intent profile (hayro-interpret patch 36); choosing a simulation profile remains. Estimates unchanged. |
+| 2026-10-15 | minor | M11: Output Preview — separations with area coverage, total area coverage and overprint preview — partial (hayro-interpret plate patch 35, Output preview panel, `print_output_preview`). Estimates unchanged. |
 | 2026-10-15 | minor | M9 #1895: generic appearance rewriting deferred; separate validation overlays preserve original artwork, exports and printing. Baked captions remain unchanged (#79 open). Estimates unchanged. |
 | 2026-10-12 | minor | M6: valid AcroForm XML element names with original PDF field names preserved; saved-PDF collision and Unicode regressions. Estimates unchanged. |
 | 2026-10-12 | minor | M6: preserve carriage returns in exported CSV field names and values; saved-PDF round-trip coverage. Estimates unchanged. |

@@ -294,7 +294,7 @@ licensed OCR or AI model.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-16 | minor | L Print: Output Preview separations are colour-managed through the document's CMYK output intent (hayro-interpret patch 35); still partial (only the output intent is simulated, relative colorimetric). Counts and hours unchanged. |
+| 2026-10-16 | minor | L Print: Output Preview separations are colour-managed through the document's CMYK output intent (hayro-interpret patch 36); still partial (only the output intent is simulated, relative colorimetric). Counts and hours unchanged. |
 | 2026-10-15 | minor | L Print: Output Preview (separations with area coverage, total area coverage, overprint preview) partial; the row recounted from the checklist (17 shipped, 4 partial of 39, 48.7%); remaining 30–55 → 25–50 h. Headline numbers not recomputed. |
 | 2026-10-12 | minor | Exclusive image crops resize with their pixels across nested states, intervening operators and content streams; shared clips remain fixed. Synthetic engine/tool regressions and private image save/reopen checks; estimates unchanged. |
 | 2026-10-11 | minor | Web printing shipped (gap 4): Hardware, Platforms and L Print text updated. Text only: scores, readiness and hours not re-judged |

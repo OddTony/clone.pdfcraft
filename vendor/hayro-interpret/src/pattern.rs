@@ -148,7 +148,7 @@ pub struct TilingPattern<'a> {
 }
 
 impl TilingPattern<'_> {
-    /// PdfCraft patch (34): an uncoloured pattern draws its cell in the colour it is used
+    /// PdfCraft patch (35): an uncoloured pattern draws its cell in the colour it is used
     /// with, so on a plate it draws that colour's film. A coloured pattern's cell is separated
     /// as it is drawn.
     pub(crate) fn for_plate(&mut self, plate: &Plate, overprint: bool, overprint_mode: u8) {

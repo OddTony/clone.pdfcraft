@@ -99,7 +99,7 @@ pub(crate) enum ColorSpaceType {
     Lab(Lab),
     Separation(Separation),
     DeviceN(DeviceN),
-    /// PdfCraft patch (34): `inner` drawn as the plate of one ink (see [`Plate`]).
+    /// PdfCraft patch (35): `inner` drawn as the plate of one ink (see [`Plate`]).
     Plate(PlateSpace),
 }
 
@@ -256,7 +256,7 @@ impl ColorSpace {
     pub(crate) fn is_indexed(&self) -> bool {
         match self.0.as_ref() {
             ColorSpaceType::Indexed(_) => true,
-            // PdfCraft patch (34): a plate decodes its samples as its space does.
+            // PdfCraft patch (35): a plate decodes its samples as its space does.
             ColorSpaceType::Plate(p) => p.inner.is_indexed(),
             _ => false,
         }
@@ -766,7 +766,7 @@ impl Lab {
         ]
     }
 
-    /// PdfCraft patch (35): the colour `input` in the separation hub (see [`Hub`]), relative
+    /// PdfCraft patch (36): the colour `input` in the separation hub (see [`Hub`]), relative
     /// colorimetric: the space's white point becomes the PCS white (Bradford-adapted).
     fn to_hub(&self, input: &[f32], manual_scale: bool) -> [f32; 3] {
         let xyz = self.xyz(self.components(input, manual_scale));
@@ -870,7 +870,7 @@ pub(crate) struct Separation {
     alternate_space: ColorSpace,
     tint_transform: Function,
     is_none_separation: bool,
-    /// PdfCraft patch (34): the colorant the space paints, for separations.
+    /// PdfCraft patch (35): the colorant the space paints, for separations.
     colorant: Colorant,
 }
 
@@ -920,7 +920,7 @@ pub(crate) struct DeviceN {
     num_components: u8,
     tint_transform: Function,
     is_none: bool,
-    /// PdfCraft patch (34): the colorant of each component, for separations.
+    /// PdfCraft patch (35): the colorant of each component, for separations.
     colorants: Vec<Colorant>,
 }
 
@@ -989,10 +989,10 @@ struct ICCColorRepr {
     is_lab: bool,
     transform_u8: Arc<Transform8BitExecutor>,
     transform_f32: OnceLock<Arc<TransformF32Executor>>,
-    /// PdfCraft patch (35): a digest of the profile's bytes, to tell a colour in a
+    /// PdfCraft patch (36): a digest of the profile's bytes, to tell a colour in a
     /// [`CmykSimulation`]'s own profile from one in another.
     digest: u128,
-    /// PdfCraft patch (35): the transform into the separation hub (see [`Hub`]), made on first
+    /// PdfCraft patch (36): the transform into the separation hub (see [`Hub`]), made on first
     /// use; `None` when the profile doesn't convert to it.
     to_hub: OnceLock<Option<Arc<TransformF32Executor>>>,
 }
@@ -1069,7 +1069,7 @@ impl ICCProfile {
         })))
     }
 
-    /// PdfCraft patch (35): `input` (whole colours of this profile's components) in the
+    /// PdfCraft patch (36): `input` (whole colours of this profile's components) in the
     /// separation hub, three values per colour in `rgb`. L*a*b* components are scaled to the
     /// profile's encoding unless `manual_scale` says they already are (an Indexed palette's).
     fn to_hub(&self, input: &[f32], manual_scale: bool, rgb: &mut [f32]) -> Option<()> {
@@ -1227,7 +1227,7 @@ impl Color {
         }
     }
 
-    /// PdfCraft patch (34): the gray film of `tint` on a plate (see [`Plate`]).
+    /// PdfCraft patch (35): the gray film of `tint` on a plate (see [`Plate`]).
     pub(crate) fn film(tint: f32, opacity: f32) -> Self {
         Self::new(
             ColorSpace::device_gray(),
@@ -1236,7 +1236,7 @@ impl Color {
         )
     }
 
-    /// PdfCraft patch (34): this colour as drawn on `plate`. `overprint` is the graphics
+    /// PdfCraft patch (35): this colour as drawn on `plate`. `overprint` is the graphics
     /// state's overprint parameter for this paint (`OP` for strokes, `op` otherwise) and
     /// `overprint_mode` its `OPM` (ISO 32000-2 §8.6.7). A paint that leaves the plate as it is
     /// becomes fully transparent.
@@ -1271,7 +1271,7 @@ impl Color {
     }
 }
 
-/// PdfCraft patch (34): a printing ink, the unit of a separation: one of the four process
+/// PdfCraft patch (35): a printing ink, the unit of a separation: one of the four process
 /// colorants or a spot colorant named by a `Separation` or `DeviceN` colour space (ISO 32000-2
 /// §8.6.6.4).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1315,7 +1315,7 @@ impl Ink {
     }
 }
 
-/// PdfCraft patch (34): what a `Separation` or `DeviceN` colorant name paints (ISO 32000-2
+/// PdfCraft patch (35): what a `Separation` or `DeviceN` colorant name paints (ISO 32000-2
 /// §8.6.6.4): an ink (the process names are the process inks), every ink (`All`), or nothing
 /// (`None`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1341,7 +1341,7 @@ impl Colorant {
     }
 }
 
-/// PdfCraft patch (34): draw one ink's separation instead of the composite page. Every paint
+/// PdfCraft patch (35): draw one ink's separation instead of the composite page. Every paint
 /// draws the ink's tint as a gray film: white where the plate carries no ink, black where it
 /// carries 100%. Set through [`InterpreterSettings::plate`](crate::InterpreterSettings::plate).
 #[derive(Clone, Debug, PartialEq)]
@@ -1353,17 +1353,17 @@ pub struct Plate {
     /// plate as it is. When `false`, every paint knocks out what is under it, as on a
     /// composite device.
     pub overprint: bool,
-    /// PdfCraft patch (35): the printing condition process colour converts to, from the
+    /// PdfCraft patch (36): the printing condition process colour converts to, from the
     /// document's output intent. `None` converts by the ISO 32000-2 §10.4.2 device formulas.
     pub simulation: Option<CmykSimulation>,
 }
 
-/// PdfCraft patch (34): told about each spot ink a paint uses, with the ink's appearance: the
+/// PdfCraft patch (35): told about each spot ink a paint uses, with the ink's appearance: the
 /// sRGB colour of that ink alone at a tint in `0.0..=1.0`, through the colour space's
 /// alternate space and tint transform.
 pub type InkSinkFn = Arc<dyn Fn(&Ink, &dyn Fn(f32) -> [u8; 3]) + Send + Sync>;
 
-/// PdfCraft patch (34): how a colour space paints one ink's plate.
+/// PdfCraft patch (35): how a colour space paints one ink's plate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InkUse {
     /// The space specifies the ink: its colours set the plate's tint.
@@ -1375,7 +1375,7 @@ pub(crate) enum InkUse {
     Nothing,
 }
 
-/// PdfCraft patch (34): DeviceCMYK to sRGB as pages are drawn (the bundled CGATS-compatible
+/// PdfCraft patch (35): DeviceCMYK to sRGB as pages are drawn (the bundled CGATS-compatible
 /// profile), to compose separations back into a preview. `cmyk` holds whole pixels of four
 /// bytes and `rgb` the same number of three-byte pixels; `None` when the lengths disagree or
 /// the transform fails.
@@ -1400,11 +1400,11 @@ fn rgb_to_cmyk([r, g, b]: [f32; 3]) -> [f32; 4] {
     [unit(c - k), unit(m - k), unit(y - k), unit(k)]
 }
 
-/// PdfCraft patch (35): colours converted per step through a [`CmykSimulation`], so that the
+/// PdfCraft patch (36): colours converted per step through a [`CmykSimulation`], so that the
 /// buffers stay on the stack whatever an image's size.
 const SIMULATION_CHUNK: usize = 256;
 
-/// PdfCraft patch (35): the printing condition separations simulate, from an output intent's
+/// PdfCraft patch (36): the printing condition separations simulate, from an output intent's
 /// destination profile (ISO 32000-2 §14.11.5): a CMYK ICC profile with PCS-to-device (BToA)
 /// tables. Set through [`Plate::simulation`]. Process colour in other spaces converts to the
 /// profile's CMYK through those tables, instead of by the device formulas of §10.4.2:
@@ -1447,7 +1447,7 @@ impl PartialEq for CmykSimulation {
     }
 }
 
-/// PdfCraft patch (35): why an ICC profile can't be simulated.
+/// PdfCraft patch (36): why an ICC profile can't be simulated.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NoSimulation {
     /// The profile doesn't parse.
@@ -1515,7 +1515,7 @@ impl CmykSimulation {
     }
 }
 
-/// PdfCraft patch (35): a profile's description, without control characters and at most `max`
+/// PdfCraft patch (36): a profile's description, without control characters and at most `max`
 /// characters long; `None` when it has none.
 fn profile_description(profile: &ColorProfile, max: usize) -> Option<String> {
     let text = match profile.description.as_ref()? {
@@ -1539,7 +1539,7 @@ fn profile_description(profile: &ColorProfile, max: usize) -> Option<String> {
     (!clean.is_empty()).then(|| clean.to_string())
 }
 
-/// PdfCraft patch (35): a transform from `source` to `destination`, relative colorimetric, or
+/// PdfCraft patch (36): a transform from `source` to `destination`, relative colorimetric, or
 /// through the perceptual tables (`true`) where a profile lacks colorimetric ones.
 fn transform_f32(
     source: &ColorProfile,
@@ -1564,7 +1564,7 @@ fn transform_f32(
     })
 }
 
-/// PdfCraft patch (35): as [`transform_f32`], for bytes.
+/// PdfCraft patch (36): as [`transform_f32`], for bytes.
 fn transform_u8(
     source: &ColorProfile,
     source_layout: Layout,
@@ -1589,7 +1589,7 @@ fn transform_u8(
 
 static SRGB: LazyLock<ColorProfile> = LazyLock::new(ColorProfile::new_srgb);
 
-/// PdfCraft patch (35): the separation hub, the RGB that Lab and ICCBased colours pass through
+/// PdfCraft patch (36): the separation hub, the RGB that Lab and ICCBased colours pass through
 /// on their way to a simulated CMYK: ROMM RGB (ProPhoto) primaries, D50 white, gamma 1.8. Its
 /// gamut holds practically every surface colour, so nothing printable clips on the way, and
 /// paper white and black land on exact grid points of the conversion's tables. (moxcms
@@ -1636,9 +1636,9 @@ impl Hub {
 static HUB: LazyLock<Hub> = LazyLock::new(Hub::new);
 
 impl ColorSpace {
-    /// PdfCraft patch (34): this space drawn as `ink`'s plate (for images and shadings, whose
+    /// PdfCraft patch (35): this space drawn as `ink`'s plate (for images and shadings, whose
     /// colours are converted sample by sample), converting process colour through
-    /// `simulation` (patch 35).
+    /// `simulation` (patch 36).
     pub(crate) fn plate(&self, ink: Ink, simulation: Option<CmykSimulation>) -> Self {
         Self(Arc::new(ColorSpaceType::Plate(PlateSpace {
             inner: self.clone(),
@@ -1647,7 +1647,7 @@ impl ColorSpace {
         })))
     }
 
-    /// PdfCraft patch (35): whether `simulation` converts this space's colours (see
+    /// PdfCraft patch (36): whether `simulation` converts this space's colours (see
     /// [`CmykSimulation`]).
     fn simulated_by(&self, simulation: &CmykSimulation) -> bool {
         match self.0.as_ref() {
@@ -1662,7 +1662,7 @@ impl ColorSpace {
         }
     }
 
-    /// PdfCraft patch (35): the colours `input` (whole colours of this space's components;
+    /// PdfCraft patch (36): the colours `input` (whole colours of this space's components;
     /// `manual_scale` as for [`ToRgb::convert_f32`]) in `simulation`'s CMYK, four values per
     /// colour in `cmyk`. `None` when the space isn't [`simulated_by`](Self::simulated_by)
     /// `simulation`, the lengths disagree, or a conversion fails.
@@ -1719,13 +1719,13 @@ impl ColorSpace {
         Some(())
     }
 
-    /// PdfCraft patch (34): DeviceCMYK itself (`CalCMYK` reads as it too), where the nonzero
+    /// PdfCraft patch (35): DeviceCMYK itself (`CalCMYK` reads as it too), where the nonzero
     /// overprint mode applies.
     pub(crate) fn is_device_cmyk(&self) -> bool {
         matches!(self.0.as_ref(), ColorSpaceType::DeviceCmyk)
     }
 
-    /// PdfCraft patch (34): spaces whose colours are converted to sRGB before separation
+    /// PdfCraft patch (35): spaces whose colours are converted to sRGB before separation
     /// (DeviceRGB is separated from its components directly, without a conversion).
     fn separates_through_srgb(&self) -> bool {
         match self.0.as_ref() {
@@ -1735,7 +1735,7 @@ impl ColorSpace {
         }
     }
 
-    /// PdfCraft patch (34): how the space paints `ink`'s plate. Gray, RGB, CIE-based and ICC
+    /// PdfCraft patch (35): how the space paints `ink`'s plate. Gray, RGB, CIE-based and ICC
     /// spaces are process colour: they specify the four process inks and no spot ink.
     pub(crate) fn ink_use(&self, ink: &Ink) -> InkUse {
         match self.0.as_ref() {
@@ -1778,9 +1778,9 @@ impl ColorSpace {
         }
     }
 
-    /// PdfCraft patch (34): the tint, `0.0` (no ink) to `1.0` (solid), that the colour
+    /// PdfCraft patch (35): the tint, `0.0` (no ink) to `1.0` (solid), that the colour
     /// `components` puts on `ink`'s plate; `0.0` when the space doesn't specify the ink.
-    /// Process colour converts through `simulation` when there is one (patch 35).
+    /// Process colour converts through `simulation` when there is one (patch 36).
     /// `manual_scale` as for [`ToRgb::convert_f32`] (components normalised to `0.0..=1.0`, as
     /// an Indexed palette gives them).
     pub(crate) fn ink_tint(
@@ -1824,7 +1824,7 @@ impl ColorSpace {
         unit(tint)
     }
 
-    /// PdfCraft patch (34): a process colour as DeviceCMYK: CMYK spaces (DeviceCMYK, ICC with
+    /// PdfCraft patch (35): a process colour as DeviceCMYK: CMYK spaces (DeviceCMYK, ICC with
     /// four components) as they are, gray as black only (`k = 1 − gray`, §10.4.2.2), and RGB,
     /// CIE-based and three-component ICC spaces through sRGB by [`rgb_to_cmyk`]. Patch 32:
     /// the spaces `simulation` converts go through it instead, and only fall back to those
@@ -1869,7 +1869,7 @@ impl ColorSpace {
         }
     }
 
-    /// PdfCraft patch (34): tell `sink` about every spot ink the space names, with the ink's
+    /// PdfCraft patch (35): tell `sink` about every spot ink the space names, with the ink's
     /// appearance (the space's colour with only that component set).
     pub(crate) fn report_spots(&self, sink: &InkSinkFn) {
         match self.0.as_ref() {
@@ -1905,7 +1905,7 @@ impl ColorSpace {
     }
 }
 
-/// PdfCraft patch (34): a colour space drawn as one ink's plate: each colour becomes the gray
+/// PdfCraft patch (35): a colour space drawn as one ink's plate: each colour becomes the gray
 /// film of that ink's tint (see [`Plate`]).
 #[derive(Debug, Clone)]
 pub(crate) struct PlateSpace {
@@ -1928,7 +1928,7 @@ impl PlateSpace {
         f32_to_u8(1.0 - tint)
     }
 
-    /// PdfCraft patch (35): the inner space's colours `input` converted through the
+    /// PdfCraft patch (36): the inner space's colours `input` converted through the
     /// simulation, as film; `None` when the space isn't simulated or a conversion fails.
     fn film_through_simulation(
         &self,
