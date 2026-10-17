@@ -27,7 +27,7 @@ const TEXT_TAG: u64 = 1 << 62;
 const GRID_TAG: u64 = 1 << 61;
 /// Preview rasters tagged with this bit are converted to luminance on receipt, matching the
 /// monochrome print requested by Print ▸ Print in grayscale.
-const GRAYSCALE_TAG: u64 = 1 << 60;
+const GRAYSCALE_TAG: u64 = 1 << 59;
 /// The tag of a raster that is out of date (shown until its replacement arrives).
 const STALE_TAG: u64 = u64::MAX;
 /// Pages whose raster would exceed this many device pixels on a side are drawn in tiles.
@@ -5088,6 +5088,31 @@ fn grayscale(mut img: egui::ColorImage) -> egui::ColorImage {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn print_preview_rgb_is_not_tagged_grayscale() {
+        let info = thumbnail_info(1);
+        let mut view = DocView::new(DocId(1), &info, ViewDefaults::default());
+
+        view.set_print_grayscale(false);
+        view.queue_print_previews(&[(0, 0.5)]);
+
+        let color_tag = view.frame_queue.last().expect("RGB preview request").tag;
+
+        assert_ne!(color_tag & PRINT_TAG, 0);
+
+        assert_eq!(color_tag & GRAYSCALE_TAG, 0, "RGB_PREVIEW_MARKED_GRAYSCALE");
+
+        view.frame_queue.clear();
+        view.set_print_grayscale(true);
+        view.queue_print_previews(&[(0, 0.5)]);
+
+        let gray_tag = view.frame_queue.last().expect("grayscale preview request").tag;
+
+        assert_ne!(gray_tag & PRINT_TAG, 0);
+        assert_ne!(gray_tag & GRAYSCALE_TAG, 0);
+    }
+
     #[test]
     fn page_size_hint_zone_is_the_bottom_left_quadrant() {
         let area = Rect::from_min_max(pos2(100.0, 50.0), pos2(500.0, 450.0));
