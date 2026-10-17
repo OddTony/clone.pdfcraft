@@ -132,11 +132,14 @@ pub(crate) fn page_input(
     // their action.
     let pressable = f.kind == FormFieldKind::PushButton && !f.read_only() && f.button.is_some();
     let usable = allowed && (fillable(f) || pressable || f.kind == FormFieldKind::Signature);
-    ui.ctx().set_cursor_icon(match (usable, f.kind) {
-        (false, _) => egui::CursorIcon::NotAllowed,
-        (true, FormFieldKind::Text) => egui::CursorIcon::Text,
-        _ => egui::CursorIcon::PointingHand,
-    });
+    crate::canvas_cursor::set(
+        ui,
+        match (usable, f.kind) {
+            (false, _) => egui::CursorIcon::NotAllowed,
+            (true, FormFieldKind::Text) => egui::CursorIcon::Text,
+            _ => egui::CursorIcon::PointingHand,
+        },
+    );
     // A text field opens on the press rather than the click, so a drag that starts on it
     // selects its text (#2213).
     let pressed = f.kind == FormFieldKind::Text && usable && resp.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed());

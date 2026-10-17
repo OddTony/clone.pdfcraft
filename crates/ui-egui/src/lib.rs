@@ -77,6 +77,7 @@ pub use sign_ui::{DigitalIdEntry, SignDraft, SignGraphic, SignStep};
 mod autoscroll;
 mod bidi;
 pub mod bulk_fields;
+mod canvas_cursor;
 mod dialogs;
 mod edit_text_ui;
 pub use edit_text_ui::CropMode;

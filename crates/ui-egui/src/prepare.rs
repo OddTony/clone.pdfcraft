@@ -304,7 +304,7 @@ pub(crate) fn page_input(
         return out;
     }
     if let Some(tool) = tool {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
         if resp.drag_started() || resp.clicked() {
             let origin = ui.input(|i| i.pointer.press_origin()).filter(|o| xf.rect.contains(*o)).unwrap_or(p);
             prep.grab = Some((page, Grab::Draw(origin), origin));
@@ -352,9 +352,9 @@ pub(crate) fn page_input(
         f.widgets.iter().enumerate().find(|(_, w)| w.page == Some(page) && screen_rect(xf, info, page, w.rect).contains(p)).map(|(i, _)| (f, i))
     });
     if let Some((_, left, top)) = corner {
-        ui.ctx().set_cursor_icon(if left == top { egui::CursorIcon::ResizeNwSe } else { egui::CursorIcon::ResizeNeSw });
+        crate::canvas_cursor::set(ui, if left == top { egui::CursorIcon::ResizeNwSe } else { egui::CursorIcon::ResizeNeSw });
     } else if hit.is_some() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Move);
     }
     if resp.drag_started() {
         let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(p);

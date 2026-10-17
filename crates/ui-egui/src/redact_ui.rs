@@ -260,7 +260,7 @@ pub(crate) fn page_input(
     }
     let Some(p) = pointer.filter(|p| xf.rect.contains(*p)) else { return false };
     if !over_text(p) {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
     }
     if resp.drag_started() {
         let origin = ui.input(|i| i.pointer.press_origin()).unwrap_or(p);

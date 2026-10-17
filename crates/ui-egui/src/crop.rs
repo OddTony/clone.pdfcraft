@@ -29,7 +29,7 @@ pub(crate) fn page_input(
     let pointer = ui.input(|i| i.pointer.hover_pos());
     let origin = ui.input(|i| i.pointer.press_origin());
     if pointer.is_some_and(|p| xf.rect.contains(p)) {
-        ui.ctx().set_cursor_icon(if allowed { egui::CursorIcon::Crosshair } else { egui::CursorIcon::NotAllowed });
+        crate::canvas_cursor::set(ui, if allowed { egui::CursorIcon::Crosshair } else { egui::CursorIcon::NotAllowed });
     }
     if !allowed {
         return false;

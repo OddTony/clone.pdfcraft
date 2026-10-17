@@ -159,7 +159,7 @@ impl AutoScroll {
     /// Draw an original geometric marker at the activation point, above page content.
     pub(crate) fn paint(&self, ui: &egui::Ui, viewport: egui::Rect) {
         if self.drag.is_some() {
-            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            crate::canvas_cursor::set(ui, CursorIcon::Grabbing);
             return;
         }
         let Some(anchor) = self.anchor else { return };
@@ -174,7 +174,7 @@ impl AutoScroll {
                 Stroke::NONE,
             ));
         }
-        ui.ctx().set_cursor_icon(CursorIcon::ResizeVertical);
+        crate::canvas_cursor::set(ui, CursorIcon::ResizeVertical);
     }
 
     /// Escape belongs to autoscroll first, leaving selection/find/full-screen intact.

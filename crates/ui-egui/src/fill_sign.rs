@@ -642,10 +642,10 @@ pub(crate) fn page_input(
         if let Some(rect) = image.rect(p, at, tool == FillTool::Initials) {
             let tex = image_texture(ui, image, preview);
             xf.paint_user_image(ui.painter(), tex, p, rect, i64::from(p.rotation), Color32::WHITE);
-            ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+            crate::canvas_cursor::set(ui, egui::CursorIcon::None);
         }
     } else {
-        ui.ctx().set_cursor_icon(if tool == FillTool::Text { egui::CursorIcon::Text } else { egui::CursorIcon::Crosshair });
+        crate::canvas_cursor::set(ui, if tool == FillTool::Text { egui::CursorIcon::Text } else { egui::CursorIcon::Crosshair });
     }
     if !resp.clicked() {
         return None;
@@ -997,7 +997,7 @@ fn scan_tab(
             Some(p) if fr.contains(p) => egui::CursorIcon::Grab,
             _ => egui::CursorIcon::Crosshair,
         };
-        ui.ctx().set_cursor_icon(icon);
+        crate::canvas_cursor::set(ui, icon);
     }
 
     ui.add_space(6.0);

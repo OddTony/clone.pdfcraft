@@ -155,7 +155,7 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, p
     let pointer = ui.input(|i| i.pointer.hover_pos());
     let origin = ui.input(|i| i.pointer.press_origin());
     if pointer.is_some_and(|p| xf.rect.contains(p)) {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+        crate::canvas_cursor::set(ui, egui::CursorIcon::Crosshair);
     }
     if resp.drag_started()
         && let Some(o) = origin.filter(|o| xf.rect.contains(*o))
