@@ -2657,3 +2657,107 @@ fn a_chain_of_objects_too_deep_to_copy_is_refused_and_leaves_the_destination_alo
         .join();
     assert!(run.is_ok(), "the copy must not overflow the stack");
 }
+
+// ── document-level attachments (attach.rs) ──────────────────────────────────────────────────
+
+fn tree_keys(doc: &Document) -> Vec<String> {
+    let names = doc.resolve(catalog(doc).get(b"Names").unwrap()).as_dict().cloned().unwrap();
+    let mut out = Vec::new();
+    let mut stack = vec![names.get(b"EmbeddedFiles").unwrap().clone()];
+    while let Some(n) = stack.pop() {
+        let d = doc.resolve(&n).as_dict().cloned().unwrap();
+        if let Some(p) = d.get(b"Names").map(|n| doc.resolve(n)).and_then(|n| n.as_array().cloned()) {
+            out.extend(p.chunks(2).map(|c| c[0].as_string().unwrap().to_text()));
+        }
+        if let Some(k) = d.get(b"Kids").map(|n| doc.resolve(n)).and_then(|n| n.as_array().cloned()) {
+            stack.extend(k.into_iter().rev());
+        }
+    }
+    out
+}
+
+#[test]
+fn attach_to_a_document_without_a_tree_creates_one_with_filespec_and_stream() {
+    let mut doc = open(fixture());
+    let name = attach_file(&mut doc, "/tmp/some dir/notes.txt", b"hello", "my notes", Some("D:20260101000000Z")).unwrap();
+    assert_eq!(name, "notes.txt");
+    let out = full_roundtrip(&doc);
+    assert_eq!(tree_keys(&out), vec!["notes.txt"]);
+    let names = out.resolve(catalog(&out).get(b"Names").unwrap()).as_dict().cloned().unwrap();
+    let leaf = out.resolve(names.get(b"EmbeddedFiles").unwrap()).as_dict().cloned().unwrap();
+    let fs = out.resolve(&leaf.get(b"Names").and_then(|n| n.as_array()).unwrap()[1]).as_dict().cloned().unwrap();
+    assert_eq!(fs.name(b"Type"), Some(&b"Filespec"[..]));
+    assert_eq!(fs.get(b"UF").and_then(|o| o.as_string()).unwrap().to_text(), "notes.txt");
+    assert_eq!(fs.get(b"Desc").and_then(|o| o.as_string()).unwrap().to_text(), "my notes");
+    assert_eq!(fs.name(b"AFRelationship"), Some(&b"Unspecified"[..]));
+    let efd = out.resolve(fs.get(b"EF").unwrap()).as_dict().cloned().unwrap();
+    let s = out.resolve(efd.get(b"F").unwrap());
+    let sd = s.as_dict().cloned().unwrap();
+    assert_eq!(sd.name(b"Subtype"), Some(&b"text/plain"[..]));
+    let params = out.resolve(sd.get(b"Params").unwrap()).as_dict().cloned().unwrap();
+    assert_eq!(params.get(b"Size").and_then(|o| o.as_int()), Some(5));
+    // MD5 of "hello".
+    let sum: String = params.get(b"CheckSum").and_then(|o| o.as_string()).unwrap().bytes.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(sum, "5d41402abc4b2a76b9719d911017c592");
+}
+
+#[test]
+fn a_second_attachment_extends_the_tree_in_sorted_order_and_names_stay_unique() {
+    let mut doc = open(fixture());
+    attach_file(&mut doc, "m.txt", b"1", "", None).unwrap();
+    attach_file(&mut doc, "z.txt", b"2", "", None).unwrap();
+    attach_file(&mut doc, "a.txt", b"3", "", None).unwrap();
+    assert_eq!(attach_file(&mut doc, "m.txt", b"4", "", None).unwrap(), "m.txt (2)");
+    assert_eq!(tree_keys(&full_roundtrip(&doc)), vec!["a.txt", "m.txt", "m.txt (2)", "z.txt"]);
+}
+
+#[test]
+fn attach_into_an_existing_kids_tree_files_the_key_in_the_covering_leaf() {
+    // doc_c's tree is a leaf; build one with /Kids and /Limits by hand.
+    let b: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 4 0 R >> >>".into(), // 1
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".into(),   // 2
+        "<< /Type /Page /Parent 2 0 R >>".into(),                                     // 3
+        "<< /Kids [5 0 R 6 0 R] >>".into(),                                           // 4
+        "<< /Limits [(b) (d)] /Names [(b) (x) (d) (x)] >>".into(),                    // 5
+        "<< /Limits [(m) (p)] /Names [(m) (x) (p) (x)] >>".into(),                    // 6
+    ];
+    let mut doc = open(build(&b, "/Root 1 0 R"));
+    attach_file(&mut doc, "c", b"1", "", None).unwrap(); // into leaf 5
+    attach_file(&mut doc, "a", b"1", "", None).unwrap(); // before every key: first leaf, widens Limits
+    attach_file(&mut doc, "z", b"1", "", None).unwrap(); // past every key: last leaf
+    let out = full_roundtrip(&doc);
+    assert_eq!(tree_keys(&out), vec!["a", "b", "c", "d", "m", "p", "z"]);
+    let root =
+        out.resolve(out.resolve(catalog(&out).get(b"Names").unwrap()).as_dict().unwrap().get(b"EmbeddedFiles").unwrap()).as_dict().cloned().unwrap();
+    assert_eq!(root.get(b"Kids").and_then(|k| k.as_array()).map(|k| k.len()), Some(2), "the kids tree keeps its shape");
+    let limits = |i: usize| -> Vec<String> {
+        let kid = out.resolve(&root.get(b"Kids").unwrap().as_array().unwrap()[i]).as_dict().cloned().unwrap();
+        kid.get(b"Limits").unwrap().as_array().unwrap().iter().map(|l| l.as_string().unwrap().to_text()).collect()
+    };
+    assert_eq!(limits(0), vec!["a", "d"]);
+    assert_eq!(limits(1), vec!["m", "z"]);
+}
+
+#[test]
+fn detach_removes_the_entry_then_the_emptied_tree() {
+    let mut doc = open(fixture());
+    attach_file(&mut doc, "one.txt", b"1", "", None).unwrap();
+    attach_file(&mut doc, "two.txt", b"2", "", None).unwrap();
+    detach_file(&mut doc, "one.txt").unwrap();
+    assert_eq!(tree_keys(&full_roundtrip(&doc)), vec!["two.txt"]);
+    assert!(detach_file(&mut doc, "one.txt").is_err(), "already gone");
+    detach_file(&mut doc, "two.txt").unwrap();
+    assert!(!catalog(&full_roundtrip(&doc)).contains(b"Names"), "no empty /Names left behind");
+    assert!(detach_file(&mut doc, "two.txt").is_err());
+}
+
+#[test]
+fn attach_keeps_other_name_trees() {
+    let mut doc = doc_c();
+    attach_file(&mut doc, "b.txt", b"1", "", None).unwrap();
+    let out = full_roundtrip(&doc);
+    assert_eq!(tree_keys(&out), vec!["b.txt", "notes.txt"]);
+    let names = out.resolve(catalog(&out).get(b"Names").unwrap()).as_dict().cloned().unwrap();
+    assert!(names.contains(b"Dests"));
+}

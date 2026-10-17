@@ -5801,3 +5801,21 @@ fn cropping_an_existing_image_clips_it_and_moves_with_it() {
     // No area, or a box off the image, is refused.
     assert!(s.apply(id, Edit::EditPageImage { page: 0, index: 0, change: ImageEdit::Crop([10.0, 10.0, 10.0, 50.0]) }).is_err());
 }
+
+#[test]
+fn attach_file_round_trips_through_the_inspect_lister_and_undo() {
+    let (mut s, id) = session_with(1);
+    s.apply(id, Edit::AttachFile { name: "data.csv".into(), bytes: Arc::new(b"a,b\n1,2\n".to_vec()), description: "numbers".into() }).unwrap();
+    let saved = s.save_bytes(id).unwrap();
+    let info = pdfcraft_render::inspect(saved.clone(), None).unwrap();
+    assert_eq!(info.attachments.len(), 1);
+    let a = &info.attachments[0];
+    assert_eq!((a.name.as_str(), a.description.as_deref(), a.size), ("data.csv", Some("numbers"), Some(8)));
+    assert_eq!(pdfcraft_render::attachment_data(&saved, None, a).unwrap(), b"a,b\n1,2\n");
+    // Detach through the engine, then undo brings it back.
+    s.apply(id, Edit::DetachFile { name: "data.csv".into() }).unwrap();
+    assert!(pdfcraft_render::inspect(s.save_bytes(id).unwrap(), None).unwrap().attachments.is_empty());
+    assert!(s.apply(id, Edit::DetachFile { name: "data.csv".into() }).is_err());
+    s.undo(id).unwrap();
+    assert_eq!(pdfcraft_render::inspect(s.save_bytes(id).unwrap(), None).unwrap().attachments.len(), 1);
+}

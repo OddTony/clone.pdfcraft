@@ -420,7 +420,8 @@ fn page_list(s: &str) -> Result<Vec<usize>, String> {
 }
 
 /// The options `edit` understands, for its "unknown option" message.
-const EDIT_OPTIONS: &str = "--out, --password, --full, --rotate, --delete, --move, --insert-blank, --title, --author, --attach, --attach-desc, --detach";
+const EDIT_OPTIONS: &str =
+    "--out, --password, --full, --rotate, --delete, --move, --insert-blank, --title, --author, --attach, --attach-desc, --detach";
 
 /// Apply page and metadata edits through the engine and save (incrementally unless `--full`).
 ///

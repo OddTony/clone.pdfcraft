@@ -436,6 +436,8 @@ impl PdfCraftApp {
             }
             "edit.image" => self.add_image_dialog(),
             "edit.attach" => self.attach_file_dialog(),
+            // Removing is per file, in the Attachments panel.
+            "edit.detach" => self.choose_right_panel(Some(crate::RightPanel::Attachments)),
             "edit.link" => {
                 self.quick_tool = crate::QuickTool::Link;
                 self.notify_tr("Drag a rectangle to create a link; double-click a link to edit it");
