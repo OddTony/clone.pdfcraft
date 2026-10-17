@@ -242,7 +242,8 @@ fn read_inner(r: &mut Reader<'_>) -> Option<Number> {
         let mut exp_val: i32 = 0;
         let mut exp_digits = false;
         while let Some(b'0'..=b'9') = r.peek_byte() {
-            let d = (r.read_byte().unwrap() - b'0') as i32;
+            let Some(byte) = r.read_byte() else { break };
+            let d = (byte - b'0') as i32;
             exp_digits = true;
             exp_val = exp_val.saturating_mul(10).saturating_add(d);
         }

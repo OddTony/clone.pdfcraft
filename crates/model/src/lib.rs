@@ -321,6 +321,38 @@ mod tests {
         assert_eq!(pages(&d)[0].rotation(&d), 270);
     }
 
+    #[test]
+    fn overflowing_page_box_is_preserved_or_save_is_refused() {
+        use pdfcraft_cos::{SaveOptions, write_full, write_incremental};
+        for bounds in ["0 0 1e400 1e400", "-1e400 -1e400 0 0"] {
+            let mut d = doc_with(0, "", &format!("/MediaBox [{bounds}] /CropBox [{bounds}]"));
+            let source = d.bytes().clone();
+            let before = pages(&d)[0].display_size(&d);
+            assert_eq!(before, (f64::MAX, f64::MAX));
+            // Unmodified page objects stay byte-for-byte in the original revision.
+            let bytes = write_incremental(&d, &Default::default()).unwrap();
+            assert!(bytes.starts_with(&source));
+            let reopened = Document::open(Arc::new(bytes)).unwrap();
+            assert_eq!(pages(&reopened)[0].display_size(&reopened), before);
+            for object_streams in [false, true] {
+                assert!(write_full(&d, &SaveOptions { object_streams, ..Default::default() }).is_err());
+            }
+            let page = pages(&d)[0].obj;
+            d.update_dict(page, |dict| dict.set(b"Rotate".to_vec(), Object::Int(90))).unwrap();
+            assert!(write_incremental(&d, &Default::default()).is_err());
+            assert_eq!(d.bytes(), &source, "failed save must leave source bytes alone");
+            assert_eq!(pages(&d)[0].rotation(&d), 90, "failed save must keep edits");
+            assert_eq!(pages(&d)[0].display_size(&d), before);
+        }
+        // Representable huge boxes still round-trip through both full-save formats.
+        let d = doc_with(0, "", "/MediaBox [0 0 1e30 2e30] /CropBox [0 0 1e30 2e30] /UserUnit 75000");
+        for object_streams in [false, true] {
+            let bytes = write_full(&d, &SaveOptions { object_streams, ..Default::default() }).unwrap();
+            let reopened = Document::open(Arc::new(bytes)).unwrap();
+            assert_eq!(pages(&reopened)[0].display_size(&reopened), pages(&d)[0].display_size(&d));
+        }
+    }
+
     /// Display space is in points: `/UserUnit 2` doubles it. As in Acrobat, the value isn't
     /// inherited, values below 1 or not numbers count as 1, and values over 75,000 as 75,000.
     #[test]
