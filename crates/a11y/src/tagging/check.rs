@@ -1,8 +1,9 @@
 //! What every tagging operation must leave true, as a list of problems (ISO 32000-2 §14.7.4,
 //! §14.7.5.4): each tag's `/P` names what lists it, each content item an indirect tag owns has a
 //! parent-tree entry pointing back at it and is drawn on its page, no parent-tree entry points
-//! at a tag that doesn't own the content, MCIDs are unique on a page, `/ParentTreeNextKey` is
-//! past every key, and every type is standard or role-mapped.
+//! at a tag that doesn't own the content, no two pages or annotations share a key, MCIDs are
+//! unique on a page, `/ParentTreeNextKey` is past every key, and every type is standard or
+//! role-mapped.
 
 use std::collections::{HashMap, HashSet};
 
@@ -98,6 +99,28 @@ pub fn structure_problems(doc: &Document) -> Vec<String> {
                 Some(Value::Single(Object::Ref(r))) if r == *tag => {}
                 other => out.push(format!("the parent tree maps object {object} (key {key}) to {other:?}, not its tag {tag}")),
             },
+        }
+    }
+    // Each key belongs to one page or annotation.
+    let mut users: HashMap<i64, String> = HashMap::new();
+    let mut annotations: HashSet<ObjRef> = HashSet::new();
+    let mut claim = |key: i64, user: String| match users.get(&key) {
+        Some(first) => out.push(format!("parent tree key {key} is used by both {first} and {user}")),
+        None => {
+            users.insert(key, user);
+        }
+    };
+    for page in &pages {
+        if let Some(key) = key_of(page.obj, b"StructParents") {
+            claim(key, format!("page {}", page_no(page.obj)));
+        }
+        let annots = page.dict.get(b"Annots").map(|a| copy.resolve(a)).and_then(|a| a.as_array().cloned()).unwrap_or_default();
+        for annot in annots.iter().filter_map(Object::as_ref) {
+            if annotations.insert(annot)
+                && let Some(key) = key_of(annot, b"StructParent")
+            {
+                claim(key, format!("object {annot}"));
+            }
         }
     }
     // No parent-tree entry points at a tag that doesn't own the content.

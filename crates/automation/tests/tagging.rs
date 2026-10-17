@@ -224,3 +224,48 @@ fn tags_panel_tools_add_move_delete_and_artifact_tags() {
     assert_eq!(problems, Vec::<String>::new());
     assert_eq!(after, before);
 }
+
+/// A tagged form in a layout field tagging used to refuse: the root's /K an array, the parent
+/// tree split into a leaf with /Limits whose page array is indirect, and no /ParentTreeNextKey.
+fn tagged_form() -> Vec<u8> {
+    pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 6 0 R /AcroForm << /Fields [11 0 R 12 0 R] >> >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 4 0 R /StructParents 0 /Annots [11 0 R 12 0 R] /Resources << /Font << /F1 5 0 R >> >> >>"
+            .into(),
+        stream("/H1 << /MCID 0 >> BDC BT /F1 16 Tf 20 260 Td (Sign up) Tj ET EMC\n/P << /MCID 1 >> BDC BT /F1 10 Tf 20 230 Td (Name and email) Tj ET EMC"),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into(),
+        "<< /Type /StructTreeRoot /K [7 0 R] /ParentTree 10 0 R >>".into(),
+        "<< /Type /StructElem /S /Document /P 6 0 R /K [8 0 R 9 0 R] >>".into(),
+        "<< /Type /StructElem /S /H1 /P 7 0 R /Pg 3 0 R /K 0 >>".into(),
+        "<< /Type /StructElem /S /P /P 7 0 R /Pg 3 0 R /K 1 >>".into(),
+        "<< /Kids [13 0 R] >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [20 200 140 215] /P 3 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (email) /Rect [160 200 280 215] /P 3 0 R >>".into(),
+        "<< /Limits [0 0] /Nums [0 14 0 R] >>".into(),
+        "[8 0 R 9 0 R]".into(),
+    ])
+}
+
+#[test]
+fn form_fields_are_tagged_into_an_existing_tag_tree_end_to_end() {
+    let dir = workdir("form");
+    std::fs::write(dir.join("in.pdf"), tagged_form()).unwrap();
+    let before = saved_state(&dir.join("in.pdf")).1;
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "in.pdf" }))["doc"].as_u64().unwrap();
+    let tagged = ok(&mut a, "accessibility_autotag_form_fields", json!({ "doc": doc }));
+    assert_eq!((tagged["status"].as_str(), tagged["remaining_findings"].as_u64()), (Some("passed"), Some(0)), "{tagged}");
+    let order = ok(&mut a, "accessibility_reading_order", json!({ "doc": doc, "page": 1 }));
+    let types: Vec<&str> = order["regions"].as_array().unwrap().iter().map(|r| r["type"].as_str().unwrap()).collect();
+    assert_eq!(types, ["H1", "P", "Form", "Form"], "after the page's content, in /Annots order");
+    assert!(matches!(a.call("accessibility_autotag_form_fields", &json!({ "doc": doc })), Err(ToolError::Failed(_))), "nothing is left to tag");
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "out.pdf" }));
+    let (problems, after) = saved_state(&dir.join("out.pdf"));
+    assert_eq!(problems, Vec::<String>::new());
+    assert_eq!(after, before, "the page draws what it drew");
+    let reopened = ok(&mut a, "doc_open", json!({ "path": "out.pdf" }))["doc"].as_u64().unwrap();
+    let check = ok(&mut a, "accessibility_check", json!({ "doc": reopened, "rules": ["tagged-pdf", "tagged-form-fields"] }));
+    assert_eq!(check["failed"], 0, "{check}");
+    assert_eq!(ok(&mut a, "edit_undo", json!({ "doc": doc }))["undone"], "Tag form fields");
+}

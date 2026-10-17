@@ -1513,7 +1513,8 @@ pub enum Edit {
         figure: u32,
         alt: Option<String>,
     },
-    /// Add `/Form` tags and object references for all widgets in an untagged AcroForm.
+    /// Add `/Form` tags, object references and parent-tree entries for every page widget no tag
+    /// references, in any tag-tree layout.
     AutoTagFormFields,
     /// Change one property on a reachable indirect structure tag.
     SetTagProperty {
@@ -2553,7 +2554,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             a11y::set_alt(doc, r, alt.as_deref()).map_err(|e| EditError::Accessibility(e.to_string()))?;
         }
         Edit::AutoTagFormFields => {
-            a11y::tag_form_fields(doc).map_err(EditError::Accessibility)?;
+            a11y::tag_form_fields(doc).map_err(|e| EditError::Accessibility(e.to_string()))?;
         }
         Edit::SetTagProperty { object, property, value } => {
             a11y::set_tag_property(doc, *object, *property, value.as_deref()).map_err(|e| EditError::Accessibility(e.to_string()))?;

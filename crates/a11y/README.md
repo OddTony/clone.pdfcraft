@@ -34,6 +34,7 @@ content_to_artifact(&mut doc, 0, &Selection::Rect([0.0, 0.0, 612.0, 40.0]))?;
 move_tag_to(&mut doc, tag, Destination::Before(other))?;  // any parent
 delete_tag(&mut doc, tag, /* keep_contents */ true)?;
 tag_to_artifact(&mut doc, tag)?;                          // the whole subtree
+tag_form_fields(&mut doc)?;                               // a Form tag per untagged widget
 assert!(structure_problems(&doc).is_empty());
 ```
 
@@ -45,9 +46,14 @@ assert!(structure_problems(&doc).is_empty());
   changed.
 - The **parent tree** is read and extended in any number-tree layout (flat `/Nums`, `/Kids` with
   `/Limits`, indirect arrays, a direct root); every edit keeps `/P`, parent-tree entries, MCIDs
-  and `/ParentTreeNextKey` consistent, and new types must be standard or role-mapped.
+  and `/ParentTreeNextKey` consistent, and new types must be standard or role-mapped. New keys
+  skip every key a page or annotation already uses, listed in the tree or not.
+- **Form fields** (`tag_form_fields`): every page widget no tag references gets a `/Form` tag
+  with an object reference, after its page's tagged content; a widget a tag already references
+  but whose `/StructParent` doesn't lead back is linked to that tag instead.
 - Edits work on a copy and refuse what they can't do safely (a tag listed twice or stored
   inline, content in a form XObject, nested tagged content, a page whose content can't be
   decoded exactly), changing nothing.
 
-Not yet: automatic tagging of mixed content, the table editor, artifact types.
+Not yet: automatic tagging of mixed content, form-field tags placed next to their labels, the
+table editor, artifact types.

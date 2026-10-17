@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (gap 11: Tag form fields extends any tag-tree layout; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gap 11: the Tags panel's structural edits and the Reading Order tool ship; 40–70 h → 25–50 h) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -200,11 +201,10 @@ update the numbers.
 
 ### 11. Accessibility: no mixed-content auto-tag, table editor or Make Accessible
 
-- **Missing:** automatic tagging of mixed content (Apply still refuses it and existing tags), tag
-  fields into structure trees with unusual layouts (`Tag form fields` extends only a direct
-  Document root with a direct ParentTree Nums array), the table editor, artifact types, a
-  document-wide Order panel, the Make Accessible action, Read Out Loud; full keyboard operation
-  of PdfCraft itself and a screen-reader audit.
+- **Missing:** automatic tagging of mixed content (Apply still refuses it and existing tags),
+  form-field tags placed next to their labels (`Tag form fields` puts them after the page's
+  content), the table editor, artifact types, a document-wide Order panel, the Make Accessible
+  action, Read Out Loud; full keyboard operation of PdfCraft itself and a screen-reader audit.
 - **Evidence:** all 32 checker rules, figure alt text and a bounded auto-tag preview exist, and
   Apply writes valid structure for text-only files. The Tags panel adds, deletes, moves (drag and
   drop, across parents), retypes and turns whole subtrees into artifacts, highlights a tag's
@@ -212,7 +212,8 @@ update the numbers.
   H1–H6, Figure, Table, List or artifact and reorders the numbered regions. Both keep `/P`, the
   parent tree (flat or `/Kids`, direct or indirect arrays), MCIDs and the role map consistent on
   every edit, refuse what they can't do safely, and are covered by property tests over random
-  edit sequences; `a11y.keyboard-only` (P0) planned, `a11y.app-screen-reader` partial.
+  edit sequences. `Tag form fields` tags every untagged widget in any of those layouts too;
+  `a11y.keyboard-only` (P0) planned, `a11y.app-screen-reader` partial.
 - **Impact:** untagged and badly tagged files can be fixed by hand in PdfCraft, but not tagged in
   one step; PdfCraft itself is not yet usable without a mouse.
 - **Estimate:** 25–50 h. **Doc:** [target-app-parity.md](target-app-parity.md).
@@ -383,6 +384,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-17 | minor | Gap 11: Tag form fields extends any tag-tree layout the Tags panel reads (a root in the catalog, several top tags, indirect arrays, a parent tree with /Kids), links widgets a tag already references instead of tagging them twice, and skips parent-tree keys that pages and annotations already use. Field tags still go after the page's content, not next to their labels. Estimates unchanged. |
 | 2026-10-16 | minor | Gap 11: the Tags panel adds, deletes, moves (across parents, by drag and drop), retypes and turns subtrees into artifacts with highlight both ways, and the Reading Order tool tags selected content and reorders regions, all keeping the parent tree consistent in any layout. Mixed-content auto-tag, the table editor and Make Accessible remain; 40–70 h → 25–50 h. |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |

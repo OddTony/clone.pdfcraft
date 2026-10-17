@@ -13,6 +13,7 @@
 
 mod check;
 mod content;
+mod fields;
 mod parent_tree;
 mod tree;
 
@@ -26,6 +27,7 @@ use pdfcraft_cos::{CosError, Dict, Document, ObjRef, Object, PdfString};
 pub use check::structure_problems;
 pub use content::UnitKind;
 use content::{Mark, PageContent, Source, Unit};
+pub use fields::tag_form_fields;
 use parent_tree::ParentTree;
 use tree::{Container, Kid, Node, Owner, Tree, classify, kid_items};
 
@@ -181,6 +183,12 @@ pub enum TaggingError {
     NotAnAnnotation(usize),
     #[error("the annotation already has a tag")]
     AlreadyTagged,
+    #[error("the PDF has no form fields")]
+    NoForm,
+    #[error("the form has no untagged fields on its pages")]
+    NoUntaggedFields,
+    #[error("{0} form field(s) are referenced by an inline tag or by more than one tag, so they can't be linked safely; every other field has a tag")]
+    FieldsNotLinkable(usize),
     #[error("the structure parent tree can't be updated: {0}")]
     ParentTree(String),
     #[error("the tag tree is too large to edit")]
@@ -431,10 +439,27 @@ fn ensure_structure(doc: &mut Document, create: bool) -> Result<ObjRef, TaggingE
     Ok(root)
 }
 
+/// The parent tree, handing out no key a page or annotation already uses.
 fn parent_tree(doc: &Document, root: ObjRef) -> Result<ParentTree, TaggingError> {
     let dict = doc.get(root).as_dict().cloned().ok_or(TaggingError::Untagged)?;
     let pt = dict.get(b"ParentTree").and_then(Object::as_ref).ok_or_else(|| pt_error("it is missing".into()))?;
-    Ok(ParentTree::read(doc, pt, dict.get(b"ParentTreeNextKey").and_then(Object::as_int)))
+    let mut tree = ParentTree::read(doc, pt, dict.get(b"ParentTreeNextKey").and_then(Object::as_int));
+    tree.avoid(keys_in_use(doc));
+    Ok(tree)
+}
+
+/// The parent-tree keys of the pages (`/StructParents`) and their annotations (`/StructParent`),
+/// listed in the tree or not.
+fn keys_in_use(doc: &Document) -> Vec<i64> {
+    let mut keys = Vec::new();
+    for page in pdfcraft_model::pages(doc) {
+        keys.extend(page.dict.get(b"StructParents").and_then(Object::as_int));
+        let annots = page.dict.get(b"Annots").map(|a| doc.resolve(a)).and_then(|a| a.as_array().cloned()).unwrap_or_default();
+        for annot in &annots {
+            keys.extend(doc.resolve(annot).as_dict().and_then(|d| d.get(b"StructParent").and_then(Object::as_int)));
+        }
+    }
+    keys
 }
 
 fn save_next_key(doc: &mut Document, root: ObjRef, pt: &ParentTree) -> Result<(), TaggingError> {
@@ -1100,30 +1125,38 @@ pub fn tag_annotation(doc: &mut Document, page: usize, annotation: ObjRef, dest:
     };
     let dest = match dest {
         Some(d) => d,
-        None => {
-            // After the last tag that owns content on this page, else by page order.
-            let content = PageContent::read(&next, p);
-            let listing = describe(&next, &tree, p, &content, &content.units());
-            match listing.regions.last().map(|r| climb_cells(&next, &tree, r.tag)).filter(|t| editable(&tree, *t).is_ok()) {
-                Some(t) => Destination::After(t),
-                None => auto_destination(&next, &tree, &pages, page, &[], &[]),
-            }
-        }
+        None => after_page_content(&next, &tree, p).unwrap_or_else(|| auto_destination(&next, &tree, &pages, page, &[], &[])),
     };
     let (container, index) = resolve_destination(&tree, &next, root, dest, None)?;
     let parent = container_ref(root, container).ok_or(TaggingError::InlineParent(root))?;
     let mut pt = parent_tree(&next, root)?;
     let key = pt.allocate().map_err(pt_error)?;
-    let mut objr = Dict::new();
-    objr.set(b"Type".to_vec(), Object::name("OBJR"));
-    objr.set(b"Obj".to_vec(), Object::Ref(annotation));
-    objr.set(b"Pg".to_vec(), Object::Ref(p.obj));
-    let tag = next.add(Object::Dict(element(kind, parent, Some(p.obj), vec![Object::Dict(objr)])));
-    next.update_dict(annotation, |d| d.set(b"StructParent".to_vec(), Object::Int(key)))?;
+    let tag = annotation_tag(&mut next, kind, parent, p.obj, annotation, key)?;
     pt.set_single(&mut next, key, Object::Ref(tag)).map_err(pt_error)?;
     insert_kid(&mut next, root, container, index, Object::Ref(tag))?;
     save_next_key(&mut next, root, &pt)?;
     *doc = next;
+    Ok(tag)
+}
+
+/// Just after the last tag that owns content on the page (out of table and list internals), when
+/// that tag can be edited: where a new annotation tag goes by default.
+fn after_page_content(doc: &Document, tree: &Tree, page: &pdfcraft_model::Page) -> Option<Destination> {
+    let content = PageContent::read(doc, page);
+    let listing = describe(doc, tree, page, &content, &content.units());
+    listing.regions.last().map(|r| climb_cells(doc, tree, r.tag)).filter(|t| editable(tree, *t).is_ok()).map(Destination::After)
+}
+
+/// A new tag of `kind` under `parent` holding an object reference to `annotation` on `page`,
+/// with the annotation's `/StructParent` set to `key`. The caller lists the tag in its parent
+/// and points `key` at it in the parent tree.
+fn annotation_tag(doc: &mut Document, kind: &str, parent: ObjRef, page: ObjRef, annotation: ObjRef, key: i64) -> Result<ObjRef, TaggingError> {
+    let mut objr = Dict::new();
+    objr.set(b"Type".to_vec(), Object::name("OBJR"));
+    objr.set(b"Obj".to_vec(), Object::Ref(annotation));
+    objr.set(b"Pg".to_vec(), Object::Ref(page));
+    let tag = doc.add(Object::Dict(element(kind, parent, Some(page), vec![Object::Dict(objr)])));
+    doc.update_dict(annotation, |d| d.set(b"StructParent".to_vec(), Object::Int(key)))?;
     Ok(tag)
 }
 

@@ -26,6 +26,14 @@ struct Slot {
     value: Object,
 }
 
+/// A leaf that new keys go into.
+struct Leaf {
+    leaf: ObjRef,
+    /// The nodes above it, from the root.
+    path: Vec<ObjRef>,
+    pairs: Vec<(i64, Object)>,
+}
+
 /// What a key maps to.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Value {
@@ -42,6 +50,8 @@ pub(crate) struct ParentTree {
     duplicates: HashSet<i64>,
     /// Why keys can't be added (a layout the writer doesn't extend).
     fixed: Option<String>,
+    /// Keys a page or object uses although the tree doesn't list them: never handed out.
+    in_use: HashSet<i64>,
     /// The next unused key (`/ParentTreeNextKey`, or one past the greatest key).
     pub next_key: i64,
 }
@@ -58,7 +68,7 @@ impl ParentTree {
     /// Read the tree whose root node is `root`. `next_key` is the structure tree root's
     /// `/ParentTreeNextKey`.
     pub fn read(doc: &Document, root: ObjRef, next_key: Option<i64>) -> ParentTree {
-        let mut tree = ParentTree { root, slots: BTreeMap::new(), duplicates: HashSet::new(), fixed: None, next_key: 0 };
+        let mut tree = ParentTree { root, slots: BTreeMap::new(), duplicates: HashSet::new(), fixed: None, in_use: HashSet::new(), next_key: 0 };
         let mut seen = HashSet::new();
         let mut stack = vec![(root, 0usize)];
         while let Some((node, depth)) = stack.pop() {
@@ -122,9 +132,19 @@ impl ParentTree {
         }
     }
 
-    /// Hand out a fresh key.
+    /// Never hand out these keys: pages and objects use them although the tree may not list them
+    /// (a stale `/StructParent`, or a page whose entry is missing).
+    pub fn avoid(&mut self, keys: impl IntoIterator<Item = i64>) {
+        self.in_use.extend(keys.into_iter().filter(|k| *k >= 0));
+    }
+
+    /// Hand out a fresh key: one the tree doesn't list and nothing uses.
     pub fn allocate(&mut self) -> Result<i64, String> {
-        let key = self.next_key;
+        let mut key = self.next_key;
+        // Each step passes a distinct listed or used key, so this ends.
+        while self.slots.contains_key(&key) || self.in_use.contains(&key) {
+            key = key.checked_add(1).ok_or("the parent tree has no free key left")?;
+        }
         self.next_key = key.checked_add(1).ok_or("the parent tree has no free key left")?;
         Ok(key)
     }
@@ -161,7 +181,7 @@ impl ParentTree {
             None => {
                 let mut array = Vec::new();
                 place(&mut array)?;
-                self.insert(doc, key, Object::Array(array))
+                self.insert(doc, vec![(key, Object::Array(array))])
             }
             Some(slot) => match &slot.value {
                 Object::Array(a) => {
@@ -193,7 +213,7 @@ impl ParentTree {
         }
         match self.slots.get(&key).cloned() {
             None if matches!(value, Object::Null) => Ok(()),
-            None => self.insert(doc, key, value),
+            None => self.insert(doc, vec![(key, value)]),
             Some(slot) => {
                 if let Object::Ref(r) = &slot.value
                     && doc.get(*r).as_array().is_some()
@@ -222,38 +242,60 @@ impl ParentTree {
         Ok(())
     }
 
-    /// Add a new key: into the leaf its value belongs to, widening `/Limits` on the way down.
-    fn insert(&mut self, doc: &mut Document, key: i64, value: Object) -> Result<(), String> {
+    /// Point new keys at one element each (a fresh key per tagged annotation), writing each leaf
+    /// of the tree once however many of the keys go into it.
+    pub fn add_singles(&mut self, doc: &mut Document, entries: Vec<(i64, Object)>) -> Result<(), String> {
+        let mut keys = HashSet::new();
+        for (key, _) in &entries {
+            if self.slots.contains_key(key) || !keys.insert(*key) {
+                return Err(format!("key {key} is already in the parent tree"));
+            }
+        }
+        self.insert(doc, entries)
+    }
+
+    /// Add new keys: each into the leaf it belongs to, widening `/Limits` on the way down.
+    fn insert(&mut self, doc: &mut Document, entries: Vec<(i64, Object)>) -> Result<(), String> {
         if let Some(why) = &self.fixed {
             return Err(format!("the parent tree can't be extended: {why}"));
         }
+        let mut leaves: Vec<Leaf> = Vec::new();
+        for (key, value) in entries {
+            let (leaf, path) = self.leaf_for(doc, key)?;
+            match leaves.iter_mut().find(|l| l.leaf == leaf) {
+                Some(l) => l.pairs.push((key, value)),
+                None => leaves.push(Leaf { leaf, path, pairs: vec![(key, value)] }),
+            }
+        }
+        for Leaf { leaf, path, mut pairs } in leaves {
+            pairs.sort_by_key(|(key, _)| *key);
+            let (Some(low), Some(high)) = (pairs.first().map(|p| p.0), pairs.last().map(|p| p.0)) else { continue };
+            let (nums, holder) = doc.get(leaf).as_dict().and_then(|d| nums_of(doc, d)).unwrap_or_default();
+            let nums = merge(nums, pairs);
+            match holder {
+                Some(array) => doc.set(array, Object::Array(nums)),
+                None => doc.update_dict(leaf, |d| d.set(b"Nums".to_vec(), Object::Array(nums))).map_err(|e| e.to_string())?,
+            }
+            for n in path.iter().chain(std::iter::once(&leaf)) {
+                widen_limits(doc, *n, low, *n == self.root)?;
+                widen_limits(doc, *n, high, *n == self.root)?;
+            }
+        }
+        let in_use = std::mem::take(&mut self.in_use);
+        *self = ParentTree::read(doc, self.root, Some(self.next_key));
+        self.in_use = in_use;
+        Ok(())
+    }
+
+    /// The leaf a new key goes into, and the nodes above it.
+    fn leaf_for(&self, doc: &Document, key: i64) -> Result<(ObjRef, Vec<ObjRef>), String> {
         let mut node = self.root;
         let mut path: Vec<ObjRef> = Vec::new();
         for _ in 0..=MAX_DEPTH {
-            let Some(dict) = doc.get(node).as_dict().cloned() else { return Err("a parent tree node is missing".into()) };
+            let object = doc.get(node);
+            let Some(dict) = object.as_dict() else { return Err("a parent tree node is missing".into()) };
             let kids = dict.get(b"Kids").map(|k| doc.resolve(k)).and_then(|k| k.as_array().cloned()).filter(|k| !k.is_empty());
-            let Some(kids) = kids.filter(|_| !dict.contains(b"Nums")) else {
-                let (mut nums, holder) = nums_of(doc, &dict).unwrap_or_default();
-                // Whole pairs only; the new pair goes before the first greater key.
-                let mut at = nums.len() - nums.len() % 2;
-                for (i, [k, _]) in nums.as_chunks::<2>().0.iter().enumerate() {
-                    if k.as_int().is_some_and(|k| k > key) {
-                        at = i.saturating_mul(2);
-                        break;
-                    }
-                }
-                nums.insert(at.min(nums.len()), value);
-                nums.insert(at.min(nums.len()), Object::Int(key));
-                match holder {
-                    Some(array) => doc.set(array, Object::Array(nums)),
-                    None => doc.update_dict(node, |d| d.set(b"Nums".to_vec(), Object::Array(nums))).map_err(|e| e.to_string())?,
-                }
-                for n in path.iter().chain(std::iter::once(&node)) {
-                    widen_limits(doc, *n, key, *n == self.root)?;
-                }
-                *self = ParentTree::read(doc, self.root, Some(self.next_key));
-                return Ok(());
-            };
+            let Some(kids) = kids.filter(|_| !dict.contains(b"Nums")) else { return Ok((node, path)) };
             let mut choice = None;
             for kid in &kids {
                 let Some(r) = kid.as_ref() else { return Err("a node lists a kid that is not an indirect reference".into()) };
@@ -269,6 +311,32 @@ impl ParentTree {
         }
         Err("the parent tree is too deep".into())
     }
+}
+
+/// A leaf's `/Nums` with new pairs (in key order) added: each before the first greater key, and
+/// a stray value after the last whole pair kept last.
+fn merge(nums: Vec<Object>, pairs: Vec<(i64, Object)>) -> Vec<Object> {
+    let mut out = Vec::with_capacity(nums.len().saturating_add(pairs.len().saturating_mul(2)));
+    let mut pending = pairs.into_iter().peekable();
+    let mut items = nums.into_iter();
+    let mut stray = None;
+    while let Some(key) = items.next() {
+        let Some(value) = items.next() else {
+            stray = Some(key);
+            break;
+        };
+        if let Some(k) = key.as_int() {
+            while let Some((new, v)) = pending.next_if(|(new, _)| *new < k) {
+                out.extend([Object::Int(new), v]);
+            }
+        }
+        out.extend([key, value]);
+    }
+    for (new, v) in pending {
+        out.extend([Object::Int(new), v]);
+    }
+    out.extend(stray);
+    out
 }
 
 fn limits(doc: &Document, node: &Dict) -> Option<(i64, i64)> {

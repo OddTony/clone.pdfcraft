@@ -126,7 +126,11 @@ fn untagged() -> Document {
 /// A tagged page: Document › [P (MCID 0), Sect › [P (MCID 1), Figure (MCID 2)]], an artifact,
 /// untagged text and an untagged link.
 fn tagged() -> Document {
-    pdf(&[
+    pdf(&tagged_bodies())
+}
+
+fn tagged_bodies() -> Vec<String> {
+    vec![
         "<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 7 0 R >>".into(),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 4 0 R /StructParents 0 /Annots [14 0 R] \
@@ -149,7 +153,7 @@ fn tagged() -> Document {
         "<< /Type /StructElem /S /Figure /P 10 0 R /K 2 >>".into(),
         "<< /Nums [0 [9 0 R 11 0 R 12 0 R]] >>".into(),
         "<< /Type /Annot /Subtype /Link /Rect [20 85 90 100] /Border [0 0 0] >>".into(),
-    ])
+    ]
 }
 
 #[test]
@@ -431,7 +435,11 @@ fn annotations_get_tags_and_parent_tree_entries() {
 /// limits and indirect arrays, stored directly in the root; the root's /K a lone reference;
 /// marked-content references instead of integers; and no /ParentTreeNextKey.
 fn unusual() -> Document {
-    pdf(&[
+    pdf(&unusual_bodies())
+}
+
+fn unusual_bodies() -> Vec<String> {
+    vec![
         "<< /Type /Catalog /Pages 2 0 R /StructTreeRoot << /Type /StructTreeRoot /K 8 0 R /ParentTree << /Kids [13 0 R 15 0 R] >> >> >>".into(),
         "<< /Type /Pages /Kids [3 0 R 16 0 R] /Count 2 >>".into(),
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 4 0 R /StructParents 0 /Resources << /Font << /F1 5 0 R >> /XObject << /Im 6 0 R >> >> >>"
@@ -456,7 +464,7 @@ fn unusual() -> Document {
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 18 0 R /StructParents 1 /Resources << /Font << /F1 5 0 R >> >> >>".into(),
         "<< /Type /StructElem /S /P /P 8 0 R /Pg 16 0 R /K 0 >>".into(),
         stream("/P << /MCID 0 >> BDC BT /F1 12 Tf 20 260 Td (Page two) Tj ET EMC BT /F1 12 Tf 20 200 Td (More) Tj ET"),
-    ])
+    ]
 }
 
 #[test]
@@ -708,6 +716,198 @@ fn an_artifact_never_swallows_another_tags_content() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Form fields
+
+/// The form tag that references a widget, if exactly one does.
+fn form_of(doc: &Document, widget: ObjRef) -> Option<ObjRef> {
+    let tree = Tree::read(doc);
+    let tag = tree.object_owner(widget)?;
+    (tree.node(tag)?.dict.name(b"S") == Some(&b"Form"[..])).then_some(tag)
+}
+
+fn kids_of(doc: &Document, tag: ObjRef) -> Vec<ObjRef> {
+    kid_items(doc, doc.get(tag).as_dict().and_then(|d| d.get(b"K"))).iter().filter_map(Object::as_ref).collect()
+}
+
+fn fields_pass_the_checker(doc: &Document) -> bool {
+    let options = crate::Options { rules: [crate::Rule::TaggedPdf, crate::Rule::TaggedFormFields].into(), pages: None };
+    let report = crate::check(doc, &options);
+    [crate::Rule::TaggedPdf, crate::Rule::TaggedFormFields].iter().all(|r| report.result(*r).is_some_and(|x| x.status == crate::Status::Passed))
+}
+
+#[test]
+fn new_keys_skip_keys_pages_and_annotations_already_use() {
+    // A second link and a second page hold keys 1 and 2, which the parent tree doesn't list but
+    // would hand out next.
+    let mut b = tagged_bodies();
+    b[1] = "<< /Type /Pages /Kids [3 0 R 16 0 R] /Count 2 >>".into();
+    b[2] = b[2].replace("/Annots [14 0 R]", "/Annots [14 0 R 15 0 R]");
+    b.push("<< /Type /Annot /Subtype /Link /Rect [20 60 90 75] /StructParent 1 >>".into());
+    b.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /StructParents 2 >>".into());
+    let mut doc = pdf(&b);
+    consistent(&doc);
+    tag_annotation(&mut doc, 0, r(14), None).unwrap();
+    consistent(&doc);
+    assert_eq!(doc.get(r(14)).as_dict().unwrap().int(b"StructParent"), Some(3));
+    assert_eq!(doc.get(r(7)).as_dict().unwrap().int(b"ParentTreeNextKey"), Some(4));
+}
+
+/// [`unusual`] with a text field on each page.
+fn unusual_form() -> Document {
+    let mut b = unusual_bodies();
+    b[0] = b[0].replace("<< /Type /Catalog /Pages 2 0 R", "<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [19 0 R 20 0 R] >>");
+    b[2] = b[2].replace("/StructParents 0", "/StructParents 0 /Annots [19 0 R]");
+    b[15] = b[15].replace("/StructParents 1", "/StructParents 1 /Annots [20 0 R]");
+    b.push("<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [150 85 280 100] /P 3 0 R >>".into());
+    b.push("<< /Type /Annot /Subtype /Widget /FT /Tx /T (city) /Rect [150 195 280 210] /P 16 0 R >>".into());
+    pdf(&b)
+}
+
+#[test]
+fn form_fields_are_tagged_into_an_unusual_tree_in_place() {
+    let mut doc = unusual_form();
+    let before = painting(&doc);
+    assert_eq!(tag_form_fields(&mut doc), Ok(2));
+    consistent(&doc);
+    assert_eq!(painting(&doc), before);
+    assert!(fields_pass_the_checker(&doc));
+    // Page one's last tag is the figure inside an inline Div, which takes no siblings, so its
+    // field goes before page two's paragraph; page two's goes after it.
+    let (name, city) = (form_of(&doc, r(19)).unwrap(), form_of(&doc, r(20)).unwrap());
+    assert_eq!(kids_of(&doc, r(8)), [r(9), r(10), name, r(17), city]);
+    for (form, page) in [(name, r(3)), (city, r(16))] {
+        assert_eq!(doc.get(form).as_dict().unwrap().get(b"Pg"), Some(&Object::Ref(page)));
+        assert_eq!(doc.get(form).as_dict().unwrap().get(b"P"), Some(&Object::Ref(r(8))));
+    }
+    // The keys follow the greatest one, in the last leaf, whose limits widen.
+    assert_eq!(doc.get(r(19)).as_dict().unwrap().int(b"StructParent"), Some(2));
+    assert_eq!(doc.get(r(20)).as_dict().unwrap().int(b"StructParent"), Some(3));
+    let leaf = doc.get(r(15));
+    let leaf = leaf.as_dict().unwrap();
+    assert_eq!(leaf.get(b"Limits"), Some(&Object::Array(vec![Object::Int(1), Object::Int(3)])));
+    let nums = leaf.get(b"Nums").unwrap().as_array().unwrap();
+    assert_eq!(nums[2..], [Object::Int(2), Object::Ref(name), Object::Int(3), Object::Ref(city)]);
+    let again = reopened(&doc);
+    consistent(&again);
+    assert_eq!(kinds(&again), kinds(&doc));
+    assert_eq!(tag_form_fields(&mut again.clone()), Err(TaggingError::NoUntaggedFields));
+}
+
+/// A tagged form with two top tags and no Document: the first's /K a lone reference, the
+/// second's an indirect array; the parent tree's /Nums an indirect array; /ParentTreeNextKey
+/// past the greatest key; and /MarkInfo an indirect dictionary not yet marked.
+fn parts_form() -> Document {
+    pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /MarkInfo 12 0 R /StructTreeRoot 6 0 R /AcroForm << /Fields [11 0 R] >> >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 4 0 R /StructParents 0 /Annots [11 0 R] /Resources << /Font << /F1 5 0 R >> >> >>"
+            .into(),
+        stream("/H1 << /MCID 0 >> BDC BT /F1 16 Tf 20 260 Td (Order) Tj ET EMC\n/P << /MCID 1 >> BDC BT /F1 10 Tf 20 230 Td (Name) Tj ET EMC"),
+        FONT.into(),
+        "<< /Type /StructTreeRoot /K [7 0 R 8 0 R] /ParentTree 13 0 R /ParentTreeNextKey 5 >>".into(),
+        "<< /Type /StructElem /S /Part /P 6 0 R /K 9 0 R >>".into(),
+        "<< /Type /StructElem /S /Part /P 6 0 R /K 14 0 R >>".into(),
+        "<< /Type /StructElem /S /H1 /P 7 0 R /Pg 3 0 R /K 0 >>".into(),
+        "<< /Type /StructElem /S /P /P 8 0 R /Pg 3 0 R /K 1 >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [80 225 200 240] /P 3 0 R >>".into(),
+        "<< /Marked false >>".into(),
+        "<< /Nums 15 0 R >>".into(),
+        "[10 0 R]".into(),
+        "[0 [9 0 R 10 0 R]]".into(),
+    ])
+}
+
+#[test]
+fn form_fields_join_several_top_tags_indirect_arrays_and_the_next_key() {
+    let mut doc = parts_form();
+    consistent(&doc);
+    assert!(!fields_pass_the_checker(&doc));
+    assert_eq!(tag_form_fields(&mut doc), Ok(1));
+    consistent(&doc);
+    assert!(fields_pass_the_checker(&doc));
+    // After the page's last tag, in the part whose /K was an indirect array.
+    let form = form_of(&doc, r(11)).unwrap();
+    assert_eq!(kids_of(&doc, r(8)), [r(10), form]);
+    assert_eq!(doc.get(form).as_dict().unwrap().get(b"P"), Some(&Object::Ref(r(8))));
+    // The key is /ParentTreeNextKey, written into the indirect /Nums array where it is.
+    assert_eq!(doc.get(r(11)).as_dict().unwrap().int(b"StructParent"), Some(5));
+    assert_eq!(doc.get(r(6)).as_dict().unwrap().int(b"ParentTreeNextKey"), Some(6));
+    assert_eq!(doc.get(r(13)).as_dict().unwrap().get(b"Nums"), Some(&Object::Ref(r(15))));
+    assert_eq!(doc.get(r(15)).as_array().unwrap()[2..], [Object::Int(5), Object::Ref(form)]);
+    // The document is marked tagged in the dictionary the catalog refers to.
+    assert_eq!(doc.get(doc.root().unwrap()).as_dict().unwrap().get(b"MarkInfo"), Some(&Object::Ref(r(12))));
+    assert_eq!(doc.get(r(12)).as_dict().unwrap().get(b"Marked"), Some(&Object::Bool(true)));
+    let again = reopened(&doc);
+    consistent(&again);
+    assert!(fields_pass_the_checker(&again));
+}
+
+#[test]
+fn widgets_with_a_tag_are_linked_and_stale_keys_replaced() {
+    // Widget 11 has a Form tag but no /StructParent; widget 12's /StructParent is the page's
+    // key, which no tag answers to for it; widget 13 has two Form tags.
+    let doc = pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 6 0 R /AcroForm << /Fields [11 0 R 12 0 R 13 0 R] >> >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 4 0 R /StructParents 0 /Annots [11 0 R 12 0 R 13 0 R] /Resources << /Font << /F1 5 0 R >> >> >>"
+            .into(),
+        stream("/P << /MCID 0 >> BDC BT /F1 10 Tf 20 260 Td (Form) Tj ET EMC"),
+        FONT.into(),
+        "<< /Type /StructTreeRoot /K 7 0 R /ParentTree 10 0 R >>".into(),
+        "<< /Type /StructElem /S /Document /P 6 0 R /K [8 0 R 9 0 R 14 0 R 15 0 R] >>".into(),
+        "<< /Type /StructElem /S /P /P 7 0 R /Pg 3 0 R /K 0 >>".into(),
+        "<< /Type /StructElem /S /Form /P 7 0 R /Pg 3 0 R /K << /Type /OBJR /Obj 11 0 R >> >>".into(),
+        "<< /Nums [0 [8 0 R]] >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (a) /Rect [20 200 120 215] /P 3 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (b) /Rect [20 180 120 195] /P 3 0 R /StructParent 0 >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (c) /Rect [20 160 120 175] /P 3 0 R >>".into(),
+        "<< /Type /StructElem /S /Form /P 7 0 R /Pg 3 0 R /K << /Type /OBJR /Obj 13 0 R >> >>".into(),
+        "<< /Type /StructElem /S /Form /P 7 0 R /Pg 3 0 R /K << /Type /OBJR /Obj 13 0 R >> >>".into(),
+    ]);
+    let mut edited = doc.clone();
+    assert_eq!(tag_form_fields(&mut edited), Ok(2));
+    // Widget 11 keeps its tag and gets the key that leads back to it; 12 gets a tag and a fresh key.
+    assert_eq!(form_of(&edited, r(11)), Some(r(9)));
+    assert_eq!(edited.get(r(11)).as_dict().unwrap().int(b"StructParent"), Some(1));
+    let b = form_of(&edited, r(12)).unwrap();
+    assert_eq!(edited.get(r(12)).as_dict().unwrap().int(b"StructParent"), Some(2));
+    assert_eq!(kids_of(&edited, r(7)), [r(8), r(9), b, r(14), r(15)]);
+    // Only the doubly tagged widget is left, as it was.
+    let problems = structure_problems(&edited);
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(problems[0].contains("13 0 R is owned by 2 tags"), "{problems:?}");
+    assert!(!edited.get(r(13)).as_dict().unwrap().contains(b"StructParent"));
+    let mut again = edited.clone();
+    assert_eq!(tag_form_fields(&mut again), Err(TaggingError::FieldsNotLinkable(1)));
+    assert_eq!(saved(&again), saved(&edited), "a refusal changes nothing");
+    assert_eq!(reopened(&edited).get(r(12)).as_dict().unwrap().int(b"StructParent"), Some(2));
+}
+
+#[test]
+fn a_field_on_a_page_without_tags_follows_the_earlier_pages_field() {
+    // Page one has a paragraph and a field, page two only a field.
+    let mut doc = pdf(&[
+        "<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot 6 0 R /AcroForm << /Fields [10 0 R 11 0 R] >> >>".into(),
+        "<< /Type /Pages /Kids [3 0 R 12 0 R] /Count 2 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents 4 0 R /StructParents 0 /Annots [10 0 R] /Resources << /Font << /F1 5 0 R >> >> >>"
+            .into(),
+        stream("/P << /MCID 0 >> BDC BT /F1 10 Tf 20 260 Td (Name) Tj ET EMC"),
+        FONT.into(),
+        "<< /Type /StructTreeRoot /K [7 0 R] /ParentTree 9 0 R /ParentTreeNextKey 1 >>".into(),
+        "<< /Type /StructElem /S /Document /P 6 0 R /K [8 0 R] >>".into(),
+        "<< /Type /StructElem /S /P /P 7 0 R /Pg 3 0 R /K 0 >>".into(),
+        "<< /Nums [0 [8 0 R]] >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [80 255 200 270] /P 3 0 R >>".into(),
+        "<< /Type /Annot /Subtype /Widget /FT /Tx /T (date) /Rect [80 255 200 270] /P 12 0 R >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Annots [11 0 R] >>".into(),
+    ]);
+    assert_eq!(tag_form_fields(&mut doc), Ok(2));
+    consistent(&doc);
+    let (name, date) = (form_of(&doc, r(10)).unwrap(), form_of(&doc, r(11)).unwrap());
+    assert_eq!(kids_of(&doc, r(7)), [r(8), name, date]);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Random operation sequences
 
 #[derive(Clone, Debug)]
@@ -723,6 +923,17 @@ enum Item {
     Image,
 }
 
+/// What a form field widget starts as.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Field {
+    Untagged,
+    /// A `/StructParent` no tag answers to.
+    Stale,
+    /// A `/Form` tag references it, but its `/StructParent` is missing or leads nowhere.
+    Unlinked,
+    Tagged,
+}
+
 #[derive(Clone, Debug)]
 struct Spec {
     pages: Vec<Vec<Item>>,
@@ -734,6 +945,13 @@ struct Spec {
     links: bool,
     /// Sections per page carry `/Pg`, and their paragraphs inherit it.
     inherit: bool,
+    /// Form field widgets: widget i is on page i % pages.
+    fields: Vec<Field>,
+    /// The widgets are the kids of one radio-button field rather than fields of their own.
+    radio: bool,
+    /// A page without tagged content and the first link use the keys new entries would get
+    /// first, though the parent tree doesn't list them.
+    stale_keys: bool,
 }
 
 fn item() -> impl Strategy<Value = Item> {
@@ -746,17 +964,21 @@ fn item() -> impl Strategy<Value = Item> {
     ]
 }
 
-fn spec() -> impl Strategy<Value = Spec> {
+/// Specs whose widgets start as one of `fields`.
+fn spec_with(fields: &'static [Field]) -> impl Strategy<Value = Spec> {
     (
-        prop::collection::vec(prop::collection::vec(item(), 0..7), 1..4),
-        0u8..4,
-        any::<bool>(),
-        any::<bool>(),
-        any::<bool>(),
-        any::<bool>(),
-        any::<bool>(),
+        (
+            prop::collection::vec(prop::collection::vec(item(), 0..7), 1..4),
+            0u8..4,
+            any::<bool>(),
+            any::<bool>(),
+            any::<bool>(),
+            any::<bool>(),
+            any::<bool>(),
+        ),
+        (prop::collection::vec(prop::sample::select(fields), 0..6), any::<bool>(), any::<bool>()),
     )
-        .prop_map(|(pages, layout, single_root, mcr, next_key, links, inherit)| Spec {
+        .prop_map(|((pages, layout, single_root, mcr, next_key, links, inherit), (fields, radio, stale_keys))| Spec {
             pages,
             layout,
             single_root,
@@ -764,28 +986,48 @@ fn spec() -> impl Strategy<Value = Spec> {
             next_key,
             links,
             inherit,
+            fields,
+            radio,
+            stale_keys,
         })
 }
 
-/// Build a consistent document for a spec.
+/// Specs of consistent documents: every widget a tag references is linked to it.
+fn spec() -> impl Strategy<Value = Spec> {
+    spec_with(&[Field::Untagged, Field::Stale, Field::Tagged])
+}
+
+/// Build a document for a spec: consistent unless a widget is [`Field::Unlinked`].
 fn build(spec: &Spec) -> Document {
     let mut objects: Vec<String> = vec![String::new(); 4];
     let add = |objects: &mut Vec<String>, body: String| {
         objects.push(body);
         objects.len() as u32
     };
+    let list = |v: &[u32]| v.iter().map(|x| format!("{x} 0 R")).collect::<Vec<_>>().join(" ");
     // 1 catalog, 2 pages, 3 font, 4 image.
     objects[2] = FONT.into();
     objects[3] = IMAGE.into();
-    let tagged_any = spec.pages.iter().flatten().any(|i| matches!(i, Item::Tagged { .. }));
+    let n = spec.pages.len();
+    let content_on = |p: usize| spec.pages[p].iter().any(|i| matches!(i, Item::Tagged { .. }));
+    let tagged_any = (0..n).any(content_on) || spec.fields.iter().any(|f| matches!(f, Field::Unlinked | Field::Tagged));
     let root = if tagged_any { add(&mut objects, String::new()) } else { 0 };
     let document = if tagged_any { add(&mut objects, String::new()) } else { 0 };
+    // Page p's content has key p and tagged widget i key n + i; a new entry would get `fresh`.
+    let next_key = n + spec.fields.len();
+    let greatest = (0..n).filter(|p| content_on(*p)).chain((0..spec.fields.len()).filter(|i| spec.fields[*i] == Field::Tagged).map(|i| n + i)).max();
+    let fresh = if tagged_any { greatest.map_or(0, |g| g + 1).max(if spec.next_key { next_key } else { 0 }) } else { 0 };
+    let mut stale = (fresh..).take(if spec.stale_keys { 2 } else { 0 });
+    let radio = (spec.radio && !spec.fields.is_empty()).then(|| add(&mut objects, String::new()));
+    let mut widgets: Vec<u32> = Vec::new();
     // Sections: two shared ones, or (inheriting pages) two per page that carry the page.
     let mut sections: Vec<(u32, Option<u32>, Vec<u32>)> = Vec::new();
     let mut section_at: std::collections::HashMap<(usize, u8), usize> = std::collections::HashMap::new();
     let mut doc_kids: Vec<u32> = Vec::new();
     let mut page_refs = Vec::new();
     let mut arrays: Vec<(usize, Vec<u32>)> = Vec::new();
+    let mut singles: Vec<(usize, u32)> = Vec::new();
+    let mut stale_page = false;
     for (p, items) in spec.pages.iter().enumerate() {
         let page = add(&mut objects, String::new());
         page_refs.push(page);
@@ -833,13 +1075,45 @@ fn build(spec: &Spec) -> Document {
             }
         }
         let content = add(&mut objects, stream(&ops.join("\n")));
-        let annots = if spec.links {
-            let link = add(&mut objects, format!("<< /Type /Annot /Subtype /Link /Rect [200 {} 280 {}] >>", 10 + p, 30 + p));
-            format!("/Annots [{link} 0 R]")
+        let key = if !owners.is_empty() {
+            Some(p)
+        } else if !stale_page {
+            stale_page = true;
+            stale.next()
         } else {
-            String::new()
+            None
         };
-        let key = if owners.is_empty() { String::new() } else { format!("/StructParents {p}") };
+        let mut annots = Vec::new();
+        if spec.links {
+            let key = if p == 0 { stale.next().map(|k| format!("/StructParent {k}")).unwrap_or_default() } else { String::new() };
+            annots.push(add(&mut objects, format!("<< /Type /Annot /Subtype /Link /Rect [200 {} 280 {}] {key} >>", 10 + p, 30 + p)));
+        }
+        for i in (p..spec.fields.len()).step_by(n) {
+            let y = 40 + 20 * (i / n);
+            let field = radio.map_or_else(|| format!("/FT /Tx /T (field {i})"), |r| format!("/Parent {r} 0 R"));
+            let key = match spec.fields[i] {
+                Field::Untagged => String::new(),
+                Field::Stale => format!("/StructParent {}", 1000 + i),
+                Field::Unlinked if i % 2 == 1 => format!("/StructParent {}", 2000 + i),
+                Field::Unlinked => String::new(),
+                Field::Tagged => format!("/StructParent {}", n + i),
+            };
+            let widget = add(&mut objects, format!("<< /Type /Annot /Subtype /Widget {field} /Rect [150 {y} 280 {}] /P {page} 0 R {key} >>", y + 15));
+            if matches!(spec.fields[i], Field::Unlinked | Field::Tagged) {
+                // An object reference as the lone /K, or in an array.
+                let objr = format!("<< /Type /OBJR /Obj {widget} 0 R /Pg {page} 0 R >>");
+                let k = if i % 2 == 0 { objr } else { format!("[{objr}]") };
+                let form = add(&mut objects, format!("<< /Type /StructElem /S /Form /P {document} 0 R /Pg {page} 0 R /K {k} >>"));
+                doc_kids.push(form);
+                if spec.fields[i] == Field::Tagged {
+                    singles.push((n + i, form));
+                }
+            }
+            annots.push(widget);
+            widgets.push(widget);
+        }
+        let annots = if annots.is_empty() { String::new() } else { format!("/Annots [{}]", list(&annots)) };
+        let key = key.map(|k| format!("/StructParents {k}")).unwrap_or_default();
         objects[page as usize - 1] = format!(
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] /Contents {content} 0 R {key} {annots} /Resources << /Font << /F1 3 0 R >> /XObject << /Im 4 0 R >> >> >>"
         );
@@ -847,13 +1121,19 @@ fn build(spec: &Spec) -> Document {
             arrays.push((p, owners));
         }
     }
-    let kids: Vec<String> = page_refs.iter().map(|p| format!("{p} 0 R")).collect();
-    objects[1] = format!("<< /Type /Pages /Kids [{}] /Count {} >>", kids.join(" "), page_refs.len());
+    objects[1] = format!("<< /Type /Pages /Kids [{}] /Count {} >>", list(&page_refs), page_refs.len());
+    if let Some(r) = radio {
+        objects[r as usize - 1] = format!("<< /FT /Btn /Ff 49152 /T (choice) /Kids [{}] >>", list(&widgets));
+    }
+    let form = match (radio, widgets.is_empty()) {
+        (_, true) => String::new(),
+        (Some(r), _) => format!("/AcroForm << /Fields [{r} 0 R] >>"),
+        (None, _) => format!("/AcroForm << /Fields [{}] >>", list(&widgets)),
+    };
     if !tagged_any {
-        objects[0] = "<< /Type /Catalog /Pages 2 0 R >>".into();
+        objects[0] = format!("<< /Type /Catalog /Pages 2 0 R {form} >>");
         return pdf(&objects);
     }
-    let list = |v: &[u32]| v.iter().map(|x| format!("{x} 0 R")).collect::<Vec<_>>().join(" ");
     for (sect, page, kids) in &sections {
         let pg = page.map(|p| format!("/Pg {p} 0 R")).unwrap_or_default();
         objects[*sect as usize - 1] = format!("<< /Type /StructElem /S /Sect /P {document} 0 R {pg} /K [{}] >>", list(kids));
@@ -874,6 +1154,9 @@ fn build(spec: &Spec) -> Document {
                 let v = value(&mut objects, owners);
                 leaves.push(add(&mut objects, format!("<< /Limits [{p} {p}] /Nums [{p} {v}] >>")));
             }
+            for (key, form) in &singles {
+                leaves.push(add(&mut objects, format!("<< /Limits [{key} {key}] /Nums [{key} {form} 0 R] >>")));
+            }
             if leaves.is_empty() {
                 leaves.push(add(&mut objects, "<< /Limits [0 0] /Nums [] >>".into()));
             }
@@ -885,14 +1168,15 @@ fn build(spec: &Spec) -> Document {
                 let v = value(&mut objects, owners);
                 nums.push(format!("{p} {v}"));
             }
+            nums.extend(singles.iter().map(|(key, form)| format!("{key} {form} 0 R")));
             format!("<< /Nums [{}] >>", nums.join(" "))
         }
     };
     let parent_tree = if spec.layout == 3 { parent_tree } else { format!("{} 0 R", add(&mut objects, parent_tree)) };
     let k = if spec.single_root { format!("{document} 0 R") } else { format!("[{document} 0 R]") };
-    let next = if spec.next_key { format!("/ParentTreeNextKey {}", spec.pages.len()) } else { String::new() };
+    let next = if spec.next_key { format!("/ParentTreeNextKey {next_key}") } else { String::new() };
     objects[root as usize - 1] = format!("<< /Type /StructTreeRoot /K {k} /ParentTree {parent_tree} {next} >>");
-    objects[0] = format!("<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot {root} 0 R >>");
+    objects[0] = format!("<< /Type /Catalog /Pages 2 0 R /MarkInfo << /Marked true >> /StructTreeRoot {root} 0 R {form} >>");
     pdf(&objects)
 }
 
@@ -905,6 +1189,7 @@ enum Step {
     Delete { tag: usize, keep: bool },
     ToArtifact { tag: usize },
     Annot { page: usize },
+    Fields,
 }
 
 fn step() -> impl Strategy<Value = Step> {
@@ -917,6 +1202,7 @@ fn step() -> impl Strategy<Value = Step> {
         2 => (0usize..64, any::<bool>()).prop_map(|(tag, keep)| Step::Delete { tag, keep }),
         1 => (0usize..64).prop_map(|tag| Step::ToArtifact { tag }),
         1 => (0usize..8).prop_map(|page| Step::Annot { page }),
+        1 => Just(Step::Fields),
     ]
 }
 
@@ -964,6 +1250,7 @@ fn run(doc: &mut Document, step: &Step) -> Option<Result<(), TaggingError>> {
             let annot = page_tagging(doc, page).ok()?.annotations.first()?.object;
             tag_annotation(doc, page, annot, None).map(|_| ())
         }
+        Step::Fields => tag_form_fields(doc).map(|_| ()),
     })
 }
 
@@ -994,5 +1281,53 @@ proptest! {
         prop_assert_eq!(structure_problems(&again), Vec::<String>::new());
         prop_assert_eq!(kinds(&again), kinds(&doc));
         prop_assert_eq!(painting(&again), drawn);
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 128, ..ProptestConfig::default() })]
+
+    /// Tag form fields in every layout the builder makes, with widgets untagged, with a stale
+    /// key, tagged but not linked, or tagged: each widget ends up with exactly one Form tag its
+    /// key leads back to, the structure stays consistent and the pages draw what they drew, a
+    /// page's new tags follow its /Annots order, and the result survives an incremental save
+    /// with nothing left to tag.
+    #[test]
+    fn form_fields_are_tagged_in_any_tree_layout(spec in spec_with(&[Field::Untagged, Field::Stale, Field::Unlinked, Field::Tagged])) {
+        let mut doc = build(&spec);
+        let drawn = painting(&doc);
+        let before = saved(&doc);
+        let old: HashSet<ObjRef> = crate::tags(&doc).into_iter().map(|t| t.object).collect();
+        let to_do = spec.fields.iter().filter(|f| **f != Field::Tagged).count();
+        match tag_form_fields(&mut doc) {
+            Ok(n) => prop_assert_eq!(n, to_do),
+            Err(e) => {
+                prop_assert_eq!(to_do, 0, "refused: {}", e);
+                prop_assert_eq!(e, if spec.fields.is_empty() { TaggingError::NoForm } else { TaggingError::NoUntaggedFields });
+                prop_assert_eq!(saved(&doc), before, "a refusal changes nothing");
+                return Ok(());
+            }
+        }
+        prop_assert_eq!(structure_problems(&doc), Vec::<String>::new());
+        prop_assert_eq!(&painting(&doc), &drawn);
+        prop_assert!(fields_pass_the_checker(&doc));
+        let tree = Tree::read(&doc);
+        for page in pdfcraft_model::pages(&doc) {
+            let mut new_tags = Vec::new();
+            for a in annotations(&doc, &tree, &page).iter().filter(|a| a.subtype == "Widget") {
+                let form = form_of(&doc, a.object);
+                prop_assert!(form.is_some(), "widget {} has no Form tag", a.object);
+                if let Some(at) = form.filter(|f| !old.contains(f)).and_then(|f| tree.index.get(&f)) {
+                    new_tags.push(*at);
+                }
+            }
+            prop_assert!(new_tags.windows(2).all(|w| w[0] < w[1]), "{:?}", new_tags);
+        }
+        let again = reopened(&doc);
+        prop_assert_eq!(structure_problems(&again), Vec::<String>::new());
+        prop_assert_eq!(kinds(&again), kinds(&doc));
+        prop_assert_eq!(painting(&again), drawn);
+        let mut twice = again.clone();
+        prop_assert_eq!(tag_form_fields(&mut twice), Err(TaggingError::NoUntaggedFields));
     }
 }
