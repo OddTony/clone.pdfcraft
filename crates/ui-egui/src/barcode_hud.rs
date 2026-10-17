@@ -82,6 +82,35 @@ impl BarcodeHudState {
 pub struct BarcodeScannerHud;
 
 impl BarcodeScannerHud {
+    /// Reactive Auto-Page Tracking hook:
+    /// Whenever the current page index cleanly snaps/changes (via arrow keys, scrolling,
+    /// or page navigation), this hook reacts instantly to the new page context and extracts/displays
+    /// its QR codes and barcodes seamlessly.
+    pub fn auto_scan_on_page_change(
+        view: &mut DocView,
+        doc: &Document,
+        now: f64,
+    ) {
+        let current_page = view.current;
+        if view.barcode_hud.last_scanned_page != Some(current_page) {
+            view.barcode_hud.last_scanned_page = Some(current_page);
+
+            // Reactively scan if either the panel is open, the HUD is active, or we're tracking codes
+            if view.barcode_hud.panel_open || view.barcode_hud.open || !view.barcode_hud.scanned_codes.is_empty() {
+                let codes = doc.scan_page_codes(current_page);
+                if codes.is_empty() {
+                    view.barcode_hud.scanned_codes.clear();
+                    view.barcode_hud.open = false;
+                } else {
+                    let count = codes.len();
+                    view.barcode_hud.update_codes(codes);
+                    view.barcode_hud.open = true;
+                    view.barcode_hud.show_toast(format!("Auto-detected {count} code(s) on page {}", current_page + 1), now);
+                }
+            }
+        }
+    }
+
     /// Render the interactive HUD on the canvas foreground anchored directly to the active barcode.
     ///
     /// Returns a pending replacement `Edit` if the user modified and applied a code.
@@ -614,3 +643,62 @@ impl BarcodeScannerHud {
         pending_edit
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pdfcraft_engine::barcode_scan::CodeKind;
+
+    #[test]
+    fn test_barcode_hud_state_navigation() {
+        let mut state = BarcodeHudState::default();
+        let code1 = ScannedCode {
+            id: 0,
+            page: 0,
+            kind: CodeKind::QrCode,
+            text: "https://example.com/1".into(),
+            rect: [10.0, 10.0, 100.0, 100.0],
+            pixel_size: [100, 100],
+            image_index: Some(0),
+        };
+        let code2 = ScannedCode {
+            id: 1,
+            page: 0,
+            kind: CodeKind::Code128,
+            text: "TRACK123456".into(),
+            rect: [10.0, 120.0, 200.0, 180.0],
+            pixel_size: [200, 60],
+            image_index: Some(1),
+        };
+
+        state.update_codes(vec![code1.clone(), code2.clone()]);
+        assert_eq!(state.scanned_codes.len(), 2);
+        assert!(state.open);
+        assert_eq!(state.active_index, 0);
+        assert_eq!(state.active_code().map(|c| c.text.as_str()), Some("https://example.com/1"));
+
+        // Step next
+        state.next_code();
+        assert_eq!(state.active_index, 1);
+        assert_eq!(state.active_code().map(|c| c.text.as_str()), Some("TRACK123456"));
+
+        // Step next wraps to 0
+        state.next_code();
+        assert_eq!(state.active_index, 0);
+
+        // Step prev wraps to 1
+        state.prev_code();
+        assert_eq!(state.active_index, 1);
+    }
+
+    #[test]
+    fn test_toast_display() {
+        let mut state = BarcodeHudState::default();
+        state.show_toast("Code detected".into(), 10.0);
+        assert!(state.toast.is_some());
+        let (msg, expiry) = state.toast.unwrap();
+        assert_eq!(msg, "Code detected");
+        assert_eq!(expiry, 13.0);
+    }
+}
+

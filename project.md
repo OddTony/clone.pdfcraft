@@ -478,6 +478,25 @@ The repository issues backlog has been thoroughly audited and structured into 6 
   - Comprehensive unit tests written covering line construction, handle hit testing, delete key edit generation, and fit-page vs. zoomed-in navigation steps.
 - **Next Step**: Phase 1.2 — Floating Selection Context Menu (anchored popup for Cut/Copy/Paste/Format).
 
+### Log Entry — 2026-10-18: Canvas Viewport Jitter Elimination & Reactive Barcode Auto-Scan Hook
+- **Action/Task**: Eliminated all scrolling and page-change jitter, flickering, and erratic displacement on canvas viewport; stabilized layout math; added intelligent 180ms page-step debounce while preserving instantaneous fresh key taps and smooth continuous line panning; wired reactive barcode auto-scan hook to trigger on all page changes.
+- **Root Causes Diagnosed & Fixed**:
+  1. *14-Pixel Single-Page Vertical Jerk*:
+     - *Defect*: `goto` navigation offset used `(r.top() - y_shift - GAP + frac * r.height())`. In single-page mode, `r.top() - y_shift` evaluates to `MARGIN` (28.0), resulting in `28.0 - 14.0 = 14.0` offset on Frame 1, which egui's ScrollArea immediately clamped to 0.0 on Frame 2 when the page fit within the viewport, causing a 14-pixel vertical jump back and forth on every page transition.
+     - *Fix*: Locked `target_y` in single-page mode to `0.0` when `frac <= 0.0` and `max_scroll` when `frac >= 1.0`. In continuous mode, clamped to `[0.0, max_scroll]`. Locked horizontal offset to `0.0` with `scroll.scroll_offset(vec2(0.0, target_y))`, completely eliminating both vertical jerk and sideways drift.
+  2. *Duplicate PageDown/PageUp Execution*:
+     - *Defect*: In single-page mode, `key_nav(Key::PageDown)` was matched by `shortcuts` page-step handler, and then re-matched inside the loop by `ZoomNavigationEngine`, calling `view.step_page` twice in the same frame.
+     - *Fix*: Cleaned key dispatch logic so `PageDown`/`PageUp` without `command` are processed solely through `ZoomNavigationEngine`.
+  3. *Uncontrolled Key-Repeat Page Thrashing*:
+     - *Defect*: Holding `ArrowDown` or `ArrowRight` fired raw OS repeat events every 30ms, flipping 30 pages a second and thrashing the renderer and layout engine.
+     - *Fix*: Added `last_page_step: f64` to `DocView`. Instantaneously fires fresh key presses (`i.key_pressed(k)`), but throttles repeat events to a smooth 180ms interval. `ScrollLine` panning remains un-throttled at full display refresh rate.
+  4. *Seamless QR/Barcode Auto-Scan Hook*:
+     - *Enhancement*: Added `BarcodeScannerHud::auto_scan_on_page_change(view, doc, now)`. Automatically triggers scanning and updates HUD state / scanned codes whenever `view.barcode_hud.last_scanned_page != Some(view.current)` when HUD or panel is active.
+- **Verification**:
+  - `cargo check --workspace`: 0 errors, 0 warnings.
+  - `cargo test -p pdfcraft-ui-egui --lib -j 2`: 441 passed, 0 failed (including new HUD state navigation and toast tests).
+  - `cargo test -p pdfcraft-engine --lib -j 2`: 274 passed, 0 failed.
+
 ### Log Entry — 2026-10-18: QR & Barcode Detection Overhaul, Sandeep PDF Studio v3 HUD Redesign & Auto-Page Tracking
 - **Action/Task**: Overhauled barcode & QR scanner detection pipeline to reliably decode 1D barcodes and QR codes from both standalone images and rendered vector page buffers; implemented reactive auto-page tracking; redesigned the floating HUD panel and anchored popups to match Sandeep PDF Studio v3 styling without altering main application toolbars.
 - **Components Built & Overhauled**:
@@ -544,26 +563,25 @@ The repository issues backlog has been thoroughly audited and structured into 6 
 ### Copy-Ready AI Collaborator Handoff Block
 
 ```markdown
-### PDF Craft Sync Summary — QR/Barcode Detection Overhaul & Sandeep PDF Studio v3 Styling (2026-10-18)
+#### PDF Craft Sync Summary — Viewport Jitter Elimination & Reactive Barcode Auto-Scan (2026-10-18)
 - **Status**: Production-grade implementation fully verified, warning-free, and passing all unit test suites.
-- **Implemented Fixes & Overhauls**:
-  1. *QR & Barcode Scanner Detection Overhaul*:
-     - Full Code 128 decoder with complete 107-character pattern table, Start A/B/C, Code C numeric pairs, Code A/B ASCII, and modulo-103 checksum verification.
-     - Full Code 39 decoder with canonical 44-character 9-bit binary table, start/stop `*` delimiters, and ASCII payload parsing.
-     - Dual-pass detection in `Document::scan_page_codes`:
-       - Pass 1: Scans embedded image XObjects.
-       - Pass 2: Renders the page buffer at 1.5x scale via `PageRenderer` to detect vector-rendered shipping label barcodes (e.g. UPS, FedEx, USPS, Amazon, DHL), mapping pixel bounding boxes back to PDF user-space points `[min_x, min_y, max_x, max_y]`.
-     - Multi-scanline line scanner with vertical extent tracing to accurately measure barcode height and bounding geometry.
-  2. *Reactive Auto-Page Tracking*:
-     - Automatically triggers scanning whenever the active page index changes (`view.barcode_hud.last_scanned_page != Some(view.current)`) upon scrolling or pressing arrow keys.
-     - Updates HUD data in real time and highlights active codes on canvas without manual clicking.
-  3. *Sandeep PDF Studio v3 HUD Visual Redesign*:
-     - Redesigned the floating "QR & Barcodes" HUD panel (`show_panel`) and anchored popup (`show`) to Sandeep PDF Studio v3 styling: deep slate obsidian surfaces (`#13141A`, `#1B1D26`), electric blue borders (`#3B82F6`), subtle card containers, status badges (`● AUTO`, `v3.0`), and monospace payload containers with single-click copy and edit actions.
-     - Preserved 100% pixel-perfect replacement constraint and vector QR embedding.
-     - Kept all main application toolbars untouched.
+- **Implemented Fixes & Viewport Stabilization**:
+  1. *Elimination of 14-Pixel Jerk & Position Drift*:
+     - Completely eliminated the 14-pixel layout jump on single-page transitions caused by `(r.top() - y_shift - GAP)` offset calculation.
+     - Locked `target_y` in single-page mode to `0.0` (for `frac <= 0.0`) and `max_scroll` (for `frac >= 1.0`).
+     - Locked horizontal scroll offset to `0.0` with `scroll.scroll_offset(vec2(0.0, target_y))`, preventing accidental horizontal offsets when flipping pages.
+  2. *Intelligent Key-Repeat Debounce & Clean Event Dispatch*:
+     - Added `last_page_step` tracker in `DocView`.
+     - Fresh key-down presses (`key_pressed`) fire instantaneously.
+     - Key repeat events are smoothly debounced to an ergonomic 180ms interval, stopping runaway 30-pages-per-second layout thrashing.
+     - Fixed duplicate `PageDown`/`PageUp` execution in `canvas_navigation_shortcuts`.
+     - Maintained full display-refresh-rate smooth panning for `ScrollLine`.
+  3. *Seamless Barcode/QR Reactive Auto-Scan on Page Change*:
+     - Added `BarcodeScannerHud::auto_scan_on_page_change(view, doc, now)`.
+     - Whenever arrow keys or scrolling snap to a new page index, the scanner hook automatically detects and decodes the new page's codes and updates the HUD and side panel in real time.
 - **Verification & Test Results**:
   - `cargo check --workspace`: 0 errors, 0 warnings.
   - `cargo test -p pdfcraft-engine --lib -j 2`: 274 passed, 0 failed.
-  - `cargo test -p pdfcraft-ui-egui --lib -j 2`: 439 passed, 0 failed.
+  - `cargo test -p pdfcraft-ui-egui --lib -j 2`: 441 passed, 0 failed.
 - **Master Tracking Document**: `project.md` in repository root.
 ```

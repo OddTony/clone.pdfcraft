@@ -466,6 +466,8 @@ pub struct DocView {
     zoom_anchor: Option<(usize, f32, f32, Vec2)>,
     /// The page view has been shown, so its scroll offset in egui's memory is this document's.
     shown: bool,
+    /// Last timestamp a page step was performed via keyboard navigation, for debounce.
+    pub last_page_step: f64,
     /// Turns wheel input into page turns in single-page view.
     wheel: crate::wheel_pager::WheelPager,
     /// Until this time, apply precise (touchpad) wheel input 1:1 and suppress egui's eased copy.
@@ -742,6 +744,7 @@ impl DocView {
             viewport_screen: Rect::NOTHING,
             zoom_anchor: None,
             shown: false,
+            last_page_step: 0.0,
             wheel: Default::default(),
             precise_scroll_until: 0.0,
             fling: Default::default(),
@@ -2251,7 +2254,8 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
     // As in Acrobat: → / ← go to the next / previous page in every layout (#185), and so do
     // ⌘Page Down / ⌘Page Up, or plain Page Down / Page Up in single-page view.
     let command = ctx.input(|i| i.modifiers.command);
-    let scrolls = view.continuous;
+    let now = ctx.input(|i| i.time);
+    let key_pressed_fresh = |k| ctx.input(|i| i.key_pressed(k));
     let key_nav = |k| {
         ctx.input(|i| {
             i.key_pressed(k)
@@ -2259,18 +2263,31 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
         })
     };
     if view.line_editor.is_none() {
-        if key_nav(Key::ArrowRight) || (key_nav(Key::PageDown) && (command || !scrolls)) {
-            view.step_page(true);
-        }
-        if key_nav(Key::ArrowLeft) || (key_nav(Key::PageUp) && (command || !scrolls)) {
-            view.step_page(false);
+        let mut did_step = false;
+        if key_nav(Key::ArrowRight) || (command && key_nav(Key::PageDown)) {
+            let is_fresh = key_pressed_fresh(Key::ArrowRight) || (command && key_pressed_fresh(Key::PageDown));
+            if is_fresh || now - view.last_page_step >= 0.18 {
+                view.step_page(true);
+                view.last_page_step = now;
+                view.single_edges = None;
+                did_step = true;
+            }
+        } else if key_nav(Key::ArrowLeft) || (command && key_nav(Key::PageUp)) {
+            let is_fresh = key_pressed_fresh(Key::ArrowLeft) || (command && key_pressed_fresh(Key::PageUp));
+            if is_fresh || now - view.last_page_step >= 0.18 {
+                view.step_page(false);
+                view.last_page_step = now;
+                view.single_edges = None;
+                did_step = true;
+            }
         }
         // ↓ / ↑ scroll or step pages intelligently based on current zoom and fit conditions.
-        if !command {
+        if !command && !did_step {
             for k in [Key::ArrowDown, Key::ArrowUp, Key::PageDown, Key::PageUp] {
                 if !key_nav(k) {
                     continue;
                 }
+                let is_fresh = key_pressed_fresh(k);
                 let nav_action = crate::canvas_selection::ZoomNavigationEngine::evaluate_navigation_step(
                     k,
                     view.fit,
@@ -2283,12 +2300,15 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
                 );
                 match nav_action {
                     crate::canvas_selection::ZoomNavAction::StepPage { forward, target_fraction } => {
-                        let before = view.current;
-                        view.step_page(forward);
-                        if !forward && view.current != before && target_fraction > 0.0 {
-                            view.goto = Some((view.current, target_fraction));
+                        if is_fresh || now - view.last_page_step >= 0.18 {
+                            let before = view.current;
+                            view.step_page(forward);
+                            view.last_page_step = now;
+                            if !forward && view.current != before && target_fraction > 0.0 {
+                                view.goto = Some((view.current, target_fraction));
+                            }
+                            view.single_edges = None;
                         }
-                        view.single_edges = None;
                     }
                     crate::canvas_selection::ZoomNavAction::ScrollLine { delta_points } => {
                         view.key_scroll += delta_points;
@@ -2601,9 +2621,24 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         // The row above was laid out for the page before the turn: place the new one next frame.
         ui.ctx().request_repaint();
     } else if let Some((page, frac)) = view.goto.take() {
-        let page = page.min(rects.len() - 1);
-        let r = rects[page];
-        scroll = scroll.vertical_scroll_offset((r.top() - y_shift - GAP + frac * r.height()).max(0.0));
+        let page = page.min(rects.len().saturating_sub(1));
+        if let Some(&r) = rects.get(page) {
+            let max_scroll = (content_h - avail.height()).max(0.0);
+            let target_y = if !view.continuous {
+                if frac <= 0.0 {
+                    0.0
+                } else if frac >= 1.0 {
+                    max_scroll
+                } else {
+                    (frac * max_scroll).clamp(0.0, max_scroll)
+                }
+            } else if page == 0 && frac <= 0.0 {
+                0.0
+            } else {
+                (r.top() - GAP + frac * r.height()).clamp(0.0, max_scroll)
+            };
+            scroll = scroll.scroll_offset(vec2(0.0, target_y));
+        }
     }
     let ppp = ui.ctx().pixels_per_point();
     let scale = view.render_scale(ppp);
@@ -4008,6 +4043,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
 
     // Barcode & QR Code Scanner HUD & Generator Panel
+    let now = ui.input(|i| i.time);
+    crate::barcode_hud::BarcodeScannerHud::auto_scan_on_page_change(view, doc, now);
+
     if let Some(hud_edit) = crate::barcode_hud::BarcodeScannerHud::show(ui, view, info, can_modify) {
         view.pending_edit = Some(hud_edit);
     }
@@ -4854,6 +4892,9 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                         if icons::button(ui, "scan", 32.0, is_panel_open, "QR & Barcode Tools").clicked() {
                             if let Some(v) = app.views.get_mut(tab_idx) {
                                 v.barcode_hud.panel_open = !v.barcode_hud.panel_open;
+                                if v.barcode_hud.panel_open {
+                                    v.barcode_hud.last_scanned_page = None;
+                                }
                             }
                         }
                     }
