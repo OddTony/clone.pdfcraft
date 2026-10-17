@@ -1,8 +1,8 @@
 //! Embeds the fonts of the optional craft-fonts build input (`CRAFT_FONTS_DIR`) as `CRAFT_FONTS`.
 //! The recipe is craft-fonts' `docs/integration.md`; unset, `CRAFT_FONTS` is empty. It only reads
-//! the local checkout (no network). On wasm32 it embeds only the UI faces (BIZ UDPGothic Regular
+//! the local checkout (no network). On wasm32 it defaults to only the UI faces (BIZ UDPGothic Regular
 //! and any `Arab`, `Telu`, `Hebr` or `Thai` face), to keep the web build within hosting limits (Cloudflare Pages:
-//! 25 MiB per file).
+//! 25 MiB per file). `CRAFT_FONTS_WEB=all` opts into every otherwise permitted manifest face.
 
 use std::fmt::Write as _;
 use std::path::PathBuf;
@@ -10,9 +10,20 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo::rerun-if-env-changed=CRAFT_FONTS_DIR");
     println!("cargo::rerun-if-env-changed=CRAFT_FONTS_REQUIRED");
+    println!("cargo::rerun-if-env-changed=CRAFT_FONTS_WEB");
+    // Validate configuration even without a font input, and never downgrade a typo to the
+    // optional-input warning controlled by CRAFT_FONTS_REQUIRED.
+    let web_all = match std::env::var_os("CRAFT_FONTS_WEB") {
+        None => false,
+        Some(value) if value == "all" => true,
+        Some(value) => {
+            println!("cargo::error=unsupported CRAFT_FONTS_WEB={value:?}; leave it unset for the default WASM font selection or set it to all");
+            return;
+        }
+    };
     let mut src = String::from("pub static CRAFT_FONTS: &[CraftFont] = &[\n");
     if let Some(dir) = std::env::var_os("CRAFT_FONTS_DIR").map(PathBuf::from) {
-        match craft_fonts(&dir) {
+        match craft_fonts(&dir, web_all) {
             Ok(entries) => src.push_str(&entries),
             Err(e) if std::env::var_os("CRAFT_FONTS_REQUIRED").is_some() => {
                 println!("cargo::error=CRAFT_FONTS_DIR={}: {e}", dir.display());
@@ -32,7 +43,7 @@ fn main() {
 const BARRED_FAMILIES: [&str; 5] = ["Source Han", "Source Serif", "Source Sans", "Noto Sans CJK", "Noto Serif CJK"];
 
 /// One `CraftFont { .. }` initialiser per manifest line.
-fn craft_fonts(dir: &std::path::Path) -> Result<String, String> {
+fn craft_fonts(dir: &std::path::Path, web_all: bool) -> Result<String, String> {
     let manifest = dir.join("fonts/manifest.txt");
     println!("cargo::rerun-if-changed={}", manifest.display());
     let text = std::fs::read_to_string(&manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
@@ -57,7 +68,7 @@ fn craft_fonts(dir: &std::path::Path) -> Result<String, String> {
         let hebrew = scripts.split(',').any(|s| s.trim() == "Hebr");
         let web_face =
             (*family == "BIZ UDPGothic" && *style == "Regular") || arabic || telugu || hebrew || scripts.split(',').any(|s| s.trim() == "Thai");
-        if wasm && !web_face {
+        if wasm && !web_all && !web_face {
             continue;
         }
         let path = dir.join(file).canonicalize().map_err(|e| format!("{file}: {e}"))?;
