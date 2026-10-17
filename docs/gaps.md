@@ -302,6 +302,10 @@ update the numbers.
 
 ### 15. Forms: JavaScript object model, actions, submit, XFA depth
 
+Native JavaScript link actions and interactive desktop menus are covered by engine, automation
+and UI regressions; the wider object model and lifecycle gaps below remain. See
+[JavaScript link actions](javascript-link-actions.md).
+
 - **Missing:** the wider Acrobat JavaScript object model (annotations, layers, dialogs), document
   actions, the Actions tab triggers that run JavaScript, form submission, the debugger, barcode
   fields, rich-text values; XFA flattening and complete dynamic-form fidelity.
