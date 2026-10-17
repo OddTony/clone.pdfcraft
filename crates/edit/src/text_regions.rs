@@ -143,6 +143,9 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
                 && !row_text.ends_with(char::is_whitespace)
                 && !line.text.starts_with(char::is_whitespace)
                 && line.frame_rect()[0] - prev.frame_rect()[2] > line.size * 0.12
+                // A separately positioned vowel mark isn't a new word even when
+                // the producer's advance/geometry looks like an inter-word gap.
+                && !line.text.chars().next().is_some_and(crate::bidi::is_hebrew_mark)
             {
                 row_text.push(' ');
                 block.editor_text.push(' ');
@@ -194,6 +197,27 @@ fn shape_source(
             && let Ok(shaped) = pdfcraft_fonts::source_shaping::shape(&bytes, text)
         {
             return Ok(Some((bytes, shaped, family)));
+        }
+    }
+    // Preserve the source's embedded glyphs first. When its subset cannot cover newly
+    // inserted Hebrew, prefer a complete matching build face before substituting families.
+    for face in pdfcraft_fonts::embedding::matching_faces(&family) {
+        if pdfcraft_fonts::embedding::covers(face.bytes, text)
+            && let Ok(shaped) = pdfcraft_fonts::source_shaping::shape(face.bytes, text)
+        {
+            return Ok(Some((face.bytes.to_vec(), shaped, face.family.to_string())));
+        }
+    }
+    // Hebrew input may come from a subset with no matching complete face. The bundled
+    // Hebrew document face supports shaped glyphs (including marks), unlike the legacy
+    // one-character Type 3 fallback. Never use an interface-only system font here.
+    if text.chars().any(|c| matches!(c as u32, 0x0590..=0x05FF | 0xFB1D..=0xFB4F)) {
+        for face in pdfcraft_fonts::ui_hebrew_fonts() {
+            if pdfcraft_fonts::embedding::covers(face.bytes, text)
+                && let Ok(shaped) = pdfcraft_fonts::source_shaping::shape(face.bytes, text)
+            {
+                return Ok(Some((face.bytes.to_vec(), shaped, face.family.to_string())));
+            }
         }
     }
     Err(EditError::Invalid("complex text needs the complete source TrueType/OpenType face; load that font before editing".into()))
@@ -393,15 +417,65 @@ pub(super) fn rewrite_styled_block(
     let mut fallback_names: std::collections::BTreeMap<(String, char), String> = std::collections::BTreeMap::new();
     let mut full_faces: HashMap<String, String> = HashMap::new();
     let mut programs: HashMap<String, Option<std::sync::Arc<Vec<u8>>>> = HashMap::new();
+    // If the PDF subset cannot shape all the requested Hebrew marks, embed an
+    // openly licensed full Hebrew face and shape the WHOLE run in it. Mixing
+    // a Type 3 vowel glyph with its original base letter cannot position niqqud.
+    // This is generic per-document font resolution, never a hardcoded PDF/font.
+    let has_hebrew_marks = draft.chars().any(crate::bidi::is_hebrew_mark);
+    let uniform_hebrew_style = has_hebrew_marks && style.ranges.is_empty()
+        && block.lines.iter().filter_map(|i| lines.get(*i)).all(|line| {
+            pdfcraft_fonts::embedding::face_key(&line.base_font) == pdfcraft_fonts::embedding::face_key(&first.base_font)
+                && line.size == first.size && line.color == first.color
+                && line.bold == first.bold && line.italic == first.italic
+        });
+    if has_hebrew_marks && !uniform_hebrew_style {
+        return Err(EditError::Invalid(
+            "Hebrew points across incompatible source font/style runs need a uniform full-face paragraph".into(),
+        ));
+    }
+    let shape_text: String = if has_hebrew_marks {
+        draft.chars().filter(|c| !matches!(c, '\n' | '\r')).collect()
+    } else {
+        String::new()
+    };
+    let source_can_shape = has_hebrew_marks && fonts.get(first.font.as_bytes())
+        .and_then(|f| doc.resolve(f).as_dict().cloned())
+        .and_then(|font| pdfcraft_fonts::pdf::embedded_sfnt(doc, &font))
+        .is_some_and(|bytes| {
+            pdfcraft_fonts::embedding::covers(&bytes, &shape_text)
+                && pdfcraft_fonts::source_shaping::shape(&bytes, &shape_text).is_ok()
+        });
+    let shaped_hebrew_resource = if has_hebrew_marks && !source_can_shape {
+        let face = pdfcraft_fonts::document_hebrew_font(first.bold).ok_or_else(no_hebrew_font)?;
+        if !pdfcraft_fonts::embedding::covers(face.bytes, &shape_text) {
+            return Err(EditError::Invalid(
+                "the embedded source and bundled Hebrew fonts cannot cover every character in this paragraph".into(),
+            ));
+        }
+        let name = pdfcraft_fonts::embedding::embed(doc, &mut fonts, face.bytes, face.family)
+            .map_err(EditError::Invalid)?;
+        let font = fonts.get(name.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned())
+            .ok_or_else(|| EditError::Invalid("the shaped Hebrew fallback font could not be loaded".into()))?;
+        metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
+        substituted = Some(format!("{} (shaped Hebrew)", face.family));
+        Some(name)
+    } else if has_hebrew_marks {
+        Some(first.font.clone())
+    } else {
+        None
+    };
     for (range, index) in styled_spans {
         let source = lines.get(index).unwrap_or(first);
         for ch in draft.get(range).unwrap_or_default().chars() {
+            let source_index = if uniform_hebrew_style { block.lines[0] } else { index };
             if ch == '\n' {
-                chars.push((ch, index, source.font.clone()));
+                chars.push((ch, source_index, source.font.clone()));
                 continue;
             }
             let s = ch.to_string();
-            let name = if let Some(resource) = overrides.get(&index).and_then(|r| r.resource.as_ref()).or(style.resource.as_ref()) {
+            let name = if let Some(resource) = shaped_hebrew_resource.as_ref().filter(|_| uniform_hebrew_style) {
+                resource.clone()
+            } else if let Some(resource) = overrides.get(&index).and_then(|r| r.resource.as_ref()).or(style.resource.as_ref()) {
                 if !metrics.get(resource).is_some_and(|m| source_encodes(m, &s)) {
                     return Err(EditError::Invalid(format!("the selected font resource {resource} cannot show U+{:04X}", u32::from(ch))));
                 }
@@ -412,22 +486,6 @@ pub(super) fn rewrite_styled_block(
                 pdfcraft_fonts::embedding::face_key(&m.base_font) == pdfcraft_fonts::embedding::face_key(&source.base_font) && source_encodes(m, &s)
             }) {
                 name.clone()
-            } else if let Some(face) =
-                pdfcraft_fonts::embedding::matching_faces(&source.base_font).into_iter().find(|f| pdfcraft_fonts::embedding::covers(f.bytes, &s))
-            {
-                let key = face.name();
-                if let Some(name) = full_faces.get(&key) {
-                    name.clone()
-                } else {
-                    let name = pdfcraft_fonts::embedding::embed(doc, &mut fonts, face.bytes, face.family).map_err(EditError::Invalid)?;
-                    let font = fonts
-                        .get(name.as_bytes())
-                        .and_then(|f| doc.dict(f))
-                        .ok_or_else(|| EditError::Invalid("the full source font could not be loaded".into()))?;
-                    metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
-                    full_faces.insert(key, name.clone());
-                    name
-                }
             } else if let Some(bytes) = programs
                 .entry(source.font.clone())
                 .or_insert_with(|| source_program(doc, &fonts, &source.font).map(std::sync::Arc::new))
@@ -446,6 +504,22 @@ pub(super) fn rewrite_styled_block(
                         .get(name.as_bytes())
                         .and_then(|f| doc.dict(f))
                         .ok_or_else(|| EditError::Invalid("the source font could not be loaded".into()))?;
+                    metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
+                    full_faces.insert(key, name.clone());
+                    name
+                }
+            } else if let Some(face) =
+                pdfcraft_fonts::embedding::matching_faces(&source.base_font).into_iter().find(|f| pdfcraft_fonts::embedding::covers(f.bytes, &s))
+            {
+                let key = face.name();
+                if let Some(name) = full_faces.get(&key) {
+                    name.clone()
+                } else {
+                    let name = pdfcraft_fonts::embedding::embed(doc, &mut fonts, face.bytes, face.family).map_err(EditError::Invalid)?;
+                    let font = fonts
+                        .get(name.as_bytes())
+                        .and_then(|f| doc.dict(f))
+                        .ok_or_else(|| EditError::Invalid("the full source font could not be loaded".into()))?;
                     metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
                     full_faces.insert(key, name.clone());
                     name
@@ -485,7 +559,7 @@ pub(super) fn rewrite_styled_block(
                     name
                 }
             };
-            chars.push((ch, index, name));
+            chars.push((ch, source_index, name));
         }
     }
     let size_of = |source: &TextLine, index: usize| {
@@ -706,7 +780,13 @@ pub(super) fn rewrite_styled_block(
             continue;
         }
         let w = measured.get(row_index).copied().unwrap_or(0.0);
-        let align = style.align.unwrap_or(if centered { crate::added::Align::Center } else { crate::added::Align::Left });
+        let align = style.align.unwrap_or(if centered {
+            crate::added::Align::Center
+        } else if crate::bidi::rtl_base(draft) {
+            crate::added::Align::Right
+        } else {
+            crate::added::Align::Left
+        });
         let original_rect = block.rows.get(row_index).and_then(|row| row_rect(row, lines)).unwrap_or(block.rect);
         let left = if style.width.is_none() && style.align.is_none() { original_rect[0] } else { block.rect[0] };
         let available = if style.width.is_none() && style.align.is_none() { original_rect[2] - original_rect[0] } else { width };

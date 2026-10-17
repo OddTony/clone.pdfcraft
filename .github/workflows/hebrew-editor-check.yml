@@ -1,0 +1,55 @@
+name: Hebrew editor code checks
+
+on:
+  push:
+    branches: [fix/hebrew-editor-fonts-20261015]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hebrew-editor-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-and-test:
+    name: Compile editor and run RTL regression tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # Save compiled crates even when an experimental regression fails.
+      CACHE_ON_FAILURE: "true"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # Node.js 24
+        with:
+          shared-key: pdfcraft-hebrew-editor-check
+
+      - name: Install Linux GUI development libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev \
+            libgl1-mesa-dev libgtk-3-dev
+
+      - name: Check GUI and PDF text-writing crates
+        run: cargo check --locked -p pdfcraft-ui-egui -p pdfcraft-edit
+
+      - name: RTL caret and niqqud regression tests
+        run: |
+          set -uo pipefail
+          failed=0
+          run_check() { "$@" || failed=1; }
+          run_check cargo test --locked --lib -p pdfcraft-ui-egui rtl_caret_hit_testing_uses_physical_order_without_reversing_text
+          run_check cargo test --locked --lib -p pdfcraft-ui-egui mixed_hebrew_latin_caret_stops_remain_valid_unicode_indices
+          run_check cargo test --locked --lib -p pdfcraft-ui-egui live_rtl_preview_uses_original_font_after_text_changes
+          run_check cargo test --locked --lib -p pdfcraft-fonts unicode_grapheme_sequences_reuse_one_embedded_pdf_glyph
+          run_check cargo test --locked --lib -p pdfcraft-edit vowelized_hebrew_uses_the_shaping_writer_not_the_type3_fallback
+          run_check cargo test --locked --lib -p pdfcraft-engine edited_pdf_preview_matches_apply_save_render
+          exit "$failed"

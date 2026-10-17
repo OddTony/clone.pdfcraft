@@ -32,11 +32,19 @@ pub(crate) struct TextBackground {
     received: Option<u64>,
     draft_key: Option<(String, pdfcraft_engine::BlockStyle)>,
     draft_rect: Option<[f64; 4]>,
+    /// A PDF-rendered temporary edit. Unlike egui, this uses the same glyph
+    /// mapping, shaping and positioning as the saved document.
+    draft_renderer: Option<pdfcraft_render::RenderPool>,
+    draft_texture: Option<egui::TextureHandle>,
+    draft_tag: Option<u64>,
+    draft_received: Option<u64>,
+    draft_error: Option<String>,
 }
 
 impl TextBackground {
     pub fn pending(&self) -> bool {
-        self.renderer.is_some() && self.received != self.tag
+        (self.renderer.is_some() && self.received != self.tag)
+            || (self.draft_renderer.is_some() && self.draft_received != self.draft_tag)
     }
 
     pub fn prepare(
@@ -65,8 +73,26 @@ impl TextBackground {
             let draft_key = (ed.text.clone(), ed.style());
             if self.draft_key.as_ref() != Some(&draft_key) {
                 self.draft_rect = doc.text_edit_layout(ed.page, ed.block, &ed.text, &draft_key.1).ok().and_then(|layout| layout.draft_rect);
+                // A draft raster is immutable and belongs to this exact text
+                // and formatting state. Drop it immediately after any keystroke.
+                self.draft_renderer = None;
+                self.draft_texture = None;
+                self.draft_tag = None;
+                self.draft_received = None;
+                self.draft_error = None;
+                if ed.has_changes() {
+                    match doc.text_edit_draft_preview(ed.page, ed.block, &ed.text, &draft_key.1) {
+                        Ok(preview) => self.draft_renderer = Some(preview.renderer()),
+                        Err(e) => self.draft_error = Some(e),
+                    }
+                }
                 self.draft_key = Some(draft_key);
             }
+        }
+        // The original page already has the exact text. Avoid an unused textless
+        // raster job on focus; start it only if the user actually edits the block.
+        if editor.is_some_and(LineEditor::pristine_source_visible) {
+            return;
         }
         let (Some((_, page, _)), Some(renderer)) = (self.key, self.renderer.as_ref()) else { return };
         let Some(p) = doc.info.pages.get(page) else { return };
@@ -99,6 +125,44 @@ impl TextBackground {
         if self.received != Some(tag) {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
+        let mut render_error = None;
+        if let Some(draft) = &self.draft_renderer {
+            if self.draft_tag != Some(tag) {
+                draft.set_queue(vec![pdfcraft_render::RenderRequest { page, scale, tag, ..Default::default() }]);
+                self.draft_tag = Some(tag);
+            }
+            if let Some(output) = draft.try_recv() {
+                if let Some(error) = output.error {
+                    render_error = Some(error);
+                } else if output.request.tag == tag {
+                    self.draft_texture = Some(ctx.load_texture(
+                        "text-editor-saved-pdf-preview",
+                        crate::canvas::texture_image([output.width as usize, output.height as usize], output.rgba),
+                        egui::TextureOptions::LINEAR,
+                    ));
+                    self.draft_received = Some(tag);
+                }
+            }
+            if self.draft_received != Some(tag) && render_error.is_none() {
+                ctx.request_repaint_after(std::time::Duration::from_millis(16));
+            }
+        }
+        if let Some(error) = render_error {
+            self.draft_renderer = None;
+            self.draft_texture = None;
+            self.draft_error = Some(error);
+        }
+    }
+
+    pub fn ready_draft(&self, page: usize, block: usize) -> bool {
+        self.key.is_some_and(|(_, p, target)| (p, target) == (page, TextTarget::Block(block)))
+            && self.draft_texture.is_some()
+            && self.draft_tag == self.draft_received
+            && self.draft_error.is_none()
+    }
+
+    pub fn draft_error(&self) -> Option<&str> {
+        self.draft_error.as_deref()
     }
 
     pub fn ready(&self, page: usize, block: usize) -> bool {
@@ -117,12 +181,25 @@ impl TextBackground {
         editor: Option<&LineEditor>,
         draft: Option<&crate::content_ui::TextDraft>,
     ) {
-        let ready = editor.is_some_and(|ed| ed.page == page && self.ready(page, ed.block))
-            || draft.is_some_and(|d| d.page == page && d.index.is_some_and(|index| self.ready_added(page, index)));
+        // Entering Edit Text must never redraw untouched text through a different font
+        // or bidi renderer. The original page raster remains authoritative until
+        // a real edit changes the glyphs or their style.
+        if editor.is_some_and(|ed| ed.page == page && ed.pristine_source_visible()) {
+            return;
+        }
+        let use_draft = editor.is_some_and(|ed| {
+            ed.page == page && ed.has_changes() && self.ready_draft(page, ed.block)
+        });
+        let ready = editor.is_some_and(|ed| {
+            ed.page == page && (self.ready(page, ed.block) || self.ready_draft(page, ed.block))
+        }) || draft.is_some_and(|d| {
+            d.page == page && d.index.is_some_and(|index| self.ready_added(page, index))
+        });
         if !ready {
             return;
         }
-        let Some(tex) = &self.texture else { return };
+        let tex = if use_draft { self.draft_texture.as_ref() } else { self.texture.as_ref() };
+        let Some(tex) = tex else { return };
         // Font metrics can underestimate the actual glyph ink. Paint the complete textless
         // page so overhanging glyphs cannot remain outside the estimated source rectangle.
         let painter = painter.with_clip_rect(painter.clip_rect().intersect(xf.rect));
@@ -140,6 +217,8 @@ const MAX_OUTLINES: usize = 250;
 #[derive(Clone, Debug, PartialEq)]
 pub struct LineEditor {
     pub selection: Option<std::ops::Range<usize>>,
+    /// Physical mouse-selection anchor in logical Unicode character coordinates.
+    rtl_drag_anchor: Option<usize>,
     pub font_resource: Option<String>,
     pub page: usize,
     pub block: usize,
@@ -212,6 +291,15 @@ pub(crate) fn extras_panel(ui: &mut egui::Ui, e: &mut Extras) -> bool {
 impl LineEditor {
     pub(crate) fn has_changes(&self) -> bool {
         self.text != self.original || self.look != self.look0 || self.extras != self.extras0
+    }
+
+    /// Keep the original PDF glyphs on screen while the editor is pristine.
+    /// This avoids word-order changes, mark detachment, and font substitutions
+    /// merely from opening the editor. OCR layers are not visible PDF text.
+    pub(crate) fn pristine_source_visible(&self) -> bool {
+        !self.has_changes()
+            && self.font_resource.is_none()
+            && self.source.as_ref().is_some_and(|(block, _)| !block.invisible)
     }
 
     /// Extra width permitted by the editor. Source containers now remain fixed.
@@ -949,6 +1037,7 @@ fn open_editor(
     let max_width = if l.rows.len() == 1 { (right - b.left()).max(b.width()) } else { b.width() };
     view.line_editor = Some(LineEditor {
         selection: None,
+        rtl_drag_anchor: None,
         font_resource: None,
         page,
         block,
@@ -1127,6 +1216,75 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
         definitions.font_data.insert(name.clone(), Arc::new(egui::FontData::from_owned(program.bytes.clone())));
         families.insert(program.resource.clone(), name);
     }
+    // Interface-only matching of a PDF's named font to a user-installed face.
+    // No system font bytes are written back into a PDF. Source-embedded fonts win.
+    // A face must match the PDF family/PostScript name, not merely its style.
+    #[cfg(target_os = "macos")]
+    {
+        let missing: Vec<_> = doc.text_lines(page).into_iter()
+            .filter(|line| !families.contains_key(&line.font))
+            .map(|line| (line.font, line.base_font, line.text))
+            .collect();
+        if !missing.is_empty() && std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_none_or(|v| v != "0") {
+            let mut roots = vec![
+                std::path::PathBuf::from("/Library/Fonts"),
+                std::path::PathBuf::from("/System/Library/Fonts"),
+                std::path::PathBuf::from("/System/Library/Fonts/Supplemental"),
+            ];
+            if let Some(home) = std::env::var_os("HOME") {
+                roots.push(std::path::PathBuf::from(home).join("Library/Fonts"));
+            }
+            let mut scanned = 0_usize;
+            for root in roots {
+                let Ok(entries) = std::fs::read_dir(root) else { continue };
+                for entry in entries.flatten() {
+                    // Stop parsing installed fonts once every missing document face
+                    // has been matched. Keep the same opt-out as the UI font policy.
+                    if missing.iter().all(|(resource, _, _)| families.contains_key(resource)) {
+                        break;
+                    }
+                    if scanned >= 1024 || families.len() >= 128 { break; }
+                    scanned += 1;
+                    let path = entry.path();
+                    let Some(ext) = path.extension().and_then(|e| e.to_str()) else { continue };
+                    let collection = ext.eq_ignore_ascii_case("ttc");
+                    if !collection && !ext.eq_ignore_ascii_case("ttf") && !ext.eq_ignore_ascii_case("otf") { continue; }
+                    let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
+                    // Larger, multi-face collections are ordinary macOS installed fonts.
+                    let limit = if collection { 64_u64 << 20 } else { 16_u64 << 20 };
+                    if !meta.is_file() || meta.len() > limit { continue; }
+                    let Ok(bytes) = std::fs::read(&path) else { continue };
+                    for face_index in 0..if collection { 16 } else { 1 } {
+                        let Ok((family, postscript)) = pdfcraft_fonts::embedding::display_names_at(&bytes, face_index) else { break };
+                        let matched: Vec<_> = missing.iter().filter(|(resource, source, sample)| {
+                            let nonspace: String = sample.chars().filter(|ch| !ch.is_whitespace()).collect();
+                            !families.contains_key(resource)
+                                && [family.as_str(), postscript.as_str()].iter().any(|name| {
+                                    pdfcraft_fonts::embedding::face_key(name) ==
+                                        pdfcraft_fonts::embedding::face_key(source)
+                                })
+                                && pdfcraft_fonts::embedding::covers_at(&bytes, face_index, &nonspace)
+                        }).collect();
+                        if matched.is_empty() { continue; }
+                        let name = format!("pdf-source-installed-{}", definitions.font_data.len());
+                        let mut data = egui::FontData::from_owned(bytes.clone());
+                        data.index = face_index;
+                        definitions.font_data.insert(name.clone(), Arc::new(data));
+                        // A system font is an interface-only fallback: it must not be
+                        // selected for implicit embedding in the saved PDF.
+                        let mut stack = vec![name.clone()];
+                        if let Some(defaults) = definitions.families.get(&FontFamily::Proportional) {
+                            stack.extend(defaults.iter().cloned());
+                        }
+                        definitions.families.insert(FontFamily::Name(name.clone().into()), stack);
+                        for (resource, _, _) in matched {
+                            families.insert(resource.clone(), name.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
     for program in &programs {
         let Some(name) = families.get(&program.resource) else { continue };
         // Word-created PDFs often split one face into several subsets. Use all of the
@@ -1150,6 +1308,120 @@ pub(crate) fn install_source_fonts(ctx: &egui::Context, doc: &pdfcraft_engine::D
         ctx.set_fonts(definitions);
     }
     families
+}
+
+/// Physical caret stops for RTL text. The egui TextEdit buffer stays in
+/// logical Unicode order; only hit testing and caret painting use this map.
+#[derive(Clone, Copy, Debug)]
+struct RtlCaretStop { index: usize, x: f32, y: f32 }
+
+fn editor_rtl(text: &str) -> bool {
+    unicode_bidi::get_base_direction(text) == unicode_bidi::Direction::Rtl
+}
+
+fn is_combining_for_cursor(c: char) -> bool {
+    matches!(c as u32,
+        0x0300..=0x036F | 0x0591..=0x05BD | 0x05BF | 0x05C1..=0x05C2
+        | 0x05C4..=0x05C5 | 0x05C7 | 0xFB1E | 0x0610..=0x061A
+        | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06ED | 0xFE20..=0xFE2F)
+}
+
+fn rtl_caret_stops(galley: &egui::Galley) -> Vec<RtlCaretStop> {
+    use unicode_bidi::{BidiInfo, Level};
+    let mut stops = Vec::new();
+    let source_rows: Vec<&str> = galley.job.text.split('\n').collect();
+    let explicit_rows = source_rows.len() == galley.rows.len();
+    let mut consumed = 0_usize; // Unicode characters, NOT shaped glyphs.
+    let total = galley.job.text.chars().count();
+    for (row_index, placed) in galley.rows.iter().enumerate() {
+        let glyphs = &placed.row.glyphs;
+        // egui's HarfBuzz-backed shaper may emit more than one visual glyph for
+        // one Unicode scalar. Never derive logical cursor indices from glyph
+        // indices: this caused 4-letter Hebrew words to return index 7.
+        let line = if explicit_rows {
+            source_rows.get(row_index).copied().unwrap_or_default().to_owned()
+        } else if galley.rows.len() == 1 {
+            galley.job.text.clone()
+        } else {
+            // Soft-wrapped rows have no source newline. Consume a bounded number
+            // of Unicode characters, leaving the last row the remaining text.
+            let remaining: String = galley.job.text.chars().skip(consumed).collect();
+            let length = if row_index + 1 == galley.rows.len() {
+                remaining.chars().count()
+            } else {
+                glyphs.len().min(remaining.chars().count())
+            };
+            remaining.chars().take(length).collect()
+        };
+        let n_chars = line.chars().count();
+        if line.is_empty() {
+            stops.push(RtlCaretStop { index: consumed.min(total), x: placed.pos.x, y: placed.pos.y });
+            consumed += usize::from(placed.ends_with_newline);
+            continue;
+        }
+        let exact_widths = glyphs.len() == n_chars;
+        let average_width = placed.row.size.x.max(0.0) / n_chars.max(1) as f32;
+        // (UTF-8 byte start, Unicode char start, Unicode char end, advance).
+        let mut clusters: Vec<(usize, usize, usize, f32)> = Vec::new();
+        for (i, (byte, ch)) in line.char_indices().enumerate() {
+            let width = if exact_widths {
+                glyphs.get(i).map_or(average_width, |g| g.advance_width.max(0.0))
+            } else {
+                // If glyph shaping expanded/combined clusters, absolute glyph
+                // indices are unrelated to Unicode character indices.
+                average_width
+            };
+            if is_combining_for_cursor(ch) && let Some(last) = clusters.last_mut() {
+                last.2 = i + 1;
+                last.3 += width;
+            } else {
+                clusters.push((byte, i, i + 1, width));
+            }
+        }
+        let base = if editor_rtl(&galley.job.text) { Level::rtl() } else { Level::ltr() };
+        let info = BidiInfo::new(&line, Some(base));
+        let Some(para) = info.paragraphs.first() else { continue };
+        let (levels, runs) = info.visual_runs(para, 0..line.len());
+        let mut x = placed.pos.x;
+        for run in runs {
+            let rtl = levels.get(run.start).is_some_and(Level::is_rtl);
+            let mut indices: Vec<_> = clusters.iter().enumerate()
+                .filter(|(_, c)| run.contains(&c.0)).map(|(i, _)| i).collect();
+            if rtl { indices.reverse(); }
+            for i in indices {
+                let (_, start, end, width) = clusters[i];
+                stops.push(RtlCaretStop { index: consumed + if rtl { end } else { start }, x, y: placed.pos.y });
+                x += width;
+                stops.push(RtlCaretStop { index: consumed + if rtl { start } else { end }, x, y: placed.pos.y });
+            }
+        }
+        consumed += n_chars + usize::from(placed.ends_with_newline);
+    }
+    stops
+}
+
+fn rtl_caret_at(galley: &egui::Galley, pointer: egui::Vec2) -> Option<usize> {
+    rtl_caret_stops(galley).into_iter().min_by(|a, b| {
+        let distance = |s: &RtlCaretStop| {
+            (pointer.y - s.y).abs() * 10_000.0 + (pointer.x - s.x).abs()
+        };
+        distance(a).total_cmp(&distance(b))
+    }).map(|s| s.index)
+}
+
+fn rtl_caret_location(galley: &egui::Galley, index: usize) -> Option<egui::Pos2> {
+    rtl_caret_stops(galley).into_iter().find(|s| s.index == index)
+        .map(|s| egui::pos2(s.x, s.y))
+}
+
+fn rtl_move_visual(galley: &egui::Galley, index: usize, left: bool) -> Option<usize> {
+    let stops = rtl_caret_stops(galley);
+    let at = stops.iter().position(|s| s.index == index)?;
+    if left {
+        stops.get(..at)?.iter().rev().find(|s| s.index != index).map(|s| s.index)
+    } else {
+        stops.get(at + 1..)?.iter().find(|s| s.index != index).map(|s| s.index)
+    }
 }
 
 fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> egui::text::LayoutJob {
@@ -1200,14 +1472,16 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             }
             let native_width = ui.fonts_mut(|f| f.layout_no_wrap(line.text.clone(), font.clone(), Color32::BLACK).size().x);
             let target_width = ((line.rect[2] - line.rect[0]) * look.size / line.size.max(0.01)) as f32 * scale;
-            let spacing = if original_face { (target_width - native_width) / line.text.chars().count().saturating_sub(1).max(1) as f32 } else { 0.0 };
+            let spacing = if original_face && !text.chars().any(is_combining_for_cursor) {
+                (target_width - native_width) / line.text.chars().count().saturating_sub(1).max(1) as f32
+            } else { 0.0 };
             job.append(
                 text.get(range).unwrap_or_default(),
                 0.0,
                 egui::TextFormat {
                     font_id: font,
                     extra_letter_spacing: spacing + ed.extras.char_spacing as f32 * scale,
-                    color: color32(look.color),
+                    color: if ed.pristine_source_visible() || crate::bidi::has_rtl(&ed.text) { Color32::TRANSPARENT } else { color32(look.color) },
                     italics: look.italic && !embedded,
                     ..Default::default()
                 },
@@ -1219,7 +1493,7 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             0.0,
             egui::TextFormat {
                 font_id: editor_font(&ed.look, ed.size),
-                color: color32(ed.look.color),
+                color: if crate::bidi::has_rtl(&ed.text) { Color32::TRANSPARENT } else { color32(ed.look.color) },
                 italics: ed.look.italic,
                 ..Default::default()
             },
@@ -1228,11 +1502,71 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
     job
 }
 
+/// Render RTL text from visual Unicode runs without asking `edited_spans` to
+/// map visual string indices back into the logical source string. The previous
+/// code did so, yielding incorrect section boundaries and default-font fallback
+/// as soon as a character was typed. Keep the ORIGINAL source face for each row.
+fn editor_visual_job(
+    ui: &egui::Ui,
+    ed: &LineEditor,
+    visual: &str,
+    scale: f32,
+    width: f32,
+) -> egui::text::LayoutJob {
+    let original = editor_job(ui, ed, &ed.text, scale, width);
+    let mut job = egui::text::LayoutJob::default();
+    job.wrap = original.wrap;
+    job.halign = original.halign;
+    let source = ed.source.as_ref();
+    for (row_index, row) in visual.split_inclusive('\n').enumerate() {
+        let line = source.and_then(|(block, lines)| {
+            block.rows.get(row_index).and_then(|r| r.first()).and_then(|i| lines.get(*i))
+        });
+        let mut look = line.map_or_else(
+            || ed.look.clone(),
+            |line| source_look(&line.base_font, line.size, line.color, line.bold, line.italic),
+        );
+        if ed.look.family != ed.look0.family { look.family = ed.look.family; }
+        if ed.look.bold != ed.look0.bold { look.bold = ed.look.bold; }
+        if ed.look.italic != ed.look0.italic { look.italic = ed.look.italic; }
+        if ed.look.size != ed.look0.size { look.size = ed.look.size; }
+        if ed.look.color != ed.look0.color { look.color = ed.look.color; }
+        let mut font = editor_font(&look, (look.size as f32 * scale).clamp(1.0, 300.0));
+        let original_face = ed.look.family == ed.look0.family
+            && ed.look.bold == ed.look0.bold && ed.look.italic == ed.look0.italic;
+        let embedded = line.and_then(|l| original_face.then(|| ed.fonts.get(&l.font)).flatten());
+        if let Some(name) = embedded {
+            font.family = FontFamily::Name(name.clone().into());
+        }
+        job.append(row, 0.0, egui::TextFormat {
+            font_id: font,
+            extra_letter_spacing: ed.extras.char_spacing as f32 * scale,
+            color: color32(look.color),
+            italics: look.italic && embedded.is_none(),
+            ..Default::default()
+        });
+    }
+    job
+}
+
 /// Align the editable galley's baselines to the source rows instead of egui's interface
 /// leading. Glyphs, meshes, caret and selection receive the same transform.
 fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32) -> Arc<egui::Galley> {
-    let mut job = editor_job(ui, ed, text, scale, width);
+    let job = editor_job(ui, ed, text, scale, width);
+    editor_galley_with_job(ui, ed, text, scale, width, job)
+}
+
+fn editor_galley_with_job(
+    ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32,
+    mut job: egui::text::LayoutJob,
+) -> Arc<egui::Galley> {
     let centered = job.halign == egui::Align::Center;
+    // PDF source rows have physical left and right edges. For an RTL paragraph,
+    // retain the source right edge rather than treating its varying left edge
+    // as the paragraph anchor.
+    // Use the logical paragraph's base direction. A visualized RTL row can
+    // begin with a Latin/number run on the left and must still align right.
+    let rtl = editor_rtl(&ed.text);
     job.halign = egui::Align::LEFT;
     let mut galley = ui.fonts_mut(|fonts| fonts.layout_job(job));
     let Some((block, lines)) = &ed.source else { return galley };
@@ -1276,7 +1610,13 @@ fn editor_galley(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: 
         let base_y = (block.rect[3] - baseline) as f32 * scale;
         let row = Arc::make_mut(&mut placed.row);
         placed.pos.y = base_y - ascent;
-        placed.pos.x = if centered { (width - row.size.x) / 2.0 } else { (source_rect[0] - block.rect[0]) as f32 * scale };
+        placed.pos.x = if centered {
+            (width - row.size.x) / 2.0
+        } else if rtl {
+            (source_rect[2] - block.rect[0]) as f32 * scale - row.size.x
+        } else {
+            (source_rect[0] - block.rect[0]) as f32 * scale
+        };
         for glyph in &mut row.glyphs {
             let dy = ascent - glyph.pos.y;
             glyph.pos.y = ascent;
@@ -1311,7 +1651,14 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     let background_ready = view
         .line_editor
         .as_ref()
-        .is_some_and(|ed| view.text_background.ready(ed.page, ed.block) && !ed.source.as_ref().is_some_and(|(b, _)| b.invisible));
+        .is_some_and(|ed| {
+            (view.text_background.ready(ed.page, ed.block)
+                || view.text_background.ready_draft(ed.page, ed.block))
+                && !ed.source.as_ref().is_some_and(|(b, _)| b.invisible)
+        });
+    let draft_pdf_ready = view.line_editor.as_ref()
+        .is_some_and(|ed| view.text_background.ready_draft(ed.page, ed.block));
+    let draft_error = view.text_background.draft_error().map(str::to_owned);
     let draft_rect = view.text_background.draft_rect.map(|r| xf.user_rect(info, page, r.map(|v| v as f32)));
     let ed = view.line_editor.as_mut()?;
     if hold {
@@ -1331,6 +1678,8 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     ed.size = (ed.look.size as f32 * scale).clamp(1.0, 300.0);
     let font = editor_font(&ed.look, ed.size);
     let text_color = color32(ed.look.color);
+    let pristine_source = ed.pristine_source_visible();
+    let rtl_input = crate::bidi::has_rtl(&ed.text);
     let mut done = None;
     egui::Area::new(egui::Id::new("edit-text-line")).order(egui::Order::Foreground).fixed_pos(Pos2::new(ed.rect.left(), ed.rect.top())).show(
         ctx,
@@ -1355,6 +1704,18 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             // can differ from the PDF's. Keep every visible row inside the growing frame.
             let live = draft_rect.map_or(visible, |bounds| bounds.union(visible));
             ui.painter().rect_stroke(live.expand(2.0), CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
+            // Do not silently substitute the source font when the PDF rewrite
+            // rejects an unsupported glyph. The user sees the same error that
+            // Apply would return, while the original document stays untouched.
+            if let Some(error) = &draft_error {
+                ui.painter().text(
+                    live.left_bottom() + egui::vec2(0.0, 5.0),
+                    egui::Align2::LEFT_TOP,
+                    error,
+                    egui::FontId::proportional(11.0),
+                    Color32::from_rgb(184, 49, 49),
+                );
+            }
             // On the frame, a press takes hold of the box (a click selects it, a drag moves it):
             // the pointer says so there, and reads as text inside.
             if let Some(p) = ui.input(|i| i.pointer.hover_pos())
@@ -1365,23 +1726,34 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             }
             // White, unless the text is too pale to read on white (white text from a coloured
             // banner, #913): then a dark box, with a caret that shows on it.
-            let fill = if background_ready { Color32::TRANSPARENT } else { editor_fill(text_color) };
+            let fill = if background_ready || pristine_source { Color32::TRANSPARENT } else { editor_fill(text_color) };
             // Until the background worker finishes, cover the entire source box, including
             // lines the draft no longer occupies. Shrinking the text must never expose a copy.
-            if !background_ready {
+            if !background_ready && !pristine_source {
                 ui.painter().rect_filled(ed.rect.expand(1.0), CornerRadius::ZERO, fill);
             }
             egui::Frame::NONE.fill(fill).show(ui, |ui| {
                 // A textless PDF preview keeps its real page background through the transparent editor.
                 // The temporary opaque cover uses the shared caret-contrast rule.
                 ui.visuals_mut().text_cursor.stroke.color =
-                    if background_ready { if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE } } else { caret_color_on(fill) };
+                    if background_ready || pristine_source { if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE } } else { caret_color_on(fill) };
                 let rows = 1;
                 let snapshot = ed.clone();
                 let mut layouter =
                     |ui: &egui::Ui, text: &dyn egui::TextBuffer, wrap_width: f32| editor_galley(ui, &snapshot, text.as_str(), scale, wrap_width);
-                let output = egui::TextEdit::multiline(&mut ed.text)
-                    .id(egui::Id::new("edit-text-line-input"))
+                let input_id = egui::Id::new("edit-text-line-input");
+                let previous_range = egui::widgets::text_edit::TextEditState::load(ctx, input_id)
+                    .and_then(|s| s.cursor.char_range());
+                let opening = ed.focus;
+                if rtl_input {
+                    // egui's built-in caret/selection use LTR hit testing. Paint the
+                    // physical caret ourselves from Unicode bidi visual runs.
+                    ui.visuals_mut().text_cursor.stroke.color = Color32::TRANSPARENT;
+                    ui.visuals_mut().selection.bg_fill = Color32::TRANSPARENT;
+                    ui.visuals_mut().selection.stroke.color = Color32::TRANSPARENT;
+                }
+                let mut output = egui::TextEdit::multiline(&mut ed.text)
+                    .id(input_id)
                     .font(font.clone())
                     .margin(egui::Margin::ZERO)
                     .layouter(&mut layouter)
@@ -1390,6 +1762,90 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
                     .desired_width(width)
                     .desired_rows(rows)
                     .show(ui);
+                if rtl_input {
+                    let mut corrected: Option<egui::text::CCursorRange> = None;
+                    // A physical click near the left end of an RTL line means the
+                    // logical END of the text, not the beginning of the LTR buffer.
+                    let pointer = ctx.input(|i| i.pointer.latest_pos());
+                    let physical = pointer.filter(|p| output.response.rect.expand(4.0).contains(*p))
+                        .and_then(|p| rtl_caret_at(&output.galley, p - output.galley_pos));
+                    let pressed = ctx.input(|i| i.pointer.primary_pressed());
+                    let down = ctx.input(|i| i.pointer.primary_down());
+                    if pressed && let Some(index) = physical {
+                        ed.rtl_drag_anchor = Some(index);
+                        corrected = Some(egui::text::CCursorRange::one(egui::text::CCursor::new(index)));
+                    } else if (output.response.dragged() || output.response.drag_stopped())
+                        && let (Some(anchor), Some(index)) = (ed.rtl_drag_anchor, physical)
+                    {
+                        let mut range = egui::text::CCursorRange::one(egui::text::CCursor::new(index));
+                        range.secondary = egui::text::CCursor::new(anchor);
+                        corrected = Some(range);
+                    } else if (output.response.clicked() || opening) && let Some(index) = physical {
+                        corrected = Some(egui::text::CCursorRange::one(egui::text::CCursor::new(index)));
+                    } else if output.response.has_focus()
+                        && let Some(previous) = previous_range
+                        && !ctx.input(|i| i.modifiers.command || i.modifiers.alt)
+                    {
+                        let left = ctx.input(|i| i.key_pressed(egui::Key::ArrowLeft));
+                        let right = ctx.input(|i| i.key_pressed(egui::Key::ArrowRight));
+                        if left != right
+                            && let Some(index) = rtl_move_visual(&output.galley, usize::from(previous.primary.index), left)
+                        {
+                            let mut range = egui::text::CCursorRange::one(egui::text::CCursor::new(index));
+                            if ctx.input(|i| i.modifiers.shift) {
+                                range.secondary = previous.secondary;
+                            }
+                            corrected = Some(range);
+                        }
+                    }
+                    if !down {
+                        ed.rtl_drag_anchor = None;
+                    }
+                    if let Some(range) = corrected {
+                        output.state.cursor.set_char_range(Some(range));
+                        output.state.clone().store(ctx, output.response.id);
+                        output.cursor_range = Some(range);
+                    }
+                    // Highlight the selected logical grapheme clusters in physical
+                    // visual order, not egui's reversed LTR selection geometry.
+                    if let Some(range) = output.cursor_range.filter(|r| !r.is_empty()) {
+                        let selected = range.as_sorted_char_range();
+                        let start: usize = selected.start.into();
+                        let end: usize = selected.end.into();
+                        let stops = rtl_caret_stops(&output.galley);
+                        for pair in stops.windows(2) {
+                            let (a, b) = (pair[0], pair[1]);
+                            if a.y != b.y || b.x <= a.x { continue; }
+                            if a.index.min(b.index) >= start && a.index.max(b.index) <= end {
+                                let min = output.galley_pos + egui::vec2(a.x, a.y);
+                                ui.painter().rect_filled(
+                                    Rect::from_min_size(min, egui::vec2(b.x - a.x, ed.size.max(8.0))),
+                                    CornerRadius::ZERO,
+                                    Color32::from_rgba_premultiplied(35, 125, 235, 65),
+                                );
+                            }
+                        }
+                    }
+                    // The logical input is transparent; paint visual bidi order
+                    // separately without altering clipboard or saved PDF text.
+                    if !pristine_source && !draft_pdf_ready {
+                        let visual = crate::bidi::visual_auto(&ed.text);
+                        let job = editor_visual_job(ui, ed, &visual, scale, width);
+                        let display = editor_galley_with_job(ui, ed, &visual, scale, width, job);
+                        ui.painter().galley(output.galley_pos, display, text_color);
+                    }
+                    if output.response.has_focus()
+                        && let Some(cursor) = output.cursor_range.and_then(|r| r.single())
+                        && let Some(stop) = rtl_caret_location(&output.galley, usize::from(cursor.index))
+                    {
+                        let pos = output.galley_pos + stop.to_vec2();
+                        let height = ed.size.max(8.0);
+                        ui.painter().line_segment(
+                            [pos, pos + egui::vec2(0.0, height)],
+                            Stroke::new(1.4, if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE }),
+                        );
+                    }
+                }
                 if let Some(cursor) = output.cursor_range {
                     let selected = cursor.as_sorted_char_range();
                     let byte = |index| ed.text.char_indices().nth(index).map_or(ed.text.len(), |(at, _)| at);
@@ -1453,6 +1909,7 @@ mod tests {
         let block = doc.text_blocks(0).remove(0);
         let ed = LineEditor {
             selection: None,
+            rtl_drag_anchor: None,
             font_resource: None,
             page: 0,
             block: 0,
@@ -1473,6 +1930,114 @@ mod tests {
             extras0: Extras::default(),
         };
         (app, ed)
+    }
+
+    #[test]
+    fn pristine_pdf_text_stays_in_the_source_renderer_until_the_first_edit() {
+        let (app, mut ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        ed.source = Some((doc.text_blocks(0).remove(0), doc.text_lines(0)));
+        assert!(ed.pristine_source_visible(), "opening a text block must keep original glyphs visible");
+
+        ed.text.push('x');
+        assert!(!ed.pristine_source_visible(), "typing must activate editable text rendering");
+
+        ed.text = ed.original.clone();
+        ed.font_resource = Some("F1".to_owned());
+        assert!(!ed.pristine_source_visible(), "a different selected font must activate preview");
+
+        ed.font_resource = None;
+        assert!(ed.pristine_source_visible(), "undo restores the original PDF glyph presentation");
+    }
+
+    #[test]
+    fn opening_a_source_paragraph_never_paints_its_reconstructed_glyphs() {
+        let (app, mut ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        ed.source = Some((doc.text_blocks(0).remove(0), doc.text_lines(0)));
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::theme::font_definitions());
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let original = editor_job(ui, &ed, &ed.text, 1.0, 400.0);
+            assert!(!original.sections.is_empty());
+            assert!(original.sections.iter().all(|s| s.format.color == Color32::TRANSPARENT));
+            ed.text.push('x');
+            let edited = editor_job(ui, &ed, &ed.text, 1.0, 400.0);
+            assert!(edited.sections.iter().any(|s| s.format.color != Color32::TRANSPARENT));
+        });
+        output.drop_without_applying_deltas();
+    }
+
+    #[test]
+    fn live_rtl_preview_uses_original_font_after_text_changes() {
+        let (app, mut ed) = preview_app();
+        let doc = app.session.get(app.views[0].id).unwrap();
+        let block = doc.text_blocks(0).remove(0);
+        let lines = doc.text_lines(0);
+        let resource = block.rows[0].first().and_then(|i| lines.get(*i))
+            .map(|l| l.font.clone()).expect("source font");
+        ed.source = Some((block, lines));
+        ed.fonts.insert(resource, "pdf-source-test".to_owned());
+        ed.text = "שלום עולם חדש".to_owned();
+        let ctx = egui::Context::default();
+        let mut defs = crate::theme::font_definitions();
+        // Source fonts are registered by install_source_fonts in the real
+        // editor. This isolated test needs the same named family binding.
+        let proportional = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+        defs.families.insert(FontFamily::Name("pdf-source-test".into()), proportional);
+        ctx.set_fonts(defs);
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let visual = crate::bidi::visual_auto(&ed.text);
+            let job = editor_visual_job(ui, &ed, &visual, 1.0, 500.0);
+            assert_eq!(job.text, visual.as_ref());
+            assert_eq!(job.sections.len(), 1);
+            assert_eq!(job.sections[0].format.font_id.family, FontFamily::Name("pdf-source-test".into()));
+        });
+        output.drop_without_applying_deltas();
+    }
+
+    #[test]
+    fn rtl_caret_hit_testing_uses_physical_order_without_reversing_text() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::theme::font_definitions());
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let galley = ui.fonts_mut(|f| f.layout_no_wrap(
+                "שלום".to_owned(), egui::FontId::proportional(20.0), Color32::BLACK,
+            ));
+            let stops = rtl_caret_stops(&galley);
+            assert!(!stops.is_empty());
+            let y = stops[0].y;
+            let min_x = stops.iter().map(|s| s.x).fold(f32::INFINITY, f32::min);
+            let max_x = stops.iter().map(|s| s.x).fold(f32::NEG_INFINITY, f32::max);
+            assert_eq!(rtl_caret_at(&galley, egui::vec2(min_x - 2.0, y)), Some(4));
+            assert_eq!(rtl_caret_at(&galley, egui::vec2(max_x + 2.0, y)), Some(0));
+            assert_eq!(rtl_move_visual(&galley, 4, false), Some(3));
+            assert_eq!(rtl_move_visual(&galley, 0, true), Some(1));
+
+            let vowelized = ui.fonts_mut(|f| f.layout_no_wrap(
+                "אַ".to_owned(), egui::FontId::proportional(20.0), Color32::BLACK,
+            ));
+            let stops = rtl_caret_stops(&vowelized);
+            assert!(stops.iter().all(|s| s.index != 1), "caret must not split a Hebrew base and its niqqud");
+        });
+        output.drop_without_applying_deltas();
+    }
+
+    #[test]
+    fn mixed_hebrew_latin_caret_stops_remain_valid_unicode_indices() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::theme::font_definitions());
+        let text = "שלום Invoice 123";
+        let output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let galley = ui.fonts_mut(|f| f.layout_no_wrap(
+                text.to_owned(), egui::FontId::proportional(18.0), Color32::BLACK,
+            ));
+            let stops = rtl_caret_stops(&galley);
+            assert!(stops.iter().all(|s| s.index <= text.chars().count()));
+            assert!(stops.iter().any(|s| s.index == 0));
+            assert!(stops.iter().any(|s| s.index == text.chars().count()));
+        });
+        output.drop_without_applying_deltas();
     }
 
     #[test]

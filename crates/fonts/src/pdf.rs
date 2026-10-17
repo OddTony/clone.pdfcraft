@@ -64,6 +64,10 @@ pub struct Metrics {
     code_len: usize,
     /// Valid single-character explicit mappings, preindexed once for large full CJK fonts.
     explicit_reverse: HashMap<char, u32>,
+    /// Exact multi-Unicode-scalar sequences mapped to a single existing PDF
+    /// character code (e.g. Hebrew peh+dagesh represented by one source glyph).
+    /// Prefer the longest sequence so edits can reuse composite source glyphs.
+    sequence_reverse: HashMap<char, Vec<(String, u32)>>,
     /// Subset CIDFontType2 only: one bit per CID (below 65 536) whose glyph has an outline in the
     /// embedded program. See [`cids_with_outlines`].
     outlined_cids: Vec<u64>,
@@ -110,11 +114,51 @@ pub fn embedded_sfnt(doc: &Document, font: &Dict) -> Option<Vec<u8>> {
         // Some PDF generators keep a Mac format-6 code→glyph cmap. egui accepts Unicode
         // format-4/12 cmaps. Combine the PDF's Unicode meanings with the source glyph IDs;
         // only this in-memory copy gets a new cmap, never the working PDF or a font asset.
-        let Ok(cmap) = face.cmap() else { continue };
         let metrics = Metrics::from_dict(doc, font);
         if metrics.composite {
+            // An embedded CIDFontType2 subset often omits cmap altogether: the PDF
+            // supplies Unicode through /ToUnicode and glyph IDs through /CIDToGIDMap.
+            // Rebuild only a temporary editor copy. Never modify the original stream.
+            let map_stream = descendant.as_ref().and_then(|d| d.get(b"CIDToGIDMap")).map(|v| doc.resolve(v));
+            let gid_bytes = match map_stream.as_deref() {
+                Some(Object::Stream(st)) => st.decoded_within(1 << 17).ok(),
+                None | Some(Object::Name(_)) => None, // /Identity is CID == GID.
+                _ => continue,
+            };
+            if matches!(map_stream.as_deref(), Some(Object::Stream(_))) && gid_bytes.is_none() {
+                continue;
+            }
+            let mut mappings = std::collections::BTreeMap::new();
+            let glyph_count = u32::from(face.metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default()).glyph_count);
+            for code in 0..=0xFFFF_u32 {
+                let Some(value) = metrics.text_of(code) else { continue };
+                let Some(ch) = only_char(&value) else { continue };
+                let cid = metrics.cid(code);
+                let gid = if let Some(ref map) = gid_bytes {
+                    let Some(at) = (cid as usize).checked_mul(2) else { continue };
+                    let Some(pair) = map.get(at..at + 2) else { continue };
+                    u32::from(u16::from_be_bytes([pair[0], pair[1]]))
+                } else {
+                    cid
+                };
+                if gid == 0 || gid >= glyph_count { continue }
+                // An empty outline is valid for spaces, but never guess a missing letter.
+                if !ch.is_whitespace()
+                    && face.loca(None).ok().is_some_and(|loca| {
+                        loca.get_raw(gid as usize).zip(loca.get_raw(gid as usize + 1)).is_some_and(|(a, b)| b <= a)
+                    })
+                { continue; }
+                mappings.entry(u32::from(ch)).or_insert(gid);
+            }
+            if !mappings.is_empty()
+                && append_editor_cmap(&mut bytes, &mappings).is_some()
+                && skrifa::FontRef::new(&bytes).is_ok_and(|f| f.charmap().mappings().next().is_some())
+            {
+                return Some(bytes);
+            }
             continue;
         }
+        let Ok(cmap) = face.cmap() else { continue };
         let mut mappings = std::collections::BTreeMap::new();
         for code in 0..=255 {
             let Some(text) = metrics.unicode.text(code) else { continue };
@@ -188,6 +232,50 @@ fn append_editor_cmap(bytes: &mut Vec<u8>, mappings: &std::collections::BTreeMap
         if record.get(..4)? == b"head" {
             head = Some(u32::from_be_bytes(record.get(8..12)?.try_into().ok()?) as usize);
         }
+    }
+    // Some subsetters remove the entire cmap table. Extend the sfnt directory
+    // with a record, adjusting all table offsets. No original PDF bytes are touched.
+    if entry.is_none() {
+        let end = 12usize.checked_add(count.checked_mul(16)?)?;
+        if bytes.get(0..end).is_none() || count >= 256 { return None; }
+        // Check the directory before changing it.
+        for i in 0..count {
+            let at = 12 + i * 16;
+            let offset = u32::from_be_bytes(bytes.get(at + 8..at + 12)?.try_into().ok()?) as usize;
+            let len = u32::from_be_bytes(bytes.get(at + 12..at + 16)?.try_into().ok()?) as usize;
+            if offset.checked_add(len)? > bytes.len() { return None; }
+        }
+        bytes.splice(end..end, [0_u8; 16]);
+        let new_count = u16::try_from(count + 1).ok()?;
+        bytes.get_mut(4..6)?.copy_from_slice(&new_count.to_be_bytes());
+        let pow = 1_u16.checked_shl(15 - new_count.leading_zeros())?;
+        let range = pow.checked_mul(16)?;
+        bytes.get_mut(6..8)?.copy_from_slice(&range.to_be_bytes());
+        bytes.get_mut(8..10)?.copy_from_slice(&(pow.trailing_zeros() as u16).to_be_bytes());
+        bytes.get_mut(10..12)?.copy_from_slice(&(new_count * 16 - range).to_be_bytes());
+        for i in 0..count {
+            let at = 12 + i * 16;
+            let offset = u32::from_be_bytes(bytes.get(at + 8..at + 12)?.try_into().ok()?);
+            if offset as usize >= end {
+                bytes.get_mut(at + 8..at + 12)?.copy_from_slice(&offset.checked_add(16)?.to_be_bytes());
+            }
+        }
+        bytes.get_mut(end..end + 4)?.copy_from_slice(b"cmap");
+        // sfnt table directories are tag-sorted; keep cmap discoverable by
+        // parsers that binary-search the directory rather than scanning it.
+        let mut records = Vec::with_capacity(count + 1);
+        for i in 0..=count {
+            let at = 12 + i * 16;
+            let record: [u8; 16] = bytes.get(at..at + 16)?.try_into().ok()?;
+            records.push(record);
+        }
+        records.sort_unstable_by(|a, b| a[..4].cmp(&b[..4]));
+        entry = records.iter().position(|r| &r[..4] == b"cmap").map(|i| 12 + i * 16);
+        for (i, record) in records.iter().enumerate() {
+            let at = 12 + i * 16;
+            bytes.get_mut(at..at + 16)?.copy_from_slice(record);
+        }
+        head = head.map(|o| if o >= end { o + 16 } else { o });
     }
     let entry = entry?;
     let mut cmap = Vec::with_capacity(28 + mappings.len() * 12);
@@ -577,6 +665,7 @@ impl Metrics {
             visual_order: false,
             code_len: 1,
             explicit_reverse: (32..127u8).map(|c| (char::from(c), u32::from(c))).collect(),
+            sequence_reverse: HashMap::new(),
             outlined_cids: Vec::new(),
         }
     }
@@ -616,6 +705,27 @@ impl Metrics {
             }
         }
         m.explicit_reverse = reverse;
+        let mut sequences: HashMap<char, Vec<(String, u32)>> = HashMap::new();
+        // A ToUnicode CMap can map one PDF glyph to a logical grapheme of
+        // several Unicode scalars. Such a glyph is NOT missing from the subset.
+        // Index only bounded, explicit mappings; never guess from font names.
+        for (&code, (_, text)) in &m.unicode.explicit {
+            if text.chars().count() > 1 && text.chars().count() <= 16
+                && text.len() <= 64 && m.has_glyph(code)
+                && let Some(first) = text.chars().next()
+            {
+                let options = sequences.entry(first).or_default();
+                if options.len() < 256 {
+                    options.push((text.clone(), code));
+                }
+            }
+        }
+        for options in sequences.values_mut() {
+            options.sort_by(|(a, ac), (b, bc)| {
+                b.len().cmp(&a.len()).then(ac.cmp(bc))
+            });
+        }
+        m.sequence_reverse = sequences;
         // Only a font known to be laid out in visual order counts: a missing GSUB proves nothing
         // (bare CFF and subset fonts often drop it), and the font program is never decoded here.
         if legacy_indic_font(&m.base_font) {
@@ -839,10 +949,21 @@ impl Metrics {
             }
         }
         let mut out = Vec::with_capacity(text.len() * self.code_len);
-        for ch in text.chars() {
-            let code = *reverse.get(&ch)?;
+        let mut remaining = text;
+        while let Some(ch) = remaining.chars().next() {
+            // A compound grapheme is one PDF glyph. This is common in
+            // document subsets, and treating each scalar separately causes
+            // unnecessary default-font substitution on otherwise valid edits.
+            let composite = self.sequence_reverse.get(&ch).and_then(|choices| {
+                choices.iter().find(|(sequence, _)| remaining.starts_with(sequence))
+            });
+            let (code, count) = match composite {
+                Some((sequence, code)) => (*code, sequence.len()),
+                None => (*reverse.get(&ch)?, ch.len_utf8()),
+            };
             let bytes = code.to_be_bytes();
             out.extend_from_slice(&bytes[4 - self.code_len.clamp(1, 4)..]);
+            remaining = remaining.get(count..)?;
         }
         Some(out)
     }
@@ -1254,6 +1375,25 @@ mod tests {
         assert!(append_editor_cmap(&mut broken, &std::collections::BTreeMap::from([(65, 1)])).is_none());
     }
 
+    #[test]
+    fn missing_cmap_directory_is_reconstructed_in_memory() {
+        use skrifa::{MetadataProvider as _, raw::TableProvider as _};
+        let mut subset = include_bytes!("../../../assets/fonts/Inter-Regular.ttf").to_vec();
+        let count = u16::from_be_bytes(subset[4..6].try_into().unwrap()) as usize;
+        let entry = (0..count).map(|i| 12 + i * 16)
+            .find(|i| &subset[*i..*i + 4] == b"cmap").unwrap();
+        subset[entry..entry + 4].copy_from_slice(b"XXX0");
+        let source = subset.clone();
+        let gid = skrifa::FontRef::new(&subset).unwrap().cmap().err();
+        assert!(gid.is_some(), "the deliberately removed cmap cannot parse");
+        let original = skrifa::FontRef::new(include_bytes!("../../../assets/fonts/Inter-Regular.ttf")).unwrap();
+        let glyph = original.charmap().map('A').unwrap().to_u32();
+        append_editor_cmap(&mut subset, &std::collections::BTreeMap::from([(u32::from('א'), glyph)])).unwrap();
+        let repaired = skrifa::FontRef::new(&subset).unwrap();
+        assert_eq!(repaired.charmap().map('א').unwrap().to_u32(), glyph);
+        assert_eq!(&source[entry..entry + 4], b"XXX0");
+    }
+
     fn metrics_with_flags(flags: Option<Object>) -> Metrics {
         let mut doc = Document::new_empty();
         let mut descriptor = Dict::new();
@@ -1512,6 +1652,25 @@ mod tests {
         enc.set(b"Differences".to_vec(), Object::Array(vec![Object::Int(i64::MAX), Object::name("A"), Object::name("B")]));
         let f = font(&mut doc, vec![("Subtype", Object::name("Type1")), ("Encoding", Object::Dict(enc))]);
         assert_eq!(unicode_map(&doc, &f, false).text(u32::MAX).as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn unicode_grapheme_sequences_reuse_one_embedded_pdf_glyph() {
+        let mut doc = Document::new_empty();
+        let cmap = b"3 beginbfchar <0150> <05E405BC> <0120> <05E4> <00FF> <05B7> endbfchar";
+        let tu = doc.add(Object::Stream(Stream::from_raw(Dict::new(), cmap.to_vec())));
+        let f = font(&mut doc, vec![
+            ("Subtype", Object::name("Type0")),
+            ("BaseFont", Object::name("SampleHebrew")),
+            ("Encoding", Object::name("Identity-H")),
+            ("ToUnicode", Object::Ref(tu)),
+        ]);
+        // A synthetic full font has no subset outline filter. The sequence
+        // is automatically indexed from ToUnicode, not injected by the test.
+        let m = Metrics::from_dict(&doc, &f);
+        assert_eq!(m.encode("פּ").as_deref(), Some(&[0x01, 0x50][..]));
+        assert_eq!(m.encode("פּפ").as_deref(), Some(&[0x01, 0x50, 0x01, 0x20][..]));
+        assert_eq!(m.decode(&[0x01, 0x50]), "פּ");
     }
 
     #[test]

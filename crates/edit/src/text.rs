@@ -1035,7 +1035,11 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
         });
         if joins && let Some(l) = lines.last_mut() {
             let gap = last.map_or(0.0, |(_, pen)| pen.continues(&s, 0.0).1);
-            if gap > l.size * 0.2 && !l.text.ends_with(' ') && !s.text.starts_with(' ') {
+            // Independently positioned Hebrew vowel marks do not start new words.
+            // Never invent a word-space directly before a combining character.
+            if gap > l.size * 0.2 && !l.text.ends_with(' ') && !s.text.starts_with(' ')
+                && !s.text.chars().next().is_some_and(crate::bidi::is_hebrew_mark)
+            {
                 l.text.push(' ');
             }
             l.text.push_str(&s.text);
@@ -1089,9 +1093,52 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
         }
         l.text = crate::bidi::to_logical(&l.text);
     }
+    // Even /ActualText supplied in logical order can contain position-derived
+    // gaps between Hebrew bases and separately positioned combining marks.
+    for line in &mut lines {
+        line.text = repair_hebrew_mark_spacing(&line.text);
+    }
     // Lines of only spaces aren't editable text.
     lines.retain(|l| !l.text.trim().is_empty());
     Ok(lines)
+}
+
+/// Some PDFs position Hebrew vowel marks in separate Tj/TJ runs, and their
+/// visual gaps become synthetic spaces during extraction. A base-letter followed
+/// by whitespace and a combining mark is a single grapheme, not two words.
+/// Do not change actual spaces elsewhere; retain Unicode marks for copy/save.
+fn repair_hebrew_mark_spacing(input: &str) -> String {
+    let chars: Vec<char> = input.chars().collect();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        out.push(ch);
+        i += 1;
+        if matches!(ch as u32, 0x05D0..=0x05EA | 0xFB1D..=0xFB4F) {
+            let start = i;
+            while chars.get(i).is_some_and(|c| *c == ' ') { i += 1; }
+            if !chars.get(i).is_some_and(|c| crate::bidi::is_hebrew_mark(*c)) {
+                out.extend(chars[start..i].iter());
+            }
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod hebrew_editor_spacing_tests {
+    use super::repair_hebrew_mark_spacing;
+
+    #[test]
+    fn detached_hebrew_marks_attach_without_removing_real_word_spaces() {
+        assert_eq!(
+            repair_hebrew_mark_spacing("א ַנדערער דונא ַ, שטא ָט פּעסט"),
+            "אַנדערער דונאַ, שטאָט פּעסט"
+        );
+        assert_eq!(repair_hebrew_mark_spacing("שלום עולם"), "שלום עולם");
+        assert_eq!(repair_hebrew_mark_spacing("א ַ ב"), "אַ ב");
+    }
 }
 
 /// Joining independent text objects is safe only when they use the same text and graphics
@@ -1996,6 +2043,13 @@ pub(crate) fn rewrite_block_with_limit(
     rewrite_block_from(doc, page, lines, block, text, style, max_glyphs)
 }
 
+/// Vowelized Hebrew needs glyph shaping and mark offsets, never one Type 3
+/// glyph per Unicode character. Keep the text in logical Unicode order.
+fn needs_shaped_hebrew(text: &str) -> bool {
+    text.chars().any(crate::bidi::is_hebrew_mark)
+        && text.chars().any(crate::bidi::is_hebrew)
+}
+
 /// [`rewrite_block_with_limit`] with the page's [`text_lines`], read from `doc` as it is now.
 fn rewrite_block_from(
     doc: &mut Document,
@@ -2014,8 +2068,8 @@ fn rewrite_block_from(
     let mut res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let mut fonts_res = res.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
     let registered_face = fonts_res.iter().any(|(name, _)| name.starts_with(b"PCFull"));
-    // Hebrew is written back in drawing order (and with the Hebrew fallback face) by the
-    // single-style path below; the styled region path does not reorder right-to-left runs.
+    // Ordinary unvowelized Hebrew retains the legacy drawing-order path;
+    // vowelized Hebrew takes the shaping-aware path below when its style permits.
     let hebrew = text.unwrap_or(&b.text).chars().any(crate::bidi::is_hebrew);
     if hebrew && (!style.ranges.is_empty() || style.resource.is_some()) {
         return Err(EditError::Invalid(
@@ -2029,9 +2083,31 @@ fn rewrite_block_from(
         return Err(EditError::Invalid("formatting part of turned text, or choosing a document font for it, isn't supported yet".into()));
     }
     let visual_indic = members.iter().any(|line| line.visual_order);
-    if upright
-        && !hebrew
-        && !visual_indic
+    // Hebrew with niqqud must use OpenType shaping (glyph IDs and mark offsets).
+    // The legacy Type 3 writer places each character independently and rejects
+    // combining marks. Keep ordinary legacy Hebrew behavior for now, but send
+    // vowelized paragraphs through the shaped, Unicode-preserving writer.
+    // The existing source CID font may encode the entire Unicode replacement,
+    // including multi-scalar glyphs (Hebrew base+dagesh). If so, keep that exact
+    // original face. Only invoke the shaped fallback when the source is genuinely
+    // missing a requested glyph; previously every vowelized edit defaulted to
+    // replacing the whole paragraph's font.
+    let source_covers_draft = fonts_res
+        .get(first.font.as_bytes())
+        .and_then(|font| doc.resolve(font).as_dict().cloned())
+        .map(|font| Metrics::from_dict(doc, &font))
+        .is_some_and(|m| {
+            let logical = text.unwrap_or(&b.text).replace('\n', " ");
+            let visual = crate::bidi::to_visual(&logical);
+            source_encodes(&m, &visual)
+        });
+    let vowelized_hebrew = needs_shaped_hebrew(text.unwrap_or(&b.text))
+        && !source_covers_draft
+        && style.ranges.is_empty()
+        && style.resource.is_none()
+        && style.family.is_none()
+        && style.bold.is_none();
+    let styled_non_hebrew = !hebrew
         && (!style.ranges.is_empty()
             || style.resource.is_some()
             || (text.is_some_and(|draft| {
@@ -2043,8 +2119,8 @@ fn rewrite_block_from(
                 || b.rows.iter().any(|row| row.len() > 1)
                 || members.iter().any(|line| line.font != first.font || line.size != first.size || line.color != first.color))
                 && style.family.is_none()
-                && style.bold.is_none())
-    {
+                && style.bold.is_none());
+    if upright && !visual_indic && (vowelized_hebrew || styled_non_hebrew) {
         return rewrite_styled_block(doc, page, &b, &lines, text, style);
     }
     let streams = content_streams(doc, &p.dict);
@@ -2596,6 +2672,14 @@ mod tests {
         // No face has them all: the best face stays, and names the missing glyph.
         assert_eq!(fallback_face(&faces, &['a', 'ф'], |_, ch| ch.is_ascii()).map(|f| f.family), Some("Mincho"));
         assert!(fallback_face(&[], &['a'], has).is_none());
+    }
+
+    #[test]
+    fn vowelized_hebrew_uses_the_shaping_writer_not_the_type3_fallback() {
+        assert!(needs_shaped_hebrew("אַנדערער דונאַ שטאָט"));
+        assert!(needs_shaped_hebrew("בְּרָכָה"));
+        assert!(!needs_shaped_hebrew("שלום"));
+        assert!(!needs_shaped_hebrew("English 123"));
     }
 
     #[test]
