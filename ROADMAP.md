@@ -1,5 +1,7 @@
 # PdfCraft roadmap
 
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (M0: QA skill package checks; staged-candidate/save/evidence guidance clarified; product estimates unchanged)
+
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M2/gap 12: the Annex D.2 alias codes read as the ink they draw in both tables; the text oracle scores reading order; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -157,6 +159,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+- **2026-10-17 (M0, QA skills):** Portable skill package validator + CI: detect reference/notice drift, broken local links, metadata errors, missing guide coverage. Clarified editable-document save checks, resolved historical failures, guide routing, unimplemented evidence checker. Staged exports: isolated Git metadata recipe + root/index/inventory checks + asset-gate proof. User-authorized Rust 1.95: all 64 xtask tests, scoped Clippy, formatting, skills, layers, assets passed. Isolated candidate: assets pass, unregistered synthetic asset rejected, pass after removal. Product estimates unchanged.
 - **2026-10-15 (M2, gap 12):** `cargo xtask text-oracle` scores reading order as well as word F1: the longest common subsequence of the two word sequences over the longer one. F1 is a bag of words and cannot see order at all -- measuring #2431, a change that moves text and nothing else, it called 26 of the 29 files whose output changed identical, where the order score separated 18 improvements from 6 regressions. Reports, does not gate; a disagreement with Poppler, not a verdict. Estimates unchanged.
 - **2026-10-15 (M2, #2305 follow-up):** WinAnsiEncoding 0xA0 and 0xAD and MacRomanEncoding 0xCA extract as the ordinary space and hyphen Annex D.2 names them, in the vendored hayro tables (patch 30) as well as `crates/fonts`, so search, copy and redaction see characters that were hidden behind U+00A0 and U+00AD. Across the pdf.js corpus the soft hyphens we extract fall 117 to 13 and the non-breaking spaces 30 to 26; the rest come from `/ToUnicode`. An explicit `/Differences` name keeps its glyph list value, as pdftotext does. Estimates unchanged.
 - **2026-10-13 (community, M3, #1569 review):** Pixel-only Wayland wheel, wheel-tilt and continuous input use standalone moved events, so Ctrl zoom does not remain latched after the modifier is released (#991); vendored winit patch (13), with a policy test. Estimates unchanged.

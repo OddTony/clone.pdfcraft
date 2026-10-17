@@ -11,6 +11,7 @@ mod layers;
 mod macos_integration;
 mod parity;
 mod screenshots;
+mod skills;
 mod version;
 
 type Command = fn(&[String]) -> anyhow::Result<()>;
@@ -21,8 +22,9 @@ const COMMANDS: &[(&str, &str, Command)] = &[
     ("layers", "Enforce the crate dependency layering (plan/architecture.md §3)", gates::layers),
     ("wasm", "cargo check --target wasm32-unknown-unknown for every crate below L8", gates::wasm),
     ("deny", "Dependency licences, bans, sources and advisories (deny.toml; needs cargo-deny)", gates::deny),
-    ("ci", "fmt --check, clippy -D warnings, test, layers, wasm, assets, deny, parity (stops at first failure)", gates::ci),
+    ("ci", "fmt --check, clippy -D warnings, test, layers, wasm, assets, skills, deny, parity (stops at first failure)", gates::ci),
     ("assets", "Enforce the asset policy (AGENTS.md §1) against ATTRIBUTION.toml; --write regenerates ATTRIBUTION.md", assets::run),
+    ("skills", "Validate portable QA skill metadata, links, coverage, reference copies and notices", skills_cmd),
     ("corpus", "Fetch the pinned pdf.js test corpus into corpus/ (git-ignored) and verify it; --update-pin re-records the pin", gates::corpus),
     ("check", "Robustness sweep over corpus/ with pdfcraft-cli; fails on crashes or regressions vs xtask/baselines", gates::check),
     ("fuzz", "Mutation fuzzing of open/render/edit/save in child processes; findings in fuzz-out/ (--time 300)", fuzz::run),
@@ -46,6 +48,15 @@ const COMMANDS: &[(&str, &str, Command)] = &[
 fn version_cmd(args: &[String]) -> anyhow::Result<()> {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
     version::run(&gates::root(), &args).map_err(anyhow::Error::msg)
+}
+
+fn skills_cmd(args: &[String]) -> anyhow::Result<()> {
+    if !args.is_empty() {
+        anyhow::bail!("usage: cargo xtask skills");
+    }
+    let count = skills::validate(&gates::root().join(".agents/skills/QA")).map_err(anyhow::Error::msg)?;
+    println!("skills: {count} portable QA skills validated");
+    Ok(())
 }
 
 fn main() -> ExitCode {

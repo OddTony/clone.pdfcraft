@@ -1,0 +1,19 @@
+---
+name: pdfcraft-qa-prepare-commit
+description: Use when preparing PdfCraft changes for a commit, selecting staged hunks, or assessing staged readiness while unrelated or partially staged work may exist.
+---
+
+# Prepare a verified commit candidate
+
+Read current repository instructions, [task contract](references/contract.md) and [staged-candidate method](references/commit-preparation.md). Use existing staging/confirmed in-scope repair authority. Preserve tests-only restrictions. End preparation with readiness report; commit, push and PR creation require own requested scope.
+
+1. Establish intended change, acceptance criteria, existing staged ownership, baseline HEAD and available tools. Inspect staged/unstaged/untracked inputs separately. Set finite audit budget, normally at most three repair cycles unless task overrides. Review build/filter/hook effects before execution.
+2. Stage only reviewed paths/hunks, including required regression tests/configuration. Preserve unrelated user staging and unstaged hunks, including within same file. Avoid broad staging, reset, stash or cleanup. Resolve ambiguous ownership only for affected selection. Do not accidentally commit local notes, private fixtures or generated evidence.
+3. Freeze complete index manifest, tree ID, baseline and relevant environment. Audit staged blobs, callers, contracts and failure paths; branch history/dirty files insufficient. Materialize whole identified tree in new owned directory via reference's verified alternate-index path. Check completeness, modes and checkout transformations. Archive exit zero or tree ID cannot establish runnable snapshot.
+4. Make each plausible defect falsifiable hypothesis. Exercise valid input reaching intended seam plus accepted control. Distinguish product contradiction from bad oracle, setup failure, timeout or ambiguous requirement. For repair, capture intended pre-fix RED, apply smallest authorized fix, obtain GREEN with same oracle. Do not change expectations or suppress checks to force success. Preserve counterevidence for already-correct behavior.
+5. Select relevant native checks via [Rust workflow](references/rust-workflow.md). Confirm named tests actually executed; keep required gates authoritative. Dirty-tree pass exploratory only. Missing tools, fixtures or required execution remain incomplete; skill authorizes no installation.
+6. When risk warrants, add small property, state sequence or structured fuzzer via [generation and replay controls](references/generative.md). Start with accepted scaffold, independent semantic expectation and plausible violating control. Bound cases, bytes/depth, shrinking, time, workers and retained resources. Preserve original/minimized concrete inputs; replay from fresh state. Avoid automatic full mutation or overnight campaigns.
+7. Restage deliberately after each authorized repair. Changed source, index, HEAD, fixtures, configuration, tools or hook output expires affected evidence. Check materialized source inputs before/after execution too; tools can repair export without index changes. Rebuild identified snapshot; rerun applicable checks. Review final diff afresh; fixed number of clean reviews proves no absence of bugs. Use separate reviewer when authorized/proportionate; adjudicate findings with evidence.
+8. Recheck final tree/HEAD after tools/hooks and before report. Report ready, not ready or incomplete for stated scope, with [evidence](references/evidence.md), unresolved findings and exclusions. Unrelated staged content outside intended commit blocks whole-index readiness claim until scope reconciled. Stop at checkpoint; later changes invalidate it.
+
+Author: David Osipov; personal@david-osipov.vision; [website](https://david-osipov.vision). Original skill material: MIT; see [licence and notices](THIRD_PARTY_NOTICES.md).

@@ -1,0 +1,37 @@
+# Operation-specific PDF fidelity
+
+Preservation, syntax, appearance, confidentiality, permissions, signature integrity, trust and publication are distinct claims. Before execution define expectation manifest: operation/version, independent semantic facts, allowed changes, forbidden effects, fixture provenance/hash, exact save mode, resource bounds and required consumers/oracles. Parse/render/save round trip cannot observe every fact. Baseline f0c9901c398372782a4eb001c95638289a5edab0; reread current APIs/policy.
+
+## Object and revision invariants
+
+Unrelated edits must preserve unknown reachable catalog/page/annotation/trailer keys, streams, relations and values. Contributor-original fixtures: distinct sentinels, indirect aliases, bounded cycles, decoded payloads. Compare semantic edges, meaningful multiplicity and stream content. Full rewrites may renumber objects/omit unreachable garbage; object-number/whole-file equality is no general oracle. Deleted sentinel must fail preservation despite unchanged page count/pixels.
+
+When affected, cover classic xref tables, xref/object streams, hybrid `/XRefStm`, generations, bounded sparse identifiers, `/Prev` and revision ends. Hand-author different envelopes independently; `pdfcraft-testkit` scaffolding does not independently generate every structure. Keep repair logs/warnings: repairing viewers may hide invalid output. Arlington supplements dictionary/schema checks, not lexical layout, xrefs/incremental updates or content operators.
+
+Eligible ordinary saves append to appropriate saved revision: require exact old-byte prefix and coherent current graph. Redaction, sanitization, encryption changes, repaired inputs and other full-save operations need separate expectations. New-path automation defaults to full rewrite. `save_full_bytes` rejects signed documents. Save/undo/redo/second-save/reopen must preserve intended history/keys, including undo past saved revision. Incremental caller option cannot prove incremental output.
+
+## Values, appearances, and metadata
+
+Check AcroForm logical values, inherited `/DA`/`/DR`, Parent/Kids relations, multiple widgets, choice `/I`, buttons `/AS`, widget `/AP` and rotation separately from rendering. `/V`-only update may leave stale appearances; `/AP`-only update may leave wrong logical content. Engine can generate unsaved display-only appearances. `/NeedAppearances` gives no cross-viewer guarantee. Logical `/V` may retain unsupported characters that appearance cannot draw; flattening must not silently make replacement characters permanent.
+
+Compare trailer `/Info` and catalog XMP semantics; retain unknown schemas/packet facts. Organize synchronizer maps Title→dc:title, Author→dc:creator, Subject→dc:description, Keywords→pdf:Keywords, Creator→xmp:CreatorTool, Producer→pdf:Producer. Changes only existing safely editable UTF-8 packets; absent, undecodable, oversized or unsuitable packets stay preserved with no sync promise. Test escaping, language alternatives/ordered authors, trimming/clearing, compressed input and unknown properties. Syntax-only XML/PDF check cannot prove factual correctness.
+
+PDF accessibility: tags, `/Lang`, logical reading order, descriptions, forms, human meaning. App AccessKit nodes/raster appearance cannot establish these. Retain Manual/Skipped checker states; independently review meaningful descriptions/reading order. Explicit PDF/A or PDF/UA profile covers declared machine-verifiable rules, not generic fidelity/full human accessibility.
+
+## Redaction, sanitization, signatures, and encryption
+
+Redaction needs recoverable-content tests; black rectangle insufficient. Unique markers: current/historical content, encoded glyph/ToUnicode data, nested/shared forms, image masks/alternates, inherited resources, form/XFA values, relevant descriptions. Use required full rewrite; compare reachable current graph, decompressed data, independent extraction and rendering. Raw grep/extraction each have blind spots. Shared objects needed by unaffected pages may remain; declare scope. Sanitization needs marker per requested category plus unselected-category control, never unsupported universal hidden-data-erasure claim.
+
+Signatures: distinguish ByteRange/covered-byte integrity, CMS algorithms, trust chain, later changes, DocMDP/FieldMDP classification, clock and revocation. Preserve covered bytes for permitted appends; full rewrite is no preservation strategy. Intact self-signed certificate may be untrusted; incremental changes may violate permissions. Use synthetic identities/keys and controlled trust/clock. Never collect real signing credentials or alter user's public trust store.
+
+Encryption: wrong/missing/user/owner authentication, allowed/denied operations, algorithm/permission declarations, save/reopen, password-changing undo/redo, encrypted recovery. Independently decrypt known expected content when available. Absent plaintext marker cannot prove confidentiality; saved decrypted copy may be severe wrong outcome. Permission flags restrict applications, not cryptographic DRM. Testing legacy formats does not recommend new weak encryption.
+
+## Save boundaries and independent consumers
+
+Editable documents: engine `check_save` reparses prepared bytes/checks renderable page count before publication; useful guard, no independent preservation oracle. Invalid-bytes rejection needs editable fixture. No editor: checks skipped; `save_bytes` returns original bytes. Assess separately. Automation may apply `FlattenFillSign` before serialization: snapshot post-edit state for later errors. Native staging/publication differ from `mark_saved` acknowledgment. Replacement succeeds, refresh fails: new disk bytes remain. Browser Blob/anchor/postMessage success: dispatch only, no durable storage proof. Inspect phase.
+
+Use existing `pdfcraft-oracle` probes/required-oracle policy. Any `PDFCRAFT_ORACLES_REQUIRED` presence, including `0`, makes absence fail. qpdf syntax/warnings cannot prove preservation. External Poppler pixels/text may disagree with target/spec; never decide by majority. Deliberately wrong semantic control must fail even if every parser accepts.
+
+Run permitted copyleft oracles only as separate local processes on synthetic authorized copies: cap time/memory/output; record exact executable/version/hash/args, input/output hashes, exits, stdout/stderr, cleanup. Copy no implementation, binary, font or asset into project; no hosted PDF upload implied. Record optional absence; required absence blocks dependent claim. Cite public standards without redistributing copyrighted standard PDFs. New committed/generated assets follow current attribution/licence policy: no Adobe visual assets, committed new fonts or licence-unknown samples.
+
+Source anchors: [COS model/writers](https://github.com/storytold/pdfcraft/blob/f0c9901c398372782a4eb001c95638289a5edab0/crates/cos/README.md), [engine save APIs](https://github.com/storytold/pdfcraft/blob/f0c9901c398372782a4eb001c95638289a5edab0/crates/engine/src/lib.rs), [XMP synchronization](https://github.com/storytold/pdfcraft/blob/f0c9901c398372782a4eb001c95638289a5edab0/crates/organize/src/xmp.rs), [target oracle contract](https://github.com/storytold/pdfcraft/blob/f0c9901c398372782a4eb001c95638289a5edab0/crates/oracle/README.md), and [public PDF syntax errata](https://pdf-issues.pdfa.org/32000-2-2020/clause07.html). Anchors identify source evidence; source tests/proposed recipes are not executed outcomes.

@@ -99,6 +99,10 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo xtask assets
 
+      - name: Portable QA skills
+        if: runner.os == 'Linux'
+        run: cargo xtask skills
+
       - name: CLI without the MCP server still builds
         if: runner.os == 'Linux'
         run: cargo check -p pdfcraft-cli --no-default-features

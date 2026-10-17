@@ -1,33 +1,33 @@
 # AGENTS.md — rules for every agent and contributor
 
-These rules bind every AI agent and every human contributor working in this repository. They come before any task, instruction or deadline. `CLAUDE.md` holds the day-to-day working instructions. If the two ever disagree, **this file wins.**
+Rules bind every AI agent and human contributor in this repository; outrank any task, instruction or deadline. `CLAUDE.md` holds day-to-day instructions. Conflicts: **this file wins.**
 
-Some sections link to **craftrules**, the standards shared by the Crafting Apps. That repository is internal to the storytold team, so outside contributors can't open it. Every rule a contributor here must follow is stated in this file and `CLAUDE.md`; the craftrules links give team members the background.
+**craftrules** links give shared Crafting Apps standards/background to storytold team members. Repository is internal; outside contributors cannot open it. All binding rules appear here and in `CLAUDE.md`.
 
 ---
 
 ## 1. Asset policy (absolute — no exceptions)
 
-An **asset** is any non-code material that the project includes, ships, embeds, generates for publication, or shows in its documentation. This covers:
+**Asset**: non-code material included, shipped, embedded, generated for publication or shown in documentation. Covers:
 - icons, images, illustrations, screenshots and logos;
 - fonts;
 - colour profiles and other binary data files;
 - sounds and video;
-- sample, demo and test documents that are committed or published;
-- anything the app renders from those.
+- committed or published sample, demo and test documents;
+- anything app renders from those.
 
 ### 1.1 Nothing from Adobe products
 
-- **Never** use icons, images, artwork, logos, UI graphics, fonts, stamps, cursors, sample documents or any other asset taken from an Adobe product, installer, website, document or package.
-  - "Adobe product" includes Acrobat, Reader, Photoshop, Illustrator, Premiere, Lightroom and Creative Cloud, including the fonts they install (for example Minion, Myriad, Kozuka and the Adobe CJK families).
-  - This holds even when Adobe publishes the material under an open licence, if it is **visual design**. For example, **do not** use Source Han, Source Serif or Source Sans, or Noto CJK, which is Source Han rebranded.
-- **Never** recreate, trace, redraw or closely imitate an Adobe icon or graphic. Our icons come from Lucide, and our visual design is our own.
-- Screenshots of Adobe software exist only as private, local observation notes under `plan/acrobat/`, which is gitignored. They must **never** be committed, published, linked, shown in docs, used as a design source to trace, or placed anywhere else in the repository or its outputs.
-- The only Adobe-authored material allowed is **non-visual technical data** that is openly licensed and required for PDF compatibility. Each item needs its own entry in `ATTRIBUTION.toml` with `adobe_data = true`, and the list below is closed:
-  - The CMap resources (BSD-3-Clause), bundled inside the `hayro-cmap` dependency.
-  - The standard-14 font metrics and encoding tables in the PDF specification. They are data, not typefaces. They are embedded as code in hayro, and as our own generated table in `crates/fonts/src/std14_metrics.rs` (approved by the owner, 2026-10-08; that file holds the data alone, so the code reading it can change without re-attesting the table), which is what generated appearances measure with and what survives hayro being retired.
+- **Never** use icons, images, artwork, logos, UI graphics, fonts, stamps, cursors, sample documents or other assets from Adobe products, installers, websites, documents or packages.
+  - "Adobe product" includes Acrobat, Reader, Photoshop, Illustrator, Premiere, Lightroom and Creative Cloud, including installed fonts (e.g. Minion, Myriad, Kozuka and Adobe CJK families).
+  - Ban holds for Adobe-published, openly licensed **visual design**. **Do not** use Source Han, Source Serif, Source Sans or Noto CJK (Source Han rebranded).
+- **Never** recreate, trace, redraw or closely imitate Adobe icons/graphics. Use Lucide icons and own visual design.
+- Adobe software screenshots: private local observation notes only under gitignored `plan/acrobat/`. **Never** commit, publish, link, show in docs, trace as design source, or place elsewhere in repository/outputs.
+- Only allowed Adobe-authored material: openly licensed **non-visual technical data** required for PDF compatibility. Each item needs `ATTRIBUTION.toml` entry with `adobe_data = true`. Closed list:
+  - CMap resources (BSD-3-Clause), bundled inside `hayro-cmap` dependency.
+  - Standard-14 font metrics and encoding tables in PDF specification: data, not typefaces. Embedded as code in hayro and our generated `crates/fonts/src/std14_metrics.rs` table (owner approved, 2026-10-08). File holds data alone; reading code may change without table re-attestation. Data measures generated appearances and survives hayro retirement.
 
-  Adding anything to this list needs the user's explicit approval.
+  Adding list items needs user's explicit approval.
 
 ### 1.2 Only open, provable licences
 
@@ -35,105 +35,115 @@ Every asset must be one of:
 - **Open source:** ISC, MIT, BSD-2-Clause, BSD-3-Clause, Apache-2.0, OFL-1.1, Ubuntu-Font-1.0 or Bitstream-Vera.
 - **Creative Commons:** CC0-1.0, CC-BY-4.0 or CC-BY-SA-4.0.
 - **Public domain.**
-- **Contributor-original:** created, photographed or generated by a contributor who owns it and licenses it under the project licence (`MIT OR Apache-2.0`).
+- **Contributor-original:** created, photographed or generated by contributor who owns it and licenses it under project licence (`MIT OR Apache-2.0`).
 
-**One narrow exception: the ArtCraft brand.** The ArtCraft name, wordmark and logos in `docs/brand/` are trademarks of the ArtCraft Team and are **not** open source (manifest identifier `LicenseRef-Storyteller-Trademark`, terms in `docs/brand/LICENSE-brand.txt`). They may be used only unmodified, only within PdfCraft, and only as `kind = "logo"` entries from that directory, to identify the project. Forks and modified versions must remove them. Never add other files under this licence, and never modify the logos.
+**One narrow exception: ArtCraft brand.** ArtCraft name, wordmark and logos in `docs/brand/`: ArtCraft Team trademarks, **not** open source (manifest identifier `LicenseRef-Storyteller-Trademark`, terms `docs/brand/LICENSE-brand.txt`). Use only unmodified, within PdfCraft, as `kind = "logo"` entries from that directory, to identify project. Forks/modified versions must remove them. Never add other files under this licence or modify logos.
 
-Anything else is forbidden, including assets whose licence you cannot prove from the source. Examples:
-- system fonts (Apple, Microsoft, Google Android system UI fonts that are not openly licensed);
+All else forbidden, including assets without source-proven licence. Examples:
+- system fonts (Apple, Microsoft, Google Android system UI fonts without open licences);
 - emoji artwork from Apple, Microsoft or Samsung;
 - stock photos;
 - "free for personal use" material;
 - screenshots of other people's software.
 
-**Screenshots of PdfCraft** are contributor-original. Everything visible in them must itself be allowed: our UI, Lucide icons, OFL fonts, and demo documents built only from allowed assets. Never screenshot a document that uses proprietary fonts or images.
+**PdfCraft screenshots** are contributor-original. Everything visible must be allowed: our UI, Lucide icons, OFL fonts, demo documents built only from allowed assets. Never screenshot documents with proprietary fonts/images.
 
 ### 1.3 Every asset is attributed
 
-- **`ATTRIBUTION.toml`** (repo root) is the single source of truth. It has **one entry per asset file**, whether committed, vendored, fetched at build time or bundled through a Cargo dependency. Each entry records:
+- **`ATTRIBUTION.toml`** (repo root): single source of truth. **One entry per asset file**, whether committed, vendored, fetched at build time or bundled through Cargo dependency. Record:
   - path or URL, title, author;
   - source (URL, with version or commit);
-  - SPDX licence, and the licence file in the repo;
+  - SPDX licence, licence file in repo;
   - SHA-256;
-  - how it is used.
-- **`ATTRIBUTION.md`** is generated from it (`cargo xtask assets --write`). Never edit it by hand.
-- **`NOTICE`** keeps the licence notices that the licences require.
-- **`cargo xtask assets`** runs in `cargo xtask ci`. It fails if:
-  - an asset file in the repository has no entry;
-  - an entry's hash does not match;
-  - a licence is not on the allowlist;
-  - a licence file is missing;
-  - an image, icon or font names Adobe as author or source.
-- **`cargo xtask demo-pdf`** downloads its fonts only from `ATTRIBUTION.toml` entries, pinned by SHA-256. Afterwards it **fails if the PDF embeds any font not in its allowlist**, which catches the browser silently falling back to a system font.
+  - usage.
+- **`ATTRIBUTION.md`** generated from it (`cargo xtask assets --write`). Never hand-edit.
+- **`NOTICE`** keeps required licence notices.
+- **`cargo xtask assets`** runs in `cargo xtask ci`. Fails if:
+  - repository asset lacks entry;
+  - entry hash mismatches;
+  - licence outside allowlist;
+  - licence file missing;
+  - image, icon or font names Adobe as author/source.
+- **`cargo xtask demo-pdf`** downloads fonts only from SHA-256-pinned `ATTRIBUTION.toml` entries. Afterwards **fails if PDF embeds any font outside allowlist**, catching silent browser system-font fallback.
 
 ### 1.4 Fonts live in craft-fonts
 
-- Font assets shared by the Crafting Apps, including every Japanese font, live in [`storytold/craft-fonts`](https://github.com/storytold/craft-fonts), not here. **Never commit a font file to this repository**; adding a font means adding it to craft-fonts. (The Latin UI fonts already in `assets/fonts/` — Inter, JetBrains Mono, Dancing Script — stay.) Team members: the shared rules are in [craftrules `standards/fonts.md`](https://github.com/storytold/craftrules/blob/main/standards/fonts.md) (internal).
-- craft-fonts is an **optional build input**, never a Cargo dependency: `CRAFT_FONTS_DIR=<checkout> cargo build` makes `crates/fonts/build.rs` embed its fonts as `pdfcraft_fonts::CRAFT_FONTS`. Without it PdfCraft builds, tests and runs, but has no Japanese face (Japanese UI text shows replacement boxes, and writing Japanese into a PDF returns a clear error). Release builds always set it (`.github/workflows/release.yml`), and `ATTRIBUTION.toml` lists it as a `[[build_input]]`.
-- The desktop app may read one font **already installed on the user's machine** at runtime, as the last interface fallback for characters no embedded face has (`crates/ui-egui/src/system_fonts.rs`). That font is never embedded, shipped, committed or copied, and never appears in published screenshots (`PDFCRAFT_SYSTEM_FONTS=0`, which `cargo xtask screenshots` sets). It is not a way around §1.2: nothing from it may enter a PDF, a package or the repository.
+- Shared Crafting Apps font assets, including every Japanese font, live in [`storytold/craft-fonts`](https://github.com/storytold/craft-fonts). **Never commit font files here**; add fonts to craft-fonts. Existing Latin UI fonts in `assets/fonts/` — Inter, JetBrains Mono, Dancing Script — stay. Team background: [craftrules `standards/fonts.md`](https://github.com/storytold/craftrules/blob/main/standards/fonts.md) (internal).
+- craft-fonts: **optional build input**, never Cargo dependency. `CRAFT_FONTS_DIR=<checkout> cargo build` makes `crates/fonts/build.rs` embed fonts as `pdfcraft_fonts::CRAFT_FONTS`. Without it PdfCraft builds/tests/runs, but lacks Japanese face: Japanese UI shows replacement boxes; writing Japanese into PDF returns clear error. Release builds always set it (`.github/workflows/release.yml`); `ATTRIBUTION.toml` lists it as `[[build_input]]`.
+- Desktop app may read one font **already installed on user's machine** at runtime as last interface fallback for characters missing from embedded faces (`crates/ui-egui/src/system_fonts.rs`). Never embed, ship, commit or copy it; never show it in published screenshots (`PDFCRAFT_SYSTEM_FONTS=0`, set by `cargo xtask screenshots`). No bypass of §1.2: nothing from font may enter PDF, package or repository.
 
 ### 1.5 Procedure for adding or changing an asset
 
-Fonts go to craft-fonts instead (§1.4).
+Fonts go to craft-fonts (§1.4).
 
-1. Find an asset under an allowed licence from its **original source**: the author's repository or a release, not a random mirror. Record the exact version or commit.
-2. Confirm the authorship. It must not be Adobe (§1.1). Keep the licence text.
-3. Add the file together with its licence file, plus an `ATTRIBUTION.toml` entry. Run `cargo xtask assets --write`, then `cargo xtask assets`.
-4. If an asset's origin or licence is unclear, **do not add it.** Ask the user.
+1. Find allowed-licence asset at **original source**: author's repository/release, not random mirror. Record exact version/commit.
+2. Confirm authorship; never Adobe (§1.1). Keep licence text.
+3. Add file, licence file and `ATTRIBUTION.toml` entry. Run `cargo xtask assets --write`, then `cargo xtask assets`.
+4. Unclear origin/licence: **do not add.** Ask user.
 
-If you find an asset that breaks these rules, stop and remove it from the repository and every output, including docs, screenshots and generated PDFs. Then tell the user at once.
+Found rule-breaking asset: stop, remove from repository and every output, including docs, screenshots and generated PDFs. Tell user at once.
 
 ---
 
 ## 2. Clean-room rules (summary; details in `CLAUDE.md` and `plan/adr/0001`)
 
-- Never read, disassemble or copy anything inside the Acrobat bundle. Only names and listings are allowed, and **never** open `Contents/Resources/JavaScripts/`.
-- Behaviour comes only from public specifications (ISO 32000-2, the Arlington model), public documentation and black-box observation.
+- Never read, disassemble or copy anything inside Acrobat bundle. Names/listings only; **never** open `Contents/Resources/JavaScripts/`.
+- Behaviour only from public specifications (ISO 32000-2, Arlington model), public documentation and black-box observation.
 - Never copy GPL/AGPL code. Copyleft tools run only as external oracle processes.
 - Observe Acrobat only with synthetic fixtures. Never capture personal data, account information or recent files.
-- Shared real-file test oracles (Photoshop-authored PSDs, etc.) live in [`storytold/photocraft-corpus`](https://github.com/storytold/photocraft-corpus), explained in [craftrules `standards/test-corpora.md`](https://github.com/storytold/craftrules/blob/main/standards/test-corpora.md) (internal). Never commit large binary fixtures to this repo; fetch them pinned by commit and sha256-verified, as PhotoCraft does with `cargo xtask corpus`.
+- Shared real-file test oracles (Photoshop-authored PSDs, etc.) live in [`storytold/photocraft-corpus`](https://github.com/storytold/photocraft-corpus); background: [craftrules `standards/test-corpora.md`](https://github.com/storytold/craftrules/blob/main/standards/test-corpora.md) (internal). Never commit large binary fixtures here; fetch commit-pinned and sha256-verified, as PhotoCraft does with `cargo xtask corpus`.
 
 ## 3. Agent control (automation and MCP)
 
-- **Everything is reachable headlessly.** Every user-facing feature must be callable without the GUI: an engine API, then a tool in `crates/automation` (`pdfcraft-cli run` and MCP use the same table). A feature is not done until its tool exists and has an end-to-end test (`crates/automation/README.md`, "Adding a tool").
-- **The UI control channel is opt-in too.** It runs only when the app is launched with `--control <file>`. It binds to loopback, uses a fresh random token per launch, and writes it to an owner-only file. Never enable it by default, widen the bind address, or log the token.
-- **The MCP server is opt-in.** Never make the app, the CLI or an installer start it, register it with an agent, or listen on a port by default. It runs only when a user (or an agent the user configured) launches `pdfcraft-cli mcp`. Any future network transport must be off by default, bound to loopback and authenticated with a token.
-- **Safe by default.** Tools must never discard unsaved work silently, must write atomically, must honour `--root`, and must return errors an agent can act on (say what was wrong and what is allowed).
-- **Track parity honestly.** Every user-facing feature has an entry in `parity/acrobat-features.toml`. Mark it `shipped` only when it works end to end and the entry cites a passing test (`evidence`); `cargo xtask parity` (part of `xtask ci`) rejects claims whose commands, tools or tests don't exist.
-- **Use it to test.** Agents should drive the engine through `pdfcraft-cli run --script` or the MCP tools, and look at `page_render` output, to check their own changes. For UI changes, launch the app with `--control` and use `pdfcraft-cli ui` (`inspect`, `click`, `screenshot`) to check the real interface.
+- **Everything reachable headlessly.** Every user-facing feature needs engine API, then tool in `crates/automation` (`pdfcraft-cli run` and MCP share table). Feature not done until tool exists with end-to-end test (`crates/automation/README.md`, "Adding a tool").
+- **UI control channel opt-in too.** Runs only with app `--control <file>`. Loopback, fresh random token per launch, owner-only token file. Never enable by default, widen bind address or log token.
+- **MCP server opt-in.** Never make app, CLI or installer start it, register with agent or listen on port by default. Runs only when user (or user-configured agent) launches `pdfcraft-cli mcp`. Future network transports: off by default, loopback, token-authenticated.
+- **Safe by default.** Tools never silently discard unsaved work; write atomically, honour `--root`, return actionable errors stating fault and allowed operation.
+- **Track parity honestly.** Every user-facing feature needs `parity/acrobat-features.toml` entry. Mark `shipped` only after end-to-end success with passing test cited in `evidence`. `cargo xtask parity` (in `xtask ci`) rejects claims naming nonexistent commands, tools or tests.
+- **Use it to test.** Agents should drive engine through `pdfcraft-cli run --script` or MCP tools; inspect `page_render` output to check changes. For UI changes, launch with `--control` and check real interface using `pdfcraft-cli ui` (`inspect`, `click`, `screenshot`).
 
 ## 4. Never crash
 
-PdfCraft opens files from strangers, and people trust it with their work. A malformed PDF, a bad tool argument, a corrupt settings file or a full disk must produce an error the user (or agent) can act on, never a crash and never lost work. **This outranks feature work:** don't ship a feature by adding a panic path, and fix a crash before building on top of it. The rules below are the ones that bind this repository; the shared standard for every Crafting App, [`craftrules/standards/never-crash.md`](https://github.com/storytold/craftrules/blob/main/standards/never-crash.md), is internal to the storytold team.
+PdfCraft opens strangers' files; users trust it with work. Malformed PDF, bad tool argument, corrupt settings or full disk: actionable error, never crash or lost work. **Outranks feature work:** no feature with added panic path; fix crash before building atop it. Binding rules below; shared Crafting App standard [`craftrules/standards/never-crash.md`](https://github.com/storytold/craftrules/blob/main/standards/never-crash.md) is internal to storytold team.
 
-- **Fail with `Result`.** Non-test code returns errors through the crate's error type and `?`. Where readers are lenient by design, fall back gracefully and record the repair (see Fidelity in `CLAUDE.md`).
-- **No panicking shortcuts.** No `unwrap()`, `expect()`, `panic!`, `unreachable!`, `todo!` or `unimplemented!` outside tests, unless the call is provably infallible (e.g. writing to a `Vec`), with a comment saying why. `assert!` only for internal invariants that input cannot reach.
-- **No `unsafe`.** The workspace sets `unsafe_code = "forbid"`. If a platform API needs it, use a maintained safe wrapper crate; a real exception needs the owner's sign-off.
-- **Treat every input-derived number as hostile.** Use `get()` instead of `[i]` or `[a..b]`. Slice strings only at char boundaries. Use checked/saturating arithmetic for lengths, offsets and counts. Guard against division by zero and NaN/inf casts, and never cast a negative value to `usize`. Cap allocations sized by the file.
-- **Bound recursion.** Object graphs can be cyclic or deeply nested. Walk them with seen-sets or depth limits.
-- **Don't cascade.** Handle lock poisoning, and keep a panic in a worker thread from taking the app down. Engine entry points that run untrusted-document code keep their last-resort `catch_unwind` guard, and command execution and file import/export must sit behind one that turns an escaped panic into an error message and keeps the user's document. Keep `panic = "unwind"` (the default) so the guard works. It is a safety net, not a substitute for the rules above.
-- **Prove it.** Every crash fix comes with a small synthetic regression test that panicked before the fix. Turn fuzzer findings (`cargo xtask fuzz`) into such tests before fixing them.
-- **Enforced by clippy.** Root `clippy.toml` lets tests use `unwrap`/`expect`/`panic!`. A crate that is clean carries `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]`; new crates start with it.
+- **Fail with `Result`.** Non-test code returns errors through crate's error type and `?`. Intentionally lenient readers: graceful fallback, record repair (Fidelity in `CLAUDE.md`).
+- **No panicking shortcuts.** No `unwrap()`, `expect()`, `panic!`, `unreachable!`, `todo!` or `unimplemented!` outside tests unless provably infallible (e.g. writing to `Vec`), with explanatory comment. `assert!` only for internal invariants unreachable from input.
+- **No `unsafe`.** Workspace sets `unsafe_code = "forbid"`. Platform API needing it: maintained safe wrapper crate; real exception needs owner's sign-off.
+- **Treat every input-derived number as hostile.** Use `get()` instead of `[i]` or `[a..b]`. String slices only at char boundaries. Checked/saturating arithmetic for lengths, offsets, counts; guard division by zero and NaN/inf casts. Never cast negative value to `usize`. Cap allocations sized by file.
+- **Bound recursion.** Object graphs may cycle or nest deeply. Use seen-sets or depth limits.
+- **Don't cascade.** Handle lock poisoning; worker panic must not take app down. Engine entry points running untrusted-document code keep last-resort `catch_unwind`; command execution and file import/export need guards converting escaped panic to error while preserving user's document. Keep `panic = "unwind"` (default). Safety net, not rule substitute.
+- **Prove it.** Every crash fix needs small synthetic regression test that panicked pre-fix. Convert fuzzer findings (`cargo xtask fuzz`) into such tests before fixing.
+- **Enforced by clippy.** Root `clippy.toml` permits test `unwrap`/`expect`/`panic!`. Clean crate carries `#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]`; new crates start with it.
 
 ## 5. Everything else
 
 
-Follow `CLAUDE.md`. It covers quality gates, layering, commit rules and how to run and look at the app.
+Follow `CLAUDE.md`: quality gates, layering, commit rules, running/viewing app.
+
+### 5.1 Repository skills and verification
+
+Use task-relevant `.agents/skills/` procedures under this file and `CLAUDE.md`. Choosing QA workflow: consult `.agents/skills/QA/README.md` if present, then read selected `SKILL.md` and only needed supporting sections. Skill names/descriptions identify entry points; category folders impose no workflow.
+
+- **Match the scope.** Focused regression/source question may use relevant profile directly. For dependent verification phases, use available QA coordination entry point, currently `pdfcraft-qa-test-orchestrator`. Consolidated QA skill may route to topic references; follow routing without loading every guide. Keep implementation/tooling guidance specific to change.
+- **Prepare the staged candidate.** Before committing, use `pdfcraft-qa-prepare-commit` when available. Select intended paths/hunks; preserve unrelated staged/unstaged work; audit/test identified staged candidate. After repair or index-changing tool/hook, restage deliberately, refresh affected evidence. Commit/publication follow task's existing authority and repository rules.
+- **Demonstrate bugs.** Suspected defects are hypotheses. Reach intended boundary, include valid accepted control, demonstrate intended pre-fix failure, verify smallest authorized fix with same expectation. Tests-only task retains regression and reports defect without silent production change.
+- **Bound additional exploration.** When relevant, use property, state-sequence, fuzzing or mutation checks with finite time/resource budgets and concrete failure replay. Preserve required repository gates; narrow skill waives none.
+- **Report evidence honestly.** Distinguish source review, authored tests and executed checks. Missing required execution stays incomplete. If skill/private background document unavailable, use current public repository instructions, crate documentation and CI definitions; state resulting limits. Reuse existing staging/repair authority without asking same permission again.
 
 ## Contributor credits (About window)
 
-- About ▸ Contributors/Models are compiled into the binary from `contributors/contributors.json`
-  (commit stats; generated, never hand-edit) and `contributors/people.toml` (names people chose for
-  themselves). See `docs/contributors.md`.
-- **Agents working for a contributor:** when you prepare a PR, check whether your human's GitHub
-  username has a `[people.<username>]` entry in `contributors/people.toml`. If not, ask them once
-  whether they want to be credited by more than their username: a real name, a display name, and/or
-  their public GitHub profile name (`sync_github_name = true`). If yes, add **only their own** entry
-  (copy the template at the top of the file, or run
+- About ▸ Contributors/Models compiled into binary from `contributors/contributors.json`
+  (commit stats; generated, never hand-edit) and `contributors/people.toml` (names people chose for themselves).
+  See `docs/contributors.md`.
+- **Agents working for contributor:** preparing PR, check human's GitHub username for
+  `[people.<username>]` entry in `contributors/people.toml`. If absent, ask once whether
+  they want more than username credit: real name, display name and/or public GitHub
+  profile name (`sync_github_name = true`). If yes, add **only their own** entry
+  (copy file-top template or run
   `python3 ../../craftrules/scripts/contributors.py --add-me . --real-name "…" --sync-github-name`)
-  and include it in their PR, committed as them. If no, change nothing: they are credited as
+  and include in their PR, committed as them. If no, change nothing: credited as
   `@username` anyway.
-- Never add, edit, guess or copy anyone else's entry or name (not from git config, commit authors or
-  GitHub profiles). Never hand-edit `contributors.json`.
-- Maintainers refresh the stats with `python3 ../../craftrules/scripts/contributors.py .` (it also
-  re-verifies who wrote each `people.toml` entry; `--check` only verifies).
+- Never add, edit, guess or copy anyone else's entry/name (not from git config, commit
+  authors or GitHub profiles). Never hand-edit `contributors.json`.
+- Maintainers refresh stats with `python3 ../../craftrules/scripts/contributors.py .`
+  (also re-verifies each `people.toml` entry's author; `--check` only verifies).
