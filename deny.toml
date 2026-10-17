@@ -48,13 +48,14 @@ ignore = [
     # winprint's fmt-derive (craft-print's Windows spooler), so it runs at compile time on Windows
     # and is not in the binary.
     { id = "RUSTSEC-2024-0370", reason = "compile-time proc macro of winprint's fmt-derive (craft-print Windows printing, #1107)" },
-    # zvariant, zbus_names and zvariant_derive are unmaintained (no vulnerability): zbus 6 absorbed
-    # them. They reach the tree through zbus 5 (accesskit/atspi for Linux accessibility, and
-    # pdfcraft-platform) and zbus 4 (keyring's Secret Service backend). Revisit when those move to
-    # zbus 6.
-    { id = "RUSTSEC-2026-0370", reason = "zvariant merged into zbus 6; reached through accesskit/atspi, pdfcraft-platform and keyring on zbus 4/5" },
-    { id = "RUSTSEC-2026-0371", reason = "zbus_names merged into zbus 6; reached through accesskit/atspi, pdfcraft-platform and keyring on zbus 4/5" },
-    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive merged into zbus 6; reached through accesskit/atspi, pdfcraft-platform and keyring on zbus 4/5" },
+    # zvariant, zbus_names and zvariant_derive are unmaintained (no vulnerability, and no fixed
+    # release to move to). They reach the tree as the D-Bus stack behind `accesskit_unix` ->
+    # `atspi`, which is Linux accessibility only, and as a dev-dependency of pdfcraft-platform.
+    # The Hot Folder's keyring (Secret Service backend) adds them again through zbus 4.
+    # Revisit when the accesskit/zbus chain moves to a maintained successor.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant unmaintained; Linux a11y stack via accesskit_unix, and keyring (Hot Folder)" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names unmaintained; Linux a11y stack via accesskit_unix, and keyring (Hot Folder)" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive unmaintained; Linux a11y stack via accesskit_unix, and keyring (Hot Folder)" },
 ]
 
 # egui's default UI fonts (Ubuntu-Light, Hack, emoji-icon-font): font licences on the AGENTS.md
