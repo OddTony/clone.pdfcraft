@@ -1614,6 +1614,8 @@ impl Automation {
     }
 
     fn doc_combine(&mut self, a: &Args) -> Result<Value> {
+        let quality = pdfcraft_engine::optimizer::CombineQuality::parse(a.opt_str("quality")?.unwrap_or("original"))
+            .ok_or_else(|| Args::wrong("quality", "original, balanced or compact"))?;
         let paths = a.strs("paths")?;
         if paths.len() < 2 {
             return Err(ToolError::InvalidArgs("combine needs at least two files".into()));
@@ -1700,7 +1702,7 @@ impl Automation {
             }
         }
         .map_err(failed)?;
-        let mut result = self.deliver(a, "Combined", combined.bytes)?;
+        let mut result = self.deliver(a, "Combined", quality.apply(combined.bytes).map_err(failed)?)?;
         if !combined.renamed_fields.is_empty() {
             result["renamed_fields"] = json!(combined.renamed_fields.iter().map(|(old, new)| json!([old, new])).collect::<Vec<_>>());
         }
