@@ -550,6 +550,8 @@ pub struct PdfCraftApp {
     pub flatten_fill_sign_on_save: bool,
     /// Point size for new Fill & Sign text and dates, kept across launches.
     pub fill_text_size: f64,
+    /// Colour for new Fill & Sign text and dates, kept across launches.
+    pub fill_text_color: [f64; 3],
     pub dialog: Option<Dialog>,
     /// How to ask for the latest release (the desktop app sets it; see `updates`).
     pub update_source: Option<updates::UpdateSource>,
@@ -921,6 +923,7 @@ impl PdfCraftApp {
             ui_scale_applied: None,
             flatten_fill_sign_on_save: false,
             fill_text_size: fill_sign::TEXT_SIZE,
+            fill_text_color: [0.0; 3],
             dialog: None,
             update_source: None,
             updates: updates::Updates::default(),
@@ -2277,6 +2280,7 @@ impl PdfCraftApp {
             "right_panel_closed": self.right_panel_closed,
         });
         // Set apart: one more key inside the macro above passes serde_json's recursion limit.
+        v["fill_text_color"] = serde_json::json!(self.fill_text_color);
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
@@ -2357,6 +2361,11 @@ impl PdfCraftApp {
         }
         if let Some(size) = v["fill_text_size"].as_f64().and_then(fill_sign::valid_text_size) {
             self.fill_text_size = size;
+        }
+        if let Ok(color) = serde_json::from_value::<[f64; 3]>(v["fill_text_color"].clone())
+            && let Some(color) = fill_sign::valid_text_color(color)
+        {
+            self.fill_text_color = color;
         }
         if let Some(prefs) = RedactPrefs::from_json(&v["redact_prefs"]) {
             self.redact_prefs = prefs.clone();

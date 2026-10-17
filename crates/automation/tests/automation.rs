@@ -2786,6 +2786,38 @@ fn fill_sign_text_font_size_is_saved_and_validated() {
 }
 
 #[test]
+fn fill_sign_text_and_date_colours_are_saved_and_validated() {
+    let dir = workdir("fill-sign-text-colour");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    for (kind, y) in [("text", 40), ("date", 80)] {
+        ok(
+            &mut a,
+            "fill_sign_add",
+            json!({ "doc": doc, "page": 1, "type": kind, "at": [20, y], "text": "Blue", "color": "#3366CC", "font_size": 6.5 }),
+        );
+    }
+    for (kind, color) in [("text", "not-a-colour"), ("signature", "#3366CC"), ("check", "#3366CC")] {
+        assert!(matches!(
+            a.call("fill_sign_add", &json!({ "doc": doc, "page": 1, "type": kind, "at": [20, 100], "text": "No", "color": color })),
+            Err(ToolError::InvalidArgs(_))
+        ));
+    }
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "coloured.pdf" }));
+    let pdf = pdfcraft_cos::Document::open(std::sync::Arc::new(std::fs::read(dir.join("coloured.pdf")).unwrap())).unwrap();
+    let page = pdfcraft_model::pages(&pdf).remove(0);
+    let annotations = pdf.resolve(page.dict.get(b"Annots").unwrap());
+    let annotations = annotations.as_array().unwrap();
+    assert_eq!(annotations.len(), 2, "invalid requests add nothing");
+    for reference in annotations {
+        let annotation = pdf.resolve(reference);
+        // FreeText stores its text colour in DA; C is the annotation background.
+        let da = annotation.as_dict().unwrap().get(b"DA").unwrap().as_string().unwrap();
+        assert_eq!(String::from_utf8(da.bytes.to_vec()).unwrap(), "0.2 0.4 0.8 rg /Helv 6.5 Tf");
+    }
+}
+
+#[test]
 fn image_signatures_through_tools_preserve_transparency_and_survive_save() {
     let dir = workdir("image-signatures");
     let mut png = Vec::new();

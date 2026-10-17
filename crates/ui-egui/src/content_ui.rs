@@ -605,6 +605,43 @@ fn finish(cv: &mut ContentView, d: TextDraft, added: &[Added]) -> Option<Edit> {
     }
 }
 
+/// Commit a typed size once (Enter or leaving the field), rather than one undo step per key.
+/// The bounds match AddedText validation, so the panel also accepts coloured text below 8 pt.
+fn font_size_input(ui: &mut egui::Ui, size: &mut f64) {
+    let id = ui.make_persistent_id("font-size-input");
+    let (previous, mut text) = ui.data(|d| d.get_temp::<(u64, String)>(id)).unwrap_or_else(|| (size.to_bits(), size.to_string()));
+    if previous != size.to_bits() {
+        text = size.to_string();
+    }
+    let response = ui.add(egui::TextEdit::singleline(&mut text).id(id).desired_width(44.0));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, ui.is_enabled(), tl!("Font size:")));
+    let cancel = (response.has_focus() || response.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Escape));
+    if cancel {
+        text = size.to_string();
+        response.surrender_focus();
+    } else if response.lost_focus() || (response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))) {
+        if let Some(value) = typed_font_size(&text) {
+            *size = value;
+        }
+        text = size.to_string();
+    }
+    let before = *size;
+    egui::ComboBox::from_id_salt("font-size").selected_text("pt").width(28.0).show_ui(ui, |ui| {
+        for value in [4.0, 6.0, 8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 36.0, 48.0, 72.0] {
+            ui.selectable_value(size, value, format!("{value} pt"));
+        }
+    });
+    if *size != before {
+        text = size.to_string();
+    }
+    ui.data_mut(|d| d.insert_temp(id, (size.to_bits(), text)));
+}
+
+fn typed_font_size(text: &str) -> Option<f64> {
+    let value = text.trim().parse::<f64>().ok()?;
+    (value.is_finite() && (1.0..=500.0).contains(&value)).then_some(value)
+}
+
 /// Format text (shown in the Edit panel while a text item is selected, or for new text).
 /// Returns the changed style; for a selected item the caller turns it into an update.
 pub(crate) fn format_panel(ui: &mut egui::Ui, t: &Tokens, style: &AddedText) -> Option<AddedText> {
@@ -616,12 +653,7 @@ pub(crate) fn format_panel(ui: &mut egui::Ui, t: &Tokens, style: &AddedText) -> 
                 ui.selectable_value(&mut s.family, f, f.label());
             }
         });
-        // A list rather than a drag value: every change is an undo step.
-        egui::ComboBox::from_id_salt("font-size").selected_text(format!("{} pt", s.size)).width(70.0).show_ui(ui, |ui| {
-            for size in [8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 36.0, 48.0, 72.0] {
-                ui.selectable_value(&mut s.size, size, format!("{size} pt"));
-            }
-        });
+        font_size_input(ui, &mut s.size);
     });
     ui.horizontal(|ui| {
         if ui.selectable_label(s.bold, egui::RichText::new("B").strong()).on_hover_text(tl!("Bold")).clicked() {
@@ -910,6 +942,83 @@ mod tests {
     use egui_kittest::kittest::Queryable;
 
     use super::*;
+
+    #[test]
+    fn typed_sizes_accept_small_fractional_values_and_reject_invalid_input() {
+        for value in ["1", "4", "6.5", " 13.25 ", "500"] {
+            assert_eq!(typed_font_size(value), Some(value.trim().parse().unwrap()));
+        }
+        for value in ["", "0", "-1", "0.5", "501", "NaN", "inf", "1e999", "small"] {
+            assert_eq!(typed_font_size(value), None, "{value}");
+        }
+    }
+
+    #[test]
+    fn typed_size_commits_once_and_invalid_input_preserves_the_style() {
+        let mut h = egui_kittest::Harness::new_ui_state(
+            |ui, state: &mut (f64, usize)| {
+                let before = state.0;
+                ui.horizontal(|ui| font_size_input(ui, &mut state.0));
+                if state.0 != before {
+                    state.1 += 1;
+                }
+            },
+            (12.0, 0),
+        );
+        h.run();
+        let enter = || egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE };
+        let select_all =
+            || egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND };
+        for (text, expected, changes) in [("6.5", 6.5, 1), ("NaN", 6.5, 1), ("0", 6.5, 1), ("13.25", 13.25, 2)] {
+            h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Font size:").click();
+            h.run();
+            h.event(select_all());
+            h.event(egui::Event::Text(text.into()));
+            h.run_steps(2);
+            assert_eq!(h.state().1, changes - usize::from(text == "6.5" || text == "13.25"), "typing alone does not commit");
+            h.event(enter());
+            h.run_steps(2);
+            assert_eq!(*h.state(), (expected, changes));
+        }
+    }
+
+    #[test]
+    fn typed_size_commits_on_focus_loss_and_escape_discards_the_draft() {
+        let mut h = egui_kittest::Harness::new_ui_state(
+            |ui, state: &mut (f64, usize)| {
+                let before = state.0;
+                ui.horizontal(|ui| font_size_input(ui, &mut state.0));
+                let _ = ui.button("Other control");
+                if state.0 != before {
+                    state.1 += 1;
+                }
+            },
+            (12.0, 0),
+        );
+        h.run();
+        let select_all =
+            || egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND };
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Font size:").click();
+        h.run();
+        h.event(select_all());
+        h.event(egui::Event::Text("6.5".into()));
+        h.run_steps(2);
+        assert_eq!(*h.state(), (12.0, 0));
+        h.get_by_label("Other control").click();
+        h.run_steps(2);
+        assert_eq!(*h.state(), (6.5, 1));
+        h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Font size:").click();
+        h.run();
+        h.event(select_all());
+        h.event(egui::Event::Text("13.25".into()));
+        h.run_steps(2);
+        h.event(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
+        h.run_steps(2);
+        assert_eq!(*h.state(), (6.5, 1), "Escape must not commit the draft");
+        h.get_by_label("Other control").click();
+        h.run_steps(2);
+        assert_eq!(*h.state(), (6.5, 1), "later focus loss must not revive the cancelled draft");
+    }
 
     /// The image a flip button leaves behind, as the panel returns it.
     fn flipped(tooltip: &str) -> pdfcraft_engine::AddedImage {

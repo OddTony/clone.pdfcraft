@@ -2877,6 +2877,41 @@ fn the_format_panel_restyles_the_paragraph_being_edited() {
 }
 
 #[test]
+fn typed_small_coloured_text_size_survives_save_and_reopen() {
+    let mut h = harness(1, |_| {});
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let r = h.state().views[0].page_screen_rect(0).unwrap();
+    let at = egui::pos2(r.left() + 40.0 / 200.0 * r.width(), r.top() + (300.0 - 158.0) / 300.0 * r.height());
+    h.hover_at(at);
+    h.run_steps(1);
+    h.drag_at(at);
+    h.run_steps(1);
+    h.drop_at(at);
+    h.run_steps(3);
+    assert!(h.state().views[0].line_editor.is_some());
+    h.get_by_label("Font size:").click();
+    h.run_steps(1);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.event(egui::Event::Text("6.5".into()));
+    h.key_press(Key::Enter);
+    h.run_steps(4);
+    h.get_by_label("Blue").click();
+    h.run_steps(4);
+    let id = h.state().views[0].id;
+    let lines = h.state().session.get(id).unwrap().text_lines(0);
+    assert!(!lines.is_empty());
+    for line in &lines {
+        assert!((line.size - 6.5).abs() < 0.01, "{line:?}");
+        assert!(line.color[2] > line.color[0], "the small text stays blue: {line:?}");
+    }
+    let saved = h.state().session.save_bytes(id).unwrap();
+    let mut reopened = pdfcraft_engine::Session::new();
+    let rid = reopened.open("small-blue.pdf", None, saved, None).unwrap();
+    assert_eq!(reopened.get(rid).unwrap().text_lines(0), lines);
+}
+
+#[test]
 fn selected_text_formatting_keeps_the_rest_of_the_paragraph_and_reopens() {
     let mut h = harness(1, |_| {});
     assert!(h.state_mut().execute("edit.edit_text"));

@@ -1926,8 +1926,8 @@ milestone = "M7"
 status = "shipped"
 commands = ["edit.edit_text", "edit.text"]
 tools = ["text_edit", "content_update"]
-evidence = ["crates/edit/src/tests.rs::paragraphs_take_new_formatting", "crates/ui-egui/tests/editing.rs::the_format_panel_restyles_the_paragraph_being_edited", "crates/automation/tests/automation.rs::editing_existing_text_through_tools"]
-notes = "existing paragraphs and added text: font family (Helvetica, Times, Courier) with bold and italic, size, colour; existing paragraphs are rewrapped"
+evidence = ["crates/edit/src/tests.rs::paragraphs_take_new_formatting", "crates/ui-egui/tests/editing.rs::the_format_panel_restyles_the_paragraph_being_edited", "crates/automation/tests/automation.rs::editing_existing_text_through_tools", "crates/ui-egui/src/content_ui.rs::typed_sizes_accept_small_fractional_values_and_reject_invalid_input", "crates/ui-egui/src/content_ui.rs::typed_size_commits_once_and_invalid_input_preserves_the_style", "crates/ui-egui/tests/editing.rs::typed_small_coloured_text_size_survives_save_and_reopen"]
+notes = "existing paragraphs and added text: font family (Helvetica, Times, Courier) with bold and italic, size, colour; existing paragraphs are rewrapped; the Edit font-size field accepts typed fractional values from 1–500 pt, including below 8 pt; Enter/focus loss commits once and invalid input preserves the previous value"
 
 [[feature]]
 id = "edit.text-format-style"
@@ -5268,8 +5268,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["sign.fill.text"]
 tools = ["fill_sign_add"]
-evidence = ["crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/annot/src/tests.rs::fill_and_sign_items_are_drawn", "crates/automation/tests/automation.rs::fill_and_sign_through_tools", "crates/engine/src/tests.rs::typed_text_reads_across_as_displayed_on_rotated_pages"]
-notes = "typewriter FreeText, 10 pt Helvetica. Reads across as displayed on pages with /Rotate (sideways-stored scans): the box follows the displayed axes and the appearance is turned back (PdfCraft key /PCTextRotate); other apps that regenerate the appearance from /DA draw it unturned. A later page rotation does not re-turn it. Field detection does not work on scanned (image-only) forms yet"
+evidence = ["crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/annot/src/tests.rs::fill_and_sign_items_are_drawn", "crates/automation/tests/automation.rs::fill_and_sign_through_tools", "crates/engine/src/tests.rs::typed_text_reads_across_as_displayed_on_rotated_pages", "crates/ui-egui/tests/fill_sign.rs::fill_text_colour_survives_preview_commit_settings_and_save", "crates/automation/tests/automation.rs::fill_sign_text_and_date_colours_are_saved_and_validated"]
+notes = "typewriter FreeText, 10 pt Helvetica. Reads across as displayed on pages with /Rotate (sideways-stored scans): the box follows the displayed axes and the appearance is turned back (PdfCraft key /PCTextRotate); other apps that regenerate the appearance from /DA draw it unturned. A later page rotation does not re-turn it. Field detection does not work on scanned (image-only) forms yet; text/date colour is selectable, remembered and preserved in saved appearances; fill_sign_add exposes color and font_size"
 
 [[feature]]
 id = "form.fill-sign-marks"
@@ -5292,8 +5292,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["sign.fill.date"]
 tools = ["fill_sign_add", "fill_sign_date_format"]
-evidence = ["crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/automation/tests/automation.rs::fill_and_sign_through_tools", "crates/ui-egui/tests/date_format.rs::fill_and_sign_dates_follow_the_date_format_preference_and_it_is_remembered", "crates/engine/src/dates.rs::presets_write_the_day_in_their_own_order", "crates/engine/src/dates.rs::names_follow_the_date_language", "crates/ui-egui/tests/date_format.rs::month_names_follow_the_date_language_or_else_the_interface_language", "crates/ui-egui/tests/date_format.rs::a_date_the_pdf_cannot_hold_is_refused_with_a_warning_first"]
-notes = "local date in Preferences ▸ Date format (default m/d/yyyy; 12 presets or any pattern in Acrobat date letters with \\ escapes, checked and previewed as typed, remembered; only whole date codes accepted; month and weekday names in the interface languages, Czech months in the genitive after a day, following the interface language unless one is picked; fill_sign_add takes a one-off format and language). Beyond Acrobat: its Fill & Sign has no format setting (only Acrobat Sign accounts do). Missing: Fill & Sign text is Helvetica/WinAnsi, so a date with letters outside Western European (Czech ř, Japanese, Chinese names) is refused with a warning instead of being saved as ?; the OS locale's format isn't offered as a preset; names in languages without an interface translation"
+evidence = ["crates/ui-egui/tests/fill_sign.rs::text_marks_and_date", "crates/automation/tests/automation.rs::fill_and_sign_through_tools", "crates/ui-egui/tests/date_format.rs::fill_and_sign_dates_follow_the_date_format_preference_and_it_is_remembered", "crates/engine/src/dates.rs::presets_write_the_day_in_their_own_order", "crates/engine/src/dates.rs::names_follow_the_date_language", "crates/ui-egui/tests/date_format.rs::month_names_follow_the_date_language_or_else_the_interface_language", "crates/ui-egui/tests/date_format.rs::a_date_the_pdf_cannot_hold_is_refused_with_a_warning_first", "crates/automation/tests/automation.rs::fill_sign_text_and_date_colours_are_saved_and_validated"]
+notes = "local date in Preferences ▸ Date format (default m/d/yyyy; 12 presets or any pattern in Acrobat date letters with \\ escapes, checked and previewed as typed, remembered; only whole date codes accepted; month and weekday names in the interface languages, Czech months in the genitive after a day, following the interface language unless one is picked; fill_sign_add takes a one-off format and language). Beyond Acrobat: its Fill & Sign has no format setting (only Acrobat Sign accounts do). Missing: Fill & Sign text is Helvetica/WinAnsi, so a date with letters outside Western European (Czech ř, Japanese, Chinese names) is refused with a warning instead of being saved as ?; the OS locale's format isn't offered as a preset; names in languages without an interface translation; shares the Fill & Sign text colour preference and tool argument"
 
 [[feature]]
 id = "form.fill-sign-signature"

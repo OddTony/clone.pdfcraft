@@ -2950,6 +2950,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     info,
                     ft,
                     app.fill_text_size,
+                    app.fill_text_color,
                     view,
                     signature.as_ref(),
                     initials.as_ref(),
@@ -4588,6 +4589,14 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                                 .speed(0.25)
                                 .suffix(" pt"),
                         );
+                    }
+                    if matches!(current_fill, Some(crate::fill_sign::FillTool::Text | crate::fill_sign::FillTool::Date)) {
+                        ui.menu_button(tl!("Colour"), |ui| {
+                            if let Some(color) = comments::swatch_grid(ui, Some(app.fill_text_color)) {
+                                app.fill_text_color = color;
+                                ui.close();
+                            }
+                        });
                     }
                     if let QuickTool::Comment(tool) = app.quick_tool {
                         let (r, _) = ui.allocate_exact_size(vec2(32.0, 9.0), Sense::hover());
