@@ -25,6 +25,34 @@ use std::path::{Path, PathBuf};
 use pdfcraft_automation::{Automation, ToolError, tools};
 use serde_json::{Value, json};
 
+// Hostile-argument coverage exercises every registered tool, including explicit playback.
+// Keep its audio side effects deterministic and silent without excluding any tool or call.
+struct SilentSpeech;
+impl pdfcraft_platform::speech::Backend for SilentSpeech {
+    fn voices(&mut self) -> Result<Vec<pdfcraft_platform::speech::Voice>, String> {
+        Ok(Vec::new())
+    }
+    fn start(&mut self, _: &str, _: &pdfcraft_platform::speech::Options) -> Result<(), String> {
+        Ok(())
+    }
+    fn pause(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+    fn resume(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+    fn stop(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+    fn finished(&mut self) -> Result<bool, String> {
+        Ok(true)
+    }
+}
+
+fn silent_automation() -> Automation {
+    Automation::new().with_speech_player(pdfcraft_platform::speech::Player::with_backend(Box::new(SilentSpeech)))
+}
+
 /// A fresh empty directory for one test.
 fn tmp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("pdfcraft-hostile-{}-{name}", std::process::id()));
@@ -193,7 +221,7 @@ fn guarded(a: &mut Automation, tool: &str, args: &Value) -> std::result::Result<
 #[test]
 fn no_tool_panics_on_hostile_arguments() {
     let root = tmp("args");
-    let mut a = Automation::new().with_root(&root).expect("root");
+    let mut a = silent_automation().with_root(&root).expect("root");
     let values = zoo();
     let mut failures = Vec::new();
     let mut calls = 0usize;
@@ -253,7 +281,7 @@ fn no_tool_escapes_the_root() {
         }
     };
 
-    let mut a = Automation::new().with_root(&root).expect("root");
+    let mut a = silent_automation().with_root(&root).expect("root");
 
     // A real document, so tools reach their path arguments instead of failing on `doc` first.
     let created = a.call("doc_create", &json!({ "from": "blank", "pages": 1 })).expect("create a blank document");
