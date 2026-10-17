@@ -1179,6 +1179,9 @@ pub enum ButtonAction {
     ImportIcon,
     /// A script PdfCraft can't run yet.
     Script(String),
+    /// An action followed by the actions its `/Next` runs (ISO 32000-2 §12.6.2), in order:
+    /// at least two.
+    Chain(Vec<ButtonAction>),
 }
 
 /// What a set-layer-visibility action does to a layer.

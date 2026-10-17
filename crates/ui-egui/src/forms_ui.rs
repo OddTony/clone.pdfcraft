@@ -120,13 +120,21 @@ pub(crate) fn page_input(
 ) -> FieldPointer {
     let pointer = ui.input(|i| i.pointer.hover_pos());
     let Some(p) = pointer.filter(|p| xf.rect.contains(*p)) else { return FieldPointer::Away };
-    let hit = form.iter().find_map(|f| {
-        f.widgets
-            .iter()
-            .enumerate()
-            .find(|(_, w)| w.page == Some(page) && !w.hidden && widget_rect(xf, info, page, w.rect).contains(p))
-            .map(|(i, w)| (f, i, w))
-    });
+    let under = || {
+        form.iter().flat_map(|f| {
+            f.widgets
+                .iter()
+                .enumerate()
+                .filter(move |(_, w)| w.page == Some(page) && !w.hidden && widget_rect(xf, info, page, w.rect).contains(p))
+                .map(move |(i, w)| (f, i, w))
+        })
+    };
+    // The topmost widget takes the click (the page draws later annotations over earlier ones),
+    // but a read-only one doesn't respond to clicks (ISO 32000-2, the ReadOnly field flag): a
+    // label box drawn over a radio button lets the click through. It's the target only when
+    // nothing else is there, to say it's read-only.
+    let top = |read_only: bool| under().filter(|(f, _, _)| f.read_only() == read_only).max_by_key(|(_, _, w)| w.stack);
+    let hit = top(false).or_else(|| top(true));
     let Some((f, wi, w)) = hit else { return FieldPointer::Away };
     // Empty signature fields are signed by clicking them (Use a certificate); push buttons run
     // their action.
@@ -162,6 +170,8 @@ pub(crate) fn page_input(
         FormFieldKind::CheckBox => {
             view.forms.focus = None;
             view.pending_edit = Some(Edit::SetFieldValue { name: f.name.clone(), value: FieldValue::Check(f.value.is_empty()) });
+            // Its own action (show or hide fields, a script, …) runs once the value is in.
+            view.forms.button = w.action.clone().map(|a| (f.name.clone(), a));
         }
         FormFieldKind::Radio => {
             view.forms.focus = None;
@@ -171,6 +181,9 @@ pub(crate) fn page_input(
             if value.as_ref() != f.value.first() {
                 view.pending_edit = Some(Edit::SetFieldValue { name: f.name.clone(), value: FieldValue::Radio(value) });
             }
+            // The clicked button's own action runs once the value is in, even when the value
+            // stays (clicking the selected button of a group that can't be turned off).
+            view.forms.button = w.action.clone().map(|a| (f.name.clone(), a));
         }
         // The press already committed the previous field and opened this one (above), unless
         // press and release came in one frame. Committing again would re-run a validation that

@@ -110,6 +110,13 @@ impl PdfCraftApp {
                             }
                         }
                     }
+                    // A picture or appearance change redraws the field without changing what the form
+                    // model compares, so its pages are redrawn whatever the comparison found.
+                    if let Some(name) = appearance_field(&edit) {
+                        for f in doc.form.iter().filter(|f| f.name == name) {
+                            changed_pages.extend(f.widgets.iter().filter_map(|w| w.page));
+                        }
+                    }
                     for page in changed_pages {
                         view.page_changed(page);
                     }
@@ -437,7 +444,7 @@ impl PdfCraftApp {
     /// Apply the edit queued on tab `i` (the active one). Returns false only when it was a
     /// field's typing and the field refused it (#166): the editor reopens with the text, and the
     /// user has been told why, so the typing isn't lost and the caller can stop.
-    fn apply_queued_edit(&mut self, i: usize) -> bool {
+    pub(crate) fn apply_queued_edit(&mut self, i: usize) -> bool {
         let Some(edit) = self.views.get_mut(i).and_then(|v| v.pending_edit.take()) else { return true };
         let signature_page = self.views.get_mut(i).and_then(|v| v.fill_signature_page.take());
         let committed = self.views.get_mut(i).and_then(|v| v.forms.committed.take());
@@ -950,6 +957,15 @@ fn comment_page(edit: &Edit) -> Option<usize> {
 }
 
 /// Whether `edit` is a form-related modification.
+/// The field whose appearance `edit` may change without changing its form data (a button's
+/// picture, Field Properties ▸ Appearance).
+fn appearance_field(edit: &Edit) -> Option<&str> {
+    match edit {
+        Edit::SetFieldImage { name, .. } | Edit::SetFieldProps { name, .. } => Some(name),
+        _ => None,
+    }
+}
+
 fn is_form_edit(edit: &Edit) -> bool {
     matches!(
         edit,

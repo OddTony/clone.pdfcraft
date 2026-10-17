@@ -105,6 +105,12 @@ pub struct Widget {
     pub rotation: i64,
     /// List boxes: where the options are drawn, so a click can pick the one under the pointer.
     pub list: Option<appearance::ListRows>,
+    /// Check boxes and radio buttons: what clicking this widget does besides changing the value
+    /// (its mouse-up action, or else the field's), as Acrobat runs it after the value changes.
+    pub action: Option<af::ButtonAction>,
+    /// Its position in its page's `/Annots` (0 when not listed): later widgets are drawn on top,
+    /// and take a click where widgets overlap.
+    pub stack: usize,
 }
 
 /// A terminal form field.
@@ -254,7 +260,8 @@ fn name_obj(text: &str) -> Object {
 /// At most this many `/State` entries of a set-layer-visibility action are read.
 const MAX_LAYER_STATE: usize = 1024;
 
-/// A push button's mouse-up action (`/A`, or `/AA /U`, on the field or its widget).
+/// A button's mouse-up action (`/A`, or `/AA /U`, on the field or its widget): a push button's,
+/// or a check box or radio button widget's.
 fn button_action(doc: &Document, d: &Dict, widgets: &[ObjRef]) -> Option<af::ButtonAction> {
     // A button PdfCraft generated for an XFA image field (`/PCXfaImage true`, no PDF action):
     // clicking it picks a picture, as `buttonImportIcon()` does.
@@ -265,7 +272,50 @@ fn button_action(doc: &Document, d: &Dict, widgets: &[ObjRef]) -> Option<af::But
         dict.get(b"A").cloned().or_else(|| dict.get(b"AA").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().and_then(|aa| aa.get(b"U").cloned())))
     };
     let action = pick(d).or_else(|| widgets.iter().find_map(|w| doc.get(*w).as_dict().and_then(pick)))?;
-    let a = doc.resolve(&action);
+    action_chain(doc, &action)
+}
+
+/// At most this many actions of a `/Next` chain are read.
+const MAX_ACTION_CHAIN: usize = 256;
+
+/// An action and the actions its `/Next` runs after it (ISO 32000-2 §12.6.2: one action or an
+/// array of them, each with its own `/Next`), in order. Actions PdfCraft can't run are left
+/// out; each action object is read once, so a cycle ends.
+fn action_chain(doc: &Document, first: &Object) -> Option<af::ButtonAction> {
+    let mut steps = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut stack = vec![first.clone()];
+    let mut read = 0;
+    while let Some(o) = stack.pop() {
+        if read >= MAX_ACTION_CHAIN {
+            break;
+        }
+        read += 1;
+        if let Some(r) = o.as_ref()
+            && !seen.insert(r)
+        {
+            continue;
+        }
+        let resolved = doc.resolve(&o);
+        let Some(d) = resolved.as_dict() else { continue };
+        steps.extend(one_action(doc, &o));
+        if let Some(next) = d.get(b"Next") {
+            match doc.resolve(next).as_array() {
+                // The stack runs last-in first: the array's first action goes on top.
+                Some(items) => stack.extend(items.iter().take(MAX_ACTION_CHAIN).rev().cloned()),
+                None => stack.push(next.clone()),
+            }
+        }
+    }
+    match steps.len() {
+        0 | 1 => steps.pop(),
+        _ => Some(af::ButtonAction::Chain(steps)),
+    }
+}
+
+/// One action dictionary (or a reference to one), without its `/Next`.
+fn one_action(doc: &Document, action: &Object) -> Option<af::ButtonAction> {
+    let a = doc.resolve(action);
     let a = a.as_dict()?;
     let s = |k: &[u8]| a.get(k).and_then(|v| text_of(&doc.resolve(v)));
     Some(match a.name(b"S")? {
@@ -336,7 +386,7 @@ fn button_action(doc: &Document, d: &Dict, widgets: &[ObjRef]) -> Option<af::But
             let preserve_rb = !a.get(b"PreserveRB").is_some_and(|p| matches!(&*doc.resolve(p), Object::Bool(false)));
             af::ButtonAction::SetLayers { changes, preserve_rb }
         }
-        b"JavaScript" => af::button_script(&script(doc, &action)?),
+        b"JavaScript" => af::button_script(&script(doc, action)?),
         _ => return None,
     })
 }
@@ -554,6 +604,9 @@ fn enumerate(doc: &Document) -> (Vec<Field>, usize) {
     adopt_page_fields(doc, &pages, &base, &page_of, &mut seen, &mut out);
     let adopted = out.len() - listed;
     rank_tabs(doc, &pages, &annot_index, &mut out);
+    for w in out.iter_mut().flat_map(|f| f.widgets.iter_mut()) {
+        w.stack = annot_index.get(&w.obj).copied().unwrap_or(0);
+    }
     (out, adopted)
 }
 
@@ -803,6 +856,10 @@ fn walk(
                 hidden: annot_flags & (2 | 32) != 0,
                 rotation: appearance::mk_rotation(doc, wd),
                 list: (kind == FieldKind::List).then(|| appearance::list_rows_of(doc, inh.da.as_deref().unwrap_or("/Helv 0 Tf 0 g"), Some(d), wd)),
+                stack: 0,
+                action: matches!(kind, FieldKind::CheckBox | FieldKind::Radio)
+                    .then(|| button_action(doc, wd, &[]).or_else(|| button_action(doc, d, &[])))
+                    .flatten(),
             })
         })
         .collect();

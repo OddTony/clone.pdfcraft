@@ -3888,7 +3888,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         }
     }
     if let Some((name, action)) = app.views[index].forms.button.take() {
-        run_button(app, index, &name, action);
+        // The edit the click queued goes in first, as in Acrobat: a check box or radio button's
+        // new value (so a show/hide edit doesn't replace it), or the typing in the field the
+        // click left (so a picker the action opens, such as an image field's, doesn't find the
+        // document changed under it and drop the pick). A refused edit runs no action.
+        let value_in = app.views[index].pending_edit.is_none() || app.apply_queued_edit(index);
+        if value_in {
+            run_button(app, index, &name, action);
+        }
     }
     if copy_selected {
         app.execute("edit.copy");
@@ -3993,6 +4000,30 @@ fn selection_actions(
     false
 }
 
+/// The display changes of show/hide steps `(fields, hide)`, in order: a later step wins for a
+/// field both name. `display.hidden` 1, `display.visible` 0, as a script setting
+/// `field.display` would.
+fn display_changes(app: &PdfCraftApp, index: usize, steps: &[(Vec<String>, bool)]) -> Vec<pdfcraft_engine::FieldChange> {
+    let Some(doc) = app.views.get(index).and_then(|v| app.session.get(v.id)) else { return Vec::new() };
+    let mut display = std::collections::BTreeMap::new();
+    for (fields, hide) in steps {
+        let listed = |n: &String| fields.iter().any(|f| n == f || n.starts_with(&format!("{f}.")));
+        for f in doc.form.iter().filter(|f| listed(&f.name)) {
+            display.insert(f.name.clone(), *hide);
+        }
+    }
+    display
+        .into_iter()
+        .map(|(name, hide)| pdfcraft_engine::FieldChange {
+            name,
+            value: None,
+            read_only: None,
+            required: None,
+            display: Some(if hide { 1 } else { 0 }),
+        })
+        .collect()
+}
+
 /// Run a push button's action (the ones that need no JavaScript engine).
 fn run_button(app: &mut PdfCraftApp, index: usize, name: &str, action: pdfcraft_engine::form_scripts::ButtonAction) {
     use pdfcraft_engine::form_scripts::ButtonAction as B;
@@ -4023,26 +4054,36 @@ fn run_button(app: &mut PdfCraftApp, index: usize, name: &str, action: pdfcraft_
         B::Uri(u) => app.request_document_url(&u, crate::LinkOrigin::Button),
         B::GoTo(p) => app.views[index].go_to_page(p.min(pages.saturating_sub(1))),
         B::ShowHide { fields, hide } => {
-            let listed = |n: &String| fields.iter().any(|f| n == f || n.starts_with(&format!("{f}.")));
-            // `display.hidden` 1, `display.visible` 0, as a script setting `field.display` would.
-            let changes: Vec<pdfcraft_engine::FieldChange> = app
-                .session
-                .get(app.views[index].id)
-                .map(|d| d.form.iter().filter(|f| listed(&f.name)).map(|f| f.name.clone()).collect::<Vec<_>>())
-                .unwrap_or_default()
-                .into_iter()
-                .map(|name| pdfcraft_engine::FieldChange {
-                    name,
-                    value: None,
-                    read_only: None,
-                    required: None,
-                    display: Some(if hide { 1 } else { 0 }),
-                })
-                .collect();
+            let changes = display_changes(app, index, &[(fields, hide)]);
             if !changes.is_empty() {
                 let label = if hide { "Hide a field" } else { "Show a field" };
                 app.views[index].pending_edit =
                     Some(pdfcraft_engine::Edit::Batch { label: label.into(), edits: vec![pdfcraft_engine::Edit::ApplyScriptChanges { changes }] });
+            }
+        }
+        B::Chain(steps) => {
+            // The chain's show and hide steps go in together, as one undo step, before its
+            // other steps run in order (each of which may queue an edit of its own).
+            let (shows, others): (Vec<_>, Vec<_>) = steps.into_iter().partition(|a| matches!(a, B::ShowHide { .. }));
+            let shows: Vec<(Vec<String>, bool)> = shows
+                .into_iter()
+                .filter_map(|a| match a {
+                    B::ShowHide { fields, hide } => Some((fields, hide)),
+                    _ => None,
+                })
+                .collect();
+            let changes = display_changes(app, index, &shows);
+            if !changes.is_empty() {
+                let edit = pdfcraft_engine::Edit::Batch {
+                    label: "Show or hide fields".into(),
+                    edits: vec![pdfcraft_engine::Edit::ApplyScriptChanges { changes }],
+                };
+                if !app.apply_edit(edit) {
+                    return;
+                }
+            }
+            for step in others {
+                run_button(app, index, name, step);
             }
         }
         B::SetLayers { changes, preserve_rb } => {
