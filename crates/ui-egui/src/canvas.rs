@@ -1814,11 +1814,9 @@ impl DocView {
                 self.comments.page_rendered(page);
             }
         } else if r.request.tag & PRINT_TAG != 0 {
-            let tex = ctx.load_texture(
-                format!("print-{:?}-{page}", self.id),
-                if r.request.tag & GRAYSCALE_TAG != 0 { grayscale(img) } else { img },
-                TextureOptions::LINEAR,
-            );
+            let img = if r.request.tag & GRAYSCALE_TAG != 0 { grayscale(img) } else { img };
+            let img = filtered_print_preview_image(img, ctx.pixels_per_point());
+            let tex = ctx.load_texture(format!("print-{:?}-{page}", self.id), img, TextureOptions::LINEAR);
             self.print_pages.insert(page, (r.request.tag, tex));
         } else if r.request.tag & GRID_TAG != 0 {
             let tex = ctx.load_texture(format!("grid-{:?}-{page}", self.id), img, TextureOptions::LINEAR);
@@ -5064,6 +5062,32 @@ pub(crate) fn texture_image(size: [usize; 2], pixels: pdfcraft_render::Pixels) -
     }
 }
 
+/// Downsample the sharp print raster with an antialiasing filter before GPU upload.
+/// GPU bilinear sampling alone cannot preserve thin rules when shrinking by 6-12x.
+fn filtered_print_preview_image(img: egui::ColorImage, ppp: f32) -> egui::ColorImage {
+    let [w, h] = img.size;
+    if w == 0 || h == 0 {
+        return img;
+    }
+    let ppp = if ppp.is_finite() { ppp.clamp(1.0, 4.0) } else { 1.0 };
+    let max_w = (crate::print_ui::PREVIEW_BOX.0 * ppp).round().max(1.0) as usize;
+    let max_h = (crate::print_ui::PREVIEW_BOX.1 * ppp).round().max(1.0) as usize;
+    let scale = (max_w as f64 / w as f64).min(max_h as f64 / h as f64).min(1.0);
+    if scale >= 1.0 {
+        return img;
+    }
+    let out_w = ((w as f64 * scale).round() as u32).max(1);
+    let out_h = ((h as f64 * scale).round() as u32).max(1);
+    // Color32 is a premultiplied RGBA8 value. Filter premultiplied pixels to
+    // avoid transparent-colour halos; preserve alpha in the resulting texture.
+    let rgba: &[u8] = bytemuck::cast_slice(&img.pixels);
+    let Some(source) = image::RgbaImage::from_raw(w as u32, h as u32, rgba.to_vec()) else {
+        return img;
+    };
+    let reduced = image::imageops::resize(&source, out_w, out_h, image::imageops::FilterType::Lanczos3);
+    egui::ColorImage::from_rgba_premultiplied([out_w as usize, out_h as usize], reduced.as_raw())
+}
+
 /// A luminance preview for a monochrome print. `Color32` stores premultiplied pixels, so a
 /// non-opaque colour's alpha is restored after multiplying the unmultiplied RGB by its
 /// luminance. This uses the display gamma-space weights users expect in editors/print dialogs,
@@ -5088,6 +5112,31 @@ fn grayscale(mut img: egui::ColorImage) -> egui::ColorImage {
 
 #[cfg(test)]
 mod tests {
+    /// Thin raster rules remain detectable after Lanczos reduction, with RGB intact.
+    #[test]
+    fn print_preview_filtered_downscale_keeps_fine_rules() {
+        let width = 1184;
+        let height = 712;
+        let mut source = egui::ColorImage::filled([width, height], Color32::WHITE);
+        for k in 0..9 {
+            let y = 47 + k * 64;
+            for x in 24..1160 {
+                source.pixels[y * width + x] = Color32::from_rgb(0, 38, 140);
+            }
+        }
+        let reduced = filtered_print_preview_image(source, 1.0);
+        assert_eq!(reduced.size, [296, 178]);
+        for k in 0..9 {
+            let expected = ((47 + k * 64) as f64 / 4.0).round() as usize;
+            let row_start = expected.saturating_sub(2);
+            let row_end = (expected + 2).min(reduced.size[1] - 1);
+            let visible = (row_start..=row_end).any(|y| {
+                let c = reduced.pixels[y * reduced.size[0] + 148];
+                c.r() < 245 && c.g() < 245 && c.b() < 245
+            });
+            assert!(visible, "fine rule {k} was lost near row {expected}");
+        }
+    }
 
     #[test]
     fn print_preview_rgb_is_not_tagged_grayscale() {

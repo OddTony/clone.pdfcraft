@@ -681,6 +681,8 @@ pub(crate) const PREVIEW_MAX_SIDE: f32 = 4096.0;
 /// The most bytes of print-preview rasters kept at once. The current sheet comes first, then the
 /// next and the previous one; a neighbour that doesn't fit isn't rendered ahead.
 pub(crate) const PREVIEW_BYTES: f64 = 128.0 * 1024.0 * 1024.0;
+/// Source quality floor for print previews; the raster is filtered down before GPU upload.
+const PREVIEW_MIN_SOURCE_SCALE: f32 = 150.0 / 72.0;
 
 /// Pages on the current sheet and its neighbours, each with the device pixels per point that
 /// fill the preview pane (so the picture is not a stretched thumbnail), nearest sheet first and
@@ -712,7 +714,7 @@ pub(crate) fn preview_rasters(d: &PrintDraft, sizes: &[(f64, f64)], labels: &[St
             if !placed.is_finite() || placed < 0.05 || !long_pt.is_finite() || long_pt < 1.0 {
                 continue;
             }
-            let scale = placed.min(64.0).min(side / long_pt);
+            let scale = placed.clamp(PREVIEW_MIN_SOURCE_SCALE, 64.0).min(side / long_pt);
             let cost = (pw * f64::from(scale)).ceil() * (ph * f64::from(scale)).ceil() * 4.0;
             if let Some(slot) = out.iter_mut().find(|(page, _, _)| *page == pl.page) {
                 if scale > slot.1 && bytes - slot.2 + cost <= PREVIEW_BYTES {
@@ -1356,6 +1358,23 @@ mod tests {
         }
         let typed = PrintDraft { which: Which::Range, range: "1".into(), ..PrintDraft::default() };
         assert_eq!(typed.settings(5, &labels).map(|s| s.pages), Ok(vec![3]));
+    }
+
+    /// A4 rasterized sheets with fine rules need enough source pixels
+    /// before the preview is downsampled with an antialiasing filter.
+    #[test]
+    fn print_preview_a4_raster_requires_filtered_supersampling() {
+        let d = PrintDraft::default();
+        let sizes = vec![(842.0, 595.0); 2];
+        let labels = vec!["1".into(), "2".into()];
+
+        let rasters = preview_rasters(&d, &sizes, &labels, 1.0, 8192.0);
+
+        let scale = rasters.iter().find(|(page, _)| *page == 0).map(|(_, scale)| *scale).expect("first sheet must request a raster");
+
+        let min_scale = 150.0 / 72.0;
+
+        assert!(scale >= min_scale - 0.01, "RASTER_PREVIEW_UNDERSAMPLED:              scale={scale}, minimum={min_scale}");
     }
 
     #[test]
