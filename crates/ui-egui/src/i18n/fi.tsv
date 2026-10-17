@@ -2591,6 +2591,7 @@ certificate	Key usage	Avaimen käyttö
 certificate	Self-signed	Itse allekirjoitettu
 certificate	SHA-1 digest	SHA-1-tiiviste
 certificate	SHA-256 digest	SHA-256-tiiviste
+	the name is not a plain file name	nimi ei ole tavallinen tiedostonimi
 @plural	{n} file|{n} files	{n} tiedosto|{n} tiedostoa
 @plural	{n} comment|{n} comments	{n} kommentti|{n} kommenttia
 @plural	{n} result|{n} results	{n} tulos|{n} tulosta

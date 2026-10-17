@@ -2591,6 +2591,7 @@ certificate	Key usage	Nøgleanvendelse
 certificate	Self-signed	Selvsigneret
 certificate	SHA-1 digest	SHA-1-fingeraftryk
 certificate	SHA-256 digest	SHA-256-fingeraftryk
+	the name is not a plain file name	navnet er ikke et almindeligt filnavn
 @plural	{n} file|{n} files	{n} fil|{n} filer
 @plural	{n} comment|{n} comments	{n} kommentar|{n} kommentarer
 @plural	{n} result|{n} results	{n} resultat|{n} resultater

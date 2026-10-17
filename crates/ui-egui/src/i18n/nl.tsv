@@ -2591,6 +2591,7 @@ certificate	Key usage	Sleutelgebruik
 certificate	Self-signed	Zelfondertekend
 certificate	SHA-1 digest	SHA-1-hash
 certificate	SHA-256 digest	SHA-256-hash
+	the name is not a plain file name	de naam is geen gewone bestandsnaam
 @plural	{n} file|{n} files	{n} bestand|{n} bestanden
 @plural	{n} comment|{n} comments	{n} opmerking|{n} opmerkingen
 @plural	{n} result|{n} results	{n} resultaat|{n} resultaten
