@@ -528,6 +528,8 @@ pub struct DocView {
     pub org_drag: Option<Vec<usize>>,
     /// Pages panel: the pages being dragged to a new place.
     pub panel_drag: Option<Vec<usize>>,
+    /// Transient keyboard owner for this document's Pages sidebar.
+    pub(crate) pages_focus_id: Option<egui::Id>,
     /// Marquee Zoom / Snapshot: the rectangle being dragged (page, start), and a finished one.
     pub marquee: Option<(usize, Pos2)>,
     pub marquee_done: Option<crate::zoom_snap::Marquee>,
@@ -786,6 +788,7 @@ impl DocView {
             sign: Default::default(),
             org_drag: None,
             panel_drag: None,
+            pages_focus_id: None,
             marquee: None,
             marquee_done: None,
             fill_text: None,
@@ -1308,10 +1311,7 @@ impl DocView {
     /// Select all: every page in Organize, or every word on the current page.
     pub fn select_all(&mut self) -> bool {
         if self.organize {
-            self.selected = (0..self.page_count).collect();
-            // Keep the current page as the anchor for the next Shift-click.
-            self.select_anchor = (self.page_count > 0).then_some(self.current);
-            return !self.selected.is_empty();
+            return self.select_all_pages();
         }
         let page = self.current;
         let Some(t) = self.texts.get(&page) else { return false };
@@ -1320,6 +1320,13 @@ impl DocView {
         }
         self.selection = Some(Selection::run(page, 0, t.glyphs.len() - 1));
         true
+    }
+
+    /// Select every page without navigating; shared by Organize and the Pages sidebar.
+    pub fn select_all_pages(&mut self) -> bool {
+        self.selected = (0..self.page_count).collect();
+        self.select_anchor = (self.page_count > 0).then_some(self.current);
+        !self.selected.is_empty()
     }
 
     /// Rotate the view 90° clockwise or counter-clockwise (View ▸ Rotate View, ⇧⌘+ / ⇧⌘−).

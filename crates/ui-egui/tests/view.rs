@@ -52,6 +52,58 @@ fn rect(h: &Harness<'static, PdfCraftApp>, page: usize) -> Option<egui::Rect> {
     h.state().views[0].page_screen_rect(page)
 }
 
+fn sidebar_key(h: &mut Harness<'static, PdfCraftApp>, key: Key, modifiers: Modifiers) {
+    h.event(egui::Event::ModifiersChanged(modifiers));
+    for pressed in [true, false] {
+        h.event(egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers });
+    }
+    h.run_steps(2);
+    h.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+    h.run_steps(1);
+}
+
+#[test]
+fn pages_sidebar_select_all_keeps_current_page_and_keyboard_scope() {
+    use egui_kittest::kittest::Queryable;
+    let mut h = harness(&[("panel", "pages")]);
+    h.get_by_label("Page 2").click();
+    h.run_steps(3);
+    assert_eq!(h.state().views[0].current, 1);
+    // Moving the pointer is not a keyboard-focus change.
+    h.hover_at(rect(&h, 1).unwrap().center());
+    h.run_steps(1);
+    for _ in 0..2 {
+        sidebar_key(&mut h, Key::A, Modifiers::COMMAND);
+        assert_eq!(h.state().views[0].target_pages(), vec![0, 1, 2]);
+        assert_eq!(h.state().views[0].current, 1, "selecting does not navigate");
+    }
+    sidebar_key(&mut h, Key::Escape, Modifiers::NONE);
+    assert!(h.state().views[0].selected.is_empty());
+
+    // A click on the viewer returns Ctrl+A to text selection, even with Pages open.
+    let pos = rect(&h, 1).unwrap().center();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE });
+    }
+    h.run_steps(3);
+    sidebar_key(&mut h, Key::A, Modifiers::COMMAND);
+    assert!(h.state().views[0].selected.is_empty(), "viewer shortcut must not select thumbnails");
+
+    // A different document does not inherit the previous sidebar's keyboard ownership.
+    h.get_by_label("Page 2").click();
+    h.run_steps(2);
+    h.state_mut().open_bytes("other.pdf", None, PAGES.to_vec()).unwrap();
+    h.run_steps(5);
+    sidebar_key(&mut h, Key::A, Modifiers::COMMAND);
+    let active = h.state().active.unwrap();
+    assert!(h.state().views[active].selected.is_empty());
+    h.get_by_label("Page 1").click();
+    h.run_steps(2);
+    sidebar_key(&mut h, Key::A, Modifiers::COMMAND);
+    assert_eq!(h.state().views[active].target_pages(), vec![0, 1, 2]);
+    assert!(h.state().views[0].selected.is_empty(), "selection remains document-local");
+}
+
 /// Two pages of different sizes: 300×400 then 600×300.
 const MIXED: &[u8] = b"%PDF-1.7
 1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
