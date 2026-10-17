@@ -25,6 +25,7 @@ mod copy_image;
 pub mod dates;
 pub mod export;
 pub mod js;
+pub mod keyboard;
 pub mod links;
 pub mod ocr;
 pub mod optimizer;

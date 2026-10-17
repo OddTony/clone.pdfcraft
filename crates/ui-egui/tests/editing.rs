@@ -2127,6 +2127,12 @@ fn restricted_documents_show_a_notice_and_block_page_changes() {
     h.key_press(Key::Delete);
     h.run_steps(3);
     assert_eq!(texts_of(h.state(), 0).len(), 2, "page changes are blocked");
+    h.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::D);
+    h.run_steps(2);
+    h.event(egui::Event::Cut);
+    h.run_steps(2);
+    assert!(h.state().page_clipboard.is_none(), "a refused cut must not replace the clipboard");
+    assert_eq!(texts_of(h.state(), 0).len(), 2, "the new shortcuts retain permission checks");
     assert_eq!(h.query_all_by_label_contains("Insert a file").count(), 0, "nothing to insert into");
     // Looking closer is not a page change.
     h.get_by_label("Larger pages").click();
@@ -2352,6 +2358,92 @@ fn dragging_thumbnails_reorders_pages() {
     assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Move page"));
     let sel: Vec<usize> = h.state().views[0].selected.iter().copied().collect();
     assert_eq!(sel, vec![2], "the moved page stays selected");
+}
+
+#[test]
+fn organize_clipboard_shortcuts_copy_cut_and_paste_pages() {
+    for representation in ["keys", "native", "both"] {
+        let mut h = organize(4);
+        let before = page_texts(h.state());
+        let send = |h: &mut Harness<'static, PdfCraftApp>, key, event| {
+            h.input_mut().events.push(egui::Event::ModifiersChanged(Modifiers::COMMAND));
+            if representation != "keys" {
+                h.input_mut().events.push(event);
+            }
+            if representation != "native" {
+                for pressed in [true, false] {
+                    h.input_mut().events.push(egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: Modifiers::COMMAND });
+                }
+            }
+            h.step();
+            let described =
+                h.output().platform_output.commands.iter().any(|c| matches!(c, egui::OutputCommand::CopyText(text) if text.starts_with("doc.pdf: ")));
+            h.input_mut().events.push(egui::Event::ModifiersChanged(Modifiers::NONE));
+            h.step();
+            described
+        };
+        h.state_mut().views[0].select_pages(&[0, 2]);
+        assert!(send(&mut h, Key::C, egui::Event::Copy), "native Paste needs a nonempty clipboard");
+        assert_eq!(h.state().page_clipboard.as_ref().unwrap().pages, [0, 2]);
+        assert_eq!(page_texts(h.state()), before, "copy does not edit");
+        h.state_mut().views[0].select_pages(&[3]);
+        send(&mut h, Key::V, egui::Event::Paste("page clipboard".into()));
+        assert_eq!(
+            page_texts(h.state()),
+            vec![before[0].clone(), before[1].clone(), before[2].clone(), before[3].clone(), before[0].clone(), before[2].clone()]
+        );
+        assert_eq!(h.state().views[0].target_pages(), [4, 5]);
+        h.state_mut().views[0].select_pages(&[1]);
+        assert!(send(&mut h, Key::X, egui::Event::Cut));
+        assert_eq!(page_texts(h.state()).len(), 5);
+        h.state_mut().views[0].select_pages(&[4]);
+        send(&mut h, Key::V, egui::Event::Paste("page clipboard".into()));
+        assert_eq!(
+            page_texts(h.state()),
+            vec![before[0].clone(), before[2].clone(), before[3].clone(), before[0].clone(), before[2].clone(), before[1].clone()]
+        );
+        h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+        h.run_steps(2);
+        assert_eq!(page_texts(h.state()).len(), 5, "paste is undoable");
+        h.state_mut().views[0].select_pages(&[0, 1, 2, 3, 4]);
+        send(&mut h, Key::X, egui::Event::Cut);
+        assert_eq!(page_texts(h.state()).len(), 5, "Cut must keep at least one page");
+    }
+}
+
+#[test]
+fn organize_clipboard_shortcuts_leave_text_and_overlays_alone() {
+    for context in ["document", "text", "dialog", "palette"] {
+        let mut h = organize(3);
+        let before = page_texts(h.state());
+        h.state_mut().views[0].select_pages(&[0]);
+        assert!(h.state_mut().execute("page.copy"));
+        h.state_mut().views[0].select_pages(&[1]);
+        match context {
+            "document" => h.state_mut().views[0].organize = false,
+            "text" => {
+                h.query_all_by_value("1").next().expect("current page input").focus();
+            }
+            "dialog" => {
+                h.state_mut().execute("help.about");
+            }
+            "palette" => {
+                h.state_mut().execute("view.palette");
+            }
+            _ => unreachable!(),
+        }
+        h.run_steps(2);
+        for (key, event) in [(Key::C, egui::Event::Copy), (Key::X, egui::Event::Cut), (Key::V, egui::Event::Paste("2".into()))] {
+            h.key_press_modifiers(Modifiers::COMMAND, key);
+            h.event(event);
+            h.run_steps(2);
+            assert_eq!(h.state().page_clipboard.as_ref().unwrap().pages, [0], "{context} owns clipboard input");
+            assert_eq!(page_texts(h.state()), before, "{context} must not edit pages");
+        }
+        if context == "text" {
+            assert!(h.state().views[0].page_input.contains('2'), "the text editor receives Paste");
+        }
+    }
 }
 
 #[test]

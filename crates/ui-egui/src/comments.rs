@@ -1558,7 +1558,7 @@ pub(crate) fn keys(ctx: &egui::Context, view: &mut DocView, tool: &mut QuickTool
     if !ctx.input(|i| i.pointer.any_down()) {
         view.comments.cancelled_drag = false;
     }
-    if ctx.egui_wants_keyboard_input() {
+    if ctx.egui_wants_keyboard_input() && !crate::keyboard::document_focused(ctx) {
         return;
     }
     let cv = &mut view.comments;

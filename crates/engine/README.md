@@ -67,6 +67,7 @@ family (`sign`, `sign_with_timestamp`, `timestamp_document`, `embed_ltv`).
 | Module | What it holds |
 |---|---|
 | `commands` | The command registry: id, label, menu, shortcut, and a `Needs` precondition encoding document security. Menus, the ⌘K palette, shortcuts and the control channel all read it, so every surface agrees on what exists and when it is enabled |
+| `keyboard` | Visible page-focus targets and safe forward/reverse traversal, shared by the viewer and `page_focus_targets`; widgets follow PDF tab order, then top-level comments follow annotation-array order |
 | `catalog` | Acrobat's "All tools" information architecture as data — groups, sections, icons, hues, and an `Availability` of `Ready`, `Planned(milestone)` or `Provider`. The UI renders what is *not* built yet, honestly |
 | `actions` | PDF action dispatch (go-to, URI, named, set-layer-state, JavaScript) |
 | `links` | Link creation, properties, and finding URLs in page text |

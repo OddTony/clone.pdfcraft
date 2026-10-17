@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (gaps 11/16: tool accelerators, focus regions and page-item traversal; full keyboard operation remains partial; estimates unchanged)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (gap 6: #1910 Organize Pages opens on the current page; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -43,7 +44,7 @@ update the numbers.
 | 13 | Performance budgets and lazy loading of very large files | performance | 25–45 | this file |
 | 14 | Arabic not mirrored; no Hindi, Indonesian, Korean | localization | 25–45 | [localization-parity.md](localization-parity.md) |
 | 15 | Forms: JavaScript object model, actions, submit, XFA depth | feature | 40–75 | [pdf-spec-parity.md](pdf-spec-parity.md) |
-| 16 | UI precision gaps (multi-select move, rulers, accelerators, windows) | UI/UX | 30–60 | [ui-parity.md](ui-parity.md) |
+| 16 | UI precision gaps (multi-select move, rulers, windows) | UI/UX | 30–60 | [ui-parity.md](ui-parity.md) |
 | 17 | Certificate security and other protect gaps | feature, spec | 15–30 | [pdf-spec-parity.md](pdf-spec-parity.md) |
 | 18 | Print production tools absent | feature | 25–45 | [target-app-parity.md](target-app-parity.md) |
 | 19 | Preferences mostly missing | UI/UX | 15–25 | [ui-parity.md](ui-parity.md) |
@@ -207,7 +208,7 @@ update the numbers.
 - **Evidence:** all 32 checker rules, figure alt text, tag property and sibling order edits, and
   a bounded auto-tag preview exist. Apply writes valid structure and parent-tree links for
   text-only files; it refuses mixed content and existing tags;
-  `a11y.keyboard-only` (P0) planned, `a11y.app-screen-reader` partial.
+  `a11y.keyboard-only` (P0) partial: F6 cycles visible focus regions and Tab traverses page widgets/comments; full control coverage and link traversal remain. `a11y.app-screen-reader` remains partial.
 - **Impact:** most untagged files still need another editor to build their structure; PdfCraft itself is
   not yet usable without a mouse.
 - **Estimate:** 40–70 h. **Doc:** [target-app-parity.md](target-app-parity.md).
@@ -312,7 +313,7 @@ update the numbers.
 
 ### 16. UI precision gaps
 
-- **Missing:** moving several selected objects across pages (same-page moves shipped, #844), single-key tool accelerators,
+- **Missing:** moving several selected objects across pages (same-page moves shipped, #844),
   rulers, grids and guides, loupe and dynamic zoom, multiple windows and split view, comment
   pop-ups that can be moved, connector lines, customisable quick tools; shortcut display and tool-mode bugs (#746, #721), macOS window controls
   (#789).
@@ -378,6 +379,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-16 | minor | Gaps 11/16: requested tool accelerators and region/page keyboard navigation added; full-app coverage and screen-reader audit remain incomplete. Estimates unchanged. |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |
 | 2026-10-13 | minor | Gap 6: Organize Pages selects and reveals the current page on open, including after an earlier grid selection elsewhere (#1910). Estimates unchanged. |

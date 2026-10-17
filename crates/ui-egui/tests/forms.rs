@@ -44,20 +44,37 @@ fn click_field(h: &mut Harness<'static, PdfCraftApp>, name: &str, widget: usize)
     h.run_steps(3);
 }
 
+/// Tab now also visits check boxes and radio widgets between text/choice editors.
+fn tab_to_field(h: &mut Harness<'static, PdfCraftApp>, name: &str) {
+    for _ in 0..20 {
+        h.key_press(egui::Key::Tab);
+        h.run_steps(4);
+        if h.state().views[0].forms.focus.as_ref().is_some_and(|f| f.name == name) {
+            return;
+        }
+    }
+    panic!("Tab did not reach {name}");
+}
+
 #[test]
 fn typing_into_a_text_field_and_tabbing_on() {
     let mut h = harness();
     click_field(&mut h, "name", 0);
     assert!(h.state().views[0].forms.focus.is_some(), "the editor opened");
+    let tool = h.state().quick_tool;
+    for key in [egui::Key::V, egui::Key::H, egui::Key::Z, egui::Key::S, egui::Key::T, egui::Key::U, egui::Key::D, egui::Key::E] {
+        h.key_press(key);
+        h.run_steps(2);
+        assert_eq!(h.state().quick_tool, tool, "tool accelerators must leave form typing alone");
+    }
     h.event(egui::Event::Text("Ada Lovelace".into()));
     h.run_steps(2);
-    h.key_press(egui::Key::Tab);
-    h.run_steps(4);
+    tab_to_field(&mut h, "country");
     assert_eq!(value(&h, "name"), ["Ada Lovelace"]);
     assert_eq!(
         h.state().views[0].forms.focus.as_ref().map(|f| f.name.as_str()),
         Some("country"),
-        "Tab moves to the next field that takes typing or a choice"
+        "Tab reaches choice fields through the intervening widgets"
     );
     // The country list is open; Escape closes it. Escape also abandons a draft.
     h.key_press(egui::Key::Escape);
@@ -108,12 +125,10 @@ fn tabbing_into_a_filled_field_selects_it_so_typing_replaces() {
     h.key_press(egui::Key::Enter);
     h.run_steps(3);
     assert_eq!(value(&h, "city"), ["Paris"]);
-    // name → (Tab) country → (Tab) city, whose text is selected on entry.
+    // Tab through every widget to country, then city; text is selected on entry.
     click_field(&mut h, "name", 0);
-    h.key_press(egui::Key::Tab);
-    h.run_steps(3);
-    h.key_press(egui::Key::Tab);
-    h.run_steps(4);
+    tab_to_field(&mut h, "country");
+    tab_to_field(&mut h, "city");
     assert_eq!(h.state().views[0].forms.focus.as_ref().map(|f| f.name.as_str()), Some("city"));
     h.event(egui::Event::Text("Lyon".into()));
     h.run_steps(1);
@@ -619,6 +634,11 @@ fn a_save_shortcut_pressed_while_typing_saves_only_the_document_it_was_pressed_i
 #[test]
 fn a_value_refused_on_enter_keeps_save_in_the_same_frame_from_running() {
     refused_value_stops_save(egui::Key::Enter, "enter-refused");
+}
+
+#[test]
+fn a_value_refused_on_f6_keeps_save_in_the_same_frame_from_running() {
+    refused_value_stops_save(egui::Key::F6, "f6-refused");
 }
 
 #[test]

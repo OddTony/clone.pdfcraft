@@ -91,6 +91,7 @@ pub mod forms_ui;
 mod home;
 mod icon_data;
 pub mod icons;
+mod keyboard;
 pub mod last_session;
 pub mod motion;
 mod page_selection_ui;
@@ -516,6 +517,7 @@ pub struct PdfCraftApp {
     /// showing its comments or bookmarks (#1590). Remembered across restarts.
     pub right_panel_closed: bool,
     pub quick_tool: QuickTool,
+    pub(crate) keyboard: keyboard::Navigation,
     /// The tool to go back to when Space, held for a temporary Hand, is released.
     space_hand: Option<QuickTool>,
     /// Comment author, per-tool colours and widths, pin.
@@ -738,6 +740,9 @@ pub struct PdfCraftApp {
     /// Shortcuts pressed while a text field had the keyboard, run on the next frame (see
     /// `registry_shortcuts`).
     deferred_commands: Vec<(&'static str, Option<DocId>)>,
+    /// Modifiers at the end of the previous frame, so clipboard events can use the modifiers
+    /// held when they arrived, even if the keys were released later in the same frame.
+    shortcut_modifiers: egui::Modifiers,
     /// The dialog seen at the last check, and a counter bumped whenever it changes (see
     /// [`Self::dialog_epoch`]).
     dialog_seen: Option<Dialog>,
@@ -904,6 +909,7 @@ impl PdfCraftApp {
             right_panel_closed: false,
             quick_tool: QuickTool::Select,
             space_hand: None,
+            keyboard: keyboard::Navigation::default(),
             comment_prefs: Default::default(),
             theme: ThemeKind::Light,
             theme_preference: ThemePreference::Light,
@@ -1030,6 +1036,7 @@ impl PdfCraftApp {
             last_autosave: 0.0,
             allow_quit: false,
             deferred_commands: Vec::new(),
+            shortcut_modifiers: egui::Modifiers::NONE,
             dialog_seen: None,
             dialog_epoch: 0,
             ctx: None,
@@ -2767,6 +2774,9 @@ impl PdfCraftApp {
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
         use egui::Key;
+        let blocked = self.modal_open() || self.palette_open;
+        self.keyboard.apply_pending_focus(ctx, blocked);
+        let initial_modifiers = std::mem::replace(&mut self.shortcut_modifiers, ctx.input(|input| input.modifiers));
         // "Save changes?" is modal: its keys are its own (⌘D is Don't save there, not Document
         // properties; Escape cancels it rather than clearing a selection), and nothing may run
         // underneath it. They are read here, before the canvas can consume them.
@@ -2786,7 +2796,8 @@ impl PdfCraftApp {
         {
             return;
         }
-        self.registry_shortcuts(ctx);
+        self.registry_shortcuts(ctx, initial_modifiers);
+        self.page_item_keys(ctx);
         // (Esc closes a Combine file shown large first.)
         if self.full_screen && self.combine_tab.preview.is_none() && ctx.input(|i| i.key_pressed(Key::Escape)) {
             self.set_full_screen(ctx, false);
@@ -2860,12 +2871,12 @@ impl PdfCraftApp {
         true
     }
 
-    /// The quick tools' keys, as in Acrobat: V selects, H pans, and holding Space pans until it
-    /// is released. Plain letters, so not while a text field, a form field, a dialog or the
-    /// palette has the keyboard.
+    /// Holding Space temporarily pans until released, unless a text editor or overlay owns it.
     fn tool_keys(&mut self, i: usize, ctx: &egui::Context) {
         use egui::Key;
-        let free = self.dialog.is_none() && !self.palette_open && !ctx.egui_wants_keyboard_input() && self.views[i].forms.focus.is_none();
+        let document_free = self.keyboard.document_focused(ctx) && self.views.get(i).is_some_and(|v| v.keyboard_item.is_none());
+        let free =
+            self.dialog.is_none() && !self.palette_open && (!ctx.egui_wants_keyboard_input() || document_free) && self.views[i].forms.focus.is_none();
         let (plain, space) = ctx.input(|input| (input.modifiers.is_none(), input.key_down(Key::Space)));
         if let Some(previous) = self.space_hand
             && !space
@@ -2877,14 +2888,6 @@ impl PdfCraftApp {
         }
         if !free || !plain {
             return;
-        }
-        if ctx.input(|input| input.key_pressed(Key::V)) {
-            self.quick_tool = QuickTool::Select;
-            self.space_hand = None;
-        }
-        if ctx.input(|input| input.key_pressed(Key::H)) {
-            self.quick_tool = QuickTool::Hand;
-            self.space_hand = None;
         }
         if space && self.space_hand.is_none() && self.quick_tool != QuickTool::Hand {
             self.space_hand = Some(self.quick_tool);
@@ -3073,6 +3076,7 @@ impl eframe::App for PdfCraftApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.keyboard.begin_frame();
         i18n::set_current(i18n::Lang::from_pref(&self.language));
         // Fonts registered via set_fonts only take effect next frame; named families would panic now.
         if !self.fonts_ready {
@@ -3106,6 +3110,9 @@ impl eframe::App for PdfCraftApp {
                     }
                 },
             );
+            let accepted = self.process_pending_edits();
+            self.finish_page_tab(accepted);
+            self.keyboard.paint(&ctx);
             dialogs::show(self, &ctx);
             // Notices too: a refused field value or a failed save must be seen in full screen.
             self.show_progress(&ctx);
@@ -3148,7 +3155,9 @@ impl eframe::App for PdfCraftApp {
                 docking::show(self, ui);
             }
         });
-        self.process_pending_edits();
+        let accepted = self.process_pending_edits();
+        self.finish_page_tab(accepted);
+        self.keyboard.paint(&ctx);
         palette::show(self, &ctx);
         dialogs::show(self, &ctx);
         self.show_progress(&ctx);

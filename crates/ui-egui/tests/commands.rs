@@ -236,6 +236,166 @@ fn shortcuts_run_registered_commands() {
 }
 
 #[test]
+fn annotation_and_editing_shortcuts_select_tools_without_entering_read_mode() {
+    use pdfcraft_ui_egui::{QuickTool, comments::CommentTool};
+    for os in [OperatingSystem::Nix, OperatingSystem::Windows, OperatingSystem::Mac] {
+        let mut h = harness();
+        h.ctx.set_os(os);
+        let cmd = if os == OperatingSystem::Mac { Modifiers::COMMAND | Modifiers::MAC_CMD } else { Modifiers::COMMAND | Modifiers::CTRL };
+        let mode = h.state().mode;
+        h.key_press_modifiers(cmd | Modifiers::SHIFT, Key::H);
+        h.run_steps(2);
+        assert_eq!(h.state().quick_tool, QuickTool::Comment(CommentTool::Highlight));
+        assert_eq!(h.state().mode, mode, "Highlight must not trigger Read mode on {os:?}");
+        for (key, tool) in [
+            (Key::S, QuickTool::Comment(CommentTool::Note)),
+            (Key::T, QuickTool::Comment(CommentTool::TextBox)),
+            (Key::E, QuickTool::EditText),
+            (Key::R, QuickTool::Comment(CommentTool::ReplaceText)),
+            (Key::I, QuickTool::Comment(CommentTool::Caret)),
+            (Key::X, QuickTool::Comment(CommentTool::StrikeOut)),
+            (Key::M, QuickTool::Comment(CommentTool::Highlight)),
+            (Key::V, QuickTool::Select),
+            (Key::U, QuickTool::Comment(CommentTool::Highlight)),
+        ] {
+            h.key_press(key);
+            h.run_steps(2);
+            assert_eq!(h.state().quick_tool, tool, "{key:?} on {os:?}");
+        }
+        h.key_press(Key::V);
+        h.run_steps(2);
+        for key in [Key::R, Key::I, Key::X, Key::M] {
+            for modifiers in [Modifiers::SHIFT, Modifiers::ALT] {
+                h.key_press_modifiers(modifiers, key);
+                h.run_steps(2);
+                assert_eq!(h.state().quick_tool, QuickTool::Select, "extra modifiers must not select {key:?} on {os:?}");
+            }
+        }
+        h.key_press_modifiers(if os == OperatingSystem::Mac { cmd | Modifiers::CTRL } else { cmd }, Key::H);
+        h.run_steps(2);
+        assert_eq!(h.state().mode, pdfcraft_ui_egui::Mode::Read, "Read mode retains its own shortcut");
+    }
+}
+
+#[test]
+fn plain_tool_keys_leave_text_inputs_and_overlays_alone() {
+    for context in ["text", "palette", "dialog"] {
+        let mut h = harness();
+        let previous = h.state().quick_tool;
+        match context {
+            "text" => h.query_all_by_value("1").next().expect("page input").focus(),
+            "palette" => {
+                h.state_mut().execute("view.palette");
+            }
+            "dialog" => {
+                h.state_mut().execute("help.about");
+            }
+            _ => unreachable!(),
+        }
+        h.run_steps(2);
+        for key in [Key::V, Key::H, Key::Z, Key::S, Key::T, Key::U, Key::D, Key::E, Key::R, Key::I, Key::X, Key::M] {
+            h.key_press(key);
+            h.run_steps(2);
+            assert_eq!(h.state().quick_tool, previous, "{context} owns {key:?}");
+        }
+        assert!(!h.state().session.get(h.state().views[0].id).unwrap().dirty);
+    }
+    let mut h = harness();
+    let previous = h.state().quick_tool;
+    h.input_mut().events.extend([
+        egui::Event::Key { key: Key::D, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::COMMAND },
+        egui::Event::Key { key: Key::E, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE },
+    ]);
+    h.step();
+    assert!(matches!(h.state().dialog, Some(Dialog::Properties(_))));
+    assert_eq!(h.state().quick_tool, previous, "a dialog opened in this frame also owns plain tool keys");
+}
+
+#[test]
+fn shortcuts_reference_groups_commands_by_function() {
+    let mut h = harness();
+    h.state_mut().set_option("animation_effects", "off").unwrap();
+    h.state_mut().execute("help.shortcuts");
+    h.run_steps(12);
+    h.get_by_label("File").click();
+    h.run_steps(3);
+    assert!(h.query_by_label("Save as").is_none(), "File commands collapse together: {:?}", h.get_by_label("File"));
+    h.get_by_label("Copy pages (Organize pages)");
+    h.get_by_label("File").click();
+    h.run_steps(3);
+    h.get_by_label("Save as");
+    h.get_by_label("Ctrl+Shift+H / M");
+    h.get_by_label("Replace text");
+    h.get_by_label("Insert text");
+    h.get_by_label("Strikethrough text");
+    h.get_by_label("Cycle text markup tools");
+    h.get_by_label("Edit text & images");
+}
+
+#[test]
+fn page_command_shortcuts_run_the_registered_actions() {
+    for os in [OperatingSystem::Nix, OperatingSystem::Windows, OperatingSystem::Mac] {
+        let mut h = harness();
+        h.ctx.set_os(os);
+        let command = if os == OperatingSystem::Mac { Modifiers::MAC_CMD | Modifiers::COMMAND } else { Modifiers::CTRL | Modifiers::COMMAND };
+        let shifted = command | Modifiers::SHIFT;
+        h.state_mut().views[0].select_pages(&[1]);
+        h.key_press_modifiers(shifted | Modifiers::ALT, Key::R);
+        h.run_steps(2);
+        assert!(h.state().dialog.is_none(), "extra Alt is not the page shortcut");
+        h.key_press_modifiers(shifted, Key::R);
+        h.run_steps(2);
+        assert_eq!(
+            h.state().dialog,
+            Some(Dialog::RotatePages),
+            "os={os:?}, active={:?}, toast={:?}, modifiers={command:?}",
+            h.state().active,
+            h.state().toast
+        );
+        assert_eq!(h.state().rotate_draft.which, 1, "the selection is offered");
+        h.key_press(Key::Escape);
+        h.run_steps(2);
+        h.key_press_modifiers(shifted, Key::X);
+        h.run_steps(2);
+        assert_eq!(h.state().dialog, Some(Dialog::Extract));
+        h.key_press(Key::Escape);
+        h.run_steps(2);
+        h.key_press_modifiers(shifted, Key::T);
+        h.run_steps(2);
+        assert_eq!(h.state().quick_tool, pdfcraft_ui_egui::QuickTool::Crop);
+        h.key_press_modifiers(shifted, Key::D);
+        h.run_steps(2);
+        let id = h.state().views[0].id;
+        let doc = h.state().session.get(id).unwrap();
+        assert_eq!(doc.info.pages.len(), 2, "deletes only the selected page");
+        assert!(h.state().dialog.is_none(), "Shift+D must not open Document properties");
+        h.key_press_modifiers(command, Key::Z);
+        h.run_steps(2);
+        assert_eq!(h.state().session.get(id).unwrap().info.pages.len(), 3, "deletion is undoable");
+    }
+}
+
+#[test]
+fn native_shift_cut_opens_extract_instead_of_cutting_pages() {
+    for held_from_previous_frame in [false, true] {
+        let mut h = harness();
+        h.state_mut().set_option("organize", "on").unwrap();
+        h.state_mut().views[0].select_pages(&[1]);
+        // egui-winit translates Ctrl/Cmd+Shift+X to Cut, with no X key event. The
+        // modifiers may be released before the frame that receives Cut is drawn.
+        h.input_mut().events.push(egui::Event::ModifiersChanged(Modifiers::COMMAND | Modifiers::SHIFT));
+        if held_from_previous_frame {
+            h.step();
+        }
+        h.input_mut().events.extend([egui::Event::Cut, egui::Event::ModifiersChanged(Modifiers::NONE)]);
+        h.run_steps(2);
+        assert_eq!(h.state().dialog, Some(Dialog::Extract));
+        assert!(h.state().page_clipboard.is_none());
+        assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().info.pages.len(), 3);
+    }
+}
+
+#[test]
 fn the_palette_lists_commands_with_shortcuts_and_runs_them() {
     let mut h = harness();
     h.state_mut().set_option("palette", "rotate pages clockwise").unwrap();

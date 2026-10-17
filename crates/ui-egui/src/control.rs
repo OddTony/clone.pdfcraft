@@ -680,6 +680,10 @@ impl Host for crate::PdfCraftApp {
                 "pages_on_screen": v.visible_page_rects().iter().map(|(p, r)| json!({ "page": p + 1, "rect": [r.min.x, r.min.y, r.max.x, r.max.y] })).collect::<Vec<_>>(),
                 "selected_comment": v.comments.selected.map(|(p, i)| json!({ "page": p + 1, "index": i + 1 })),
                 "comment_composer_open": v.comments.composer.is_some(),
+                "focused_page_item": v.keyboard_item.as_ref().map(|(page, item)| match item {
+                    pdfcraft_engine::keyboard::PageItem::Field { name, widget } => json!({"page":page.saturating_add(1),"kind":"field","name":name,"widget":widget.saturating_add(1)}),
+                    pdfcraft_engine::keyboard::PageItem::Annotation { index } => json!({"page":page.saturating_add(1),"kind":"annotation","index":index.saturating_add(1)}),
+                }),
             })),
             // The Combine files tab: how its files show, and each grid thumbnail's state.
             "combine": {

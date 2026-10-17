@@ -65,6 +65,11 @@ pub struct Shortcut {
 }
 
 impl Shortcut {
+    /// A tool accelerator without modifiers; frontends leave it to focused text editors.
+    pub const fn plain(key: &'static str) -> Self {
+        Self { command: false, shift: false, mac_ctrl: false, key }
+    }
+
     /// ⌘ (Ctrl elsewhere) and `key`.
     pub const fn cmd(key: &'static str) -> Self {
         Self { command: true, shift: false, mac_ctrl: false, key }
@@ -121,11 +126,21 @@ pub struct CommandSpec {
     /// Top-level menu it appears in (`File`, `Edit`, `View`, `Pages`, `Help`), if any.
     pub menu: Option<&'static str>,
     pub shortcut: Option<Shortcut>,
+    /// An additional binding for the same command.
+    pub alternate_shortcut: Option<Shortcut>,
     pub needs: Needs,
-    /// The shortcut also works while a text field has focus.
+    /// Modified shortcuts also work while a text field has focus. Plain tool accelerators
+    /// always stay with text editors, even when this is true for the command's primary binding.
     pub in_text: bool,
     /// Lucide icon name for palettes and toolbars.
     pub icon: &'static str,
+}
+
+impl CommandSpec {
+    /// Every binding, primary first, shared by help, palettes and input dispatch.
+    pub fn shortcuts(&self) -> impl Iterator<Item = Shortcut> + '_ {
+        self.shortcut.into_iter().chain(self.alternate_shortcut)
+    }
 }
 
 const fn c(
@@ -136,7 +151,7 @@ const fn c(
     needs: Needs,
     icon: &'static str,
 ) -> CommandSpec {
-    CommandSpec { id, label, menu, shortcut, needs, in_text: true, icon }
+    CommandSpec { id, label, menu, shortcut, alternate_shortcut: None, needs, in_text: true, icon }
 }
 
 /// Like `c`, but the shortcut is left to text fields while one has focus (⌘Z, ⌘A…).
@@ -148,7 +163,7 @@ const fn ct(
     needs: Needs,
     icon: &'static str,
 ) -> CommandSpec {
-    CommandSpec { id, label, menu, shortcut, needs, in_text: false, icon }
+    CommandSpec { id, label, menu, shortcut, alternate_shortcut: None, needs, in_text: false, icon }
 }
 
 use Needs::*;
@@ -174,9 +189,10 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("measure.info", "Measurement information", None, None, Document, "ruler"),
     c("measure.snap", "Measurement snapping", None, None, Document, "ruler"),
     c("measure.export", "Export measurements as CSV", None, None, Document, "file-output"),
-    c("page.copy", "Copy pages", None, None, Document, "copy"),
-    c("page.cut", "Cut pages", None, None, Assembly, "scissors"),
-    c("page.paste", "Paste pages", None, None, Assembly, "clipboard-paste"),
+    // Clipboard shortcuts belong to the Organize grid; the frontend scopes them to that view.
+    ct("page.copy", "Copy pages", None, Some(Shortcut::cmd("C")), Document, "copy"),
+    ct("page.cut", "Cut pages", None, Some(Shortcut::cmd("X")), Assembly, "scissors"),
+    ct("page.paste", "Paste pages", None, Some(Shortcut::cmd("V")), Assembly, "clipboard-paste"),
     c("create.file", "Create PDF from file…", FILE, None, Nothing, "file-input"),
     c("create.multiple", "Create PDF from multiple files…", FILE, None, Nothing, "files"),
     c("create.multiple_separate", "Create separate PDFs…", FILE, None, Nothing, "files"),
@@ -209,7 +225,13 @@ pub const COMMANDS: &[CommandSpec] = &[
     // In View ▸ Zoom with the view-local zoom keys, so `menu = None` keeps it out of the generated
     // View menu (where it would show twice). The palette and ⌘3 still run it.
     c("view.fit_visible", "Fit visible", None, Some(Shortcut::cmd("3")), Document, "scan"),
-    c("view.marquee_zoom", "Marquee zoom", VIEW, None, Document, "zoom-in"),
+    ct("view.marquee_zoom", "Marquee zoom", VIEW, Some(Shortcut::plain("Z")), Document, "zoom-in"),
+    ct("view.select_tool", "Select", VIEW, Some(Shortcut::plain("V")), Document, "mouse-pointer-2"),
+    ct("view.hand_tool", "Hand", VIEW, Some(Shortcut::plain("H")), Document, "hand"),
+    c("view.focus_next_region", "Next focus region", None, Some(Shortcut::plain("F6")), Nothing, "scan"),
+    c("view.focus_previous_region", "Previous focus region", None, Some(Shortcut { shift: true, ..Shortcut::plain("F6") }), Nothing, "scan"),
+    c("view.next_page_item", "Next page item", None, None, Document, "arrow-right"),
+    c("view.previous_page_item", "Previous page item", None, None, Document, "arrow-left"),
     // Acrobat's column select: drag a rectangle and select only the text inside it. Alt/Option-
     // drag with the Select tool does the same; this is the way in where the desktop takes
     // Alt-drag for moving windows (several Linux window managers).
@@ -234,11 +256,16 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("view.theme.light", "Light gray", None, None, Nothing, "sun"),
     c("view.theme.dark", "Dark gray", None, None, Nothing, "moon"),
     c("comment.list", "Comments panel", VIEW, None, Document, "message-square-text"),
-    c("comment.note", "Add a sticky note", None, None, Annotate, "sticky-note"),
-    c("comment.freetext", "Add a text box", None, None, Annotate, "type"),
-    c("comment.highlight", "Highlight text", None, None, Annotate, "highlighter"),
+    ct("comment.note", "Add a sticky note", None, Some(Shortcut::plain("S")), Annotate, "sticky-note"),
+    ct("comment.freetext", "Add a text box", None, Some(Shortcut::plain("T")), Annotate, "type"),
+    CommandSpec {
+        alternate_shortcut: Some(Shortcut::plain("M")),
+        ..c("comment.highlight", "Highlight text", None, Some(Shortcut::cmd_shift("H")), Annotate, "highlighter")
+    },
+    ct("comment.cycle_markup", "Cycle text markup tools", None, Some(Shortcut::plain("U")), Annotate, "highlighter"),
+    ct("comment.cycle_drawing", "Cycle drawing tools", None, Some(Shortcut::plain("D")), Annotate, "pencil"),
     c("comment.underline", "Underline text", None, None, Annotate, "underline"),
-    c("comment.strikeout", "Strikethrough text", None, None, Annotate, "strikethrough"),
+    ct("comment.strikeout", "Strikethrough text", None, Some(Shortcut::plain("X")), Annotate, "strikethrough"),
     c("comment.squiggly", "Squiggly underline text", None, None, Annotate, "spline"),
     c("comment.ink", "Draw freehand", None, None, Annotate, "pencil"),
     c("comment.line", "Draw a line", None, None, Annotate, "minus"),
@@ -249,8 +276,8 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("comment.polyline", "Draw connected lines", None, None, Annotate, "spline"),
     c("comment.cloud", "Draw a cloud", None, None, Annotate, "cloud"),
     c("comment.callout", "Add a callout", None, None, Annotate, "message-square-quote"),
-    c("comment.caret", "Insert text", None, None, Annotate, "text-cursor-input"),
-    c("comment.replace", "Replace text", None, None, Annotate, "replace"),
+    ct("comment.caret", "Insert text", None, Some(Shortcut::plain("I")), Annotate, "text-cursor-input"),
+    ct("comment.replace", "Replace text", None, Some(Shortcut::plain("R")), Annotate, "replace"),
     c("comment.attach", "Attach a file", None, None, Annotate, "paperclip"),
     c("comment.eraser", "Erase drawings", None, None, Annotate, "eraser"),
     c("form.fields", "Form fields panel", VIEW, None, Document, "list"),
@@ -276,7 +303,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("form.tab_order.column", "Tab order: by columns", None, None, HasFields, "columns-3"),
     c("form.tab_order.structure", "Tab order: by document structure", None, None, HasFields, "list"),
     c("edit.text", "Add text", None, None, Modification, "type"),
-    c("edit.edit_text", "Edit text & images", None, None, Modification, "text-cursor-input"),
+    ct("edit.edit_text", "Edit text & images", None, Some(Shortcut::plain("E")), Modification, "text-cursor-input"),
     c("edit.link", "Add or edit links", None, None, Modification, "link-2"),
     c("edit.links_from_urls", "Create links from URLs", None, None, Modification, "link-2"),
     c("edit.remove_links", "Remove all links", None, None, Modification, "trash-2"),
@@ -358,15 +385,15 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("bookmark.from_structure", "New bookmarks from structure", PAGES, None, Assembly, "list"),
     c("page.rotate", "Rotate pages clockwise", PAGES, None, Assembly, "rotate-cw"),
     c("page.rotate_ccw", "Rotate pages counterclockwise", PAGES, None, Assembly, "rotate-ccw"),
-    c("page.delete", "Delete pages", PAGES, None, Assembly, "trash-2"),
+    c("page.delete", "Delete pages", PAGES, Some(Shortcut::cmd_shift("D")), Assembly, "trash-2"),
     c("page.insert_blank", "Insert blank page", PAGES, None, Assembly, "file-plus"),
-    c("page.rotate_dialog", "Rotate pages…", PAGES, None, Assembly, "rotate-cw"),
+    c("page.rotate_dialog", "Rotate pages…", PAGES, Some(Shortcut::cmd_shift("R")), Assembly, "rotate-cw"),
     c("page.duplicate", "Duplicate pages", PAGES, None, Assembly, "copy-plus"),
-    c("page.crop", "Crop pages", PAGES, None, Assembly, "crop"),
+    c("page.crop", "Crop pages", PAGES, Some(Shortcut::cmd_shift("T")), Assembly, "crop"),
     c("page.boxes", "Set page boxes…", PAGES, None, Assembly, "square-dashed-mouse-pointer"),
-    c("page.insert", "Insert pages from file…", PAGES, None, Assembly, "file-input"),
+    c("page.insert", "Insert pages from file…", PAGES, Some(Shortcut::cmd_shift("I")), Assembly, "file-input"),
     c("page.replace", "Replace pages…", PAGES, None, Assembly, "replace"),
-    c("page.extract", "Extract pages…", PAGES, None, Assembly, "file-output"),
+    c("page.extract", "Extract pages…", PAGES, Some(Shortcut::cmd_shift("X")), Assembly, "file-output"),
     c("page.split", "Split document…", PAGES, None, Assembly, "scissors"),
     c("page.number", "Number pages…", PAGES, None, Assembly, "hash"),
     c("help.shortcuts", "Keyboard shortcuts", HELP, None, Nothing, "circle-help"),
@@ -439,7 +466,7 @@ mod tests {
         let mut keys = std::collections::HashSet::new();
         for c in COMMANDS {
             assert!(ids.insert(c.id), "duplicate id {}", c.id);
-            if let Some(s) = c.shortcut {
+            for s in c.shortcuts() {
                 assert!(keys.insert(s), "duplicate shortcut {} ({})", s.label(true), c.id);
             }
         }
@@ -454,6 +481,26 @@ mod tests {
                         assert!(command(i.command).is_some(), "catalogue item {} ({}) is Ready but not registered", i.label, i.command);
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn page_shortcuts_follow_platform_conventions() {
+        for (id, shortcut) in [
+            ("page.rotate_dialog", Shortcut::cmd_shift("R")),
+            ("page.delete", Shortcut::cmd_shift("D")),
+            ("page.insert", Shortcut::cmd_shift("I")),
+            ("page.extract", Shortcut::cmd_shift("X")),
+            ("page.crop", Shortcut::cmd_shift("T")),
+            ("page.copy", Shortcut::cmd("C")),
+            ("page.cut", Shortcut::cmd("X")),
+            ("page.paste", Shortcut::cmd("V")),
+        ] {
+            let spec = command(id).unwrap();
+            assert_eq!(spec.shortcut, Some(shortcut), "{id}");
+            if matches!(id, "page.copy" | "page.cut" | "page.paste") {
+                assert!(!spec.in_text, "{id} must leave text editors alone");
             }
         }
     }

@@ -1085,53 +1085,79 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
             Dialog::Shortcuts => {
                 ui.label(egui::RichText::new(tl!("Keyboard shortcuts")).font(theme::semibold(18.0)));
                 ui.add_space(8.0);
+                use crate::commands::ShortcutCategory as C;
                 use crate::commands::{
                     ACTUAL_SIZE, COPY, FIND_NEXT, FIND_PREV, FIT_WIDTH, PAGE_LEVEL, PAGE_NEXT, PAGE_PREV, ROTATE_CCW, ROTATE_CW, SELECT_ALL, ZOOM_IN,
                     ZOOM_OUT,
                 };
-                // Registered commands first (always in sync with the real bindings), then the
-                // keys the document view handles itself.
-                let mut rows: Vec<(String, String)> = pdfcraft_engine::commands::COMMANDS
+                // Both registered and view-local bindings share the same functional sections.
+                let mut rows: Vec<(C, String, String)> = pdfcraft_engine::commands::COMMANDS
                     .iter()
                     .filter_map(|c| {
-                        c.shortcut.map(|k| (crate::commands::shortcut_label(ui.ctx(), k), tl!(c.label).trim_end_matches('…').to_string()))
+                        let keys = crate::commands::shortcuts_label(ui.ctx(), c);
+                        if keys.is_empty() {
+                            return None;
+                        }
+                        let mut label = tl!(c.label).trim_end_matches('…').to_string();
+                        if matches!(c.id, "page.copy" | "page.cut" | "page.paste") {
+                            label = format!("{label} ({})", tl!("Organize pages"));
+                        }
+                        Some((C::for_command(c.id), keys, label))
                     })
                     .collect();
                 let key = |s: pdfcraft_engine::commands::Shortcut| crate::commands::shortcut_label(ui.ctx(), s);
                 let pair = |a, b| format!("{} / {}", key(a), key(b));
-                // Key names, translated where a catalog has them (not scanned as UI literals).
                 let named = |k: &str| tl!(k).to_string();
                 let scroll = crate::i18n::fmt(
                     tl!("Zoom in / out (also pinch or {key}-scroll)"),
                     &[("key", crate::commands::command_modifier_label(ui.ctx()))],
                 );
-                for (k, v) in [
-                    (pair(FIND_NEXT, FIND_PREV), tl!("Next / previous match").to_string()),
-                    (key(COPY), tl!("Copy selected text").to_string()),
-                    (named("Double-click"), tl!("Select a word").to_string()),
-                    (crate::i18n::key_name("Esc").to_string(), tl!("Clear selection / close find").to_string()),
-                    (key(ACTUAL_SIZE), tl!("Actual size").to_string()),
-                    (key(PAGE_LEVEL), tl!("Zoom to page level").to_string()),
-                    (key(FIT_WIDTH), tl!("Fit to width").to_string()),
-                    (pair(ZOOM_IN, ZOOM_OUT), scroll),
-                    (pair(ROTATE_CW, ROTATE_CCW), tl!("Rotate view").to_string()),
-                    (format!("{} / {}", crate::i18n::key_name("Home"), crate::i18n::key_name("End")), tl!("First / last page").to_string()),
-                    (format!("← / →, {}", pair(PAGE_PREV, PAGE_NEXT)), tl!("Previous / next page").to_string()),
-                    (named("V"), tl!("Select (V)").to_string()),
-                    (named("H / Space (hold)"), tl!("Hand (H)").to_string()),
-                    (crate::i18n::key_name("Delete").to_string(), tl!("Delete selected pages (Organize)").to_string()),
-                    (key(SELECT_ALL), tl!("Select all pages (Organize)").to_string()),
-                ] {
-                    rows.push((k, v));
-                }
+                rows.extend([
+                    (C::Search, pair(FIND_NEXT, FIND_PREV), tl!("Next / previous match").to_string()),
+                    (C::Edit, key(COPY), tl!("Copy selected text").to_string()),
+                    (C::Edit, named("Double-click"), tl!("Select a word").to_string()),
+                    (C::Search, crate::i18n::key_name("Esc").to_string(), tl!("Clear selection / close find").to_string()),
+                    (C::View, key(ACTUAL_SIZE), tl!("Actual size").to_string()),
+                    (C::View, key(PAGE_LEVEL), tl!("Zoom to page level").to_string()),
+                    (C::View, key(FIT_WIDTH), tl!("Fit to width").to_string()),
+                    (C::View, pair(ZOOM_IN, ZOOM_OUT), scroll),
+                    (C::View, pair(ROTATE_CW, ROTATE_CCW), tl!("Rotate view").to_string()),
+                    (
+                        C::Navigation,
+                        format!("{} / {}", crate::i18n::key_name("Home"), crate::i18n::key_name("End")),
+                        tl!("First / last page").to_string(),
+                    ),
+                    (C::Navigation, format!("← / →, {}", pair(PAGE_PREV, PAGE_NEXT)), tl!("Previous / next page").to_string()),
+                    (C::Tools, named("Space (hold)"), tl!("Hand (H)").to_string()),
+                    (
+                        C::Navigation,
+                        pair(
+                            pdfcraft_engine::commands::Shortcut::plain("Tab"),
+                            pdfcraft_engine::commands::Shortcut { shift: true, ..pdfcraft_engine::commands::Shortcut::plain("Tab") },
+                        ),
+                        tl!("Next / previous page item").to_string(),
+                    ),
+                    (C::Pages, crate::i18n::key_name("Delete").to_string(), tl!("Delete selected pages (Organize)").to_string()),
+                    (C::Pages, key(SELECT_ALL), tl!("Select all pages (Organize)").to_string()),
+                ]);
                 egui::ScrollArea::vertical().max_height(460.0).show(ui, |ui| {
-                    egui::Grid::new("keys").num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
-                        for (k, v) in &rows {
-                            ui.label(egui::RichText::new(k).font(egui::FontId::monospace(12.5)));
-                            ui.label(v);
-                            ui.end_row();
+                    for category in C::ALL {
+                        if !rows.iter().any(|(c, _, _)| *c == category) {
+                            continue;
                         }
-                    });
+                        egui::CollapsingHeader::new(tl!(category.title())).id_salt(("shortcut-category", category)).default_open(true).show(
+                            ui,
+                            |ui| {
+                                egui::Grid::new(("keys", category)).num_columns(2).spacing([24.0, 6.0]).show(ui, |ui| {
+                                    for (_, k, v) in rows.iter().filter(|(c, _, _)| *c == category) {
+                                        ui.label(egui::RichText::new(k).font(egui::FontId::monospace(12.5)));
+                                        ui.label(v);
+                                        ui.end_row();
+                                    }
+                                });
+                            },
+                        );
+                    }
                 });
             }
             Dialog::About => {
