@@ -2710,3 +2710,13 @@ certificate	Version	الإصدار
 	Make properties default	جعل الخصائص افتراضية
 	Pages selected	الصفحات المحددة
 	Page properties	خصائص الصفحة
+	Screen resolution	دقة الشاشة
+	Standard (96 ppi)	قياسية (96 ppi)
+	Calibrate…	معايرة…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	عدد بكسلات الشاشة الفعلي في البوصة. عايِر باستخدام مسطرة ليعرض الحجم الفعلي (100%) الصفحات بحجمها الحقيقي.
+	Calibrate screen	معايرة الشاشة
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	قِس أحد الخطوط أدناه بمسطرة من علامة الطرف إلى الأخرى، واكتب طوله بجانبه. أطول خط يمكنك قياسه هو الأدق؛ وإذا قست عدة خطوط يُؤخذ المتوسط.
+	These measurements differ by more than 2%: check them.	تختلف هذه القياسات بأكثر من 2%: تحقق منها.
+	At the current {ppi} ppi this line should measure {length} {unit}.	بالدقة الحالية {ppi} ppi يجب أن يبلغ طول هذا الخط {length} {unit}.
+	Measured length	الطول المقيس
+	That length can't be right for this line: check the unit.	لا يمكن أن يكون هذا الطول صحيحًا لهذا الخط: تحقق من الوحدة.

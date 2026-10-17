@@ -2434,3 +2434,13 @@ animation effects	Off	Aus
 	Make properties default	Eigenschaften als Standard festlegen
 	Pages selected	Ausgewählte Seiten
 	Page properties	Seiteneigenschaften
+	Screen resolution	Bildschirmauflösung
+	Standard (96 ppi)	Standard (96 ppi)
+	Calibrate…	Kalibrieren…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Die tatsächlichen Pixel pro Zoll des Bildschirms. Mit einem Lineal kalibrieren, damit die tatsächliche Größe (100 %) Seiten in ihrer echten Größe zeigt.
+	Calibrate screen	Bildschirm kalibrieren
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Messen Sie eine der Linien unten mit einem Lineal von einer Endmarke zur anderen und geben Sie ihre Länge daneben ein. Die längste Linie, die Sie messen können, ist am genauesten; mehrere Messungen werden gemittelt.
+	These measurements differ by more than 2%: check them.	Diese Messungen weichen um mehr als 2 % voneinander ab: Prüfen Sie sie.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Bei der aktuellen Auflösung von {ppi} ppi sollte diese Linie {length} {unit} messen.
+	Measured length	Gemessene Länge
+	That length can't be right for this line: check the unit.	Diese Länge kann für diese Linie nicht stimmen: Prüfen Sie die Einheit.

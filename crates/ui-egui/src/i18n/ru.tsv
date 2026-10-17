@@ -2346,3 +2346,13 @@ animation effects	Off	Выкл
 	Make properties default	Сделать свойства стандартными
 	Pages selected	Выделенные страницы
 	Page properties	Свойства страницы
+	Screen resolution	Разрешение экрана
+	Standard (96 ppi)	Стандартное (96 ppi)
+	Calibrate…	Калибровать…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Реальное число пикселей на дюйм экрана. Откалибруйте с помощью линейки, чтобы реальный размер (100%) показывал страницы в их настоящем размере.
+	Calibrate screen	Калибровка экрана
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Измерьте линейкой одну из линий ниже от одной концевой метки до другой и введите её длину рядом. Чем длиннее линия, которую вы можете измерить, тем точнее; несколько измерений усредняются.
+	These measurements differ by more than 2%: check them.	Эти измерения расходятся более чем на 2%: проверьте их.
+	At the current {ppi} ppi this line should measure {length} {unit}.	При текущем разрешении {ppi} ppi длина этой линии должна быть {length} {unit}.
+	Measured length	Измеренная длина
+	That length can't be right for this line: check the unit.	Такая длина не может быть верной для этой линии: проверьте единицы измерения.

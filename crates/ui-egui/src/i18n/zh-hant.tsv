@@ -2383,3 +2383,13 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+	Screen resolution	螢幕解析度
+	Standard (96 ppi)	標準 (96 ppi)
+	Calibrate…	校準…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	螢幕實際的每英吋像素數。用尺校準後，實際大小 (100%) 會以真實尺寸顯示頁面。
+	Calibrate screen	校準螢幕
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	用尺測量下面任一條線，從一端的標記量到另一端，並在旁邊輸入長度。能測量的線越長越準確；測量多條時取平均值。
+	These measurements differ by more than 2%: check them.	這些測量值相差超過 2%：請檢查。
+	At the current {ppi} ppi this line should measure {length} {unit}.	以目前的 {ppi} ppi，這條線應為 {length} {unit}。
+	Measured length	測得的長度
+	That length can't be right for this line: check the unit.	這個長度不可能與這條線相符：請檢查單位。

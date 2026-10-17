@@ -2684,3 +2684,13 @@ key	Space	Tarpas
 	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neįrašyti pakeitimai bus prarasti.
 theme	Appearance	Išvaizda
+	Screen resolution	Ekrano skiriamoji geba
+	Standard (96 ppi)	Standartinė (96 ppi)
+	Calibrate…	Kalibruoti…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Tikrasis ekrano pikselių colyje skaičius. Sukalibruokite liniuote, kad tikrasis dydis (100 %) rodytų puslapius tikru dydžiu.
+	Calibrate screen	Kalibruoti ekraną
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Liniuote išmatuokite vieną iš toliau esančių linijų nuo vienos galinės žymos iki kitos ir šalia įveskite jos ilgį. Ilgiausia linija, kurią galite išmatuoti, tiksliausia; keli matavimai suvidurkinami.
+	These measurements differ by more than 2%: check them.	Šie matavimai skiriasi daugiau nei 2 %: patikrinkite juos.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Esant dabartinei {ppi} ppi skiriamajai gebai, ši linija turėtų būti {length} {unit}.
+	Measured length	Išmatuotas ilgis
+	That length can't be right for this line: check the unit.	Toks ilgis negali tikti šiai linijai: patikrinkite vienetą.

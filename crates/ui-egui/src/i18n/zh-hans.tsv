@@ -2397,3 +2397,13 @@ animation effects	Off	关
 	Make properties default	将属性设为默认
 	Pages selected	选定的页面
 	Page properties	页面属性
+	Screen resolution	屏幕分辨率
+	Standard (96 ppi)	标准 (96 ppi)
+	Calibrate…	校准…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	屏幕实际的每英寸像素数。用尺子校准后，实际大小 (100%) 会按真实尺寸显示页面。
+	Calibrate screen	校准屏幕
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	用尺子测量下面任意一条线，从一端的标记量到另一端，并在旁边输入长度。能测量的线越长越准确；测量多条时取平均值。
+	These measurements differ by more than 2%: check them.	这些测量值相差超过 2%：请检查。
+	At the current {ppi} ppi this line should measure {length} {unit}.	按当前的 {ppi} ppi，这条线应为 {length} {unit}。
+	Measured length	测得的长度
+	That length can't be right for this line: check the unit.	这个长度不可能与这条线相符：请检查单位。

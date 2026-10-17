@@ -2455,3 +2455,13 @@ animation effects	Off	Вимкнено
 	Make properties default	Зробити властивості типовими
 	Pages selected	Вибрані сторінки
 	Page properties	Властивості сторінки
+	Screen resolution	Роздільна здатність екрана
+	Standard (96 ppi)	Стандартна (96 ppi)
+	Calibrate…	Калібрувати…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Справжня кількість пікселів на дюйм екрана. Відкалібруйте лінійкою, щоб реальний розмір (100%) показував сторінки в їхньому справжньому розмірі.
+	Calibrate screen	Калібрування екрана
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Виміряйте лінійкою одну з ліній нижче від однієї кінцевої позначки до іншої та введіть її довжину поруч. Що довша лінія, яку ви можете виміряти, то точніше; кілька вимірювань усереднюються.
+	These measurements differ by more than 2%: check them.	Ці вимірювання розходяться більш ніж на 2%: перевірте їх.
+	At the current {ppi} ppi this line should measure {length} {unit}.	За поточної роздільної здатності {ppi} ppi довжина цієї лінії має бути {length} {unit}.
+	Measured length	Виміряна довжина
+	That length can't be right for this line: check the unit.	Така довжина не може бути правильною для цієї лінії: перевірте одиниці.

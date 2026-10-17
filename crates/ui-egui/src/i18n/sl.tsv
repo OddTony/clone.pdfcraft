@@ -2438,3 +2438,13 @@ animation effects	Off	Izklopljeni
 	Make properties default	Nastavi lastnosti kot privzete
 	Pages selected	Izbrane strani
 	Page properties	Lastnosti strani
+	Screen resolution	Ločljivost zaslona
+	Standard (96 ppi)	Standardna (96 ppi)
+	Calibrate…	Umeri…
+	The screen's own pixels per inch. Calibrate with a ruler so that Actual size (100%) shows pages at their real size.	Dejansko število slikovnih pik na palec zaslona. Umerite z ravnilom, da dejanska velikost (100 %) prikaže strani v njihovi resnični velikosti.
+	Calibrate screen	Umeri zaslon
+	Measure one of the lines below with a ruler, from one end mark to the other, and type its length beside it. The longest line you can measure is the most accurate; measuring several averages them.	Z ravnilom izmerite eno od spodnjih črt od ene končne oznake do druge in poleg nje vnesite njeno dolžino. Najdaljša črta, ki jo lahko izmerite, je najbolj natančna; več meritev se povpreči.
+	These measurements differ by more than 2%: check them.	Te meritve se razlikujejo za več kot 2 %: preverite jih.
+	At the current {ppi} ppi this line should measure {length} {unit}.	Pri trenutni ločljivosti {ppi} ppi bi morala ta črta meriti {length} {unit}.
+	Measured length	Izmerjena dolžina
+	That length can't be right for this line: check the unit.	Ta dolžina za to črto ne more biti pravilna: preverite enoto.

@@ -132,6 +132,7 @@ mod organize_panel;
 pub mod portable;
 mod protect;
 mod recovery;
+pub mod screen_ppi;
 pub mod scroll_speed;
 #[cfg(not(target_arch = "wasm32"))]
 mod system_fonts;
@@ -337,6 +338,8 @@ pub enum Dialog {
     DocumentJs,
     /// Preferences.
     Preferences,
+    /// Preferences ▸ Screen resolution ▸ Calibrate… (a line to measure with a ruler).
+    CalibrateScreen,
     /// Compare files: choose the older version.
     CompareFiles,
     /// Action Wizard.
@@ -546,6 +549,11 @@ pub struct PdfCraftApp {
     pub system_text_scale: f32,
     /// The interface size last given to egui ([`ui_scale::sync`]).
     ui_scale_applied: Option<f32>,
+    /// Preferences ▸ Screen resolution in device pixels per inch, or `None` for the standard
+    /// 96 dpi basis ([`screen_ppi`]).
+    pub screen_ppi: Option<f32>,
+    /// What the Calibrate screen window's ruler reading boxes hold, one per line.
+    pub calibration_readings: [f64; screen_ppi::LINES.len()],
     /// Preferences: bake Fill & Sign marks into the page when saving. Off, so a normal save stays editable.
     pub flatten_fill_sign_on_save: bool,
     /// Point size for new Fill & Sign text and dates, kept across launches.
@@ -919,6 +927,8 @@ impl PdfCraftApp {
             ui_scale: None,
             system_text_scale: 1.0,
             ui_scale_applied: None,
+            screen_ppi: None,
+            calibration_readings: [0.0; screen_ppi::LINES.len()],
             flatten_fill_sign_on_save: false,
             fill_text_size: fill_sign::TEXT_SIZE,
             dialog: None,
@@ -2280,6 +2290,8 @@ impl PdfCraftApp {
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
+        // Likewise; null is the standard 96 dpi basis.
+        v["screen_ppi"] = serde_json::json!(self.screen_ppi);
         v.to_string()
     }
 
@@ -2369,6 +2381,8 @@ impl PdfCraftApp {
         }
         // Settings are untrusted: a size out of range follows the system instead.
         self.ui_scale = v["ui_scale"].as_f64().and_then(ui_scale::valid);
+        // Settings are untrusted: a resolution out of range keeps the standard basis.
+        self.screen_ppi = v["screen_ppi"].as_f64().and_then(screen_ppi::valid);
         // Settings are untrusted: an unusable pattern keeps the default.
         if let Some(f) = v["date_format"].as_str() {
             let _ = self.session.set_date_format(f);
@@ -2530,6 +2544,7 @@ impl PdfCraftApp {
                     "js-console" => Some(Dialog::JsConsole),
                     "document-js" => Some(Dialog::DocumentJs),
                     "preferences" => Some(Dialog::Preferences),
+                    "calibrate-screen" => Some(Dialog::CalibrateScreen),
                     "compare-files" => Some(Dialog::CompareFiles),
                     "action-wizard" => Some(Dialog::ActionWizard),
                     "pdfa" => Some(Dialog::PdfA),
@@ -2701,6 +2716,7 @@ impl PdfCraftApp {
                 };
             }
             ("ui-scale", _) => self.ui_scale = ui_scale::parse(value)?,
+            ("screen-ppi", _) => self.screen_ppi = screen_ppi::parse(value)?,
             ("system-title-bar", _) => {
                 self.system_title_bar = match value {
                     "true" => true,
@@ -2946,6 +2962,11 @@ impl eframe::App for PdfCraftApp {
         self.sync_theme(ctx);
         let native = ctx.native_pixels_per_point().unwrap_or(1.0);
         ui_scale::sync(ctx, ui_scale::zoom(self.ui_scale, self.system_text_scale, native), &mut self.ui_scale_applied);
+        // Every frame, so a changed interface size or display scale keeps a calibrated page its real size.
+        let basis = screen_ppi::basis(self.screen_ppi, ctx.pixels_per_point());
+        for view in &mut self.views {
+            view.pt = basis;
+        }
         // Remember user work even if its tab is subsequently closed or Home is selected.
         self.startup_superseded |= !self.views.is_empty() || self.combine_showing() || self.dialog.is_some() || self.password_prompt.is_some();
         // Also done in `raw_input_hook`, before input; here for hosts that don't call the hook.
