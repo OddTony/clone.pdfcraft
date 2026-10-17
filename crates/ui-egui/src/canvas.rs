@@ -215,6 +215,7 @@ impl ViewDefaults {
 #[derive(Default)]
 pub struct Find {
     pub query: String,
+    pub replacement: String,
     /// (page, glyph range) in document order.
     pub matches: Vec<(usize, Range<usize>)>,
     pub current: Option<usize>,
@@ -4247,6 +4248,7 @@ fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: 
     }
     let mut close = false;
     let mut step: Option<bool> = None;
+    let mut replace = None;
     let searched = view.texts.len() + view.text_failed.len();
     egui::Area::new(egui::Id::new("find-bar"))
         .order(egui::Order::Middle)
@@ -4320,11 +4322,33 @@ fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: 
                             close = true;
                         }
                     });
+                    ui.horizontal(|ui| {
+                        ui.add(icons::image("replace", 16.0, t.text_muted));
+                        ui.add(
+                            egui::TextEdit::singleline(&mut find.replacement)
+                                .id(egui::Id::new("replace-input"))
+                                .hint_text(tl!("Replace with"))
+                                .desired_width(220.0)
+                                .frame(egui::Frame::NONE),
+                        );
+                        let enabled = !find.query.trim().is_empty() && !find.matches.is_empty();
+                        if ui.add_enabled(enabled, egui::Button::new(tl!("Replace all"))).clicked() {
+                            replace = Some(pdfcraft_engine::Edit::ReplaceTextOccurrences {
+                                query: find.query.clone(),
+                                replacement: find.replacement.clone(),
+                                case_sensitive: find.case_sensitive,
+                                whole_words: find.whole_words,
+                            });
+                        }
+                    });
                 });
         });
     if close {
         view.find = None;
         return;
+    }
+    if let Some(edit) = replace {
+        view.pending_edit = Some(edit);
     }
     if find.query != find.case_query {
         view.rerun_find();

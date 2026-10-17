@@ -211,6 +211,15 @@ impl Automation {
             "text_extract" => self.text_extract(&a)?,
             "text_word_count" => self.text_word_count(&a)?,
             "text_find" => self.text_find(&a)?,
+            "text_replace" => self.apply(
+                &a,
+                Edit::ReplaceTextOccurrences {
+                    query: a.str("query")?.to_owned(),
+                    replacement: a.str("replacement")?.to_owned(),
+                    case_sensitive: a.opt_bool("case_sensitive")?.unwrap_or(false),
+                    whole_words: a.opt_bool("whole_words")?.unwrap_or(false),
+                },
+            )?,
             "page_rotate" => {
                 let degrees = a.int("degrees")?;
                 if degrees % 90 != 0 {

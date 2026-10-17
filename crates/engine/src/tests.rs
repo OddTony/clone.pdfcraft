@@ -2,6 +2,14 @@ use std::sync::Arc;
 
 use super::*;
 
+#[test]
+fn replace_occurrences_honours_case_and_word_options() {
+    assert_eq!(replace_occurrences("Page page pages", "page", "Sheet", false, true).unwrap(), "Sheet Sheet pages");
+    assert_eq!(replace_occurrences("Page page", "Page", "Sheet", true, false).unwrap(), "Sheet page");
+    assert_eq!(replace_occurrences("Page", "page", "Sheet", true, false).unwrap(), "Page");
+    assert_eq!(replace_occurrences("Page", "Page", "", true, false).unwrap(), "");
+}
+
 /// A minimal `n`-page document; page `i` shows "Page i+1".
 pub(crate) fn fixture(n: usize) -> Vec<u8> {
     let mut objs: Vec<Vec<u8>> = vec![b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()];

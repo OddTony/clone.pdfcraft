@@ -274,6 +274,7 @@ fn scope_of(edit: &Edit) -> Scope {
         Edit::MoveObjects { .. }
         | Edit::EditTextLine { .. }
         | Edit::EditTextBlock { .. }
+        | Edit::ReplaceTextOccurrences { .. }
         | Edit::EditPageImage { .. }
         | Edit::AddText { .. }
         | Edit::AddImage { .. }
@@ -1604,6 +1605,13 @@ pub enum Edit {
         /// Formatting changes (font, size, colour, alignment); default keeps the paragraph's.
         style: pdfcraft_edit::BlockStyle,
     },
+    /// Replace every matching phrase in the document while retaining each source run's style.
+    ReplaceTextOccurrences {
+        query: String,
+        replacement: String,
+        case_sensitive: bool,
+        whole_words: bool,
+    },
     /// An explicit open-licensed full font program, completing subsets or selected by a user.
     RegisterTextFont {
         page: usize,
@@ -2025,7 +2033,7 @@ impl Edit {
             Edit::SetFieldScript { name, .. } => Label::with("Edit script of {name}", name.as_str()),
             Edit::SetDocumentScript { script: None, .. } => Label::of("Delete document JavaScript"),
             Edit::SetDocumentScript { .. } => Label::of("Edit document JavaScript"),
-            Edit::EditTextLine { .. } | Edit::EditTextBlock { .. } => Label::of("Edit text"),
+            Edit::EditTextLine { .. } | Edit::EditTextBlock { .. } | Edit::ReplaceTextOccurrences { .. } => Label::of("Edit text"),
             Edit::RegisterTextFont { .. } => Label::of("Load document font"),
             Edit::MoveObjects { objects, .. } => plural("Move object", "Move objects", objects.len()),
             Edit::EditPageImage { change, .. } => Label::of(match change {
@@ -2220,6 +2228,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::ConvertPdfA { .. }
         | Edit::EditTextLine { .. }
         | Edit::EditTextBlock { .. }
+        | Edit::ReplaceTextOccurrences { .. }
         | Edit::RegisterTextFont { .. }
         | Edit::EditPageImage { .. }
         | Edit::Flatten { .. }
@@ -2325,6 +2334,49 @@ impl EditCtx {
 }
 
 /// Perform an edit on a working copy (the caller discards it on error).
+fn replace_occurrences(source: &str, query: &str, replacement: &str, case_sensitive: bool, whole_words: bool) -> Result<String, EditError> {
+    const MAX_TEXT: usize = 4_000_000;
+    if query.len() > MAX_TEXT || replacement.len() > MAX_TEXT || source.len() > MAX_TEXT {
+        return Err(EditError::Invalid("search, replacement or paragraph text exceeds the 4 MiB limit".into()));
+    }
+    if query.is_empty() {
+        return Ok(source.to_owned());
+    }
+    let mut out = String::with_capacity(source.len());
+    let mut append = |text: &str| -> Result<(), EditError> {
+        out
+            .len()
+            .checked_add(text.len())
+            .filter(|n| *n <= MAX_TEXT)
+            .ok_or_else(|| EditError::Invalid("replacement paragraph would exceed 4 MiB".into()))?;
+        out.push_str(text);
+        Ok(())
+    };
+    let mut cursor = 0usize;
+    while cursor < source.len() {
+        let tail = source.get(cursor..).unwrap_or_default();
+        let found = tail.char_indices().find_map(|(offset, _)| {
+            let start = cursor.saturating_add(offset);
+            let end = start.checked_add(query.len())?;
+            let candidate = source.get(start..end)?;
+            let matches = if case_sensitive { candidate == query } else { candidate.eq_ignore_ascii_case(query) };
+            let before = source.get(..start).and_then(|s| s.chars().next_back());
+            let after = source.get(end..).and_then(|s| s.chars().next());
+            let boundary = |c: Option<char>| c.is_none_or(|c| !c.is_alphanumeric() && c != '_');
+            (matches && (!whole_words || (boundary(before) && boundary(after)))).then_some((start, end))
+        });
+        if let Some((start, end)) = found {
+            append(source.get(cursor..start).unwrap_or_default())?;
+            append(replacement)?;
+            cursor = end;
+        } else {
+            append(tail)?;
+            break;
+        }
+    }
+    if source.is_empty() { Ok(source.to_owned()) } else { Ok(out) }
+}
+
 fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> Result<(), EditError> {
     match edit {
         Edit::RotatePages { pages, degrees } => pdfcraft_organize::rotate_pages(doc, pages, *degrees)?,
@@ -2560,6 +2612,30 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         Edit::MoveObjects { page, objects, offset } => pdfcraft_edit::move_objects(doc, *page, objects, *offset)?,
         Edit::EditTextBlock { page, block, text, style } => {
             pdfcraft_edit::rewrite_block(doc, *page, *block, Some(text), style)?;
+        }
+        Edit::ReplaceTextOccurrences { query, replacement, case_sensitive, whole_words } => {
+            if query.is_empty() {
+                return Err(EditError::Invalid("search text must not be empty".into()));
+            }
+            let mut changed = false;
+            for page in (0..cx.pages).rev() {
+                let blocks = pdfcraft_edit::text_blocks(doc, page)?;
+                for (block_index, block) in blocks.iter().enumerate().rev() {
+                    let next = replace_occurrences(&block.editor_text, query, replacement, *case_sensitive, *whole_words)?;
+                    if next != block.editor_text {
+                        let result = pdfcraft_edit::rewrite_block(doc, page, block_index, Some(&next), &pdfcraft_edit::BlockStyle::default())?;
+                        if let Some(font) = result.substituted {
+                            return Err(EditError::Invalid(format!(
+                                "replacement text is not supported by the original font ({font}); nothing was changed"
+                            )));
+                        }
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                return Err(EditError::Invalid("no matching text was found".into()));
+            }
         }
         Edit::RegisterTextFont { page, bytes } => {
             pdfcraft_edit::text::register_text_font(doc, *page, bytes)?;
