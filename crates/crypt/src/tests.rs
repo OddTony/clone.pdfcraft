@@ -93,6 +93,22 @@ fn the_owner_password_upgrades_a_user_session() {
 }
 
 #[test]
+fn an_empty_owner_password_lets_the_user_password_open_as_owner() {
+    // AES-256 keeps an empty owner password as given.
+    let aes = new(Algorithm::Aes256, "user pw", "", 0b0100).dict().clone();
+    // R3 (`create` uses the user password for an empty owner one): /O and /U for "", Algorithms 3–5.
+    let mut rc4_128 = new(Algorithm::Rc4_128, "user pw", "x", 0b0100).dict().clone();
+    let rk = owner_rc4_key(&rc4_128, b"");
+    rc4_128.o = (1..=19u8).fold(rc4(&rk, &pad(b"user pw")), |o, i| rc4(&rk.iter().map(|b| b ^ i).collect::<Vec<_>>(), &o));
+    rc4_128.u = u_value_r4(&rc4_128, ID, &file_key_r4(&rc4_128, ID, b"user pw"));
+    for d in [aes, rc4_128] {
+        let h = SecurityHandler::open(d.clone(), ID, Some("user pw")).unwrap();
+        assert_eq!(h.auth(), Auth::Owner, "R{}", d.r);
+        assert_eq!(SecurityHandler::open(d, ID, Some("nope")).unwrap_err(), CryptError::WrongPassword);
+    }
+}
+
+#[test]
 fn empty_user_password_opens_without_asking() {
     for alg in ALL {
         let d = new(alg, "", "secret", -1).dict().clone();
