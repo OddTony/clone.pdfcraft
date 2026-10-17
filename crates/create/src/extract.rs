@@ -143,9 +143,11 @@ fn image(doc: &Document, s: &Stream) -> Result<(&'static str, Vec<u8>), String> 
         .and_then(|d| d.as_array().map(|a| a.first().and_then(Object::as_f64) > a.get(1).and_then(Object::as_f64)))
         .unwrap_or(false);
     let space = if mask { Ok(Space::Gray) } else { space(doc, s.dict.get(b"ColorSpace")) };
-    // Lab JPEGs aren't decoded yet: a decoder may read their samples as YCbCr.
+    // Lab JPEGs aren't decoded yet: a decoder may read their samples as YCbCr. Nor is a Lab
+    // image whose /Decode export can't apply yet: it would show the default range's colours.
     let space = space.and_then(|space| match space {
         Space::Lab(_) if jpeg => Err("Lab JPEG images can't be exported yet".to_string()),
+        Space::Lab(_) if !lab_decode_supported(doc, s) => Err("Lab images with a /Decode other than the default can't be exported yet".to_string()),
         space => Ok(space),
     });
     // A JPEG in a colour space PdfCraft can't convert yet is written as is, if it can be.
@@ -508,6 +510,26 @@ fn numbers<const N: usize>(doc: &Document, d: &Dict, key: &[u8]) -> Option<[f32;
     let values = entry.as_array().filter(|a| a.len() == N)?;
     let values: Vec<f32> = values.iter().map(|v| doc.resolve(v).as_f64().map(|v| v as f32)).collect::<Option<_>>()?;
     values.try_into().ok()
+}
+
+/// Whether export reads a Lab image's samples as the page does: with no `/Decode`, the default
+/// one (L\* 0–100 and the a\* and b\* `/Range`, as the renderer defaults it) or that default
+/// inverted, the only mappings export applies so far. The page honours any other `/Decode`.
+fn lab_decode_supported(doc: &Document, s: &Stream) -> bool {
+    let Some(decode) = s.dict.get(b"Decode") else { return true };
+    let decode = doc.resolve(decode);
+    let Some(decode) = decode.as_array().and_then(|a| a.iter().map(|v| doc.resolve(v).as_f64()).collect::<Option<Vec<f64>>>()) else {
+        return false;
+    };
+    let space = s.dict.get(b"ColorSpace").map(|cs| doc.resolve(cs));
+    let lab = space.as_deref().and_then(|cs| cs.as_array()).and_then(|a| a.get(1)).map(|d| doc.resolve(d));
+    let range = match lab.as_deref() {
+        Some(Object::Dict(d)) => numbers::<4>(doc, d, b"Range"),
+        _ => None,
+    };
+    let [a0, a1, b0, b1] = range.unwrap_or([-100.0, 100.0, -100.0, 100.0]).map(f64::from);
+    let is = |want: [f64; 6]| decode.len() == 6 && decode.iter().zip(want).all(|(got, want)| (got - want).abs() < 1e-6);
+    is([0.0, 100.0, a0, a1, b0, b1]) || is([100.0, 0.0, a1, a0, b1, b0])
 }
 
 /// Samples as one byte each (16-bit samples keep their high byte).

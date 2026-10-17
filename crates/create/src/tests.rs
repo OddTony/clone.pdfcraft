@@ -1317,6 +1317,41 @@ fn lab_jpegs_are_written_as_is_or_reported() {
 }
 
 #[test]
+fn lab_images_with_another_decode_are_reported() {
+    // The page maps a Lab image's samples through any /Decode; export applies only the default
+    // one and its inverse so far. With another, the export showed the default range's colours
+    // (17 levels off for a /Decode [0 100 -50 50 -50 50]), so such an image is reported.
+    let lab = || {
+        cie_space(
+            "Lab",
+            vec![("WhitePoint", reals(&[0.9642, 1.0, 0.8249])), ("Range", Object::Array([-128, 127, -128, 127].map(Object::Int).to_vec()))],
+        )
+    };
+    for (what, decode, exported) in [
+        ("a narrower /Decode", Some([0, 100, -50, 50, -50, 50]), false),
+        ("the default /Decode written out", Some([0, 100, -128, 127, -128, 127]), true),
+        ("no /Decode", None, true),
+    ] {
+        let mut doc = from_images(&[("flat.png".into(), png_bytes(false))]).unwrap();
+        with_image(&mut doc, |_| {
+            let mut s = flat(lab(), 8, &[200, 60, 30]);
+            if let Some(decode) = decode {
+                s.dict.set(b"Decode".to_vec(), Object::Array(decode.map(Object::Int).to_vec()));
+            }
+            s
+        });
+        let out = extract_images(&doc, &[0], 0);
+        if exported {
+            assert!(out.skipped.is_empty(), "{what}: {:?}", out.skipped);
+            let (drawn, exported, _) = drawn_and_exported(&doc);
+            assert!(close(drawn, exported), "{what}: the page draws {drawn:?}, the export has {exported:?}");
+        } else {
+            assert!(out.images.is_empty() && out.skipped.first().is_some_and(|(_, _, why)| why.contains("/Decode")), "{what}: {out:?}");
+        }
+    }
+}
+
+#[test]
 fn damaged_calibrated_and_lab_spaces_are_reported() {
     for space in [
         Object::Array(vec![Object::name("CalRGB")]),
