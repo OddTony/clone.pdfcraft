@@ -2687,3 +2687,7 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+
+# AI-assisted additions for the cut-content notice (#623) (2026-10-16); not reviewed by a native speaker.
+	Page {page} holds more content than PdfCraft can read: part of it isn't drawn, and its text can't be found or copied.	Trang {page} chứa nhiều nội dung hơn mức PdfCraft có thể đọc: một phần không được vẽ, và không thể tìm hoặc sao chép văn bản của trang.
+	{n} pages hold more content than PdfCraft can read, page {page} first: parts of them aren't drawn, and their text can't be found or copied.	{n} trang chứa nhiều nội dung hơn mức PdfCraft có thể đọc, bắt đầu từ trang {page}: một số phần không được vẽ, và không thể tìm hoặc sao chép văn bản của các trang đó.

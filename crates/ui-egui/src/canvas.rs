@@ -5601,6 +5601,7 @@ trailer << /Root 1 0 R >>
                 }],
                 line_of: vec![0],
                 space_before: vec![false],
+                truncated: false,
             }
             .into(),
         );
