@@ -390,7 +390,13 @@ impl Automation {
                 let id = self.doc(&a)?.id;
                 let before = self.doc(&a)?.bytes.len();
                 let path = self.resolve(a.str("path")?, true)?;
-                let (bytes, merged) = self.session.reduced_bytes(id).map_err(failed)?;
+                let quality = match a.opt_str("quality")? {
+                    None => pdfcraft_engine::optimize::ReduceQuality::Screen,
+                    Some(name) => pdfcraft_engine::optimize::ReduceQuality::from_name(name)
+                        .ok_or_else(|| ToolError::InvalidArgs(format!("unknown reduce quality {name:?} (screen, print)")))?,
+                };
+                let (bytes, report) = self.session.optimized_bytes(id, &quality.settings(), &[]).map_err(failed)?;
+                let merged = report.merged;
                 // As in the app, a copy that isn't smaller is not written (#490).
                 let written = bytes.len() < before;
                 if written {

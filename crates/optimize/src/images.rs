@@ -284,13 +284,13 @@ fn image_stream(old: &Dict, px: &[u8], n: usize, w: u32, h: u32, compression: Co
     d.set(b"Height".to_vec(), Object::Int(h as i64));
     d.set(b"BitsPerComponent".to_vec(), Object::Int(8));
     let use_jpeg = match compression {
-        Compression::Jpeg(_) => true,
+        Compression::Jpeg(_) | Compression::JpegOnly(_) => true,
         Compression::Flate => false,
         Compression::Retain => was_dct,
     };
     if use_jpeg {
         let q = match compression {
-            Compression::Jpeg(q) => q,
+            Compression::Jpeg(q) | Compression::JpegOnly(q) => q,
             _ => 80,
         };
         let data = jpeg(px, n, w, h, q)?;
@@ -316,12 +316,18 @@ fn process(doc: &Document, s: &Stream, ppi: f64, settings: &ImageSettings, n: us
         return None;
     }
     let was_dct = is_dct(s)?;
+    // Print preserves lossless samples at their original resolution. Masked JPEGs also stay
+    // unchanged: resampling a shared soft mask can affect other images using it (#1282).
+    if matches!(settings.compression, Compression::JpegOnly(_)) && (!was_dct || d.contains(b"SMask")) {
+        return None;
+    }
     let (w, h) = (d.int(b"Width")? as u32, d.int(b"Height")? as u32);
     if w == 0 || h == 0 || (w as u64) * (h as u64) > MAX_PIXELS {
         return None;
     }
     let resize = settings.downsample && ppi.is_finite() && ppi > settings.above_ppi && settings.target_ppi > 0.0;
-    let recompress = matches!(settings.compression, Compression::Jpeg(_)) || (matches!(settings.compression, Compression::Flate) && was_dct);
+    let recompress = matches!(settings.compression, Compression::Jpeg(_) | Compression::JpegOnly(_))
+        || (matches!(settings.compression, Compression::Flate) && was_dct);
     if !resize && !recompress {
         return None;
     }

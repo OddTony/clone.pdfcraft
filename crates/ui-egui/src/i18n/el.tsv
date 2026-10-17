@@ -2438,3 +2438,10 @@ animation effects	Off	Ανενεργά
 	Make properties default	Ορισμός ιδιοτήτων ως προεπιλογή
 	Pages selected	Επιλεγμένες σελίδες
 	Page properties	Ιδιότητες σελίδας
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Οθόνη / email
+	Reduce	Μείωση
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Μικρότερα αρχεία για οθόνες και email. Οι εικόνες πάνω από 225 ppi μειώνονται σε 150 ppi, JPEG ποιότητας 60· τα γραμμικά σχέδια μπορεί να χάσουν λεπτομέρειες.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Υψηλότερη ποιότητα, συνήθως μεγαλύτερα αρχεία. Οι φωτογραφίες JPEG πάνω από 450 ppi μειώνονται σε 300 ppi, ποιότητα 85. Τα γραφικά χωρίς απώλειες και οι εικόνες με μάσκες διατηρούν τα εικονοστοιχεία τους.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	Η υψηλότερη ποιότητα εικόνας συνεπάγεται μεγαλύτερα αρχεία. Αποθηκεύεται αντίγραφο μόνο αν είναι μικρότερο.

@@ -325,6 +325,8 @@ pub enum Dialog {
     Sign,
     /// Optimize PDF ▸ Advanced optimization.
     Optimize,
+    /// Reduce File Size quality chooser.
+    ReduceQuality,
     /// Prepare a form ▸ right-click a field ▸ Duplicate.
     DuplicateField,
     /// Check for accessibility ▸ Accessibility Checker Options.
@@ -704,6 +706,9 @@ pub struct PdfCraftApp {
     pub stamp_draft: stamps_ui::StampDraft,
     /// PDF Optimizer choices.
     pub optimize_draft: OptimizeDraft,
+    /// Last confirmed quality; drafts are never persisted.
+    pub reduce_quality: pdfcraft_engine::optimize::ReduceQuality,
+    pub reduce_quality_draft: pdfcraft_engine::optimize::ReduceQuality,
     /// The running optimization (Optimize PDF ▸ Advanced optimization).
     pub optimize_run: Option<optimize_ui::OptimizeRun>,
     /// A background job's progress card (see [`widgets::progress_notice`]).
@@ -1012,6 +1017,8 @@ impl PdfCraftApp {
             custom_stamps: Vec::new(),
             stamp_draft: Default::default(),
             optimize_draft: OptimizeDraft::default(),
+            reduce_quality: Default::default(),
+            reduce_quality_draft: Default::default(),
             optimize_run: None,
             progress_notice: None,
             page_clipboard: None,
@@ -2276,6 +2283,7 @@ impl PdfCraftApp {
             "right_panel_closed": self.right_panel_closed,
         });
         // Set apart: one more key inside the macro above passes serde_json's recursion limit.
+        v["reduce_quality"] = self.reduce_quality.name().into();
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
@@ -2294,6 +2302,7 @@ impl PdfCraftApp {
                 v.get("docking_left_open").and_then(serde_json::Value::as_bool).unwrap_or(self.docking.layout.contains(&docking::Panel::Tools));
             self.right = v.get("docking_right").and_then(|value| serde_json::from_value(value.clone()).ok()).flatten();
         }
+        self.reduce_quality = v["reduce_quality"].as_str().and_then(pdfcraft_engine::optimize::ReduceQuality::from_name).unwrap_or_default();
         self.combine_columns = combine_ui::Columns::from_json(&v["combine_columns"]);
         if let Some(view) = v["combine_view"].as_str().and_then(combine_ui::CombineView::parse) {
             self.combine_view = view;

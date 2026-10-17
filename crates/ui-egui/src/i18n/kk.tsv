@@ -2430,3 +2430,10 @@ animation effects	Off	Өшірулі
 	Make properties default	Қасиеттерді әдепкі ету
 	Pages selected	Таңдалған беттер
 	Page properties	Бет қасиеттері
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Экран / электрондық пошта
+	Reduce	Кішірейту
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Экран мен электрондық поштаға арналған шағын файлдар. 225 ppi-ден жоғары кескіндер 150 ppi-ге дейін, JPEG сапасы 60 болып кішірейтіледі; сызбалардың кейбір бөлшектері жоғалуы мүмкін.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Сапасы жоғары, әдетте көлемі үлкен файлдар. 450 ppi-ден жоғары JPEG фотосуреттері 300 ppi-ге дейін, сапасы 85 болып кішірейтіледі. Шығынсыз графика мен маскасы бар кескіндер өз пиксельдерін сақтайды.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	Кескін сапасы жоғары болса, файл көлемі де үлкен болады. Көшірме тек көлемі кішірейсе сақталады.

@@ -2382,3 +2382,10 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	螢幕 / 電子郵件
+	Reduce	縮小
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	適合螢幕和電子郵件的小檔案。超過 225 ppi 的影像縮小到 150 ppi，JPEG 品質為 60；線條圖可能遺失細節。
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	品質更高，檔案通常更大。超過 450 ppi 的 JPEG 照片縮小到 300 ppi，品質為 85。無損圖形和帶遮色片的影像保留原有像素。
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	更高的影像品質意味著更大的檔案。僅在檔案變小時儲存副本。

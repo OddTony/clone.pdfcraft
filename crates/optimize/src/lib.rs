@@ -60,6 +60,9 @@ pub enum Stage {
 pub enum Compression {
     /// JPEG with a quality from 1 to 100.
     Jpeg(u8),
+    /// Recompress only unmasked JPEG inputs; leave lossless images and their pixels untouched.
+    /// Used by Print, with fragment merging disabled. Unsupported images stay unchanged.
+    JpegOnly(u8),
     /// Lossless (zlib).
     Flate,
     /// Keep the image's own compression (resampled images become Flate if they weren't JPEG).
@@ -120,6 +123,42 @@ impl Default for Settings {
             flate_unencoded: true,
             remove_invalid_links: true,
             remove_unreferenced_dests: true,
+        }
+    }
+}
+
+/// Quality choices for Reduce File Size, independent of the advanced optimizer presets.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ReduceQuality {
+    #[default]
+    Screen,
+    Print,
+}
+
+impl ReduceQuality {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Screen => "screen",
+            Self::Print => "print",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "screen" => Some(Self::Screen),
+            "print" => Some(Self::Print),
+            _ => None,
+        }
+    }
+
+    pub fn settings(self) -> Settings {
+        match self {
+            Self::Screen => Settings::default(),
+            Self::Print => {
+                let images = ImageSettings { downsample: true, target_ppi: 300.0, above_ppi: 450.0, compression: Compression::JpegOnly(85) };
+                // Merging mixed JPEG/Flate fragments resamples the lossless inputs too.
+                Settings { color: images, gray: images, merge_fragments: false, ..Settings::default() }
+            }
         }
     }
 }

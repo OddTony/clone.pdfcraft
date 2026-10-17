@@ -2572,3 +2572,10 @@ animation effects	Off	Desactivados
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Estás viendo la versión firmada de «{from}» (revisión {rev}). Es una instantánea: los cambios aquí no afectarán al original.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Estás viendo la revisión {rev} de «{from}». Es una instantánea: los cambios aquí no afectarán al original.
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Pantalla / correo
+	Reduce	Reducir
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Archivos más pequeños para pantallas y correo. Las imágenes de más de 225 ppp se reducen a 150 ppp, JPEG de calidad 60; los dibujos pueden perder detalle.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Mayor calidad, archivos generalmente más grandes. Las fotos JPEG de más de 450 ppp se reducen a 300 ppp, calidad 85. Los gráficos sin pérdida y las imágenes con máscara conservan sus píxeles.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	Una mayor calidad de imagen implica archivos más grandes. Solo se guarda una copia si es más pequeña.

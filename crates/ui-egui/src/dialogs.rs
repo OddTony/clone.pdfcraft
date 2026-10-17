@@ -67,6 +67,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut overwrite_elsewhere = false;
     let mut summarize_now = false;
     let mut optimize_now = false;
+    let mut reduce_now = false;
     let mut duplicate_now: Option<Edit> = None;
     let mut replace_now = false;
     let mut open_revision: Option<usize> = None;
@@ -716,6 +717,12 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 });
                 return;
             }
+            Dialog::ReduceQuality => {
+                let (ok, cancel) = crate::optimize_ui::reduce_body(ui, &mut app.reduce_quality_draft, &t);
+                reduce_now = ok;
+                close = ok || cancel;
+                return;
+            }
             Dialog::Optimize => {
                 let (ok, cancel) = crate::optimize_ui::body(ui, &mut app.optimize_draft, &t);
                 optimize_now = ok;
@@ -1269,6 +1276,9 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     if summarize_now {
         app.summarize_comments();
+    }
+    if reduce_now {
+        app.reduce_with_draft();
     }
     if optimize_now {
         app.optimize_with_draft();

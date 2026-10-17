@@ -2428,3 +2428,10 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Ekran / e-posta
+	Reduce	Küçült
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Ekranlar ve e-posta için daha küçük dosyalar. 225 ppi üzerindeki görüntüler 150 ppi'ye, JPEG kalitesi 60 olacak şekilde küçültülür; çizimler ayrıntı kaybedebilir.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Daha yüksek kalite, genellikle daha büyük dosyalar. 450 ppi üzerindeki JPEG fotoğrafları 300 ppi'ye, kalite 85 olacak şekilde küçültülür. Kayıpsız grafikler ve maskeli görüntüler piksellerini korur.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	Daha yüksek görüntü kalitesi daha büyük dosyalar demektir. Yalnızca daha küçükse bir kopya kaydedilir.

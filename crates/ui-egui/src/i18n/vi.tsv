@@ -2685,3 +2685,10 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Màn hình / email
+	Reduce	Giảm
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Tệp nhỏ hơn cho màn hình và email. Ảnh trên 225 ppi được giảm xuống 150 ppi, JPEG chất lượng 60; bản vẽ nét có thể mất chi tiết.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Chất lượng cao hơn, tệp thường lớn hơn. Ảnh JPEG trên 450 ppi được giảm xuống 300 ppi, chất lượng 85. Đồ họa nén không mất dữ liệu và ảnh có mặt nạ giữ nguyên điểm ảnh.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	Chất lượng ảnh cao hơn đồng nghĩa với tệp lớn hơn. Chỉ lưu bản sao nếu tệp nhỏ hơn.

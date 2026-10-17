@@ -4,7 +4,7 @@ Layer L4: the PDF Optimizer (execution plan M11.1; Acrobat's Reduce File Size an
 Advanced optimization).
 
 ```rust
-let report = optimize(&mut doc, &Settings::default())?;   // Reduce File Size's choices
+let report = optimize(&mut doc, &Settings::default())?;   // Screen / email choices
 let report = optimize(&mut doc, &Preset::Mobile.settings())?; // smaller, for screens
 // Or with progress: called before each image and the clean-up; `false` cancels.
 let report = optimize_with_progress(&mut doc, &settings, &mut |stage| keep_going)?;
@@ -36,3 +36,24 @@ then this, then merges identical objects and writes a full, compressed save
 (`pdfcraft_engine::optimizer::OptimizeJob`, which the UI runs on a worker thread with a
 progress bar). JPEG decoding and
 encoding and resampling come from the `image` crate.
+
+## Reduce File Size quality
+
+`ReduceQuality` is separate from the advanced optimizer's Standard/Mobile presets.
+`Screen` returns `Settings::default()` unchanged (150 ppi above 225, JPEG 60).
+`Print` uses 300 ppi above 450 and `Compression::JpegOnly(85)`: only supported,
+unmasked JPEG photographs are recompressed, and only when smaller. Lossless image
+streams retain their original encoding, resolution and exact samples, including
+Flate line art. Fragment merging is disabled because merging mixed fragments can
+resample lossless inputs. Masked JPEGs and unsupported image formats stay unchanged.
+This can produce larger copies than Screen, or no beneficial reduction at all.
+
+The UI asks before starting and remembers only the last confirmed quality. The
+existing worker, progress, cancellation and reduced-copy save rules are reused.
+`doc_reduce quality=screen|print` exposes the same choices; omitting it preserves
+the CLI default. Standard, Mobile and the advanced dialog are unchanged.
+
+There is no output-size estimate. “Keep image quality” is deferred to the independent
+lossless-profile work in PR #1282; Print itself is **not** a lossless document mode.
+Generated fixture coverage is in `tests/optimize.rs` (`reduce_quality_baseline`,
+`print_preserves_line_art_pixels_and_document_structure`, `print_threshold_and_masked_jpegs`).

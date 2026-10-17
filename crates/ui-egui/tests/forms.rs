@@ -1008,3 +1008,31 @@ fn auto_size_fields_shrink_and_wrap_typed_text_to_fit_their_box() {
     // An explicit size is kept, as in Acrobat: the text may then run past the box.
     assert_eq!(on_screen_fit(&h, "fixed", long).0, 10.0);
 }
+
+#[test]
+fn reduce_chooser_preserves_form_typing_and_commits_on_confirmation() {
+    use egui_kittest::kittest::Queryable;
+    let dir = scratch("reduce-quality");
+    let mut h = harness();
+    h.state_mut().run_inline = true;
+    h.state_mut().save_override = Some(dir.join("reduced.pdf").to_string_lossy().into_owned());
+    click_field(&mut h, "name", 0);
+    h.event(egui::Event::Text("Reduced value".into()));
+    h.run_steps(2);
+    assert!(h.state_mut().execute("optimize.reduce"));
+    h.run_steps(2);
+    assert_eq!(h.state().dialog, Some(pdfcraft_ui_egui::Dialog::ReduceQuality));
+    assert!(h.state().optimize_run.is_none());
+    h.get_by_label("Cancel").click();
+    h.run_steps(2);
+    // Opening the modal may commit focus through the normal form editor, but cancellation
+    // must never discard the typed value or start an optimizer.
+    let focus = &h.state().views[0].forms.focus;
+    assert!(value(&h, "name") == ["Reduced value"] || focus.as_ref().is_some_and(|f| f.text == "Reduced value"));
+    assert!(h.state_mut().execute("optimize.reduce"));
+    h.run_steps(2);
+    h.get_by_label("Reduce").click();
+    h.run_steps(2);
+    assert_eq!(value(&h, "name"), ["Reduced value"]);
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -2433,3 +2433,10 @@ animation effects	Off	Aus
 	Make properties default	Eigenschaften als Standard festlegen
 	Pages selected	Ausgewählte Seiten
 	Page properties	Seiteneigenschaften
+
+# Reduce File Size quality choices (contributor-original).
+	Screen / email	Bildschirm / E-Mail
+	Reduce	Verkleinern
+	Smaller files for screens and email. Images above 225 ppi are reduced to 150 ppi, JPEG quality 60; line art may lose detail.	Kleinere Dateien für Bildschirme und E-Mails. Bilder über 225 ppi werden auf 150 ppi reduziert, JPEG-Qualität 60; Strichzeichnungen können Details verlieren.
+	Higher quality, usually larger files. JPEG photos above 450 ppi are reduced to 300 ppi, quality 85. Lossless graphics and masked images keep their pixels.	Höhere Qualität, meist größere Dateien. JPEG-Fotos über 450 ppi werden auf 300 ppi reduziert, Qualität 85. Verlustfreie Grafiken und maskierte Bilder behalten ihre Pixel.
+	Higher image quality trades off against smaller file size. A copy is saved only if it is smaller.	Höhere Bildqualität bedeutet größere Dateien. Eine Kopie wird nur gespeichert, wenn sie kleiner ist.

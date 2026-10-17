@@ -105,6 +105,14 @@ fn reduce(name: &'static str, bytes: Vec<u8>, out: &std::path::Path) -> egui_kit
     });
     h.run_steps(2);
     assert!(h.state_mut().execute("optimize.reduce"));
+    h.run_steps(2);
+    assert_eq!(h.state().dialog, Some(pdfcraft_ui_egui::Dialog::ReduceQuality));
+    assert!(h.state().optimize_run.is_none());
+    {
+        use egui_kittest::kittest::Queryable;
+        h.get_by_label("Reduce").click();
+    }
+    h.run_steps(2);
     // It runs on a worker thread like the PDF Optimizer, with the progress card meanwhile.
     let start = std::time::Instant::now();
     while h.state().optimize_run.is_some() && start.elapsed() < std::time::Duration::from_secs(30) {
@@ -358,4 +366,66 @@ fn multiple_files_past_a_thousand_are_all_used() {
     assert_eq!(app.views.len(), 1);
     let doc = app.session.get(app.views[0].id).unwrap();
     assert_eq!(doc.info.pages.len(), 1001, "every picked file is used, in order");
+}
+
+#[test]
+fn reduce_chooser_cancel_and_confirmed_quality_survive_restart() {
+    use egui_kittest::{Harness, kittest::Queryable};
+    use pdfcraft_engine::optimize::ReduceQuality;
+    use pdfcraft_ui_egui::Dialog;
+    let dir = ReduceDir::new();
+    let out = dir.0.join("cancel.pdf");
+    let path = out.clone();
+    let mut h = Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.run_inline = true;
+        app.open_bytes("notes.txt", None, b"Searchable notes".to_vec()).unwrap();
+        app.save_override = Some(path.to_string_lossy().into_owned());
+        app
+    });
+    h.run_steps(2);
+    let original = h.state().session.docs()[0].bytes.clone();
+    assert!(h.state_mut().execute("optimize.reduce"));
+    h.run_steps(2);
+    assert_eq!(h.state().dialog, Some(Dialog::ReduceQuality));
+    assert_eq!(h.state().reduce_quality_draft, ReduceQuality::Screen);
+    assert!(h.state().optimize_run.is_none());
+    h.get_by_label("Print").click();
+    h.run_steps(2);
+    h.get_by_label_contains("JPEG photos above 450 ppi");
+    assert_eq!(h.state().reduce_quality_draft, ReduceQuality::Print);
+    let mut restarted = PdfCraftApp::new();
+    restarted.restore(&h.state().persist());
+    assert_eq!(restarted.reduce_quality, ReduceQuality::Screen, "unconfirmed draft isn't saved");
+    h.get_by_label("Cancel").click();
+    h.run_steps(2);
+    assert!(h.state().dialog.is_none() && h.state().optimize_run.is_none());
+    assert!(!out.exists());
+    assert_eq!(h.state().session.docs()[0].bytes, original);
+
+    assert!(h.state_mut().execute("optimize.reduce"));
+    h.run_steps(2);
+    assert_eq!(h.state().reduce_quality_draft, ReduceQuality::Screen);
+    h.get_by_label("Print").click();
+    h.run_steps(2);
+    if let Ok(path) = std::env::var("PDFCRAFT_REDUCE_QUALITY_SHOT") {
+        h.render().unwrap().save(path).unwrap();
+    }
+    h.get_by_label("Reduce").click();
+    h.run_steps(3);
+    assert_eq!(h.state().reduce_quality, ReduceQuality::Print);
+    assert_eq!(h.state().session.docs()[0].bytes, original, "optimization uses a snapshot");
+    restarted.restore(&h.state().persist());
+    assert_eq!(restarted.reduce_quality, ReduceQuality::Print);
+    restarted.open_bytes("notes.txt", None, b"notes".to_vec()).unwrap();
+    assert!(restarted.execute("optimize.reduce"));
+    assert_eq!(restarted.reduce_quality_draft, ReduceQuality::Print);
+    for json in ["{}", r#"{"reduce_quality":"unknown"}"#, r#"{"reduce_quality":123}"#, r#"{"reduce_quality":null}"#] {
+        restarted.restore(json);
+        assert_eq!(restarted.reduce_quality, ReduceQuality::Screen);
+    }
+    let mut fresh = PdfCraftApp::new();
+    fresh.restore("invalid JSON");
+    assert_eq!(fresh.reduce_quality, ReduceQuality::Screen);
 }

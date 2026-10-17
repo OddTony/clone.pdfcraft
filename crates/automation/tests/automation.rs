@@ -4626,6 +4626,19 @@ fn optimizing_through_tools() {
     assert!(reduced["bytes_after"].as_u64().unwrap() < reduced["bytes_before"].as_u64().unwrap());
     assert_eq!(reduced["written"], true);
     assert_eq!(std::fs::metadata(dir.join("reduced.pdf")).unwrap().len(), reduced["bytes_after"].as_u64().unwrap());
+    let print = ok(&mut a, "doc_reduce", json!({ "doc": doc, "path": "print.pdf", "quality": "print" }));
+    assert_eq!(print["written"], true);
+    let printed = pdfcraft_cos::Document::open(std::sync::Arc::new(std::fs::read(dir.join("print.pdf")).unwrap())).unwrap();
+    let dimensions: Vec<_> = printed
+        .object_numbers()
+        .into_iter()
+        .filter_map(|number| {
+            let obj = printed.try_get(number).ok()?;
+            let pdfcraft_cos::Object::Stream(s) = &*obj else { return None };
+            (s.dict.name(b"Subtype") == Some(b"Image")).then(|| (s.dict.int(b"Width"), s.dict.int(b"Height")))
+        })
+        .collect();
+    assert_eq!(dimensions, [(Some(1200), Some(800))], "600 ppi photo becomes 300 ppi through the tool");
     assert!(matches!(
         a.call("doc_optimize", &json!({ "doc": doc, "path": "x.pdf", "color": { "compression": "gif" } })),
         Err(ToolError::InvalidArgs(_))
@@ -6494,4 +6507,29 @@ fn a_root_less_write_output_is_atomic_too() {
     let e = free.write_output(&dir.join("new").to_string_lossy(), &[4]).unwrap_err();
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn reduce_quality_is_optional_and_validated_through_tools() {
+    let dir = workdir("reduce-quality");
+    std::fs::write(dir.join("source.pdf"), fixture(2)).unwrap();
+    let original = std::fs::read(dir.join("source.pdf")).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "source.pdf" }))["doc"].as_u64().unwrap();
+    for quality in ["screen", "print"] {
+        let r = ok(&mut a, "doc_reduce", json!({ "doc": doc, "path": format!("{quality}.pdf"), "quality": quality }));
+        if r["written"] == true {
+            let reopened = ok(&mut a, "doc_open", json!({ "path": format!("{quality}.pdf") }))["doc"].as_u64().unwrap();
+            assert_eq!(page_text(&mut a, reopened), ["Page 1", "Page 2"]);
+        }
+        assert_eq!(std::fs::read(dir.join("source.pdf")).unwrap(), original);
+    }
+    for quality in [json!("lossless"), json!(123), json!("mobile")] {
+        assert!(matches!(a.call("doc_reduce", &json!({ "doc": doc, "path": "invalid.pdf", "quality": quality })), Err(ToolError::InvalidArgs(_))));
+        assert!(!dir.join("invalid.pdf").exists());
+    }
+    let default = ok(&mut a, "doc_reduce", json!({ "doc": doc, "path": "default.pdf" }));
+    let screen = ok(&mut a, "doc_reduce", json!({ "doc": doc, "path": "screen-again.pdf", "quality": "screen" }));
+    assert_eq!(default["bytes_after"], screen["bytes_after"]);
+    assert_eq!(page_text(&mut a, doc), ["Page 1", "Page 2"]);
 }
