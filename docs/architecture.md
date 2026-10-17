@@ -1,6 +1,6 @@
 # PdfCraft architecture
 
-> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (native form detection crate at L4) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** minor (optional form model installation and native desktop worker) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 How PdfCraft is built today. The design rationale and the planned crates live in
 `plan/architecture.md` and `plan/adr/` (local-only); this file describes what is on `main`. Each
@@ -112,3 +112,4 @@ built by `.github/workflows/release.yml` ([releasing.md](releasing.md)).
 |---|---|---|
 | 2026-10-10 | major | Created from the code on main (crate list, `xtask/src/layers.rs`, crate READMEs, `vendor/README.md`) |
 | 2026-10-17 | minor | Native FFDetr image inference at L4; engine jobs and explicit-model automation integration. |
+| 2026-10-17 | minor | Optional first-use FFDetr download, bounded verified storage and desktop worker; model distribution is separate from installers. |

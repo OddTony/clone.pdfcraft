@@ -911,10 +911,66 @@ impl Automation {
         Ok(json!({ "comments": n }))
     }
 
+    pub(crate) fn form_detection_status(&self, a: &Args) -> Result<Value> {
+        use pdfcraft_engine::form_detection::{MODEL_FILE, model};
+        let directory = self.form_model_directory(a, false)?;
+        Ok(json!({"available": model::available(&directory).map_err(failed)?, "path": directory.join(MODEL_FILE),
+            "download_url": model::DOWNLOAD_URL, "download_bytes": model::MODEL_BYTES}))
+    }
+
+    fn form_model_directory(&self, a: &Args, install: bool) -> Result<std::path::PathBuf> {
+        use crate::file_access::Access;
+        use pdfcraft_engine::form_detection::{MODEL_FILE, model};
+        let directory = match a.opt_str("directory")? {
+            Some(path) => std::path::PathBuf::from(path),
+            None => model::directory().map_err(failed)?,
+        };
+        let shown = directory.to_string_lossy();
+        let directory = self.resolve_for(&shown, Access::Read, true)?;
+        if install {
+            self.resolve(&shown, true)?;
+        }
+        // Check the nested files too: an installed file may be a link outside the read root.
+        for name in [MODEL_FILE, "LICENSE-APACHE", "ATTRIBUTION.txt"] {
+            let path = directory.join(name);
+            self.resolve_for(&path.to_string_lossy(), Access::Read, true)?;
+            if install {
+                self.resolve(&path.to_string_lossy(), true)?;
+            }
+        }
+        Ok(directory)
+    }
+
+    pub(crate) fn form_detection_install(&self, a: &Args) -> Result<Value> {
+        if a.opt_bool("confirm_download")? != Some(true) {
+            return Err(ToolError::InvalidArgs("confirm_download must be true to download the 121 MB form detection model from GitHub".into()));
+        }
+        let directory = self.form_model_directory(a, true)?;
+        let path =
+            pdfcraft_engine::guard(|| pdfcraft_engine::form_detection::model::install(&directory, |_, _| true)).map_err(failed)?.map_err(failed)?;
+        Ok(json!({"available":true, "path":path}))
+    }
+
     pub(crate) fn form_detect_fields(&mut self, a: &Args) -> Result<Value> {
         let pages = if a.opt_ints("pages")?.is_some() { self.pages(a, "pages")? } else { Vec::new() };
         let id = self.doc(a)?.id;
-        if let Some(path) = a.opt_str("model")? {
+        let backend = a.opt_str("backend")?.unwrap_or("geometry");
+        if !["geometry", "ffdetr"].contains(&backend) {
+            return Err(ToolError::InvalidArgs("backend must be geometry or ffdetr".into()));
+        }
+        let model = a.opt_str("model")?.map(str::to_string);
+        let model = if model.is_none() && backend == "ffdetr" {
+            let directory = self.form_model_directory(a, false)?;
+            if !pdfcraft_engine::form_detection::model::available(&directory).map_err(failed)? {
+                return Err(failed(
+                    "form detection is not installed or failed verification; use form_detection_status and form_detection_install with confirm_download:true",
+                ));
+            }
+            Some(directory.join(pdfcraft_engine::form_detection::MODEL_FILE).to_string_lossy().into_owned())
+        } else {
+            model
+        };
+        if let Some(path) = model.as_deref() {
             let confidence = a.opt_num("confidence")?.unwrap_or(0.3);
             if !confidence.is_finite() || !(0.0..=1.0).contains(&confidence) {
                 return Err(ToolError::InvalidArgs("confidence must be a finite number between 0 and 1".into()));
