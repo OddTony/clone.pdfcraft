@@ -2474,6 +2474,54 @@ fn editing_existing_text_through_tools() {
     assert_eq!(p["lines"].as_array().map(Vec::len), Some(2), "{p}");
 }
 
+#[test]
+fn a_wrapped_paragraph_is_listed_as_flowing_text_and_rewraps_when_edited() {
+    let dir = workdir("flowing-text");
+    let rows = [
+        "Paragraphs in a PDF are drawn one row at a",
+        "time, so an editor has to work out which row",
+        "breaks only wrapped the text and which ones",
+        "end a paragraph.",
+    ];
+    let shown: String = rows.iter().enumerate().map(|(i, row)| format!(" 1 0 0 1 72 {} Tm ({row}) Tj", 700 - 14 * i)).collect();
+    let content = format!("BT /F1 12 Tf{shown} ET");
+    let objs: Vec<String> = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".into(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".into(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into(),
+    ];
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    std::fs::write(dir.join("wrapped.pdf"), out).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "wrapped.pdf" }))["doc"].as_u64().unwrap();
+    let p = ok(&mut a, "text_paragraphs", json!({ "doc": doc, "page": 1 }))["paragraphs"][0].clone();
+    assert_eq!(p["editor_text"], rows.join("\n"));
+    assert_eq!(p["flowing_text"], rows.join(" "));
+    // Words added in the first row flow on through the rows below instead of leaving a short row.
+    let edited = p["flowing_text"].as_str().unwrap().replacen("drawn", "drawn and redrawn", 1);
+    ok(&mut a, "text_edit", json!({ "doc": doc, "page": 1, "paragraph": 1, "text": edited }));
+    let p = &ok(&mut a, "text_paragraphs", json!({ "doc": doc, "page": 1 }))["paragraphs"][0];
+    assert_eq!(p["flowing_text"], edited);
+    assert_eq!(p["lines"].as_array().map(Vec::len), Some(4), "{p}");
+    // The rows are the edited text wrapped again: the first row now ends earlier in the sentence.
+    let editor_rows: Vec<&str> = p["editor_text"].as_str().unwrap().split('\n').collect();
+    assert_eq!(editor_rows.join(" "), edited);
+    assert!(editor_rows[0].starts_with("Paragraphs in a PDF are drawn and redrawn") && !editor_rows[1].starts_with("time,"), "{p}");
+}
+
 /// One page whose content is one stream in three pieces (#155): a `TJ` array ends the middle
 /// piece and its operator starts the last one.
 fn split_streams_pdf() -> Vec<u8> {

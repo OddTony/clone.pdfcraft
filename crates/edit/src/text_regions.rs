@@ -118,6 +118,7 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
             blocks.push(TextBlock {
                 text: String::new(),
                 editor_text: String::new(),
+                soft_breaks: Vec::new(),
                 spans: Vec::new(),
                 rect,
                 base_font: first.base_font.clone(),
@@ -165,7 +166,89 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
         block.rect = union(block.rect, rect);
         block.rows.push(row);
     }
+    for block in &mut blocks {
+        block.soft_breaks = soft_breaks(block, lines);
+    }
     blocks
+}
+
+/// Writing without spaces between words (Chinese, Japanese, Korean), where a row may end after
+/// any character.
+fn unspaced(c: char) -> bool {
+    matches!(u32::from(c), 0x3040..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xAC00..=0xD7AF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF)
+}
+
+/// Whether a row starts a list item: a bullet, or a number or letter in `1.`, `1)` or `(a)` form.
+fn list_item(row: &str) -> bool {
+    let mut chars = row.chars();
+    let Some(first) = chars.next() else { return false };
+    if "•◦▪▫‣⁃–—-*·●○■□".contains(first) {
+        return chars.next().is_some_and(char::is_whitespace);
+    }
+    let label = row.trim_start_matches('(');
+    let digits = label.chars().take_while(char::is_ascii_digit).count();
+    let letters = if digits == 0 { label.chars().take_while(char::is_ascii_alphabetic).count() } else { 0 };
+    let (len, closing) = if digits > 0 { (digits, ".)") } else { (letters, ")") };
+    (1..=3).contains(&len) && (digits > 0 || len == 1) && {
+        let mut rest = label.chars().skip(len);
+        rest.next().is_some_and(|c| closing.contains(c)) && rest.next().is_some_and(char::is_whitespace)
+    }
+}
+
+/// The breaks in `block.editor_text` that only wrap its paragraph ([`TextBlock::soft_breaks`]): the
+/// row before had no room for the next row's first word. A break stays when the row before could
+/// have taken that word, the next row is indented or starts a list item, more than the
+/// paragraph's leading separates them, or the row before ends with a hyphen (whether a rewrapped
+/// word keeps it can't be told from the page).
+fn soft_breaks(block: &TextBlock, lines: &[TextLine]) -> Vec<usize> {
+    let breaks: Vec<usize> = block.editor_text.match_indices('\n').map(|(i, _)| i).collect();
+    let texts: Vec<&str> = block.editor_text.split('\n').collect();
+    let rects: Vec<[f64; 4]> = block.rows.iter().filter_map(|r| row_rect(r, lines)).collect();
+    let firsts: Vec<&TextLine> = block.rows.iter().filter_map(|r| r.first().and_then(|i| lines.get(*i))).collect();
+    if block.invisible || breaks.is_empty() || [texts.len(), rects.len(), firsts.len()].iter().any(|n| *n != block.rows.len()) {
+        return Vec::new();
+    }
+    let mut steps: Vec<f64> = firsts.windows(2).map(|w| (w[0].origin.baseline - w[1].origin.baseline).abs()).collect();
+    steps.sort_by(f64::total_cmp);
+    let leading = steps.get(steps.len() / 2).copied().unwrap_or(0.0);
+    let width = block.rect[2] - block.rect[0];
+    let mut soft = Vec::new();
+    for (k, at) in breaks.iter().enumerate() {
+        let (Some(prev), Some(next), Some(before), Some(after), Some(a), Some(b)) =
+            (rects.get(k), rects.get(k + 1), texts.get(k), texts.get(k + 1), firsts.get(k), firsts.get(k + 1))
+        else {
+            continue;
+        };
+        let size = a.size.max(b.size).max(1.0);
+        let (before, after) = (before.trim_end(), after.trim_start());
+        if before.is_empty() || after.is_empty() || before.ends_with(['-', '\u{00AD}', '\u{2010}']) || list_item(after) {
+            continue;
+        }
+        if (a.origin.baseline - b.origin.baseline).abs() > leading * 1.25 + size * 0.05 {
+            continue;
+        }
+        let flush = |r: &[f64; 4]| (r[0] - block.rect[0]).abs() < size * 0.5;
+        if flush(prev) && next[0] - block.rect[0] > size * 0.8 {
+            continue;
+        }
+        // The room left on the row before: on the right of left-aligned or justified text, on
+        // the left of right-aligned text, and at most the right margin when the row is indented.
+        let free = if flush(prev) {
+            block.rect[2] - prev[2]
+        } else if (block.rect[2] - prev[2]).abs() < size * 0.5 {
+            prev[0] - block.rect[0]
+        } else {
+            (block.rect[2] - prev[2]).min(width - (prev[2] - prev[0]))
+        };
+        // The next row's first word, measured as its share of the first run's width.
+        let word = if after.starts_with(unspaced) { 1 } else { after.chars().take_while(|c| !c.is_whitespace() && !unspaced(*c)).count() };
+        let run = b.text.trim_start().chars().count().max(1);
+        let word_width = (b.rect[2] - b.rect[0]) * word.min(run) as f64 / run as f64;
+        if free < word_width + size * 0.55 {
+            soft.push(*at);
+        }
+    }
+    soft
 }
 
 /// Shape in the source or an explicitly registered matching full face. Never use interface fonts.
@@ -199,13 +282,11 @@ fn shape_source(
     Err(EditError::Invalid("complex text needs the complete source TrueType/OpenType face; load that font before editing".into()))
 }
 
-/// For each output row (a range of the draft's characters), whether it is exactly the source row
-/// at the same position: the same characters, none of them inserted or changed by the edit.
-fn untouched_rows(block: &TextBlock, draft: &str, rows: &[std::ops::Range<usize>]) -> Vec<bool> {
-    let old: Vec<char> = block.editor_text.chars().collect();
-    let new: Vec<char> = draft.chars().collect();
-    let prefix = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
-    let suffix = old.iter().rev().zip(new.iter().rev()).take(old.len().min(new.len()).saturating_sub(prefix)).take_while(|(a, b)| a == b).count();
+/// How each output row (a range of the draft's characters) relates to the source rows: whether it
+/// is exactly the source row at the same position (the same characters, none inserted or changed
+/// by the edit), and which source row, if any, it begins at.
+fn row_sources(block: &TextBlock, draft: &str, rows: &[std::ops::Range<usize>]) -> Vec<(bool, Option<usize>)> {
+    let (old, new, prefix, suffix) = block.common_ends(draft);
     // The source character a draft character is, if the edit left it alone.
     let origin = |i: usize| {
         if i < prefix {
@@ -227,14 +308,16 @@ fn untouched_rows(block: &TextBlock, draft: &str, rows: &[std::ops::Range<usize>
     source_rows.push(start..old.len());
     // A line break inside a source run would pair editor rows with the wrong visual rows.
     if source_rows.len() != block.rows.len() {
-        return vec![false; rows.len()];
+        return vec![(false, None); rows.len()];
     }
     rows.iter()
         .enumerate()
         .map(|(r, range)| {
-            source_rows.get(r).is_some_and(|source| {
+            let same = source_rows.get(r).is_some_and(|source| {
                 !range.is_empty() && range.len() == source.len() && range.clone().zip(source.clone()).all(|(i, j)| origin(i) == Some(j))
-            })
+            });
+            let begins = origin(range.start).and_then(|j| source_rows.iter().position(|source| source.start == j && !source.is_empty()));
+            (same, begins)
         })
         .collect()
 }
@@ -257,7 +340,7 @@ pub(super) fn rewrite_styled_block(
     if draft.len() > 4_000_000 {
         return Err(EditError::Invalid("the replacement text is too large".into()));
     }
-    if draft == block.editor_text && *style == BlockStyle::default() {
+    if block.unchanged(draft) && *style == BlockStyle::default() {
         return Ok(LineEdit { substituted: None });
     }
     let mut ranges: Vec<_> = style.ranges.iter().collect();
@@ -611,9 +694,10 @@ pub(super) fn rewrite_styled_block(
     let ops = pieces.parse().ops;
     // A row the edit doesn't reach keeps its source operators, so its kerning, TJ word gaps and
     // glyph widths stay exactly as they were instead of being rebuilt from the text state.
+    let sources = row_sources(block, draft, &row_ranges);
     let plain = BlockStyle { ranges: Vec::new(), ..style.clone() } == BlockStyle::default();
     let mut kept = if plain {
-        untouched_rows(block, draft, &row_ranges).into_iter().zip(&rows).map(|(same, row)| same && row.iter().all(|c| c.1 < source_count)).collect()
+        sources.iter().zip(&rows).map(|((same, _), row)| *same && row.iter().all(|c| c.1 < source_count)).collect()
     } else {
         vec![false; rows.len()]
     };
@@ -707,7 +791,10 @@ pub(super) fn rewrite_styled_block(
         }
         let w = measured.get(row_index).copied().unwrap_or(0.0);
         let align = style.align.unwrap_or(if centered { crate::added::Align::Center } else { crate::added::Align::Left });
-        let original_rect = block.rows.get(row_index).and_then(|row| row_rect(row, lines)).unwrap_or(block.rect);
+        // A row that begins where a source row began (after a line break the text keeps) stays
+        // where that row was, even when rows before it rewrapped into more or fewer rows.
+        let source_row = sources.get(row_index).and_then(|(_, begins)| *begins).unwrap_or(row_index);
+        let original_rect = block.rows.get(source_row).and_then(|row| row_rect(row, lines)).unwrap_or(block.rect);
         let left = if style.width.is_none() && style.align.is_none() { original_rect[0] } else { block.rect[0] };
         let available = if style.width.is_none() && style.align.is_none() { original_rect[2] - original_rect[0] } else { width };
         let mut x = left
