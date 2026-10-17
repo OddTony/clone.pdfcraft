@@ -546,6 +546,16 @@ pub fn tools() -> Vec<ToolDef> {
             json!({ "doc": doc(), "page": { "type": "integer", "minimum": 1 }, "path": { "type": "string" }, "rect": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 } }),
             &["doc", "page", "path"],
         )),
+        t(
+            "page_add_qr",
+            "Generate and add a QR code to a page",
+            "Generate a QR code encoding text or URL and place it as content on a page: in rect (points from the top-left of the page), or centred at its natural size. Undoable; movable with content_update.",
+        )
+        .cmd("edit.qr")
+        .with(schema(
+            json!({ "doc": doc(), "page": { "type": "integer", "minimum": 1 }, "text": { "type": "string" }, "rect": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 } }),
+            &["doc", "page", "text"],
+        )),
         t("content_update", "Edit added content", "Move/resize (rect), retype (text) or restyle (font, size, bold, italic, color, align) an added item (page, index from content_list). Images: rotate (degrees, multiple of 90, counter-clockwise), flip_h / flip_v (toggle), crop [left, bottom, right, top] as fractions trimmed, image (a file that replaces the picture). Undoable.")
             .with(schema(
                 json!({

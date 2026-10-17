@@ -533,6 +533,10 @@ pub struct DocView {
     pub marquee_done: Option<crate::zoom_snap::Marquee>,
     /// Fill & Sign text being typed.
     pub fill_text: Option<crate::fill_sign::TypeBox>,
+    /// Interactive canvas element selection state.
+    pub canvas_selection: crate::canvas_selection::SelectionState,
+    /// Barcode and QR code scanner HUD state.
+    pub barcode_hud: crate::barcode_hud::BarcodeHudState,
     /// A queued Fill & Sign signature: select it after its edit succeeds, then leave placement.
     pub(crate) fill_signature_page: Option<usize>,
     pub(crate) signature_drag: crate::signature_drag::SignatureDrag,
@@ -789,6 +793,8 @@ impl DocView {
             marquee: None,
             marquee_done: None,
             fill_text: None,
+            canvas_selection: Default::default(),
+            barcode_hud: Default::default(),
             fill_signature_page: None,
             signature_drag: Default::default(),
         }
@@ -2212,8 +2218,28 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
             view.pending_action = Some(ViewAction::CancelCamera);
         } else if view.selection.is_some() {
             view.selection = None;
+        } else if view.canvas_selection.has_selection() {
+            view.canvas_selection.clear();
         } else {
             view.find = None;
+        }
+    }
+    // Delete-key removal for selected canvas elements when no inline text editor is typing
+    if (key(Key::Delete) || key(Key::Backspace))
+        && view.line_editor.is_none()
+        && view.canvas_selection.has_selection()
+    {
+        if let Some(edit) = crate::canvas_selection::SelectionLayoutEngine::handle_delete_key(&mut view.canvas_selection) {
+            view.pending_edit = Some(edit);
+        }
+    }
+    // Enter key activates inline text editing on active canvas selection
+    if key(Key::Enter) && view.canvas_selection.has_selection() && view.line_editor.is_none() {
+        if let Some(sel) = &view.canvas_selection.selected {
+            if matches!(sel.kind, crate::canvas_selection::SelectableKind::TextLine | crate::canvas_selection::SelectableKind::TextBlock) {
+                view.pending_text_open = Some((sel.page, sel.index));
+                view.canvas_selection.clear();
+            }
         }
     }
     if key(Key::Home) {
@@ -2232,35 +2258,39 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
     if key(Key::ArrowLeft) || (key(Key::PageUp) && (command || !scrolls)) {
         view.step_page(false);
     }
-    // ↓ / ↑ scroll a line, and Page Down / Page Up a screen where the pages scroll. In
-    // single-page view, ↓ / ↑ turn the page once there is nothing left to scroll that way, as
-    // the wheel does (#273): always on a page that fits.
-    // The Scroll speed preference sets how far ↓ / ↑ go as well as the wheel (#985); Page Down /
-    // Page Up keep a screen.
+    // ↓ / ↑ scroll or step pages intelligently based on current zoom and fit conditions.
     if !command {
-        let line = KEY_SCROLL_LINE * speed.factor();
-        let screen = (view.viewport_h - KEY_SCROLL_LINE).max(KEY_SCROLL_LINE);
-        let steps = [(Key::ArrowDown, line), (Key::ArrowUp, -line), (Key::PageDown, screen), (Key::PageUp, -screen)];
-        for (k, by) in steps {
-            let arrow = matches!(k, Key::ArrowDown | Key::ArrowUp);
-            if !key(k) || !(scrolls || arrow) {
+        for k in [Key::ArrowDown, Key::ArrowUp, Key::PageDown, Key::PageUp] {
+            if !key(k) {
                 continue;
             }
-            let forward = k == Key::ArrowDown;
-            // Only an up-to-date view counts: the page drawn is the current one, with no jump pending.
-            let at_end = !scrolls
-                && view.goto.is_none()
-                && view.single_edges.is_some_and(|(page, top, bottom)| page == view.current && if forward { bottom } else { top });
-            if at_end {
-                let before = view.current;
-                view.step_page(forward);
-                if !forward && view.current != before {
-                    // Going back up lands on the bottom of the previous page.
-                    view.goto = Some((view.current, 1.0));
+            let nav_action = crate::canvas_selection::ZoomNavigationEngine::evaluate_navigation_step(
+                k,
+                view.fit,
+                view.continuous,
+                view.zoom,
+                view.single_edges,
+                view.current,
+                speed.factor(),
+                view.viewport_h,
+            );
+            match nav_action {
+                crate::canvas_selection::ZoomNavAction::StepPage { forward, target_fraction } => {
+                    let before = view.current;
+                    view.step_page(forward);
+                    if !forward && view.current != before && target_fraction > 0.0 {
+                        view.goto = Some((view.current, target_fraction));
+                    }
+                    view.single_edges = None;
                 }
-                view.single_edges = None;
-            } else {
-                view.key_scroll += by;
+                crate::canvas_selection::ZoomNavAction::ScrollLine { delta_points } => {
+                    view.key_scroll += delta_points;
+                }
+                crate::canvas_selection::ZoomNavAction::ScrollScreen { forward } => {
+                    let screen = (view.viewport_h - KEY_SCROLL_LINE).max(KEY_SCROLL_LINE);
+                    view.key_scroll += if forward { screen } else { -screen };
+                }
+                crate::canvas_selection::ZoomNavAction::None => {}
             }
         }
     }
@@ -3099,11 +3129,50 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 view.links.context = Some((i, l.index));
             }
             let consumed = on_objects || on_edit_text || on_link || on_content || boxing || on_field || comments::page_input(ui, &resp, &pcx, view);
+            if tool == QuickTool::Select && !consumed && let Some(p) = pointer.filter(|p| xf.rect.contains(*p)) {
+                let shift = ui.input(|inp| inp.modifiers.shift);
+                if resp.double_clicked() {
+                    if let Some((idx, _block)) = lines.iter().enumerate().rev().find(|(_, b)| {
+                        xf.user_rect(info, i, b.rect.map(|v| v as f32)).expand(3.0).contains(p)
+                    }) {
+                        view.pending_text_open = Some((i, idx));
+                        view.canvas_selection.clear();
+                    }
+                } else if resp.clicked() || resp.secondary_clicked() {
+                    if let Some((idx, block)) = lines.iter().enumerate().rev().find(|(_, b)| {
+                        xf.user_rect(info, i, b.rect.map(|v| v as f32)).expand(3.0).contains(p)
+                    }) {
+                        let el = crate::canvas_selection::SelectableElement::new_block(
+                            i,
+                            idx,
+                            block.rect,
+                            block.editor_text.clone(),
+                        );
+                        view.canvas_selection.select_element(el, shift);
+                    } else if !shift && view.canvas_selection.selected.as_ref().is_some_and(|s| s.page == i) {
+                        view.canvas_selection.clear();
+                    }
+                } else if !view.canvas_selection.has_selection() {
+                    if let Some((idx, block)) = lines.iter().enumerate().rev().find(|(_, b)| {
+                        xf.user_rect(info, i, b.rect.map(|v| v as f32)).expand(3.0).contains(p)
+                    }) {
+                        view.canvas_selection.hovered = Some(crate::canvas_selection::SelectableElement::new_block(
+                            i,
+                            idx,
+                            block.rect,
+                            block.editor_text.clone(),
+                        ));
+                    } else if view.canvas_selection.hovered.as_ref().is_some_and(|h| h.page == i) {
+                        view.canvas_selection.hovered = None;
+                    }
+                }
+            }
 
             let preview_target =
                 (matches!(tool, QuickTool::Select | QuickTool::Fill(_)) && !comments_hidden).then_some(view.comments.selected).flatten();
             view.signature_drag.prepare(ui.ctx(), doc, preview_target, scale);
             view.signature_drag.paint(painter, &pcx, &view.comments, view.pending_edit.as_ref());
+            crate::canvas_selection::SelectionLayoutEngine::paint_selection_overlay(&painter, &xf, info, &view.canvas_selection);
 
             // Text layer: find matches, selection, I-beam and drag-to-select.
             let to_screen = |g: [f32; 4]| xf.view_rect(g);
@@ -3733,6 +3802,235 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if typed.is_some() {
         view.pending_edit = typed;
     }
+    let floating_action = crate::canvas_selection::FloatingContextMenu::show(ui, avail, view, info, can_modify, can_copy);
+    if let Some(act) = floating_action {
+        match act {
+            crate::canvas_selection::FloatingMenuAction::Cut => {
+                if let Some(sel) = &view.canvas_selection.selected {
+                    if let Some(text) = &sel.text {
+                        ui.ctx().copy_text(text.clone());
+                    }
+                }
+                if let Some(edit) = crate::canvas_selection::SelectionLayoutEngine::handle_delete_key(&mut view.canvas_selection) {
+                    view.pending_edit = Some(edit);
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::Copy => {
+                if let Some(sel) = &view.canvas_selection.selected {
+                    if let Some(text) = &sel.text {
+                        ui.ctx().copy_text(text.clone());
+                    }
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::Paste => {
+                let clip_text = arboard::Clipboard::new().ok().and_then(|mut c| c.get_text().ok());
+                if let Some(text) = clip_text {
+                    if let Some(sel) = &view.canvas_selection.selected {
+                        if sel.kind == crate::canvas_selection::SelectableKind::TextBlock {
+                            view.pending_edit = Some(Edit::EditTextBlock {
+                                page: sel.page,
+                                block: sel.index,
+                                text,
+                                style: Default::default(),
+                            });
+                        } else if sel.kind == crate::canvas_selection::SelectableKind::TextLine {
+                            view.pending_edit = Some(Edit::EditTextLine {
+                                page: sel.page,
+                                line: sel.index,
+                                text,
+                            });
+                        }
+                    }
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::FormatPainter => {
+                if let Some(sel) = &view.canvas_selection.selected {
+                    if let Some(captured) = &view.canvas_selection.format_painter {
+                        // Apply captured formatting to selected block
+                        if sel.kind == crate::canvas_selection::SelectableKind::TextBlock {
+                            let block_text = sel.text.clone().unwrap_or_default();
+                            view.pending_edit = Some(Edit::EditTextBlock {
+                                page: sel.page,
+                                block: sel.index,
+                                text: block_text,
+                                style: pdfcraft_engine::BlockStyle {
+                                    size: Some(captured.font_size as f64),
+                                    bold: Some(captured.is_bold),
+                                    underline: Some(captured.is_strikethrough),
+                                    line_spacing: (captured.line_spacing > 0.0).then_some(captured.line_spacing),
+                                    char_spacing: (captured.char_spacing != 0.0).then_some(captured.char_spacing),
+                                    scale: (captured.scale != 100.0).then_some(captured.scale),
+                                    ..Default::default()
+                                },
+                            });
+                        }
+                    } else {
+                        // Pick up formatting from the selected block
+                        let mut captured = crate::canvas_selection::CapturedFormat {
+                            font_family: None,
+                            font_size: 12.0,
+                            is_bold: false,
+                            is_italic: false,
+                            is_strikethrough: false,
+                            is_superscript: false,
+                            is_subscript: false,
+                            color: Color32::BLACK,
+                            line_spacing: 1.2,
+                            char_spacing: 0.0,
+                            scale: 100.0,
+                        };
+                        if let Some((_, blocks)) = view.edit_lines.get(&sel.page) {
+                            if let Some(b) = blocks.get(sel.index) {
+                                captured.font_family = Some(b.base_font.clone());
+                                captured.font_size = b.size as f32;
+                                captured.is_bold = b.bold;
+                                captured.is_italic = b.italic;
+                                captured.color = Color32::from_rgb(
+                                    (b.color[0] * 255.0) as u8,
+                                    (b.color[1] * 255.0) as u8,
+                                    (b.color[2] * 255.0) as u8,
+                                );
+                            }
+                        }
+                        view.canvas_selection.format_painter = Some(captured);
+                    }
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::ToggleBold => {
+                if let Some(sel) = &view.canvas_selection.selected {
+                    if sel.kind == crate::canvas_selection::SelectableKind::TextBlock {
+                        let cur_bold = view.edit_lines.get(&sel.page)
+                            .and_then(|(_, blocks)| blocks.get(sel.index))
+                            .map_or(false, |b| b.bold);
+                        view.pending_edit = Some(Edit::EditTextBlock {
+                            page: sel.page,
+                            block: sel.index,
+                            text: sel.text.clone().unwrap_or_default(),
+                            style: pdfcraft_engine::BlockStyle {
+                                bold: Some(!cur_bold),
+                                ..Default::default()
+                            },
+                        });
+                    }
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::ToggleItalic => {
+                if let Some(sel) = &view.canvas_selection.selected {
+                    if sel.kind == crate::canvas_selection::SelectableKind::TextBlock {
+                        let cur_italic = view.edit_lines.get(&sel.page)
+                            .and_then(|(_, blocks)| blocks.get(sel.index))
+                            .map_or(false, |b| b.italic);
+                        let family = view.edit_lines.get(&sel.page)
+                            .and_then(|(_, blocks)| blocks.get(sel.index))
+                            .map(|b| {
+                                if b.base_font.contains("Times") {
+                                    pdfcraft_engine::FontFamily::Times
+                                } else if b.base_font.contains("Courier") {
+                                    pdfcraft_engine::FontFamily::Courier
+                                } else {
+                                    pdfcraft_engine::FontFamily::Helvetica
+                                }
+                            })
+                            .unwrap_or(pdfcraft_engine::FontFamily::Helvetica);
+                        view.pending_edit = Some(Edit::EditTextBlock {
+                            page: sel.page,
+                            block: sel.index,
+                            text: sel.text.clone().unwrap_or_default(),
+                            style: pdfcraft_engine::BlockStyle {
+                                family: Some((family, false, !cur_italic)),
+                                ..Default::default()
+                            },
+                        });
+                    }
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::ToggleStrikethrough => {
+                if let Some(sel) = &view.canvas_selection.selected {
+                    let text = sel.text.clone().unwrap_or_default();
+                    let strike_char = '\u{0336}';
+                    let toggled = if text.contains(strike_char) {
+                        text.replace(strike_char, "")
+                    } else {
+                        text.chars().flat_map(|c| if c.is_whitespace() { vec![c] } else { vec![c, strike_char] }).collect()
+                    };
+                    if sel.kind == crate::canvas_selection::SelectableKind::TextBlock {
+                        view.pending_edit = Some(Edit::EditTextBlock {
+                            page: sel.page,
+                            block: sel.index,
+                            text: toggled,
+                            style: Default::default(),
+                        });
+                    } else if sel.kind == crate::canvas_selection::SelectableKind::TextLine {
+                        view.pending_edit = Some(Edit::EditTextLine {
+                            page: sel.page,
+                            line: sel.index,
+                            text: toggled,
+                        });
+                    }
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::OpenSymbolPalette => {
+                view.canvas_selection.symbol_palette_open = !view.canvas_selection.symbol_palette_open;
+            }
+            crate::canvas_selection::FloatingMenuAction::EditText => {
+                if let Some(sel) = &view.canvas_selection.selected {
+                    if matches!(sel.kind, crate::canvas_selection::SelectableKind::TextLine | crate::canvas_selection::SelectableKind::TextBlock) {
+                        view.pending_text_open = Some((sel.page, sel.index));
+                        view.canvas_selection.clear();
+                    }
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::Delete => {
+                if let Some(edit) = crate::canvas_selection::SelectionLayoutEngine::handle_delete_key(&mut view.canvas_selection) {
+                    view.pending_edit = Some(edit);
+                }
+            }
+            crate::canvas_selection::FloatingMenuAction::RecognizeOcr => {
+                if let Some(_sel) = &view.canvas_selection.selected {
+                    app.ocr_draft.pages = crate::ocr_ui::OcrPages::Current;
+                    app.ocr_draft.text_pages = true;
+                    app.dialog = Some(crate::Dialog::RecognizeText);
+                    view.canvas_selection.clear();
+                }
+            }
+        }
+    }
+
+    // Barcode & QR Code Scanner HUD
+    if let Some(hud_edit) = crate::barcode_hud::BarcodeScannerHud::show(ui, view, info, can_modify) {
+        view.pending_edit = Some(hud_edit);
+    }
+
+    // Floating Symbol Insertion Palette
+    if view.canvas_selection.symbol_palette_open {
+        let anchor = view.canvas_selection.selected.as_ref()
+            .and_then(|sel| view.page_xform(sel.page).map(|xf| sel.screen_rect(&xf, info)))
+            .map(|r| Pos2::new(r.center().x - 140.0, (r.bottom() + 10.0).min(avail.bottom() - 250.0)))
+            .unwrap_or_else(|| Pos2::new(avail.center().x - 140.0, avail.center().y - 120.0));
+
+        if let Some(sym) = crate::symbol_palette::SymbolPalette::show(ui, anchor) {
+            if let Some(ed) = &mut view.line_editor {
+                ed.text.push_str(sym);
+            } else if let Some(sel) = &view.canvas_selection.selected {
+                let new_text = format!("{}{}", sel.text.as_deref().unwrap_or(""), sym);
+                if sel.kind == crate::canvas_selection::SelectableKind::TextBlock {
+                    view.pending_edit = Some(Edit::EditTextBlock {
+                        page: sel.page,
+                        block: sel.index,
+                        text: new_text,
+                        style: Default::default(),
+                    });
+                } else if sel.kind == crate::canvas_selection::SelectableKind::TextLine {
+                    view.pending_edit = Some(Edit::EditTextLine {
+                        page: sel.page,
+                        line: sel.index,
+                        text: new_text,
+                    });
+                }
+            }
+            view.canvas_selection.symbol_palette_open = false;
+        }
+    }
     if let Some(why) = view.objects.notice.take() {
         refused = Some(why);
     }
@@ -3740,6 +4038,10 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // One crop, then back to selecting (as Acrobat does).
     let cropped = view.pending_edit.as_ref().is_some_and(|e| matches!(e, pdfcraft_engine::Edit::SetPageBox { .. }));
     let mut tool = app.quick_tool;
+    if floating_action == Some(crate::canvas_selection::FloatingMenuAction::EditText) {
+        tool = QuickTool::EditText;
+        app.quick_tool = QuickTool::EditText;
+    }
     comments::keys(ui.ctx(), view, &mut tool, allowed);
     if preparing {
         crate::prepare::keys(ui.ctx(), view);
