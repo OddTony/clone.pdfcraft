@@ -478,6 +478,26 @@ The repository issues backlog has been thoroughly audited and structured into 6 
   - Comprehensive unit tests written covering line construction, handle hit testing, delete key edit generation, and fit-page vs. zoomed-in navigation steps.
 - **Next Step**: Phase 1.2 — Floating Selection Context Menu (anchored popup for Cut/Copy/Paste/Format).
 
+### Log Entry — 2026-10-18: QR & Barcode Detection Overhaul, Sandeep PDF Studio v3 HUD Redesign & Auto-Page Tracking
+- **Action/Task**: Overhauled barcode & QR scanner detection pipeline to reliably decode 1D barcodes and QR codes from both standalone images and rendered vector page buffers; implemented reactive auto-page tracking; redesigned the floating HUD panel and anchored popups to match Sandeep PDF Studio v3 styling without altering main application toolbars.
+- **Components Built & Overhauled**:
+  - `crates/engine/src/barcode_scan.rs`:
+    - Implemented full Code 128 decoder with complete 107-character pattern table, Start A/B/C, Code C numeric pairs, Code A/B ASCII, and modulo-103 checksum verification.
+    - Implemented full Code 39 decoder with canonical 44-character 9-bit binary table, start/stop `*` delimiters, and ASCII payload parsing.
+    - Implemented dual-pass detection in `Document::scan_page_codes`:
+      - Pass 1: Scans all standalone embedded image XObjects.
+      - Pass 2: Renders the page buffer at 1.5x scale via `PageRenderer` to detect vector-rendered barcodes (the primary format for shipping labels from FedEx, UPS, USPS, Amazon, DHL), mapping pixel bounding boxes back to PDF user-space points `[min_x, min_y, max_x, max_y]`.
+    - Added multi-scanline scanning with vertical extent tracing to accurately measure barcode height and bounding geometry.
+  - `crates/ui-egui/src/barcode_hud.rs`:
+    - Redesigned floating HUD panel (`show_panel`) and anchored popup (`show`) to Sandeep PDF Studio v3 aesthetics: deep slate obsidian surfaces (`#13141A`, `#1B1D26`), electric blue borders (`#3B82F6`), subtle card containers, status badges (`● AUTO`, `v3.0`), and monospace payload containers with single-click copy and edit actions.
+    - Implemented **Reactive Auto-Page Tracking**: automatically triggers detection whenever the active page index changes (`view.barcode_hud.last_scanned_page != Some(view.current)`) upon scrolling or pressing arrow keys, updating HUD data in real time without manual clicking.
+    - Preserved 100% pixel-perfect replacement constraint and vector QR embedding.
+    - Left all main application toolbars completely untouched.
+- **Verification**:
+  - `cargo check --workspace`: 0 errors, 0 warnings.
+  - `cargo test -p pdfcraft-engine --lib -j 2`: 274 passed, 0 failed.
+  - `cargo test -p pdfcraft-ui-egui --lib -j 2`: 439 passed, 0 failed.
+
 ### Log Entry — 2026-10-18: QR/Barcode HUD UI Integration, Text Replace Bug Fix, & Arrow Navigation
 - **Action/Task**: Completed critical integration pass for QR/Barcode Scanner HUD, fixed text replacement redaction markup bug, and perfected arrow-key continuous/page navigation.
 - **Components Modified**:
@@ -524,25 +544,26 @@ The repository issues backlog has been thoroughly audited and structured into 6 
 ### Copy-Ready AI Collaborator Handoff Block
 
 ```markdown
-### PDF Craft Sync Summary — UI Wiring & Integration Bug-Fix Pass (2026-10-18)
-- **Status**: Production-grade integration completed, verified warning-free and passing unit test suites.
-- **Implemented Architecture & Fixes**:
-  1. *QR & Barcode Scanner HUD & Generator UI Wiring*:
-     - Rendered `BarcodeScannerHud::show` and `BarcodeScannerHud::show_panel` in `crates/ui-egui/src/canvas.rs` inside `document_area`.
-     - Added dedicated "QR & Barcode Tools" toggle button using the `"scan"` icon in `quick_bar`.
-     - Supports page scanning, multi-code `◀` / `▶` navigation, payload editing, clipboard copying, and 100% pixel-perfect replacement constraint.
-     - Built-in QR generator panel capable of embedding QR codes directly on canvas coordinates.
-  2. *Text Replacement Bug Fix (Stop Redaction Strike-Through)*:
-     - Resolved defect where selecting "Replace text" produced an annotation markup comment (`Edit::ReplaceText`) drawing a red strikethrough.
-     - Routed `SelectionAction::Replace` directly to inline text editing (`view.pending_text_open`) by intersecting selection quads with page `TextBlock` inventory and setting `app.quick_tool = QuickTool::EditText`.
-     - Preserves strict font metrics, line spacing, and paragraph reflow naturally with zero black backgrounds and zero red strikethroughs.
-  3. *Arrow Key Page Navigation & Repeat Event Handling*:
-     - Enhanced `shortcuts` in `canvas.rs` with `key_nav` to capture OS repeat events (`Event::Key { pressed: true, .. }`).
-     - Holding down Up/Down arrow keys smoothly scrolls the viewport or flips pages according to active zoom and page fit conditions.
-     - Guarded keyboard page navigation when `view.line_editor.is_some()` so multiline text editing cursor operations remain uninterrupted.
+### PDF Craft Sync Summary — QR/Barcode Detection Overhaul & Sandeep PDF Studio v3 Styling (2026-10-18)
+- **Status**: Production-grade implementation fully verified, warning-free, and passing all unit test suites.
+- **Implemented Fixes & Overhauls**:
+  1. *QR & Barcode Scanner Detection Overhaul*:
+     - Full Code 128 decoder with complete 107-character pattern table, Start A/B/C, Code C numeric pairs, Code A/B ASCII, and modulo-103 checksum verification.
+     - Full Code 39 decoder with canonical 44-character 9-bit binary table, start/stop `*` delimiters, and ASCII payload parsing.
+     - Dual-pass detection in `Document::scan_page_codes`:
+       - Pass 1: Scans embedded image XObjects.
+       - Pass 2: Renders the page buffer at 1.5x scale via `PageRenderer` to detect vector-rendered shipping label barcodes (e.g. UPS, FedEx, USPS, Amazon, DHL), mapping pixel bounding boxes back to PDF user-space points `[min_x, min_y, max_x, max_y]`.
+     - Multi-scanline line scanner with vertical extent tracing to accurately measure barcode height and bounding geometry.
+  2. *Reactive Auto-Page Tracking*:
+     - Automatically triggers scanning whenever the active page index changes (`view.barcode_hud.last_scanned_page != Some(view.current)`) upon scrolling or pressing arrow keys.
+     - Updates HUD data in real time and highlights active codes on canvas without manual clicking.
+  3. *Sandeep PDF Studio v3 HUD Visual Redesign*:
+     - Redesigned the floating "QR & Barcodes" HUD panel (`show_panel`) and anchored popup (`show`) to Sandeep PDF Studio v3 styling: deep slate obsidian surfaces (`#13141A`, `#1B1D26`), electric blue borders (`#3B82F6`), subtle card containers, status badges (`● AUTO`, `v3.0`), and monospace payload containers with single-click copy and edit actions.
+     - Preserved 100% pixel-perfect replacement constraint and vector QR embedding.
+     - Kept all main application toolbars untouched.
 - **Verification & Test Results**:
   - `cargo check --workspace`: 0 errors, 0 warnings.
-  - `cargo test -p pdfcraft-ui-egui --lib -j 2`: 439 passed, 0 failed.
   - `cargo test -p pdfcraft-engine --lib -j 2`: 274 passed, 0 failed.
+  - `cargo test -p pdfcraft-ui-egui --lib -j 2`: 439 passed, 0 failed.
 - **Master Tracking Document**: `project.md` in repository root.
 ```
