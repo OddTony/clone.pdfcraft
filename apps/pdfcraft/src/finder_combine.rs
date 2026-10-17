@@ -66,7 +66,15 @@ fn listed(path: &Path, temp: &Path) -> Option<Vec<String>> {
     if canon(dir.parent()?)? != canon(temp)? {
         return None;
     }
-    let meta = std::fs::metadata(path).ok()?;
+    // Neither the folder nor the list may be a link: what the Quick Action writes is a real
+    // folder holding a real file, so a link cannot stand in for either.
+    if std::fs::symlink_metadata(dir).ok()?.file_type().is_symlink() {
+        return None;
+    }
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if meta.file_type().is_symlink() {
+        return None;
+    }
     let text = if meta.is_file() && meta.len() <= MAX_LIST { std::fs::read_to_string(path).unwrap_or_default() } else { String::new() };
     let _ = std::fs::remove_file(path);
     let _ = std::fs::remove_dir(dir);
@@ -80,22 +88,16 @@ fn workflow_dir() -> Option<PathBuf> {
 
 /// Write the Quick Action (when it is missing or differs) for the app `bundle_id`, and let
 /// the services list know. Failures are logged; the app works without it.
+///
+/// macOS lists a newly installed Quick Action only under Quick Actions ▸ Customize until the
+/// person ticks it once; the app does not tick it for them (Finder keeps that choice as a
+/// boolean in the `pbs` defaults, which `defaults write` can't nest, and rewriting the whole
+/// services record for one checkbox would be too much). The Combine files tab says where it is.
 pub fn install(bundle_id: &str) {
     let Some(dir) = workflow_dir() else { return };
-    let contents = dir.join("Contents");
-    let files = [(contents.join("Info.plist"), info_plist()), (contents.join("document.wflow"), document(bundle_id))];
-    if files.iter().all(|(p, text)| std::fs::read_to_string(p).ok().as_deref() == Some(text.as_str())) {
-        return;
-    }
-    // Only a first install turns it on in Finder's menu: someone who unticks it in Quick
-    // Actions ▸ Customize keeps it off when a later version rewrites the files.
-    let first = !contents.join("document.wflow").exists();
-    let written = std::fs::create_dir_all(&contents).and_then(|()| files.iter().try_for_each(|(p, text)| std::fs::write(p, text)));
-    match written {
-        Ok(()) => {
-            if first {
-                let _ = std::process::Command::new("/usr/bin/defaults").args(shown_args("pbs")).status();
-            }
+    match install_in(&dir, bundle_id) {
+        Ok(false) => {}
+        Ok(true) => {
             // Finder's menu picks the new service up on its own too; this only hurries it.
             let _ = std::process::Command::new("/System/Library/CoreServices/pbs").arg("-update").spawn();
             log::info!("Finder Quick Action installed: {}", dir.display());
@@ -104,19 +106,34 @@ pub fn install(bundle_id: &str) {
     }
 }
 
-/// `defaults` arguments that mark the Quick Action as shown in Finder's right-click menu, the
-/// Services menu and Finder's preview, as Automator does for one it saves; macOS lists a new
-/// one only under Customize otherwise. `domain` is `pbs` (a file path in tests).
-fn shown_args(domain: &str) -> Vec<String> {
-    vec![
-        "write".into(),
-        domain.into(),
-        "NSServicesStatus".into(),
-        "-dict-add".into(),
-        format!("\"(null) - {NAME} - runWorkflowAsService\""),
-        "{ presentation_modes = { ContextMenu = 1; FinderPreview = 1; ServicesMenu = 1; TouchBar = 0; }; }".into(),
-    ]
+/// Write the workflow's two files into `dir` (a `….workflow` folder) unless they are already
+/// these; `Ok(true)` when something was written.
+fn install_in(dir: &Path, bundle_id: &str) -> std::io::Result<bool> {
+    let contents = dir.join("Contents");
+    let files = [(contents.join("Info.plist"), info_plist()), (contents.join("document.wflow"), document(bundle_id))];
+    if files.iter().all(|(p, text)| std::fs::read_to_string(p).ok().as_deref() == Some(text.as_str())) {
+        return Ok(false);
+    }
+    std::fs::create_dir_all(&contents)?;
+    for (p, text) in &files {
+        std::fs::write(p, text)?;
+    }
+    Ok(true)
 }
+
+/// The file types the Quick Action is offered for: what Combine files reads (PDFs and
+/// `pdfcraft_engine::CONVERTIBLE`), as Uniform Type Identifiers. Not `public.image`, which
+/// would offer it for HEIC and other pictures Combine can't read.
+const FILE_TYPES: [(&str, &[&str]); 8] = [
+    ("com.adobe.pdf", &["pdf"]),
+    ("public.png", &["png"]),
+    ("public.jpeg", &["jpg", "jpeg"]),
+    ("public.tiff", &["tif", "tiff"]),
+    ("com.compuserve.gif", &["gif"]),
+    ("com.microsoft.bmp", &["bmp"]),
+    ("public.jpeg-2000", &["jp2", "j2k", "jpx"]),
+    ("public.plain-text", &["txt", "text"]),
+];
 
 /// The shell step: the selected paths into a fresh list, opened with the app.
 fn script(bundle_id: &str) -> String {
@@ -156,15 +173,15 @@ fn info_plist() -> String {
 			</dict>
 			<key>NSSendFileTypes</key>
 			<array>
-				<string>com.adobe.pdf</string>
-				<string>public.image</string>
+{}
 			</array>
 		</dict>
 	</array>
 </dict>
 </plist>
 "#,
-        esc(NAME)
+        esc(NAME),
+        FILE_TYPES.iter().map(|(uti, _)| format!("\t\t\t\t<string>{uti}</string>")).collect::<Vec<_>>().join("\n")
     )
 }
 
@@ -359,25 +376,83 @@ mod tests {
     }
 
     fn tempdir_in(temp: &Path) -> PathBuf {
-        let d = temp.join(format!("{DIR}{}-{}", std::process::id(), line!()));
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let d = temp.join(format!("{DIR}{}-{n}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
         d
     }
 
-    /// The "shown" setting is one `defaults` can write, in the form macOS keeps for a Quick
-    /// Action ticked in Customize (written to a scratch file here, never the real `pbs`).
-    #[cfg(target_os = "macos")]
+    /// The Quick Action is offered for exactly what Combine files reads: PDFs and every
+    /// extension Create converts, each under one type.
     #[test]
-    fn the_quick_action_is_marked_as_shown_in_finders_menu() {
-        let file = std::env::temp_dir().join(format!("pdfcraft-pbs-test-{}.plist", std::process::id()));
-        let _ = std::fs::remove_file(&file);
-        let path = file.to_string_lossy().into_owned();
-        let ok = std::process::Command::new("/usr/bin/defaults").args(shown_args(&path)).status().unwrap();
-        assert!(ok.success());
-        let read = std::process::Command::new("/usr/bin/defaults").args(["read", &path, "NSServicesStatus"]).output().unwrap();
-        let text = String::from_utf8_lossy(&read.stdout);
-        assert!(text.contains("(null) - Combine files in PdfCraft - runWorkflowAsService") && text.contains("ContextMenu = 1"), "{text}");
-        let _ = std::fs::remove_file(&file);
+    fn the_quick_action_offers_exactly_the_files_combine_reads() {
+        let mut offered: Vec<&str> = FILE_TYPES.iter().flat_map(|(_, exts)| exts.iter().copied()).collect();
+        offered.sort_unstable();
+        let mut reads: Vec<&str> = std::iter::once("pdf").chain(pdfcraft_engine::CONVERTIBLE.iter().copied()).collect();
+        reads.sort_unstable();
+        assert_eq!(offered, reads);
+        let info = info_plist();
+        for (uti, _) in FILE_TYPES {
+            assert!(info.contains(&format!("<string>{uti}</string>")), "{uti}");
+        }
+    }
+
+    /// A list longer than `MAX_LIST`, or a folder where the list should be, combines nothing
+    /// (an oversized list is still cleared away).
+    #[test]
+    fn an_oversized_list_or_a_folder_in_its_place_combines_nothing() {
+        let temp = std::env::temp_dir();
+        let big = tempdir_in(&temp).join(LIST);
+        std::fs::write(&big, "/a.pdf\n".repeat(MAX_LIST as usize / 7 + 1)).unwrap();
+        assert!(std::fs::metadata(&big).unwrap().len() > MAX_LIST);
+        assert_eq!(listed(&big, &temp), Some(vec![]));
+        assert!(!big.exists(), "the oversized list is removed");
+        let d = tempdir_in(&temp);
+        std::fs::create_dir_all(d.join(LIST)).unwrap();
+        assert_eq!(listed(&d.join(LIST), &temp), Some(vec![]));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A link to a folder or to a list is not a list: the Quick Action writes neither, and
+    /// nothing a link points at is touched.
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_folder_or_list_is_not_a_list() {
+        let temp = std::env::temp_dir();
+        let real = tempdir_in(&temp);
+        std::fs::write(real.join(LIST), "/a.pdf\n").unwrap();
+        let folder_link = temp.join(format!("{DIR}{}-folder-link", std::process::id()));
+        let _ = std::fs::remove_file(&folder_link);
+        std::os::unix::fs::symlink(&real, &folder_link).unwrap();
+        assert_eq!(listed(&folder_link.join(LIST), &temp), None);
+        let elsewhere = tempdir_in(&temp);
+        let other = elsewhere.join("other.txt");
+        std::fs::write(&other, "/b.pdf\n").unwrap();
+        let file_dir = tempdir_in(&temp);
+        let file_link = file_dir.join(LIST);
+        std::os::unix::fs::symlink(&other, &file_link).unwrap();
+        assert_eq!(listed(&file_link, &temp), None);
+        assert!(real.join(LIST).exists() && other.exists(), "nothing the links point at is touched");
+        let _ = std::fs::remove_file(&folder_link);
+        for d in [&real, &elsewhere, &file_dir] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    /// Installing writes the workflow once, rewrites it when it differs, and leaves it alone
+    /// when it is already this version.
+    #[test]
+    fn installing_writes_the_workflow_only_when_it_differs() {
+        let root = std::env::temp_dir().join(format!("pdfcraft-install-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join(format!("{NAME}.workflow"));
+        assert!(install_in(&dir, "com.example.app").unwrap(), "a first install writes");
+        assert!(dir.join("Contents/Info.plist").is_file() && dir.join("Contents/document.wflow").is_file());
+        assert!(!install_in(&dir, "com.example.app").unwrap(), "the same version writes nothing");
+        assert!(install_in(&dir, "com.example.other").unwrap(), "another bundle id rewrites it");
+        assert!(std::fs::read_to_string(dir.join("Contents/document.wflow")).unwrap().contains("open -b com.example.other"));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// The Quick Action's two files are property lists macOS reads, and its step writes a
@@ -394,7 +469,7 @@ mod tests {
             assert!(lint.status.success(), "{name}: {}", String::from_utf8_lossy(&lint.stdout));
         }
         let info = std::fs::read_to_string(dir.join("Info.plist")).unwrap();
-        assert!(info.contains("<string>Combine files in PdfCraft</string>") && info.contains("com.adobe.pdf") && info.contains("public.image"));
+        assert!(info.contains("<string>Combine files in PdfCraft</string>") && info.contains("com.adobe.pdf") && !info.contains("public.image"));
         // The step, with `open` replaced by printing the list's path.
         let step = script("com.example.app").replace("open -b com.example.app", "printf %s");
         let out = std::process::Command::new("/bin/zsh").arg("-c").arg(&step).arg("zsh").arg("/p/one.pdf").arg("/p/two words.png").output().unwrap();
