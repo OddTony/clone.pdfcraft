@@ -234,7 +234,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
  "x11rb",
 ]
 
@@ -1040,11 +1040,11 @@ dependencies = [
 [[package]]
 name = "collabcraft-share"
 version = "0.1.0"
-source = "git+https://github.com/wdunn001/collab-craft?rev=3c77c3e#3c77c3e551e0597165f85d7921eeb68a4b4b289a"
+source = "git+https://github.com/wdunn001/collab-craft?rev=23a3b6612eb73a51d54139e25658c94689adbb06#23a3b6612eb73a51d54139e25658c94689adbb06"
 dependencies = [
- "craft-cloud 0.1.0 (git+https://github.com/wdunn001/craft-libs?rev=6f0a6d2)",
+ "craft-cloud",
  "craft-cloud-client",
- "craft-ui 0.1.0 (git+https://github.com/wdunn001/craft-libs?rev=6f0a6d2)",
+ "craft-ui",
  "wasm-bindgen-futures",
 ]
 
@@ -1183,16 +1183,7 @@ dependencies = [
 [[package]]
 name = "craft-cloud"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=289d562cc6e8b567819aee51f759a78f41a65454#289d562cc6e8b567819aee51f759a78f41a65454"
-dependencies = [
- "serde",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "craft-cloud"
-version = "0.1.0"
-source = "git+https://github.com/wdunn001/craft-libs?rev=6f0a6d2#6f0a6d2f4c24140d5ea988e5e40a85b2c6058401"
+source = "git+https://github.com/wdunn001/craft-libs?rev=3aa7841deee2f9919a4dcca55487db5063293654#3aa7841deee2f9919a4dcca55487db5063293654"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -1201,10 +1192,11 @@ dependencies = [
 [[package]]
 name = "craft-cloud-client"
 version = "0.1.0"
-source = "git+https://github.com/wdunn001/collab-craft?rev=3c77c3e#3c77c3e551e0597165f85d7921eeb68a4b4b289a"
+source = "git+https://github.com/wdunn001/collab-craft?rev=23a3b6612eb73a51d54139e25658c94689adbb06#23a3b6612eb73a51d54139e25658c94689adbb06"
 dependencies = [
- "craft-cloud 0.1.0 (git+https://github.com/wdunn001/craft-libs?rev=6f0a6d2)",
+ "craft-cloud",
  "craft-collab",
+ "craft-esign",
  "js-sys",
  "log",
  "serde",
@@ -1219,7 +1211,7 @@ dependencies = [
 [[package]]
 name = "craft-collab"
 version = "0.1.0"
-source = "git+https://github.com/wdunn001/collab-craft?rev=3c77c3e#3c77c3e551e0597165f85d7921eeb68a4b4b289a"
+source = "git+https://github.com/wdunn001/collab-craft?rev=23a3b6612eb73a51d54139e25658c94689adbb06#23a3b6612eb73a51d54139e25658c94689adbb06"
 dependencies = [
  "js-sys",
  "log",
@@ -1227,6 +1219,16 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "craft-esign"
+version = "0.1.0"
+source = "git+https://github.com/wdunn001/craft-libs?rev=3aa7841deee2f9919a4dcca55487db5063293654#3aa7841deee2f9919a4dcca55487db5063293654"
+dependencies = [
+ "craft-cloud",
+ "serde",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1256,21 +1258,13 @@ dependencies = [
 [[package]]
 name = "craft-ui"
 version = "0.1.0"
-source = "git+https://github.com/storytold/craft-libs?rev=289d562cc6e8b567819aee51f759a78f41a65454#289d562cc6e8b567819aee51f759a78f41a65454"
+source = "git+https://github.com/wdunn001/craft-libs?rev=3aa7841deee2f9919a4dcca55487db5063293654#3aa7841deee2f9919a4dcca55487db5063293654"
 dependencies = [
- "craft-cloud 0.1.0 (git+https://github.com/storytold/craft-libs?rev=289d562cc6e8b567819aee51f759a78f41a65454)",
+ "craft-cloud",
+ "craft-esign",
  "egui",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "craft-ui"
-version = "0.1.0"
-source = "git+https://github.com/wdunn001/craft-libs?rev=6f0a6d2#6f0a6d2f4c24140d5ea988e5e40a85b2c6058401"
-dependencies = [
- "craft-cloud 0.1.0 (git+https://github.com/wdunn001/craft-libs?rev=6f0a6d2)",
- "egui",
 ]
 
 [[package]]
@@ -1980,7 +1974,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4451,9 +4445,10 @@ dependencies = [
  "arboard",
  "base64 0.22.1",
  "bytemuck",
- "craft-cloud 0.1.0 (git+https://github.com/storytold/craft-libs?rev=289d562cc6e8b567819aee51f759a78f41a65454)",
+ "craft-cloud",
+ "craft-esign",
  "craft-quit",
- "craft-ui 0.1.0 (git+https://github.com/storytold/craft-libs?rev=289d562cc6e8b567819aee51f759a78f41a65454)",
+ "craft-ui",
  "eframe",
  "egui",
  "egui_extras",
@@ -5022,7 +5017,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5543,7 +5538,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5613,7 +5608,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6490,7 +6485,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.5",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7585,7 +7580,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

@@ -331,6 +331,23 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                 let _ = fmt; // the format id is always "pdf" for us
                             }
                         }
+                        if crate::esign::request_button(ui, &app.esign) {
+                            let (id, title, etag) = match crate::cloud::origin(app) {
+                                Some(origin) => (origin.entry.id.clone(), origin.entry.name.clone(), origin.entry.etag.clone()),
+                                None => (
+                                    String::new(),
+                                    app.active.and_then(|i| app.session.get(app.views.get(i)?.id)).map(|d| d.display_name()).unwrap_or_default(),
+                                    None,
+                                ),
+                            };
+                            let sender = craft_cloud::Identity {
+                                id: String::new(),
+                                display: app.cloud.account.as_ref().map(|a| a.display.clone()).unwrap_or_default(),
+                                email: None,
+                                avatar: None,
+                            };
+                            crate::esign::open(&mut app.esign, id, title, etag, sender);
+                        }
                         // Who else has this document open (viewer presence only).
                         crate::cloud::who(app, ui);
                     }

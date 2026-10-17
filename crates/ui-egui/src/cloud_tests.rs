@@ -384,13 +384,14 @@ fn open_minimal(h: &mut Harness) -> u64 {
 /// `ctx.run_ui` needs `FnMut`. Both the `draw` closure and the mutable app reference are
 /// wrapped in `Option` and moved into the `FnMut` closure; `.take()` consumes each exactly
 /// once on the first (and only) frame — safe with no `unsafe` required.
-fn shapes_from_page(app: &mut PdfCraftApp, size: egui::Vec2, draw: impl FnOnce(&mut PdfCraftApp, &mut egui::Ui)) -> Vec<String> {
+fn shapes_from_page(app: &mut PdfCraftApp, size: egui::Vec2, draw: impl FnOnce(&mut PdfCraftApp, &mut egui::Ui) + 'static) -> Vec<String> {
     let ctx = egui::Context::default();
     ctx.set_fonts(crate::theme::font_definitions());
     // Both the `FnOnce` draw closure and the `&mut app` are moved into Options.
     // Inside the `FnMut`, `.take()` extracts them at most once; subsequent frames
     // (there are none in practice) are no-ops.  No unsafe needed.
-    let mut draw_opt: Option<Box<dyn FnOnce(&mut PdfCraftApp, &mut egui::Ui)>> = Some(Box::new(draw));
+    type DrawOnce = Box<dyn FnOnce(&mut PdfCraftApp, &mut egui::Ui)>;
+    let mut draw_opt: Option<DrawOnce> = Some(Box::new(draw));
     let mut app_opt: Option<&mut PdfCraftApp> = Some(app);
     let output = ctx.run_ui(egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() }, |ui| {
         if let (Some(f), Some(a)) = (draw_opt.take(), app_opt.take()) {
@@ -419,7 +420,7 @@ fn open_from_cloud_page_heading_and_back_button_are_visible() {
     let app = h.state_mut();
     app.cloud_page = Some(crate::CloudPage::Open);
     let labels = shapes_from_page(app, egui::vec2(1200.0, 800.0), |app, ui| {
-        crate::cloud_page_shell(app, ui, |app, ui| crate::cloud::open_page(app, ui));
+        crate::cloud_page_shell(app, ui, crate::cloud::open_page);
     });
     assert!(labels.iter().any(|l| l.contains("Open from cloud")), "cloud Open page must render a visible heading; rendered: {labels:?}",);
     assert!(labels.iter().any(|l| l.contains("Back")), "Back button must render visible text for screen-reader navigation; rendered: {labels:?}",);
@@ -433,7 +434,7 @@ fn save_as_cloud_page_heading_and_back_button_are_visible() {
     let app = h.state_mut();
     app.cloud_page = Some(crate::CloudPage::SaveAs);
     let labels = shapes_from_page(app, egui::vec2(1200.0, 800.0), |app, ui| {
-        crate::cloud_page_shell(app, ui, |app, ui| crate::cloud::save_page(app, ui));
+        crate::cloud_page_shell(app, ui, crate::cloud::save_page);
     });
     assert!(labels.iter().any(|l| l.contains("Save as to cloud")), "cloud Save As page must render a visible heading; rendered: {labels:?}",);
     assert!(labels.iter().any(|l| l.contains("Back")), "Back button must render visible text for screen-reader navigation; rendered: {labels:?}",);

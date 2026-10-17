@@ -35,6 +35,7 @@ pub mod canvas;
 mod chrome;
 pub mod cloud;
 mod combine_grid;
+pub mod esign;
 mod image_pick;
 mod tags_ui;
 pub use combine_grid::ThumbState as CombineThumb;
@@ -836,6 +837,8 @@ pub struct PdfCraftApp {
     /// Presence is viewer presence only: PdfCraft does not host real-time collaborative
     /// text editing.
     pub presence: craft_ui::presence::PresenceBar,
+    /// Request-signatures dialog. Hosted through CollabCraft; local PAdES stays in Sign.
+    pub esign: craft_ui::esign::EsignDialog,
 }
 
 /// Where in a document a request to open an address came from.
@@ -1105,6 +1108,7 @@ impl PdfCraftApp {
             share: craft_ui::share::ShareDialog::new(),
             presence: craft_ui::presence::PresenceBar::new().badges_only(),
             word_count_draft: word_count_ui::Draft::default(),
+            esign: craft_ui::esign::EsignDialog::new(),
         }
     }
 
@@ -3133,6 +3137,26 @@ impl eframe::App for PdfCraftApp {
         cloud::start(self);
         // Drain answers from the cloud worker (Open, Save, account, listing).
         cloud::pump(self, ctx);
+        // E-sign dialog: capability probe and inbox, even when closed.
+        esign::pump(&mut self.esign, ctx);
+        if let Some(send) = esign::take_send(&mut self.esign) {
+            match self.active.and_then(|i| {
+                let id = self.views.get(i)?.id;
+                self.session.save_full_bytes(id).ok().map(|b| (*b).clone())
+            }) {
+                Some(bytes) => {
+                    self.esign.submit_request(craft_ui::esign::Request::Create {
+                        draft: Box::new(send.draft),
+                        document: bytes,
+                        idempotency_key: send.idempotency_key,
+                        send: true,
+                    });
+                }
+                None => {
+                    esign::note_create(&mut self.esign, Err("save the document before requesting signatures".into()));
+                }
+            }
+        }
         // After pump: if we were on the cloud Open page and a new document tab appeared
         // (the open completed), dismiss the page and show the document.
         if self.cloud_page == Some(CloudPage::Open) && self.views.len() > self.cloud_page_doc_count && self.cloud.busy.is_none() {
@@ -3213,7 +3237,7 @@ impl eframe::App for PdfCraftApp {
                 }
                 // Cloud Save As page: pick a folder, name, and save; dismisses on success.
                 Some(CloudPage::SaveAs) => {
-                    let saved = cloud_page_shell(self, ui, |app, ui| crate::cloud::save_page(app, ui));
+                    let saved = cloud_page_shell(self, ui, crate::cloud::save_page);
                     if saved {
                         self.cloud_page = None;
                     }
