@@ -10,9 +10,14 @@ Comments (annotations), ISO 32000-2 §12.5. Layer L3, depends on `pdfcraft-cos`,
 - **Appearance streams** (`appearance::build`) generated from the annotation dictionary, so new
   and restyled comments look the same in every viewer. Highlights multiply (`/BM /Multiply`).
   Note icons are PdfCraft's own drawings. Text boxes use standard Helvetica (WinAnsi), with
-  line breaking by approximate Helvetica proportions (no font program is bundled). Text it can't
-  draw (in a text box, callout, Fill & Sign text, measurement label or dynamic stamp's by-line;
-  `appearance::undrawable_text`) is kept as typed and drawn as `?`, and the comment is marked with
+  line breaking by Helvetica's metrics (no font program is bundled). Text boxes, callouts and
+  Fill & Sign text draw what WinAnsi can't write with Type 3 fonts of craft-fonts glyphs that
+  carry a ToUnicode map (`pdfcraft_fonts::type3_plan`, Japanese faces for now); `build` returns
+  an `appearance::Appearance` whose `store` adds those fonts to the document as indirect objects,
+  and `appearance::text_measure` / `text_wrap` size boxes with the advances the text is drawn
+  with. Text it still can't draw (in a text box, callout or Fill & Sign text: scripts that need
+  shaping, or anything without craft-fonts; in a measurement label or dynamic stamp's by-line:
+  anything outside WinAnsi; `appearance::undrawable_text`) is kept as typed and drawn as `?`, and the comment is marked with
   the first such character (`pdfcraft_fonts::UNDRAWN_MARK`) so the engine reports the edit and
   flattening refuses to make it permanent. Two refusals (`AnnotError::Undrawable`): a redaction
   mark's overlay text, which becomes page content when applied; and a restyle or resize of a

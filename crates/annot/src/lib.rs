@@ -14,7 +14,7 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};
+use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString};
 
 pub mod appearance;
 pub mod links;
@@ -1313,22 +1313,22 @@ fn redraw_or_restore(doc: &mut Document, r: ObjRef, before: Dict) -> Result<(), 
     Ok(())
 }
 
-/// Draw `r`'s normal appearance from its dictionary, whatever its text: characters the standard
-/// fonts can't draw come out as `?`, and the annotation is marked (`pdfcraft_fonts::UNDRAWN_MARK`,
+/// Draw `r`'s normal appearance from its dictionary, whatever its text: characters no font can
+/// draw come out as `?`, and the annotation is marked (`pdfcraft_fonts::UNDRAWN_MARK`,
 /// cleared when all of it can be drawn) so the edit is reported and flattening won't make that
 /// `?` permanent. For new text (a new comment, changed contents), as Acrobat keeps text its font
 /// can't show, and for display-only copies.
 fn draw_appearance(doc: &mut Document, r: ObjRef) -> Result<(), AnnotError> {
     let d = annot_dict(doc, r);
     let subtype = String::from_utf8_lossy(d.name(b"Subtype").unwrap_or_default()).into_owned();
-    let Some(stream) = build_appearance(doc, &d) else { return Err(AnnotError::Unsupported(subtype)) };
-    apply_appearance(doc, r, &d, stream)
+    let Some(drawn) = build_appearance(doc, &d) else { return Err(AnnotError::Unsupported(subtype)) };
+    apply_appearance(doc, r, &d, drawn)
 }
 
 /// Draw the appearance for an annotation dictionary: the expensive half of [`set_appearance`].
 /// Pure from the dictionary and the objects it points at, so [`AppearanceCache`] can reuse it.
-fn build_appearance(doc: &Document, d: &Dict) -> Option<Stream> {
-    let mut stream = appearance::build(d)?;
+fn build_appearance(doc: &Document, d: &Dict) -> Option<appearance::Appearance> {
+    let mut drawn = appearance::build(d)?;
     // Picture-stamp restyling must retain the placement's page-axis correction.
     if d.get(b"PCPicture").is_some() {
         let matrix = d.get(b"AP").and_then(|ap| {
@@ -1338,17 +1338,17 @@ fn build_appearance(doc: &Document, d: &Dict) -> Option<Stream> {
             normal.dict.get(b"Matrix").cloned()
         });
         if let Some(matrix) = matrix {
-            stream.dict.set(b"Matrix".to_vec(), matrix);
+            drawn.stream.dict.set(b"Matrix".to_vec(), matrix);
         }
     }
-    Some(stream)
+    Some(drawn)
 }
 
 /// Store a built appearance on the annotation: the cheap half of [`set_appearance`].
-fn apply_appearance(doc: &mut Document, r: ObjRef, d: &Dict, stream: Stream) -> Result<(), AnnotError> {
-    // Characters the standard fonts can't draw came out as `?`: mark the annotation with the first.
+fn apply_appearance(doc: &mut Document, r: ObjRef, d: &Dict, drawn: appearance::Appearance) -> Result<(), AnnotError> {
+    // Characters no font could draw came out as `?`: mark the annotation with the first.
     let missing = appearance::undrawable_text(d).map(|(_, c)| c);
-    let ap = doc.add(Object::Stream(stream));
+    let ap = drawn.store(doc);
     // A copy (a shared /AP is left alone) that keeps unknown entries; the old down and rollover
     // appearances would show the previous look on press or hover, so they go with the old /N.
     let mut apd = d.get(b"AP").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().cloned()).unwrap_or_default();
@@ -1375,7 +1375,7 @@ fn apply_appearance(doc: &mut Document, r: ObjRef, d: &Dict, stream: Stream) -> 
 /// refreshes) and keep it for content-only ones.
 #[derive(Clone, Debug, Default)]
 pub struct AppearanceCache {
-    entries: std::collections::HashMap<ObjRef, Stream>,
+    entries: std::collections::HashMap<ObjRef, appearance::Appearance>,
     bytes: usize,
     hits: u64,
     builds: u64,
@@ -1390,20 +1390,22 @@ impl AppearanceCache {
         *self = Self::default();
     }
 
-    fn get(&mut self, r: ObjRef) -> Option<Stream> {
-        let stream = self.entries.get(&r)?.clone();
+    fn get(&mut self, r: ObjRef) -> Option<appearance::Appearance> {
+        let drawn = self.entries.get(&r)?.clone();
         self.hits += 1;
-        Some(stream)
+        Some(drawn)
     }
 
-    fn insert(&mut self, r: ObjRef, stream: &Stream) {
+    fn insert(&mut self, r: ObjRef, drawn: &appearance::Appearance) {
         self.builds += 1;
         if self.entries.len() >= 1_000_000 {
             self.clear();
         }
-        if self.bytes.saturating_add(stream.raw.len()) <= Self::MAX_BYTES {
-            self.bytes += stream.raw.len();
-            self.entries.insert(r, stream.clone());
+        // The fallback glyphs of text outside WinAnsi are shared, not copied, so the form is the size.
+        let size = drawn.stream.raw.len();
+        if self.bytes.saturating_add(size) <= Self::MAX_BYTES {
+            self.bytes += size;
+            self.entries.insert(r, drawn.clone());
         }
         // Else over budget: keep serving the entries already cached instead of growing.
     }
@@ -1443,15 +1445,15 @@ pub fn with_missing_appearances_cached(doc: &Document, cache: &mut AppearanceCac
             if has_normal {
                 continue;
             }
-            if let Some(stream) = cache.get(r) {
+            if let Some(drawn) = cache.get(r) {
                 // Fails only when `r` isn't a dictionary, which the cached build ruled out.
-                apply_appearance(copy.get_or_insert_with(|| doc.clone()), r, &d, stream).ok();
+                apply_appearance(copy.get_or_insert_with(|| doc.clone()), r, &d, drawn).ok();
                 continue;
             }
-            let Some(stream) = build_appearance(doc, &d) else { continue };
-            cache.insert(r, &stream);
+            let Some(drawn) = build_appearance(doc, &d) else { continue };
+            cache.insert(r, &drawn);
             // Fails only when `r` isn't a dictionary, which the build just ruled out.
-            apply_appearance(copy.get_or_insert_with(|| doc.clone()), r, &d, stream).ok();
+            apply_appearance(copy.get_or_insert_with(|| doc.clone()), r, &d, drawn).ok();
         }
     }
     copy
@@ -1592,10 +1594,10 @@ fn fitted_box(doc: &Document, r: ObjRef, text: &str) -> Option<[f64; 4]> {
         w
     } else {
         // No usable old width: fall back to the creation-time width (at most 300 pt).
-        let longest = text.lines().map(|l| appearance::text_width(l, size)).fold(0.0, f64::max);
+        let longest = appearance::text_measure(text, size);
         (longest + 2.0 * pad + 4.0).clamp(40.0, 300.0)
     };
-    let lines = appearance::wrap(text, size, (w - 2.0 * pad).max(1.0)).len().max(1) as f64;
+    let lines = appearance::text_wrap(text, size, (w - 2.0 * pad).max(1.0)).len().max(1) as f64;
     Some([x0, top - lines * size * 1.2 - 2.0 * pad - 2.0, x0 + w, top])
 }
 

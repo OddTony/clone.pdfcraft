@@ -9,12 +9,134 @@
 //! The note icons are PdfCraft's own drawings (AGENTS.md §1). Text boxes use the standard
 //! Helvetica font with WinAnsi encoding; line breaking uses [`text_width`], an approximation of
 //! Helvetica's proportions by character class (no font program or metrics file is bundled).
+//! What WinAnsi can't write in a text box is drawn with Type 3 fonts of craft-fonts glyphs that
+//! carry a ToUnicode map (`/PCJp0`, …); without craft-fonts it stays `?`. [`text_measure`] and
+//! [`text_wrap`] measure text the way the box draws it. Those fonts are made when the appearance
+//! is stored ([`Appearance::store`]), as indirect objects of the document.
 
-use pdfcraft_cos::{Dict, Object, PdfString, Stream};
-use pdfcraft_fonts::{first_undrawable, literal, win_ansi};
+use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};
+use pdfcraft_fonts::{
+    JAPANESE_TYPE3_NAME, Type3Plan, document_japanese_fonts_for_style, first_undrawable, literal, type3_plan, win_ansi, win_ansi_encodable, wrap_with,
+};
 pub use pdfcraft_fonts::{helvetica_width as text_width, wrap};
 
 use crate::{NOTE_SIZE, Rgb, n};
+
+/// Type 3 fonts one text box may draw its text outside WinAnsi with (240 characters each).
+const MAX_FALLBACK_FONTS: usize = 4;
+
+/// The Type 3 fonts for the characters of `text` WinAnsi can't write. `None` when WinAnsi writes
+/// all of it (the text is then drawn exactly as before) or the build has no face (no craft-fonts).
+fn fallback_plan(text: &str) -> Option<Type3Plan> {
+    let mut outside = text.chars().filter(|c| !matches!(c, '\n' | '\r') && !win_ansi_encodable(*c)).peekable();
+    outside.peek()?;
+    // The rest of the text is Helvetica, so the sans faces match it.
+    type3_plan(&document_japanese_fonts_for_style(false, false), outside, MAX_FALLBACK_FONTS)
+}
+
+/// The font a run of a text box's line is drawn in: Helvetica with WinAnsi, or fallback font `i`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Face {
+    Helv,
+    Fallback(usize),
+}
+
+impl Face {
+    fn resource(self) -> String {
+        match self {
+            Face::Helv => "Helv".into(),
+            Face::Fallback(i) => format!("PCJp{i}"),
+        }
+    }
+}
+
+/// `line` cut into runs of one font each. A character neither font draws stays in a Helvetica run,
+/// which writes it as `?`.
+fn runs(plan: &Type3Plan, line: &str) -> Vec<(Face, String)> {
+    let mut out: Vec<(Face, String)> = Vec::new();
+    for ch in line.chars() {
+        let face = match plan.code(ch) {
+            Some((font, _)) if !win_ansi_encodable(ch) => Face::Fallback(font),
+            _ => Face::Helv,
+        };
+        match out.last_mut() {
+            Some((last, run)) if *last == face => run.push(ch),
+            _ => out.push((face, ch.to_string())),
+        }
+    }
+    out
+}
+
+/// Advance of `s` at `size` as a text box draws it: Helvetica for its runs, the glyphs' own advances
+/// for the fallback runs.
+fn measure(plan: Option<&Type3Plan>, s: &str, size: f64) -> f64 {
+    let Some(plan) = plan else { return text_width(s, size) };
+    runs(plan, s)
+        .iter()
+        .map(|(face, run)| match face {
+            Face::Helv => text_width(run, size),
+            Face::Fallback(_) => run.chars().filter_map(|c| plan.width(c)).sum::<f64>() * size,
+        })
+        .sum()
+}
+
+/// The width of the widest line of `text` at `size`, as [`build`] draws a text box. Size a text
+/// box with this and [`text_wrap`], not [`text_width`] and [`wrap`], or text outside WinAnsi
+/// overflows the box fitted to it.
+pub fn text_measure(text: &str, size: f64) -> f64 {
+    let plan = fallback_plan(text);
+    text.split(['\n', '\r']).map(|line| measure(plan.as_ref(), line, size)).fold(0.0, f64::max)
+}
+
+/// [`wrap`] for the lines [`build`] draws in a text box.
+pub fn text_wrap(text: &str, size: f64, width: f64) -> Vec<String> {
+    let plan = fallback_plan(text);
+    wrap_with(text, size, width, |s, size| measure(plan.as_ref(), s, size))
+}
+
+/// The first character of a text box's `text` that [`build`] draws as `?`: outside WinAnsi and not
+/// drawn by its fallback fonts.
+fn first_undrawn(text: &str) -> Option<char> {
+    let plan = fallback_plan(text);
+    text.chars().find(|c| !matches!(c, '\n' | '\r') && !win_ansi_encodable(*c) && !plan.as_ref().is_some_and(|p| p.can_draw(*c)))
+}
+
+/// A normal appearance [`build`] drew: the form, and the plan of the Type 3 fonts its text outside
+/// WinAnsi is shown in (the form names them `/PCJp0`, …), which [`Appearance::store`] adds.
+#[derive(Clone, Debug)]
+pub struct Appearance {
+    pub stream: Stream,
+    fallback: Option<Type3Plan>,
+}
+
+impl Appearance {
+    /// Add the form to `doc` and return it, with its fallback fonts in its `/Resources /Font` as
+    /// indirect objects (their streams and descriptors must be, ISO 32000-2 §7.3.8 and §9.6.5).
+    pub fn store(self, doc: &mut Document) -> ObjRef {
+        let Appearance { mut stream, fallback } = self;
+        if let Some(plan) = fallback {
+            let fonts = plan.fonts(JAPANESE_TYPE3_NAME, |o| Object::Ref(doc.add(o)));
+            // `draw` gives every form it names fallback fonts in a `/Resources /Font` dictionary.
+            let resources =
+                stream.dict.get_mut(b"Resources").and_then(Object::as_dict_mut).and_then(|r| r.get_mut(b"Font")).and_then(Object::as_dict_mut);
+            if let Some(resources) = resources {
+                for (i, font) in fonts.into_iter().enumerate() {
+                    resources.set(Face::Fallback(i).resource().into_bytes(), Object::Dict(font));
+                }
+            }
+        }
+        doc.add(Object::Stream(stream))
+    }
+}
+
+/// A byte string as a PDF hexadecimal string, `<…>`.
+fn hex_string(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len().saturating_mul(2).saturating_add(2));
+    out.push(b'<');
+    out.extend(bytes.iter().flat_map(|b| format!("{b:02X}").into_bytes()));
+    out.push(b'>');
+    out
+}
 
 /// Length of an arrowhead for a line of width `w`.
 pub fn arrow_size(w: f64) -> f64 {
@@ -275,15 +397,15 @@ fn text_turn(d: &Dict) -> i64 {
     d.get(b"PCTextRotate").and_then(Object::as_int).unwrap_or(0).rem_euclid(360) / 90 * 90
 }
 
-/// The first text [`build`] would draw in the standard fonts (Helvetica, WinAnsiEncoding) that
-/// they can't, which would come out as `?`: what it is (for the message) and the character. The
-/// text of a text box, callout or Fill & Sign text, a measurement's label, a dynamic stamp's
-/// "By …" line, and a redaction mark's overlay text (drawn when it is applied). `None` when all of
-/// it can be drawn.
+/// The first text [`build`] would draw as `?`: what it is (for the message) and the character.
+/// The text of a text box, callout or Fill & Sign text (outside WinAnsi and not drawn by its
+/// fallback fonts), and a measurement's label, a dynamic stamp's "By …" line and a redaction
+/// mark's overlay text (drawn when it is applied), which the standard fonts (Helvetica,
+/// WinAnsiEncoding) can't draw. `None` when all of it can be drawn.
 pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
     let text = |key: &[u8]| d.get(key).and_then(Object::as_string).map(PdfString::to_text);
     let (what, text) = match d.name(b"Subtype")? {
-        b"FreeText" => ("the comment's text", text(b"Contents")?),
+        b"FreeText" => return Some(("the comment's text", first_undrawn(&text(b"Contents")?)?)),
         b"Line" | b"PolyLine" | b"Polygon" => ("the measurement label", text(b"PCMeasureValue")?),
         b"Stamp" if matches!(d.get(b"PCStamp"), Some(Object::Bool(true))) => ("the stamp's \"By\" line", text(b"PCByLine")?),
         // Drawn in Helvetica when the redaction is applied: refused when it is marked.
@@ -294,9 +416,16 @@ pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
 }
 
 /// Draw the normal appearance of an annotation, or `None` if this subtype/variant isn't supported.
-/// Text the standard fonts can't draw comes out as `?`: [`undrawable_text`] says which, and
+/// Text no font can draw comes out as `?`: [`undrawable_text`] says which, and
 /// [`crate::set_appearance`] marks the annotation with it (`pdfcraft_fonts::UNDRAWN_MARK`).
-pub fn build(d: &Dict) -> Option<Stream> {
+pub fn build(d: &Dict) -> Option<Appearance> {
+    let mut fallback = None;
+    let stream = draw(d, &mut fallback)?;
+    Some(Appearance { stream, fallback })
+}
+
+/// The form [`build`] returns; a text box sets `fallback` to the plan of the fonts it names.
+fn draw(d: &Dict, fallback: &mut Option<Type3Plan>) -> Option<Stream> {
     // Imported measurement appearances may include leaders, captions and formatting that
     // this builder cannot reproduce. Preserve them rather than silently losing detail.
     if d.contains(b"Measure") && !d.contains(b"PCMeasureValue") {
@@ -746,19 +875,44 @@ pub fn build(d: &Dict) -> Option<Stream> {
             ));
             let mut out = c.into_bytes();
             let mut y = rect[3] - pad - size * 0.9;
-            for line in wrap(&text, size, width) {
+            // Text outside WinAnsi is drawn in fallback fonts when the build has them; text WinAnsi
+            // writes is drawn exactly as it always was.
+            let plan = fallback_plan(&text);
+            let mut current = Face::Helv;
+            for line in wrap_with(&text, size, width, |s, size| measure(plan.as_ref(), s, size)) {
                 if y < rect[1] - size {
                     break;
                 }
-                let lw = text_width(&line, size);
+                let lw = measure(plan.as_ref(), &line, size);
                 let x = match q {
                     1 => rect[0] + pad + (width - lw) / 2.0,
                     2 => rect[2] - pad - lw,
                     _ => rect[0] + pad,
                 };
                 out.extend(format!("1 0 0 1 {} {} Tm ", n(x), n(y)).bytes());
-                out.extend(literal(&win_ansi(&line)));
-                out.extend_from_slice(b" Tj\n");
+                let Some(plan) = &plan else {
+                    out.extend(literal(&win_ansi(&line)));
+                    out.extend_from_slice(b" Tj\n");
+                    y -= size * 1.2;
+                    continue;
+                };
+                for (i, (face, run)) in runs(plan, &line).into_iter().enumerate() {
+                    if i > 0 {
+                        out.push(b' ');
+                    }
+                    if face != current {
+                        out.extend(format!("/{} {} Tf ", face.resource(), n(size)).bytes());
+                        current = face;
+                    }
+                    match face {
+                        Face::Helv => out.extend(literal(&win_ansi(&run))),
+                        Face::Fallback(_) => {
+                            out.extend(hex_string(&run.chars().filter_map(|c| plan.code(c).map(|(_, code)| code)).collect::<Vec<u8>>()))
+                        }
+                    }
+                    out.extend_from_slice(b" Tj");
+                }
+                out.push(b'\n');
                 y -= size * 1.2;
             }
             out.extend_from_slice(b"ET\n");
@@ -770,6 +924,7 @@ pub fn build(d: &Dict) -> Option<Stream> {
             let mut fonts = Dict::new();
             fonts.set(b"Helv".to_vec(), Object::Dict(font));
             res.set(b"Font".to_vec(), Object::Dict(fonts));
+            *fallback = plan;
             let mut stream = form(full, &out, res);
             if let Some(m) = matrix {
                 stream.dict.set(b"Matrix".to_vec(), Object::Array(m.iter().copied().map(Object::Real).collect()));

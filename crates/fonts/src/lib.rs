@@ -17,6 +17,7 @@ mod shaping;
 pub mod source_shaping;
 mod std14;
 mod std14_metrics;
+mod type3;
 pub use craft::{
     CRAFT_FONTS, CraftFont, SHIPPORI_MINCHO, document_arabic_font, document_hebrew_font, document_japanese_font, document_japanese_font_for_style,
     document_japanese_fonts_for_style, document_thai_font, ui_arabic_fonts, ui_chinese_fonts, ui_cjk_fonts, ui_hebrew_fonts, ui_japanese_fonts,
@@ -29,6 +30,7 @@ pub use shaping::{
     ShapedCluster, ShapedScript, arabic_glyph, arabic_has, hebrew_has, shape_arabic, shape_hebrew, shape_thai, shaped_glyph, thai_has,
 };
 pub use std14::Std14;
+pub use type3::{JAPANESE_TYPE3_NAME, MAX_TYPE3_GLYPHS, Type3Glyph, Type3Plan, needs_shaping, type3_font, type3_glyph, type3_plan};
 
 /// Advance of `s` in Helvetica at `size` points, using the exact standard-14 metrics.
 ///

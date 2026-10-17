@@ -12,11 +12,12 @@
 
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use pdfcraft_content::{Matrix, Op, Pieces, parse, serialize_ops};
 use pdfcraft_cos::{Dict, Document, Object, PdfString, Stream};
 use pdfcraft_fonts::pdf::Metrics;
-use pdfcraft_fonts::{CraftFont, GlyphError, japanese_glyph_from};
+use pdfcraft_fonts::{CraftFont, GlyphError, JAPANESE_TYPE3_NAME, MAX_TYPE3_GLYPHS, Type3Glyph, type3_font, type3_glyph};
 
 use crate::EditError;
 
@@ -1299,8 +1300,6 @@ fn needs_type3(text: &str) -> bool {
     text.chars().any(|c| !is_win_ansi_char(c))
 }
 
-/// The `/Name` of the Type 3 fonts generated for Japanese text.
-const JAPANESE_FONT_NAME: &str = "PCJapanese";
 /// The `/Name` of the Type 3 fonts generated for Hebrew text.
 const HEBREW_FONT_NAME: &str = "PCHebrew";
 
@@ -1308,7 +1307,7 @@ const HEBREW_FONT_NAME: &str = "PCHebrew";
 /// one of them is split across several, which read back as one line (see [`same_font`]).
 fn is_type3_fallback(font: &Dict) -> bool {
     font.name(b"Subtype") == Some(b"Type3")
-        && font.name(b"Name").is_some_and(|n| n == JAPANESE_FONT_NAME.as_bytes() || n == HEBREW_FONT_NAME.as_bytes())
+        && font.name(b"Name").is_some_and(|n| n == JAPANESE_TYPE3_NAME.as_bytes() || n == HEBREW_FONT_NAME.as_bytes())
 }
 
 /// Whether a run shown in `font` (a resource name, and the Japanese or Hebrew fallback face it subsets, if
@@ -1332,7 +1331,6 @@ fn source_family(base_font: &str) -> crate::added::Family {
 
 const SUBSTITUTE_NAME: &str = "PCEdHelv";
 const SUBSTITUTE: &[u8] = SUBSTITUTE_NAME.as_bytes();
-const MAX_TYPE3_GLYPHS: usize = 240;
 
 /// The generated fonts for one replacement: one per run of at most `max_glyphs` unique characters,
 /// in order of first appearance.
@@ -1348,70 +1346,14 @@ struct Type3Fallback {
     codes: HashMap<char, (usize, u8)>,
 }
 
-/// One glyph of a generated font: its code there, its character, its glyph procedure and advance.
-struct Type3Glyph {
-    code: u8,
-    ch: char,
-    path: Vec<u8>,
-    width: f64,
-}
-
-fn pdf_num(v: f64) -> String {
-    if v.fract() == 0.0 { format!("{v:.0}") } else { format!("{v:.4}").trim_end_matches('0').trim_end_matches('.').to_string() }
-}
-
-fn type3_path(face: &CraftFont, ch: char) -> Result<(Vec<u8>, f64), EditError> {
-    let glyph = japanese_glyph_from(face, ch).map_err(|e| match e {
+/// The glyph of `ch` in `face` for a generated font (`pdfcraft_fonts::type3_glyph`), with the
+/// editor's message when the face can't draw it.
+fn type3_path(face: &CraftFont, ch: char) -> Result<Arc<Type3Glyph>, EditError> {
+    type3_glyph(face, ch).map_err(|e| match e {
         GlyphError::NoFont => no_japanese_font(),
         GlyphError::Missing => EditError::Invalid(format!("the {} fallback font has no glyph for U+{:04X}", face.family, ch as u32)),
         GlyphError::TooComplex => EditError::Invalid(format!("the {} fallback glyph U+{:04X} is too complex", face.family, ch as u32)),
-    })?;
-    let (dx, width) = proportional(ch, &glyph);
-    let scale = 1000.0;
-    // d1 is `wx wy llx lly urx ury` (ISO 32000-2 §9.6.4) with a box enclosing the glyph;
-    // Acrobat draws a bullet in place of a glyph whose d1 is malformed.
-    let b = if glyph.contours.is_empty() { [0.0; 4] } else { glyph.bbox };
-    let mut out = format!(
-        "{} 0 {} {} {} {} d1\n",
-        pdf_num(width * scale),
-        pdf_num(((b[0] + dx) * scale).floor()),
-        pdf_num((b[1] * scale).floor()),
-        pdf_num(((b[2] + dx) * scale).ceil()),
-        pdf_num((b[3] * scale).ceil())
-    )
-    .into_bytes();
-    for contour in glyph.contours {
-        let Some(first) = contour.first() else { continue };
-        out.extend_from_slice(format!("{} {} m\n", pdf_num((first[0] + dx) * scale), pdf_num(first[1] * scale)).as_bytes());
-        for p in contour.iter().skip(1) {
-            out.extend_from_slice(format!("{} {} l\n", pdf_num((p[0] + dx) * scale), pdf_num(p[1] * scale)).as_bytes());
-        }
-        out.extend_from_slice(b"h\n");
-    }
-    out.extend_from_slice(b"f\n");
-    Ok((out, width))
-}
-
-/// Side bearing (em) given to a respaced glyph on each side.
-const SIDE_BEARING: f64 = 0.05;
-
-/// Shift and advance for a fallback glyph. Japanese faces draw Cyrillic and Greek full-width
-/// (one em each, as in JIS X 0208) and have no proportional (`palt`) metrics for them, so a
-/// word set that way reads as letter-spaced. Those letters get their ink width plus a side
-/// bearing instead; everything else keeps the face's own advance.
-fn proportional(ch: char, glyph: &pdfcraft_fonts::GlyphOutline) -> (f64, f64) {
-    let respace = matches!(ch, '\u{0370}'..='\u{03FF}' | '\u{0400}'..='\u{052F}' | '\u{1F00}'..='\u{1FFF}');
-    let ink = glyph.bbox[2] - glyph.bbox[0];
-    if !respace || glyph.contours.is_empty() || !(ink > 0.0 && ink < glyph.width) {
-        return (0.0, glyph.width);
-    }
-    (SIDE_BEARING - glyph.bbox[0], ink + 2.0 * SIDE_BEARING)
-}
-
-fn unicode_hex(ch: char) -> String {
-    let mut units = [0u16; 2];
-    let encoded = ch.encode_utf16(&mut units);
-    encoded.iter().map(|u| format!("{u:04X}")).collect()
+    })
 }
 
 /// No font this build has can draw `text`. Only Japanese text is about the Japanese face: other
@@ -1470,7 +1412,9 @@ fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(
     Ok((std::iter::once(hebrew).chain(japanese).collect(), true))
 }
 
-fn type3_font(
+/// The generated fonts that show `text` (each of at most `max_glyphs` characters), added to
+/// `fonts_res`, and where each character is in them.
+fn type3_fallback(
     doc: &mut Document,
     fonts_res: &mut Dict,
     text: &str,
@@ -1493,31 +1437,24 @@ fn type3_font(
     // The faces differ in coverage (e.g. of Cyrillic), so use the best face that has every
     // character. When none has them all, the best face reports the character it lacks. Hebrew
     // text keeps the Hebrew face and takes each character it lacks from the next face that has it.
-    let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
+    let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| type3_glyph(face, ch).is_ok()) }
         .ok_or_else(|| no_fallback_font(text))?;
     let others: &[&CraftFont] = if hebrew { faces.get(1..).unwrap_or_default() } else { &[] };
     // Every outline is read before the document is touched, so a character that fails leaves it
     // as it was. Each font takes the next `per_font` characters; codes restart at 1 in each.
     let per_font = max_glyphs.clamp(1, MAX_TYPE3_GLYPHS);
     let mut glyphs = Vec::with_capacity(chars.len());
-    for (i, ch) in chars.into_iter().enumerate() {
+    for ch in chars {
         // Hebrew text: the first face with the glyph, else the Hebrew face's error.
-        let (path, width) = others.iter().fold(type3_path(face, ch), |found, f| found.or_else(|e| type3_path(f, ch).map_err(|_| e)))?;
-        let code = u8::try_from((i % per_font).saturating_add(1))
-            .map_err(|_| EditError::Invalid("replacement text has too many unique characters".into()))?;
-        glyphs.push(Type3Glyph { code, ch, path, width });
+        glyphs.push(others.iter().fold(type3_path(face, ch), |found, f| found.or_else(|e| type3_path(f, ch).map_err(|_| e)))?);
     }
     let mut codes = HashMap::with_capacity(glyphs.len());
     let mut widths = Vec::with_capacity(glyphs.len());
     let mut names = Vec::new();
-    let mut glyphs = glyphs.into_iter();
-    loop {
-        let group: Vec<Type3Glyph> = glyphs.by_ref().take(per_font).collect();
-        if group.is_empty() {
-            break;
-        }
-        for glyph in &group {
-            codes.insert(glyph.ch, (names.len(), glyph.code));
+    for group in glyphs.chunks(per_font) {
+        // Codes 1..=per_font (at most 240), so the conversion can't fail.
+        for (code, glyph) in (1u8..=u8::MAX).zip(group) {
+            codes.insert(glyph.ch, (names.len(), code));
             widths.push((glyph.ch, glyph.width));
         }
         names.push(add_type3_font(doc, fonts_res, face, hebrew, group));
@@ -1528,55 +1465,8 @@ fn type3_font(
 /// Adds one generated font whose codes 1 to `glyphs.len()` show `glyphs`, and returns its resource
 /// name (`PCJp`, then `PCJp1`, ...; `PCHe`, ... for Hebrew text). Nothing here can fail: the
 /// outlines were read already.
-fn add_type3_font(doc: &mut Document, fonts_res: &mut Dict, face: &CraftFont, hebrew: bool, glyphs: Vec<Type3Glyph>) -> String {
-    let last_char = glyphs.len();
-    let mut charprocs = Dict::new();
-    let mut widths = Vec::with_capacity(last_char);
-    let mut differences = vec![Object::Int(1)];
-    let mut cmap = String::from(
-        "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapType 2 def\n1 begincodespacerange\n<01> <FF>\nendcodespacerange\n",
-    );
-    cmap.push_str(&format!("{last_char} beginbfchar\n"));
-    for glyph in glyphs {
-        let glyph_name = format!("g{:02X}", glyph.code);
-        let mut pd = Dict::new();
-        pd.set(b"Length".to_vec(), glyph.path.len() as i64);
-        let proc_ref = doc.add(Object::Stream(Stream::from_raw(pd, glyph.path)));
-        charprocs.set(glyph_name.as_bytes().to_vec(), Object::Ref(proc_ref));
-        differences.push(Object::name(&glyph_name));
-        widths.push(Object::Real((glyph.width * 1000.0).round()));
-        cmap.push_str(&format!("<{:02X}> <{}>\n", glyph.code, unicode_hex(glyph.ch)));
-    }
-    cmap.push_str("endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n");
-    let mut cmap_dict = Dict::new();
-    cmap_dict.set(b"Length".to_vec(), cmap.len() as i64);
-    let cmap_ref = doc.add(Object::Stream(Stream::from_raw(cmap_dict, cmap.into_bytes())));
-    let mut encoding = Dict::new();
-    encoding.set(b"Type".to_vec(), Object::name("Encoding"));
-    encoding.set(b"Differences".to_vec(), Object::Array(differences));
-    let mut font = Dict::new();
-    font.set(b"Type".to_vec(), Object::name("Font"));
-    font.set(b"Subtype".to_vec(), Object::name("Type3"));
-    font.set(b"Name".to_vec(), Object::name(if hebrew { HEBREW_FONT_NAME } else { JAPANESE_FONT_NAME }));
-    let mut descriptor = Dict::new();
-    descriptor.set(b"Type".to_vec(), Object::name("FontDescriptor"));
-    descriptor.set(b"FontName".to_vec(), Object::name(&format!("{}-{}", face.family, face.style).replace(' ', "")));
-    descriptor.set(b"FontFamily".to_vec(), Object::String(PdfString::literal(face.family.as_bytes().to_vec())));
-    descriptor.set(b"Flags".to_vec(), Object::Int(if face.family.contains("Mincho") { 6 } else { 4 }));
-    descriptor.set(b"ItalicAngle".to_vec(), Object::Int(0));
-    // PDF 1.7 tables 5.9 and 5.19: a Type 3 descriptor is indirect; Ascent/Descent may be omitted.
-    font.set(b"FontDescriptor".to_vec(), Object::Ref(doc.add(Object::Dict(descriptor))));
-    font.set(b"FontBBox".to_vec(), Object::Array(vec![Object::Int(0), Object::Int(-300), Object::Int(1000), Object::Int(1000)]));
-    font.set(
-        b"FontMatrix".to_vec(),
-        Object::Array(vec![Object::Real(0.001), Object::Int(0), Object::Int(0), Object::Real(0.001), Object::Int(0), Object::Int(0)]),
-    );
-    font.set(b"FirstChar".to_vec(), Object::Int(1));
-    font.set(b"LastChar".to_vec(), Object::Int(last_char as i64));
-    font.set(b"Widths".to_vec(), Object::Array(widths));
-    font.set(b"Encoding".to_vec(), Object::Dict(encoding));
-    font.set(b"CharProcs".to_vec(), Object::Dict(charprocs));
-    font.set(b"ToUnicode".to_vec(), Object::Ref(cmap_ref));
+fn add_type3_font(doc: &mut Document, fonts_res: &mut Dict, face: &CraftFont, hebrew: bool, glyphs: &[Arc<Type3Glyph>]) -> String {
+    let font = type3_font(face, if hebrew { HEBREW_FONT_NAME } else { JAPANESE_TYPE3_NAME }, glyphs, |o| Object::Ref(doc.add(o)));
     let prefix = if hebrew { "PCHe" } else { "PCJp" };
     let mut name = String::from(prefix);
     let mut suffix = 0usize;
@@ -1735,7 +1625,7 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
         None => {
             let fallback_shown = crate::bidi::to_visual(&text);
             if needs_type3(&text) {
-                let fallback = type3_font(doc, &mut fonts_res, &text, source_family(&target.base_font), target.bold, max_glyphs)?;
+                let fallback = type3_fallback(doc, &mut fonts_res, &text, source_family(&target.base_font), target.bold, max_glyphs)?;
                 let runs = type3_encode(&fallback, &fallback_shown)
                     .ok_or_else(|| EditError::Invalid(format!("\"{text}\" can't be shown by the {} fallback", fallback.family)))?;
                 let size = font_size_before(&ops, first).unwrap_or(target.size);
@@ -2128,7 +2018,7 @@ fn rewrite_block_from(
     } else {
         None
     };
-    let type3 = if !reuse && needs_type3(&flat) { Some(type3_font(doc, &mut fonts_res, &flat, family, bold, max_glyphs)?) } else { None };
+    let type3 = if !reuse && needs_type3(&flat) { Some(type3_fallback(doc, &mut fonts_res, &flat, family, bold, max_glyphs)?) } else { None };
     let advance = |s: &str| -> f64 {
         let t = match (&metrics, reuse) {
             (Some(m), true) => {
@@ -2602,13 +2492,13 @@ mod tests {
     fn hebrew_and_japanese_fallback_shards_are_recognized_as_ours() {
         static HEBR: &[&str] = &["Hebr"];
         let face = CraftFont { family: "FakeHebrew", style: "Regular", scripts: HEBR, bytes: b"" };
-        let glyph = |code, ch| Type3Glyph { code, ch, path: b"0 0 0 0 0 0 d1\nf\n".to_vec(), width: 0.5 };
+        let glyph = |ch| Arc::new(Type3Glyph { ch, width: 0.5, program: b"0 0 0 0 0 0 d1\nf\n".to_vec() });
         let mut doc = Document::new_empty();
         let mut fonts = Dict::new();
         // A replacement split across two Hebrew fonts, then one Japanese font.
-        let he = add_type3_font(&mut doc, &mut fonts, &face, true, vec![glyph(1, 'א')]);
-        let he1 = add_type3_font(&mut doc, &mut fonts, &face, true, vec![glyph(1, 'ב')]);
-        let jp = add_type3_font(&mut doc, &mut fonts, &face, false, vec![glyph(1, 'あ')]);
+        let he = add_type3_font(&mut doc, &mut fonts, &face, true, &[glyph('א')]);
+        let he1 = add_type3_font(&mut doc, &mut fonts, &face, true, &[glyph('ב')]);
+        let jp = add_type3_font(&mut doc, &mut fonts, &face, false, &[glyph('あ')]);
         assert_eq!([he.as_str(), he1.as_str(), jp.as_str()], ["PCHe", "PCHe1", "PCJp"]);
         for name in [&he, &he1, &jp] {
             let font = fonts.get(name.as_bytes()).and_then(Object::as_dict).cloned().unwrap_or_default();

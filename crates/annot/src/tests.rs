@@ -1165,24 +1165,25 @@ fn drawings_resize_by_scaling_their_strokes() {
 /// those characters, and the comment is marked with the first one (cleared once all of it can be
 /// drawn). A comment another program drew with a font that has those characters keeps that
 /// appearance: a restyle is refused rather than replace it with `?`, while new text is taken.
+/// Text boxes use Devanagari, which no fallback font draws in any build (it needs shaping).
 #[test]
 fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
     let mut doc = fixture();
     let mark = |doc: &Document, i: usize| pdfcraft_fonts::undrawn_mark(&list(doc, 0)[i]);
     let mut boxed = new(0, Shape::TextBox { rect: [100.0, 600.0, 300.0, 650.0], font_size: 12.0 });
-    boxed.contents = "签名 Ada".into();
+    boxed.contents = "नम Ada".into();
     let t = add_annotation(&mut doc, &boxed, &meta("t")).unwrap();
-    assert_eq!(text(&list(&doc, 0)[t], b"Contents"), "签名 Ada");
+    assert_eq!(text(&list(&doc, 0)[t], b"Contents"), "नम Ada");
     assert!(ap_content(&doc, &list(&doc, 0)[t]).contains("(?? Ada)"), "{}", ap_content(&doc, &list(&doc, 0)[t]));
-    assert_eq!(mark(&doc, t), Some('签'));
+    assert_eq!(mark(&doc, t), Some('न'));
     let typed = Shape::Typewriter { rect: [100.0, 700.0, 200.0, 716.0], font_size: 11.0 };
     let f = add_annotation(
         &mut doc,
-        &NewAnnotation { page: 0, style: Style::default_for(&typed), shape: typed, contents: "张三".into(), author: "Ada".into() },
+        &NewAnnotation { page: 0, style: Style::default_for(&typed), shape: typed, contents: "मन".into(), author: "Ada".into() },
         &meta("x"),
     )
     .unwrap();
-    assert_eq!(mark(&doc, f), Some('张'));
+    assert_eq!(mark(&doc, f), Some('म'));
     let stamp =
         Shape::Stamp { rect: [100.0, 100.0, 260.0, 142.0], stamp: StampKind::DynApproved, by: Some("By 张三 at 2:14 pm, Oct 02, 2026".into()) };
     let s = add_annotation(
@@ -1194,18 +1195,18 @@ fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
     assert_eq!(mark(&doc, s), Some('张'));
     // Our own `?` appearance is redrawn on a restyle; Western European text clears the mark.
     set_style(&mut doc, 0, t, Some([1.0, 0.0, 0.0]), None, None, None, &meta("")).unwrap();
-    assert_eq!(mark(&doc, t), Some('签'));
+    assert_eq!(mark(&doc, t), Some('न'));
     set_contents(&mut doc, 0, t, "Zürich —\nGenève", &meta("")).unwrap();
     assert_eq!(mark(&doc, t), None);
-    set_contents(&mut doc, 0, t, "签名", &meta("")).unwrap();
-    assert_eq!((text(&list(&doc, 0)[t], b"Contents").as_str(), mark(&doc, t)), ("签名", Some('签')));
-    // A text box another program drew (with a font that has 欢): a restyle keeps that appearance.
+    set_contents(&mut doc, 0, t, "नम", &meta("")).unwrap();
+    assert_eq!((text(&list(&doc, 0)[t], b"Contents").as_str(), mark(&doc, t)), ("नम", Some('न')));
+    // A text box another program drew (with a font that has न): a restyle keeps that appearance.
     let mut foreign = Dict::new();
     foreign.set(b"Type".to_vec(), Object::name("Annot"));
     foreign.set(b"Subtype".to_vec(), Object::name("FreeText"));
     foreign.set(b"Rect".to_vec(), Object::Array([100.0, 400.0, 300.0, 430.0].iter().map(|v| Object::Real(*v)).collect()));
     foreign.set(b"DA".to_vec(), PdfString::literal(b"0 g /Helv 12 Tf".to_vec()));
-    foreign.set(b"Contents".to_vec(), PdfString::text("欢迎"));
+    foreign.set(b"Contents".to_vec(), PdfString::text("नम"));
     let mut drawn = Dict::new();
     drawn.set(b"Type".to_vec(), Object::name("XObject"));
     drawn.set(b"Subtype".to_vec(), Object::name("Form"));
@@ -1222,21 +1223,21 @@ fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
     let k = list(&doc, 0).len() - 1;
     let before = list(&doc, 0)[k].clone();
     let err = set_style(&mut doc, 0, k, Some([1.0, 0.0, 0.0]), Some(0.4), Some(6.0), None, &meta("")).unwrap_err();
-    assert!(matches!(&err, AnnotError::Undrawable(m) if m.contains("can't redraw") && m.contains("\"欢\" (U+6B22)")), "{err:?}");
+    assert!(matches!(&err, AnnotError::Undrawable(m) if m.contains("can't redraw") && m.contains("\"न\" (U+0928)")), "{err:?}");
     assert_eq!(list(&doc, 0)[k], before, "a refused restyle keeps the colour, opacity, width and appearance");
     let err = set_rect(&mut doc, 0, k, [40.0, 40.0, 180.0, 90.0], &meta("")).unwrap_err();
     assert!(matches!(&err, AnnotError::Undrawable(_)), "{err:?}");
     assert_eq!(list(&doc, 0)[k], before, "a refused resize keeps the rectangle");
     // New text from the user is taken (and marked), as for any comment.
-    set_contents(&mut doc, 0, k, "欢迎光临", &meta("")).unwrap();
-    assert_eq!(mark(&doc, k), Some('欢'));
+    set_contents(&mut doc, 0, k, "नमन", &meta("")).unwrap();
+    assert_eq!(mark(&doc, k), Some('न'));
     // One without an appearance is shown in the display copy only; drawing it marks it.
     let mut bare = Dict::new();
     bare.set(b"Type".to_vec(), Object::name("Annot"));
     bare.set(b"Subtype".to_vec(), Object::name("FreeText"));
     bare.set(b"Rect".to_vec(), Object::Array([100.0, 300.0, 300.0, 330.0].iter().map(|v| Object::Real(*v)).collect()));
     bare.set(b"DA".to_vec(), PdfString::literal(b"0 g /Helv 12 Tf".to_vec()));
-    bare.set(b"Contents".to_vec(), PdfString::text("欢迎"));
+    bare.set(b"Contents".to_vec(), PdfString::text("नम"));
     let b = doc.add(Object::Dict(bare));
     let mut on_page = annots(&doc, page);
     on_page.push(Object::Ref(b));
@@ -1245,10 +1246,140 @@ fn comment_text_the_standard_fonts_cannot_draw_is_kept_and_marked() {
     assert!(shown.get(b).as_dict().unwrap().contains(b"AP"), "displayed anyway");
     assert!(!doc.get(b).as_dict().unwrap().contains(b"AP"), "the document itself is unchanged");
     set_appearance(&mut doc, b).unwrap();
-    assert_eq!(doc.get(b).as_dict().and_then(pdfcraft_fonts::undrawn_mark), Some('欢'));
+    assert_eq!(doc.get(b).as_dict().and_then(pdfcraft_fonts::undrawn_mark), Some('न'));
     // Kept through a save.
     let doc = reopen(&doc);
-    assert_eq!(text(&list(&doc, 0)[t], b"Contents"), "签名");
+    assert_eq!(text(&list(&doc, 0)[t], b"Contents"), "नम");
+}
+
+/// The fallback faces come from craft-fonts, an optional build input.
+fn without_craft_fonts(test: &str) -> bool {
+    if !pdfcraft_fonts::document_japanese_fonts_for_style(false, false).is_empty() {
+        return false;
+    }
+    eprintln!("skipping {test}: built without craft-fonts (set CRAFT_FONTS_DIR to run it)");
+    true
+}
+
+/// The Type 3 fonts `d`'s normal appearance names in its `/Resources /Font`, as stored.
+fn type3_fonts_of(doc: &Document, d: &Dict) -> Vec<Dict> {
+    let n = d.get(b"AP").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().and_then(|a| a.reference(b"N"))).expect("has /AP /N");
+    let Object::Stream(s) = &*doc.get(n) else { panic!("AP is not a stream") };
+    let res = doc.resolve(s.dict.get(b"Resources").expect("resources"));
+    let fonts = doc.resolve(res.as_dict().unwrap().get(b"Font").expect("fonts"));
+    let fonts = fonts.as_dict().unwrap().iter().map(|(_, f)| doc.resolve(f).as_dict().cloned().unwrap()).collect::<Vec<_>>();
+    fonts.into_iter().filter(|f| f.name(b"Subtype") == Some(b"Type3")).collect()
+}
+
+/// Every part of `font` that must be indirect is (ISO 32000-2 §7.3.8, §9.6.5); its ToUnicode map.
+fn indirect_parts_and_tounicode(doc: &Document, font: &Dict) -> String {
+    assert!(font.reference(b"FontDescriptor").is_some(), "the descriptor is indirect");
+    let procs = font.get(b"CharProcs").and_then(Object::as_dict).expect("inline CharProcs");
+    assert!(!procs.is_empty() && procs.iter().all(|(_, g)| g.as_ref().is_some()), "every glyph stream is indirect");
+    let tu = font.reference(b"ToUnicode").expect("the ToUnicode stream is indirect");
+    let Object::Stream(tu) = &*doc.get(tu) else { panic!("ToUnicode is a stream") };
+    String::from_utf8(tu.decoded().unwrap()).unwrap()
+}
+
+/// Text box text WinAnsi can't write (#506) is drawn with Type 3 fonts of craft-fonts glyphs instead
+/// of `?`, so the comment isn't marked: its fonts' parts are indirect objects that survive a save,
+/// and their ToUnicode maps give each typed character back.
+#[test]
+fn text_outside_winansi_is_drawn_with_type3_fonts_and_reads_back() {
+    if without_craft_fonts("text_outside_winansi_is_drawn_with_type3_fonts_and_reads_back") {
+        return;
+    }
+    let mut doc = fixture();
+    let typed = "山田太郎 Ada 東京都江東区1-2-3";
+    let mut boxed = new(0, Shape::TextBox { rect: [100.0, 600.0, 400.0, 650.0], font_size: 12.0 });
+    boxed.contents = typed.into();
+    let t = add_annotation(&mut doc, &boxed, &meta("t")).unwrap();
+    let doc = reopen(&doc);
+    let d = &list(&doc, 0)[t];
+    assert_eq!(pdfcraft_fonts::undrawn_mark(d), None);
+    let content = ap_content(&doc, d);
+    assert!(!content.contains('?') && content.contains("/PCJp0 12 Tf") && content.contains("/Helv 12 Tf"), "{content}");
+    let fonts = type3_fonts_of(&doc, d);
+    assert_eq!(fonts.len(), 1, "one font for a dozen characters");
+    let cmap = indirect_parts_and_tounicode(&doc, &fonts[0]);
+    for c in typed.chars().filter(|c| !pdfcraft_fonts::win_ansi_encodable(*c)) {
+        assert!(cmap.contains(&format!("<{:04X}>", c as u32)), "{c} is in the ToUnicode map: {cmap}");
+    }
+}
+
+/// A character no fallback font draws still comes out as `?` and marks the comment, beside the
+/// Japanese that is drawn.
+#[test]
+fn text_no_fallback_font_draws_is_still_marked_beside_drawn_text() {
+    if without_craft_fonts("text_no_fallback_font_draws_is_still_marked_beside_drawn_text") {
+        return;
+    }
+    let mut doc = fixture();
+    let mut boxed = new(0, Shape::TextBox { rect: [100.0, 600.0, 400.0, 650.0], font_size: 12.0 });
+    boxed.contents = "山田 नम".into();
+    let t = add_annotation(&mut doc, &boxed, &meta("t")).unwrap();
+    let d = &list(&doc, 0)[t];
+    assert_eq!(pdfcraft_fonts::undrawn_mark(d), Some('न'));
+    let content = ap_content(&doc, d);
+    assert!(content.contains("/PCJp0 12 Tf") && content.contains("( ??) Tj"), "{content}");
+}
+
+/// Text WinAnsi writes names no fallback font, with or without craft-fonts.
+#[test]
+fn winansi_text_names_no_fallback_font() {
+    let mut doc = fixture();
+    let mut boxed = new(0, Shape::TextBox { rect: [100.0, 600.0, 400.0, 650.0], font_size: 12.0 });
+    boxed.contents = "Zürich —\nGenève".into();
+    let t = add_annotation(&mut doc, &boxed, &meta("t")).unwrap();
+    let d = &list(&doc, 0)[t];
+    assert!(type3_fonts_of(&doc, d).is_empty());
+    assert!(!ap_content(&doc, d).contains("PCJp"));
+}
+
+/// A text box another program saved without an appearance is drawn in the display copy with its
+/// fallback fonts as indirect objects of that copy, from a fresh build and from the cache alike.
+#[test]
+fn display_copies_get_indirect_fallback_fonts() {
+    if without_craft_fonts("display_copies_get_indirect_fallback_fonts") {
+        return;
+    }
+    let mut doc = fixture();
+    let mut bare = Dict::new();
+    bare.set(b"Type".to_vec(), Object::name("Annot"));
+    bare.set(b"Subtype".to_vec(), Object::name("FreeText"));
+    bare.set(b"Rect".to_vec(), Object::Array([100.0, 300.0, 300.0, 330.0].iter().map(|v| Object::Real(*v)).collect()));
+    bare.set(b"DA".to_vec(), PdfString::literal(b"0 g /Helv 12 Tf".to_vec()));
+    bare.set(b"Contents".to_vec(), PdfString::text("日本語"));
+    let b = doc.add(Object::Dict(bare));
+    let page = page_ref(&doc, 0).unwrap();
+    let mut on_page = annots(&doc, page);
+    on_page.push(Object::Ref(b));
+    set_annots(&mut doc, page, on_page).unwrap();
+    let mut cache = AppearanceCache::default();
+    for round in 0..2 {
+        let shown = with_missing_appearances_cached(&doc, &mut cache).expect("a display copy");
+        let d = shown.get(b).as_dict().cloned().unwrap();
+        let fonts = type3_fonts_of(&shown, &d);
+        assert_eq!(fonts.len(), 1, "round {round}");
+        assert!(indirect_parts_and_tounicode(&shown, &fonts[0]).contains("<65E5>"), "round {round}: 日 reads back");
+    }
+    assert_eq!(cache.hits(), 1, "the second copy reuses the first build");
+    assert!(!doc.get(b).as_dict().unwrap().contains(b"AP"), "the document itself is unchanged");
+}
+
+/// Text boxes are sized with the advances their text is drawn with: a Japanese character is about
+/// one em, where Helvetica's estimate would make the box too small.
+#[test]
+fn text_outside_winansi_is_measured_as_drawn() {
+    if without_craft_fonts("text_outside_winansi_is_measured_as_drawn") {
+        return;
+    }
+    let w = appearance::text_measure("日本語\nab", 12.0);
+    assert!((w - 36.0).abs() < 2.0, "three ideographs at 12 pt: {w}");
+    assert_eq!(appearance::text_measure("Ada", 12.0), appearance::text_width("Ada", 12.0));
+    let long = "これは日本語の文章です".repeat(5);
+    let lines = appearance::text_wrap(&long, 12.0, 100.0);
+    assert!(lines.len() > 5 && lines.iter().all(|l| appearance::text_measure(l, 12.0) <= 100.0), "{lines:?}");
 }
 
 /// Content edits rebuild the display copy on every commit but leave annotations alone: the
