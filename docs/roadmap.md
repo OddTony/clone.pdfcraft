@@ -1,5 +1,6 @@
 # PdfCraft roadmap: milestones and what's next
 
+> **Last reviewed:** 2026-10-17 · **Last updated:** 2026-10-17 · **Change:** patch (PR #2880: integrated upstream `924c4da4`; feature scope and estimates unchanged)
 > **Last reviewed:** 2026-10-16 · **Last updated:** 2026-10-16 · **Change:** minor (M0 #2489: opt-in full permitted WASM font embedding at build time; estimates unchanged)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-14 · **Change:** minor (M14: the Italian catalog has every entry the other catalogs had and the code looks up, 2,528 entries; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (M2/M6: spot-colour images convert once per pixel value; widget placement and the Fields panel scale with the field count; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -180,6 +181,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-17 | patch | PR #2880: integrated upstream `924c4da4`; feature scope and estimates unchanged. |
 | 2026-10-16 | minor | M0 #2489: configurable build-time WASM font embedding; no runtime loading or default-policy change. Estimates unchanged. |
 | 2026-10-15 | minor | M9 #1895: generic appearance rewriting deferred; separate validation overlays preserve original artwork, exports and printing. Baked captions remain unchanged (#79 open). Estimates unchanged. |
 | 2026-10-12 | minor | M6: valid AcroForm XML element names with original PDF field names preserved; saved-PDF collision and Unicode regressions. Estimates unchanged. |
