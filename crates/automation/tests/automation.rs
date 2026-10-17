@@ -3417,6 +3417,71 @@ fn helvetica_page(body: &str) -> Vec<u8> {
     out
 }
 
+/// #2377 A: verify pixels, not just extractable text. The first row's foreground must
+/// remain in front, and the second row must remain in front of its own green background.
+#[test]
+fn text_edit_keeps_interleaved_paint_order_after_save_and_undo() {
+    let dir = workdir("text-paint-order");
+    let body = "q 0 0.5 0 rg 60 695 240 18 re f Q \
+                BT /F1 12 Tf 1 g 72 700 Td (First row) Tj ET \
+                q 1 0 0 rg 72 695 240 18 re f Q \
+                q 0 0.5 0 rg 60 677 240 18 re f Q \
+                BT /F1 12 Tf 1 g 72 682 Td (Second row) Tj ET \
+                q 0 0 1 rg 200 677 20 18 re f Q";
+    std::fs::write(dir.join("paint.pdf"), helvetica_page(body)).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"paint.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "text_paragraphs", json!({"doc":doc,"page":1}))["count"], 1);
+    let before = a.render_pixels(doc, 1, 1.0).unwrap();
+    ok(&mut a, "text_edit", json!({"doc":doc,"page":1,"paragraph":1,"text":"Other row\nNew row","color":"#ffffff"}));
+    let after = a.render_pixels(doc, 1, 1.0).unwrap();
+    let (width, height, pixels) = &after;
+    let patch = |x0, y0, x1, y1| {
+        (y0..y1)
+            .flat_map(|y| {
+                (x0..x1).map(move |x| {
+                    let i = ((height - 1 - y) * width + x) as usize * 4;
+                    &pixels[i..i + 3]
+                })
+            })
+            .collect::<Vec<_>>()
+    };
+    assert!(patch(72, 682, 150, 693).iter().any(|p| p.iter().all(|c| *c > 220)), "edited second row must be visible above green");
+    assert!(patch(72, 700, 150, 710).iter().all(|p| p[0] > 240 && p[1] < 10 && p[2] < 10), "red foreground stays above first row");
+    assert!(patch(202, 680, 218, 690).iter().all(|p| p[2] > 240 && p[0] < 10 && p[1] < 10));
+    ok(&mut a, "edit_undo", json!({"doc":doc}));
+    assert_eq!(a.render_pixels(doc, 1, 1.0).unwrap(), before);
+    ok(&mut a, "edit_redo", json!({"doc":doc}));
+    assert_eq!(a.render_pixels(doc, 1, 1.0).unwrap(), after);
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"edited.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"edited.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(a.render_pixels(reopened, 1, 1.0).unwrap(), after);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn text_edit_keeps_painted_heading_separate_from_label() {
+    let dir = workdir("painted-heading");
+    let body = "q 0 0.5 0 rg 60 695 300 18 re f Q \
+                BT /F1 9 Tf 1 g 72 700 Td (Label) Tj ET \
+                q 0 0.5 0 rg 60 667 300 28 re f Q \
+                BT /F1 20 Tf 1 g 72 682 Td (Heading) Tj ET";
+    std::fs::write(dir.join("heading.pdf"), helvetica_page(body)).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({"path":"heading.pdf"}))["doc"].as_u64().unwrap();
+    let before = ok(&mut a, "text_paragraphs", json!({"doc":doc,"page":1}));
+    assert_eq!(before["count"], 2, "{before}");
+    ok(&mut a, "text_edit", json!({"doc":doc,"page":1,"paragraph":2,"text":"Changed"}));
+    let after = ok(&mut a, "text_paragraphs", json!({"doc":doc,"page":1}));
+    assert_eq!(after["paragraphs"][0]["text"], "Label");
+    assert_eq!(after["paragraphs"][1]["text"], "Changed");
+    assert_eq!(after["paragraphs"][1]["size"], 20.0);
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"heading-edited.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"heading-edited.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(a.render_pixels(reopened, 1, 1.0).unwrap(), a.render_pixels(doc, 1, 1.0).unwrap());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn auditing_faux_redactions_through_tools() {
     let dir = workdir("faux-redaction-audit");

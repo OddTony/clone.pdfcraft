@@ -73,6 +73,7 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
             // is a table cell or a tab stop, which a rewrite would close up.
             let scanned = !mixed || (invisible(prev) == invisible(line) && (!invisible(line) || gap < prev.size.max(line.size) * 0.6));
             scanned
+                && prev.paint == line.paint
                 && (mixed || same_style(prev, line))
                 && same_plane(prev, line)
                 && (prev.frame_origin().1 - line.frame_origin().1).abs() < prev.size.min(line.size) * 0.2
@@ -108,6 +109,9 @@ fn group_layout(lines: &[TextLine], mixed: bool) -> Vec<TextBlock> {
             // OCR lines stay apart: the scan fixes where each one is, so they never rewrap together.
             (!mixed || !(invisible(prev) || invisible(first)))
                 && (mixed || same_style(prev, first))
+                // A heading/label on its own painted panel is independent of the next
+                // panel. Mixed runs without intervening artwork still form rich paragraphs.
+                && (prev.paint == first.paint || same_style(prev, first) || (prev.scope.is_some() && prev.scope == first.scope))
                 && same_plane(prev, first)
                 && aligned
                 && first.size.min(prev.size) >= first.size.max(prev.size) * 0.4
@@ -691,6 +695,14 @@ pub(super) fn rewrite_styled_block(
         .rfind(|v| *v > 0.0)
         .unwrap_or(first.size * 1.5);
     let mut baseline = first.origin.baseline;
+    let distributed = block.lines.iter().filter_map(|i| lines.get(*i)).any(|line| line.paint != first.paint);
+    // Each distributed row needs a graphics-state wrapper and its own insertion. Bound
+    // those allocations even for a small draft made almost entirely of line breaks.
+    if distributed && rows.len() > 10_000 {
+        return Err(EditError::Invalid("a paragraph interleaved with artwork cannot be rewritten into more than 10000 rows".into()));
+    }
+    let prefix = block_ops.clone();
+    let mut row_ops = Vec::new();
     for (row_index, row) in rows.iter().enumerate() {
         let anchor = block.rows.get(row_index).and_then(|r| r.first()).and_then(|i| lines.get(*i));
         if style.line_spacing.is_none()
@@ -704,6 +716,16 @@ pub(super) fn rewrite_styled_block(
             // Kept rows only occur without spacing or size changes, so this is the step below.
             baseline -= source_leading;
             continue;
+        }
+        // Keep each rewritten row in its original painting slot. Appending everything at
+        // either end would put text under later backgrounds or over earlier foregrounds.
+        // Extra wrapped rows use the last slot; deleted rows simply lose their glyphs.
+        let slot = block.rows.get(row_index).or_else(|| block.rows.last()).and_then(|r| r.first()).and_then(|i| lines.get(*i)).unwrap_or(first);
+        if distributed {
+            block_ops = prefix.clone();
+            let inverse = Matrix(slot.origin.ctm).invert().ok_or_else(|| EditError::Invalid("the row has a singular transform".into()))?;
+            let matrix = Matrix(first.origin.ctm).then(&inverse);
+            block_ops.insert(1, Op::new("cm", matrix.0.map(n).to_vec()));
         }
         let w = measured.get(row_index).copied().unwrap_or(0.0);
         let align = style.align.unwrap_or(if centered { crate::added::Align::Center } else { crate::added::Align::Left });
@@ -801,32 +823,48 @@ pub(super) fn rewrite_styled_block(
             x += segment_width;
             pos = end;
         }
+        if distributed {
+            block_ops.push(Op::new("Q", vec![]));
+            row_ops.push((slot, std::mem::take(&mut block_ops)));
+        }
         baseline -= if style.line_spacing.is_none() && style.size.is_none() {
             source_leading
         } else {
             style.line_spacing.unwrap_or(1.5).clamp(0.5, 5.0) * style.size.unwrap_or(anchor.size)
         };
     }
-    block_ops.push(Op::new("Q", vec![]));
+    if !distributed {
+        block_ops.push(Op::new("Q", vec![]));
+        row_ops.push((lead, block_ops));
+    }
     let mut drop = coincident_ops(lines, &members);
     drop.extend(members.iter().flat_map(|l| l.ops.iter().copied()));
-    let o = &lead.origin;
-    let start = lead.ops.first().copied().unwrap_or(o.bt_op);
-    let split = ops
-        .get(o.bt_op..start)
-        .unwrap_or_default()
-        .iter()
-        .enumerate()
-        .any(|(i, op)| matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"") && !drop.contains(&(o.bt_op + i)));
-    let after = if split { &o.state } else { &o.bt_state };
-    block_ops.extend(after.ops());
-    if split {
-        block_ops.insert(0, Op::new("ET", vec![]));
-        block_ops.push(Op::new("BT", vec![]));
-        block_ops.push(Op::new("Tm", o.tlm.iter().map(|v| n(*v)).collect()));
+    let mut inserts: HashMap<usize, Vec<Op>> = HashMap::new();
+    for (lead, mut block_ops) in row_ops {
+        let o = &lead.origin;
+        let start = lead.ops.first().copied().unwrap_or(o.bt_op);
+        let split = ops
+            .get(o.bt_op..start)
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .any(|(i, op)| matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"") && !drop.contains(&(o.bt_op + i)));
+        let after = if split { &o.state } else { &o.bt_state };
+        block_ops.extend(after.ops());
+        if split {
+            block_ops.insert(0, Op::new("ET", vec![]));
+            block_ops.push(Op::new("BT", vec![]));
+            block_ops.push(Op::new("Tm", o.tlm.iter().map(|v| n(*v)).collect()));
+        }
+        let at = if split { start } else { o.bt_op };
+        inserts.entry(at).or_default().extend(block_ops);
     }
-    let at = if split { start } else { o.bt_op };
-    let data = splice(&pieces, &ops, |i| (if i == at { std::mem::take(&mut block_ops) } else { Vec::new() }, !drop.contains(&i)));
+    let mut glyphless = if distributed { glyphless_shows(doc, &ops, &fonts, &drop)? } else { HashMap::new() };
+    let data = splice(&pieces, &ops, |i| {
+        let mut insert = inserts.remove(&i).unwrap_or_default();
+        insert.extend(glyphless.remove(&i).unwrap_or_default());
+        (insert, !drop.contains(&i))
+    });
     let contents = rewritten_contents(doc, &streams, data);
     res.set(b"Font".to_vec(), Object::Dict(fonts));
     doc.update_dict(p.obj, |d| {
