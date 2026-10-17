@@ -734,16 +734,14 @@ fn driver_options_panel(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens) {
     let PrintDraft { driver_options: Some((_, options)), driver_choices: choices, show_driver_options: show, .. } = d else { return };
     egui::Frame::new().fill(t.hover).corner_radius(egui::CornerRadius::same(6)).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(tl!("Printer properties")).font(theme::semibold(13.0)));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(tl!("Done")).clicked() {
-                    *show = false;
-                }
-                if ui.add_enabled(!choices.is_empty(), egui::Button::new(tl!("Reset to printer defaults"))).clicked() {
-                    choices.clear();
-                }
-            });
+        ui.label(egui::RichText::new(tl!("Printer properties")).font(theme::semibold(13.0)));
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 32.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui.button(tl!("Done")).clicked() {
+                *show = false;
+            }
+            if ui.add_enabled(!choices.is_empty(), egui::Button::new(tl!("Reset to printer defaults"))).clicked() {
+                choices.clear();
+            }
         });
         if options.is_empty() {
             ui.label(egui::RichText::new(tl!("This printer offers no settings of its own.")).small().color(t.text_muted));
@@ -808,7 +806,10 @@ pub(crate) fn body(
     let settings = d.settings(sizes.len(), labels);
     let sheets = settings.as_ref().ok().and_then(|s| print::layout(sizes, s).ok()).unwrap_or_default();
     d.sheet = d.sheet.min(sheets.len().saturating_sub(1));
-    ui.horizontal_top(|ui| {
+    // Keep the normal layout unchanged; bound the expanded driver controls.
+    let expanded = d.show_driver_options;
+    let mut draw_content = |ui: &mut egui::Ui| {
+        ui.horizontal_top(|ui| {
         // Settings.
         ui.vertical(|ui| {
             ui.set_width(470.0);
@@ -1224,10 +1225,33 @@ pub(crate) fn body(
                 }
             }
         });
-    });
+        });
+    };
+
+    // Keep the original, fully accessible layout on roomy viewports. On a
+    // compact viewport, scroll settings and preview, not title or actions.
+    let viewport_height = ui.ctx().content_rect().height();
+    if expanded || viewport_height < 820.0 {
+        let max_content_height = if expanded {
+            (viewport_height * 0.55).max(140.0)
+        } else {
+            // Reserve room for the title, action row, frame and screen margins.
+            (viewport_height - 190.0).max(140.0)
+        };
+        egui::ScrollArea::vertical()
+            .id_salt("print-dialog-content")
+            .max_height(max_content_height)
+            .auto_shrink([false, true])
+            .show(ui, &mut draw_content);
+    } else {
+        draw_content(ui);
+    }
+
     ui.add_space(12.0);
     let (mut go, mut cancel) = (false, false);
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+    // Avoid filling the remaining modal height with an oversized footer.
+    let footer_size = egui::vec2(ui.available_width(), 32.0);
+    ui.allocate_ui_with_layout(footer_size, egui::Layout::right_to_left(egui::Align::Center), |ui| {
         let looking = still_looking(d);
         let label = if d.printer.is_some() || looking { tl!("Print") } else { tl!("Save as PDF") };
         if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty() && !looking, |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
