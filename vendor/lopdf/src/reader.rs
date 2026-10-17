@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
@@ -26,6 +27,41 @@ use crate::object_stream::ObjectStream;
 use crate::parser;
 use crate::xref::{Xref, XrefEntry, XrefType};
 use crate::{Dictionary, Document, Error, IncrementalDocument, Object, ObjectId, Result};
+
+// PdfCraft patch (#2670, item 11): one damaged file can have thousands of unreadable
+// objects. Keep samples and exact totals per load, shared by that load's Rayon workers,
+// rather than hiding reader errors globally or silencing the next document's diagnostics.
+const MAX_OBJECT_LOAD_MESSAGES: usize = 8;
+
+#[derive(Default)]
+struct ObjectLoadLog {
+    failures: AtomicUsize,
+    streams: AtomicUsize,
+}
+
+impl ObjectLoadLog {
+    fn object(&self) -> bool {
+        // Each xref entry reports at most once; these counters cannot exceed the number
+        // of entries already held in memory. No input-sized allocation is needed.
+        self.failures.fetch_add(1, Ordering::Relaxed) < MAX_OBJECT_LOAD_MESSAGES
+    }
+
+    fn stream(&self) -> bool {
+        self.streams.fetch_add(1, Ordering::Relaxed);
+        self.object()
+    }
+
+    fn finish(&self) {
+        let failures = self.failures.load(Ordering::Relaxed);
+        if failures > MAX_OBJECT_LOAD_MESSAGES {
+            error!(
+                "Object loading: {failures} failed objects ({} object streams); {} additional messages suppressed",
+                self.streams.load(Ordering::Relaxed),
+                failures.saturating_sub(MAX_OBJECT_LOAD_MESSAGES),
+            );
+        }
+    }
+}
 
 #[cfg(not(feature = "async"))]
 impl Document {
@@ -962,6 +998,7 @@ impl Reader<'_> {
 
     fn load_objects_raw(&mut self, filter_func: Option<FilterFunc>) -> Result<()> {
         let is_encrypted = self.document.trailer.get(b"Encrypt").is_ok();
+        let load_log = ObjectLoadLog::default();
         let zero_length_streams = Mutex::new(vec![]);
         let object_streams = Mutex::new(vec![]);
 
@@ -1002,7 +1039,9 @@ impl Reader<'_> {
                             return Ok(None);
                         }
                         // Lenient loading logs and skips malformed objects; strict loading fails.
-                        error!("Object load error at offset {}: {e:?}", offset);
+                        if load_log.object() {
+                            error!("Object load error at offset {}: {e:?}", offset);
+                        }
                         return if self.strict { Err(e) } else { Ok(None) };
                     }
                 };
@@ -1019,7 +1058,9 @@ impl Reader<'_> {
                             // Not an encryption-related loss, so it obeys the same
                             // strict-mode policy as any other load error.
                             Err(e) => {
-                                error!("Object stream load error for {object_id:?}: {e:?}");
+                                if load_log.stream() {
+                                    error!("Object stream load error for {object_id:?}: {e:?}");
+                                }
                                 return if self.strict { Err(e) } else { Ok(None) };
                             }
                         };
@@ -1057,27 +1098,28 @@ impl Reader<'_> {
         };
 
         #[cfg(feature = "rayon")]
-        {
-            self.document.objects = self
-                .document
-                .reference_table
-                .entries
-                .par_iter()
-                .map(entries_filter_map)
-                .filter_map(Result::transpose)
-                .collect::<Result<BTreeMap<_, _>>>()?;
-        }
+        let objects = self
+            .document
+            .reference_table
+            .entries
+            .par_iter()
+            .map(entries_filter_map)
+            .filter_map(Result::transpose)
+            .collect::<Result<BTreeMap<_, _>>>();
         #[cfg(not(feature = "rayon"))]
-        {
-            self.document.objects = self
-                .document
-                .reference_table
-                .entries
-                .iter()
-                .map(entries_filter_map)
-                .filter_map(Result::transpose)
-                .collect::<Result<BTreeMap<_, _>>>()?;
-        }
+        let objects = self
+            .document
+            .reference_table
+            .entries
+            .iter()
+            .map(entries_filter_map)
+            .filter_map(Result::transpose)
+            .collect::<Result<BTreeMap<_, _>>>();
+
+        // Collection joins the Rayon work before the summary. Report even if strict mode
+        // returns an error; neither object recovery nor the error result is changed.
+        load_log.finish();
+        self.document.objects = objects?;
 
         // Only add entries, but never replace entries
         for (id, entry) in object_streams.into_inner().unwrap() {

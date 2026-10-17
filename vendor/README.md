@@ -5,6 +5,15 @@ licence files unchanged. Every patch is marked `PdfCraft patch:` in the source, 
 PdfCraft test, and should be proposed upstream. Remove the vendored copy once upstream releases
 the fix. Vendoring copyleft code is never allowed (plan/adr/0001).
 
+Reader diagnostics (#2670, item 11): `lopdf::Reader::load_objects_raw` shares a per-read
+counter across Rayon workers. It logs at most eight detailed malformed-object/object-stream
+errors, then one ERROR summary with exact failure and suppressed-message counts. Collection
+finishes before the summary, including strict-mode errors. Normal recovery, error levels,
+small-file diagnostics and unrelated warnings are unchanged; the next read gets a fresh
+budget. This does not limit other parser diagnostics. Covered by the six tests in
+`crates/render/tests/object_load_logging.rs`, including the inspector's compatibility fallback,
+strict refusal, healthy/boundary controls and independent concurrent document reads.
+
 A PdfCraft patch in `hayro-syntax::Page::base_dimensions` expresses the existing one-point floor as a raw reciprocal of `/UserUnit`, rounded upward only when f32 multiplication would fall below one point. Five `pdfcraft-render` regressions with prefix `raster::tests::raw_crop_` cover the observed dimensions, origins and rotations, units 41/47, bounded vector rasters and unchanged nearly-zero A4 fallback. Accepted page-unit policy and licences are unchanged.
 
 | Crate | Version | Licence | Patches | Test |
