@@ -51,9 +51,9 @@ fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool) -> (bool
             close = true;
         }
     });
-    ui.add_space(2.0);
-    ui.separator();
     ui.add_space(4.0);
+    ui.separator();
+    ui.add_space(6.0);
     (go_back, close)
 }
 
@@ -63,6 +63,7 @@ fn all_tools(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         app.left_open = false;
     }
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+        ui.add_space(2.0);
         let shown = if app.all_tools_expanded { TOOL_GROUPS.len() } else { COLLAPSED_TOOLS.min(TOOL_GROUPS.len()) };
         for g in &TOOL_GROUPS[..shown] {
             if tool_row(ui, t, g).clicked() {
@@ -205,6 +206,7 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
     let marks = if footer { app.active_ids().and_then(|(_, id)| app.session.get(id)).map_or(0, |d| d.redaction_marks()) } else { 0 };
     let list_h = if footer { (ui.available_height() - 52.0).max(80.0) } else { ui.available_height() };
     egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(list_h).show(ui, |ui| {
+        ui.add_space(2.0);
         for s in g.sections {
             widgets::section_title(ui, tl!(s.title));
             for item in s.items {
