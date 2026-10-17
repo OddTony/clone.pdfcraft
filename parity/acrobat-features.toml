@@ -1719,7 +1719,7 @@ status = "shipped"
 commands = []
 tools = []
 evidence = ["crates/ui-egui/tests/keyboard.rs::tool_accelerators_select_and_cycle_without_extra_modifiers", "crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/commands.rs::shortcuts_run_registered_commands", "crates/engine/src/commands.rs::shortcut_labels_follow_platform_conventions", "crates/ui-egui/tests/commands.rs::quit_shortcut_requires_exact_modifiers_and_preserves_unsaved_work", "crates/ui-egui/tests/signing.rs::ctrl_alt_q_types_an_email_without_quitting"]
-notes = "Annotation tools: Ctrl/Cmd+Shift+H for Highlight; U cycles Highlight/Underline/Strikeout, D cycles Line/Arrow/Rectangle, V/H/Z select Select/Hand/Marquee Zoom, S Sticky note, T Text box and E Edit text & images. Plain keys yield to text editors, forms and overlays. Read mode requires its own modifiers. Quit requires exact Ctrl+Q/Cmd+Q modifiers and preserves unsaved-document confirmation. Ctrl+Alt+Q email input is covered with synthetic key/text events; native German keyboard-layout translation is not covered by that test (#1980)."
+notes = "Annotation tools: Ctrl/Cmd+Shift+H or M for Highlight, R Replace text, I Insert text and X Strikethrough (#3002); U cycles Highlight/Underline/Strikeout, D cycles Line/Arrow/Rectangle, V/H/Z select Select/Hand/Marquee Zoom, S Sticky note, T Text box and E Edit text & images. Plain keys yield to text editors, forms and overlays. Read mode requires its own modifiers. Quit requires exact Ctrl+Q/Cmd+Q modifiers and preserves unsaved-document confirmation. Ctrl+Alt+Q email input is covered with synthetic key/text events; native German keyboard-layout translation is not covered by that test (#1980)."
 
 [[feature]]
 id = "view.shortcuts-dialog"
@@ -3585,7 +3585,7 @@ status = "shipped"
 commands = ["comment.highlight"]
 tools = ["comment_add"]
 evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/comments.rs::dragging_over_text_with_the_highlighter_highlights_it", "crates/ui-egui/tests/comments.rs::a_new_highlight_opens_its_note_for_typing", "crates/engine/src/tests.rs::highlight_multiplies_over_text"]
-notes = "Ctrl/Cmd+Shift+H selects Highlight; U cycles Highlight, Underline and Strikeout. Drag over text, or pick the tool with text selected; a new highlight opens its note for typing in the Comments panel; agents can highlight by text search"
+notes = "Ctrl/Cmd+Shift+H or M selects Highlight; U cycles Highlight, Underline and Strikeout. Drag over text, or pick the tool with text selected; a new highlight opens its note for typing in the Comments panel; agents can highlight by text search"
 
 [[feature]]
 id = "comment.underline"
@@ -3608,8 +3608,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.strikeout"]
 tools = ["comment_add"]
-evidence = ["crates/ui-egui/tests/comments.rs::a_selection_made_first_is_marked_when_a_tool_is_picked", "crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment"]
-notes = ""
+evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/ui-egui/tests/comments.rs::a_selection_made_first_is_marked_when_a_tool_is_picked", "crates/annot/src/tests.rs::every_tool_creates_a_drawable_comment"]
+notes = "X selects Strikethrough directly; U cycles the markup tools."
 
 [[feature]]
 id = "comment.squiggly"
@@ -3632,8 +3632,8 @@ milestone = "M5"
 status = "shipped"
 commands = ["comment.replace"]
 tools = ["comment_add"]
-evidence = ["crates/annot/src/tests.rs::replace_text_groups_a_strikeout_and_a_caret", "crates/ui-egui/tests/comments.rs::replacing_text_strikes_it_and_adds_a_caret", "crates/automation/tests/automation.rs::drawing_comments_through_tools"]
-notes = "strikeout (/IT StrikeOutTextEdit) and a grouped caret (/RT /Group) with the replacement"
+evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/annot/src/tests.rs::replace_text_groups_a_strikeout_and_a_caret", "crates/ui-egui/tests/comments.rs::replacing_text_strikes_it_and_adds_a_caret", "crates/automation/tests/automation.rs::drawing_comments_through_tools"]
+notes = "R selects Replace text: strikeout (/IT StrikeOutTextEdit) and a grouped caret (/RT /Group) with the replacement"
 
 [[feature]]
 id = "comment.insert-text"
@@ -3644,8 +3644,8 @@ milestone = "M5"
 status = "partial"
 commands = ["comment.caret"]
 tools = ["comment_add"]
-evidence = ["crates/annot/src/tests.rs::polygons_clouds_connected_lines_callouts_and_carets_are_drawn", "crates/ui-egui/tests/comments.rs::polygons_clouds_connected_lines_callouts_and_inserted_text", "crates/ui-egui/tests/comments.rs::inserted_text_snaps_to_the_gap_between_characters_on_the_baseline", "crates/automation/tests/automation.rs::drawing_comments_through_tools"]
-notes = "in the UI the caret snaps to the nearer character edge, on the baseline and sized to the text, on upright horizontal text of unrotated pages; elsewhere it stays at the click. comment_add places it where it is told (no snapping)"
+evidence = ["crates/ui-egui/tests/commands.rs::annotation_and_editing_shortcuts_select_tools_without_entering_read_mode", "crates/annot/src/tests.rs::polygons_clouds_connected_lines_callouts_and_carets_are_drawn", "crates/ui-egui/tests/comments.rs::polygons_clouds_connected_lines_callouts_and_inserted_text", "crates/ui-egui/tests/comments.rs::inserted_text_snaps_to_the_gap_between_characters_on_the_baseline", "crates/automation/tests/automation.rs::drawing_comments_through_tools"]
+notes = "I selects Insert text. In the UI the caret snaps to the nearer character edge, on the baseline and sized to the text, on upright horizontal text of unrotated pages; elsewhere it stays at the click. comment_add places it where it is told (no snapping)"
 
 [[feature]]
 id = "comment.typewriter"

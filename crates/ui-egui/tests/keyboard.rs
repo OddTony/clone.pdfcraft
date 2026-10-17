@@ -216,13 +216,18 @@ fn f6_preserves_the_last_form_keystrokes_before_moving_to_the_toolbar() {
         .unwrap_or_else(|| panic!("first text field; item={:?}", h.state().views[0].keyboard_item))
         .name
         .clone();
+    for key in [Key::R, Key::I, Key::X, Key::M] {
+        h.key_press(key);
+        h.run_steps(2);
+        assert_eq!(h.state().quick_tool, QuickTool::Select, "the form editor owns {key:?}");
+    }
     h.input_mut().events.extend([
-        egui::Event::Text("Keyboard draft".into()),
+        egui::Event::Text("Keyboard draft rixm".into()),
         egui::Event::Key { key: Key::F6, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE },
     ]);
     h.run_steps(5);
     let a = h.state();
-    assert_eq!(a.session.get(a.views[0].id).unwrap().form.iter().find(|f| f.name == field).unwrap().value, ["Keyboard draft"]);
+    assert_eq!(a.session.get(a.views[0].id).unwrap().form.iter().find(|f| f.name == field).unwrap().value, ["Keyboard draft rixm"]);
     assert!(h.query_all_by_label("Toolbar").any(|n| n.is_focused()));
 }
 

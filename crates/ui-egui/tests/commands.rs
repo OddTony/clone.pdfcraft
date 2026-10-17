@@ -251,11 +251,25 @@ fn annotation_and_editing_shortcuts_select_tools_without_entering_read_mode() {
             (Key::S, QuickTool::Comment(CommentTool::Note)),
             (Key::T, QuickTool::Comment(CommentTool::TextBox)),
             (Key::E, QuickTool::EditText),
+            (Key::R, QuickTool::Comment(CommentTool::ReplaceText)),
+            (Key::I, QuickTool::Comment(CommentTool::Caret)),
+            (Key::X, QuickTool::Comment(CommentTool::StrikeOut)),
+            (Key::M, QuickTool::Comment(CommentTool::Highlight)),
+            (Key::V, QuickTool::Select),
             (Key::U, QuickTool::Comment(CommentTool::Highlight)),
         ] {
             h.key_press(key);
             h.run_steps(2);
             assert_eq!(h.state().quick_tool, tool, "{key:?} on {os:?}");
+        }
+        h.key_press(Key::V);
+        h.run_steps(2);
+        for key in [Key::R, Key::I, Key::X, Key::M] {
+            for modifiers in [Modifiers::SHIFT, Modifiers::ALT] {
+                h.key_press_modifiers(modifiers, key);
+                h.run_steps(2);
+                assert_eq!(h.state().quick_tool, QuickTool::Select, "extra modifiers must not select {key:?} on {os:?}");
+            }
         }
         h.key_press_modifiers(if os == OperatingSystem::Mac { cmd | Modifiers::CTRL } else { cmd }, Key::H);
         h.run_steps(2);
@@ -279,7 +293,7 @@ fn plain_tool_keys_leave_text_inputs_and_overlays_alone() {
             _ => unreachable!(),
         }
         h.run_steps(2);
-        for key in [Key::V, Key::H, Key::Z, Key::S, Key::T, Key::U, Key::D, Key::E] {
+        for key in [Key::V, Key::H, Key::Z, Key::S, Key::T, Key::U, Key::D, Key::E, Key::R, Key::I, Key::X, Key::M] {
             h.key_press(key);
             h.run_steps(2);
             assert_eq!(h.state().quick_tool, previous, "{context} owns {key:?}");
@@ -310,7 +324,10 @@ fn shortcuts_reference_groups_commands_by_function() {
     h.get_by_label("File").click();
     h.run_steps(3);
     h.get_by_label("Save as");
-    h.get_by_label("Ctrl+Shift+H");
+    h.get_by_label("Ctrl+Shift+H / M");
+    h.get_by_label("Replace text");
+    h.get_by_label("Insert text");
+    h.get_by_label("Strikethrough text");
     h.get_by_label("Cycle text markup tools");
     h.get_by_label("Edit text & images");
 }

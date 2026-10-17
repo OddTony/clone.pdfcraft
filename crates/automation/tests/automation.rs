@@ -1169,9 +1169,16 @@ fn command_list_reports_enablement_and_tools() {
     assert_eq!(find("page.rotate")["enabled"], true);
     assert_eq!(find("edit.undo")["enabled"], false);
     assert_eq!(find("comment.highlight")["shortcut"], if cfg!(target_os = "macos") { "⇧⌘H" } else { "Ctrl+Shift+H" });
-    assert!(find("comment.highlight")["alternate_shortcut"].is_null());
+    assert_eq!(find("comment.highlight")["alternate_shortcut"], "M");
     assert_eq!(find("comment.cycle_markup")["shortcut"], "U");
-    for (id, key) in [("comment.note", "S"), ("comment.freetext", "T"), ("edit.edit_text", "E")] {
+    for (id, key) in [
+        ("comment.note", "S"),
+        ("comment.freetext", "T"),
+        ("edit.edit_text", "E"),
+        ("comment.replace", "R"),
+        ("comment.caret", "I"),
+        ("comment.strikeout", "X"),
+    ] {
         assert_eq!(find(id)["shortcut"], key);
     }
     ok(&mut a, "page_rotate", json!({ "doc": doc, "pages": [1], "degrees": 90 }));
