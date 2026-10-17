@@ -3901,7 +3901,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
 
 #[derive(Clone, Copy)]
 enum SelectionAction {
-    Note,
+    Comment,
     Markup(comments::CommentTool),
     Replace,
     Copy,
@@ -3939,7 +3939,7 @@ fn selection_actions(
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
                 for (label, action) in [
-                    (tl!("Add comment"), SelectionAction::Note),
+                    (tl!("Add comment"), SelectionAction::Comment),
                     (tl!("Highlight"), SelectionAction::Markup(comments::CommentTool::Highlight)),
                     (tl!("Underline"), SelectionAction::Markup(comments::CommentTool::Underline)),
                     (tl!("Strikethrough"), SelectionAction::Markup(comments::CommentTool::StrikeOut)),
@@ -3956,25 +3956,21 @@ fn selection_actions(
         });
     });
     let Some(action) = chosen else { return false };
-    if let SelectionAction::Copy = action {
-        return true;
+    match action {
+        SelectionAction::Copy => return true,
+        SelectionAction::Comment => {
+            comments::comment_on_selection(view, info);
+            return false;
+        }
+        SelectionAction::Markup(_) | SelectionAction::Replace => {}
     }
     let Some((page, quads)) = view.selection_quads(info) else { return false };
-    let last = quads.last().copied().unwrap_or_default();
-    let at = [last[2].max(last[6]), last[1].max(last[3])];
+    let at = comments::after_last_quad(&quads);
     view.clear_selection();
     match action {
-        SelectionAction::Note | SelectionAction::Replace => {
-            if matches!(action, SelectionAction::Replace) {
-                view.comments.replace = Some(quads);
-            }
-            view.comments.composer = Some(comments::Composer {
-                page,
-                at,
-                kind: if matches!(action, SelectionAction::Replace) { comments::ComposerKind::Replace } else { comments::ComposerKind::Note },
-                text: String::new(),
-                focus: true,
-            });
+        SelectionAction::Replace => {
+            view.comments.text_quads = Some(quads);
+            view.comments.composer = Some(comments::Composer { page, at, kind: comments::ComposerKind::Replace, text: String::new(), focus: true });
         }
         SelectionAction::Markup(tool) => {
             // Every markup button carries a markup tool; anything else adds nothing.
@@ -3987,8 +3983,8 @@ fn selection_actions(
                 author: prefs.author.clone(),
             }));
         }
-        // Copy is dispatched through the app after the view borrow ends.
-        SelectionAction::Copy => {}
+        // Handled above: Copy is dispatched through the app after the view borrow ends.
+        SelectionAction::Copy | SelectionAction::Comment => {}
     }
     false
 }
