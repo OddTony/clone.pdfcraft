@@ -2406,28 +2406,28 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         ui.ctx().request_repaint();
     }
 
-    let mut content_w = view.content_width(info, avail.width());
-    let mut rects = view.layout(info, content_w);
+    let content_w = view.content_width(info, avail.width());
+    let rects = view.layout(info, content_w);
     // When not scrolling continuously, only one row is shown at a time: the current page, or the
     // current two-page spread (with the cover rule). These indices drive paging, which pages are
     // drawn, and the content height (#752). Empty for a document with no pages.
-    let compute_row = |layout: PageLayout, cover: bool, cur: usize, rects_len: usize| -> Vec<usize> {
-        if rects_len == 0 {
+    let shown_row = |view: &DocView| -> Vec<usize> {
+        if rects.is_empty() {
             Vec::new()
         } else {
-            let last = rects_len - 1;
-            let cur = cur.min(last);
-            match layout {
+            let last = rects.len() - 1;
+            let cur = view.current.min(last);
+            match view.layout {
                 PageLayout::Single => vec![cur],
-                PageLayout::TwoUp if cover && cur == 0 => vec![0],
+                PageLayout::TwoUp if view.cover && cur == 0 => vec![0],
                 PageLayout::TwoUp => {
-                    let first = if cover { cur - (cur + 1) % 2 } else { cur - cur % 2 };
+                    let first = if view.cover { cur - (cur + 1) % 2 } else { cur - cur % 2 };
                     if first < last { vec![first, first + 1] } else { vec![first] }
                 }
             }
         }
     };
-    let mut row = compute_row(view.layout, view.cover, view.current, rects.len());
+    let mut row = shown_row(view);
     let middle_gesture = view.auto_scroll.blocks_input();
     // Not scrolling: when the whole page or spread fits, the wheel would do nothing, so it turns
     // pages instead; zoomed in far enough to pan, it pans, and at the edge it turns the page on
@@ -2437,7 +2437,6 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let mut single_paging = false;
     let mut edge_turned = false;
     if !view.continuous {
-        let cur_before = view.current;
         // The row's bounding box on screen (one page, or a two-page spread).
         let row_rect = row.iter().filter_map(|&i| rects.get(i)).copied().reduce(Rect::union);
         // Within a point, so layout rounding can't stop a fitting page from turning.
@@ -2459,13 +2458,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 }
             }
         });
-        if view.current != cur_before {
-            view.fit_zoom(info);
-            content_w = view.content_width(info, avail.width());
-            rects = view.layout(info, content_w);
-            row = compute_row(view.layout, view.cover, view.current, rects.len());
-            ui.ctx().request_repaint();
-        }
+        row = shown_row(view);
         if single_paging {
             // Paging owns vertical wheel motion here. A diagonal gesture keeps its sideways
             // part, as `ScrollArea` itself handles each axis.
@@ -2578,7 +2571,8 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     } else if let Some((page, frac)) = view.goto.take() {
         let page = page.min(rects.len() - 1);
         let r = rects[page];
-        scroll = scroll.vertical_scroll_offset((r.top() - y_shift - GAP + frac * r.height()).max(0.0));
+        let max_y = (content_h - avail.height()).max(0.0);
+        scroll = scroll.vertical_scroll_offset((r.top() - y_shift - GAP + frac * r.height()).max(0.0).min(max_y));
     }
     let ppp = ui.ctx().pixels_per_point();
     let scale = view.render_scale(ppp);
@@ -3621,46 +3615,20 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let pan_held = now_settle < view.pan_hold_until;
     let (mut wanted, visible_now) = out.inner;
     let cur = view.current;
-    if !view.continuous {
+    if !view.continuous
+        && let (Some(&first), Some(&last)) = (visible_pages.first(), visible_pages.last())
+    {
+        let n = if view.layout == PageLayout::Single { 1 } else { 2 };
         let max_side = ui.ctx().input(|inp| inp.max_texture_side) as f32;
-        let n = info.pages.len();
-        let step = if view.layout == PageLayout::TwoUp { 2 } else { 1 };
-        let mut prefetch_candidates = Vec::new();
-        // Prefetch adjacent pages: 2 steps ahead, 1 step behind.
-        for s in 1..=2 {
-            let p = cur + s * step;
-            if p < n {
-                prefetch_candidates.push(p);
-                if view.layout == PageLayout::TwoUp && p + 1 < n {
-                    prefetch_candidates.push(p + 1);
-                }
-            }
-        }
-        if cur >= step {
-            let p = cur - step;
-            prefetch_candidates.push(p);
-            if view.layout == PageLayout::TwoUp && p + 1 < n {
-                prefetch_candidates.push(p + 1);
-            }
-        }
-        for p in prefetch_candidates {
-            if visible_now.contains(&p) || wanted.iter().any(|w| w.0 == p) {
-                continue;
-            }
-            if let Some(page_info) = info.pages.get(p) {
-                let (pw_pt, ph_pt) = (page_info.width.max(1.0), page_info.height.max(1.0));
-                let tiled = pw_pt.max(ph_pt) * scale > TILE_THRESHOLD.min(max_side);
-                let (want_scale, want_tag) = if tiled {
-                    let bs = BASE_SIDE.min(max_side) / pw_pt.max(ph_pt);
-                    (bs, scale_tag(bs))
-                } else {
-                    (scale, tag)
-                };
-                match view.pages.get(&p).filter(|cached| tiled && cached.tag != STALE_TAG && tag_scale(cached.tag) >= want_scale) {
-                    Some(cached) => wanted.push((p, tag_scale(cached.tag), cached.tag, None)),
-                    None => wanted.push((p, want_scale, want_tag, None)),
-                }
-            }
+        for i in (last.saturating_add(1)..=last.saturating_add(n)).chain(first.saturating_sub(n)..first) {
+            let Some(p) = info.pages.get(i).filter(|_| !view.errors.contains_key(&i)) else { continue };
+            let side = p.width.max(p.height).max(1.0);
+            wanted.push(if side * scale > TILE_THRESHOLD.min(max_side) {
+                let bs = BASE_SIDE.min(max_side) / side;
+                (i, bs, scale_tag(bs), None)
+            } else {
+                (i, scale, tag, None)
+            });
         }
     }
     wanted.sort_by_key(|w| (!visible_now.contains(&w.0), w.0.abs_diff(cur), w.3.is_some()));

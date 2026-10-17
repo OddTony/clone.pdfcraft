@@ -1410,3 +1410,15 @@ fn single_page_mode_prefetches_adjacent_pages() {
     assert!(h.state().views[0].page_raster(1).is_some(), "adjacent page 1 was prefetched and rendered while on page 0");
 }
 
+#[test]
+fn single_page_jump_draws_a_fitting_page_where_it_stays() {
+    // When jumping to a page in single-page view, a fitting page is drawn where it stays (no 14pt hop).
+    let mut h = harness(&[("layout", "single")]);
+    h.state_mut().views[0].go_to_page(1);
+    h.step();
+    let top_first_frame = rect(&h, 1).unwrap().top();
+    h.step();
+    let top_second_frame = rect(&h, 1).unwrap().top();
+    assert_eq!(top_first_frame, top_second_frame, "page must not hop into place on the second frame");
+}
+
