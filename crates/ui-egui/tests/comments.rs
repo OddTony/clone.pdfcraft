@@ -428,7 +428,7 @@ fn a_released_pen_stroke_stays_drawn_until_the_page_raster_has_it() {
     let mut h = harness(|app| app.set_option("quick", "ink").unwrap());
     stroke_without_settling(&mut h, (40.0, 100.0), (140.0, 60.0));
     assert_eq!(comments(&h).len(), 1, "the stroke is committed");
-    assert!(h.state().views[0].comments.settling_len() <= 1, "still drawn from its points or already settled");
+    assert_eq!(h.state().views[0].comments.settling_len(), 1, "still drawn from its points");
     settle(&mut h);
     assert_eq!(h.state().views[0].comments.settling_len(), 0, "the raster draws it now");
 }
@@ -437,7 +437,7 @@ fn a_released_pen_stroke_stays_drawn_until_the_page_raster_has_it() {
 fn undoing_a_pen_stroke_before_its_raster_leaves_no_ghost() {
     let mut h = harness(|app| app.set_option("quick", "ink").unwrap());
     stroke_without_settling(&mut h, (40.0, 100.0), (140.0, 60.0));
-    assert!(h.state().views[0].comments.settling_len() <= 1);
+    assert_eq!(h.state().views[0].comments.settling_len(), 1);
     h.state_mut().undo();
     assert_eq!(h.state().views[0].comments.settling_len(), 0);
 }
