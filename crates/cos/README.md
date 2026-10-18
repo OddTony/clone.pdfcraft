@@ -42,6 +42,16 @@ must not silently replace it with zero or invent a finite value. Incremental sav
 unmodified objects in the original bytes, but rewriting an affected object requires correcting
 its invalid number first. A failed save leaves the source and unsaved edits intact.
 
+A full rewrite must serialize every reachable object, including untouched pages. Thus a
+non-finite value on one page can block redaction, sanitization, optimization or linearization
+that requires a full rewrite even when only another page was edited. Incremental saving is
+**not** a substitute for those operations: it retains the old revision, including removed
+content. The writer does not clamp to a display-coordinate limit or treat a failed security
+operation as successful. Choosing a finite replacement and recording that repair requires an
+explicit repair policy; it is not inferred from the renderer's bounded display geometry.
+`untouched_overflow_allows_incremental_save_but_refuses_full_rewrite` covers this distinction
+for positive/negative overflow and a finite huge value, including retention of unsaved edits.
+
 Useful alongside: `doc.repair_log()` (what was reconstructed), `doc.revisions()` and
 `doc.revision_ends()` (the incremental history), `doc.is_edited(num)` and `doc.modified_objects()`,
 `doc.permissions()` and `doc.security()`, `doc.set_encryption()` / `doc.remove_encryption()`, and

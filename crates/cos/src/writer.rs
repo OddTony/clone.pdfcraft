@@ -693,6 +693,57 @@ mod tests {
     }
 
     #[test]
+    fn untouched_overflow_allows_incremental_save_but_refuses_full_rewrite() {
+        for number in ["1e400", "-1e400", "1e30"] {
+            let source = std::sync::Arc::new(
+                pdfcraft_testkit::Pdf::new()
+                    .obj("<< /Type /Catalog /Pages 2 0 R >>")
+                    .obj("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>")
+                    .obj(format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {number} {number}] >>"))
+                    .obj("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>")
+                    .build(),
+            );
+            for object_streams in [false, true] {
+                let opts = SaveOptions { object_streams, ..Default::default() };
+                let mut doc = Document::open(source.clone()).unwrap();
+                let bad_page = ObjRef { num: 3, generation: 0 };
+                let other_page = ObjRef { num: 4, generation: 0 };
+                let mut other = doc.dict(&Object::Ref(other_page)).unwrap();
+                other.set(b"Rotate".to_vec(), Object::Int(90));
+                doc.set(other_page, Object::Dict(other));
+
+                let incremental = write_incremental(&doc, &opts).unwrap();
+                assert!(incremental.starts_with(&source));
+                let reopened = Document::open(std::sync::Arc::new(incremental)).unwrap();
+                assert_eq!(reopened.dict(&Object::Ref(other_page)).unwrap().int(b"Rotate"), Some(90));
+                let original_bad = doc.get(bad_page);
+                assert_eq!(*reopened.get(bad_page), *original_bad);
+
+                // Full-save operations must traverse the untouched first page too. Refusal
+                // cannot discard the second page's unsaved edit or alter the original bytes.
+                let full = write_full(&doc, &opts);
+                if number == "1e30" {
+                    let reopened = Document::open(std::sync::Arc::new(full.unwrap())).unwrap();
+                    assert_eq!(reopened.dict(&Object::Ref(other_page)).unwrap().int(b"Rotate"), Some(90));
+                    assert_eq!(*reopened.get(bad_page), *original_bad);
+                } else {
+                    assert!(matches!(full, Err(CosError::NonFiniteNumber)), "{number}, object_streams={object_streams}");
+                    assert!(doc.is_edited(other_page.num));
+                    assert_eq!(doc.dict(&Object::Ref(other_page)).unwrap().int(b"Rotate"), Some(90));
+                    assert_eq!(doc.bytes().as_slice(), source.as_slice());
+                    assert_eq!(*doc.get(bad_page), *original_bad);
+
+                    let mut bad = doc.dict(&Object::Ref(bad_page)).unwrap();
+                    bad.set(b"Rotate".to_vec(), Object::Int(90));
+                    doc.set(bad_page, Object::Dict(bad));
+                    assert!(matches!(write_incremental(&doc, &opts), Err(CosError::NonFiniteNumber)));
+                    assert_eq!(doc.dict(&Object::Ref(bad_page)).unwrap().int(b"Rotate"), Some(90));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn a_second_read_that_differs_fails_the_save_instead_of_writing_null() {
         let mut doc = Document::new_empty();
         let dict = doc.add(Object::Dict(Dict::new()));
