@@ -57,15 +57,8 @@ fn idle_chrome(ctx: &egui::Context) -> IdleChrome {
     ctx.data(|d| d.get_temp::<IdleChrome>(egui::Id::new("idle-chrome"))).unwrap_or_default()
 }
 
-/// The opacity for chrome that fades when idle. `id` names the bar; the rect it last recorded with
-/// [`note_idle_rect`] is what counts as hovering it. `busy` keeps it opaque while something of its
-/// own is in use (a focused field, a dragged tab); an open menu or popup anywhere does too.
-pub fn idle_opacity(ctx: &egui::Context, id: egui::Id, busy: bool) -> f32 {
-    IDLE_OPACITY + (1.0 - IDLE_OPACITY) * idle_shown(ctx, id, busy)
-}
-
 /// How far the idle chrome `id` is shown, from 0 (faded) to 1 (in use), easing between them; the
-/// fill of a bar that turns clear when idle follows it. See [`idle_opacity`].
+/// fill of a bar that turns clear when idle follows it. See [`idle`].
 pub fn idle_shown(ctx: &egui::Context, id: egui::Id, busy: bool) -> f32 {
     idle(ctx, id, busy, false).shown
 }
@@ -73,7 +66,7 @@ pub fn idle_shown(ctx: &egui::Context, id: egui::Id, busy: bool) -> f32 {
 /// Where idle chrome stands this frame.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Idle {
-    /// The opacity to draw it at (see [`idle_opacity`]).
+    /// The opacity to draw it at: faded to [`IDLE_OPACITY`] when idle.
     pub opacity: f32,
     /// From 0 (faded) to 1 (in use).
     pub shown: f32,
@@ -81,7 +74,11 @@ pub struct Idle {
     pub hidden: f32,
 }
 
-/// The idle state of the chrome `id` (see [`idle_opacity`]). A bar that `hides` also slides out
+/// The idle state of the chrome `id`, which fades when idle. The rect it last recorded with
+/// [`note_idle_rect`] is what counts as hovering it. `busy` keeps it awake while something of its
+/// own is in use (a focused field, a dragged tab); an open menu or popup anywhere does too.
+///
+/// A bar that `hides` also slides out
 /// of the window once idle for [`HIDE_AFTER`], while auto-hide is on, and the pointer coming
 /// near where it belongs brings it back.
 pub fn idle(ctx: &egui::Context, id: egui::Id, busy: bool, hides: bool) -> Idle {
@@ -683,7 +680,7 @@ mod tests {
         let mut opacity = 0.0;
         let id = egui::Id::new("idle-test-bar");
         let output = ctx.run_ui(input, |ui| {
-            opacity = idle_opacity(ui.ctx(), id, busy);
+            opacity = idle(ui.ctx(), id, busy, false).opacity;
             note_idle_rect(ui.ctx(), id, Rect::from_min_size(Pos2::new(0.0, 0.0), vec2(40.0, 200.0)));
         });
         output.drop_without_applying_deltas();

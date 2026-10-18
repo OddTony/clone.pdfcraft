@@ -191,6 +191,31 @@ fn the_left_bar_slides_away_when_idle_and_comes_back_at_the_edge() {
     assert!((back.left() - home.left()).abs() < 0.5, "back in place: {back:?}, was {home:?}");
 }
 
+/// The right bars slide out of the window to the right the same way, each brought back by the
+/// pointer at the edge beside it.
+#[test]
+fn the_right_bars_slide_away_when_idle_and_come_back_at_the_edge() {
+    let mut h = with_document();
+    h.get_by_label("Read").click();
+    h.run_steps(2);
+    let (save, next) = (h.get_by_label("Save (Ctrl+S)").rect(), h.get_by_label("Next page").rect());
+    let page = h.state().views[0].viewport_rect().center();
+    h.hover_at(page);
+    h.run_steps(40);
+    for label in ["Save (Ctrl+S)", "Next page"] {
+        let r = h.get_by_label(label).rect();
+        assert!(r.left() > WIDTH, "{label} slid out of the window: {r:?}");
+    }
+    h.hover_at(egui::pos2(WIDTH - 2.0, next.center().y));
+    h.run_steps(4);
+    let back = h.get_by_label("Next page").rect();
+    assert!((back.left() - next.left()).abs() < 0.5, "page navigation back in place: {back:?}, was {next:?}");
+    assert!(h.get_by_label("Save (Ctrl+S)").rect().left() > WIDTH, "the other bar stays away");
+    h.hover_at(egui::pos2(WIDTH - 2.0, save.center().y));
+    h.run_steps(4);
+    assert!((h.get_by_label("Save (Ctrl+S)").rect().left() - save.left()).abs() < 0.5);
+}
+
 /// The search button opens Find tools and commands and closes it again; so does the palette's
 /// own close button.
 #[test]

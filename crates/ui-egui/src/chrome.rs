@@ -718,10 +718,13 @@ fn right_bar(app: &mut PdfCraftApp, column: Rect, ctx: &egui::Context) {
     });
 
     let id = egui::Id::new("right-bar");
-    let opacity = widgets::idle_opacity(ctx, id, false);
-    let shown = egui::Area::new(id).order(egui::Order::Middle).pivot(Align2::CENTER_TOP).fixed_pos(column.center_top() + vec2(0.0, BAR_MARGIN)).show(
-        ctx,
-        |ui| {
+    let (slide, opacity) = idle_slide(ctx, id, column, false);
+    let shown = egui::Area::new(id)
+        .order(egui::Order::Middle)
+        .pivot(Align2::CENTER_TOP)
+        .fixed_pos(column.center_top() + vec2(0.0, BAR_MARGIN) + slide)
+        .constrain(false)
+        .show(ctx, |ui| {
             ui.multiply_opacity(opacity);
             widgets::floating_frame(&t).show(ui, |ui| {
                 // The side panels come last: when the window is short, they are what scrolls. An area
@@ -793,9 +796,8 @@ fn right_bar(app: &mut PdfCraftApp, column: Rect, ctx: &egui::Context) {
                     });
                 });
             });
-        },
-    );
-    widgets::note_idle_rect(ctx, id, shown.response.rect);
+        });
+    widgets::note_idle_rect(ctx, id, shown.response.rect.translate(-slide));
 }
 
 /// Where a side panel picked on the right bar waits for [`apply_bar_choices`].
@@ -880,12 +882,13 @@ fn nav_bar(app: &mut PdfCraftApp, column: Rect, ctx: &egui::Context) -> Option<f
     let view = app.views.get_mut(index)?;
     let bar_id = egui::Id::new("nav-bar");
     let editing = ctx.memory(|m| m.has_focus(view.page_input_id()));
-    let opacity = widgets::idle_opacity(ctx, bar_id, editing);
+    let (slide, opacity) = idle_slide(ctx, bar_id, column, editing);
     let mut page_display = None;
     let shown = egui::Area::new(bar_id)
         .order(egui::Order::Middle)
         .pivot(Align2::CENTER_BOTTOM)
-        .fixed_pos(column.center_bottom() - vec2(0.0, BAR_MARGIN))
+        .fixed_pos(column.center_bottom() - vec2(0.0, BAR_MARGIN) + slide)
+        .constrain(false)
         .show(ctx, |ui| {
             ui.multiply_opacity(opacity);
             widgets::floating_frame(&t).show(ui, |ui| {
@@ -978,11 +981,20 @@ fn nav_bar(app: &mut PdfCraftApp, column: Rect, ctx: &egui::Context) -> Option<f
                 });
             });
         });
-    widgets::note_idle_rect(ctx, bar_id, shown.response.rect);
+    widgets::note_idle_rect(ctx, bar_id, shown.response.rect.translate(-slide));
     if let Some(id) = page_display {
         app.execute(id);
     }
     Some(shown.response.rect.height())
+}
+
+/// How far the right bar `id`, which belongs in `column`, has slid out of the window to the right
+/// while idle (see [`widgets::idle`]), and the opacity to draw it at.
+fn idle_slide(ctx: &egui::Context, id: egui::Id, column: Rect, busy: bool) -> (egui::Vec2, f32) {
+    let idle = widgets::idle(ctx, id, busy, true);
+    // Far enough to take the card and its shadow out of the window.
+    let reach = ctx.data(|d| d.get_temp::<Rect>(id.with("idle-rect"))).map_or(RIGHT_BAR_COLUMN, |r| column.right() - r.left()) + 24.0;
+    (vec2(reach.max(0.0) * idle.hidden, 0.0), idle.opacity)
 }
 
 /// A short line between groups in a vertical floating bar.
