@@ -388,7 +388,13 @@ fn pdfua_verify_reports_conditions_with_their_clause_and_place() {
     assert_eq!(r["counts"]["manual"], 47);
     assert!(r["manual"].as_array().unwrap().iter().any(|m| m["condition"] == "09-001"));
     assert!(r["not_checked"].as_array().unwrap().iter().any(|m| m["condition"] == "31-011"));
-    assert!(!r["passed"].as_array().unwrap().iter().any(|id| id == "09-001" || id == "31-011"));
+    let passed = r["passed"].as_array().unwrap();
+    assert!(!passed.iter().any(|p| p["condition"] == "09-001" || p["condition"] == "31-011"));
+    // Passed conditions say what they are as the others do (the tool's description promises it).
+    assert!(!passed.is_empty());
+    for p in passed {
+        assert!(["condition", "checkpoint", "clause"].iter().all(|k| p[*k].is_string()) && p["matterhorn"].is_boolean(), "{p}");
+    }
     let total: u64 = ["failed", "passed", "manual", "not_checked"].iter().map(|k| r["counts"][*k].as_u64().unwrap()).sum();
     assert_eq!(total, 135);
     // PDF/UA-2 on request: the file declares part 1 and is PDF 1.7.

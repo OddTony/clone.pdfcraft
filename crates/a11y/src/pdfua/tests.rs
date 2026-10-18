@@ -227,6 +227,28 @@ fn the_role_map_reaches_pdf_1_7_standard_types() {
 }
 
 #[test]
+fn only_the_entries_of_a_role_map_circle_are_named_circular() {
+    // A and Z lead into the circle Loop → Again → Loop without being part of it: 02-003 names
+    // Loop and Again, whichever order the map lists them in, and A and Z still fail 02-001.
+    let kids = "<< /S /H1 /Pg 3 0 R /K 0 >> << /S /Figure /Alt (x) /K 1 >> << /S /A /K 2 >> << /S /P /K 3 >> \
+                << /S /Z >> << /S /Link /K << /Type /OBJR /Obj 10 0 R >> >> << /S /Form /K << /Type /OBJR /Obj 11 0 R >> >>";
+    for role_map in ["/A /Loop /Loop /Again /Again /Loop /Z /Again", "/Loop /Again /Again /Loop /Z /Again /A /Loop"] {
+        let mut objs = with_kids(kids);
+        objs[TREE_ROOT] = format!("<< /Type /StructTreeRoot /K 7 0 R /RoleMap << {role_map} >> >>");
+        let r = verified(&objs);
+        assert_eq!(failed(&r), ids(&["02-001", "02-003"]), "{role_map}");
+        let mut circles = messages(&r, "02-003");
+        circles.sort();
+        assert_eq!(circles, ["Role map entry Again leads round in a circle", "Role map entry Loop leads round in a circle"], "{role_map}");
+        assert_eq!(
+            messages(&r, "02-001"),
+            ["Structure type A doesn't map to a standard type", "Structure type Z doesn't map to a standard type"],
+            "{role_map}"
+        );
+    }
+}
+
+#[test]
 fn long_role_map_chains_are_followed_to_their_end_once() {
     let n = 20_000;
     let chain = |last: &str| (0..n).map(|i| format!("/T{i} /T{}", i + 1)).chain([format!("/T{n} /{last}")]).collect::<Vec<_>>().join(" ");
@@ -336,7 +358,10 @@ fn every_text_needs_a_language() {
     let r = verified(&objs);
     assert!(messages(&r, "11-001").contains(&"Figure element on page 1: no language (Lang) on it, above it or on the document".to_string()));
     assert_eq!(messages(&r, "11-002"), ["Figure element on page 1: its alternate text, actual text or expansion has no language (Lang)"]);
-    assert!(!messages(&r, "11-001").iter().any(|m| m.starts_with("H1")));
+    // Exactly the tags with page content of their own: the Link and Form tags, which hold only
+    // an annotation (OBJR), are left to 11-004 and 11-005; H1 has its own language.
+    let named: Vec<String> = messages(&r, "11-001").iter().map(|m| m.split(' ').next().unwrap_or_default().to_owned()).collect();
+    assert_eq!(named, ["Figure", "TH", "TD"]);
 }
 
 #[test]

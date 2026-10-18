@@ -483,3 +483,36 @@ fn verify_pdfua_lists_failed_and_manual_conditions() {
     assert!(h.state().a11y.ua.is_none() && h.state().a11y.report.is_some());
     h.get_by_label("Title - Failed");
 }
+
+/// After Verify PDF/UA the options keep the PDF/UA profile, but the report and the Checker
+/// panel's own Check Again still run the Checker's rules: they act on the Checker's results.
+#[test]
+fn the_report_and_check_again_run_the_checker_after_a_pdfua_verification() {
+    use pdfcraft_engine::a11y::pdfua::Part;
+    use pdfcraft_ui_egui::A11yProfile;
+    let dir = std::env::temp_dir().join(format!("pdfcraft-a11y-checker-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let out = dir.clone();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("notes.pdf", None, FIXTURE.to_vec()).unwrap();
+        app.export_dir_override = Some(out.to_string_lossy().into_owned());
+        app
+    });
+    h.run_steps(3);
+    assert!(h.state_mut().execute("a11y.check_pdfua"));
+    h.run_steps(2);
+    // The report is the Checker's, though the last check was a PDF/UA verification.
+    assert!(h.state_mut().execute("a11y.report"));
+    h.run_steps(2);
+    assert!(h.state().a11y.report.is_some(), "the report command ran the Checker");
+    assert!(dir.join("notes Accessibility Report.html").exists(), "and wrote its report");
+    // Check again in the Checker panel, with the profile still PDF/UA: the Checker again.
+    assert_eq!(h.state().a11y_options.profile, A11yProfile::PdfUa(Part::Ua1));
+    h.get_by_label("Check again").click();
+    h.run_steps(2);
+    assert!(h.state().a11y.ua.is_none() && h.state().a11y.report.is_some(), "Check again stays on the Checker's rules");
+    h.get_by_label("Title - Failed");
+    let _ = std::fs::remove_dir_all(&dir);
+}
