@@ -401,8 +401,7 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
                 changed = true;
             }
             Some(FontChoice::Family(family)) => {
-                ed.font_resource = None;
-                ed.look.family = family;
+                ed.choose_family(family);
                 changed = true;
             }
             Some(FontChoice::Load) => app.pick_files(crate::files::FilePurpose::TextFont { page: ed.page }, false),

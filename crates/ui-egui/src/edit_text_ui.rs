@@ -162,6 +162,10 @@ pub struct LineEditor {
     /// The Format text panel's values, and what the paragraph had (to send only changes).
     pub look: pdfcraft_engine::AddedText,
     look0: pdfcraft_engine::AddedText,
+    /// A standard family was picked from the font list. The family guessed from a PDF font name
+    /// (Calibri reads as Helvetica) can be the one picked, so comparing `look` with `look0` alone
+    /// would miss the choice.
+    family_chosen: bool,
     /// Underline, line spacing (× size; 0 = the paragraph's own), character spacing (pt) and
     /// horizontal scale (%), and what they were.
     pub extras: Extras,
@@ -189,7 +193,7 @@ impl LineEditor {
         if let Some(face) = self.font_resource.as_ref().and_then(|r| sources.iter().find(|(res, _)| res == r)).map(|(_, face)| face) {
             return face.clone();
         }
-        if self.look.family != self.look0.family {
+        if self.look.family != self.look0.family || self.family_chosen {
             return self.look.family.label().to_string();
         }
         let base = self.source.as_ref().map(|(block, _)| block.base_font.as_str()).unwrap_or_default();
@@ -205,10 +209,19 @@ impl LineEditor {
     pub(crate) fn keep_source_font(&mut self) {
         self.font_resource = None;
         self.look.family = self.look0.family;
+        self.family_chosen = false;
+    }
+
+    /// A standard family picked from the font list, replacing the paragraph's font even when it
+    /// is the family the paragraph's font name reads as.
+    pub(crate) fn choose_family(&mut self, family: pdfcraft_engine::FontFamily) {
+        self.font_resource = None;
+        self.look.family = family;
+        self.family_chosen = true;
     }
 
     pub(crate) fn has_changes(&self) -> bool {
-        self.text != self.original || self.look != self.look0 || self.extras != self.extras0
+        self.text != self.original || self.look != self.look0 || self.extras != self.extras0 || self.family_chosen
     }
 
     /// Extra width permitted by the editor. Source containers now remain fixed.
@@ -226,7 +239,7 @@ impl LineEditor {
         let (l, o) = (&self.look, &self.look0);
         let mut style = pdfcraft_engine::BlockStyle {
             resource: self.font_resource.clone(),
-            family: (l.family != o.family || l.bold != o.bold || l.italic != o.italic).then_some((l.family, l.bold, l.italic)),
+            family: (l.family != o.family || self.family_chosen || l.bold != o.bold || l.italic != o.italic).then_some((l.family, l.bold, l.italic)),
             size: (l.size != o.size).then_some(l.size),
             color: (l.color != o.color).then_some(l.color),
             align: (l.align != o.align).then_some(l.align),
@@ -264,6 +277,7 @@ impl LineEditor {
     pub fn applied(&mut self) {
         self.selection = None;
         self.font_resource = None;
+        self.family_chosen = false;
         self.look0 = self.look.clone();
         self.extras0 = self.extras;
         self.original = self.text.clone();
@@ -962,6 +976,7 @@ fn open_editor(
         focus: true,
         look: look_of(l),
         look0: look_of(l),
+        family_chosen: false,
         extras: Extras::default(),
         extras0: Extras::default(),
     });
@@ -1174,7 +1189,7 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
             let Some(line) = lines.get(index) else { continue };
             let mut look = source_look(&line.base_font, line.size, line.color, line.bold, line.italic);
             look.size = line.size;
-            if ed.look.family != ed.look0.family {
+            if ed.look.family != ed.look0.family || ed.family_chosen {
                 look.family = ed.look.family;
             }
             if ed.look.bold != ed.look0.bold {
@@ -1190,7 +1205,8 @@ fn editor_job(ui: &egui::Ui, ed: &LineEditor, text: &str, scale: f32, width: f32
                 look.size = ed.look.size;
             }
             let mut font = editor_font(&look, (look.size as f32 * scale).clamp(1.0, 300.0));
-            let original_face = ed.look.family == ed.look0.family && ed.look.bold == ed.look0.bold && ed.look.italic == ed.look0.italic;
+            let original_face =
+                ed.look.family == ed.look0.family && !ed.family_chosen && ed.look.bold == ed.look0.bold && ed.look.italic == ed.look0.italic;
             let embedded = original_face && ed.fonts.contains_key(&line.font);
             if embedded && let Some(name) = ed.fonts.get(&line.font) {
                 font.family = FontFamily::Name(name.clone().into());
@@ -1471,10 +1487,29 @@ mod tests {
             focus: true,
             look: look_of(&block),
             look0: look_of(&block),
+            family_chosen: false,
             extras: Extras::default(),
             extras0: Extras::default(),
         };
         (app, ed)
+    }
+
+    #[test]
+    fn picking_the_family_the_font_name_reads_as_still_changes_the_font() {
+        // A Calibri paragraph reads as Helvetica; picking Helvetica from the list used to leave
+        // `look` equal to what the paragraph had, so no family change was sent and Calibri stayed.
+        let (_app, mut ed) = preview_app();
+        let family = ed.look0.family;
+        assert_eq!(ed.style().family, None, "nothing chosen yet");
+        ed.choose_family(family);
+        assert_eq!(ed.style().family, Some((family, ed.look.bold, ed.look.italic)));
+        assert!(ed.has_changes());
+        assert_eq!(ed.font_shown(&[]), family.label());
+        ed.keep_source_font();
+        assert_eq!(ed.style().family, None, "Keep source fonts withdraws the choice");
+        ed.choose_family(family);
+        ed.applied();
+        assert_eq!(ed.style().family, None, "an applied choice is the paragraph's font now");
     }
 
     #[test]
