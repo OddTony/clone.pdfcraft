@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M8, #1350: named replacement descriptions retired during Sanitize and across shared resources; estimates unchanged)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M6: AcroForm XML text; estimates unchanged)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M2/gap 12: the Annex D.2 alias codes read as the ink they draw in both tables; the text oracle scores reading order; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-13 · **Last updated:** 2026-10-13 · **Change:** minor (M6: preserve XML/XFDF attribute whitespace; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -161,6 +162,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-18 (M8, PR #2598 replacement-text refresh):** Integrated upstream d8b27058, preserving its replacement-description retirement alongside bounded metadata matching and conservative packet removal. Estimates unchanged.
+
 - **2026-10-18 (M8, PR #2598 timing refresh):** Integrated upstream 12fcc641 and adopted its complete deterministic render/pen-test fix, superseding this branch's earlier timing workaround. Metadata redaction behavior and estimates unchanged.
 
 - **2026-10-18 (M8, PR #2598 refresh):** Integrated upstream 645016ad, preserving metadata-redaction limits and matching behavior alongside stream-boundary comment handling. Estimates unchanged.
@@ -170,6 +173,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 - **2026-10-16 (M5, PR #2598 CI):** Pen preview regressions hold raster delivery while checking pending strokes, then wait for delivery by state. Adapted narrowly from #2812; no fullscreen or redaction behavior change. Estimates unchanged.
 - **2026-10-15 (M8, #2448):** Applying redactions clears what the marks removed from document metadata too: `/Info` entries whose value repeats a removed text run (case-insensitive) go with their mirrored XMP property, and an XMP stream that still holds removed text where per-entry editing cannot reach — custom schemas, entity-escaped values, page-level packets, or a stream that cannot be decoded and read — is removed whole, like the hidden-information metadata category. Unrelated entries and the rest of an editable packet survive. Text inside images and runs under two characters leave no searchable string, so Remove hidden information (metadata) remains the certain path. `redact` now uses `organize` (registered as a sideways edge). Estimates unchanged.
+- **2026-10-18 (M8, #1350):** Integrated current main while preserving content-stream comment boundaries. Hidden-text cleanup retires unused named replacement descriptions on rewritten pages and forms, including inherited/shared resource holders, without removing descriptions still used by surviving content. Synthetic saved-byte and preservation regressions cover the cleanup. Estimates unchanged.
 - **2026-10-15 (M6, AcroForm XML text):** Plain AcroForm XML imports retain all direct text around comments and processing instructions, including CDATA and character references. Synthetic regressions verify exact values and unknown catalog data after incremental and full save/reopen. Nested-element and XFA interpretation are unchanged. Estimates unchanged.
 - **2026-10-15 (M6, #1917 refresh):** Integrated upstream `99941daa` while retaining the XML/XFDF attribute whitespace correction and all upstream progress. Only independent documentation conflicts required resolution; focused production and test files are unchanged from the previously green CI head. Estimates unchanged.
 - **2026-10-15 (M1, #2267 refresh):** Integrated upstream `99941daa` while retaining the raw-deflate fallback correction and all upstream progress. Only independent documentation conflicts required resolution; focused production and test files are unchanged from the previously green CI head. Estimates unchanged.
@@ -538,7 +542,10 @@ Newest first: the date, what moved, and the new overall estimate.
 | 2026-10-10 | major | Restructured to the progress-docs standard (stage, two numbers, dimensions, features, languages, upcoming, log); full re-measure; assessment, gaps and milestones moved to `docs/`; log sorted newest first and a stray merged entry dated |
 | 2026-10-07 | minor | 806 tracked features, 51.0% shipped, effort-weighted ≈ 30–35%, 600–1,100 h |
 | 2026-10-05 | major | Honest assessment and "Where we're lacking" added |
+| 2026-10-12 | minor | M8: cleanup removes replacement descriptions only from changed marked-content spans, preserving surviving accessibility text. Estimates unchanged. |
 | 2026-10-12 | minor | M8: image redaction removes alternate images and unsupported masks only on affected images. Estimates unchanged. |
 
 - **2026-10-12 (M8):** Redaction cleans indirect and form structure references, preserving surviving form tags.
 - **2026-10-13 (M7):** Edit a PDF ▸ Add content: Header and footer, Watermark and Background open an Add / Update / Remove menu (Update and Remove enabled only when the document has that mark), as Acrobat's Watermark control does. The catalogue gains `ToolItem::actions`, so any tool can list more commands (#1192).
+
+- **2026-10-18 (M8, #1350):** Published the history-preserving integration; simplified the inherited-form resource guard for Rust 1.96 Clippy. Formatting, 64 redaction tests, scoped Clippy, layering, assets and the scoped wasm check pass locally. CI remains pending; estimates unchanged.
