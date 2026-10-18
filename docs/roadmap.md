@@ -1,5 +1,6 @@
 # PdfCraft roadmap: milestones and what's next
 
+> **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M7 #2517: a partial rewrite keeps its marker around a kept row, and off the next marked region; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7 #2517: a blank line stays a paragraph break; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M14/#2383 GPU-limit candidate; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7: the Edit text caret is as tall as the row it is on; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -199,6 +200,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | M7 #2517: a partial rewrite of the last paragraph closes its marker after the last `ET`, and does not close a following marked region early. Estimates unchanged. |
 | 2026-10-15 | minor | M7 #2517: a blank line between paragraphs stays a paragraph break, and growing the first paragraph does not absorb the next one. Estimates unchanged. |
 | 2026-10-15 | minor | M7: Edit text caret height follows its row, with a kittest regression; estimates unchanged |
 | 2026-10-18 | minor | M4, PR #1919 review: repeated page indices apply each rotation to the latest page-local value, preserving indirect/inherited angles. Synthetic adjacent/interleaved duplicates retain siblings and page contents through incremental and full saves. Estimates unchanged. |

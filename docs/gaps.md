@@ -1,6 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
-> **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 3: #2517 a blank line stays a paragraph break; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (gap 3: #2517 a partial rewrite keeps a kept row inside the paragraph and leaves the next marked region closed; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M1: raw-deflate fallback preserves decoding-limit errors; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -99,7 +99,8 @@ update the numbers.
   removes a distinct neighbour whose glyph box overlaps (#1316); a second drawing on the same
   baseline is still replaced. A blank line stays a paragraph break. An explicit `TL` is the
   measured baseline gap, and growing a paragraph so its new row is one leading above the next
-  one does not absorb that paragraph (#2517). A heading and smaller body lines (#1756), a
+  one does not absorb that paragraph (#2517). A partial rewrite of the last paragraph keeps a
+  source row inside that paragraph, and does not close a following marked region early. A heading and smaller body lines (#1756), a
   hanging-indent continuation (#2564), and cells in different columns (#1680, #2478) are still
   grouped by the same geometry. Estimates are unchanged.
 
@@ -387,6 +388,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | Gap 3: #2517 a partial rewrite keeps a kept source row in the paragraph and leaves the next marked region closed around its text. Estimates unchanged. |
 | 2026-10-15 | minor | Gap 3: #2517 a blank line at ordinary leading stays a paragraph break. Estimates unchanged. |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-14 | minor | M1: raw-deflate fallback preserves decoding-limit errors in strict and tolerant decoding; synthetic filter and COS stream regressions. Estimates unchanged. |
