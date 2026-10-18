@@ -127,6 +127,33 @@ fn a_hidden_form_reminder_does_not_hide_repair_warnings() {
     h.get_by_label("This file was damaged and has been repaired. Saving keeps the repaired version.");
 }
 
+/// Restoring the ordinary hint must neither be blocked by nor revive a dismissed warning.
+#[test]
+fn a_dismissed_repair_warning_does_not_block_restoring_the_form_reminder() {
+    let mut bytes = form();
+    let xref = bytes.windows(5).position(|w| w == b"xref\n").unwrap();
+    bytes.truncate(xref);
+    bytes.extend_from_slice(b"trailer << /Root 1 0 R >>\n%%EOF\n");
+    let mut h = harness(Some(r#"{"show_form_field_reminder":false}"#.to_string()), bytes);
+    let warning = "This file was damaged and has been repaired. Saving keeps the repaired version.";
+    h.get_by_label(warning);
+    h.get_by_label("Dismiss").click();
+    h.run_steps(4);
+    assert!(h.state().views[0].notice_dismissed);
+    assert!(h.query_by_label(warning).is_none());
+    shot(&mut h, "warning-dismissed");
+    h.state_mut().set_option("form-reminder", "on").unwrap();
+    h.run_steps(4);
+    h.get_by_label(REMINDER);
+    assert!(h.query_by_label(warning).is_none());
+    shot(&mut h, "reminder-after-dismissed-warning");
+    assert!(h.state().views[0].notice_dismissed, "do not clear the independent warning dismissal");
+    h.get_by_label("Dismiss").click();
+    h.run_steps(4);
+    assert!(h.query_by_label(REMINDER).is_none());
+    assert!(h.query_by_label(warning).is_none(), "the warning must stay dismissed after hiding the reminder again");
+}
+
 /// The persistent preference is independent of the document's security restrictions.
 #[test]
 fn a_hidden_form_reminder_does_not_hide_security_notices() {

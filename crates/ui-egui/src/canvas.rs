@@ -4356,9 +4356,6 @@ fn notices(
         });
         return open.then_some(Notice::Signatures);
     }
-    if view.notice_dismissed {
-        return None;
-    }
     let mut open_security = false;
     let mut unlock = false;
     let mut open_repairs = false;
@@ -4375,6 +4372,10 @@ fn notices(
         && xfa.is_none()
         && info.xfa.is_none()
         && info.fields.iter().any(|f| f.kind != pdfcraft_render::FieldKind::PushButton);
+    // Restoring this hint must not be blocked by, or clear, a dismissed repair warning.
+    if view.notice_dismissed && !form_reminder {
+        return None;
+    }
     let msg = if scripts_off {
         Some(("triangle-alert", crate::js_ui::scripts_off_notice(), true))
     } else if secured {
