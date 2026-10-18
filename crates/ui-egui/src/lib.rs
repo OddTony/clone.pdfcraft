@@ -3141,11 +3141,13 @@ impl eframe::App for PdfCraftApp {
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
             if self.mode == Mode::Read {
                 match self.active {
-                    // The document area keeps the right bars' column itself; these pages get it here.
-                    None if self.combine_showing() => chrome::with_right_bar(self, ui, combine_ui::page),
-                    None => chrome::with_right_bar(self, ui, home::show),
+                    // The document area floats the right bars itself; these pages get them here.
+                    None if self.combine_showing() => chrome::with_right_bar(self, ui, chrome::RightBar::Beside, combine_ui::page),
+                    None => chrome::with_right_bar(self, ui, chrome::RightBar::Beside, home::show),
                     Some(index) => match compare_ui::side_by_side(self, index) {
-                        Some((old, new)) => chrome::with_right_bar(self, ui, |app, ui| compare_ui::compare_area(app, old, new, ui)),
+                        Some((old, new)) => {
+                            chrome::with_right_bar(self, ui, chrome::RightBar::Beside, |app, ui| compare_ui::compare_area(app, old, new, ui))
+                        }
                         None => canvas::document_area(self, index, ui),
                     },
                 }

@@ -2276,14 +2276,14 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
 /// keep this much of the previous screen in view.
 const KEY_SCROLL_LINE: f32 = 40.0;
 
-/// The document at `index`, with the right bars in a column at its right edge. Full screen is the
-/// page alone, and a comparison's two halves share the one column the frame gives them.
+/// The document at `index`, with the right bars floating over its right edge. Full screen is the
+/// page alone, and a comparison's two halves share the bars the frame floats over them.
 pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let comparing = app.active.is_some_and(|i| crate::compare_ui::side_by_side(app, i).is_some());
     if app.full_screen || comparing {
         document_page(app, index, ui);
     } else {
-        crate::chrome::with_right_bar(app, ui, |app, ui| document_page(app, index, ui));
+        crate::chrome::with_right_bar(app, ui, crate::chrome::RightBar::Float, |app, ui| document_page(app, index, ui));
     }
 }
 
@@ -2355,9 +2355,17 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     // No dialog, close prompt or palette over the page: only then does page input count.
     let unobstructed = !app.modal_open() && !app.palette_open;
+    crate::chrome::note_page_top(ui.ctx(), ui.available_rect_before_wrap().top());
     let view = &mut app.views[index];
     if view.organize {
-        organize_grid(view, info, doc.allows_assembly(), doc.dirty, unobstructed, ui, &t);
+        // The grid's toolbar ends at the right edge (Close): it keeps clear of the right bars, as
+        // Home and Combine do.
+        let full = ui.available_rect_before_wrap();
+        let area = full.with_max_x((full.right() - crate::chrome::right_bar_inset(ui.ctx())).max(full.left()));
+        let mut grid = ui.new_child(egui::UiBuilder::new().max_rect(area));
+        grid.set_clip_rect(area.intersect(ui.clip_rect()));
+        organize_grid(view, info, doc.allows_assembly(), doc.dirty, unobstructed, &mut grid, &t);
+        ui.advance_cursor_after_rect(full);
         return;
     }
 
@@ -3729,10 +3737,12 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             });
         });
     }
-    find_bar(view, info.pages.len(), avail, ui, &t);
+    // The bars pinned to the page's top-right corner stay left of the right bars floating there.
+    let beside_bars = avail.with_max_x((avail.right() - crate::chrome::right_bar_inset(ui.ctx())).max(avail.left()));
+    find_bar(view, info.pages.len(), beside_bars, ui, &t);
     page_size_hint(view, info, units, avail, unobstructed, ui, &t);
     if tool == QuickTool::EnhanceCamera {
-        crate::camera_ui::bar(ui.ctx(), view, avail, &t, can_modify);
+        crate::camera_ui::bar(ui.ctx(), view, beside_bars, &t, can_modify);
     }
     if let Some(e) = comments::composer(ui.ctx(), view, info, prefs) {
         view.pending_edit = Some(e);

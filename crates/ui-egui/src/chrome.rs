@@ -576,26 +576,72 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui, size: f32) {
     });
 }
 
-/// Between a floating bar and the ends of the column it floats in.
-const BAR_MARGIN: f32 = 10.0;
-/// The column at the right edge of the document area (or Home, Combine, a comparison) that the
-/// right bars float in. Nothing else is laid out there, so the bars never cover the page, its
-/// toolbars or a button near the edge, and pages fit beside them.
-pub const RIGHT_BAR_RESERVE: f32 = 64.0;
+/// Between a floating bar and the top or bottom of the area it floats over.
+const BAR_MARGIN: f32 = 14.0;
+/// The strip at the right edge of the document area (or Home, Combine, a comparison) whose
+/// centre line the right bars float on: they sit over the page, as the left bar does, and their
+/// cards (a button and the card's margins, 42 wide) end the same 14 from the edge as the left
+/// bar starts from its own.
+const RIGHT_BAR_COLUMN: f32 = 70.0;
 /// The size of the right bar's buttons, and of the page navigation's.
 const BAR_BUTTON: f32 = 30.0;
 
-/// Lay `content` out left of the right column, and float the right bars in the column.
-pub fn with_right_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui, content: impl FnOnce(&mut PdfCraftApp, &mut egui::Ui)) {
+/// How the right bars share the area with what [`with_right_bar`] lays out.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum RightBar {
+    /// Over a document: the pages run under the bars to the edge, as they do under the left bar.
+    Float,
+    /// Beside Home, Combine and a comparison, whose own toolbars end at the right edge: the bars
+    /// get a column of their own, so they never cover those controls.
+    Beside,
+}
+
+/// Lay `content` out, with the right bars floating over its right edge or in a column beside it.
+pub fn with_right_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui, how: RightBar, content: impl FnOnce(&mut PdfCraftApp, &mut egui::Ui)) {
     let full = ui.available_rect_before_wrap();
-    let width = (full.width() - RIGHT_BAR_RESERVE).max(0.0);
-    let left = Rect::from_min_size(full.min, vec2(width, full.height()));
-    let column = Rect::from_min_max(egui::pos2(left.right(), full.top()), full.max);
-    right_bar(app, column, ui.ctx());
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(left));
-    child.set_clip_rect(left.intersect(ui.clip_rect()));
+    let area = match how {
+        RightBar::Float => full,
+        RightBar::Beside => full.with_max_x((full.right() - RIGHT_BAR_COLUMN).max(full.left())),
+    };
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area));
+    child.set_clip_rect(area.intersect(ui.clip_rect()));
+    let inset = egui::Id::new(RIGHT_BAR_INSET);
+    let top = egui::Id::new(PAGE_TOP);
+    ui.ctx().data_mut(|d| {
+        d.insert_temp(inset, if how == RightBar::Float { RIGHT_BAR_COLUMN } else { 0.0 });
+        d.remove::<f32>(top);
+    });
     content(app, &mut child);
+    let page_top = ui.ctx().data_mut(|d| {
+        d.remove::<f32>(inset);
+        d.remove_temp::<f32>(top)
+    });
+    // Below the notices over a document, whose buttons end at the right edge too.
+    let top = page_top.map_or(full.top(), |y| y.clamp(full.top(), full.bottom()));
+    let column = Rect::from_min_max(egui::pos2((full.right() - RIGHT_BAR_COLUMN).max(full.left()), top), full.max);
+    // After the content, so this frame's bars are the ones on top of it.
+    right_bar(app, column, ui.ctx());
     ui.advance_cursor_after_rect(full);
+}
+
+/// Where [`with_right_bar`] says how much of its content's right edge the bars cover.
+const RIGHT_BAR_INSET: &str = "right-bar-inset";
+
+/// How much of the right edge of the content being laid out the right bars float over: what a
+/// popup bar pinned to that edge (find, camera) stays left of. Zero where they are not shown (full
+/// screen, a comparison's halves).
+pub fn right_bar_inset(ctx: &egui::Context) -> f32 {
+    ctx.data(|d| d.get_temp::<f32>(egui::Id::new(RIGHT_BAR_INSET))).unwrap_or(0.0)
+}
+
+/// Where [`note_page_top`] leaves the top of the page view for [`with_right_bar`].
+const PAGE_TOP: &str = "right-bar-page-top";
+
+/// Say where the page view starts, below any notices, for the right bars to start there too.
+pub fn note_page_top(ctx: &egui::Context, y: f32) {
+    if y.is_finite() {
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new(PAGE_TOP), y));
+    }
 }
 
 /// The floating bars in `column`: search, document properties, save and print, keyboard shortcuts

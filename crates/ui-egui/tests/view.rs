@@ -839,7 +839,11 @@ fn bookmark_destinations_scroll_to_their_position() {
     let v = &h.state().views[0];
     assert_eq!((v.current, v.fit, v.zoom), (1, Fit::None, 3.0));
     let d = from_viewport_corner(&h, 1, 0.25, 0.5);
-    assert!((d.x - 70.0).abs() < 2.0 && d.y.abs() < 2.0, "the destination point is at the window's top-left: {d:?}");
+    // Unless the view can't scroll that far: then the page's right edge stops at the gutter on
+    // the right, where the right bars float.
+    let (page, vp) = (rect(&h, 1).expect("page on screen"), h.state().views[0].viewport_rect());
+    let scrolled_to_end = (page.right() + 70.0 - vp.right()).abs() < 2.0 && d.x > 70.0;
+    assert!(((d.x - 70.0).abs() < 2.0 || scrolled_to_end) && d.y.abs() < 2.0, "the destination point is at the window's top-left: {d:?}");
 
     // Malformed operands fall back to the top of the page at the current zoom.
     h.get_by_label("Broken").click();

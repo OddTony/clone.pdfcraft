@@ -87,6 +87,23 @@ fn the_right_bars_hold_the_side_panels_and_page_navigation() {
     assert!(h.get_by_label("Next page").rect().top() > h.get_by_label("Page thumbnails").rect().bottom());
 }
 
+/// The right bars float over the page, as the left bar does, instead of in a column of their own:
+/// the page area runs under them to the window's edge, and they keep the left bar's inset.
+#[test]
+fn the_right_bars_float_over_the_page() {
+    let mut h = with_document();
+    h.get_by_label("Read").click();
+    h.run_steps(4);
+    let page_area = h.state().views[0].viewport_rect();
+    for label in ["Save (Ctrl+S)", "Next page"] {
+        let r = h.get_by_label(label).rect();
+        assert!(page_area.right() > r.right(), "the page area {page_area:?} runs under {label} at {r:?}");
+        // The card's margin (6) plus the 14 the bars keep from the edge.
+        let inset = WIDTH - r.right();
+        assert!((14.0..=24.0).contains(&inset), "{label} at {r:?} floats {inset} in from the edge");
+    }
+}
+
 /// The search button opens Find tools and commands and closes it again; so does the palette's
 /// own close button.
 #[test]
