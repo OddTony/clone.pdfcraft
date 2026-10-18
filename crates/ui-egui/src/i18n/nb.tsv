@@ -428,6 +428,7 @@
 	Current page	Gjeldende side
 	Current page ({n})	Gjeldende side ({n})
 	Current page — type a page number or label (such as iv) and press Enter	Gjeldende side – skriv inn et sidetall eller en sideetikett (som iv) og trykk Enter
+	Zoom — type a percentage and press Enter	Zoom – skriv inn en prosentverdi og trykk Enter
 	Custom	Egendefinert
 	Custom scale:	Egendefinert skala:
 	Custom text:	Egendefinert tekst:
@@ -1250,6 +1251,8 @@
 	Vertical text cannot be moved with this selection.	Loddrett tekst kan ikke flyttes med dette utvalget.
 	View revision {n}	Vis revisjon {n}
 	View signed version	Vis signert versjon
+	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Du ser på revisjon {rev} av «{from}». Dette er et øyeblikksbilde: endringer her påvirker ikke originalen.
+	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Du ser på den signerte versjonen av «{from}» (revisjon {rev}). Dette er et øyeblikksbilde: endringer her påvirker ikke originalen.
 	Viewport	Visningsområde
 	Viewport rectangle in page points (x, y, width, height)	Visningsområdets rektangel i sidepunkter (x, y, bredde, høyde)
 	Visible Rectangle	Synlig rektangel
@@ -1946,6 +1949,7 @@
 	Couldn't use the photo: {e}	Kunne ikke bruke bildet: {e}
 	Couldn't use {name}: {e}	Kunne ikke bruke {name}: {e}
 	Couldn't write {name}: {e}	Kunne ikke skrive {name}: {e}
+	the name is not a plain file name	navnet er ikke et vanlig filnavn
 	Couldn't write {path}: {e}	Kunne ikke skrive {path}: {e}
 	Create link	Opprett lenke
 	Created 1 link	Opprettet 1 lenke
