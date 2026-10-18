@@ -2576,6 +2576,47 @@ fn pages_export_as_png_jpeg_and_tiff() {
     assert_eq!((decoded.width(), decoded.height()), (400, 600));
 }
 
+/// Export ▸ Image reports the size the files will take before writing them (#2819): the pages it
+/// measures are encoded, and their bytes per pixel estimate the rest.
+#[test]
+fn export_size_estimate_tracks_the_files_written() {
+    use crate::export::{Exporter, ImageFormat};
+    // Identical pages: scaling the measured bytes per pixel must reach each one's file size.
+    let mut blank = Session::new();
+    let bytes = blank.create_blank(612.0, 792.0, 5).unwrap();
+    let id = blank.open_new("blank.pdf", bytes).unwrap();
+    let mut ex = Exporter::new(blank.get(id).unwrap());
+    let pages = [0, 1, 2, 3, 4];
+    for format in [ImageFormat::Png, ImageFormat::Jpeg { quality: 85 }, ImageFormat::Tiff] {
+        let estimate = ex.estimate(&pages, 150.0, format).unwrap();
+        assert_eq!(estimate.sampled, [0, 2, 4], "the first, the middle and the last page are measured");
+        let written: Vec<u64> = pages.iter().map(|page| ex.image(*page, 150.0, format).unwrap().len() as u64).collect();
+        assert_eq!(estimate.pages, written, "{format:?}: identical pages export the same bytes, so every estimate is a file's size");
+        assert_eq!(estimate.total(), written.iter().sum::<u64>());
+    }
+    // A range of three pages is measured whole.
+    assert_eq!(ex.estimate(&[0, 1, 2], 150.0, ImageFormat::Png).unwrap().sampled, [0, 1, 2]);
+    // Pages that differ (here by their text) are estimated from the sample: close, not exact.
+    let (s, id) = session_with(5);
+    let mut ex = Exporter::new(s.get(id).unwrap());
+    let estimate = ex.estimate(&pages, 150.0, ImageFormat::Png).unwrap();
+    let written: Vec<u64> = pages.iter().map(|page| ex.image(*page, 150.0, ImageFormat::Png).unwrap().len() as u64).collect();
+    for (page, (estimated, actual)) in estimate.pages.iter().zip(&written).enumerate() {
+        let ratio = *estimated as f64 / *actual as f64;
+        assert!((0.75..=1.25).contains(&ratio), "page {}: estimated {estimated} bytes, wrote {actual}", page + 1);
+    }
+    // A page too large to draw whole is measured smaller, and still lands close to the file.
+    let estimate = ex.estimate(&[0], 600.0, ImageFormat::Jpeg { quality: 85 }).unwrap();
+    let written = ex.image(0, 600.0, ImageFormat::Jpeg { quality: 85 }).unwrap().len() as u64;
+    let ratio = estimate.pages[0] as f64 / written as f64;
+    assert!((0.5..=2.0).contains(&ratio), "600 dpi: estimated {} bytes, wrote {written}", estimate.pages[0]);
+    // A page the source does not have is refused, as exporting it would be; an empty range has
+    // nothing to estimate.
+    assert!(ex.estimate(&[9], 150.0, ImageFormat::Png).is_err());
+    let empty = ex.estimate(&[], 150.0, ImageFormat::Png).unwrap();
+    assert!(empty.pages.is_empty() && empty.sampled.is_empty() && empty.total() == 0);
+}
+
 #[test]
 fn added_text_and_images_render_and_stay_editable() {
     let (mut s, id) = session_with(1);
