@@ -612,3 +612,36 @@ fn copying_and_pasting_the_selected_fields() {
     assert_eq!(doc.form.iter().find(|f| f.name == "agree").unwrap().value, form.iter().find(|f| f.name == "agree").unwrap().value);
     assert_ne!(doc.form.iter().find(|f| f.name == added[0].name).unwrap().value, doc.form.iter().find(|f| f.name == "agree").unwrap().value);
 }
+
+fn copy_the_check_box(h: &mut Harness<'static, PdfCraftApp>) -> Vec<String> {
+    use pdfcraft_engine::{Edit, NewField};
+    h.state_mut().apply_edit(Edit::AddField { page: 0, rect: [20.0, 280.0, 50.0, 310.0], kind: NewField::CheckBox, name: Some("agree".into()) });
+    assert!(h.state_mut().execute("form.prepare"));
+    h.run_steps(2);
+    h.state_mut().views[0].prepare.selected = Some(("agree".into(), 0));
+    h.event(egui::Event::Copy);
+    h.run_steps(2);
+    names(h)
+}
+
+#[test]
+fn pasting_under_a_dialog_does_nothing() {
+    let mut h = harness();
+    let before = copy_the_check_box(&mut h);
+    h.state_mut().execute("help.about");
+    h.run_steps(2);
+    assert!(h.state().dialog.is_some(), "the About dialog is open");
+    h.event(egui::Event::Paste("agree".into()));
+    h.run_steps(3);
+    assert_eq!(names(&h), before, "⌘V under a dialog pasted fields behind it");
+}
+
+#[test]
+fn pasting_other_text_does_not_paste_the_copied_fields() {
+    let mut h = harness();
+    let before = copy_the_check_box(&mut h);
+    // Text copied in another app since: ⌘V brings that text, not the fields.
+    h.event(egui::Event::Paste("hello from another app".into()));
+    h.run_steps(3);
+    assert_eq!(names(&h), before, "stale copied fields were pasted");
+}

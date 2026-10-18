@@ -142,6 +142,9 @@ pub struct PrepareView {
     ignore_release: bool,
     /// The fields ⌘C copied (#1571), as they were selected.
     copied: Vec<(String, usize)>,
+    /// The text ⌘C put on the clipboard: ⌘V pastes the fields only while it brings that text back,
+    /// not after something else has been copied since.
+    clip: String,
     /// How many times they have been pasted: each paste lands one step further.
     pastes: u32,
 }
@@ -632,14 +635,16 @@ pub(crate) fn keys(ctx: &egui::Context, view: &mut DocView, form: &[FormField]) 
     // text, so ⌘C puts the copied fields' names there.
     let (copy, paste) = ctx.input(|i| {
         let any = |f: &dyn Fn(&egui::Event) -> bool| i.events.iter().any(f);
-        (any(&|e| matches!(e, egui::Event::Copy)), any(&|e| matches!(e, egui::Event::Paste(_))))
+        let pasted = i.events.iter().find_map(|e| if let egui::Event::Paste(s) = e { Some(s.clone()) } else { None });
+        (any(&|e| matches!(e, egui::Event::Copy)), pasted)
     });
     if copy && view.prepare.selected.is_some() {
         view.prepare.copied = view.prepare.selected.iter().chain(view.prepare.also.iter()).cloned().collect();
         view.prepare.pastes = 0;
-        ctx.copy_text(view.prepare.names().join("\n"));
+        view.prepare.clip = view.prepare.names().join("\n");
+        ctx.copy_text(view.prepare.clip.clone());
     }
-    if paste && !view.prepare.copied.is_empty() {
+    if paste.is_some_and(|p| p == view.prepare.clip) && !view.prepare.copied.is_empty() {
         view.pending_edit = paste_copied(view, form);
         return;
     }
