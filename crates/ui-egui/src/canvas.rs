@@ -2724,6 +2724,9 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             scroll = scroll.vertical_scroll_offset((r.top() - y_shift + fy * r.height() - rel.y).clamp(0.0, max_y));
         }
     }
+    // No fade at the edges with more to scroll to: on a page it reads as a shadow cast on it,
+    // and the scroll bars already say there is more.
+    ui.spacing_mut().scroll.fade.strength = 0.0;
     let out = scroll.show_viewport(ui, |ui, viewport| {
         // egui's drag responses accept every pointer button. Keep a wheel gesture from also
         // selecting text, drawing a mark, or panning with the Hand tool.
