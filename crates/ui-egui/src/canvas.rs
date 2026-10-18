@@ -615,6 +615,17 @@ fn thumbnail_scale(width: f32, height: f32, density: f32) -> f32 {
     (THUMB_W / width.max(1.0)).min(THUMB_H / height.max(1.0)) * density
 }
 
+/// The count under the page box: the physical position and total (`3 of 180`) where the
+/// displayed `label` differs from the physical number, else the total alone. `current` is
+/// the 0-based physical index.
+pub(crate) fn page_count_hint(label: &str, current: usize, total: usize) -> String {
+    if !label.is_empty() && label != (current + 1).to_string() {
+        format!("{} of {total}", current + 1)
+    } else {
+        total.to_string()
+    }
+}
+
 /// Organize-toolbar actions that need the app (file pickers, new tabs, dialogs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ViewAction {
@@ -1285,7 +1296,6 @@ impl DocView {
     pub(crate) fn current_page_label(&self, label: Option<&str>) -> String {
         label.filter(|l| !l.is_empty()).map(str::to_owned).unwrap_or_else(|| (self.current + 1).to_string())
     }
-
     /// Retain the current page when `typed` exactly matches its displayed label, even if
     /// another page has that label. Otherwise resolve a trimmed label (case-insensitive),
     /// then a physical page number. `false` when it names no page.
@@ -5151,6 +5161,14 @@ fn grayscale(mut img: egui::ColorImage) -> egui::ColorImage {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn page_count_hint_shows_the_physical_position_only_where_it_differs() {
+        assert_eq!(page_count_hint("3", 2, 180), "180");
+        assert_eq!(page_count_hint("ii", 1, 180), "2 of 180");
+        assert_eq!(page_count_hint("1", 2, 180), "3 of 180");
+        assert_eq!(page_count_hint("", 0, 5), "5");
+    }
+
     #[test]
     fn page_size_hint_zone_is_the_bottom_left_quadrant() {
         let area = Rect::from_min_max(pos2(100.0, 50.0), pos2(500.0, 450.0));
