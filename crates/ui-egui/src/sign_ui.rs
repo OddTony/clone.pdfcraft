@@ -573,8 +573,10 @@ impl PdfCraftApp {
         let from = doc.name.clone();
         match self.session.open_revision(id, n) {
             Ok(new) => {
-                // The reading-colours preference is app-wide: the newly opened revision starts with it.
+                // The reading-colours and line-weights preferences are app-wide: the newly opened
+                // revision starts with them.
                 self.session.set_reading_colors(new, self.reading_colors);
+                self.session.set_thin_lines(new, self.thin_lines);
                 let Some(doc) = self.session.get(new) else { return };
                 let mut view = DocView::new(new, &doc.info, self.view_defaults);
                 view.snapshot = Some(Snapshot { kind: SnapshotKind::Revision, revision: n, from });
@@ -622,8 +624,10 @@ impl PdfCraftApp {
         let name = format!("{} (signed version)", Self::file_stem(&from));
         match self.session.open(format!("{name}.pdf"), None, std::sync::Arc::new(bytes), doc.password.clone().as_deref()) {
             Ok(new) => {
-                // The reading-colours preference is app-wide: the newly opened copy starts with it.
+                // The reading-colours and line-weights preferences are app-wide: the newly opened
+                // copy starts with them.
                 self.session.set_reading_colors(new, self.reading_colors);
+                self.session.set_thin_lines(new, self.thin_lines);
                 let Some(doc) = self.session.get(new) else { return };
                 let mut view = DocView::new(new, &doc.info, self.view_defaults);
                 view.snapshot = Some(Snapshot { kind: SnapshotKind::SignedVersion, revision, from });

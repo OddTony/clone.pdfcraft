@@ -528,6 +528,9 @@ pub struct PdfCraftApp {
     /// The reading-colours preference (Preferences ▸ Reading colours): applied to every open
     /// document, and documents open with it (Acrobat's Replace Document Colors).
     pub reading_colors: pdfcraft_render::ReadingColors,
+    /// View ▸ Line weights off (⌘5): every open document, and documents opened afterwards,
+    /// stroke their paths one device pixel wide. Remembered across restarts (#1828).
+    pub thin_lines: bool,
     /// The Linux portal is enabled only by the native host, and starts on the first System choice.
     #[cfg(target_os = "linux")]
     desktop_theme: Option<pdfcraft_platform::desktop_theme::DesktopTheme>,
@@ -913,6 +916,7 @@ impl PdfCraftApp {
             theme: ThemeKind::Light,
             theme_preference: ThemePreference::Light,
             reading_colors: Default::default(),
+            thin_lines: false,
             #[cfg(target_os = "linux")]
             desktop_theme: None,
             #[cfg(target_os = "linux")]
@@ -1318,9 +1322,11 @@ impl PdfCraftApp {
     ) -> Result<DocId, String> {
         let id = self.session.commit_open(prepared);
         self.password_prompt = None;
-        // The reading-colours preference is app-wide: a newly opened document starts with it.
-        // Idempotent: the engine returns `false` when the document has the setting already.
+        // The reading-colours and line-weights preferences are app-wide: a newly opened document
+        // starts with them. Idempotent: the engine returns `false` when the document has the
+        // setting already.
         self.session.set_reading_colors(id, self.reading_colors);
+        self.session.set_thin_lines(id, self.thin_lines);
         let doc = self.session.get(id).ok_or("the document could not be opened")?;
         let pages = doc.info.pages.len();
         // Acrobat opens straight to the Comments panel when a document has comments.
@@ -2035,6 +2041,17 @@ impl PdfCraftApp {
         }
     }
 
+    /// The app-wide line-weights setting (View ▸ Line weights, ⌘5): sets it and applies it to
+    /// every open document. A document the change actually touches re-renders.
+    pub fn set_thin_lines(&mut self, thin: bool) {
+        self.thin_lines = thin;
+        for i in 0..self.views.len() {
+            if self.session.set_thin_lines(self.views[i].id, thin) {
+                self.views[i].invalidate_content();
+            }
+        }
+    }
+
     /// Enable the Linux desktop portal in a native window. Headless contexts keep
     /// their supplied input and never connect to the user's session bus.
     #[cfg(target_os = "linux")]
@@ -2308,6 +2325,7 @@ impl PdfCraftApp {
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
+        v["thin_lines"] = serde_json::Value::Bool(self.thin_lines);
         v.to_string()
     }
 
@@ -2394,6 +2412,9 @@ impl PdfCraftApp {
         // fails to deserialize and keeps Off.
         if let Ok(colors) = serde_json::from_value::<pdfcraft_render::ReadingColors>(v["reading_colors"].clone()) {
             self.reading_colors = colors;
+        }
+        if let Some(thin) = v["thin_lines"].as_bool() {
+            self.thin_lines = thin;
         }
         // Settings are untrusted: a size out of range follows the system instead.
         self.ui_scale = v["ui_scale"].as_f64().and_then(ui_scale::valid);

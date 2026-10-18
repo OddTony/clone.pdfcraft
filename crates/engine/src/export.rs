@@ -32,9 +32,11 @@ impl Document {
     /// artwork stays original; viewer validation badges are not document content and
     /// do not enter image/text exports or Print as Image. Saving uses the working file.
     pub fn export_source(&self) -> ExportSource {
+        // Line weights off is a view setting: exports and Print as Image draw the real widths.
+        let config = pdfcraft_render::RenderConfig { thin_lines: false, ..self.config.clone() };
         ExportSource {
             bytes: self.display.clone(),
-            config: self.config.clone(),
+            config,
             pages: self.info.pages.len(),
             sizes: self.info.pages.iter().map(|p| (p.width, p.height)).collect(),
         }

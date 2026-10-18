@@ -235,6 +235,64 @@ fn shortcuts_run_registered_commands() {
     assert_eq!(h.state().mode, pdfcraft_ui_egui::Mode::Read);
 }
 
+/// ⌘5 / Ctrl+5 turns the active document's line weights off and on again (#1828).
+#[test]
+fn command_5_toggles_line_weights() {
+    let mut h = harness();
+    let thin = |h: &Harness<'static, PdfCraftApp>| {
+        let (_, id) = h.state().active_ids().unwrap();
+        h.state().session.get(id).unwrap().thin_lines()
+    };
+    assert!(!thin(&h));
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Num5);
+    h.run_steps(2);
+    assert!(thin(&h), "line weights off");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Num5);
+    h.run_steps(2);
+    assert!(!thin(&h), "line weights on again");
+}
+
+/// Line weights is one app-wide setting (#1828): ⌘5 in one document thins every open document,
+/// a document opened afterwards starts thin, and the choice survives a restart through the
+/// settings file.
+#[test]
+fn line_weights_are_app_wide_and_remembered() {
+    let mut h = harness();
+    let first = h.state().views[0].id;
+    h.state_mut().open_bytes("second.pdf", None, fixture(1)).unwrap();
+    h.run_steps(2);
+    let (_, second) = h.state().active_ids().unwrap();
+    assert_ne!(first, second);
+    let thin = |h: &Harness<'static, PdfCraftApp>, id| h.state().session.get(id).unwrap().thin_lines();
+
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Num5);
+    h.run_steps(2);
+    assert!(thin(&h, second), "the active document");
+    assert!(thin(&h, first), "the other open document");
+    h.state_mut().open_bytes("third.pdf", None, fixture(1)).unwrap();
+    h.run_steps(2);
+    let (_, third) = h.state().active_ids().unwrap();
+    assert!(thin(&h, third), "a document opened afterwards");
+
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&h.state().persist());
+    restored.open_bytes("doc.pdf", None, fixture(1)).unwrap();
+    let id = restored.views[0].id;
+    assert!(restored.session.get(id).unwrap().thin_lines(), "after a restart");
+
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Num5);
+    h.run_steps(2);
+    for id in [first, second, third] {
+        assert!(!thin(&h, id), "line weights on again everywhere");
+    }
+    // Settings are untrusted: a value that isn't a boolean keeps line weights on.
+    let mut fresh = PdfCraftApp::new();
+    fresh.restore(r#"{"thin_lines": "yes"}"#);
+    fresh.open_bytes("doc.pdf", None, fixture(1)).unwrap();
+    let id = fresh.views[0].id;
+    assert!(!fresh.session.get(id).unwrap().thin_lines());
+}
+
 #[test]
 fn the_palette_lists_commands_with_shortcuts_and_runs_them() {
     let mut h = harness();
