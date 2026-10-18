@@ -10,7 +10,7 @@ pub(crate) const PDFUA_ID: &str = "http://www.aiim.org/pdfua/ns/id/";
 /// Read an identification property by its expanded XML name, not its arbitrary prefix.
 /// Refuse deeply nested or excessively large XML trees before parsing untrusted metadata.
 pub(crate) fn identifier(xmp: &str, namespace: &str, local: &str) -> Option<String> {
-    if xml_nesting_depth(xmp) > 1024 {
+    if xmp.len() > 8 * 1024 * 1024 || !xml_limits_ok(xmp) {
         return None;
     }
     let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: 100_000 };
@@ -26,12 +26,14 @@ pub(crate) fn identifier(xmp: &str, namespace: &str, local: &str) -> Option<Stri
     None
 }
 
-fn xml_nesting_depth(text: &str) -> usize {
+/// Reject deep XML and start tags with too many attributes before roxmltree checks duplicates.
+/// Each unquoted `=` in a valid start tag introduces an attribute, including namespace bindings.
+fn xml_limits_ok(text: &str) -> bool {
     fn find(hay: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
         (from..hay.len()).find(|&p| hay[p..].starts_with(needle))
     }
     let b = text.as_bytes();
-    let (mut i, mut depth, mut max) = (0usize, 0usize, 0usize);
+    let (mut i, mut depth, mut total_attributes) = (0usize, 0usize, 0usize);
     while i < b.len() {
         if b[i] != b'<' {
             i += 1;
@@ -48,13 +50,16 @@ fn xml_nesting_depth(text: &str) -> usize {
             i = find(b, i + 2, b">").map_or(b.len(), |p| p + 1);
         } else {
             depth += 1;
-            max = max.max(depth);
+            if depth > 1024 {
+                return false;
+            }
             // Skip the rest of the start tag, over any quoted attribute value, and remember its last
             // significant byte: a tag that ends in `/` closes itself, so it is one level deep while it
             // is read rather than a level left open.
             i += 1;
             let mut quote = 0u8;
             let mut last = 0u8;
+            let mut attributes = 0usize;
             while i < b.len() {
                 let c = b[i];
                 if quote != 0 {
@@ -66,6 +71,13 @@ fn xml_nesting_depth(text: &str) -> usize {
                 } else if c == b'>' {
                     i += 1;
                     break;
+                } else if c == b'=' {
+                    attributes += 1;
+                    total_attributes += 1;
+                    if attributes > 128 || total_attributes > 4096 {
+                        return false;
+                    }
+                    last = c;
                 } else if !c.is_ascii_whitespace() {
                     last = c;
                 }
@@ -76,7 +88,7 @@ fn xml_nesting_depth(text: &str) -> usize {
             }
         }
     }
-    max
+    true
 }
 
 /// The value of a simple XMP property, written either as an attribute (`pdfaid:part="2"`) or
@@ -207,5 +219,26 @@ mod tests {
         assert_eq!(iso_date("D:20240105").as_deref(), Some("2024-01-05T00:00:00Z"));
         assert_eq!(iso_date("D:20240105120000Z").as_deref(), Some("2024-01-05T12:00:00Z"));
         assert_eq!(iso_date("junk"), None);
+    }
+}
+
+#[cfg(test)]
+mod limit_tests {
+    use super::*;
+
+    #[test]
+    fn attribute_and_namespace_budgets_bound_parser_work() {
+        let prefix = r#"<root xmlns:a="http://www.aiim.org/pdfa/ns/id/" a:part="2" "#;
+        let attrs = |count| (0..count).map(|i| format!("x{i}=\"v=1\" ")).collect::<String>();
+        let at_limit = format!("{prefix}{}/>", attrs(126));
+        assert_eq!(identifier(&at_limit, PDFA_ID, "part").as_deref(), Some("2"));
+        let over_limit = format!("{prefix}{}/>", attrs(127));
+        assert_eq!(identifier(&over_limit, PDFA_ID, "part"), None);
+        let namespaces = (0..129).map(|i| format!("xmlns:n{i}=\"urn:{i}\" ")).collect::<String>();
+        assert_eq!(identifier(&format!("<root {namespaces}/>"), PDFA_ID, "part"), None);
+        let many_elements = format!("<root>{}</root>", r#"<n a="v"/>"#.repeat(4097));
+        assert!(!xml_limits_ok(&many_elements));
+        let over_bytes = format!("<root>{}</root>", " ".repeat(8 * 1024 * 1024));
+        assert_eq!(identifier(&over_bytes, PDFA_ID, "part"), None);
     }
 }
