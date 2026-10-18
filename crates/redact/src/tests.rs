@@ -2,32 +2,12 @@ use std::sync::Arc;
 
 use pdfcraft_annot::{Meta, NewAnnotation, Shape, Style, add_annotation, rect_quad};
 use pdfcraft_cos::{Document, SaveOptions, write_full, write_incremental};
+use pdfcraft_testkit::{Pdf, stream_obj as stream};
 
 use super::*;
 
-fn stream(dict: &str, data: &[u8]) -> Vec<u8> {
-    let mut v = format!("<< {dict} /Length {} >>\nstream\n", data.len()).into_bytes();
-    v.extend_from_slice(data);
-    v.extend_from_slice(b"\nendstream");
-    v
-}
-
 fn pdf(objs: Vec<Vec<u8>>) -> Document {
-    let mut out = b"%PDF-1.7\n".to_vec();
-    let mut offs = Vec::new();
-    for (i, o) in objs.iter().enumerate() {
-        offs.push(out.len());
-        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
-        out.extend_from_slice(o);
-        out.extend_from_slice(b"\nendobj\n");
-    }
-    let x = out.len();
-    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
-    for o in offs {
-        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
-    }
-    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{x}\n%%EOF\n", objs.len() + 1).as_bytes());
-    Document::open(Arc::new(out)).unwrap()
+    Document::open(Arc::new(Pdf::new().objs(objs).build())).unwrap()
 }
 
 /// A font where every glyph is 500 units wide (so a 10 pt glyph advances 5 pt).
@@ -252,7 +232,7 @@ fn vertical_writing_text_under_a_mark_fails_closed() {
 #[test]
 fn images_are_removed_or_have_their_pixels_cleared() {
     // Image 1 is fully covered; image 2 (4×1 gray, all white) is half covered.
-    let img = stream("/Type /XObject /Subtype /Image /Width 4 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", &[255, 255, 255, 255]);
+    let img = stream("/Type /XObject /Subtype /Image /Width 4 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", [255, 255, 255, 255]);
     let src = b"q 10 0 0 10 10 10 cm /Im1 Do Q q 40 0 0 10 100 100 cm /Im2 Do Q";
     let mut doc = one_page(src, "/XObject << /Im1 7 0 R /Im2 7 0 R >>", vec![img]);
     mark(&mut doc, 0, &[[5.0, 5.0, 25.0, 25.0], [95.0, 95.0, 120.0, 115.0]], "");
@@ -705,6 +685,141 @@ fn overlay_text_takes_its_font_size_colour_alignment_and_repeats() {
     assert!(fonts.contains(b"PCCour") && !fonts.contains(b"PCTimes"));
 }
 
+fn repeated_overlay_document(width: f64, height: f64, repeat: bool) -> Document {
+    pdf(vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Contents 4 0 R /Annots [5 0 R] >>".to_vec(),
+        stream("", b"0 0 20 20 re f"),
+        format!("<< /Type /Annot /Subtype /Redact /Rect [0 0 {width} {height}] /IC [0 0 0] /OverlayText (X) /DA (/Helv 2 Tf) /Repeat {repeat} >>")
+            .into_bytes(),
+    ])
+}
+
+#[test]
+fn oversized_repeated_overlay_is_refused_before_changing_the_document() {
+    // About 11 MiB of generated content before the fix; a bounded reproduction, not an OOM test.
+    let mut doc = repeated_overlay_document(16000.0, 1600.0, true);
+    let before = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert_eq!(apply(&mut doc, None), Err(RedactError::OverlayLimit));
+    assert_eq!(write_full(&doc, &SaveOptions::default()).unwrap(), before);
+    assert_eq!(marks(&doc).len(), 1);
+    let mut single = repeated_overlay_document(16000.0, 1600.0, false);
+    apply(&mut single, None).unwrap();
+    assert_eq!(content(&reopen(&single), 0).matches("(X) Tj").count(), 1);
+}
+
+#[test]
+fn overlay_budget_is_shared_by_pages_and_respects_the_page_selection() {
+    let mut doc = repeated_overlay_document(8000.0, 800.0, true);
+    let page = (*doc.get(ObjRef::new(3, 0))).clone();
+    let mut kids = vec![Object::Ref(ObjRef::new(3, 0))];
+    for _ in 0..2 {
+        let mut page = page.as_dict().unwrap().clone();
+        let annotation = doc.add((*doc.get(ObjRef::new(5, 0))).clone());
+        page.set(b"Annots".to_vec(), Object::Array(vec![Object::Ref(annotation)]));
+        kids.push(Object::Ref(doc.add(Object::Dict(page))));
+    }
+    doc.update_dict(ObjRef::new(2, 0), |d| {
+        d.set(b"Kids".to_vec(), Object::Array(kids));
+        d.set(b"Count".to_vec(), Object::Int(3));
+    })
+    .unwrap();
+    let before = write_full(&doc, &SaveOptions::default()).unwrap();
+    // Each appearance fits on its own; their sum exceeds the operation's budget.
+    assert_eq!(apply(&mut doc, None), Err(RedactError::OverlayLimit));
+    assert_eq!(write_full(&doc, &SaveOptions::default()).unwrap(), before);
+    assert_eq!(marks(&doc).len(), 3);
+    apply(&mut doc, Some(&[1])).unwrap();
+    assert_eq!(marks(&doc).iter().map(|m| m.page).collect::<Vec<_>>(), [0, 2]);
+}
+
+#[test]
+fn grouped_marks_keep_overlay_order_and_ignore_duplicate_page_selections() {
+    let mut doc = repeated_overlay_document(60.0, 30.0, false);
+    let page = doc.get(ObjRef::new(3, 0)).as_dict().unwrap().clone();
+    let original_mark = (*doc.get(ObjRef::new(5, 0))).clone();
+    let mut kids = vec![Object::Ref(ObjRef::new(3, 0))];
+    for _ in 0..2 {
+        let mut copy = page.clone();
+        let mark = doc.add(original_mark.clone());
+        copy.set(b"Annots".to_vec(), Object::Array(vec![Object::Ref(mark)]));
+        kids.push(Object::Ref(doc.add(Object::Dict(copy))));
+    }
+    doc.update_dict(ObjRef::new(2, 0), |d| {
+        d.set(b"Kids".to_vec(), Object::Array(kids));
+        d.set(b"Count".to_vec(), Object::Int(3));
+    })
+    .unwrap();
+    let mut second = original_mark.as_dict().unwrap().clone();
+    second.set(b"OverlayText".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"Y".to_vec())));
+    let second = doc.add(Object::Dict(second));
+    doc.update_dict(ObjRef::new(3, 0), |d| {
+        d.set(b"Annots".to_vec(), Object::Array(vec![Object::Ref(ObjRef::new(5, 0)), Object::Ref(second)]));
+    })
+    .unwrap();
+    let untouched = content(&doc, 1);
+    let report = apply(&mut doc, Some(&[2, 0, 2])).unwrap();
+    assert_eq!((report.pages, report.marks), (2, 3));
+    let saved = reopen(&doc);
+    assert_eq!(marks(&saved).iter().map(|m| m.page).collect::<Vec<_>>(), [1]);
+    assert_eq!(content(&saved, 1), untouched);
+    let first = content(&saved, 0);
+    assert!(first.find("(X) Tj").unwrap() < first.find("(Y) Tj").unwrap());
+    assert_eq!(content(&saved, 2).matches("(X) Tj").count(), 1);
+}
+
+#[test]
+fn overlay_extreme_counts_and_invalid_geometry_are_refused_without_large_allocations() {
+    let doc = repeated_overlay_document(20.0, 10.0, true);
+    let original = marks(&doc).remove(0);
+    for rect in [[0.0, 0.0, 1e100, 10.0], [0.0, 0.0, 20.0, 1e100], [-f64::MAX, 0.0, f64::MAX, 10.0], [0.0, 0.0, f64::NAN, 10.0]] {
+        let mut mark = original.clone();
+        mark.rects = vec![rect];
+        let mut remaining = overlay::MAX_BYTES;
+        assert_eq!(overlay::content(&[&mark], &mut remaining), Err(RedactError::OverlayLimit));
+    }
+}
+
+#[test]
+fn repeated_overlay_keeps_its_exact_appearance_and_counts_escaped_bytes() {
+    let doc = repeated_overlay_document(20.0, 10.0, true);
+    let mut mark = marks(&doc).remove(0);
+    let expected = b"q 0 0 0 rg\n0 0 20 10 re f\nQ\nq 0 0 20 10 re W n BT 1 0 0 rg /PCHelv 2 Tf 1 0 0 1 1.773 7.9 Tm (X X X X X X X X X) Tj 1 0 0 1 1.773 5.5 Tm (X X X X X X X X X) Tj 1 0 0 1 1.773 3.1 Tm (X X X X X X X X X) Tj 1 0 0 1 1.773 0.7 Tm (X X X X X X X X X) Tj ET Q\n";
+    let mut remaining = expected.len();
+    assert_eq!(overlay::content(&[&mark], &mut remaining).unwrap(), expected);
+    assert_eq!(remaining, 0);
+    mark.overlay = "é(\\)".into();
+    let mut remaining = overlay::MAX_BYTES;
+    let encoded = overlay::content(&[&mark], &mut remaining).unwrap();
+    let escaped = b"\xe9\\(\\\\\\)";
+    assert!(encoded.windows(escaped.len()).any(|w| w == escaped));
+    assert_eq!(overlay::MAX_BYTES - remaining, encoded.len());
+    let mut too_small = encoded.len() - 1;
+    assert_eq!(overlay::content(&[&mark], &mut too_small), Err(RedactError::OverlayLimit));
+}
+
+#[test]
+#[ignore = "manual overlay timing probe"]
+fn repeated_overlay_timing_probe() {
+    use std::hash::{Hash, Hasher};
+    for (w, h) in [(20.0, 10.0), (2000.0, 200.0), (4000.0, 400.0), (8000.0, 800.0)] {
+        let doc = repeated_overlay_document(w, h, true);
+        let marks = marks(&doc);
+        let refs: Vec<_> = marks.iter().collect();
+        let start = std::time::Instant::now();
+        let mut bytes = Vec::new();
+        for _ in 0..20 {
+            let mut remaining = overlay::MAX_BYTES;
+            bytes = std::hint::black_box(overlay::content(std::hint::black_box(&refs), &mut remaining).unwrap());
+        }
+        let elapsed = start.elapsed().as_secs_f64() * 1000.0 / 20.0;
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        bytes.hash(&mut hash);
+        println!("{w}x{h}: bytes={} hash={} ms={elapsed:.3}", bytes.len(), hash.finish());
+    }
+}
+
 /// Overlay text the standard fonts can't draw: refused when it is marked, and for a mark another
 /// program made, refused when it is applied, before anything is redacted, rather than burnt into
 /// the page as `?`.
@@ -940,3 +1055,281 @@ fn redacting_every_inheriting_page_retires_the_parent_resources() {
         assert_eq!(under(&mut saved, page, &[[0.0, 190.0, 300.0, 220.0]]), 0);
     }
 }
+
+#[test]
+fn replacement_text_and_property_resources_do_not_survive_redaction() {
+    let mut doc = one_page(
+        b"/Span /P0 BDC /Span <</ActualText (LEAK_INLINE)>> BDC BT /F1 10 Tf 10 200 Td (SECRET)",
+        "/Properties << /P0 7 0 R >>",
+        vec![
+            b"<< /MCID 0 /ActualText (LEAK_PROPERTY) /Alt (LEAK_ALT) /E (LEAK_EXPANSION) >>".to_vec(),
+            stream("", b"Tj ET EMC EMC /Span <</ActualText (Public point)>> DP BT /F1 10 Tf 10 100 Td (Public) Tj ET"),
+        ],
+    );
+    doc.update_dict(ObjRef::new(3, 0), |d| {
+        d.set(b"Contents".to_vec(), Object::Array(vec![Object::Ref(ObjRef::new(4, 0)), Object::Ref(ObjRef::new(8, 0))]));
+    })
+    .unwrap();
+    mark(&mut doc, 0, &[[5.0, 195.0, 60.0, 212.0]], "");
+    apply(&mut doc, None).unwrap();
+    assert_no_secret(&doc, b"LEAK_");
+    let saved = reopen(&doc);
+    assert!(content(&saved, 0).contains("Public"));
+    let p = pdfcraft_model::pages(&saved).swap_remove(0);
+    assert!(!saved.resolve(p.dict.get(b"Resources").unwrap()).as_dict().unwrap().contains(b"Properties"));
+}
+
+#[test]
+fn inherited_form_properties_lose_replacement_text() {
+    let mut doc = one_page(
+        b"/Fm Do",
+        "/XObject << /Fm 7 0 R >> /Properties << /P0 8 0 R >>",
+        vec![
+            stream(
+                "/Type /XObject /Subtype /Form /BBox [0 0 300 300]",
+                b"/Span /P0 BDC BT /F1 10 Tf 10 200 Td (SECRET) Tj ET EMC BT /F1 10 Tf 10 100 Td (Public) Tj ET",
+            ),
+            b"<< /ActualText (LEAK_FORM_PROPERTY) >>".to_vec(),
+        ],
+    );
+    mark(&mut doc, 0, &[[5.0, 195.0, 60.0, 212.0]], "");
+    apply(&mut doc, None).unwrap();
+    assert_no_secret(&doc, b"LEAK_");
+    assert_no_secret(&doc, b"SECRET");
+    let mut saved = reopen(&doc);
+    assert_eq!(under(&mut saved, 0, &[[0.0, 90.0, 100.0, 110.0]]), 6);
+}
+
+#[test]
+fn properties_used_by_unmodified_inheriting_forms_stay() {
+    let mut doc = one_page(
+        b"BT /F1 10 Tf 10 200 Td (SECRET) Tj ET /Fm Do",
+        "/XObject << /Fm 7 0 R >> /Properties << /P0 8 0 R >>",
+        vec![stream("/Type /XObject /Subtype /Form /BBox [0 0 10 10]", b"/Span /P0 BDC 0 0 10 10 re f EMC"), b"<< /ActualText (Public) >>".to_vec()],
+    );
+    mark(&mut doc, 0, &[[5.0, 195.0, 60.0, 212.0]], "");
+    apply(&mut doc, None).unwrap();
+    let saved = reopen(&doc);
+    let page = pdfcraft_model::pages(&saved).swap_remove(0);
+    let resources = saved.resolve(page.dict.get(b"Resources").unwrap());
+    let properties = saved.resolve(resources.as_dict().unwrap().get(b"Properties").unwrap());
+    let property = saved.resolve(properties.as_dict().unwrap().get(b"P0").unwrap());
+    assert_eq!(property.as_dict().unwrap().get(b"ActualText").unwrap().as_string().unwrap().to_text(), "Public");
+}
+
+#[test]
+fn untouched_replacement_descriptions_survive_redaction_and_hidden_text_cleanup() {
+    for hidden in [false, true] {
+        let mode = if hidden { 3 } else { 0 };
+        let data = format!(
+            "/Span <</ActualText (LEAK_REMOVED)>> BDC BT /F1 10 Tf {mode} Tr 10 200 Td (SECRET) Tj ET EMC \
+             /Span /Public BDC BT /F1 10 Tf 0 Tr 10 100 Td (Public) Tj ET EMC"
+        );
+        let mut doc = one_page(
+            data.as_bytes(),
+            "/Properties << /Public 7 0 R >>",
+            vec![b"<< /ActualText (PUBLIC_ACTUAL) /Alt (PUBLIC_ALT) /E (PUBLIC_EXPANSION) /T (PUBLIC_TITLE) >>".to_vec()],
+        );
+        if hidden {
+            sanitize::remove_hidden(&mut doc, &[sanitize::Hidden::HiddenText]).unwrap();
+        } else {
+            mark(&mut doc, 0, &[[5.0, 195.0, 60.0, 212.0]], "");
+            apply(&mut doc, None).unwrap();
+        }
+        assert_no_secret(&doc, b"LEAK_");
+        assert_no_secret(&doc, b"SECRET");
+        let saved = reopen(&doc);
+        let page = pdfcraft_model::pages(&saved).swap_remove(0);
+        let resources = saved.resolve(page.dict.get(b"Resources").unwrap());
+        let properties = saved.resolve(resources.as_dict().unwrap().get(b"Properties").unwrap());
+        let property = saved.resolve(properties.as_dict().unwrap().get(b"Public").unwrap());
+        let dict = property.as_dict().unwrap();
+        for key in [&b"ActualText"[..], b"Alt", b"E", b"T"] {
+            assert!(dict.contains(key), "surviving description removed: {key:?}, hidden={hidden}");
+        }
+    }
+}
+
+#[test]
+fn a_hostile_icc_component_count_is_refused_not_multiplied_into_a_crash() {
+    // /N comes from the file. 2^60 × 8 bpc × width 2 overflows the row size; a negative /N wrapped
+    // to a huge usize. Either way the half-covered image can't be cleared, so it is removed whole.
+    for n in ["1152921504606846976", "-1", "2"] {
+        let img = stream("/Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace [/ICCBased 8 0 R] /BitsPerComponent 8", [255, 255]);
+        let icc = stream(&format!("/N {n}"), b"");
+        let mut doc = one_page(b"q 20 0 0 10 100 100 cm /Im Do Q", "/XObject << /Im 7 0 R >>", vec![img, icc]);
+        mark(&mut doc, 0, &[[95.0, 95.0, 110.0, 115.0]], "");
+        let r = apply(&mut doc, None).unwrap();
+        assert_eq!((r.images_removed, r.images_cleared), (1, 0), "/N {n}: {r:?}");
+        assert!(!content(&doc, 0).contains("/Im Do"), "/N {n}");
+    }
+}
+
+#[test]
+fn image_alternatives_and_masks_cannot_keep_redacted_pixels() {
+    for extra in ["/Alternates [<< /Image 8 0 R >>]", "/SMask 8 0 R", "/Mask 8 0 R", "/Mask [0 0]"] {
+        let mut doc = one_page(
+            b"q 0 0 300 300 re W n 8 0 0 10 10 10 cm /Im Do Q",
+            "/XObject << /Im 7 0 R >>",
+            vec![
+                stream(
+                    &format!("/Type /XObject /Subtype /Image /Width 8 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8 {extra}"),
+                    b"LEAK_TOPPUBLIC__",
+                ),
+                stream("/Type /XObject /Subtype /Image /Width 8 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", b"LEAK_ALT"),
+            ],
+        );
+        mark(&mut doc, 0, &[[10.0, 15.0, 18.0, 20.0]], "");
+        let report = apply(&mut doc, None).unwrap();
+        assert_no_secret(&doc, b"LEAK_");
+        assert_eq!((report.images_cleared, report.images_removed), if extra.starts_with("/Alternates") { (1, 0) } else { (0, 1) });
+    }
+}
+
+#[test]
+fn masks_and_alternates_outside_redaction_stay() {
+    let mut doc = one_page(
+        b"q 8 0 0 10 10 10 cm /Im Do Q",
+        "/XObject << /Im 7 0 R >>",
+        vec![
+            stream(
+                "/Type /XObject /Subtype /Image /Width 8 /Height 2 /ColorSpace /DeviceGray /BitsPerComponent 8 /SMask 8 0 R /Alternates [<< /Image 8 0 R >>]",
+                b"PUBLIC_TOPBOTTOM",
+            ),
+            stream("/Type /XObject /Subtype /Image /Width 8 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8", b"PUBLIC__"),
+        ],
+    );
+    mark(&mut doc, 0, &[[100.0, 100.0, 120.0, 120.0]], "");
+    let report = apply(&mut doc, None).unwrap();
+    assert_eq!((report.images_removed, report.images_cleared), (0, 0));
+    let saved = reopen(&doc);
+    let page = pdfcraft_model::pages(&saved).swap_remove(0);
+    let resources = saved.resolve(page.dict.get(b"Resources").unwrap());
+    let xobjects = saved.resolve(resources.as_dict().unwrap().get(b"XObject").unwrap());
+    let image = saved.resolve(xobjects.as_dict().unwrap().get(b"Im").unwrap());
+    let Object::Stream(image) = &*image else { panic!() };
+    assert!(image.dict.contains(b"SMask") && image.dict.contains(b"Alternates"));
+    assert_eq!(image.decoded().unwrap(), b"PUBLIC_TOPBOTTOM");
+}
+
+#[test]
+fn stream_boundary_comment_stays_inert_after_unrelated_redaction() {
+    for tail in [b"BT /F1 10 Tf 10 200 Td (HIDDEN) Tj ET".as_slice(), b"BT /F1 10 Tf 10 200 Td (HIDDEN) Tj ET\nBT /F1 10 Tf 10 250 Td (LIVE) Tj ET"] {
+        let mut doc = one_page(b"BT /F1 10 Tf 10 100 Td (REMOVE) Tj ET % note", "", vec![]);
+        let hidden = doc.add(Object::Stream(Stream::from_raw(Dict::new(), tail.to_vec())));
+        let page = pdfcraft_model::pages(&doc)[0].obj;
+        doc.update_dict(page, |d| d.set(b"Contents".to_vec(), Object::Array(vec![Object::Ref(ObjRef::new(4, 0)), Object::Ref(hidden)]))).unwrap();
+        mark(&mut doc, 0, &[[9.0, 95.0, 50.0, 110.0]], "");
+        assert_eq!(apply(&mut doc, None).unwrap().glyphs, 6);
+        let reopened = reopen(&doc);
+        let page = &pdfcraft_model::pages(&reopened)[0];
+        let (_, data) = page_streams(&reopened, &page.dict, 0).unwrap();
+        // Independent of Pieces::join: the renderer concatenates streams with spaces.
+        let ops = pdfcraft_content::parse(&data.join(&b' ')).ops;
+        assert!(!ops.iter().any(|o| o.operands.iter().any(|v| v.as_string().is_some_and(|s| s.bytes == b"HIDDEN"))), "hidden text became executable");
+        let live = ops.iter().any(|o| o.operands.iter().any(|v| v.as_string().is_some_and(|s| s.bytes == b"LIVE")));
+        assert_eq!(live, tail.contains(&b'\n'));
+    }
+}
+
+#[test]
+fn rewriting_a_piece_keeps_its_leading_comment_terminator() {
+    for eol in [b"\n".as_slice(), b"\r", b"\r\n"] {
+        let mut doc = one_page(b"q Q % note", "", vec![]);
+        let mut tail = eol.to_vec();
+        tail.extend(b"BT /F1 10 Tf 10 100 Td (REMOVE) Tj ET BT /F1 10 Tf 10 200 Td (KEEP) Tj ET");
+        let second = doc.add(Object::Stream(Stream::from_raw(Dict::new(), tail)));
+        let page = pdfcraft_model::pages(&doc)[0].obj;
+        doc.update_dict(page, |d| d.set(b"Contents".to_vec(), Object::Array(vec![Object::Ref(ObjRef::new(4, 0)), Object::Ref(second)]))).unwrap();
+        mark(&mut doc, 0, &[[9.0, 95.0, 50.0, 110.0]], "");
+        assert_eq!(apply(&mut doc, None).unwrap().glyphs, 6);
+        let p = &pdfcraft_model::pages(&doc)[0];
+        let (_, data) = page_streams(&doc, &p.dict, 0).unwrap();
+        let ops = pdfcraft_content::parse(&data.join(&b' ')).ops;
+        assert_eq!(ops.iter().filter(|o| o.is("BT")).count(), 2, "leading EOL lost; first live operator swallowed");
+        assert!(ops.iter().any(|o| o.operands.iter().any(|v| v.as_string().is_some_and(|s| s.bytes == b"KEEP"))));
+    }
+}
+
+#[test]
+fn named_hidden_text_descriptions_are_removed_from_saved_bytes() {
+    let mut doc = one_page(
+        b"/Span /P0 BDC BT /F1 10 Tf 3 Tr 10 200 Td (SECRET) Tj ET EMC",
+        "/Properties << /P0 7 0 R >>",
+        vec![b"<< /ActualText (LEAK_ACTUAL) /Alt (LEAK_ALT) /E (LEAK_EXPANSION) /T (LEAK_TITLE) >>".to_vec()],
+    );
+    sanitize::remove_hidden(&mut doc, &[sanitize::Hidden::HiddenText]).unwrap();
+    assert_no_secret(&doc, b"SECRET");
+    assert_no_secret(&doc, b"LEAK_");
+    let saved = reopen(&doc);
+    let page = pdfcraft_model::pages(&saved).swap_remove(0);
+    assert!(!saved.resolve(page.dict.get(b"Resources").unwrap()).as_dict().unwrap().contains(b"Properties"));
+}
+
+#[test]
+fn unused_descriptions_in_shared_or_inherited_resources_are_retired() {
+    for hidden in [false, true] {
+        for inherited in [false, true] {
+            let mode = if hidden { 3 } else { 0 };
+            let data = format!("/Span /P0 BDC BT /F1 10 Tf {mode} Tr 10 200 Td (SECRET) Tj ET EMC /Fm Do");
+            let mut doc = one_page(
+                data.as_bytes(),
+                "/Properties << /P0 7 0 R /Public 8 0 R >> /XObject << /Fm 9 0 R >>",
+                vec![
+                    b"<< /ActualText (LEAK_ACTUAL) /Alt (LEAK_ALT) /E (LEAK_EXPANSION) /T (LEAK_TITLE) >>".to_vec(),
+                    b"<< /ActualText (PUBLIC_ACTUAL) /Alt (PUBLIC_ALT) /E (PUBLIC_EXPANSION) /T (PUBLIC_TITLE) >>".to_vec(),
+                    stream("/Type /XObject /Subtype /Form /BBox [0 0 100 120]", b"/Span /Public BDC BT /F1 10 Tf 0 Tr 10 100 Td (Public) Tj ET EMC"),
+                ],
+            );
+            let first = doc.get(ObjRef::new(3, 0)).as_dict().unwrap().clone();
+            let resources = doc.add(first.get(b"Resources").unwrap().clone());
+            let second_content = doc.add(Object::Stream(Stream::from_raw(Dict::new(), b"/Fm Do".to_vec())));
+            let mut second = first;
+            second.set(b"Contents".to_vec(), Object::Ref(second_content));
+            if inherited {
+                second.remove(b"Resources");
+            } else {
+                second.set(b"Resources".to_vec(), Object::Ref(resources));
+            }
+            let second = doc.add(Object::Dict(second));
+            doc.update_dict(ObjRef::new(3, 0), |d| {
+                if inherited {
+                    d.remove(b"Resources");
+                } else {
+                    d.set(b"Resources".to_vec(), Object::Ref(resources));
+                }
+            })
+            .unwrap();
+            doc.update_dict(ObjRef::new(2, 0), |d| {
+                d.set(b"Kids".to_vec(), Object::Array(vec![Object::Ref(ObjRef::new(3, 0)), Object::Ref(second)]));
+                d.set(b"Count".to_vec(), Object::Int(2));
+                if inherited {
+                    d.set(b"Resources".to_vec(), Object::Ref(resources));
+                }
+            })
+            .unwrap();
+            if hidden {
+                sanitize::remove_hidden(&mut doc, &[sanitize::Hidden::HiddenText]).unwrap();
+            } else {
+                mark(&mut doc, 0, &[[5.0, 195.0, 60.0, 212.0]], "");
+                apply(&mut doc, Some(&[0])).unwrap();
+            }
+            assert_no_secret(&doc, b"LEAK_");
+            assert_no_secret(&doc, b"SECRET");
+            let mut saved = reopen(&doc);
+            for page_index in 0..2 {
+                assert_eq!(under(&mut saved, page_index, &[[0.0, 90.0, 100.0, 110.0]]), 6);
+                let page = pdfcraft_model::pages(&saved).swap_remove(page_index);
+                let resources = saved.resolve(page.dict.get(b"Resources").unwrap());
+                let properties = saved.resolve(resources.as_dict().unwrap().get(b"Properties").unwrap());
+                assert!(!properties.as_dict().unwrap().contains(b"P0"));
+                let property = saved.resolve(properties.as_dict().unwrap().get(b"Public").unwrap());
+                for key in [&b"ActualText"[..], b"Alt", b"E", b"T"] {
+                    assert!(property.as_dict().unwrap().contains(key), "shared form lost {key:?}: hidden={hidden}, inherited={inherited}");
+                }
+            }
+        }
+    }
+}
+
+mod property_retirement;
