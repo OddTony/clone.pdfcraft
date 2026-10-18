@@ -2646,4 +2646,42 @@ mod tests {
         assert_eq!(ocr_layer_text(4, false), expected, "symbolic, no /ToUnicode");
         assert_eq!(ocr_layer_text(32, true), expected, "nonsymbolic, /ToUnicode for ASCII only");
     }
+
+    /// One page drawing `text` in Helvetica under text rendering mode `mode`.
+    fn tr_mode_page(mode: u8, text: &str) -> Pdf {
+        use lopdf::{Document, Object, Stream, dictionary};
+        let mut doc = Document::with_version("1.7");
+        let font = doc.add_object(dictionary! {
+            "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica",
+            "Encoding" => "WinAnsiEncoding"
+        });
+        let ops = format!("BT /F1 24 Tf {mode} Tr 72 700 Td ({text}) Tj ET");
+        let content = doc.add_object(Stream::new(dictionary! {}, ops.into_bytes()));
+        let pages = doc.new_object_id();
+        let page = doc.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages,
+            "MediaBox" => vec![Object::Integer(0), Object::Integer(0), Object::Integer(612), Object::Integer(792)],
+            "Resources" => dictionary! {"Font" => dictionary! {"F1" => font}},
+            "Contents" => content
+        });
+        doc.objects.insert(pages, dictionary! {"Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1}.into());
+        let catalog = doc.add_object(dictionary! {"Type" => "Catalog", "Pages" => pages});
+        doc.trailer.set("Root", catalog);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        Pdf::new(std::sync::Arc::new(bytes)).unwrap()
+    }
+
+    /// #3109: text drawn in clipping-only mode (`7 Tr`) is part of the page's text, like the
+    /// other modes. Gradient- and image-filled titles are written this way: the text sets the
+    /// clip, then paint goes through it. MuPDF, pdftotext and the edit layer all extract it.
+    #[test]
+    fn clipping_only_text_is_extracted() {
+        for mode in [0, 3, 4, 5, 6, 7] {
+            let pdf = tr_mode_page(mode, "Hello World");
+            let text = extract_page(&pdf, 0, &InterpreterSettings::default()).unwrap();
+            assert!(text.plain_text().contains("Hello World"), "{mode} Tr: text extracted: {:?}", text.plain_text());
+            assert!(!text.find("Hello").is_empty(), "{mode} Tr: text is findable");
+        }
+    }
 }

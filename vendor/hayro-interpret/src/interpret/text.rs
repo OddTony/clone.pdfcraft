@@ -126,6 +126,17 @@ pub(crate) fn show_glyph<'a>(
         }
         TextRenderingMode::Clip => {
             clip_glyph(ctx, glyph, glyph_transform);
+            // PdfCraft patch (#3109): report the glyph for text extraction, as Invisible
+            // mode does. Clipping-only text (gradient- or image-filled titles) is part of
+            // the page's text; without this, extraction, Find and redaction miss it while
+            // MuPDF, pdftotext and the edit layer all see it.
+            device.draw_glyph(
+                glyph,
+                ctx.get().ctm,
+                glyph_transform,
+                &get_paint(ctx, false),
+                &GlyphDrawMode::Invisible,
+            );
         }
         TextRenderingMode::FillAndClip => {
             clip_glyph(ctx, glyph, glyph_transform);
