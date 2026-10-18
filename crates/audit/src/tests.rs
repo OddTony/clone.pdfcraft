@@ -529,3 +529,163 @@ fn reading_blocks_respect_stream_comments_and_split_operands() {
         assert_eq!(text, "Replacement text", "{}", String::from_utf8_lossy(s1));
     }
 }
+
+#[test]
+fn clipping_path_prunes_clipped_out_box() {
+    // Negative control (#3118): box is drawn outside the active clip, so it hides nothing.
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\nq 0 0 10 10 re W n 0 g 100 688 220 32 re f Q\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert!(findings.is_empty(), "{findings:?}");
+
+    // Paired positive control: clipping path contains the box, so the cover is detected.
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\nq 90 680 240 50 re W n 0 g 100 688 220 32 re f Q\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].kind, FindingKind::CoveredText);
+    assert!(findings[0].covered_text.contains("SECRET"));
+}
+
+#[test]
+fn form_bbox_clips_contained_drawing() {
+    // Negative control (#3118): form BBox does not reach the text.
+    let mut b = Builder::new();
+    b.add("<< /Type /Catalog /Pages 2 0 R >>");
+    b.add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 6 0 R >> /XObject << /Fm 5 0 R >> >> >>");
+    b.add_stream(b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n/Fm Do\n");
+    b.add_stream_with(b"0 g\n100 688 220 32 re f\n", "/Type /XObject /Subtype /Form /BBox [0 0 10 10]");
+    b.add(FONT);
+    let findings = audit_redactions(&open(b.build())).expect("audit must run");
+    assert!(findings.is_empty(), "{findings:?}");
+
+    // Paired positive control: form BBox covers the text.
+    let mut b = Builder::new();
+    b.add("<< /Type /Catalog /Pages 2 0 R >>");
+    b.add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 6 0 R >> /XObject << /Fm 5 0 R >> >> >>");
+    b.add_stream(b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n/Fm Do\n");
+    b.add_stream_with(b"0 g\n100 688 220 32 re f\n", "/Type /XObject /Subtype /Form /BBox [0 0 612 792]");
+    b.add(FONT);
+    let findings = audit_redactions(&open(b.build())).expect("audit must run");
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+}
+
+#[test]
+fn optional_content_hidden_layer_is_not_reported() {
+    // Negative control (#3118): box is drawn inside a layer that is default OFF.
+    let mut b = Builder::new();
+    b.add("<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [6 0 R] /D << /OFF [6 0 R] >> >> >>");
+    b.add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.add(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /Properties << /L1 6 0 R >> >> >>",
+    );
+    b.add_stream(b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n/OC /L1 BDC\n0 g\n100 688 220 32 re f\nEMC\n");
+    b.add(FONT);
+    b.add("<< /Type /OCG /Name (Hidden) >>");
+    let findings = audit_redactions(&open(b.build())).expect("audit must run");
+    assert!(findings.is_empty(), "{findings:?}");
+
+    // Paired positive control: box is drawn inside a layer that is visible.
+    let mut b = Builder::new();
+    b.add("<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [6 0 R] /D << /Order [6 0 R] >> >> >>");
+    b.add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.add(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /Properties << /L1 6 0 R >> >> >>",
+    );
+    b.add_stream(b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n/OC /L1 BDC\n0 g\n100 688 220 32 re f\nEMC\n");
+    b.add(FONT);
+    b.add("<< /Type /OCG /Name (Visible) >>");
+    let findings = audit_redactions(&open(b.build())).expect("audit must run");
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+}
+
+#[test]
+fn text_clipping_mode_fill_is_not_reported_as_cover() {
+    // Negative control (#3118): fill through Tr 7 text clip fills the glyphs, not a page cover.
+    let content = b"q BT /F1 24 Tf 7 Tr 100 700 Td (SECRET DATA 123) Tj ET 0 0 0.5 rg 0 0 612 792 re f Q\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert!(findings.is_empty(), "{findings:?}");
+
+    // Paired positive control: after Q restores normal clipping (or with 0 Tr), fill is detected.
+    let content = b"q BT /F1 24 Tf 7 Tr 100 700 Td (SECRET DATA 123) Tj ET Q 0 g 100 688 220 32 re f\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+}
+
+#[test]
+fn color_set_with_cs_sc_and_scn_controls() {
+    // 1. DeviceGray via cs / sc
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n1 g 0 0 1 1 re f /DeviceGray cs 0 sc 100 688 220 32 re f\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "DeviceGray cs/sc: {findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+
+    // 2. DeviceRGB via cs / sc
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n1 g 0 0 1 1 re f /DeviceRGB cs 0 0 0 sc 100 688 220 32 re f\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "DeviceRGB cs/sc: {findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+
+    // 3. DeviceCMYK via cs / sc
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n1 g 0 0 1 1 re f /DeviceCMYK cs 0 0 0 1 sc 100 688 220 32 re f\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "DeviceCMYK cs/sc: {findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+
+    // 4. scn operator with DeviceRGB
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n1 g 0 0 1 1 re f /DeviceRGB cs 0.05 0.05 0.05 scn 100 688 220 32 re f\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "scn operator: {findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+
+    // 5. Fail-closed: unknown color space defaults to black
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n1 g 0 0 1 1 re f /CustomSeparation cs 0.5 sc 100 688 220 32 re f\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "unknown color space fail-closed: {findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+
+    // 6. Negative control: light color set via cs / sc is not reported as cover
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n0 g 0 0 1 1 re f /DeviceGray cs 1 sc 100 688 220 32 re f\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert!(findings.is_empty(), "light color via cs/sc must not be reported: {findings:?}");
+}
+
+#[test]
+fn unclosed_oc_in_form_xobject_does_not_leak_to_parent() {
+    let mut b = Builder::new();
+    b.add("<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [6 0 R] /D << /OFF [6 0 R] >> >> >>");
+    b.add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.add(
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /XObject << /Fm 7 0 R >> /Properties << /L1 6 0 R >> >> >>",
+    );
+    // Page: text, then /Fm Do (which has unclosed /OC /L1 BDC), then genuine cover over text.
+    b.add_stream(b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\n/Fm Do\n0 g\n100 688 220 32 re f\n");
+    b.add(FONT);
+    b.add("<< /Type /OCG /Name (Hidden) >>");
+    // Form Fm leaves /OC /L1 unclosed (no EMC)
+    b.add_stream_with(
+        b"/OC /L1 BDC\n0 g\n0 0 10 10 re f\n",
+        "/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources << /Properties << /L1 6 0 R >> >>",
+    );
+    let findings = audit_redactions(&open(b.build())).expect("audit must run");
+    assert_eq!(findings.len(), 1, "genuine cover following unclosed form OC must not be suppressed: {findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+}
+
+#[test]
+fn rotated_re_cover_detection() {
+    // 90-degree axis-aligned rotation: (x_user, y_user) = (800 - y, x)
+    // with rect [688, 480, 32, 220] mapping to user space [100, 688, 320, 720] over the text.
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\nq 0 1 -1 0 800 0 cm 0 g 688 480 32 220 re f Q\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "90-deg rotated axis-aligned rect is detected: {findings:?}");
+    assert!(findings[0].covered_text.contains("SECRET"));
+
+    // 45-degree non-axis-aligned rotation: bounding box overlaps text, but non-axis-aligned geometry is excluded.
+    let content = b"BT /F1 24 Tf 100 700 Td (SECRET DATA 123) Tj ET\nq 0.7071 0.7071 -0.7071 0.7071 200 550 cm 0 g 10 10 160 160 re f Q\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert!(findings.is_empty(), "non-axis-aligned path is not a rectangular cover: {findings:?}");
+}
