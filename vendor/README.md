@@ -16,7 +16,9 @@ concurrent reads have independent budgets. Direct `ObjectStream` parsing gets a 
 budget per call. Indirect `/Length` lookups retain the eager load's budget while
 reading compressed containers; lightweight metadata lookups use a silent context
 instead of starting independent batches. Other parser diagnostics (including
-stream-boundary recovery and reference-cycle warnings) are outside this scope. Covered by the fourteen tests in
+stream-boundary recovery and reference-cycle warnings) are outside this scope. The encrypted
+loader also shares one warning budget across every decrypted object-stream container.
+Covered by the fifteen tests in
 `crates/render/tests/object_load_logging.rs`, including all `lopdf::*` targets and a
 one-worker strict-summary regression, plus the reader's `encrypted_load_logging`
 unit test for the normally unused eager encrypted-skip branch.

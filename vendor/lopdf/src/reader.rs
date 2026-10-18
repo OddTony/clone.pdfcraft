@@ -988,11 +988,13 @@ impl Reader<'_> {
                     .push((obj_num, index));
             }
 
+            // PdfCraft patch: encrypted containers share one budget for this document read.
+            let load_log = ObjectLoadLog::default();
             for (container_id, objects_in_stream) in streams_to_process {
                 if let Some(container_obj) = self.document.objects.get(&(container_id, 0))
                     && let Ok(stream) = container_obj.as_stream()
                 {
-                    match ObjectStream::new_with_limit(stream, self.max_decompressed_size) {
+                    match ObjectStream::new_with_log(stream, self.max_decompressed_size, &load_log) {
                         Ok(object_stream) => {
                             for (obj_num, _index) in objects_in_stream {
                                 let obj_id = (obj_num, 0);
@@ -1005,6 +1007,7 @@ impl Reader<'_> {
                     }
                 }
             }
+            load_log.finish();
 
             let mut stored_state = state.clone();
             // Record the /Encrypt dictionary's object id so that a later

@@ -378,3 +378,96 @@ fn compressed_lengths_metadata_does_not_start_diagnostic_batches() {
     assert_eq!(metadata.page_count, 1);
     assert!(records().is_empty(), "metadata lookups have no eager-load logging context: {:?}", records());
 }
+
+/// An encrypted fixture retains real compressed references in an incremental xref stream.
+/// The writer omits existing containers, so retain them and add compressed references explicitly.
+fn encrypted_container_fixture(count: usize) -> Vec<u8> {
+    let mut doc = Document::load_mem(&fixture(0, 0)).unwrap();
+    doc.trailer.set("ID", lopdf::Object::Array(vec![lopdf::Object::string_literal("BBBBBBBBBBBBBBBB"); 2]));
+    let mut containers = Vec::new();
+    for i in 0..count {
+        let member = 10000 + u32::try_from(i).unwrap();
+        let index = format!("{member} 0 ");
+        let mut dict = lopdf::Dictionary::new();
+        // The writer omits existing ObjStm containers. Restore this same-length name after
+        // serialization; names are not encrypted and object offsets remain unchanged.
+        dict.set("Type", "ObjStx");
+        dict.set("N", 2); // One valid member, but a deliberately wrong count.
+        dict.set("First", i64::try_from(index.len()).unwrap());
+        let container = doc.add_object(lopdf::Stream::new(dict, format!("{index}42").into_bytes()));
+        containers.push(container.0);
+    }
+    let version = lopdf::EncryptionVersion::V2 {
+        document: &doc,
+        owner_password: "owner",
+        user_password: "user",
+        key_length: 128,
+        permissions: lopdf::Permissions::all(),
+    };
+    doc.encrypt(&lopdf::EncryptionState::try_from(version).unwrap()).unwrap();
+    let encrypt = doc.trailer.get(b"Encrypt").unwrap().as_reference().unwrap();
+    let mut pdf = Vec::new();
+    doc.save_to(&mut pdf).unwrap();
+    let mut restored = 0;
+    for i in 0..=pdf.len() - 6 {
+        if &pdf[i..i + 6] == b"ObjStx" {
+            pdf[i + 5] = b'm';
+            restored += 1;
+        }
+    }
+    assert_eq!(restored, count);
+    let marker = b"startxref\n";
+    let start = pdf.windows(marker.len()).rposition(|w| w == marker).unwrap() + marker.len();
+    let prev: usize = std::str::from_utf8(&pdf[start..]).unwrap().lines().next().unwrap().parse().unwrap();
+    let xref = pdf.len();
+    let xref_id = 10000 + count;
+    let mut entries = Vec::new();
+    for container in containers {
+        entries.push(2);
+        entries.extend_from_slice(&container.to_be_bytes());
+        entries.extend_from_slice(&0u16.to_be_bytes());
+    }
+    entries.push(1);
+    entries.extend_from_slice(&u32::try_from(xref).unwrap().to_be_bytes());
+    entries.extend_from_slice(&0u16.to_be_bytes());
+    let id = "42".repeat(16);
+    pdf.extend_from_slice(format!("\n{xref_id} 0 obj\n<< /Type /XRef /Size {} /Root 1 0 R /Encrypt {} {} R /ID [<{id}> <{id}>] /Prev {prev} /Index [10000 {}] /W [1 4 2] /Length {} >>\nstream\n", xref_id + 1, encrypt.0, encrypt.1, count + 1, entries.len()).as_bytes());
+    pdf.extend_from_slice(&entries);
+    pdf.extend_from_slice(format!("\nendstream\nendobj\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+    pdf
+}
+
+/// All encrypted containers share one budget, retaining their decrypted members and page.
+#[test]
+fn encrypted_object_streams_share_the_load_budget() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    for strict in [false, true] {
+        for count in [1, 32] {
+            let pdf = encrypted_container_fixture(count);
+            start_capture();
+            let doc = Document::load_mem_with_options(&pdf, LoadOptions { strict, ..LoadOptions::with_password("user") }).unwrap();
+            assert_eq!(doc.get_pages().len(), 1);
+            for i in 0..count {
+                let member = 10000 + u32::try_from(i).unwrap();
+                let value = doc.get_object((member, 0));
+                assert!(
+                    value.is_ok(),
+                    "missing member {member}: xref={:?}, container={:?}, logs={:?}",
+                    doc.reference_table.get(member),
+                    doc.get_object((6 + u32::try_from(i).unwrap(), 0)),
+                    records()
+                );
+                assert_eq!(value.unwrap().as_i64().unwrap(), 42);
+            }
+            let messages = records();
+            assert_eq!(messages.len(), if count <= 8 { count } else { 9 }, "strict={strict}, count={count}: {messages:?}");
+            assert!(messages.iter().all(|(level, _)| *level == Level::Warn));
+            if count > 8 {
+                let summary = &messages.last().unwrap().1;
+                assert!(summary.starts_with("Object loading:"), "{summary}");
+                assert!(summary.contains(&format!("{count} object stream warnings")), "{summary}");
+                assert!(summary.contains(&format!("{} additional messages suppressed", count - 8)), "{summary}");
+            }
+        }
+    }
+}
