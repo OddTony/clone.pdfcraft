@@ -1335,12 +1335,12 @@ impl Automation {
         };
         let opts = cbz::CbzOptions { dpi, format, passthrough: a.opt_bool("passthrough")?.unwrap_or(true) };
         let path = self.resolve(a.str("path")?, true)?;
-        let report = write_atomic_streamed(&path, staging_suffixes(), std::fs::File::sync_all, |file| {
+        // Measured on the staged file before the rename, so a written archive is never reported as 0 bytes.
+        let (report, bytes) = write_atomic_streamed(&path, staging_suffixes(), std::fs::File::sync_all, |file| {
             let (out, report) = cbz::write_cbz(&src, &pages, opts, std::io::BufWriter::new(file), |_| {}).map_err(std::io::Error::other)?;
-            out.into_inner().map_err(std::io::IntoInnerError::into_error)?;
-            Ok(report)
+            let file = out.into_inner().map_err(std::io::IntoInnerError::into_error)?;
+            Ok((report, file.metadata()?.len()))
         })?;
-        let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
         let lowered: Vec<Value> = report.lower_dpi.iter().map(|(p, dpi)| json!({ "page": p + 1, "dpi": dpi })).collect();
         Ok(json!({
             "path": path.to_string_lossy(),
