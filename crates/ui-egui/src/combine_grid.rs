@@ -195,6 +195,16 @@ impl Thumbs {
         }
     }
 
+    /// Keep thumbnails of pages of `group` that were not among `rotated` when its bytes changed.
+    pub(crate) fn keep_unrotated(&mut self, group: u64, old_auth: u64, source: usize, auth: u64, rotated: &[usize]) {
+        for ((g, page), e) in &mut self.entries {
+            if *g == group && e.key.auth == old_auth && rotated.binary_search(page).is_err() {
+                e.key.source = source;
+                e.key.auth = auth;
+            }
+        }
+    }
+
     /// Render threads that exist now (real threads, not pools): those of pools at work, of pools
     /// keeping a document open, and of pools let go of.
     fn threads(&mut self) -> usize {
@@ -991,16 +1001,24 @@ impl Card {
             Some((nth, ..)) => RowAction::PreviewAt(f.id, nth),
             None => RowAction::Preview(f.id),
         };
-        // The card's own actions, in this order: expand (or, on a page, collapse), remove (the file,
-        // or the page), show large.
+        // The card's own actions, in this order: expand (or, on a page, collapse), rotate both
+        // ways, remove (the file, or the page), show large.
         let mut buttons: Vec<(&str, String, RowAction)> = Vec::new();
         if expandable {
             buttons.push(("maximize-2", tl!("Expand").to_owned(), RowAction::Expand(f.id, true)));
         }
         if let Some((nth, ..)) = self.page {
             buttons.push(("minimize-2", tl!("Collapse").to_owned(), RowAction::Expand(f.id, false)));
+            if previewable {
+                buttons.push(("rotate-ccw", tl!("Rotate counterclockwise").to_owned(), RowAction::RotatePage(f.id, nth, -90)));
+                buttons.push(("rotate-cw", tl!("Rotate clockwise").to_owned(), RowAction::RotatePage(f.id, nth, 90)));
+            }
             buttons.push(("trash-2", tl!("Remove page").to_owned(), RowAction::RemovePages(Some((f.id, nth)))));
         } else {
+            if previewable {
+                buttons.push(("rotate-ccw", tl!("Rotate counterclockwise").to_owned(), RowAction::RotateFile(f.id, -90)));
+                buttons.push(("rotate-cw", tl!("Rotate clockwise").to_owned(), RowAction::RotateFile(f.id, 90)));
+            }
             buttons.push(("trash-2", crate::i18n::fmt(tl!("Remove {name}"), &[("name", &f.name)]), RowAction::RemoveFile(f.id)));
         }
         if previewable {
@@ -1011,16 +1029,17 @@ impl Card {
         let mut over_bar = false;
         if !covered && ui.rect_contains_pointer(c.shrink(4.0)) && !egui::DragAndDrop::has_any_payload(ui.ctx()) {
             let count = buttons.len() as f32;
+            let btn = ((c.width() - 24.0 - (count - 1.0).max(0.0) * 2.0) / count.max(1.0)).clamp(20.0, 26.0);
             // Mostly above the page (a quarter over its top edge), so it hides little of it, and
             // never the name below.
             let y = paper.top() + BAR_H / 4.0 - BAR_H / 2.0;
-            let bar = Rect::from_center_size(pos2(paper.center().x, y), vec2(count * 26.0 + (count - 1.0).max(0.0) * 2.0 + 8.0, BAR_H));
+            let bar = Rect::from_center_size(pos2(paper.center().x, y), vec2(count * btn + (count - 1.0).max(0.0) * 2.0 + 8.0, BAR_H));
             over_bar = ui.rect_contains_pointer(bar);
             painter.rect(bar, CornerRadius::same(8), t.card, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
             let mut bar_ui = ui.new_child(egui::UiBuilder::new().max_rect(bar.shrink(4.0)).layout(egui::Layout::left_to_right(egui::Align::Center)));
             bar_ui.spacing_mut().item_spacing.x = 2.0;
             for (icon, label, act) in &buttons {
-                if icons::button(&mut bar_ui, icon, 26.0, false, label).clicked() {
+                if icons::button(&mut bar_ui, icon, btn, false, label).clicked() {
                     action = Some(act.clone());
                 }
             }
