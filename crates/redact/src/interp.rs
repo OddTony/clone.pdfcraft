@@ -980,6 +980,7 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
     // the run with no space and no split. Set by the number, spent by the next glyph drawn (so
     // it never reaches the next operator).
     let mut kerned = false;
+    let mut drew_removed = false;
     for item in items {
         match item {
             Object::String(s) => {
@@ -1024,9 +1025,11 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
                                 // continue through it, so each side matches on its own.
                                 scope.flush_run();
                                 kerned = false;
+                                drew_removed = false;
                             } else {
                                 let k = kerned;
                                 kerned = false;
+                                drew_removed = true;
                                 scope.removed_glyph(&t, g.origin, g.end, g.height, k);
                             }
                         }
@@ -1042,6 +1045,7 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
                             scope.flush_run();
                         }
                         kerned = false;
+                        drew_removed = false;
                         run.extend_from_slice(&bytes[g.bytes.clone()]);
                     }
                 }
@@ -1053,7 +1057,7 @@ fn show(scope: &mut Scope<'_>, gs: &Gs, tm: &mut Matrix, items: &[Object]) -> (V
                 if let Some(v) = other.as_f64() {
                     *tm = Matrix::translate(-v / 1000.0 * size * gs.scale, 0.0).then(tm);
                     push_num(&mut out, v);
-                    kerned = true;
+                    kerned = drew_removed;
                 }
             }
         }

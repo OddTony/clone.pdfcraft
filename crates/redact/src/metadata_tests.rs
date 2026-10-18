@@ -307,3 +307,20 @@ fn metadata_values_and_packet_decoding_share_the_operation_allowance() {
         assert!(pdfcraft_model::pages(&saved)[0].dict.get(b"Metadata").is_none());
     }
 }
+
+#[test]
+fn leading_tj_number_does_not_join_previous_line_into_one_run() {
+    let mut doc = meta_doc(
+        b"BT /F1 12 Tf 20 220 Td (TOPSECRET) Tj 0 -100 Td [-50 (PLAN)] TJ ET",
+        &[("Title", "TopSecret project"), ("Author", "Ada")],
+        None,
+        None,
+    );
+    mark(&mut doc, 0, &[[0.0, 0.0, 300.0, 300.0]], "");
+    let report = apply(&mut doc, None).unwrap();
+    assert!(!report.metadata_cleared_on_limit);
+    assert_eq!(report.info_entries_cleared, 1);
+    let saved = reopen(&doc);
+    assert_eq!(info_value(&saved, "Title"), None);
+    assert_eq!(info_value(&saved, "Author").as_deref(), Some("Ada"));
+}

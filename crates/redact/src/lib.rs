@@ -701,14 +701,10 @@ fn clear_marked_metadata(doc: &mut Document, fragments: &[String], kerned: &[Ker
         if matches {
             if let Some(root) = doc.root()
                 && let Some(meta) = doc.get(root).as_dict().and_then(|d| d.get(b"Metadata").cloned())
+                && let Object::Stream(s) = &*doc.resolve(&meta)
             {
-                let within_budget = match &*doc.resolve(&meta) {
-                    Object::Stream(s) => {
-                        work.charge(s.raw.len())
-                            && s.decoded_within(MAX_METADATA.min(work.decode_limit())).is_ok_and(|bytes| work.charge(bytes.len().saturating_mul(4)))
-                    }
-                    _ => false,
-                };
+                let within_budget = work.charge(s.raw.len())
+                    && s.decoded_within(MAX_METADATA.min(work.decode_limit())).is_ok_and(|bytes| work.charge(bytes.len().saturating_mul(4)));
                 if !within_budget {
                     return clear_metadata_on_limit(doc, report);
                 }
