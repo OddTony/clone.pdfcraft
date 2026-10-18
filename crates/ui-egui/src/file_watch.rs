@@ -412,6 +412,10 @@ impl PdfCraftApp {
         let Some(id) = self.views.get(i).map(|v| v.id) else { return };
         match self.session.reload(id, bytes) {
             Ok(()) => {
+                // The new version opened with a fresh render config: the app-wide view settings
+                // carry over to it.
+                self.session.set_thin_lines(id, self.thin_lines);
+                self.session.set_reading_colors(id, self.reading_colors);
                 // Whatever was unsaved is gone, so there is nothing left to recover.
                 self.forget_recovery(id);
                 if let (Some(view), Some(doc)) = (self.views.get_mut(i), self.session.get(id)) {

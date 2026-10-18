@@ -265,6 +265,24 @@ fn a_deleted_file_leaves_the_document_open() {
     assert_eq!(pages(&h), 3, "and the next build shows");
 }
 
+/// A rebuilt file opens as a fresh document underneath: the app-wide view settings, Line weights
+/// off and Reading colours, carry over to it (#1828).
+#[test]
+fn a_reload_keeps_line_weights_and_reading_colours() {
+    use pdfcraft_render::ReadingColors;
+    let file = TempPdf::new("view-settings", &fixture(2));
+    let mut h = harness(&file.path);
+    let id = h.state().views[0].id;
+    h.state_mut().set_thin_lines(true);
+    h.state_mut().set_reading_colors(ReadingColors::WHITE_ON_BLACK);
+    h.run_steps(1);
+    file.rebuild(&fixture(3));
+    h.run_steps(3);
+    assert_eq!(pages(&h), 3, "the new version shows");
+    assert!(h.state().session.get(id).unwrap().thin_lines(), "line weights stay off");
+    assert_eq!(h.state().session.reading_colors(id), Some(ReadingColors::WHITE_ON_BLACK), "reading colours stay");
+}
+
 #[test]
 fn nothing_reloads_with_the_preference_off() {
     assert!(PdfCraftApp::new().reload_changed_files, "on by default");
