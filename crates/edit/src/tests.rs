@@ -5061,3 +5061,40 @@ fn text_edit_across_tagged_actualtext_boundary_is_not_destructive() {
     assert!(result.is_err(), "an edit crossing the tagged span must not orphan it");
     assert_eq!(page_content_bytes(&doc, 0), before);
 }
+
+#[test]
+fn refused_tag_boundary_edit_does_not_add_font_objects() {
+    if !pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers("Jpan")) {
+        eprintln!("skipping: craft-fonts Japanese face is unavailable");
+        return;
+    }
+    for mode in 0..3 {
+        let mut doc = text_page("BT /F1 12 Tf 72 700 Td (before) Tj /Span << /MCID 0 /ActualText (fi) >> BDC (X) Tj EMC (after) Tj ET");
+        let before = doc.read_state();
+        let result = match mode {
+            0 => text::replace_line(&mut doc, 0, 0, "日本"),
+            1 => text::replace_block(&mut doc, 0, 0, "日本"),
+            _ => {
+                let style = text::BlockStyle {
+                    ranges: vec![text::RangeStyle {
+                        range: 0..3,
+                        family: None,
+                        resource: None,
+                        size: None,
+                        color: Some([1.0, 0.0, 0.0]),
+                        underline: None,
+                        char_spacing: None,
+                        scale: None,
+                    }],
+                    ..Default::default()
+                };
+                text::rewrite_block(&mut doc, 0, 0, Some("日本"), &style)
+            }
+        };
+        assert!(
+            matches!(result, Err(EditError::Invalid(ref message)) if message.contains("tagged ActualText boundaries")),
+            "mode={mode}: {result:?}"
+        );
+        assert!(before.matches(&doc), "refusal must leave every document object untouched, mode={mode}");
+    }
+}

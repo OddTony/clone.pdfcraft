@@ -1798,6 +1798,10 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
     let pieces = Pieces::join(&streams.iter().map(|(_, d)| d.as_slice()).collect::<Vec<_>>());
     let ops = pieces.parse().ops;
     let first = target.ops.first().copied().filter(|i| *i < ops.len()).ok_or_else(|| EditError::Invalid("the page's content changed".into()))?;
+    // Refuse an unmappable tagged edit before creating any fallback font objects.
+    let mut drops = coincident_ops(&lines, &[&target]);
+    drops.extend(target.ops.iter().copied());
+    let mut tags = preserve_actualtext_tags(doc, &res, &ops, &mut drops, first)?;
     // The line's own font, when it can show every character.
     let font = fonts_res.get(target.font.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned()).map(|d| Metrics::from_dict(doc, &d));
     let visual_indic = font.as_ref().is_some_and(|m| m.visual_order) || target.visual_order;
@@ -1866,9 +1870,6 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
     }
     // Rebuild: the line's first operator becomes the replacement, its others go. Copies of the
     // line drawn on the same baseline go too, so the replacement is all that shows.
-    let mut drops = coincident_ops(&lines, &[&target]);
-    drops.extend(target.ops.iter().copied());
-    let mut tags = preserve_actualtext_tags(doc, &res, &ops, &mut drops, first)?;
     let new_data = splice(&pieces, &ops, |i| {
         if i == first {
             (std::mem::take(&mut replacement), false)
@@ -2155,7 +2156,12 @@ fn rewrite_block_from(
                 && style.family.is_none()
                 && style.bold.is_none())
     {
-        return rewrite_styled_block(doc, page, &b, &lines, text, style);
+        // Font embedding happens before the styled layout knows where it will splice. Stage the
+        // edit so a later tagged-boundary refusal cannot leave orphaned font objects behind.
+        let mut staged = doc.clone();
+        let result = rewrite_styled_block(&mut staged, page, &b, &lines, text, style)?;
+        *doc = staged;
+        return Ok(result);
     }
     let streams = content_streams(doc, &p.dict);
     let pieces = Pieces::join(&streams.iter().map(|(_, d)| d.as_slice()).collect::<Vec<_>>());
@@ -2172,6 +2178,20 @@ fn rewrite_block_from(
     let o = &first.origin;
     let last = members.last().copied().unwrap_or(first);
     let emit = &last.origin;
+    // Drop the paragraph and coincident copies (fake-bold or invisible text). Insert after any
+    // untouched text in the same text object, preserving its order around the rewritten paragraph.
+    // Check the tagged boundaries before fallback fonts can mutate the document.
+    let mut drop = coincident_ops(&lines, &members);
+    drop.extend(members.iter().flat_map(|l| l.ops.iter().copied()));
+    let start = last.ops.first().copied().unwrap_or(emit.bt_op);
+    let split = ops
+        .get(emit.bt_op..start)
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+        .any(|(i, op)| matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"") && !drop.contains(&(emit.bt_op + i)));
+    let at = if split { start } else { emit.bt_op };
+    let mut tags = preserve_actualtext_tags(doc, &res, &ops, &mut drop, at)?;
     let (font_name, old_size) = o.state.font.clone().ok_or_else(|| EditError::Invalid("the paragraph has no font".into()))?;
     let k = o.k.max(1e-6);
     // The size in text space: points ÷ the text-to-user scale.
@@ -2450,19 +2470,6 @@ fn rewrite_block_from(
         block_ops.push(Op::new("Q", vec![]));
     }
     block_ops.push(Op::new("Q", vec![]));
-    // The paragraph's operators go, and so does another drawing on the same baseline (a fake-bold
-    // second copy, an invisible text layer): the new text is all that may show.
-    let mut drop = coincident_ops(&lines, &members);
-    drop.extend(members.iter().flat_map(|l| l.ops.iter().copied()));
-    // Text shown earlier in the same text object stays first: the paragraph then goes where its
-    // last row was, after any backgrounds between the rows, or between two halves of the text object.
-    let start = last.ops.first().copied().unwrap_or(emit.bt_op);
-    let split = ops
-        .get(emit.bt_op..start)
-        .unwrap_or_default()
-        .iter()
-        .enumerate()
-        .any(|(i, op)| matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"") && !drop.contains(&(emit.bt_op + i)));
     // What the text after the paragraph expects: the state at its BT (or where it was split).
     let after = if split { &emit.state } else { &emit.bt_state };
     block_ops.extend(after.ops().into_iter().filter(|op| !op.is("Tf") || after.font.is_some()));
@@ -2471,8 +2478,6 @@ fn rewrite_block_from(
         block_ops.push(Op::new("BT", vec![]));
         block_ops.push(Op::new("Tm", emit.tlm.iter().map(|v| n(*v)).collect()));
     }
-    let at = if split { start } else { emit.bt_op };
-    let mut tags = preserve_actualtext_tags(doc, &res, &ops, &mut drop, at)?;
     let new_data = splice(&pieces, &ops, |i| {
         let insert = if i == at { std::mem::take(&mut block_ops) } else { tags.remove(&i).unwrap_or_default() };
         (insert, !drop.contains(&i))
