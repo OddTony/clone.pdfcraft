@@ -188,12 +188,12 @@ impl CommentTool {
 
     /// Whether the line-thickness control applies.
     pub fn has_width(self) -> bool {
-        self.draws() || self.clicks_points()
+        self.draws() || self.clicks_points() || matches!(self, Self::TextBox | Self::Callout)
     }
 
-    /// Whether the fill-colour control applies: shapes with an interior (#686).
+    /// Whether the fill-colour control applies to this tool.
     pub fn has_fill(self) -> bool {
-        matches!(self, Self::Rectangle | Self::Oval | Self::Polygon | Self::Cloud)
+        matches!(self, Self::Rectangle | Self::Oval | Self::Polygon | Self::Cloud | Self::TextBox | Self::Callout)
     }
 
     /// A placeholder shape of this kind (for per-tool default styles).
@@ -295,7 +295,7 @@ impl CommentPrefs {
         }
     }
 
-    /// The tool's fill (`None`: no fill). Only shapes with an interior keep one.
+    /// The tool's fill (`None`: no fill).
     pub fn set_fill(&mut self, tool: CommentTool, fill: Option<Rgb>) {
         if let Some((_, s)) = self.styles.iter_mut().find(|(t, _)| *t == tool) {
             s.fill = if tool.has_fill() { fill.filter(|c| c.iter().all(|x| x.is_finite())).map(|c| c.map(|x| x.clamp(0.0, 1.0))) } else { None };
