@@ -6,9 +6,10 @@
 //! too (#1510). A single `m`/`l` segment along an axis, stroked (`S`) wide enough to blot the text
 //! out ("marker" style), counts as the rectangle the stroke paints (#2385). Graphics state tracked
 //! here is deliberately small: the CTM stack (`q`/`Q`/`cm`), the colors (`g`/`rg`/`k` and
-//! `G`/`RG`/`K`), the line width (`w`) and the alphas from ExtGState (`gs` reading `/ca` and
-//! `/CA`). Form XObjects are followed read-only with a depth cap. Anything fancier (other filled
-//! paths, slanted or bent strokes, shadings, patterns) is out of scope and documented as such.
+//! `G`/`RG`/`K`), the line width (`w`) and what ExtGState sets of them (`gs` reading `/ca`,
+//! `/CA` and `/LW`). Form XObjects are followed read-only with a depth cap. Anything fancier
+//! (other filled paths, slanted or bent strokes, shadings, patterns) is out of scope and
+//! documented as such.
 //!
 //! Paint order: a page's content streams are one stream in pieces (ISO 32000-2 §7.8.2), so they
 //! are parsed joined and walked once with a single graphics state — state set in an earlier
@@ -75,13 +76,16 @@ impl Path {
 
     /// The rectangle a stroke of this path paints, if the path is one segment along an axis: the
     /// segment widened by half the line width each side (caps are not counted). The width is
-    /// taken through the CTM's scale, which is exact for the axis-aligned CTMs this covers.
+    /// measured across the segment after the CTM, so a non-uniform scale widens only the strokes
+    /// it stretches across.
     fn stroked_rect(&self, gs: &Gs) -> Option<[f64; 4]> {
         const EPS: f64 = 1e-6;
         let Path::Lines(pts, _) = self else { return None };
         let [a, b] = <[[f64; 2]; 2]>::try_from(pts.as_slice()).ok()?;
         let [m0, m1, m2, m3, ..] = gs.ctm.0;
-        let half = gs.width * (m0 * m3 - m1 * m2).abs().sqrt() / 2.0;
+        // |det M| / |M u| for the segment's unit direction u in drawing space, via adj(M).
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let half = gs.width * (m3 * dx - m2 * dy).hypot(m0 * dy - m1 * dx) / dx.hypot(dy) / 2.0;
         if half.is_nan() || half <= EPS {
             return None;
         }
@@ -218,7 +222,7 @@ impl<'a> Walker<'a> {
                 }
                 b"gs" => {
                     if let Some(name) = op.name(0) {
-                        (gs.alpha, gs.stroke_alpha) = ext_alphas(self.doc, resources, name);
+                        ext_state(self.doc, resources, name, gs);
                     }
                 }
                 b"re" => {
@@ -342,9 +346,9 @@ impl Gs {
     }
 }
 
-/// The non-stroking and stroking alphas (`/ca`, `/CA`) of a named ExtGState, each defaulting to
-/// opaque.
-fn ext_alphas(doc: &Document, resources: &Dict, name: &[u8]) -> (f64, f64) {
+/// Apply what a named ExtGState sets of the state tracked here: the non-stroking and stroking
+/// alphas (`/ca`, `/CA`) and the line width (`/LW`). A key it leaves out keeps its value.
+fn ext_state(doc: &Document, resources: &Dict, name: &[u8], gs: &mut Gs) {
     let state = resources
         .get(b"ExtGState")
         .map(|o| doc.resolve(o))
@@ -352,11 +356,16 @@ fn ext_alphas(doc: &Document, resources: &Dict, name: &[u8]) -> (f64, f64) {
         .and_then(|d| d.get(name).map(|o| doc.resolve(o)))
         .and_then(|o| o.as_dict().cloned())
         .unwrap_or_default();
-    let alpha = |key: &[u8]| {
-        let a = state.get(key).map(|o| doc.resolve(o)).and_then(|o| o.as_f64());
-        a.filter(|a| a.is_finite()).map(|a| a.clamp(0.0, 1.0)).unwrap_or(1.0)
-    };
-    (alpha(b"ca"), alpha(b"CA"))
+    let num = |key: &[u8]| state.get(key).map(|o| doc.resolve(o)).and_then(|o| o.as_f64()).filter(|v| v.is_finite());
+    if let Some(a) = num(b"ca") {
+        gs.alpha = a.clamp(0.0, 1.0);
+    }
+    if let Some(a) = num(b"CA") {
+        gs.stroke_alpha = a.clamp(0.0, 1.0);
+    }
+    if let Some(w) = num(b"LW").filter(|w| *w >= 0.0) {
+        gs.width = w;
+    }
 }
 
 /// Every opaque filled rectangle drawn by a page's content (and its form XObjects), with paint

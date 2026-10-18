@@ -612,3 +612,72 @@ fn white_rectangle_over_text_is_reported_as_hidden_under_white() {
         "the second copy of the text is drawn after the white"
     );
 }
+
+/// One page with `content` and `/ExtGState << /GS1 6 0 R /GS2 7 0 R >>` holding `states`.
+fn page_with_states(content: &[u8], states: [&str; 2]) -> Vec<u8> {
+    let mut b = Builder::new();
+    b.add("<< /Type /Catalog /Pages 2 0 R >>");
+    b.add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /ExtGState << /GS1 6 0 R /GS2 7 0 R >> >> >>");
+    b.add_stream(content);
+    b.add(FONT);
+    for s in states {
+        b.add(s);
+    }
+    b.build()
+}
+
+/// A `gs` sets only the parameters its dictionary names: `/LW` is the line width as `w` is, and
+/// an alpha it leaves out keeps the value an earlier `gs` set (ISO 32000-2 §8.4.5).
+#[test]
+fn ext_gstate_sets_line_width_and_keeps_omitted_alphas() {
+    let text = &b"BT /F1 14 Tf 72 700 Td (IBAN IT60X0542811101000000123456) Tj ET\n"[..];
+    let audit = |cover: &[u8], states| audit_redactions(&open(page_with_states(&[text, cover].concat(), states))).expect("audit must run");
+    let findings = audit(b"/GS1 gs 0 G 70 705 m 400 705 l S\n", ["<< /LW 20 >>", "<< >>"]);
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!((findings[0].kind.clone(), findings[0].rect), (FindingKind::CoveredText, [70.0, 695.0, 400.0, 715.0]));
+    assert!(audit(b"/GS1 gs /GS2 gs 0 G 20 w 70 705 m 400 705 l S\n", ["<< /CA 0.5 >>", "<< /ca 0.5 >>"]).is_empty(), "/CA 0.5 still applies");
+    assert!(audit(b"/GS1 gs /GS2 gs 0 g 70 695 330 20 re f\n", ["<< /ca 0.5 >>", "<< /LW 20 >>"]).is_empty(), "/ca 0.5 still applies");
+}
+
+/// The line width is measured across the stroke after the CTM: under `4 0 0 1 0 0 cm` a
+/// horizontal stroke keeps its width and a vertical one is four times as wide.
+#[test]
+fn stroke_width_follows_a_non_uniform_ctm_across_the_segment() {
+    let text = &b"BT /F1 14 Tf 72 700 Td (IBAN IT60X0542811101000000123456) Tj ET\n"[..];
+    let audit = |cover: &[u8]| audit_redactions(&open(one_page(&[text, cover].concat(), ""))).expect("audit must run");
+    let rects = |cover: &[u8]| audit(cover).into_iter().map(|f| f.rect).collect::<Vec<_>>();
+    assert_eq!(rects(b"q 4 0 0 1 0 0 cm 0 G 20 w 17.5 705 m 100 705 l S Q\n"), [[70.0, 695.0, 400.0, 715.0]]);
+    assert_eq!(rects(b"q 4 0 0 1 0 0 cm 0 G 5 w 20 690 m 20 720 l S Q\n"), [[70.0, 690.0, 90.0, 720.0]]);
+}
+
+/// A white cover is `hidden-under-white` whatever the text's color: white text on a dark page,
+/// whited out, is not a dark cover just because text and cover have no contrast.
+#[test]
+fn white_cover_over_white_text_is_hidden_under_white() {
+    let content = b"0 g 0 0 612 792 re f\n1 g BT /F1 14 Tf 72 700 Td (IBAN IT60X0542811101000000123456) Tj ET\n1 g 70 695 330 20 re f\n";
+    let findings = audit_redactions(&open(one_page(content, ""))).expect("audit must run");
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!((findings[0].kind.clone(), findings[0].rect), (FindingKind::HiddenUnderWhite, [70.0, 695.0, 400.0, 715.0]));
+}
+
+/// A highlight paints its `/QuadPoints`, not its `/Rect`: a line inside the rectangle but
+/// outside every quadrilateral is not hidden. Without `/QuadPoints` the `/Rect` is used.
+#[test]
+fn highlight_covers_its_quad_points_not_its_rect() {
+    let content = b"BT /F1 14 Tf 72 700 Td (IBAN IT60X0542811101000000123456) Tj 0 -30 Td (Account holder Jane Doe) Tj ET\n";
+    let audit = |quads: &str| {
+        let mut b = Builder::new();
+        b.add("<< /Type /Catalog /Pages 2 0 R >>");
+        b.add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        b.add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [6 0 R] >>");
+        b.add_stream(content);
+        b.add(FONT);
+        b.add(&format!("<< /Type /Annot /Subtype /Highlight /Rect [70 660 400 715] /C [0 0 0] {quads} >>"));
+        audit_redactions(&open(b.build())).expect("audit must run")
+    };
+    let findings = audit("/QuadPoints [70 715 400 715 70 695 400 695]");
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].covered_text, "IBAN IT60X0542811101000000123456");
+    assert_eq!(audit("")[0].covered_text, "IBAN IT60X0542811101000000123456 Account holder Jane Doe");
+}

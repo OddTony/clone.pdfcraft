@@ -45,7 +45,7 @@ pub enum FindingKind {
     CoveredText,
     /// A `/Redact` annotation was placed but never applied: the text is untouched.
     UnappliedMark,
-    /// A white (or nearly white) opaque rectangle painted after dark text hides it: the text is
+    /// A white (or nearly white) opaque rectangle painted after text hides it: the text is
     /// invisible on the page and still extractable (a "whited out" form).
     HiddenUnderWhite,
 }
@@ -129,8 +129,11 @@ pub fn audit_redactions(doc: &Document) -> Result<Vec<AuditFinding>, AuditError>
                 Mark::Redact => (FindingKind::UnappliedMark, None),
                 Mark::Highlight(rgb) => (FindingKind::CoveredText, Some(rgb)),
             };
-            let covered =
-                joined(lines.iter().filter(|line| covers(&mark.rect, line) && hides.is_none_or(|rgb| contrast(line.color, rgb) < COVER_CONTRAST)));
+            let covered = joined(
+                lines
+                    .iter()
+                    .filter(|line| mark.areas.iter().any(|a| covers(a, line)) && hides.is_none_or(|rgb| contrast(line.color, rgb) < COVER_CONTRAST)),
+            );
             if !covered.is_empty() {
                 out.push(AuditFinding { page: n, kind, rect: mark.rect, covered_text: covered });
             }
@@ -159,14 +162,14 @@ fn joined<'a>(lines: impl Iterator<Item = &'a TextLine>) -> String {
     covered.trim().to_string()
 }
 
-/// How a painted rectangle hides a text line, if it does: dark enough to be a cover
-/// ([`is_cover`]), or white or nearly so over dark text, which is gone under it. Light covers
-/// in between (table shading, highlights) are not flagged.
+/// How a painted rectangle hides a text line, if it does: white or nearly so, which hides any
+/// text under it, or dark enough to be a cover ([`is_cover`]). Light covers in between (table
+/// shading, highlights) are not flagged.
 fn cover_kind(rect: &cover::FilledRect, line: &TextLine) -> Option<FindingKind> {
-    if is_cover(rect, line) {
-        Some(FindingKind::CoveredText)
-    } else if rect.pos > line.paint_pos() && covers(&rect.rect, line) && luminance(rect.rgb) >= WHITE_LUMINANCE {
+    if rect.pos > line.paint_pos() && covers(&rect.rect, line) && luminance(rect.rgb) >= WHITE_LUMINANCE {
         Some(FindingKind::HiddenUnderWhite)
+    } else if is_cover(rect, line) {
+        Some(FindingKind::CoveredText)
     } else {
         None
     }
@@ -232,6 +235,9 @@ enum Mark {
 struct Annot {
     /// `/Rect`, normalized, in unrotated user space.
     rect: [f64; 4],
+    /// What the annotation paints: a highlight's `/QuadPoints`, each as its bounding box, or else
+    /// the `/Rect`.
+    areas: Vec<[f64; 4]>,
     kind: Mark,
 }
 
@@ -282,7 +288,23 @@ fn annots(doc: &Document, page: &Dict) -> Result<Vec<Annot>, AuditError> {
         };
         let v = nums(b"Rect");
         if v.len() == 4 && v.iter().all(|x| x.is_finite()) {
-            out.push(Annot { rect: [v[0].min(v[2]), v[1].min(v[3]), v[0].max(v[2]), v[1].max(v[3])], kind });
+            let rect = [v[0].min(v[2]), v[1].min(v[3]), v[0].max(v[2]), v[1].max(v[3])];
+            let q = nums(b"QuadPoints");
+            let areas = if matches!(kind, Mark::Highlight(_)) && !q.is_empty() && q.len() % 8 == 0 && q.iter().all(|x| x.is_finite()) {
+                q.chunks(8)
+                    .map(|c| {
+                        [
+                            c[0].min(c[2]).min(c[4]).min(c[6]),
+                            c[1].min(c[3]).min(c[5]).min(c[7]),
+                            c[0].max(c[2]).max(c[4]).max(c[6]),
+                            c[1].max(c[3]).max(c[5]).max(c[7]),
+                        ]
+                    })
+                    .collect()
+            } else {
+                vec![rect]
+            };
+            out.push(Annot { rect, areas, kind });
         }
     }
     Ok(out)
