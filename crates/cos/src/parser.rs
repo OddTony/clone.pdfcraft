@@ -338,7 +338,8 @@ impl<'a> Lexer<'a> {
             return Ok(Object::Real(0.0));
         }
         // Tolerate a doubled sign ("--280") like the real branch does.
-        let cleaned = s.trim_start_matches('+').replacen("--", "-", 1);
+        let t = s.trim_start_matches('+');
+        let cleaned = t.strip_prefix('-').filter(|r| r.starts_with('-')).unwrap_or(t);
         match cleaned.parse::<i64>() {
             Ok(v) => Ok(Object::Int(v)),
             Err(_) => {
