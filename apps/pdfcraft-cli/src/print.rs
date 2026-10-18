@@ -117,17 +117,22 @@ pub(super) fn run(args: &[String]) -> Result<(), CliError> {
     }
     let content = auto.call("print_wsd", &params).map_err(|e| e.to_string())?;
     let verdict = verdict(&content);
-    print_output(&auto, content, None)?;
+    // A closed report pipe is the usual quiet exit for a job that went well, but it must not hide a
+    // failed or unconfirmed one: those keep their non-zero verdict whatever happened to the report.
+    finish(verdict, print_output(&auto, content, None))
+}
+
+/// The command's result from the print verdict and what became of writing the report.
+fn finish(verdict: Verdict, written: Result<(), CliError>) -> Result<(), CliError> {
     match verdict {
-        Verdict::Done => Ok(()),
+        Verdict::Done => written,
         Verdict::Failed => Err("print: the job did not complete successfully; see the JSON report".into()),
         Verdict::Unconfirmed => Err(UNCONFIRMED.into()),
     }
 }
 
 /// What a print that ended without a confirmed result tells the person: the document may well have printed.
-const UNCONFIRMED: &str =
-    "print: the printer accepted the document, but how the job ended is unknown (it may be printing, or may have printed); check the printer before sending again; see the JSON report";
+const UNCONFIRMED: &str = "print: the printer accepted the document, but how the job ended is unknown (it may be printing, or may have printed); check the printer before sending again; see the JSON report";
 
 /// How the `print_wsd` report ended the command.
 #[derive(Debug, PartialEq, Eq)]
@@ -151,7 +156,8 @@ fn verdict(content: &[pdfcraft_automation::Content]) -> Verdict {
         if v["success"] != false {
             continue;
         }
-        let unconfirmed = v["accepted"] == true && matches!(v["outcome"].as_str(), Some("still_running" | "accepted_unknown" | "forgotten" | "failed"));
+        let unconfirmed =
+            v["accepted"] == true && matches!(v["outcome"].as_str(), Some("still_running" | "accepted_unknown" | "forgotten" | "failed"));
         if !unconfirmed {
             return Verdict::Failed;
         }
@@ -165,7 +171,7 @@ mod tests {
     use pdfcraft_automation::Content;
     use serde_json::json;
 
-    use super::{Verdict, verdict};
+    use super::{CliError, Verdict, finish, verdict};
 
     fn report(accepted: bool, outcome: &str, success: bool) -> Vec<Content> {
         vec![Content::Json(json!({ "accepted": accepted, "outcome": outcome, "success": success }))]
@@ -181,5 +187,20 @@ mod tests {
             assert_eq!(verdict(&report(true, outcome, false)), Verdict::Failed, "{outcome}");
         }
         assert_eq!(verdict(&report(false, "failed", false)), Verdict::Failed);
+    }
+
+    fn broken_pipe() -> Result<(), CliError> {
+        Err(CliError::Stdout(std::io::Error::from(std::io::ErrorKind::BrokenPipe)))
+    }
+
+    #[test]
+    fn a_closed_report_pipe_never_hides_a_failed_or_unconfirmed_print() {
+        // The job went well: a closed pipe keeps its quiet handling (main turns it into success).
+        assert!(matches!(finish(Verdict::Done, broken_pipe()), Err(CliError::Stdout(_))));
+        assert!(finish(Verdict::Done, Ok(())).is_ok());
+        // The job did not: the verdict is a message error (non-zero exit), not the pipe error.
+        for verdict in [Verdict::Failed, Verdict::Unconfirmed] {
+            assert!(matches!(finish(verdict, broken_pipe()), Err(CliError::Message(_))));
+        }
     }
 }
