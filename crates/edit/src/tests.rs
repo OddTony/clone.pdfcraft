@@ -1143,7 +1143,7 @@ fn mixed_script_cached_widths_follow_each_rewrite_state() {
         let rows: Vec<_> = lines.chunk_by(|a, b| (a.origin_baseline() - b.origin_baseline()).abs() < 0.001).collect();
         assert!(rows.len() > 1, "the cache must also be used while wrapping");
         assert_eq!(underlines.len(), rows.len() * 2);
-        for (row, underline) in rows.into_iter().zip(underlines.chunks_exact(2)) {
+        for (row, underline) in rows.into_iter().zip(underlines.as_chunks::<2>().0) {
             // Recompute from the saved fonts, independently of the rewrite's cache.
             let widths: Vec<_> = row
                 .iter()
