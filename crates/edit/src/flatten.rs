@@ -38,24 +38,53 @@ fn hidden_layers(doc: &Document) -> HashSet<ObjRef> {
     if d.name(b"BaseState") == Some(b"OFF") { all.into_iter().filter(|g| !on.contains(g)).collect() } else { off.into_iter().collect() }
 }
 
+enum VeResult {
+    Value(bool),
+    DepthLimit,
+    Malformed,
+}
+
 /// Evaluate an ISO 32000-1 §8.11.2.2 `/VE` visibility expression (`true` = visible).
-fn eval_ve(doc: &Document, expr: &Object, hidden_layers: &HashSet<ObjRef>, depth: usize) -> Option<bool> {
+fn eval_ve(doc: &Document, expr: &Object, hidden_layers: &HashSet<ObjRef>, depth: usize) -> VeResult {
     if depth > 16 {
-        return None;
+        return VeResult::DepthLimit;
     }
     let resolved = doc.resolve(expr);
     if let Some(arr) = resolved.as_array() {
-        let [op, rest @ ..] = arr.as_slice() else { return None };
-        match (doc.resolve(op).as_name()?, rest) {
-            (b"Not", [operand]) => eval_ve(doc, operand, hidden_layers, depth + 1).map(|v| !v),
-            (b"And", [_, ..]) => rest.iter().try_fold(true, |acc, o| eval_ve(doc, o, hidden_layers, depth + 1).map(|v| acc && v)),
-            (b"Or", [_, ..]) => rest.iter().try_fold(false, |acc, o| eval_ve(doc, o, hidden_layers, depth + 1).map(|v| acc || v)),
-            _ => None,
+        let [op, rest @ ..] = arr.as_slice() else { return VeResult::Malformed };
+        let op_obj = doc.resolve(op);
+        let Some(name) = op_obj.as_name() else { return VeResult::Malformed };
+        match (name, rest) {
+            (b"Not", [operand]) => match eval_ve(doc, operand, hidden_layers, depth + 1) {
+                VeResult::Value(v) => VeResult::Value(!v),
+                other => other,
+            },
+            (b"And", [_, ..]) => {
+                let mut acc = true;
+                for o in rest {
+                    match eval_ve(doc, o, hidden_layers, depth + 1) {
+                        VeResult::Value(v) => acc &= v,
+                        other => return other,
+                    }
+                }
+                VeResult::Value(acc)
+            }
+            (b"Or", [_, ..]) => {
+                let mut acc = false;
+                for o in rest {
+                    match eval_ve(doc, o, hidden_layers, depth + 1) {
+                        VeResult::Value(v) => acc |= v,
+                        other => return other,
+                    }
+                }
+                VeResult::Value(acc)
+            }
+            _ => VeResult::Malformed,
         }
     } else if depth > 0 {
-        expr.as_ref().map(|r| !hidden_layers.contains(&r))
+        expr.as_ref().map_or(VeResult::Malformed, |r| VeResult::Value(!hidden_layers.contains(&r)))
     } else {
-        None
+        VeResult::Malformed
     }
 }
 
@@ -72,10 +101,12 @@ fn is_hidden(doc: &Document, d: &Dict, hidden_layers: &HashSet<ObjRef>) -> bool 
     let obj = doc.resolve(oc);
     let Some(oc_dict) = obj.as_dict() else { return false };
     if oc_dict.name(b"Type") == Some(b"OCMD") {
-        if let Some(ve) = oc_dict.get(b"VE")
-            && let Some(vis) = eval_ve(doc, ve, hidden_layers, 0)
-        {
-            return !vis;
+        if let Some(ve) = oc_dict.get(b"VE") {
+            match eval_ve(doc, ve, hidden_layers, 0) {
+                VeResult::Value(vis) => return !vis,
+                VeResult::DepthLimit => return true,
+                VeResult::Malformed => {}
+            }
         }
         let groups: Vec<ObjRef> = match oc_dict.get(b"OCGs").and_then(|g| doc.resolve(g).as_array().cloned()) {
             Some(a) => a.iter().filter_map(Object::as_ref).collect(),
