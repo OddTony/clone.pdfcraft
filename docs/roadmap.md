@@ -198,6 +198,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | M2, PR #3034 review: missing glyphs without PDF widths or standard metrics use natural alternate advances; explicit zero and missing-width values retain priority. Estimates unchanged. |
 | 2026-10-18 | minor | M2, PR #3034: refreshed against main, preserved upstream progress and renumbered the missing-glyph patch to (35); behavior and estimates unchanged. |
 | 2026-10-15 | minor | M7: Edit text caret height follows its row, with a kittest regression; estimates unchanged |
 | 2026-10-18 | minor | M4, PR #1919 review: repeated page indices apply each rotation to the latest page-local value, preserving indirect/inherited angles. Synthetic adjacent/interleaved duplicates retain siblings and page contents through incremental and full saves. Estimates unchanged. |
