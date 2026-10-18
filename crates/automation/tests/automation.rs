@@ -6495,3 +6495,165 @@ fn a_root_less_write_output_is_atomic_too() {
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn truncated_multipage_pdf() -> Vec<u8> {
+    let mut out = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 /MediaBox [0 0 200 200] >> endobj\n".to_vec();
+    // Page 1 (obj 3): clean text with "SECRET-ONE"
+    out.extend_from_slice(b"3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n");
+    let body1 = b"BT /F1 12 Tf 10 100 Td (SECRET-ONE) Tj ET";
+    out.extend_from_slice(format!("4 0 obj << /Length {} >> stream\n", body1.len()).as_bytes());
+    out.extend_from_slice(body1);
+    out.extend_from_slice(b"\nendstream endobj\n");
+    out.extend_from_slice(b"5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n");
+
+    // Page 2 (obj 6): text with "SECRET-TWO" followed by recursive form /Fm0 Do (hits MAX_NESTED_PAINTS)
+    out.extend_from_slice(
+        b"6 0 obj << /Type /Page /Parent 2 0 R /Contents 7 0 R /Resources << /Font << /F1 5 0 R >> /XObject << /Fm0 9 0 R >> >> >> endobj\n",
+    );
+    let body2 = b"BT /F1 12 Tf 10 100 Td (SECRET-TWO) Tj ET /Fm0 Do";
+    out.extend_from_slice(format!("7 0 obj << /Length {} >> stream\n", body2.len()).as_bytes());
+    out.extend_from_slice(body2);
+    out.extend_from_slice(b"\nendstream endobj\n");
+    // Form Fm0 calls itself recursively
+    out.extend_from_slice(b"9 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 40 40] /Resources << /XObject << /Fm0 9 0 R >> >> /Length 8 >> stream\n/Fm0 Do\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n");
+    out
+}
+
+#[test]
+fn text_find_retains_partial_matches_and_marks_incomplete_on_truncation() {
+    let dir = workdir("find-truncation");
+    std::fs::write(dir.join("trunc.pdf"), truncated_multipage_pdf()).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "trunc.pdf" }))["doc"].as_u64().unwrap();
+
+    // 1. Incomplete search: retains partial matches but complete is false with warning
+    let res = ok(&mut a, "text_find", json!({ "doc": doc, "query": "SECRET" }));
+    assert_eq!(res["count"], 2, "matches on examined parts are retained");
+    assert_eq!(res["complete"], false, "search is incomplete due to page truncation");
+    assert_eq!(res["warning_count"], 1);
+    let warnings = res["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0]["page"], 2);
+    assert_eq!(warnings[0]["error"], "content was truncated by page safety budget");
+    assert_eq!(warnings[0]["error_truncated"], false);
+
+    // 2. Incomplete search with 0 matches: complete is still false
+    let res_empty = ok(&mut a, "text_find", json!({ "doc": doc, "query": "NONEXISTENT" }));
+    assert_eq!(res_empty["count"], 0);
+    assert_eq!(res_empty["complete"], false);
+    assert_eq!(res_empty["warning_count"], 1);
+
+    // 3. Complete search on clean document with 0 matches: complete: true, count: 0
+    let clean_doc = ok(&mut a, "doc_open", json!({ "path": "b.pdf" }))["doc"].as_u64().unwrap();
+    let res_clean = ok(&mut a, "text_find", json!({ "doc": clean_doc, "query": "NONEXISTENT" }));
+    assert_eq!(res_clean["count"], 0);
+    assert_eq!(res_clean["complete"], true);
+    assert_eq!(res_clean["warning_count"], 0);
+    assert!(res_clean["warnings"].as_array().unwrap().is_empty());
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn text_find_cached_text_preserves_incomplete_status() {
+    let dir = workdir("cache-truncation");
+    std::fs::write(dir.join("trunc.pdf"), truncated_multipage_pdf()).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "trunc.pdf" }))["doc"].as_u64().unwrap();
+
+    // First search populates text cache
+    let first = ok(&mut a, "text_find", json!({ "doc": doc, "query": "SECRET" }));
+    assert_eq!(first["complete"], false);
+
+    // Second search reuses text cache
+    let second = ok(&mut a, "text_find", json!({ "doc": doc, "query": "SECRET" }));
+    assert_eq!(second["complete"], false);
+    assert_eq!(second["count"], 2);
+    assert_eq!(second["warning_count"], 1);
+    assert_eq!(second["warnings"][0]["page"], 2);
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn search_redaction_is_strictly_atomic_on_multipage_incomplete_traversal() {
+    let dir = workdir("redact-atomic");
+    std::fs::write(dir.join("trunc.pdf"), truncated_multipage_pdf()).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "trunc.pdf" }))["doc"].as_u64().unwrap();
+
+    // Attempt search-based redaction across both pages. Page 1 matches, Page 2 truncates.
+    let err_res = err(&mut a, "redact_mark", json!({ "doc": doc, "find": "SECRET" }));
+    match err_res {
+        ToolError::Failed(msg) => {
+            assert!(msg.contains("cannot mark redactions on page 2"), "{msg}");
+            assert!(
+                msg.contains("page content was truncated by safety budget; search discovery is incomplete (limit pages to clean pages to proceed)"),
+                "{msg}"
+            );
+        }
+        other => panic!("expected ToolError::Failed, got {other:?}"),
+    }
+
+    // Verify document was NOT mutated at all: 0 redaction marks pending, 0 annotations on page 1.
+    let comments = ok(&mut a, "comment_list", json!({ "doc": doc }));
+    let annots = comments["comments"].as_array().unwrap();
+    assert!(annots.is_empty(), "no annotations may be created on page 1 when a later page truncates");
+
+    // Calling redact_clear confirms there are zero redaction marks pending
+    let clear_err = err(&mut a, "redact_clear", json!({ "doc": doc }));
+    match clear_err {
+        ToolError::Failed(msg) => assert_eq!(msg, "there are no redaction marks"),
+        other => panic!("expected there are no redaction marks, got {other:?}"),
+    }
+
+    // Also verify words-based search redaction fails atomically
+    let err_words = err(&mut a, "redact_mark", json!({ "doc": doc, "words": ["SECRET-ONE", "SECRET-TWO"] }));
+    match err_words {
+        ToolError::Failed(msg) => {
+            assert!(msg.contains("cannot mark redactions on page 2"), "{msg}");
+            assert!(
+                msg.contains("page content was truncated by safety budget; search discovery is incomplete (limit pages to clean pages to proceed)"),
+                "{msg}"
+            );
+        }
+        other => panic!("expected ToolError::Failed, got {other:?}"),
+    }
+    let comments = ok(&mut a, "comment_list", json!({ "doc": doc }));
+    assert!(comments["comments"].as_array().unwrap().is_empty());
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn text_extract_reports_truncation_status_and_warning() {
+    let dir = workdir("extract-truncation");
+    std::fs::write(dir.join("trunc.pdf"), truncated_multipage_pdf()).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "trunc.pdf" }))["doc"].as_u64().unwrap();
+
+    // 1. Both pages extracted: Page 1 is clean, Page 2 is truncated.
+    let res = ok(&mut a, "text_extract", json!({ "doc": doc }));
+    let pages = res["pages"].as_array().unwrap();
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[0]["page"], 1);
+    assert_eq!(pages[0].get("truncated"), None);
+    assert_eq!(pages[1]["page"], 2);
+    assert_eq!(pages[1]["truncated"], true);
+    assert_eq!(res["truncated"], true);
+    assert_eq!(
+        res["warning"],
+        "Text extraction was truncated due to processing limits; extracted text may be incomplete"
+    );
+
+    // 2. Control: Extract only clean page 1.
+    let clean_res = ok(&mut a, "text_extract", json!({ "doc": doc, "pages": [1] }));
+    let clean_pages = clean_res["pages"].as_array().unwrap();
+    assert_eq!(clean_pages.len(), 1);
+    assert_eq!(clean_pages[0]["page"], 1);
+    assert_eq!(clean_pages[0].get("truncated"), None);
+    assert_eq!(clean_res.get("truncated"), None);
+    assert_eq!(clean_res.get("warning"), None);
+
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -131,6 +131,7 @@ impl<'a> Type3<'a> {
         if glyph.nesting_depth > crate::context::MAX_PAINT_NESTING
             || !crate::context::take_nested_paint(glyph.nesting_depth)
         {
+            crate::context::mark_content_truncated();
             return None;
         }
         let mut state = glyph.state.clone();

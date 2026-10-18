@@ -96,6 +96,14 @@ impl Automation {
             };
             matched_words = needles.iter().map(|w| (w.clone(), 0)).collect();
             let texts = self.page_texts(id, &pages)?;
+            for (&p, text) in pages.iter().zip(&texts) {
+                if text.truncated {
+                    return Err(failed(format!(
+                        "cannot mark redactions on page {}: page content was truncated by safety budget; search discovery is incomplete (limit pages to clean pages to proceed)",
+                        p + 1
+                    )));
+                }
+            }
             let info = self.doc(a)?.info.clone();
             for (&p, text) in pages.iter().zip(&texts) {
                 let hits: Vec<(Option<usize>, _)> = match pattern {
