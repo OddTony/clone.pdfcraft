@@ -1065,6 +1065,111 @@ fn japanese_fallback_reports_the_face_after_save_and_reopen() {
 }
 
 #[test]
+#[ignore = "manual mixed-script rewrite timing probe; run with --ignored --nocapture"]
+fn mixed_script_paragraph_rewrite_timing_probe() {
+    assert!(pdfcraft_fonts::document_japanese_font().is_some(), "the timing probe requires the release-pinned craft-fonts input");
+    for (repeats, width) in [(32, 480.0), (512, 480.0), (2048, 480.0), (512, 14_400.0)] {
+        let draft = "The quick brown fox шалом ".repeat(repeats);
+        let mut samples = Vec::new();
+        for _ in 0..3 {
+            let mut doc = text_page("BT /F1 12 Tf 72 700 Td (The quick brown fox) Tj ET");
+            let style = text::BlockStyle {
+                width: Some(width),
+                align: Some(added::Align::Center),
+                underline: Some(true),
+                char_spacing: Some(1.25),
+                scale: Some(80.0),
+                ..Default::default()
+            };
+            let start = std::time::Instant::now();
+            text::rewrite_block(&mut doc, 0, 0, Some(&draft), &style).unwrap();
+            samples.push(start.elapsed().as_micros());
+            assert!(text::text_lines(&doc, 0).unwrap().iter().any(|line| line.base_font == "Helvetica"));
+            std::hint::black_box(doc);
+        }
+        samples.sort_unstable();
+        eprintln!("mixed-script-rewrite bytes={} width={width} median_us={} samples_us={samples:?}", draft.len(), samples[1]);
+    }
+}
+
+#[test]
+fn mixed_script_source_measurements_are_bounded_by_distinct_characters() {
+    if without_craft_fonts("mixed_script_source_measurements_are_bounded_by_distinct_characters") {
+        return;
+    }
+    for resource in ["F1", "F2"] {
+        for repeats in [1, 256] {
+            for width in [80.0, 14_400.0] {
+                let draft = "ab шалом ab ".repeat(repeats);
+                let distinct = draft.chars().collect::<std::collections::HashSet<_>>().len();
+                let mut doc = text_page(&format!("BT /{resource} 12 Tf 72 700 Td (ab) Tj ET"));
+                let style = text::BlockStyle { width: Some(width), align: Some(added::Align::Justify), underline: Some(true), ..Default::default() };
+                text::take_source_character_measurements();
+                text::rewrite_block(&mut doc, 0, 0, Some(&draft), &style).unwrap();
+                let measured = text::take_source_character_measurements();
+                assert_eq!(measured, distinct, "{resource}, {repeats} repeats, width {width}: measure each distinct source candidate once");
+            }
+        }
+    }
+}
+
+#[test]
+fn mixed_script_cached_widths_follow_each_rewrite_state() {
+    if without_craft_fonts("mixed_script_cached_widths_follow_each_rewrite_state") {
+        return;
+    }
+    let draft = "ab шалом ab шалом ab шалом ab";
+    for (resource, size, spacing, scale) in [("F2", 12.0, 0.0, 100.0), ("F1", 18.0, 1.25, 80.0), ("F2", 18.0, 1.25, 80.0), ("F1", 12.0, 0.0, 100.0)] {
+        let mut doc = text_page(&format!("BT /{resource} 12 Tf 5 Tw 72 700 Td (ab) Tj ET"));
+        let original_font = doc.get(pdfcraft_cos::ObjRef::new(if resource == "F1" { 5 } else { 6 }, 0)).as_ref().clone();
+        let style = text::BlockStyle {
+            size: Some(size),
+            width: Some(120.0),
+            align: Some(added::Align::Center),
+            underline: Some(true),
+            char_spacing: Some(spacing),
+            scale: Some(scale),
+            ..Default::default()
+        };
+        text::rewrite_block(&mut doc, 0, 0, Some(draft), &style).unwrap();
+        let doc = reopen(&doc);
+        assert_eq!(doc.get(pdfcraft_cos::ObjRef::new(if resource == "F1" { 5 } else { 6 }, 0)).as_ref(), &original_font);
+        let lines = text::text_lines(&doc, 0).unwrap();
+        assert_eq!(text::text_blocks(&doc, 0).unwrap()[0].text.split_whitespace().collect::<Vec<_>>(), draft.split_whitespace().collect::<Vec<_>>());
+        let page = pdfcraft_model::pages(&doc).remove(0);
+        let fonts = doc.dict(doc.dict(page.dict.get(b"Resources").unwrap()).unwrap().get(b"Font").unwrap()).unwrap();
+        let ops = pdfcraft_content::parse(&page_content_bytes(&doc, 0)).ops;
+        let underlines: Vec<_> = ops.iter().filter(|op| op.is("m") || op.is("l")).collect();
+        let rows: Vec<_> = lines.chunk_by(|a, b| (a.origin_baseline() - b.origin_baseline()).abs() < 0.001).collect();
+        assert!(rows.len() > 1, "the cache must also be used while wrapping");
+        assert_eq!(underlines.len(), rows.len() * 2);
+        for (row, underline) in rows.into_iter().zip(underlines.chunks_exact(2)) {
+            // Recompute from the saved fonts, independently of the rewrite's cache.
+            let widths: Vec<_> = row
+                .iter()
+                .map(|line| {
+                    if line.text.chars().any(|ch| ch.is_ascii_alphabetic()) {
+                        assert_eq!(line.font, resource);
+                    }
+                    let m = pdfcraft_fonts::pdf::Metrics::from_dict(&doc, &doc.dict(fonts.get(line.font.as_bytes()).unwrap()).unwrap());
+                    let bytes = m.encode(&line.text).unwrap_or_else(|| panic!("saved font {} cannot encode {line:?}", m.base_font));
+                    m.codes(&bytes).iter().map(|(code, _)| m.width(*code) * size + spacing).sum::<f64>() * scale / 100.0
+                })
+                .collect();
+            let total: f64 = widths.iter().sum();
+            let left = (120.0 - total).max(0.0) / 2.0;
+            let mut x = 72.0 + left;
+            for (line, advance) in row.iter().zip(widths) {
+                assert!((line.baseline()[0] - x).abs() < 0.02, "{resource}, size {size}: {line:?}, expected {x}");
+                x += advance;
+            }
+            assert!((underline[0].operands[0].as_f64().unwrap() - left).abs() < 0.02);
+            assert!((underline[1].operands[0].as_f64().unwrap() - left - total).abs() < 0.02);
+        }
+    }
+}
+
+#[test]
 fn mixed_script_paragraph_keeps_the_source_font_without_an_explicit_line_break() {
     if without_craft_fonts("mixed_script_paragraph_keeps_the_source_font_without_an_explicit_line_break") {
         return;

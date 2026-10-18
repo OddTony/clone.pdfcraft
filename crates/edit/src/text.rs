@@ -1712,6 +1712,25 @@ fn source_width(metrics: &Metrics, text: &str, size: f64, space: f64, char_spaci
     words + text.matches(' ').count() as f64 * (space * size + char_spacing + word_spacing)
 }
 
+#[cfg(test)]
+thread_local! {
+    static SOURCE_CHARACTER_MEASUREMENTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_source_character_measurements() -> usize {
+    SOURCE_CHARACTER_MEASUREMENTS.with(|count| count.replace(0))
+}
+
+/// An actually encodable source character in the normalized `Tw = 0` drawing state.
+fn source_character_advance(metrics: &Metrics, ch: char, size: f64, char_spacing: f64) -> Option<f64> {
+    #[cfg(test)]
+    SOURCE_CHARACTER_MEASUREMENTS.with(|count| count.set(count.get().saturating_add(1)));
+    let mut utf8 = [0; 4];
+    let bytes = metrics.encode(ch.encode_utf8(&mut utf8))?;
+    Some(metrics.codes(&bytes).iter().map(|(code, _)| metrics.width(*code) * size + char_spacing).sum())
+}
+
 fn source_show(metrics: &Metrics, text: &str, size: f64, space: f64, char_spacing: f64, word_spacing: f64) -> Result<Vec<Op>, EditError> {
     if let Some(bytes) = metrics.encode(text) {
         return Ok(vec![Op::new("Tj", vec![Object::String(PdfString::literal(bytes))])]);
@@ -2136,13 +2155,22 @@ fn rewrite_block_from(
     // Keep this on the single-style path: its fallback writer batches missing glyphs instead
     // of making a separate font for every character (#2592). Explicit font changes and the
     // existing turned/RTL/visual-order paths keep their previous selection.
-    let source_chars: HashSet<char> = metrics
+    // Per-rewrite metrics, size and character spacing; Tw is normalized to zero below.
+    // Cache failures too, so repeated missing glyphs need only one source lookup.
+    let source_advances: HashMap<char, Option<f64>> = metrics
         .as_ref()
         .filter(|_| !reuse && upright && !hebrew && !visual_indic && style.family.is_none() && style.bold.is_none() && needs_type3(&flat))
-        // A partial run needs actual glyphs: source_encodes also accepts a missing space
-        // as positioning, but a numeric-only TJ at a run edge extracts no space.
-        .map(|m| flat.chars().filter(|ch| m.encode(&ch.to_string()).is_some()).collect())
+        .map(|m| {
+            let mut advances = HashMap::new();
+            for ch in flat.chars() {
+                advances.entry(ch).or_insert_with(|| source_character_advance(m, ch, size, o_state.char_spacing));
+            }
+            advances
+        })
         .unwrap_or_default();
+    // A partial run needs actual glyphs: source_encodes also accepts a missing space
+    // as positioning, but a numeric-only TJ at a run edge extracts no space.
+    let source_chars: HashSet<char> = source_advances.iter().filter_map(|(&ch, width)| width.map(|_| ch)).collect();
     let partial_reuse = !source_chars.is_empty();
     let space = metrics.as_ref().map_or(0.33, |m| source_space(doc, &fonts_res, m));
     // The chosen style also determines the real Japanese fallback outlines and advances.
@@ -2219,12 +2247,10 @@ fn rewrite_block_from(
                 let mut source_advance = 0.0;
                 let mut fallback_count = 0usize;
                 for c in s.chars() {
-                    if source_chars.contains(&c)
-                        && let Some(m) = &metrics
-                    {
+                    if let Some(width) = source_advances.get(&c).copied().flatten() {
                         // Tw is normalized to zero below; justification adds its own space
                         // adjustments. Measure the source run in that same drawing state.
-                        source_advance += source_width(m, &c.to_string(), size, space, o_state.char_spacing, 0.0);
+                        source_advance += width;
                     } else {
                         let count = counts.entry(c).or_insert(0);
                         *count = count.saturating_add(1);
