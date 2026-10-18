@@ -1051,6 +1051,8 @@ fn xobject(
                     return None;
                 }
                 scope.report.forms_removed += 1;
+                // Its text was never read, so the metadata check can't know what went with it.
+                scope.removed_cut = true;
                 out.replaced.push(name);
                 out.doomed.push(r);
                 return Some(None);
@@ -1059,6 +1061,7 @@ fn xobject(
                 Ok(d) => d,
                 Err(_) if scope.mode == Mode::Apply => {
                     scope.report.forms_removed += 1;
+                    scope.removed_cut = true;
                     out.replaced.push(name);
                     out.doomed.push(r);
                     return Some(None);
