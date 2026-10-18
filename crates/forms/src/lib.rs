@@ -20,6 +20,8 @@ pub mod af;
 pub mod appearance;
 mod author;
 pub mod detect;
+#[doc(hidden)]
+pub mod profile;
 mod scripting;
 pub use actions::{FieldAction, Trigger, field_actions, set_field_actions};
 pub use author::{
@@ -512,6 +514,7 @@ pub struct Fields {
 
 /// Read all terminal fields and the page-only adoption count in one enumeration.
 pub fn fields_with_adopted(doc: &Document) -> Fields {
+    let _profile = profile::Span::new("field_enumeration");
     let (items, adopted_page_fields) = enumerate(doc);
     Fields { items, adopted_page_fields }
 }
@@ -750,7 +753,10 @@ fn walk(
         inh.q = Some(q);
     }
     if let Some(m) = d.get(b"MaxLen").and_then(|o| doc.resolve(o).as_int()) {
-        inh.max_len = usize::try_from(m).ok();
+        // Compatibility: some writers emit zero for an unlimited text field. Keep /MaxLen
+        // untouched in the object graph, but expose only positive limits to both UI and API.
+        // An explicit zero also clears an inherited limit rather than inheriting it again.
+        inh.max_len = usize::try_from(m).ok().filter(|limit| *limit > 0);
     }
     let kids: Vec<ObjRef> =
         d.get(b"Kids").map(|k| doc.resolve(k)).and_then(|k| k.as_array().cloned()).unwrap_or_default().iter().filter_map(|k| k.as_ref()).collect();
@@ -845,6 +851,7 @@ pub fn set_value(doc: &mut Document, name: &str, value: &FieldValue) -> Result<(
 
 /// [`set_value`], running the fields' JavaScript through `scripts`.
 pub fn set_value_with(doc: &mut Document, name: &str, value: &FieldValue, scripts: &mut dyn Scripts) -> Result<(), FormError> {
+    let _profile = profile::Span::new("form_event");
     let all = fields(doc);
     if all.is_empty() {
         return Err(FormError::NoForm);
@@ -866,11 +873,13 @@ pub fn recalculate(doc: &mut Document) -> Result<usize, FormError> {
 
 /// [`recalculate`], running custom Calculate (and Format) scripts through `scripts`.
 pub fn recalculate_with(doc: &mut Document, scripts: &mut dyn Scripts) -> Result<usize, FormError> {
+    let _profile = profile::Span::new("calculation_pass");
     let mut all = fields(doc);
     let calculated = |f: &Field| f.actions.calculate != af::Calculate::None || f.actions.scripts.calculate.is_some();
     if !all.iter().any(calculated) {
         return Ok(0);
     }
+    let ordering = profile::Span::new("calculation_order");
     let co: Vec<ObjRef> = acroform(doc)
         .and_then(|af| af.get(b"CO").map(|c| doc.resolve(c)).and_then(|c| c.as_array().cloned()))
         .unwrap_or_default()
@@ -883,6 +892,7 @@ pub fn recalculate_with(doc: &mut Document, scripts: &mut dyn Scripts) -> Result
             order.push(f.name.clone());
         }
     }
+    drop(ordering);
     let mut changed = 0;
     for name in order {
         let Some(f) = all.iter().find(|f| f.name == name).cloned() else { continue };
@@ -902,10 +912,12 @@ pub fn recalculate_with(doc: &mut Document, scripts: &mut dyn Scripts) -> Result
             }
             r.value
         } else {
+            let _profile = profile::Span::new("native_calculation");
             let Some(v) = af::calculate(&f.actions.calculate, &lookup) else { continue };
             v
         };
         if current != v && matches!(f.kind, FieldKind::Text | FieldKind::Combo) {
+            let _profile = profile::Span::new("calculation_write");
             doc.update_dict(f.obj, |d| d.set(b"V".to_vec(), PdfString::text(&v)))?;
             redraw(doc, &f, std::slice::from_ref(&v), scripts)?;
             if let Some(target) = all.iter_mut().find(|x| x.name == name) {
@@ -922,6 +934,7 @@ fn invalid<T>(m: impl Into<String>) -> Result<T, FormError> {
 }
 
 fn write_value(doc: &mut Document, f: &Field, value: &FieldValue, scripts: &mut dyn Scripts) -> Result<(), FormError> {
+    let _profile = profile::Span::new("field_write");
     match (f.kind, value) {
         (FieldKind::Text, FieldValue::Text(t)) => {
             if let Some(max) = f.max_len
@@ -1097,6 +1110,7 @@ pub(crate) fn merged_appearance(doc: &Document, widget: ObjRef, fresh: &Dict) ->
 
 /// Regenerate the normal appearance of every widget of a text or choice field.
 fn redraw(doc: &mut Document, f: &Field, values: &[String], scripts: &mut dyn Scripts) -> Result<(), FormError> {
+    let _profile = profile::Span::new("appearance");
     let shown = match values {
         [one] if matches!(f.kind, FieldKind::Text | FieldKind::Combo) => scripting::formatted(doc, f, one, scripts),
         _ => None,

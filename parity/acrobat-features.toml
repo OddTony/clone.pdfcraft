@@ -4392,8 +4392,8 @@ milestone = "M6"
 status = "shipped"
 commands = ["form.fields"]
 tools = ["form_fill", "form_fields"]
-evidence = ["crates/ui-egui/tests/forms.rs::typing_into_a_text_field_and_tabbing_on", "crates/forms/src/tests.rs::text_fields_get_new_appearances", "crates/engine/src/tests.rs::filling_a_form_shows_saves_and_undoes", "crates/automation/tests/automation.rs::orphan_form_fields_through_tools"]
-notes = "in-place editor; Enter or clicking away commits, Escape cancels; no format/keystroke JavaScript yet (M6.4)"
+evidence = ["crates/ui-egui/tests/forms.rs::typing_into_a_text_field_and_tabbing_on", "crates/forms/src/tests.rs::text_fields_get_new_appearances", "crates/engine/src/tests.rs::filling_a_form_shows_saves_and_undoes", "crates/automation/tests/automation.rs::orphan_form_fields_through_tools", "crates/forms/src/tests.rs::zero_max_len_is_unlimited_and_overrides_inherited_limit"]
+notes = "In-place editor; Enter or clicking away commits, Escape cancels. Imported MaxLen 0 permits text input and overrides inherited limits; positive limits remain enforced. Custom scripts run through the engine (see form.custom-scripts)."
 
 [[feature]]
 id = "form.fill-checkbox-radio"
@@ -4572,7 +4572,7 @@ milestone = "M6"
 status = "shipped"
 commands = ["form.field.properties"]
 tools = ["form_set_props", "form_fill"]
-evidence = ["crates/forms/src/tests.rs::formats_validation_and_calculations_run_like_acrobat"]
+evidence = ["crates/forms/src/tests.rs::formats_validation_and_calculations_run_like_acrobat", "crates/engine/src/tests.rs::checkbox_and_rank_changes_recalculate_ordered_dependents", "crates/engine/src/tests.rs::dynamic_calculation_reads_and_side_effects_reach_later_fields"]
 notes = "/CO order, then other calculated fields; recalculated after every fill and Clear form"
 
 [[feature]]

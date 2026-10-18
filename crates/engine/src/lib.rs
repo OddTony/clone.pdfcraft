@@ -52,6 +52,9 @@ pub use pdfcraft_create::{CONVERTIBLE, CreateError, ImageResolution, SourceKind,
 pub use pdfcraft_edit::{
     Added, AddedImage, AddedText, Align as TextAlign, Background, Content as AddedContent, Family as FontFamily, HeaderFooter, MarkKind, Watermark,
 };
+/// Opt-in form timing shared with frontends through the engine façade.
+#[doc(hidden)]
+pub use pdfcraft_forms::profile as form_profile;
 pub use pdfcraft_forms::{
     BorderStyle, CheckStyle, Field as FormField, FieldAction, FieldChange, FieldFont, FieldKind as FormFieldKind, FieldProps, FieldValue,
     Look as FieldLook, LookPatch as FieldLookPatch, NewField, TabOrder, Trigger as FieldTrigger, Widget as FormWidget, af as form_scripts,
@@ -3289,6 +3292,7 @@ impl Session {
 
     /// Apply an edit. On success the previous state is undoable and the view data is refreshed.
     pub fn apply(&mut self, id: DocId, edit: Edit) -> Result<(), EditError> {
+        let _profile = pdfcraft_forms::profile::Span::new("engine_edit");
         let now = self.now();
         let today = self.today();
         let js_off = self.js_off;
@@ -3516,6 +3520,7 @@ impl Session {
     /// Comment and form edits skip the full re-inspection (seconds on very large files): the
     /// comment list and field values are re-read from the object graph instead.
     fn refresh_scoped(doc: &mut Document, scope: Scope) -> Result<(), EditError> {
+        let _profile = pdfcraft_forms::profile::Span::new("engine_refresh");
         if scope == Scope::Full || doc.info.encrypted != doc.editor.as_ref().is_some_and(|e| e.cos.output_handler().is_some()) {
             return Self::refresh(doc);
         }

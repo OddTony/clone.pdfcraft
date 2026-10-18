@@ -1943,3 +1943,19 @@ fn page_shapes_closes_only_last_stroked_subpath_but_all_filled_subpaths() {
     assert_eq!(filled.boxes, [[50.0, 100.0, 170.0, 140.0], [200.0, 100.0, 320.0, 140.0]]);
     assert!(filled.rules.is_empty());
 }
+
+#[test]
+fn zero_max_len_is_unlimited_and_overrides_inherited_limit() {
+    let mut doc = fixture();
+    let city = fields(&doc).into_iter().find(|f| f.name == "address.city").unwrap();
+    let parent = doc.get(city.obj).as_dict().unwrap().get(b"Parent").unwrap().as_ref().unwrap();
+    doc.update_dict(parent, |d| d.set(b"MaxLen".to_vec(), Object::Int(3))).unwrap();
+    assert_eq!(fields(&doc).into_iter().find(|f| f.name == "address.city").unwrap().max_len, Some(3));
+    doc.update_dict(city.obj, |d| d.set(b"MaxLen".to_vec(), Object::Int(0))).unwrap();
+    assert_eq!(fields(&doc).into_iter().find(|f| f.name == "address.city").unwrap().max_len, None);
+    set_value(&mut doc, "address.city", &FieldValue::Text("Absalom".into())).unwrap();
+    let again = reopen(&doc);
+    assert_eq!(field(&fields(&again), "address.city").value, ["Absalom"]);
+    assert_eq!(again.get(city.obj).as_dict().unwrap().int(b"MaxLen"), Some(0), "preserve the original entry");
+    assert!(set_value(&mut doc, "zip", &FieldValue::Text("123456".into())).is_err(), "positive limits still apply");
+}

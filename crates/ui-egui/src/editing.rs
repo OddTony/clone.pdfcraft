@@ -30,6 +30,7 @@ pub enum SaveTarget {
 impl PdfCraftApp {
     /// Apply an edit to the active document. Returns `true` on success; failures are shown.
     pub fn apply_edit(&mut self, edit: Edit) -> bool {
+        let _profile = pdfcraft_engine::form_profile::Span::new("ui_edit");
         let Some((i, id)) = self.active_ids() else { return false };
         let label = edit.label();
         let (form_before, page_count_before, had_xfa) = if let Some(d) = self.session.get(id) {
@@ -39,6 +40,7 @@ impl PdfCraftApp {
         };
         match self.session.apply(id, edit.clone()) {
             Ok(()) => {
+                let _profile = pdfcraft_engine::form_profile::Span::new("ui_refresh");
                 let Some(doc) = self.session.get(id) else { return true };
                 let info = &doc.info;
                 let view = &mut self.views[i];
