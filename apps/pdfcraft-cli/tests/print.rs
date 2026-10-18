@@ -95,4 +95,34 @@ mod live {
         assert_eq!(v["capabilities"]["formats"][0], "application/pdf");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// The printer accepts the document but the job never ends within the wait: the command still exits
+    /// non-zero, but says the printer has the document so the person checks before sending it again.
+    #[test]
+    fn a_job_still_running_is_reported_as_accepted_not_as_a_failure() {
+        use craft_print::wsd::testing::Ending;
+        let printer = FakePrinter::new(Config { ending: Ending::Hangs, ..Default::default() });
+        let server = printer_server(printer.clone());
+        let dir = tmp("hangs");
+        let file = dir.join("blank.pdf");
+        let script = dir.join("steps.json");
+        std::fs::write(
+            &script,
+            format!(
+                r#"[{{"tool":"doc_create","args":{{"from":"blank","pages":1}}}},{{"tool":"doc_save","args":{{"doc":1,"path":{:?}}}}}]"#,
+                file.to_str().unwrap()
+            ),
+        )
+        .unwrap();
+        let saved = run(&["run", "--script", script.to_str().unwrap()]);
+        assert!(saved.status.success(), "{}", err(&saved));
+        let o = run(&["print", "--wsd", &server.url("/print"), file.to_str().unwrap(), "--yes", "--wait", "1"]);
+        assert!(!o.status.success());
+        let message = err(&o);
+        assert!(message.contains("accepted the document") && message.contains("check the printer before sending again"), "{message}");
+        assert!(!message.contains("did not complete successfully"), "{message}");
+        let report: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+        assert_eq!(report["outcome"], "still_running", "{report}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

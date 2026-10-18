@@ -116,7 +116,70 @@ pub(super) fn run(args: &[String]) -> Result<(), CliError> {
         params["path"] = json!(file);
     }
     let content = auto.call("print_wsd", &params).map_err(|e| e.to_string())?;
-    let failed = content.iter().any(|c| matches!(c, pdfcraft_automation::Content::Json(v) if v["success"] == false));
+    let verdict = verdict(&content);
     print_output(&auto, content, None)?;
-    if failed { Err("print: the job did not complete successfully; see the JSON report".into()) } else { Ok(()) }
+    match verdict {
+        Verdict::Done => Ok(()),
+        Verdict::Failed => Err("print: the job did not complete successfully; see the JSON report".into()),
+        Verdict::Unconfirmed => Err(UNCONFIRMED.into()),
+    }
+}
+
+/// What a print that ended without a confirmed result tells the person: the document may well have printed.
+const UNCONFIRMED: &str =
+    "print: the printer accepted the document, but how the job ended is unknown (it may be printing, or may have printed); check the printer before sending again; see the JSON report";
+
+/// How the `print_wsd` report ended the command.
+#[derive(Debug, PartialEq, Eq)]
+enum Verdict {
+    Done,
+    /// A terminal failure (refused, canceled, aborted, completed with errors…): the job did not print.
+    Failed,
+    /// The printer has the document but its end state is unknown (`still_running`, `accepted_unknown`,
+    /// `forgotten`, or the job could not be followed): sending it again could print it twice. Still a
+    /// non-zero exit, as the CLI has no third status: the message and the report's `outcome` tell it apart.
+    Unconfirmed,
+}
+
+fn verdict(content: &[pdfcraft_automation::Content]) -> Verdict {
+    let reports = content.iter().filter_map(|c| match c {
+        pdfcraft_automation::Content::Json(v) => Some(v),
+        _ => None,
+    });
+    let mut verdict = Verdict::Done;
+    for v in reports {
+        if v["success"] != false {
+            continue;
+        }
+        let unconfirmed = v["accepted"] == true && matches!(v["outcome"].as_str(), Some("still_running" | "accepted_unknown" | "forgotten" | "failed"));
+        if !unconfirmed {
+            return Verdict::Failed;
+        }
+        verdict = Verdict::Unconfirmed;
+    }
+    verdict
+}
+
+#[cfg(test)]
+mod tests {
+    use pdfcraft_automation::Content;
+    use serde_json::json;
+
+    use super::{Verdict, verdict};
+
+    fn report(accepted: bool, outcome: &str, success: bool) -> Vec<Content> {
+        vec![Content::Json(json!({ "accepted": accepted, "outcome": outcome, "success": success }))]
+    }
+
+    #[test]
+    fn accepted_but_unconfirmed_outcomes_are_not_a_plain_failure() {
+        assert_eq!(verdict(&report(true, "completed", true)), Verdict::Done);
+        for outcome in ["still_running", "accepted_unknown", "forgotten"] {
+            assert_eq!(verdict(&report(true, outcome, false)), Verdict::Unconfirmed, "{outcome}");
+        }
+        for outcome in ["aborted", "canceled", "completed_with_errors", "unknown"] {
+            assert_eq!(verdict(&report(true, outcome, false)), Verdict::Failed, "{outcome}");
+        }
+        assert_eq!(verdict(&report(false, "failed", false)), Verdict::Failed);
+    }
 }
