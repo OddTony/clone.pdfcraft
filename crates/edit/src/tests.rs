@@ -264,6 +264,39 @@ fn flattening_keeps_a_cloudy_square_it_cannot_draw() {
     case("/BE << /S /C /I 2 >> /AP << /N 6 0 R >>", 1, false);
 }
 
+/// #3213: an annotation on an optional-content layer that is OFF in the default configuration
+/// is hidden and must not be baked into page content by flattening. It stays as an annotation
+/// so its layer still controls it, and nothing is drawn on the page.
+#[test]
+fn flattening_leaves_annotations_on_hidden_layers_alone() {
+    let page = stream("", " ");
+    let form = "<< /Type /XObject /Subtype /Form /BBox [100 600 200 650] /Length 28 >>\nstream\n1 0 0 RG 100 600 100 50 re S\nendstream";
+    let case = |extra: &str, drawn: usize, left: bool| {
+        let annot = format!("<< /Type /Annot /Subtype /Square /Rect [100 600 200 650] /C [1 0 0] /AP << /N 6 0 R >> {extra} >>");
+        let mut doc = build(&[
+            "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [7 0 R 8 0 R] /D << /OFF [7 0 R] /ON [8 0 R] >> >> >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << >> /Contents 5 0 R /Annots [4 0 R] >>",
+            &annot,
+            &page,
+            form,
+            "<< /Type /OCG /Name (Hidden layer) >>",
+            "<< /Type /OCG /Name (Shown layer) >>",
+        ]);
+        let before = streams(&doc, 0);
+        assert_eq!(flatten(&mut doc, &[0], true, false).unwrap(), drawn);
+        let doc = reopen(&doc);
+        let p = &pdfcraft_model::pages(&doc)[0];
+        assert_eq!(p.dict.contains(b"Annots"), left);
+        if drawn == 0 {
+            assert_eq!(streams(&doc, 0), before, "nothing was drawn in place of the comment");
+        }
+    };
+    case("/OC 7 0 R", 0, true);
+    case("/OC 8 0 R", 1, false);
+    case("", 1, false);
+}
+
 /// #805: a supported note with no stored appearance is still drawn by viewers. Flattening must
 /// generate that appearance and bake it into the page, not delete a comment that shows an icon.
 #[test]

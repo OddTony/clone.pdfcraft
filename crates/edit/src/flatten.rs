@@ -18,6 +18,50 @@ use crate::{EditError, check, n, page_list, place_tagged};
 const HIDDEN: i64 = 2;
 const NO_VIEW: i64 = 32;
 
+fn sub_dict(doc: &Document, d: &Dict, key: &[u8]) -> Option<Dict> {
+    d.get(key).map(|o| doc.resolve(o)).and_then(|o| o.as_dict().cloned())
+}
+
+/// The layers that are off in the default configuration.
+fn hidden_layers(doc: &Document) -> HashSet<ObjRef> {
+    let Some(root) = doc.root() else { return HashSet::new() };
+    let Some(cat) = doc.get(root).as_dict().cloned() else { return HashSet::new() };
+    let Some(oc) = sub_dict(doc, &cat, b"OCProperties") else { return HashSet::new() };
+    let Some(d) = sub_dict(doc, &oc, b"D") else { return HashSet::new() };
+    let all: Vec<ObjRef> =
+        oc.get(b"OCGs").and_then(|g| doc.resolve(g).as_array().map(|a| a.iter().filter_map(Object::as_ref).collect())).unwrap_or_default();
+    let list = |k: &[u8]| -> Vec<ObjRef> {
+        d.get(k).and_then(|g| doc.resolve(g).as_array().map(|a| a.iter().filter_map(Object::as_ref).collect())).unwrap_or_default()
+    };
+    let (on, off) = (list(b"ON"), list(b"OFF"));
+    if d.name(b"BaseState") == Some(b"OFF") { all.into_iter().filter(|g| !on.contains(g)).collect() } else { off.into_iter().collect() }
+}
+
+/// Whether this annotation is hidden by its flags or by an optional-content layer that is off.
+fn is_hidden(doc: &Document, d: &Dict, hidden_layers: &HashSet<ObjRef>) -> bool {
+    let flags = d.get(b"F").and_then(|f| doc.resolve(f).as_int()).unwrap_or(0);
+    if flags & (HIDDEN | NO_VIEW) != 0 {
+        return true;
+    }
+    if hidden_layers.is_empty() {
+        return false;
+    }
+    let Some(oc) = d.get(b"OC") else { return false };
+    if oc.as_ref().is_some_and(|r| hidden_layers.contains(&r)) {
+        return true;
+    }
+    let obj = doc.resolve(oc);
+    let Some(oc_dict) = obj.as_dict() else { return false };
+    if oc_dict.name(b"Type") == Some(b"OCMD") {
+        let groups: Vec<ObjRef> = match oc_dict.get(b"OCGs").and_then(|g| doc.resolve(g).as_array().cloned()) {
+            Some(a) => a.iter().filter_map(Object::as_ref).collect(),
+            None => oc_dict.get(b"OCGs").and_then(Object::as_ref).into_iter().collect(),
+        };
+        return !groups.is_empty() && groups.iter().all(|g| hidden_layers.contains(g));
+    }
+    false
+}
+
 fn nums(doc: &Document, o: Option<&Object>) -> Option<Vec<f64>> {
     let o = doc.resolve(o?);
     o.as_array()?.iter().map(|x| doc.resolve(x).as_f64()).collect()
@@ -110,12 +154,12 @@ pub fn flatten_fill_sign(doc: &mut Document, pages: &[usize]) -> Result<usize, E
 /// an appearance whose text the standard fonts can't draw. Its page (0-based), whether it is a
 /// form field, and the character.
 fn undrawn_on(doc: &Document, all: &[pdfcraft_model::Page], pages: &[usize], which: Which) -> Option<(usize, bool, char)> {
+    let hidden = hidden_layers(doc);
     for &i in pages {
         let list = all.get(i)?.dict.get(b"Annots").map(|a| doc.resolve(a)).and_then(|a| a.as_array().cloned()).unwrap_or_default();
         for entry in &list {
             let Some(d) = doc.resolve(entry).as_dict().cloned() else { continue };
-            let flags = d.get(b"F").and_then(|f| doc.resolve(f).as_int()).unwrap_or(0);
-            if !selected(doc, &d, which) || flags & (HIDDEN | NO_VIEW) != 0 {
+            if !selected(doc, &d, which) || is_hidden(doc, &d, &hidden) {
                 continue;
             }
             let widget = d.name(b"Subtype") == Some(b"Widget");
@@ -145,6 +189,7 @@ fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<us
     }
     let mut drawn = 0;
     let mut removed_widgets: HashSet<ObjRef> = HashSet::new();
+    let hidden = hidden_layers(doc);
     for &i in pages {
         let page = all[i].clone();
         let annots_obj = page.dict.get(b"Annots").cloned();
@@ -173,8 +218,7 @@ fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<us
             if subtype == b"Widget" || !selected(doc, &d, which) {
                 continue;
             }
-            let flags = d.get(b"F").and_then(|f| doc.resolve(f).as_int()).unwrap_or(0);
-            if flags & (HIDDEN | NO_VIEW) != 0 || appearance(doc, &d).is_some() {
+            if is_hidden(doc, &d, &hidden) || appearance(doc, &d).is_some() {
                 continue;
             }
             // A subtype this build cannot draw fails here and is kept below, so the comment is
@@ -187,11 +231,7 @@ fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<us
             let Some(d) = obj.as_dict() else { continue };
             let subtype = d.name(b"Subtype").unwrap_or_default();
             let widget = subtype == b"Widget";
-            if !selected(doc, d, which) {
-                continue;
-            }
-            let flags = d.get(b"F").and_then(|f| doc.resolve(f).as_int()).unwrap_or(0);
-            if flags & (HIDDEN | NO_VIEW) != 0 {
+            if !selected(doc, d, which) || is_hidden(doc, d, &hidden) {
                 continue;
             }
             let rect = nums(doc, d.get(b"Rect")).filter(|r| r.len() == 4).map(|r| [r[0].min(r[2]), r[1].min(r[3]), r[0].max(r[2]), r[1].max(r[3])]);
