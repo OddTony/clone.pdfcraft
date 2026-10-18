@@ -170,6 +170,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+- **2026-10-18 (M14/M7, Arabic text):** Arabic catalogs and comments keep logical source order. The shared native text engine now resolves bidi before shaping/wrapping and maps pointer, visual arrow, selection, clipboard, IME and accessibility operations back to source offsets. Vendor event/geometry regressions cover mixed scripts, controls, marks, fractional DPI and long narrow text. Annotation/form appearances use shaped Arabic outlines and preserve values on save/reopen. Existing-text Arabic fallback is limited to upright uniform-style replacement and reports substitution; bold/italic fallback, shaped style ranges, arbitrary source grouping and the mirrored interface remain open. `misc.rtl-ui` is partial; readiness and estimates are unchanged. Native release acceptance is a separate gate.
 
 - **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
 
