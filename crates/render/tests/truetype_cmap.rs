@@ -119,6 +119,11 @@ fn reference_glyph_rgba(glyph_name: &[u8]) -> Vec<u8> {
     render_codes(INTER_TTF.to_vec(), 32, Some(encoding), None, &[65])
 }
 
+fn assert_reference_glyph_is_not_notdef(glyph_name: &[u8], raster: &[u8]) {
+    let notdef = reference_glyph_rgba(b".notdef");
+    assert_ne!(raster, notdef.as_slice(), "{glyph_name:?} resolved to .notdef");
+}
+
 #[test]
 fn nonsymbolic_truetype_with_differences_renders_czech_and_slovak_carons() {
     let encoding = Object::Dictionary(dictionary! {
@@ -137,6 +142,7 @@ fn nonsymbolic_truetype_with_differences_renders_czech_and_slovak_carons() {
     });
     for (code, name) in [(190u8, &b"lcaron"[..]), (232u8, &b"ccaron"[..]), (236u8, &b"ecaron"[..]), (248u8, &b"rcaron"[..])] {
         let expected = reference_glyph_rgba(name);
+        assert_reference_glyph_is_not_notdef(name, &expected);
         let actual = render_codes(INTER_TTF.to_vec(), 32, Some(encoding.clone()), None, &[code]);
         assert!(actual == expected, "Nonsymbolic TrueType font with /Differences drew wrong glyph for {}", String::from_utf8_lossy(name));
     }
@@ -163,6 +169,7 @@ fn macos_unicode_platform_cmap_renders_slovak_carons() {
     });
     for (code, name) in [(190u8, &b"lcaron"[..]), (232u8, &b"ccaron"[..]), (236u8, &b"ecaron"[..]), (248u8, &b"rcaron"[..])] {
         let expected = reference_glyph_rgba(name);
+        assert_reference_glyph_is_not_notdef(name, &expected);
         let actual = render_codes(macos_ttf.clone(), 32, Some(encoding.clone()), None, &[code]);
         assert!(actual == expected, "macOS (0, 3) Unicode cmap drew wrong glyph for {}", String::from_utf8_lossy(name));
     }
@@ -253,7 +260,9 @@ fn windows_ucs4_cmap_resolves_name_derived_unicode() {
         "BaseEncoding" => "WinAnsiEncoding",
         "Differences" => vec![Object::Integer(65), Object::Name(b"rcaron".to_vec())],
     });
-    assert!(render_codes(ttf, 32, Some(encoding), None, &[65]) == reference_glyph_rgba(b"rcaron"));
+    let expected = reference_glyph_rgba(b"rcaron");
+    assert_reference_glyph_is_not_notdef(b"rcaron", &expected);
+    assert!(render_codes(ttf, 32, Some(encoding), None, &[65]) == expected);
 }
 
 #[test]
@@ -284,6 +293,7 @@ fn post_v2_uni_and_agl_glyph_names_resolve_without_unicode_cmap() {
     });
     for (code, name) in [(190u8, &b"lcaron"[..]), (232u8, &b"ccaron"[..]), (236u8, &b"ecaron"[..]), (248u8, &b"rcaron"[..])] {
         let expected = reference_glyph_rgba(name);
+        assert_reference_glyph_is_not_notdef(name, &expected);
         let actual = render_codes(post_only_ttf.clone(), 32, Some(encoding.clone()), None, &[code]);
         assert!(actual == expected, "post v2.0 glyph name resolution drew wrong glyph for {}", String::from_utf8_lossy(name));
     }
@@ -317,6 +327,7 @@ fn font_descriptor_flags_with_extra_bits_preserve_non_symbolic() {
         ],
     });
     let expected = reference_glyph_rgba(b"ccaron");
+    assert_reference_glyph_is_not_notdef(b"ccaron", &expected);
     // Bit 6 (32 = NonSymbolic) plus a high producer-specific bit (1 << 20) that previously caused
     // FontFlags::from_bits to return None and discard all flags.
     let actual = render_codes(INTER_TTF.to_vec(), 32 | (1 << 20), Some(encoding), None, &[232]);

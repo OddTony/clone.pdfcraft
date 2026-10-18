@@ -308,12 +308,19 @@ impl EmbeddedKind {
     }
 
     fn map_name(&self, lookup: &str) -> Option<GlyphId> {
+        let exact_name = self.glyph_names.get(lookup).copied().filter(|g| *g != GlyphId::NOTDEF);
         let exact_unicode = glyph_names::get(lookup).and_then(|n| n.chars().next()).or_else(|| unicode_from_name(lookup));
 
-        let mut glyph = exact_unicode
-            .and_then(|c| self.map_unicode_in_cmap(c))
-            .or_else(|| self.map_macintosh_cmap(lookup, exact_unicode))
-            .or_else(|| self.glyph_names.get(lookup).copied().filter(|g| *g != GlyphId::NOTDEF));
+        let mut glyph = if glyph_names::get(lookup).is_some_and(|name| name.chars().nth(1).is_some()) {
+            exact_name
+                .or_else(|| exact_unicode.and_then(|c| self.map_unicode_in_cmap(c)))
+                .or_else(|| self.map_macintosh_cmap(lookup, exact_unicode))
+        } else {
+            exact_unicode
+                .and_then(|c| self.map_unicode_in_cmap(c))
+                .or_else(|| self.map_macintosh_cmap(lookup, exact_unicode))
+                .or_else(|| exact_name)
+        };
 
         if glyph.is_none() {
             let base_lookup = if !lookup.starts_with('.') { lookup.split('.').next().unwrap_or(lookup) } else { lookup };
