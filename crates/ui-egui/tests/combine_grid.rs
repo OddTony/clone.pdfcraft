@@ -1874,6 +1874,23 @@ fn rotating_a_file_card_or_an_expanded_page_card_updates_thumbnails_and_the_comb
             && matches!(pages.get(1), Some((_, CombineThumb::Ready { width, height, .. })) if width > height)
     }));
 
+    // Repeating a source page ("1, 1") and rotating the second card turns only that occurrence.
+    h.state_mut().combine_draft[0].range = "1, 1".into();
+    h.run_steps(2);
+    expand(&mut h, "portrait.pdf");
+    assert!(settle(&mut h, |app| app
+        .combine_page_thumbnails(0)
+        .iter()
+        .all(|(_, t)| matches!(t, CombineThumb::Ready { width, height, .. } if height > width))));
+    let second = h.get_all_by_label(&page_card(1, "portrait.pdf")).nth(1).unwrap().rect().center();
+    h.hover_at(second);
+    h.run_steps(2);
+    h.get_by_label("Rotate clockwise").click();
+    assert!(settle(&mut h, |app| {
+        matches!(app.combine_page_thumbnails(0).as_slice(), [(0, CombineThumb::Ready { width: w0, height: h0, .. })] if h0 > w0)
+            && matches!(app.combine_page_thumbnails(1).as_slice(), [(0, CombineThumb::Ready { width: w1, height: h1, .. })] if w1 > h1)
+    }));
+
     // Combining produces the final document with each page's chosen orientation.
     h.hover_at(egui::pos2(5.0, 890.0));
     h.run_steps(2);
@@ -1882,5 +1899,5 @@ fn rotating_a_file_card_or_an_expanded_page_card_updates_thumbnails_and_the_comb
     let app = h.state();
     let doc = app.session.get(app.views[0].id).unwrap();
     let pages: Vec<(f32, f32, u16)> = doc.info.pages.iter().map(|p| (p.width, p.height, p.rotation)).collect();
-    assert_eq!(pages, [(200.0, 300.0, 0), (200.0, 300.0, 90), (300.0, 200.0, 0)]);
+    assert_eq!(pages, [(200.0, 300.0, 0), (300.0, 200.0, 90), (200.0, 300.0, 90), (300.0, 200.0, 0)]);
 }
