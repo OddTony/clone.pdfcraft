@@ -61,8 +61,6 @@ exchange with Acrobat users or a missing sub-case is `partial, not blocking` (a 
 
 | Core workflow | Works end to end? | Evidence | Hours to pass |
 |---|---|---|---|
-| 2026-10-18 | minor | M1 / #2877 refreshed against upstream. Two-page regression covers untouched overflow blocking full rewrites, incremental byte preservation, finite huge values and retained unsaved edits. The conservative refusal policy is unchanged. |
-| 2026-10-17 | minor | M1 / #2877 review follow-up. Full and incremental saves refuse to rewrite non-finite numbers rather than silently writing zero. Untouched incremental data remains byte-preserved; parser overflow stays detectable by printcheck. Synthetic save/reopen regressions cover both full-save formats and preserve finite huge page boxes. Estimates unchanged. |
 | View, search and print | yes | Render, find, select, panels, tiles; 500-page scrolling test; Print with CUPS on macOS/Linux, the Windows spooler and, on the web, the browser's print dialog. Rendering borrowed from `hayro` | 0 |
 | Organize, combine and split pages | yes | `organize.*` P0s shipped with tests; links, fields, layers and bookmarks carried over; page deletion drops dangling destinations and the opening action (#817, #821) | 0 |
 | Comment and review | yes | Every markup type with appearances, replies, status, XFDF/FDF; comments saved in the PDF reopen in other readers; XFDF keeps polygon vertices and callouts (#809, #819) | 0 |
@@ -192,6 +190,8 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | M1 / #2877 refreshed against upstream. Two-page regression covers untouched overflow blocking full rewrites, incremental byte preservation, finite huge values and retained unsaved edits. The conservative refusal policy is unchanged. |
+| 2026-10-17 | minor | M1 / #2877 review follow-up. Full and incremental saves refuse to rewrite non-finite numbers rather than silently writing zero. Untouched incremental data remains byte-preserved; parser overflow stays detectable by printcheck. Synthetic save/reopen regressions cover both full-save formats and preserve finite huge page boxes. Estimates unchanged. |
 | 2026-10-15 | minor | M7: Edit text caret height follows its row, with a kittest regression; estimates unchanged |
 | 2026-10-18 | minor | M3, #3149: page replacement cancels render demand collected for the previous geometry; all viewer raster upload paths reject empty or oversized textures before cache eviction. Synthetic regressions reproduce the reported 1880×2350 upload at a 2048 limit, retain cached images and unsaved edits, and resume bounded backdrops and tiles. Estimates unchanged. |
 | 2026-10-15 | minor | M6: Plain AcroForm XML imports retain all direct text around comments and processing instructions, including CDATA and character references. Estimates unchanged. |
