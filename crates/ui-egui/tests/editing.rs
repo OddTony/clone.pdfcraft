@@ -4183,6 +4183,16 @@ fn cropped_image_corner_resize_keeps_opposite_corner_and_scales_crop() {
     assert_eq!(reopened.get(re).unwrap().page_images(0), h.state().session.get(id).unwrap().page_images(0));
 }
 
+/// Run frames until the render workers have delivered every queued raster, bounded.
+fn settle_renders(h: &mut Harness<'static, PdfCraftApp>) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while h.state().render_pending() && std::time::Instant::now() < deadline {
+        h.run_steps(2);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(!h.state().render_pending(), "the page raster arrives");
+}
+
 /// While a corner is dragged, the image's pixels are drawn in the blue frame, not left at their
 /// old size until release (#1671).
 #[test]
@@ -4197,6 +4207,9 @@ fn image_pixels_follow_the_frame_while_a_corner_is_dragged() {
     assert!(h.state_mut().execute("edit.edit_text"));
     h.state_mut().views[0].set_zoom(1.2);
     h.run_steps(4);
+    // The live picture is the page raster stretched into the frame, and the render workers
+    // deliver that raster asynchronously: wait for it rather than for a number of frames.
+    settle_renders(&mut h);
     let page = h.state().views[0].page_screen_rect(0).unwrap();
     let at = |x: f32, y: f32| egui::pos2(page.left() + x / 200.0 * page.width(), page.top() + (300.0 - y) / 300.0 * page.height());
     let p = at(95.0, 195.0);
@@ -4248,6 +4261,7 @@ fn image_pixels_follow_the_frame_while_a_corner_is_dragged() {
         h.run_steps(4);
         h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
         h.run_steps(4);
+        settle_renders(&mut h);
     }
 }
 
