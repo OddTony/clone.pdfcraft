@@ -1874,6 +1874,20 @@ fn rotating_a_file_card_or_an_expanded_page_card_updates_thumbnails_and_the_comb
             && matches!(pages.get(1), Some((_, CombineThumb::Ready { width, height, .. })) if width > height)
     }));
 
+    // Undo and redo restore the orientation of the single rotated page.
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    assert!(settle(&mut h, |app| {
+        let pages = app.combine_page_thumbnails(1);
+        matches!(pages.first(), Some((_, CombineThumb::Ready { width, height, .. })) if height > width)
+            && matches!(pages.get(1), Some((_, CombineThumb::Ready { width, height, .. })) if height > width)
+    }));
+    h.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    assert!(settle(&mut h, |app| {
+        let pages = app.combine_page_thumbnails(1);
+        matches!(pages.first(), Some((_, CombineThumb::Ready { width, height, .. })) if height > width)
+            && matches!(pages.get(1), Some((_, CombineThumb::Ready { width, height, .. })) if width > height)
+    }));
+
     // Repeating a source page ("1, 1") and rotating the second card turns only that occurrence.
     h.state_mut().combine_draft[0].range = "1, 1".into();
     h.run_steps(2);
