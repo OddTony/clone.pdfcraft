@@ -21,7 +21,9 @@
 //! (`/ca`, `/CA < 1`) or a highlight with `/CA < 1` is not flagged; annotation rectangles are
 //! compared in unrotated user space, so pages with `/Rotate` may misalign; covers inside form
 //! XObjects are found, but only text drawn directly in the page content is checked under them,
-//! so text inside a form XObject is not audited.
+//! so text inside a form XObject is not audited; a `/Highlight` is judged by its own
+//! `/QuadPoints`, `/C` and `/CA`, never by its appearance stream (`/AP`), so a finding can differ
+//! from what a viewer paints.
 //!
 //! The audit fails closed: any content that cannot be read (an undecodable content stream,
 //! malformed annotations, form XObjects nested deeper than 32 or in a cycle) is an error, never
