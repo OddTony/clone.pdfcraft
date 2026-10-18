@@ -634,11 +634,11 @@ mod tests {
         assert_eq!(licence_ids("(MIT OR Apache-2.0) AND OFL-1.1").collect::<Vec<_>>(), ["MIT", "Apache-2.0", "OFL-1.1"]);
     }
 
-    fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("pdfcraft-xtask-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("cache")).unwrap();
-        std::fs::create_dir_all(dir.join("out")).unwrap();
+    /// A fresh `cache/` and `out/` for one test, in a directory removed with the guard.
+    fn scratch() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("cache")).unwrap();
+        std::fs::create_dir(dir.path().join("out")).unwrap();
         dir
     }
 
@@ -646,21 +646,23 @@ mod tests {
     /// manifest's hash is copied into place and nothing is downloaded.
     #[test]
     fn cached_asset_is_copied_instead_of_downloaded() {
-        let dir = scratch("cache-hit");
-        std::fs::write(dir.join("cache/model.rten"), b"weights").unwrap();
-        let dest = dir.join("out/model.rten");
-        fetch_verified("https://invalid.invalid/model.rten", &dest, &sha256_hex(b"weights"), Some(&dir.join("cache"))).unwrap();
+        let dir = scratch();
+        let root = dir.path();
+        std::fs::write(root.join("cache/model.rten"), b"weights").unwrap();
+        let dest = root.join("out/model.rten");
+        fetch_verified("https://invalid.invalid/model.rten", &dest, &sha256_hex(b"weights"), Some(&root.join("cache"))).unwrap();
         assert_eq!(std::fs::read(&dest).unwrap(), b"weights");
-        assert!(!dir.join("out/model.part").exists());
+        assert!(!root.join("out/model.part").exists());
     }
 
     /// A cached file that fails its hash is refused outright, never quietly replaced by a download.
     #[test]
     fn corrupt_cached_asset_is_refused() {
-        let dir = scratch("cache-bad");
-        std::fs::write(dir.join("cache/model.rten"), b"tampered").unwrap();
-        let dest = dir.join("out/model.rten");
-        let err = fetch_verified("https://invalid.invalid/model.rten", &dest, &sha256_hex(b"weights"), Some(&dir.join("cache"))).unwrap_err();
+        let dir = scratch();
+        let root = dir.path();
+        std::fs::write(root.join("cache/model.rten"), b"tampered").unwrap();
+        let dest = root.join("out/model.rten");
+        let err = fetch_verified("https://invalid.invalid/model.rten", &dest, &sha256_hex(b"weights"), Some(&root.join("cache"))).unwrap_err();
         assert!(err.to_string().contains("SHA-256 mismatch"), "{err}");
         assert!(!dest.exists());
     }
