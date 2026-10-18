@@ -110,13 +110,16 @@ fn play_file(path: &Path) -> Result<(), String> {
 }
 
 fn play_desk(session: &Session, desk: &Desk) -> Result<(), String> {
-    let mut h = open_letter(&session.name, &session.content, desk);
+    let mut h = open_letter(&session.name, &session.content, desk, session.page);
     h.state_mut().set_option("zoom", &desk.zoom).map_err(|e| format!("{}: zoom: {e}", session.name))?;
     h.run_steps(4);
     eprintln!("{name}: {w}×{h} at {z}%", name = session.name, w = desk.width, h = desk.height, z = desk.zoom);
     for (n, step) in session.steps.iter().enumerate() {
         if let Err(why) = step.run(&mut h, session) {
-            let shot = save_shot(&mut h, &format!("{}-{}x{}", session.name, desk.width, desk.height));
+            let shot = match save_shot(&mut h, &format!("{}-{}x{}", session.name, desk.width, desk.height)) {
+                Ok(path) => path,
+                Err(error) => format!("not written ({error})"),
+            };
             let paras = paragraphs(&h).join("\n");
             return Err(format!(
                 "{name} on {w}×{h} at {z}%: step {step_no} {step:?}\n{why}\nparagraphs:\n{paras}\nscreenshot: {shot}",
@@ -163,7 +166,7 @@ impl Step {
                 }
             }
             Step::Shot { name } => {
-                let _ = save_named(h, name);
+                save_named(h, name)?;
             }
         }
         Ok(())
@@ -251,12 +254,12 @@ fn paragraphs(h: &Harness<'static, PdfCraftApp>) -> Vec<String> {
     s.session.get(view.id).map(|d| d.text_blocks(0).into_iter().map(|b| b.text).collect()).unwrap_or_default()
 }
 
-fn save_shot(h: &mut Harness<'static, PdfCraftApp>, name: &str) -> String {
+fn save_shot(h: &mut Harness<'static, PdfCraftApp>, name: &str) -> Result<String, String> {
     let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
     save_named(h, &safe)
 }
 
-fn save_named(h: &mut Harness<'static, PdfCraftApp>, name: &str) -> String {
+fn save_named(h: &mut Harness<'static, PdfCraftApp>, name: &str) -> Result<String, String> {
     for _ in 0..20 {
         h.run_steps(2);
         if !h.state().render_pending() {
@@ -264,16 +267,15 @@ fn save_named(h: &mut Harness<'static, PdfCraftApp>, name: &str) -> String {
         }
     }
     let dir = PathBuf::from("/tmp/pdfcraft-play");
-    let _ = fs::create_dir_all(&dir);
+    fs::create_dir_all(&dir).map_err(|error| format!("screenshot directory: {error}"))?;
     let path = dir.join(format!("{name}.png"));
-    if let Ok(image) = h.render() {
-        let _ = image.save(&path);
-    }
-    path.display().to_string()
+    let image = h.render().map_err(|error| format!("screenshot render: {error}"))?;
+    image.save(&path).map_err(|error| format!("screenshot {}: {error}", path.display()))?;
+    Ok(path.display().to_string())
 }
 
-fn open_letter(name: &str, content: &str, desk: &Desk) -> Harness<'static, PdfCraftApp> {
-    let bytes = letter_pdf(content);
+fn open_letter(name: &str, content: &str, desk: &Desk, page: [f32; 2]) -> Harness<'static, PdfCraftApp> {
+    let bytes = letter_pdf(content, page);
     let title = name.to_string();
     let mut h = Harness::builder().with_size(egui::vec2(desk.width, desk.height)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
@@ -285,12 +287,14 @@ fn open_letter(name: &str, content: &str, desk: &Desk) -> Harness<'static, PdfCr
     h
 }
 
-fn letter_pdf(content: &str) -> Vec<u8> {
+fn letter_pdf(content: &str, page: [f32; 2]) -> Vec<u8> {
+    let [width, height] = page;
+    let stream = format!("{content}\n");
     let objs = [
         "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>".to_string(),
-        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()),
+        format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>"),
+        format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
     ];
     let mut out = b"%PDF-1.7\n".to_vec();
