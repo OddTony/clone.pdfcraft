@@ -1777,9 +1777,12 @@ fn files_dropped_beside_the_pages_panel_still_open_as_documents() {
     h.hover_at(egui::pos2(thumb.left() - 300.0, thumb.center().y));
     h.run_steps(2);
     drop_files(&mut h, vec![Dropped("other.pdf", fixture(1))]);
-    h.run_steps(3);
+    // Native opening prepares the document on a worker; three UI frames need not give it
+    // any CPU time. Wait for the result, as the other dropped-document regression does.
+    support::wait_until(&mut h, "document dropped beside the Pages panel", |app| app.views.len() == 2 && app.password_prompt.is_none());
     assert_eq!(h.state().views.len(), 2);
     assert_eq!(texts_of(h.state(), 0), ["Page 1", "Page 2"]);
+    assert_eq!(texts_of(h.state(), 1), ["Page 1"], "the dropped PDF opens as its own document");
 }
 
 fn grid_zoom(h: &Harness<'static, PdfCraftApp>) -> f32 {
@@ -4222,9 +4225,25 @@ fn image_pixels_follow_the_frame_while_a_corner_is_dragged() {
             .filter(|b| b.width() < page.width() - 1.0)
             .collect()
     };
+    // The dragged picture is cut from the page raster, which a render thread delivers after
+    // however many frames it takes (more on a slow runner): wait for it on screen, by state.
+    let raster_shown = |h: &Harness<'static, PdfCraftApp>| {
+        h.output().shapes.iter().any(|s| {
+            matches!(&s.shape, egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() && m.calc_bounds().width() >= page.width() - 1.0)
+        })
+    };
+    let wait_for_raster = |h: &mut Harness<'static, PdfCraftApp>| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        while h.state().render_pending() || !raster_shown(h) {
+            assert!(std::time::Instant::now() < deadline, "timed out waiting for the page raster");
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    };
     let start = frame(&h).expect("the selected image has a frame");
     let (grip, fixed) = (start.right_top(), start.left_bottom());
     for factor in [0.6, 1.3] {
+        wait_for_raster(&mut h);
         let to = fixed + (grip - fixed) * factor;
         h.hover_at(grip);
         h.run_steps(1);
