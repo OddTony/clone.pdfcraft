@@ -239,19 +239,23 @@ impl<'a> Scope<'a> {
         if self.metadata_limited || text.is_empty() {
             return;
         }
-        if kerned && self.run_end.is_some() {
-            if let Some(((x, y), previous_height)) = self.run_end {
-                let (dx, dy) = (origin.0 - x, origin.1 - y);
-                let h = previous_height.max(height);
-                let gap = dx.hypot(dy);
+        if kerned
+            && let Some(((x, y), previous_height)) = self.run_end
+            && previous_height > 0.0
+            && height > 0.0
+        {
+            let (dx, dy) = (origin.0 - x, origin.1 - y);
+            let h = previous_height.max(height);
+            let gap = dx.hypot(dy);
+            if gap.is_finite() && h.is_finite() && gap <= 1.5 * h {
                 let forward = dx * (end.0 - origin.0) + dy * (end.1 - origin.1);
-                if h.is_finite() && h > 0.0 && gap.is_finite() && gap > 0.15 * h && forward.is_finite() && forward > 0.0 {
+                if gap > 0.15 * h && forward.is_finite() && forward > 0.0 {
                     self.run_gaps.push(self.run.len());
                 }
+                self.append_removed(text);
+                self.run_end = Some((end, height));
+                return;
             }
-            self.append_removed(text);
-            self.run_end = Some((end, height));
-            return;
         }
         if let Some(((lx, ly), lh)) = self.run_end
             && lh > 0.0
@@ -1137,6 +1141,9 @@ fn xobject(
                 if scope.mode == Mode::Verify {
                     return None;
                 }
+                if !scope.rects.is_empty() && scope.hidden_text.is_none() {
+                    scope.limit_metadata();
+                }
                 scope.report.forms_removed += 1;
                 out.replaced.push(name);
                 out.doomed.push(r);
@@ -1145,6 +1152,9 @@ fn xobject(
             let data = match s.decoded() {
                 Ok(d) => d,
                 Err(_) if scope.mode == Mode::Apply => {
+                    if !scope.rects.is_empty() && scope.hidden_text.is_none() {
+                        scope.limit_metadata();
+                    }
                     scope.report.forms_removed += 1;
                     out.replaced.push(name);
                     out.doomed.push(r);

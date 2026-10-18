@@ -687,33 +687,55 @@ fn clear_marked_metadata(doc: &mut Document, fragments: &[String], kerned: &[Ker
     }
 
     // 1. Entry by entry: the value goes, and with it the XMP property that mirrors the entry.
-    let keys: Vec<String> = doc
+    let entries: Vec<(Vec<u8>, Option<String>)> = doc
         .trailer()
         .get(b"Info")
         .map(|o| doc.resolve(o))
-        .and_then(|o| o.as_dict().map(|d| d.iter().filter_map(|(k, _)| String::from_utf8(k.clone()).ok()).collect()))
+        .and_then(|o| o.as_dict().map(|d| d.iter().map(|(k, v)| (k.clone(), doc.resolve(v).as_string().map(|s| s.to_text()))).collect()))
         .unwrap_or_default();
-    for key in keys {
-        let matches = pdfcraft_organize::info(doc, &key).is_some_and(|v| hit(&v));
+    let mut catalog_charged = false;
+    for (raw_key, val) in entries {
+        let matches = val.as_deref().is_some_and(&hit);
         if work.exhausted.get() {
             return clear_metadata_on_limit(doc, report);
         }
         if matches {
-            if let Some(root) = doc.root()
-                && let Some(meta) = doc.get(root).as_dict().and_then(|d| d.get(b"Metadata").cloned())
-                && let Object::Stream(s) = &*doc.resolve(&meta)
-            {
-                let within_budget = work.charge(s.raw.len())
-                    && s.decoded_within(MAX_METADATA.min(work.decode_limit())).is_ok_and(|bytes| work.charge(bytes.len().saturating_mul(4)));
-                if !within_budget {
-                    return clear_metadata_on_limit(doc, report);
+            let mirrored = match raw_key.as_slice() {
+                b"Title" => Some("Title"),
+                b"Author" => Some("Author"),
+                b"Subject" => Some("Subject"),
+                b"Keywords" => Some("Keywords"),
+                b"Creator" => Some("Creator"),
+                b"Producer" => Some("Producer"),
+                _ => None,
+            };
+            if let Some(key) = mirrored {
+                if !catalog_charged
+                    && let Some(root) = doc.root()
+                    && let Some(meta) = doc.get(root).as_dict().and_then(|d| d.get(b"Metadata").cloned())
+                    && let Object::Stream(s) = &*doc.resolve(&meta)
+                {
+                    let within_budget = work.charge(s.raw.len())
+                        && s.decoded_within(MAX_METADATA.min(work.decode_limit())).is_ok_and(|bytes| work.charge(bytes.len().saturating_mul(4)));
+                    if !within_budget {
+                        return clear_metadata_on_limit(doc, report);
+                    }
+                    catalog_charged = true;
                 }
-            }
-            pdfcraft_organize::set_info(doc, &key, "").map_err(|e| pdfcraft_edit::EditError::Invalid(e.to_string()))?;
-            // A trailer `/Info` that is a direct dictionary is quietly left alone (only the
-            // wholesale step below can take it); count what really went.
-            if pdfcraft_organize::info(doc, &key).is_none() {
-                report.info_entries_cleared += 1;
+                pdfcraft_organize::set_info(doc, key, "").map_err(|e| pdfcraft_edit::EditError::Invalid(e.to_string()))?;
+                // A trailer `/Info` that is a direct dictionary is quietly left alone (only the
+                // wholesale step below can take it); count what really went.
+                if pdfcraft_organize::info(doc, key).is_none() {
+                    report.info_entries_cleared += 1;
+                }
+            } else if let Some(info_ref) = doc.trailer().reference(b"Info") {
+                let mut cleared = false;
+                doc.update_dict(info_ref, |d| {
+                    cleared = d.remove(&raw_key).is_some();
+                })?;
+                if cleared {
+                    report.info_entries_cleared += 1;
+                }
             }
         }
     }

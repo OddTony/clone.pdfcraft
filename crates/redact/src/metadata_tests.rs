@@ -324,3 +324,49 @@ fn leading_tj_number_does_not_join_previous_line_into_one_run() {
     assert_eq!(info_value(&saved, "Title"), None);
     assert_eq!(info_value(&saved, "Author").as_deref(), Some("Ada"));
 }
+
+#[test]
+fn large_tj_displacement_splits_runs_and_custom_info_keys_with_spaces_clear_cleanly() {
+    let mut doc = meta_doc(
+        b"BT /F1 10 Tf 10 100 Td [(SECRET) -6000 (4711)] TJ ET",
+        &[("Title", "Secret plan"), ("Case No", "4711"), ("Author", "Ada")],
+        None,
+        None,
+    );
+    mark(&mut doc, 0, &[[0.0, 0.0, 300.0, 300.0]], "");
+    let report = apply(&mut doc, None).unwrap();
+    assert!(!report.metadata_cleared_on_limit);
+    assert_eq!(report.info_entries_cleared, 2);
+    let saved = reopen(&doc);
+    assert_eq!(info_value(&saved, "Title"), None);
+    assert_eq!(info_value(&saved, "Case No"), None);
+    assert_eq!(info_value(&saved, "Author").as_deref(), Some("Ada"));
+    assert_no_secret(&doc, b"Secret plan");
+    assert_no_secret(&doc, b"4711");
+}
+
+#[test]
+fn removed_uninspectable_form_xobject_clears_metadata_on_limit() {
+    let clean = packet("<z:clean>Harmless</z:clean>", "");
+    let mut doc = meta_doc(b"/Fm0 Do", &[("Author", "Ada")], Some(&clean), Some(&clean));
+    let mut fdict = Dict::new();
+    fdict.set(b"Type".to_vec(), Object::Name(b"XObject".to_vec()));
+    fdict.set(b"Subtype".to_vec(), Object::Name(b"Form".to_vec()));
+    fdict.set(b"BBox".to_vec(), Object::Array(vec![Object::Int(0), Object::Int(0), Object::Int(100), Object::Int(100)]));
+    fdict.set(b"Filter".to_vec(), Object::Name(b"FlateDecode".to_vec()));
+    let form_ref = doc.add(Object::Stream(Stream { dict: fdict, raw: b"not valid zlib".to_vec() }));
+    let page = pdfcraft_model::pages(&doc).swap_remove(0);
+    let mut res = page.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
+    let mut xo = Dict::new();
+    xo.set(b"Fm0".to_vec(), Object::Ref(form_ref));
+    res.set(b"XObject".to_vec(), Object::Dict(xo));
+    doc.update_dict(page.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(res))).unwrap();
+
+    mark(&mut doc, 0, &[[0.0, 0.0, 300.0, 300.0]], "");
+    let report = apply(&mut doc, None).unwrap();
+    assert_eq!(report.forms_removed, 1);
+    assert!(report.metadata_cleared_on_limit);
+    let saved = reopen(&doc);
+    assert_eq!(info_value(&saved, "Author"), None);
+    assert!(xmp_text(&saved).is_none());
+}
