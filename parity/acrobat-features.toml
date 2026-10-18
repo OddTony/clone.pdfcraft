@@ -7196,8 +7196,8 @@ milestone = "M2"
 status = "shipped"
 commands = []
 tools = ["text_extract"]
-evidence = ["crates/render/src/text.rs::rtl_runs_come_out_in_logical_order_and_cjk_has_no_spaces", "crates/render/src/text.rs::lines_words_and_search", "crates/automation/tests/automation.rs::parallel_text_extraction_keeps_page_order_and_follows_edits"]
-notes = ""
+evidence = ["crates/render/src/text.rs::rtl_runs_come_out_in_logical_order_and_cjk_has_no_spaces", "crates/render/src/text.rs::lines_words_and_search", "crates/render/src/text.rs::sparse_bullet_line_has_a_word_gap", "crates/render/src/text.rs::condensed_ocr_word_gap_is_searchable", "crates/automation/tests/automation.rs::parallel_text_extraction_keeps_page_order_and_follows_edits"]
+notes = "List markers do not inflate tracking estimates; narrow text uses a slightly smaller word-gap margin. Gap inference remains geometric and can still miss or invent spaces."
 
 [[feature]]
 id = "create.translate"

@@ -1600,16 +1600,33 @@ fn arrange(glyphs: &[TextGlyph]) -> (Vec<usize>, Vec<u32>, Vec<bool>) {
             let h = segs[si].h;
             // Word gaps relative to this line's typical letter gap (handles tracking).
             sc.gaps.clear();
-            sc.gaps.extend(sc.placed.windows(2).map(|w| glyphs[w[1]].rect[0] - glyphs[w[0]].rect[2]));
+            sc.gaps.extend(sc.placed.windows(2).filter_map(|pair| {
+                let &[p, c] = pair else { return None };
+                let (p, c) = (glyphs.get(p)?, glyphs.get(c)?);
+                // A list marker's separation from its text is not letter tracking. On a
+                // two-glyph line it would otherwise become the entire tracking estimate.
+                if matches!(p.text.as_str(), "•" | "‣" | "◦" | "⁃") {
+                    return None;
+                }
+                Some(c.rect[0] - p.rect[2])
+            }));
             sc.gaps.sort_by(f32::total_cmp);
             let typical = sc.gaps.get(sc.gaps.len() / 3).copied().unwrap_or(0.0).max(0.0);
-            let threshold = (typical + h * WORD_GAP).max(h * WORD_GAP);
             spaces.clear();
             spaces.resize(sc.placed.len(), false);
             for (w, pair) in sc.placed.windows(2).enumerate() {
                 let &[p, c] = pair else { continue };
                 let gap = glyphs[c].rect[0] - glyphs[p].rect[2];
                 let (pt, ct) = (&glyphs[p].text, &glyphs[c].text);
+                // Condensed OCR glyphs have narrower advances than their em height. Use a
+                // slightly smaller margin for a pair of narrow letters on a longer line, while
+                // retaining the line's measured tracking. Short labels keep the normal margin.
+                let narrow = sc.placed.len() >= 4
+                    && pt.chars().all(char::is_alphanumeric)
+                    && ct.chars().all(char::is_alphanumeric)
+                    && glyphs[p].rect[2] - glyphs[p].rect[0] < h * 0.4
+                    && glyphs[c].rect[2] - glyphs[c].rect[0] < h * 0.4;
+                let threshold = typical + h * if narrow { 0.14 } else { WORD_GAP };
                 let cjk = pt.chars().any(is_cjk) && ct.chars().any(is_cjk) && gap < h * 0.5;
                 let tight_cluster = (pt.chars().any(is_complex) || ct.chars().any(is_complex)) && gap < h * 0.6;
                 let run_start = sc.breaks.binary_search(&c).is_ok();
@@ -2196,6 +2213,43 @@ mod tests {
     }
 
     #[test]
+    fn sparse_bullet_line_has_a_word_gap() {
+        for marker in ["•", "‣", "◦", "⁃"] {
+            let glyphs = vec![em_box(marker, 0.0, 0.0, 5.0, 10.0), em_box("a", 10.0, 0.0, 15.0, 10.0)];
+            assert_eq!(layout(glyphs).plain_text(), format!("{marker} a"));
+        }
+        // The marker alone doesn't force a space when the following glyph touches it.
+        let touching = vec![em_box("•", 0.0, 0.0, 5.0, 10.0), em_box("a", 5.0, 0.0, 10.0, 10.0)];
+        assert_eq!(layout(touching).plain_text(), "•a");
+    }
+
+    #[test]
+    fn condensed_ocr_words_keep_a_narrow_gap() {
+        let mut glyphs = Vec::new();
+        let mut x = 0.0;
+        for c in "computer".chars() {
+            glyphs.push(em_box(&c.to_string(), x, 0.0, x + 5.25, 21.0));
+            x += 5.25;
+        }
+        x += 3.08;
+        for c in "is".chars() {
+            glyphs.push(em_box(&c.to_string(), x, 0.0, x + 5.25, 21.0));
+            x += 5.25;
+        }
+        assert_eq!(layout(glyphs).plain_text(), "computer is");
+    }
+
+    #[test]
+    fn condensed_tracking_is_not_mistaken_for_word_gaps() {
+        let mut glyphs = Vec::new();
+        for (i, c) in "narrow".chars().enumerate() {
+            let x = i as f32 * 6.0;
+            glyphs.push(em_box(&c.to_string(), x, 0.0, x + 4.0, 20.0));
+        }
+        assert_eq!(layout(glyphs).plain_text(), "narrow");
+    }
+
+    #[test]
     fn rtl_runs_come_out_in_logical_order_and_cjk_has_no_spaces() {
         let mut v = Vec::new();
         // Hebrew "שלום" drawn visually right-to-left: ם ו ל ש from left to right.
@@ -2291,6 +2345,14 @@ mod tests {
 
     fn page_text(ops: &str) -> String {
         extract_page(&text_page(ops), 0, &InterpreterSettings::default()).unwrap().plain_text()
+    }
+
+    #[test]
+    fn condensed_ocr_word_gap_is_searchable() {
+        let pdf = text_page("BT /F2 21 Tf 3 Tr 50 Tz 1 0 0 1 10 200 Tm [(computer) -293.333 (is)] TJ ET");
+        let text = extract_page(&pdf, 0, &InterpreterSettings::default()).unwrap();
+        assert_eq!(text.plain_text(), "computer is");
+        assert_eq!(text.find("computer is").len(), 1);
     }
 
     #[test]
