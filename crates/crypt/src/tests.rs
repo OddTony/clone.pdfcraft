@@ -109,6 +109,18 @@ fn an_empty_owner_password_lets_the_user_password_open_as_owner() {
 }
 
 #[test]
+fn an_empty_owner_password_with_another_key_does_not_make_the_user_an_owner() {
+    // A crafted R6 file: "" still matches /O, but /OE wraps a different file key than /UE.
+    let h = new(Algorithm::Aes256, "user pw", "", 0b0100);
+    let mut d = h.dict().clone();
+    let ok = hash_r6(6, b"", &d.o[40..48], &d.u[..48]);
+    d.oe = aes_cbc_encrypt(&ok, &[0; 16], &[0x42; 32], false);
+    let user = SecurityHandler::open(d, ID, Some("user pw")).unwrap();
+    assert_eq!(user.auth(), Auth::User);
+    assert_eq!(user.file_key(), h.file_key(), "the user password keeps the /UE key");
+}
+
+#[test]
 fn empty_user_password_opens_without_asking() {
     for alg in ALL {
         let d = new(alg, "", "secret", -1).dict().clone();
