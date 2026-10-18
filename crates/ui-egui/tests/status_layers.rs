@@ -130,6 +130,45 @@ fn caption_strip(h: &mut Harness<'static, PdfCraftApp>) -> Vec<u8> {
     (y0..y1.min(image.height())).flat_map(|y| (x0..x1.min(image.width())).map(move |x| (x, y))).flat_map(|(x, y)| image.get_pixel(x, y).0).collect()
 }
 
+/// Redraw the open document with `captions`, invalidate the page cache as the language-change
+/// path does, and return the caption's rendered pixels.
+fn redraw_captions(h: &mut Harness<'static, PdfCraftApp>, captions: pdfcraft_engine::sign::StatusCaptions) -> Vec<u8> {
+    let app = h.state_mut();
+    app.session.set_signature_captions(captions);
+    for view in &mut app.views {
+        view.invalidate_content();
+    }
+    settle(h);
+    caption_strip(h)
+}
+
+/// Whether the display-copy PDF that feeds exports contains `words` as a marked-content
+/// `/ActualText` value. Outline captions have no text-showing operator for the text exporter to
+/// decode, so the accessible string lives here instead.
+fn exported_pdf_has_actual_text(doc: &pdfcraft_engine::Document, words: &str) -> bool {
+    let exported = pdfcraft_cos::Document::open(doc.export_source().bytes).unwrap();
+    exported.object_numbers().into_iter().any(|n| {
+        let object = exported.get(pdfcraft_cos::ObjRef::new(n, 0));
+        let pdfcraft_cos::Object::Stream(stream) = &*object else {
+            return false;
+        };
+        let Ok(bytes) = stream.decoded() else { return false };
+        if !bytes.windows(b"/ActualText".len()).any(|w| w == b"/ActualText") {
+            return false;
+        }
+        pdfcraft_content::parse(&bytes).ops.iter().any(|op| {
+            op.is("BDC")
+                && op
+                    .operands
+                    .get(1)
+                    .and_then(pdfcraft_cos::Object::as_dict)
+                    .and_then(|dict| dict.get(b"ActualText"))
+                    .and_then(pdfcraft_cos::Object::as_string)
+                    .is_some_and(|text| text.to_text() == words)
+        })
+    })
+}
+
 /// How many nodes read `label` while the pointer rests on the signature: the badge's tooltip adds
 /// one, a widget without a badge none.
 fn hovered(h: &mut Harness<'static, PdfCraftApp>, label: &str) -> usize {
@@ -183,4 +222,50 @@ fn named_layers_follow_trust_and_language_and_keep_the_badge_until_valid() {
     assert_ne!(caption_strip(&mut h), english, "the page redraws the caption");
     let text = pdfcraft_engine::export::Exporter::new(h.state().session.get(doc_id).unwrap()).text_of(&[0]).unwrap();
     assert!(text.contains("Signatur gültig"), "{text:?}");
+}
+
+#[test]
+fn arabic_caption_keeps_logical_word_order_on_page_and_in_exported_pdf() {
+    if pdfcraft_fonts::document_arabic_font().is_none() {
+        eprintln!("skipping Arabic status-caption rendering: build without a craft-fonts Arab face");
+        return;
+    }
+    let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
+    let id = pdfcraft_engine::sign::pkcs12::open(&p12, "test").unwrap();
+    let anchor = id.chain.first().cloned().unwrap_or_else(|| id.certificate.clone());
+    let bytes = signed(&id);
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "ar").unwrap();
+        app.open_bytes("named.pdf", None, bytes).expect("opens");
+        app.set_option("left", "closed").unwrap();
+        app
+    });
+    settle(&mut h);
+    h.state_mut().apply_trusted_certificates(vec![anchor]);
+    settle(&mut h);
+
+    let from_interface = caption_strip(&mut h);
+    let logical = pdfcraft_engine::sign::StatusCaptions {
+        valid: "التوقيع صالح".into(),
+        unknown: "الصلاحية غير معروفة".into(),
+        invalid: "التوقيع غير صالح".into(),
+    };
+    let ar = pdfcraft_ui_egui::i18n::Lang::from_code("ar").unwrap();
+    let display = |english: &str| pdfcraft_ui_egui::i18n::tr(ar, english).to_owned();
+    let display_order = pdfcraft_engine::sign::StatusCaptions {
+        valid: display("Signature valid"),
+        unknown: display("Validity unknown"),
+        invalid: display("Signature invalid"),
+    };
+    assert_ne!(logical.valid, display_order.valid, "the regression needs a multiword caption whose display order differs");
+    let doc_id = h.state().views[0].id;
+    let doc = h.state().session.get(doc_id).unwrap();
+    assert!(exported_pdf_has_actual_text(doc, &logical.valid), "the exported display-copy PDF keeps logical /ActualText");
+    assert!(!exported_pdf_has_actual_text(doc, &display_order.valid), "display-order words must not leak into exported /ActualText");
+
+    let logical_render = redraw_captions(&mut h, logical);
+    let double_reordered_render = redraw_captions(&mut h, display_order);
+    assert_eq!(from_interface, logical_render, "the interface path renders the logical-order caption");
+    assert_ne!(from_interface, double_reordered_render, "display-order input reverses the rendered word order a second time");
 }
