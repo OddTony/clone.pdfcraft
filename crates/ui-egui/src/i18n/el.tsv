@@ -2440,3 +2440,7 @@ animation effects	Off	Ανενεργά
 	Make properties default	Ορισμός ιδιοτήτων ως προεπιλογή
 	Pages selected	Επιλεγμένες σελίδες
 	Page properties	Ιδιότητες σελίδας
+
+# Optional Hungarian OCR installation notices.
+	Checking Hungarian OCR installation…	Έλεγχος εγκατάστασης ουγγρικού OCR…
+	Hungarian OCR requires the desktop app with Tesseract 5 and the hun language model. Restart PdfCraft after installation.	Το ουγγρικό OCR απαιτεί την εφαρμογή υπολογιστή με Tesseract 5 και το γλωσσικό μοντέλο hun. Επανεκκινήστε το PdfCraft μετά την εγκατάσταση.

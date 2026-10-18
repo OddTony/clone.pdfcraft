@@ -2432,3 +2432,7 @@ animation effects	Off	Өшірулі
 	Make properties default	Қасиеттерді әдепкі ету
 	Pages selected	Таңдалған беттер
 	Page properties	Бет қасиеттері
+
+# Optional Hungarian OCR installation notices.
+	Checking Hungarian OCR installation…	Венгр тіліндегі OCR орнатылуын тексеру…
+	Hungarian OCR requires the desktop app with Tesseract 5 and the hun language model. Restart PdfCraft after installation.	Венгр тіліндегі OCR үшін Tesseract 5 және hun тілдік моделі бар жұмыс үстелі қолданбасы қажет. Орнатқаннан кейін PdfCraft қолданбасын қайта іске қосыңыз.
