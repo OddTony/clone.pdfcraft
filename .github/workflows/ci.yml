@@ -20,6 +20,9 @@ jobs:
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
     strategy:
       fail-fast: false
       matrix:
@@ -39,13 +42,27 @@ jobs:
           ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
           path: craft-fonts
 
-      - name: Install Linux system dependencies (egui/winit/rfd)
+      - name: Configure craft-fonts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "CRAFT_FONTS_DIR=$GITHUB_WORKSPACE/craft-fonts" >> "$GITHUB_ENV"
+          echo "CRAFT_FONTS_REQUIRED=1" >> "$GITHUB_ENV"
+
+      - name: Install Linux system dependencies (egui/winit/rfd) and the oracles
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libxkbcommon-dev libwayland-dev libx11-dev libxrandr-dev libxi-dev \
-            libgl1-mesa-dev libgtk-3-dev
+            libgl1-mesa-dev libgtk-3-dev \
+            qpdf poppler-utils
+
+      # The independent oracles (crates/oracle) are only worth having when they run. With this
+      # set, a missing one fails the job instead of printing a skip notice that reads as a pass.
+      # Only the tools the job actually uses are installed above.
+      - name: Require the oracles (Linux)
+        if: runner.os == 'Linux'
+        run: echo "PDFCRAFT_ORACLES_REQUIRED=1" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
@@ -72,12 +89,10 @@ jobs:
 
       - name: Test (with craft-fonts)
         if: runner.os == 'Linux'
-        env:
-          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
-          CRAFT_FONTS_REQUIRED: "1"
         run: cargo test --workspace
 
       - name: Layering
+        if: runner.os == 'Linux'
         run: cargo xtask layers
 
       - name: Assets (licences and attribution)

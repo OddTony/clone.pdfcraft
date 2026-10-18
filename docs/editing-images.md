@@ -3,9 +3,12 @@
 In **Edit a PDF → Edit text and images**, click a figure to select it. Drag the selected
 figure to move it, drag a corner to resize it proportionally, or press Delete to remove
 that placement. The context menu also rotates or flips it. Changes support undo and
-survive saving/reopening. An image painted inside its own rectangular clip
-(`q … re W n … cm Do Q`, as PowerPoint exports it) moves and resizes together with that
-clip; a clip shared with other content stays where it is.
+survive saving/reopening. For single-figure transforms, a clipping path exclusive to one image moves and resizes
+together with its pixels, including nested graphics states, intervening state operators
+and paths split across content streams. A clip shared with other content stays where it is.
+When the figure already sits alone in a `q … cm … Q` (its own placement, or the one an
+earlier edit added), moving or resizing it again changes that `cm`, so repeated edits don't
+nest one more graphics state each time.
 
 PDF figures are not always bitmap images. Imported diagrams often use a **Form XObject**,
 which packages text, vector paths, and nested images into one object. PdfCraft selects
@@ -33,8 +36,8 @@ curved clips can still have a loose bounding frame. Dragging the visible frame m
 the full placement by the same change; resizing keeps the opposite corner fixed, including
 horizontal-only or vertical-only corner drags, and grabbing a grip slightly off-centre does not
 jump. A selected corner keeps control of its drag even over a text label; the drag previews one
-frame and applies one undoable edit on release. A clip that belongs to the image alone
-(`q re W n cm Do Q`) moves with it; a clip shared with other content stays where it is.
+frame and applies one undoable edit on release. Exclusive crops and their holes move
+with the selected image; shared clips stay fixed without moving neighbouring text or artwork.
 
 `image_hit` applies the same path and hole checks headlessly. `page_images` retains `rect` as
 the full placement rectangle used by `image_edit` and adds `visible_rect` for selection (null

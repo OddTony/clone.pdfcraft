@@ -18,7 +18,7 @@ use crate::x_object::{
 use hayro_syntax::content::TypedIter;
 use hayro_syntax::content::ops::TypedInstruction;
 use hayro_syntax::object::dict::keys::{
-    ANNOTS, AP, AS, C, CA, F, MCID, N, OC, QUADPOINTS, RECT, SUBTYPE,
+    ACTUAL_TEXT, ANNOTS, AP, AS, C, CA, F, MCID, N, OC, QUADPOINTS, RECT, SUBTYPE,
 };
 use hayro_syntax::object::{Array, Dict, Object, Rect, Stream, dict_or_stream};
 use hayro_syntax::page::{ContentReader, Page, Resources};
@@ -175,6 +175,9 @@ pub fn interpret_page<'a>(
     if context.settings.render_annotations
         && let Some(annot_arr) = page.raw().get::<Array<'_>>(ANNOTS)
     {
+        // PdfCraft patch (29): bracket the annotations so devices can tell their paints from
+        // the document's own (the reading-colours setting recolours the document, not comments).
+        device.begin_annotations();
         for annot in annot_arr.iter::<Dict<'_>>() {
             let flags = annot.get::<u32>(F).unwrap_or(0);
 
@@ -275,6 +278,7 @@ pub fn interpret_page<'a>(
                 draw_highlight_without_appearance(&annot, context, device);
             }
         }
+        device.end_annotations();
     }
 }
 
@@ -615,6 +619,19 @@ fn interpret_window<'a>(
                 }
 
                 device.begin_marked_content(bdc.0, mcid);
+
+                // PdfCraft patch (25): hand the device the sequence's `/ActualText`, from an inline
+                // property list or one named in the resources' `/Properties`.
+                let actual = dict_or_stream(bdc.1)
+                    .map(|(props, _)| props.clone())
+                    .or_else(|| {
+                        let name = bdc.1.clone().into_name()?;
+                        resources.properties.get::<Dict<'_>>(name)
+                    })
+                    .and_then(|props| props.get::<hayro_syntax::object::String<'_>>(ACTUAL_TEXT));
+                if let Some(text) = actual {
+                    device.actual_text(text.as_bytes());
+                }
             }
             TypedInstruction::MarkedContentPointWithProperties(_) => {}
             TypedInstruction::EndMarkedContent(_) => {

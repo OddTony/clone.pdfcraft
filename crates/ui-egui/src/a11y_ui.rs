@@ -5,6 +5,7 @@
 use std::collections::BTreeSet;
 
 use egui::{Align, Layout};
+use pdfcraft_cos::ObjRef;
 use pdfcraft_engine::DocId;
 use pdfcraft_engine::a11y::{Category, Options, Report, Rule, Status};
 
@@ -45,6 +46,9 @@ impl Default for A11yOptions {
 #[derive(Clone, Debug, Default)]
 pub struct A11yState {
     pub report: Option<(DocId, Report)>,
+    /// The prior check of the same document with the same checker options.
+    pub previous: Option<(DocId, Report)>,
+    pub options: Option<Options>,
     /// Collapsed categories and expanded rules.
     pub collapsed: BTreeSet<Category>,
     pub expanded: BTreeSet<Rule>,
@@ -59,7 +63,8 @@ pub(crate) enum PanelAction {
     CheckAgain,
     ShowReport,
     Options,
-    GoTo(usize),
+    GoTo(usize, Option<[f64; 4]>),
+    GoToTag(ObjRef, Option<usize>, Option<[f64; 4]>),
 }
 
 /// Rules with an automatic (or guided) fix.
@@ -171,14 +176,20 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &mut A11yState, doc: D
         return action;
     };
     let failed = report.count(Status::Failed);
+    let manual = report.count(Status::Manual);
+    let skipped = report.count(Status::Skipped);
     ui.horizontal(|ui| {
         ui.label(
-            egui::RichText::new(if failed == 0 {
+            egui::RichText::new(if failed == 0 && manual == 0 && skipped == 0 {
                 tl!("No issues found").to_string()
             } else if failed == 1 {
                 tl!("1 issue").to_string()
-            } else {
+            } else if failed > 1 {
                 crate::i18n::fmt(tl!("{n} issues"), &[("n", &failed.to_string())])
+            } else if manual > 0 {
+                format!("{}: {manual}", tl!("Needs manual check"))
+            } else {
+                format!("{}: {skipped}", tl!("Skipped"))
             })
             .color(t.text_muted),
         );
@@ -191,6 +202,29 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &mut A11yState, doc: D
             }
         });
     });
+    if failed > 0 && manual > 0 {
+        ui.label(egui::RichText::new(format!("{}: {manual}", tl!("Needs manual check"))).small().color(t.text_muted));
+    }
+    if let Some((_, previous)) = state.previous.as_ref().filter(|(d, _)| *d == doc) {
+        egui::CollapsingHeader::new(tl!("Compare")).default_open(true).show(ui, |ui| {
+            for status in [Status::Passed, Status::Failed, Status::Manual, Status::Skipped] {
+                ui.label(format!("{}: {} → {}", tl!(status.label()), previous.count(status), report.count(status)));
+            }
+            for current in &report.results {
+                let Some(prior) = previous.result(current.rule) else { continue };
+                if prior.status != current.status || prior.findings.len() != current.findings.len() {
+                    ui.label(format!(
+                        "{}: {} ({}) → {} ({})",
+                        tl!(current.rule.name()),
+                        tl!(prior.status.label()),
+                        prior.findings.len(),
+                        tl!(current.status.label()),
+                        current.findings.len()
+                    ));
+                }
+            }
+        });
+    }
     ui.add_space(6.0);
     for c in Category::ALL {
         let rules: Vec<_> = report.in_category(c).collect();
@@ -291,10 +325,14 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &mut A11yState, doc: D
                         // the sentence is said in the panel's language with those words still in it.
                         let said = f.said(&crate::i18n::words);
                         let l = ui.add(egui::Label::new(egui::RichText::new(said).small().color(t.text_muted)).sense(egui::Sense::click()));
-                        if let Some(p) = f.page
+                        if let Some(object) = f.object {
+                            if l.on_hover_text(tl!("Tags")).clicked() {
+                                action = Some(PanelAction::GoToTag(object, f.page, f.bbox));
+                            }
+                        } else if let Some(p) = f.page
                             && l.on_hover_text(tl!("Go to the page")).clicked()
                         {
-                            action = Some(PanelAction::GoTo(p));
+                            action = Some(PanelAction::GoTo(p, f.bbox));
                         }
                     }
                 });
@@ -305,6 +343,27 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &mut A11yState, doc: D
 }
 
 impl PdfCraftApp {
+    /// Prepare for accessibility ▸ Find untagged content.
+    pub(crate) fn find_untagged_content(&mut self) {
+        let Some((_, id)) = self.active_ids() else { return };
+        let Some(doc) = self.session.get(id) else { return };
+        let options = Options { rules: [Rule::TaggedContent, Rule::TaggedAnnotations, Rule::TaggedFormFields].into_iter().collect(), pages: None };
+        let Some(report) = doc.accessibility_check(&options) else {
+            self.notify_tr("This document can't be checked: it couldn't be read for editing");
+            return;
+        };
+        let failed = report.count(Status::Failed);
+        self.a11y.previous = None;
+        self.a11y.options = Some(options);
+        self.a11y.report = Some((id, report));
+        self.right = Some(RightPanel::Accessibility);
+        self.notify(if failed == 0 {
+            tl!("No untagged content was found.").to_string()
+        } else {
+            crate::i18n::fmt(tl!("Found {n} untagged content problems."), &[("n", &failed.to_string())])
+        });
+    }
+
     /// Check for accessibility: the options first, unless they are turned off.
     pub(crate) fn start_accessibility_check(&mut self) {
         if self.a11y_options.show_dialog {
@@ -319,29 +378,42 @@ impl PdfCraftApp {
         let Some((_, id)) = self.active_ids() else { return };
         let Some(doc) = self.session.get(id) else { return };
         let o = &self.a11y_options;
-        let options = Options { rules: o.rules.clone(), pages: (!o.all_pages).then(|| (o.from.max(1) - 1..o.to.max(o.from)).collect()) };
+        // The range was picked on whatever document had the options dialog last; with the dialog
+        // turned off it reaches here unchecked, and a page past the end would select nothing.
+        let to = o.to.clamp(1, doc.info.pages.len().max(1));
+        let from = o.from.clamp(1, to);
+        let options = Options { rules: o.rules.clone(), pages: (!o.all_pages).then(|| (from - 1..to).collect()) };
         let Some(report) = doc.accessibility_check(&options) else {
             self.notify_tr("This document can't be checked: it couldn't be read for editing");
             return;
         };
         // Rules skipped by hand stay skipped when checking again.
         let mut report = report;
-        for r in report.results.iter_mut().filter(|r| self.a11y_skipped.contains(&r.rule)) {
+        for r in report.results.iter_mut().filter(|r| self.a11y_skipped.contains(&(id, r.rule))) {
             r.status = Status::Skipped;
             r.findings.clear();
         }
         let failed = report.count(Status::Failed);
+        let manual = report.count(Status::Manual);
+        let skipped = report.count(Status::Skipped);
+        self.a11y.previous =
+            if self.a11y.options.as_ref() == Some(&options) { self.a11y.report.take().filter(|(prior_id, _)| *prior_id == id) } else { None };
+        self.a11y.options = Some(options);
         self.a11y.report = Some((id, report));
         self.right = Some(RightPanel::Accessibility);
-        self.notify(if failed == 0 {
+        self.notify(if failed == 0 && manual == 0 && skipped == 0 {
             tl!("The checker found no problems in this document.").to_string()
         } else if failed == 1 {
             tl!("The checker found 1 problem which may prevent the document from being fully accessible.").to_string()
-        } else {
+        } else if failed > 1 {
             crate::i18n::fmt(
                 tl!("The checker found {n} problems which may prevent the document from being fully accessible."),
                 &[("n", &failed.to_string())],
             )
+        } else if manual > 0 {
+            format!("{}: {manual}", tl!("Needs manual check"))
+        } else {
+            format!("{}: {skipped}", tl!("Skipped"))
         });
         if self.a11y_options.create_report {
             self.show_accessibility_report();
@@ -367,19 +439,46 @@ impl PdfCraftApp {
         self.write_files(&[(format!("{stem} Accessibility Report.html"), std::sync::Arc::new(html.into_bytes()))], &title);
     }
 
+    /// Turn to a finding's page and, when the checker located it, flash its box there.
+    fn a11y_show_on_page(&mut self, index: usize, page: usize, bbox: Option<[f64; 4]>) {
+        let Some(view) = self.views.get_mut(index) else { return };
+        view.go_to_page(page);
+        if let Some(bbox) = bbox {
+            view.flash = Some((page, bbox.map(|v| v as f32), 0.0));
+        }
+    }
+
     pub(crate) fn a11y_action(&mut self, index: usize, action: PanelAction) {
         match action {
             PanelAction::CheckAgain => self.run_accessibility_check(),
             PanelAction::Options => self.dialog = Some(Dialog::AccessibilityOptions),
             PanelAction::ShowReport => self.show_accessibility_report(),
-            PanelAction::GoTo(p) => self.views[index].go_to_page(p),
+            PanelAction::GoTo(p, bbox) => self.a11y_show_on_page(index, p, bbox),
+            PanelAction::GoToTag(object, page, bbox) => {
+                let Some((_, id)) = self.active_ids() else { return };
+                let Some(tags) = self.session.get(id).map(|doc| self.tags_state.tags(doc)) else { return };
+                if !tags.iter().any(|tag| tag.object == object) {
+                    if let Some(page) = page {
+                        self.a11y_show_on_page(index, page, bbox);
+                    }
+                    return;
+                }
+                if self.tags_state.select(id, &tags, object) {
+                    self.right = Some(RightPanel::Tags);
+                    if let Some(page) = page {
+                        self.a11y_show_on_page(index, page, bbox);
+                    }
+                } else {
+                    self.notify_tr("Save or revert changes before selecting another tag.");
+                }
+            }
             PanelAction::Skip(rule) => {
-                self.a11y_skipped.insert(rule);
-                if let Some((_, r)) = self.a11y.report.as_mut()
-                    && let Some(x) = r.results.iter_mut().find(|x| x.rule == rule)
-                {
-                    x.status = Status::Skipped;
-                    x.findings.clear();
+                if let Some((id, r)) = self.a11y.report.as_mut() {
+                    self.a11y_skipped.insert((*id, rule));
+                    if let Some(x) = r.results.iter_mut().find(|x| x.rule == rule) {
+                        x.status = Status::Skipped;
+                        x.findings.clear();
+                    }
                 }
             }
             PanelAction::Fix(rule) => {
@@ -530,6 +629,12 @@ pub(crate) fn alt_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> 
 }
 
 impl PdfCraftApp {
+    /// Prepare for accessibility ▸ Tag form fields.
+    pub(crate) fn autotag_form_fields(&mut self) {
+        self.apply_edit(pdfcraft_engine::Edit::AutoTagFormFields);
+        self.choose_right_panel(Some(RightPanel::Tags));
+    }
+
     /// Prepare for accessibility ▸ Add alternate text.
     pub(crate) fn start_alt_text(&mut self) {
         let Some((_, id)) = self.active_ids() else { return };

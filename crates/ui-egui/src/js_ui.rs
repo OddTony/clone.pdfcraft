@@ -22,11 +22,30 @@ pub struct DocJsDraft {
     pub script: String,
 }
 
+/// What the user is told when a form's scripts were turned off: in a toast as it happens, then
+/// on the notice bar for as long as the document is open.
+pub(crate) fn scripts_off_notice() -> String {
+    tl!("This form's scripts are turned off because one ran too long. Reopen the document to run them again.").to_string()
+}
+
 impl PdfCraftApp {
     /// Act on what scripts produced in document `id`: alerts are shown, console output goes to
     /// the console, print and page requests are carried out, links wait for the user's permission
     /// (form submissions are reported, never sent).
     pub fn handle_js(&mut self, id: DocId, out: JsOutput) {
+        let view = self.views.iter().position(|v| v.id == id);
+        // A script that ran away turned the form's scripts off: calculations and buttons stop
+        // working, and the error is only in the console. Say so once, and bring the notice bar
+        // (which keeps saying so) back if it was closed. A message of the form's own, below,
+        // takes the toast's place.
+        if let Some(v) = view.and_then(|i| self.views.get_mut(i))
+            && !v.scripts_off_noted
+            && self.session.get(id).is_some_and(|d| d.xfa_scripts_off())
+        {
+            v.scripts_off_noted = true;
+            v.notice_dismissed = false;
+            self.notify(scripts_off_notice());
+        }
         if out.is_empty() {
             return;
         }
@@ -34,7 +53,6 @@ impl PdfCraftApp {
         for e in &out.errors {
             self.js_console.log.push(format!("Error: {e}"));
         }
-        let view = self.views.iter().position(|v| v.id == id);
         for r in out.requests {
             match r {
                 Request::Print => self.open_print(),
@@ -230,6 +248,18 @@ pub(crate) fn document_js_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     close
 }
 
+/// The label for a [`pdfcraft_render::ReadingColors`] mode name (`mode_name`).
+fn reading_mode_label(mode: &str) -> &'static str {
+    match mode {
+        "black-on-white" => "Black on white",
+        "white-on-black" => "White on black",
+        "yellow-on-black" => "Yellow on black",
+        "green-on-black" => "Green on black",
+        "custom" => "Custom",
+        _ => "Off",
+    }
+}
+
 /// Preferences: interface language and size, appearance, identity and JavaScript. Returns `true` to close.
 pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     ui.label(egui::RichText::new(tl!("Preferences")).font(theme::semibold(18.0)));
@@ -352,11 +382,84 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     #[cfg(not(target_arch = "wasm32"))]
     ui.add(widgets::checkbox(&mut app.reload_changed_files, tl!("Reload documents when their files change on disk")));
     ui.horizontal(|ui| {
-        ui.label(tl!("Mouse wheel scroll speed"));
+        ui.label(tl!("Scroll speed (mouse wheel and arrow keys)"));
         for speed in crate::scroll_speed::ScrollSpeed::ALL {
             widgets::radio_value(ui, &mut app.scroll_speed, speed, tl_ctx!("scroll speed", speed.label()));
         }
     });
+    // Whether anything animates, the wheel's scrolling and zooming included; left alone it
+    // follows the system's animation setting.
+    ui.horizontal(|ui| {
+        ui.label(tl!("Animation effects"));
+        for choice in crate::motion::AnimationEffects::ALL {
+            widgets::radio_value(ui, &mut app.animation_effects, choice, tl_ctx!("animation effects", choice.label()));
+        }
+    });
+    // Only where the app draws the title bar (GNOME on Wayland); elsewhere the desktop draws it.
+    if app.window_controls.is_some() {
+        ui.add(widgets::checkbox(&mut app.system_title_bar, tl!("Use system title bar")))
+            .on_hover_text(tl!("Show a basic title bar for the window buttons instead of the tab strip. GNOME doesn't draw title bars for apps, so this one doesn't follow its theme."));
+    }
+    ui.add_space(8.0);
+    // Reading colours (Acrobat: Replace Document Colors): solid text and line-art paints are
+    // remapped while rendering, and the page clears to the background colour. The preference
+    // is app-wide: every open document follows it, and documents open with it.
+    ui.label(egui::RichText::new(tl!("Reading colours")).font(theme::semibold(13.0)));
+    ui.horizontal(|ui| {
+        ui.label(tl!("Replace document colours"));
+        let mode = app.reading_colors.mode_name();
+        egui::ComboBox::from_id_salt("reading-colors").selected_text(tl!(reading_mode_label(mode))).show_ui(ui, |ui| {
+            for (m, label) in [
+                ("off", "Off"),
+                ("black-on-white", "Black on white"),
+                ("white-on-black", "White on black"),
+                ("yellow-on-black", "Yellow on black"),
+                ("green-on-black", "Green on black"),
+                ("custom", "Custom"),
+            ] {
+                if ui.selectable_label(mode == m, tl!(label)).clicked() {
+                    match m {
+                        "off" => app.set_reading_colors(pdfcraft_render::ReadingColors::default()),
+                        "custom" => {
+                            // Custom starts from the colours already chosen, or black on white.
+                            let colors = app.reading_colors.params.map_or(pdfcraft_render::ReadingColors::BLACK_ON_WHITE, |params| {
+                                pdfcraft_render::ReadingColors { params: Some(params) }
+                            });
+                            app.set_reading_colors(colors);
+                        }
+                        // `parse` knows these names; a preset comes with its own flags.
+                        preset => {
+                            if let Ok(colors) = pdfcraft_render::ReadingColors::parse(preset, None, None, None, None) {
+                                app.set_reading_colors(colors);
+                            }
+                        }
+                    }
+                    ui.close();
+                }
+            }
+        });
+    });
+    if app.reading_colors.params.is_some() {
+        let mut changed = false;
+        if let Some(params) = app.reading_colors.params.as_mut() {
+            ui.horizontal(|ui| {
+                let text = ui.label(tl!("Text"));
+                changed |= ui.color_edit_button_srgb(&mut params.text).labelled_by(text.id).changed();
+                let background = ui.label(tl!("Page background"));
+                changed |= ui.color_edit_button_srgb(&mut params.background).labelled_by(background.id).changed();
+            });
+            if ui.add(crate::widgets::checkbox(&mut params.only_black, tl!("Only change the colour of black text or line art"))).changed() {
+                changed = true;
+            }
+            if ui.add(crate::widgets::checkbox(&mut params.line_art, tl!("Change the colour of line art as well as text"))).changed() {
+                changed = true;
+            }
+        }
+        if changed {
+            app.set_reading_colors(app.reading_colors);
+        }
+    }
+    ui.label(egui::RichText::new(tl!("Colours are remapped while rendering; the document itself never changes.")).small().color(t.text_muted));
     ui.add_space(8.0);
     // Identity: the author of new comments (Acrobat: Preferences ▸ Identity).
     ui.label(egui::RichText::new(tl!("Identity")).font(theme::semibold(13.0)));
@@ -364,6 +467,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         let label = ui.label(tl!("Name on new comments"));
         ui.add(crate::widgets::line(&mut app.comment_prefs.author).desired_width(220.0).char_limit(crate::MAX_AUTHOR_CHARS)).labelled_by(label.id);
     });
+    ui.add(widgets::checkbox(&mut app.comment_prefs.hide_empty_highlight_hover, tl!("Hide hover previews for highlights without comment text")));
     ui.add_space(8.0);
     ui.label(egui::RichText::new(tl!("Fill & Sign")).font(theme::semibold(13.0)));
     ui.add(widgets::checkbox(&mut app.flatten_fill_sign_on_save, tl!("Flatten Fill & Sign when saving")));
