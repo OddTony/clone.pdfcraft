@@ -3462,6 +3462,81 @@ trailer << /Root 1 0 R >>
         assert_eq!(&page.rgba[((38 * 40 + 1) * 4)..][..4], &[255, 0, 0, 255]);
     }
 
+    /// One page `w` × `h` points whose content `content` paints with pattern `/P1`: a 10 × 10 cell
+    /// of blue with `/XStep step /YStep step` and pattern matrix `matrix`. Its RGBA pixels.
+    fn tiling_page(w: usize, h: usize, content: &str, step: &str, matrix: &str) -> Vec<u8> {
+        let cell = "0 0 1 rg 0 0 10 10 re f";
+        let pdf = format!(
+            "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 {w} {h}] /Contents 4 0 R /Resources << /Pattern << /P1 5 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
+5 0 obj << /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 3 /BBox [0 0 10 10] /XStep {step} /YStep {step} /Matrix [{matrix}] /Length {} >> stream
+{cell}
+endstream endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+            content.len(),
+            cell.len()
+        );
+        let mut r = PageRenderer::new(Arc::new(pdf.into_bytes()), RenderConfig::default());
+        let page = r.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(page.error.is_none(), "{:?}", page.error);
+        page.rgba.to_vec()
+    }
+
+    /// #3349: PowerPoint (PDFMaker) writes a picture fill as a tiling pattern drawn once, with
+    /// `/XStep 2147480100 /YStep 2147480100` and a matrix that flips y. Fitting such a step into
+    /// a cell pixmap shrank the picture below a pixel, so it vanished. The cell's `/BBox` is drawn
+    /// at full scale, once, filled or stroked: where it is it shows, and around it (left, right,
+    /// above, below) nothing repeats or smears.
+    #[test]
+    fn a_tiling_pattern_drawn_once_shows_its_cell() {
+        let at = |px: &[u8], w: usize, x: usize, y: usize| px[(y * w + x) * 4..][..3].to_vec();
+        let (blue, white) = (vec![0, 0, 255], vec![255, 255, 255]);
+        // The cell at user x 10..20 and, flipped, y 10..20: device rows 20..30.
+        let once = tiling_page(40, 40, "/Pattern cs /P1 scn 0 0 40 40 re f", "2147480100", "1 0 0 -1 10 20");
+        assert_eq!(at(&once, 40, 15, 25), blue, "the cell");
+        for (x, y, side) in [(5, 25, "left"), (25, 25, "right"), (15, 15, "above"), (15, 35, "below")] {
+            assert_eq!(at(&once, 40, x, y), white, "nothing {side} of it");
+        }
+        // Stroked: a wide line across the cell shows it too.
+        let stroked = tiling_page(40, 40, "/Pattern CS /P1 SCN 20 w 0 15 m 40 15 l S", "2147480100", "1 0 0 -1 10 20");
+        assert_eq!(at(&stroked, 40, 15, 25), blue, "a stroke with the pattern");
+        assert_eq!(at(&stroked, 40, 25, 25), white);
+        // An ordinary step still tiles.
+        let tiled = tiling_page(40, 40, "/Pattern cs /P1 scn 0 0 40 40 re f", "20", "1 0 0 1 0 0");
+        assert_eq!(at(&tiled, 40, 25, 35), blue, "a step of 20 repeats the cell");
+    }
+
+    /// #3349: a step too large for a cell pixmap is drawn as one cell only when the painted area
+    /// can't reach another: a page wide (or tall) enough to show the next cell, or the one before,
+    /// still tiles them.
+    #[test]
+    fn a_large_step_still_tiles_where_the_next_cell_shows() {
+        let at = |px: &[u8], w: usize, x: usize, y: usize| px[(y * w + x) * 4..][..3].to_vec();
+        let blue = vec![0, 0, 255];
+        // Steps of 3100 points: over 3000 pixels at this scale, so the cell is shrunk to fit,
+        // by 3000/3100; a pixel 4 points into a cell is blue either way.
+        let wide = "/Pattern cs /P1 scn 0 0 3200 20 re f";
+        let next = tiling_page(3200, 20, wide, "3100", "1 0 0 1 0 0");
+        assert_eq!(at(&next, 3200, 3104, 15), blue, "the cell to the right");
+        let before = tiling_page(3200, 20, wide, "3100", "1 0 0 1 3100 0");
+        assert_eq!(at(&before, 3200, 4, 15), blue, "the cell to the left");
+        let tall = "/Pattern cs /P1 scn 0 0 20 3200 re f";
+        let above = tiling_page(20, 3200, tall, "3100", "1 0 0 1 0 0");
+        assert_eq!(at(&above, 20, 4, 3200 - 3104), blue, "the cell above");
+        let below = tiling_page(20, 3200, tall, "3100", "1 0 0 1 0 3100");
+        assert_eq!(at(&below, 20, 4, 3200 - 4), blue, "the cell below");
+        // A stroke counts with its width: this line ends at x 3080, short of the next cell at
+        // 3100, but its square cap reaches 3110.
+        let stroked = tiling_page(3200, 20, "/Pattern CS /P1 SCN 60 w 2 J 0 10 m 3080 10 l S", "3100", "1 0 0 1 0 0");
+        assert_eq!(at(&stroked, 3200, 3104, 15), blue, "the next cell, under the stroke's cap");
+    }
+
     /// Contributor-original JPEG 2000: one unsigned 8-bit pixel per component, one tile,
     /// no decomposition, reversible wavelet, and one empty packet per component. Empty
     /// coefficients decode to the midpoint (128) after the unsigned DC level shift.
