@@ -1003,7 +1003,11 @@ impl Reader<'_> {
                                 }
                             }
                         }
-                        Err(_e) => {}
+                        Err(e) => {
+                            if load_log.stream() {
+                                error!("Object stream load error for container {container_id}: {e:?}");
+                            }
+                        }
                     }
                 }
             }
@@ -1293,14 +1297,18 @@ impl Reader<'_> {
         // PdfCraft patch: each top-level lookup starts with an empty set and every nested lookup adds one object, so
         // the set's size is the depth of the lookup chain.
         if already_seen.len() >= MAX_LOOKUP_DEPTH {
-            warn!(
-                "lookup chain deeper than {MAX_LOOKUP_DEPTH} at object {} {}",
-                id.0, id.1
-            );
+            if load_log.warning() {
+                warn!(
+                    "lookup chain deeper than {MAX_LOOKUP_DEPTH} at object {} {}",
+                    id.0, id.1
+                );
+            }
             return Err(Error::ReferenceLimit);
         }
         if already_seen.contains(&id) {
-            warn!("reference cycle detected resolving object {} {}", id.0, id.1);
+            if load_log.warning() {
+                warn!("reference cycle detected resolving object {} {}", id.0, id.1);
+            }
             return Err(Error::ReferenceCycle(id));
         }
         already_seen.insert(id);

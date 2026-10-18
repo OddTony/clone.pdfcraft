@@ -18,7 +18,11 @@ reading compressed containers; lightweight metadata lookups use a silent context
 instead of starting independent batches. Other parser diagnostics (including
 stream-boundary recovery and reference-cycle warnings) are outside this scope. The encrypted
 loader also shares one warning budget across every decrypted object-stream container.
-Covered by the fifteen tests in
+Encrypted-container parse failures contribute to the shared failure/stream totals.
+Lookup-depth and reference-cycle warnings use that same budget and stay silent
+when only lightweight metadata is requested.
+
+Covered by the eighteen tests in
 `crates/render/tests/object_load_logging.rs`, including all `lopdf::*` targets and a
 one-worker strict-summary regression, plus the reader's `encrypted_load_logging`
 unit test for the normally unused eager encrypted-skip branch.

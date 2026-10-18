@@ -382,6 +382,10 @@ fn compressed_lengths_metadata_does_not_start_diagnostic_batches() {
 /// An encrypted fixture retains real compressed references in an incremental xref stream.
 /// The writer omits existing containers, so retain them and add compressed references explicitly.
 fn encrypted_container_fixture(count: usize) -> Vec<u8> {
+    encrypted_stream_fixture(count, false)
+}
+
+fn encrypted_stream_fixture(count: usize, broken: bool) -> Vec<u8> {
     let mut doc = Document::load_mem(&fixture(0, 0)).unwrap();
     doc.trailer.set("ID", lopdf::Object::Array(vec![lopdf::Object::string_literal("BBBBBBBBBBBBBBBB"); 2]));
     let mut containers = Vec::new();
@@ -392,8 +396,8 @@ fn encrypted_container_fixture(count: usize) -> Vec<u8> {
         // The writer omits existing ObjStm containers. Restore this same-length name after
         // serialization; names are not encrypted and object offsets remain unchanged.
         dict.set("Type", "ObjStx");
-        dict.set("N", 2); // One valid member, but a deliberately wrong count.
-        dict.set("First", i64::try_from(index.len()).unwrap());
+        dict.set("N", if broken { 1 } else { 2 }); // Otherwise one valid member with a wrong count.
+        dict.set("First", if broken { 99 } else { i64::try_from(index.len()).unwrap() });
         let container = doc.add_object(lopdf::Stream::new(dict, format!("{index}42").into_bytes()));
         containers.push(container.0);
     }
@@ -469,5 +473,90 @@ fn encrypted_object_streams_share_the_load_budget() {
                 assert!(summary.contains(&format!("{} additional messages suppressed", count - 8)), "{summary}");
             }
         }
+    }
+}
+
+#[test]
+fn encrypted_container_errors_are_counted_and_bounded() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    for strict in [false, true] {
+        for count in [1, 32] {
+            let pdf = encrypted_stream_fixture(count, true);
+            start_capture();
+            let doc = Document::load_mem_with_options(&pdf, LoadOptions { strict, ..LoadOptions::with_password("user") }).unwrap();
+            assert_eq!(doc.get_pages().len(), 1);
+            assert!(doc.get_object((10000, 0)).is_err(), "the bad container was not parsed");
+            let messages = records();
+            if count > 8 {
+                assert_bounded(&messages, count, count);
+            } else {
+                assert_eq!(messages.len(), count, "failed encrypted containers must be recorded: {messages:?}");
+                assert!(messages.iter().all(|(level, text)| *level == Level::Error && text.starts_with("Object stream load error")));
+            }
+        }
+    }
+}
+
+fn lookup_warning_fixture(count: usize, cycle: bool) -> Vec<u8> {
+    let mut objects = vec![
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R >>".to_vec(),
+        b"<< /Length 3 >>\nstream\nq Q\nendstream".to_vec(),
+        b"42".to_vec(),
+    ];
+    let chain = if cycle { 1 } else { 18 };
+    for i in 0..chain {
+        let length = if cycle {
+            "6 0 R".to_string()
+        } else if i + 1 == chain {
+            "1".to_string()
+        } else {
+            format!("{} 0 R", 7 + i)
+        };
+        objects.push(format!("<< /Length {length} >>\nstream\nx\nendstream").into_bytes());
+    }
+    objects.extend((0..count).map(|_| b"<< /Length 6 0 R >>\nstream\nx\nendstream".to_vec()));
+    String::from_utf8(pdf_with_objects(objects)).unwrap().replace("/Root 1 0 R", "/Root 1 0 R /Info 6 0 R").into_bytes()
+}
+
+#[test]
+fn lookup_warnings_share_the_load_budget() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    for cycle in [false, true] {
+        for strict in [false, true] {
+            for count in [1, 32] {
+                let pdf = lookup_warning_fixture(count, cycle);
+                start_capture();
+                let doc = Document::load_mem_with_options(&pdf, LoadOptions { strict, ..Default::default() }).unwrap();
+                assert_eq!(doc.get_pages().len(), 1);
+                assert_eq!(doc.get_object((5, 0)).unwrap().as_i64().unwrap(), 42);
+                let messages = records();
+                let warnings = count + 1;
+                let lengths = count + if cycle { 1 } else { 17 };
+                let total = warnings + lengths;
+                assert_eq!(messages.len(), if total <= 8 { total } else { 9 }, "cycle={cycle}, strict={strict}, count={count}: {messages:?}");
+                if total > 8 {
+                    let (level, summary) = messages.last().unwrap();
+                    assert_eq!(*level, Level::Error);
+                    assert!(summary.contains("0 failed objects (0 object streams)"), "{summary}");
+                    assert!(summary.contains(&format!("{warnings} object stream warnings")), "{summary}");
+                    assert!(summary.contains(&format!("{lengths} stream length errors")), "{summary}");
+                    assert!(summary.contains(&format!("{} additional messages suppressed", total - 8)), "{summary}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn metadata_lookup_warnings_stay_silent() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    for cycle in [false, true] {
+        let pdf = lookup_warning_fixture(0, cycle);
+        start_capture();
+        let info = Document::load_metadata_mem(&pdf).unwrap();
+        assert_eq!(info.page_count, 1);
+        assert!(records().is_empty(), "metadata lookup diagnostics escaped the silent context: {:?}", records());
     }
 }
