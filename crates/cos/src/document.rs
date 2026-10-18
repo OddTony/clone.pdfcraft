@@ -2547,11 +2547,6 @@ mod tests {
         assert!(old.get(ObjRef::new(1, 0)).as_dict().unwrap().get(b"Lang").is_none());
     }
 
-    /// An object stream whose own cross-reference entry says it is compressed inside another
-    /// stream (which the format forbids, and which does not exist here: qpdf's
-    /// `xref-compressed-in-compressed.pdf`, #2367) could not be loaded, so every object in it
-    /// read as null and a full save wrote `/Outlines null`. The stream is now found by its own
-    /// header, as a plain object with a wrong offset is.
     /// qpdf's `xref-compressed-in-compressed.pdf` in miniature: object 3 is an object stream
     /// holding object 4, and the cross-reference stream says object 3 itself lives in stream 99.
     fn compressed_in_compressed_fixture() -> Document {
@@ -2584,6 +2579,11 @@ mod tests {
         Document::open(Arc::new(out)).unwrap()
     }
 
+    /// An object stream whose own cross-reference entry says it is compressed inside another
+    /// stream (which the format forbids, and which does not exist here: qpdf's
+    /// `xref-compressed-in-compressed.pdf`, #2367) could not be loaded, so every object in it
+    /// read as null and a full save wrote `/Outlines null`. The stream is now found by its own
+    /// header, as a plain object with a wrong offset is.
     #[test]
     fn an_object_stream_marked_as_compressed_is_found_by_its_header() {
         let doc = compressed_in_compressed_fixture();
