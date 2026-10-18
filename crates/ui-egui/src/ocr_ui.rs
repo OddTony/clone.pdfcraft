@@ -67,9 +67,35 @@ pub struct OcrRun {
     pub progress: Arc<Mutex<OcrProgress>>,
 }
 
+/// The native installation probe may take seconds; never run it on the GUI thread.
+fn readiness(ui: &egui::Ui, language: &str) -> Option<Result<(), String>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    if language == "hu" {
+        type Probe = Arc<Mutex<Option<Result<(), String>>>>;
+        static PROBE: std::sync::OnceLock<Probe> = std::sync::OnceLock::new();
+        let probe = PROBE.get_or_init(|| {
+            let result: Probe = Arc::new(Mutex::new(None));
+            let worker = result.clone();
+            if let Err(e) = std::thread::Builder::new().name("pdfcraft-ocr-probe".into()).spawn(move || {
+                let found = pdfcraft_engine::ocr::availability("hu");
+                *worker.lock().unwrap_or_else(|e| e.into_inner()) = Some(found);
+            }) {
+                *result.lock().unwrap_or_else(|e| e.into_inner()) = Some(Err(e.to_string()));
+            }
+            result
+        });
+        let result = probe.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if result.is_none() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+        }
+        return result;
+    }
+    let _ = ui;
+    Some(pdfcraft_engine::ocr::availability(language))
+}
+
 pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
     let pages = app.active_ids().and_then(|(_, id)| app.session.get(id)).map_or(1, |d| d.info.pages.len().max(1));
-    let available = pdfcraft_engine::ocr::available();
     let d = &mut app.ocr_draft;
     d.to = d.to.clamp(1, pages);
     d.from = d.from.clamp(1, d.to);
@@ -123,12 +149,16 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
         ui.add(crate::widgets::checkbox(&mut d.text_pages, tl!("Also recognize pages that already have text")))
             .on_hover_text(tl!("Pictures on those pages are recognized too; words already in the page's text are not added again"));
     });
-    if !available {
-        ui.label(
-            egui::RichText::new(tl!("Text recognition isn't installed: its model files are missing. Reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them."))
-                .small()
-                .color(t.text_muted),
-        );
+    let readiness = readiness(ui, &d.language);
+    let available = matches!(readiness, Some(Ok(())));
+    let message = match readiness {
+        None => Some("Checking Hungarian OCR installation…".to_string()),
+        Some(Err(_)) if d.language == "en" => Some(tl!("Text recognition isn't installed: its model files are missing. Reinstall PdfCraft, or set PDFCRAFT_MODELS to the folder that holds them.").to_string()),
+        Some(Err(message)) => Some(message),
+        Some(Ok(())) => None,
+    };
+    if let Some(message) = message {
+        ui.label(egui::RichText::new(message).small().color(t.text_muted));
         ui.add_space(6.0);
     }
     ui.add_space(6.0);
@@ -169,7 +199,7 @@ impl PdfCraftApp {
         let progress = Arc::new(Mutex::new(OcrProgress { total: job.pages.len(), ..Default::default() }));
         let p = progress.clone();
         let work = move || {
-            let result = pdfcraft_engine::ocr::engine().map(|ocr| {
+            let result = pdfcraft_engine::ocr::engine_for_language(&job.settings.language).map(|ocr| {
                 job.run(&ocr, |done, total| {
                     let Ok(mut s) = p.lock() else { return false };
                     s.done = done;
@@ -228,7 +258,7 @@ impl PdfCraftApp {
         let work = move || {
             crate::i18n::set_current(lang);
             let (mut ok, mut words, mut failed) = (0, 0, Vec::new());
-            match pdfcraft_engine::ocr::engine() {
+            match pdfcraft_engine::ocr::engine_for_language(&settings.language) {
                 Err(e) => failed.push(e),
                 Ok(ocr) => {
                     for (i, (name, bytes)) in files.into_iter().enumerate() {

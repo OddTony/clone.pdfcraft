@@ -162,3 +162,24 @@ fn an_ocr_word_opens_for_editing_and_stays_open() {
     h.run_steps(4);
     assert_eq!(opened(&h).as_deref(), Some("Recognize"), "moving the pointer away keeps the word open");
 }
+
+#[test]
+fn hungarian_is_selectable_in_the_ocr_dialog() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("scan.pdf", None, scan()).unwrap();
+        app
+    });
+    h.run_steps(4);
+    h.state_mut().execute("ocr.recognize");
+    h.run_steps(2);
+    h.get_by_value("English").click();
+    h.run_steps(2);
+    h.get_by_label("Magyar").click();
+    h.run_steps(2);
+    assert_eq!(h.state().ocr_draft.settings().language, "hu");
+    if let Ok(path) = std::env::var("PDFCRAFT_OCR_SCREENSHOT") {
+        h.render().unwrap().save(path).unwrap();
+    }
+}
