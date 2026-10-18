@@ -1668,10 +1668,9 @@ fn a_copied_picture_is_pasted_into_another_pdf_as_an_image_of_its_own() {
     assert!(untouched(&h));
 }
 
-/// A picture drawn through grouped Form artwork with a caption over it (as Word, InDesign and
-/// scanners with OCR write them): one click still selects it, and ⌘C copies the picture.
-#[test]
-fn a_picture_inside_form_artwork_under_text_is_selected_and_copied() {
+/// "scan.pdf": a 200 × 300 page whose picture (2 × 1 pixels, red then blue) is drawn through
+/// grouped Form artwork over 10–190 × 10–290, with the caption "WWWWWWW" over it at y 130–170.
+fn captioned_picture_harness() -> Harness<'static, PdfCraftApp> {
     let stream = |dict: &str, data: &[u8]| {
         let mut o = format!("<< {dict} /Length {} >>\nstream\n", data.len()).into_bytes();
         o.extend_from_slice(data);
@@ -1715,6 +1714,14 @@ fn a_picture_inside_form_artwork_under_text_is_selected_and_copied() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     h.state_mut().system_clipboard = false;
+    h
+}
+
+/// A picture drawn through grouped Form artwork with a caption over it (as Word, InDesign and
+/// scanners with OCR write them): one click still selects it, and ⌘C copies the picture.
+#[test]
+fn a_picture_inside_form_artwork_under_text_is_selected_and_copied() {
+    let mut h = captioned_picture_harness();
     let i = h.state().active.unwrap();
     let r = h.state().views[i].page_screen_rect(0).expect("on screen");
     // On the caption ("WWWWWWW" at y 130–170 of 300, from x 15).
@@ -1731,6 +1738,42 @@ fn a_picture_inside_form_artwork_under_text_is_selected_and_copied() {
     assert_eq!(name, "scan p1 img1.png");
     let png = image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).unwrap().into_rgba8();
     assert_eq!(png.into_raw(), vec![255, 0, 0, 255, 0, 0, 255, 255]);
+}
+
+/// #1602: text selected before switching to Edit text & images does not outlive a click on a
+/// picture, so ⌘C copies the picture alone and no copied text replaces it on the clipboard.
+#[test]
+fn selecting_a_picture_to_edit_drops_the_text_selection_so_copy_takes_the_picture() {
+    let mut h = captioned_picture_harness();
+    let i = h.state().active.unwrap();
+    for _ in 0..3000 {
+        h.run_steps(2);
+        if h.state_mut().views[i].select_all() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert_eq!(h.state().views[i].selected_text().as_deref(), Some("WWWWWWW"));
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let r = h.state().views[i].page_screen_rect(0).expect("on screen");
+    // On the picture, below the caption.
+    let at = egui::pos2(r.left() + 100.0 / 200.0 * r.width(), r.top() + (300.0 - 250.0) / 300.0 * r.height());
+    h.hover_at(at);
+    h.run_steps(1);
+    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: true, modifiers: Default::default() });
+    h.event(egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed: false, modifiers: Default::default() });
+    h.run_steps(2);
+    assert_eq!(h.state().views[i].image_selection.as_ref().map(|s| (s.page, s.index)), Some((0, 0)));
+    assert_eq!(h.state().views[i].selected_text(), None, "the text selection is gone");
+    h.event(egui::Event::Copy);
+    let mut copied_text = false;
+    for _ in 0..4 {
+        h.step();
+        copied_text |= h.output().platform_output.commands.iter().any(|c| matches!(c, egui::OutputCommand::CopyText(_)));
+    }
+    assert!(!copied_text, "no text goes on the clipboard over the picture");
+    assert_eq!(h.state().last_copied_file.as_ref().map(|(name, _)| name.as_str()), Some("scan p1 img1.png"));
 }
 
 /// A picture in Edit text & images, right-clicked so its menu is open (in a tall window, so the
