@@ -15,3 +15,6 @@ pdfcraft-content = { workspace = true }
 pdfcraft-cos = { workspace = true }
 pdfcraft-model = { workspace = true }
 roxmltree = "0.20"
+
+[dev-dependencies]
+flate2 = { workspace = true }

@@ -4,13 +4,14 @@
 use pdfcraft_cos::Document;
 
 /// Namespace URIs of the PDF/A and PDF/UA identification schemas.
+pub(crate) const MAX_XMP_BYTES: usize = 8 * 1024 * 1024;
 pub(crate) const PDFA_ID: &str = "http://www.aiim.org/pdfa/ns/id/";
 pub(crate) const PDFUA_ID: &str = "http://www.aiim.org/pdfua/ns/id/";
 
 /// Read an identification property by its expanded XML name, not its arbitrary prefix.
 /// Refuse deeply nested or excessively large XML trees before parsing untrusted metadata.
 pub(crate) fn identifier(xmp: &str, namespace: &str, local: &str) -> Option<String> {
-    if xmp.len() > 8 * 1024 * 1024 || !xml_limits_ok(xmp) {
+    if xmp.len() > MAX_XMP_BYTES || !xml_limits_ok(xmp) {
         return None;
     }
     let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: 100_000 };

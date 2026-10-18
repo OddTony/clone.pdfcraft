@@ -393,3 +393,27 @@ fn standards_identification_uses_namespace_not_prefix() {
     let nested = format!("{}{}", "<n>".repeat(1100), "</n>".repeat(1100));
     assert_eq!(declared(&with_xmp(&nested)).pdfa, None);
 }
+
+#[test]
+fn oversized_xmp_is_refused_while_decoding() {
+    let xmp = " ".repeat(xmp::MAX_XMP_BYTES + 1);
+    let stream = format!("<< /Type /Metadata /Subtype /XML /Length {} >>\nstream\n{xmp}\nendstream", xmp.len());
+    let doc = build(&["<< /Type /Catalog /Pages 2 0 R /Metadata 3 0 R >>", "<< /Type /Pages /Kids [] /Count 0 >>", &stream], "");
+    assert!(metadata(&doc).is_none());
+    assert_eq!(declared(&doc).pdfa, None);
+
+    use std::io::Write as _;
+    let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    z.write_all(xmp.as_bytes()).unwrap();
+    let compressed = z.finish().unwrap();
+    let hex: String = compressed.iter().map(|byte| format!("{byte:02X}")).collect();
+    let data = format!("{hex}>");
+    let stream =
+        format!("<< /Type /Metadata /Subtype /XML /Filter [/ASCIIHexDecode /FlateDecode] /Length {} >>\nstream\n{data}\nendstream", data.len());
+    let doc = build(&["<< /Type /Catalog /Pages 2 0 R /Metadata 3 0 R >>", "<< /Type /Pages /Kids [] /Count 0 >>", &stream], "");
+    let cat = catalog(&doc);
+    let raw = doc.resolve(cat.get(b"Metadata").unwrap());
+    let Object::Stream(stream) = &*raw else { panic!("fixture has no metadata stream") };
+    assert_eq!(stream.decoded().unwrap().len(), xmp::MAX_XMP_BYTES + 1, "fixture must actually decompress");
+    assert!(metadata(&doc).is_none(), "compressed metadata must be limited during decoding");
+}
