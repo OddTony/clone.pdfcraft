@@ -44,9 +44,6 @@ fn is_hidden(doc: &Document, d: &Dict, hidden_layers: &HashSet<ObjRef>) -> bool 
     if flags & (HIDDEN | NO_VIEW) != 0 {
         return true;
     }
-    if hidden_layers.is_empty() {
-        return false;
-    }
     let Some(oc) = d.get(b"OC") else { return false };
     if oc.as_ref().is_some_and(|r| hidden_layers.contains(&r)) {
         return true;
