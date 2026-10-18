@@ -599,6 +599,30 @@ impl Document {
         self.editor.as_ref().map(|e| a11y::tag_content(&e.cos, object)).unwrap_or_else(|| Ok(Vec::new()))
     }
 
+    /// Reading Order tool: the content units, annotations and numbered regions of `page` (0-based).
+    pub fn page_tagging(&self, page: usize) -> Result<a11y::PageTagging, String> {
+        let e = self.editor.as_ref().ok_or("the document can't be read")?;
+        guard(|| a11y::page_tagging(&e.cos, page))
+            .map_err(|m| format!("reading the page's tags failed unexpectedly ({m})"))?
+            .map_err(|e| e.to_string())
+    }
+
+    /// Tags panel ▸ Highlight content: where a tag's content (and its descendants') is drawn on
+    /// `page`, in user space.
+    pub fn tag_boxes(&self, tag: pdfcraft_cos::ObjRef, page: usize) -> Vec<[f64; 4]> {
+        self.editor.as_ref().and_then(|e| guard(|| a11y::tag_boxes(&e.cos, tag, page)).ok()).unwrap_or_default()
+    }
+
+    /// The tag whose content is drawn at a point of `page` (user space), the smallest first.
+    pub fn tag_at(&self, page: usize, x: f64, y: f64) -> Option<pdfcraft_cos::ObjRef> {
+        self.editor.as_ref().and_then(|e| guard(|| a11y::tag_at(&e.cos, page, x, y)).ok().flatten())
+    }
+
+    /// Consistency problems of the tag tree (parent tree, `/P`, MCIDs, role map); empty when sound.
+    pub fn structure_problems(&self) -> Vec<String> {
+        self.editor.as_ref().and_then(|e| guard(|| a11y::structure_problems(&e.cos)).ok()).unwrap_or_default()
+    }
+
     /// The edit that fixes `rule`, for the rules with an automatic fix: the document language
     /// (`value` is the language), the title (`value` replaces it; else the current title or the
     /// file name) and the tab order.
@@ -1513,7 +1537,8 @@ pub enum Edit {
         figure: u32,
         alt: Option<String>,
     },
-    /// Add `/Form` tags and object references for all widgets in an untagged AcroForm.
+    /// Add `/Form` tags, object references and parent-tree entries for every page widget no tag
+    /// references, in any tag-tree layout.
     AutoTagFormFields,
     /// Change one property on a reachable indirect structure tag.
     SetTagProperty {
@@ -1534,6 +1559,49 @@ pub enum Edit {
     /// Tags panel ▸ Mark as artifact: retire a leaf tag and mark its content as an artifact.
     MarkTagArtifact {
         object: pdfcraft_cos::ObjRef,
+    },
+    /// Tags panel ▸ New Tag: an empty tag of `kind` at `destination` (an untagged document gets
+    /// a tag tree first).
+    NewTag {
+        kind: String,
+        destination: a11y::Destination,
+    },
+    /// Tags panel ▸ Delete Tag. With `keep_contents` its children move up into its place;
+    /// otherwise everything below it leaves the tree and its content stays on the page, untagged.
+    DeleteTag {
+        object: pdfcraft_cos::ObjRef,
+        keep_contents: bool,
+    },
+    /// Tags panel ▸ drag a tag, or the Reading Order tool's order list: move a tag (with
+    /// everything below it) under any parent.
+    MoveTagTo {
+        object: pdfcraft_cos::ObjRef,
+        destination: a11y::Destination,
+    },
+    /// Tags panel ▸ Change Tag to Artifact: everything below the tag becomes an artifact and the
+    /// tag leaves the tree.
+    TagToArtifact {
+        object: pdfcraft_cos::ObjRef,
+    },
+    /// Reading Order tool, or Tags panel ▸ Create Tag from Selection: tag content of `page`
+    /// (0-based) as `kind`, optionally with alternate text, at `destination` (else next to the
+    /// tags of neighbouring content).
+    TagContent {
+        page: usize,
+        selection: a11y::Selection,
+        kind: String,
+        alt: Option<String>,
+        destination: Option<a11y::Destination>,
+    },
+    /// Reading Order tool ▸ Background/Artifact: content of `page` becomes an artifact.
+    ContentToArtifact {
+        page: usize,
+        selection: a11y::Selection,
+    },
+    /// Tags panel ▸ Tag Annotation: a tag for an annotation of `page`.
+    TagAnnotation {
+        page: usize,
+        annotation: pdfcraft_cos::ObjRef,
     },
     /// Document JavaScripts: add, replace (`script`) or remove (`None`) the document-level
     /// script `name`.
@@ -1927,6 +1995,12 @@ pub const EDIT_LABELS: &[&str] = &[
     "Flatten Fill & Sign",
     "Protect with password",
     "Remove security",
+    "Mark content as artifact",
+    "New tag",
+    "Delete tag",
+    "Remove tag, keep its contents",
+    "Tag content as {type}",
+    "Tag annotation",
 ];
 
 /// The names of the batches built below L7, which an interface shows in the same places as
@@ -2011,7 +2085,13 @@ impl Edit {
             Edit::SetTagProperty { .. } => Label::of("Change tag properties"),
             Edit::MoveTag { .. } => Label::of("Move object"),
             Edit::MarkDecorative { .. } => Label::of("Mark figure as decorative"),
-            Edit::MarkTagArtifact { .. } => Label::of("Mark content as artifact"),
+            Edit::MarkTagArtifact { .. } | Edit::TagToArtifact { .. } | Edit::ContentToArtifact { .. } => Label::of("Mark content as artifact"),
+            Edit::NewTag { .. } => Label::of("New tag"),
+            Edit::DeleteTag { keep_contents: false, .. } => Label::of("Delete tag"),
+            Edit::DeleteTag { keep_contents: true, .. } => Label::of("Remove tag, keep its contents"),
+            Edit::MoveTagTo { .. } => Label::of("Move object"),
+            Edit::TagContent { kind, .. } => Label::with("Tag content as {type}", kind.as_str()),
+            Edit::TagAnnotation { .. } => Label::of("Tag annotation"),
             Edit::AddOcrText { .. } => Label::of("Recognize text"),
             Edit::ApplyScriptChanges { .. } => Label::of("Run JavaScript"),
             Edit::XfaEvent { .. } => Label::of("Run form script"),
@@ -2209,6 +2289,13 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::MoveTag { .. }
         | Edit::MarkDecorative { .. }
         | Edit::MarkTagArtifact { .. }
+        | Edit::NewTag { .. }
+        | Edit::DeleteTag { .. }
+        | Edit::MoveTagTo { .. }
+        | Edit::TagToArtifact { .. }
+        | Edit::TagContent { .. }
+        | Edit::ContentToArtifact { .. }
+        | Edit::TagAnnotation { .. }
         | Edit::AddOcrText { .. }
         | Edit::SetDocumentScript { .. }
         | Edit::SetFieldScript { .. }
@@ -2495,7 +2582,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             a11y::set_alt(doc, r, alt.as_deref()).map_err(|e| EditError::Accessibility(e.to_string()))?;
         }
         Edit::AutoTagFormFields => {
-            a11y::tag_form_fields(doc).map_err(EditError::Accessibility)?;
+            a11y::tag_form_fields(doc).map_err(|e| EditError::Accessibility(e.to_string()))?;
         }
         Edit::SetTagProperty { object, property, value } => {
             a11y::set_tag_property(doc, *object, *property, value.as_deref()).map_err(|e| EditError::Accessibility(e.to_string()))?;
@@ -2562,6 +2649,27 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         }
         Edit::MarkTagArtifact { object } => {
             a11y::mark_tag_artifact(doc, *object).map_err(|e| EditError::Accessibility(e.to_string()))?;
+        }
+        Edit::NewTag { kind, destination } => {
+            a11y::new_tag(doc, kind, *destination).map_err(|e| EditError::Accessibility(e.to_string()))?;
+        }
+        Edit::DeleteTag { object, keep_contents } => {
+            a11y::delete_tag(doc, *object, *keep_contents).map_err(|e| EditError::Accessibility(e.to_string()))?;
+        }
+        Edit::MoveTagTo { object, destination } => {
+            a11y::move_tag_to(doc, *object, *destination).map_err(|e| EditError::Accessibility(e.to_string()))?;
+        }
+        Edit::TagToArtifact { object } => {
+            a11y::tag_to_artifact(doc, *object).map_err(|e| EditError::Accessibility(e.to_string()))?;
+        }
+        Edit::TagContent { page, selection, kind, alt, destination } => {
+            a11y::tag_selection(doc, *page, selection, kind, alt.as_deref(), *destination).map_err(|e| EditError::Accessibility(e.to_string()))?;
+        }
+        Edit::ContentToArtifact { page, selection } => {
+            a11y::content_to_artifact(doc, *page, selection).map_err(|e| EditError::Accessibility(e.to_string()))?;
+        }
+        Edit::TagAnnotation { page, annotation } => {
+            a11y::tag_annotation(doc, *page, *annotation, None).map_err(|e| EditError::Accessibility(e.to_string()))?;
         }
         Edit::AddHeaderFooter { pages, settings, replace } => {
             let date = cx.today;
