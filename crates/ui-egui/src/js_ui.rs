@@ -260,6 +260,24 @@ fn reading_mode_label(mode: &str) -> &'static str {
     }
 }
 
+/// A timer for the floating chrome: `label`, then the `choices` (seconds) in a list, usable while
+/// what it times is `on`.
+fn timer_row(ui: &mut egui::Ui, on: bool, label: &str, id: &str, secs: &mut u8, choices: &[u8]) {
+    ui.add_enabled_ui(on, |ui| {
+        ui.horizontal(|ui| {
+            ui.add_space(24.0);
+            ui.label(label);
+            egui::ComboBox::from_id_salt(id).selected_text(format!("{secs} s")).show_ui(ui, |ui| {
+                for &choice in choices {
+                    if ui.selectable_value(secs, choice, format!("{choice} s")).clicked() {
+                        ui.close();
+                    }
+                }
+            });
+        });
+    });
+}
+
 /// Preferences: interface language and size, appearance, identity and JavaScript. Returns `true` to close.
 pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     ui.label(egui::RichText::new(tl!("Preferences")).font(theme::semibold(18.0)));
@@ -322,17 +340,10 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
             app.notify(error);
         }
     });
+    crate::chrome::fade_toggle(app, ui);
+    timer_row(ui, app.chrome_fades, tl!("Fade side panels after"), "chrome-fade-after", &mut app.chrome_fade_after, &widgets::FADE_CHOICES);
     crate::chrome::auto_hide_toggle(app, ui);
-    ui.horizontal(|ui| {
-        ui.label(tl!("Fade side panels after"));
-        egui::ComboBox::from_id_salt("chrome-fade-after").selected_text(format!("{} s", app.chrome_fade_after)).show_ui(ui, |ui| {
-            for secs in widgets::FADE_CHOICES {
-                if ui.selectable_value(&mut app.chrome_fade_after, secs, format!("{secs} s")).clicked() {
-                    ui.close();
-                }
-            }
-        });
-    });
+    timer_row(ui, app.auto_hide_bars, tl!("Hide side panels after"), "chrome-hide-after", &mut app.chrome_hide_after, &widgets::HIDE_CHOICES);
     ui.add_space(8.0);
     crate::appearance::preferences_section(ui, app, t);
     ui.add_space(8.0);

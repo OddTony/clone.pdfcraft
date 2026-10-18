@@ -374,6 +374,12 @@ fn theme_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     }
 }
 
+/// View ▸ Fade side panels (and its twin in Preferences): whether the floating chrome turns faint
+/// when idle.
+pub(crate) fn fade_toggle(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    ui.add(widgets::checkbox(&mut app.chrome_fades, tl!("Fade side panels")));
+}
+
 /// View ▸ Auto hide side panels (and its twin in Preferences): whether the floating bars at the
 /// document's sides slide away when idle.
 pub(crate) fn auto_hide_toggle(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
@@ -605,6 +611,7 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui, size: f32) {
             }
             crate::commands::registry_menu(app, ui, "View");
             ui.menu_button(tl!("Display theme"), |ui| theme_menu(app, ui));
+            fade_toggle(app, ui);
             auto_hide_toggle(app, ui);
             ui.menu_button(tl!("Side panels"), |ui| {
                 for (p, label) in [

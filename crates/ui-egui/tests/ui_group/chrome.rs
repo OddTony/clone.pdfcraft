@@ -247,46 +247,106 @@ fn auto_hide_side_panels_can_be_turned_off_from_the_view_menu() {
     assert!(restored.set_option("auto-hide-bars", "sometimes").is_err());
 }
 
-/// Preferences ▸ Fade side panels after sets how long the chrome stays opaque, and the bars wait
-/// for it before they slide away. It is kept with the settings, and the automation option sets it.
+/// Pick `choice` from the Preferences list showing `current`.
+fn pick(h: &mut Harness<'static, PdfCraftApp>, current: &str, choice: &str) {
+    h.get_by_value(current).scroll_to_me();
+    h.run_steps(4);
+    h.get_by_value(current).click();
+    h.run_steps(4);
+    // The list scrolls: the last choices are below its fold.
+    h.get_by_label(choice).scroll_to_me();
+    h.run_steps(4);
+    h.get_by_label(choice).click();
+    h.run_steps(2);
+}
+
+/// Preferences ▸ Fade side panels after and Hide side panels after set how long the chrome stays
+/// opaque and in place, each on its own. They are kept with the settings, and the automation
+/// options set them.
 #[test]
-fn the_fade_timer_is_chosen_in_preferences() {
+fn the_fade_and_hide_timers_are_chosen_in_preferences() {
     let mut h = with_document();
     h.get_by_label("Read").click();
     h.run_steps(2);
-    assert_eq!(h.state().chrome_fade_after, 5, "five seconds by default");
+    assert_eq!((h.state().chrome_fade_after, h.state().chrome_hide_after), (5, 8), "five and eight seconds by default");
     h.state_mut().set_option("dialog", "preferences").unwrap();
     h.run_steps(2);
-    h.get_by_value("5 s").scroll_to_me();
-    h.run_steps(4);
-    h.get_by_value("5 s").click();
-    h.run_steps(4);
-    // The list scrolls: the last choice is below its fold.
-    h.get_by_label("15 s").scroll_to_me();
-    h.run_steps(4);
-    h.get_by_label("15 s").click();
-    h.run_steps(2);
-    assert_eq!(h.state().chrome_fade_after, 15);
+    pick(&mut h, "5 s", "10 s");
+    assert_eq!(h.state().chrome_fade_after, 10);
+    pick(&mut h, "8 s", "15 s");
+    assert_eq!(h.state().chrome_hide_after, 15);
     h.state_mut().dialog = None;
     h.run_steps(2);
     let home = on_left_bar(&h, "Read");
     h.hover_at(h.state().views[0].viewport_rect().center());
-    // Ten seconds: past the usual eight, short of fifteen.
-    h.run_steps(40);
+    // Twelve seconds: past the usual eight, short of fifteen.
+    h.run_steps(48);
     let stays = on_left_bar(&h, "Read");
-    assert!((stays.left() - home.left()).abs() < 0.5, "still in place before it fades: {stays:?}");
+    assert!((stays.left() - home.left()).abs() < 0.5, "still in place before fifteen seconds: {stays:?}");
+    h.run_steps(16);
+    assert!(on_left_bar(&h, "Read").right() < 0.0, "gone after fifteen");
     let saved = h.state().persist();
     let mut restored = PdfCraftApp::new();
     restored.restore(&saved);
-    assert_eq!(restored.chrome_fade_after, 15, "kept with the settings");
+    assert_eq!((restored.chrome_fade_after, restored.chrome_hide_after), (10, 15), "kept with the settings");
     restored.set_option("chrome-fade-after", "2").unwrap();
-    assert_eq!(restored.chrome_fade_after, 2);
+    restored.set_option("chrome-hide-after", "30").unwrap();
+    assert_eq!((restored.chrome_fade_after, restored.chrome_hide_after), (2, 30));
     for wrong in ["6", "0", "-1", "soon"] {
         assert!(restored.set_option("chrome-fade-after", wrong).is_err(), "{wrong}");
+        assert!(restored.set_option("chrome-hide-after", wrong).is_err(), "{wrong}");
     }
-    assert_eq!(restored.chrome_fade_after, 2);
-    restored.restore(r#"{"chrome_fade_after": 7}"#);
-    assert_eq!(restored.chrome_fade_after, 2, "a timer not on offer is ignored");
+    assert_eq!((restored.chrome_fade_after, restored.chrome_hide_after), (2, 30));
+    restored.restore(r#"{"chrome_fade_after": 7, "chrome_hide_after": 9}"#);
+    assert_eq!((restored.chrome_fade_after, restored.chrome_hide_after), (2, 30), "a timer not on offer is ignored");
+}
+
+/// View ▸ Fade side panels turns the fading off; it is kept with the settings, and the automation
+/// option sets it.
+#[test]
+fn fading_can_be_turned_off_from_the_view_menu() {
+    let mut h = with_document();
+    assert!(h.state().chrome_fades, "on by default");
+    h.get_by_label("Menu").click();
+    h.run_steps(2);
+    h.get_by_label("View ⏵").click();
+    h.run_steps(2);
+    h.get_by_role_and_label(Role::CheckBox, "Fade side panels").click();
+    h.run_steps(2);
+    assert!(!h.state().chrome_fades);
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&h.state().persist());
+    assert!(!restored.chrome_fades, "kept with the settings");
+    restored.set_option("fade-bars", "true").unwrap();
+    assert!(restored.chrome_fades);
+    assert!(restored.set_option("fade-bars", "maybe").is_err());
+}
+
+/// With a panel of tools beside the page, or a dialog open, the bars count as in use: they stay
+/// in place however long the pointer is elsewhere.
+#[test]
+fn an_open_tools_panel_or_dialog_keeps_the_bars_in_place() {
+    let mut h = with_document();
+    // A document opens in All tools, its panel of tools beside the page.
+    assert_eq!(h.state().mode, Mode::AllTools);
+    let home = on_left_bar(&h, "Read");
+    h.hover_at(h.state().views[0].viewport_rect().center());
+    h.run_steps(48);
+    let stays = on_left_bar(&h, "Read");
+    assert!((stays.left() - home.left()).abs() < 0.5, "the tools panel keeps the bar in place: {stays:?}");
+    // Reading, with Preferences open.
+    h.get_by_label("Read").click();
+    h.run_steps(2);
+    let home = on_left_bar(&h, "Read");
+    h.state_mut().set_option("dialog", "preferences").unwrap();
+    h.hover_at(egui::pos2(WIDTH / 2.0, 850.0));
+    h.run_steps(48);
+    let stays = on_left_bar(&h, "Read");
+    assert!((stays.left() - home.left()).abs() < 0.5, "the dialog keeps the bar in place: {stays:?}");
+    // Closed, the clock starts again.
+    h.state_mut().dialog = None;
+    h.run_steps(48);
+    assert!(on_left_bar(&h, "Read").right() < 0.0, "slid away once nothing was open");
 }
 
 /// Edit a PDF with Format text showing: its colour swatches fit the tools panel, so the tool rows

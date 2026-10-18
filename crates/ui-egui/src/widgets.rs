@@ -20,33 +20,34 @@ pub const IDLE_AFTER: f64 = 5.0;
 pub const FADE_CHOICES: [u8; 8] = [1, 2, 3, 4, 5, 8, 10, 15];
 /// How far idle chrome fades: faint enough to leave the page alone, still there to find.
 pub const IDLE_OPACITY: f32 = 0.3;
-/// How long after their last use the floating bars slide away, when they hide at all: this long,
-/// or as they fade if that comes later.
+/// How long after their last use the floating bars slide away, unless the preferences say
+/// otherwise.
 pub const HIDE_AFTER: f64 = 8.0;
+/// The auto-hide timers Preferences offers, in seconds.
+pub const HIDE_CHOICES: [u8; 9] = [2, 3, 4, 5, 8, 10, 15, 20, 30];
 /// How far around where a hidden bar belongs the pointer brings it back: past the window's edge,
 /// since the bars float 14 in from it.
 const REVEAL_REACH: f32 = 28.0;
 
-/// The preferences behind the chrome's idle behaviour, set each frame before the chrome is drawn
-/// ([`set_idle_chrome`]).
+/// The preferences behind the chrome's idle behaviour, and whether something it serves is open,
+/// set each frame before the chrome is drawn ([`set_idle_chrome`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct IdleChrome {
+    /// Whether the chrome fades when idle.
+    pub fades: bool,
     /// Seconds the chrome stays opaque after its last use.
     pub fade_after: f64,
     /// Whether the floating bars slide out of the window when idle.
     pub auto_hide: bool,
+    /// Seconds the bars stay in place after their last use.
+    pub hide_after: f64,
+    /// Something the chrome belongs with is open (a dialog, a panel of tools): it stays awake.
+    pub held: bool,
 }
 
 impl Default for IdleChrome {
     fn default() -> Self {
-        IdleChrome { fade_after: IDLE_AFTER, auto_hide: true }
-    }
-}
-
-impl IdleChrome {
-    /// When an idle bar slides away.
-    fn hide_after(self) -> f64 {
-        self.fade_after.max(HIDE_AFTER)
+        IdleChrome { fades: true, fade_after: IDLE_AFTER, auto_hide: true, hide_after: HIDE_AFTER, held: false }
     }
 }
 
@@ -78,40 +79,34 @@ pub struct Idle {
 
 /// The idle state of the chrome `id`, which fades when idle. The rect it last recorded with
 /// [`note_idle_rect`] is what counts as hovering it. `busy` keeps it awake while something of its
-/// own is in use (a focused field, a dragged tab); an open menu or popup anywhere does too.
+/// own is in use (a focused field, a dragged tab); an open menu or popup anywhere, or what
+/// [`IdleChrome::held`] says is open, does too.
 ///
-/// A bar that `hides` also slides out
-/// of the window once idle for [`HIDE_AFTER`], while auto-hide is on, and the pointer coming
-/// near where it belongs brings it back.
+/// A bar that `hides` also slides out of the window once idle for [`IdleChrome::hide_after`],
+/// while auto-hide is on, and the pointer coming near where it belongs brings it back.
 pub fn idle(ctx: &egui::Context, id: egui::Id, busy: bool, hides: bool) -> Idle {
     let chrome = idle_chrome(ctx);
-    let hides = hides && chrome.auto_hide;
-    let fade_after = if chrome.fade_after.is_finite() { chrome.fade_after.clamp(0.5, 600.0) } else { IDLE_AFTER };
-    let hide_after = IdleChrome { fade_after, ..chrome }.hide_after();
+    // A timer that is not a sensible number of seconds falls back to the default.
+    let seconds = |v: f64, default: f64| if v.is_finite() { v.clamp(0.5, 600.0) } else { default };
+    let fade_after = chrome.fades.then(|| seconds(chrome.fade_after, IDLE_AFTER));
+    let hide_after = (hides && chrome.auto_hide).then(|| seconds(chrome.hide_after, HIDE_AFTER));
     let now = ctx.input(|i| i.time);
     let rect = ctx.data(|d| d.get_temp::<Rect>(id.with("idle-rect")));
     let pointer = ctx.input(|i| i.pointer.hover_pos());
-    let reach = if hides { vec2(REVEAL_REACH, REVEAL_REACH / 2.0) } else { egui::Vec2::ZERO };
+    let reach = if hide_after.is_some() { vec2(REVEAL_REACH, REVEAL_REACH / 2.0) } else { egui::Vec2::ZERO };
     let hovered = matches!((rect, pointer), (Some(r), Some(p)) if r.expand2(reach).contains(p));
     let key = id.with("idle-since");
-    let since = if hovered || busy || egui::Popup::is_any_open(ctx) {
+    let since = if hovered || busy || chrome.held || egui::Popup::is_any_open(ctx) {
         ctx.data_mut(|d| d.insert_temp(key, now));
         now
     } else {
         ctx.data_mut(|d| *d.get_temp_mut_or_insert_with(key, || now))
     };
     let elapsed = (now - since).max(0.0);
-    let awake = elapsed < fade_after;
-    let stays = !hides || elapsed < hide_after;
-    // Wake once more when the bar is due to fade (or slide away), even if nothing else repaints.
-    let next = if awake {
-        Some(fade_after)
-    } else if stays && hides {
-        Some(hide_after)
-    } else {
-        None
-    };
-    if let Some(at) = next {
+    let awake = fade_after.is_none_or(|at| elapsed < at);
+    let stays = hide_after.is_none_or(|at| elapsed < at);
+    // Wake once more when the bar is next due to fade or slide away, even if nothing else repaints.
+    if let Some(at) = [fade_after, hide_after].into_iter().flatten().filter(|at| elapsed < *at).reduce(f64::min) {
         ctx.request_repaint_after(std::time::Duration::from_secs_f64((at - elapsed).clamp(0.0, at) + 0.05));
     }
     let shown = ctx.animate_bool_with_time(id.with("idle-fade"), awake, 0.4);
@@ -938,24 +933,48 @@ mod tests {
         assert!(stays.hidden < 1e-3 && stays.shown < 1e-3, "{stays:?}");
     }
 
-    /// The fade waits as long as the preference says; a bar never slides away before it fades.
+    /// The fade and the slide each wait as long as their preference says, and either can be off.
     #[test]
-    fn the_fade_follows_its_timer_and_hiding_waits_for_it() {
-        let ctx = egui::Context::default();
-        let slow = IdleChrome { fade_after: 15.0, auto_hide: true };
+    fn the_fade_and_the_slide_follow_their_own_timers() {
         let away = Some(Pos2::new(600.0, 300.0));
+        let slow = IdleChrome { fade_after: 15.0, hide_after: 3.0, ..IdleChrome::default() };
+        let ctx = egui::Context::default();
         hiding_frame(&ctx, 0.0, away, slow);
-        let at_ten = hiding_frame(&ctx, 10.0, away, slow);
-        assert!((at_ten.shown - 1.0).abs() < 1e-3 && at_ten.hidden < 1e-3, "{at_ten:?}");
+        hiding_frame(&ctx, 3.1, away, slow);
+        let early = hiding_frame(&ctx, 4.0, away, slow);
+        assert!((early.shown - 1.0).abs() < 1e-3 && early.hidden > 0.999, "slid away after three seconds, still opaque: {early:?}");
         hiding_frame(&ctx, 15.1, away, slow);
-        let gone = hiding_frame(&ctx, 16.0, away, slow);
-        assert!(gone.shown < 1e-3 && gone.hidden > 0.999, "fades and slides away together: {gone:?}");
-        let quick = IdleChrome { fade_after: 1.0, auto_hide: true };
+        assert!(hiding_frame(&ctx, 16.0, away, slow).shown < 1e-3, "faded after fifteen");
+        let quick = IdleChrome { fade_after: 1.0, ..IdleChrome::default() };
         let ctx = egui::Context::default();
         hiding_frame(&ctx, 0.0, away, quick);
         hiding_frame(&ctx, 1.1, away, quick);
         let faded = hiding_frame(&ctx, 2.0, away, quick);
         assert!(faded.shown < 1e-3 && faded.hidden < 1e-3, "faded after one second, in place until eight: {faded:?}");
+        // No fade: opaque until it slides away, and after.
+        let clear = IdleChrome { fades: false, ..IdleChrome::default() };
+        let ctx = egui::Context::default();
+        hiding_frame(&ctx, 0.0, away, clear);
+        hiding_frame(&ctx, 8.1, away, clear);
+        let gone = hiding_frame(&ctx, 30.0, away, clear);
+        assert!((gone.shown - 1.0).abs() < 1e-3 && gone.hidden > 0.999, "{gone:?}");
+    }
+
+    /// While something the chrome belongs with is open (a dialog, the tools panel), it stays awake
+    /// and in place however long the pointer is away; once it closes, the clock starts.
+    #[test]
+    fn open_dialogs_and_panels_hold_the_chrome_awake() {
+        let away = Some(Pos2::new(600.0, 300.0));
+        let held = IdleChrome { held: true, ..IdleChrome::default() };
+        let ctx = egui::Context::default();
+        hiding_frame(&ctx, 0.0, away, held);
+        let still = hiding_frame(&ctx, 60.0, away, held);
+        assert!((still.shown - 1.0).abs() < 1e-3 && still.hidden < 1e-3, "{still:?}");
+        let free = IdleChrome::default();
+        assert!((hiding_frame(&ctx, 64.0, away, free).shown - 1.0).abs() < 1e-3, "four seconds after it closed");
+        hiding_frame(&ctx, 68.1, away, free);
+        let later = hiding_frame(&ctx, 69.0, away, free);
+        assert!(later.shown < 1e-3 && later.hidden > 0.999, "{later:?}");
     }
 
     /// View ▸ Page display mixes radio buttons and checkboxes. With the theme's 6 px widget radius

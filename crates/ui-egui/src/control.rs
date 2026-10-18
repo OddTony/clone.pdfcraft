@@ -720,6 +720,8 @@ impl Host for crate::PdfCraftApp {
             "tools_side": if self.docking.tools_on_right() { "right" } else { "left" },
             "auto_hide_bars": self.auto_hide_bars,
             "chrome_fade_after": self.chrome_fade_after,
+            "chrome_fades": self.chrome_fades,
+            "chrome_hide_after": self.chrome_hide_after,
             "right_panel": self.right.map(|r| format!("{r:?}")),
             "dialog": self.dialog.map(|d| format!("{d:?}")),
             "palette_open": self.palette_open,

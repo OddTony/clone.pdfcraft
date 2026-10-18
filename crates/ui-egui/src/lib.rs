@@ -601,9 +601,14 @@ pub struct PdfCraftApp {
     /// View ▸ Auto hide side panels: the floating bars at the document's sides slide out of the
     /// window when idle, and come back when the pointer comes near them.
     pub auto_hide_bars: bool,
+    /// Preferences ▸ Fade side panels: the floating chrome turns faint when idle.
+    pub chrome_fades: bool,
     /// Preferences ▸ Fade side panels after: seconds the floating chrome stays opaque after its
     /// last use, one of [`widgets::FADE_CHOICES`].
     pub chrome_fade_after: u8,
+    /// Preferences ▸ Hide side panels after: seconds the floating bars stay in place after their
+    /// last use, one of [`widgets::HIDE_CHOICES`].
+    pub chrome_hide_after: u8,
     /// Whether the window currently has the app's header bar (`None` until the first frame).
     app_frame_shown: Option<bool>,
     pub password_prompt: Option<PasswordPrompt>,
@@ -958,7 +963,9 @@ impl PdfCraftApp {
             window_controls: None,
             system_title_bar: false,
             auto_hide_bars: true,
+            chrome_fades: true,
             chrome_fade_after: 5,
+            chrome_hide_after: 8,
             app_frame_shown: None,
             password_prompt: None,
             unlock_prompt: None,
@@ -2290,6 +2297,8 @@ impl PdfCraftApp {
         v["redact_prefs"] = self.redact_defaults.to_json();
         v["auto_hide_bars"] = serde_json::Value::Bool(self.auto_hide_bars);
         v["chrome_fade_after"] = serde_json::Value::from(self.chrome_fade_after);
+        v["chrome_fades"] = serde_json::Value::Bool(self.chrome_fades);
+        v["chrome_hide_after"] = serde_json::Value::from(self.chrome_hide_after);
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
         v.to_string()
@@ -2329,6 +2338,12 @@ impl PdfCraftApp {
         }
         if let Some(secs) = v["chrome_fade_after"].as_u64().and_then(|n| u8::try_from(n).ok()).filter(|n| widgets::FADE_CHOICES.contains(n)) {
             self.chrome_fade_after = secs;
+        }
+        if let Some(on) = v["chrome_fades"].as_bool() {
+            self.chrome_fades = on;
+        }
+        if let Some(secs) = v["chrome_hide_after"].as_u64().and_then(|n| u8::try_from(n).ok()).filter(|n| widgets::HIDE_CHOICES.contains(n)) {
+            self.chrome_hide_after = secs;
         }
         if let Some(on) = v["system_title_bar"].as_bool() {
             self.system_title_bar = on;
@@ -2733,6 +2748,21 @@ impl PdfCraftApp {
                     .filter(|n| widgets::FADE_CHOICES.contains(n))
                     .ok_or("chrome-fade-after must be 1, 2, 3, 4, 5, 8, 10 or 15 (seconds)")?;
             }
+            ("chrome-hide-after", _) => {
+                self.chrome_hide_after = value
+                    .trim()
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|n| widgets::HIDE_CHOICES.contains(n))
+                    .ok_or("chrome-hide-after must be 2, 3, 4, 5, 8, 10, 15, 20 or 30 (seconds)")?;
+            }
+            ("fade-bars", _) => {
+                self.chrome_fades = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err("fade-bars must be true or false".into()),
+                };
+            }
             ("auto-hide-bars", _) => {
                 self.auto_hide_bars = match value {
                     "true" => true,
@@ -3123,7 +3153,18 @@ impl eframe::App for PdfCraftApp {
             view.begin_render_frame();
         }
         // How the floating chrome fades and hides this frame.
-        widgets::set_idle_chrome(&ctx, widgets::IdleChrome { auto_hide: self.auto_hide_bars, fade_after: f64::from(self.chrome_fade_after) });
+        // A dialog, the palette or a panel of tools being open counts as the chrome in use.
+        let held = self.modal_open() || self.palette_open || (self.mode != Mode::Read && self.docking.exposed(docking::Panel::Tools));
+        widgets::set_idle_chrome(
+            &ctx,
+            widgets::IdleChrome {
+                fades: self.chrome_fades,
+                fade_after: f64::from(self.chrome_fade_after),
+                auto_hide: self.auto_hide_bars,
+                hide_after: f64::from(self.chrome_hide_after),
+                held,
+            },
+        );
         // The window shows the active document's name (or title, if it asks for that).
         let title = self
             .active
