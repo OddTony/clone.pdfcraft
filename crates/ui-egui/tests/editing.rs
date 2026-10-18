@@ -4830,3 +4830,67 @@ fn right_clicking_an_image_opens_its_menu_alone() {
     assert_eq!(h.state().session.get(id).unwrap().can_undo(), Some("Flip image"));
     assert!(h.query_by_label("Redact Image").is_none(), "an item closes the menu");
 }
+
+/// An image menu that is no longer drawn (another tool took over) is closed, not kept hidden:
+/// it must neither come back when Edit text & images does nor keep the page's menu away.
+#[test]
+fn the_image_menu_closes_when_its_tool_is_put_down() {
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(80, 40, image::Rgb([200, 40, 40])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let c = h.state().views[0].page_screen_rect(0).expect("on screen").center();
+    h.hover_at(c);
+    h.run_steps(1);
+    h.event(egui::Event::PointerButton { pos: c, button: egui::PointerButton::Secondary, pressed: true, modifiers: Default::default() });
+    h.event(egui::Event::PointerButton { pos: c, button: egui::PointerButton::Secondary, pressed: false, modifiers: Default::default() });
+    h.run_steps(3);
+    h.get_by_label("Flip Horizontal");
+    // A keyboard shortcut or the palette puts the tool down: the menu goes with it.
+    h.state_mut().quick_tool = pdfcraft_ui_egui::QuickTool::Select;
+    h.run_steps(3);
+    assert!(h.query_by_label("Flip Horizontal").is_none());
+    // Back in Edit text & images it is not still waiting there.
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(3);
+    assert!(h.query_by_label("Flip Horizontal").is_none(), "the closed menu stays closed");
+}
+
+/// Ctrl+X in the Organize grid cuts pages: a page image still selected in Edit text & images
+/// is not copied or deleted by it.
+#[test]
+fn cut_in_the_organize_grid_leaves_a_selected_image_alone() {
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(80, 40, image::Rgb([200, 40, 40])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("picture.png", None, png.clone()).expect("opens");
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(2);
+    let c = h.state().views[0].page_screen_rect(0).expect("on screen").center();
+    h.hover_at(c);
+    h.run_steps(1);
+    h.drag_at(c);
+    h.run_steps(1);
+    h.drop_at(c);
+    h.run_steps(2);
+    assert!(h.state().views[0].image_selection.is_some(), "the image is selected");
+    let id = h.state().views[0].id;
+    let before = h.state().session.get(id).unwrap().page_images(0).len();
+    h.state_mut().views[0].organize = true;
+    h.run_steps(3);
+    h.event(egui::Event::Cut);
+    h.run_steps(3);
+    assert_eq!(h.state().session.get(id).unwrap().page_images(0).len(), before, "the image is still there");
+}

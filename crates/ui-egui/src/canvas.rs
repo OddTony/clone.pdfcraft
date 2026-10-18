@@ -2796,6 +2796,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             // Set again below when the right-click lands on a link.
             view.links.context = None;
         }
+        let mut image_menu_drawn = false;
         for &i in &visible_pages {
             badge_hover = None;
             let r = snap_to_pixels(rects[i].translate(origin.to_vec2()), ppp);
@@ -3156,6 +3157,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 && let Some(images) = view.edit_images.get(&i).map(|(_, l)| l.clone())
             {
                 crate::edit_text_ui::image_menu(ui, i, &images, view, &mut image_action);
+                image_menu_drawn = true;
             }
             let on_link = tool == QuickTool::Link && can_modify && crate::link_ui::page_input(ui, &resp, &xf, i, info, &doc_links, view);
             if tool == QuickTool::Select
@@ -3533,6 +3535,11 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         if view.continuous {
             view.current = current;
         }
+        // A menu that was not drawn this frame (another tool, or its page scrolled out of the drawn
+        // range) is closed: nothing could dismiss it, and it would keep the page's menu away.
+        if !image_menu_drawn {
+            view.image_menu = None;
+        }
         // The image menu replaces the page's own while it is open, so the two never stack.
         let page_menu = view.image_menu.is_none();
         let _ = page_menu.then(|| {
@@ -3620,13 +3627,18 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     && let Some((page, at)) = view.comments.context_at
                 {
                     // The page's content is parsed once per right-click, not on every frame the menu is open.
-                    let key = egui::Id::new("copy-image-under-menu");
-                    let cached = ui.data(|d| d.get_temp::<(usize, [f64; 2], Option<usize>)>(key)).filter(|c| c.0 == page && c.1 == at);
+                    // Keyed by tab and edit generation too: the same point in another tab, or after the
+                    // picture moved or went, is another answer.
+                    let key = egui::Id::new(("copy-image-under-menu", view.id));
+                    let generation = doc.edit_generation();
+                    let cached = ui
+                        .data(|d| d.get_temp::<(u64, usize, [f64; 2], Option<usize>)>(key))
+                        .filter(|c| c.0 == generation && c.1 == page && c.2 == at);
                     let hit = match cached {
-                        Some(c) => c.2,
+                        Some(c) => c.3,
                         None => {
                             let hit = doc.page_image_at(page, at);
-                            ui.data_mut(|d| d.insert_temp(key, (page, at, hit)));
+                            ui.data_mut(|d| d.insert_temp(key, (generation, page, at, hit)));
                             hit
                         }
                     };

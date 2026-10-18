@@ -2859,7 +2859,9 @@ impl PdfCraftApp {
             return;
         }
         // A page image selected in Edit text & images: Copy and Cut take the image, as its menu does.
+        // Not while the Organize grid shows: Ctrl+C and Ctrl+X are its page operations then.
         if self.quick_tool == QuickTool::EditText
+            && !self.views.get(i).is_some_and(|v| v.organize)
             && let Some((page, index)) = self.views.get(i).and_then(|v| v.image_selection.as_ref()).map(|s| (s.page, s.index))
         {
             if self.copy_page_image(page, index) && cut {
