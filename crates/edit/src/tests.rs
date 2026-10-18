@@ -274,7 +274,7 @@ fn flattening_leaves_annotations_on_hidden_layers_alone() {
     let case = |extra: &str, drawn: usize, left: bool| {
         let annot = format!("<< /Type /Annot /Subtype /Square /Rect [100 600 200 650] /C [1 0 0] /AP << /N 6 0 R >> {extra} >>");
         let mut doc = build(&[
-            "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [7 0 R 8 0 R] /D << /OFF [7 0 R] /ON [8 0 R] >> >> >>",
+            "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [7 0 R 8 0 R 13 0 R] /D << /OFF [7 0 R] /ON [8 0 R 13 0 R] >> >> >>",
             "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << >> /Contents 5 0 R /Annots [4 0 R] >>",
             &annot,
@@ -286,6 +286,7 @@ fn flattening_leaves_annotations_on_hidden_layers_alone() {
             "<< /Type /OCMD /OCGs [7 0 R 8 0 R] /P /AnyOn >>",
             "<< /Type /OCMD /OCGs [7 0 R 8 0 R] /P /AnyOff >>",
             "<< /Type /OCMD /OCGs [7 0 R 8 0 R] /P /AllOff >>",
+            "<< /Type /OCG /Name (Second shown layer) >>",
         ]);
         let before = streams(&doc, 0);
         assert_eq!(flatten(&mut doc, &[0], true, false).unwrap(), drawn);
@@ -303,6 +304,18 @@ fn flattening_leaves_annotations_on_hidden_layers_alone() {
     case("/OC 11 0 R", 1, false);
     case("/OC 12 0 R", 0, true);
     case("", 1, false);
+    // ISO 32000-1 §8.11.2.2 /VE visibility expressions take precedence over /P.
+    case("/OC << /Type /OCMD /VE [ /Not 7 0 R ] >>", 1, false);
+    case("/OC << /Type /OCMD /VE [ /Not 8 0 R ] >>", 0, true);
+    case("/OC << /Type /OCMD /VE [ /And 8 0 R 7 0 R ] >>", 0, true);
+    case("/OC << /Type /OCMD /VE [ /Or 8 0 R 7 0 R ] >>", 1, false);
+    case("/OC << /Type /OCMD /VE [ /Or 7 0 R [ /And 8 0 R 13 0 R ] ] >>", 1, false);
+    case("/OC << /Type /OCMD /VE [ /And 8 0 R [ /Not 13 0 R ] ] >>", 0, true);
+    case("/OC << /Type /OCMD /VE [ /Not 8 0 R ] /OCGs [8 0 R] /P /AllOn >>", 0, true);
+    case("/OC << /Type /OCMD /VE [ /Not 7 0 R ] /OCGs [7 0 R] /P /AllOn >>", 1, false);
+    case("/OC << /Type /OCMD /VE [] /OCGs [7 0 R] /P /AllOn >>", 0, true);
+    case("/OC << /Type /OCMD /VE [ /Not 7 0 R 8 0 R ] /OCGs [7 0 R] /P /AllOn >>", 0, true);
+    case("/OC << /Type /OCMD /VE [ /Xor 8 0 R ] /OCGs [7 0 R] /P /AllOn >>", 0, true);
 
     let case_all_on = |extra: &str, drawn: usize, left: bool| {
         let annot = format!("<< /Type /Annot /Subtype /Square /Rect [100 600 200 650] /C [1 0 0] /AP << /N 6 0 R >> {extra} >>");

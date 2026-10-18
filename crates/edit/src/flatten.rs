@@ -38,6 +38,27 @@ fn hidden_layers(doc: &Document) -> HashSet<ObjRef> {
     if d.name(b"BaseState") == Some(b"OFF") { all.into_iter().filter(|g| !on.contains(g)).collect() } else { off.into_iter().collect() }
 }
 
+/// Evaluate an ISO 32000-1 §8.11.2.2 `/VE` visibility expression (`true` = visible).
+fn eval_ve(doc: &Document, expr: &Object, hidden_layers: &HashSet<ObjRef>, depth: usize) -> Option<bool> {
+    if depth > 16 {
+        return None;
+    }
+    let resolved = doc.resolve(expr);
+    if let Some(arr) = resolved.as_array() {
+        let [op, rest @ ..] = arr.as_slice() else { return None };
+        match (doc.resolve(op).as_name()?, rest) {
+            (b"Not", [operand]) => eval_ve(doc, operand, hidden_layers, depth + 1).map(|v| !v),
+            (b"And", [_, ..]) => rest.iter().try_fold(true, |acc, o| eval_ve(doc, o, hidden_layers, depth + 1).map(|v| acc && v)),
+            (b"Or", [_, ..]) => rest.iter().try_fold(false, |acc, o| eval_ve(doc, o, hidden_layers, depth + 1).map(|v| acc || v)),
+            _ => None,
+        }
+    } else if depth > 0 {
+        expr.as_ref().map(|r| !hidden_layers.contains(&r))
+    } else {
+        None
+    }
+}
+
 /// Whether this annotation is hidden by its flags or by an optional-content layer that is off.
 fn is_hidden(doc: &Document, d: &Dict, hidden_layers: &HashSet<ObjRef>) -> bool {
     let flags = d.get(b"F").and_then(|f| doc.resolve(f).as_int()).unwrap_or(0);
@@ -51,6 +72,11 @@ fn is_hidden(doc: &Document, d: &Dict, hidden_layers: &HashSet<ObjRef>) -> bool 
     let obj = doc.resolve(oc);
     let Some(oc_dict) = obj.as_dict() else { return false };
     if oc_dict.name(b"Type") == Some(b"OCMD") {
+        if let Some(ve) = oc_dict.get(b"VE")
+            && let Some(vis) = eval_ve(doc, ve, hidden_layers, 0)
+        {
+            return !vis;
+        }
         let groups: Vec<ObjRef> = match oc_dict.get(b"OCGs").and_then(|g| doc.resolve(g).as_array().cloned()) {
             Some(a) => a.iter().filter_map(Object::as_ref).collect(),
             None => oc_dict.get(b"OCGs").and_then(Object::as_ref).into_iter().collect(),
