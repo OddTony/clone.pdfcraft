@@ -323,6 +323,16 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         }
     });
     crate::chrome::auto_hide_toggle(app, ui);
+    ui.horizontal(|ui| {
+        ui.label(tl!("Fade side panels after"));
+        egui::ComboBox::from_id_salt("chrome-fade-after").selected_text(format!("{} s", app.chrome_fade_after)).show_ui(ui, |ui| {
+            for secs in widgets::FADE_CHOICES {
+                if ui.selectable_value(&mut app.chrome_fade_after, secs, format!("{secs} s")).clicked() {
+                    ui.close();
+                }
+            }
+        });
+    });
     ui.add_space(8.0);
     crate::appearance::preferences_section(ui, app, t);
     ui.add_space(8.0);

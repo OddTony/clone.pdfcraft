@@ -247,6 +247,48 @@ fn auto_hide_side_panels_can_be_turned_off_from_the_view_menu() {
     assert!(restored.set_option("auto-hide-bars", "sometimes").is_err());
 }
 
+/// Preferences ▸ Fade side panels after sets how long the chrome stays opaque, and the bars wait
+/// for it before they slide away. It is kept with the settings, and the automation option sets it.
+#[test]
+fn the_fade_timer_is_chosen_in_preferences() {
+    let mut h = with_document();
+    h.get_by_label("Read").click();
+    h.run_steps(2);
+    assert_eq!(h.state().chrome_fade_after, 5, "five seconds by default");
+    h.state_mut().set_option("dialog", "preferences").unwrap();
+    h.run_steps(2);
+    h.get_by_value("5 s").scroll_to_me();
+    h.run_steps(4);
+    h.get_by_value("5 s").click();
+    h.run_steps(4);
+    // The list scrolls: the last choice is below its fold.
+    h.get_by_label("15 s").scroll_to_me();
+    h.run_steps(4);
+    h.get_by_label("15 s").click();
+    h.run_steps(2);
+    assert_eq!(h.state().chrome_fade_after, 15);
+    h.state_mut().dialog = None;
+    h.run_steps(2);
+    let home = on_left_bar(&h, "Read");
+    h.hover_at(h.state().views[0].viewport_rect().center());
+    // Ten seconds: past the usual eight, short of fifteen.
+    h.run_steps(40);
+    let stays = on_left_bar(&h, "Read");
+    assert!((stays.left() - home.left()).abs() < 0.5, "still in place before it fades: {stays:?}");
+    let saved = h.state().persist();
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&saved);
+    assert_eq!(restored.chrome_fade_after, 15, "kept with the settings");
+    restored.set_option("chrome-fade-after", "2").unwrap();
+    assert_eq!(restored.chrome_fade_after, 2);
+    for wrong in ["6", "0", "-1", "soon"] {
+        assert!(restored.set_option("chrome-fade-after", wrong).is_err(), "{wrong}");
+    }
+    assert_eq!(restored.chrome_fade_after, 2);
+    restored.restore(r#"{"chrome_fade_after": 7}"#);
+    assert_eq!(restored.chrome_fade_after, 2, "a timer not on offer is ignored");
+}
+
 /// The search button opens Find tools and commands and closes it again; so does the palette's
 /// own close button.
 #[test]

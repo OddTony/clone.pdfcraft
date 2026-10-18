@@ -16,6 +16,8 @@ const DIALOG_PAD_Y: i8 = 16;
 /// How long the floating bars and the tab strip stay fully opaque after they were last hovered or
 /// used, in seconds, unless the preferences say otherwise ([`IdleChrome`]).
 pub const IDLE_AFTER: f64 = 5.0;
+/// The fade timers Preferences offers, in seconds.
+pub const FADE_CHOICES: [u8; 8] = [1, 2, 3, 4, 5, 8, 10, 15];
 /// How far idle chrome fades: faint enough to leave the page alone, still there to find.
 pub const IDLE_OPACITY: f32 = 0.3;
 /// How long after their last use the floating bars slide away, when they hide at all: this long,

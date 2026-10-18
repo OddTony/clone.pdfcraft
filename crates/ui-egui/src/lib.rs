@@ -601,6 +601,9 @@ pub struct PdfCraftApp {
     /// View ▸ Auto hide side panels: the floating bars at the document's sides slide out of the
     /// window when idle, and come back when the pointer comes near them.
     pub auto_hide_bars: bool,
+    /// Preferences ▸ Fade side panels after: seconds the floating chrome stays opaque after its
+    /// last use, one of [`widgets::FADE_CHOICES`].
+    pub chrome_fade_after: u8,
     /// Whether the window currently has the app's header bar (`None` until the first frame).
     app_frame_shown: Option<bool>,
     pub password_prompt: Option<PasswordPrompt>,
@@ -955,6 +958,7 @@ impl PdfCraftApp {
             window_controls: None,
             system_title_bar: false,
             auto_hide_bars: true,
+            chrome_fade_after: 5,
             app_frame_shown: None,
             password_prompt: None,
             unlock_prompt: None,
@@ -2285,6 +2289,7 @@ impl PdfCraftApp {
         // Set apart: one more key inside the macro above passes serde_json's recursion limit.
         v["redact_prefs"] = self.redact_defaults.to_json();
         v["auto_hide_bars"] = serde_json::Value::Bool(self.auto_hide_bars);
+        v["chrome_fade_after"] = serde_json::Value::from(self.chrome_fade_after);
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
         v.to_string()
@@ -2321,6 +2326,9 @@ impl PdfCraftApp {
         self.last_session = last_session::LastSession::from_json(&v["last_session"]);
         if let Some(on) = v["auto_hide_bars"].as_bool() {
             self.auto_hide_bars = on;
+        }
+        if let Some(secs) = v["chrome_fade_after"].as_u64().and_then(|n| u8::try_from(n).ok()).filter(|n| widgets::FADE_CHOICES.contains(n)) {
+            self.chrome_fade_after = secs;
         }
         if let Some(on) = v["system_title_bar"].as_bool() {
             self.system_title_bar = on;
@@ -2711,6 +2719,14 @@ impl PdfCraftApp {
                 };
             }
             ("ui-scale", _) => self.ui_scale = ui_scale::parse(value)?,
+            ("chrome-fade-after", _) => {
+                self.chrome_fade_after = value
+                    .trim()
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|n| widgets::FADE_CHOICES.contains(n))
+                    .ok_or("chrome-fade-after must be 1, 2, 3, 4, 5, 8, 10 or 15 (seconds)")?;
+            }
             ("auto-hide-bars", _) => {
                 self.auto_hide_bars = match value {
                     "true" => true,
@@ -3101,7 +3117,7 @@ impl eframe::App for PdfCraftApp {
             view.begin_render_frame();
         }
         // How the floating chrome fades and hides this frame.
-        widgets::set_idle_chrome(&ctx, widgets::IdleChrome { auto_hide: self.auto_hide_bars, ..Default::default() });
+        widgets::set_idle_chrome(&ctx, widgets::IdleChrome { auto_hide: self.auto_hide_bars, fade_after: f64::from(self.chrome_fade_after) });
         // The window shows the active document's name (or title, if it asks for that).
         let title = self
             .active

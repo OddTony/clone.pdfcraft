@@ -2688,3 +2688,4 @@ key	Space	Space
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	Auto hide side panels	Tự động ẩn bảng bên
 	Slide the floating bars beside the page out of the way when they are not in use. Move the pointer to the window's edge to bring them back.	Trượt các thanh nổi cạnh trang ra khỏi tầm nhìn khi không dùng đến. Di con trỏ đến mép cửa sổ để đưa chúng trở lại.
+	Fade side panels after	Làm mờ bảng bên sau
