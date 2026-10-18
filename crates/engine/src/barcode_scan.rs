@@ -909,7 +909,9 @@ pub fn scan_rgba_buffer(width: usize, height: usize, rgba: &[u8], page: usize) -
     for y in 0..height {
         let src_start = y.saturating_mul(width);
         let dst_start = (y.saturating_add(pad)).saturating_mul(pad_w).saturating_add(pad);
-        if let (Some(src), Some(dst)) = (gray.pixels.get(src_start..src_start.saturating_add(width)), padded_pixels.get_mut(dst_start..dst_start.saturating_add(width))) {
+        if let (Some(src), Some(dst)) =
+            (gray.pixels.get(src_start..src_start.saturating_add(width)), padded_pixels.get_mut(dst_start..dst_start.saturating_add(width)))
+        {
             dst.copy_from_slice(src);
         }
     }
@@ -1108,9 +1110,7 @@ impl Document {
                     code.image_index = Some(idx);
 
                     let [ma, mb, mc, md, me, mf] = img.matrix;
-                    let apply = |u: f64, v: f64| -> (f64, f64) {
-                        (ma * u + mc * v + me, mb * u + md * v + mf)
-                    };
+                    let apply = |u: f64, v: f64| -> (f64, f64) { (ma * u + mc * v + me, mb * u + md * v + mf) };
                     let w_f = w as f64;
                     let h_f = h as f64;
                     let u0 = (code.rect[0] / w_f).clamp(0.0, 1.0);
@@ -1118,12 +1118,7 @@ impl Document {
                     let v0 = ((h_f - code.rect[3]) / h_f).clamp(0.0, 1.0);
                     let v1 = ((h_f - code.rect[1]) / h_f).clamp(0.0, 1.0);
 
-                    let corners = [
-                        apply(u0, v0),
-                        apply(u1, v0),
-                        apply(u1, v1),
-                        apply(u0, v1),
-                    ];
+                    let corners = [apply(u0, v0), apply(u1, v0), apply(u1, v1), apply(u0, v1)];
                     let sub_min_x = corners.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
                     let sub_min_y = corners.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
                     let sub_max_x = corners.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
@@ -1168,12 +1163,8 @@ impl Document {
                     let vy1 = (code.rect[3] as f32) / effective_scale;
 
                     let (mut min_x, mut min_y, mut max_x, mut max_y) = if let Some(info) = page_info {
-                        let corners = [
-                            info.view_to_user(vx0, vy0),
-                            info.view_to_user(vx1, vy0),
-                            info.view_to_user(vx1, vy1),
-                            info.view_to_user(vx0, vy1),
-                        ];
+                        let corners =
+                            [info.view_to_user(vx0, vy0), info.view_to_user(vx1, vy0), info.view_to_user(vx1, vy1), info.view_to_user(vx0, vy1)];
                         (
                             corners.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min),
                             corners.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min),

@@ -208,6 +208,21 @@ impl PageBackground {
     }
 }
 
+/// Global reading background and tint overlay preference (session-persistent).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ReadingBgState {
+    pub mode: PageBackground,
+    pub color: Color32,
+    pub tint_strength: f32,
+    pub picker_open: bool,
+}
+
+impl Default for ReadingBgState {
+    fn default() -> Self {
+        Self { mode: PageBackground::Default, color: Color32::from_rgb(0x1E, 0x1E, 0x1E), tint_strength: 0.5, picker_open: false }
+    }
+}
+
 /// How a newly opened document is shown (Preferences ▸ Documents and view). A PDF that asks
 /// for its own layout or zoom gets that instead.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -457,14 +472,6 @@ pub struct DocView {
     /// Single-page view, as last drawn: the page shown and whether the view was at its top and
     /// at its bottom, so ↑ / ↓ turn the page there instead of doing nothing (#273).
     single_edges: Option<(usize, bool, bool)>,
-    /// Viewport reading background preference to reduce eye strain (Light, Default, Dark). Strictly non-destructive UI setting.
-    pub page_background: PageBackground,
-    /// Custom page background color for reading mode tint overlay.
-    pub page_background_color: Color32,
-    /// Whether the background color picker / tint modal is open.
-    pub background_picker_open: bool,
-    /// Tint strength for reading mode overlay (0.0 to 1.0, default 0.5).
-    pub background_tint_strength: f32,
     /// Last rendered page whose texture is ready, used to avoid white flashes when navigating.
     pub last_ready_page: Option<usize>,
     /// Pinned scroll offset in single-page mode while a new page's texture is generating.
@@ -749,7 +756,13 @@ impl DocView {
         let continuous = match defaults.fit {
             Fit::Page => false,
             Fit::Width => true,
-            Fit::None => if defaults.zoom >= 1.25 { true } else { defaults.continuous },
+            Fit::None => {
+                if defaults.zoom >= 1.25 {
+                    true
+                } else {
+                    defaults.continuous
+                }
+            }
             _ => defaults.continuous,
         };
         Self {
@@ -776,10 +789,6 @@ impl DocView {
             goto_point: None,
             key_scroll: 0.0,
             single_edges: None,
-            page_background: PageBackground::Default,
-            page_background_color: Color32::from_rgb(0x1E, 0x1E, 0x1E),
-            background_picker_open: false,
-            background_tint_strength: 0.5,
             last_ready_page: None,
             single_page_target_y: None,
             flash: None,
@@ -913,10 +922,6 @@ impl DocView {
         fresh.rotation = self.rotation;
         fresh.current = self.current;
         fresh.organize = self.organize;
-        fresh.page_background = self.page_background;
-        fresh.page_background_color = self.page_background_color;
-        fresh.background_picker_open = self.background_picker_open;
-        fresh.background_tint_strength = self.background_tint_strength;
         fresh.last_ready_page = self.last_ready_page;
         fresh.grid_zoom = self.grid_zoom;
         // Same document id, so the scroll offset egui keeps for it is still this document's.
@@ -2474,6 +2479,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     // No dialog, close prompt or palette over the page: only then does page input count.
     let unobstructed = !app.modal_open() && !app.palette_open;
+    let reading_bg = app.reading_bg;
     let view = &mut app.views[index];
     if view.organize {
         organize_grid(view, info, doc.allows_assembly(), doc.dirty, unobstructed, ui, &t);
@@ -2481,7 +2487,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
 
     let avail = ui.available_rect_before_wrap();
-    if let Some(bg) = view.page_background.color() {
+    if let Some(bg) = reading_bg.mode.color() {
         ui.painter().rect_filled(avail, CornerRadius::ZERO, bg);
     }
     view.viewport_w = avail.width();
@@ -2494,7 +2500,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     let old_zoom = view.zoom;
     view.fit_zoom(info);
-    if view.continuous && view.shown && view.zoom_anchor.is_none() && view.goto.is_none() && view.goto_point.is_none() && (view.zoom - old_zoom).abs() > 1e-4 {
+    if view.continuous
+        && view.shown
+        && view.zoom_anchor.is_none()
+        && view.goto.is_none()
+        && view.goto_point.is_none()
+        && (view.zoom - old_zoom).abs() > 1e-4
+    {
         let prev_viewport = view.viewport_screen;
         let top_y = prev_viewport.min.y;
         let anchor = view
@@ -2878,7 +2890,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             scroll = scroll.vertical_scroll_offset(((r.top() - y_shift + fy * r.height() - rel.y).clamp(0.0, max_y)).round());
         }
     }
-    if let Some(bg) = view.page_background.color() {
+    if let Some(bg) = reading_bg.mode.color() {
         ui.painter().rect_filled(avail, CornerRadius::ZERO, bg);
     }
     let out = scroll.show_viewport(ui, |ui, viewport| {
@@ -2914,7 +2926,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         let origin = resp_rect.min - vec2(0.0, y_shift);
         let painter = ui.painter();
         let visible = viewport.translate(resp_rect.min.to_vec2());
-        if let Some(bg) = view.page_background.color() {
+        if let Some(bg) = reading_bg.mode.color() {
             painter.rect_filled(visible, CornerRadius::ZERO, bg);
         }
         let mut wanted = Vec::new();
@@ -2967,7 +2979,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             let xf = PageXform { rect: r, rot: view.rotation, pw: info.pages[i].width.max(1.0), ph: info.pages[i].height.max(1.0) };
             // Soft shadow + paper.
             painter.add(egui::epaint::Shadow { offset: [0, 3], blur: 14, spread: 0, color: t.page_shadow }.as_shape(r, CornerRadius::ZERO));
-            let paper_color = match view.page_background {
+            let paper_color = match reading_bg.mode {
                 PageBackground::Dark => Color32::from_rgb(0x1E, 0x1E, 0x1E),
                 PageBackground::Light => Color32::from_rgb(0xF5, 0xF2, 0xEB),
                 PageBackground::Default => Color32::WHITE,
@@ -3100,9 +3112,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 let page_tex = view.pages.get(&i).map(|p| p.tex.id());
                 view.move_background.paint(ui, painter, &xf, i, info, &view.content, page_tex);
             }
-            if view.page_background != PageBackground::Default && view.background_tint_strength > 0.0 {
-                let [cr, cg, cb, _] = view.page_background_color.to_array();
-                let a = ((255.0 * view.background_tint_strength).clamp(0.0, 255.0)) as u8;
+            if reading_bg.mode != PageBackground::Default && reading_bg.tint_strength > 0.0 {
+                let [cr, cg, cb, _] = reading_bg.color.to_array();
+                let a = ((255.0 * reading_bg.tint_strength).clamp(0.0, 255.0)) as u8;
                 painter.rect_filled(r, CornerRadius::ZERO, Color32::from_rgba_unmultiplied(cr, cg, cb, a));
             }
             painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(0.5, t.border.gamma_multiply(0.8)), egui::StrokeKind::Outside);
@@ -4029,11 +4041,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                         // Apply captured formatting to selected block
                         if sel.kind == crate::canvas_selection::SelectableKind::TextBlock {
                             let block_text = sel.text.clone().unwrap_or_default();
-                            let color = [
-                                captured.color.r() as f64 / 255.0,
-                                captured.color.g() as f64 / 255.0,
-                                captured.color.b() as f64 / 255.0,
-                            ];
+                            let color = [captured.color.r() as f64 / 255.0, captured.color.g() as f64 / 255.0, captured.color.b() as f64 / 255.0];
                             let family = captured.font_family.as_ref().map(|f| {
                                 if f.contains("Times") {
                                     pdfcraft_engine::FontFamily::Times
@@ -4081,8 +4089,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                             captured.font_size = b.size as f32;
                             captured.is_bold = b.bold;
                             captured.is_italic = b.italic;
-                            captured.color =
-                                Color32::from_rgb((b.color[0] * 255.0) as u8, (b.color[1] * 255.0) as u8, (b.color[2] * 255.0) as u8);
+                            captured.color = Color32::from_rgb((b.color[0] * 255.0) as u8, (b.color[1] * 255.0) as u8, (b.color[2] * 255.0) as u8);
                         }
                         view.canvas_selection.format_painter = Some(captured);
                     }
@@ -4105,10 +4112,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 if let Some(sel) = &view.canvas_selection.selected
                     && sel.kind == crate::canvas_selection::SelectableKind::TextBlock
                 {
-                    let block = view
-                        .edit_lines
-                        .get(&sel.page)
-                        .and_then(|(_, blocks)| blocks.get(sel.index));
+                    let block = view.edit_lines.get(&sel.page).and_then(|(_, blocks)| blocks.get(sel.index));
                     let cur_bold = block.is_some_and(|b| b.bold);
                     let cur_italic = block.is_some_and(|b| b.italic);
                     let family = block
@@ -4177,17 +4181,21 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let now = ui.input(|i| i.time);
     crate::barcode_hud::BarcodeScannerHud::auto_scan_on_page_change(view, doc, now);
 
-    if view.barcode_hud.open {
+    let barcode_interactive = view.barcode_hud.open || app.quick_tool == QuickTool::Select;
+    if barcode_interactive {
         let current_page = view.current;
         if let Some(xf) = view.page_xform(current_page) {
             let mut clicked_code = None;
             for (i, c) in view.barcode_hud.scanned_codes.iter().enumerate() {
                 if c.page == current_page {
                     let code_rect = xf.user_rect(info, current_page, c.rect.map(|v| v as f32));
-                    let is_active = i == view.barcode_hud.active_index;
+                    let is_active = view.barcode_hud.open && i == view.barcode_hud.active_index;
                     let resp = ui.interact(code_rect, ui.id().with(("barcode-box", current_page, i)), egui::Sense::click());
                     if resp.clicked() {
                         clicked_code = Some((i, c.rect));
+                    }
+                    if resp.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                     }
                     if is_active {
                         ui.painter().rect(
@@ -4197,7 +4205,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                             Stroke::new(1.0, Color32::from_rgb(0x3B, 0x82, 0xF6)),
                             egui::StrokeKind::Outside,
                         );
-                    } else {
+                    } else if view.barcode_hud.open || resp.hovered() {
                         ui.painter().rect_stroke(
                             code_rect,
                             CornerRadius::ZERO,
@@ -4208,15 +4216,18 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 }
             }
             if let Some((idx, target_rect)) = clicked_code {
-                if idx == view.barcode_hud.active_index && view.barcode_hud.panel_open {
+                if idx == view.barcode_hud.active_index && view.barcode_hud.open && view.barcode_hud.panel_open {
                     // Clicking the same focused barcode again toggles the HUD closed
                     view.barcode_hud.panel_open = false;
                 } else {
                     // Clicking a barcode focuses it, rescans with tight bounds, and opens HUD
+                    view.barcode_hud.open = true;
+                    view.barcode_hud.panel_open = true;
+                    view.barcode_hud.active_index = idx;
                     view.barcode_hud.target_rect = Some(target_rect);
                     let codes = doc.scan_page_codes(current_page);
                     view.barcode_hud.update_codes_conditional(codes, true);
-                    view.barcode_hud.panel_open = true;
+                    view.barcode_hud.active_index = idx;
                     view.barcode_hud.edit_buffer = None;
                 }
             }

@@ -128,7 +128,8 @@ fn image(doc: &Document, s: &Stream) -> Result<(&'static str, Vec<u8>), String> 
     let key = if mask { None } else { colour_key(doc, s) };
     if !mask {
         let has_smask = s.dict.get(b"SMask").map(|m| doc.resolve(m)).is_some_and(|m| matches!(&*m, Object::Stream(..) | Object::Ref(..)));
-        let has_stream_mask = s.dict.get(b"Mask").map(|m| doc.resolve(m)).is_some_and(|m| matches!(&*m, Object::Stream(..) | Object::Ref(..)) && key.is_none());
+        let has_stream_mask =
+            s.dict.get(b"Mask").map(|m| doc.resolve(m)).is_some_and(|m| matches!(&*m, Object::Stream(..) | Object::Ref(..)) && key.is_none());
         if (has_smask || has_stream_mask) && alpha.is_none() {
             return Err("the image has a mask that cannot be decoded".into());
         }

@@ -76,13 +76,12 @@ pub use link_ui::LinkDraft;
 pub use optimize_ui::{OptimizeDraft, OptimizeTab};
 pub use sign_ui::{DigitalIdEntry, SignDraft, SignGraphic, SignStep};
 mod autoscroll;
-mod bidi;
 pub mod barcode_hud;
+mod bidi;
 pub mod bulk_fields;
 mod dialogs;
 mod edit_text_ui;
 pub use edit_text_ui::CropMode;
-pub mod symbol_palette;
 mod editing;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod file_watch;
@@ -105,6 +104,7 @@ mod pickers;
 pub mod prepare;
 mod print_ui;
 mod signature_drag;
+pub mod symbol_palette;
 pub mod units;
 mod web_print;
 mod word_count_ui;
@@ -151,7 +151,7 @@ mod open_worker_tests;
 
 use pdfcraft_engine::{DocId, Session};
 
-pub use canvas::{DocView, RasterMemory};
+pub use canvas::{DocView, RasterMemory, ReadingBgState};
 pub use editing::{CloseRequest, SaveTarget};
 pub use files::{ExtractDraft, FilePurpose, FileRequest, RotateDraft, SplitDraft, SplitMode, SplitPlan};
 pub use recovery::{AUTOSAVE_SECS, RecoveryMeta, RecoveryStore};
@@ -529,6 +529,8 @@ pub struct PdfCraftApp {
     /// The reading-colours preference (Preferences ▸ Reading colours): applied to every open
     /// document, and documents open with it (Acrobat's Replace Document Colors).
     pub reading_colors: pdfcraft_render::ReadingColors,
+    /// Session-persistent eye-strain reading background preference and tint settings.
+    pub reading_bg: ReadingBgState,
     /// The Linux portal is enabled only by the native host, and starts on the first System choice.
     #[cfg(target_os = "linux")]
     desktop_theme: Option<pdfcraft_platform::desktop_theme::DesktopTheme>,
@@ -911,6 +913,7 @@ impl PdfCraftApp {
             theme: ThemeKind::Light,
             theme_preference: ThemePreference::Light,
             reading_colors: Default::default(),
+            reading_bg: Default::default(),
             #[cfg(target_os = "linux")]
             desktop_theme: None,
             #[cfg(target_os = "linux")]

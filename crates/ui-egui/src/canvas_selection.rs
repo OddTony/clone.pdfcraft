@@ -47,38 +47,17 @@ pub struct SelectableElement {
 impl SelectableElement {
     /// Construct a selectable text line element.
     pub fn new_line(page: usize, index: usize, user_rect: [f64; 4], text: String, baseline: Option<[f64; 2]>) -> Self {
-        Self {
-            page,
-            kind: SelectableKind::TextLine,
-            index,
-            user_rect,
-            text: Some(text),
-            baseline,
-        }
+        Self { page, kind: SelectableKind::TextLine, index, user_rect, text: Some(text), baseline }
     }
 
     /// Construct a selectable text block element.
     pub fn new_block(page: usize, index: usize, user_rect: [f64; 4], text: String) -> Self {
-        Self {
-            page,
-            kind: SelectableKind::TextBlock,
-            index,
-            user_rect,
-            text: Some(text),
-            baseline: None,
-        }
+        Self { page, kind: SelectableKind::TextBlock, index, user_rect, text: Some(text), baseline: None }
     }
 
     /// Construct a selectable image element.
     pub fn new_image(page: usize, index: usize, user_rect: [f64; 4]) -> Self {
-        Self {
-            page,
-            kind: SelectableKind::Image,
-            index,
-            user_rect,
-            text: None,
-            baseline: None,
-        }
+        Self { page, kind: SelectableKind::Image, index, user_rect, text: None, baseline: None }
     }
 
     /// Transform the user-space bounding box to screen coordinates.
@@ -217,13 +196,7 @@ pub struct SelectionLayoutEngine;
 
 impl SelectionLayoutEngine {
     /// Hit-test a screen point against a list of candidate elements.
-    pub fn hit_test_element(
-        pos: Pos2,
-        xf: &PageXform,
-        info: &DocInfo,
-        elements: &[SelectableElement],
-        padding: f32,
-    ) -> Option<SelectableElement> {
+    pub fn hit_test_element(pos: Pos2, xf: &PageXform, info: &DocInfo, elements: &[SelectableElement], padding: f32) -> Option<SelectableElement> {
         // Search in reverse order so topmost elements are hit first.
         elements.iter().rev().find(|el| el.contains_screen_pos(pos, xf, info, padding)).cloned()
     }
@@ -236,43 +209,16 @@ impl SelectionLayoutEngine {
         match el.kind {
             SelectableKind::TextLine => {
                 // Replacing a line's text with an empty string removes its glyphs while preserving layout.
-                Some(Edit::EditTextLine {
-                    page: el.page,
-                    line: el.index,
-                    text: String::new(),
-                })
+                Some(Edit::EditTextLine { page: el.page, line: el.index, text: String::new() })
             }
-            SelectableKind::TextBlock => {
-                Some(Edit::EditTextBlock {
-                    page: el.page,
-                    block: el.index,
-                    text: String::new(),
-                    style: Default::default(),
-                })
-            }
-            SelectableKind::Image => {
-                Some(Edit::EditPageImage {
-                    page: el.page,
-                    index: el.index,
-                    change: ImageEdit::Delete,
-                })
-            }
-            SelectableKind::AddedContent => {
-                Some(Edit::DeleteContent {
-                    page: el.page,
-                    index: el.index,
-                })
-            }
+            SelectableKind::TextBlock => Some(Edit::EditTextBlock { page: el.page, block: el.index, text: String::new(), style: Default::default() }),
+            SelectableKind::Image => Some(Edit::EditPageImage { page: el.page, index: el.index, change: ImageEdit::Delete }),
+            SelectableKind::AddedContent => Some(Edit::DeleteContent { page: el.page, index: el.index }),
         }
     }
 
     /// Render visual bounding box and selection handles for selected and hovered elements.
-    pub fn paint_selection_overlay(
-        painter: &egui::Painter,
-        xf: &PageXform,
-        info: &DocInfo,
-        state: &SelectionState,
-    ) {
+    pub fn paint_selection_overlay(painter: &egui::Painter, xf: &PageXform, info: &DocInfo, state: &SelectionState) {
         // Paint subtle hover outline if hovered element is distinct from selected.
         if let Some(hovered) = &state.hovered {
             let is_selected = state.selected.as_ref().is_some_and(|s| s.page == hovered.page && s.kind == hovered.kind && s.index == hovered.index);
@@ -304,13 +250,7 @@ impl SelectionLayoutEngine {
             // Handles (corners and edge midpoints)
             let handle_size = 7.0;
             for (_, h_rect) in SelectionHandle::handle_rects(rect, handle_size) {
-                painter.rect(
-                    h_rect,
-                    CornerRadius::same(1),
-                    Color32::WHITE,
-                    Stroke::new(1.0, ACCENT_BLUE),
-                    egui::StrokeKind::Middle,
-                );
+                painter.rect(h_rect, CornerRadius::same(1), Color32::WHITE, Stroke::new(1.0, ACCENT_BLUE), egui::StrokeKind::Middle);
             }
         }
     }
@@ -367,8 +307,7 @@ impl ZoomNavigationEngine {
                 ZoomNavAction::ScrollLine { delta_points: delta }
             }
         } else {
-            let entire_page_fits = fit == Fit::Page
-                || single_edges.is_some_and(|(p, top, bottom)| p == current_page && top && bottom);
+            let entire_page_fits = fit == Fit::Page || single_edges.is_some_and(|(p, top, bottom)| p == current_page && top && bottom);
 
             if entire_page_fits {
                 ZoomNavAction::StepPage { forward, target_fraction: if forward { 0.0 } else { 1.0 } }
@@ -428,21 +367,14 @@ impl FloatingContextMenu {
     /// Prefers positioning above the bounding box (`rect.top() - menu_height - 6.0`),
     /// falling back to below (`rect.bottom() + 6.0`) when clipped against the top of the viewport.
     /// Also clamps horizontally so the menu stays fully inside `viewport` bounds.
-    pub fn compute_anchor(
-        bounds: Rect,
-        viewport: Rect,
-        menu_width: f32,
-        menu_height: f32,
-    ) -> Option<Pos2> {
+    pub fn compute_anchor(bounds: Rect, viewport: Rect, menu_width: f32, menu_height: f32) -> Option<Pos2> {
         if !viewport.intersects(bounds) {
             return None;
         }
 
         let margin = 8.0;
-        let x = (bounds.center().x - menu_width * 0.5).clamp(
-            viewport.left() + margin,
-            (viewport.right() - menu_width - margin).max(viewport.left() + margin),
-        );
+        let x = (bounds.center().x - menu_width * 0.5)
+            .clamp(viewport.left() + margin, (viewport.right() - menu_width - margin).max(viewport.left() + margin));
 
         let space_above = bounds.top() - viewport.top();
         let y = if space_above >= menu_height + 10.0 {
@@ -457,14 +389,7 @@ impl FloatingContextMenu {
     /// Render the floating context menu anchored to the selected element.
     ///
     /// Shows a pill toolbar with Cut, Copy, Paste, Format Painter, Edit Text, Bold, Italic, Strikethrough, Symbols, and Delete icon buttons.
-    pub fn show(
-        ui: &mut egui::Ui,
-        viewport: Rect,
-        view: &DocView,
-        info: &DocInfo,
-        can_modify: bool,
-        can_copy: bool,
-    ) -> Option<FloatingMenuAction> {
+    pub fn show(ui: &mut egui::Ui, viewport: Rect, view: &DocView, info: &DocInfo, can_modify: bool, can_copy: bool) -> Option<FloatingMenuAction> {
         if view.line_editor.is_some() {
             return None;
         }
@@ -475,7 +400,13 @@ impl FloatingContextMenu {
 
         let is_text = matches!(sel.kind, SelectableKind::TextLine | SelectableKind::TextBlock);
         let is_image = matches!(sel.kind, SelectableKind::Image);
-        let menu_width = if is_text { 330.0 } else if is_image { 190.0 } else { 150.0 };
+        let menu_width = if is_text {
+            330.0
+        } else if is_image {
+            190.0
+        } else {
+            150.0
+        };
         let menu_height = 36.0;
 
         let anchor = Self::compute_anchor(screen_rect, viewport, menu_width, menu_height)?;
@@ -491,32 +422,21 @@ impl FloatingContextMenu {
                     .fill(t.card)
                     .stroke(Stroke::new(1.0, t.border))
                     .corner_radius(CornerRadius::same(8))
-                    .shadow(egui::Shadow {
-                        offset: [0, 4],
-                        blur: 14,
-                        spread: 0,
-                        color: Color32::from_black_alpha(if t.dark() { 90 } else { 32 }),
-                    })
+                    .shadow(egui::Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(if t.dark() { 90 } else { 32 }) })
                     .inner_margin(egui::Margin::symmetric(6, 4))
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         ui.horizontal(|ui| {
                             // Cut (Ctrl+X)
-                            if can_modify && can_copy
-                                && crate::icons::button(ui, "scissors", 26.0, false, "Cut (Ctrl+X)").clicked()
-                            {
+                            if can_modify && can_copy && crate::icons::button(ui, "scissors", 26.0, false, "Cut (Ctrl+X)").clicked() {
                                 action = Some(FloatingMenuAction::Cut);
                             }
                             // Copy (Ctrl+C)
-                            if can_copy
-                                && crate::icons::button(ui, "copy", 26.0, false, "Copy (Ctrl+C)").clicked()
-                            {
+                            if can_copy && crate::icons::button(ui, "copy", 26.0, false, "Copy (Ctrl+C)").clicked() {
                                 action = Some(FloatingMenuAction::Copy);
                             }
                             // Paste (Ctrl+V)
-                            if can_modify
-                                && crate::icons::button(ui, "clipboard-paste", 26.0, false, "Paste (Ctrl+V)").clicked()
-                            {
+                            if can_modify && crate::icons::button(ui, "clipboard-paste", 26.0, false, "Paste (Ctrl+V)").clicked() {
                                 action = Some(FloatingMenuAction::Paste);
                             }
 
@@ -529,15 +449,15 @@ impl FloatingContextMenu {
                                     26.0,
                                     has_format,
                                     if has_format { "Apply formatting (Format Painter)" } else { "Pick up formatting (Format Painter)" },
-                                ).clicked() {
+                                )
+                                .clicked()
+                                {
                                     action = Some(FloatingMenuAction::FormatPainter);
                                 }
                             }
 
                             // Edit Text (for text elements)
-                            if is_text && can_modify
-                                && crate::icons::button(ui, "text-cursor-input", 26.0, false, "Edit text").clicked()
-                            {
+                            if is_text && can_modify && crate::icons::button(ui, "text-cursor-input", 26.0, false, "Edit text").clicked() {
                                 action = Some(FloatingMenuAction::EditText);
                             }
 
@@ -559,9 +479,7 @@ impl FloatingContextMenu {
                             }
 
                             // Recognize Text (OCR for images)
-                            if is_image && can_modify
-                                && crate::icons::button(ui, "scan-text", 26.0, false, "Recognize text (OCR)").clicked()
-                            {
+                            if is_image && can_modify && crate::icons::button(ui, "scan-text", 26.0, false, "Recognize text (OCR)").clicked() {
                                 action = Some(FloatingMenuAction::RecognizeOcr);
                             }
 
@@ -615,14 +533,7 @@ mod tests {
 
         let edit = SelectionLayoutEngine::handle_delete_key(&mut state);
         assert!(state.selected.is_none());
-        assert_eq!(
-            edit,
-            Some(Edit::EditTextLine {
-                page: 2,
-                line: 7,
-                text: String::new(),
-            })
-        );
+        assert_eq!(edit, Some(Edit::EditTextLine { page: 2, line: 7, text: String::new() }));
     }
 
     #[test]
@@ -638,57 +549,22 @@ mod tests {
 
     #[test]
     fn test_zoom_nav_action_fit_page() {
-        let action = ZoomNavigationEngine::evaluate_navigation_step(
-            Key::ArrowDown,
-            Fit::Page,
-            false,
-            1.0,
-            Some((0, true, true)),
-            0,
-            1.0,
-            800.0,
-        );
+        let action = ZoomNavigationEngine::evaluate_navigation_step(Key::ArrowDown, Fit::Page, false, 1.0, Some((0, true, true)), 0, 1.0, 800.0);
         assert_eq!(action, ZoomNavAction::StepPage { forward: true, target_fraction: 0.0 });
 
-        let action_up = ZoomNavigationEngine::evaluate_navigation_step(
-            Key::ArrowUp,
-            Fit::Page,
-            false,
-            1.0,
-            Some((1, true, true)),
-            1,
-            1.0,
-            800.0,
-        );
+        let action_up = ZoomNavigationEngine::evaluate_navigation_step(Key::ArrowUp, Fit::Page, false, 1.0, Some((1, true, true)), 1, 1.0, 800.0);
         assert_eq!(action_up, ZoomNavAction::StepPage { forward: false, target_fraction: 1.0 });
     }
 
     #[test]
     fn test_zoom_nav_action_zoomed_in() {
         // Zoomed in: single_edges top/bottom false
-        let action = ZoomNavigationEngine::evaluate_navigation_step(
-            Key::ArrowDown,
-            Fit::None,
-            false,
-            2.0,
-            Some((0, true, false)),
-            0,
-            1.0,
-            600.0,
-        );
+        let action = ZoomNavigationEngine::evaluate_navigation_step(Key::ArrowDown, Fit::None, false, 2.0, Some((0, true, false)), 0, 1.0, 600.0);
         assert_eq!(action, ZoomNavAction::ScrollLine { delta_points: 40.0 });
 
         // Zoomed in at bottom boundary
-        let action_boundary = ZoomNavigationEngine::evaluate_navigation_step(
-            Key::ArrowDown,
-            Fit::None,
-            false,
-            2.0,
-            Some((0, false, true)),
-            0,
-            1.0,
-            600.0,
-        );
+        let action_boundary =
+            ZoomNavigationEngine::evaluate_navigation_step(Key::ArrowDown, Fit::None, false, 2.0, Some((0, false, true)), 0, 1.0, 600.0);
         assert_eq!(action_boundary, ZoomNavAction::StepPage { forward: true, target_fraction: 0.0 });
     }
 
@@ -731,4 +607,3 @@ mod tests {
         assert!(anchor_right.x + 180.0 <= 1000.0 - 8.0);
     }
 }
-

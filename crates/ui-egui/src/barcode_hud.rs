@@ -41,24 +41,31 @@ pub struct BarcodeHudState {
 impl BarcodeHudState {
     /// Find the index of a code whose bounding rectangle matches `target`.
     pub fn find_code_matching_rect(&self, target: [f64; 4]) -> Option<usize> {
-        self.scanned_codes.iter().position(|c| {
-            (c.rect[0] - target[0]).abs() < 5.0
-                && (c.rect[1] - target[1]).abs() < 5.0
-                && (c.rect[2] - target[2]).abs() < 5.0
-                && (c.rect[3] - target[3]).abs() < 5.0
-        }).or_else(|| {
-            let target_cx = (target[0] + target[2]) * 0.5;
-            let target_cy = (target[1] + target[3]) * 0.5;
-            self.scanned_codes.iter().enumerate().min_by(|(_, a), (_, b)| {
-                let acx = (a.rect[0] + a.rect[2]) * 0.5;
-                let acy = (a.rect[1] + a.rect[3]) * 0.5;
-                let bcx = (b.rect[0] + b.rect[2]) * 0.5;
-                let bcy = (b.rect[1] + b.rect[3]) * 0.5;
-                let dist_a = (acx - target_cx).hypot(acy - target_cy);
-                let dist_b = (bcx - target_cx).hypot(bcy - target_cy);
-                dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
-            }).map(|(idx, _)| idx)
-        })
+        self.scanned_codes
+            .iter()
+            .position(|c| {
+                (c.rect[0] - target[0]).abs() < 5.0
+                    && (c.rect[1] - target[1]).abs() < 5.0
+                    && (c.rect[2] - target[2]).abs() < 5.0
+                    && (c.rect[3] - target[3]).abs() < 5.0
+            })
+            .or_else(|| {
+                let target_cx = (target[0] + target[2]) * 0.5;
+                let target_cy = (target[1] + target[3]) * 0.5;
+                self.scanned_codes
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| {
+                        let acx = (a.rect[0] + a.rect[2]) * 0.5;
+                        let acy = (a.rect[1] + a.rect[3]) * 0.5;
+                        let bcx = (b.rect[0] + b.rect[2]) * 0.5;
+                        let bcy = (b.rect[1] + b.rect[3]) * 0.5;
+                        let dist_a = (acx - target_cx).hypot(acy - target_cy);
+                        let dist_b = (bcx - target_cx).hypot(bcy - target_cy);
+                        dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .map(|(idx, _)| idx)
+            })
     }
 
     /// Populate or update scanned codes for a page with explicit open control.
@@ -137,7 +144,7 @@ fn get_downloads_dir() -> std::path::PathBuf {
     std::env::temp_dir()
 }
 
-fn safe_rect_and_pixels(rect: [f64; 4], pixel_size: [u32; 2], kind: pdfcraft_engine::barcode_scan::CodeKind) -> ([f64; 4], u32, u32) {
+fn safe_rect_and_pixels(rect: [f64; 4], pixel_size: [u32; 2], kind: pdfcraft_engine::barcode_scan::CodeKind) -> ([f64; 4], [f64; 4], u32, u32) {
     let min_x = if rect[0].is_finite() && rect[2].is_finite() { rect[0].min(rect[2]) } else { 0.0 };
     let max_x = if rect[0].is_finite() && rect[2].is_finite() { rect[0].max(rect[2]) } else { 100.0 };
     let min_y = if rect[1].is_finite() && rect[3].is_finite() { rect[1].min(rect[3]) } else { 0.0 };
@@ -146,12 +153,15 @@ fn safe_rect_and_pixels(rect: [f64; 4], pixel_size: [u32; 2], kind: pdfcraft_eng
     let orig_w = (max_x - min_x).max(15.0);
     let orig_h = (max_y - min_y).max(15.0);
 
-    // Inflate safe_rect by 3 PDF points on all sides to completely cover anti-aliased edges
+    // Exact normalized safe rect without inflation for re-embedding new code
+    let new_image_rect = [min_x, min_y, max_x, max_y];
+
+    // Inflate whiteout_rect by 3 PDF points on all sides to completely cover anti-aliased edges
     let min_x = (min_x - 3.0).max(0.0);
     let max_x = max_x + 3.0;
     let min_y = (min_y - 3.0).max(0.0);
     let max_y = max_y + 3.0;
-    let safe_rect = [min_x, min_y, max_x, max_y];
+    let whiteout_rect = [min_x, min_y, max_x, max_y];
 
     let rect_w = orig_w.round().max(16.0) as u32;
     let rect_h = orig_h.round().max(16.0) as u32;
@@ -163,7 +173,7 @@ fn safe_rect_and_pixels(rect: [f64; 4], pixel_size: [u32; 2], kind: pdfcraft_eng
     } else {
         (pw.max(64), ph.max(24))
     };
-    (safe_rect, pw, ph)
+    (whiteout_rect, new_image_rect, pw, ph)
 }
 
 /// Unified Floating HUD widget.
@@ -172,21 +182,19 @@ pub struct BarcodeScannerHud;
 impl BarcodeScannerHud {
     /// Reactive Auto-Page Tracking hook:
     ///
-    /// CONDITIONAL AUTO-SCAN STATE:
-    /// Never force the QR/Barcode HUD open automatically on page scroll or arrow-key navigation.
-    /// Only auto-scan the new page and refresh HUD data if the user already has the HUD explicitly open.
+    /// Scans current page on page change so interactive canvas clicks work immediately.
+    /// Only displays feedback toasts if the user has the HUD open.
     pub fn auto_scan_on_page_change(view: &mut DocView, doc: &Document, now: f64) {
         let current_page = view.current;
         if view.barcode_hud.last_scanned_page != Some(current_page) {
             view.barcode_hud.last_scanned_page = Some(current_page);
 
-            // Only auto-scan the new page if the HUD is already open
+            let codes = doc.scan_page_codes(current_page);
+            let count = codes.len();
+            let panel_open = view.barcode_hud.panel_open;
+            view.barcode_hud.update_codes_conditional(codes, true);
+            view.barcode_hud.panel_open = panel_open;
             if view.barcode_hud.open {
-                let codes = doc.scan_page_codes(current_page);
-                let count = codes.len();
-                let panel_open = view.barcode_hud.panel_open;
-                view.barcode_hud.update_codes_conditional(codes, true);
-                view.barcode_hud.panel_open = panel_open;
                 if count > 0 {
                     view.barcode_hud.show_toast(format!("Detected {count} code(s) on page {}", current_page + 1), now);
                 } else {
@@ -263,10 +271,24 @@ impl BarcodeScannerHud {
                                 .show(ui, |ui| {
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing.x = 6.0;
-                                        if ui.add(egui::Button::new(egui::RichText::new("🗑 Delete").font(theme::medium(11.0)).color(Color32::from_rgb(0xEF, 0x44, 0x44)))).on_hover_text("Delete barcode and whiteout region").clicked() {
+                                        if ui
+                                            .add(egui::Button::new(
+                                                egui::RichText::new("🗑 Delete").font(theme::medium(11.0)).color(Color32::from_rgb(0xEF, 0x44, 0x44)),
+                                            ))
+                                            .on_hover_text("Delete barcode and whiteout region")
+                                            .clicked()
+                                        {
                                             delete_code = Some(active.clone());
                                         }
-                                        if ui.add(egui::Button::new(egui::RichText::new("⬇ Download").font(theme::medium(11.0)).color(Color32::from_rgb(0x60, 0xA5, 0xFA)))).on_hover_text("Export barcode PNG to Downloads folder").clicked() {
+                                        if ui
+                                            .add(egui::Button::new(
+                                                egui::RichText::new("⬇ Download")
+                                                    .font(theme::medium(11.0))
+                                                    .color(Color32::from_rgb(0x60, 0xA5, 0xFA)),
+                                            ))
+                                            .on_hover_text("Export barcode PNG to Downloads folder")
+                                            .clicked()
+                                        {
                                             download_code = Some(active.clone());
                                         }
                                     });
@@ -291,191 +313,207 @@ impl BarcodeScannerHud {
         let hud_pos = Pos2::new((viewport.right() - hud_w - 18.0).max(viewport.left() + 18.0), viewport.top() + 18.0);
 
         if state.panel_open {
-            egui::Area::new(egui::Id::new(("barcode-scanner-hud-v3", view_id))).order(egui::Order::Foreground).fixed_pos(hud_pos).show(ui.ctx(), |ui| {
-            egui::Frame::NONE
-                .fill(card_bg)
-                .stroke(border_stroke)
-                .corner_radius(CornerRadius::same(12))
-                .shadow(egui::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(170) })
-                .inner_margin(Margin::symmetric(14, 12))
-                .show(ui, |ui| {
-                    ui.set_width(hud_w - 28.0);
-
-                    // Header: Icon + Title + Sandeep PDF Studio v3 Tag + Close button
-                    ui.horizontal(|ui| {
-                        crate::icons::paint(ui, Rect::from_min_size(ui.cursor().min, vec2(16.0, 16.0)), "scan", 16.0, accent_blue);
-                        ui.add_space(22.0);
-                        ui.label(egui::RichText::new("QR & Barcodes").font(theme::semibold(13.5)).color(text_primary));
-
-                        // v3 Version Chip
-                        ui.painter().rect_filled(
-                            Rect::from_min_size(ui.cursor().min + vec2(4.0, 2.0), vec2(26.0, 15.0)),
-                            CornerRadius::same(4),
-                            Color32::from_rgb(0x1D, 0x4E, 0xD8),
-                        );
-                        ui.add_space(6.0);
-                        ui.label(egui::RichText::new("v3").font(theme::semibold(9.5)).color(Color32::WHITE));
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("✕").on_hover_text("Close HUD").clicked() {
-                                close_hud = true;
-                            }
-                        });
-                    });
-
-                    ui.add_space(8.0);
-
-                    // Section 1: Page Tracker & Multi-Code Navigation Bar
+            egui::Area::new(egui::Id::new(("barcode-scanner-hud-v3", view_id))).order(egui::Order::Foreground).fixed_pos(hud_pos).show(
+                ui.ctx(),
+                |ui| {
                     egui::Frame::NONE
-                        .fill(item_card_bg)
-                        .stroke(item_card_stroke)
-                        .corner_radius(CornerRadius::same(8))
-                        .inner_margin(Margin::symmetric(10, 8))
+                        .fill(card_bg)
+                        .stroke(border_stroke)
+                        .corner_radius(CornerRadius::same(12))
+                        .shadow(egui::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(170) })
+                        .inner_margin(Margin::symmetric(14, 12))
                         .show(ui, |ui| {
+                            ui.set_width(hud_w - 28.0);
+
+                            // Header: Icon + Title + Sandeep PDF Studio v3 Tag + Close button
                             ui.horizontal(|ui| {
-                                ui.label(
-                                    egui::RichText::new(format!("Page {} of {}", current_page + 1, total_pages))
-                                        .font(theme::medium(11.5))
-                                        .color(text_muted),
+                                crate::icons::paint(ui, Rect::from_min_size(ui.cursor().min, vec2(16.0, 16.0)), "scan", 16.0, accent_blue);
+                                ui.add_space(22.0);
+                                ui.label(egui::RichText::new("QR & Barcodes").font(theme::semibold(13.5)).color(text_primary));
+
+                                // v3 Version Chip
+                                ui.painter().rect_filled(
+                                    Rect::from_min_size(ui.cursor().min + vec2(4.0, 2.0), vec2(26.0, 15.0)),
+                                    CornerRadius::same(4),
+                                    Color32::from_rgb(0x1D, 0x4E, 0xD8),
                                 );
+                                ui.add_space(6.0);
+                                ui.label(egui::RichText::new("v3").font(theme::semibold(9.5)).color(Color32::WHITE));
+
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.small_button("⟳").on_hover_text("Rescan current page").clicked() {
-                                        trigger_rescan = true;
+                                    if ui.small_button("✕").on_hover_text("Close HUD").clicked() {
+                                        close_hud = true;
                                     }
-                                    ui.label(egui::RichText::new("● AUTO").font(theme::semibold(9.5)).color(emerald_green));
                                 });
                             });
 
-                            ui.add_space(6.0);
+                            ui.add_space(8.0);
 
-                            if total_codes > 0 {
-                                ui.horizontal(|ui| {
-                                    let prev_btn =
-                                        ui.add_sized([26.0, 22.0], egui::Button::new("◀")).on_hover_text("Previous barcode/QR code (Left Arrow)");
-                                    if prev_btn.clicked() {
-                                        step_prev = true;
-                                    }
-
-                                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                                        ui.painter().rect_filled(
-                                            Rect::from_min_size(ui.cursor().min, vec2(136.0, 22.0)),
-                                            CornerRadius::same(5),
-                                            Color32::from_rgb(0x13, 0x14, 0x1A),
-                                        );
-                                        ui.add_space(8.0);
-                                        ui.label(
-                                            egui::RichText::new(format!("Code {} of {}", state.active_index + 1, total_codes))
-                                                .font(theme::semibold(12.0))
-                                                .color(accent_blue),
-                                        );
-                                    });
-
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        let next_btn =
-                                            ui.add_sized([26.0, 22.0], egui::Button::new("▶")).on_hover_text("Next barcode/QR code (Right Arrow)");
-                                        if next_btn.clicked() {
-                                            step_next = true;
-                                        }
-                                    });
-                                });
-                            } else {
-                                ui.label(egui::RichText::new("No barcodes or QR codes on this page").font(theme::regular(11.0)).color(text_muted));
-                            }
-                        });
-
-                    // Section 2: Active Code Details Card (Data of ONE code at a time)
-                    if let Some(active) = state.active_code().cloned() {
-                        ui.add_space(8.0);
-                        egui::Frame::NONE
-                            .fill(item_card_bg)
-                            .stroke(item_card_stroke)
-                            .corner_radius(CornerRadius::same(8))
-                            .inner_margin(Margin::symmetric(10, 8))
-                            .show(ui, |ui| {
-                                // Symbology + Dimensions
-                                ui.horizontal(|ui| {
-                                    ui.label(egui::RichText::new("●").color(accent_blue).font(theme::semibold(11.0)));
-                                    ui.label(egui::RichText::new(active.kind.label()).font(theme::semibold(12.0)).color(text_primary));
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        ui.label(
-                                            egui::RichText::new(format!("{}×{}px • 100%", active.pixel_size[0], active.pixel_size[1]))
-                                                .font(theme::semibold(10.0))
-                                                .color(Color32::from_rgb(0x38, 0xBD, 0xF8)),
-                                        );
-                                    });
-                                });
-
-                                ui.add_space(6.0);
-
-                                // Payload View or Edit Mode
-                                if let Some(buf) = &mut state.edit_buffer {
-                                    ui.label(egui::RichText::new("EDIT PAYLOAD (100% RE-EMBED)").font(theme::semibold(9.5)).color(text_muted));
-                                    ui.add_space(3.0);
-                                    ui.add(egui::TextEdit::singleline(buf).desired_width(ui.available_width()));
-                                    ui.add_space(8.0);
+                            // Section 1: Page Tracker & Multi-Code Navigation Bar
+                            egui::Frame::NONE
+                                .fill(item_card_bg)
+                                .stroke(item_card_stroke)
+                                .corner_radius(CornerRadius::same(8))
+                                .inner_margin(Margin::symmetric(10, 8))
+                                .show(ui, |ui| {
                                     ui.horizontal(|ui| {
-                                        let can_apply = can_modify && !buf.trim().is_empty();
-                                        if ui.add_enabled(can_apply, egui::Button::new("⚡ Re-embed")).clicked() {
-                                            apply_code = Some((active.clone(), buf.clone()));
-                                        }
-                                        if ui.button("Cancel").clicked() {
-                                            cancel_edit = true;
-                                        }
+                                        ui.label(
+                                            egui::RichText::new(format!("Page {} of {}", current_page + 1, total_pages))
+                                                .font(theme::medium(11.5))
+                                                .color(text_muted),
+                                        );
+                                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                            if ui.small_button("⟳").on_hover_text("Rescan current page").clicked() {
+                                                trigger_rescan = true;
+                                            }
+                                            ui.label(egui::RichText::new("● AUTO").font(theme::semibold(9.5)).color(emerald_green));
+                                        });
                                     });
-                                } else {
-                                    // Monospace text container
-                                    egui::Frame::NONE
-                                        .fill(Color32::from_rgb(0x0C, 0x0D, 0x12))
-                                        .stroke(Stroke::new(1.0, Color32::from_rgb(0x22, 0x25, 0x30)))
-                                        .corner_radius(CornerRadius::same(6))
-                                        .inner_margin(Margin::symmetric(8, 6))
-                                        .show(ui, |ui| {
-                                            ui.horizontal_wrapped(|ui| {
-                                                ui.label(egui::RichText::new(&active.text).font(theme::medium(12.0)).monospace().color(text_primary));
+
+                                    ui.add_space(6.0);
+
+                                    if total_codes > 0 {
+                                        ui.horizontal(|ui| {
+                                            let prev_btn = ui
+                                                .add_sized([26.0, 22.0], egui::Button::new("◀"))
+                                                .on_hover_text("Previous barcode/QR code (Left Arrow)");
+                                            if prev_btn.clicked() {
+                                                step_prev = true;
+                                            }
+
+                                            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                                ui.painter().rect_filled(
+                                                    Rect::from_min_size(ui.cursor().min, vec2(136.0, 22.0)),
+                                                    CornerRadius::same(5),
+                                                    Color32::from_rgb(0x13, 0x14, 0x1A),
+                                                );
+                                                ui.add_space(8.0);
+                                                ui.label(
+                                                    egui::RichText::new(format!("Code {} of {}", state.active_index + 1, total_codes))
+                                                        .font(theme::semibold(12.0))
+                                                        .color(accent_blue),
+                                                );
+                                            });
+
+                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                let next_btn = ui
+                                                    .add_sized([26.0, 22.0], egui::Button::new("▶"))
+                                                    .on_hover_text("Next barcode/QR code (Right Arrow)");
+                                                if next_btn.clicked() {
+                                                    step_next = true;
+                                                }
+                                            });
+                                        });
+                                    } else {
+                                        ui.label(
+                                            egui::RichText::new("No barcodes or QR codes on this page").font(theme::regular(11.0)).color(text_muted),
+                                        );
+                                    }
+                                });
+
+                            // Section 2: Active Code Details Card (Data of ONE code at a time)
+                            if let Some(active) = state.active_code().cloned() {
+                                ui.add_space(8.0);
+                                egui::Frame::NONE
+                                    .fill(item_card_bg)
+                                    .stroke(item_card_stroke)
+                                    .corner_radius(CornerRadius::same(8))
+                                    .inner_margin(Margin::symmetric(10, 8))
+                                    .show(ui, |ui| {
+                                        // Symbology + Dimensions
+                                        ui.horizontal(|ui| {
+                                            ui.label(egui::RichText::new("●").color(accent_blue).font(theme::semibold(11.0)));
+                                            ui.label(egui::RichText::new(active.kind.label()).font(theme::semibold(12.0)).color(text_primary));
+                                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                ui.label(
+                                                    egui::RichText::new(format!("{}×{}px • 100%", active.pixel_size[0], active.pixel_size[1]))
+                                                        .font(theme::semibold(10.0))
+                                                        .color(Color32::from_rgb(0x38, 0xBD, 0xF8)),
+                                                );
                                             });
                                         });
 
-                                    ui.add_space(6.0);
-                                    ui.horizontal(|ui| {
-                                        if ui.button("📋 Copy").on_hover_text("Copy payload to clipboard").clicked() {
-                                            copy_text = Some(active.text.clone());
-                                        }
-                                        if can_modify && ui.button("✏ Edit Payload").on_hover_text("Edit and re-embed code").clicked() {
-                                            start_edit = true;
-                                        }
-                                        if can_modify && ui.button("🗑 Delete Code").on_hover_text("Whiteout and remove code from page").clicked() {
-                                            delete_code = Some(active.clone());
+                                        ui.add_space(6.0);
+
+                                        // Payload View or Edit Mode
+                                        if let Some(buf) = &mut state.edit_buffer {
+                                            ui.label(
+                                                egui::RichText::new("EDIT PAYLOAD (100% RE-EMBED)").font(theme::semibold(9.5)).color(text_muted),
+                                            );
+                                            ui.add_space(3.0);
+                                            ui.add(egui::TextEdit::singleline(buf).desired_width(ui.available_width()));
+                                            ui.add_space(8.0);
+                                            ui.horizontal(|ui| {
+                                                let can_apply = can_modify && !buf.trim().is_empty();
+                                                if ui.add_enabled(can_apply, egui::Button::new("⚡ Re-embed")).clicked() {
+                                                    apply_code = Some((active.clone(), buf.clone()));
+                                                }
+                                                if ui.button("Cancel").clicked() {
+                                                    cancel_edit = true;
+                                                }
+                                            });
+                                        } else {
+                                            // Monospace text container
+                                            egui::Frame::NONE
+                                                .fill(Color32::from_rgb(0x0C, 0x0D, 0x12))
+                                                .stroke(Stroke::new(1.0, Color32::from_rgb(0x22, 0x25, 0x30)))
+                                                .corner_radius(CornerRadius::same(6))
+                                                .inner_margin(Margin::symmetric(8, 6))
+                                                .show(ui, |ui| {
+                                                    ui.horizontal_wrapped(|ui| {
+                                                        ui.label(
+                                                            egui::RichText::new(&active.text)
+                                                                .font(theme::medium(12.0))
+                                                                .monospace()
+                                                                .color(text_primary),
+                                                        );
+                                                    });
+                                                });
+
+                                            ui.add_space(6.0);
+                                            ui.horizontal(|ui| {
+                                                if ui.button("📋 Copy").on_hover_text("Copy payload to clipboard").clicked() {
+                                                    copy_text = Some(active.text.clone());
+                                                }
+                                                if can_modify && ui.button("✏ Edit Payload").on_hover_text("Edit and re-embed code").clicked() {
+                                                    start_edit = true;
+                                                }
+                                                if can_modify
+                                                    && ui.button("🗑 Delete Code").on_hover_text("Whiteout and remove code from page").clicked()
+                                                {
+                                                    delete_code = Some(active.clone());
+                                                }
+                                            });
                                         }
                                     });
+                            }
+
+                            // Section 3: Collapsible "Generate New QR" Section
+                            ui.add_space(8.0);
+                            ui.collapsing("Generate New QR Code", |ui| {
+                                ui.add_space(4.0);
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut state.qr_input)
+                                        .desired_width(ui.available_width())
+                                        .hint_text("https://example.com or text..."),
+                                );
+                                ui.add_space(6.0);
+                                let can_gen = can_modify && !state.qr_input.trim().is_empty();
+                                if ui.add_enabled(can_gen, egui::Button::new("⚡ Embed QR on Page")).clicked() {
+                                    trigger_generate = true;
                                 }
                             });
-                    }
 
-                    // Section 3: Collapsible "Generate New QR" Section
-                    ui.add_space(8.0);
-                    ui.collapsing("Generate New QR Code", |ui| {
-                        ui.add_space(4.0);
-                        ui.add(
-                            egui::TextEdit::singleline(&mut state.qr_input)
-                                .desired_width(ui.available_width())
-                                .hint_text("https://example.com or text..."),
-                        );
-                        ui.add_space(6.0);
-                        let can_gen = can_modify && !state.qr_input.trim().is_empty();
-                        if ui.add_enabled(can_gen, egui::Button::new("⚡ Embed QR on Page")).clicked() {
-                            trigger_generate = true;
-                        }
-                    });
-
-                    // Feedback Toast
-                    if let Some((msg, expiry)) = &state.toast
-                        && *expiry > now
-                    {
-                        ui.add_space(6.0);
-                        ui.label(egui::RichText::new(msg).font(theme::medium(11.0)).color(emerald_green));
-                    }
-                });
-            });
+                            // Feedback Toast
+                            if let Some((msg, expiry)) = &state.toast
+                                && *expiry > now
+                            {
+                                ui.add_space(6.0);
+                                ui.label(egui::RichText::new(msg).font(theme::medium(11.0)).color(emerald_green));
+                            }
+                        });
+                },
+            );
         }
 
         if trigger_rescan {
@@ -488,13 +526,11 @@ impl BarcodeScannerHud {
         if cancel_edit {
             state.edit_buffer = None;
         }
-        if start_edit
-            && let Some(active) = state.active_code()
-        {
+        if start_edit && let Some(active) = state.active_code() {
             state.edit_buffer = Some(active.text.clone());
         }
         if let Some((active, buf)) = apply_code {
-            let (safe_rect, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
+            let (whiteout_rect, new_image_rect, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
 
             match Document::generate_replacement_code(active.kind, &buf, pw, ph) {
                 Ok(png_bytes) => {
@@ -504,13 +540,13 @@ impl BarcodeScannerHud {
                         vec![
                             Edit::AddImage {
                                 page: current_page,
-                                rect: Some(safe_rect),
+                                rect: Some(whiteout_rect),
                                 name: "Whiteout.png".into(),
                                 bytes: Arc::new(whiteout_bytes),
                             },
                             Edit::AddImage {
                                 page: current_page,
-                                rect: Some(safe_rect),
+                                rect: Some(new_image_rect),
                                 name: "UpdatedCode.png".into(),
                                 bytes: Arc::new(png_bytes),
                             },
@@ -518,17 +554,14 @@ impl BarcodeScannerHud {
                     } else {
                         vec![Edit::AddImage {
                             page: current_page,
-                            rect: Some(safe_rect),
+                            rect: Some(new_image_rect),
                             name: "UpdatedCode.png".into(),
                             bytes: Arc::new(png_bytes),
                         }]
                     };
 
-                    pending_edit = Some(Edit::Batch {
-                        label: "Replace code".into(),
-                        edits,
-                    });
-                    state.target_rect = Some(safe_rect);
+                    pending_edit = Some(Edit::Batch { label: "Replace code".into(), edits });
+                    state.target_rect = Some(new_image_rect);
                     state.last_scanned_page = None;
                     state.edit_buffer = None;
                     state.show_toast(format!("Replaced at 100% dimensions ({}×{}px)!", pw, ph), now);
@@ -539,12 +572,12 @@ impl BarcodeScannerHud {
             }
         }
         if let Some(active) = delete_code {
-            let (safe_rect, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
+            let (whiteout_rect, _, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
             match Document::generate_whiteout(pw, ph) {
                 Ok(whiteout_png) => {
                     pending_edit = Some(Edit::AddImage {
                         page: current_page,
-                        rect: Some(safe_rect),
+                        rect: Some(whiteout_rect),
                         name: "Whiteout.png".into(),
                         bytes: Arc::new(whiteout_png),
                     });
@@ -559,7 +592,7 @@ impl BarcodeScannerHud {
             }
         }
         if let Some(active) = download_code {
-            let (_, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
+            let (_, _, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
             let pw = pw.max(128);
             let ph = if active.kind == pdfcraft_engine::barcode_scan::CodeKind::QrCode { pw } else { ph.max(48) };
             match Document::generate_replacement_code(active.kind, &active.text, pw, ph) {
@@ -713,10 +746,7 @@ mod tests {
         assert_eq!(state.active_code().map(|c| c.text.as_str()), Some("Code 2"));
 
         // Simulate replacement of Code 2: new scan reorders updated Code 2 to index 0 ("Code 1")
-        let updated_code2 = ScannedCode {
-            text: "Code 2 Updated".into(),
-            ..code2.clone()
-        };
+        let updated_code2 = ScannedCode { text: "Code 2 Updated".into(), ..code2.clone() };
         state.target_rect = Some(code2.rect);
         state.update_codes(vec![updated_code2.clone(), code1.clone()]);
 

@@ -30,8 +30,8 @@ pub mod links;
 pub mod ocr;
 pub mod optimizer;
 pub mod print_raster;
-pub mod qr;
 pub mod printcheck;
+pub mod qr;
 mod scan_colours;
 mod scan_fields;
 pub mod signature_image;
@@ -42,10 +42,10 @@ mod upright_image;
 pub mod word_count;
 pub mod xfa;
 
+pub use barcode_scan::{CodeKind, ScannedCode};
 pub use signature_image::{ImageSignaturePreview, SignatureImage};
 pub use signature_scan::{PhotoRect, ScanError, SignaturePhoto, Turn};
 pub use text_preview::TextEditPreview;
-pub use barcode_scan::{CodeKind, ScannedCode};
 
 pub use pdfcraft_organize::{BoxSpec, FieldConflicts, PageBox, SplitBy, Transition, TransitionSpec, split_ranges};
 
@@ -3603,15 +3603,7 @@ impl Session {
     pub fn add_qr_code(&mut self, id: DocId, page: usize, text: &str, rect: Option<[f64; 4]>) -> Result<(), EditError> {
         let matrix = qr::QrCode::encode_text(text).map_err(|e| EditError::Invalid(e.to_string()))?;
         let png_bytes = matrix.to_png_bytes(8, 2).map_err(|e| EditError::Invalid(e.to_string()))?;
-        self.apply(
-            id,
-            Edit::AddImage {
-                page,
-                rect,
-                name: "QRCode.png".into(),
-                bytes: Arc::new(png_bytes),
-            },
-        )
+        self.apply(id, Edit::AddImage { page, rect, name: "QRCode.png".into(), bytes: Arc::new(png_bytes) })
     }
 
     /// Apply an edit. On success the previous state is undoable and the view data is refreshed.
