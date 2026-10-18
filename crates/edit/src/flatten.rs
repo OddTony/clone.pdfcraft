@@ -18,6 +18,7 @@ use crate::{EditError, check, n, page_list, place_tagged};
 const HIDDEN: i64 = 2;
 const NO_VIEW: i64 = 32;
 
+/// Resolve `key` in dictionary `d` and return its dictionary value if present.
 fn sub_dict(doc: &Document, d: &Dict, key: &[u8]) -> Option<Dict> {
     d.get(key).map(|o| doc.resolve(o)).and_then(|o| o.as_dict().cloned())
 }
@@ -57,7 +58,16 @@ fn is_hidden(doc: &Document, d: &Dict, hidden_layers: &HashSet<ObjRef>) -> bool 
             Some(a) => a.iter().filter_map(Object::as_ref).collect(),
             None => oc_dict.get(b"OCGs").and_then(Object::as_ref).into_iter().collect(),
         };
-        return !groups.is_empty() && groups.iter().all(|g| hidden_layers.contains(g));
+        if groups.is_empty() {
+            return false;
+        }
+        let policy = oc_dict.name(b"P").unwrap_or(b"AnyOn");
+        return match policy {
+            b"AllOn" => groups.iter().any(|g| hidden_layers.contains(g)),
+            b"AnyOff" => groups.iter().all(|g| !hidden_layers.contains(g)),
+            b"AllOff" => groups.iter().any(|g| !hidden_layers.contains(g)),
+            _ => groups.iter().all(|g| hidden_layers.contains(g)),
+        };
     }
     false
 }
@@ -173,6 +183,7 @@ fn undrawn_on(doc: &Document, all: &[pdfcraft_model::Page], pages: &[usize], whi
     None
 }
 
+/// Flatten selected annotations on `pages`. Returns how many annotations were drawn.
 fn flatten_which(doc: &mut Document, pages: &[usize], which: Which) -> Result<usize, EditError> {
     let all = page_list(doc);
     check(pages, all.len())?;

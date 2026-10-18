@@ -282,6 +282,10 @@ fn flattening_leaves_annotations_on_hidden_layers_alone() {
             form,
             "<< /Type /OCG /Name (Hidden layer) >>",
             "<< /Type /OCG /Name (Shown layer) >>",
+            "<< /Type /OCMD /OCGs [7 0 R 8 0 R] /P /AllOn >>",
+            "<< /Type /OCMD /OCGs [7 0 R 8 0 R] /P /AnyOn >>",
+            "<< /Type /OCMD /OCGs [7 0 R 8 0 R] /P /AnyOff >>",
+            "<< /Type /OCMD /OCGs [7 0 R 8 0 R] /P /AllOff >>",
         ]);
         let before = streams(&doc, 0);
         assert_eq!(flatten(&mut doc, &[0], true, false).unwrap(), drawn);
@@ -294,6 +298,10 @@ fn flattening_leaves_annotations_on_hidden_layers_alone() {
     };
     case("/OC 7 0 R", 0, true);
     case("/OC 8 0 R", 1, false);
+    case("/OC 9 0 R", 0, true);
+    case("/OC 10 0 R", 1, false);
+    case("/OC 11 0 R", 1, false);
+    case("/OC 12 0 R", 0, true);
     case("", 1, false);
 }
 
