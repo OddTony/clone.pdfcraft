@@ -3940,6 +3940,7 @@ dependencies = [
 name = "pdfcraft"
 version = "0.9.0"
 dependencies = [
+ "toml",
  "craft-quit",
  "eframe",
  "egui",
