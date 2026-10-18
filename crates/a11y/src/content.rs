@@ -4,7 +4,7 @@
 //! Every sentence a rule here can say is listed in [`crate::WORDINGS`], so interfaces can say it in
 //! their own language; a test in this crate keeps that list complete.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object};
 use pdfcraft_model::Page;
@@ -16,13 +16,52 @@ use crate::{Finding, Rule};
 pub(crate) struct Scan {
     pub has_text: bool,
     pub has_images: bool,
+    /// Some page paints something: text, a path, a shading or an image.
+    pub painted: bool,
     /// Page → painting operations outside tagged or artifact content.
     pub untagged: BTreeMap<usize, usize>,
     /// Page → fonts used.
     pub fonts: BTreeMap<usize, BTreeSet<ObjRef>>,
+    /// Page → fonts that draw text: shown in a render mode other than 3 (invisible).
+    pub rendered_fonts: BTreeMap<usize, BTreeSet<ObjRef>>,
+    /// Page → artifacts that begin inside tagged (MCID) content.
+    pub artifacts_in_tagged: BTreeMap<usize, usize>,
+    /// Page → tagged (MCID) content that begins inside an artifact.
+    pub tagged_in_artifacts: BTreeMap<usize, usize>,
+    /// Form XObject → how many times a content stream draws it.
+    pub form_uses: HashMap<ObjRef, usize>,
+    /// Form XObjects whose own content has marked content with an MCID.
+    pub forms_with_mcid: HashSet<ObjRef>,
 }
 
 const MAX_FORM_DEPTH: usize = 12;
+
+/// `q` saves nested deeper than this are not followed (the text state stays as it is).
+const MAX_SAVES: usize = 4096;
+
+/// What encloses a point in a content stream.
+#[derive(Clone, Copy, Debug, Default)]
+struct Within {
+    /// Marked content with an MCID: tagged content.
+    tagged: bool,
+    /// Marked content tagged /Artifact.
+    artifact: bool,
+}
+
+impl Within {
+    /// Tagged or an artifact: not untagged content.
+    fn covered(self) -> bool {
+        self.tagged || self.artifact
+    }
+}
+
+/// The part of the text state the scan follows. `q` saves it and `Q` restores it.
+#[derive(Clone, Copy, Debug, Default)]
+struct TextState {
+    font: Option<ObjRef>,
+    /// The text rendering mode (Tr); 3 draws nothing.
+    mode: i64,
+}
 
 impl Scan {
     pub fn run(doc: &Document, pages: &[Page], list: &[usize]) -> Scan {
@@ -32,7 +71,7 @@ impl Scan {
             let res = page.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
             let data = page_content(doc, &page.dict);
             let mut w = Walk { doc, scan: &mut s, page: p, forms: HashSet::new() };
-            w.content(&data, &res, false, 0);
+            w.content(&data, &res, Within::default(), TextState::default(), None, 0);
         }
         s
     }
@@ -69,51 +108,83 @@ impl Walk<'_> {
         res.get(key).map(|x| self.doc.resolve(x)).and_then(|x| x.as_dict().cloned()).unwrap_or_default()
     }
 
-    /// Walk a content stream; `covered`: already inside tagged or artifact content.
-    fn content(&mut self, data: &[u8], res: &Dict, covered: bool, depth: usize) {
+    /// Walk a content stream. `outer` is what encloses it (for a form XObject, what encloses the
+    /// `Do` that draws it), `text` the text state it starts in, and `form` the form XObject it is.
+    fn content(&mut self, data: &[u8], res: &Dict, outer: Within, text: TextState, form: Option<ObjRef>, depth: usize) {
         let (fonts, xobjects, props) = (self.sub(res, b"Font"), self.sub(res, b"XObject"), self.sub(res, b"Properties"));
-        // Marked-content stack: whether each level is tagged or an artifact.
-        let mut stack: Vec<bool> = Vec::new();
-        let mut untagged = 0;
+        // Marked-content stack: what encloses each level.
+        let mut stack: Vec<Within> = Vec::new();
+        let mut saved: Vec<TextState> = Vec::new();
+        let mut text = text;
+        let (mut untagged, mut has_mcid) = (0usize, false);
+        let (mut artifacts_in_tagged, mut tagged_in_artifacts) = (0usize, 0usize);
         for op in pdfcraft_content::parse(data).ops {
-            let inside = covered || stack.last().copied().unwrap_or(false);
+            let within = stack.last().copied().unwrap_or(outer);
+            let inside = within.covered();
             match op.op.as_slice() {
-                b"BMC" => stack.push(inside || op.name(0) == Some(b"Artifact")),
+                b"q" if saved.len() < MAX_SAVES => saved.push(text),
+                b"Q" => text = saved.pop().unwrap_or(text),
+                b"Tr" => text.mode = op.operands.first().and_then(Object::as_int).unwrap_or(text.mode),
+                b"BMC" => {
+                    let artifact = op.name(0) == Some(b"Artifact");
+                    artifacts_in_tagged += usize::from(artifact && within.tagged);
+                    stack.push(Within { tagged: within.tagged, artifact: within.artifact || artifact });
+                }
                 b"BDC" => {
-                    let marks = op.name(0) == Some(b"Artifact")
-                        || match op.operands.get(1) {
+                    let artifact = op.name(0) == Some(b"Artifact");
+                    let mcid = !artifact
+                        && match op.operands.get(1) {
                             Some(Object::Dict(d)) => d.contains(b"MCID"),
                             Some(Object::Name(n)) => {
                                 props.get(n).map(|x| self.doc.resolve(x)).and_then(|x| x.as_dict().map(|d| d.contains(b"MCID"))).unwrap_or(false)
                             }
                             _ => false,
                         };
-                    stack.push(inside || marks);
+                    has_mcid |= mcid;
+                    artifacts_in_tagged += usize::from(artifact && within.tagged);
+                    tagged_in_artifacts += usize::from(mcid && within.artifact);
+                    stack.push(Within { tagged: within.tagged || mcid, artifact: within.artifact || artifact });
                 }
                 b"EMC" => {
                     stack.pop();
                 }
                 b"Tj" | b"TJ" | b"'" | b"\"" => {
                     self.scan.has_text = true;
+                    self.scan.painted = true;
                     untagged += usize::from(!inside);
+                    if text.mode != 3
+                        && let Some(font) = text.font
+                    {
+                        self.scan.rendered_fonts.entry(self.page).or_default().insert(font);
+                    }
                 }
                 b"Tf" => {
-                    if let Some(r) = op.name(0).and_then(|n| fonts.get(n)).and_then(Object::as_ref) {
+                    text.font = op.name(0).and_then(|n| fonts.get(n)).and_then(Object::as_ref);
+                    if let Some(r) = text.font {
                         self.scan.fonts.entry(self.page).or_default().insert(r);
                     }
                 }
-                b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" | b"S" | b"s" | b"sh" => untagged += usize::from(!inside),
+                b"f" | b"F" | b"f*" | b"B" | b"B*" | b"b" | b"b*" | b"S" | b"s" | b"sh" => {
+                    self.scan.painted = true;
+                    untagged += usize::from(!inside);
+                }
                 b"BI" => {
                     self.scan.has_images = true;
+                    self.scan.painted = true;
                     untagged += usize::from(!inside);
                 }
                 b"Do" => {
                     let Some(r) = op.name(0).and_then(|n| xobjects.get(n)).and_then(Object::as_ref) else { continue };
                     let obj = self.doc.get(r);
                     let Object::Stream(x) = &*obj else { continue };
+                    if x.dict.name(b"Subtype") == Some(b"Form") {
+                        let uses = self.scan.form_uses.entry(r).or_default();
+                        *uses = uses.saturating_add(1);
+                    }
                     match x.dict.name(b"Subtype") {
                         Some(b"Image") => {
                             self.scan.has_images = true;
+                            self.scan.painted = true;
                             untagged += usize::from(!inside);
                         }
                         Some(b"Form") if depth < MAX_FORM_DEPTH && self.forms.insert(r) => {
@@ -124,7 +195,7 @@ impl Walk<'_> {
                                 .and_then(|o| o.as_dict().cloned())
                                 .unwrap_or_else(|| res.clone());
                             let data = x.decoded().unwrap_or_default();
-                            self.content(&data, &inner, inside, depth + 1);
+                            self.content(&data, &inner, within, text, Some(r), depth + 1);
                             self.forms.remove(&r);
                         }
                         _ => {}
@@ -133,17 +204,28 @@ impl Walk<'_> {
                 _ => {}
             }
         }
-        if untagged > 0 {
-            *self.scan.untagged.entry(self.page).or_default() += untagged;
+        let page = self.page;
+        for (count, map) in [
+            (untagged, &mut self.scan.untagged),
+            (artifacts_in_tagged, &mut self.scan.artifacts_in_tagged),
+            (tagged_in_artifacts, &mut self.scan.tagged_in_artifacts),
+        ] {
+            if count > 0 {
+                let n = map.entry(page).or_default();
+                *n = n.saturating_add(count);
+            }
+        }
+        if has_mcid && let Some(form) = form {
+            self.scan.forms_with_mcid.insert(form);
         }
     }
 }
 
-fn catalog(doc: &Document) -> Dict {
+pub(crate) fn catalog(doc: &Document) -> Dict {
     doc.root().and_then(|r| doc.get(r).as_dict().cloned()).unwrap_or_default()
 }
 
-fn text_of(doc: &Document, d: &Dict, key: &[u8]) -> Option<String> {
+pub(crate) fn text_of(doc: &Document, d: &Dict, key: &[u8]) -> Option<String> {
     d.get(key).map(|o| doc.resolve(o)).and_then(|o| o.as_string().map(|s| s.to_text())).map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())
 }
 
@@ -220,7 +302,7 @@ fn subtype_name(d: &Dict) -> String {
 
 /// An annotation's rectangle is already in page user space. Ignore missing, malformed and
 /// degenerate rectangles rather than sending the checker to an arbitrary place on the page.
-fn annotation_rect(doc: &Document, annot: &Dict) -> Option<[f64; 4]> {
+pub(crate) fn annotation_rect(doc: &Document, annot: &Dict) -> Option<[f64; 4]> {
     let rect = annot.get(b"Rect").map(|r| doc.resolve(r))?;
     let values = rect.as_array()?;
     let [x0, y0, x1, y1] = values.as_slice() else { return None };
@@ -345,7 +427,7 @@ pub(crate) fn page_rule(doc: &Document, rule: Rule, pages: &[Page], list: &[usiz
     out
 }
 
-fn full_name(doc: &Document, field: ObjRef) -> String {
+pub(crate) fn full_name(doc: &Document, field: ObjRef) -> String {
     let mut parts = Vec::new();
     let mut node = Some(field);
     for _ in 0..64 {

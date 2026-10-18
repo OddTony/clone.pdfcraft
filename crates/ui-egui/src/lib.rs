@@ -29,6 +29,7 @@ macro_rules! tl_ctx {
 }
 
 mod a11y_ui;
+pub use a11y_ui::Profile as A11yProfile;
 mod actions_ui;
 mod appearance;
 pub mod canvas;
