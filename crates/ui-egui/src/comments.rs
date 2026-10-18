@@ -420,6 +420,10 @@ pub(crate) struct Settling {
     pub points: Vec<[f64; 2]>,
     /// Frame time (seconds) at release; a raster that never arrives must not leave a ghost.
     pub since: f64,
+    /// Its annotation is in the document, so a raster of the page from now on draws it. Until
+    /// then a raster is of the document without it (in full screen the edit is applied the frame
+    /// after the release, and a raster already on its way can arrive in between).
+    pub committed: bool,
 }
 
 /// Longest a released drawing stays painted without its page raster, and how many are kept.
@@ -428,7 +432,7 @@ const SETTLE_MAX: usize = 16;
 
 impl CommentView {
     /// Remember a released drag drawing so it stays on screen until its page is re-rendered.
-    fn settle(&mut self, now: f64, page: usize, tool: CommentTool, points: &[[f64; 2]]) {
+    pub(crate) fn settle(&mut self, now: f64, page: usize, tool: CommentTool, points: &[[f64; 2]]) {
         if !matches!(tool, CommentTool::Ink | CommentTool::Line | CommentTool::Arrow | CommentTool::Rectangle | CommentTool::Oval) {
             return;
         }
@@ -436,7 +440,7 @@ impl CommentView {
         if self.settling.len() >= SETTLE_MAX {
             self.settling.remove(0);
         }
-        self.settling.push(Settling { page, tool, points: points.to_vec(), since: now });
+        self.settling.push(Settling { page, tool, points: points.to_vec(), since: now, committed: false });
     }
 
     /// How many released drawings are still painted from their points (waiting for a raster).
@@ -444,9 +448,22 @@ impl CommentView {
         self.settling.len()
     }
 
-    /// A fresh raster of `page` is on screen: it draws the committed annotation itself.
+    /// A fresh raster of `page` is on screen: it draws the committed annotations itself. One
+    /// still waiting for its edit isn't in that raster, and stays drawn from its points.
     pub(crate) fn page_rendered(&mut self, page: usize) {
-        self.settling.retain(|s| s.page != page);
+        self.settling.retain(|s| s.page != page || !s.committed);
+    }
+
+    /// The edit adding the released drawings was applied: rasters from now on draw them.
+    pub(crate) fn drawings_committed(&mut self) {
+        for s in &mut self.settling {
+            s.committed = true;
+        }
+    }
+
+    /// The edit adding the released drawings failed: nothing will draw them.
+    pub(crate) fn drawings_refused(&mut self) {
+        self.settling.retain(|s| s.committed);
     }
 }
 
@@ -1910,22 +1927,6 @@ pub fn status_badge(state: &str) -> Option<(&'static str, &'static str, Color32)
 mod tests {
     use super::*;
     use pdfcraft_render::TextGlyph;
-
-    /// #1858 without the render pool's timing: a released drawing stays painted from its
-    /// points until a raster of its own page arrives, and only that page's raster clears it.
-    #[test]
-    fn a_released_drawing_settles_until_its_page_is_rendered() {
-        let mut cv = CommentView::default();
-        cv.settle(0.0, 0, CommentTool::Ink, &[[10.0, 10.0], [20.0, 20.0]]);
-        assert_eq!(cv.settling_len(), 1);
-        cv.page_rendered(1);
-        assert_eq!(cv.settling_len(), 1, "another page's raster doesn't draw it");
-        cv.page_rendered(0);
-        assert_eq!(cv.settling_len(), 0, "its page's raster does");
-        cv.settle(0.0, 0, CommentTool::Ink, &[[10.0, 10.0]]);
-        cv.settle(SETTLE_SECS, 0, CommentTool::Ink, &[[10.0, 10.0]]);
-        assert_eq!(cv.settling_len(), 1, "one never rendered expires");
-    }
 
     /// One glyph per character, `w` points wide, on a line of `em`-point text whose baseline is at `y`, drawn
     /// along `direction` (a unit vector in view space, y down).
