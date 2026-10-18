@@ -66,6 +66,9 @@ pub(crate) struct Output {
     /// dictionaries may name them too (an inherited or shared /Resources, or the caller's when a
     /// form has none of its own): [`unlink_doomed`] removes those entries.
     pub doomed: Vec<ObjRef>,
+    /// Original property values retired by this scope or a nested form. Other resource holders
+    /// may still name them; unlink only entries no surviving content uses.
+    pub retired_properties: Vec<Object>,
     /// Glyphs / inline images still overlapping a region (verify mode).
     pub residue: usize,
     /// Apply mode met vertical-writing text (which it cannot remove) while a redaction region was
@@ -247,9 +250,10 @@ fn content_draws(doc: &Document, content: &[Vec<u8>], xo: &Dict, name: &[u8], de
 /// An entry goes unless a page that draws through that dictionary still draws the name (the same
 /// image shown on another page, or again outside a mark). A dictionary that loses an entry is
 /// replaced by a private copy on its node, so a dictionary object shared with other nodes is
-/// left as it is for them. Fails closed when a page's use of a name cannot be told.
-pub(crate) fn unlink_doomed(doc: &mut Document, doomed: &[ObjRef]) -> Result<(), RedactError> {
-    if doomed.is_empty() {
+/// left as it is for them. Retired properties are likewise unlinked only when none of the
+/// holder's pages or inheriting forms names them. Fails closed when use cannot be determined.
+pub(crate) fn unlink_doomed(doc: &mut Document, doomed: &[ObjRef], retired_properties: &[Object]) -> Result<(), RedactError> {
+    if doomed.is_empty() && retired_properties.is_empty() {
         return Ok(());
     }
     let doomed: HashSet<ObjRef> = doomed.iter().copied().collect();
@@ -279,11 +283,16 @@ pub(crate) fn unlink_doomed(doc: &mut Document, doomed: &[ObjRef]) -> Result<(),
         }
     }
     let index: HashMap<ObjRef, usize> = pdfcraft_model::pages(doc).iter().enumerate().map(|(i, p)| (p.obj, i)).collect();
+    let holder_nodes: Vec<ObjRef> = holders.iter().map(|(node, _)| *node).collect();
     for (node, users) in holders {
-        let Some(res) = doc.get(node).as_dict().and_then(|d| d.get(b"Resources")).and_then(|r| doc.resolve(r).as_dict().cloned()) else { continue };
+        let Some(mut res) = doc.get(node).as_dict().and_then(|d| d.get(b"Resources")).and_then(|r| doc.resolve(r).as_dict().cloned()) else {
+            continue;
+        };
         let mut xo = res_dict(doc, &res, b"XObject");
         let names: Vec<Vec<u8>> = xo.iter().filter(|(_, v)| v.as_ref().is_some_and(|r| doomed.contains(&r))).map(|(n, _)| n.to_vec()).collect();
-        if names.is_empty() {
+        let properties = res_dict(doc, &res, b"Properties");
+        let property_names: Vec<Vec<u8>> = properties.iter().filter(|(_, v)| retired_properties.contains(v)).map(|(n, _)| n.to_vec()).collect();
+        if names.is_empty() && property_names.is_empty() {
             continue;
         }
         let mut contents = Vec::with_capacity(users.len());
@@ -311,9 +320,82 @@ pub(crate) fn unlink_doomed(doc: &mut Document, doomed: &[ObjRef]) -> Result<(),
             }
         }
         if pruned {
-            let mut res = res;
             res.set(b"XObject".to_vec(), Object::Dict(xo));
+        }
+        pruned |= prune_retired_properties(doc, &mut res, &property_names, &contents)?;
+        if pruned {
             doc.update_dict(node, |d| d.set(b"Resources".to_vec(), Object::Dict(res)))?;
+        }
+    }
+    // A surviving form can own the same old resource dictionary as a rewritten page. Its
+    // unused descriptions remain reachable too, even after every page holder is cleaned.
+    unlink_form_properties(doc, &holder_nodes, retired_properties)?;
+    Ok(())
+}
+
+/// Retire only properties removed from a rewritten scope, preserving names still used by any
+/// content sharing this holder. Different pages' streams must never be concatenated together.
+fn prune_retired_properties(doc: &Document, res: &mut Dict, names: &[Vec<u8>], contents: &[Vec<Vec<u8>>]) -> Result<bool, CosError> {
+    if names.is_empty() {
+        return Ok(false);
+    }
+    let mut used = HashSet::new();
+    for content in contents {
+        for op in resource_ops(doc, res, content)? {
+            if matches!(op.op.as_slice(), b"BDC" | b"DP")
+                && let Some(name) = op.name(1)
+            {
+                used.insert(name.to_vec());
+            }
+        }
+    }
+    let mut properties = res_dict(doc, res, b"Properties");
+    let mut pruned = false;
+    for name in names {
+        if !used.contains(name) {
+            pruned |= properties.remove(name).is_some();
+        }
+    }
+    if pruned {
+        if properties.is_empty() {
+            res.remove(b"Properties");
+        } else {
+            res.set(b"Properties".to_vec(), Object::Dict(properties));
+        }
+    }
+    Ok(pruned)
+}
+
+fn unlink_form_properties(doc: &mut Document, holders: &[ObjRef], retired: &[Object]) -> Result<(), CosError> {
+    if retired.is_empty() {
+        return Ok(());
+    }
+    let mut pending: Vec<Dict> = holders
+        .iter()
+        .filter_map(|r| doc.get(*r).as_dict().and_then(|d| d.get(b"Resources")).and_then(|r| doc.resolve(r).as_dict().cloned()))
+        .collect();
+    let mut seen = HashSet::new();
+    while let Some(resources) = pending.pop() {
+        for (_, value) in res_dict(doc, &resources, b"XObject").iter() {
+            let Some(reference) = value.as_ref() else { continue };
+            if !seen.insert(reference) {
+                continue;
+            }
+            if seen.len() > 1_000_000 {
+                return Err(CosError::Syntax { offset: 0, detail: "redaction could not fully inspect shared form resources".into() });
+            }
+            let object = doc.get(reference);
+            let Object::Stream(form) = &*object else { continue };
+            if form.dict.name(b"Subtype") != Some(b"Form") {
+                continue;
+            }
+            let Some(mut res) = form.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()) else { continue };
+            let names: Vec<Vec<u8>> =
+                res_dict(doc, &res, b"Properties").iter().filter(|(_, value)| retired.contains(value)).map(|(name, _)| name.to_vec()).collect();
+            if !names.is_empty() && prune_retired_properties(doc, &mut res, &names, &[vec![form.decoded()?]])? {
+                doc.update_dict(reference, |d| d.set(b"Resources".to_vec(), Object::Dict(res.clone())))?;
+            }
+            pending.push(res);
         }
     }
     Ok(())
@@ -343,7 +425,11 @@ fn clip_out(rects: &[[f64; 4]], ctm: &Matrix, around: [f64; 4]) -> Option<Vec<Op
 }
 
 fn resource_ops(doc: &Document, res: &Dict, content: &[Vec<u8>]) -> Result<Vec<Op>, CosError> {
-    let mut ops = Pieces::join(content).parse().ops;
+    let parsed = Pieces::join(content).parse();
+    if parsed.skipped > 0 || parsed.ops.len() > 2_000_000 {
+        return Err(CosError::Syntax { offset: 0, detail: "redaction could not fully inspect property resources".into() });
+    }
+    let mut ops = parsed.ops;
     let xobjects = res_dict(doc, res, b"XObject");
     let mut seen = HashSet::new();
     let mut cursor = 0;
@@ -354,7 +440,7 @@ fn resource_ops(doc: &Document, res: &Dict, content: &[Vec<u8>]) -> Result<Vec<O
             && seen.insert(r)
             && let Object::Stream(s) = &*doc.get(r)
             && s.dict.name(b"Subtype") == Some(b"Form")
-            && !s.dict.contains(b"Resources")
+            && !s.dict.get(b"Resources").is_some_and(|r| doc.resolve(r).as_dict().is_some())
         {
             let parsed = pdfcraft_content::parse(&s.decoded()?);
             if seen.len() > 2_000_000 || ops.len().saturating_add(parsed.ops.len()) > 2_000_000 || parsed.skipped > 0 {
@@ -367,16 +453,19 @@ fn resource_ops(doc: &Document, res: &Dict, content: &[Vec<u8>]) -> Result<Vec<O
     Ok(ops)
 }
 
-pub(crate) fn prune_properties(doc: &Document, res: &mut Dict, content: &[Vec<u8>]) -> Result<(), CosError> {
+pub(crate) fn prune_properties(doc: &Document, res: &mut Dict, content: &[Vec<u8>]) -> Result<Vec<Object>, CosError> {
     let mut properties = res_dict(doc, res, b"Properties");
     if properties.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
+    let mut retired = Vec::new();
     let ops = resource_ops(doc, res, content)?;
     let names: Vec<Vec<u8>> = properties.iter().map(|(n, _)| n.to_vec()).collect();
     for name in names {
-        if !ops.iter().any(|op| matches!(op.op.as_slice(), b"BDC" | b"DP") && op.name(1) == Some(&name)) {
-            properties.remove(&name);
+        if !ops.iter().any(|op| matches!(op.op.as_slice(), b"BDC" | b"DP") && op.name(1) == Some(&name))
+            && let Some(value) = properties.remove(&name)
+        {
+            retired.push(value);
         }
     }
     if properties.is_empty() {
@@ -384,7 +473,7 @@ pub(crate) fn prune_properties(doc: &Document, res: &mut Dict, content: &[Vec<u8
     } else {
         res.set(b"Properties".to_vec(), Object::Dict(properties));
     }
-    Ok(())
+    Ok(retired)
 }
 
 fn prune_form_resources(doc: &Document, res: &mut Dict, content: &[Vec<u8>]) -> Result<(), CosError> {
@@ -439,6 +528,12 @@ pub(crate) fn process(doc: &mut Document, scope: &mut Scope<'_>, streams: &[Vec<
     // next. Parse them joined, then give each operator back to the piece its keyword is in.
     let joined = Pieces::join(streams);
     let mut parsed = joined.parse();
+    // A rewritten piece loses its comments, so keep where they began and ended: a comment that
+    // ran on into the next piece still hides that piece's first line.
+    let comment_edges = joined.comment_edges(&parsed);
+    // Layer removal also changes enclosing replacement spans, so remember the operators before
+    // any cleanup, not just the survivors of the layer pass.
+    let original = parsed.ops.clone();
     if !scope.hidden_layers.is_empty() {
         let props = res_dict(doc, resources, b"Properties");
         let (kept, removed) = strip_hidden_layers(doc, scope, parsed.ops, &props);
@@ -448,7 +543,6 @@ pub(crate) fn process(doc: &mut Document, scope: &mut Scope<'_>, streams: &[Vec<
             forced_change = true;
         }
     }
-    let original = parsed.ops.clone();
     let mut pieces: Vec<Vec<Op>> = streams.iter().map(|_| Vec::new()).collect();
     let mut rewrite: Vec<bool> = vec![forced_change; streams.len()];
     for op in parsed.ops {
@@ -688,8 +782,17 @@ pub(crate) fn process(doc: &mut Document, scope: &mut Scope<'_>, streams: &[Vec<
     if scope.mode == Mode::Apply {
         clean_replacements(doc, resources, &original, &mut processed, scope.report);
     }
-    for (ops, changed) in processed {
-        out.streams.push(changed.then(|| serialize_ops(&ops)));
+    for ((ops, changed), (comment_in, comment_out)) in processed.into_iter().zip(comment_edges) {
+        out.streams.push(changed.then(|| {
+            // The piece before still ends inside a comment: end it before the first operator.
+            let mut bytes = if comment_in { b"\n".to_vec() } else { Vec::new() };
+            bytes.extend(serialize_ops(&ops));
+            // The piece ended inside a comment that hid the start of the next one: keep it open.
+            if comment_out {
+                bytes.push(b'%');
+            }
+            bytes
+        }));
     }
     out
 }
@@ -907,6 +1010,7 @@ fn xobject(
             out.residue += inner.residue;
             out.vertical |= inner.vertical;
             out.doomed.extend_from_slice(&inner.doomed);
+            out.retired_properties.extend(inner.retired_properties);
             out.tag_changes.extend(inner.tag_changes);
             out.error = inner.error.or(out.error.take());
             if scope.mode == Mode::Verify {
@@ -919,29 +1023,34 @@ fn xobject(
             let mut dict = s.dict.clone();
             dict.remove(b"Length");
             let mut cleaned_res = res.clone();
-            if let Some(data) = &new_data
-                && let Err(error) = prune_properties(doc, &mut cleaned_res, std::slice::from_ref(data))
-                    .and_then(|()| prune_form_resources(doc, &mut cleaned_res, std::slice::from_ref(data)))
-            {
-                out.error = Some(error);
-                return None;
+            // Install rewritten nested forms before finding live property names: a new form may
+            // still inherit its caller's resources, and its new Do name must resolve here.
+            if !inner.xobjects.is_empty() || !inner.replaced.is_empty() {
+                let mut xo = res_dict(doc, &cleaned_res, b"XObject");
+                if let Some(data) = &new_data {
+                    prune(&mut xo, &inner.replaced, std::slice::from_ref(data));
+                }
+                for (name, reference) in &inner.xobjects {
+                    xo.set(name.clone(), Object::Ref(*reference));
+                }
+                cleaned_res.set(b"XObject".to_vec(), Object::Dict(xo));
+            }
+            if let Some(data) = &new_data {
+                let content = std::slice::from_ref(data);
+                match prune_properties(doc, &mut cleaned_res, content) {
+                    Ok(retired) => out.retired_properties.extend(retired),
+                    Err(error) => {
+                        out.error = Some(error);
+                        return None;
+                    }
+                }
+                if let Err(error) = prune_form_resources(doc, &mut cleaned_res, content) {
+                    out.error = Some(error);
+                    return None;
+                }
             }
             if cleaned_res != res {
                 dict.set(b"Resources".to_vec(), Object::Dict(cleaned_res));
-            }
-            // Rebuild the copy's /Resources whenever inner content gained or lost an XObject, so a
-            // `Do` the copy no longer makes stops keeping the original image or form reachable.
-            if !inner.xobjects.is_empty() || !inner.replaced.is_empty() {
-                let mut res = dict.get(b"Resources").and_then(Object::as_dict).cloned().unwrap_or_else(|| res.clone());
-                let mut xo = res_dict(doc, &res, b"XObject");
-                if let Some(d) = &new_data {
-                    prune(&mut xo, &inner.replaced, std::slice::from_ref(d));
-                }
-                for (n, r) in &inner.xobjects {
-                    xo.set(n.clone(), Object::Ref(*r));
-                }
-                res.set(b"XObject".to_vec(), Object::Dict(xo));
-                dict.set(b"Resources".to_vec(), Object::Dict(res));
             }
             let (changed, empty) = tags::touched(doc, &res, &data, new_data.as_deref().unwrap_or(&data));
             let stream = match new_data {
