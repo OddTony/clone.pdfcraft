@@ -125,7 +125,7 @@ are borrowed; PDF 2.0 additions and most subset standards are missing. **150–2
 | PDF/E, PDF/VT | verify, convert | none | |
 | Preflight (profiles, fixups, reports) | hundreds of profiles | none | |
 | Factur-X / ZUGFeRD (e-invoice in PDF/A-3) | Preflight checks | none | |
-| **All subset standards** | | | **65–115** (gap 9) |
+| **All subset standards** | | | **60–110** (gap 9) |
 
 ## Revision history
 
