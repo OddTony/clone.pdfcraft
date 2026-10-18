@@ -3352,7 +3352,7 @@ licence = "MIT OR Apache-2.0"
 licence_file = "LICENSE-MIT"
 kind = "translation"
 usage = "Vietnamese UI strings, compiled in by crates/ui-egui/src/i18n/mod.rs"
-sha256 = "95b5fc6d10f7bc8371688772741870448de716fa2dd9af62fdfe4e009d269b45"
+sha256 = "36c505b7acefa57dd2fc82b2984ed320accf5bd61d34511a40ca6186ab2c8361"
 
 [[asset]]
 path = "crates/ui-egui/src/i18n/sl.tsv"
