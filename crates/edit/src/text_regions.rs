@@ -836,7 +836,9 @@ pub(super) fn rewrite_styled_block(
         block_ops.push(Op::new("Tm", o.tlm.iter().map(|v| n(*v)).collect()));
     }
     let at = if split { start } else { o.bt_op };
-    let data = splice(&pieces, &ops, |i| (if i == at { std::mem::take(&mut block_ops) } else { Vec::new() }, !drop.contains(&i)));
+    let mut tags = preserve_actualtext_tags(doc, &res, &ops, &mut drop, at)?;
+    let data =
+        splice(&pieces, &ops, |i| (if i == at { std::mem::take(&mut block_ops) } else { tags.remove(&i).unwrap_or_default() }, !drop.contains(&i)));
     let contents = rewritten_contents(doc, &streams, data);
     res.set(b"Font".to_vec(), Object::Dict(fonts));
     doc.update_dict(p.obj, |d| {

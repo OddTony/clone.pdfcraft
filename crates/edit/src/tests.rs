@@ -4975,3 +4975,126 @@ fn flattening_comments_keeps_annotations_that_are_not_comments() {
     let without_widget: Vec<&str> = all.iter().copied().filter(|s| *s != "Widget").collect();
     assert_eq!(left(&reopen(&doc)), without_widget, "flattening fields touches no annotation that isn't a widget");
 }
+
+fn editing_actual_text_preserves_tag_properties(paragraph: bool) {
+    {
+        let mut doc =
+            text_page("/Span << /MCID 0 /ActualText (Logical words) /Lang (en) /E (Expansion) >> BDC BT /F1 12 Tf 72 700 Td (Shown words) Tj ET EMC");
+        if paragraph {
+            text::replace_block(&mut doc, 0, 0, "Logical Words").unwrap();
+        } else {
+            text::replace_line(&mut doc, 0, 0, "Logical Words").unwrap();
+        }
+        let doc = reopen(&doc);
+        let bytes = page_content_bytes(&doc, 0);
+        let content = String::from_utf8_lossy(&bytes);
+        assert!(content.contains("/MCID") && content.contains("/Lang") && content.contains("/E "), "paragraph={paragraph}: {content}");
+        assert!(!content.contains("/ActualText"), "paragraph={paragraph}: {content}");
+        assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, "Logical Words");
+    }
+}
+
+#[test]
+fn line_edit_preserves_actualtext_tag_properties() {
+    editing_actual_text_preserves_tag_properties(false);
+}
+
+#[test]
+fn paragraph_edit_preserves_actualtext_tag_properties() {
+    editing_actual_text_preserves_tag_properties(true);
+}
+
+#[test]
+fn styled_paragraph_edit_preserves_actualtext_tag_properties() {
+    let mut doc = text_page("/Span << /MCID 0 /ActualText (Logical words) /Lang (en) >> BDC BT /F1 12 Tf 72 700 Td (Shown words) Tj ET EMC");
+    let style = text::BlockStyle { color: Some([1.0, 0.0, 0.0]), ..Default::default() };
+    text::rewrite_block(&mut doc, 0, 0, Some("Logical Words"), &style).unwrap();
+    let doc = reopen(&doc);
+    let content = String::from_utf8_lossy(&page_content_bytes(&doc, 0)).into_owned();
+    assert!(content.contains("/MCID") && content.contains("/Lang") && !content.contains("/ActualText"), "{content}");
+    assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, "Logical Words");
+}
+
+#[test]
+fn editing_named_actualtext_keeps_shared_properties_unchanged() {
+    let properties = "/Properties << /MC0 << /MCID 0 /ActualText (Logical words) /Lang (en) >> >>";
+    for paragraph in [false, true] {
+        let mut doc = build(&[
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            &format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> {properties} >> /Contents 4 0 R >>"),
+            &stream("", "/Span /MC0 BDC BT /F1 12 Tf 72 700 Td (Shown words) Tj ET EMC"),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        ]);
+        if paragraph {
+            text::replace_block(&mut doc, 0, 0, "Logical Words").unwrap();
+        } else {
+            text::replace_line(&mut doc, 0, 0, "Logical Words").unwrap();
+        }
+        let doc = reopen(&doc);
+        let content = String::from_utf8_lossy(&page_content_bytes(&doc, 0)).into_owned();
+        assert!(content.contains("/MCID") && content.contains("/Lang") && !content.contains("ActualText"), "{content}");
+        assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, "Logical Words");
+        let page = page_list(&doc).remove(0);
+        let resources = doc.dict(page.dict.get(b"Resources").unwrap()).unwrap();
+        let properties = doc.dict(resources.get(b"Properties").unwrap()).unwrap();
+        let original = doc.dict(properties.get(b"MC0").unwrap()).unwrap();
+        assert!(original.contains(b"ActualText"), "the shared property list must stay intact");
+    }
+}
+
+#[test]
+fn editing_nested_actualtext_keeps_outer_tag() {
+    let mut doc = text_page("/P << /MCID 0 /Lang (en) >> BDC BT /F1 12 Tf 72 700 Td /Span << /ActualText (fi) >> BDC (X) Tj EMC ET EMC");
+    text::replace_block(&mut doc, 0, 0, "fit").unwrap();
+    let content = String::from_utf8_lossy(&page_content_bytes(&reopen(&doc), 0)).into_owned();
+    assert!(content.contains("/MCID") && content.contains("/Lang") && !content.contains("ActualText"), "{content}");
+    assert_eq!(text::text_lines(&reopen(&doc), 0).unwrap()[0].text, "fit");
+}
+
+#[test]
+fn text_edit_across_tagged_actualtext_boundary_is_not_destructive() {
+    let original = "BT /F1 12 Tf 72 700 Td (before) Tj /Span << /MCID 0 /ActualText (fi) >> BDC (X) Tj EMC (after) Tj ET";
+    let mut doc = text_page(original);
+    let before = page_content_bytes(&doc, 0);
+    let result = text::replace_block(&mut doc, 0, 0, "replacement");
+    assert!(result.is_err(), "an edit crossing the tagged span must not orphan it");
+    assert_eq!(page_content_bytes(&doc, 0), before);
+}
+
+#[test]
+fn refused_tag_boundary_edit_does_not_add_font_objects() {
+    if !pdfcraft_fonts::CRAFT_FONTS.iter().any(|f| f.covers("Jpan")) {
+        eprintln!("skipping: craft-fonts Japanese face is unavailable");
+        return;
+    }
+    for mode in 0..3 {
+        let mut doc = text_page("BT /F1 12 Tf 72 700 Td (before) Tj /Span << /MCID 0 /ActualText (fi) >> BDC (X) Tj EMC (after) Tj ET");
+        let before = doc.read_state();
+        let result = match mode {
+            0 => text::replace_line(&mut doc, 0, 0, "日本"),
+            1 => text::replace_block(&mut doc, 0, 0, "日本"),
+            _ => {
+                let style = text::BlockStyle {
+                    ranges: vec![text::RangeStyle {
+                        range: 0..3,
+                        family: None,
+                        resource: None,
+                        size: None,
+                        color: Some([1.0, 0.0, 0.0]),
+                        underline: None,
+                        char_spacing: None,
+                        scale: None,
+                    }],
+                    ..Default::default()
+                };
+                text::rewrite_block(&mut doc, 0, 0, Some("日本"), &style)
+            }
+        };
+        assert!(
+            matches!(result, Err(EditError::Invalid(ref message)) if message.contains("tagged ActualText boundaries")),
+            "mode={mode}: {result:?}"
+        );
+        assert!(before.matches(&doc), "refusal must leave every document object untouched, mode={mode}");
+    }
+}
