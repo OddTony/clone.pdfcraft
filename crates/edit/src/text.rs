@@ -567,6 +567,53 @@ pub(crate) fn splice(pieces: &Pieces, ops: &[Op], mut edit: impl FnMut(usize) ->
     pieces.splice(edits)
 }
 
+/// Preserve the non-ActualText properties of a marked sequence removed by a text rewrite.
+/// A rewrite spanning multiple tagged sequences needs a separate mapping of new text to tags.
+fn preserve_actualtext_tags(
+    doc: &Document,
+    resources: &Dict,
+    ops: &[Op],
+    drops: &mut std::collections::HashSet<usize>,
+    at: usize,
+) -> Result<HashMap<usize, Vec<Op>>, EditError> {
+    let properties = resources.get(b"Properties").and_then(|p| doc.dict(p)).unwrap_or_default();
+    let mut stack = Vec::new();
+    let mut patches = HashMap::new();
+    for (i, op) in ops.iter().enumerate() {
+        if op.is("BDC") || op.is("BMC") {
+            stack.push(i);
+        } else if op.is("EMC") {
+            let Some(open) = stack.pop() else { continue };
+            if !drops.contains(&open) || !drops.contains(&i) {
+                continue;
+            }
+            let Some(start) = ops.get(open) else { continue };
+            if !start.is("BDC") {
+                continue;
+            }
+            let Some(prop) = start.operands.get(1) else { continue };
+            let list = match prop {
+                Object::Name(name) => properties.get(name).and_then(|p| doc.dict(p)),
+                _ => doc.dict(prop),
+            };
+            let Some(mut list) = list else { continue };
+            if list.remove(b"ActualText").is_none() || list.is_empty() {
+                continue;
+            }
+            if !(open < at && at < i) {
+                return Err(EditError::Invalid("editing text across tagged ActualText boundaries is not supported".into()));
+            }
+            let mut preserved = start.clone();
+            if let Some(prop) = preserved.operands.get_mut(1) {
+                *prop = Object::Dict(list);
+            }
+            patches.insert(open, vec![preserved]);
+            drops.remove(&i);
+        }
+    }
+    Ok(patches)
+}
+
 /// The page's `/Contents` after a [`splice`]: pieces whose bytes changed become new streams
 /// (keeping their dictionaries), the others stay as they were.
 pub(crate) fn rewritten_contents(doc: &mut Document, streams: &[(Object, Vec<u8>)], new: Vec<Vec<u8>>) -> Object {
@@ -1821,7 +1868,16 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
     // line drawn on the same baseline go too, so the replacement is all that shows.
     let mut drops = coincident_ops(&lines, &[&target]);
     drops.extend(target.ops.iter().copied());
-    let new_data = splice(&pieces, &ops, |i| if i == first { (std::mem::take(&mut replacement), false) } else { (Vec::new(), !drops.contains(&i)) });
+    let mut tags = preserve_actualtext_tags(doc, &res, &ops, &mut drops, first)?;
+    let new_data = splice(&pieces, &ops, |i| {
+        if i == first {
+            (std::mem::take(&mut replacement), false)
+        } else if let Some(tag) = tags.remove(&i) {
+            (tag, false)
+        } else {
+            (Vec::new(), !drops.contains(&i))
+        }
+    });
     let contents = rewritten_contents(doc, &streams, new_data);
     let page_ref = p.obj;
     if substituted.is_some() {
@@ -2416,8 +2472,9 @@ fn rewrite_block_from(
         block_ops.push(Op::new("Tm", emit.tlm.iter().map(|v| n(*v)).collect()));
     }
     let at = if split { start } else { emit.bt_op };
+    let mut tags = preserve_actualtext_tags(doc, &res, &ops, &mut drop, at)?;
     let new_data = splice(&pieces, &ops, |i| {
-        let insert = if i == at { std::mem::take(&mut block_ops) } else { Vec::new() };
+        let insert = if i == at { std::mem::take(&mut block_ops) } else { tags.remove(&i).unwrap_or_default() };
         (insert, !drop.contains(&i))
     });
     let contents = rewritten_contents(doc, &streams, new_data);

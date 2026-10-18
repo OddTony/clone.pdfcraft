@@ -361,6 +361,38 @@ fn render_pixels_agrees_with_page_render_and_skips_the_png() {
 }
 
 #[test]
+fn editing_actualtext_preserves_tag_content_after_save() {
+    let dir = workdir("edit-tagged-actualtext");
+    let content = "/Span << /MCID 0 /ActualText (Logical words) /Lang (en) >> BDC BT /F1 24 Tf 20 150 Td (Shown words) Tj ET EMC";
+    let pdf = format!(
+        "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R /MarkInfo << /Marked true >> >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /StructParents 0 /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >> endobj\n4 0 obj << /Length {} >> stream\n{}\nendstream endobj\n5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n6 0 obj << /Type /StructTreeRoot /K 7 0 R /ParentTree 8 0 R >> endobj\n7 0 obj << /Type /StructElem /S /P /P 6 0 R /Pg 3 0 R /K 0 >> endobj\n8 0 obj << /Nums [0 [7 0 R]] >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF",
+        content.len(),
+        content
+    );
+    std::fs::write(dir.join("tagged-input.pdf"), pdf).unwrap();
+    for selection in ["line", "paragraph"] {
+        let mut a = auto(&dir);
+        let doc = ok(&mut a, "doc_open", json!({"path": "tagged-input.pdf"}))["doc"].as_u64().unwrap();
+        let mut edit = json!({"doc": doc, "page": 1, "text": "Logical Words"});
+        edit[selection] = json!(1);
+        ok(&mut a, "text_edit", edit);
+        let path = format!("tagged-{selection}.pdf");
+        ok(&mut a, "doc_save", json!({"doc": doc, "path": path, "full": true}));
+        let reopened = ok(&mut a, "doc_open", json!({"path": path}))["doc"].as_u64().unwrap();
+        let check = ok(&mut a, "accessibility_check", json!({"doc": reopened, "rules": ["tagged-content"]}));
+        assert_eq!(check["failed"], 0, "{check}");
+        let tags = ok(&mut a, "accessibility_tags", json!({"doc": reopened, "types": ["P"]}));
+        assert_eq!(tags["count"], 1, "{tags}");
+        let tag = ok(
+            &mut a,
+            "accessibility_tag_content",
+            json!({"doc": reopened, "object": tags["tags"][0]["object"], "generation": tags["tags"][0]["generation"]}),
+        );
+        assert_eq!(tag["content"], json!([{"page": 1, "mcid": 0, "text": "Logical Words"}]));
+    }
+}
+
+#[test]
 fn autotag_apply_writes_reviewable_tags_and_survives_save_reopen() {
     let dir = workdir("autotag-apply");
     let mut a = auto(&dir);
