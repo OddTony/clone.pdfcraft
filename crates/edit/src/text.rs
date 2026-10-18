@@ -1245,6 +1245,93 @@ pub(crate) fn form_call(
     })
 }
 
+/// A text line drawn inside a form XObject, with its paint position (see [`form_text_lines`]).
+pub type FormLine = (TextLine, Vec<usize>);
+
+/// The lines of text the form XObjects of a page (0-based) draw, at any depth, which
+/// [`text_lines`] leaves out. Each comes with its paint position: the page's `(content-stream
+/// index, operator index)` of the outermost `Do`, then the operator index of each nested `Do`,
+/// then that of the line's last text-showing operator in its form. Positions compare
+/// lexicographically in paint order, and a page-level operator's `[stream, index]` compares with
+/// them the same way. Fails, rather than leave text out, when a form would be entered `max_depth`
+/// forms deep or past the page's [`MAX_FORM_VISITS`] budget.
+pub fn form_text_lines(doc: &Document, page: usize, max_depth: usize) -> Result<Vec<FormLine>, EditError> {
+    struct Walk<'a> {
+        doc: &'a Document,
+        max_depth: usize,
+        lines: Vec<FormLine>,
+        path: Vec<pdfcraft_cos::ObjRef>,
+        visits: usize,
+    }
+    /// `at` gives the paint position of the operator at an index of `ops`; `collect` is false at
+    /// page level, whose text [`text_lines`] already reads.
+    fn walk(w: &mut Walk, ops: &[Op], resources: &Dict, carry: &mut Carry, at: &dyn Fn(usize) -> Vec<usize>, collect: bool) -> Result<(), EditError> {
+        let fonts_res = resources.get(b"Font").map(|f| w.doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
+        let mut cache = HashMap::new();
+        let mut invoked = Vec::new();
+        let shown = interpret(w.doc, ops, &fonts_res, &mut cache, carry, Some(&mut invoked), true);
+        if collect {
+            let mut lines = Vec::new();
+            let mut last = None;
+            let mut forms = invoked.iter().map(|f| f.0).peekable();
+            for s in shown {
+                // Text after a form starts a new line.
+                while forms.next_if(|&op| op < s.op).is_some() {
+                    last = None;
+                }
+                add_shown(&mut lines, &mut last, s, 0);
+            }
+            for mut l in lines {
+                if !l.logical_order {
+                    if l.visual_order && !l.actual_text {
+                        l.text = crate::indic::to_logical(&l.text);
+                    }
+                    l.text = crate::bidi::to_logical(&l.text);
+                }
+                if !l.text.trim().is_empty() {
+                    let pos = at(l.ops.iter().max().copied().unwrap_or(0));
+                    w.lines.push((l, pos));
+                }
+            }
+        }
+        for (i, name, ts) in invoked {
+            enter(w, resources, &name, ts, at(i))?;
+        }
+        Ok(())
+    }
+    fn enter(w: &mut Walk, resources: &Dict, name: &[u8], ts: Ts, at: Vec<usize>) -> Result<(), EditError> {
+        if w.path.len() >= w.max_depth || w.visits >= MAX_FORM_VISITS {
+            let xobjects = resources.get(b"XObject").map(|x| w.doc.resolve(x)).and_then(|x| x.as_dict().cloned()).unwrap_or_default();
+            let is_form =
+                xobjects.get(name).is_some_and(|o| matches!(&*w.doc.resolve(o), Object::Stream(s) if s.dict.name(b"Subtype") == Some(b"Form")));
+            if is_form {
+                return Err(EditError::Invalid("form XObjects nest too deep or are drawn too often to read their text".into()));
+            }
+            return Ok(());
+        }
+        let Some(form) = form_call(w.doc, resources, name, ts.ctm, &w.path, &mut w.visits) else { return Ok(()) };
+        let ops = parse(&form.data).ops;
+        // The form starts with the graphics state at its `Do`, its own matrix applied.
+        let mut carry = Carry { ts: Ts { ctm: form.ctm, ..ts }, stack: Vec::new(), marked: Vec::new() };
+        if let Some(r) = form.obj {
+            w.path.push(r);
+        }
+        let result = walk(w, &ops, &form.resources, &mut carry, &|i| at.iter().copied().chain([i]).collect(), true);
+        if form.obj.is_some() {
+            w.path.pop();
+        }
+        result
+    }
+    let p = page_dict(doc, page)?;
+    let res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
+    let pieces = Pieces::join(&content_streams(doc, &p.dict).into_iter().map(|(_, d)| d).collect::<Vec<_>>());
+    let ops = pieces.parse().ops;
+    let at = |i: usize| vec![ops.get(i).map_or(0, |op| pieces.pieces_of(op).0), i];
+    let mut w = Walk { doc, max_depth, lines: Vec::new(), path: Vec::new(), visits: 0 };
+    walk(&mut w, &ops, &res, &mut Carry::new(), &at, false)?;
+    Ok(w.lines)
+}
+
 /// The lines a page shows as it reads, including text drawn by form XObjects (which
 /// [`text_lines`] leaves out because it can only rewrite the page's own streams). Lines from a
 /// form carry a stream number past the page's streams, one per form drawn.
