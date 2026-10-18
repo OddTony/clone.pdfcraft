@@ -287,6 +287,23 @@ fn post_v2_uni_and_agl_glyph_names_resolve_without_unicode_cmap() {
         let actual = render_codes(post_only_ttf.clone(), 32, Some(encoding.clone()), None, &[code]);
         assert!(actual == expected, "post v2.0 glyph name resolution drew wrong glyph for {}", String::from_utf8_lossy(name));
     }
+
+    // When a font has both a Unicode cmap and an exact suffixed alternate in `post` v2.0 (`I.1`),
+    // `/Differences` must select the `post` v2.0 alternate (`I.1`) rather than stripping `.1` and
+    // drawing plain `I` from the Unicode cmap.
+    let alt_encoding = Object::Dictionary(dictionary! {
+        "Type" => "Encoding",
+        "BaseEncoding" => Object::Name(b"WinAnsiEncoding".to_vec()),
+        "Differences" => vec![
+            Object::Integer(73),
+            Object::Name(b"I.1".to_vec()),
+        ],
+    });
+    let expected_alt = render_codes(post_only_ttf, 32, Some(alt_encoding.clone()), None, &[73]);
+    let plain_i = reference_glyph_rgba(b"I");
+    assert!(expected_alt != plain_i, "I.1 alternate in Inter must differ from plain I");
+    let actual_with_cmap = render_codes(INTER_TTF.to_vec(), 32, Some(alt_encoding), None, &[73]);
+    assert!(actual_with_cmap == expected_alt, "exact post v2.0 alternate I.1 must win over suffix-stripped cmap lookup");
 }
 
 #[test]
