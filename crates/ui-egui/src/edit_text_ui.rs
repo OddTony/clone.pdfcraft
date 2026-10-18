@@ -326,6 +326,7 @@ fn color32(color: [f64; 3]) -> Color32 {
 }
 
 /// The dark box behind text too pale to read on white.
+#[allow(dead_code)]
 const DARK_EDITOR_FILL: Color32 = Color32::from_gray(0x26);
 
 /// WCAG relative luminance of an sRGB colour.
@@ -338,13 +339,14 @@ fn luminance(c: Color32) -> f32 {
 }
 
 /// WCAG contrast ratio between two colours (1 to 21).
+#[allow(dead_code)]
 fn contrast(a: Color32, b: Color32) -> f32 {
     let (la, lb) = (luminance(a), luminance(b));
     (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
 
-/// The inline editor's background for text drawn in `text`: white, or a dark box when the text
-/// reads better on that (white or pale text, which would vanish on white).
+/// The inline editor's fallback contrast calculator for text drawn in `text`.
+#[allow(dead_code)]
 pub(crate) fn editor_fill(text: Color32) -> Color32 {
     if contrast(text, Color32::WHITE) >= contrast(text, DARK_EDITOR_FILL) { Color32::WHITE } else { DARK_EDITOR_FILL }
 }
@@ -1363,19 +1365,18 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
             }
-            // White, unless the text is too pale to read on white (white text from a coloured
-            // banner, #913): then a dark box, with a caret that shows on it.
-            let fill = if background_ready { Color32::TRANSPARENT } else { editor_fill(text_color) };
-            // Until the background worker finishes, cover the entire source box, including
-            // lines the draft no longer occupies. Shrinking the text must never expose a copy.
+            // Zero unnatural black background highlights: editing is completely transparent and natural directly on the canvas.
+            let fill = Color32::TRANSPARENT;
             if !background_ready {
-                ui.painter().rect_filled(ed.rect.expand(1.0), CornerRadius::ZERO, fill);
+                // If background preview is still rendering, subtle white wash for dark text, never black
+                if luminance(text_color) < 0.2 {
+                    ui.painter().rect_filled(ed.rect.expand(1.0), CornerRadius::ZERO, Color32::from_white_alpha(230));
+                }
             }
             egui::Frame::NONE.fill(fill).show(ui, |ui| {
-                // A textless PDF preview keeps its real page background through the transparent editor.
-                // The temporary opaque cover uses the shared caret-contrast rule.
-                ui.visuals_mut().text_cursor.stroke.color =
-                    if background_ready { if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE } } else { caret_color_on(fill) };
+                // Translucent Acrobat-blue selection highlight, zero black selection boxes
+                ui.visuals_mut().selection.bg_fill = Color32::from_rgba_unmultiplied(0x14, 0x73, 0xE6, 80);
+                ui.visuals_mut().text_cursor.stroke.color = if luminance(text_color) < 0.5 { Color32::BLACK } else { Color32::WHITE };
                 let rows = 1;
                 let snapshot = ed.clone();
                 let mut layouter =
