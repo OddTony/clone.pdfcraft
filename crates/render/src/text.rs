@@ -2684,4 +2684,26 @@ mod tests {
             assert!(!text.find("Hello").is_empty(), "{mode} Tr: text is findable");
         }
     }
+
+    /// #3109 follow-up (review): filtered extraction ("exclude image/OCR text",
+    /// `TextFilter.images`) must keep clipping-only (`7 Tr`) titles — they are typically
+    /// visible on the page — while still dropping invisible (`3 Tr`) OCR layers.
+    #[test]
+    fn clipping_only_text_survives_image_filter() {
+        let settings = InterpreterSettings::default();
+        let filter = || TextFilter { images: true, ..TextFilter::default() };
+        let clip = extract_page_filtered(&tr_mode_page(7, "Hello World"), 0, &settings, filter()).unwrap();
+        assert!(
+            clip.plain_text().contains("Hello World"),
+            "7 Tr kept with images filter: {:?}",
+            clip.plain_text()
+        );
+        assert!(!clip.find("Hello").is_empty(), "7 Tr findable with images filter");
+        let ocr = extract_page_filtered(&tr_mode_page(3, "Hello World"), 0, &settings, filter()).unwrap();
+        assert!(
+            !ocr.plain_text().contains("Hello World"),
+            "3 Tr still dropped with images filter: {:?}",
+            ocr.plain_text()
+        );
+    }
 }
