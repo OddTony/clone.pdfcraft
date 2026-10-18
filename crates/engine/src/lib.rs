@@ -4342,6 +4342,7 @@ impl Session {
         if !doc.allows_printing() {
             return Err(EditError::NotPermitted("printing"));
         }
+        let hide_comments = matches!(settings.content, print::Content::Document | print::Content::FormFieldsOnly);
         // Print as image: the pages used become pictures first, then the picture document is
         // imposed in their place (its page k is the k-th distinct source page used).
         if let Some(raster) = &settings.raster {
@@ -4351,7 +4352,6 @@ impl Session {
                     distinct.push(p);
                 }
             }
-            let hide_comments = matches!(settings.content, print::Content::Document | print::Content::FormFieldsOnly);
             let bytes = print_raster::rasterize(doc, &distinct, raster, hide_comments).map_err(EditError::Print)?;
             let pictures = pdfcraft_cos::Document::open(Arc::new(bytes)).map_err(|e| EditError::Print(e.to_string()))?;
             let remapped = print::Settings {
@@ -4374,7 +4374,31 @@ impl Session {
         if !doc.config.layers.is_empty() {
             set_default_layer_state(&mut cos, &doc.info.layers);
         }
-        pdfcraft_print::impose(&cos, settings).map_err(|e| EditError::Print(e.to_string()))
+        // The pages that draw with Type 3 fonts go as pictures when asked (Windows printers,
+        // #2684: its print component can crash the app on them); the others stay vector.
+        let pictures = match &settings.type3_raster {
+            Some(raster) => {
+                let pages = pdfcraft_print::type3_pages(&cos, &settings.pages, settings.content);
+                print_raster::pictures(doc, &pages, raster, hide_comments).map_err(EditError::Print)?
+            }
+            None => Default::default(),
+        };
+        pdfcraft_print::impose_with_pictures(&cos, settings, &pictures).map_err(|e| EditError::Print(e.to_string()))
+    }
+
+    /// The pages among `pages` (0-based) whose print under `content` draws with a Type 3 font
+    /// ([`pdfcraft_print::type3_pages`]): those [`print::Settings::type3_raster`] prints as
+    /// pictures. Empty when the document can't be read.
+    pub fn print_type3_pages(&self, id: DocId, pages: &[usize], content: print::Content) -> Vec<usize> {
+        let Some(doc) = self.get(id) else { return Vec::new() };
+        let cos = match doc.editor.as_ref() {
+            Some(e) => e.cos.clone(),
+            None => match pdfcraft_cos::Document::open_with_password(doc.bytes.clone(), doc.password.as_deref()) {
+                Ok(c) => c,
+                Err(_) => return Vec::new(),
+            },
+        };
+        pdfcraft_print::type3_pages(&cos, pages, content)
     }
 
     /// For each page, whether its text mostly runs bottom-to-top ([`pdfcraft_print::text_reads_up`]);
