@@ -452,7 +452,8 @@ pub struct DocView {
     last_press_time: f64,
     last_press_pos: Option<Pos2>,
     last_queue: Vec<RenderRequest>,
-    /// Hold finished rasters in the pool so tests can inspect the view before delivery.
+    /// Finished renders wait in the pool instead of reaching the view (tests): what the view
+    /// shows before a raster arrives can be looked at however fast the renderer is.
     pub hold_rasters: bool,
     viewport_w: f32,
     viewport_h: f32,
@@ -5583,6 +5584,30 @@ trailer << /Root 1 0 R >>
         v.page_changed(0);
         assert_eq!(v.prepare_render_queue(&info, 1.0), vec![req]);
         assert_eq!(v.pages.get(&0).unwrap().tag, STALE_TAG);
+    }
+
+    /// #1858: a released drawing stays painted from its points until a raster that has it
+    /// arrives. A page raster that lands before the drawing's edit is applied (in full screen the
+    /// edit waits for the next frame, and a render already under way can finish first) is of the
+    /// document without it, and must not end the preview.
+    #[test]
+    fn a_raster_from_before_a_drawing_is_committed_keeps_it_drawn() {
+        let ctx = egui::Context::default();
+        let info = thumbnail_info(1);
+        let mut v = DocView::new(DocId(1), &info, ViewDefaults::default());
+        let req = RenderRequest { scale: 1.0, tag: 1000, ..Default::default() };
+        v.comments.settle(0.0, 0, crate::comments::CommentTool::Ink, &[[10.0, 10.0], [40.0, 30.0]]);
+        v.last_queue = vec![req];
+        assert!(v.receive_result(&ctx, solid_result(req, 10, 10)) > 0, "the raster is taken");
+        assert_eq!(v.comments.settling_len(), 1, "a raster from before the commit doesn't have the stroke");
+        v.comments.drawings_committed();
+        v.last_queue = vec![req];
+        assert!(v.receive_result(&ctx, solid_result(req, 10, 10)) > 0);
+        assert_eq!(v.comments.settling_len(), 0, "a raster after the commit draws it");
+        // An edit that fails leaves nothing to wait for.
+        v.comments.settle(0.0, 0, crate::comments::CommentTool::Ink, &[[10.0, 10.0], [40.0, 30.0]]);
+        v.comments.drawings_refused();
+        assert_eq!(v.comments.settling_len(), 0, "a refused drawing isn't left painted");
     }
 
     #[test]

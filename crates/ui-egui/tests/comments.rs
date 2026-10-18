@@ -408,7 +408,9 @@ fn shapes_and_ink_are_drawn_by_dragging() {
     assert!((r[0] - 40.0).abs() < 3.0 && (r[1] - 40.0).abs() < 3.0 && (r[2] - 140.0).abs() < 3.0 && (r[3] - 100.0).abs() < 3.0, "{r:?}");
 }
 
-/// Hold raster delivery while releasing a stroke, regardless of renderer speed.
+/// Press, drag and release a stroke, running only one frame after the release. Finished
+/// renders are held back from the view (`hold_rasters`), so the raster the commit asks for can't
+/// arrive before the test looks, however fast it renders; a test lets it through by clearing it.
 fn stroke_without_settling(h: &mut Harness<'static, PdfCraftApp>, a: (f32, f32), b: (f32, f32)) {
     h.state_mut().views[0].hold_rasters = true;
     let (from, to) = (at(h, a.0, a.1), at(h, b.0, b.1));

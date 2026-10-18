@@ -161,6 +161,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-18 (M8, PR #2598 timing refresh):** Integrated upstream 12fcc641 and adopted its complete deterministic render/pen-test fix, superseding this branch's earlier timing workaround. Metadata redaction behavior and estimates unchanged.
+
 - **2026-10-18 (M8, PR #2598 refresh):** Integrated upstream 645016ad, preserving metadata-redaction limits and matching behavior alongside stream-boundary comment handling. Estimates unchanged.
 
 - **2026-10-16 (M8, PR #2598 review follow-up):** Match processing-instruction data without matching targets; bound fragment collection and total metadata comparison/decoding work, removing scoped metadata on exhaustion. Saved-secret regressions inspect reopened objects and decoded streams, with a compressed positive control. Whole-run matching policy and estimates unchanged.
