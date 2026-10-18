@@ -89,6 +89,7 @@ mod fling;
 pub mod folders_ui;
 pub mod forms_ui;
 mod home;
+pub mod host;
 mod icon_data;
 pub mod icons;
 pub mod last_session;
@@ -401,10 +402,10 @@ pub enum OsEvent {
 /// Returns the [`OsEvent`]s that arrived since it was last called (set by the desktop app).
 pub type OsEventsFn = Box<dyn FnMut() -> Vec<OsEvent>>;
 
-/// Hands a saved PDF to the page embedding PdfCraft (web): `(name, bytes, save_as)`. `save_as`
-/// is `true` for Save As. Set by the web app when a host page (such as a Nextcloud app) asked
-/// for saves; without it the browser downloads the file.
-pub type HostSaveFn = Box<dyn Fn(&str, &[u8], bool) -> Result<(), String>>;
+/// Hands a saved PDF to the page embedding PdfCraft (web). Set by the web app when a host page
+/// (such as a Nextcloud app) asked for saves; without it the browser downloads the file. `Ok`
+/// means handed over: unless the page answers saves ([`host`]), the document then counts as saved.
+pub type HostSaveFn = Box<dyn Fn(host::HostSave<'_>) -> Result<(), String>>;
 
 /// Told every frame whether any tab has unsaved work, so a host page can warn before leaving.
 pub type HostDirtyFn = Box<dyn FnMut(bool)>;
@@ -613,6 +614,10 @@ pub struct PdfCraftApp {
     pub unsaved_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Requests from the operating system, polled every frame (macOS Apple events).
     pub os_events: Option<OsEventsFn>,
+    /// Messages from the embedding page (web, see [`host`]), read every frame.
+    pub host_inbox: host::HostInbox,
+    /// Saves handed to the embedding page that wait for its answer (#1792).
+    host_saves: host::HostSaves<host::WaitingSave>,
     /// Save delivers to the embedding page instead of downloading (web, see [`HostSaveFn`]).
     pub host_save: Option<HostSaveFn>,
     /// Reports unsaved work to the embedding page (web, see [`HostDirtyFn`]).
@@ -959,6 +964,8 @@ impl PdfCraftApp {
             failed_inbox: Default::default(),
             unsaved_flag: Default::default(),
             os_events: None,
+            host_inbox: Default::default(),
+            host_saves: Default::default(),
             host_save: None,
             host_dirty: None,
             close_request: None,
@@ -3039,6 +3046,8 @@ impl eframe::App for PdfCraftApp {
         craft_quit::on_close_request(ctx);
         let now = ctx.input(|i| i.time);
         self.autosave_tick(now);
+        // Answers from an embedding page that confirms its saves (#1792).
+        self.poll_host(ctx, now);
         // Reload documents whose files a build rewrote (#431).
         #[cfg(not(target_arch = "wasm32"))]
         self.watch_files();
