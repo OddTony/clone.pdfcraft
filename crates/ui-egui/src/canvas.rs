@@ -4332,13 +4332,22 @@ fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: 
                                 .frame(egui::Frame::NONE),
                         );
                         let enabled = !find.query.trim().is_empty() && !find.matches.is_empty();
+                        let current = find
+                            .current
+                            .and_then(|c| find.matches.get(c).map(|(page, _)| (c, *page)))
+                            .map(|(c, page)| (page, find.matches.iter().take(c).filter(|(p, _)| *p == page).count()));
+                        let edit_for = |find: &Find, occurrence| pdfcraft_engine::Edit::ReplaceTextOccurrences {
+                            query: find.query.clone(),
+                            replacement: find.replacement.clone(),
+                            case_sensitive: find.case_sensitive,
+                            whole_words: find.whole_words,
+                            occurrence,
+                        };
+                        if ui.add_enabled(enabled && current.is_some(), egui::Button::new(tl!("Replace"))).clicked() {
+                            replace = Some(edit_for(find, current));
+                        }
                         if ui.add_enabled(enabled, egui::Button::new(tl!("Replace all"))).clicked() {
-                            replace = Some(pdfcraft_engine::Edit::ReplaceTextOccurrences {
-                                query: find.query.clone(),
-                                replacement: find.replacement.clone(),
-                                case_sensitive: find.case_sensitive,
-                                whole_words: find.whole_words,
-                            });
+                            replace = Some(edit_for(find, None));
                         }
                     });
                 });

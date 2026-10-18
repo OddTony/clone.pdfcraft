@@ -1605,12 +1605,15 @@ pub enum Edit {
         /// Formatting changes (font, size, colour, alignment); default keeps the paragraph's.
         style: pdfcraft_edit::BlockStyle,
     },
-    /// Replace every matching phrase in the document while retaining each source run's style.
+    /// Replace matching phrases in the document while retaining each source run's style: every
+    /// match, or only `occurrence` — `(page, n)`, the `n`th match (0-based) on 0-based `page`, in
+    /// reading order.
     ReplaceTextOccurrences {
         query: String,
         replacement: String,
         case_sensitive: bool,
         whole_words: bool,
+        occurrence: Option<(usize, usize)>,
     },
     /// An explicit open-licensed full font program, completing subsets or selected by a user.
     RegisterTextFont {
@@ -2334,24 +2337,13 @@ impl EditCtx {
 }
 
 /// Perform an edit on a working copy (the caller discards it on error).
-fn replace_occurrences(source: &str, query: &str, replacement: &str, case_sensitive: bool, whole_words: bool) -> Result<String, EditError> {
-    const MAX_TEXT: usize = 4_000_000;
-    if query.len() > MAX_TEXT || replacement.len() > MAX_TEXT || source.len() > MAX_TEXT {
-        return Err(EditError::Invalid("search, replacement or paragraph text exceeds the 4 MiB limit".into()));
-    }
+/// Byte ranges of the matches of `query` in `source`, left to right and non-overlapping.
+fn match_ranges(source: &str, query: &str, case_sensitive: bool, whole_words: bool) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
     if query.is_empty() {
-        return Ok(source.to_owned());
+        return out;
     }
-    let mut out = String::with_capacity(source.len());
-    let mut append = |text: &str| -> Result<(), EditError> {
-        out
-            .len()
-            .checked_add(text.len())
-            .filter(|n| *n <= MAX_TEXT)
-            .ok_or_else(|| EditError::Invalid("replacement paragraph would exceed 4 MiB".into()))?;
-        out.push_str(text);
-        Ok(())
-    };
+    let boundary = |c: Option<char>| c.is_none_or(|c| !c.is_alphanumeric() && c != '_');
     let mut cursor = 0usize;
     while cursor < source.len() {
         let tail = source.get(cursor..).unwrap_or_default();
@@ -2362,19 +2354,48 @@ fn replace_occurrences(source: &str, query: &str, replacement: &str, case_sensit
             let matches = if case_sensitive { candidate == query } else { candidate.eq_ignore_ascii_case(query) };
             let before = source.get(..start).and_then(|s| s.chars().next_back());
             let after = source.get(end..).and_then(|s| s.chars().next());
-            let boundary = |c: Option<char>| c.is_none_or(|c| !c.is_alphanumeric() && c != '_');
             (matches && (!whole_words || (boundary(before) && boundary(after)))).then_some((start, end))
         });
-        if let Some((start, end)) = found {
-            append(source.get(cursor..start).unwrap_or_default())?;
-            append(replacement)?;
-            cursor = end;
-        } else {
-            append(tail)?;
-            break;
-        }
+        let Some((start, end)) = found else { break };
+        out.push((start, end));
+        cursor = end;
     }
-    if source.is_empty() { Ok(source.to_owned()) } else { Ok(out) }
+    out
+}
+
+/// `source` with the matches of `query` replaced: all of them, or only the `only`th (0-based).
+fn replace_occurrences(
+    source: &str,
+    query: &str,
+    replacement: &str,
+    case_sensitive: bool,
+    whole_words: bool,
+    only: Option<usize>,
+) -> Result<String, EditError> {
+    const MAX_TEXT: usize = 4_000_000;
+    if query.len() > MAX_TEXT || replacement.len() > MAX_TEXT || source.len() > MAX_TEXT {
+        return Err(EditError::Invalid("search, replacement or paragraph text exceeds the 4 MiB limit".into()));
+    }
+    let mut out = String::with_capacity(source.len());
+    let mut append = |text: &str| -> Result<(), EditError> {
+        out.len()
+            .checked_add(text.len())
+            .filter(|n| *n <= MAX_TEXT)
+            .ok_or_else(|| EditError::Invalid("replacement paragraph would exceed 4 MiB".into()))?;
+        out.push_str(text);
+        Ok(())
+    };
+    let mut cursor = 0usize;
+    for (i, (start, end)) in match_ranges(source, query, case_sensitive, whole_words).into_iter().enumerate() {
+        if only.is_some_and(|n| n != i) {
+            continue;
+        }
+        append(source.get(cursor..start).unwrap_or_default())?;
+        append(replacement)?;
+        cursor = end;
+    }
+    append(source.get(cursor..).unwrap_or_default())?;
+    Ok(out)
 }
 
 fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> Result<(), EditError> {
@@ -2613,15 +2634,41 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         Edit::EditTextBlock { page, block, text, style } => {
             pdfcraft_edit::rewrite_block(doc, *page, *block, Some(text), style)?;
         }
-        Edit::ReplaceTextOccurrences { query, replacement, case_sensitive, whole_words } => {
+        Edit::ReplaceTextOccurrences { query, replacement, case_sensitive, whole_words, occurrence } => {
             if query.is_empty() {
                 return Err(EditError::Invalid("search text must not be empty".into()));
             }
             let mut changed = false;
-            for page in (0..cx.pages).rev() {
+            let pages: Vec<usize> = match occurrence {
+                Some((page, _)) if *page < cx.pages => vec![*page],
+                Some(_) => return Err(EditError::Invalid("no matching text was found".into())),
+                None => (0..cx.pages).rev().collect(),
+            };
+            for page in pages {
                 let blocks = pdfcraft_edit::text_blocks(doc, page)?;
+                // For a single occurrence: the block holding it and its index within that block.
+                let mut target = None;
+                if let Some((_, nth)) = occurrence {
+                    let mut seen = 0usize;
+                    for (block_index, block) in blocks.iter().enumerate() {
+                        let count = match_ranges(&block.editor_text, query, *case_sensitive, *whole_words).len();
+                        if let Some(within) = nth.checked_sub(seen).filter(|n| *n < count) {
+                            target = Some((block_index, within));
+                            break;
+                        }
+                        seen = seen.saturating_add(count);
+                    }
+                    if target.is_none() {
+                        return Err(EditError::Invalid("no matching text was found".into()));
+                    }
+                }
                 for (block_index, block) in blocks.iter().enumerate().rev() {
-                    let next = replace_occurrences(&block.editor_text, query, replacement, *case_sensitive, *whole_words)?;
+                    let only = match target {
+                        Some((b, n)) if b == block_index => Some(n),
+                        Some(_) => continue,
+                        None => None,
+                    };
+                    let next = replace_occurrences(&block.editor_text, query, replacement, *case_sensitive, *whole_words, only)?;
                     if next != block.editor_text {
                         let result = pdfcraft_edit::rewrite_block(doc, page, block_index, Some(&next), &pdfcraft_edit::BlockStyle::default())?;
                         if let Some(font) = result.substituted {

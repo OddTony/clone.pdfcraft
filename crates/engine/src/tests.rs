@@ -4,10 +4,16 @@ use super::*;
 
 #[test]
 fn replace_occurrences_honours_case_and_word_options() {
-    assert_eq!(replace_occurrences("Page page pages", "page", "Sheet", false, true).unwrap(), "Sheet Sheet pages");
-    assert_eq!(replace_occurrences("Page page", "Page", "Sheet", true, false).unwrap(), "Sheet page");
-    assert_eq!(replace_occurrences("Page", "page", "Sheet", true, false).unwrap(), "Page");
-    assert_eq!(replace_occurrences("Page", "Page", "", true, false).unwrap(), "");
+    assert_eq!(replace_occurrences("Page page pages", "page", "Sheet", false, true, None).unwrap(), "Sheet Sheet pages");
+    assert_eq!(replace_occurrences("Page page", "Page", "Sheet", true, false, None).unwrap(), "Sheet page");
+    assert_eq!(replace_occurrences("Page", "page", "Sheet", true, false, None).unwrap(), "Page");
+    assert_eq!(replace_occurrences("Page", "Page", "", true, false, None).unwrap(), "");
+}
+
+#[test]
+fn replace_occurrences_can_target_one_match() {
+    assert_eq!(replace_occurrences("a b a b a", "a", "X", true, false, Some(1)).unwrap(), "a b X b a");
+    assert_eq!(replace_occurrences("a b a", "a", "X", true, false, Some(2)).unwrap(), "a b a");
 }
 
 /// A minimal `n`-page document; page `i` shows "Page i+1".

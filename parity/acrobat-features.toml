@@ -1407,7 +1407,7 @@ status = "partial"
 commands = []
 tools = ["text_replace"]
 evidence = ["crates/automation/tests/automation.rs::text_replace_preserves_text_runs_and_is_undoable", "crates/engine/src/tests.rs::replace_occurrences_honours_case_and_word_options"]
-notes = "Replaces matching text in one undoable edit and preserves source run styles. Interface exposes Replace all beside Find. Case-insensitive matching currently folds ASCII only; full Unicode case folding and verified UI coverage remain."
+notes = "Replaces matching text in one undoable edit and preserves source run styles. Interface exposes Replace (the current match only) and Replace all beside Find; the single-match target is counted over editable text blocks, so a match spanning blocks can shift it. Case-insensitive matching currently folds ASCII only; full Unicode case folding and verified UI coverage remain."
 
 [[feature]]
 id = "view.find-next-previous"

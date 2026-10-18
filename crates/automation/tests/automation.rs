@@ -1637,7 +1637,18 @@ fn text_replace_preserves_text_runs_and_is_undoable() {
     let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
     let replaced = ok(&mut a, "text_replace", json!({ "doc": doc, "query": "page", "replacement": "Sheet" }));
     assert_eq!(page_text(&mut a, doc), vec!["Sheet 1", "Sheet 2", "Sheet 3"]);
-    assert!(replaced["undo"].as_bool().unwrap_or(false));
+    assert_eq!(replaced["undo"], "Edit text");
+    ok(&mut a, "edit_undo", json!({ "doc": doc }));
+    assert_eq!(page_text(&mut a, doc), vec!["Page 1", "Page 2", "Page 3"]);
+}
+
+#[test]
+fn text_replace_can_target_a_single_occurrence() {
+    let dir = workdir("text-replace-one");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "text_replace", json!({ "doc": doc, "query": "page", "replacement": "Sheet", "page": 2, "occurrence": 1 }));
+    assert_eq!(page_text(&mut a, doc), vec!["Page 1", "Sheet 2", "Page 3"]);
     ok(&mut a, "edit_undo", json!({ "doc": doc }));
     assert_eq!(page_text(&mut a, doc), vec!["Page 1", "Page 2", "Page 3"]);
 }
