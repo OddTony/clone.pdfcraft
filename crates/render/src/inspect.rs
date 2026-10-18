@@ -629,7 +629,7 @@ impl<'a> Inspector<'a> {
                 .filter(|(k, _)| !STANDARD.contains(&k.as_slice()))
                 .filter_map(|(k, v)| match self.resolve(v) {
                     Object::String(bytes, _) => {
-                        let v = text_string(bytes).trim_matches('\0').trim().to_string();
+                        let v = text_string(bytes).trim_matches(|c: char| c == '\0' || c.is_whitespace()).to_string();
                         (!v.is_empty()).then(|| (String::from_utf8_lossy(k).into_owned(), v))
                     }
                     _ => None,

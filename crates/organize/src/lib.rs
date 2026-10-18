@@ -565,13 +565,21 @@ pub const STANDARD_INFO_KEYS: [&str; 9] = ["Title", "Author", "Subject", "Keywor
 pub const MAX_CUSTOM_KEY_LEN: usize = 127;
 
 /// The custom document properties: every `/Info` entry whose key the spec does not name and whose
-/// value is text, in the dictionary's order, as (name, text). At most 256 are listed.
+/// value is text, in the dictionary's order, as (name, text), the text without NUL or whitespace
+/// padding and entries that are only padding left out. At most 256 are listed.
 pub fn custom_info(doc: &Document) -> Vec<(String, String)> {
     let Some(info) = doc.trailer().get(b"Info").map(|o| doc.resolve(o)) else { return Vec::new() };
     let Some(d) = info.as_dict() else { return Vec::new() };
     d.iter()
         .filter(|(k, _)| !STANDARD_INFO_KEYS.iter().any(|s| s.as_bytes() == k.as_slice()))
-        .filter_map(|(k, v)| Some((String::from_utf8_lossy(k).into_owned(), doc.resolve(v).as_string()?.to_text())))
+        .filter_map(|(k, v)| {
+            // Padding (\0s and whitespace, in any mix) is not part of the value, and a value that
+            // is only padding is no property. Filtered before the cap, so blank entries can't
+            // crowd real ones out.
+            let text = doc.resolve(v).as_string()?.to_text();
+            let text = text.trim_matches(|c: char| c == '\0' || c.is_whitespace());
+            (!text.is_empty()).then(|| (String::from_utf8_lossy(k).into_owned(), text.to_owned()))
+        })
         .take(256)
         .collect()
 }

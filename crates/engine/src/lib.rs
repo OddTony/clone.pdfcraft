@@ -3907,13 +3907,7 @@ impl Session {
             doc.info.keywords = info("Keywords");
             doc.info.creator = info("Creator");
             doc.info.producer = info("Producer");
-            doc.info.custom = pdfcraft_organize::custom_info(&editor.cos)
-                .into_iter()
-                .filter_map(|(k, v)| {
-                    let v = v.trim_matches('\0').trim().to_string();
-                    (!v.is_empty()).then_some((k, v))
-                })
-                .collect();
+            doc.info.custom = pdfcraft_organize::custom_info(&editor.cos);
             doc.info.file_size = bytes.len();
             if !doc.signatures.is_empty() {
                 let signatures = signatures_of(&editor.cos, &bytes, &doc.trust, &doc.sig_cache);

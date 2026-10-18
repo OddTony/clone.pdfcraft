@@ -255,7 +255,7 @@ fn custom_document_properties_do_not_change_after_an_unrelated_edit() {
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>",
-        "<< /Producer (Test) /Project (Apollo) /Dept /RnD /Blank (   ) /Padded (Lab\\000\\000) /Revision 7 /Empty () >>",
+        "<< /Producer (Test) /Project (Apollo) /Dept /RnD /Blank (   ) /Padded (Lab\\000\\000) /Revision 7 /Empty () /Mixed ( \\000Lab\\000 ) /Pad ( \\000 ) >>",
     ];
     let mut pdf = b"%PDF-1.7\n".to_vec();
     let mut offsets = Vec::new();
@@ -274,8 +274,9 @@ fn custom_document_properties_do_not_change_after_an_unrelated_edit() {
     let doc = ok(&mut a, "doc_open", json!({ "path": "custom.pdf" }))["doc"].as_u64().unwrap();
     let opened = ok(&mut a, "doc_info", json!({ "doc": doc }))["custom"].clone();
     let names: Vec<&str> = opened.as_array().unwrap().iter().map(|c| c["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["Project", "Padded"], "{opened}");
+    assert_eq!(names, ["Project", "Padded", "Mixed"], "{opened}");
     assert_eq!(opened[1]["value"], "Lab", "{opened}");
+    assert_eq!(opened[2]["value"], "Lab", "{opened}");
     ok(&mut a, "doc_set_info", json!({ "doc": doc, "key": "Title", "value": "Report" }));
     let edited = ok(&mut a, "doc_info", json!({ "doc": doc }))["custom"].clone();
     assert_eq!(edited, opened);
