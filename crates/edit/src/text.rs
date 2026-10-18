@@ -69,6 +69,9 @@ pub struct TextLine {
     /// Some of the line's text is `/ActualText`, which is already in logical order: visual-order
     /// Indic recovery would scramble it.
     actual_text: bool,
+    /// The `/PCEdLine` marked-content sequence a replacement mixing fonts wrote the line in
+    /// (see [`continues_font`]).
+    edited: Option<usize>,
 }
 
 impl TextLine {
@@ -664,6 +667,7 @@ struct Shown {
     scope: Option<usize>,
     logical_order: bool,
     actual_text: bool,
+    edited: Option<usize>,
 }
 
 impl Shown {
@@ -751,6 +755,8 @@ fn interpret(
     let (mut tm, mut tlm) = (Matrix::IDENTITY, Matrix::IDENTITY);
     let mut bt = 0usize;
     let mut marked = std::mem::take(&mut carry.marked);
+    // The `/PCEdLine` sequences around the text (a replacement mixing fonts), innermost last.
+    let mut edited: Vec<Option<usize>> = Vec::new();
     let mut actual: Vec<Option<(usize, usize, String)>> = Vec::new();
     for (i, op) in ops.iter().enumerate() {
         match op.op.as_slice() {
@@ -759,6 +765,7 @@ fn interpret(
                 // artifacts and inner spans, which inherit their enclosing region.
                 let region = matches!(op.name(0), Some(b"P" | b"H" | b"H1" | b"H2" | b"H3" | b"H4" | b"H5" | b"H6" | b"LI" | b"TD" | b"TH"));
                 marked.push(if region { Some(i) } else { marked.last().copied().flatten() });
+                edited.push(if op.name(0) == Some(b"PCEdLine") { Some(i) } else { edited.last().copied().flatten() });
                 // The property list is inline or named in the resources' /Properties (§14.6.2).
                 let list = logical_text.and_then(|properties| match op.operands.get(1) {
                     Some(Object::Name(n)) => properties.get(n).and_then(|o| doc.dict(o)),
@@ -772,6 +779,7 @@ fn interpret(
             }
             b"EMC" => {
                 marked.pop();
+                edited.pop();
                 if let Some(Some((start, open, logical))) = actual.pop() {
                     let tail = out.split_off(start.min(out.len()));
                     let mut items = tail.into_iter();
@@ -1002,6 +1010,7 @@ fn interpret(
                     scope: marked.last().copied().flatten(),
                     logical_order: false,
                     actual_text: false,
+                    edited: edited.last().copied().flatten(),
                 });
             }
             _ => {}
@@ -1046,7 +1055,7 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
             piece == si
                 && lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order)
                 && (bt == s.bt || lines.last().is_some_and(|l| compatible_word(l, &s)))
-                && (s.text.trim().is_empty() || lines.last().is_some_and(|l| same_font(l, &s.font, s.face.as_deref())))
+                && (s.text.trim().is_empty() || lines.last().is_some_and(|l| continues_font(l, &s)))
                 && (s.text.trim().is_empty()
                     || lines.last().is_some_and(|l| {
                         (s.size - l.size).abs() < 0.01 && s.bold == l.bold && s.italic == l.italic && fill_color(&s.state.fill) == l.color
@@ -1070,6 +1079,7 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
             l.decodable &= s.decodable;
             l.visual_order |= s.visual_order;
             l.actual_text |= s.actual_text;
+            adopt_source_font(l, &s);
             // Spaces may use a separate subset font; they do not change the visible style.
         } else {
             lines.push(TextLine {
@@ -1090,6 +1100,7 @@ pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditErro
                 scope: s.scope,
                 logical_order: s.logical_order,
                 actual_text: s.actual_text,
+                edited: s.edited,
                 ops: std::iter::once(s.op).chain(s.extra_ops.iter().copied()).collect(),
                 origin: Origin {
                     tm: s.tm.0,
@@ -1139,7 +1150,7 @@ fn add_shown(lines: &mut Vec<TextLine>, last: &mut Option<Pen>, s: Shown, stream
         let bt = pen.bt;
         lines.last().is_some_and(|l| l.scope == s.scope && l.logical_order == s.logical_order)
             && (bt == s.bt || lines.last().is_some_and(|l| compatible_word(l, &s)))
-            && (s.text.trim().is_empty() || lines.last().is_some_and(|l| same_font(l, &s.font, s.face.as_deref())))
+            && (s.text.trim().is_empty() || lines.last().is_some_and(|l| continues_font(l, &s)))
             && (s.text.trim().is_empty()
                 || lines.last().is_some_and(|l| {
                     (s.size - l.size).abs() < 0.01 && s.bold == l.bold && s.italic == l.italic && fill_color(&s.state.fill) == l.color
@@ -1160,6 +1171,7 @@ fn add_shown(lines: &mut Vec<TextLine>, last: &mut Option<Pen>, s: Shown, stream
         l.decodable &= s.decodable;
         l.visual_order |= s.visual_order;
         l.actual_text |= s.actual_text;
+        adopt_source_font(l, &s);
     } else {
         lines.push(TextLine {
             text: s.text.clone(),
@@ -1179,6 +1191,7 @@ fn add_shown(lines: &mut Vec<TextLine>, last: &mut Option<Pen>, s: Shown, stream
             scope: s.scope,
             logical_order: s.logical_order,
             actual_text: s.actual_text,
+            edited: s.edited,
             ops: std::iter::once(s.op).chain(s.extra_ops.iter().copied()).collect(),
             origin: Origin {
                 tm: s.tm.0,
@@ -1353,6 +1366,23 @@ fn is_type3_fallback(font: &Dict) -> bool {
 
 /// Whether a run shown in `font` (a resource name, and the Japanese or Hebrew fallback face it subsets, if
 /// any) continues `line`: the same font resource, or another subset of the same face.
+/// Whether run `s` may continue `line` font-wise: the same font, or both inside the `/PCEdLine`
+/// sequence of a replacement that set the words its font can't show in a substitute (#2378),
+/// which reads back as the one line it replaced, so the next edit replaces all of it.
+fn continues_font(line: &TextLine, s: &Shown) -> bool {
+    same_font(line, &s.font, s.face.as_deref()) || (s.edited.is_some() && line.edited == s.edited)
+}
+
+/// A line that began with a substitute run takes the source font of a later run, so the next
+/// replacement starts from the line's own font again.
+fn adopt_source_font(line: &mut TextLine, s: &Shown) {
+    if line.edited.is_some() && line.font.starts_with("PCEd") && !s.font.starts_with(b"PCEd") {
+        line.font = String::from_utf8_lossy(&s.font).into_owned();
+        line.base_font = s.base_font.clone();
+        line.face = s.face.clone();
+    }
+}
+
 fn same_font(line: &TextLine, font: &[u8], face: Option<&str>) -> bool {
     line.font.as_bytes() == font || (line.face.is_some() && line.face.as_deref() == face)
 }
@@ -1839,6 +1869,8 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
                 match mixed {
                     Some(runs) => {
                         let space = font.as_ref().map_or(0.33, |m| source_space(doc, &fonts_res, m));
+                        // Marked as one line, so it reads back as one (see `continues_font`).
+                        replacement.push(Op::new("BMC", vec![Object::name("PCEdLine")]));
                         for (own, run) in runs {
                             if own {
                                 replacement.push(Op::new("Tf", vec![Object::name(&target.font), pdfcraft_content::num(size)]));
@@ -1857,6 +1889,7 @@ pub(crate) fn replace_line_with_limit(doc: &mut Document, page: usize, line: usi
                                 replacement.push(Op::new("Tj", vec![Object::String(PdfString::literal(pdfcraft_fonts::win_ansi(&run)))]));
                             }
                         }
+                        replacement.push(Op::new("EMC", Vec::new()));
                     }
                     None => {
                         replacement.push(Op::new("Tf", vec![Object::name(&substitute_name), pdfcraft_content::num(size)]));
