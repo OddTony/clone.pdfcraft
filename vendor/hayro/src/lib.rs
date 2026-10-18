@@ -157,6 +157,10 @@ pub struct RenderSettings {
     /// PdfCraft patch: when set, solid text and line-art paint colours are remapped while
     /// rendering; `None` renders exactly as without the patch.
     pub color_replacement: Option<ColorReplacement>,
+    /// PdfCraft patch: with line weights off, every stroke that isn't text is drawn one device
+    /// pixel wide, whatever its line width (Acrobat's View ▸ Show/Hide ▸ Rulers & Grids ▸ Line
+    /// Weights, unticked). `false` renders exactly as without the patch.
+    pub hairline_strokes: bool,
 }
 
 impl Default for RenderSettings {
@@ -170,6 +174,7 @@ impl Default for RenderSettings {
             x_offset: 0.0,
             y_offset: 0.0,
             color_replacement: None,
+            hairline_strokes: false,
         }
     }
 }
@@ -252,6 +257,7 @@ pub fn render_into<'a>(
         cache,
         render_settings.color_replacement,
         interpreter_settings.preview,
+        render_settings.hairline_strokes,
     );
 
     // PdfCraft patch (18): the page renders as one transparency group with the background
@@ -673,5 +679,107 @@ mod color_replacement_render_tests {
         let no_line_art = render_stencil_on(BLACK, Some(replacement(false)));
         assert_eq!(sample(&no_line_art, 5, 5), [0, 0, 0, 255]);
         assert_eq!(sample(&no_line_art, 40, 25), [0, 0, 0, 255]);
+    }
+}
+
+/// PdfCraft patch: `RenderSettings::hairline_strokes` (a viewer's Line Weights, unticked).
+#[cfg(test)]
+mod hairline_tests {
+    use super::{InterpreterSettings, Pdf, Pixmap, RenderCache, RenderSettings, render};
+    use vello_cpu::color::palette::css::WHITE;
+
+    /// A one-page 100×100 pt PDF: a 12 pt black line across the middle, and a `Tr 1` (stroked)
+    /// 40 pt Helvetica "I" with a 6 pt pen to its left.
+    fn fixture() -> Vec<u8> {
+        let body = "12 w 20 50 m 90 50 l S\n\
+                    BT 1 Tr 6 w /F1 40 Tf 4 10 Td (I) Tj ET";
+        let objs: Vec<Vec<u8>> = vec![
+            b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+            b"<< /Type /Pages /Kids [4 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_vec(),
+            b"<< /Type /Page /Parent 2 0 R /Contents 5 0 R /Resources << /Font << /F1 3 0 R >> >> >>"
+                .to_vec(),
+            format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()).into_bytes(),
+        ];
+        let mut out = b"%PDF-1.7\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, o) in objs.iter().enumerate() {
+            offsets.push(out.len());
+            out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+            out.extend_from_slice(o);
+            out.extend_from_slice(b"\nendobj\n");
+        }
+        let xref = out.len();
+        out.extend_from_slice(
+            format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes(),
+        );
+        for o in offsets {
+            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n",
+                objs.len() + 1
+            )
+            .as_bytes(),
+        );
+        out
+    }
+
+    fn render_at(scale: f32, hairline_strokes: bool) -> Pixmap {
+        let pdf = Pdf::new(fixture()).unwrap();
+        let cache = RenderCache::new();
+        let settings = RenderSettings {
+            x_scale: scale,
+            y_scale: scale,
+            bg_color: WHITE,
+            hairline_strokes,
+            ..RenderSettings::default()
+        };
+        render(
+            pdf.pages().get(0).expect("the fixture has one page"),
+            &cache,
+            &InterpreterSettings::default(),
+            &settings,
+        )
+    }
+
+    /// How many pixels of column `x` are visibly darkened (any coverage counts, so an
+    /// antialiased hairline straddling two rows is two).
+    fn inked_rows(pixmap: &Pixmap, x: u16) -> usize {
+        (0..pixmap.height())
+            .filter(|&y| pixmap.sample(x, y).r < 240)
+            .count()
+    }
+
+    #[test]
+    fn hairline_strokes_draw_line_art_one_pixel_wide_at_any_scale() {
+        for scale in [1.0_f32, 4.0] {
+            let column = (55.0 * scale) as u16;
+            let at_width = inked_rows(&render_at(scale, false), column);
+            let expected = (12.0 * scale) as usize;
+            assert!(
+                (expected..=expected + 2).contains(&at_width),
+                "scale {scale}: a 12 pt line covers {expected} rows, drew {at_width}"
+            );
+            let hairline = inked_rows(&render_at(scale, true), column);
+            assert!(
+                (1..=2).contains(&hairline),
+                "scale {scale}: a hairline is one device pixel (two when it straddles rows), drew {hairline}"
+            );
+        }
+    }
+
+    #[test]
+    fn hairline_strokes_leave_stroked_text_alone() {
+        // The glyph's left stem: a 6 pt pen round a 40 pt "I" makes a bar wider than a pixel.
+        let stem = |pixmap: &Pixmap| {
+            (0..pixmap.width())
+                .filter(|&x| pixmap.sample(x, (100 - 25) as u16).r < 240)
+                .count()
+        };
+        let at_width = stem(&render_at(1.0, false));
+        assert!(at_width >= 4, "the stroked stem is wider than a hairline: {at_width}");
+        assert_eq!(stem(&render_at(1.0, true)), at_width, "text outlines keep their width");
     }
 }

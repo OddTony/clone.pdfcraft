@@ -845,6 +845,7 @@ impl Automation {
             "comment_mark" => self.comment_mark(&a)?,
             "comment_lock" => self.comment_lock(&a)?,
             "comments_hide" => self.comments_hide(&a)?,
+            "view_line_weights" => self.view_line_weights(&a)?,
             "view_reading_colors" => self.view_reading_colors(&a)?,
             "comments_summarize" => self.comments_summarize(&a)?,
             "comment_edit" => self.comment_edit(&a)?,
@@ -1805,7 +1806,14 @@ impl Automation {
         let doc = self.session.get(id).ok_or_else(|| failed("no such document"))?;
         let colors = self.session.reading_colors(id).unwrap_or_default();
         let fresh = || {
-            let config = RenderConfig { password: doc.password.as_deref().map(Arc::from), reading_colors: colors, ..Default::default() };
+            // The view settings page_render follows: reading colours and line weights (a
+            // change to either drops this entry, see `view_reading_colors`).
+            let config = RenderConfig {
+                password: doc.password.as_deref().map(Arc::from),
+                reading_colors: colors,
+                hairline_strokes: !doc.line_weights_shown(),
+                ..Default::default()
+            };
             (doc.display.clone(), PageRenderer::new(doc.display.clone(), config))
         };
         let entry = self.renderers.entry(id).or_insert_with(fresh);
