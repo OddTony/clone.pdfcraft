@@ -492,8 +492,17 @@ pub(super) fn rewrite_styled_block(
     // Each font's space width, worked out once: when a font can't show a space, finding one
     // reads every font on the page, and doing that for every character of a paragraph made each
     // keystroke in a long paragraph take half a second (#2616).
-    let spaces: HashMap<String, f64> = metrics.iter().map(|(name, m)| (name.clone(), source_space(doc, &fonts, m))).collect();
-    let space_of = |name: &str, m: &Metrics| spaces.get(name).copied().unwrap_or_else(|| source_space(doc, &fonts, m));
+    // Only for the fonts the paragraph uses, when first asked: working out every page font's width
+    // up front would scan the page once per font for a short edit on a page of many fonts.
+    let spaces: std::cell::RefCell<HashMap<String, f64>> = std::cell::RefCell::new(HashMap::new());
+    let space_of = |name: &str, m: &Metrics| {
+        if let Some(w) = spaces.borrow().get(name) {
+            return *w;
+        }
+        let w = source_space(doc, &fonts, m);
+        spaces.borrow_mut().insert(name.to_owned(), w);
+        w
+    };
     let mut calibration = HashMap::new();
     for (index, source) in lines.iter().enumerate() {
         if let Some(m) = metrics.get(&source.font) {
@@ -783,7 +792,7 @@ pub(super) fn rewrite_styled_block(
                     m,
                     &string,
                     size_of(source, item.1),
-                    spaces.get(&item.2).copied().unwrap_or_else(|| source_space(doc, &fonts, m)),
+                    spaces.borrow().get(&item.2).copied().unwrap_or_else(|| source_space(doc, &fonts, m)),
                     state.char_spacing,
                     state.word_spacing,
                 )?);
