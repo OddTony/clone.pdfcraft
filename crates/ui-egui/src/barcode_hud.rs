@@ -8,7 +8,7 @@
 
 use egui::{Color32, CornerRadius, Margin, Pos2, Rect, Stroke, vec2};
 use pdfcraft_engine::barcode_scan::ScannedCode;
-use pdfcraft_engine::{Document, Edit, ImageEdit};
+use pdfcraft_engine::{Document, Edit};
 use pdfcraft_render::DocInfo;
 use std::sync::Arc;
 
@@ -34,13 +34,44 @@ pub struct BarcodeHudState {
     pub qr_input: String,
     /// The page that was last scanned for codes.
     pub last_scanned_page: Option<usize>,
+    /// Target rectangle coordinates to track and refocus after rescanning.
+    pub target_rect: Option<[f64; 4]>,
 }
 
 impl BarcodeHudState {
+    /// Find the index of a code whose bounding rectangle matches `target`.
+    pub fn find_code_matching_rect(&self, target: [f64; 4]) -> Option<usize> {
+        self.scanned_codes.iter().position(|c| {
+            (c.rect[0] - target[0]).abs() < 5.0
+                && (c.rect[1] - target[1]).abs() < 5.0
+                && (c.rect[2] - target[2]).abs() < 5.0
+                && (c.rect[3] - target[3]).abs() < 5.0
+        }).or_else(|| {
+            let target_cx = (target[0] + target[2]) * 0.5;
+            let target_cy = (target[1] + target[3]) * 0.5;
+            self.scanned_codes.iter().enumerate().min_by(|(_, a), (_, b)| {
+                let acx = (a.rect[0] + a.rect[2]) * 0.5;
+                let acy = (a.rect[1] + a.rect[3]) * 0.5;
+                let bcx = (b.rect[0] + b.rect[2]) * 0.5;
+                let bcy = (b.rect[1] + b.rect[3]) * 0.5;
+                let dist_a = (acx - target_cx).hypot(acy - target_cy);
+                let dist_b = (bcx - target_cx).hypot(bcy - target_cy);
+                dist_a.partial_cmp(&dist_b).unwrap_or(std::cmp::Ordering::Equal)
+            }).map(|(idx, _)| idx)
+        })
+    }
+
     /// Populate or update scanned codes for a page with explicit open control.
     pub fn update_codes_conditional(&mut self, codes: Vec<ScannedCode>, keep_open: bool) {
+        let target_rect = self.target_rect.take().or_else(|| self.active_code().map(|c| c.rect));
         self.scanned_codes = codes;
-        if self.active_index >= self.scanned_codes.len() {
+        if let Some(target) = target_rect {
+            if let Some(pos) = self.find_code_matching_rect(target) {
+                self.active_index = pos;
+            } else if self.active_index >= self.scanned_codes.len() {
+                self.active_index = 0;
+            }
+        } else if self.active_index >= self.scanned_codes.len() {
             self.active_index = 0;
         }
         self.open = keep_open;
@@ -376,6 +407,7 @@ impl BarcodeScannerHud {
         });
 
         if trigger_rescan {
+            state.target_rect = state.active_code().map(|c| c.rect);
             let codes = doc.scan_page_codes(current_page);
             let count = codes.len();
             state.update_codes(codes);
@@ -390,24 +422,23 @@ impl BarcodeScannerHud {
             state.edit_buffer = Some(active.text.clone());
         }
         if let Some((active, buf)) = apply_code {
-            let [pw, ph] = active.pixel_size;
+            let rect = active.rect;
+            let rect_w = (rect[2] - rect[0]).abs().ceil().max(1.0) as u32;
+            let rect_h = (rect[3] - rect[1]).abs().ceil().max(1.0) as u32;
+            let pw = if active.pixel_size[0] > 0 { active.pixel_size[0] } else { rect_w.saturating_mul(2) };
+            let ph = if active.pixel_size[1] > 0 { active.pixel_size[1] } else { rect_h.saturating_mul(2) };
+
             match Document::generate_replacement_code(active.kind, &buf, pw, ph) {
                 Ok(png_bytes) => {
-                    if let Some(img_idx) = active.image_index {
-                        pending_edit = Some(Edit::EditPageImage {
-                            page: current_page,
-                            index: img_idx,
-                            change: ImageEdit::Replace { name: "UpdatedCode.png".into(), bytes: Arc::new(png_bytes) },
-                        });
-                    } else {
-                        // Vector-rendered code replacement: place replacement raster at exact coordinates
-                        pending_edit = Some(Edit::AddImage {
-                            page: current_page,
-                            rect: Some(active.rect),
-                            name: "UpdatedCode.png".into(),
-                            bytes: Arc::new(png_bytes),
-                        });
-                    }
+                    // Place the new barcode (generated with solid white background) stretched to active.rect
+                    pending_edit = Some(Edit::AddImage {
+                        page: current_page,
+                        rect: Some(rect),
+                        name: "UpdatedCode.png".into(),
+                        bytes: Arc::new(png_bytes),
+                    });
+                    state.target_rect = Some(rect);
+                    state.last_scanned_page = None;
                     state.edit_buffer = None;
                     state.show_toast(format!("Replaced at 100% dimensions ({}×{}px)!", pw, ph), now);
                 }
@@ -515,5 +546,45 @@ mod tests {
         let (msg, expiry) = state.toast.unwrap();
         assert_eq!(msg, "Code detected");
         assert_eq!(expiry, 13.0);
+    }
+
+    #[test]
+    fn test_barcode_hud_ordering_shift_fix() {
+        let mut state = BarcodeHudState::default();
+        let code1 = ScannedCode {
+            id: 0,
+            page: 0,
+            kind: CodeKind::QrCode,
+            text: "Code 1".into(),
+            rect: [10.0, 10.0, 100.0, 100.0],
+            pixel_size: [100, 100],
+            image_index: Some(0),
+        };
+        let code2 = ScannedCode {
+            id: 1,
+            page: 0,
+            kind: CodeKind::Code128,
+            text: "Code 2".into(),
+            rect: [10.0, 120.0, 200.0, 180.0],
+            pixel_size: [200, 60],
+            image_index: Some(1),
+        };
+
+        state.update_codes(vec![code1.clone(), code2.clone()]);
+        state.next_code();
+        assert_eq!(state.active_index, 1);
+        assert_eq!(state.active_code().map(|c| c.text.as_str()), Some("Code 2"));
+
+        // Simulate replacement of Code 2: new scan reorders updated Code 2 to index 0 ("Code 1")
+        let updated_code2 = ScannedCode {
+            text: "Code 2 Updated".into(),
+            ..code2.clone()
+        };
+        state.target_rect = Some(code2.rect);
+        state.update_codes(vec![updated_code2.clone(), code1.clone()]);
+
+        // active_index tracks target_rect and points to index 0 where Code 2 is now
+        assert_eq!(state.active_index, 0);
+        assert_eq!(state.active_code().map(|c| c.text.as_str()), Some("Code 2 Updated"));
     }
 }
