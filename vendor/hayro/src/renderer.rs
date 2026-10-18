@@ -1155,7 +1155,8 @@ impl Renderer {
                         } else {
                             0.0
                         };
-                        if (xs * t.x_step.abs() > MAX_PIXMAP_SIZE || ys * t.y_step.abs() > MAX_PIXMAP_SIZE)
+                        if usable_cell_scale(xs, ys)
+                            && (xs * t.x_step.abs() > MAX_PIXMAP_SIZE || ys * t.y_step.abs() > MAX_PIXMAP_SIZE)
                             && shows_one_cell(&t.matrix, path_transform, path, reach, bbox, t.x_step, t.y_step)
                         {
                             const BORDER: f64 = 1.0;
@@ -1950,6 +1951,13 @@ fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
     };
 
     peniko::BlendMode::new(mix, Compose::SrcOver)
+}
+
+/// PdfCraft patch (20): whether a cell's scale can draw it at full size: finite and positive. A
+/// `/BBox` too thin to divide by (1e-40 wide passes the zero-area check) gives an infinite scale,
+/// which would send non-finite geometry to the cell renderer; such a cell keeps the old path.
+pub fn usable_cell_scale(xs: f32, ys: f32) -> bool {
+    xs.is_finite() && ys.is_finite() && xs > 0.0 && ys > 0.0
 }
 
 /// PdfCraft patch (20): whether `path` (drawn with `path_transform`, its paint reaching `reach`

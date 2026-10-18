@@ -3512,6 +3512,41 @@ trailer << /Root 1 0 R >>
         assert_eq!(at(&tiled, 40, 25, 35), blue, "a step of 20 repeats the cell");
     }
 
+    /// #3356 review: a `/BBox` too thin to divide by (not zero, which is refused, but 1e-40
+    /// wide) makes the cell scale infinite; it keeps the old path, so no infinite or NaN
+    /// geometry reaches the cell renderer, the page renders and what follows still draws.
+    #[test]
+    fn a_tiling_cell_too_thin_to_scale_keeps_the_old_path() {
+        assert!(hayro::usable_cell_scale(2.0, 1.0));
+        for (xs, ys) in [(f32::INFINITY, 1.0), (1.0, f32::NAN), (0.0, 1.0), (1.0, -2.0)] {
+            assert!(!hayro::usable_cell_scale(xs, ys), "{xs} {ys}");
+        }
+        let thin = "0.0000000000000000000000000000000000000001";
+        let content = "/Pattern cs /P1 scn 0 0 40 40 re f 1 0 0 rg 0 0 4 4 re f";
+        let cell = "0 0 1 rg 0 0 10 10 re f";
+        let pdf = format!(
+            "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 40 40] /Contents 4 0 R /Resources << /Pattern << /P1 5 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
+5 0 obj << /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 3 /BBox [0 0 {thin} 10] /XStep 2147480100 /YStep 2147480100 /Length {} >> stream
+{cell}
+endstream endobj
+trailer << /Root 1 0 R >>
+%%EOF",
+            content.len(),
+            cell.len()
+        );
+        let mut r = PageRenderer::new(Arc::new(pdf.into_bytes()), RenderConfig::default());
+        let page = r.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(page.error.is_none(), "{:?}", page.error);
+        assert_eq!(&page.rgba[((38 * 40 + 1) * 4)..][..4], &[255, 0, 0, 255], "what follows still draws");
+        assert_eq!(&page.rgba[((20 * 40 + 20) * 4)..][..3], &[255, 255, 255], "the degenerate cell draws nothing");
+    }
+
     /// #3349: a step too large for a cell pixmap is drawn as one cell only when the painted area
     /// can't reach another: a page wide (or tall) enough to show the next cell, or the one before,
     /// still tiles them.
