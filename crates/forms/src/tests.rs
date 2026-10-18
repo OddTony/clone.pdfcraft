@@ -2175,3 +2175,65 @@ fn document_scripts_read_each_name_tree_node_once() {
     ]);
     assert_eq!(document_scripts_named(&doc), [("init".to_string(), "var ready = true;".to_string())]);
 }
+
+/// A Korean value is drawn by putting a NanumGothic subset (Type0/CIDFontType2/Identity-H with ToUnicode) in `/DR`
+/// and pointing `/DA` at it: no `?`, no mark and no `/NeedAppearances`, and the same after save and reopen.
+/// New characters make a new merged subset; another field without Hangul stays Helvetica.
+#[test]
+fn korean_values_are_drawn_in_an_embedded_korean_font() {
+    let mut doc = fixture();
+    set_value(&mut doc, "name", &FieldValue::Text("박검토 (A-1)".into())).unwrap();
+    if pdfcraft_fonts::document_korean_font(false).is_none() {
+        eprintln!("skipping the Korean form checks: built without a craft-fonts Kore face (set CRAFT_FONTS_DIR)");
+        assert_eq!(undrawn_fields(&doc), [("name".to_string(), '박')]);
+        return;
+    }
+    let check = |doc: &Document, want: &str| {
+        let f = field(&fields(doc), "name").clone();
+        assert_eq!(f.value, [want]);
+        assert_eq!(appearance::parse_da(&f.da).font, KOREAN_FIELD_FONT, "{}", f.da);
+        let k = appearance::dr_korean_font(doc, KOREAN_FIELD_FONT).expect("the Korean font is in /DR");
+        assert!(k.covers(want));
+        let font = doc.dict(&Object::Ref(k.obj)).unwrap();
+        assert_eq!(font.name(b"Subtype"), Some(&b"Type0"[..]));
+        assert_eq!(font.name(b"Encoding"), Some(&b"Identity-H"[..]));
+        assert!(font.get(b"ToUnicode").is_some());
+        let w = &f.widgets[0];
+        let ap = doc.get(w.obj).as_dict().unwrap().get(b"AP").and_then(|a| doc.dict(a)).unwrap();
+        let Object::Stream(s) = doc.resolve(ap.get(b"N").unwrap()).as_ref().clone() else { panic!("an appearance stream") };
+        let body = String::from_utf8_lossy(&s.decoded().unwrap()).into_owned();
+        assert!(body.contains(&format!("/{KOREAN_FIELD_FONT} ")), "{body}");
+        assert!(!body.contains("(?"), "{body}");
+        // The appearance's font reads the text back (ToUnicode).
+        let res = doc.dict(s.dict.get(b"Resources").unwrap()).unwrap();
+        let fonts = doc.dict(res.get(b"Font").unwrap()).unwrap();
+        let used = doc.dict(fonts.get(KOREAN_FIELD_FONT.as_bytes()).unwrap()).unwrap();
+        let m = pdfcraft_fonts::pdf::Metrics::from_dict(doc, &used);
+        assert_eq!(m.decode(&k.encode(want)), want);
+        assert_eq!(doc.get(w.obj).as_dict().and_then(pdfcraft_fonts::undrawn_mark), None);
+        assert!(undrawn_fields(doc).is_empty());
+        assert!(!need_appearances(doc));
+    };
+    check(&doc, "박검토 (A-1)");
+    let doc2 = reopen(&doc);
+    check(&doc2, "박검토 (A-1)");
+    // New characters: a merged subset replaces it, and the earlier characters stay.
+    let mut doc = doc2;
+    let first = appearance::dr_korean_font(&doc, KOREAN_FIELD_FONT).unwrap();
+    set_value(&mut doc, "name", &FieldValue::Text("홍길동".into())).unwrap();
+    check(&doc, "홍길동");
+    let second = appearance::dr_korean_font(&doc, KOREAN_FIELD_FONT).unwrap();
+    assert_ne!(first.obj, second.obj);
+    assert!(second.covers("박검토홍길동"));
+    // Only characters it already has: the same font is used.
+    set_value(&mut doc, "name", &FieldValue::Text("검토".into())).unwrap();
+    assert_eq!(appearance::dr_korean_font(&doc, KOREAN_FIELD_FONT).unwrap().obj, second.obj);
+    // A field without Hangul stays Helvetica.
+    set_value(&mut doc, "notes", &FieldValue::Text("Plain".into())).unwrap();
+    assert_eq!(appearance::parse_da(&field(&fields(&doc), "notes").da).font, "Helv");
+    // A Korean value in a new field.
+    let new = add_field(&mut doc, 0, [50.0, 100.0, 250.0, 120.0], &NewField::Text { multiline: false }, Some("검토자")).unwrap();
+    set_value(&mut doc, &new, &FieldValue::Text("김민수".into())).unwrap();
+    assert_eq!(appearance::parse_da(&field(&fields(&doc), "검토자").da).font, KOREAN_FIELD_FONT);
+    assert!(undrawn_fields(&doc).is_empty());
+}

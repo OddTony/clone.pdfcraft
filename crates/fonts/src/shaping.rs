@@ -1,4 +1,4 @@
-//! Arabic, Hebrew and Thai text shaping with the matching craft-fonts face and bounded glyph outlines.
+//! Arabic, Hebrew, Thai and Korean text shaping with the matching craft-fonts face and bounded glyph outlines.
 
 use std::sync::OnceLock;
 
@@ -28,6 +28,10 @@ pub enum ShapedScript {
     Arabic,
     Hebrew,
     Thai,
+    /// Hangul (NanumGothic Regular). Left to right with no combining, one glyph per character.
+    Korean,
+    /// Hangul (NanumGothic Bold). Bold is a different font file, kept apart so glyph ids don't mix.
+    KoreanBold,
 }
 
 impl ShapedScript {
@@ -36,6 +40,8 @@ impl ShapedScript {
             Self::Arabic => crate::document_arabic_font(),
             Self::Hebrew => crate::document_hebrew_font(false),
             Self::Thai => crate::document_thai_font(),
+            Self::Korean => crate::document_korean_font(false),
+            Self::KoreanBold => crate::document_korean_font(true),
         }
     }
 }
@@ -44,10 +50,14 @@ fn face(script: ShapedScript) -> Option<&'static (FontRef<'static>, ShaperData)>
     static FACE: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
     static HEBREW: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
     static THAI: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
+    static KOREAN: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
+    static KOREAN_BOLD: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
     let cache = match script {
         ShapedScript::Arabic => &FACE,
         ShapedScript::Hebrew => &HEBREW,
         ShapedScript::Thai => &THAI,
+        ShapedScript::Korean => &KOREAN,
+        ShapedScript::KoreanBold => &KOREAN_BOLD,
     };
     cache
         .get_or_init(|| {
@@ -91,6 +101,16 @@ pub fn shape_thai(text: &str) -> Result<Vec<ShapedCluster>, GlyphError> {
     shape_script(text, false, ShapedScript::Thai)
 }
 
+/// Whether the Korean document font (Regular) has a glyph for `c` (false without the font). Bold has the same character set.
+pub fn korean_has(c: char) -> bool {
+    face(ShapedScript::Korean).is_some_and(|(font, _)| font.charmap().map(c).is_some())
+}
+
+/// Shape one Hangul run in NanumGothic (Bold when `bold`). Left to right, clusters in drawing order.
+pub fn shape_korean(text: &str, bold: bool) -> Result<Vec<ShapedCluster>, GlyphError> {
+    shape_script(text, false, if bold { ShapedScript::KoreanBold } else { ShapedScript::Korean })
+}
+
 fn shape_script(text: &str, rtl: bool, kind: ShapedScript) -> Result<Vec<ShapedCluster>, GlyphError> {
     let (font, data) = face(kind).ok_or(GlyphError::NoFont)?;
     let shaper = data.shaper(font).build();
@@ -102,11 +122,12 @@ fn shape_script(text: &str, rtl: bool, kind: ShapedScript) -> Result<Vec<ShapedC
         ShapedScript::Arabic => script::ARABIC,
         ShapedScript::Hebrew => script::HEBREW,
         ShapedScript::Thai => script::THAI,
+        ShapedScript::Korean | ShapedScript::KoreanBold => script::HANGUL,
     });
     // Preserve the historical Arabic per-character mapping; Hebrew and Thai marks stay with their base.
     buffer.set_cluster_level(match kind {
         ShapedScript::Arabic => BufferClusterLevel::Characters,
-        ShapedScript::Hebrew | ShapedScript::Thai => BufferClusterLevel::MonotoneGraphemes,
+        ShapedScript::Hebrew | ShapedScript::Thai | ShapedScript::Korean | ShapedScript::KoreanBold => BufferClusterLevel::MonotoneGraphemes,
     });
     let shaped = shaper.shape(buffer, ShapeOptions::new());
     // Clusters are byte offsets into `text`; a cluster shows the characters up to the next one.
@@ -297,5 +318,33 @@ mod hebrew_tests {
         assert!(hebrew_has('א') && hebrew_has('\u{05B8}') && !hebrew_has('日'));
         assert_eq!(shape_hebrew("日", true), Err(GlyphError::Missing));
         assert!(shape_hebrew("", true).unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod korean_tests {
+    use super::*;
+
+    /// Hangul gets one cluster per character, in the original text, with a separate font per weight.
+    #[test]
+    fn hangul_is_shaped_one_cluster_per_syllable() {
+        if crate::document_korean_font(false).is_none() {
+            eprintln!("skipping the Korean shaping checks: built without a craft-fonts Kore face (set CRAFT_FONTS_DIR)");
+            assert_eq!(shape_korean("한", false), Err(GlyphError::NoFont));
+            assert!(!korean_has('한'));
+            return;
+        }
+        let c = shape_korean("한글 검사", false).unwrap();
+        let texts: Vec<&str> = c.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(texts, ["한", "글", " ", "검", "사"]);
+        assert!(c.iter().all(|c| c.script == ShapedScript::Korean && c.glyphs.len() == 1));
+        assert!(c.iter().filter(|c| c.text != " ").all(|c| c.advance > 0.5 && c.advance < 1.5), "{c:?}");
+        let bold = shape_korean("한", true).unwrap();
+        assert_eq!(bold.first().map(|c| c.script), Some(ShapedScript::KoreanBold));
+        for c in c.iter().chain(&bold) {
+            let g = shaped_glyph(c.script, c.glyphs[0].0).unwrap();
+            assert_eq!(g.contours.is_empty(), c.text == " ");
+        }
+        assert!(korean_has('검') && korean_has('A') && !korean_has('\u{0E01}'));
     }
 }

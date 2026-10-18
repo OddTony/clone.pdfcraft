@@ -8,7 +8,9 @@
 //! The `/DA` font is used when the form's `/DR` defines it as a simple font that can encode the
 //! displayed text (using its own encoding and Differences), or as a composite font with a
 //! predefined Unicode CMap such as `UniJIS-UTF16-H`, as Japanese forms use. Otherwise (unsupported
-//! characters, other composite fonts, missing resources) Helvetica is used. Text the chosen font
+//! characters, other composite fonts, missing resources) Helvetica is used. Korean values are drawn with the
+//! NanumGothic subset PdfCraft put in `/DR` (`PCNanum`, Type0/CIDFontType2/Identity-H with ToUnicode): when a value is
+//! written, `crate::korean_field_font` embeds the font and points `/DA` at it. Text the chosen font
 //! can't hold (outside WinAnsi in Helvetica, or beyond U+FFFF in a UCS-2 CMap) is drawn as `?`, as
 //! Acrobat keeps a value its field font can't show: the value itself is stored as typed,
 //! [`field_appearance_drawn`] returns the first such character, and the caller marks the widget
@@ -157,6 +159,8 @@ enum FontText {
     Simple(Box<Metrics>),
     /// A composite font with a predefined Unicode CMap.
     Unicode(UnicodeCMap),
+    /// A NanumGothic subset PdfCraft put in `/DR` (Korean values, [`pdfcraft_fonts::KoreanFont`]).
+    Korean(Box<pdfcraft_fonts::KoreanFont>),
 }
 
 impl FontText {
@@ -166,12 +170,14 @@ impl FontText {
             // Selection checks every displayed string first; wrapping only removes line breaks.
             Self::Simple(metrics) => metrics.encode(&s.replace('\t', " ")).unwrap_or_default(),
             Self::Unicode(cmap) => cmap.encode(s),
+            Self::Korean(k) => k.encode(s),
         }
     }
 
     fn can_encode(&self, s: &str) -> bool {
         match self {
             Self::Simple(metrics) => metrics.encode(&s.replace('\t', " ")).is_some(),
+            Self::Korean(k) => k.covers(s),
             _ => true,
         }
     }
@@ -186,6 +192,7 @@ impl FontText {
                 s.chars().map(|c| if c == '\t' { ' ' } else { c }).find(|c| metrics.encode(c.encode_utf8(&mut [0; 4])).is_none())
             }
             Self::Unicode(cmap) => cmap.first_unencodable(s),
+            Self::Korean(k) => k.first_missing(s),
         }
     }
 
@@ -193,6 +200,7 @@ impl FontText {
         match self {
             Self::WinAnsi | Self::Simple(_) => helvetica_width(s, size),
             Self::Unicode(_) => cjk_width(s, size),
+            Self::Korean(k) => k.width(s, size),
         }
     }
 }
@@ -203,6 +211,11 @@ fn dr_font(doc: &Document, name: &str) -> Option<(Object, FontText)> {
     let dr = doc.resolve(af.get(b"DR")?);
     let fonts = doc.resolve(dr.as_dict()?.get(b"Font")?);
     let entry = fonts.as_dict()?.get(name.as_bytes())?.clone();
+    if let Object::Ref(r) = entry
+        && let Some(k) = pdfcraft_fonts::KoreanFont::from_existing(doc, r)
+    {
+        return Some((entry, FontText::Korean(Box::new(k))));
+    }
     let font = doc.resolve(&entry);
     let fd = font.as_dict()?;
     match fd.name(b"Subtype") {
@@ -218,6 +231,19 @@ fn dr_font(doc: &Document, name: &str) -> Option<(Object, FontText)> {
         return None;
     }
     Some((entry, FontText::Simple(Box::new(Metrics::from_dict(doc, fd)))))
+}
+
+/// Whether the form's `/DR` font `name` can draw all of `text` (false for a missing font).
+pub(crate) fn dr_font_shows(doc: &Document, name: &str, text: &str) -> bool {
+    dr_font(doc, name).is_some_and(|(_, enc)| text.split(['\n', '\r']).all(|line| enc.can_encode(line) && enc.first_unencodable(line).is_none()))
+}
+
+/// The font, when `/DR`'s `name` is a NanumGothic subset PdfCraft embedded.
+pub(crate) fn dr_korean_font(doc: &Document, name: &str) -> Option<pdfcraft_fonts::KoreanFont> {
+    match dr_font(doc, name)? {
+        (_, FontText::Korean(k)) => Some(*k),
+        _ => None,
+    }
 }
 
 fn helvetica() -> Object {

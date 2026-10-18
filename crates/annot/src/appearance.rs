@@ -9,12 +9,20 @@
 //! The note icons are PdfCraft's own drawings (AGENTS.md §1). Text boxes use the standard
 //! Helvetica font with WinAnsi encoding; line breaking uses [`text_width`], an approximation of
 //! Helvetica's proportions by character class (no font program or metrics file is bundled).
+//! A text box with Hangul in it (FreeText, callout, Fill & Sign text) is drawn with the NanumGothic
+//! subset ([`pdfcraft_fonts::KoreanFont`]) the caller put in the document, when it passes one ([`build_with`]).
 
 use pdfcraft_cos::{Dict, Object, PdfString, Stream};
 use pdfcraft_fonts::{first_undrawable, literal, win_ansi};
 pub use pdfcraft_fonts::{helvetica_width as text_width, wrap};
 
 use crate::{NOTE_SIZE, Rgb, n};
+
+/// The width of one line of text-box text `text`: measured in NanumGothic when it has Hangul, as [`build_with`]
+/// draws it, and in Helvetica otherwise. Used to size a new text box (Fill & Sign text and the like).
+pub fn box_text_width(text: &str, size: f64) -> f64 {
+    if pdfcraft_fonts::korean_text(text) { pdfcraft_fonts::korean_text_width(text, size) } else { text_width(text, size) }
+}
 
 /// Length of an arrowhead for a line of width `w`.
 pub fn arrow_size(w: f64) -> f64 {
@@ -283,7 +291,8 @@ fn text_turn(d: &Dict) -> i64 {
 pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
     let text = |key: &[u8]| d.get(key).and_then(Object::as_string).map(PdfString::to_text);
     let (what, text) = match d.name(b"Subtype")? {
-        b"FreeText" => ("the comment's text", text(b"Contents")?),
+        // A text box with Hangul is drawn in NanumGothic: only characters NanumGothic lacks are refused.
+        b"FreeText" => return text(b"Contents").and_then(|t| pdfcraft_fonts::first_undrawable_korean(&t)).map(|c| ("the comment's text", c)),
         b"Line" | b"PolyLine" | b"Polygon" => ("the measurement label", text(b"PCMeasureValue")?),
         b"Stamp" if matches!(d.get(b"PCStamp"), Some(Object::Bool(true))) => ("the stamp's \"By\" line", text(b"PCByLine")?),
         // Drawn in Helvetica when the redaction is applied: refused when it is marked.
@@ -297,6 +306,12 @@ pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
 /// Text the standard fonts can't draw comes out as `?`: [`undrawable_text`] says which, and
 /// [`crate::set_appearance`] marks the annotation with it (`pdfcraft_fonts::UNDRAWN_MARK`).
 pub fn build(d: &Dict) -> Option<Stream> {
+    build_with(d, None)
+}
+
+/// [`build`] with a Korean font: with `korean`, a text box with Hangul is drawn in that font (the caller
+/// puts the font object in the document, [`crate::set_appearance`]). Without it, the same as [`build`].
+pub fn build_with(d: &Dict, korean: Option<&pdfcraft_fonts::KoreanFont>) -> Option<Stream> {
     // Imported measurement appearances may include leaders, captions and formatting that
     // this builder cannot reproduce. Preserve them rather than silently losing detail.
     if d.contains(b"Measure") && !d.contains(b"PCMeasureValue") {
@@ -732,11 +747,15 @@ pub fn build(d: &Dict) -> Option<Stream> {
                 ));
             }
             let text = d.get(b"Contents").and_then(|o| o.as_string()).map(PdfString::to_text).unwrap_or_default();
+            // Text with Hangul is measured and drawn with the NanumGothic subset.
+            let korean = korean.filter(|_| pdfcraft_fonts::korean_text(&text));
+            let font_name = if korean.is_some() { "PCKo" } else { "Helv" };
+            let measure = |s: &str, size: f64| korean.map_or_else(|| text_width(s, size), |k| k.width(s, size));
             let pad = 2.0 + bw;
             let width = (rect[2] - rect[0] - 2.0 * pad).max(1.0);
             let q = d.int(b"Q").unwrap_or(0);
             c.push_str(&format!(
-                "{} {} {} {} re W n\nBT\n/Helv {} Tf\n{}",
+                "{} {} {} {} re W n\nBT\n/{font_name} {} Tf\n{}",
                 n(rect[0]),
                 n(rect[1]),
                 n(rect[2] - rect[0]),
@@ -746,29 +765,34 @@ pub fn build(d: &Dict) -> Option<Stream> {
             ));
             let mut out = c.into_bytes();
             let mut y = rect[3] - pad - size * 0.9;
-            for line in wrap(&text, size, width) {
+            for line in pdfcraft_fonts::wrap_with(&text, size, width, measure) {
                 if y < rect[1] - size {
                     break;
                 }
-                let lw = text_width(&line, size);
+                let lw = measure(&line, size);
                 let x = match q {
                     1 => rect[0] + pad + (width - lw) / 2.0,
                     2 => rect[2] - pad - lw,
                     _ => rect[0] + pad,
                 };
                 out.extend(format!("1 0 0 1 {} {} Tm ", n(x), n(y)).bytes());
-                out.extend(literal(&win_ansi(&line)));
+                out.extend(literal(&korean.map_or_else(|| win_ansi(&line), |k| k.encode(&line))));
                 out.extend_from_slice(b" Tj\n");
                 y -= size * 1.2;
             }
             out.extend_from_slice(b"ET\n");
-            let mut font = Dict::new();
-            font.set(b"Type".to_vec(), Object::name("Font"));
-            font.set(b"Subtype".to_vec(), Object::name("Type1"));
-            font.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
-            font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
             let mut fonts = Dict::new();
-            fonts.set(b"Helv".to_vec(), Object::Dict(font));
+            match korean {
+                Some(k) => fonts.set(b"PCKo".to_vec(), Object::Ref(k.obj)),
+                None => {
+                    let mut font = Dict::new();
+                    font.set(b"Type".to_vec(), Object::name("Font"));
+                    font.set(b"Subtype".to_vec(), Object::name("Type1"));
+                    font.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
+                    font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
+                    fonts.set(b"Helv".to_vec(), Object::Dict(font));
+                }
+            }
             res.set(b"Font".to_vec(), Object::Dict(fonts));
             let mut stream = form(full, &out, res);
             if let Some(m) = matrix {

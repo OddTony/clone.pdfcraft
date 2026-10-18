@@ -142,6 +142,18 @@ pub fn japanese_glyph(ch: char) -> Result<GlyphOutline, GlyphError> {
     japanese_glyph_from(face, ch)
 }
 
+/// Whether `c` is Hangul (syllables U+AC00–D7A3, jamo U+1100–11FF, compatibility jamo U+3130–318F).
+pub fn is_hangul(c: char) -> bool {
+    matches!(u32::from(c), 0xAC00..=0xD7A3 | 0x1100..=0x11FF | 0x3130..=0x318F)
+}
+
+/// One glyph of the Korean document font ([`crate::document_korean_font`], NanumGothic), with the same complexity
+/// and missing-glyph checks as [`japanese_glyph`]. [`GlyphError::NoFont`] in a build without a Korean face.
+pub fn korean_glyph(ch: char, bold: bool) -> Result<GlyphOutline, GlyphError> {
+    let Some(face) = crate::document_korean_font(bold) else { return Err(GlyphError::NoFont) };
+    japanese_glyph_from(face, ch)
+}
+
 /// The bounded outline and advance from the explicitly selected craft-fonts face.
 /// Uses the same complexity and missing-glyph checks as [`japanese_glyph`].
 pub fn japanese_glyph_from(face: &crate::CraftFont, ch: char) -> Result<GlyphOutline, GlyphError> {
@@ -189,14 +201,16 @@ pub(crate) fn bounded_outline(font: &FontRef, gid: GlyphId, width: f64) -> Resul
 }
 
 /// The first character of `text` (other than white space) that neither the script font of typed
-/// signatures nor its Inter fallback has a glyph for: [`script_outline`] would leave it out.
+/// signatures nor its Inter fallback (nor, for Korean, NanumGothic) has a glyph for: [`script_outline`] would leave it out.
 /// `None` when they can draw all of them.
 pub fn script_missing(text: &str) -> Option<char> {
     let font = FontRef::new(FONT).ok()?;
     let charmap = font.charmap();
     let fallback = FontRef::new(INTER_REGULAR).ok();
     let fallback_map = fallback.as_ref().map(|f| f.charmap());
-    text.chars().find(|c| !c.is_whitespace() && charmap.map(*c).is_none() && fallback_map.as_ref().and_then(|m| m.map(*c)).is_none())
+    text.chars().find(|c| {
+        !c.is_whitespace() && charmap.map(*c).is_none() && fallback_map.as_ref().and_then(|m| m.map(*c)).is_none() && !crate::korean_has(*c)
+    })
 }
 
 /// The outlines of `text` in the script font. Characters it lacks (Cyrillic, Greek, …) are drawn
@@ -215,7 +229,7 @@ pub fn script_outline(text: &str) -> ScriptOutline {
     let glyphs = font.outline_glyphs();
     let advances = font.glyph_metrics(Size::unscaled(), loc);
     // The fallback face, scaled so its capitals are as tall as the script's.
-    let fallback = FontRef::new(INTER_REGULAR).ok().map(|f| {
+    let scaled = |f: FontRef<'static>| {
         let m = f.metrics(Size::unscaled(), loc);
         let em = 1.0 / m.units_per_em.max(1) as f64;
         let ratio = match (metrics.cap_height, m.cap_height) {
@@ -224,7 +238,10 @@ pub fn script_outline(text: &str) -> ScriptOutline {
         };
         let ratio = if ratio.is_finite() { ratio.clamp(0.5, 2.0) } else { 1.0 };
         (f.charmap(), f.outline_glyphs(), f.glyph_metrics(Size::unscaled(), loc), em * ratio)
-    });
+    };
+    let fallback = FontRef::new(INTER_REGULAR).ok().map(scaled);
+    // Hangul comes from NanumGothic (the craft-fonts Kore face), with the same slant and size fitting as Inter.
+    let korean = crate::document_korean_font(false).and_then(|f| FontRef::new(f.bytes).ok()).map(scaled);
     let mut pen = Flatten::new(scale);
     // The 4096-point budget is for one untrusted document glyph (japanese_glyph), not a
     // whole signature in our bundled font. Keep a separate bounded budget for the line.
@@ -238,6 +255,15 @@ pub fn script_outline(text: &str) -> ScriptOutline {
             }
             pen.dx += advances.advance_width(gid).unwrap_or(0.0) as f64 * scale;
         } else if let Some((map, outlines, adv, em)) = &fallback
+            && let Some(gid) = map.map(ch)
+        {
+            (pen.scale, pen.slant) = (*em, FALLBACK_SLANT);
+            if let Some(g) = outlines.get(gid) {
+                let _ = g.draw(DrawSettings::unhinted(Size::unscaled(), loc), &mut pen);
+                pen.close();
+            }
+            pen.dx += adv.advance_width(gid).unwrap_or(0.0) as f64 * em;
+        } else if let Some((map, outlines, adv, em)) = &korean
             && let Some(gid) = map.map(ch)
         {
             (pen.scale, pen.slant) = (*em, FALLBACK_SLANT);
@@ -267,6 +293,22 @@ mod tests {
         assert!(max_x > o.width - 0.5, "ink reaches the last letter: {max_x} / {}", o.width);
         assert!(!super::script_outline(&"W".repeat(super::MAX_SIGNATURE_CHARS)).contours.is_empty());
         assert!(super::script_outline(&"W".repeat(super::MAX_SIGNATURE_CHARS + 1)).contours.is_empty());
+    }
+
+    /// Korean names are drawn from NanumGothic (a build without the font reports them as missing characters).
+    #[test]
+    fn korean_names_are_drawn_from_the_korean_face() {
+        if crate::document_korean_font(false).is_none() {
+            assert_eq!(super::script_missing("홍길동"), Some('홍'));
+            return;
+        }
+        assert_eq!(super::script_missing("홍길동 Kim"), None);
+        for ch in "홍길동".chars() {
+            let o = super::script_outline(&ch.to_string());
+            assert!(!o.contours.is_empty() && o.width > 0.3, "{ch}: {}", o.width);
+        }
+        let o = super::script_outline("홍길동");
+        assert!(o.width > 3.0 * super::script_outline("홍").width * 0.9);
     }
 
     /// Issue #846: Cyrillic (and Greek) names come out of the fallback face instead of vanishing.
@@ -328,5 +370,27 @@ mod tests {
             assert!(!g.contours.is_empty());
         }
         assert_eq!(super::japanese_glyph('\u{1f4a9}'), Err(super::GlyphError::Missing));
+    }
+
+    #[test]
+    fn hangul_is_recognised_and_drawn_from_the_korean_face() {
+        for c in ['가', '힣', 'ᄀ', 'ㄱ', 'ㆎ'] {
+            assert!(super::is_hangul(c), "{c}");
+        }
+        for c in ['A', '日', 'こ', '·', '\u{d7a4}'] {
+            assert!(!super::is_hangul(c), "{c}");
+        }
+        if crate::document_korean_font(false).is_none() {
+            eprintln!("skipping the Korean glyph checks: built without a craft-fonts Kore face (set CRAFT_FONTS_DIR)");
+            assert_eq!(super::korean_glyph('검', false), Err(super::GlyphError::NoFont));
+            return;
+        }
+        for bold in [false, true] {
+            for ch in "검방한글ㄱ".chars() {
+                let g = super::korean_glyph(ch, bold).expect("NanumGothic has the Hangul glyphs");
+                assert!(g.width > 0.2 && g.width < 2.0 && !g.contours.is_empty(), "{ch}");
+            }
+        }
+        assert_eq!(super::korean_glyph('\u{1f4a9}', false), Err(super::GlyphError::Missing));
     }
 }

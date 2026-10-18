@@ -3025,9 +3025,14 @@ fn creating_from_text_refuses_what_the_font_cannot_draw() {
     // WinAnsi characters, line breaks and tabs are still fine.
     let d = ok(&mut a, "doc_create", json!({ "from": "text", "text": "Price: 5 € at café\r\n\tnext\u{c}page two" }))["doc"].as_u64().unwrap();
     assert_eq!(page_text(&mut a, d).len(), 2);
-    // #959: page_add_text refuses it too.
+    // #959: page_add_text refuses it too. Hangul is drawn in builds with NanumGothic (the craft-fonts Kore face).
     let doc = ok(&mut a, "doc_create", json!({ "from": "blank" }))["doc"].as_u64().unwrap();
-    refused(a.call("page_add_text", &json!({ "doc": doc, "page": 1, "text": "ABC 제안서 시험", "at": [20, 20] })));
+    let added = a.call("page_add_text", &json!({ "doc": doc, "page": 1, "text": "ABC 제안서 시험", "at": [20, 20] }));
+    if pdfcraft_fonts::document_korean_font(false).is_some() {
+        assert!(added.is_ok(), "{added:?}");
+    } else {
+        refused(added);
+    }
 }
 
 #[test]
@@ -6562,4 +6567,54 @@ fn a_root_less_write_output_is_atomic_too() {
     let e = free.write_output(&dir.join("new").to_string_lossy(), &[4]).unwrap_err();
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Korean through the tools: form field values (a new field, filling), FreeText, Fill & Sign text, a watermark and
+/// a signature appearance (name, reason, graphic text) are drawn; flattening and removing hidden content don't refuse them, and the text stays page text.
+#[test]
+fn korean_fields_comments_watermark_and_signatures_through_tools() {
+    if pdfcraft_fonts::document_korean_font(false).is_none() {
+        eprintln!("skipping the Korean tool checks: built without a craft-fonts Kore face (set CRAFT_FONTS_DIR)");
+        return;
+    }
+    let dir = workdir("korean-stage2");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "form_add_field", json!({ "doc": doc, "page": 1, "type": "text", "rect": [20, 240, 180, 262], "name": "검토자" }));
+    ok(&mut a, "form_fill", json!({ "doc": doc, "values": { "검토자": "박검토" } }));
+    let fields = ok(&mut a, "form_fields", json!({ "doc": doc }))["fields"].as_array().unwrap().clone();
+    assert_eq!(fields[0]["value"], "박검토", "{fields:?}");
+    ok(
+        &mut a,
+        "comment_add",
+        json!({ "doc": doc, "page": 1, "type": "textbox", "rect": [10, 200, 190, 230], "contents": "한글 주석", "font_size": 12 }),
+    );
+    ok(&mut a, "fill_sign_add", json!({ "doc": doc, "page": 2, "type": "text", "at": [20, 40], "text": "홍길동" }));
+    ok(&mut a, "doc_watermark", json!({ "doc": doc, "text": "대외비" }));
+    // Flattening does not refuse, and the text becomes page text.
+    ok(&mut a, "doc_flatten", json!({ "doc": doc, "fields": true, "comments": false }));
+    ok(&mut a, "doc_flatten", json!({ "doc": doc, "fields": false, "comments": true }));
+    let text = page_text(&mut a, doc);
+    for want in ["박검토", "한글 주석", "대외비"] {
+        assert!(text[0].contains(want), "{want}: {text:?}");
+    }
+    assert!(text[1].contains("홍길동"), "{text:?}");
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "korean.pdf" }));
+    // Removing hidden content (which flattens the form) does not refuse a form with Korean values either.
+    let other = ok(&mut a, "doc_open", json!({ "path": "b.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "form_add_field", json!({ "doc": other, "page": 1, "type": "text", "rect": [20, 240, 180, 262], "name": "이름" }));
+    ok(&mut a, "form_fill", json!({ "doc": other, "values": { "이름": "김민수" } }));
+    ok(&mut a, "doc_remove_hidden", json!({ "doc": other }));
+    assert!(page_text(&mut a, other)[0].contains("김민수"));
+    // Signature appearance: a Korean name graphic and reason are drawn.
+    ok(&mut a, "sign_id_create", json!({ "name": "Kim Minsu", "key": "p256", "password": "secret12", "path": "kim.p12" }));
+    ok(
+        &mut a,
+        "sign_document",
+        json!({ "doc": doc, "id": "kim.p12", "password": "secret12", "page": 1, "rect": [20, 100, 220, 150], "reason": "설계도서 승인",
+                "appearance": { "reason": true }, "graphic": { "text": "김민수" }, "out": "signed.pdf" }),
+    );
+    let signed = ok(&mut a, "doc_open", json!({ "path": "signed.pdf" }))["doc"].as_u64().unwrap();
+    let sigs = ok(&mut a, "sign_list", json!({ "doc": signed }));
+    assert!(sigs.to_string().contains("설계도서 승인"), "{sigs}");
 }

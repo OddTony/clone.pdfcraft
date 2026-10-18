@@ -10,7 +10,8 @@
 //! anything is drawn on top, the page's original content is wrapped in `q … Q` (two tiny streams)
 //! so its graphics state can't leak into the mark.
 //!
-//! Text uses standard Helvetica (WinAnsi) added to the page resources as `/PCHelv`.
+//! Text uses standard Helvetica (WinAnsi) added to the page resources as `/PCHelv`. Header and footer
+//! lines with Hangul are drawn through the Add Text shaping path (Type 3 fonts of NanumGothic outlines, `added::draw_text_shaped`).
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -80,8 +81,25 @@ impl HeaderFooter {
     /// (and a `\r` that would be drawn is refused too). The dialog asks this too, so its preview
     /// never offers text that applying refuses (#2013).
     pub fn first_undrawable(&self) -> Option<char> {
-        self.text.iter().flat_map(|t| t.lines()).find_map(pdfcraft_fonts::first_non_win_ansi)
+        self.text.iter().flat_map(|t| t.lines()).find_map(|line| match korean_line(line, self.font_size, self.color) {
+            // A Hangul line: the same test as added text (without NanumGothic the Hangul itself is refused).
+            Some(t) => added::first_undrawable(&t),
+            None => pdfcraft_fonts::first_non_win_ansi(line),
+        })
     }
+}
+
+/// The added-text item that draws one header or footer line with Hangul through the shaping path (top-left `[0, 0]`, no wrapping).
+/// `None` without Hangul or without a Korean font in this build (the standard-font path draws or refuses it).
+fn korean_line(line: &str, size: f64, color: Rgb) -> Option<AddedText> {
+    if !line.chars().any(pdfcraft_fonts::is_hangul) || pdfcraft_fonts::document_korean_font(false).is_none() {
+        return None;
+    }
+    let size = if size.is_finite() && size > 0.0 { size } else { 1.0 };
+    let mut t = AddedText { rect: [0.0, -size, 1.0, 0.0], text: line.to_owned(), size, color, ..AddedText::default() };
+    // Wide enough never to wrap (the width is measured from the shaped result).
+    t.rect[2] = added::text_width(&t) + size;
+    Some(t)
 }
 
 /// A picture for a background or watermark (Acrobat: Source ▸ File): an XObject already in
@@ -121,7 +139,11 @@ impl Watermark {
     pub fn first_undrawable(&self) -> Option<char> {
         match self.source {
             Some(_) => None,
-            None => self.text.trim().lines().find_map(pdfcraft_fonts::first_non_win_ansi),
+            // Hangul lines are drawn in NanumGothic, as headers and footers are (the size doesn't matter for the test).
+            None => self.text.trim().lines().find_map(|line| match korean_line(line, 12.0, self.color) {
+                Some(t) => added::first_undrawable(&t),
+                None => pdfcraft_fonts::first_non_win_ansi(line),
+            }),
         }
     }
 }
@@ -322,6 +344,18 @@ fn add_resources(doc: &mut Document, page: &pdfcraft_model::Page, opacity: Optio
         res.set(b"ExtGState".to_vec(), Object::Dict(gs));
     }
     // The page gets its own (possibly copied) resources; shared dictionaries stay untouched.
+    doc.update_dict(page.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(res)))?;
+    Ok(())
+}
+
+/// Add the fonts in `fonts` to the page's own resources (the Korean Type 3 fonts of headers and footers).
+fn add_fonts(doc: &mut Document, page: &pdfcraft_model::Page, fonts: &Dict) -> Result<(), EditError> {
+    let mut res = page.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
+    let mut all = res.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
+    for (name, font) in fonts.iter() {
+        all.set(name.clone(), font.clone());
+    }
+    res.set(b"Font".to_vec(), Object::Dict(all));
     doc.update_dict(page.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(res)))?;
     Ok(())
 }
@@ -553,6 +587,17 @@ pub(crate) fn undrawable(c: char) -> EditError {
 
 /// The wording of the refusal for text with `c`, which the standard fonts can't draw.
 pub fn undrawable_message(c: char) -> String {
+    if pdfcraft_fonts::is_hangul(c) {
+        // Hangul is drawn when NanumGothic (the craft-fonts Kore face) is there: reaching here means a build without it, or a character it lacks.
+        return match pdfcraft_fonts::document_korean_font(false) {
+            None => format!(
+                "Korean text needs PdfCraft's Korean font (NanumGothic), which this build doesn't include, so \"{c}\" (U+{:04X}) can't be added \
+                 (to build it in, set CRAFT_FONTS_DIR to a craft-fonts checkout that has a Kore face)",
+                u32::from(c)
+            ),
+            Some(f) => format!("the Korean font ({}) can't draw \"{c}\" (U+{:04X})", f.family, u32::from(c)),
+        };
+    }
     format!("the standard fonts can't draw \"{c}\" (U+{:04X}); only Western European characters can be added as text for now", u32::from(c))
 }
 
@@ -615,6 +660,11 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
         let [top, bottom, left, right] = hf.margins;
         let mut body: Vec<u8> = format!("BT\n/PCHelv {} Tf\n{}\n", n(size), rgb(hf.color)).into_bytes();
         let mut underlines = String::new();
+        // Hangul lines are drawn separately after the standard font's BT … ET, and their fonts added to the page resources.
+        let mut shaped = Vec::new();
+        let mut shaped_fonts = Dict::new();
+        let taken = page.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
+        let mut taken = taken.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
         for (slot, template) in hf.text.iter().enumerate() {
             if template.trim().is_empty() {
                 continue;
@@ -623,7 +673,8 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
             let header = slot < 3;
             let line_h = size * 1.2;
             for (li, line) in lines.iter().enumerate() {
-                let tw = helvetica_width(line, size);
+                let korean = korean_line(line, size, hf.color);
+                let tw = korean.as_ref().map_or_else(|| helvetica_width(line, size), |t| t.rect[2] - size);
                 let x = match slot % 3 {
                     0 => left,
                     1 => (w - tw) / 2.0,
@@ -631,13 +682,27 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
                 };
                 // Headers hang below the top margin; footers sit on the bottom margin.
                 let y = if header { h - top - size * 0.8 - li as f64 * line_h } else { bottom + (lines.len() - 1 - li) as f64 * line_h };
-                body.extend(text_op(x, y, line));
+                match korean {
+                    Some(mut t) => {
+                        // The shaping path's baseline is 0.95 em below the top of the box.
+                        let top = y + 0.95 * size;
+                        t.rect = [x, top - size, x + t.rect[2], top];
+                        let (content, fonts) = added::draw_text_shaped(doc, &t, &taken)?;
+                        shaped.extend(content);
+                        for (name, font) in fonts.iter() {
+                            taken.set(name.clone(), font.clone());
+                            shaped_fonts.set(name.clone(), font.clone());
+                        }
+                    }
+                    None => body.extend(text_op(x, y, line)),
+                }
                 if hf.underline {
                     underlines.push_str(&format!("{} {} {} {} re f\n", n(x), n(y - size * 0.15), n(tw), n((size * 0.06).max(0.4))));
                 }
             }
         }
         body.extend_from_slice(b"ET\n");
+        body.extend(shaped);
         if !underlines.is_empty() {
             body.extend(format!("{}\n{underlines}", rgb(hf.color)).bytes());
         }
@@ -645,6 +710,9 @@ pub fn add_header_footer(doc: &mut Document, pages: &[usize], hf: &HeaderFooter,
         content.extend(body);
         content.extend_from_slice(END.as_bytes());
         add_resources(doc, page, None, None)?;
+        if !shaped_fonts.is_empty() {
+            add_fonts(doc, &page_list(doc)[i], &shaped_fonts)?;
+        }
         let page = &page_list(doc)[i];
         place(doc, page, MarkKind::HeaderFooter, content, false)?;
     }
@@ -689,7 +757,9 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
             place(doc, page, MarkKind::Watermark, content.into_bytes(), wm.behind)?;
             continue;
         }
-        let widest = lines.iter().map(|l| helvetica_width(l, 1.0)).fold(0.0, f64::max).max(0.01);
+        // A Hangul line's width is measured through the shaping path (it scales with the font size).
+        let line_width = |l: &str, size: f64| korean_line(l, size, wm.color).map_or_else(|| helvetica_width(l, size), |t| t.rect[2] - size);
+        let widest = lines.iter().map(|l| line_width(l, 1.0)).fold(0.0, f64::max).max(0.01);
         let size = if wm.font_size > 0.0 { wm.font_size } else { ((w * w + h * h).sqrt() * 0.5 / widest).clamp(6.0, 300.0) };
         let (s, c) = wm.rotation.to_radians().sin_cos();
         let (cx, cy) = (w / 2.0 + wm.offset[0], h / 2.0 + wm.offset[1]);
@@ -711,13 +781,36 @@ pub fn add_watermark(doc: &mut Document, pages: &[usize], wm: &Watermark, replac
         );
         let line_h = size * 1.15;
         let total = line_h * (lines.len() as f64 - 1.0);
+        // Hangul lines: drawn through the shaping path after the standard font's BT … ET, as headers and footers are; their fonts go in the page resources.
+        let mut shaped = Vec::new();
+        let mut shaped_fonts = Dict::new();
+        let taken = page.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
+        let mut taken = taken.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
         for (li, line) in lines.iter().enumerate() {
-            let tw = helvetica_width(line, size);
-            content.extend(text_op(-tw / 2.0, total / 2.0 - li as f64 * line_h - size * 0.35, line));
+            let y = total / 2.0 - li as f64 * line_h - size * 0.35;
+            match korean_line(line, size, wm.color) {
+                Some(mut t) => {
+                    let tw = t.rect[2] - size;
+                    // The shaping path's baseline is 0.95 em below the top of the box.
+                    let top = y + 0.95 * size;
+                    t.rect = [-tw / 2.0, top - size, -tw / 2.0 + t.rect[2], top];
+                    let (drawn, fonts) = added::draw_text_shaped(doc, &t, &taken)?;
+                    shaped.extend(drawn);
+                    for (name, font) in fonts.iter() {
+                        taken.set(name.clone(), font.clone());
+                        shaped_fonts.set(name.clone(), font.clone());
+                    }
+                }
+                None => content.extend(text_op(-helvetica_width(line, size) / 2.0, y, line)),
+            }
         }
         content.extend_from_slice(b"ET\n");
+        content.extend(shaped);
         content.extend_from_slice(END.as_bytes());
         add_resources(doc, &page, Some(opacity), None)?;
+        if !shaped_fonts.is_empty() {
+            add_fonts(doc, &page_list(doc)[i], &shaped_fonts)?;
+        }
         let page = &page_list(doc)[i];
         place(doc, page, MarkKind::Watermark, content, wm.behind)?;
     }

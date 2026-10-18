@@ -4538,3 +4538,205 @@ fn flattening_comments_keeps_annotations_that_are_not_comments() {
     let without_widget: Vec<&str> = all.iter().copied().filter(|s| *s != "Widget").collect();
     assert_eq!(left(&reopen(&doc)), without_widget, "flattening fields touches no annotation that isn't a widget");
 }
+
+/// The `/FontFamily` of the Type 3 fonts in the page's own resources.
+fn type3_families(doc: &Document, page: usize) -> Vec<String> {
+    let p = &pdfcraft_model::pages(doc)[page];
+    let Some(res) = p.dict.get(b"Resources").map(|r| doc.resolve(r)) else { return vec![] };
+    let Some(fonts) = res.as_dict().and_then(|r| r.get(b"Font")).map(|f| doc.resolve(f)) else { return vec![] };
+    let mut out = Vec::new();
+    for (_, f) in fonts.as_dict().unwrap().iter() {
+        let f = doc.resolve(f);
+        let f = f.as_dict().unwrap();
+        if f.name(b"Subtype") != Some(b"Type3") {
+            continue;
+        }
+        let d = doc.resolve(f.get(b"FontDescriptor").unwrap());
+        out.push(d.as_dict().unwrap().get(b"FontFamily").and_then(Object::as_string).unwrap().to_text());
+    }
+    out
+}
+
+fn without_korean_font(test: &str) -> bool {
+    if pdfcraft_fonts::document_korean_font(false).is_some() {
+        return false;
+    }
+    eprintln!("skipping {test}: built without a craft-fonts Kore face (set CRAFT_FONTS_DIR to run it)");
+    true
+}
+
+/// Korean added text is drawn in NanumGothic, and the item, its text and its fonts survive save and reopen.
+#[test]
+fn added_korean_text_is_drawn_with_the_korean_face_and_survives_reopen() {
+    let mut doc = fixture();
+    let t = AddedText { rect: [72.0, 600.0, 400.0, 700.0], text: "검사 결과 Hello 123 → ※".into(), size: 14.0, ..AddedText::default() };
+    if without_korean_font("added_korean_text_is_drawn_with_the_korean_face_and_survives_reopen") {
+        assert_eq!(first_undrawable(&t), Some('검'));
+        let err = add_content(&mut doc, 0, &Content::Text(t)).unwrap_err().to_string();
+        assert!(err.contains("Korean") && err.contains("CRAFT_FONTS_DIR"), "{err}");
+        return;
+    }
+    let family = pdfcraft_fonts::document_korean_font(false).unwrap().family;
+    assert_eq!(first_undrawable(&t), None);
+    add_content(&mut doc, 0, &Content::Text(t.clone())).unwrap();
+    let bold = AddedText { rect: [72.0, 500.0, 400.0, 560.0], text: "굵은 한글".into(), bold: true, ..t.clone() };
+    add_content(&mut doc, 0, &Content::Text(bold.clone())).unwrap();
+    for d in [&doc, &reopen(&doc)] {
+        let added = list_added(d);
+        assert_eq!(added[0].content, Content::Text(AddedText { rect: super::added::text_rect(&t), ..t.clone() }));
+        assert_eq!(added[1].content, Content::Text(AddedText { rect: super::added::text_rect(&bold), ..bold.clone() }));
+        let families = type3_families(d, 0);
+        assert!(!families.is_empty() && families.iter().all(|f| f == family), "{families:?}");
+        // Copy and search read the original text.
+        let text: Vec<String> = text::text_lines(d, 0).unwrap().into_iter().map(|l| l.text).collect();
+        assert!(text.iter().any(|l| l.contains("검사 결과 Hello 123 → ※")), "{text:?}");
+        assert!(text.iter().any(|l| l.contains("굵은 한글")), "{text:?}");
+    }
+    // A narrow box breaks lines at spaces.
+    let narrow = AddedText { rect: [0.0, 0.0, 40.0, 200.0], text: "가나 다라".into(), size: 14.0, ..AddedText::default() };
+    assert_eq!(super::added::lines(&narrow), ["가나", "다라"]);
+    // Retyping and deleting clean up the item's fonts as well.
+    update_content(&mut doc, 0, 0, &Content::Text(AddedText { text: "수정한 글".into(), ..t.clone() })).unwrap();
+    assert!(!own(&doc, 0).is_empty());
+    delete_content(&mut doc, 0, 1).unwrap();
+    delete_content(&mut doc, 0, 0).unwrap();
+    assert!(list_added(&doc).is_empty() && arabic_font_names(&doc, 0).is_empty());
+}
+
+/// Editing a paragraph or line with Hangul the original font lacks falls back to NanumGothic, not a Japanese face.
+#[test]
+fn korean_replacement_falls_back_to_the_korean_face_after_save_and_reopen() {
+    let replacement = "검사 방법 OK";
+    if without_korean_font("korean_replacement_falls_back_to_the_korean_face_after_save_and_reopen") {
+        let mut doc = text_page("BT /F2 12 Tf 72 700 Td (ab) Tj ET");
+        let err = text::replace_line(&mut doc, 0, 0, replacement).unwrap_err().to_string();
+        assert!(err.contains("Korean"), "{err}");
+        return;
+    }
+    let face = pdfcraft_fonts::document_korean_font(false).unwrap();
+    let expected = format!("{}-{}", face.family, face.style).replace(' ', "");
+    for paragraph in [false, true] {
+        let mut doc = text_page("BT /F2 12 Tf 72 700 Td (ab) Tj ET");
+        if paragraph {
+            text::replace_block(&mut doc, 0, 0, replacement).unwrap();
+        } else {
+            text::replace_line(&mut doc, 0, 0, replacement).unwrap();
+        }
+        for d in [&doc, &reopen(&doc)] {
+            let lines = text::text_lines(d, 0).unwrap();
+            assert_eq!(lines[0].text, replacement);
+            assert_eq!(lines[0].base_font, expected);
+        }
+    }
+}
+
+/// Korean headers and footers are drawn in NanumGothic, their text reads back after reopening, and Replace works.
+#[test]
+fn korean_header_and_footer_are_drawn_with_the_korean_face() {
+    let hf = HeaderFooter {
+        text: ["서울 건축".into(), String::new(), String::new(), String::new(), "페이지 <<1>> / <<n>>".into(), "Page <<1>>".into()],
+        underline: true,
+        ..HeaderFooter::default()
+    };
+    let mut doc = fixture();
+    if without_korean_font("korean_header_and_footer_are_drawn_with_the_korean_face") {
+        assert_eq!(hf.first_undrawable(), Some('서'));
+        let err = add_header_footer(&mut doc, &[0], &hf, false, &cx()).unwrap_err().to_string();
+        assert_eq!(err, undrawable_message('서'));
+        assert!(err.contains("Korean"), "{err}");
+        return;
+    }
+    let family = pdfcraft_fonts::document_korean_font(false).unwrap().family;
+    assert_eq!(hf.first_undrawable(), None);
+    add_header_footer(&mut doc, &[0, 1, 2], &hf, false, &cx()).unwrap();
+    add_header_footer(&mut doc, &[0, 1, 2], &hf, true, &cx()).unwrap();
+    let doc = reopen(&doc);
+    for page in 0..3 {
+        let mark = streams(&doc, page).pop().unwrap();
+        assert!(mark.contains("/PCMark /HeaderFooter") && mark.contains("(Page") && mark.contains("/ActualText"), "{mark}");
+        let families = type3_families(&doc, page);
+        assert!(families.iter().any(|f| f == family), "{families:?}");
+        let text: Vec<String> = text::text_lines(&doc, page).unwrap().into_iter().map(|l| l.text).collect();
+        assert!(text.iter().any(|l| l.contains("서울 건축")), "{text:?}");
+        assert!(text.iter().any(|l| l.contains(&format!("페이지 {} / 3", page + 1))), "{text:?}");
+    }
+    // Characters NanumGothic lacks too (Hanja and the like) are still refused, and the document is left as it is.
+    let bad = HeaderFooter { text: ["한글 漢字".into(), String::new(), String::new(), String::new(), String::new(), String::new()], ..hf };
+    assert_eq!(bad.first_undrawable(), Some('漢'));
+    let mut doc = fixture();
+    let before = streams(&doc, 0);
+    assert_eq!(add_header_footer(&mut doc, &[0], &bad, false, &cx()).unwrap_err().to_string(), undrawable_message('漢'));
+    assert_eq!(streams(&doc, 0), before);
+}
+
+/// A Korean watermark is drawn in NanumGothic (the shaping path), as headers and footers are, and reads back after reopening.
+#[test]
+fn korean_watermark_is_drawn_with_the_korean_face() {
+    let wm = Watermark { text: "대외비 DRAFT\n서울건축".into(), ..Watermark::default() };
+    let mut doc = fixture();
+    if without_korean_font("korean_watermark_is_drawn_with_the_korean_face") {
+        assert_eq!(wm.first_undrawable(), Some('대'));
+        assert!(add_watermark(&mut doc, &[0], &wm, false).is_err());
+        return;
+    }
+    let family = pdfcraft_fonts::document_korean_font(false).unwrap().family;
+    assert_eq!(wm.first_undrawable(), None);
+    add_watermark(&mut doc, &[0, 1], &wm, false).unwrap();
+    add_watermark(&mut doc, &[0, 1], &wm, true).unwrap();
+    let doc = reopen(&doc);
+    for page in 0..2 {
+        let mark = streams(&doc, page).pop().unwrap();
+        assert!(mark.contains("/PCMark /Watermark") && mark.contains("/ActualText") && !mark.contains("(?"), "{mark}");
+        let families = type3_families(&doc, page);
+        assert!(families.iter().any(|f| f == family), "{families:?}");
+        let text: Vec<String> = text::text_lines(&doc, page).unwrap().into_iter().map(|l| l.text).collect();
+        assert!(text.iter().any(|l| l.contains("대외비 DRAFT")) && text.iter().any(|l| l.contains("서울건축")), "{text:?}");
+    }
+    // Characters NanumGothic lacks are still refused.
+    let bad = Watermark { text: "한글 漢字".into(), ..Watermark::default() };
+    assert_eq!(bad.first_undrawable(), Some('漢'));
+}
+
+/// A page with Korean FreeText and Fill & Sign text flattens too: nothing is refused, and the appearances
+/// drawn with the NanumGothic subset become page content with their text kept.
+#[test]
+fn korean_comments_flatten_and_keep_their_text() {
+    use pdfcraft_annot::{Meta, NewAnnotation, Shape, Style, add_annotation, summaries};
+    let mut doc = fixture();
+    let meta = Meta { date: None, id: "k".into() };
+    let add = |doc: &mut Document, shape: Shape, contents: &str| {
+        let style = Style::default_for(&shape);
+        add_annotation(doc, &NewAnnotation { page: 0, shape, style, contents: contents.into(), author: "a".into() }, &meta).unwrap()
+    };
+    add(&mut doc, Shape::TextBox { rect: [60.0, 700.0, 300.0, 730.0], font_size: 12.0 }, "한글 주석");
+    add(&mut doc, Shape::Typewriter { rect: [60.0, 600.0, 200.0, 616.0], font_size: 11.0 }, "홍길동");
+    if without_korean_font("korean_comments_flatten_and_keep_their_text") {
+        assert!(flatten(&mut doc, &[0], true, false).unwrap_err().to_string().contains("can't flatten"));
+        return;
+    }
+    assert_eq!(flatten(&mut doc, &[0], true, false).unwrap(), 2);
+    let doc = reopen(&doc);
+    assert!(summaries(&doc).is_empty());
+    // The flattened appearances (PCFl0, PCFl1) draw their text with the NanumGothic subset.
+    let mut shown = Vec::new();
+    for name in [&b"PCFl0"[..], b"PCFl1"] {
+        let r = xobject(&doc, 0, name).expect("a flattened appearance");
+        let Object::Stream(s) = doc.get(r).as_ref().clone() else { panic!("a form XObject") };
+        let res = doc.dict(s.dict.get(b"Resources").unwrap()).unwrap();
+        let fonts = doc.dict(res.get(b"Font").unwrap()).unwrap();
+        let Some(Object::Ref(f)) = fonts.get(b"PCKo").cloned() else { panic!("the Korean font: {fonts:?}") };
+        let k = pdfcraft_fonts::KoreanFont::from_existing(&doc, f).expect("a PdfCraft Korean font");
+        let m = pdfcraft_fonts::pdf::Metrics::from_dict(&doc, &doc.dict(&Object::Ref(f)).unwrap());
+        let body = s.decoded().unwrap();
+        // The CID string of the text is in the appearance, and ToUnicode reads the original text.
+        for want in ["한글 주석", "홍길동"] {
+            let shows = pdfcraft_fonts::literal(&k.encode(want));
+            if k.covers(want) && body.windows(shows.len()).any(|w| w == shows.as_slice()) {
+                assert_eq!(m.decode(&k.encode(want)), want);
+                shown.push(want);
+            }
+        }
+    }
+    shown.sort_unstable();
+    assert_eq!(shown, ["한글 주석", "홍길동"]);
+}

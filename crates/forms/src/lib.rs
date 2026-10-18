@@ -1167,12 +1167,102 @@ pub(crate) fn merged_appearance(doc: &Document, widget: ObjRef, fresh: &Dict) ->
     apd
 }
 
+/// The resource name, in the form's `/DR`, of the NanumGothic subset PdfCraft embeds (`/DA` points at it).
+pub const KOREAN_FIELD_FONT: &str = "PCNanum";
+
+/// When the field font can't draw a value (or option) with Hangul, put a NanumGothic subset (Type0/CIDFontType2/Identity-H
+/// with ToUnicode) in the form's `/DR` as [`KOREAN_FIELD_FONT`] and point the `/DA` of the field (and of widgets with their
+/// own `/DA`) at it. So the Hangul shows both in PdfCraft's appearance and in other viewers that redraw from `/DA`.
+/// When it is that font already but there are new characters, the `/DR` entry becomes a new subset with the current ones
+/// added (font objects used by appearances already drawn stay as they are). Without Hangul, when the font draws it already, or
+/// in a build without a Korean font, the field is returned unchanged (then `?` and [`pdfcraft_fonts::UNDRAWN_MARK`] as before).
+pub(crate) fn korean_field_font(doc: &mut Document, f: &Field, values: &[String]) -> Result<Field, FormError> {
+    if !matches!(f.kind, FieldKind::Text | FieldKind::Combo | FieldKind::List) || f.has(flags::PASSWORD) {
+        return Ok(f.clone());
+    }
+    let mut text = values.join("\n");
+    if matches!(f.kind, FieldKind::Combo | FieldKind::List) {
+        for (_, display) in &f.options {
+            text.push('\n');
+            text.push_str(display);
+        }
+    }
+    if !pdfcraft_fonts::korean_text(&text) {
+        return Ok(f.clone());
+    }
+    // Each widget may have its own `/DA`: change it if any one can't draw the value.
+    let widget_das: Vec<(ObjRef, String)> = f
+        .widgets
+        .iter()
+        .filter_map(|w| Some((w.obj, doc.get(w.obj).as_dict()?.get(b"DA").and_then(|o| doc.resolve(o).as_string().map(PdfString::to_text))?)))
+        .collect();
+    let shows = |doc: &Document, da: &str| {
+        let name = appearance::parse_da(da).font;
+        name != KOREAN_FIELD_FONT && appearance::dr_font_shows(doc, &name, &text)
+    };
+    let current = appearance::dr_korean_font(doc, KOREAN_FIELD_FONT);
+    let covered = current.as_ref().is_some_and(|k| k.covers(&text));
+    let uses_korean = |da: &str| appearance::parse_da(da).font == KOREAN_FIELD_FONT;
+    let all_korean = uses_korean(&f.da) && widget_das.iter().all(|(_, da)| uses_korean(da));
+    if (all_korean && covered) || (shows(doc, &f.da) && widget_das.iter().all(|(_, da)| shows(doc, da))) {
+        return Ok(f.clone());
+    }
+    if !covered {
+        let union = match &current {
+            Some(k) => format!("{}{text}", k.chars()),
+            None => text.clone(),
+        };
+        let font = pdfcraft_fonts::KoreanFont::embed(doc, &union).map_err(FormError::Invalid)?;
+        set_dr_font(doc, KOREAN_FIELD_FONT.as_bytes(), font.obj)?;
+    }
+    let korean_da = |da: &str| {
+        let d = appearance::parse_da(da);
+        format!("/{KOREAN_FIELD_FONT} {} Tf {}", appearance::fmt(d.size), d.color)
+    };
+    let da = korean_da(&f.da);
+    doc.update_dict(f.obj, |d| d.set(b"DA".to_vec(), PdfString::literal(da.clone().into_bytes())))?;
+    for (w, wda) in widget_das {
+        let new = korean_da(&wda);
+        doc.update_dict(w, |d| d.set(b"DA".to_vec(), PdfString::literal(new.into_bytes())))?;
+    }
+    Ok(Field { da, ..f.clone() })
+}
+
+/// Set the form's `/DR /Font` entry `name` to `font`. An indirect `/AcroForm`, `/DR` or `/Font` is changed in place.
+fn set_dr_font(doc: &mut Document, name: &[u8], font: ObjRef) -> Result<(), FormError> {
+    let Some(root) = doc.root() else { return Err(FormError::NoForm) };
+    let af_entry = doc.get(root).as_dict().and_then(|c| c.get(b"AcroForm").cloned());
+    let mut af = af_entry.as_ref().map(|o| doc.resolve(o)).and_then(|o| o.as_dict().cloned()).unwrap_or_default();
+    let dr_entry = af.get(b"DR").cloned();
+    let mut dr = dr_entry.as_ref().map(|o| doc.resolve(o)).and_then(|o| o.as_dict().cloned()).unwrap_or_default();
+    let fonts_entry = dr.get(b"Font").cloned();
+    let mut fonts = fonts_entry.as_ref().map(|o| doc.resolve(o)).and_then(|o| o.as_dict().cloned()).unwrap_or_default();
+    fonts.set(name.to_vec(), Object::Ref(font));
+    if let Some(Object::Ref(r)) = fonts_entry {
+        doc.set(r, Object::Dict(fonts));
+        return Ok(());
+    }
+    dr.set(b"Font".to_vec(), Object::Dict(fonts));
+    if let Some(Object::Ref(r)) = dr_entry {
+        doc.set(r, Object::Dict(dr));
+        return Ok(());
+    }
+    af.set(b"DR".to_vec(), Object::Dict(dr));
+    match af_entry {
+        Some(Object::Ref(r)) => doc.set(r, Object::Dict(af)),
+        _ => doc.update_dict(root, |c| c.set(b"AcroForm".to_vec(), Object::Dict(af)))?,
+    }
+    Ok(())
+}
+
 /// Regenerate the normal appearance of every widget of a text or choice field.
 fn redraw(doc: &mut Document, f: &Field, values: &[String], scripts: &mut dyn Scripts) -> Result<(), FormError> {
     let shown = match values {
         [one] if matches!(f.kind, FieldKind::Text | FieldKind::Combo) => scripting::formatted(doc, f, one, scripts),
         _ => None,
     };
+    // A Korean value: draw with the field whose `/DA` now points at NanumGothic in `/DR`.
+    let f = &korean_field_font(doc, f, shown.as_ref().map_or(values, std::slice::from_ref))?;
     let mut undrawn = false;
     for w in &f.widgets {
         let (stream, missing) = match &shown {

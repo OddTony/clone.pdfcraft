@@ -4,6 +4,9 @@
 //! is everything that needs a font *program*: this crate reads font dictionaries, never embedded
 //! programs, so it has no glyph outlines for document fonts and cannot subset or re-embed. That
 //! is phase F 4.2 in docs/plan/execution-plan.md.
+//!
+//! The exception is the craft-fonts Korean face (NanumGothic): it is a font program this crate has, so `korean_pdf`
+//! subsets it and embeds it in PDFs ([`KoreanFont`]).
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -11,6 +14,7 @@ mod craft;
 pub mod embedding;
 mod encodings;
 pub mod fallback;
+mod korean_pdf;
 pub mod pdf;
 mod script;
 mod shaping;
@@ -19,14 +23,17 @@ mod std14;
 mod std14_metrics;
 pub use craft::{
     CRAFT_FONTS, CraftFont, SHIPPORI_MINCHO, document_arabic_font, document_hebrew_font, document_japanese_font, document_japanese_font_for_style,
-    document_japanese_fonts_for_style, document_thai_font, ui_arabic_fonts, ui_chinese_fonts, ui_cjk_fonts, ui_hebrew_fonts, ui_japanese_fonts,
-    ui_telugu_fonts, ui_thai_fonts,
+    document_japanese_fonts_for_style, document_korean_font, document_thai_font, ui_arabic_fonts, ui_chinese_fonts, ui_cjk_fonts, ui_hebrew_fonts,
+    ui_japanese_fonts, ui_korean_fonts, ui_telugu_fonts, ui_thai_fonts,
 };
+pub use korean_pdf::{KOREAN_MARK, KoreanFont, first_undrawable_korean, korean_text, korean_text_width};
 pub use script::{
-    GlyphError, GlyphOutline, INTER_REGULAR, MAX_SIGNATURE_CHARS, ScriptOutline, japanese_glyph, japanese_glyph_from, script_missing, script_outline,
+    GlyphError, GlyphOutline, INTER_REGULAR, MAX_SIGNATURE_CHARS, ScriptOutline, is_hangul, japanese_glyph, japanese_glyph_from, korean_glyph,
+    script_missing, script_outline,
 };
 pub use shaping::{
-    ShapedCluster, ShapedScript, arabic_glyph, arabic_has, hebrew_has, shape_arabic, shape_hebrew, shape_thai, shaped_glyph, thai_has,
+    ShapedCluster, ShapedScript, arabic_glyph, arabic_has, hebrew_has, korean_has, shape_arabic, shape_hebrew, shape_korean, shape_thai,
+    shaped_glyph, thai_has,
 };
 pub use std14::Std14;
 

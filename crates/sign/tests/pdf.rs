@@ -2199,3 +2199,43 @@ fn rewritten_page_resources_are_page_content_whatever_keys_they_carry() {
         s.modification
     );
 }
+
+/// A signature appearance with Hangul (name, reason, location, labels) is drawn in a NanumGothic subset (Type0/Identity-H
+/// with ToUnicode), and the signature stays valid. Only characters NanumGothic lacks too are refused.
+#[test]
+fn korean_visible_signature_text_is_drawn_in_an_embedded_korean_font() {
+    let id = pkcs12::open(&data("ec-p256.p12"), "test").unwrap();
+    let shown = pdfcraft_sign::Appearance { reason: true, location: true, ..pdfcraft_sign::Appearance::default() };
+    let korean =
+        SignOptions { reason: Some("설계도서 승인".into()), location: Some("서울 한빛건축".into()), appearance: shown.clone(), ..opts() };
+    if pdfcraft_fonts::document_korean_font(false).is_none() {
+        eprintln!("skipping the Korean signature checks: built without a craft-fonts Kore face (set CRAFT_FONTS_DIR)");
+        assert!(pdfcraft_sign::sign(&open(&fixture()), &id, &korean).is_err());
+        return;
+    }
+    let signed = pdfcraft_sign::sign(&open(&fixture()), &id, &korean).unwrap();
+    let doc = open(&signed);
+    let s = signatures(&doc, &signed, &TrustStore::default()).into_iter().find(|s| s.signed).unwrap();
+    assert_eq!(s.reason.as_deref(), Some("설계도서 승인"));
+    assert_eq!((s.status, s.modification), (Status::Unknown, Modification::None), "{:?}", s.details);
+    let (content, res) = appearance_in(&doc, "Signature1");
+    let fonts = doc.resolve(res.get(b"Font").unwrap()).as_dict().cloned().unwrap();
+    let Some(Object::Ref(r)) = fonts.get(b"Helv").cloned() else { panic!("the Korean font is indirect") };
+    let k = pdfcraft_fonts::KoreanFont::from_existing(&doc, r).expect("a PdfCraft Korean font");
+    assert!(k.covers("설계도서 승인서울 한빛건축"));
+    let font = doc.dict(&Object::Ref(r)).unwrap();
+    let m = pdfcraft_fonts::pdf::Metrics::from_dict(&doc, &font);
+    assert_eq!(m.decode(&k.encode("설계도서 승인")), "설계도서 승인");
+    assert!(!content.contains("(?"), "{content}");
+    // Korean labels are drawn too.
+    let labels =
+        pdfcraft_sign::AppearanceLabels {
+            signed_by: "전자서명:".into(), reason: "사유: ".into(), ..pdfcraft_sign::AppearanceLabels::default()
+        };
+    assert_eq!(labels.first_undrawable(), None);
+    pdfcraft_sign::sign(&open(&fixture()), &id, &SignOptions { appearance_labels: labels, ..korean.clone() }).unwrap();
+    // Characters NanumGothic lacks too are refused.
+    let emoji = SignOptions { reason: Some("승인 \u{1F600}".into()), ..korean };
+    let err = pdfcraft_sign::sign(&open(&fixture()), &id, &emoji).unwrap_err().to_string();
+    assert!(err.contains("U+1F600") && err.contains("the reason"), "{err}");
+}

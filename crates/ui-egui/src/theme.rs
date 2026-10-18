@@ -383,9 +383,11 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     }
     // Arabic-script faces (file names, document titles), Telugu faces (the Telugu interface,
     // file names), Hebrew faces (file names, text being edited) and Thai faces after the CJK ones; the
-    // ranges don't overlap.
-    for face in pdfcraft_fonts::ui_arabic_fonts()
+    // ranges don't overlap. Korean (NanumGothic) also goes after the CJK faces: the Japanese and Chinese faces have no
+    // Hangul, so only Hangul falls through to it, and Kanji and kana are drawn by the faces they were (the Japanese UI looks the same).
+    for face in pdfcraft_fonts::ui_korean_fonts()
         .into_iter()
+        .chain(pdfcraft_fonts::ui_arabic_fonts())
         .chain(pdfcraft_fonts::ui_telugu_fonts())
         .chain(pdfcraft_fonts::ui_hebrew_fonts())
         .chain(pdfcraft_fonts::ui_thai_fonts())
@@ -702,6 +704,27 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// Built with craft-fonts, every interface font family draws Hangul (glyphs, not boxes), and the Japanese faces keep their order.
+    #[test]
+    fn interface_fonts_draw_hangul() {
+        let korean = pdfcraft_fonts::ui_korean_fonts();
+        let Some(first) = korean.first() else {
+            eprintln!("skipping Hangul glyph check: build with CRAFT_FONTS_DIR to run it");
+            return;
+        };
+        let defs = font_definitions();
+        let stack = &defs.families[&FontFamily::Proportional];
+        let at = |name: &str| stack.iter().position(|n| n == name);
+        if let Some(jp) = pdfcraft_fonts::ui_japanese_fonts().first() {
+            assert!(at(&jp.name()) < at(&first.name()), "Japanese faces stay before NanumGothic");
+        }
+        let mut fonts = Fonts::new(TextOptions::default(), defs);
+        let text = "검토자 한글 입력 가나다 600석→800석";
+        for id in [FontId::proportional(13.0), FontId::monospace(13.0), medium(13.0), semibold(17.0)] {
+            assert!(fonts.has_glyphs(&id, text), "{id:?} lacks a Hangul glyph");
         }
     }
 

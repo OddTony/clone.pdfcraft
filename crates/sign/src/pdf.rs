@@ -1721,7 +1721,7 @@ impl AppearanceLabels {
     /// can't draw, and that character. Signing refuses such a label when it is shown, so an
     /// interface checks its translated labels here and falls back to [`Default`] if one fails.
     pub fn first_undrawable(&self) -> Option<(&'static str, char)> {
-        self.fields().into_iter().find_map(|(field, text)| pdfcraft_fonts::first_undrawable(text).map(|c| (field, c)))
+        self.fields().into_iter().find_map(|(field, text)| pdfcraft_fonts::first_undrawable_korean(text).map(|c| (field, c)))
     }
 }
 
@@ -2069,11 +2069,22 @@ pub fn display_date(pdf: &str) -> String {
 /// character Helvetica can't draw: signing invisibly, or leaving that part out, still works. A
 /// graphic doesn't change this: the name it replaces on the left is still among the details.
 /// A label that is drawn ([`AppearanceLabels`], the caller's words) is refused the same way.
+/// A signature appearance with Hangul is drawn entirely in a NanumGothic subset (Type0/Identity-H with ToUnicode): the
+/// only characters refused then are those NanumGothic lacks too.
 fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate, opts: &SignOptions) -> Result<Stream, SignError> {
-    use pdfcraft_fonts::{first_undrawable, helvetica_width, literal, undrawable_message, win_ansi, wrap};
+    use pdfcraft_fonts::{helvetica_width, literal, undrawable_message, win_ansi};
     let (w, h) = ((rect[2] - rect[0]).max(0.0), (rect[3] - rect[1]).max(0.0));
     let a = &opts.appearance;
     let dn = cert.subject.display();
+    // If any Hangul is drawn, the whole appearance is drawn in NanumGothic, so then only characters NanumGothic lacks are refused.
+    let mut korean_all = false;
+    let first_undrawable = |t: &str, korean: bool| {
+        if korean {
+            t.chars().find(|c| !matches!(c, '\n' | '\r' | '\t') && !pdfcraft_fonts::korean_has(*c))
+        } else {
+            pdfcraft_fonts::first_undrawable(t)
+        }
+    };
     if w > 1.0 && h > 1.0 {
         let shown = [
             (a.name, "the signer's name", Some(name)),
@@ -2081,8 +2092,13 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
             (a.reason, "the reason", opts.reason.as_deref()),
             (a.location, "the location", opts.location.as_deref()),
         ];
+        let has = |v: Option<&str>| v.is_some_and(|v| !v.is_empty());
+        let drawn = [a.name, a.distinguished_name, a.reason && has(opts.reason.as_deref()), a.location && has(opts.location.as_deref()), a.date];
+        let labels: Vec<(&str, &str)> =
+            opts.appearance_labels.fields().into_iter().zip(drawn).filter(|&(_, on)| a.labels && on).map(|(label, _)| label).collect();
+        korean_all = shown.iter().filter_map(|&(on, _, text)| text.filter(|_| on)).chain(labels.iter().map(|l| l.1)).any(pdfcraft_fonts::korean_text);
         for (on, what, text) in shown {
-            if on && let Some(c) = text.and_then(first_undrawable) {
+            if on && let Some(c) = text.and_then(|t| first_undrawable(t, korean_all)) {
                 return Err(SignError::Unsupported(format!(
                     "{}; sign without a visible appearance, or leave {what} out of it",
                     undrawable_message(&format!("{what} of the visible signature"), c)
@@ -2091,10 +2107,7 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
         }
         // The labels are the caller's words (a translation), checked as the details are: only
         // those that are drawn, as each is drawn only beside its detail.
-        let has = |v: Option<&str>| v.is_some_and(|v| !v.is_empty());
-        let drawn = [a.name, a.distinguished_name, a.reason && has(opts.reason.as_deref()), a.location && has(opts.location.as_deref()), a.date];
-        let mut labels = opts.appearance_labels.fields().into_iter().zip(drawn).filter(|&(_, on)| a.labels && on);
-        if let Some((field, c)) = labels.find_map(|((field, text), _)| first_undrawable(text).map(|c| (field, c))) {
+        if let Some((field, c)) = labels.iter().find_map(|&(field, text)| first_undrawable(text, korean_all).map(|c| (field, c))) {
             return Err(SignError::Unsupported(format!(
                 "{}; pass that label in Western European characters, or leave the labels out of the visible signature",
                 undrawable_message(&format!("the {field} label of the visible signature"), c)
@@ -2126,6 +2139,12 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
         lines.push(label(&wording.date, &display_date(&opts.date)));
     }
     lines.retain(|l| !l.is_empty());
+    // When the text drawn has Hangul, the whole signature appearance is drawn in NanumGothic.
+    let all = lines.join("\n");
+    let korean = if korean_all { Some(pdfcraft_fonts::KoreanFont::embed(doc, &all).map_err(SignError::Unsupported)?) } else { None };
+    let measure = |s: &str, size: f64| korean.as_ref().map_or_else(|| helvetica_width(s, size), |k| k.width(s, size));
+    let encode = |s: &str| literal(&korean.as_ref().map_or_else(|| win_ansi(s), |k| k.encode(s)));
+    let wrap = |s: &str, size: f64, width: f64| pdfcraft_fonts::wrap_with(s, size, width, measure);
     let mut out = Vec::new();
     let mut image = None;
     if w > 1.0 && h > 1.0 {
@@ -2146,14 +2165,14 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
             // The name fills the left half.
             let mut size = (h * 0.4).min(36.0);
             let fit = (left_w - 2.0 * pad).max(1.0);
-            let longest = helvetica_width(name, 1.0).max(0.01);
+            let longest = measure(name, 1.0).max(0.01);
             size = size.min(fit / longest).max(4.0);
             let words = wrap(name, size, fit);
             let total = words.len() as f64 * size * 1.1;
             let mut y = (h + total) / 2.0 - size * 0.85;
             for l in &words {
                 out.extend(format!("/Helv {} Tf 1 0 0 1 {} {} Tm ", fmt(size), fmt(pad), fmt(y)).bytes());
-                out.extend(literal(&win_ansi(l)));
+                out.extend(encode(l));
                 out.extend_from_slice(b" Tj\n");
                 y -= size * 1.1;
             }
@@ -2170,7 +2189,7 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
         let mut y = h - pad - size * 0.9;
         for l in &wrapped {
             out.extend(format!("/Helv {} Tf 1 0 0 1 {} {} Tm ", fmt(size), fmt(right_x), fmt(y)).bytes());
-            out.extend(literal(&win_ansi(l)));
+            out.extend(encode(l));
             out.extend_from_slice(b" Tj\n");
             y -= size * 1.15;
         }
@@ -2186,7 +2205,8 @@ fn appearance(doc: &mut Document, rect: [f64; 4], name: &str, cert: &Certificate
     font.set(b"BaseFont".to_vec(), Object::name("Helvetica"));
     font.set(b"Encoding".to_vec(), Object::name("WinAnsiEncoding"));
     let mut fonts = Dict::new();
-    fonts.set(b"Helv".to_vec(), Object::Dict(font));
+    // A Korean signature appearance: the same resource name (`/Helv`) points at the NanumGothic subset.
+    fonts.set(b"Helv".to_vec(), korean.as_ref().map_or(Object::Dict(font), |k| Object::Ref(k.obj)));
     let mut res = Dict::new();
     res.set(b"Font".to_vec(), Object::Dict(fonts));
     if let Some(im) = image {

@@ -326,9 +326,13 @@ pub enum FieldFont {
     Helvetica,
     Times,
     Courier,
+    /// The NanumGothic subset PdfCraft embeds to draw Korean values (`PCNanum` in `/DR`). Not a font to choose but
+    /// one to show: it is not in [`FieldFont::ALL`], and is set automatically when a value is written.
+    Nanum,
 }
 
 impl FieldFont {
+    /// The fonts a user can choose (NanumGothic is left out: it is set automatically when a Korean value comes in).
     pub const ALL: [FieldFont; 3] = [FieldFont::Helvetica, FieldFont::Times, FieldFont::Courier];
 
     fn resource(self) -> &'static str {
@@ -336,6 +340,7 @@ impl FieldFont {
             FieldFont::Helvetica => "Helv",
             FieldFont::Times => "TiRo",
             FieldFont::Courier => "Cour",
+            FieldFont::Nanum => crate::KOREAN_FIELD_FONT,
         }
     }
 
@@ -344,6 +349,7 @@ impl FieldFont {
             FieldFont::Helvetica => "Helvetica",
             FieldFont::Times => "Times Roman",
             FieldFont::Courier => "Courier",
+            FieldFont::Nanum => "NanumGothic (auto)",
         }
     }
 }
@@ -444,6 +450,7 @@ pub fn look(doc: &Document, f: &Field) -> Look {
         font: match parsed.font.as_str() {
             "TiRo" | "Times-Roman" => FieldFont::Times,
             "Cour" | "Courier" => FieldFont::Courier,
+            crate::KOREAN_FIELD_FONT => FieldFont::Nanum,
             _ => FieldFont::Helvetica,
         },
     }
@@ -678,6 +685,8 @@ pub fn add_field(doc: &mut Document, page: usize, rect: [f64; 4], kind: &NewFiel
 /// `ask_viewers_to_redraw`), as when a value is set.
 pub fn redraw_field(doc: &mut Document, name: &str) -> Result<(), FormError> {
     let f = fields(doc).into_iter().find(|f| f.name == name).ok_or_else(|| FormError::NoSuchField(name.into()))?;
+    // A Korean value: draw with the field whose `/DA` now points at NanumGothic in `/DR`.
+    let f = crate::korean_field_font(doc, &f, &f.value.clone())?;
     let mut undrawn = false;
     for w in &f.widgets {
         let mut missing = None;

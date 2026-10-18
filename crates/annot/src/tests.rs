@@ -1308,3 +1308,73 @@ fn text_box_font_size_changes_the_da_and_grows_the_box() {
         assert_eq!(props(&doc, 0, i).unwrap().font_size, None);
     }
 }
+
+/// A text box, Fill & Sign text and a callout with Hangul are drawn in a NanumGothic subset (Type0/Identity-H
+/// with ToUnicode): no `?` and no mark, and the same after save, reopen, a style change and a text change.
+#[test]
+fn korean_comment_text_is_drawn_in_an_embedded_korean_font() {
+    let mut doc = fixture();
+    let mark = |doc: &Document, i: usize| pdfcraft_fonts::undrawn_mark(&list(doc, 0)[i]);
+    let mut boxed = new(0, Shape::TextBox { rect: [60.0, 740.0, 300.0, 770.0], font_size: 12.0 });
+    boxed.contents = "한글 주석 (검토)".into();
+    let t = add_annotation(&mut doc, &boxed, &meta("t")).unwrap();
+    if pdfcraft_fonts::document_korean_font(false).is_none() {
+        eprintln!("skipping the Korean comment checks: built without a craft-fonts Kore face (set CRAFT_FONTS_DIR)");
+        assert_eq!(mark(&doc, t), Some('한'));
+        return;
+    }
+    let korean_font = |doc: &Document, i: usize| {
+        let d = &list(doc, 0)[i];
+        let n = d.get(b"AP").map(|a| doc.resolve(a)).and_then(|a| a.as_dict().and_then(|a| a.reference(b"N"))).unwrap();
+        let Object::Stream(s) = &*doc.get(n) else { panic!("AP is not a stream") };
+        let res = doc.dict(s.dict.get(b"Resources").unwrap()).unwrap();
+        let fonts = doc.dict(res.get(b"Font").unwrap()).unwrap();
+        let Some(Object::Ref(r)) = fonts.get(b"PCKo").cloned() else { panic!("no /PCKo font: {:?}", fonts) };
+        pdfcraft_fonts::KoreanFont::from_existing(doc, r).expect("a PdfCraft Korean font")
+    };
+    let check = |doc: &Document, i: usize, want: &str| {
+        let ap = ap_content(doc, &list(doc, 0)[i]);
+        assert!(ap.contains("/PCKo ") && !ap.contains("(?"), "{ap}");
+        assert_eq!(mark(doc, i), None);
+        let k = korean_font(doc, i);
+        assert!(k.covers(want));
+        let font = doc.dict(&Object::Ref(k.obj)).unwrap();
+        let m = pdfcraft_fonts::pdf::Metrics::from_dict(doc, &font);
+        assert_eq!(m.decode(&k.encode(want)), want);
+    };
+    check(&doc, t, "한글 주석 (검토)");
+    let typed = Shape::Typewriter { rect: [100.0, 700.0, 200.0, 716.0], font_size: 11.0 };
+    let f = add_annotation(
+        &mut doc,
+        &NewAnnotation { page: 0, style: Style::default_for(&typed), shape: typed, contents: "홍길동".into(), author: "Ada".into() },
+        &meta("x"),
+    )
+    .unwrap();
+    check(&doc, f, "홍길동");
+    let mut callout = new(
+        0,
+        Shape::Callout {
+            rect: [300.0, 600.0, 500.0, 612.0],
+            knee: [260.0, 560.0],
+            point: [200.0, 520.0],
+            font_size: 12.0,
+            ending: LineEnding::OpenArrow,
+        },
+    );
+    callout.contents = "여기 확인".into();
+    let c = add_annotation(&mut doc, &callout, &meta("c")).unwrap();
+    check(&doc, c, "여기 확인");
+    let doc = reopen(&doc);
+    check(&doc, t, "한글 주석 (검토)");
+    let mut doc = doc;
+    set_style(&mut doc, 0, t, Some([1.0, 0.0, 0.0]), None, None, None, &meta("")).unwrap();
+    check(&doc, t, "한글 주석 (검토)");
+    set_contents(&mut doc, 0, t, "새 글자 힣", &meta("")).unwrap();
+    check(&doc, t, "새 글자 힣");
+    // Without Hangul it is Helvetica again.
+    set_contents(&mut doc, 0, t, "Plain", &meta("")).unwrap();
+    assert!(ap_content(&doc, &list(&doc, 0)[t]).contains("/Helv "));
+    // A character NanumGothic lacks too is drawn as `?` and marked.
+    set_contents(&mut doc, 0, t, "한글 \u{1F600}", &meta("")).unwrap();
+    assert_eq!(mark(&doc, t), Some('\u{1F600}'));
+}

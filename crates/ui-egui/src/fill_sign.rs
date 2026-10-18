@@ -710,7 +710,9 @@ pub(crate) fn type_box(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
         let Some(t) = view.fill_text.as_mut() else { return };
         // The box is white in every theme, so the caret must not follow the theme (pale in dark mode) (#655).
         ui.visuals_mut().text_cursor.stroke.color = crate::edit_text_ui::caret_color_on(Color32::WHITE);
-        let width = ((t.text.chars().count().max(8) as f32) * t.size as f32 * 0.6 * zoom).clamp(60.0, 600.0);
+        // The width the engine gives the box (NanumGothic widths for Hangul, which is full-width and wider than 0.6 em a character), at least eight characters.
+        let natural = pdfcraft_engine::annot_text::box_text_width(&t.text, t.size).max(t.size * 4.8);
+        let width = (natural as f32 * zoom + 8.0).clamp(60.0, 600.0);
         // The area's max rect is last frame's size, which caps the edit's width; widen it so the
         // box grows as text is typed.
         ui.set_min_width(width);

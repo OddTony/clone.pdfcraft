@@ -1321,14 +1321,33 @@ fn redraw_or_restore(doc: &mut Document, r: ObjRef, before: Dict) -> Result<(), 
 fn draw_appearance(doc: &mut Document, r: ObjRef) -> Result<(), AnnotError> {
     let d = annot_dict(doc, r);
     let subtype = String::from_utf8_lossy(d.name(b"Subtype").unwrap_or_default()).into_owned();
-    let Some(stream) = build_appearance(doc, &d) else { return Err(AnnotError::Unsupported(subtype)) };
+    let korean = korean_font(doc, &d)?;
+    let Some(stream) = build_appearance_with(doc, &d, korean.as_ref()) else { return Err(AnnotError::Unsupported(subtype)) };
     apply_appearance(doc, r, &d, stream)
+}
+
+/// Put the NanumGothic subset for a text box with Hangul (FreeText, callout, Fill & Sign text) in the document.
+/// Every redraw makes a new font object for its text (the font of an earlier appearance is never changed).
+fn korean_font(doc: &mut Document, d: &Dict) -> Result<Option<pdfcraft_fonts::KoreanFont>, AnnotError> {
+    if d.name(b"Subtype") != Some(b"FreeText") {
+        return Ok(None);
+    }
+    let text = d.get(b"Contents").and_then(|o| doc.resolve(o).as_string().map(PdfString::to_text)).unwrap_or_default();
+    if !pdfcraft_fonts::korean_text(&text) {
+        return Ok(None);
+    }
+    pdfcraft_fonts::KoreanFont::embed(doc, &text).map(Some).map_err(AnnotError::Undrawable)
 }
 
 /// Draw the appearance for an annotation dictionary: the expensive half of [`set_appearance`].
 /// Pure from the dictionary and the objects it points at, so [`AppearanceCache`] can reuse it.
+/// (It has no Korean font, so Hangul comes out as `?`: only copies drawn for the screen take this path.)
 fn build_appearance(doc: &Document, d: &Dict) -> Option<Stream> {
-    let mut stream = appearance::build(d)?;
+    build_appearance_with(doc, d, None)
+}
+
+fn build_appearance_with(doc: &Document, d: &Dict, korean: Option<&pdfcraft_fonts::KoreanFont>) -> Option<Stream> {
+    let mut stream = appearance::build_with(d, korean)?;
     // Picture-stamp restyling must retain the placement's page-axis correction.
     if d.get(b"PCPicture").is_some() {
         let matrix = d.get(b"AP").and_then(|ap| {
@@ -1587,15 +1606,18 @@ fn fitted_box(doc: &Document, r: ObjRef, text: &str) -> Option<[f64; 4]> {
         rect
     };
     let (x0, top) = (tb[0].min(tb[2]), tb[1].max(tb[3]));
+    // Text with Hangul is measured in NanumGothic widths, as its appearance is drawn.
+    let korean = pdfcraft_fonts::korean_text(text);
+    let measure = |s: &str, size: f64| if korean { pdfcraft_fonts::korean_text_width(s, size) } else { appearance::text_width(s, size) };
     let w = tb[2] - tb[0];
     let w = if w.is_finite() && w >= 1.0 {
         w
     } else {
         // No usable old width: fall back to the creation-time width (at most 300 pt).
-        let longest = text.lines().map(|l| appearance::text_width(l, size)).fold(0.0, f64::max);
+        let longest = text.lines().map(|l| measure(l, size)).fold(0.0, f64::max);
         (longest + 2.0 * pad + 4.0).clamp(40.0, 300.0)
     };
-    let lines = appearance::wrap(text, size, (w - 2.0 * pad).max(1.0)).len().max(1) as f64;
+    let lines = pdfcraft_fonts::wrap_with(text, size, (w - 2.0 * pad).max(1.0), measure).len().max(1) as f64;
     Some([x0, top - lines * size * 1.2 - 2.0 * pad - 2.0, x0 + w, top])
 }
 

@@ -94,6 +94,23 @@ fn hebrew_face(faces: &[CraftFont], bold: bool) -> Option<&CraftFont> {
     hebr().find(|f| f.style == style).or_else(|| hebr().find(|f| f.style == "Regular")).or_else(|| hebr().next())
 }
 
+/// The Korean (`Kore`) craft-fonts faces, in manifest order. Empty when built without craft-fonts.
+pub fn ui_korean_fonts() -> Vec<&'static CraftFont> {
+    CRAFT_FONTS.iter().filter(|f| f.covers("Kore")).collect()
+}
+
+/// The Korean document font written into PDFs (NanumGothic): the `Kore` face of the requested weight, else Regular,
+/// else any `Kore` face. `None` without craft-fonts or without a Korean face.
+pub fn document_korean_font(bold: bool) -> Option<&'static CraftFont> {
+    korean_face(CRAFT_FONTS, bold)
+}
+
+fn korean_face(faces: &[CraftFont], bold: bool) -> Option<&CraftFont> {
+    let kore = || faces.iter().filter(|f| f.covers("Kore"));
+    let style = if bold { "Bold" } else { "Regular" };
+    kore().find(|f| f.style == style).or_else(|| kore().find(|f| f.style == "Regular")).or_else(|| kore().next())
+}
+
 /// Interface CJK faces in fallback order for the UI language: Simplified Chinese first when
 /// `prefer_hans`, otherwise Japanese first (the historical default).
 ///
@@ -294,6 +311,23 @@ mod tests {
         assert!(hebrew_face(&faces[..1], false).is_none());
         assert_eq!(ui_hebrew_fonts().len(), CRAFT_FONTS.iter().filter(|f| f.covers("Hebr")).count());
         assert_eq!(document_hebrew_font(false).is_some(), CRAFT_FONTS.iter().any(|f| f.covers("Hebr")));
+    }
+
+    /// The Korean document font follows the weight, falls back to Regular without a Bold, and never picks another script's face.
+    #[test]
+    fn korean_document_faces_follow_the_weight() {
+        static KORE_LATN: &[&str] = &["Kore", "Latn"];
+        let faces = [
+            CraftFont { family: "BIZ UDPGothic", style: "Bold", scripts: &["Jpan"], bytes: b"not-korean" },
+            CraftFont { family: "FakeNanum", style: "Regular", scripts: KORE_LATN, bytes: b"regular" },
+            CraftFont { family: "FakeNanum", style: "Bold", scripts: KORE_LATN, bytes: b"bold" },
+        ];
+        assert_eq!(korean_face(&faces, false).map(|f| f.bytes), Some(&b"regular"[..]));
+        assert_eq!(korean_face(&faces, true).map(|f| f.bytes), Some(&b"bold"[..]));
+        assert_eq!(korean_face(&faces[..2], true).map(|f| f.bytes), Some(&b"regular"[..]));
+        assert!(korean_face(&faces[..1], false).is_none());
+        assert_eq!(document_korean_font(false).is_some(), CRAFT_FONTS.iter().any(|f| f.covers("Kore")));
+        assert_eq!(ui_korean_fonts().len(), CRAFT_FONTS.iter().filter(|f| f.covers("Kore")).count());
     }
 
     #[test]
