@@ -366,11 +366,11 @@ impl BarcodeScannerHud {
                     });
 
                     // Feedback Toast
-                    if let Some((msg, expiry)) = &state.toast {
-                        if *expiry > now {
-                            ui.add_space(6.0);
-                            ui.label(egui::RichText::new(msg).font(theme::medium(11.0)).color(emerald_green));
-                        }
+                    if let Some((msg, expiry)) = &state.toast
+                        && *expiry > now
+                    {
+                        ui.add_space(6.0);
+                        ui.label(egui::RichText::new(msg).font(theme::medium(11.0)).color(emerald_green));
                     }
                 });
         });
@@ -384,10 +384,10 @@ impl BarcodeScannerHud {
         if cancel_edit {
             state.edit_buffer = None;
         }
-        if start_edit {
-            if let Some(active) = state.active_code() {
-                state.edit_buffer = Some(active.text.clone());
-            }
+        if start_edit
+            && let Some(active) = state.active_code()
+        {
+            state.edit_buffer = Some(active.text.clone());
         }
         if let Some((active, buf)) = apply_code {
             let [pw, ph] = active.pixel_size;

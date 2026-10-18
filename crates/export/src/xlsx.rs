@@ -78,7 +78,7 @@ pub fn xlsx(pages: &[Page], title: &str) -> Vec<u8> {
 
     let mut sheets: Vec<String> = Vec::new();
 
-    for (_p_idx, p) in pages.iter().enumerate() {
+    for p in pages.iter() {
         let (tables, consumed) = crate::tables(&p.blocks);
         let mut rows: Vec<XlsxRow> = Vec::new();
         let mut merges: Vec<String> = Vec::new();
@@ -99,13 +99,12 @@ pub fn xlsx(pages: &[Page], title: &str) -> Vec<u8> {
         // Cluster blocks into rows if there are standalone blocks
         let mut line_groups: Vec<Vec<&Block>> = Vec::new();
         for b in header_blocks {
-            if let Some(group) = line_groups.last_mut() {
-                if let Some(first) = group.first() {
-                    if (first.rect[1] - b.rect[1]).abs() <= 6.0 {
-                        group.push(b);
-                        continue;
-                    }
-                }
+            if let Some(group) = line_groups.last_mut()
+                && let Some(first) = group.first()
+                && (first.rect[1] - b.rect[1]).abs() <= 6.0
+            {
+                group.push(b);
+                continue;
             }
             line_groups.push(vec![b]);
         }

@@ -339,6 +339,7 @@ impl ZoomNavigationEngine {
     ///   `ArrowUp`/`ArrowDown` steps whole pages immediately without dead scroll resistance.
     /// - When zoomed in (`zoom > 1.0` or page height exceeds viewport), `ArrowUp`/`ArrowDown`
     ///   smoothly pans by line increments, stepping to the adjacent page when boundary is reached.
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate_navigation_step(
         key: Key,
         fit: Fit,
@@ -501,22 +502,22 @@ impl FloatingContextMenu {
                         ui.spacing_mut().item_spacing.x = 2.0;
                         ui.horizontal(|ui| {
                             // Cut (Ctrl+X)
-                            if can_modify && can_copy {
-                                if crate::icons::button(ui, "scissors", 26.0, false, "Cut (Ctrl+X)").clicked() {
-                                    action = Some(FloatingMenuAction::Cut);
-                                }
+                            if can_modify && can_copy
+                                && crate::icons::button(ui, "scissors", 26.0, false, "Cut (Ctrl+X)").clicked()
+                            {
+                                action = Some(FloatingMenuAction::Cut);
                             }
                             // Copy (Ctrl+C)
-                            if can_copy {
-                                if crate::icons::button(ui, "copy", 26.0, false, "Copy (Ctrl+C)").clicked() {
-                                    action = Some(FloatingMenuAction::Copy);
-                                }
+                            if can_copy
+                                && crate::icons::button(ui, "copy", 26.0, false, "Copy (Ctrl+C)").clicked()
+                            {
+                                action = Some(FloatingMenuAction::Copy);
                             }
                             // Paste (Ctrl+V)
-                            if can_modify {
-                                if crate::icons::button(ui, "clipboard-paste", 26.0, false, "Paste (Ctrl+V)").clicked() {
-                                    action = Some(FloatingMenuAction::Paste);
-                                }
+                            if can_modify
+                                && crate::icons::button(ui, "clipboard-paste", 26.0, false, "Paste (Ctrl+V)").clicked()
+                            {
+                                action = Some(FloatingMenuAction::Paste);
                             }
 
                             // Format Painter (for text elements)
@@ -534,10 +535,10 @@ impl FloatingContextMenu {
                             }
 
                             // Edit Text (for text elements)
-                            if is_text && can_modify {
-                                if crate::icons::button(ui, "text-cursor-input", 26.0, false, "Edit text").clicked() {
-                                    action = Some(FloatingMenuAction::EditText);
-                                }
+                            if is_text && can_modify
+                                && crate::icons::button(ui, "text-cursor-input", 26.0, false, "Edit text").clicked()
+                            {
+                                action = Some(FloatingMenuAction::EditText);
                             }
 
                             // Quick Text Styles
@@ -558,10 +559,10 @@ impl FloatingContextMenu {
                             }
 
                             // Recognize Text (OCR for images)
-                            if is_image && can_modify {
-                                if crate::icons::button(ui, "scan-text", 26.0, false, "Recognize text (OCR)").clicked() {
-                                    action = Some(FloatingMenuAction::RecognizeOcr);
-                                }
+                            if is_image && can_modify
+                                && crate::icons::button(ui, "scan-text", 26.0, false, "Recognize text (OCR)").clicked()
+                            {
+                                action = Some(FloatingMenuAction::RecognizeOcr);
                             }
 
                             // Separator before Delete

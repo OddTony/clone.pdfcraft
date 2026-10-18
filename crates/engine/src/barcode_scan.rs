@@ -71,13 +71,7 @@ impl GrayImage {
             return None;
         }
         let mut pixels = Vec::with_capacity(width.saturating_mul(height));
-        for chunk in rgba.chunks_exact(4).take(width.saturating_mul(height)) {
-            let (r, g, b, a) = (
-                chunk.get(0).copied().unwrap_or(0),
-                chunk.get(1).copied().unwrap_or(0),
-                chunk.get(2).copied().unwrap_or(0),
-                chunk.get(3).copied().unwrap_or(255),
-            );
+        for &[r, g, b, a] in rgba.as_chunks::<4>().0.iter().take(width.saturating_mul(height)) {
             if a < 32 {
                 // Transparent pixel treated as white background
                 pixels.push(255);
@@ -333,7 +327,7 @@ fn try_decode_code128(runs: &[(bool, usize)], start_run_idx: usize) -> Option<(S
     }
 
     // Must start with a dark bar
-    if !runs.get(start_run_idx).map_or(false, |r| r.0) {
+    if !runs.get(start_run_idx).is_some_and(|r| r.0) {
         return None;
     }
 
@@ -514,13 +508,13 @@ fn try_decode_code39(runs: &[(bool, usize)], start_run_idx: usize) -> Option<(St
     if start_run_idx + 19 >= runs.len() {
         return None;
     }
-    if !runs.get(start_run_idx).map_or(false, |r| r.0) {
+    if !runs.get(start_run_idx).is_some_and(|r| r.0) {
         return None;
     }
 
     let mut first_runs = [0usize; 9];
-    for i in 0..9 {
-        first_runs[i] = runs.get(start_run_idx + i)?.1;
+    for (i, slot) in first_runs.iter_mut().enumerate() {
+        *slot = runs.get(start_run_idx + i)?.1;
     }
     if match_code39_symbol(&first_runs)? != '*' {
         return None;
@@ -531,8 +525,8 @@ fn try_decode_code39(runs: &[(bool, usize)], start_run_idx: usize) -> Option<(St
 
     while curr + 9 <= runs.len() {
         let mut char_runs = [0usize; 9];
-        for i in 0..9 {
-            char_runs[i] = runs.get(curr + i)?.1;
+        for (i, slot) in char_runs.iter_mut().enumerate() {
+            *slot = runs.get(curr + i)?.1;
         }
         if let Some(ch) = match_code39_symbol(&char_runs) {
             if ch == '*' {
@@ -789,7 +783,7 @@ fn try_direct_grid_decode(binary: &BinaryImage) -> Option<String> {
         let mut matches_finder = true;
         for my in 0..7 {
             for mx in 0..7 {
-                let expected_dark = (mx == 0 || mx == 6 || my == 0 || my == 6) || (mx >= 2 && mx <= 4 && my >= 2 && my <= 4);
+                let expected_dark = (mx == 0 || mx == 6 || my == 0 || my == 6) || ((2..=4).contains(&mx) && (2..=4).contains(&my));
                 let sample_x = ((mx as f32 + 0.5) * mod_w) as usize;
                 let sample_y = ((my as f32 + 0.5) * mod_h) as usize;
                 if binary.is_dark(sample_x, sample_y) != expected_dark {
@@ -868,7 +862,7 @@ fn decode_qr_modules(modules: &[bool], size: usize) -> Option<String> {
     }
 
     let mut bytes = Vec::with_capacity(bits.len() / 8);
-    for chunk in bits.chunks_exact(8) {
+    for chunk in bits.as_chunks::<8>().0 {
         let mut b = 0u8;
         for &bit in chunk {
             b = (b << 1) | u8::from(bit);
@@ -889,10 +883,10 @@ fn decode_qr_modules(modules: &[bool], size: usize) -> Option<String> {
             let val = ((b1 & 0x0F) << 4) | (b2 >> 4);
             payload.push(val);
         }
-        if let Ok(text) = String::from_utf8(payload) {
-            if !text.is_empty() {
-                return Some(text);
-            }
+        if let Ok(text) = String::from_utf8(payload)
+            && !text.is_empty()
+        {
+            return Some(text);
         }
     }
 
@@ -935,82 +929,112 @@ pub fn scan_rgba_buffer(width: usize, height: usize, rgba: &[u8], page: usize) -
                 max_y = max_y.max(pt.y);
             }
 
-            // For 1D barcodes where detection points only capture a 1-pixel horizontal scanline:
+            let is_1d = kind != CodeKind::QrCode;
             let h = max_y - min_y;
-            if h < 10.0 {
-                let scan_y = (min_y as usize).clamp(0, height.saturating_sub(1));
-                let mut left_x = (min_x as usize).min(max_x as usize).clamp(0, width.saturating_sub(1));
-                let mut right_x = (min_x as usize).max(max_x as usize).clamp(left_x, width);
 
-                // Trace horizontal extent along the scanline until quiet zone margin
-                let mut quiet_count = 0usize;
-                while left_x > 2 {
-                    let dark = gray.get(left_x, scan_y) < 180;
-                    if dark {
-                        quiet_count = 0;
-                    } else {
-                        quiet_count = quiet_count.saturating_add(1);
-                        if quiet_count > 15 {
-                            left_x = left_x.saturating_add(quiet_count);
+            if is_1d || h < 10.0 {
+                // For 1D barcodes, rxing only returns detection points along a single horizontal scanline.
+                // We calculate true vertical height and exact bar bounds by scanning vertically
+                // from the center to find where the black bars end, then horizontally along the mid-line.
+                let raw_y = (min_y.round() as usize).clamp(0, height.saturating_sub(1));
+                let center_x = (((min_x + max_x) * 0.5).round() as usize).clamp(0, width.saturating_sub(1));
+
+                // 1. Locate a dark pixel (bar) at or near the scanline
+                let mut found_dark = None;
+                for dy in [0isize, -1, 1, -2, 2, -3, 3] {
+                    let sy = (raw_y as isize + dy).clamp(0, height.saturating_sub(1) as isize) as usize;
+                    for dx in 0..150usize {
+                        let cands = [
+                            center_x.saturating_sub(dx),
+                            (center_x + dx).min(width.saturating_sub(1)),
+                            (min_x.round() as usize).saturating_sub(dx),
+                            ((min_x.round() as usize) + dx).min(width.saturating_sub(1)),
+                            (max_x.round() as usize).saturating_sub(dx),
+                            ((max_x.round() as usize) + dx).min(width.saturating_sub(1)),
+                        ];
+                        for cx in cands {
+                            if gray.get(cx, sy) < 180 {
+                                found_dark = Some((cx, sy));
+                                break;
+                            }
+                        }
+                        if found_dark.is_some() {
                             break;
                         }
                     }
-                    left_x = left_x.saturating_sub(1);
+                    if found_dark.is_some() {
+                        break;
+                    }
                 }
 
-                quiet_count = 0;
-                while right_x + 2 < width {
-                    let dark = gray.get(right_x, scan_y) < 180;
-                    if dark {
-                        quiet_count = 0;
+                if let Some((dark_x, dark_y)) = found_dark {
+                    // 2. Scan vertically up and down from dark_y along dark_x until black bars end
+                    let mut top_y = dark_y;
+                    while top_y > 0 && gray.get(dark_x, top_y.saturating_sub(1)) < 180 {
+                        top_y = top_y.saturating_sub(1);
+                    }
+                    let mut bot_y = dark_y;
+                    while bot_y + 1 < height && gray.get(dark_x, bot_y.saturating_add(1)) < 180 {
+                        bot_y = bot_y.saturating_add(1);
+                    }
+
+                    // 3. Along mid_y (vertical center of barcode), scan horizontally
+                    // to find the exact left edge of the first bar and right edge of the last bar.
+                    let mid_y = (top_y + bot_y) / 2;
+
+                    let mut bar_left = dark_x;
+                    let mut gap = 0usize;
+                    for x in (0..=dark_x).rev() {
+                        if gray.get(x, mid_y) < 180 {
+                            bar_left = x;
+                            gap = 0;
+                        } else {
+                            gap = gap.saturating_add(1);
+                            if gap > 12 {
+                                break;
+                            }
+                        }
+                    }
+
+                    let mut bar_right = dark_x;
+                    let mut gap = 0usize;
+                    for x in dark_x..width {
+                        if gray.get(x, mid_y) < 180 {
+                            bar_right = x;
+                            gap = 0;
+                        } else {
+                            gap = gap.saturating_add(1);
+                            if gap > 12 {
+                                break;
+                            }
+                        }
+                    }
+
+                    if bar_right > bar_left.saturating_add(15) && bot_y > top_y.saturating_add(8) {
+                        min_x = bar_left as f32;
+                        max_x = bar_right as f32;
+                        min_y = top_y as f32;
+                        max_y = bot_y as f32;
                     } else {
-                        quiet_count = quiet_count.saturating_add(1);
-                        if quiet_count > 15 {
-                            right_x = right_x.saturating_sub(quiet_count);
-                            break;
-                        }
+                        let default_h = ((max_x - min_x) * 0.35).clamp(25.0, 100.0);
+                        min_y = (min_y - default_h * 0.5).max(0.0);
+                        max_y = (min_y + default_h).min(height as f32);
                     }
-                    right_x = right_x.saturating_add(1);
-                }
-
-                if right_x > left_x.saturating_add(25) {
-                    min_x = left_x as f32;
-                    max_x = right_x as f32;
-                }
-
-                let start_x = (min_x as usize).clamp(0, width.saturating_sub(1));
-                let end_x = (max_x as usize).clamp(start_x, width);
-
-                let count_transitions = |y: usize| -> usize {
-                    let mut transitions = 0usize;
-                    let mut last_dark = false;
-                    for x in (start_x..end_x).step_by(2) {
-                        let dark = gray.get(x, y) < 180;
-                        if dark != last_dark {
-                            transitions = transitions.saturating_add(1);
-                            last_dark = dark;
-                        }
-                    }
-                    transitions
-                };
-
-                let mut top_y = scan_y;
-                while top_y > 2 && count_transitions(top_y) >= 4 {
-                    top_y = top_y.saturating_sub(2);
-                }
-
-                let mut bot_y = scan_y;
-                while bot_y + 2 < height && count_transitions(bot_y) >= 4 {
-                    bot_y = bot_y.saturating_add(2);
-                }
-
-                if bot_y > top_y.saturating_add(12) {
-                    min_y = top_y as f32;
-                    max_y = bot_y as f32;
                 } else {
                     let default_h = ((max_x - min_x) * 0.35).clamp(25.0, 100.0);
                     min_y = (min_y - default_h * 0.5).max(0.0);
                     max_y = (min_y + default_h).min(height as f32);
+                }
+            } else if kind == CodeKind::QrCode && points.len() >= 3 {
+                let fw = max_x - min_x;
+                let fh = max_y - min_y;
+                if fw > 10.0 && fh > 10.0 {
+                    let expand_x = (fw / 14.0) * 3.5;
+                    let expand_y = (fh / 14.0) * 3.5;
+                    min_x = (min_x - expand_x).max(0.0);
+                    max_x = (max_x + expand_x).min(width as f32);
+                    min_y = (min_y - expand_y).max(0.0);
+                    max_y = (max_y + expand_y).min(height as f32);
                 }
             }
 
@@ -1056,7 +1080,18 @@ impl Document {
     /// Evaluates both embedded image objects AND the rendered page buffer to reliably detect
     /// vector-rendered shipping label barcodes, table codes, and rasterized codes.
     pub fn scan_page_codes(&self, page: usize) -> Vec<ScannedCode> {
+        crate::guard(|| self.scan_page_codes_inner(page)).unwrap_or_default()
+    }
+
+    fn scan_page_codes_inner(&self, page: usize) -> Vec<ScannedCode> {
         let mut scanned = Vec::new();
+
+        let page_info = self.info.pages.get(page);
+        let [cx0, cy0, cx1, cy1] = page_info.map(|p| p.crop).unwrap_or([0.0, 0.0, 612.0, 792.0]);
+        let crop_min_x = cx0.min(cx1);
+        let crop_max_x = cx0.max(cx1);
+        let crop_min_y = cy0.min(cy1);
+        let crop_max_y = cy0.max(cy1);
 
         // Pass 1: Scan individual embedded image XObjects
         let images = self.page_images(page);
@@ -1066,7 +1101,15 @@ impl Document {
                 for mut code in img_codes {
                     code.id = scanned.len();
                     code.image_index = Some(idx);
-                    code.rect = img.visible_rect.unwrap_or(img.rect);
+                    let mut r = img.visible_rect.unwrap_or(img.rect);
+                    if code.kind == CodeKind::QrCode {
+                        let pad = 1.5;
+                        r[0] = (r[0].floor() - pad).max(crop_min_x as f64);
+                        r[1] = (r[1].floor() - pad).max(crop_min_y as f64);
+                        r[2] = (r[2].ceil() + pad).min(crop_max_x as f64);
+                        r[3] = (r[3].ceil() + pad).min(crop_max_y as f64);
+                    }
+                    code.rect = r;
                     scanned.push(code);
                 }
             }
@@ -1074,11 +1117,16 @@ impl Document {
 
         // Pass 2: Render the page buffer at crisp integer 2.0x scale (144 DPI)
         // to detect vector barcodes with exact pixel alignment and zero fractional blur.
-        let (page_w, page_h) = self.info.pages.get(page).map(|p| (p.width, p.height)).unwrap_or((612.0, 792.0));
+        let (page_w, page_h) = page_info.map(|p| (p.width, p.height)).unwrap_or((612.0, 792.0));
+        const MAX_PIXELS: f32 = 16_000_000.0;
+        let max_scale = (MAX_PIXELS / (page_w * page_h).max(1.0)).sqrt();
+
+        // Reuse single renderer across scales
+        let mut renderer = pdfcraft_render::PageRenderer::new(self.display.clone(), self.config.clone());
 
         for scale in [2.0f32, 1.0f32] {
-            let mut renderer = pdfcraft_render::PageRenderer::new(self.display.clone(), self.config.clone());
-            let rendered = renderer.render(pdfcraft_render::RenderRequest { page, scale, ..Default::default() });
+            let effective_scale = scale.min(max_scale);
+            let rendered = renderer.render(pdfcraft_render::RenderRequest { page, scale: effective_scale, ..Default::default() });
 
             if rendered.error.is_none() && rendered.width > 0 && rendered.height > 0 && !rendered.rgba.is_empty() {
                 let rw = rendered.width as usize;
@@ -1102,16 +1150,45 @@ impl Document {
                     code.id = scanned.len();
                     code.image_index = None;
 
-                    // Map rendered pixel coordinates (Y=0 at top) to PDF user-space points (Y=0 at bottom)
-                    let min_x = (code.rect[0] / (scale as f64)).clamp(0.0, page_w as f64);
-                    let max_x = (code.rect[2] / (scale as f64)).clamp(0.0, page_w as f64);
-                    let top_y = code.rect[1] / (scale as f64);
-                    let bot_y = code.rect[3] / (scale as f64);
+                    // Map rendered pixel coordinates (view space: Y=0 at top) to PDF user-space points (Y=0 at bottom)
+                    // using PageInfo::view_to_user to account for crop box and page rotation
+                    let vx0 = (code.rect[0] as f32) / effective_scale;
+                    let vy0 = (code.rect[1] as f32) / effective_scale;
+                    let vx1 = (code.rect[2] as f32) / effective_scale;
+                    let vy1 = (code.rect[3] as f32) / effective_scale;
 
-                    let pdf_min_y = ((page_h as f64) - bot_y).clamp(0.0, page_h as f64);
-                    let pdf_max_y = ((page_h as f64) - top_y).clamp(0.0, page_h as f64);
+                    let (mut min_x, mut min_y, mut max_x, mut max_y) = if let Some(info) = page_info {
+                        let corners = [
+                            info.view_to_user(vx0, vy0),
+                            info.view_to_user(vx1, vy0),
+                            info.view_to_user(vx1, vy1),
+                            info.view_to_user(vx0, vy1),
+                        ];
+                        (
+                            corners.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min),
+                            corners.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min),
+                            corners.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max),
+                            corners.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max),
+                        )
+                    } else {
+                        (vx0, page_h - vy1, vx1, page_h - vy0)
+                    };
 
-                    code.rect = [min_x, pdf_min_y, max_x, pdf_max_y];
+                    if code.kind == CodeKind::QrCode {
+                        let pad = 1.5f32;
+                        min_x = (min_x.floor() - pad).max(crop_min_x);
+                        min_y = (min_y.floor() - pad).max(crop_min_y);
+                        max_x = (max_x.ceil() + pad).min(crop_max_x);
+                        max_y = (max_y.ceil() + pad).min(crop_max_y);
+                    } else {
+                        // Strictly no padding for 1D barcodes as mandated
+                        min_x = min_x.clamp(crop_min_x, crop_max_x);
+                        min_y = min_y.clamp(crop_min_y, crop_max_y);
+                        max_x = max_x.clamp(crop_min_x, crop_max_x);
+                        max_y = max_y.clamp(crop_min_y, crop_max_y);
+                    }
+
+                    code.rect = [min_x as f64, min_y as f64, max_x as f64, max_y as f64];
                     scanned.push(code);
                     found_any = true;
                 }
@@ -1163,7 +1240,7 @@ impl Document {
             CodeKind::GenericBarcode => rxing::BarcodeFormat::CODE_128,
         };
 
-        let writer = rxing::MultiFormatWriter::default();
+        let writer = rxing::MultiFormatWriter;
         let matrix = writer.encode(text, &format, target_width as i32, target_height as i32).map_err(|e| e.to_string())?;
 
         let w = matrix.getWidth() as usize;

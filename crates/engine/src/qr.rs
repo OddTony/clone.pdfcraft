@@ -39,10 +39,11 @@ impl QrMatrix {
     }
 
     pub fn set(&mut self, row: usize, col: usize, dark: bool) {
-        if row < self.size && col < self.size {
-            if let Some(m) = self.modules.get_mut(row.saturating_mul(self.size).saturating_add(col)) {
-                *m = dark;
-            }
+        if row < self.size
+            && col < self.size
+            && let Some(m) = self.modules.get_mut(row.saturating_mul(self.size).saturating_add(col))
+        {
+            *m = dark;
         }
     }
 
@@ -107,7 +108,7 @@ impl QrMatrix {
                     // PDF user space coordinates have y pointing upwards:
                     let my = rect[1] + ((self.size - 1 - r) as f64 + (border_modules as f64)) * mod_h;
                     use std::fmt::Write;
-                    let _ = write!(ops, "{:.2} {:.2} {:.2} {:.2} re\n", mx, my, mod_w, mod_h);
+                    let _ = writeln!(ops, "{:.2} {:.2} {:.2} {:.2} re", mx, my, mod_w, mod_h);
                 }
             }
         }
@@ -121,7 +122,7 @@ pub struct QrCode;
 impl QrCode {
     /// Encode a text or URL payload into a `QrMatrix` using standard QR code encoding.
     pub fn encode_text(text: &str) -> Result<QrMatrix, QrError> {
-        let writer = rxing::qrcode::QRCodeWriter::default();
+        let writer = rxing::qrcode::QRCodeWriter;
         let matrix = writer.encode(text, &rxing::BarcodeFormat::QR_CODE, 0, 0).map_err(|e| QrError::PngEncoding(e.to_string()))?;
 
         let total_w = matrix.getWidth() as usize;

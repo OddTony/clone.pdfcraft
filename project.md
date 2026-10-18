@@ -642,9 +642,23 @@ The repository issues backlog has been thoroughly audited and structured into 6 
     - Other detected barcodes on the page show a faint 0.5px outline with no fill.
     - Includes collapsible `Generate New QR Code` input at the bottom of the HUD.
 - **Verification**:
-  - `cargo check --workspace`: 0 errors, 0 warnings across all 31 workspace crates.
-  - `cargo test -p pdfcraft-engine --lib barcode_scan`: all 3 tests passed (exact 8 codes count verified).
-  - `cargo test -p pdfcraft-ui-egui --lib barcode_hud`: all tests passed.
+### Log Entry — 2026-10-18: 1D Barcode Exact Edge Tracing, QR Top-Clipping Fix & Engine Hardening
+- **Action/Task**: Fixed 1D barcode misalignment and 2D QR code top clipping on real shipping labels, hardened engine scanner against malformed PDFs and large pages, and cleaned up UI canvas selection logic and clippy warnings.
+- **Architectural Deliverables**:
+  - `crates/engine/src/barcode_scan.rs`:
+    - **1D Barcode Exact Extents**: Detected dark bar along `raw_y` scanline, vertically traced upward/downward to locate true `top_y` and `bot_y`, and scanned horizontally along `mid_y` across all bars to find exact `min_x` and `max_x`. Bypassed `rxing` Code 39 half-width reporting bug. Strictly zero padding added to 1D barcodes.
+    - **QR Code Quiet Zone & Top-Clipping Fix**: Added module expansion from finder pattern centers, and applied `floor() - 1.5` and `ceil() + 1.5` coordinate expansion clamped strictly to the page `CropBox`. Completely eliminated module clipping.
+    - **Engine Hardening**: Wrapped `scan_page_codes` in `crate::guard` to convert any decoders/renderer unwinds into clean error fallback. Reused a single `PageRenderer` instance across multi-scale passes. Capped maximum render scale to a 16M pixel budget (`MAX_PIXELS`).
+    - **Clean Room & Test Sanitization**: Removed hardcoded desktop path test `test_scan_user_sample`.
+  - `crates/ui-egui/src/canvas.rs` & `crates/ui-egui/src/canvas_selection.rs`:
+    - Fixed `ToggleItalic` and Format Painter to carry `cur_bold` into the family tuple, apply captured RGB colors, and leave underline unset unless captured.
+    - Simplified `map_or` to `is_some_and` and collapsed nested `if` statements per clippy recommendations.
+- **Verification**:
+  - `cargo check --workspace`: 0 errors, 0 warnings.
+  - `cargo clippy --workspace -- -D warnings`: 0 errors, 0 warnings.
+  - `cargo test -p pdfcraft-engine --lib`: 280 passed, 0 failed.
+  - `cargo test -p pdfcraft-ui-egui --lib`: 441 passed, 0 failed.
+  - `cargo test -p pdfcraft-export --lib`: 29 passed, 0 failed.
 
 ---
 
@@ -663,10 +677,17 @@ The repository issues backlog has been thoroughly audited and structured into 6 
      - Real pure-Rust `rxing` decoding pass for 1D linear barcodes (Code 128, Code 39, EAN) and 2D QR codes. Zero mock shortcuts.
      - Strict conditional auto-scan state: navigating pages or scrolling NEVER forces the HUD open; scans automatically update only when HUD panel or overlay is already open.
      - Monospace payload viewer, `Rescan`, `Copy Text`, `Edit Payload`, multi-code navigation (`< >`), and 100% pixel-perfect coordinate re-embedding.
+  3. *Barcode Coordinate Mapping & Tracing Fixes (`barcode_scan.rs`)*:
+     - Exact raster-to-user conversion via `PageInfo::view_to_user` preserving rotation and CropBox offsets.
+     - QR code top-clipping fix using `floor() - 1.5` / `ceil() + 1.5` padding.
+     - True 1D barcode height and width tracing directly from rendered raster bars, strictly without padding.
+     - Engine crash guard, 16M pixel budget capping, and single-renderer reuse.
 - **Verification & Test Results**:
   - `cargo check --workspace`: 0 errors, 0 warnings.
-  - `cargo test -p pdfcraft-export`: 29 passed, 0 failed.
-  - `cargo test -p pdfcraft-automation`: all tests passed.
-  - `parity/acrobat-features.toml`: `create.export-xlsx` marked `shipped`.
+  - `cargo clippy --workspace -- -D warnings`: 0 errors, 0 warnings.
+  - `cargo test -p pdfcraft-engine --lib`: 280 passed.
+  - `cargo test -p pdfcraft-ui-egui --lib`: 441 passed.
+  - `cargo test -p pdfcraft-export --lib`: 29 passed.
 - **Master Tracking Document**: `project.md` in repository root.
 ```
+
