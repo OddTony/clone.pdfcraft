@@ -456,6 +456,24 @@ fn displayed_text(f: &Field, values: &[String]) -> String {
     if f.has(flags::PASSWORD) { "*".repeat(text.chars().count()) } else { text }
 }
 
+/// The logical appearance dimensions after the widget's rotation.
+fn widget_placement(doc: &Document, w: &Widget, wd: &Dict) -> Placement {
+    let (page_w, page_h) = ((w.rect[2] - w.rect[0]).max(1.0), (w.rect[3] - w.rect[1]).max(1.0));
+    placement(mk_rotation(doc, wd), page_w, page_h)
+}
+
+/// The exact rows drawn, including /TI and a widget too short for even one row.
+fn visible_list_options(f: &Field, rows: ListRows, height: f64) -> impl Iterator<Item = &(String, String)> {
+    let mut y = height - rows.inset;
+    f.options.iter().skip(rows.top).take_while(move |_| {
+        if y - rows.row < 0.0 {
+            return false;
+        }
+        y -= rows.row;
+        true
+    })
+}
+
 /// Materialize an approved fallback only when the normal appearance loses characters.
 /// Keep the source /DA and font unchanged; reuse one complete face in the form's /DR.
 pub(crate) fn field_appearance_embedded(
@@ -471,7 +489,15 @@ pub(crate) fn field_appearance_embedded(
     }
     let shown = formatted_values(f, values, format);
     let covers = |s: &str| pdfcraft_fonts::embedding::covers(pdfcraft_fonts::INTER_REGULAR, &s.replace('\t', " "));
-    let covered = if f.kind == FieldKind::List { f.options.iter().all(|(_, s)| covers(s)) } else { covers(&displayed_text(f, &shown)) };
+    let covered = if f.kind == FieldKind::List {
+        let wobj = doc.get(w.obj);
+        let wd = wobj.as_dict().cloned().unwrap_or_default();
+        let fobj = doc.get(f.obj);
+        let rows = list_rows_of(doc, &f.da, fobj.as_dict(), &wd);
+        visible_list_options(f, rows, widget_placement(doc, w, &wd).layout_h).all(|(_, s)| covers(s))
+    } else {
+        covers(&displayed_text(f, &shown))
+    };
     if !covered {
         return Ok(original);
     }
@@ -500,14 +526,15 @@ fn field_appearance_using(
     let values = formatted_values(f, values, format);
     let wobj = doc.get(w.obj);
     let wd = wobj.as_dict().cloned().unwrap_or_default();
-    let (page_w, page_h) = ((w.rect[2] - w.rect[0]).max(1.0), (w.rect[3] - w.rect[1]).max(1.0));
-    let place = placement(mk_rotation(doc, &wd), page_w, page_h);
+    let place = widget_placement(doc, w, &wd);
     let (width, height) = (place.layout_w, place.layout_h);
     let da = parse_da(wd.get(b"DA").and_then(|o| doc.resolve(o).as_string().map(|s| s.to_text())).as_deref().unwrap_or(&f.da));
     let text = displayed_text(f, &values);
     let can_show = |enc: &FontText| {
         if f.kind == FieldKind::List {
-            f.options.iter().all(|(_, display)| enc.can_encode(&display.replace(['\n', '\r'], " ")))
+            let fobj = doc.get(f.obj);
+            let rows = list_rows_of(doc, &f.da, fobj.as_dict(), &wd);
+            visible_list_options(f, rows, height).all(|(_, display)| enc.can_encode(&display.replace(['\n', '\r'], " ")))
         } else if f.kind == FieldKind::Text && f.has(flags::MULTILINE) {
             text.split(['\n', '\r']).all(|line| enc.can_encode(line))
         } else {
@@ -556,10 +583,7 @@ fn field_appearance_using(
             size = rows.size;
             let line = rows.row;
             let mut y = height - rows.inset;
-            for (export, display) in f.options.iter().skip(rows.top) {
-                if y - line < 0.0 {
-                    break;
-                }
+            for (export, display) in visible_list_options(f, rows, height) {
                 if values.contains(export) {
                     c.push_str(&format!("0.6 0.75 0.86 rg\n{} {} {} {} re f\n", n(bw), n(y - line), n(width - 2.0 * bw), n(line)));
                 }

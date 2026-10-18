@@ -410,6 +410,44 @@ fn scientific_fallback_handles_multiline_comb_and_choice_appearances() {
     assert_eq!(fonts.iter().filter(|(name, _)| name.starts_with(b"PCFull")).count(), 1);
 }
 
+/// Offscreen unsupported options cannot hide a visible Greek label, including rotated widgets.
+#[test]
+fn scientific_list_fallback_checks_only_rows_actually_drawn() {
+    for rotation in [0, 90, 180, 270] {
+        for top in [0, 1] {
+            let options = if top == 0 { "<FEFF03B2> <FEFF4E2D>" } else { "<FEFF4E2D> <FEFF03B2>" };
+            let rect = if rotation % 180 == 0 { "20 30 100 50" } else { "20 30 40 110" };
+            let objects = vec![
+                "<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>".into(),
+                "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 200 200] >>".into(),
+                "<< /Type /Page /Parent 2 0 R /Annots [6 0 R] >>".into(),
+                "<< /Fields [6 0 R] /DA (/Helv 12 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> >>".into(),
+                "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".into(),
+                format!(
+                    "<< /Type /Annot /Subtype /Widget /FT /Ch /T (rows) /Opt [{options}] /V <FEFF03B2> /TI {top} /Rect [{rect}] /MK << /R {rotation} >> /P 3 0 R >>"
+                ),
+            ];
+            let mut doc = document(&objects);
+            let source_font = doc.get(ObjRef::new(5, 0)).as_ref().clone();
+            crate::author::redraw_field(&mut doc, "rows").unwrap();
+            assert!(undrawn_fields(&doc).is_empty(), "offscreen option rejected Inter: rotation={rotation}, top={top}");
+            let mut doc = reopen(&doc);
+            let all = fields(&doc);
+            let f = field(&all, "rows");
+            let (font, lines) = appearance_text(&doc, &f.widgets[0], b"PCFull0");
+            assert_eq!(pdfcraft_fonts::pdf::Metrics::from_dict(&doc, font.as_dict().unwrap()).decode(&lines.concat()), "\u{03b2}");
+            assert_eq!(f.options.len(), 2, "hidden options remain in the document");
+            assert_eq!(f.value, ["\u{03b2}"]);
+            assert_eq!(f.da, "/Helv 12 Tf 0 g");
+            assert_eq!(doc.get(ObjRef::new(5, 0)).as_ref(), &source_font);
+            // Scrolling the unsupported option into view must still report the missing glyph.
+            doc.update_dict(f.widgets[0].obj, |d| d.set(b"TI".to_vec(), Object::Int(1 - top))).unwrap();
+            crate::author::redraw_field(&mut doc, "rows").unwrap();
+            assert!(!undrawn_fields(&doc).is_empty(), "visible unsupported text is still reported");
+        }
+    }
+}
+
 #[test]
 fn multiline_wrapping_keeps_encodable_text_without_requiring_ascii_space() {
     let objs: Vec<String> = vec![

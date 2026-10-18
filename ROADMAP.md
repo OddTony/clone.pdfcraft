@@ -165,6 +165,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-18 (M12, #2571):** List appearance font coverage follows the rows actually drawn, including top index and widget rotation. Offscreen unsupported options cannot hide visible Greek text, and scrolling an unsupported label into view still reports it. Stored options, values and the source font are preserved; estimates unchanged.
+
 - **2026-10-16 (M12, #2571):** Scientific XFA field values retain β γ ≥ ≤ ≈ → in render, save/reopen and print through an embedded Inter appearance. The original font/DA remain, and font resources are reused. Only text covered by this face falls back; XFA remains partial. Estimates unchanged.
 - **2026-10-18 (M3, #3149):** Page replacement cancels render demand collected for the previous geometry; all viewer raster upload paths reject empty or oversized textures before cache eviction. Synthetic regressions reproduce the reported 1880×2350 upload at a 2048 limit, retain cached images and unsaved edits, and resume bounded backdrops and tiles. Estimates unchanged.
 - **2026-10-18 (M8, #1350):** Integrated current main while preserving content-stream comment boundaries. Hidden-text cleanup retires unused named replacement descriptions on rewritten pages and forms, including inherited/shared resource holders, without removing descriptions still used by surviving content. Synthetic saved-byte and preservation regressions cover the cleanup. Estimates unchanged.

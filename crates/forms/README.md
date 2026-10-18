@@ -37,6 +37,8 @@ delete_field(&mut doc, "email")?;
   Unicode CMap; otherwise Helvetica (WinAnsi). When a text or choice appearance would lose
   characters and the bundled OFL Inter Regular covers all its displayed text, filling or
   property redraw embeds that complete face with a Unicode CMap and uses its actual advances.
+  List coverage checks only the rows the widget actually draws, including its `/TI`, height
+  and rotation. Offscreen unsupported options stay stored and are reported if scrolled into view.
   The whole appearance uses the fallback; the source font and `/DA` stay unchanged. Its resource
   is reused across widgets, edits and save/reopen. This covers Greek and mathematical symbols
   in XFA-generated fields (#2571) without an optional font input or system font. It does not add
