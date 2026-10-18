@@ -130,12 +130,19 @@ pub fn embed_mapping(
     }
     let font = FontRef::new(bytes).map_err(|e| e.to_string())?;
     let cff = font.glyf().is_err();
+    // For a CID-keyed CFF the CIDs of the CIDFontType0 are the CIDs of the CFF charset. Writing GIDs as
+    // CIDs draws every glyph whose charset entry is not the identity as a different glyph. A name-keyed
+    // CFF has CID = GID (ISO 32000-2 §9.7.4.2).
+    let charset = if cff { cid_charset(&font)? } else { None };
     let loc = LocationRef::default();
     let m = font.metrics(Size::unscaled(), loc);
     let scale = 1000.0 / f64::from(m.units_per_em);
     let advances = font.glyph_metrics(Size::unscaled(), loc);
-    let mut cid_encoding = String::from(
-        "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapName /PCGlyphs def\n/CMapType 1 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n",
+    // The CMap program carries the same CIDSystemInfo and CMapName as its stream dictionary (ISO 32000-2
+    // §9.7.5.3).
+    let (registry, ordering, supplement) = IDENTITY;
+    let mut cid_encoding = format!(
+        "/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry ({registry}) /Ordering ({ordering}) /Supplement {supplement} >> def\n/CMapName /{GLYPH_CMAP} def\n/CMapType 1 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n",
     );
     let mut cff_widths = std::collections::BTreeMap::new();
     let mut gids = vec![0, 0];
@@ -158,8 +165,12 @@ pub fn embed_mapping(
             }
             gids.extend_from_slice(&glyph.to_be_bytes());
             widths.push(Object::Real(width));
-            cff_widths.insert(glyph, width);
-            let _ = writeln!(cid_encoding, "<{cid:04X}> {glyph}");
+            let font_cid = match &charset {
+                Some(cs) => cs.string_id(*gid).map(|sid| sid.to_u16()).map_err(|_| "font glyph has no CID in its charset")?,
+                None => glyph,
+            };
+            cff_widths.insert(font_cid, width);
+            let _ = writeln!(cid_encoding, "<{cid:04X}> {font_cid}");
             let hex: String = unicode.encode_utf16().map(|u| format!("{u:04X}")).collect();
             let _ = writeln!(cmap, "<{cid:04X}> <{hex}>");
         }
@@ -210,10 +221,7 @@ pub fn embed_mapping(
     });
     descriptor.set(if cff { b"FontFile3".to_vec() } else { b"FontFile2".to_vec() }, program);
     let desc = Object::Ref(doc.add(Object::Dict(descriptor)));
-    let mut system = Dict::new();
-    system.set(b"Registry".to_vec(), Object::String(PdfString::literal(b"Adobe".to_vec())));
-    system.set(b"Ordering".to_vec(), Object::String(PdfString::literal(b"Identity".to_vec())));
-    system.set(b"Supplement".to_vec(), Object::Int(0));
+    let system = identity_system();
     let mut cid = Dict::new();
     cid.set(b"Type".to_vec(), Object::name("Font"));
     cid.set(b"Subtype".to_vec(), Object::name(if cff { "CIDFontType0" } else { "CIDFontType2" }));
@@ -234,7 +242,19 @@ pub fn embed_mapping(
     top.set(b"Type".to_vec(), Object::name("Font"));
     top.set(b"Subtype".to_vec(), Object::name("Type0"));
     top.set(b"BaseFont".to_vec(), Object::name(&name));
-    top.set(b"Encoding".to_vec(), if cff { stream(doc, cid_encoding.into_bytes()) } else { Object::name("Identity-H") });
+    let encoding = if cff {
+        // An embedded CMap stream requires /Type /CMap, /CMapName and /CIDSystemInfo (ISO 32000-2
+        // Table 118). Without them Acrobat rejects the whole page ("error parsing a form, Type 3 font
+        // or pattern").
+        let mut d = Dict::new();
+        d.set(b"Type".to_vec(), Object::name("CMap"));
+        d.set(b"CMapName".to_vec(), Object::name(GLYPH_CMAP));
+        d.set(b"CIDSystemInfo".to_vec(), Object::Dict(identity_system()));
+        Object::Ref(doc.add(Object::Stream(Stream::from_raw(d, cid_encoding.into_bytes()))))
+    } else {
+        Object::name("Identity-H")
+    };
+    top.set(b"Encoding".to_vec(), encoding);
     top.set(b"DescendantFonts".to_vec(), Object::Array(vec![descendant]));
     top.set(b"ToUnicode".to_vec(), stream(doc, cmap.into_bytes()));
     let mut index = 0usize;
@@ -244,6 +264,31 @@ pub fn embed_mapping(
     let resource = format!("PCFull{index}");
     fonts.set(resource.as_bytes().to_vec(), Object::Ref(doc.add(Object::Dict(top))));
     Ok(resource)
+}
+
+/// Name of the embedded glyph CMap of a CFF embedding.
+const GLYPH_CMAP: &str = "PCGlyphs";
+/// Registry, ordering and supplement of `Adobe-Identity-0`.
+const IDENTITY: (&str, &str, i64) = ("Adobe", "Identity", 0);
+
+/// `Adobe-Identity-0` CIDSystemInfo.
+fn identity_system() -> Dict {
+    let (registry, ordering, supplement) = IDENTITY;
+    let mut system = Dict::new();
+    system.set(b"Registry".to_vec(), Object::String(PdfString::literal(registry.as_bytes().to_vec())));
+    system.set(b"Ordering".to_vec(), Object::String(PdfString::literal(ordering.as_bytes().to_vec())));
+    system.set(b"Supplement".to_vec(), Object::Int(supplement));
+    system
+}
+
+/// The charset (GID → CID) of a CID-keyed CFF, or `None` for a name-keyed CFF (CID = GID).
+fn cid_charset<'a>(font: &FontRef<'a>) -> Result<Option<skrifa::raw::ps::cff::charset::Charset<'a>>, String> {
+    let data = font.table_data(skrifa::Tag::new(b"CFF ")).ok_or("the font has no CFF table")?;
+    let cff = skrifa::raw::ps::cff::CffFontRef::new_cff(data.as_bytes(), 0, None).map_err(|e| format!("invalid CFF table: {e}"))?;
+    if !cff.is_cid() {
+        return Ok(None);
+    }
+    cff.charset().map(Some).ok_or_else(|| "the CID-keyed CFF table has no valid charset".into())
 }
 
 /// The decoded data of the stream `object` refers to.
@@ -332,6 +377,150 @@ mod tests {
         embed(&mut doc, &mut second, bytes, "Inter").unwrap();
         assert_eq!(doc.scan_objects().filter(|(_, o)| matches!(o.as_ref(), Object::Stream(s) if s.dict.get(b"PCFullFont").is_some())).count(), 1);
         assert_eq!(face_key("ABCDEF+Droid-Sans-Fallback"), face_key("Droid Sans Fallback"));
+    }
+
+    /// A contributor-original synthetic OTF: a CID-keyed CFF with three glyphs (.notdef, A, B) whose
+    /// charset is not the identity (GID 1 → CID 7, GID 2 → CID 9). Built in memory, so no font file is
+    /// committed (AGENTS.md §1.4).
+    fn cid_keyed_otf() -> Vec<u8> {
+        fn be16(out: &mut Vec<u8>, n: u16) {
+            out.extend_from_slice(&n.to_be_bytes());
+        }
+        fn be32(out: &mut Vec<u8>, n: u32) {
+            out.extend_from_slice(&n.to_be_bytes());
+        }
+        // Fixed-width (3-byte) integers, so a DICT's length is known before its offsets are.
+        fn num(n: u16) -> Vec<u8> {
+            let mut v = vec![28];
+            v.extend_from_slice(&n.to_be_bytes());
+            v
+        }
+        fn index(items: &[Vec<u8>]) -> Vec<u8> {
+            let mut out = Vec::new();
+            be16(&mut out, items.len() as u16);
+            if items.is_empty() {
+                return out;
+            }
+            out.push(1);
+            let mut at = 1u8;
+            out.push(at);
+            for i in items {
+                at += i.len() as u8;
+                out.push(at);
+            }
+            items.iter().for_each(|i| out.extend(i));
+            out
+        }
+        let top = |charset: u16, charstrings: u16, fd_array: u16| {
+            let mut d = Vec::new();
+            [391, 392, 0].iter().for_each(|n| d.extend(num(*n)));
+            d.extend([12, 30]);
+            d.extend(num(charset));
+            d.push(15);
+            d.extend(num(charstrings));
+            d.push(17);
+            d.extend(num(fd_array));
+            d.extend([12, 36]);
+            d
+        };
+        let name = index(&[b"CidFont".to_vec()]);
+        let strings = index(&[b"Adobe".to_vec(), b"Identity".to_vec()]);
+        let charset_at = 4 + name.len() + index(&[top(0, 0, 0)]).len() + strings.len() + 2;
+        let charset = [0u8, 0, 7, 0, 9];
+        let charstrings = index(&[vec![14], vec![14], vec![14]]);
+        let charstrings_at = charset_at + charset.len();
+        let fd_array_at = charstrings_at + charstrings.len();
+        let mut font_dict = num(0);
+        font_dict.extend(num(0));
+        font_dict.push(18);
+        let mut cff = vec![1, 0, 4, 4];
+        cff.extend(name);
+        cff.extend(index(&[top(charset_at as u16, charstrings_at as u16, fd_array_at as u16)]));
+        cff.extend(strings);
+        cff.extend([0, 0]);
+        cff.extend(charset);
+        cff.extend(charstrings);
+        cff.extend(index(&[font_dict]));
+        let mut head = vec![0; 54];
+        head[0..4].copy_from_slice(&[0, 1, 0, 0]);
+        head[12..16].copy_from_slice(&0x5f0f3cf5u32.to_be_bytes());
+        head[18..20].copy_from_slice(&1000u16.to_be_bytes());
+        head[40..42].copy_from_slice(&700i16.to_be_bytes());
+        head[42..44].copy_from_slice(&700i16.to_be_bytes());
+        let mut hhea = vec![0; 36];
+        hhea[0..4].copy_from_slice(&[0, 1, 0, 0]);
+        hhea[4..6].copy_from_slice(&700i16.to_be_bytes());
+        hhea[34..36].copy_from_slice(&3u16.to_be_bytes());
+        let mut hmtx = Vec::new();
+        for w in [500, 600, 700] {
+            be16(&mut hmtx, w);
+            be16(&mut hmtx, 0);
+        }
+        let mut maxp = vec![0, 0, 0x50, 0];
+        be16(&mut maxp, 3);
+        let mut cmap = vec![0, 0, 0, 1, 0, 3, 0, 10];
+        be32(&mut cmap, 12);
+        be16(&mut cmap, 12);
+        be16(&mut cmap, 0);
+        be32(&mut cmap, 40);
+        be32(&mut cmap, 0);
+        be32(&mut cmap, 2);
+        for (cp, gid) in [(65, 1), (66, 2)] {
+            [cp, cp, gid].iter().for_each(|n| be32(&mut cmap, *n));
+        }
+        let tables = [(*b"CFF ", cff), (*b"cmap", cmap), (*b"head", head), (*b"hhea", hhea), (*b"hmtx", hmtx), (*b"maxp", maxp)];
+        let mut out = b"OTTO".to_vec();
+        [tables.len() as u16, 64, 2, 32].iter().for_each(|n| be16(&mut out, *n));
+        let mut payload = Vec::new();
+        let mut offset = 12 + 16 * tables.len();
+        for (tag, bytes) in tables {
+            out.extend(tag);
+            let mut padded = bytes.clone();
+            padded.resize(bytes.len().div_ceil(4) * 4, 0);
+            let sum = padded.chunks(4).fold(0u32, |s, b| s.wrapping_add(u32::from_be_bytes([b[0], b[1], b[2], b[3]])));
+            [sum, offset as u32, bytes.len() as u32].iter().for_each(|n| be32(&mut out, *n));
+            offset += padded.len();
+            payload.extend(padded);
+        }
+        out.extend(payload);
+        out
+    }
+
+    /// Acrobat rejected a whole page whose embedded CMap lacked /Type, /CMapName and /CIDSystemInfo, and
+    /// drew characters whose GID had been written as their CID with other glyphs.
+    #[test]
+    fn cid_keyed_cff_embedding_maps_glyphs_through_the_charset_and_declares_its_cmap() {
+        let bytes = cid_keyed_otf();
+        let mut doc = Document::new_empty();
+        let mut fonts = Dict::new();
+        let name = embed(&mut doc, &mut fonts, &bytes, "CidFont").unwrap();
+        let top = doc.dict(fonts.get(name.as_bytes()).unwrap()).unwrap();
+        let Object::Stream(encoding) = doc.resolve(top.get(b"Encoding").unwrap()).as_ref().clone() else { panic!("embedded CMap") };
+        assert_eq!(encoding.dict.name(b"Type"), Some(&b"CMap"[..]));
+        assert_eq!(encoding.dict.name(b"CMapName"), Some(&b"PCGlyphs"[..]));
+        let system = encoding.dict.get(b"CIDSystemInfo").and_then(Object::as_dict).expect("CIDSystemInfo");
+        let entry = |key: &[u8]| String::from_utf8(system.get(key).and_then(Object::as_string).unwrap().bytes.clone()).unwrap();
+        let cmap = String::from_utf8(encoding.decoded().unwrap()).unwrap();
+        // The program's own definitions match its stream dictionary (ISO 32000-2 §9.7.5.3).
+        let declared = format!(
+            "/CIDSystemInfo << /Registry ({}) /Ordering ({}) /Supplement {} >> def\n",
+            entry(b"Registry"),
+            entry(b"Ordering"),
+            system.get(b"Supplement").and_then(Object::as_int).unwrap()
+        );
+        assert_eq!(declared, "/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> def\n");
+        assert!(cmap.contains(&declared) && cmap.contains("/CMapName /PCGlyphs def\n"), "{cmap}");
+        assert!(cmap.contains("<0001> 7\n") && cmap.contains("<0002> 9\n"), "{cmap}");
+        let cid = doc.dict(doc.resolve(top.get(b"DescendantFonts").unwrap()).as_array().unwrap().first().unwrap()).unwrap();
+        assert_eq!(cid.name(b"Subtype"), Some(&b"CIDFontType0"[..]));
+        let m = Metrics::from_dict(&doc, &top);
+        let codes = m.encode("AB").unwrap();
+        assert_eq!(m.decode(&codes), "AB");
+        let widths: Vec<f64> = m.codes(&codes).iter().map(|(c, _)| m.width(*c)).collect();
+        assert!(
+            widths.len() == 2 && (widths[0] - 0.6).abs() < 1e-9 && (widths[1] - 0.7).abs() < 1e-9,
+            "/W is keyed by the charset's CIDs: {widths:?}"
+        );
     }
 
     #[test]
