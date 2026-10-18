@@ -2646,3 +2646,4 @@ certificate	Key usage	Utilizzo chiave
 certificate	Self-signed	Autofirmato
 certificate	SHA-1 digest	Impronta SHA-1
 certificate	SHA-256 digest	Impronta SHA-256
+	Marks do not remove content. Select Redact all, then save.	I contrassegni non rimuovono il contenuto. Seleziona «Oscura tutto», quindi salva.

@@ -54,6 +54,15 @@ fn marking_applying_and_clearing() {
     h.drop_at(b);
     h.run_steps(4);
     assert_eq!(marks(&h), 1);
+    h.get_by_label("Marks do not remove content. Select Redact all, then save.");
+    // Longer translated guidance must leave the action visible in the panel.
+    h.state_mut().set_option("language", "lt").unwrap();
+    h.run_steps(2);
+    h.get_by_label("Žymos turinio nepašalina. Pasirinkite „Pašalinti visą konfidencialią informaciją“ ir išsaugokite.");
+    let action = h.get_by_label("Pašalinti visą konfidencialią informaciją").rect();
+    assert!(action.bottom() < 900.0, "the apply action remains on screen: {action:?}");
+    h.state_mut().set_option("language", "en").unwrap();
+    h.run_steps(2);
     // Redact pages ▸ current page.
     h.state_mut().execute("redact.pages");
     h.run_steps(2);
@@ -65,6 +74,7 @@ fn marking_applying_and_clearing() {
     h.get_by_label("Clear all").click();
     h.run_steps(3);
     assert_eq!(marks(&h), 0);
+    assert!(h.query_by_label("Marks do not remove content. Select Redact all, then save.").is_none());
     h.state_mut().execute("edit.undo");
     h.run_steps(3);
     assert_eq!(marks(&h), 2);

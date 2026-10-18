@@ -203,7 +203,13 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
     // Redact a PDF has Acrobat's footer: Clear all / Redact all.
     let footer = g.id == "redact";
     let marks = if footer { app.active_ids().and_then(|(_, id)| app.session.get(id)).map_or(0, |d| d.redaction_marks()) } else { 0 };
-    let list_h = if footer { (ui.available_height() - 52.0).max(80.0) } else { ui.available_height() };
+    let guidance = (marks > 0).then(|| tl!("Marks do not remove content. Select Redact all, then save."));
+    let guidance_height = guidance.map_or(0.0, |message| {
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        ui.fonts_mut(|f| f.layout(message.to_owned(), font, t.text_muted, ui.available_width())).size().y + 4.0
+    });
+    let footer_height = 52.0 + guidance_height;
+    let list_h = if footer { (ui.available_height() - footer_height).max(80.0) } else { ui.available_height() };
     egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(list_h).show(ui, |ui| {
         for s in g.sections {
             widgets::section_title(ui, tl!(s.title));
@@ -275,6 +281,10 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
     });
     if footer {
         ui.add_space(8.0);
+        if let Some(message) = guidance {
+            ui.label(egui::RichText::new(message).color(t.text_muted));
+            ui.add_space(4.0);
+        }
         ui.horizontal(|ui| {
             if marks > 0 {
                 ui.label(
