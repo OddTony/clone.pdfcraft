@@ -1901,3 +1901,24 @@ fn rotating_a_file_card_or_an_expanded_page_card_updates_thumbnails_and_the_comb
     let pages: Vec<(f32, f32, u16)> = doc.info.pages.iter().map(|p| (p.width, p.height, p.rotation)).collect();
     assert_eq!(pages, [(200.0, 300.0, 0), (300.0, 200.0, 90), (200.0, 300.0, 90), (300.0, 200.0, 0)]);
 }
+
+#[test]
+fn rotating_repeated_page_preserves_file_count_and_does_not_warn_duplicates() {
+    let mut h = grid_of(vec![("repeated.pdf", fixture_sized(1, 200.0, 300.0))], vec2(1400.0, 900.0));
+    h.state_mut().combine_draft[0].range = "1, 1".into();
+    h.run_steps(2);
+    expand(&mut h, "repeated.pdf");
+    assert!(settle(&mut h, |app| app.combine_thumbnails().iter().all(ready)));
+
+    // Rotate the second occurrence of page 1.
+    let second = h.get_all_by_label(&page_card(1, "repeated.pdf")).nth(1).unwrap().rect().center();
+    h.hover_at(second);
+    h.run_steps(2);
+    h.get_by_label("Rotate clockwise").click();
+    h.run_steps(2);
+
+    // It is still only 1 file: no duplicate warning, totals show 1 file, and Combine is blocked.
+    assert_eq!(h.query_all_by_label_contains("Added more than once").count(), 0);
+    h.get_by_label_contains("1 file · 2 pages");
+    assert!(disabled(&h, "Combine"));
+}

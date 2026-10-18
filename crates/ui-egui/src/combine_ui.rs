@@ -397,8 +397,11 @@ type RangeCheck = Result<(usize, usize), String>;
 pub struct CombineFile {
     /// Stable while the file is in the list (selection, undo).
     pub id: u64,
+    /// The file as added: parts split or rotated from the same added file share it.
+    /// Used for file counts, duplicate detection, and combine eligibility.
+    pub(crate) file: u64,
     /// The file it is (part of): the entries a file is split into (a page moved between another
-    /// file's pages) share it. Combined as one file, unlocked together, counted once.
+    /// file's pages) share it. Combined as one file, unlocked together, thumbnails keyed by (group, page).
     pub(crate) group: u64,
     pub name: String,
     pub bytes: Arc<Vec<u8>>,
@@ -448,7 +451,7 @@ impl CombineTab {
         let mut twice = vec![false; files.len()];
         for indices in candidates.values() {
             let Some(first) = indices.first().and_then(|i| files.get(*i)) else { continue };
-            if indices.iter().all(|i| files.get(*i).is_some_and(|f| f.group == first.group)) {
+            if indices.iter().all(|i| files.get(*i).is_some_and(|f| f.file == first.file)) {
                 continue;
             }
             // Slice keys check exact bytes even when their hashes collide.
@@ -460,7 +463,7 @@ impl CombineTab {
             }
             for copies in contents.values() {
                 let Some(first) = copies.first().and_then(|i| files.get(*i)) else { continue };
-                if copies.iter().any(|i| files.get(*i).is_some_and(|f| f.group != first.group)) {
+                if copies.iter().any(|i| files.get(*i).is_some_and(|f| f.file != first.file)) {
                     for &i in copies {
                         if let Some(flag) = twice.get_mut(i) {
                             *flag = true;
@@ -859,9 +862,9 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 let pages: usize = checks.iter().filter_map(|c| c.as_ref().ok()).sum();
                 // Each file's size once, however many parts it is in.
                 let mut counted = BTreeSet::new();
-                let size: usize = app.combine_draft.iter().filter(|f| counted.insert(f.group)).map(|f| f.bytes.len()).sum();
+                let size: usize = app.combine_draft.iter().filter(|f| counted.insert(f.file)).map(|f| f.bytes.len()).sum();
                 // A file split into parts counts once.
-                let n = app.combine_draft.iter().map(|f| f.group).collect::<BTreeSet<u64>>().len();
+                let n = app.combine_draft.iter().map(|f| f.file).collect::<BTreeSet<u64>>().len();
                 let files = if n == 1 { tl!("1 file").to_string() } else { crate::i18n::fmt(tl!("{n} files"), &[("n", &n.to_string())]) };
                 let pages = if pages == 1 { tl!("1 page").to_string() } else { crate::i18n::fmt(tl!("{n} pages"), &[("n", &pages.to_string())]) };
                 ui.label(egui::RichText::new(format!("{files} · {pages} · {}", crate::panels::human_size(size))).color(t.text_muted));
@@ -870,7 +873,7 @@ pub(crate) fn page(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     .iter()
                     .zip(&checks)
                     .filter(|(f, c)| f.problem.is_some() || c.is_err())
-                    .map(|(f, _)| f.group)
+                    .map(|(f, _)| f.file)
                     .collect::<BTreeSet<u64>>()
                     .len();
                 if bad > 0 {
@@ -921,7 +924,7 @@ fn skip_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let t = Tokens::get(ctx);
     let mut left_out: Vec<(&str, &str)> = Vec::new();
     let mut seen = BTreeSet::new();
-    for f in app.combine_draft.iter().filter(|f| f.unreadable() && seen.insert(f.group)) {
+    for f in app.combine_draft.iter().filter(|f| f.unreadable() && seen.insert(f.file)) {
         left_out.push((f.name.as_str(), f.problem.as_deref().unwrap_or_default()));
     }
     let mut choice: Option<bool> = None;
@@ -1077,7 +1080,7 @@ fn expandable(f: &mut CombineFile) -> bool {
 fn blocker(files: &[CombineFile], checks: &[Result<usize, String>]) -> Option<String> {
     // (A file split into parts is still one file.) Files that can't be read are left out, so
     // they don't count.
-    if files.iter().filter(|f| !f.unreadable()).map(|f| f.group).collect::<BTreeSet<u64>>().len() < 2 {
+    if files.iter().filter(|f| !f.unreadable()).map(|f| f.file).collect::<BTreeSet<u64>>().len() < 2 {
         return Some(match files.iter().find(|f| f.unreadable()) {
             Some(f) => {
                 crate::i18n::fmt(tl!("{name} can't be combined: {why}"), &[("name", &f.name), ("why", f.problem.as_deref().unwrap_or_default())])
@@ -2555,6 +2558,7 @@ impl PdfCraftApp {
             };
             let mut f = CombineFile {
                 id: 0,
+                file: 0,
                 group: 0,
                 name,
                 bytes,
@@ -2579,6 +2583,7 @@ impl PdfCraftApp {
             self.combine_record();
             for mut f in added {
                 f.id = self.combine_tab.next_id;
+                f.file = f.id;
                 f.group = f.id;
                 self.combine_tab.next_id = self.combine_tab.next_id.wrapping_add(1);
                 self.combine_draft.push(f);
@@ -2696,7 +2701,7 @@ impl PdfCraftApp {
             return;
         }
         // Each file once, however many parts it is in.
-        let count = files.iter().map(|f| f.group).collect::<BTreeSet<u64>>().len();
+        let count = files.iter().map(|f| f.file).collect::<BTreeSet<u64>>().len();
         let groups: Vec<u64> = files.iter().map(|f| f.group).collect();
         let sources: Vec<(String, Arc<Vec<u8>>, Option<String>)> =
             files.iter().map(|f| (title_of(&f.name).to_string(), f.bytes.clone(), Some(f.range.clone()).filter(|r| !r.trim().is_empty()))).collect();
