@@ -2111,7 +2111,9 @@ fn rewrite_block_from(
     let source_chars: HashSet<char> = metrics
         .as_ref()
         .filter(|_| !reuse && upright && !hebrew && !visual_indic && style.family.is_none() && style.bold.is_none() && needs_type3(&flat))
-        .map(|m| flat.chars().filter(|ch| source_encodes(m, &ch.to_string())).collect())
+        // A partial run needs actual glyphs: source_encodes also accepts a missing space
+        // as positioning, but a numeric-only TJ at a run edge extracts no space.
+        .map(|m| flat.chars().filter(|ch| m.encode(&ch.to_string()).is_some()).collect())
         .unwrap_or_default();
     let partial_reuse = !source_chars.is_empty();
     let space = metrics.as_ref().map_or(0.33, |m| source_space(doc, &fonts_res, m));

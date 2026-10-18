@@ -1091,6 +1091,34 @@ fn mixed_script_paragraph_keeps_the_source_font_without_an_explicit_line_break()
 }
 
 #[test]
+fn mixed_script_subset_spaces_remain_extractable_after_saving() {
+    if without_craft_fonts("mixed_script_subset_spaces_remain_extractable_after_saving") {
+        return;
+    }
+    for (resource, draft) in [("F2", "ab шалом ab"), ("F2", "шалом ab"), ("F2", "ab шалом"), ("F1", "ab шалом ab")] {
+        for align in [added::Align::Left, added::Align::Center, added::Align::Right] {
+            let mut doc = text_page(&format!("BT /{resource} 12 Tf 72 700 Td (ab) Tj ET"));
+            let font_id = pdfcraft_cos::ObjRef::new(if resource == "F2" { 6 } else { 5 }, 0);
+            let original_font = doc.get(font_id).as_ref().clone();
+            let style =
+                text::BlockStyle { width: Some(300.0), align: Some(align), char_spacing: Some(1.25), scale: Some(80.0), ..Default::default() };
+            text::rewrite_block(&mut doc, 0, 0, Some(draft), &style).unwrap();
+            for bytes in [write_full(&doc, &Default::default()).unwrap(), pdfcraft_cos::write_incremental(&doc, &Default::default()).unwrap()] {
+                let saved = Document::open(Arc::new(bytes)).unwrap();
+                let lines = text::text_lines(&saved, 0).unwrap();
+                let decoded: String = lines.iter().map(|line| line.text.as_str()).collect();
+                assert_eq!(decoded, draft, "{resource}: edge spaces of source runs must be real extractable glyphs");
+                assert_eq!(text::text_blocks(&saved, 0).unwrap()[0].text, draft);
+                assert_eq!(saved.get(font_id).as_ref(), &original_font);
+                for line in lines.iter().filter(|line| line.text.chars().any(|ch| ch.is_ascii_alphabetic())) {
+                    assert_eq!(line.font, resource, "the Latin letters retain their source font: {line:?}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn mixed_script_runs_use_source_and_fallback_advances_for_alignment() {
     if without_craft_fonts("mixed_script_runs_use_source_and_fallback_advances_for_alignment") {
         return;
