@@ -318,6 +318,10 @@ struct Editor {
     saved: Arc<Vec<u8>>,
     /// Passwords that open [`Self::saved`].
     saved_keys: Keys,
+    /// [`Self::saved`] was never written where the document belongs: a new document (combine,
+    /// extract, create) or one restored from recovery. It stays unsaved until a save, whatever
+    /// undo brings back, or closing it would lose the whole document without asking.
+    unsaved_file: bool,
     undo: Vec<Snapshot>,
     redo: Vec<Snapshot>,
     keys: Keys,
@@ -329,15 +333,15 @@ struct Editor {
     text_blocks: TextBlocksCache,
 }
 
-/// One page's text blocks ([`pdfcraft_edit::text_blocks`]) and the unmodified document state they
-/// were read from. Opening a paragraph and applying its edit both need them, and grouping a long
-/// page is not cheap. Only an unmodified document is cached: its identity changes on every edit,
-/// undo and save (each reopens the working file), so a stale entry never matches.
+/// One page's text blocks ([`pdfcraft_edit::text_blocks`]) and the document state they were read
+/// from. Opening a paragraph and applying its edit both need them, and grouping a long page is not
+/// cheap. The state ([`pdfcraft_cos::ReadState`]) changes with every edit and save and returns
+/// with undo, so a stale entry never matches, also after the document has been edited.
 #[derive(Default)]
 struct TextBlocksCache(std::sync::Mutex<Option<CachedTextBlocks>>);
 
 /// The document state, the page (0-based) and its text blocks.
-type CachedTextBlocks = (pdfcraft_cos::SourceIdentity, usize, Arc<Vec<pdfcraft_edit::TextBlock>>);
+type CachedTextBlocks = (pdfcraft_cos::ReadState, usize, Arc<Vec<pdfcraft_edit::TextBlock>>);
 
 impl Clone for TextBlocksCache {
     fn clone(&self) -> Self {
@@ -349,20 +353,16 @@ impl Clone for TextBlocksCache {
 impl Editor {
     /// The text blocks on `page` (0-based), from the cache when the document hasn't changed.
     fn text_blocks(&self, page: usize) -> Result<Arc<Vec<pdfcraft_edit::TextBlock>>, EditError> {
-        let source = (!self.cos.is_modified()).then(|| self.cos.source_identity());
-        if let Some(source) = &source
-            && let Ok(cache) = self.text_blocks.0.lock()
-            && let Some((s, p, blocks)) = cache.as_ref()
-            && s == source
+        if let Ok(cache) = self.text_blocks.0.lock()
+            && let Some((state, p, blocks)) = cache.as_ref()
             && *p == page
+            && state.matches(&self.cos)
         {
             return Ok(blocks.clone());
         }
         let blocks = Arc::new(pdfcraft_edit::text_blocks(&self.cos, page)?);
-        if let Some(source) = source
-            && let Ok(mut cache) = self.text_blocks.0.lock()
-        {
-            *cache = Some((source, page, blocks.clone()));
+        if let Ok(mut cache) = self.text_blocks.0.lock() {
+            *cache = Some((self.cos.read_state(), page, blocks.clone()));
         }
         Ok(blocks)
     }
@@ -1280,6 +1280,10 @@ pub enum Edit {
         pages: Vec<usize>,
         to: usize,
     },
+    /// `pages` reversed among the positions they occupy.
+    ReversePages {
+        pages: Vec<usize>,
+    },
     InsertBlankPage {
         at: usize,
         width: f64,
@@ -1814,6 +1818,7 @@ pub const EDIT_LABELS: &[&str] = &[
     "Delete pages",
     "Move page",
     "Move pages",
+    "Reverse pages",
     "Insert blank page",
     "Duplicate page",
     "Duplicate pages",
@@ -1953,6 +1958,7 @@ impl Edit {
             Edit::RotatePages { pages, .. } => plural("Rotate page", "Rotate pages", pages.len()),
             Edit::DeletePages { pages } => plural("Delete page", "Delete pages", pages.len()),
             Edit::MovePages { pages, .. } => plural("Move page", "Move pages", pages.len()),
+            Edit::ReversePages { .. } => Label::of("Reverse pages"),
             Edit::InsertBlankPage { .. } => Label::of("Insert blank page"),
             Edit::DuplicatePages { pages } => plural("Duplicate page", "Duplicate pages", pages.len()),
             Edit::ReplacePages { pages, .. } => plural("Replace page", "Replace pages", pages.len()),
@@ -2126,6 +2132,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         Edit::RotatePages { .. }
         | Edit::DeletePages { .. }
         | Edit::MovePages { .. }
+        | Edit::ReversePages { .. }
         | Edit::InsertBlankPage { .. }
         | Edit::DuplicatePages { .. }
         | Edit::ReplacePages { .. }
@@ -2337,6 +2344,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         Edit::RotatePages { pages, degrees } => pdfcraft_organize::rotate_pages(doc, pages, *degrees)?,
         Edit::DeletePages { pages } => pdfcraft_organize::delete_pages(doc, pages)?,
         Edit::MovePages { pages, to } => pdfcraft_organize::move_pages(doc, pages, *to)?,
+        Edit::ReversePages { pages } => pdfcraft_organize::reverse_pages(doc, pages)?,
         Edit::InsertBlankPage { at, width, height } => {
             pdfcraft_organize::insert_blank_page(doc, *at, *width, *height)?;
         }
@@ -3583,6 +3591,7 @@ impl Session {
                         cos,
                         saved,
                         saved_keys: keys.clone(),
+                        unsaved_file: false,
                         undo: Vec::new(),
                         redo: Vec::new(),
                         keys,
@@ -3880,7 +3889,7 @@ impl Session {
     /// file is clean; undo past a later save is not, because the restored snapshot's own base
     /// is an earlier revision.
     fn sync_dirty(doc: &mut Document) {
-        doc.dirty = doc.editor.as_ref().is_some_and(|e| e.cos.is_modified() || !Arc::ptr_eq(e.cos.bytes(), &e.saved));
+        doc.dirty = doc.editor.as_ref().is_some_and(|e| e.unsaved_file || e.cos.is_modified() || !Arc::ptr_eq(e.cos.bytes(), &e.saved));
     }
 
     /// Use the current state's password for viewing (protection edits change it).
@@ -4165,6 +4174,7 @@ impl Session {
                 pdfcraft_cos::Document::open_with_password(bytes.clone(), keys.reopen.as_deref()).map_err(|e| EditError::Reopen(e.to_string()))?;
             editor.saved = bytes;
             editor.saved_keys = keys;
+            editor.unsaved_file = false;
         }
         if let Some(p) = path {
             doc.name = std::path::Path::new(&p).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.clone());
@@ -4228,7 +4238,7 @@ impl Session {
         editor.undo.clear();
         editor.redo.clear();
         Self::adopt_keys(doc);
-        doc.dirty = false;
+        Self::sync_dirty(doc);
         doc.generation += 1;
         Self::refresh(doc).inspect_err(|_| Self::show_released(doc))
     }
@@ -4708,6 +4718,9 @@ impl Session {
         let id = self.open(name, None, bytes, None)?;
         if let Some(d) = self.docs.iter_mut().find(|d| d.id == id) {
             d.dirty = true;
+            if let Some(e) = d.editor.as_mut() {
+                e.unsaved_file = true;
+            }
             // Unsaved work with no edit yet still needs its first recovery snapshot.
             d.generation += 1;
         }
@@ -4760,6 +4773,9 @@ impl Session {
         if let Some(d) = self.docs.iter_mut().find(|d| d.id == id) {
             d.path = path;
             d.dirty = true;
+            if let Some(e) = d.editor.as_mut() {
+                e.unsaved_file = true;
+            }
             d.generation += 1;
             d.snapshot_generation = d.generation; // its bytes are already in the recovery store
         }

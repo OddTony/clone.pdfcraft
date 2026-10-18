@@ -3740,6 +3740,34 @@ fn detecting_fields_on_a_scanned_form() {
 }
 
 #[test]
+fn detecting_comb_boxes_adds_one_comb_field_per_row() {
+    // The rows from #1887: five 18 x 22 cells and ten 16 x 20 cells, each a stroked `re`.
+    let mut body = String::from("BT /F1 10 Tf 40 205 Td (Postcode A) Tj ET BT /F1 10 Tf 40 105 Td (Postcode B) Tj ET\n");
+    for i in 0..5 {
+        body.push_str(&format!("{} 200 18 22 re S\n", 120 + i * 18));
+    }
+    for i in 0..10 {
+        body.push_str(&format!("{} 100 16 20 re S\n", 120 + i * 16));
+    }
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let id = s.open("comb.pdf", None, Arc::new(one_line_page("/Font << /F1 4 0 R >>", &body)), None).unwrap();
+    let found: Vec<(String, pdfcraft_forms::detect::Kind)> = s.detect_fields(id, &[]).into_iter().map(|(_, c)| (c.name, c.kind)).collect();
+    assert_eq!(
+        found,
+        [
+            ("Postcode A".to_string(), pdfcraft_forms::detect::Kind::Comb { cells: 5 }),
+            ("Postcode B".to_string(), pdfcraft_forms::detect::Kind::Comb { cells: 10 })
+        ]
+    );
+    s.auto_detect_fields(id, &[]).unwrap();
+    let d = s.get(id).unwrap();
+    let combs: Vec<(&str, FormFieldKind, bool, Option<usize>)> =
+        d.form.iter().map(|f| (f.name.as_str(), f.kind, f.has(pdfcraft_forms::flags::COMB), f.max_len)).collect();
+    assert_eq!(combs, [("Postcode A", FormFieldKind::Text, true, Some(5)), ("Postcode B", FormFieldKind::Text, true, Some(10))]);
+    assert_eq!(d.can_undo(), Some("Detect form fields"));
+}
+
+#[test]
 fn comparing_two_versions_of_a_document() {
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let v1 = s.create_from_text("t", "The contract starts on Monday.\n\nPayment is due within thirty days.\n\nSigned by both parties.").unwrap();
@@ -5951,4 +5979,53 @@ fn a_phone_photo_used_as_a_custom_stamp_is_embedded_upright() {
     assert_eq!((s.dict.int(b"Width"), s.dict.int(b"Height")), (Some(20), Some(60)));
     let rect = pdfcraft_annot::summaries(cos)[0].rect;
     assert!(((rect[2] - rect[0]) - 20.0).abs() < 0.01 && ((rect[3] - rect[1]) - 30.0).abs() < 0.01, "{rect:?}");
+}
+
+/// Opening a paragraph and applying its edit read the page's text blocks; after an edit they are
+/// still read once per document state, and undo and redo never get another state's blocks.
+#[test]
+fn text_blocks_stay_cached_after_an_edit_and_follow_undo_and_redo() {
+    let (mut session, id) = session_with(1);
+    let blocks = |s: &Session| s.get(id).unwrap().editor.as_ref().unwrap().text_blocks(0).unwrap();
+    let before = blocks(&session);
+    assert_eq!(before[0].editor_text, "Page 1");
+    let edit = Edit::EditTextBlock { page: 0, block: 0, text: "Edited".into(), style: pdfcraft_edit::BlockStyle::default() };
+    session.apply(id, edit).unwrap();
+    let edited = blocks(&session);
+    assert_eq!(edited[0].editor_text, "Edited");
+    assert!(Arc::ptr_eq(&edited, &blocks(&session)), "the edited page is grouped once");
+    session.undo(id).unwrap();
+    assert_eq!(blocks(&session)[0].editor_text, "Page 1");
+    session.redo(id).unwrap();
+    let redone = blocks(&session);
+    assert_eq!(redone[0].editor_text, "Edited");
+    assert!(Arc::ptr_eq(&redone, &blocks(&session)));
+}
+
+/// A new document, or one restored from recovery, has never been written where it belongs: undo
+/// back to the bytes it was opened from must not make it clean, or closing it would discard the
+/// whole document without asking. Saving makes it clean; Revert of a saved one too.
+#[test]
+fn undo_never_makes_an_unsaved_document_clean() {
+    let mut s = Session::new().with_clock(|| 1_700_000_000);
+    let new = s.open_new("Combined.pdf", Arc::new(fixture(2))).unwrap();
+    s.apply(new, Edit::RotatePages { pages: vec![0], degrees: 90 }).unwrap();
+    s.undo(new).unwrap();
+    assert!(s.get(new).unwrap().dirty, "a new document is unsaved until it is saved");
+    assert_eq!(s.autosave_snapshots().len(), 1, "and still needs recovery");
+    s.revert(new).unwrap();
+    assert!(s.get(new).unwrap().dirty, "Revert goes back to the created bytes, which aren't saved anywhere");
+
+    let recovered = s.open("Report.pdf", None, Arc::new(fixture(2)), None).unwrap();
+    s.mark_recovered(recovered, Some("Report.pdf".into()));
+    s.apply(recovered, Edit::RotatePages { pages: vec![0], degrees: 90 }).unwrap();
+    s.undo(recovered).unwrap();
+    assert!(s.get(recovered).unwrap().dirty, "the recovered work was never saved");
+
+    let saved = s.save_bytes(new).unwrap();
+    s.mark_saved(new, saved, Some("Combined.pdf".into())).unwrap();
+    assert!(!s.get(new).unwrap().dirty);
+    s.apply(new, Edit::RotatePages { pages: vec![0], degrees: 90 }).unwrap();
+    s.undo(new).unwrap();
+    assert!(!s.get(new).unwrap().dirty, "once saved, undo back to the saved state is clean");
 }
