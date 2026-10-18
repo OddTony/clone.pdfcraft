@@ -82,8 +82,11 @@ fn preferences_can_restore_the_form_reminder() {
     shot(&mut h, "preferences-reminder-off");
     h.get_by_role_and_label(Role::CheckBox, PREFERENCE).click();
     h.run_steps(4);
+    h.get_by_label("OK").scroll_to_me();
+    h.run_steps(4);
     h.get_by_label("OK").click();
     h.run_steps(4);
+    assert!(h.state().dialog.is_none(), "Preferences must actually close before checking the restored reminder");
     h.get_by_label(REMINDER);
     shot(&mut h, "reminder-restored");
     let saved = h.state().persist();
