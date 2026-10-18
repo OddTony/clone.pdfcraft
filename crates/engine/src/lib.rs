@@ -28,6 +28,7 @@ pub mod js;
 pub mod links;
 pub mod ocr;
 pub mod optimizer;
+pub mod preflight;
 pub mod print_raster;
 pub mod printcheck;
 mod scan_colours;
@@ -145,6 +146,7 @@ pub use pdfcraft_annot::{
 pub use pdfcraft_forms::detect;
 pub use pdfcraft_optimize as optimize;
 pub use pdfcraft_preflight as pdfa;
+pub use pdfcraft_preflight::pdfx;
 pub use pdfcraft_print as print;
 pub use pdfcraft_redact::codes::{CODE_SETS as REDACTION_CODE_SETS, CodeSet as RedactionCodeSet};
 pub use pdfcraft_redact::patterns::{
@@ -1553,6 +1555,12 @@ pub enum Edit {
     ConvertPdfA {
         level: pdfcraft_preflight::Level,
     },
+    /// Preflight ▸ Fix: fixups for what the checks found (set missing TrimBoxes, set Trapped,
+    /// remove JavaScript and actions), applied in order as one step. Fails when none of them has
+    /// anything to fix.
+    PreflightFix {
+        fixups: Vec<preflight::Fixup>,
+    },
     /// What a script (button or console) changed in form fields: values, read-only, required
     /// and visibility.
     ApplyScriptChanges {
@@ -1885,6 +1893,11 @@ pub const EDIT_LABELS: &[&str] = &[
     "Run JavaScript",
     "Run form script",
     "Save as {level}",
+    "Set missing TrimBoxes from the CropBox",
+    "Set Trapped to False",
+    "Set Trapped to True",
+    "Remove JavaScript and actions",
+    "Apply preflight fixups",
     "Edit script of {name}",
     "Delete document JavaScript",
     "Edit document JavaScript",
@@ -2017,6 +2030,10 @@ impl Edit {
             Edit::XfaEvent { .. } => Label::of("Run form script"),
             // The level is the standard's own name ("PDF/A-2b"), so it goes in as it stands.
             Edit::ConvertPdfA { level } => Label::with("Save as {level}", level.label()),
+            Edit::PreflightFix { fixups } => match fixups.as_slice() {
+                [one] => Label::of(one.label()),
+                _ => Label::of("Apply preflight fixups"),
+            },
             Edit::SetFieldScript { name, .. } => Label::with("Edit script of {name}", name.as_str()),
             Edit::SetDocumentScript { script: None, .. } => Label::of("Delete document JavaScript"),
             Edit::SetDocumentScript { .. } => Label::of("Edit document JavaScript"),
@@ -2213,6 +2230,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::SetDocumentScript { .. }
         | Edit::SetFieldScript { .. }
         | Edit::ConvertPdfA { .. }
+        | Edit::PreflightFix { .. }
         | Edit::EditTextLine { .. }
         | Edit::EditTextBlock { .. }
         | Edit::RegisterTextFont { .. }
@@ -2515,6 +2533,16 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         }
         Edit::ConvertPdfA { level } => {
             pdfcraft_preflight::convert(doc, *level).map_err(|e| EditError::Invalid(e.to_string()))?;
+        }
+        Edit::PreflightFix { fixups } => {
+            let mut changed = 0usize;
+            for fixup in fixups {
+                changed = changed.saturating_add(preflight::fix(doc, *fixup).map_err(|e| EditError::Invalid(e.to_string()))?);
+            }
+            // An edit that changes nothing would only leave an empty step in the history.
+            if changed == 0 {
+                return Err(EditError::Invalid("there is nothing for these fixups to fix".into()));
+            }
         }
         Edit::SetDocumentScript { name, script } => pdfcraft_forms::set_document_script(doc, name, script.as_deref())?,
         Edit::AddOcrText { page, words } => {

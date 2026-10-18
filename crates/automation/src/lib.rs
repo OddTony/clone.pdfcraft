@@ -29,6 +29,7 @@ mod printing;
 mod reading;
 mod redact;
 mod signing;
+mod standards;
 mod text_cache;
 mod tools;
 
@@ -786,6 +787,11 @@ impl Automation {
             "doc_compare" => self.doc_compare(&a)?,
             "action_list" => self.action_list()?,
             "pdfa_verify" => self.pdfa_verify(&a)?,
+            "pdfx_verify" => self.pdfx_verify(&a)?,
+            "preflight_profiles" => self.preflight_profiles()?,
+            "preflight_run" => self.preflight_run(&a)?,
+            "preflight_report" => self.preflight_report(&a)?,
+            "preflight_fix" => self.preflight_fix(&a)?,
             "print_readiness" => self.print_readiness(&a)?,
             "doc_export_office" => self.doc_export_office(&a)?,
             "pdfa_convert" => self.pdfa_convert(&a)?,
