@@ -187,10 +187,14 @@ fn display_socket_name(display: Option<&str>) -> String {
 /// The socket's file name for a Windows session (`SESSIONNAME`: `Console`, `RDP-Tcp#3`…). The
 /// same user signed in twice (at the console and over Remote Desktop) gets one socket per session,
 /// so a file never opens in a window on the other screen. Only letters, digits and `-` are kept.
+/// A launch without `SESSIONNAME` (from Task Scheduler, a service or some remote shells, #3338)
+/// counts as the console's: that is where such a launch almost always runs, and over Remote
+/// Desktop it finds no console window and opens its own, as before.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn socket_name(session: Option<&str>) -> String {
     let session: String = session.unwrap_or_default().chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(32).collect();
-    if session.is_empty() { "instance.sock".to_string() } else { format!("instance-{session}.sock") }
+    let session = if session.is_empty() { "Console".to_string() } else { session };
+    format!("instance-{session}.sock")
 }
 
 /// Held while a launch finds out whether it is the first, so launches that start together (several
@@ -363,8 +367,10 @@ mod tests {
         assert_eq!(socket_name(Some("RDP-Tcp#3")), "instance-RDP-Tcp3.sock");
         assert_ne!(socket_name(Some("RDP-Tcp#3")), socket_name(Some("RDP-Tcp#4")));
         assert_eq!(socket_name(Some(r"..\x/y:z")), "instance-xyz.sock", "never a path");
-        assert_eq!(socket_name(None), "instance.sock");
-        assert_eq!(socket_name(Some("")), "instance.sock");
+        // #3338: no session name (Task Scheduler) is the console's, so it finds the window
+        // opened from Explorer.
+        assert_eq!(socket_name(None), socket_name(Some("Console")));
+        assert_eq!(socket_name(Some("")), socket_name(Some("Console")));
     }
 
     #[test]
