@@ -1643,11 +1643,11 @@ title = "Cursor coordinates"
 area = "B"
 tier = "P2"
 milestone = "M12"
-status = "planned"
-commands = []
+status = "shipped"
+commands = ["view.cursor_coordinates"]
 tools = []
-evidence = []
-notes = ""
+evidence = ["crates/ui-egui/tests/control.rs::cursor_coordinates_measure_from_the_top_left_of_the_page_as_shown", "crates/ui-egui/src/canvas.rs::cursor_coordinates_count_from_the_top_left_of_the_page_on_screen"]
+notes = "View ▸ Show/Hide ▸ Cursor coordinates (or the command) shows a small panel at the bottom-right of the page view with the pointer's X and Y on the page under it, in the Preferences unit, from the top-left corner of the page as shown (after the crop box, /Rotate and /UserUnit), y down. Off every page it shows dashes. The axes turn with View ▸ Rotate View (not compared with real Acrobat). Remembered across restarts. No headless tool: it reads the pointer."
 
 [[feature]]
 id = "view.theme-light-dark"

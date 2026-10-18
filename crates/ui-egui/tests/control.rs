@@ -32,6 +32,11 @@ fn fixture(n: usize) -> Vec<u8> {
         let body = format!("BT /F1 24 Tf 20 150 Td (Page {}) Tj ET", i + 1);
         objs.push(format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()));
     }
+    pdf(&objs)
+}
+
+/// A PDF of these objects, numbered from 1 (the catalog), with its xref table.
+fn pdf(objs: &[String]) -> Vec<u8> {
     let mut out = b"%PDF-1.7\n".to_vec();
     let mut offsets = Vec::new();
     for (i, o) in objs.iter().enumerate() {
@@ -56,13 +61,17 @@ fn harness_pages(pages: usize) -> (Harness<'static, PdfCraftApp>, ControlClient)
 }
 
 fn harness_pages_at(pages: usize, width: f32, scale: f32) -> (Harness<'static, PdfCraftApp>, ControlClient) {
+    harness_bytes(fixture(pages), width, scale)
+}
+
+fn harness_bytes(bytes: Vec<u8>, width: f32, scale: f32) -> (Harness<'static, PdfCraftApp>, ControlClient) {
     let slot: Arc<Mutex<Option<ControlClient>>> = Arc::default();
     let s = slot.clone();
     let mut h = Harness::builder().with_size(egui::vec2(width, 900.0)).with_pixels_per_point(scale).build_eframe(move |cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         *s.lock().unwrap() = Some(app.attach_control(&cc.egui_ctx));
-        app.open_bytes("doc.pdf", None, fixture(pages)).unwrap();
+        app.open_bytes("doc.pdf", None, bytes).unwrap();
         app
     });
     h.run_steps(4);
@@ -1651,6 +1660,54 @@ fn page_size_shows_while_the_pointer_is_in_the_bottom_left_quadrant() {
     h.event(egui::Event::PointerMoved(away));
     h.run_steps(3);
     assert!(!shown(&h), "pointer left: hidden again");
+}
+
+#[test]
+fn cursor_coordinates_measure_from_the_top_left_of_the_page_as_shown() {
+    // A 300 × 500 pt crop box away from the media box origin, turned a quarter: shown 500 × 300.
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /CropBox [100 100 400 600] /Rotate 90 >>".to_string(),
+    ];
+    let (mut h, c) = harness_bytes(pdf(&objs), 1400.0, 1.0);
+    h.state_mut().units = pdfcraft_ui_egui::units::Unit::Millimetres;
+    let shown = |h: &Harness<'static, PdfCraftApp>| {
+        let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("cursor-coordinates"));
+        h.ctx.memory(|m| m.areas().visible_last_frame(&layer))
+    };
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    h.event(egui::Event::PointerMoved(page.min + egui::vec2(page.width() * 0.1, page.height() * 0.1)));
+    h.run_steps(3);
+    assert!(!shown(&h), "off until asked for");
+
+    ok(&mut h, &c, "ui.command", json!({"id": "view.cursor_coordinates"}));
+    h.run_steps(3);
+    assert!(shown(&h));
+    // A tenth of the way in from the top-left corner as shown: 50 × 30 pt. The same point in PDF
+    // user space is (130, 150) pt, 45.9 × 52.9 mm.
+    assert!(h.query_by_label("X: 17.6 mm").is_some(), "x from the left edge of the shown page");
+    assert!(h.query_by_label("Y: 10.6 mm").is_some(), "y down from the top edge of the shown page");
+    if let Ok(dir) = std::env::var("PDFCRAFT_SHOT_DIR") {
+        h.render().unwrap().save(format!("{dir}/cursor-coordinates.png")).unwrap();
+    }
+
+    let area = h.state().views[0].viewport_rect();
+    let off = egui::pos2(page.center().x, page.bottom() + 10.0);
+    assert!(area.contains(off), "the fixture leaves room below the page");
+    h.event(egui::Event::PointerMoved(off));
+    h.run_steps(3);
+    assert!(shown(&h), "stays up off the page");
+    assert!(h.query_by_label("X: —").is_some() && h.query_by_label("Y: —").is_some(), "no stale value off the page");
+
+    // Remembered across restarts.
+    let mut fresh = PdfCraftApp::new();
+    fresh.restore(&h.state().persist());
+    assert_eq!(serde_json::from_str::<Value>(&fresh.persist()).unwrap()["cursor_coordinates"], json!(true));
+
+    ok(&mut h, &c, "ui.command", json!({"id": "view.cursor_coordinates"}));
+    h.run_steps(3);
+    assert!(!shown(&h), "the same command hides it");
 }
 
 #[test]
