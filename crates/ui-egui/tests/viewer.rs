@@ -1637,7 +1637,7 @@ fn a_copied_picture_is_pasted_into_another_pdf_as_an_image_of_its_own() {
     h.run_steps(2);
     h.event(egui::Event::Paste(String::new()));
     h.run_steps(2);
-    let pasted = |h: &Harness<'static, PdfCraftApp>| h.state().session.get(target).unwrap().added.len();
+    let pasted = |h: &Harness<'static, PdfCraftApp>| h.state().session.get(target).unwrap().added().len();
     assert_eq!(pasted(&h), 1, "⌘V pastes the picture into the other document");
     let (w, hgt, rgba) = h.state().session.get(target).unwrap().page_image_rgba(0, 0).unwrap();
     assert_eq!((w, hgt, rgba), (40, 30, px.into_raw()), "the picture itself, at full size");
