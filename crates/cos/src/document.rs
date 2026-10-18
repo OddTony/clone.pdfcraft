@@ -869,9 +869,12 @@ impl Document {
     /// readers take one: from the `%PDF-` header. Zero for most files. In a file with bytes
     /// before its header, Acrobat, qpdf, Poppler and MuPDF count offsets from the header, so an
     /// update that wrote absolute positions sent them to the wrong place, and they rebuilt the
-    /// table and reported it. Our own reader tries both.
+    /// table and reported it. Our own reader tries both. A file whose newest section is where
+    /// its `startxref` says counted from byte 0 keeps that convention: its `/Prev` is copied as is.
     pub fn offset_base(&self) -> usize {
-        if self.revisions.is_empty() { 0 } else { self.header_offset }
+        let Some(newest) = self.revisions.last() else { return 0 };
+        let absolute = usize::try_from(newest.xref_offset).is_ok_and(|off| self.read_section(off, &mut BTreeMap::new(), &mut Vec::new()).is_ok());
+        if self.header_offset == 0 || absolute { 0 } else { self.header_offset }
     }
 
     /// Where each revision of the file ends (oldest first): the byte after the `%%EOF` (and its

@@ -463,3 +463,67 @@ fn incremental_save_of_a_prefixed_file_counts_offsets_from_the_header() {
         assert_eq!(subject, b"edited");
     }
 }
+
+/// The same file with its offsets counted from byte 0, as some writers do, as a classic table or
+/// as an uncompressed cross-reference stream.
+fn prefixed_absolute(prefix: &[u8], stream: bool) -> Vec<u8> {
+    let objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
+        "<< /Title (Prefixed) >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] >>",
+    ];
+    let mut out = [prefix, b"%PDF-1.5\n"].concat();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    if stream {
+        offsets.push(xref);
+        let mut rows = vec![0u8, 0, 0, 255];
+        for o in &offsets {
+            rows.extend_from_slice(&[1, (o >> 8) as u8, *o as u8, 0]);
+        }
+        out.extend_from_slice(
+            format!("5 0 obj\n<< /Type /XRef /Size 6 /W [1 2 1] /Root 1 0 R /Info 3 0 R /Length {} >>\nstream\n", rows.len()).as_bytes(),
+        );
+        out.extend_from_slice(&rows);
+        out.extend_from_slice(b"\nendstream\nendobj\n");
+    } else {
+        out.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+        for o in offsets {
+            out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+        }
+        out.extend_from_slice(b"trailer\n<< /Size 5 /Root 1 0 R /Info 3 0 R >>\n");
+    }
+    out.extend_from_slice(format!("startxref\n{xref}\n%%EOF\n").as_bytes());
+    out
+}
+
+/// A prefixed file that counts its offsets from byte 0 keeps doing so in an incremental save:
+/// the new section and `startxref` agree with the absolute `/Prev` they link to.
+#[test]
+fn incremental_save_of_a_prefixed_file_with_absolute_offsets_keeps_them_absolute() {
+    let prefix: Vec<u8> = b"bytes before the header\n".iter().cycle().take(128).copied().collect();
+    for stream in [false, true] {
+        let original = Arc::new(prefixed_absolute(&prefix, stream));
+        let mut doc = Document::open(original.clone()).unwrap();
+        assert!(doc.repair_log().is_empty(), "{:?}", doc.repair_log());
+        let prev = startxref(&original);
+        let info = doc.trailer().reference(b"Info").unwrap();
+        doc.update_dict(info, |d: &mut Dict| d.set(b"Subject".to_vec(), Object::String(pdfcraft_cos::PdfString::literal(b"edited".to_vec()))))
+            .unwrap();
+        let updated = write_incremental(&doc, &SaveOptions::default()).unwrap();
+        let tail = String::from_utf8_lossy(&updated[original.len()..]);
+        assert!(tail.contains(&format!("/Prev {prev}")), "{tail}");
+        let section = &updated[startxref(&updated)..];
+        let head = String::from_utf8_lossy(&section[..section.len().min(16)]);
+        assert!(head.starts_with("xref") || head.contains(" 0 obj"), "stream {stream}: {head:?} {tail}");
+        let back = Document::open(Arc::new(updated.clone())).unwrap();
+        assert_eq!(back.revisions().len(), 2, "{:?}", back.repair_log());
+        let Some(pdfcraft_cos::XrefEntry::InFile { offset, .. }) = back.xref_entry(info.num) else { panic!("{:?}", back.xref_entry(info.num)) };
+        assert!(updated[offset as usize..].starts_with(format!("{} 0 obj", info.num).as_bytes()), "{offset}: {tail}");
+    }
+}
