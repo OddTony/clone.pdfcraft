@@ -3,6 +3,82 @@
 
 use pdfcraft_cos::Document;
 
+/// Namespace URIs of the PDF/A and PDF/UA identification schemas.
+pub(crate) const PDFA_ID: &str = "http://www.aiim.org/pdfa/ns/id/";
+pub(crate) const PDFUA_ID: &str = "http://www.aiim.org/pdfua/ns/id/";
+
+/// Read an identification property by its expanded XML name, not its arbitrary prefix.
+/// Refuse deeply nested or excessively large XML trees before parsing untrusted metadata.
+pub(crate) fn identifier(xmp: &str, namespace: &str, local: &str) -> Option<String> {
+    if xml_nesting_depth(xmp) > 1024 {
+        return None;
+    }
+    let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: 100_000 };
+    let doc = roxmltree::Document::parse_with_options(xmp, options).ok()?;
+    for node in doc.descendants().filter(roxmltree::Node::is_element) {
+        if let Some(value) = node.attribute((namespace, local)) {
+            return Some(value.trim().to_owned());
+        }
+        if node.tag_name().namespace() == Some(namespace) && node.tag_name().name() == local {
+            return node.text().map(|value| value.trim().to_owned());
+        }
+    }
+    None
+}
+
+fn xml_nesting_depth(text: &str) -> usize {
+    fn find(hay: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
+        (from..hay.len()).find(|&p| hay[p..].starts_with(needle))
+    }
+    let b = text.as_bytes();
+    let (mut i, mut depth, mut max) = (0usize, 0usize, 0usize);
+    while i < b.len() {
+        if b[i] != b'<' {
+            i += 1;
+        } else if b[i..].starts_with(b"<!--") {
+            i = find(b, i + 4, b"-->").map_or(b.len(), |p| p + 3);
+        } else if b[i..].starts_with(b"<![CDATA[") {
+            i = find(b, i + 9, b"]]>").map_or(b.len(), |p| p + 3);
+        } else if b[i..].starts_with(b"<?") {
+            i = find(b, i + 2, b"?>").map_or(b.len(), |p| p + 2);
+        } else if b[i..].starts_with(b"<!") {
+            i = find(b, i + 2, b">").map_or(b.len(), |p| p + 1);
+        } else if b[i..].starts_with(b"</") {
+            depth = depth.saturating_sub(1);
+            i = find(b, i + 2, b">").map_or(b.len(), |p| p + 1);
+        } else {
+            depth += 1;
+            max = max.max(depth);
+            // Skip the rest of the start tag, over any quoted attribute value, and remember its last
+            // significant byte: a tag that ends in `/` closes itself, so it is one level deep while it
+            // is read rather than a level left open.
+            i += 1;
+            let mut quote = 0u8;
+            let mut last = 0u8;
+            while i < b.len() {
+                let c = b[i];
+                if quote != 0 {
+                    if c == quote {
+                        quote = 0;
+                    }
+                } else if c == b'"' || c == b'\'' {
+                    quote = c;
+                } else if c == b'>' {
+                    i += 1;
+                    break;
+                } else if !c.is_ascii_whitespace() {
+                    last = c;
+                }
+                i += 1;
+            }
+            if last == b'/' {
+                depth -= 1;
+            }
+        }
+    }
+    max
+}
+
 /// The value of a simple XMP property, written either as an attribute (`pdfaid:part="2"`) or
 /// as an element (`<pdfaid:part>2</pdfaid:part>`, or inside an `rdf:Alt`/`rdf:Seq`).
 pub fn value(xmp: &str, key: &str) -> Option<String> {
