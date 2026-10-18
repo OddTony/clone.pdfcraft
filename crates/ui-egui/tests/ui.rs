@@ -197,8 +197,6 @@ fn read_mode_rail_buttons_open_their_panels() {
 /// groups: the rail scrolls instead of drawing one over the other.
 #[test]
 fn a_short_rail_scrolls_instead_of_overlapping_its_controls() {
-    use egui::accesskit::Role;
-    use egui_kittest::kittest::by;
     for scale in ["150%", "200%"] {
         let mut h = Harness::builder().with_size(egui::vec2(1920.0, 1080.0)).build_eframe(move |_cc| {
             let mut app = PdfCraftApp::new();
@@ -208,21 +206,43 @@ fn a_short_rail_scrolls_instead_of_overlapping_its_controls() {
             app
         });
         h.run_steps(6);
-        let tags = h.get_by_label("Tags").rect();
-        let in_rail = |r: &egui::Rect| r.center().x > tags.left() - 4.0 && r.center().x < tags.right() + 4.0;
-        let rail: Vec<(String, egui::Rect)> = h
-            .query_all(by().predicate(|n| matches!(n.role(), Role::Button | Role::TextInput | Role::Label)))
-            .map(|n| (n.accesskit_node().label().unwrap_or_default(), n.rect()))
-            .filter(|(_, r)| in_rail(r))
-            .collect();
-        for label in ["Tags", "Signatures", "Zoom out", "Next page", "Previous view", "Page display"] {
-            assert!(rail.iter().any(|(l, _)| l.starts_with(label)), "{scale}: the rail has {label}: {rail:?}");
-        }
-        for (i, (a, ra)) in rail.iter().enumerate() {
-            for (b, rb) in &rail[i + 1..] {
-                let o = ra.intersect(*rb);
-                assert!(o.width() <= 0.5 || o.height() <= 0.5, "{scale}: {a:?} {ra:?} overlaps {b:?} {rb:?}");
-            }
+        assert_rail_controls_apart(&h, scale);
+    }
+}
+
+/// The rail has not measured its two groups on the frame it first appears, and that frame is
+/// the one shown: it must not overlap either, not only the frames after it.
+#[test]
+fn a_short_rail_does_not_overlap_on_its_first_frame() {
+    let mut h = Harness::builder().with_size(egui::vec2(1920.0, 1080.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.set_option("ui-scale", "200%").unwrap();
+        app
+    });
+    h.run_steps(4);
+    h.state_mut().open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens");
+    h.step();
+    assert_rail_controls_apart(&h, "200%");
+}
+
+fn assert_rail_controls_apart(h: &Harness<'_, PdfCraftApp>, scale: &str) {
+    use egui::accesskit::Role;
+    use egui_kittest::kittest::by;
+    let tags = h.get_by_label("Tags").rect();
+    let in_rail = |r: &egui::Rect| r.center().x > tags.left() - 4.0 && r.center().x < tags.right() + 4.0;
+    let rail: Vec<(String, egui::Rect)> = h
+        .query_all(by().predicate(|n| matches!(n.role(), Role::Button | Role::TextInput | Role::Label)))
+        .map(|n| (n.accesskit_node().label().unwrap_or_default(), n.rect()))
+        .filter(|(_, r)| in_rail(r))
+        .collect();
+    for label in ["Tags", "Signatures", "Zoom out", "Next page", "Previous view", "Page display"] {
+        assert!(rail.iter().any(|(l, _)| l.starts_with(label)), "{scale}: the rail has {label}: {rail:?}");
+    }
+    for (i, (a, ra)) in rail.iter().enumerate() {
+        for (b, rb) in &rail[i + 1..] {
+            let o = ra.intersect(*rb);
+            assert!(o.width() <= 0.5 || o.height() <= 0.5, "{scale}: {a:?} {ra:?} overlaps {b:?} {rb:?}");
         }
     }
 }

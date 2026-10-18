@@ -640,11 +640,13 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         .show(ui, |ui| {
             // The heights of the panel buttons and of the navigation cluster on the last frame.
             let heights_id = ui.id().with("rail_heights");
-            let (top, nav) = ui.data(|d| d.get_temp::<(f32, f32)>(heights_id)).unwrap_or_default();
+            let measured = ui.data(|d| d.get_temp::<(f32, f32)>(heights_id));
+            let (top, nav) = measured.unwrap_or_default();
+            let height = ui.available_height();
             // Too short for both groups (a small window, or a large interface size), the rail
             // scrolls instead of drawing the navigation over the panel buttons (#2891). A rail
             // that fits keeps the plain layout, so neither it nor the canvas beside it moves.
-            let overflows = top + 4.0 + nav > ui.available_height();
+            let overflows = top + 4.0 + nav > height;
             let mut body = |ui: &mut egui::Ui| {
                 // From the cursor: a panel's own rect is already as tall as the window.
                 let start = ui.cursor().top();
@@ -802,6 +804,11 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             };
             let heights =
                 if overflows { egui::ScrollArea::vertical().id_salt("rail").auto_shrink([false, false]).show(ui, body).inner } else { body(ui) };
+            // Unmeasured, this pass laid the groups out as if they fit: when they don't, it is
+            // redone with the heights rather than shown overlapping for a frame.
+            if measured.is_none() && heights.0 + 4.0 + heights.1 > height {
+                ui.ctx().request_discard("right rail measured its groups");
+            }
             ui.data_mut(|d| d.insert_temp(heights_id, heights));
         });
 }
