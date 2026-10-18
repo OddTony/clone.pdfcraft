@@ -688,11 +688,13 @@ mod hairline_tests {
     use super::{InterpreterSettings, Pdf, Pixmap, RenderCache, RenderSettings, render};
     use vello_cpu::color::palette::css::WHITE;
 
-    /// A one-page 100×100 pt PDF: a 12 pt black line across the middle, and a `Tr 1` (stroked)
-    /// 40 pt Helvetica "I" with a 6 pt pen to its left.
-    fn fixture() -> Vec<u8> {
-        let body = "12 w 20 50 m 90 50 l S\n\
-                    BT 1 Tr 6 w /F1 40 Tf 4 10 Td (I) Tj ET";
+    /// A 12 pt black line across the middle, and a `Tr 1` (stroked) 40 pt Helvetica "I" with a
+    /// 6 pt pen to its left.
+    const LINE_AND_TEXT: &str = "12 w 20 50 m 90 50 l S\n\
+                                 BT 1 Tr 6 w /F1 40 Tf 4 10 Td (I) Tj ET";
+
+    /// A one-page 100×100 pt PDF whose content stream is `body` (Helvetica as `/F1`).
+    fn fixture(body: &str) -> Vec<u8> {
         let objs: Vec<Vec<u8>> = vec![
             b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
             b"<< /Type /Pages /Kids [4 0 R] /Count 1 /MediaBox [0 0 100 100] >>".to_vec(),
@@ -726,8 +728,8 @@ mod hairline_tests {
         out
     }
 
-    fn render_at(scale: f32, hairline_strokes: bool) -> Pixmap {
-        let pdf = Pdf::new(fixture()).unwrap();
+    fn render_at(body: &str, scale: f32, hairline_strokes: bool) -> Pixmap {
+        let pdf = Pdf::new(fixture(body)).unwrap();
         let cache = RenderCache::new();
         let settings = RenderSettings {
             x_scale: scale,
@@ -756,13 +758,13 @@ mod hairline_tests {
     fn hairline_strokes_draw_line_art_one_pixel_wide_at_any_scale() {
         for scale in [1.0_f32, 4.0] {
             let column = (55.0 * scale) as u16;
-            let at_width = inked_rows(&render_at(scale, false), column);
+            let at_width = inked_rows(&render_at(LINE_AND_TEXT, scale, false), column);
             let expected = (12.0 * scale) as usize;
             assert!(
                 (expected..=expected + 2).contains(&at_width),
                 "scale {scale}: a 12 pt line covers {expected} rows, drew {at_width}"
             );
-            let hairline = inked_rows(&render_at(scale, true), column);
+            let hairline = inked_rows(&render_at(LINE_AND_TEXT, scale, true), column);
             assert!(
                 (1..=2).contains(&hairline),
                 "scale {scale}: a hairline is one device pixel (two when it straddles rows), drew {hairline}"
@@ -778,8 +780,37 @@ mod hairline_tests {
                 .filter(|&x| pixmap.sample(x, (100 - 25) as u16).r < 240)
                 .count()
         };
-        let at_width = stem(&render_at(1.0, false));
+        let at_width = stem(&render_at(LINE_AND_TEXT, 1.0, false));
         assert!(at_width >= 4, "the stroked stem is wider than a hairline: {at_width}");
-        assert_eq!(stem(&render_at(1.0, true)), at_width, "text outlines keep their width");
+        assert_eq!(stem(&render_at(LINE_AND_TEXT, 1.0, true)), at_width, "text outlines keep their width");
+    }
+
+    /// One device pixel whichever way the matrix scales. Under `10 0 0 1 0 0 cm` no width in
+    /// user space is a pixel both ways: a horizontal line a tenth of a pixel tall would vanish.
+    /// Dashes keep their user-space lengths.
+    #[test]
+    fn hairline_strokes_are_one_pixel_under_a_non_uniform_matrix() {
+        // 10× across, 1× up: a 12 pt horizontal line dashed 1 on, 1 off from x = 2 (12 px tall
+        // at its width, dashes 10 px long from x = 20), and a 1.2 pt vertical line at x = 3
+        // (12 px wide at its width).
+        let body = "10 0 0 1 0 0 cm [1 1] 0 d 12 w 2 50 m 9 50 l S [] 0 d 1.2 w 3 20 m 3 80 l S";
+        let inked_cols = |pixmap: &Pixmap, y: u16| {
+            (0..pixmap.width())
+                .filter(|&x| pixmap.sample(x, y).r < 240)
+                .count()
+        };
+        let at_width = render_at(body, 1.0, false);
+        let rows = inked_rows(&at_width, 65);
+        assert!((12..=14).contains(&rows), "a 12 pt line at its width: {rows} rows");
+        assert_eq!(inked_rows(&at_width, 55), 0, "a gap between dashes");
+        let cols = inked_cols(&at_width, 100 - 30);
+        assert!((12..=14).contains(&cols), "1.2 pt scaled tenfold: {cols} columns");
+
+        let hairline = render_at(body, 1.0, true);
+        let rows = inked_rows(&hairline, 65);
+        assert!((1..=2).contains(&rows), "a horizontal hairline: {rows} rows");
+        assert_eq!(inked_rows(&hairline, 55), 0, "dashes keep their user-space lengths");
+        let cols = inked_cols(&hairline, 100 - 30);
+        assert!((1..=2).contains(&cols), "a vertical hairline: {cols} columns");
     }
 }
