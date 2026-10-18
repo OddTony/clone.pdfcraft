@@ -540,15 +540,7 @@ impl PdfCraftApp {
             "page.copy" => self.copy_pages(false),
             "page.cut" => self.copy_pages(true),
             "page.paste" => self.paste_pages(),
-            "view.line_weights" => {
-                if let Some(i) = active {
-                    let id = self.views[i].id;
-                    let thin = !self.session.get(id).is_some_and(|d| d.thin_lines());
-                    if self.session.set_thin_lines(id, thin) {
-                        self.views[i].invalidate_content();
-                    }
-                }
-            }
+            "view.line_weights" => self.set_thin_lines(!self.thin_lines),
             "comment.hide_all" => {
                 if let Some(i) = active {
                     let id = self.views[i].id;

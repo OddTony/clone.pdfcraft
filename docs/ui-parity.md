@@ -51,7 +51,7 @@ No dump of Acrobat's menu tree has been diffed against the registry yet (gap 24)
 | Arrange, align and distribute page objects | yes | fields only | partial |
 | Rulers, grids, snap to grid, guides | yes | no | planned |
 | Cursor coordinates | yes | no | planned |
-| Line weights on/off (thin lines) | yes, ⌘5 | yes, ⌘5 / Ctrl+5, per document (#1828) | shipped |
+| Line weights on/off (thin lines) | yes, ⌘5 | yes, ⌘5 / Ctrl+5, app-wide and remembered (#1828) | shipped |
 | Measuring snap to paths, endpoints, midpoints, intersections | yes | yes | shipped |
 | Nudge selected objects with arrow keys (Shift for larger steps) | yes | yes in Edit text: a point, Shift ten points, for selected objects, images and an open paragraph's box (#1520) | shipped |
 | Single-key tool accelerators (H, V, Z, …) | yes, opt-in | no | planned |
