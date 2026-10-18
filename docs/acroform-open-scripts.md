@@ -14,6 +14,9 @@ decoding opening-script sources merely to decide whether to show it; the
 notice survives refreshes during the session. Disabling JavaScript globally still
 uses the existing preference behavior.
 
+Signed and certified forms show the policy beside their signature-status notice;
+the signature panel action remains available. The notice does not rewrite the PDF.
+
 Explicit button and console execution, and scripts triggered by interactive field
 edits, retain their existing behavior. Document-level helper scripts still load
 for those explicit evaluations. Existing viewer consent checks remain in force.
@@ -43,6 +46,15 @@ from producing OpenDoc requests when the changes are combined. No #2081 remote
 branch or path-consent behavior is changed. The review concern is not presented
 as a demonstrated zero-click exploit.
 
+The retained `pdfcraft_forms::open_scripts` collection helper has no production
+caller under this policy. Its opening-page selection currently handles explicit
+destination arrays only: a named `/GoTo /D` falls back to page zero, for both the
+legacy `/Dests` dictionary and `/Names /Dests` name tree. This verified collection
+limitation must be resolved before that helper is used for automatic execution;
+it does not cause scripts to execute while automatic opening-script execution is
+disabled.
+
 Regression coverage: engine `form_open_scripts_*` tests and UI
-`opening_form_script_policy_notice_is_visible`, plus the existing explicit
+`opening_form_script_policy_notice_is_visible` and
+`signed_form_shows_signature_and_opening_script_policy`, plus the existing explicit
 button/console tests.

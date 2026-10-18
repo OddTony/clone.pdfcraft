@@ -4293,9 +4293,19 @@ fn notices(
             return Some(Notice::Close);
         }
     }
+    // The policy must remain visible beside either a signature or an ordinary form notice.
+    let with_open_script_policy = |mut text: String| {
+        let policy = pdfcraft_engine::js::OPEN_SCRIPTS_SKIPPED;
+        if info.warnings.iter().any(|warning| warning == policy) && !text.contains(policy) {
+            text.push(' ');
+            text.push_str(policy);
+        }
+        text
+    };
     if let Some((icon, color, template, arg)) = signed {
         let mut open = false;
-        notice_bar(ui, t, icon, color, crate::i18n::fmt(tl!(template), &[("by", &arg)]), |ui| {
+        let text = with_open_script_policy(crate::i18n::fmt(tl!(template), &[("by", &arg)]));
+        notice_bar(ui, t, icon, color, text, |ui| {
             if crate::widgets::pill_button(ui, tl!("Signature panel"), false).clicked() {
                 open = true;
             }
@@ -4355,14 +4365,8 @@ fn notices(
     } else {
         None
     };
-    let (icon, mut text, fields) = msg?;
-    // A form banner must not hide the warning that its opening scripts were skipped.
-    let policy = pdfcraft_engine::js::OPEN_SCRIPTS_SKIPPED;
-    if info.warnings.iter().any(|warning| warning == policy) && !text.contains(policy) {
-        text.push(' ');
-        text.push_str(policy);
-    }
-    notice_bar(ui, t, icon, t.accent_text, text, |ui| {
+    let (icon, text, fields) = msg?;
+    notice_bar(ui, t, icon, t.accent_text, with_open_script_policy(text), |ui| {
         if icons::button(ui, "x", 22.0, false, tl!("Dismiss")).clicked() {
             view.notice_dismissed = true;
         }
