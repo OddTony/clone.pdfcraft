@@ -6476,6 +6476,47 @@ fn reading_colors_through_tools() {
     assert_eq!(render(&mut a, 1), page1_off);
 }
 
+/// The `view_invert_colors` tool inverts rendered page pixels
+/// without changing the PDF, and toggles cleanly via commands.
+#[test]
+fn invert_colors_through_tools() {
+    let dir = reading_colors_workdir();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let render = |a: &mut Automation, page: u64| png_pixels(&a.call("page_render", &json!({ "doc": doc, "page": page, "dpi": 72 })).unwrap()[0]);
+
+    // Off: black text on a white page.
+    let page1_off = render(&mut a, 1);
+    assert_eq!(pixel(&page1_off, 10, 290), [255, 255, 255, 255]);
+    let page2_off = render(&mut a, 2);
+
+    // Turn inversion on
+    let echo = ok(&mut a, "view_invert_colors", json!({ "doc": doc, "invert": true }));
+    assert_eq!(echo, json!({ "doc": doc, "invert": true }));
+
+    // Inverted: white page turns black, text turns white.
+    let page1_on = render(&mut a, 1);
+    assert_eq!(pixel(&page1_on, 10, 290), [0, 0, 0, 255], "background inverts to black");
+
+    // Page 2 image also inverts
+    let page2_on = render(&mut a, 2);
+    let original_img = pixel(&page2_off, 140, 80);
+    let inverted_img = pixel(&page2_on, 140, 80);
+    assert_eq!(inverted_img[0], 255 - original_img[0], "red channel inverts");
+    assert_eq!(inverted_img[1], 255 - original_img[1], "green channel inverts");
+    assert_eq!(inverted_img[2], 255 - original_img[2], "blue channel inverts");
+
+    // Toggle off by omitting invert argument
+    let echo_off = ok(&mut a, "view_invert_colors", json!({ "doc": doc }));
+    assert_eq!(echo_off, json!({ "doc": doc, "invert": false }));
+    assert_eq!(render(&mut a, 1), page1_off, "toggling back recovers original render");
+
+    // Run via command_run
+    let cmd = ok(&mut a, "command_run", json!({ "id": "view.invert_colors", "params": { "doc": doc } }));
+    assert_eq!(cmd["invert"], true, "command_run toggled invert_colors on");
+    assert_eq!(render(&mut a, 1), page1_on, "page is inverted again");
+}
+
 #[test]
 fn private_crops_with_nested_state_resize_save_reopen_through_tools() {
     use pdfcraft_cos::{Dict, Document, Object, Stream, write_incremental};

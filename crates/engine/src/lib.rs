@@ -4813,6 +4813,45 @@ impl Session {
         Some(self.get(id)?.config.reading_colors)
     }
 
+    /// Set whether document `id` renders with inverted colors.
+    /// Returns `true` if the setting changed; callers must drop cached rasters.
+    pub fn set_invert_colors(&mut self, id: DocId, invert: bool) -> bool {
+        let Some(doc) = self.docs.iter_mut().find(|d| d.id == id) else { return false };
+        if doc.config.invert_colors == invert {
+            return false;
+        }
+        doc.config.invert_colors = invert;
+        doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
+        doc.generation += 1;
+        true
+    }
+
+    /// Set the paper and ink colours of document `id`'s inverted view. Returns `true` if the
+    /// palette changed; callers must drop cached rasters (it only shows while colours are inverted).
+    pub fn set_invert_palette(&mut self, id: DocId, palette: pdfcraft_render::InvertPalette) -> bool {
+        let Some(doc) = self.docs.iter_mut().find(|d| d.id == id) else { return false };
+        if doc.config.invert_palette == palette {
+            return false;
+        }
+        doc.config.invert_palette = palette;
+        if !doc.config.invert_colors {
+            return false;
+        }
+        doc.renderer = RenderPool::new(doc.display.clone(), render_threads(), doc.config.clone());
+        doc.generation += 1;
+        true
+    }
+
+    /// Whether document `id` renders with inverted colors; `None` when no such document is open.
+    pub fn invert_colors(&self, id: DocId) -> Option<bool> {
+        Some(self.get(id)?.config.invert_colors)
+    }
+
+    /// The paper and ink colours of document `id`'s inverted view; `None` when no such document is open.
+    pub fn invert_palette(&self, id: DocId) -> Option<pdfcraft_render::InvertPalette> {
+        Some(self.get(id)?.config.invert_palette)
+    }
+
     /// Acrobat's Summarize Comments ("Comments only" layout): a new PDF listing every comment
     /// with its number, author, type, date, text and replies, grouped by page.
     pub fn summarize_comments(&self, id: DocId, sort: SummarySort) -> Result<Arc<Vec<u8>>, EditError> {
