@@ -18,21 +18,21 @@ pub const PATTERNS: [Pattern; 5] = [Pattern::Phone, Pattern::Email, Pattern::Cre
 impl Pattern {
     pub fn label(self) -> &'static str {
         match self {
-            Pattern::Phone => "Phone Numbers",
-            Pattern::Email => "Email Addresses",
-            Pattern::CreditCard => "Credit Cards",
-            Pattern::Ssn => "Social Security Numbers",
-            Pattern::Date => "Dates",
+            Self::Phone => "Phone Numbers",
+            Self::Email => "Email Addresses",
+            Self::CreditCard => "Credit Cards",
+            Self::Ssn => "Social Security Numbers",
+            Self::Date => "Dates",
         }
     }
 
     pub fn id(self) -> &'static str {
         match self {
-            Pattern::Phone => "phone",
-            Pattern::Email => "email",
-            Pattern::CreditCard => "credit-card",
-            Pattern::Ssn => "ssn",
-            Pattern::Date => "date",
+            Self::Phone => "phone",
+            Self::Email => "email",
+            Self::CreditCard => "credit-card",
+            Self::Ssn => "ssn",
+            Self::Date => "date",
         }
     }
 

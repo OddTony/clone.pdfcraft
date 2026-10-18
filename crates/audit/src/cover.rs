@@ -61,9 +61,9 @@ impl Path {
     /// The rectangle a fill of this path paints, if the path is one.
     fn rect(self) -> Option<[f64; 4]> {
         match self {
-            Path::Rect(r) => Some(r),
-            Path::Lines(pts, _) => lines_rect(pts),
-            Path::Empty | Path::Other => None,
+            Self::Rect(r) => Some(r),
+            Self::Lines(pts, _) => lines_rect(pts),
+            Self::Empty | Self::Other => None,
         }
     }
 }
@@ -100,7 +100,7 @@ fn lines_rect(mut pts: Vec<[f64; 2]>) -> Option<[f64; 4]> {
 
 impl Default for Gs {
     fn default() -> Self {
-        Gs { ctm: Matrix::IDENTITY, fill: [0.0, 0.0, 0.0], alpha: 1.0 }
+        Self { ctm: Matrix::IDENTITY, fill: [0.0, 0.0, 0.0], alpha: 1.0 }
     }
 }
 

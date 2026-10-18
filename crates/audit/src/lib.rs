@@ -48,8 +48,8 @@ impl FindingKind {
     /// add a new variant instead.
     pub fn id(self) -> &'static str {
         match self {
-            FindingKind::CoveredText => "covered-text",
-            FindingKind::UnappliedMark => "unapplied-mark",
+            Self::CoveredText => "covered-text",
+            Self::UnappliedMark => "unapplied-mark",
         }
     }
 }

@@ -308,14 +308,14 @@ impl Detail {
     }
 
     /// The whole sentence, with no hole in it.
-    pub(crate) fn plain(pattern: &'static str) -> Detail {
-        Detail::of(pattern, Fill::Nothing)
+    pub(crate) fn plain(pattern: &'static str) -> Self {
+        Self::of(pattern, Fill::Nothing)
     }
 
     /// The sentence and what fills its hole. The English is said once, here, so it and
     /// [`Detail::said`] cannot drift apart.
-    pub(crate) fn of(pattern: &'static str, fill: Fill) -> Detail {
-        let mut d = Detail { message: String::new(), pattern, fill };
+    pub(crate) fn of(pattern: &'static str, fill: Fill) -> Self {
+        let mut d = Self { message: String::new(), pattern, fill };
         d.message = d.said(&in_english);
         d
     }

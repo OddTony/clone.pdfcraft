@@ -38,23 +38,23 @@ pub enum Highlight {
 }
 
 impl Highlight {
-    pub const ALL: [Highlight; 4] = [Highlight::None, Highlight::Invert, Highlight::Outline, Highlight::Inset];
+    pub const ALL: [Self; 4] = [Self::None, Self::Invert, Self::Outline, Self::Inset];
 
     fn code(self) -> &'static str {
         match self {
-            Highlight::None => "N",
-            Highlight::Invert => "I",
-            Highlight::Outline => "O",
-            Highlight::Inset => "P",
+            Self::None => "N",
+            Self::Invert => "I",
+            Self::Outline => "O",
+            Self::Inset => "P",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Highlight::None => "None",
-            Highlight::Invert => "Invert",
-            Highlight::Outline => "Outline",
-            Highlight::Inset => "Inset",
+            Self::None => "None",
+            Self::Invert => "Invert",
+            Self::Outline => "Outline",
+            Self::Inset => "Inset",
         }
     }
 }
@@ -62,7 +62,7 @@ impl Highlight {
 impl Default for LinkStyle {
     fn default() -> Self {
         // Acrobat's defaults for a new link: invisible rectangle, invert highlight.
-        LinkStyle { visible: false, color: [0.0, 0.0, 1.0], width: 1.0, dashed: false, underline: false, highlight: Highlight::Invert }
+        Self { visible: false, color: [0.0, 0.0, 1.0], width: 1.0, dashed: false, underline: false, highlight: Highlight::Invert }
     }
 }
 

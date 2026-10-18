@@ -36,22 +36,22 @@ pub enum Level {
 impl Level {
     pub fn part(self) -> u8 {
         match self {
-            Level::A2b => 2,
-            Level::A3b => 3,
+            Self::A2b => 2,
+            Self::A3b => 3,
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            Level::A2b => "PDF/A-2b",
-            Level::A3b => "PDF/A-3b",
+            Self::A2b => "PDF/A-2b",
+            Self::A3b => "PDF/A-3b",
         }
     }
 
-    pub fn from_id(id: &str) -> Option<Level> {
+    pub fn from_id(id: &str) -> Option<Self> {
         match id.to_ascii_lowercase().replace(['/', '-', ' '], "").as_str() {
-            "pdfa2b" | "a2b" | "2b" => Some(Level::A2b),
-            "pdfa3b" | "a3b" | "3b" => Some(Level::A3b),
+            "pdfa2b" | "a2b" | "2b" => Some(Self::A2b),
+            "pdfa3b" | "a3b" | "3b" => Some(Self::A3b),
             _ => None,
         }
     }

@@ -48,15 +48,15 @@ pub const FIELD_TOOLS: [FieldTool; 9] = [
 impl FieldTool {
     pub fn command(self) -> &'static str {
         match self {
-            FieldTool::Text => "form.add.text",
-            FieldTool::CheckBox => "form.add.checkbox",
-            FieldTool::Radio => "form.add.radio",
-            FieldTool::Combo => "form.add.combo",
-            FieldTool::List => "form.add.list",
-            FieldTool::Button => "form.add.button",
-            FieldTool::Image => "form.add.image",
-            FieldTool::Date => "form.add.date",
-            FieldTool::Signature => "form.add.signature",
+            Self::Text => "form.add.text",
+            Self::CheckBox => "form.add.checkbox",
+            Self::Radio => "form.add.radio",
+            Self::Combo => "form.add.combo",
+            Self::List => "form.add.list",
+            Self::Button => "form.add.button",
+            Self::Image => "form.add.image",
+            Self::Date => "form.add.date",
+            Self::Signature => "form.add.signature",
         }
     }
 
@@ -66,15 +66,15 @@ impl FieldTool {
 
     pub fn label(self) -> &'static str {
         match self {
-            FieldTool::Text => "Text field",
-            FieldTool::CheckBox => "Checkbox",
-            FieldTool::Radio => "Radio button",
-            FieldTool::Combo => "Drop-down list",
-            FieldTool::List => "List box",
-            FieldTool::Button => "Button",
-            FieldTool::Image => "Image field",
-            FieldTool::Date => "Date field",
-            FieldTool::Signature => "Digital signature",
+            Self::Text => "Text field",
+            Self::CheckBox => "Checkbox",
+            Self::Radio => "Radio button",
+            Self::Combo => "Drop-down list",
+            Self::List => "List box",
+            Self::Button => "Button",
+            Self::Image => "Image field",
+            Self::Date => "Date field",
+            Self::Signature => "Digital signature",
         }
     }
 
@@ -82,9 +82,9 @@ impl FieldTool {
     /// join it with the next free choice.
     pub fn new_field(self, join: Option<&FormField>) -> NewField {
         match self {
-            FieldTool::Text => NewField::Text { multiline: false },
-            FieldTool::CheckBox => NewField::CheckBox,
-            FieldTool::Radio => match join.filter(|f| f.kind == FormFieldKind::Radio) {
+            Self::Text => NewField::Text { multiline: false },
+            Self::CheckBox => NewField::CheckBox,
+            Self::Radio => match join.filter(|f| f.kind == FormFieldKind::Radio) {
                 Some(g) => {
                     let taken: Vec<&str> = g.widgets.iter().filter_map(|w| w.on_state.as_deref()).collect();
                     let export =
@@ -93,25 +93,25 @@ impl FieldTool {
                 }
                 None => NewField::Radio { group: None, export: "Choice1".into() },
             },
-            FieldTool::Combo => NewField::Combo { options: Vec::new(), editable: false },
-            FieldTool::List => NewField::List { options: Vec::new(), multi: false },
-            FieldTool::Button => NewField::Button { caption: String::new() },
-            FieldTool::Image => NewField::Image,
-            FieldTool::Date => NewField::Date,
-            FieldTool::Signature => NewField::Signature,
+            Self::Combo => NewField::Combo { options: Vec::new(), editable: false },
+            Self::List => NewField::List { options: Vec::new(), multi: false },
+            Self::Button => NewField::Button { caption: String::new() },
+            Self::Image => NewField::Image,
+            Self::Date => NewField::Date,
+            Self::Signature => NewField::Signature,
         }
     }
 
     /// Width and height in points of a field placed with a single click.
     pub fn default_size(self) -> (f64, f64) {
         match self {
-            FieldTool::CheckBox | FieldTool::Radio => (14.0, 14.0),
-            FieldTool::List => (144.0, 54.0),
-            FieldTool::Button => (72.0, 22.0),
-            FieldTool::Image => (144.0, 108.0),
-            FieldTool::Signature => (180.0, 36.0),
-            FieldTool::Date => (108.0, 22.0),
-            FieldTool::Text | FieldTool::Combo => (144.0, 22.0),
+            Self::CheckBox | Self::Radio => (14.0, 14.0),
+            Self::List => (144.0, 54.0),
+            Self::Button => (72.0, 22.0),
+            Self::Image => (144.0, 108.0),
+            Self::Signature => (180.0, 36.0),
+            Self::Date => (108.0, 22.0),
+            Self::Text | Self::Combo => (144.0, 22.0),
         }
     }
 }
@@ -428,11 +428,9 @@ pub enum Arrange {
 impl Arrange {
     pub fn label(self) -> &'static str {
         match self {
-            Arrange::AlignLeft | Arrange::AlignRight | Arrange::AlignTop | Arrange::AlignBottom | Arrange::AlignCenterH | Arrange::AlignCenterV => {
-                "Align fields"
-            }
-            Arrange::DistributeH | Arrange::DistributeV => "Distribute fields",
-            Arrange::SameWidth | Arrange::SameHeight | Arrange::SameSize => "Match field sizes",
+            Self::AlignLeft | Self::AlignRight | Self::AlignTop | Self::AlignBottom | Self::AlignCenterH | Self::AlignCenterV => "Align fields",
+            Self::DistributeH | Self::DistributeV => "Distribute fields",
+            Self::SameWidth | Self::SameHeight | Self::SameSize => "Match field sizes",
         }
     }
 }
@@ -701,7 +699,7 @@ pub struct ActionDraft {
 
 impl Default for ActionDraft {
     fn default() -> Self {
-        ActionDraft { trigger: pdfcraft_engine::FieldTrigger::MouseUp, kind: 0, text: String::new() }
+        Self { trigger: pdfcraft_engine::FieldTrigger::MouseUp, kind: 0, text: String::new() }
     }
 }
 
@@ -768,7 +766,7 @@ pub struct FieldDraft {
     /// Actions tab: each trigger's action, and the one being added.
     pub actions: Vec<(pdfcraft_engine::FieldTrigger, pdfcraft_engine::FieldAction)>,
     pub new_action: ActionDraft,
-    original: Box<Option<FieldDraft>>,
+    original: Box<Option<Self>>,
 }
 
 pub(crate) fn da_size(da: &str) -> f64 {
@@ -798,7 +796,7 @@ pub(crate) fn da_font(da: &str) -> &str {
 impl FieldDraft {
     pub fn new(f: &FormField, widget: usize) -> Self {
         let r = f.widgets.get(widget).map(|w| w.rect).unwrap_or_default();
-        let mut d = FieldDraft {
+        let mut d = Self {
             field: f.name.clone(),
             kind: f.kind,
             widget,

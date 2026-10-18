@@ -64,7 +64,7 @@ pub struct CertificateList {
 }
 
 impl CertificateList {
-    pub fn parse(bytes: &[u8]) -> Result<CertificateList, SignError> {
+    pub fn parse(bytes: &[u8]) -> Result<Self, SignError> {
         if bytes.is_empty() || bytes.len() > MAX_EVIDENCE {
             return Err(bad("CRL is empty or exceeds the 2 MiB limit"));
         }
@@ -90,7 +90,7 @@ impl CertificateList {
                 revoked.push((serial, at));
             }
         }
-        Ok(CertificateList {
+        Ok(Self {
             tbs: tbs.raw.to_vec(),
             sig_alg: alg.raw.to_vec(),
             signature: sig.bits()?.to_vec(),
@@ -133,8 +133,8 @@ pub struct CertId {
 
 impl CertId {
     /// The `CertID` naming `cert` as issued by `issuer`, using `hash_alg`.
-    pub fn build(cert: &Certificate, issuer: &Certificate, hash_alg: DigestAlg) -> CertId {
-        CertId {
+    pub fn build(cert: &Certificate, issuer: &Certificate, hash_alg: DigestAlg) -> Self {
+        Self {
             hash_alg,
             issuer_name_hash: hash_alg.digest(&[&cert.issuer.raw]),
             issuer_key_hash: hash_alg.digest(&[&issuer.public_key.key_bits()]),
@@ -176,7 +176,7 @@ pub struct OcspResponse {
 }
 
 impl OcspResponse {
-    pub fn parse(bytes: &[u8]) -> Result<OcspResponse, SignError> {
+    pub fn parse(bytes: &[u8]) -> Result<Self, SignError> {
         if bytes.is_empty() || bytes.len() > MAX_EVIDENCE {
             return Err(bad("OCSP response is empty or exceeds the 2 MiB limit"));
         }
@@ -250,7 +250,7 @@ impl OcspResponse {
             let next_update = s.get(3).filter(|t| t.tag == tag::ctx(0)).map(|t| t.inner().and_then(|g| g.time())).transpose()?;
             responses.push(SingleResponse { cert_id, status, this_update, next_update });
         }
-        Ok(OcspResponse { tbs: tbs.raw.to_vec(), sig_alg: alg.raw.to_vec(), signature, responder_id, responses, responder_cert })
+        Ok(Self { tbs: tbs.raw.to_vec(), sig_alg: alg.raw.to_vec(), signature, responder_id, responses, responder_cert })
     }
 
     /// Check `cert` (issued by `issuer`) at `at`. The responder must be the issuer itself, or

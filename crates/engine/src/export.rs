@@ -171,17 +171,17 @@ pub enum ImageFormat {
 impl ImageFormat {
     pub fn extension(self) -> &'static str {
         match self {
-            ImageFormat::Png => "png",
-            ImageFormat::Jpeg { .. } => "jpg",
-            ImageFormat::Tiff => "tif",
+            Self::Png => "png",
+            Self::Jpeg { .. } => "jpg",
+            Self::Tiff => "tif",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            ImageFormat::Png => "PNG",
-            ImageFormat::Jpeg { .. } => "JPEG",
-            ImageFormat::Tiff => "TIFF",
+            Self::Png => "PNG",
+            Self::Jpeg { .. } => "JPEG",
+            Self::Tiff => "TIFF",
         }
     }
 }

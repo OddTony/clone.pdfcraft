@@ -161,22 +161,22 @@ enum Cipher {
 impl Cipher {
     fn key_len(self) -> usize {
         match self {
-            Cipher::Aes128 => 16,
-            Cipher::Aes192 => 24,
-            Cipher::Aes256 => 32,
-            Cipher::TripleDes => 24,
-            Cipher::Rc2(bits) => bits / 8,
+            Self::Aes128 => 16,
+            Self::Aes192 => 24,
+            Self::Aes256 => 32,
+            Self::TripleDes => 24,
+            Self::Rc2(bits) => bits / 8,
         }
     }
 
     fn decrypt(self, key: &[u8], iv: &[u8], ct: &[u8]) -> Result<Vec<u8>, SignError> {
         let wrong = || SignError::WrongPassword;
         let r = match self {
-            Cipher::Aes128 => cbc::Decryptor::<aes::Aes128>::new_from_slices(key, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct),
-            Cipher::Aes192 => cbc::Decryptor::<aes::Aes192>::new_from_slices(key, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct),
-            Cipher::Aes256 => cbc::Decryptor::<aes::Aes256>::new_from_slices(key, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct),
-            Cipher::TripleDes => cbc::Decryptor::<des::TdesEde3>::new_from_slices(key, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct),
-            Cipher::Rc2(bits) => {
+            Self::Aes128 => cbc::Decryptor::<aes::Aes128>::new_from_slices(key, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct),
+            Self::Aes192 => cbc::Decryptor::<aes::Aes192>::new_from_slices(key, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct),
+            Self::Aes256 => cbc::Decryptor::<aes::Aes256>::new_from_slices(key, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct),
+            Self::TripleDes => cbc::Decryptor::<des::TdesEde3>::new_from_slices(key, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct),
+            Self::Rc2(bits) => {
                 let c = rc2::Rc2::new_with_eff_key_len(key, bits);
                 cbc::Decryptor::<rc2::Rc2>::inner_iv_slice_init(c, iv).map_err(|_| wrong())?.decrypt_padded_vec::<Pkcs7>(ct)
             }

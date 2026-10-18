@@ -10,7 +10,7 @@ pub struct Rgb(pub f32, pub f32, pub f32);
 
 impl Rgb {
     pub const fn hex(v: u32) -> Self {
-        Rgb(((v >> 16) & 0xff) as f32 / 255.0, ((v >> 8) & 0xff) as f32 / 255.0, (v & 0xff) as f32 / 255.0)
+        Self(((v >> 16) & 0xff) as f32 / 255.0, ((v >> 8) & 0xff) as f32 / 255.0, (v & 0xff) as f32 / 255.0)
     }
 
     pub fn array(self) -> Object {
@@ -88,7 +88,7 @@ impl Stamp {
         let d = doy - (153 * mp + 2) / 5 + 1;
         let m = if mp < 10 { mp + 3 } else { mp - 9 };
         let y = yoe + era * 400 + i64::from(m <= 2);
-        Stamp { unix: secs, pdf: format!("D:{y:04}{m:02}{d:02}{h:02}{mi:02}{s:02}Z"), iso: format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z") }
+        Self { unix: secs, pdf: format!("D:{y:04}{m:02}{d:02}{h:02}{mi:02}{s:02}Z"), iso: format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z") }
     }
 
     /// The same moment shifted by `minutes` (used to order threaded replies).
@@ -109,28 +109,28 @@ pub enum Font {
 }
 
 impl Font {
-    pub const ALL: [Font; 6] = [Font::Helv, Font::HelvBold, Font::Times, Font::TimesItalic, Font::Courier, Font::ZapfDingbats];
+    pub const ALL: [Self; 6] = [Self::Helv, Self::HelvBold, Self::Times, Self::TimesItalic, Self::Courier, Self::ZapfDingbats];
 
     /// Resource name, following the conventional AcroForm names.
     pub fn res(self) -> &'static str {
         match self {
-            Font::Helv => "Helv",
-            Font::HelvBold => "HeBo",
-            Font::Times => "TiRo",
-            Font::TimesItalic => "TiIt",
-            Font::Courier => "Cour",
-            Font::ZapfDingbats => "ZaDb",
+            Self::Helv => "Helv",
+            Self::HelvBold => "HeBo",
+            Self::Times => "TiRo",
+            Self::TimesItalic => "TiIt",
+            Self::Courier => "Cour",
+            Self::ZapfDingbats => "ZaDb",
         }
     }
 
     fn base_font(self) -> &'static str {
         match self {
-            Font::Helv => "Helvetica",
-            Font::HelvBold => "Helvetica-Bold",
-            Font::Times => "Times-Roman",
-            Font::TimesItalic => "Times-Italic",
-            Font::Courier => "Courier",
-            Font::ZapfDingbats => "ZapfDingbats",
+            Self::Helv => "Helvetica",
+            Self::HelvBold => "Helvetica-Bold",
+            Self::Times => "Times-Roman",
+            Self::TimesItalic => "Times-Italic",
+            Self::Courier => "Courier",
+            Self::ZapfDingbats => "ZapfDingbats",
         }
     }
 
@@ -140,11 +140,11 @@ impl Font {
         let units: u32 = s
             .chars()
             .map(|c| match self {
-                Font::Helv => helvetica_width(c, false),
-                Font::HelvBold => helvetica_width(c, true),
-                Font::Courier => 600,
-                Font::Times | Font::TimesItalic => helvetica_width(c, false) * 9 / 10,
-                Font::ZapfDingbats => 800,
+                Self::Helv => helvetica_width(c, false),
+                Self::HelvBold => helvetica_width(c, true),
+                Self::Courier => 600,
+                Self::Times | Self::TimesItalic => helvetica_width(c, false) * 9 / 10,
+                Self::ZapfDingbats => 800,
             })
             .sum();
         units as f32 * size / 1000.0
@@ -173,7 +173,7 @@ impl Fonts {
                 (font, doc.add_object(dict))
             })
             .collect();
-        Fonts { ids }
+        Self { ids }
     }
 
     pub fn id(&self, font: Font) -> ObjectId {

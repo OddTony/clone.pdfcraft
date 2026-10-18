@@ -34,12 +34,12 @@ impl OptimizeStage {
     /// small fixed steps.
     pub fn fraction(self) -> f32 {
         match self {
-            OptimizeStage::Discarding => 0.0,
-            OptimizeStage::Fragments => 0.03,
-            OptimizeStage::Images { done, total } => 0.05 + 0.75 * if total == 0 { 1.0 } else { done.min(total) as f32 / total as f32 },
-            OptimizeStage::CleaningUp => 0.8,
-            OptimizeStage::Merging => 0.85,
-            OptimizeStage::Writing => 0.9,
+            Self::Discarding => 0.0,
+            Self::Fragments => 0.03,
+            Self::Images { done, total } => 0.05 + 0.75 * if total == 0 { 1.0 } else { done.min(total) as f32 / total as f32 },
+            Self::CleaningUp => 0.8,
+            Self::Merging => 0.85,
+            Self::Writing => 0.9,
         }
     }
 }
@@ -82,7 +82,7 @@ impl OptimizeJob {
     }
 
     fn work(self, progress: &mut dyn FnMut(OptimizeStage) -> bool) -> Result<Optimized, EditError> {
-        let OptimizeJob { mut cos, settings, discard, opts } = self;
+        let Self { mut cos, settings, discard, opts } = self;
         let mut step = |stage| if progress(stage) { Ok(()) } else { Err(EditError::Cancelled) };
         step(OptimizeStage::Discarding)?;
         let discarded = if discard.is_empty() { Vec::new() } else { pdfcraft_redact::sanitize::remove_hidden(&mut cos, &discard)? };

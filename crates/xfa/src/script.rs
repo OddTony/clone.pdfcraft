@@ -43,7 +43,7 @@ pub struct FormNode {
     pub occur_min: usize,
     pub occur_max: Option<usize>,
     pub index: usize,
-    pub children: Vec<FormNode>,
+    pub children: Vec<Self>,
 }
 
 /// A script the template runs for an event of one node instance.

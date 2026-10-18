@@ -81,10 +81,10 @@ pub struct ImageSettings {
 impl ImageSettings {
     /// Reduce File Size and the Standard preset: bicubic to 150 ppi above 225 ppi, JPEG medium
     /// quality.
-    pub const REDUCE: ImageSettings = ImageSettings { downsample: true, target_ppi: 150.0, above_ppi: 225.0, compression: Compression::Jpeg(60) };
+    pub const REDUCE: Self = Self { downsample: true, target_ppi: 150.0, above_ppi: 225.0, compression: Compression::Jpeg(60) };
     /// The Mobile preset: bicubic to 96 ppi above 144 ppi, JPEG high quality. Pages read on a
     /// screen; text in scans stays legible.
-    pub const MOBILE: ImageSettings = ImageSettings { downsample: true, target_ppi: 96.0, above_ppi: 144.0, compression: Compression::Jpeg(80) };
+    pub const MOBILE: Self = Self { downsample: true, target_ppi: 96.0, above_ppi: 144.0, compression: Compression::Jpeg(80) };
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -134,30 +134,30 @@ pub enum Preset {
 }
 
 impl Preset {
-    pub const ALL: [Preset; 2] = [Preset::Standard, Preset::Mobile];
+    pub const ALL: [Self; 2] = [Self::Standard, Self::Mobile];
 
     /// The name tools use.
     pub fn name(self) -> &'static str {
         match self {
-            Preset::Standard => "standard",
-            Preset::Mobile => "mobile",
+            Self::Standard => "standard",
+            Self::Mobile => "mobile",
         }
     }
 
-    pub fn from_name(name: &str) -> Option<Preset> {
-        Preset::ALL.into_iter().find(|p| p.name() == name)
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.name() == name)
     }
 
     pub fn settings(self) -> Settings {
         match self {
-            Preset::Standard => Settings::default(),
-            Preset::Mobile => Settings { color: ImageSettings::MOBILE, gray: ImageSettings::MOBILE, ..Settings::default() },
+            Self::Standard => Settings::default(),
+            Self::Mobile => Settings { color: ImageSettings::MOBILE, gray: ImageSettings::MOBILE, ..Settings::default() },
         }
     }
 
     /// The preset `settings` are, if they are one.
-    pub fn of(settings: &Settings) -> Option<Preset> {
-        Preset::ALL.into_iter().find(|p| p.settings() == *settings)
+    pub fn of(settings: &Settings) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.settings() == *settings)
     }
 }
 

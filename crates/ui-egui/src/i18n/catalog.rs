@@ -133,9 +133,9 @@ pub fn parse_entries(text: &str, forms: usize) -> (Vec<Entry>, Vec<String>) {
 
 impl Catalog {
     /// Build a catalog from its valid entries; the errors of the skipped lines come back too.
-    pub fn parse(text: &str, forms: usize) -> (Catalog, Vec<String>) {
+    pub fn parse(text: &str, forms: usize) -> (Self, Vec<String>) {
         let (entries, errors) = parse_entries(text, forms);
-        let mut c = Catalog::default();
+        let mut c = Self::default();
         for Entry { context, source, translation } in entries {
             match context.as_str() {
                 "" => {

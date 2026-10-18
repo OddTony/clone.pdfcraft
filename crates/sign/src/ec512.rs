@@ -36,9 +36,9 @@ struct Field {
 }
 
 impl Field {
-    fn new(p: BoxedUint) -> Option<Field> {
+    fn new(p: BoxedUint) -> Option<Self> {
         let nz = Option::from(crypto_bigint::NonZero::new(p))?;
-        Some(Field { nz })
+        Some(Self { nz })
     }
     fn add(&self, a: &BoxedUint, b: &BoxedUint) -> BoxedUint {
         a.add_mod(b, &self.nz)
@@ -68,8 +68,8 @@ struct Curve {
 }
 
 impl Curve {
-    fn brainpool_p512r1() -> Option<Curve> {
-        Some(Curve { f: Field::new(hex(P)?)?, a: hex(A)?, b: hex(B)?, g: (hex(GX)?, hex(GY)?), n: hex(N)? })
+    fn brainpool_p512r1() -> Option<Self> {
+        Some(Self { f: Field::new(hex(P)?)?, a: hex(A)?, b: hex(B)?, g: (hex(GX)?, hex(GY)?), n: hex(N)? })
     }
 
     fn on_curve(&self, x: &BoxedUint, y: &BoxedUint) -> bool {

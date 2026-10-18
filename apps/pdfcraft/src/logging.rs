@@ -46,8 +46,8 @@ pub struct Filter {
 impl Filter {
     /// Parse `spec`; unknown levels and empty parts are skipped. Without a bare level, targets no
     /// directive names log errors only.
-    pub fn parse(spec: &str) -> Filter {
-        let mut f = Filter { default: LevelFilter::Error, directives: Vec::new() };
+    pub fn parse(spec: &str) -> Self {
+        let mut f = Self { default: LevelFilter::Error, directives: Vec::new() };
         for part in spec.split(',').map(str::trim).filter(|p| !p.is_empty()) {
             match part.split_once('=') {
                 Some((name, level)) => {
@@ -152,8 +152,8 @@ pub struct Sink {
 }
 
 impl Sink {
-    pub fn new(max_bytes: u64) -> Sink {
-        Sink { file: None, pending: Vec::new(), dropped: 0, written: 0, max_bytes, capped: false }
+    pub fn new(max_bytes: u64) -> Self {
+        Self { file: None, pending: Vec::new(), dropped: 0, written: 0, max_bytes, capped: false }
     }
 
     /// Append `line` to the file, or keep it until [`Sink::attach`].
@@ -211,8 +211,8 @@ pub struct AppLogger {
 }
 
 impl AppLogger {
-    pub fn new(filter: Filter, stderr: bool) -> AppLogger {
-        AppLogger { filter, stderr, sink: Mutex::new(Sink::new(MAX_FILE_BYTES)) }
+    pub fn new(filter: Filter, stderr: bool) -> Self {
+        Self { filter, stderr, sink: Mutex::new(Sink::new(MAX_FILE_BYTES)) }
     }
 
     /// Rotate the logs in `dir` and send records to the fresh file; returns its path.

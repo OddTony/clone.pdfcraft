@@ -151,11 +151,11 @@ struct Ctx {
 }
 
 impl Ctx {
-    fn child(&self, c: &Common) -> Ctx {
-        Ctx { font: self.font.apply(&c.font), para: self.para.apply(&c.para), som: self.som.clone() }
+    fn child(&self, c: &Common) -> Self {
+        Self { font: self.font.apply(&c.font), para: self.para.apply(&c.para), som: self.som.clone() }
     }
 
-    fn with_som(&self, c: &Common, index: usize) -> Ctx {
+    fn with_som(&self, c: &Common, index: usize) -> Self {
         let mut out = self.child(c);
         if let Some(n) = &c.name {
             if !out.som.is_empty() {

@@ -52,56 +52,56 @@ pub enum DigestAlg {
 
 impl DigestAlg {
     /// Every digest, for tables.
-    pub const ALL: [DigestAlg; 12] = [
-        DigestAlg::Sha1,
-        DigestAlg::Sha224,
-        DigestAlg::Sha256,
-        DigestAlg::Sha384,
-        DigestAlg::Sha512,
-        DigestAlg::Sha512_224,
-        DigestAlg::Sha512_256,
-        DigestAlg::Sha3_224,
-        DigestAlg::Sha3_256,
-        DigestAlg::Sha3_384,
-        DigestAlg::Sha3_512,
-        DigestAlg::Ripemd160,
+    pub const ALL: [Self; 12] = [
+        Self::Sha1,
+        Self::Sha224,
+        Self::Sha256,
+        Self::Sha384,
+        Self::Sha512,
+        Self::Sha512_224,
+        Self::Sha512_256,
+        Self::Sha3_224,
+        Self::Sha3_256,
+        Self::Sha3_384,
+        Self::Sha3_512,
+        Self::Ripemd160,
     ];
 
-    pub fn from_oid(o: &str) -> Option<DigestAlg> {
-        DigestAlg::ALL.into_iter().find(|d| d.oid() == o)
+    pub fn from_oid(o: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|d| d.oid() == o)
     }
 
     pub fn oid(self) -> &'static str {
         match self {
-            DigestAlg::Sha1 => oid::SHA1,
-            DigestAlg::Sha224 => oid::SHA224,
-            DigestAlg::Sha256 => oid::SHA256,
-            DigestAlg::Sha384 => oid::SHA384,
-            DigestAlg::Sha512 => oid::SHA512,
-            DigestAlg::Sha512_224 => oid::SHA512_224,
-            DigestAlg::Sha512_256 => oid::SHA512_256,
-            DigestAlg::Sha3_224 => oid::SHA3_224,
-            DigestAlg::Sha3_256 => oid::SHA3_256,
-            DigestAlg::Sha3_384 => oid::SHA3_384,
-            DigestAlg::Sha3_512 => oid::SHA3_512,
-            DigestAlg::Ripemd160 => oid::RIPEMD160,
+            Self::Sha1 => oid::SHA1,
+            Self::Sha224 => oid::SHA224,
+            Self::Sha256 => oid::SHA256,
+            Self::Sha384 => oid::SHA384,
+            Self::Sha512 => oid::SHA512,
+            Self::Sha512_224 => oid::SHA512_224,
+            Self::Sha512_256 => oid::SHA512_256,
+            Self::Sha3_224 => oid::SHA3_224,
+            Self::Sha3_256 => oid::SHA3_256,
+            Self::Sha3_384 => oid::SHA3_384,
+            Self::Sha3_512 => oid::SHA3_512,
+            Self::Ripemd160 => oid::RIPEMD160,
         }
     }
 
     pub fn name(self) -> &'static str {
         match self {
-            DigestAlg::Sha1 => "SHA-1",
-            DigestAlg::Sha224 => "SHA-224",
-            DigestAlg::Sha256 => "SHA-256",
-            DigestAlg::Sha384 => "SHA-384",
-            DigestAlg::Sha512 => "SHA-512",
-            DigestAlg::Sha512_224 => "SHA-512/224",
-            DigestAlg::Sha512_256 => "SHA-512/256",
-            DigestAlg::Sha3_224 => "SHA3-224",
-            DigestAlg::Sha3_256 => "SHA3-256",
-            DigestAlg::Sha3_384 => "SHA3-384",
-            DigestAlg::Sha3_512 => "SHA3-512",
-            DigestAlg::Ripemd160 => "RIPEMD-160",
+            Self::Sha1 => "SHA-1",
+            Self::Sha224 => "SHA-224",
+            Self::Sha256 => "SHA-256",
+            Self::Sha384 => "SHA-384",
+            Self::Sha512 => "SHA-512",
+            Self::Sha512_224 => "SHA-512/224",
+            Self::Sha512_256 => "SHA-512/256",
+            Self::Sha3_224 => "SHA3-224",
+            Self::Sha3_256 => "SHA3-256",
+            Self::Sha3_384 => "SHA3-384",
+            Self::Sha3_512 => "SHA3-512",
+            Self::Ripemd160 => "RIPEMD-160",
         }
     }
 
@@ -122,18 +122,18 @@ impl DigestAlg {
             h.finalize().to_vec()
         }
         match self {
-            DigestAlg::Sha1 => sha2_run::<sha1::Sha1>(parts),
-            DigestAlg::Sha224 => sha2_run::<sha2::Sha224>(parts),
-            DigestAlg::Sha256 => sha2_run::<sha2::Sha256>(parts),
-            DigestAlg::Sha384 => sha2_run::<sha2::Sha384>(parts),
-            DigestAlg::Sha512 => sha2_run::<sha2::Sha512>(parts),
-            DigestAlg::Sha512_224 => sha2_run::<sha2::Sha512_224>(parts),
-            DigestAlg::Sha512_256 => sha2_run::<sha2::Sha512_256>(parts),
-            DigestAlg::Sha3_224 => sha3_run::<sha3::Sha3_224>(parts),
-            DigestAlg::Sha3_256 => sha3_run::<sha3::Sha3_256>(parts),
-            DigestAlg::Sha3_384 => sha3_run::<sha3::Sha3_384>(parts),
-            DigestAlg::Sha3_512 => sha3_run::<sha3::Sha3_512>(parts),
-            DigestAlg::Ripemd160 => {
+            Self::Sha1 => sha2_run::<sha1::Sha1>(parts),
+            Self::Sha224 => sha2_run::<sha2::Sha224>(parts),
+            Self::Sha256 => sha2_run::<sha2::Sha256>(parts),
+            Self::Sha384 => sha2_run::<sha2::Sha384>(parts),
+            Self::Sha512 => sha2_run::<sha2::Sha512>(parts),
+            Self::Sha512_224 => sha2_run::<sha2::Sha512_224>(parts),
+            Self::Sha512_256 => sha2_run::<sha2::Sha512_256>(parts),
+            Self::Sha3_224 => sha3_run::<sha3::Sha3_224>(parts),
+            Self::Sha3_256 => sha3_run::<sha3::Sha3_256>(parts),
+            Self::Sha3_384 => sha3_run::<sha3::Sha3_384>(parts),
+            Self::Sha3_512 => sha3_run::<sha3::Sha3_512>(parts),
+            Self::Ripemd160 => {
                 use ripemd::Digest;
                 let mut h = ripemd::Ripemd160::new();
                 for p in parts {
@@ -149,10 +149,10 @@ impl DigestAlg {
     /// signature panel that showed them like a SHA-256 one would overstate what they prove.
     pub fn weakness(self) -> Option<&'static str> {
         match self {
-            DigestAlg::Sha1 => Some(
+            Self::Sha1 => Some(
                 "This signature uses SHA-1, a weak hash algorithm: collisions in it have been demonstrated. It still validates because many documents signed years ago use it, but it should not be relied on.",
             ),
-            DigestAlg::Ripemd160 => Some(
+            Self::Ripemd160 => Some(
                 "This signature uses RIPEMD-160, a legacy 160-bit hash algorithm that is no longer recommended for signatures. It still validates, but it should not be relied on.",
             ),
             _ => None,
@@ -162,11 +162,11 @@ impl DigestAlg {
     /// The digest length in bytes.
     pub fn output_len(self) -> usize {
         match self {
-            DigestAlg::Sha1 | DigestAlg::Ripemd160 => 20,
-            DigestAlg::Sha224 | DigestAlg::Sha512_224 | DigestAlg::Sha3_224 => 28,
-            DigestAlg::Sha256 | DigestAlg::Sha512_256 | DigestAlg::Sha3_256 => 32,
-            DigestAlg::Sha384 | DigestAlg::Sha3_384 => 48,
-            DigestAlg::Sha512 | DigestAlg::Sha3_512 => 64,
+            Self::Sha1 | Self::Ripemd160 => 20,
+            Self::Sha224 | Self::Sha512_224 | Self::Sha3_224 => 28,
+            Self::Sha256 | Self::Sha512_256 | Self::Sha3_256 => 32,
+            Self::Sha384 | Self::Sha3_384 => 48,
+            Self::Sha512 | Self::Sha3_512 => 64,
         }
     }
 
@@ -316,16 +316,16 @@ impl PublicKey {
     /// (RFC 6960 §4.1.1). RSA keys are re-encoded; EC points are the stored bytes.
     pub fn key_bits(&self) -> Vec<u8> {
         match self {
-            PublicKey::Rsa { n, e } => der::seq(&[&der::uint(n), &der::uint(e)]),
-            PublicKey::P256(bits)
-            | PublicKey::P384(bits)
-            | PublicKey::P521(bits)
-            | PublicKey::BrainpoolP256(bits)
-            | PublicKey::BrainpoolP384(bits)
-            | PublicKey::BrainpoolP512(bits)
-            | PublicKey::Ed25519(bits) => bits.clone(),
+            Self::Rsa { n, e } => der::seq(&[&der::uint(n), &der::uint(e)]),
+            Self::P256(bits)
+            | Self::P384(bits)
+            | Self::P521(bits)
+            | Self::BrainpoolP256(bits)
+            | Self::BrainpoolP384(bits)
+            | Self::BrainpoolP512(bits)
+            | Self::Ed25519(bits) => bits.clone(),
             // The BIT STRING of the stored SubjectPublicKeyInfo (empty if it doesn't parse).
-            PublicKey::Unsupported { spki, .. } => Tlv::parse(spki)
+            Self::Unsupported { spki, .. } => Tlv::parse(spki)
                 .ok()
                 .and_then(|(t, _)| t.children().ok())
                 .and_then(|c| c.get(1).and_then(|k| k.bits().ok().map(<[u8]>::to_vec)))
@@ -333,62 +333,62 @@ impl PublicKey {
         }
     }
 
-    pub fn from_spki(spki: &Tlv<'_>) -> Result<PublicKey, SignError> {
+    pub fn from_spki(spki: &Tlv<'_>) -> Result<Self, SignError> {
         let parts = spki.children()?;
         let [alg, key] = parts.as_slice() else { return Err(SignError::Malformed("SubjectPublicKeyInfo".into())) };
         let alg = alg.children()?;
         let o = alg.first().ok_or_else(|| SignError::Malformed("key algorithm".into()))?.oid()?;
         let bits = key.bits()?;
         match o.as_str() {
-            oid::ED25519 => Ok(PublicKey::Ed25519(bits.to_vec())),
+            oid::ED25519 => Ok(Self::Ed25519(bits.to_vec())),
             oid::RSA => {
                 let k = Tlv::parse_all(bits)?.children()?;
                 let [n, e] = k.as_slice() else { return Err(SignError::Malformed("RSAPublicKey".into())) };
-                Ok(PublicKey::Rsa { n: n.uint_bytes().to_vec(), e: e.uint_bytes().to_vec() })
+                Ok(Self::Rsa { n: n.uint_bytes().to_vec(), e: e.uint_bytes().to_vec() })
             }
             oid::EC => match alg.get(1).map(|c| c.oid()).transpose()?.as_deref() {
-                Some(oid::P256) => Ok(PublicKey::P256(bits.to_vec())),
-                Some(oid::P384) => Ok(PublicKey::P384(bits.to_vec())),
-                Some(oid::P521) => Ok(PublicKey::P521(bits.to_vec())),
-                Some(oid::BRAINPOOL_P256) => Ok(PublicKey::BrainpoolP256(bits.to_vec())),
-                Some(oid::BRAINPOOL_P384) => Ok(PublicKey::BrainpoolP384(bits.to_vec())),
-                Some(oid::BRAINPOOL_P512) => Ok(PublicKey::BrainpoolP512(bits.to_vec())),
-                other => Ok(PublicKey::Unsupported { what: format!("elliptic curve {}", other.unwrap_or("?")), spki: spki.raw.to_vec() }),
+                Some(oid::P256) => Ok(Self::P256(bits.to_vec())),
+                Some(oid::P384) => Ok(Self::P384(bits.to_vec())),
+                Some(oid::P521) => Ok(Self::P521(bits.to_vec())),
+                Some(oid::BRAINPOOL_P256) => Ok(Self::BrainpoolP256(bits.to_vec())),
+                Some(oid::BRAINPOOL_P384) => Ok(Self::BrainpoolP384(bits.to_vec())),
+                Some(oid::BRAINPOOL_P512) => Ok(Self::BrainpoolP512(bits.to_vec())),
+                other => Ok(Self::Unsupported { what: format!("elliptic curve {}", other.unwrap_or("?")), spki: spki.raw.to_vec() }),
             },
-            other => Ok(PublicKey::Unsupported { what: format!("public key algorithm {other}"), spki: spki.raw.to_vec() }),
+            other => Ok(Self::Unsupported { what: format!("public key algorithm {other}"), spki: spki.raw.to_vec() }),
         }
     }
 
     /// The `SubjectPublicKeyInfo` encoding.
     pub fn spki(&self) -> Vec<u8> {
         match self {
-            PublicKey::Rsa { n, e } => {
+            Self::Rsa { n, e } => {
                 let rsa = der::seq(&[&der::uint(n), &der::uint(e)]);
                 der::seq(&[&der::algorithm(oid::RSA, Some(&der::null())), &der::bit_string(&rsa)])
             }
-            PublicKey::P256(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::P256)]), &der::bit_string(p)]),
-            PublicKey::P384(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::P384)]), &der::bit_string(p)]),
-            PublicKey::P521(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::P521)]), &der::bit_string(p)]),
-            PublicKey::BrainpoolP256(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::BRAINPOOL_P256)]), &der::bit_string(p)]),
-            PublicKey::BrainpoolP384(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::BRAINPOOL_P384)]), &der::bit_string(p)]),
-            PublicKey::BrainpoolP512(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::BRAINPOOL_P512)]), &der::bit_string(p)]),
-            PublicKey::Ed25519(p) => der::seq(&[&der::seq(&[&der::oid(oid::ED25519)]), &der::bit_string(p)]),
-            PublicKey::Unsupported { spki, .. } => spki.clone(),
+            Self::P256(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::P256)]), &der::bit_string(p)]),
+            Self::P384(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::P384)]), &der::bit_string(p)]),
+            Self::P521(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::P521)]), &der::bit_string(p)]),
+            Self::BrainpoolP256(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::BRAINPOOL_P256)]), &der::bit_string(p)]),
+            Self::BrainpoolP384(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::BRAINPOOL_P384)]), &der::bit_string(p)]),
+            Self::BrainpoolP512(p) => der::seq(&[&der::seq(&[&der::oid(oid::EC), &der::oid(oid::BRAINPOOL_P512)]), &der::bit_string(p)]),
+            Self::Ed25519(p) => der::seq(&[&der::seq(&[&der::oid(oid::ED25519)]), &der::bit_string(p)]),
+            Self::Unsupported { spki, .. } => spki.clone(),
         }
     }
 
     /// "RSA 2048-bit", "ECDSA P-256"…
     pub fn describe(&self) -> String {
         match self {
-            PublicKey::Rsa { n, .. } => format!("RSA {}-bit", n.len() * 8),
-            PublicKey::P256(_) => "ECDSA P-256".into(),
-            PublicKey::P384(_) => "ECDSA P-384".into(),
-            PublicKey::P521(_) => "ECDSA P-521".into(),
-            PublicKey::BrainpoolP256(_) => "ECDSA brainpoolP256r1".into(),
-            PublicKey::BrainpoolP384(_) => "ECDSA brainpoolP384r1".into(),
-            PublicKey::BrainpoolP512(_) => "ECDSA brainpoolP512r1".into(),
-            PublicKey::Ed25519(_) => "Ed25519".into(),
-            PublicKey::Unsupported { what, .. } => format!("unsupported ({what})"),
+            Self::Rsa { n, .. } => format!("RSA {}-bit", n.len() * 8),
+            Self::P256(_) => "ECDSA P-256".into(),
+            Self::P384(_) => "ECDSA P-384".into(),
+            Self::P521(_) => "ECDSA P-521".into(),
+            Self::BrainpoolP256(_) => "ECDSA brainpoolP256r1".into(),
+            Self::BrainpoolP384(_) => "ECDSA brainpoolP384r1".into(),
+            Self::BrainpoolP512(_) => "ECDSA brainpoolP512r1".into(),
+            Self::Ed25519(_) => "Ed25519".into(),
+            Self::Unsupported { what, .. } => format!("unsupported ({what})"),
         }
     }
 
@@ -401,15 +401,15 @@ impl PublicKey {
     /// Ed25519 signatures), so the store's identity is skipped.
     pub fn store_signing_key(&self) -> Option<StoreKey> {
         match self {
-            PublicKey::Rsa { .. } => Some(StoreKey::Rsa),
-            PublicKey::P256(_) => Some(StoreKey::Ecdsa(256)),
-            PublicKey::P384(_) => Some(StoreKey::Ecdsa(384)),
-            PublicKey::P521(_)
-            | PublicKey::BrainpoolP256(_)
-            | PublicKey::BrainpoolP384(_)
-            | PublicKey::BrainpoolP512(_)
-            | PublicKey::Ed25519(_)
-            | PublicKey::Unsupported { .. } => None,
+            Self::Rsa { .. } => Some(StoreKey::Rsa),
+            Self::P256(_) => Some(StoreKey::Ecdsa(256)),
+            Self::P384(_) => Some(StoreKey::Ecdsa(384)),
+            Self::P521(_)
+            | Self::BrainpoolP256(_)
+            | Self::BrainpoolP384(_)
+            | Self::BrainpoolP512(_)
+            | Self::Ed25519(_)
+            | Self::Unsupported { .. } => None,
         }
     }
 
@@ -418,19 +418,19 @@ impl PublicKey {
     /// rejects give [`SignError::Unsupported`].
     pub fn store_signature_der(&self, raw: &[u8]) -> Result<Vec<u8>, SignError> {
         match self {
-            PublicKey::Rsa { .. } => Ok(raw.to_vec()),
-            PublicKey::P256(_) => p256::ecdsa::Signature::from_slice(raw)
+            Self::Rsa { .. } => Ok(raw.to_vec()),
+            Self::P256(_) => p256::ecdsa::Signature::from_slice(raw)
                 .map(|s| s.to_der().as_bytes().to_vec())
                 .map_err(|e| SignError::Crypto(format!("the key store returned an invalid P-256 signature: {e}"))),
-            PublicKey::P384(_) => p384::ecdsa::Signature::from_slice(raw)
+            Self::P384(_) => p384::ecdsa::Signature::from_slice(raw)
                 .map(|s| s.to_der().as_bytes().to_vec())
                 .map_err(|e| SignError::Crypto(format!("the key store returned an invalid P-384 signature: {e}"))),
-            PublicKey::P521(_)
-            | PublicKey::BrainpoolP256(_)
-            | PublicKey::BrainpoolP384(_)
-            | PublicKey::BrainpoolP512(_)
-            | PublicKey::Ed25519(_)
-            | PublicKey::Unsupported { .. } => Err(SignError::Unsupported(format!("signing with {} keys", self.describe()))),
+            Self::P521(_)
+            | Self::BrainpoolP256(_)
+            | Self::BrainpoolP384(_)
+            | Self::BrainpoolP512(_)
+            | Self::Ed25519(_)
+            | Self::Unsupported { .. } => Err(SignError::Unsupported(format!("signing with {} keys", self.describe()))),
         }
     }
 
@@ -446,43 +446,43 @@ impl PublicKey {
     /// about how far it got.
     pub fn verify_noting(&self, scheme: Scheme, alg: DigestAlg, digest: &[u8], sig: &[u8], notes: &mut Vec<&'static str>) -> Result<bool, SignError> {
         match (self, scheme) {
-            (PublicKey::Unsupported { what, .. }, _) => Err(SignError::Unsupported(what.clone())),
-            (PublicKey::Rsa { n, e }, Scheme::RsaPkcs1) => crate::rsa_pad::pkcs1_verify(n, e, alg, digest, sig, notes),
-            (PublicKey::Rsa { n, e }, Scheme::RsaPss(params)) => crate::rsa_pad::pss_verify(n, e, alg, params, digest, sig, notes),
-            (PublicKey::Ed25519(_), _) => Err(SignError::Unsupported("Ed25519 signs the message, not a digest".into())),
-            (PublicKey::P256(p), Scheme::Ecdsa) => {
+            (Self::Unsupported { what, .. }, _) => Err(SignError::Unsupported(what.clone())),
+            (Self::Rsa { n, e }, Scheme::RsaPkcs1) => crate::rsa_pad::pkcs1_verify(n, e, alg, digest, sig, notes),
+            (Self::Rsa { n, e }, Scheme::RsaPss(params)) => crate::rsa_pad::pss_verify(n, e, alg, params, digest, sig, notes),
+            (Self::Ed25519(_), _) => Err(SignError::Unsupported("Ed25519 signs the message, not a digest".into())),
+            (Self::P256(p), Scheme::Ecdsa) => {
                 use p256::ecdsa::signature::hazmat::PrehashVerifier;
                 let key = p256::ecdsa::VerifyingKey::from_sec1_bytes(p).map_err(|_| SignError::Malformed("P-256 key".into()))?;
                 let Some(s) = ecdsa_rs(sig, 32, notes).and_then(|rs| p256::ecdsa::Signature::from_slice(&rs).ok()) else { return Ok(false) };
                 Ok(key.verify_prehash(digest, &s).is_ok())
             }
-            (PublicKey::P384(p), Scheme::Ecdsa) => {
+            (Self::P384(p), Scheme::Ecdsa) => {
                 use p384::ecdsa::signature::hazmat::PrehashVerifier;
                 let key = p384::ecdsa::VerifyingKey::from_sec1_bytes(p).map_err(|_| SignError::Malformed("P-384 key".into()))?;
                 let Some(s) = ecdsa_rs(sig, 48, notes).and_then(|rs| p384::ecdsa::Signature::from_slice(&rs).ok()) else { return Ok(false) };
                 Ok(key.verify_prehash(digest, &s).is_ok())
             }
-            (PublicKey::P521(p), Scheme::Ecdsa) => {
+            (Self::P521(p), Scheme::Ecdsa) => {
                 use p521::ecdsa::signature::hazmat::PrehashVerifier;
                 let key = p521::ecdsa::VerifyingKey::from_sec1_bytes(p).map_err(|_| SignError::Malformed("P-521 key".into()))?;
                 let Some(s) = ecdsa_rs(sig, 66, notes).and_then(|rs| p521::ecdsa::Signature::from_slice(&rs).ok()) else { return Ok(false) };
                 Ok(key.verify_prehash(digest, &s).is_ok())
             }
-            (PublicKey::BrainpoolP256(p), Scheme::Ecdsa) => {
+            (Self::BrainpoolP256(p), Scheme::Ecdsa) => {
                 use ecdsa::signature::hazmat::PrehashVerifier;
                 type Curve = bp256::BrainpoolP256r1;
                 let key = ecdsa::VerifyingKey::<Curve>::from_sec1_bytes(p).map_err(|_| SignError::Malformed("brainpoolP256r1 key".into()))?;
                 let Some(s) = ecdsa_rs(sig, 32, notes).and_then(|rs| ecdsa::Signature::<Curve>::from_slice(&rs).ok()) else { return Ok(false) };
                 Ok(key.verify_prehash(digest, &s).is_ok())
             }
-            (PublicKey::BrainpoolP384(p), Scheme::Ecdsa) => {
+            (Self::BrainpoolP384(p), Scheme::Ecdsa) => {
                 use ecdsa::signature::hazmat::PrehashVerifier;
                 type Curve = bp384::BrainpoolP384r1;
                 let key = ecdsa::VerifyingKey::<Curve>::from_sec1_bytes(p).map_err(|_| SignError::Malformed("brainpoolP384r1 key".into()))?;
                 let Some(s) = ecdsa_rs(sig, 48, notes).and_then(|rs| ecdsa::Signature::<Curve>::from_slice(&rs).ok()) else { return Ok(false) };
                 Ok(key.verify_prehash(digest, &s).is_ok())
             }
-            (PublicKey::BrainpoolP512(p), Scheme::Ecdsa) => {
+            (Self::BrainpoolP512(p), Scheme::Ecdsa) => {
                 let Some(rs) = ecdsa_rs(sig, 64, notes) else { return Ok(false) };
                 crate::ec512::verify(p, digest, &rs).ok_or_else(|| SignError::Malformed("brainpoolP512r1 key or signature".into()))
             }
@@ -494,8 +494,8 @@ impl PublicKey {
     /// RFC 8419: with signed attributes, the message is their DER encoding).
     pub fn verify_message(&self, scheme: Scheme, msg: &[u8], sig: &[u8]) -> Result<bool, SignError> {
         match (self, scheme) {
-            (PublicKey::Unsupported { what, .. }, _) => Err(SignError::Unsupported(what.clone())),
-            (PublicKey::Ed25519(k), Scheme::Ed25519) => {
+            (Self::Unsupported { what, .. }, _) => Err(SignError::Unsupported(what.clone())),
+            (Self::Ed25519(k), Scheme::Ed25519) => {
                 let bytes: [u8; 32] = k.as_slice().try_into().map_err(|_| SignError::Malformed("Ed25519 key".into()))?;
                 let key = ed25519_dalek::VerifyingKey::from_bytes(&bytes).map_err(|_| SignError::Malformed("Ed25519 key".into()))?;
                 let Ok(sig) = ed25519_dalek::Signature::from_slice(sig) else { return Ok(false) };
@@ -573,8 +573,8 @@ impl std::fmt::Debug for PrivateKey {
 impl PrivateKey {
     /// A key held outside PdfCraft's memory (its public half is `public`). It can't be
     /// exported to a PKCS #12 file.
-    pub fn external(public: PublicKey, key: std::sync::Arc<dyn ExternalKey>) -> PrivateKey {
-        PrivateKey { inner: Inner::External(key), public, pkcs8: Vec::new() }
+    pub fn external(public: PublicKey, key: std::sync::Arc<dyn ExternalKey>) -> Self {
+        Self { inner: Inner::External(key), public, pkcs8: Vec::new() }
     }
 
     /// Whether the key lives outside the app (and so can't be exported).
@@ -583,7 +583,7 @@ impl PrivateKey {
     }
 
     /// From a PKCS#8 `PrivateKeyInfo`.
-    pub fn from_pkcs8(info: &[u8]) -> Result<PrivateKey, SignError> {
+    pub fn from_pkcs8(info: &[u8]) -> Result<Self, SignError> {
         let t = Tlv::parse_all(info)?.children()?;
         let [_version, alg, key, ..] = t.as_slice() else { return Err(SignError::Malformed("PrivateKeyInfo".into())) };
         let alg = alg.children()?;
@@ -604,7 +604,7 @@ impl PrivateKey {
                 );
                 #[cfg(target_arch = "wasm32")]
                 let inner = Inner::Rsa;
-                Ok(PrivateKey { inner, public: PublicKey::Rsa { n, e }, pkcs8: info.to_vec() })
+                Ok(Self { inner, public: PublicKey::Rsa { n, e }, pkcs8: info.to_vec() })
             }
             oid::EC => {
                 // ECPrivateKey: version, privateKey OCTET STRING, [0] parameters, [1] publicKey.
@@ -623,12 +623,12 @@ impl PrivateKey {
                     oid::P256 => {
                         let k = p256::ecdsa::SigningKey::from_slice(d).map_err(|_| SignError::Malformed("P-256 key".into()))?;
                         let public = PublicKey::P256(k.verifying_key().to_sec1_point(false).as_bytes().to_vec());
-                        Ok(PrivateKey { inner: Inner::P256(k), public, pkcs8: info.to_vec() })
+                        Ok(Self { inner: Inner::P256(k), public, pkcs8: info.to_vec() })
                     }
                     oid::P384 => {
                         let k = p384::ecdsa::SigningKey::from_slice(d).map_err(|_| SignError::Malformed("P-384 key".into()))?;
                         let public = PublicKey::P384(k.verifying_key().to_sec1_point(false).as_bytes().to_vec());
-                        Ok(PrivateKey { inner: Inner::P384(k), public, pkcs8: info.to_vec() })
+                        Ok(Self { inner: Inner::P384(k), public, pkcs8: info.to_vec() })
                     }
                     other => Err(SignError::Unsupported(format!("elliptic curve {other}"))),
                 }
@@ -639,7 +639,7 @@ impl PrivateKey {
 
     /// A new RSA key (Acrobat's default for a self-signed digital ID is 2048-bit RSA).
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn generate_rsa(bits: usize) -> Result<PrivateKey, SignError> {
+    pub fn generate_rsa(bits: usize) -> Result<Self, SignError> {
         use aws_lc_rs::encoding::AsDer;
         use aws_lc_rs::rsa::KeySize;
         let size = match bits {
@@ -650,7 +650,7 @@ impl PrivateKey {
         };
         let kp = aws_lc_rs::signature::RsaKeyPair::generate(size).map_err(|_| SignError::Crypto("RSA key generation failed".into()))?;
         let der = kp.as_der().map_err(|_| SignError::Crypto("RSA key encoding failed".into()))?;
-        PrivateKey::from_pkcs8(der.as_ref())
+        Self::from_pkcs8(der.as_ref())
     }
 
     /// RSA keys are generated only on native targets (ADR-0009).
@@ -660,7 +660,7 @@ impl PrivateKey {
     }
 
     /// A new P-256 key.
-    pub fn generate_p256() -> Result<PrivateKey, SignError> {
+    pub fn generate_p256() -> Result<Self, SignError> {
         loop {
             let mut d = [0u8; 32];
             getrandom::fill(&mut d).map_err(|e| SignError::Crypto(format!("no randomness: {e}")))?;
@@ -669,7 +669,7 @@ impl PrivateKey {
                 // PKCS#8 with an ECPrivateKey (RFC 5915) carrying the public key.
                 let ec = der::seq(&[&der::int(1), &der::octets(&d), &der::explicit(1, &der::bit_string(&point))]);
                 let info = der::seq(&[&der::int(0), &der::seq(&[&der::oid(oid::EC), &der::oid(oid::P256)]), &der::octets(&ec)]);
-                return PrivateKey::from_pkcs8(&info);
+                return Self::from_pkcs8(&info);
             }
         }
     }

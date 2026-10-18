@@ -43,47 +43,47 @@ impl Filter {
     /// Parses a filter name. Accepts the full names (ISO 32000-2 Table 6) and the
     /// inline-image abbreviations (Table 92): `Fl`, `LZW`, `AHx`, `A85`, `RL`, `DCT`, `CCF`.
     /// A leading `/` is ignored.
-    pub fn from_name(name: &[u8]) -> Filter {
+    pub fn from_name(name: &[u8]) -> Self {
         let n = name.strip_prefix(b"/").unwrap_or(name);
         match n {
-            b"FlateDecode" | b"Fl" => Filter::Flate,
-            b"LZWDecode" | b"LZW" => Filter::Lzw,
-            b"ASCIIHexDecode" | b"AHx" => Filter::AsciiHex,
-            b"ASCII85Decode" | b"A85" => Filter::Ascii85,
-            b"RunLengthDecode" | b"RL" => Filter::RunLength,
-            b"DCTDecode" | b"DCT" => Filter::Dct,
-            b"JPXDecode" => Filter::Jpx,
-            b"JBIG2Decode" => Filter::Jbig2,
-            b"CCITTFaxDecode" | b"CCF" => Filter::CcittFax,
-            b"Crypt" => Filter::Crypt,
-            other => Filter::Unknown(String::from_utf8_lossy(other).into_owned()),
+            b"FlateDecode" | b"Fl" => Self::Flate,
+            b"LZWDecode" | b"LZW" => Self::Lzw,
+            b"ASCIIHexDecode" | b"AHx" => Self::AsciiHex,
+            b"ASCII85Decode" | b"A85" => Self::Ascii85,
+            b"RunLengthDecode" | b"RL" => Self::RunLength,
+            b"DCTDecode" | b"DCT" => Self::Dct,
+            b"JPXDecode" => Self::Jpx,
+            b"JBIG2Decode" => Self::Jbig2,
+            b"CCITTFaxDecode" | b"CCF" => Self::CcittFax,
+            b"Crypt" => Self::Crypt,
+            other => Self::Unknown(String::from_utf8_lossy(other).into_owned()),
         }
     }
 
     /// The full PDF name (without the leading `/`).
     pub fn name(&self) -> &str {
         match self {
-            Filter::Flate => "FlateDecode",
-            Filter::Lzw => "LZWDecode",
-            Filter::AsciiHex => "ASCIIHexDecode",
-            Filter::Ascii85 => "ASCII85Decode",
-            Filter::RunLength => "RunLengthDecode",
-            Filter::Dct => "DCTDecode",
-            Filter::Jpx => "JPXDecode",
-            Filter::Jbig2 => "JBIG2Decode",
-            Filter::CcittFax => "CCITTFaxDecode",
-            Filter::Crypt => "Crypt",
-            Filter::Unknown(s) => s,
+            Self::Flate => "FlateDecode",
+            Self::Lzw => "LZWDecode",
+            Self::AsciiHex => "ASCIIHexDecode",
+            Self::Ascii85 => "ASCII85Decode",
+            Self::RunLength => "RunLengthDecode",
+            Self::Dct => "DCTDecode",
+            Self::Jpx => "JPXDecode",
+            Self::Jbig2 => "JBIG2Decode",
+            Self::CcittFax => "CCITTFaxDecode",
+            Self::Crypt => "Crypt",
+            Self::Unknown(s) => s,
         }
     }
 
     /// True for the image codecs (DCT, JPX, JBIG2, CCITT fax).
     pub fn is_image_codec(&self) -> bool {
-        matches!(self, Filter::Dct | Filter::Jpx | Filter::Jbig2 | Filter::CcittFax)
+        matches!(self, Self::Dct | Self::Jpx | Self::Jbig2 | Self::CcittFax)
     }
 
     fn is_decodable(&self) -> bool {
-        matches!(self, Filter::Flate | Filter::Lzw | Filter::AsciiHex | Filter::Ascii85 | Filter::RunLength)
+        matches!(self, Self::Flate | Self::Lzw | Self::AsciiHex | Self::Ascii85 | Self::RunLength)
     }
 }
 
@@ -101,7 +101,7 @@ pub struct Params {
 
 impl Default for Params {
     fn default() -> Self {
-        Params { predictor: 1, colors: 1, bits_per_component: 8, columns: 1, early_change: 1 }
+        Self { predictor: 1, colors: 1, bits_per_component: 8, columns: 1, early_change: 1 }
     }
 }
 
@@ -124,11 +124,11 @@ pub(crate) struct Failure {
 
 impl Failure {
     pub(crate) fn corrupt(filter: &'static str, detail: impl Into<String>, partial: Vec<u8>) -> Self {
-        Failure { error: FilterError::Corrupt { filter, detail: detail.into() }, partial }
+        Self { error: FilterError::Corrupt { filter, detail: detail.into() }, partial }
     }
 
     pub(crate) fn limit(max: usize) -> Self {
-        Failure { error: FilterError::LimitExceeded(max), partial: Vec::new() }
+        Self { error: FilterError::LimitExceeded(max), partial: Vec::new() }
     }
 }
 

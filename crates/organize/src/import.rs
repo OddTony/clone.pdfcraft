@@ -1026,7 +1026,7 @@ impl Combiner {
 
     /// [`Combiner::finish`] reporting what the combine renamed.
     pub fn finish_with_renames(self) -> Result<CombineOutcome, OrganizeError> {
-        let Combiner { mut out, marks, attachments, standard, agreed, renamed_fields, .. } = self;
+        let Self { mut out, marks, attachments, standard, agreed, renamed_fields, .. } = self;
         if let Some(first) = standard.filter(|_| agreed) {
             crate::pdfx::carry(&mut out, first.source.as_ref(), &first.declared, first.objects)?;
         }
@@ -1197,7 +1197,7 @@ struct OutlineNode {
     flags: Option<Object>,
     dest: Option<Object>,
     open: bool,
-    children: Vec<OutlineNode>,
+    children: Vec<Self>,
 }
 
 /// The bookmarks of `src`, with destinations mapped through `pages` (source page to copied page). They

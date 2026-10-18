@@ -130,7 +130,7 @@ impl OutlinePen for Flatten {
     }
 
     fn close(&mut self) {
-        Flatten::close(self);
+        Self::close(self);
     }
 }
 

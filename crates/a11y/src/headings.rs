@@ -318,7 +318,7 @@ struct TextState {
 
 impl Default for TextState {
     fn default() -> Self {
-        TextState { ctm: Matrix::IDENTITY, font: None, size: 0.0, char_spacing: 0.0, word_spacing: 0.0, scale: 1.0, leading: 0.0 }
+        Self { ctm: Matrix::IDENTITY, font: None, size: 0.0, char_spacing: 0.0, word_spacing: 0.0, scale: 1.0, leading: 0.0 }
     }
 }
 

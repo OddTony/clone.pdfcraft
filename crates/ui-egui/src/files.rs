@@ -133,7 +133,7 @@ pub struct SplitDraft {
 
 impl Default for SplitDraft {
     fn default() -> Self {
-        SplitDraft { every: 1, mode: SplitMode::Pages, size_mb: 2.0 }
+        Self { every: 1, mode: SplitMode::Pages, size_mb: 2.0 }
     }
 }
 
@@ -240,7 +240,7 @@ pub struct RotateDraft {
 
 impl Default for RotateDraft {
     fn default() -> Self {
-        RotateDraft { degrees: 90, which: 0, from: 1, to: 1, parity: Default::default(), orientation: Default::default() }
+        Self { degrees: 90, which: 0, from: 1, to: 1, parity: Default::default(), orientation: Default::default() }
     }
 }
 

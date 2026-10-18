@@ -1725,7 +1725,7 @@ pub enum Edit {
     /// Several edits applied as one undoable step (all or nothing).
     Batch {
         label: String,
-        edits: Vec<Edit>,
+        edits: Vec<Self>,
     },
 }
 
@@ -1934,91 +1934,91 @@ impl Edit {
     /// Label for the Edit menu and history ("Undo Rotate pages").
     pub fn label(&self) -> Label {
         match self {
-            Edit::RotatePages { pages, .. } => plural("Rotate page", "Rotate pages", pages.len()),
-            Edit::DeletePages { pages } => plural("Delete page", "Delete pages", pages.len()),
-            Edit::MovePages { pages, .. } => plural("Move page", "Move pages", pages.len()),
-            Edit::InsertBlankPage { .. } => Label::of("Insert blank page"),
-            Edit::DuplicatePages { pages } => plural("Duplicate page", "Duplicate pages", pages.len()),
-            Edit::ReplacePages { pages, .. } => plural("Replace page", "Replace pages", pages.len()),
-            Edit::SetPageBox { pages, which: PageBox::Crop, .. } => plural("Crop page", "Crop pages", pages.len()),
-            Edit::SetPageBox { .. } => Label::of("Set page boxes"),
-            Edit::SetTransition { .. } => Label::of("Set page transitions"),
+            Self::RotatePages { pages, .. } => plural("Rotate page", "Rotate pages", pages.len()),
+            Self::DeletePages { pages } => plural("Delete page", "Delete pages", pages.len()),
+            Self::MovePages { pages, .. } => plural("Move page", "Move pages", pages.len()),
+            Self::InsertBlankPage { .. } => Label::of("Insert blank page"),
+            Self::DuplicatePages { pages } => plural("Duplicate page", "Duplicate pages", pages.len()),
+            Self::ReplacePages { pages, .. } => plural("Replace page", "Replace pages", pages.len()),
+            Self::SetPageBox { pages, which: PageBox::Crop, .. } => plural("Crop page", "Crop pages", pages.len()),
+            Self::SetPageBox { .. } => Label::of("Set page boxes"),
+            Self::SetTransition { .. } => Label::of("Set page transitions"),
             // The four `/Info` keys PdfCraft itself offers get a wording of their own, so each can
             // be said in another language; any other key is the document's and goes in as it stands.
-            Edit::SetInfo { key, .. } => match key.as_str() {
+            Self::SetInfo { key, .. } => match key.as_str() {
                 "Title" => Label::of("Change Title"),
                 "Author" => Label::of("Change Author"),
                 "Subject" => Label::of("Change Subject"),
                 "Keywords" => Label::of("Change Keywords"),
                 _ => Label::with("Change {key}", key.as_str()),
             },
-            Edit::InsertPagesFrom { name, .. } => Label::with("Insert pages from {name}", name.as_str()),
-            Edit::AddBookmark { .. } => Label::of("Add bookmark"),
-            Edit::RenameBookmark { .. } => Label::of("Rename bookmark"),
-            Edit::DeleteBookmark { .. } => Label::of("Delete bookmark"),
-            Edit::MoveBookmark { .. } => Label::of("Move bookmark"),
-            Edit::SetBookmarkPage { .. } => Label::of("Set bookmark destination"),
-            Edit::BookmarksFromStructure => Label::of("New bookmarks from structure"),
-            Edit::NumberPages { .. } => Label::of("Number pages"),
+            Self::InsertPagesFrom { name, .. } => Label::with("Insert pages from {name}", name.as_str()),
+            Self::AddBookmark { .. } => Label::of("Add bookmark"),
+            Self::RenameBookmark { .. } => Label::of("Rename bookmark"),
+            Self::DeleteBookmark { .. } => Label::of("Delete bookmark"),
+            Self::MoveBookmark { .. } => Label::of("Move bookmark"),
+            Self::SetBookmarkPage { .. } => Label::of("Set bookmark destination"),
+            Self::BookmarksFromStructure => Label::of("New bookmarks from structure"),
+            Self::NumberPages { .. } => Label::of("Number pages"),
             // What was measured is part of the wording too, for the same reason.
-            Edit::AddMeasurement(m) => Label::of(match m.kind {
+            Self::AddMeasurement(m) => Label::of(match m.kind {
                 pdfcraft_measure::Kind::Distance => "Measure distance",
                 pdfcraft_measure::Kind::Perimeter => "Measure perimeter",
                 pdfcraft_measure::Kind::Area => "Measure area",
             }),
-            Edit::SetMeasurementScale { .. } => Label::of("Set measurement scale"),
-            Edit::AddAnnotation(a) => Label::of(add_annotation(&a.shape)),
-            Edit::AddCustomStamp { .. } => Label::of("Add stamp"),
-            Edit::DeleteAnnotation { .. } => Label::of("Delete comment"),
-            Edit::SetAnnotationContents { .. } => Label::of("Edit comment"),
-            Edit::ReplyToAnnotation { .. } => Label::of("Reply"),
+            Self::SetMeasurementScale { .. } => Label::of("Set measurement scale"),
+            Self::AddAnnotation(a) => Label::of(add_annotation(&a.shape)),
+            Self::AddCustomStamp { .. } => Label::of("Add stamp"),
+            Self::DeleteAnnotation { .. } => Label::of("Delete comment"),
+            Self::SetAnnotationContents { .. } => Label::of("Edit comment"),
+            Self::ReplyToAnnotation { .. } => Label::of("Reply"),
             // The state's name is part of the wording: a language may need to agree it with the rest.
-            Edit::SetAnnotationStatus { state, .. } => Label::of(match state {
+            Self::SetAnnotationStatus { state, .. } => Label::of(match state {
                 ReviewState::None => "Set status None",
                 ReviewState::Accepted => "Set status Accepted",
                 ReviewState::Rejected => "Set status Rejected",
                 ReviewState::Cancelled => "Set status Cancelled",
                 ReviewState::Completed => "Set status Completed",
             }),
-            Edit::ReplaceText { .. } => Label::of("Replace text"),
-            Edit::EraseInk { .. } => Label::of("Erase"),
-            Edit::MarkAnnotation { marked: true, .. } => Label::of("Mark with checkmark"),
-            Edit::MarkAnnotation { .. } => Label::of("Remove checkmark"),
-            Edit::LockAnnotation { locked: true, .. } => Label::of("Lock comment"),
-            Edit::LockAnnotation { .. } => Label::of("Unlock comment"),
-            Edit::MoveAnnotation { .. } => Label::of("Move comment"),
-            Edit::ResizeAnnotation { .. } => Label::of("Resize comment"),
-            Edit::StyleAnnotation { .. } | Edit::FillAnnotation { .. } | Edit::FontSizeAnnotation { .. } | Edit::SetAnnotationInfo { .. } => {
+            Self::ReplaceText { .. } => Label::of("Replace text"),
+            Self::EraseInk { .. } => Label::of("Erase"),
+            Self::MarkAnnotation { marked: true, .. } => Label::of("Mark with checkmark"),
+            Self::MarkAnnotation { .. } => Label::of("Remove checkmark"),
+            Self::LockAnnotation { locked: true, .. } => Label::of("Lock comment"),
+            Self::LockAnnotation { .. } => Label::of("Unlock comment"),
+            Self::MoveAnnotation { .. } => Label::of("Move comment"),
+            Self::ResizeAnnotation { .. } => Label::of("Resize comment"),
+            Self::StyleAnnotation { .. } | Self::FillAnnotation { .. } | Self::FontSizeAnnotation { .. } | Self::SetAnnotationInfo { .. } => {
                 Label::of("Change comment properties")
             }
-            Edit::SetFieldValue { name, .. } => Label::with("Fill in {name}", name.as_str()),
-            Edit::SetFieldImage { name, .. } => Label::with("Set the image of {name}", name.as_str()),
-            Edit::ResetForm { .. } => Label::of("Clear form"),
-            Edit::AddField { .. } => Label::of("Add field"),
-            Edit::SetFieldProps { .. } => Label::of("Change field properties"),
-            Edit::DeleteField { .. } => Label::of("Delete field"),
-            Edit::DuplicateField { .. } => Label::of("Duplicate field"),
-            Edit::SetTabOrder { .. } | Edit::MoveInTabOrder { .. } => Label::of("Set tab order"),
-            Edit::SetInitialView(_) => Label::of("Change initial view"),
-            Edit::AutoTagText => Label::of("Automatically tag text"),
-            Edit::SetAltText { .. } => Label::of("Set alternate text"),
-            Edit::AutoTagFormFields => Label::of("Tag form fields"),
-            Edit::SetTagProperty { .. } => Label::of("Change tag properties"),
-            Edit::MoveTag { .. } => Label::of("Move object"),
-            Edit::MarkDecorative { .. } => Label::of("Mark figure as decorative"),
-            Edit::MarkTagArtifact { .. } => Label::of("Mark content as artifact"),
-            Edit::AddOcrText { .. } => Label::of("Recognize text"),
-            Edit::ApplyScriptChanges { .. } => Label::of("Run JavaScript"),
-            Edit::XfaEvent { .. } => Label::of("Run form script"),
+            Self::SetFieldValue { name, .. } => Label::with("Fill in {name}", name.as_str()),
+            Self::SetFieldImage { name, .. } => Label::with("Set the image of {name}", name.as_str()),
+            Self::ResetForm { .. } => Label::of("Clear form"),
+            Self::AddField { .. } => Label::of("Add field"),
+            Self::SetFieldProps { .. } => Label::of("Change field properties"),
+            Self::DeleteField { .. } => Label::of("Delete field"),
+            Self::DuplicateField { .. } => Label::of("Duplicate field"),
+            Self::SetTabOrder { .. } | Self::MoveInTabOrder { .. } => Label::of("Set tab order"),
+            Self::SetInitialView(_) => Label::of("Change initial view"),
+            Self::AutoTagText => Label::of("Automatically tag text"),
+            Self::SetAltText { .. } => Label::of("Set alternate text"),
+            Self::AutoTagFormFields => Label::of("Tag form fields"),
+            Self::SetTagProperty { .. } => Label::of("Change tag properties"),
+            Self::MoveTag { .. } => Label::of("Move object"),
+            Self::MarkDecorative { .. } => Label::of("Mark figure as decorative"),
+            Self::MarkTagArtifact { .. } => Label::of("Mark content as artifact"),
+            Self::AddOcrText { .. } => Label::of("Recognize text"),
+            Self::ApplyScriptChanges { .. } => Label::of("Run JavaScript"),
+            Self::XfaEvent { .. } => Label::of("Run form script"),
             // The level is the standard's own name ("PDF/A-2b"), so it goes in as it stands.
-            Edit::ConvertPdfA { level } => Label::with("Save as {level}", level.label()),
-            Edit::SetFieldScript { name, .. } => Label::with("Edit script of {name}", name.as_str()),
-            Edit::SetDocumentScript { script: None, .. } => Label::of("Delete document JavaScript"),
-            Edit::SetDocumentScript { .. } => Label::of("Edit document JavaScript"),
-            Edit::EditTextLine { .. } | Edit::EditTextBlock { .. } => Label::of("Edit text"),
-            Edit::RegisterTextFont { .. } => Label::of("Load document font"),
-            Edit::MoveObjects { objects, .. } => plural("Move object", "Move objects", objects.len()),
-            Edit::EditPageImage { change, .. } => Label::of(match change {
+            Self::ConvertPdfA { level } => Label::with("Save as {level}", level.label()),
+            Self::SetFieldScript { name, .. } => Label::with("Edit script of {name}", name.as_str()),
+            Self::SetDocumentScript { script: None, .. } => Label::of("Delete document JavaScript"),
+            Self::SetDocumentScript { .. } => Label::of("Edit document JavaScript"),
+            Self::EditTextLine { .. } | Self::EditTextBlock { .. } => Label::of("Edit text"),
+            Self::RegisterTextFont { .. } => Label::of("Load document font"),
+            Self::MoveObjects { objects, .. } => plural("Move object", "Move objects", objects.len()),
+            Self::EditPageImage { change, .. } => Label::of(match change {
                 ImageEdit::Move(_) => "Move image",
                 ImageEdit::Rotate(_) => "Rotate image",
                 ImageEdit::Crop(_) => "Crop image",
@@ -2026,40 +2026,40 @@ impl Edit {
                 ImageEdit::Replace { .. } => "Replace image",
                 ImageEdit::Delete => "Delete image",
             }),
-            Edit::AddHeaderFooter { replace: false, .. } => Label::of("Add header & footer"),
-            Edit::AddHeaderFooter { .. } => Label::of("Update header & footer"),
-            Edit::AddWatermark { replace: false, .. } => Label::of("Add watermark"),
-            Edit::AddWatermark { .. } => Label::of("Update watermark"),
-            Edit::AddBackground { replace: false, .. } => Label::of("Add background"),
-            Edit::AddBackground { .. } => Label::of("Update background"),
-            Edit::RemoveMarks { kind: MarkKind::HeaderFooter } => Label::of("Remove header & footer"),
-            Edit::RemoveMarks { kind: MarkKind::Watermark } => Label::of("Remove watermark"),
-            Edit::RemoveMarks { kind: MarkKind::Background } => Label::of("Remove background"),
-            Edit::AddText { .. } => Label::of("Add text"),
-            Edit::AddImage { .. } => Label::of("Add image"),
-            Edit::UpdateContent { .. } => Label::of("Edit content"),
-            Edit::DeleteContent { .. } => Label::of("Delete content"),
-            Edit::ReplaceImage { .. } => Label::of("Replace image"),
-            Edit::ApplyRedactions { .. } => Label::of("Apply redactions"),
-            Edit::ClearRedactions => Label::of("Remove redaction marks"),
-            Edit::RemoveHidden { .. } => Label::of("Remove hidden information"),
-            Edit::ImportData { name, .. } => Label::with("Import {name}", name.as_str()),
-            Edit::AddLink { .. } => Label::of("Add link"),
-            Edit::SetLink { .. } => Label::of("Change link properties"),
-            Edit::DeleteLink { .. } => Label::of("Delete link"),
-            Edit::RemoveLinks { .. } => Label::of("Remove all links"),
-            Edit::AddLinks { links, .. } => plural("Create link", "Create links", links.len()),
-            Edit::Sanitize => Label::of("Sanitize document"),
-            Edit::XfaToStatic => Label::of("Convert to a static form"),
-            Edit::Flatten { comments: true, fields: false } => Label::of("Flatten comments"),
-            Edit::Flatten { comments: false, fields: true } => Label::of("Flatten form fields"),
-            Edit::Flatten { .. } => Label::of("Flatten"),
-            Edit::FlattenFillSign => Label::of("Flatten Fill & Sign"),
-            Edit::Protect(_) => Label::of("Protect with password"),
-            Edit::RemoveProtection => Label::of("Remove security"),
+            Self::AddHeaderFooter { replace: false, .. } => Label::of("Add header & footer"),
+            Self::AddHeaderFooter { .. } => Label::of("Update header & footer"),
+            Self::AddWatermark { replace: false, .. } => Label::of("Add watermark"),
+            Self::AddWatermark { .. } => Label::of("Update watermark"),
+            Self::AddBackground { replace: false, .. } => Label::of("Add background"),
+            Self::AddBackground { .. } => Label::of("Update background"),
+            Self::RemoveMarks { kind: MarkKind::HeaderFooter } => Label::of("Remove header & footer"),
+            Self::RemoveMarks { kind: MarkKind::Watermark } => Label::of("Remove watermark"),
+            Self::RemoveMarks { kind: MarkKind::Background } => Label::of("Remove background"),
+            Self::AddText { .. } => Label::of("Add text"),
+            Self::AddImage { .. } => Label::of("Add image"),
+            Self::UpdateContent { .. } => Label::of("Edit content"),
+            Self::DeleteContent { .. } => Label::of("Delete content"),
+            Self::ReplaceImage { .. } => Label::of("Replace image"),
+            Self::ApplyRedactions { .. } => Label::of("Apply redactions"),
+            Self::ClearRedactions => Label::of("Remove redaction marks"),
+            Self::RemoveHidden { .. } => Label::of("Remove hidden information"),
+            Self::ImportData { name, .. } => Label::with("Import {name}", name.as_str()),
+            Self::AddLink { .. } => Label::of("Add link"),
+            Self::SetLink { .. } => Label::of("Change link properties"),
+            Self::DeleteLink { .. } => Label::of("Delete link"),
+            Self::RemoveLinks { .. } => Label::of("Remove all links"),
+            Self::AddLinks { links, .. } => plural("Create link", "Create links", links.len()),
+            Self::Sanitize => Label::of("Sanitize document"),
+            Self::XfaToStatic => Label::of("Convert to a static form"),
+            Self::Flatten { comments: true, fields: false } => Label::of("Flatten comments"),
+            Self::Flatten { comments: false, fields: true } => Label::of("Flatten form fields"),
+            Self::Flatten { .. } => Label::of("Flatten"),
+            Self::FlattenFillSign => Label::of("Flatten Fill & Sign"),
+            Self::Protect(_) => Label::of("Protect with password"),
+            Self::RemoveProtection => Label::of("Remove security"),
             // A batch carries its own name, already worded by whoever built it.
             // A batch carries its name as text, so the wording is only the hole (see `BATCH_LABELS`).
-            Edit::Batch { label, .. } => Label::with("{batch}", label.as_str()),
+            Self::Batch { label, .. } => Label::with("{batch}", label.as_str()),
         }
     }
 }
@@ -2895,7 +2895,7 @@ pub enum EditError {
 
 impl From<pdfcraft_sign::SignError> for EditError {
     fn from(e: pdfcraft_sign::SignError) -> Self {
-        EditError::Sign(e.to_string())
+        Self::Sign(e.to_string())
     }
 }
 
@@ -4970,16 +4970,16 @@ pub enum SummarySort {
 }
 
 impl SummarySort {
-    pub const ALL: [SummarySort; 4] = [SummarySort::Page, SummarySort::Author, SummarySort::Date, SummarySort::Type];
+    pub const ALL: [Self; 4] = [Self::Page, Self::Author, Self::Date, Self::Type];
     pub fn name(self) -> &'static str {
         match self {
-            SummarySort::Page => "Page",
-            SummarySort::Author => "Author",
-            SummarySort::Date => "Date",
-            SummarySort::Type => "Type",
+            Self::Page => "Page",
+            Self::Author => "Author",
+            Self::Date => "Date",
+            Self::Type => "Type",
         }
     }
-    pub fn parse(s: &str) -> Option<SummarySort> {
+    pub fn parse(s: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|k| k.name().eq_ignore_ascii_case(s))
     }
 }

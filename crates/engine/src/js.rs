@@ -33,7 +33,7 @@ impl JsOutput {
         self.errors.extend(o.error.iter().cloned());
     }
 
-    pub(crate) fn append(&mut self, other: JsOutput) {
+    pub(crate) fn append(&mut self, other: Self) {
         self.alerts.extend(other.alerts);
         self.console.extend(other.console);
         self.requests.extend(other.requests);
@@ -111,9 +111,9 @@ pub struct JsRunner {
 }
 
 impl JsRunner {
-    pub fn new(cos: &pdfcraft_cos::Document, file_name: &str) -> JsRunner {
+    pub fn new(cos: &pdfcraft_cos::Document, file_name: &str) -> Self {
         let doc = pdfcraft_js::DocInfo { file_name: file_name.to_string(), num_pages: pdfcraft_model::pages(cos).len(), page: 0, info: info(cos) };
-        JsRunner { doc, doc_scripts: pdfcraft_forms::document_scripts(cos), output: JsOutput::default(), cos: cos.clone() }
+        Self { doc, doc_scripts: pdfcraft_forms::document_scripts(cos), output: JsOutput::default(), cos: cos.clone() }
     }
 }
 

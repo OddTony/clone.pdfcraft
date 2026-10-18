@@ -113,7 +113,7 @@ impl ReadingColors {
 
 impl From<ReadingParams> for hayro::ColorReplacement {
     fn from(p: ReadingParams) -> Self {
-        hayro::ColorReplacement { text: p.text, background: p.background, only_black: p.only_black, line_art: p.line_art }
+        Self { text: p.text, background: p.background, only_black: p.only_black, line_art: p.line_art }
     }
 }
 

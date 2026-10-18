@@ -40,11 +40,11 @@ impl SavedSig {
     /// script font has nothing to draw for.
     pub fn graphic(&self) -> Option<pdfcraft_engine::sign::Graphic> {
         match self {
-            SavedSig::Drawn(strokes) => Some(pdfcraft_engine::sign::Graphic::Strokes(
+            Self::Drawn(strokes) => Some(pdfcraft_engine::sign::Graphic::Strokes(
                 strokes.iter().map(|s| s.iter().map(|p| [f64::from(p[0]), f64::from(p[1])]).collect()).collect(),
             )),
-            SavedSig::Typed(text) => pdfcraft_engine::typed_signature_graphic(text),
-            SavedSig::Image(image) => Some(image.graphic()),
+            Self::Typed(text) => pdfcraft_engine::typed_signature_graphic(text),
+            Self::Image(image) => Some(image.graphic()),
         }
     }
 }
@@ -346,14 +346,14 @@ impl ScanDraft {
 impl FillTool {
     pub fn command(self) -> &'static str {
         match self {
-            FillTool::Text => "sign.fill.text",
-            FillTool::Check => "sign.fill.check",
-            FillTool::Cross => "sign.fill.cross",
-            FillTool::Dot => "sign.fill.dot",
-            FillTool::Line => "sign.fill.line",
-            FillTool::Date => "sign.fill.date",
-            FillTool::Signature => "sign.fill.signature",
-            FillTool::Initials => "sign.fill.initials",
+            Self::Text => "sign.fill.text",
+            Self::Check => "sign.fill.check",
+            Self::Cross => "sign.fill.cross",
+            Self::Dot => "sign.fill.dot",
+            Self::Line => "sign.fill.line",
+            Self::Date => "sign.fill.date",
+            Self::Signature => "sign.fill.signature",
+            Self::Initials => "sign.fill.initials",
         }
     }
 
@@ -363,35 +363,35 @@ impl FillTool {
 
     pub fn label(self) -> &'static str {
         match self {
-            FillTool::Text => "Add text",
-            FillTool::Check => "Checkmark",
-            FillTool::Cross => "Cross",
-            FillTool::Dot => "Dot",
-            FillTool::Line => "Line",
-            FillTool::Date => "Date",
-            FillTool::Signature => "Sign",
-            FillTool::Initials => "Initials",
+            Self::Text => "Add text",
+            Self::Check => "Checkmark",
+            Self::Cross => "Cross",
+            Self::Dot => "Dot",
+            Self::Line => "Line",
+            Self::Date => "Date",
+            Self::Signature => "Sign",
+            Self::Initials => "Initials",
         }
     }
 
     pub fn icon(self) -> &'static str {
         match self {
-            FillTool::Text => "type",
-            FillTool::Check => "check",
-            FillTool::Cross => "x",
-            FillTool::Dot => "circle-dot",
-            FillTool::Line => "minus",
-            FillTool::Date => "clock-3",
-            FillTool::Signature | FillTool::Initials => "signature",
+            Self::Text => "type",
+            Self::Check => "check",
+            Self::Cross => "x",
+            Self::Dot => "circle-dot",
+            Self::Line => "minus",
+            Self::Date => "clock-3",
+            Self::Signature | Self::Initials => "signature",
         }
     }
 
     fn mark(self) -> Option<FillMark> {
         match self {
-            FillTool::Check => Some(FillMark::Check),
-            FillTool::Cross => Some(FillMark::Cross),
-            FillTool::Dot => Some(FillMark::Dot),
-            FillTool::Line => Some(FillMark::Line),
+            Self::Check => Some(FillMark::Check),
+            Self::Cross => Some(FillMark::Cross),
+            Self::Dot => Some(FillMark::Dot),
+            Self::Line => Some(FillMark::Line),
             _ => None,
         }
     }

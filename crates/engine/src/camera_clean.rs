@@ -24,20 +24,20 @@ pub enum Look {
 }
 
 impl Look {
-    pub const ALL: [Look; 4] = [Look::Original, Look::Colour, Look::Greyscale, Look::BlackWhite];
+    pub const ALL: [Self; 4] = [Self::Original, Self::Colour, Self::Greyscale, Self::BlackWhite];
 
     /// The name tools use.
     pub fn name(self) -> &'static str {
         match self {
-            Look::Original => "original",
-            Look::Colour => "colour",
-            Look::Greyscale => "greyscale",
-            Look::BlackWhite => "bw",
+            Self::Original => "original",
+            Self::Colour => "colour",
+            Self::Greyscale => "greyscale",
+            Self::BlackWhite => "bw",
         }
     }
 
-    pub fn from_name(name: &str) -> Option<Look> {
-        Look::ALL.into_iter().find(|l| l.name() == name)
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|l| l.name() == name)
     }
 }
 

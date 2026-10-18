@@ -47,29 +47,29 @@ pub const HIDDEN: [Hidden; 9] = [
 impl Hidden {
     pub fn label(self) -> &'static str {
         match self {
-            Hidden::Metadata => "Metadata",
-            Hidden::Attachments => "File attachments",
-            Hidden::Comments => "Comments and markups",
-            Hidden::FormFields => "Form fields",
-            Hidden::HiddenText => "Hidden text",
-            Hidden::HiddenLayers => "Hidden layers",
-            Hidden::Bookmarks => "Bookmarks",
-            Hidden::LinksActionsScripts => "Links, actions and JavaScripts",
-            Hidden::PrivateData => "Private data of other applications",
+            Self::Metadata => "Metadata",
+            Self::Attachments => "File attachments",
+            Self::Comments => "Comments and markups",
+            Self::FormFields => "Form fields",
+            Self::HiddenText => "Hidden text",
+            Self::HiddenLayers => "Hidden layers",
+            Self::Bookmarks => "Bookmarks",
+            Self::LinksActionsScripts => "Links, actions and JavaScripts",
+            Self::PrivateData => "Private data of other applications",
         }
     }
 
     pub fn id(self) -> &'static str {
         match self {
-            Hidden::Metadata => "metadata",
-            Hidden::Attachments => "attachments",
-            Hidden::Comments => "comments",
-            Hidden::FormFields => "form-fields",
-            Hidden::HiddenText => "hidden-text",
-            Hidden::HiddenLayers => "hidden-layers",
-            Hidden::Bookmarks => "bookmarks",
-            Hidden::LinksActionsScripts => "links-actions-scripts",
-            Hidden::PrivateData => "private-data",
+            Self::Metadata => "metadata",
+            Self::Attachments => "attachments",
+            Self::Comments => "comments",
+            Self::FormFields => "form-fields",
+            Self::HiddenText => "hidden-text",
+            Self::HiddenLayers => "hidden-layers",
+            Self::Bookmarks => "bookmarks",
+            Self::LinksActionsScripts => "links-actions-scripts",
+            Self::PrivateData => "private-data",
         }
     }
 

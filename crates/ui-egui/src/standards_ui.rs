@@ -17,7 +17,7 @@ pub struct PdfaState {
 
 impl Default for PdfaState {
     fn default() -> Self {
-        PdfaState { level: Level::A2b, issues: None, fixed: Vec::new() }
+        Self { level: Level::A2b, issues: None, fixed: Vec::new() }
     }
 }
 

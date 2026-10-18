@@ -251,25 +251,25 @@ impl PartialEq for Lang {
 impl Eq for Lang {}
 
 impl Lang {
-    pub const EN: Lang = Lang(&LANGUAGES[0]);
+    pub const EN: Self = Self(&LANGUAGES[0]);
 
     pub fn code(self) -> &'static str {
         self.0.code
     }
 
     /// A language by its exact code.
-    pub fn from_code(code: &str) -> Option<Lang> {
+    pub fn from_code(code: &str) -> Option<Self> {
         LANGUAGES.iter().find(|l| l.code.eq_ignore_ascii_case(code)).map(Lang)
     }
 
     /// Resolve the `language` preference: a language code, or [`AUTO`] (and anything unknown,
     /// e.g. a code from a newer version) to follow the system locale.
-    pub fn from_pref(pref: &str) -> Lang {
-        Lang::from_code(pref).unwrap_or_else(system_lang)
+    pub fn from_pref(pref: &str) -> Self {
+        Self::from_code(pref).unwrap_or_else(system_lang)
     }
 
     /// Every registered language.
-    pub fn all() -> impl Iterator<Item = Lang> {
+    pub fn all() -> impl Iterator<Item = Self> {
         LANGUAGES.iter().map(Lang)
     }
 

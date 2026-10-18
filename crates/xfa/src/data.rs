@@ -25,7 +25,7 @@ const MAX_DEPTH: usize = 64;
 pub struct DataNode {
     pub name: String,
     pub text: String,
-    pub children: Vec<DataNode>,
+    pub children: Vec<Self>,
 }
 
 /// A path into the data: `(name, index among same-named siblings)` per level.
@@ -33,7 +33,7 @@ pub type DataPath = Vec<(String, usize)>;
 
 impl DataNode {
     /// The node at `path` below this one.
-    pub fn get(&self, path: &[(String, usize)]) -> Option<&DataNode> {
+    pub fn get(&self, path: &[(String, usize)]) -> Option<&Self> {
         let mut node = self;
         for (name, idx) in path {
             node = node.children.iter().filter(|c| &c.name == name).nth(*idx)?;
@@ -362,7 +362,7 @@ const MAX_INDEX: usize = 10_000;
 struct Build {
     name: String,
     text: String,
-    children: Vec<Build>,
+    children: Vec<Self>,
     /// Positions in `children` by name, in order.
     by_name: HashMap<String, Vec<usize>>,
 }
@@ -371,7 +371,7 @@ impl Build {
     /// The node at `path` below this one, created as needed. `None` when the path is deeper
     /// than [`MAX_DEPTH`], an index is above [`MAX_INDEX`], or creating it would spend more
     /// than `budget` new nodes.
-    fn at(&mut self, path: &[(String, usize)], budget: &mut usize) -> Option<&mut Build> {
+    fn at(&mut self, path: &[(String, usize)], budget: &mut usize) -> Option<&mut Self> {
         if path.len() > MAX_DEPTH {
             return None;
         }
@@ -391,7 +391,7 @@ impl Build {
                 for _ in 0..need {
                     let pos = node.children.len();
                     node.by_name.entry(name.clone()).or_default().push(pos);
-                    node.children.push(Build { name: name.clone(), ..Default::default() });
+                    node.children.push(Self { name: name.clone(), ..Default::default() });
                 }
             }
             let pos = *node.by_name.get(&name)?.get(*idx)?;
@@ -626,7 +626,7 @@ pub struct ImportNode {
     /// `(namespace, name, value)`.
     pub attrs: Vec<(Option<String>, String, String)>,
     pub text: String,
-    pub children: Vec<ImportNode>,
+    pub children: Vec<Self>,
 }
 
 /// Deepest data an import keeps.
@@ -1063,7 +1063,7 @@ pub enum DataOp {
 impl DataNode {
     /// The node at `path`, made (with empty siblings before it) where missing; `None` past
     /// the index cap.
-    fn ensure(&mut self, path: &[(String, usize)]) -> Option<&mut DataNode> {
+    fn ensure(&mut self, path: &[(String, usize)]) -> Option<&mut Self> {
         let mut node = self;
         for (name, idx) in path {
             if *idx >= MAX_INDEX {
@@ -1071,7 +1071,7 @@ impl DataNode {
             }
             let have = node.children.iter().filter(|c| &c.name == name).count();
             for _ in have..=*idx {
-                node.children.push(DataNode { name: name.clone(), ..Default::default() });
+                node.children.push(Self { name: name.clone(), ..Default::default() });
             }
             node = node.children.iter_mut().filter(|c| &c.name == name).nth(*idx)?;
         }

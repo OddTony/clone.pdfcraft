@@ -2152,10 +2152,10 @@ impl PageXform {
     /// This transform resized to a raster of `px` device pixels (width, height before the view
     /// rotation), so each of its texels covers one screen pixel. The rectangle's corner must
     /// already be on a whole pixel ([`snap_to_pixels`]).
-    fn texel_aligned(&self, px: [usize; 2], ppp: f32) -> PageXform {
+    fn texel_aligned(&self, px: [usize; 2], ppp: f32) -> Self {
         let (w, h) = (px[0] as f32 / ppp, px[1] as f32 / ppp);
         let size = if self.rot % 180 == 90 { vec2(h, w) } else { vec2(w, h) };
-        PageXform { rect: Rect::from_min_size(self.rect.min, size), ..*self }
+        Self { rect: Rect::from_min_size(self.rect.min, size), ..*self }
     }
 
     /// Draw a texture covering the normalised page region, rotated with the view.

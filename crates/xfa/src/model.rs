@@ -16,18 +16,18 @@ pub enum Presence {
 }
 
 impl Presence {
-    pub fn parse(s: Option<&str>) -> Presence {
+    pub fn parse(s: Option<&str>) -> Self {
         match s.map(str::trim) {
-            Some("invisible") => Presence::Invisible,
-            Some("hidden") => Presence::Hidden,
-            Some("inactive") => Presence::Inactive,
-            _ => Presence::Visible,
+            Some("invisible") => Self::Invisible,
+            Some("hidden") => Self::Hidden,
+            Some("inactive") => Self::Inactive,
+            _ => Self::Visible,
         }
     }
 
     /// Takes space in the layout.
     pub fn occupies(self) -> bool {
-        matches!(self, Presence::Visible | Presence::Invisible)
+        matches!(self, Self::Visible | Self::Invisible)
     }
 }
 
@@ -47,14 +47,14 @@ pub enum Layout {
 }
 
 impl Layout {
-    pub fn parse(s: Option<&str>) -> Layout {
+    pub fn parse(s: Option<&str>) -> Self {
         match s.map(str::trim) {
-            Some("tb") => Layout::Tb,
-            Some("lr-tb") => Layout::LrTb,
-            Some("rl-tb") => Layout::RlTb,
-            Some("table") => Layout::Table,
-            Some("row") => Layout::Row,
-            _ => Layout::Positioned,
+            Some("tb") => Self::Tb,
+            Some("lr-tb") => Self::LrTb,
+            Some("rl-tb") => Self::RlTb,
+            Some("table") => Self::Table,
+            Some("row") => Self::Row,
+            _ => Self::Positioned,
         }
     }
 }
@@ -82,15 +82,15 @@ impl Margin {
 pub struct Color(pub [f64; 3]);
 
 impl Color {
-    pub const BLACK: Color = Color([0.0, 0.0, 0.0]);
-    pub const WHITE: Color = Color([1.0, 1.0, 1.0]);
+    pub const BLACK: Self = Self([0.0, 0.0, 0.0]);
+    pub const WHITE: Self = Self([1.0, 1.0, 1.0]);
 
     /// `value="r,g,b"` with components 0–255.
-    pub fn parse(s: &str) -> Option<Color> {
+    pub fn parse(s: &str) -> Option<Self> {
         let mut parts = s.split(',').map(|p| p.trim().parse::<f64>().ok());
         let (r, g, b) = (parts.next()??, parts.next()??, parts.next()??);
         let c = |v: f64| if v.is_finite() { (v / 255.0).clamp(0.0, 1.0) } else { 0.0 };
-        Some(Color([c(r), c(g), c(b)]))
+        Some(Self([c(r), c(g), c(b)]))
     }
 }
 
@@ -115,7 +115,7 @@ pub struct Edge {
 
 impl Default for Edge {
     fn default() -> Self {
-        Edge { presence: Presence::Visible, thickness: 0.5, color: Color::BLACK, stroke: Stroke::Solid }
+        Self { presence: Presence::Visible, thickness: 0.5, color: Color::BLACK, stroke: Stroke::Solid }
     }
 }
 
@@ -171,13 +171,13 @@ pub struct Font {
 impl Default for Font {
     /// XFA's default font: Courier 10 pt.
     fn default() -> Self {
-        Font { typeface: "Courier".into(), size: 10.0, bold: false, italic: false, underline: false, color: Color::BLACK }
+        Self { typeface: "Courier".into(), size: 10.0, bold: false, italic: false, underline: false, color: Color::BLACK }
     }
 }
 
 impl Font {
-    pub fn apply(&self, spec: &FontSpec) -> Font {
-        Font {
+    pub fn apply(&self, spec: &FontSpec) -> Self {
+        Self {
             typeface: spec.typeface.clone().unwrap_or_else(|| self.typeface.clone()),
             size: spec.size.unwrap_or(self.size),
             bold: spec.bold.unwrap_or(self.bold),
@@ -198,12 +198,12 @@ pub enum HAlign {
 }
 
 impl HAlign {
-    pub fn parse(s: Option<&str>) -> Option<HAlign> {
+    pub fn parse(s: Option<&str>) -> Option<Self> {
         match s.map(str::trim) {
-            Some("left") => Some(HAlign::Left),
-            Some("center") => Some(HAlign::Center),
-            Some("right") => Some(HAlign::Right),
-            Some("justify" | "justifyAll") => Some(HAlign::Justify),
+            Some("left") => Some(Self::Left),
+            Some("center") => Some(Self::Center),
+            Some("right") => Some(Self::Right),
+            Some("justify" | "justifyAll") => Some(Self::Justify),
             _ => None,
         }
     }
@@ -218,11 +218,11 @@ pub enum VAlign {
 }
 
 impl VAlign {
-    pub fn parse(s: Option<&str>) -> Option<VAlign> {
+    pub fn parse(s: Option<&str>) -> Option<Self> {
         match s.map(str::trim) {
-            Some("top") => Some(VAlign::Top),
-            Some("middle") => Some(VAlign::Middle),
-            Some("bottom") => Some(VAlign::Bottom),
+            Some("top") => Some(Self::Top),
+            Some("middle") => Some(Self::Middle),
+            Some("bottom") => Some(Self::Bottom),
             _ => None,
         }
     }
@@ -238,7 +238,7 @@ pub struct Anchor {
 }
 
 impl Anchor {
-    pub fn parse(s: Option<&str>) -> Anchor {
+    pub fn parse(s: Option<&str>) -> Self {
         let s = s.map(str::trim).unwrap_or("");
         let v = if s.starts_with("middle") {
             0.5
@@ -254,7 +254,7 @@ impl Anchor {
         } else {
             0.0
         };
-        Anchor { h, v }
+        Self { h, v }
     }
 }
 
@@ -285,8 +285,8 @@ pub struct Para {
 }
 
 impl Para {
-    pub fn apply(&self, spec: &ParaSpec) -> Para {
-        Para {
+    pub fn apply(&self, spec: &ParaSpec) -> Self {
+        Self {
             h_align: spec.h_align.unwrap_or(self.h_align),
             v_align: spec.v_align.unwrap_or(self.v_align),
             line_height: spec.line_height.or(self.line_height),
@@ -341,11 +341,11 @@ impl Common {
 impl Node {
     pub fn common(&self) -> &Common {
         match self {
-            Node::Subform(s) => &s.common,
-            Node::Area(a) => &a.common,
-            Node::Field(f) => &f.common,
-            Node::Draw(d) => &d.common,
-            Node::ExclGroup(g) => &g.common,
+            Self::Subform(s) => &s.common,
+            Self::Area(a) => &a.common,
+            Self::Field(f) => &f.common,
+            Self::Draw(d) => &d.common,
+            Self::ExclGroup(g) => &g.common,
         }
     }
 }
@@ -355,7 +355,7 @@ pub(crate) struct SomIndices(Vec<usize>);
 impl SomIndices {
     pub(crate) fn of(children: &[Node]) -> Self {
         let mut seen = std::collections::HashMap::new();
-        SomIndices(
+        Self(
             children
                 .iter()
                 .map(|c| {
@@ -385,7 +385,7 @@ pub struct Occur {
 
 impl Default for Occur {
     fn default() -> Self {
-        Occur { min: 1, max: Some(1), initial: 1 }
+        Self { min: 1, max: Some(1), initial: 1 }
     }
 }
 
@@ -569,9 +569,9 @@ pub enum Value {
 impl Value {
     pub fn is_empty(&self) -> bool {
         match self {
-            Value::Empty => true,
-            Value::Text(t) => t.trim().is_empty(),
-            Value::Rich(r) => r.paragraphs.iter().all(|p| p.runs.iter().all(|r| r.text.trim().is_empty() && r.embed.is_none())),
+            Self::Empty => true,
+            Self::Text(t) => t.trim().is_empty(),
+            Self::Rich(r) => r.paragraphs.iter().all(|p| p.runs.iter().all(|r| r.text.trim().is_empty() && r.embed.is_none())),
             _ => false,
         }
     }
@@ -579,8 +579,8 @@ impl Value {
     /// The plain text of a text or rich value.
     pub fn plain(&self) -> Option<String> {
         match self {
-            Value::Text(t) => Some(t.clone()),
-            Value::Rich(r) => Some(r.plain()),
+            Self::Text(t) => Some(t.clone()),
+            Self::Rich(r) => Some(r.plain()),
             _ => None,
         }
     }
@@ -646,8 +646,8 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub fn new(x: f64, y: f64, w: f64, h: f64) -> Rect {
-        Rect { x, y, w, h: h.max(0.0) }
+    pub fn new(x: f64, y: f64, w: f64, h: f64) -> Self {
+        Self { x, y, w, h: h.max(0.0) }
     }
 
     pub fn right(&self) -> f64 {
@@ -658,8 +658,8 @@ impl Rect {
         self.y + self.h
     }
 
-    pub fn inset(&self, m: &Margin) -> Rect {
-        Rect::new(self.x + m.left, self.y + m.top, (self.w - m.horizontal()).max(0.0), (self.h - m.vertical()).max(0.0))
+    pub fn inset(&self, m: &Margin) -> Self {
+        Self::new(self.x + m.left, self.y + m.top, (self.w - m.horizontal()).max(0.0), (self.h - m.vertical()).max(0.0))
     }
 }
 

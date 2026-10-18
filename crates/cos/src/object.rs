@@ -141,7 +141,7 @@ impl Dict {
 
 impl FromIterator<(Name, Object)> for Dict {
     fn from_iter<T: IntoIterator<Item = (Name, Object)>>(iter: T) -> Self {
-        let mut d = Dict::new();
+        let mut d = Self::new();
         for (k, v) in iter {
             d.set(k, v);
         }
@@ -260,7 +260,7 @@ pub enum Object {
     Real(f64),
     String(PdfString),
     Name(Name),
-    Array(Vec<Object>),
+    Array(Vec<Self>),
     Dict(Dict),
     Stream(Stream),
     Ref(ObjRef),
@@ -268,65 +268,65 @@ pub enum Object {
 
 impl Object {
     pub fn name(n: &str) -> Self {
-        Object::Name(n.as_bytes().to_vec())
+        Self::Name(n.as_bytes().to_vec())
     }
 
     pub fn as_int(&self) -> Option<i64> {
         match self {
-            Object::Int(i) => Some(*i),
-            Object::Real(r) if r.fract() == 0.0 && r.is_finite() => Some(*r as i64),
+            Self::Int(i) => Some(*i),
+            Self::Real(r) if r.fract() == 0.0 && r.is_finite() => Some(*r as i64),
             _ => None,
         }
     }
 
     pub fn as_f64(&self) -> Option<f64> {
         match self {
-            Object::Int(i) => Some(*i as f64),
-            Object::Real(r) => Some(*r),
+            Self::Int(i) => Some(*i as f64),
+            Self::Real(r) => Some(*r),
             _ => None,
         }
     }
 
     pub fn as_name(&self) -> Option<&[u8]> {
         match self {
-            Object::Name(n) => Some(n),
+            Self::Name(n) => Some(n),
             _ => None,
         }
     }
 
     pub fn as_ref(&self) -> Option<ObjRef> {
         match self {
-            Object::Ref(r) => Some(*r),
+            Self::Ref(r) => Some(*r),
             _ => None,
         }
     }
 
     pub fn as_dict(&self) -> Option<&Dict> {
         match self {
-            Object::Dict(d) => Some(d),
-            Object::Stream(s) => Some(&s.dict),
+            Self::Dict(d) => Some(d),
+            Self::Stream(s) => Some(&s.dict),
             _ => None,
         }
     }
 
     pub fn as_dict_mut(&mut self) -> Option<&mut Dict> {
         match self {
-            Object::Dict(d) => Some(d),
-            Object::Stream(s) => Some(&mut s.dict),
+            Self::Dict(d) => Some(d),
+            Self::Stream(s) => Some(&mut s.dict),
             _ => None,
         }
     }
 
-    pub fn as_array(&self) -> Option<&Vec<Object>> {
+    pub fn as_array(&self) -> Option<&Vec<Self>> {
         match self {
-            Object::Array(a) => Some(a),
+            Self::Array(a) => Some(a),
             _ => None,
         }
     }
 
     pub fn as_string(&self) -> Option<&PdfString> {
         match self {
-            Object::String(s) => Some(s),
+            Self::String(s) => Some(s),
             _ => None,
         }
     }
@@ -334,47 +334,47 @@ impl Object {
 
 impl From<i64> for Object {
     fn from(v: i64) -> Self {
-        Object::Int(v)
+        Self::Int(v)
     }
 }
 impl From<i32> for Object {
     fn from(v: i32) -> Self {
-        Object::Int(v as i64)
+        Self::Int(v as i64)
     }
 }
 impl From<f64> for Object {
     fn from(v: f64) -> Self {
-        Object::Real(v)
+        Self::Real(v)
     }
 }
 impl From<bool> for Object {
     fn from(v: bool) -> Self {
-        Object::Bool(v)
+        Self::Bool(v)
     }
 }
 impl From<ObjRef> for Object {
     fn from(v: ObjRef) -> Self {
-        Object::Ref(v)
+        Self::Ref(v)
     }
 }
 impl From<Dict> for Object {
     fn from(v: Dict) -> Self {
-        Object::Dict(v)
+        Self::Dict(v)
     }
 }
-impl From<Vec<Object>> for Object {
-    fn from(v: Vec<Object>) -> Self {
-        Object::Array(v)
+impl From<Vec<Self>> for Object {
+    fn from(v: Vec<Self>) -> Self {
+        Self::Array(v)
     }
 }
 impl From<PdfString> for Object {
     fn from(v: PdfString) -> Self {
-        Object::String(v)
+        Self::String(v)
     }
 }
 impl From<Stream> for Object {
     fn from(v: Stream) -> Self {
-        Object::Stream(v)
+        Self::Stream(v)
     }
 }
 

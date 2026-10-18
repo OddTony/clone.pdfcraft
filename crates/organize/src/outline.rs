@@ -409,8 +409,8 @@ impl From<OutlineError> for OrganizeError {
     fn from(e: OutlineError) -> Self {
         match e {
             OutlineError::Organize(e) => e,
-            OutlineError::Cos(e) => OrganizeError::Cos(e),
-            other => OrganizeError::Invalid(other.to_string()),
+            OutlineError::Cos(e) => Self::Cos(e),
+            other => Self::Invalid(other.to_string()),
         }
     }
 }

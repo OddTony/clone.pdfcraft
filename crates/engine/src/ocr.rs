@@ -51,7 +51,7 @@ fn covered(word: [f32; 4], text: &[[f32; 4]]) -> f32 {
 
 impl Default for OcrSettings {
     fn default() -> Self {
-        OcrSettings { dpi: 300.0, language: "en".into(), skip_text_pages: true }
+        Self { dpi: 300.0, language: "en".into(), skip_text_pages: true }
     }
 }
 

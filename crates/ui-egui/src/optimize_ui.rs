@@ -62,8 +62,8 @@ impl OptimizeKind {
     /// The suffix of the saved copy's name ("notes (reduced).pdf").
     pub(crate) fn suffix(self) -> &'static str {
         match self {
-            OptimizeKind::Reduce => "reduced",
-            OptimizeKind::Advanced => "optimized",
+            Self::Reduce => "reduced",
+            Self::Advanced => "optimized",
         }
     }
 }

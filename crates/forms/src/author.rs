@@ -45,15 +45,15 @@ pub enum NewField {
 impl NewField {
     fn base_name(&self) -> &'static str {
         match self {
-            NewField::Text { .. } => "Text",
-            NewField::Date => "Date",
-            NewField::CheckBox => "Check Box",
-            NewField::Radio { .. } => "Group",
-            NewField::Combo { .. } => "Dropdown",
-            NewField::List { .. } => "List Box",
-            NewField::Button { .. } => "Button",
-            NewField::Image => "Image",
-            NewField::Signature => "Signature",
+            Self::Text { .. } => "Text",
+            Self::Date => "Date",
+            Self::CheckBox => "Check Box",
+            Self::Radio { .. } => "Group",
+            Self::Combo { .. } => "Dropdown",
+            Self::List { .. } => "List Box",
+            Self::Button { .. } => "Button",
+            Self::Image => "Image",
+            Self::Signature => "Signature",
         }
     }
 }
@@ -298,25 +298,25 @@ pub enum BorderStyle {
 }
 
 impl BorderStyle {
-    pub const ALL: [BorderStyle; 5] = [BorderStyle::Solid, BorderStyle::Dashed, BorderStyle::Beveled, BorderStyle::Inset, BorderStyle::Underline];
+    pub const ALL: [Self; 5] = [Self::Solid, Self::Dashed, Self::Beveled, Self::Inset, Self::Underline];
 
     fn code(self) -> &'static str {
         match self {
-            BorderStyle::Solid => "S",
-            BorderStyle::Dashed => "D",
-            BorderStyle::Beveled => "B",
-            BorderStyle::Inset => "I",
-            BorderStyle::Underline => "U",
+            Self::Solid => "S",
+            Self::Dashed => "D",
+            Self::Beveled => "B",
+            Self::Inset => "I",
+            Self::Underline => "U",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            BorderStyle::Solid => "Solid",
-            BorderStyle::Dashed => "Dashed",
-            BorderStyle::Beveled => "Beveled",
-            BorderStyle::Inset => "Inset",
-            BorderStyle::Underline => "Underline",
+            Self::Solid => "Solid",
+            Self::Dashed => "Dashed",
+            Self::Beveled => "Beveled",
+            Self::Inset => "Inset",
+            Self::Underline => "Underline",
         }
     }
 }
@@ -329,21 +329,21 @@ pub enum FieldFont {
 }
 
 impl FieldFont {
-    pub const ALL: [FieldFont; 3] = [FieldFont::Helvetica, FieldFont::Times, FieldFont::Courier];
+    pub const ALL: [Self; 3] = [Self::Helvetica, Self::Times, Self::Courier];
 
     fn resource(self) -> &'static str {
         match self {
-            FieldFont::Helvetica => "Helv",
-            FieldFont::Times => "TiRo",
-            FieldFont::Courier => "Cour",
+            Self::Helvetica => "Helv",
+            Self::Times => "TiRo",
+            Self::Courier => "Cour",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            FieldFont::Helvetica => "Helvetica",
-            FieldFont::Times => "Times Roman",
-            FieldFont::Courier => "Courier",
+            Self::Helvetica => "Helvetica",
+            Self::Times => "Times Roman",
+            Self::Courier => "Courier",
         }
     }
 }
@@ -362,28 +362,27 @@ pub enum CheckStyle {
 }
 
 impl CheckStyle {
-    pub const ALL: [CheckStyle; 6] =
-        [CheckStyle::Check, CheckStyle::Circle, CheckStyle::Cross, CheckStyle::Diamond, CheckStyle::Square, CheckStyle::Star];
+    pub const ALL: [Self; 6] = [Self::Check, Self::Circle, Self::Cross, Self::Diamond, Self::Square, Self::Star];
 
     fn code(self) -> &'static str {
         match self {
-            CheckStyle::Check => "4",
-            CheckStyle::Circle => "l",
-            CheckStyle::Cross => "8",
-            CheckStyle::Diamond => "u",
-            CheckStyle::Square => "n",
-            CheckStyle::Star => "H",
+            Self::Check => "4",
+            Self::Circle => "l",
+            Self::Cross => "8",
+            Self::Diamond => "u",
+            Self::Square => "n",
+            Self::Star => "H",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
-            CheckStyle::Check => "Check",
-            CheckStyle::Circle => "Circle",
-            CheckStyle::Cross => "Cross",
-            CheckStyle::Diamond => "Diamond",
-            CheckStyle::Square => "Square",
-            CheckStyle::Star => "Star",
+            Self::Check => "Check",
+            Self::Circle => "Circle",
+            Self::Cross => "Cross",
+            Self::Diamond => "Diamond",
+            Self::Square => "Square",
+            Self::Star => "Star",
         }
     }
 
@@ -391,11 +390,7 @@ impl CheckStyle {
     pub(crate) fn of_widget(doc: &Document, wd: &Dict, kind: FieldKind) -> Self {
         let mk = wd.get(b"MK").and_then(|m| doc.resolve(m).as_dict().cloned()).unwrap_or_default();
         let ca = mk.get(b"CA").and_then(|c| doc.resolve(c).as_string().map(|s| s.to_text()));
-        CheckStyle::ALL.into_iter().find(|s| ca.as_deref() == Some(s.code())).unwrap_or(if kind == FieldKind::Radio {
-            CheckStyle::Circle
-        } else {
-            CheckStyle::Check
-        })
+        Self::ALL.into_iter().find(|s| ca.as_deref() == Some(s.code())).unwrap_or(if kind == FieldKind::Radio { Self::Circle } else { Self::Check })
     }
 }
 
