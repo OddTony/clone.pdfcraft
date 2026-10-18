@@ -190,6 +190,9 @@ pub(crate) struct Frame {
     row_span: usize,
     /// Marked content, or an object reference, directly under it.
     pub(crate) content: bool,
+    /// Marked content (an MCID or an MCR) directly under it: page content, which an object
+    /// reference alone isn't.
+    pub(crate) marked: bool,
     /// An annotation (OBJR) directly under it.
     annot: bool,
     /// Content, or an annotation, under it: set as its children close.
@@ -343,7 +346,7 @@ impl Walker<'_> {
                 self.tasks.push(Task::Items { loc: loc.clone(), next: 0, len: items.len(), depth: depth + 1, page });
             }
             Object::Int(mcid) => {
-                self.mark_content();
+                self.mark_content(true);
                 v.marked_content(&self.frames, page, *mcid);
             }
             Object::Ref(r) => self.reference(*r, depth, page, v),
@@ -369,7 +372,7 @@ impl Walker<'_> {
         let Some(d) = loc.value().and_then(|o| o.as_dict()) else { return };
         match d.name(b"Type") {
             Some(b"MCR") => {
-                self.mark_content();
+                self.mark_content(true);
                 let mcid = d.get(b"MCID").map(|m| self.doc.resolve(m)).and_then(|m| m.as_int());
                 if let Some(mcid) = mcid
                     && !d.contains(b"Stm")
@@ -379,7 +382,7 @@ impl Walker<'_> {
                 return;
             }
             Some(b"OBJR") => {
-                self.mark_content();
+                self.mark_content(false);
                 let obj = d.get(b"Obj").and_then(Object::as_ref);
                 let annotation = obj.is_some_and(|o| self.doc.get(o).as_dict().is_some_and(|a| a.contains(b"Subtype") && a.contains(b"Rect")));
                 if annotation && let Some(parent) = self.frames.last_mut() {
@@ -421,6 +424,7 @@ impl Walker<'_> {
             col_span: span(&attrs, b"ColSpan"),
             row_span: span(&attrs, b"RowSpan"),
             content: false,
+            marked: false,
             annot: false,
             sub_content: false,
             sub_annot: false,
@@ -446,10 +450,11 @@ impl Walker<'_> {
         v.exit(&self.frames, &frame);
     }
 
-    /// Marked content, or an object reference, directly under the open element.
-    fn mark_content(&mut self) {
+    /// Marked content (`marked`), or an object reference, directly under the open element.
+    fn mark_content(&mut self, marked: bool) {
         if let Some(parent) = self.frames.last_mut() {
             parent.content = true;
+            parent.marked |= marked;
         }
     }
 

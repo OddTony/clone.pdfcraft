@@ -547,12 +547,19 @@ impl PdfCraftApp {
         self.notify(format!("{}: {found} · {}: {manual}", part.label(), tl!("Needs manual check")));
     }
 
-    /// Run the full check with the current options and show the results.
+    /// Run the full check with the current options and show the results: PDF/UA verification when
+    /// the options' profile is PDF/UA, else the Accessibility Checker.
     pub fn run_accessibility_check(&mut self) {
         if let Profile::PdfUa(part) = self.a11y_options.profile {
             self.verify_pdfua(part);
             return;
         }
+        self.run_checker();
+    }
+
+    /// The Accessibility Checker's rules, whatever the options' profile: what the Checker panel's
+    /// Check Again, Fix and Report act on, after a PDF/UA verification too.
+    fn run_checker(&mut self) {
         let Some((_, id)) = self.active_ids() else { return };
         let Some(doc) = self.session.get(id) else { return };
         let o = &self.a11y_options;
@@ -604,7 +611,8 @@ impl PdfCraftApp {
         let Some((_, id)) = self.active_ids() else { return };
         if !self.a11y.report.as_ref().is_some_and(|(d, _)| *d == id) {
             let create = std::mem::replace(&mut self.a11y_options.create_report, false);
-            self.run_accessibility_check();
+            // The report is the Checker's, even when the last check was a PDF/UA verification.
+            self.run_checker();
             self.a11y_options.create_report = create;
         }
         let Some((_, report)) = self.a11y.report.as_ref().filter(|(d, _)| *d == id) else { return };
@@ -629,7 +637,8 @@ impl PdfCraftApp {
 
     pub(crate) fn a11y_action(&mut self, index: usize, action: PanelAction) {
         match action {
-            PanelAction::CheckAgain => self.run_accessibility_check(),
+            // The Checker panel's own actions run the Checker; the PDF/UA panel sends VerifyPdfUa.
+            PanelAction::CheckAgain => self.run_checker(),
             PanelAction::VerifyPdfUa(part) => self.verify_pdfua(part),
             PanelAction::Options => self.dialog = Some(Dialog::AccessibilityOptions),
             PanelAction::ShowReport => self.show_accessibility_report(),
@@ -673,7 +682,7 @@ impl PdfCraftApp {
                                 if !self.apply_edit(e) {
                                     return;
                                 }
-                                self.run_accessibility_check();
+                                self.run_checker();
                                 // The title can then be edited.
                                 if rule == Rule::Title {
                                     self.dialog = Some(Dialog::Properties(PropsTab::Description));

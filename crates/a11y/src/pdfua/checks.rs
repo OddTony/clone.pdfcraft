@@ -264,35 +264,49 @@ fn role_map(doc: &Document, used: &BTreeSet<Vec<u8>>, c: &mut Collected) {
 enum End {
     Standard,
     Nowhere,
+    /// The entry is part of a circle.
     Circle,
+    /// The entry is not in a circle itself, but its chain runs into one.
+    IntoCircle,
 }
 
-/// Where the chain from `start` ends. Every type passed on the way is remembered in `ends` with the
-/// same end, so the whole map is followed once however many chains share it.
+/// Where the chain from `start` ends. Every type passed on the way is remembered in `ends`, so the
+/// whole map is followed once however many chains share it: the types that form a circle as
+/// [`End::Circle`], those that only lead into one as [`End::IntoCircle`], the others with the end
+/// their chain reaches.
 fn chain_end(start: &[u8], map: &HashMap<Vec<u8>, Vec<u8>>, ends: &mut HashMap<Vec<u8>, End>) -> End {
     let mut path: Vec<Vec<u8>> = Vec::new();
     let mut on_path: HashSet<Vec<u8>> = HashSet::new();
     let mut t = start.to_vec();
-    let end = loop {
+    // The end of the chain, and where on `path` a circle closes, if it does.
+    let (end, circle_from) = loop {
         if STANDARD_1_7.contains(&t.as_slice()) {
-            break End::Standard;
+            break (End::Standard, None);
         }
-        if let Some(end) = ends.get(&t) {
-            break *end;
+        if let Some(&end) = ends.get(&t) {
+            // A type followed before. Reached from another type, a circle is one that type only
+            // leads into; `start` itself keeps what it was found to be.
+            let end = if end == End::Circle && !path.is_empty() { End::IntoCircle } else { end };
+            break (end, None);
         }
         if !on_path.insert(t.clone()) {
-            break End::Circle;
+            break (End::IntoCircle, path.iter().position(|p| *p == t));
         }
         path.push(t.clone());
         match map.get(&t) {
             Some(next) => t = next.clone(),
-            None => break End::Nowhere,
+            None => break (End::Nowhere, None),
         }
     };
-    for t in path {
-        ends.insert(t, end);
+    let mut result = end;
+    for (i, t) in path.into_iter().enumerate() {
+        let e = if circle_from.is_some_and(|from| i >= from) { End::Circle } else { end };
+        if i == 0 {
+            result = e;
+        }
+        ends.insert(t, e);
     }
-    end
+    result
 }
 
 /// The element enclosing an annotation's object reference.
@@ -430,7 +444,9 @@ impl Visitor for Tree {
 
     fn exit(&mut self, ancestors: &[Frame], e: &Frame) {
         let lang = self.open.pop().is_some_and(|o| o.lang);
-        if !self.doc_lang && !lang && e.content {
+        // Page content needs a language; a tag that only holds an annotation (OBJR) is checked
+        // under 11-004 and 11-005, with the annotation.
+        if !self.doc_lang && !lang && e.marked {
             self.add("11-001", e.index, || structure::finding(e, "no language (Lang) on it, above it or on the document"));
         }
         if e.kind == Kind::Table && self.tables.last().is_some_and(|t| t.depth == ancestors.len()) {

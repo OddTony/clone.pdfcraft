@@ -322,7 +322,7 @@ impl Automation {
             "failed": failures,
             "manual": listed(Outcome::Manual),
             "not_checked": listed(Outcome::NotChecked),
-            "passed": r.with(Outcome::Passed).map(|x| x.condition.id).collect::<Vec<_>>(),
+            "passed": listed(Outcome::Passed),
             "note": "Machine checks only. Conditions under manual need a person, and those under not_checked another validator, before the file can be called PDF/UA conformant.",
         }))
     }
