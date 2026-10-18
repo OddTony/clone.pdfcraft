@@ -706,13 +706,14 @@ impl Pen {
 /// are one stream in pieces (§7.8.2), so a `cm` (AutoCAD scales the whole page in the first
 /// stream), an unbalanced `q`, the font and the colour still apply in the streams after it.
 struct Carry {
+    visibility: crate::optional_content::Visibility,
     ts: Ts,
     stack: Vec<Ts>,
     marked: Vec<Option<usize>>,
 }
 
 impl Carry {
-    fn new() -> Self {
+    fn new(doc: &Document) -> Self {
         let ts = Ts {
             ctm: Matrix::IDENTITY,
             fill: Vec::new(),
@@ -726,7 +727,7 @@ impl Carry {
             rise: 0.0,
             render_mode: 0,
         };
-        Carry { ts, stack: Vec::new(), marked: Vec::new() }
+        Carry { ts, stack: Vec::new(), marked: Vec::new(), visibility: crate::optional_content::Visibility::new(doc) }
     }
 }
 
@@ -736,13 +737,14 @@ type Invocation = (usize, Vec<u8>, Ts);
 fn interpret(
     doc: &Document,
     ops: &[Op],
-    fonts_res: &Dict,
+    resources: &Dict,
     cache: &mut HashMap<Vec<u8>, (Rc<Metrics>, Option<String>)>,
     carry: &mut Carry,
     mut invoked: Option<&mut Vec<Invocation>>,
     // `Some(properties)`: read `/ActualText`, looking named property lists up in `properties`.
     logical_text: Option<&Dict>,
 ) -> Vec<Shown> {
+    let fonts_res = resources.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
     let mut out: Vec<Shown> = Vec::new();
     let mut ts = carry.ts.clone();
     let mut at_bt = (0usize, ts.clone());
@@ -752,6 +754,15 @@ fn interpret(
     let mut marked = std::mem::take(&mut carry.marked);
     let mut actual: Vec<Option<(usize, usize, String)>> = Vec::new();
     for (i, op) in ops.iter().enumerate() {
+        let overflow = carry.visibility.overflowing();
+        carry.visibility.apply(doc, resources, op);
+        let visible =
+            carry.visibility.visible() && (!op.is("Do") || op.name(0).is_none_or(|name| carry.visibility.xobject_visible(doc, resources, name)));
+        if !visible && matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"" | b"Do") {
+            // A replacement spanning visible and hidden content could disclose the hidden
+            // text. Read the remaining visible glyphs instead of that replacement string.
+            actual.iter_mut().for_each(|a| *a = None);
+        }
         match op.op.as_slice() {
             b"BMC" | b"BDC" if marked.len() < 256 => {
                 // Marked text paragraphs/headings are authoritative boundaries. Ignore
@@ -767,9 +778,9 @@ fn interpret(
                     Object::String(s) if s.bytes.len() <= 4_000_000 => Some(s.to_text()),
                     _ => None,
                 });
-                actual.push(logical.map(|s| (out.len(), i, s)));
+                actual.push(if visible { logical.map(|s| (out.len(), i, s)) } else { None });
             }
-            b"EMC" => {
+            b"EMC" if !overflow => {
                 marked.pop();
                 if let Some(Some((start, open, logical))) = actual.pop() {
                     let tail = out.split_off(start.min(out.len()));
@@ -844,7 +855,7 @@ fn interpret(
             b"TL" => ts.leading = op.num(0).unwrap_or(0.0),
             b"Ts" => ts.rise = op.num(0).unwrap_or(0.0),
             b"Tr" => ts.render_mode = op.operands.first().and_then(Object::as_int).unwrap_or(-1),
-            b"Do" => {
+            b"Do" if visible => {
                 if let (Some(list), Some(name)) = (invoked.as_deref_mut(), op.name(0)) {
                     list.push((i, name.to_vec(), ts.clone()));
                 }
@@ -968,7 +979,7 @@ fn interpret(
                 let size_user = (trm0.0[2].powi(2) + trm0.0[3].powi(2)).sqrt() * ts.size;
                 // A numeric-only TJ adjusts the current text matrix but paints no glyphs.
                 // It must not create a phantom editable line or enlarge its neighbours' boxes.
-                if !pieces.iter().any(|p| matches!(p, Object::String(s) if !s.bytes.is_empty())) {
+                if !visible || !pieces.iter().any(|p| matches!(p, Object::String(s) if !s.bytes.is_empty())) {
                     continue;
                 }
                 out.push(Shown {
@@ -1016,16 +1027,15 @@ fn interpret(
 pub fn text_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError> {
     let p = page_dict(doc, page)?;
     let res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
-    let fonts_res = res.get(b"Font").map(|f| doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
     let mut cache = HashMap::new();
     let mut lines: Vec<TextLine> = Vec::new();
-    let mut carry = Carry::new();
+    let mut carry = Carry::new(doc);
     // The streams are one stream in pieces (§7.8.2), split between any two tokens: parse them
     // joined, so an operator whose operands end one piece still has them.
     let pieces = Pieces::join(&content_streams(doc, &p.dict).into_iter().map(|(_, d)| d).collect::<Vec<_>>());
     let ops = pieces.parse().ops;
     let properties = res.get(b"Properties").and_then(|o| doc.dict(o)).unwrap_or_default();
-    let shown = interpret(doc, &ops, &fonts_res, &mut cache, &mut carry, None, Some(&properties));
+    let shown = interpret(doc, &ops, &res, &mut cache, &mut carry, None, Some(&properties));
     let mut last: Option<(usize, Pen)> = None; // the stream piece and where its last run ended
     for mut s in shown {
         // A single RTL glyph's ActualText (e.g. lam-alef) is an inline ligature, not a
@@ -1262,14 +1272,14 @@ fn reading_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError
         next_stream: usize,
         path: Vec<pdfcraft_cos::ObjRef>,
         visits: usize,
+        visibility: crate::optional_content::Visibility,
     }
     /// `stream` gives the stream number of the operator at an index of `ops`.
     fn walk(w: &mut Walk, ops: &[Op], resources: &Dict, carry: &mut Carry, stream: &dyn Fn(usize) -> usize) {
-        let fonts_res = resources.get(b"Font").map(|f| w.doc.resolve(f)).and_then(|f| f.as_dict().cloned()).unwrap_or_default();
         let mut cache = HashMap::new();
         let mut invoked = Vec::new();
         let properties = resources.get(b"Properties").and_then(|o| w.doc.dict(o)).unwrap_or_default();
-        let shown = interpret(w.doc, ops, &fonts_res, &mut cache, carry, Some(&mut invoked), Some(&properties));
+        let shown = interpret(w.doc, ops, resources, &mut cache, carry, Some(&mut invoked), Some(&properties));
         let mut last = None;
         let mut last_stream = None;
         let mut forms = invoked.into_iter().peekable();
@@ -1291,10 +1301,13 @@ fn reading_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError
         }
     }
     fn enter(w: &mut Walk, resources: &Dict, name: &[u8], ts: Ts) {
+        if !w.visibility.xobject_visible(w.doc, resources, name) {
+            return;
+        }
         let Some(form) = form_call(w.doc, resources, name, ts.ctm, &w.path, &mut w.visits) else { return };
         let ops = parse(&form.data).ops;
         // The form starts with the graphics state at its `Do`, its own matrix applied.
-        let mut carry = Carry { ts: Ts { ctm: form.ctm, ..ts }, stack: Vec::new(), marked: Vec::new() };
+        let mut carry = Carry { ts: Ts { ctm: form.ctm, ..ts }, stack: Vec::new(), marked: Vec::new(), visibility: w.visibility.fresh() };
         let stream = w.next_stream;
         w.next_stream = w.next_stream.saturating_add(1);
         if let Some(r) = form.obj {
@@ -1308,8 +1321,8 @@ fn reading_lines(doc: &Document, page: usize) -> Result<Vec<TextLine>, EditError
     let p = page_dict(doc, page)?;
     let res = p.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let streams = content_streams(doc, &p.dict);
-    let mut w = Walk { doc, lines: Vec::new(), next_stream: streams.len(), path: Vec::new(), visits: 0 };
-    let mut carry = Carry::new();
+    let mut carry = Carry::new(doc);
+    let mut w = Walk { doc, lines: Vec::new(), next_stream: streams.len(), path: Vec::new(), visits: 0, visibility: carry.visibility.fresh() };
     // Read the page's streams as the one stream they are, in one pass, as rendering and editing
     // do: a comment, an operator's operands or a marked-content sequence (its /ActualText too)
     // can run on from one stream into the next. Text still counts as the stream its operator
@@ -1903,11 +1916,10 @@ pub fn clear_block(doc: &mut Document, page: usize, block: usize) -> Result<(), 
     drops.extend(target.lines.iter().filter_map(|i| lines.get(*i)).flat_map(|l| l.ops.iter().copied()));
     let p = page_dict(doc, page)?;
     let res = p.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
-    let fonts = res.get(b"Font").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
     let streams = content_streams(doc, &p.dict);
     let pieces = Pieces::join(&streams.iter().map(|(_, d)| d.as_slice()).collect::<Vec<_>>());
     let ops = pieces.parse().ops;
-    let shown = interpret(doc, &ops, &fonts, &mut HashMap::new(), &mut Carry::new(), None, None);
+    let shown = interpret(doc, &ops, &res, &mut HashMap::new(), &mut Carry::new(doc), None, None);
     let mut patches = HashMap::new();
     for s in shown.into_iter().filter(|s| drops.contains(&s.op)) {
         if s.state.render_mode >= 4 {
@@ -2564,7 +2576,7 @@ pub(crate) fn translate_blocks(doc: &mut Document, page: usize, indexes: &[usize
     let fonts = res.get(b"Font").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     let pieces = Pieces::join(&streams.iter().map(|(_, d)| d.as_slice()).collect::<Vec<_>>());
     let ops = pieces.parse().ops;
-    let shown = interpret(doc, &ops, &fonts, &mut HashMap::new(), &mut Carry::new(), None, None);
+    let shown = interpret(doc, &ops, &res, &mut HashMap::new(), &mut Carry::new(doc), None, None);
     let mut patches = HashMap::new();
     // Keep full precision: a tiny rounded text-space change can be magnified by a CTM,
     // and restoring rise/spacing must not alter following unselected text.
