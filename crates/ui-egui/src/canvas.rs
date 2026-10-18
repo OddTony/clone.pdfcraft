@@ -162,6 +162,52 @@ pub fn parse_display_token(value: &str) -> Option<(PageLayout, bool)> {
     }
 }
 
+/// Viewport reading background preference to reduce eye strain (Light, Default, Dark).
+/// Strictly a non-destructive UI/reading setting: does not alter the PDF file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PageBackground {
+    #[default]
+    Default,
+    Light,
+    Dark,
+}
+
+impl PageBackground {
+    pub const ALL: [Self; 3] = [Self::Default, Self::Light, Self::Dark];
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Default => Self::Light,
+            Self::Light => Self::Dark,
+            Self::Dark => Self::Default,
+        }
+    }
+
+    pub fn icon(self) -> &'static str {
+        match self {
+            Self::Default => "sun",
+            Self::Light => "contrast",
+            Self::Dark => "moon",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Default => "Default",
+            Self::Light => "Light",
+            Self::Dark => "Dark",
+        }
+    }
+
+    pub fn color(self) -> Option<Color32> {
+        match self {
+            Self::Default => None,
+            Self::Light => Some(Color32::from_rgb(247, 245, 240)),
+            Self::Dark => Some(Color32::from_rgb(0x1E, 0x1E, 0x1E)),
+        }
+    }
+}
+
 /// How a newly opened document is shown (Preferences ▸ Documents and view). A PDF that asks
 /// for its own layout or zoom gets that instead.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -199,15 +245,16 @@ impl ViewDefaults {
     /// for anything else, including a percentage outside the 8–6400% the view can show.
     pub fn with_zoom(self, name: &str) -> Option<Self> {
         let name = name.trim();
-        let (fit, zoom) = if name.eq_ignore_ascii_case("fit-width") {
-            (Fit::Width, self.zoom)
+        let (fit, continuous, zoom) = if name.eq_ignore_ascii_case("fit-width") {
+            (Fit::Width, true, self.zoom)
         } else if name.eq_ignore_ascii_case("fit-page") {
-            (Fit::Page, self.zoom)
+            (Fit::Page, false, self.zoom)
         } else {
             let percent = name.strip_suffix('%').unwrap_or(name).trim().parse::<f32>().ok().filter(|p| (8.0..=6400.0).contains(p))?;
-            (Fit::None, percent / 100.0)
+            let z = percent / 100.0;
+            (Fit::None, if z >= 1.25 { true } else { self.continuous }, z)
         };
-        Some(Self { fit, zoom, ..self })
+        Some(Self { fit, continuous, zoom, ..self })
     }
 }
 
@@ -410,6 +457,10 @@ pub struct DocView {
     /// Single-page view, as last drawn: the page shown and whether the view was at its top and
     /// at its bottom, so ↑ / ↓ turn the page there instead of doing nothing (#273).
     single_edges: Option<(usize, bool, bool)>,
+    /// Viewport reading background preference to reduce eye strain (Light, Default, Dark). Strictly non-destructive UI setting.
+    pub page_background: PageBackground,
+    /// Pinned scroll offset in single-page mode while a new page's texture is generating.
+    pub single_page_target_y: Option<f32>,
     /// Briefly outline an annotation after navigating to it from a panel.
     pub flash: Option<(usize, [f32; 4], f64)>,
     /// Compare files: differences shaded on this document's pages (page, user-space box, colour).
@@ -687,12 +738,18 @@ impl DocView {
     /// A view of a newly opened document, shown as `defaults` say. Opening a file then applies
     /// any layout or zoom the PDF itself asks for.
     pub fn new(id: DocId, info: &DocInfo, defaults: ViewDefaults) -> Self {
+        let continuous = match defaults.fit {
+            Fit::Page => false,
+            Fit::Width => true,
+            Fit::None => if defaults.zoom >= 1.25 { true } else { defaults.continuous },
+            _ => defaults.continuous,
+        };
         Self {
             id,
             zoom: defaults.zoom,
             fit: defaults.fit,
             layout: defaults.layout,
-            continuous: defaults.continuous,
+            continuous,
             rotation: 0,
             current: 0,
             organize: false,
@@ -711,6 +768,8 @@ impl DocView {
             goto_point: None,
             key_scroll: 0.0,
             single_edges: None,
+            page_background: PageBackground::Default,
+            single_page_target_y: None,
             flash: None,
             compare_marks: Vec::new(),
             pages: HashMap::new(),
@@ -842,6 +901,7 @@ impl DocView {
         fresh.rotation = self.rotation;
         fresh.current = self.current;
         fresh.organize = self.organize;
+        fresh.page_background = self.page_background;
         fresh.grid_zoom = self.grid_zoom;
         // Same document id, so the scroll offset egui keeps for it is still this document's.
         fresh.shown = self.shown;
@@ -1340,6 +1400,11 @@ impl DocView {
     /// Switch the zoom mode, keeping the current page in view.
     pub fn set_fit(&mut self, fit: Fit) {
         self.fit = fit;
+        match fit {
+            Fit::Page => self.continuous = false,
+            Fit::Width => self.continuous = true,
+            _ => {}
+        }
         self.goto = Some((self.current, 0.0));
     }
 
@@ -1503,6 +1568,9 @@ impl DocView {
             );
         self.zoom = zoom;
         self.fit = Fit::None;
+        if zoom >= 1.25 && !self.continuous {
+            self.continuous = true;
+        }
         match anchor {
             Some(a) => self.zoom_anchor = Some(a),
             // Nothing on screen yet (e.g. a launch option): align the current page instead.
@@ -2193,16 +2261,14 @@ pub fn shortcuts(view: &mut DocView, ctx: &egui::Context, speed: crate::scroll_s
             view.zoom_step(false);
         }
         if zoom_reset {
-            view.fit = Fit::Page;
-            view.goto = Some((view.current, 0.0));
+            view.set_fit(Fit::Page);
         }
     }
     if pressed(cmd(Key::Num1)) {
         view.set_zoom(1.0);
     }
     if pressed(cmd(Key::Num2)) {
-        view.fit = Fit::Width;
-        view.goto = Some((view.current, 0.0));
+        view.set_fit(Fit::Width);
     }
     if pressed(KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, Key::G)) {
         view.find_step(false);
@@ -2399,11 +2465,20 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
 
     let avail = ui.available_rect_before_wrap();
+    if let Some(bg) = view.page_background.color() {
+        ui.painter().rect_filled(avail, CornerRadius::ZERO, bg);
+    }
     view.viewport_w = avail.width();
     view.viewport_h = avail.height();
+    if let Some((target_page, _)) = view.goto {
+        let p = target_page.min(info.pages.len().saturating_sub(1));
+        if view.current != p {
+            view.current = p;
+        }
+    }
     let old_zoom = view.zoom;
     view.fit_zoom(info);
-    if view.shown && view.zoom_anchor.is_none() && view.goto.is_none() && view.goto_point.is_none() && (view.zoom - old_zoom).abs() > 1e-4 {
+    if view.continuous && view.shown && view.zoom_anchor.is_none() && view.goto.is_none() && view.goto_point.is_none() && (view.zoom - old_zoom).abs() > 1e-4 {
         let prev_viewport = view.viewport_screen;
         let top_y = prev_viewport.min.y;
         let anchor = view
@@ -2455,12 +2530,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         ui.ctx().request_repaint();
     }
 
-    let content_w = view.content_width(info, avail.width());
-    let rects = view.layout(info, content_w);
+    let mut content_w = view.content_width(info, avail.width());
+    let mut rects = view.layout(info, content_w);
     // When not scrolling continuously, only one row is shown at a time: the current page, or the
     // current two-page spread (with the cover rule). These indices drive paging, which pages are
     // drawn, and the content height (#752). Empty for a document with no pages.
-    let row: Vec<usize> = if rects.is_empty() {
+    let mut row: Vec<usize> = if rects.is_empty() {
         Vec::new()
     } else {
         let last = rects.len() - 1;
@@ -2482,6 +2557,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // keys. Runs before `visible_pages` so the frame that turns the page draws it.
     let mut single_paging = false;
     let mut edge_turned = false;
+    let mut page_turned = false;
     if !view.continuous {
         // The row's bounding box on screen (one page, or a two-page spread).
         let row_rect = row.iter().filter_map(|&i| rects.get(i)).copied().reduce(Rect::union);
@@ -2497,9 +2573,11 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     // Zooming (⌘ or Ctrl) and sideways scrolling (Shift) never turn pages.
                     let dy = if modifiers.command || modifiers.ctrl || modifiers.shift { 0.0 } else { delta.y };
                     if fits {
-                        view.single_page_wheel(*unit, dy, *phase, i.time, can_turn);
+                        page_turned |= view.single_page_wheel(*unit, dy, *phase, i.time, can_turn);
                     } else {
-                        edge_turned |= view.single_page_wheel_edge(*unit, dy, *phase, i.time, can_turn);
+                        let turned = view.single_page_wheel_edge(*unit, dy, *phase, i.time, can_turn);
+                        edge_turned |= turned;
+                        page_turned |= turned;
                     }
                 }
             }
@@ -2509,6 +2587,25 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             // part, as `ScrollArea` itself handles each axis.
             ui.input_mut(|i| i.smooth_scroll_delta.y = 0.0);
         }
+    }
+    if page_turned {
+        view.fit_zoom(info);
+        content_w = view.content_width(info, avail.width());
+        rects = view.layout(info, content_w);
+        row = if rects.is_empty() {
+            Vec::new()
+        } else {
+            let last = rects.len() - 1;
+            let cur = view.current.min(last);
+            match view.layout {
+                PageLayout::Single => vec![cur],
+                PageLayout::TwoUp if view.cover && cur == 0 => vec![0],
+                PageLayout::TwoUp => {
+                    let first = if view.cover { cur - (cur + 1) % 2 } else { cur - cur % 2 };
+                    if first < last { vec![first, first + 1] } else { vec![first] }
+                }
+            }
+        };
     }
     // Touchpad scrolling 1:1 (#759). A precision touchpad sends pixel-precise `MouseWheel`
     // events; on Windows they carry no `TouchPhase::Start`, so egui never takes its no-smoothing
@@ -2553,7 +2650,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if paging_owns_vertical {
         precise_scroll.y = 0.0;
     }
-    if now < view.precise_scroll_until {
+    let texture_ready = view.pages.contains_key(&view.current);
+    if !texture_ready {
+        ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
+        precise_scroll = Vec2::ZERO;
+        ui.ctx().request_repaint();
+    } else if now < view.precise_scroll_until {
         ui.input_mut(|i| i.smooth_scroll_delta = Vec2::ZERO);
     } else {
         precise_scroll = Vec2::ZERO;
@@ -2607,15 +2709,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         scroll = scroll.scroll_offset(Vec2::ZERO);
     }
     if let Some(v) = view.sync_scroll.take() {
-        scroll = scroll.scroll_offset(v);
+        scroll = scroll.scroll_offset(vec2(v.x.round(), v.y.round()));
     }
     if let Some((page, fx, fy, rel)) = view.zoom_anchor.take() {
         let r = rects[page.min(rects.len() - 1)];
         let point = pos2(r.left() + fx * r.width(), r.top() - y_shift + fy * r.height());
-        scroll = scroll.scroll_offset(vec2((point.x - rel.x).max(0.0), (point.y - rel.y).max(0.0)));
-    } else if edge_turned {
-        // The row above was laid out for the page before the turn: place the new one next frame.
-        ui.ctx().request_repaint();
+        scroll = scroll.scroll_offset(vec2((point.x - rel.x).max(0.0).round(), (point.y - rel.y).max(0.0).round()));
     } else if let Some((page, frac)) = view.goto.take() {
         let page = page.min(rects.len().saturating_sub(1));
         if let Some(&r) = rects.get(page) {
@@ -2633,8 +2732,19 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             } else {
                 (r.top() - GAP + frac * r.height()).clamp(0.0, max_scroll)
             };
-            scroll = scroll.scroll_offset(vec2(0.0, target_y));
+            let snapped_y = target_y.round();
+            if !view.continuous || !texture_ready {
+                view.single_page_target_y = Some(snapped_y);
+            }
+            scroll = scroll.scroll_offset(vec2(0.0, snapped_y));
         }
+    } else if !texture_ready {
+        let target_y = view.single_page_target_y.unwrap_or(0.0);
+        scroll = scroll.scroll_offset(vec2(0.0, target_y.round()));
+        ui.ctx().request_repaint();
+    } else if !view.continuous {
+        let target_y = view.single_page_target_y.unwrap_or(0.0);
+        scroll = scroll.scroll_offset(vec2(0.0, target_y.round()));
     }
     let ppp = ui.ctx().pixels_per_point();
     let scale = view.render_scale(ppp);
@@ -2746,11 +2856,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         // Within the content, so an unreachable point never shows a frame scrolled past the end.
         let (max_x, max_y) = ((content_w - avail.width()).max(0.0), (content_h - avail.height()).max(0.0));
         if let Some(fx) = fx {
-            scroll = scroll.horizontal_scroll_offset((r.left() + fx * r.width() - rel.x).clamp(0.0, max_x));
+            scroll = scroll.horizontal_scroll_offset(((r.left() + fx * r.width() - rel.x).clamp(0.0, max_x)).round());
         }
         if let Some(fy) = fy {
-            scroll = scroll.vertical_scroll_offset((r.top() - y_shift + fy * r.height() - rel.y).clamp(0.0, max_y));
+            scroll = scroll.vertical_scroll_offset(((r.top() - y_shift + fy * r.height() - rel.y).clamp(0.0, max_y)).round());
         }
+    }
+    if let Some(bg) = view.page_background.color() {
+        ui.painter().rect_filled(avail, CornerRadius::ZERO, bg);
     }
     let out = scroll.show_viewport(ui, |ui, viewport| {
         // egui's drag responses accept every pointer button. Keep a wheel gesture from also
@@ -2765,7 +2878,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         // (#531), and a drawing's edge scroll; positive y moves the content down. All scroll
         // without easing, unlike egui's wheel default.
         let delta = auto_delta + edge_delta - vec2(0.0, key_scroll) + precise_scroll + glide;
-        if delta != Vec2::ZERO {
+        if delta != Vec2::ZERO && texture_ready {
             ui.scroll_with_delta_animation(delta, egui::style::ScrollAnimation::none());
         }
         let (resp_rect, resp) = ui.allocate_exact_size(vec2(content_w, content_h), Sense::click_and_drag());
@@ -2785,6 +2898,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         let origin = resp_rect.min - vec2(0.0, y_shift);
         let painter = ui.painter();
         let visible = viewport.translate(resp_rect.min.to_vec2());
+        if let Some(bg) = view.page_background.color() {
+            painter.rect_filled(visible, CornerRadius::ZERO, bg);
+        }
         let mut wanted = Vec::new();
         let mut visible_now = Vec::new();
         view.screen_rects.clear();
@@ -2835,7 +2951,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             let xf = PageXform { rect: r, rot: view.rotation, pw: info.pages[i].width.max(1.0), ph: info.pages[i].height.max(1.0) };
             // Soft shadow + paper.
             painter.add(egui::epaint::Shadow { offset: [0, 3], blur: 14, spread: 0, color: t.page_shadow }.as_shape(r, CornerRadius::ZERO));
-            painter.rect_filled(r, CornerRadius::ZERO, Color32::WHITE);
+            let paper_color = match view.page_background {
+                PageBackground::Dark => Color32::from_rgb(0x1E, 0x1E, 0x1E),
+                PageBackground::Light => Color32::from_rgb(0xF5, 0xF2, 0xEB),
+                PageBackground::Default => Color32::WHITE,
+            };
+            painter.rect_filled(r, CornerRadius::ZERO, paper_color);
             if let Some(err) = view.errors.get(&i) {
                 painter.rect_filled(r, CornerRadius::ZERO, Color32::from_rgb(0xFB, 0xF4, 0xF4));
                 icons::paint(
@@ -2878,10 +2999,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                         }
                     }
                     None => {
-                        let now = ui.input(|inp| inp.time);
-                        let since = *view.waiting_since.entry(i).or_insert(now);
-                        let msg = if now - since > 6.0 { "Still rendering — this page is unusually complex…" } else { "Rendering…" };
-                        painter.text(r.center(), Align2::CENTER_CENTER, tl!(msg), theme::regular(12.0), t.text_faint);
+                        if let Some(thumb) = view.thumbs.get(&i) {
+                            xf.paint_image(painter, thumb.tex.id(), 0.0, 0.0, 1.0, 1.0);
+                        } else {
+                            let now = ui.input(|inp| inp.time);
+                            let since = *view.waiting_since.entry(i).or_insert(now);
+                            let msg = if now - since > 6.0 { "Still rendering — this page is unusually complex…" } else { "Rendering…" };
+                            painter.text(r.center(), Align2::CENTER_CENTER, tl!(msg), theme::regular(12.0), t.text_faint);
+                        }
                     }
                 }
                 if tiled && r.intersects(visible) {
@@ -2954,6 +3079,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             if editing_content {
                 let page_tex = view.pages.get(&i).map(|p| p.tex.id());
                 view.move_background.paint(ui, painter, &xf, i, info, &view.content, page_tex);
+            }
+            if let Some(tint) = match view.page_background {
+                PageBackground::Dark => Some(Color32::from_black_alpha(20)),
+                PageBackground::Light => Some(Color32::from_rgba_unmultiplied(250, 240, 215, 20)),
+                PageBackground::Default => None,
+            } {
+                painter.rect_filled(r, CornerRadius::ZERO, tint);
             }
             painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(0.5, t.border.gamma_multiply(0.8)), egui::StrokeKind::Outside);
 
@@ -3710,6 +3842,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         view.fling.moved((scroll_offset - view.last_scroll).length() > 0.01);
     }
     view.last_scroll = scroll_offset;
+    if view.pages.contains_key(&view.current) {
+        view.single_page_target_y = None;
+    }
     let pan_held = now_settle < view.pan_hold_until;
     let (mut wanted, visible_now) = out.inner;
     let cur = view.current;

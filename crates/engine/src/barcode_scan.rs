@@ -902,8 +902,20 @@ pub fn scan_rgba_buffer(width: usize, height: usize, rgba: &[u8], page: usize) -
 
     let mut codes = Vec::new();
 
+    let pad = 12usize;
+    let pad_w = width.saturating_add(pad.saturating_mul(2));
+    let pad_h = height.saturating_add(pad.saturating_mul(2));
+    let mut padded_pixels = vec![255u8; pad_w.saturating_mul(pad_h)];
+    for y in 0..height {
+        let src_start = y.saturating_mul(width);
+        let dst_start = (y.saturating_add(pad)).saturating_mul(pad_w).saturating_add(pad);
+        if let (Some(src), Some(dst)) = (gray.pixels.get(src_start..src_start.saturating_add(width)), padded_pixels.get_mut(dst_start..dst_start.saturating_add(width))) {
+            dst.copy_from_slice(src);
+        }
+    }
+
     // Primary Pass: Production-grade multi-format barcode & QR reader (rxing)
-    if let Ok(results) = rxing::helpers::detect_multiple_in_luma(gray.pixels.clone(), width as u32, height as u32) {
+    if let Ok(results) = rxing::helpers::detect_multiple_in_luma(padded_pixels, pad_w as u32, pad_h as u32) {
         for res in results {
             let text = res.getText().to_string();
             if text.is_empty() {
@@ -923,16 +935,17 @@ pub fn scan_rgba_buffer(width: usize, height: usize, rgba: &[u8], page: usize) -
             let mut max_y = 0.0f32;
 
             for pt in points {
-                min_x = min_x.min(pt.x);
-                max_x = max_x.max(pt.x);
-                min_y = min_y.min(pt.y);
-                max_y = max_y.max(pt.y);
+                let px = (pt.x - pad as f32).clamp(0.0, width as f32);
+                let py = (pt.y - pad as f32).clamp(0.0, height as f32);
+                min_x = min_x.min(px);
+                max_x = max_x.max(px);
+                min_y = min_y.min(py);
+                max_y = max_y.max(py);
             }
 
             let is_1d = kind != CodeKind::QrCode;
-            let h = max_y - min_y;
 
-            if is_1d || h < 10.0 {
+            if is_1d {
                 // For 1D barcodes, rxing only returns detection points along a single horizontal scanline.
                 // We calculate true vertical height and exact bar bounds by scanning vertically
                 // from the center to find where the black bars end, then horizontally along the mid-line.
@@ -1025,17 +1038,6 @@ pub fn scan_rgba_buffer(width: usize, height: usize, rgba: &[u8], page: usize) -
                     min_y = (min_y - default_h * 0.5).max(0.0);
                     max_y = (min_y + default_h).min(height as f32);
                 }
-            } else if kind == CodeKind::QrCode && points.len() >= 3 {
-                let fw = max_x - min_x;
-                let fh = max_y - min_y;
-                if fw > 10.0 && fh > 10.0 {
-                    let expand_x = (fw / 14.0) * 3.5;
-                    let expand_y = (fh / 14.0) * 3.5;
-                    min_x = (min_x - expand_x).max(0.0);
-                    max_x = (max_x + expand_x).min(width as f32);
-                    min_y = (min_y - expand_y).max(0.0);
-                    max_y = (max_y + expand_y).min(height as f32);
-                }
             }
 
             let rect = [
@@ -1097,19 +1099,42 @@ impl Document {
         let images = self.page_images(page);
         for (idx, img) in images.iter().enumerate() {
             if let Ok((w, h, rgba)) = self.page_image_rgba(page, idx) {
+                if w == 0 || h == 0 {
+                    continue;
+                }
                 let img_codes = scan_rgba_buffer(w as usize, h as usize, &rgba, page);
                 for mut code in img_codes {
                     code.id = scanned.len();
                     code.image_index = Some(idx);
-                    let mut r = img.visible_rect.unwrap_or(img.rect);
-                    if code.kind == CodeKind::QrCode {
-                        let pad = 1.5;
-                        r[0] = (r[0].floor() - pad).max(crop_min_x as f64);
-                        r[1] = (r[1].floor() - pad).max(crop_min_y as f64);
-                        r[2] = (r[2].ceil() + pad).min(crop_max_x as f64);
-                        r[3] = (r[3].ceil() + pad).min(crop_max_y as f64);
-                    }
-                    code.rect = r;
+
+                    let [ma, mb, mc, md, me, mf] = img.matrix;
+                    let apply = |u: f64, v: f64| -> (f64, f64) {
+                        (ma * u + mc * v + me, mb * u + md * v + mf)
+                    };
+                    let w_f = w as f64;
+                    let h_f = h as f64;
+                    let u0 = (code.rect[0] / w_f).clamp(0.0, 1.0);
+                    let u1 = (code.rect[2] / w_f).clamp(0.0, 1.0);
+                    let v0 = ((h_f - code.rect[3]) / h_f).clamp(0.0, 1.0);
+                    let v1 = ((h_f - code.rect[1]) / h_f).clamp(0.0, 1.0);
+
+                    let corners = [
+                        apply(u0, v0),
+                        apply(u1, v0),
+                        apply(u1, v1),
+                        apply(u0, v1),
+                    ];
+                    let sub_min_x = corners.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+                    let sub_min_y = corners.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+                    let sub_max_x = corners.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
+                    let sub_max_y = corners.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
+
+                    code.rect = [
+                        sub_min_x.clamp(crop_min_x as f64, crop_max_x as f64),
+                        sub_min_y.clamp(crop_min_y as f64, crop_max_y as f64),
+                        sub_max_x.clamp(crop_min_x as f64, crop_max_x as f64),
+                        sub_max_y.clamp(crop_min_y as f64, crop_max_y as f64),
+                    ];
                     scanned.push(code);
                 }
             }
@@ -1135,21 +1160,6 @@ impl Document {
 
                 let mut found_any = false;
                 for mut code in buffer_codes {
-                    // Avoid duplicating codes that were already found in embedded images
-                    let already_found = scanned.iter().any(|c| {
-                        c.text == code.text && {
-                            let overlap_x = (c.rect[0].max(code.rect[0])) <= (c.rect[2].min(code.rect[2]) + 20.0);
-                            let overlap_y = (c.rect[1].max(code.rect[1])) <= (c.rect[3].min(code.rect[3]) + 20.0);
-                            overlap_x && overlap_y
-                        }
-                    });
-                    if already_found {
-                        continue;
-                    }
-
-                    code.id = scanned.len();
-                    code.image_index = None;
-
                     // Map rendered pixel coordinates (view space: Y=0 at top) to PDF user-space points (Y=0 at bottom)
                     // using PageInfo::view_to_user to account for crop box and page rotation
                     let vx0 = (code.rect[0] as f32) / effective_scale;
@@ -1174,23 +1184,56 @@ impl Document {
                         (vx0, page_h - vy1, vx1, page_h - vy0)
                     };
 
-                    if code.kind == CodeKind::QrCode {
-                        let pad = 1.5f32;
-                        min_x = (min_x.floor() - pad).max(crop_min_x);
-                        min_y = (min_y.floor() - pad).max(crop_min_y);
-                        max_x = (max_x.ceil() + pad).min(crop_max_x);
-                        max_y = (max_y.ceil() + pad).min(crop_max_y);
-                    } else {
-                        // Strictly no padding for 1D barcodes as mandated
-                        min_x = min_x.clamp(crop_min_x, crop_max_x);
-                        min_y = min_y.clamp(crop_min_y, crop_max_y);
-                        max_x = max_x.clamp(crop_min_x, crop_max_x);
-                        max_y = max_y.clamp(crop_min_y, crop_max_y);
-                    }
+                    min_x = min_x.clamp(crop_min_x, crop_max_x);
+                    min_y = min_y.clamp(crop_min_y, crop_max_y);
+                    max_x = max_x.clamp(crop_min_x, crop_max_x);
+                    max_y = max_y.clamp(crop_min_y, crop_max_y);
 
                     code.rect = [min_x as f64, min_y as f64, max_x as f64, max_y as f64];
+
+                    // If this visible rendered code overlaps a code from Pass 1,
+                    // the visible rendered code takes precedence (covers/replaces it)
+                    scanned.retain(|c| {
+                        let overlap_x = (c.rect[0].max(code.rect[0])) <= (c.rect[2].min(code.rect[2]) + 15.0);
+                        let overlap_y = (c.rect[1].max(code.rect[1])) <= (c.rect[3].min(code.rect[3]) + 15.0);
+                        !(overlap_x && overlap_y)
+                    });
+
+                    code.id = scanned.len();
+                    code.image_index = None;
                     scanned.push(code);
                     found_any = true;
+                }
+
+                if let Some(info) = page_info {
+                    scanned.retain(|c| {
+                        let p0 = info.user_to_view(c.rect[0] as f32, c.rect[3] as f32);
+                        let p1 = info.user_to_view(c.rect[2] as f32, c.rect[1] as f32);
+                        let rx0 = ((p0[0].min(p1[0]) * effective_scale).round() as usize).clamp(0, rw);
+                        let rx1 = ((p0[0].max(p1[0]) * effective_scale).round() as usize).clamp(0, rw);
+                        let ry0 = ((p0[1].min(p1[1]) * effective_scale).round() as usize).clamp(0, rh);
+                        let ry1 = ((p0[1].max(p1[1]) * effective_scale).round() as usize).clamp(0, rh);
+
+                        if rx1 > rx0.saturating_add(5) && ry1 > ry0.saturating_add(5) {
+                            let mut dark_count = 0usize;
+                            let total_samples = 30usize;
+                            for sy in 0..total_samples {
+                                let y = ry0 + (sy * (ry1 - ry0)) / total_samples;
+                                for sx in 0..total_samples {
+                                    let x = rx0 + (sx * (rx1 - rx0)) / total_samples;
+                                    let idx = (y * rw + x) * 4;
+                                    if let Some(slice) = rendered.rgba.get(idx..idx + 3) {
+                                        if slice[0] < 180 || slice[1] < 180 || slice[2] < 180 {
+                                            dark_count = dark_count.saturating_add(1);
+                                        }
+                                    }
+                                }
+                            }
+                            dark_count > (total_samples * total_samples) / 50
+                        } else {
+                            true
+                        }
+                    });
                 }
 
                 if found_any {
@@ -1222,6 +1265,14 @@ impl Document {
         unique
     }
 
+    /// Generate a solid white PNG raster at the specified dimensions for whiteout edits.
+    pub fn generate_whiteout(target_width: u32, target_height: u32) -> Result<Vec<u8>, String> {
+        let w = target_width.clamp(8, 2048);
+        let h = target_height.clamp(8, 2048);
+        let rgba = vec![255u8; (w as usize).saturating_mul(h as usize).saturating_mul(4)];
+        encode_png_exact(w, h, &rgba)
+    }
+
     /// Generate an updated QR code or barcode raster at **exactly 100% of the original pixel dimensions**.
     ///
     /// This strictly enforces the pixel-perfect replacement constraint: the generated PNG byte stream
@@ -1243,26 +1294,54 @@ impl Document {
         let writer = rxing::MultiFormatWriter;
         let matrix = writer.encode(text, &format, target_width as i32, target_height as i32).map_err(|e| e.to_string())?;
 
-        let w = matrix.getWidth() as usize;
-        let h = matrix.getHeight() as usize;
+        let mw = matrix.getWidth() as usize;
+        let mh = matrix.getHeight() as usize;
 
-        // Render high-contrast RGBA buffer
-        let mut rgba = vec![255u8; w.saturating_mul(h).saturating_mul(4)];
-        for y in 0..h {
-            for x in 0..w {
+        // Find exact bounds of the black bars/modules in the generated matrix
+        let mut min_x = usize::MAX;
+        let mut max_x = 0usize;
+        let mut min_y = usize::MAX;
+        let mut max_y = 0usize;
+
+        for y in 0..mh {
+            for x in 0..mw {
                 if matrix.get(x as u32, y as u32) {
-                    let idx = (y.saturating_mul(w).saturating_add(x)).saturating_mul(4);
-                    if let Some(slice) = rgba.get_mut(idx..idx + 4) {
-                        slice[0] = 0;
-                        slice[1] = 0;
-                        slice[2] = 0;
-                        slice[3] = 255;
+                    min_x = min_x.min(x);
+                    max_x = max_x.max(x);
+                    min_y = min_y.min(y);
+                    max_y = max_y.max(y);
+                }
+            }
+        }
+
+        let tw = target_width as usize;
+        let th = target_height as usize;
+        let mut rgba = vec![255u8; tw.saturating_mul(th).saturating_mul(4)];
+
+        if min_x <= max_x && min_y <= max_y {
+            let cw = (max_x - min_x + 1) as f64;
+            let ch = (max_y - min_y + 1) as f64;
+
+            for y in 0..th {
+                let sy = ((min_y as f64) + ((y as f64) / (th as f64)) * ch).floor() as u32;
+                let sy_clamped = sy.min(max_y as u32);
+                for x in 0..tw {
+                    let sx = ((min_x as f64) + ((x as f64) / (tw as f64)) * cw).floor() as u32;
+                    let sx_clamped = sx.min(max_x as u32);
+                    if matrix.get(sx_clamped, sy_clamped) {
+                        let idx = (y.saturating_mul(tw).saturating_add(x)).saturating_mul(4);
+                        if let Some(slice) = rgba.get_mut(idx..idx + 4) {
+                            slice[0] = 0;
+                            slice[1] = 0;
+                            slice[2] = 0;
+                            slice[3] = 255;
+                        }
                     }
                 }
             }
         }
 
-        encode_png_exact(w as u32, h as u32, &rgba)
+        encode_png_exact(target_width, target_height, &rgba)
     }
 }
 

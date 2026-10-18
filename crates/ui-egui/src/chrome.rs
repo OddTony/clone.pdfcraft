@@ -2,7 +2,7 @@
 
 use egui::{Align, Align2, Color32, CornerRadius, Layout, Rect, Sense, Stroke, vec2};
 
-use crate::canvas::{DocView, Fit, PageLayout};
+use crate::canvas::{DocView, Fit, PageBackground, PageLayout};
 use crate::theme::{self, ThemePreference, Tokens};
 use crate::{Dialog, Mode, PdfCraftApp, PropsTab, RightPanel, icons, widgets, window_controls};
 
@@ -552,14 +552,13 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     v.set_zoom(1.0);
                 }
                 if widgets::menu_item(ui, tl!("Zoom to page level"), &key(PAGE_LEVEL)).clicked() {
-                    v.fit = Fit::Page;
+                    v.set_fit(Fit::Page);
                 }
                 if widgets::menu_item(ui, tl!("Fit to width"), &key(FIT_WIDTH)).clicked() {
-                    v.fit = Fit::Width;
+                    v.set_fit(Fit::Width);
                 }
                 if widgets::menu_item(ui, tl!("Fit to height"), "").clicked() {
-                    v.fit = Fit::Height;
-                    v.goto = Some((v.current, 0.0));
+                    v.set_fit(Fit::Height);
                 }
                 if widgets::menu_item(ui, tl!("Fit visible"), &crate::commands::command_shortcut_label(&ctx, "view.fit_visible")).clicked() {
                     ui.close();
@@ -691,8 +690,14 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 // Not `columns-2` while fitting the page: that is the two-page view's icon.
                 let fit_icon = if view.fit == Fit::Width { "maximize" } else { "maximize-2" };
                 if icons::button(ui, fit_icon, 32.0, false, tl!("Toggle fit page / fit width")).clicked() {
-                    view.fit = if view.fit == Fit::Width { Fit::Page } else { Fit::Width };
-                    view.goto = Some((view.current, 0.0));
+                    let next = if view.fit == Fit::Width { Fit::Page } else { Fit::Width };
+                    view.set_fit(next);
+                }
+                let bg_tip = format!("Page background: {} (click to cycle)", view.page_background.label());
+                let bg_active = view.page_background != PageBackground::Default;
+                if icons::button(ui, view.page_background.icon(), 32.0, bg_active, &bg_tip).clicked() {
+                    view.page_background = view.page_background.next();
+                    ui.ctx().request_repaint();
                 }
                 let zoom = format!("{:.0}%", view.zoom * 100.0);
                 ui.allocate_ui_with_layout(vec2(40.0, 16.0), Layout::top_down(Align::Center), |ui| {

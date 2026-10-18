@@ -1118,9 +1118,9 @@ impl PdfCraftApp {
             M::Default => {}
             M::ActualSize => view.set_zoom(1.0),
             M::Percent(p) => view.set_zoom((p / 100.0) as f32),
-            M::FitPage | M::FitVisible => view.fit = canvas::Fit::Page,
-            M::FitWidth => view.fit = canvas::Fit::Width,
-            M::FitHeight => view.fit = canvas::Fit::Height,
+            M::FitPage | M::FitVisible => view.set_fit(canvas::Fit::Page),
+            M::FitWidth => view.set_fit(canvas::Fit::Width),
+            M::FitHeight => view.set_fit(canvas::Fit::Height),
         }
         if v.page > 0 && v.page < pages {
             view.go_to_page(v.page);

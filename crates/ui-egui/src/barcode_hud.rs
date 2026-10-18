@@ -207,6 +207,7 @@ impl BarcodeScannerHud {
         let mut start_edit = false;
         let mut apply_code = None;
         let mut cancel_edit = false;
+        let mut delete_code = None;
         let mut trigger_generate = false;
 
         // Sandeep PDF Studio v3 Modern Dark Aesthetics
@@ -375,6 +376,9 @@ impl BarcodeScannerHud {
                                         if can_modify && ui.button("✏ Edit Payload").on_hover_text("Edit and re-embed code").clicked() {
                                             start_edit = true;
                                         }
+                                        if can_modify && ui.button("🗑 Delete Code").on_hover_text("Whiteout and remove code from page").clicked() {
+                                            delete_code = Some(active.clone());
+                                        }
                                     });
                                 }
                             });
@@ -423,19 +427,50 @@ impl BarcodeScannerHud {
         }
         if let Some((active, buf)) = apply_code {
             let rect = active.rect;
-            let rect_w = (rect[2] - rect[0]).abs().ceil().max(1.0) as u32;
-            let rect_h = (rect[3] - rect[1]).abs().ceil().max(1.0) as u32;
-            let pw = if active.pixel_size[0] > 0 { active.pixel_size[0] } else { rect_w.saturating_mul(2) };
-            let ph = if active.pixel_size[1] > 0 { active.pixel_size[1] } else { rect_h.saturating_mul(2) };
+            let orig_w = (rect[2] - rect[0]).abs();
+            let orig_h = (rect[3] - rect[1]).abs();
+            let rect_w = orig_w.round().max(1.0) as u32;
+            let rect_h = orig_h.round().max(1.0) as u32;
+            let pw = if active.pixel_size[0] > 0 { active.pixel_size[0] } else { rect_w };
+            let ph = if active.pixel_size[1] > 0 { active.pixel_size[1] } else { rect_h };
+            let (pw, ph) = if active.kind == pdfcraft_engine::barcode_scan::CodeKind::QrCode {
+                let side = pw.max(ph);
+                (side, side)
+            } else {
+                (pw, ph)
+            };
 
             match Document::generate_replacement_code(active.kind, &buf, pw, ph) {
                 Ok(png_bytes) => {
-                    // Place the new barcode (generated with solid white background) stretched to active.rect
-                    pending_edit = Some(Edit::AddImage {
-                        page: current_page,
-                        rect: Some(rect),
-                        name: "UpdatedCode.png".into(),
-                        bytes: Arc::new(png_bytes),
+                    // Two-step overlay: first whiteout the old code, then place new code over active.rect
+                    let whiteout_bytes = Document::generate_whiteout(pw, ph).unwrap_or_default();
+                    let edits = if !whiteout_bytes.is_empty() {
+                        vec![
+                            Edit::AddImage {
+                                page: current_page,
+                                rect: Some(rect),
+                                name: "Whiteout.png".into(),
+                                bytes: Arc::new(whiteout_bytes),
+                            },
+                            Edit::AddImage {
+                                page: current_page,
+                                rect: Some(rect),
+                                name: "UpdatedCode.png".into(),
+                                bytes: Arc::new(png_bytes),
+                            },
+                        ]
+                    } else {
+                        vec![Edit::AddImage {
+                            page: current_page,
+                            rect: Some(rect),
+                            name: "UpdatedCode.png".into(),
+                            bytes: Arc::new(png_bytes),
+                        }]
+                    };
+
+                    pending_edit = Some(Edit::Batch {
+                        label: "Replace code".into(),
+                        edits,
                     });
                     state.target_rect = Some(rect);
                     state.last_scanned_page = None;
@@ -444,6 +479,30 @@ impl BarcodeScannerHud {
                 }
                 Err(e) => {
                     state.show_toast(format!("Replacement failed: {e}"), now);
+                }
+            }
+        }
+        if let Some(active) = delete_code {
+            let rect = active.rect;
+            let orig_w = (rect[2] - rect[0]).abs();
+            let orig_h = (rect[3] - rect[1]).abs();
+            let pw = orig_w.round().max(16.0) as u32;
+            let ph = orig_h.round().max(16.0) as u32;
+            match Document::generate_whiteout(pw, ph) {
+                Ok(whiteout_png) => {
+                    pending_edit = Some(Edit::AddImage {
+                        page: current_page,
+                        rect: Some(rect),
+                        name: "Whiteout.png".into(),
+                        bytes: Arc::new(whiteout_png),
+                    });
+                    state.target_rect = None;
+                    state.last_scanned_page = None;
+                    state.edit_buffer = None;
+                    state.show_toast("Code deleted with whiteout!".into(), now);
+                }
+                Err(e) => {
+                    state.show_toast(format!("Delete failed: {e}"), now);
                 }
             }
         }
