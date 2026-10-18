@@ -186,6 +186,53 @@ fn single_page_layout_shows_one_page_at_a_time() {
 }
 
 #[test]
+fn single_page_view_prefetches_the_next_page() {
+    // Only the shown page is drawn, but the next one renders ahead of the turn: otherwise
+    // turning forward shows blank paper until it arrives.
+    let mut h = harness(&[("layout", "single"), ("zoom", "50")]);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while h.state().render_pending() {
+        assert!(std::time::Instant::now() < deadline, "renders settle");
+        h.run_steps(2);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(rect(&h, 1).is_none(), "page 2 is not shown");
+    assert!(h.state().views[0].raster_memory().page_count >= 2, "page 2 is rendered ahead of the turn");
+}
+
+#[test]
+fn single_page_wheel_turn_draws_the_new_page_at_once() {
+    // The frame that turns the page draws the new one. Its jump used to be measured from the
+    // old page's place, which scrolled both out of view: a blank frame on every turn forward.
+    let mut h = harness_stepping(1.0 / 60.0, &[("layout", "single")]);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Num0); // fit page
+    h.run_steps(4);
+    let vp = h.state().views[0].viewport_rect();
+    h.hover_at(vp.center());
+    h.run_steps(2);
+    h.event(wheel(MouseWheelUnit::Line, -1.0, TouchPhase::Move));
+    h.step();
+    assert_eq!(h.state().views[0].current, 1, "one notch turns one page");
+    let r = rect(&h, 1).expect("page 2 drawn in the frame that turns to it");
+    assert!(r.min.y >= vp.min.y && r.max.y <= vp.max.y, "page 2 fits on screen: {r:?} in {vp:?}");
+}
+
+#[test]
+fn single_page_jump_draws_a_fitting_page_where_it_stays() {
+    // A page that fits has nothing to scroll, but the jump to it asked for the gap above it:
+    // drawn that much too high for a frame, it then hopped into place.
+    let mut h = harness_stepping(1.0 / 60.0, &[("layout", "single")]);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Num0); // fit page
+    h.run_steps(4);
+    h.state_mut().set_option("page", "2").unwrap();
+    h.step();
+    let first = rect(&h, 1).expect("page 2 drawn in the frame after the jump");
+    h.run_steps(4);
+    let settled = rect(&h, 1).expect("page 2");
+    assert!((first.min.y - settled.min.y).abs() < 0.5, "page 2 drawn where it settles: {first:?} then {settled:?}");
+}
+
+#[test]
 fn single_page_wheel_pans_instead_when_zoomed_in() {
     // The zoomed-in guard: with room to pan, the wheel pans and must not turn pages.
     let mut h = harness(&[("layout", "single"), ("zoom", "200")]);
@@ -615,6 +662,35 @@ fn default_zoom_is_used_for_new_documents() {
     fresh.restore(r#"{"default_zoom":"bogus"}"#);
     fresh.open_bytes("again.pdf", None, PAGES.to_vec()).expect("opens");
     assert_eq!(fit_zoom(&fresh, 0), (Fit::None, 1.5));
+}
+
+#[test]
+fn the_rail_zoom_field_sets_a_typed_zoom() {
+    use egui::accesskit::Role;
+    use egui_kittest::kittest::Queryable;
+    use pdfcraft_ui_egui::canvas::Fit;
+    let mut h = harness(&[]);
+    let type_zoom = |h: &mut Harness<'static, PdfCraftApp>, typed: &str, key: Key| {
+        h.get_by_role_and_label(Role::TextInput, "Zoom").click();
+        h.run_steps(2);
+        h.get_by_role_and_label(Role::TextInput, "Zoom").type_text(typed);
+        h.run_steps(1);
+        h.key_press(key);
+        h.run_steps(3);
+    };
+    type_zoom(&mut h, "150", Key::Enter);
+    assert_eq!((h.state().views[0].fit, h.state().views[0].zoom), (Fit::None, 1.5));
+    type_zoom(&mut h, "62.5 %", Key::Enter);
+    assert_eq!(h.state().views[0].zoom, 0.625);
+    for (typed, key) in [("abc", Key::Enter), ("0", Key::Enter), ("300", Key::Escape)] {
+        type_zoom(&mut h, typed, key);
+        assert_eq!(h.state().views[0].zoom, 0.625, "{typed}");
+    }
+    type_zoom(&mut h, "9000", Key::Enter);
+    assert_eq!(h.state().views[0].zoom, 64.0);
+    h.state_mut().views[0].set_zoom(2.0);
+    h.run_steps(2);
+    assert_eq!(h.get_by_role_and_label(Role::TextInput, "Zoom").value().as_deref(), Some("200%"));
 }
 
 #[test]
