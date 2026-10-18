@@ -1512,6 +1512,8 @@ impl DocView {
         }
     }
 
+    /// A zoom typed as a percentage ("150", "150%", " 62.5 % ") as a zoom factor; `None` unless it is a
+    /// finite, positive number. `set_zoom` clamps it to the supported range.
     pub fn parse_zoom_percent(typed: &str) -> Option<f32> {
         let percent = typed.trim().trim_end_matches('%').trim_end().parse::<f32>().ok()?;
         (percent.is_finite() && percent > 0.0).then_some(percent / 100.0)
