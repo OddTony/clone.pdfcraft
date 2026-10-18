@@ -25,7 +25,7 @@ clear_marks(&mut doc, None)?;                        // remove marks without app
 - **vectors**: covered paths are removed; partly covered paths and shadings are clipped so
   nothing paints inside the areas;
 - **form XObjects**: rewritten recursively into new objects (pages sharing the original keep it);
-- **annotations** whose rectangle overlaps (with their pop-ups), and **form fields** with a
+- **annotations** whose rectangle overlaps (with their pop-ups and their replies, `/IRT`), and **form fields** with a
   widget under a mark;
 - **document metadata** that repeats removed text: `/Info` entries whose value contains a removed
   text run (case-insensitive) are cleared — through `pdfcraft_organize::set_info`, which also
