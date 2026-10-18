@@ -50,7 +50,7 @@ Assert-NoRow 'SELECT `Value` FROM `Property` WHERE `Property` = ''MSIINSTALLPERU
 # The full UI picks the welcome dialog's default scope with type 51 actions between AppSearch and
 # LaunchConditions; the execute sequence never changes the context.
 $search = Read-Row 'SELECT `Sequence` FROM `InstallUISequence` WHERE `Action` = ''AppSearch''' 1
-$scopeActions = @(Read-Rows 'SELECT `CustomAction`.`Source`, `CustomAction`.`Target`, `InstallUISequence`.`Condition`, `InstallUISequence`.`Sequence`, `CustomAction`.`Type` FROM `CustomAction`, `InstallUISequence` WHERE `CustomAction`.`Action` = `InstallUISequence`.`Action`' 5 |
+$scopeActions = @((Read-Rows 'SELECT `CustomAction`.`Source`, `CustomAction`.`Target`, `InstallUISequence`.`Condition`, `InstallUISequence`.`Sequence`, `CustomAction`.`Type` FROM `CustomAction`, `InstallUISequence` WHERE `CustomAction`.`Action` = `InstallUISequence`.`Action`' 5) |
   Where-Object { (([int] $_[4]) -band 0x3F) -eq 51 -and $_[0] -in @('INSTALLSCOPE', 'ALLUSERS', 'MSIINSTALLPERUSER', 'PERMACHINEFOLDER') } |
   Sort-Object { [int] $_[3] })
 if ($scopeActions.Count -lt 5) { throw "InstallUISequence has $($scopeActions.Count) install-scope actions" }
@@ -75,6 +75,21 @@ $machineFolder = @($scopeActions | Where-Object { $_[0] -eq 'PERMACHINEFOLDER' }
 $view64 = $Database.SummaryInformation(0).Property(7) -notmatch '^Intel;'
 Assert-Equal $machineFolder[0][1] $(if ($view64) { '[ProgramFiles64Folder]PdfCraft\' } else { '[ProgramFilesFolder]PdfCraft\' }) 'Per-machine install folder'
 if ([int] $machineFolder[0][3] -ne [int] $scopeActions[0][3]) { throw 'the per-machine folder must be read before the context changes' }
+# The UI's upgrade search runs in the chosen context: after the last scope action and before
+# LaunchConditions and MigrateFeatureStates. The execute sequence's keeps its standard place, before
+# AppSearch and RemoveExistingProducts.
+$uiFind = Read-Row 'SELECT `Sequence` FROM `InstallUISequence` WHERE `Action` = ''FindRelatedProducts''' 1
+$uiLaunch = Read-Row 'SELECT `Sequence` FROM `InstallUISequence` WHERE `Action` = ''LaunchConditions''' 1
+$uiMigrate = Read-Row 'SELECT `Sequence` FROM `InstallUISequence` WHERE `Action` = ''MigrateFeatureStates''' 1
+if ([int] $uiFind[0] -le [int] $scopeActions[-1][3] -or [int] $uiFind[0] -ge [int] $uiLaunch[0] -or [int] $uiFind[0] -ge [int] $uiMigrate[0]) {
+  throw "InstallUISequence must run FindRelatedProducts ($($uiFind[0])) after the scope actions and before LaunchConditions and MigrateFeatureStates"
+}
+$execFind = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''FindRelatedProducts''' 1
+$execSearch = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''AppSearch''' 1
+$execRemove = Read-Row 'SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action` = ''RemoveExistingProducts''' 1
+if ([int] $execFind[0] -ge [int] $execSearch[0] -or [int] $execFind[0] -ge [int] $execRemove[0]) {
+  throw "InstallExecuteSequence must run FindRelatedProducts ($($execFind[0])) before AppSearch and RemoveExistingProducts"
+}
 
 $launchConditions = Read-Rows 'SELECT `Condition`, `Description` FROM `LaunchCondition`' 2
 $Installer.UILevel = 2
@@ -155,7 +170,7 @@ foreach ($row in (Read-Rows 'SELECT `Registry`, `Root` FROM `Registry`' 2)) {
 $radio = Read-Row 'SELECT `Type`, `Property` FROM `Control` WHERE `Dialog_` = ''InstallWelcome'' AND `Control` = ''Scope''' 2
 Assert-Equal $radio[0] 'RadioButtonGroup' 'Welcome scope control'
 Assert-Equal $radio[1] 'INSTALLSCOPE' 'Welcome scope property'
-$choices = @(Read-Rows 'SELECT `Value`, `Order` FROM `RadioButton` WHERE `Property` = ''INSTALLSCOPE''' 2 | Sort-Object { [int] $_[1] } | ForEach-Object { $_[0] })
+$choices = @((Read-Rows 'SELECT `Value`, `Order` FROM `RadioButton` WHERE `Property` = ''INSTALLSCOPE''' 2) | Sort-Object { [int] $_[1] } | ForEach-Object { $_[0] })
 Assert-Equal ($choices -join ',') 'perUser,perMachine' 'Welcome scope choices'
 $locked = Read-Row 'SELECT `Condition` FROM `ControlCondition` WHERE `Dialog_` = ''InstallWelcome'' AND `Control_` = ''Scope'' AND `Action` = ''Disable''' 1
 Assert-Equal $locked[0] 'EXISTINGMACHINEINSTALL OR EXISTINGUSERINSTALL' 'Welcome scope locked on update'
@@ -195,22 +210,31 @@ foreach ($entry in @(@('StartMenuShortcut', 'ProgramMenuFolder', 'PdfcraftStartM
   Assert-Equal $component[0] $entry[1] "$($entry[2]) directory"
   Assert-Equal $component[1] $entry[3] "$($entry[2]) condition"
 }
-# Defaults an update keeps (#1058, #305). No static default: a SetProperty after AppSearch turns it on
-# for a first install and, for an update from a release that offered it ($Release set), only while what
-# it installed is still there ($FoundMachine per machine, $FoundUser per user, from AppSearch; the
-# desktop shortcut has one search, as DesktopFolder follows the context). A command-line value is
-# left alone. Windows Installer's evaluator runs the SetProperty condition and then $Component's own
-# condition.
-function Assert-KeptOnUpdate([string] $Property, [string] $Release, [string] $FoundMachine, [string] $FoundUser, [string] $FoundValue, [string] $Component, [string] $What) {
+# Defaults an update keeps (#1058, #305). No static default: one action, in both sequences but run
+# only in the first (msidbCustomActionTypeFirstSequence), turns it on for a first install and, for an
+# update from a release that offered it ($Release set), only while what it installed is still there
+# in the install scope's place (found per machine or per user, from AppSearch). In the full UI it runs
+# after the scope and the upgrade search, which follow the dialog's choice, so the checkboxes start
+# from it; otherwise it runs in the execute sequence after AppSearch. Each sequence has its own
+# searches: the desktop shortcut's execute-sequence search is DesktopFolder, which follows the context
+# setup starts in, while the full UI starts per machine and looks for "Only me" by path. A
+# command-line value is left alone. Windows Installer's evaluator runs the sequence's condition and
+# then $Component's own condition.
+function Assert-KeptOnUpdate([string] $Property, [string] $Release, [string] $UiMachine, [string] $UiUser, [string] $ExecMachine, [string] $ExecUser, [string] $FoundValue, [string] $Component, [string] $What) {
   Assert-NoRow ('SELECT `Value` FROM `Property` WHERE `Property` = ''' + $Property + '''') "$What static default"
-  $action = Read-Row ('SELECT `Action`, `Target` FROM `CustomAction` WHERE `Source` = ''' + $Property + '''') 2
+  $action = Read-Row ('SELECT `Action`, `Target`, `Type` FROM `CustomAction` WHERE `Source` = ''' + $Property + '''') 3
   Assert-Equal $action[1] '1' "$What default value"
-  $condition = $null
+  # Type 51 (set a property) with msidbCustomActionTypeFirstSequence (256).
+  Assert-Equal ([int] $action[2] -band 0x13F) 307 "$What default action type"
+  $conditions = @{}
   foreach ($sequence in @('InstallUISequence', 'InstallExecuteSequence')) {
     $search = Read-Row ('SELECT `Sequence` FROM `' + $sequence + '` WHERE `Action` = ''AppSearch''') 1
+    $find = Read-Row ('SELECT `Sequence` FROM `' + $sequence + '` WHERE `Action` = ''FindRelatedProducts''') 1
     $set = Read-Row ('SELECT `Sequence`, `Condition` FROM `' + $sequence + '` WHERE `Action` = ''' + $action[0] + '''') 2
-    if ([int] $set[0] -le [int] $search[0]) { throw "$sequence must set the $What default after AppSearch" }
-    $condition = $set[1]
+    if ([int] $set[0] -le [int] $search[0] -or [int] $set[0] -le [int] $find[0]) {
+      throw "$sequence must set the $What default after AppSearch and FindRelatedProducts"
+    }
+    $conditions[$sequence] = $set[1]
   }
   $installed = Read-Row ('SELECT `Condition` FROM `Component` WHERE `Component` = ''' + $Component + '''') 1
   Assert-Equal $installed[0] "$Property = 1" "$Component condition"
@@ -224,23 +248,31 @@ function Assert-KeptOnUpdate([string] $Property, [string] $Release, [string] $Fo
     @('update, removed', '', $old, $old, '', '', 0),
     @("update, $Property=0", '0', $old, $old, $FoundValue, '', 0),
     @("update, removed, $Property=1", '1', $old, $old, '', '', 1))
-  if ($FoundMachine -ne $FoundUser) { $cases += , @('update, removed, still there for the other scope', '', $old, $old, '', $FoundValue, 0) }
   # An update from a release from before it existed (WIX_UPGRADE_DETECTED alone) is a first install.
   if ($Release -ne 'WIX_UPGRADE_DETECTED') { $cases += , @('update from a release without it', '', $old, '', '', '', 1) }
   $session = $null
   try {
     $session = $Installer.OpenPackage((Resolve-Path -LiteralPath $Path).Path, 1)
-    # The context as Windows Installer leaves it: ALLUSERS=1 per machine, empty per user.
-    foreach ($scope in @(@('per machine', '1', '', $FoundMachine, $FoundUser), @('per user', '', '1', $FoundUser, $FoundMachine))) {
-      foreach ($case in $cases) {
-        $session.Property('ALLUSERS') = $scope[1]
-        $session.Property('MSIINSTALLPERUSER') = $scope[2]
+    # The context as the full UI's scope actions leave it (ALLUSERS=1 per machine, ALLUSERS=2 and
+    # MSIINSTALLPERUSER=1 per user) and as Windows Installer resolves it for the execute sequence
+    # (ALLUSERS=1, or empty per user); the searches this sequence reads for that scope.
+    foreach ($scope in @(
+        @('full UI, per machine', 'InstallUISequence', '1', '', $UiMachine, $UiUser),
+        @('full UI, per user', 'InstallUISequence', '2', '1', $UiUser, $UiMachine),
+        @('unattended, per machine', 'InstallExecuteSequence', '1', '', $ExecMachine, $ExecUser),
+        @('unattended, per user', 'InstallExecuteSequence', '', '1', $ExecUser, $ExecMachine))) {
+      $scopeCases = $cases
+      if ($scope[4] -ne $scope[5]) { $scopeCases += , @('update, removed, still there for the other scope', '', $old, $old, '', $FoundValue, 0) }
+      foreach ($case in $scopeCases) {
+        foreach ($found in @($UiMachine, $UiUser, $ExecMachine, $ExecUser)) { $session.Property($found) = '' }
+        $session.Property('ALLUSERS') = $scope[2]
+        $session.Property('MSIINSTALLPERUSER') = $scope[3]
         $session.Property($Property) = $case[1]
         $session.Property('WIX_UPGRADE_DETECTED') = $case[2]
         $session.Property($Release) = $case[3]
-        $session.Property($scope[4]) = $case[5]
-        $session.Property($scope[3]) = $case[4]
-        if ($session.EvaluateCondition($condition) -eq 1) { $session.Property($Property) = $action[1] }
+        if ($scope[4] -ne $scope[5]) { $session.Property($scope[5]) = $case[5] }
+        $session.Property($scope[4]) = $case[4]
+        if ($session.EvaluateCondition($conditions[$scope[1]]) -eq 1) { $session.Property($Property) = $action[1] }
         Assert-Equal ($session.EvaluateCondition($installed[0])) $case[6] "$What, $($scope[0])`: $($case[0])"
       }
     }
@@ -248,7 +280,7 @@ function Assert-KeptOnUpdate([string] $Property, [string] $Release, [string] $Fo
     if ($session) { [void] [Runtime.InteropServices.Marshal]::FinalReleaseComObject($session) }
   }
 }
-Assert-KeptOnUpdate 'INSTALLDESKTOPSHORTCUT' 'WIX_UPGRADE_DETECTED' 'EXISTINGDESKTOPSHORTCUT' 'EXISTINGDESKTOPSHORTCUT' 'C:\Users\Public\Desktop\PdfCraft.lnk' 'PdfcraftDesktopShortcut' 'Desktop shortcut'
+Assert-KeptOnUpdate 'INSTALLDESKTOPSHORTCUT' 'WIX_UPGRADE_DETECTED' 'EXISTINGDESKTOPSHORTCUT' 'EXISTINGUSERDESKTOPSHORTCUT' 'EXISTINGDESKTOPSHORTCUT' 'EXISTINGDESKTOPSHORTCUT' 'C:\Users\Public\Desktop\PdfCraft.lnk' 'PdfcraftDesktopShortcut' 'Desktop shortcut'
 if (($secure[0] -split ';') -notcontains 'INSTALLDESKTOPSHORTCUT') { throw "INSTALLDESKTOPSHORTCUT is not secure: '$($secure[0])'" }
 $checkbox = Read-Row 'SELECT `Type`, `Property`, `Text` FROM `Control` WHERE `Dialog_` = ''InstallWelcome'' AND `Control` = ''DesktopShortcut''' 3
 Assert-Equal $checkbox[0] 'CheckBox' 'Welcome desktop-shortcut control'
@@ -317,7 +349,7 @@ $imageComponent = Read-Row 'SELECT `KeyPath`, `Attributes` FROM `Component` WHER
 Assert-Equal $imageComponent[0] $imageKeyPath[0] 'Image context menu key path'
 # msidbComponentAttributesRegistryKeyPath (4).
 if (([int] $imageComponent[1] -band 4) -eq 0) { throw "Image context menu key path is not a registry value: attributes $($imageComponent[1])" }
-Assert-KeptOnUpdate 'INSTALLIMAGECONTEXTMENU' 'IMAGECONTEXTMENURELEASE' 'EXISTINGIMAGECONTEXTMENU' 'EXISTINGUSERIMAGECONTEXTMENU' 'Create PDF with PdfCraft…' 'PdfcraftImageContextMenu' 'Image context menu'
+Assert-KeptOnUpdate 'INSTALLIMAGECONTEXTMENU' 'IMAGECONTEXTMENURELEASE' 'EXISTINGIMAGECONTEXTMENU' 'EXISTINGUSERIMAGECONTEXTMENU' 'EXISTINGIMAGECONTEXTMENU' 'EXISTINGUSERIMAGECONTEXTMENU' 'Create PDF with PdfCraft…' 'PdfcraftImageContextMenu' 'Image context menu'
 Assert-MenuSearch 'EXISTINGIMAGECONTEXTMENU' '2' $imageKey 'IMAGECONTEXTMENURELEASE' '0.4.0' 'Image context menu (per machine)'
 Assert-MenuSearch 'EXISTINGUSERIMAGECONTEXTMENU' '1' $imageKey 'IMAGECONTEXTMENURELEASE' '0.4.0' 'Image context menu (per user)'
 if (($secure[0] -split ';') -notcontains 'INSTALLIMAGECONTEXTMENU') { throw "INSTALLIMAGECONTEXTMENU is not secure: '$($secure[0])'" }
@@ -343,7 +375,7 @@ Assert-Equal $pdfCommand[1] 'PdfcraftPdfContextMenu' 'PDF context menu command c
 $pdfComponent = Read-Row 'SELECT `Condition`, `KeyPath` FROM `Component` WHERE `Component` = ''PdfcraftPdfContextMenu''' 2
 Assert-Equal $pdfComponent[0] 'INSTALLPDFCONTEXTMENU = 1' 'PDF context menu condition'
 Assert-Equal $pdfComponent[1] $pdfMenu[0] 'PDF context menu key path'
-Assert-KeptOnUpdate 'INSTALLPDFCONTEXTMENU' 'PDFCONTEXTMENURELEASE' 'EXISTINGPDFCONTEXTMENU' 'EXISTINGUSERPDFCONTEXTMENU' 'Edit with PdfCraft' 'PdfcraftPdfContextMenu' 'PDF context menu'
+Assert-KeptOnUpdate 'INSTALLPDFCONTEXTMENU' 'PDFCONTEXTMENURELEASE' 'EXISTINGPDFCONTEXTMENU' 'EXISTINGUSERPDFCONTEXTMENU' 'EXISTINGPDFCONTEXTMENU' 'EXISTINGUSERPDFCONTEXTMENU' 'Edit with PdfCraft' 'PdfcraftPdfContextMenu' 'PDF context menu'
 Assert-MenuSearch 'EXISTINGPDFCONTEXTMENU' '2' $pdfKey 'PDFCONTEXTMENURELEASE' '0.7.1' 'PDF context menu (per machine)'
 Assert-MenuSearch 'EXISTINGUSERPDFCONTEXTMENU' '1' $pdfKey 'PDFCONTEXTMENURELEASE' '0.7.1' 'PDF context menu (per user)'
 if (($secure[0] -split ';') -notcontains 'INSTALLPDFCONTEXTMENU') { throw "INSTALLPDFCONTEXTMENU is not secure: '$($secure[0])'" }

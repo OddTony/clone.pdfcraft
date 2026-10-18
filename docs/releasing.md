@@ -142,7 +142,10 @@ neither the MSI nor the portable zip needs the Visual C++ redistributable.
   `INSTALLIMAGECONTEXTMENU=0` (no checkbox) leaves out the image menu. An update (the launcher runs
   `msiexec /passive` with no properties) keeps the desktop shortcut only if `PdfCraft.lnk` is still
   on the desktop of its scope, so deleting it once keeps it away (#1058), and keeps each menu only if
-  its key path is still in HKLM (per machine) or HKCU (per user) (#305). Both are AppSearch results read before the old version is
+  its key path is still in HKLM (per machine) or HKCU (per user) (#305). In the full UI these defaults are
+  set after the scope choice and an upgrade search in that scope, so the checkboxes start from the
+  installed version's choice; for "Only me" the desktop is looked up by path (under the profile or
+  OneDrive), since the UI starts in the per-machine context. Both are AppSearch results read before the old version is
   removed. An update from a release that didn't have a menu yet (before 0.7.1 for the PDF menu,
   before 0.4.0 for the image menu, found by `OnlyDetect` Upgrade rows) adds it like a first install.
   A value given on the command line wins.
