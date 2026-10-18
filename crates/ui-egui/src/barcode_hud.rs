@@ -6,7 +6,7 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use egui::{Color32, CornerRadius, Margin, Pos2, Rect, Stroke, vec2};
+use egui::{Color32, CornerRadius, Margin, Pos2, Rect, Stroke, pos2, vec2};
 use pdfcraft_engine::barcode_scan::ScannedCode;
 use pdfcraft_engine::{Document, Edit};
 use pdfcraft_render::DocInfo;
@@ -115,6 +115,57 @@ impl BarcodeHudState {
     }
 }
 
+fn get_downloads_dir() -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            let p = std::path::PathBuf::from(profile).join("Downloads");
+            if p.exists() {
+                return p;
+            }
+        }
+    }
+    #[cfg(unix)]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let p = std::path::PathBuf::from(home).join("Downloads");
+            if p.exists() {
+                return p;
+            }
+        }
+    }
+    std::env::temp_dir()
+}
+
+fn safe_rect_and_pixels(rect: [f64; 4], pixel_size: [u32; 2], kind: pdfcraft_engine::barcode_scan::CodeKind) -> ([f64; 4], u32, u32) {
+    let min_x = if rect[0].is_finite() && rect[2].is_finite() { rect[0].min(rect[2]) } else { 0.0 };
+    let max_x = if rect[0].is_finite() && rect[2].is_finite() { rect[0].max(rect[2]) } else { 100.0 };
+    let min_y = if rect[1].is_finite() && rect[3].is_finite() { rect[1].min(rect[3]) } else { 0.0 };
+    let max_y = if rect[1].is_finite() && rect[3].is_finite() { rect[1].max(rect[3]) } else { 50.0 };
+
+    let orig_w = (max_x - min_x).max(15.0);
+    let orig_h = (max_y - min_y).max(15.0);
+
+    // Inflate safe_rect by 3 PDF points on all sides to completely cover anti-aliased edges
+    let min_x = (min_x - 3.0).max(0.0);
+    let max_x = max_x + 3.0;
+    let min_y = (min_y - 3.0).max(0.0);
+    let max_y = max_y + 3.0;
+    let safe_rect = [min_x, min_y, max_x, max_y];
+
+    let rect_w = orig_w.round().max(16.0) as u32;
+    let rect_h = orig_h.round().max(16.0) as u32;
+    let pw = if pixel_size[0] > 0 { pixel_size[0].max(16) } else { rect_w };
+    let ph = if pixel_size[1] > 0 { pixel_size[1].max(16) } else { rect_h };
+    let (pw, ph) = if kind == pdfcraft_engine::barcode_scan::CodeKind::QrCode {
+        let side = pw.max(ph).max(64);
+        (side, side)
+    } else {
+        (pw.max(64), ph.max(24))
+    };
+    (safe_rect, pw, ph)
+}
+
 /// Unified Floating HUD widget.
 pub struct BarcodeScannerHud;
 
@@ -133,7 +184,9 @@ impl BarcodeScannerHud {
             if view.barcode_hud.open {
                 let codes = doc.scan_page_codes(current_page);
                 let count = codes.len();
+                let panel_open = view.barcode_hud.panel_open;
                 view.barcode_hud.update_codes_conditional(codes, true);
+                view.barcode_hud.panel_open = panel_open;
                 if count > 0 {
                     view.barcode_hud.show_toast(format!("Detected {count} code(s) on page {}", current_page + 1), now);
                 } else {
@@ -147,7 +200,7 @@ impl BarcodeScannerHud {
     ///
     /// Returns a pending replacement `Edit` if the user modified and applied a code.
     pub fn show(ui: &mut egui::Ui, view: &mut DocView, doc: &Document, info: &DocInfo, can_modify: bool) -> Option<Edit> {
-        if !view.barcode_hud.open {
+        if !view.barcode_hud.open || !view.barcode_hud.panel_open {
             return None;
         }
 
@@ -156,34 +209,7 @@ impl BarcodeScannerHud {
         let viewport = view.viewport_rect();
         let view_id = view.id.0;
         let now = ui.input(|i| i.time);
-
-        // 1. Highlight barcodes on canvas:
-        // Active code gets 0.5px blue bounding box with slight light blue fill.
-        // Other codes get faint outline with no fill.
-        if let Some(xf) = view.page_xform(current_page) {
-            for (i, c) in view.barcode_hud.scanned_codes.iter().enumerate() {
-                if c.page == current_page {
-                    let code_rect = xf.user_rect(info, current_page, c.rect.map(|v| v as f32));
-                    if i == view.barcode_hud.active_index {
-                        // User requirement: "highlighted with a blue colour 0.5 px bounding box--- with very slight light blue fill"
-                        ui.painter().rect(
-                            code_rect,
-                            CornerRadius::ZERO,
-                            Color32::from_rgba_unmultiplied(0x3B, 0x82, 0xF6, 25), // slight light blue fill
-                            Stroke::new(0.5, Color32::from_rgb(0x3B, 0x82, 0xF6)), // 0.5 px blue bounding box
-                            egui::StrokeKind::Outside,
-                        );
-                    } else {
-                        ui.painter().rect_stroke(
-                            code_rect,
-                            CornerRadius::ZERO,
-                            Stroke::new(0.5, Color32::from_rgba_unmultiplied(0x3B, 0x82, 0xF6, 65)),
-                            egui::StrokeKind::Inside,
-                        );
-                    }
-                }
-            }
-        }
+        let page_xf = view.page_xform(current_page);
 
         let state = &mut view.barcode_hud;
         let total_codes = state.scanned_codes.len();
@@ -208,7 +234,47 @@ impl BarcodeScannerHud {
         let mut apply_code = None;
         let mut cancel_edit = false;
         let mut delete_code = None;
+        let mut download_code = None;
         let mut trigger_generate = false;
+
+        // Floating context menu near focused barcode with 🗑 Delete and ⬇ Download
+        if let Some(active) = state.active_code() {
+            if active.page == current_page {
+                if let Some(xf) = page_xf {
+                    let code_rect = xf.user_rect(info, current_page, active.rect.map(|v| v as f32));
+                    let menu_pos = pos2(
+                        (code_rect.center().x - 70.0).clamp(viewport.left() + 10.0, viewport.right() - 150.0),
+                        if code_rect.bottom() + 38.0 <= viewport.bottom() {
+                            code_rect.bottom() + 4.0
+                        } else {
+                            (code_rect.top() - 34.0).max(viewport.top() + 10.0)
+                        },
+                    );
+                    egui::Area::new(egui::Id::new(("barcode-context-menu", view_id, state.active_index)))
+                        .order(egui::Order::Foreground)
+                        .fixed_pos(menu_pos)
+                        .show(ui.ctx(), |ui| {
+                            egui::Frame::NONE
+                                .fill(Color32::from_rgb(0x1B, 0x1D, 0x26))
+                                .stroke(Stroke::new(1.0, Color32::from_rgb(0x3B, 0x82, 0xF6)))
+                                .corner_radius(CornerRadius::same(6))
+                                .shadow(egui::Shadow { offset: [0, 4], blur: 10, spread: 0, color: Color32::from_black_alpha(160) })
+                                .inner_margin(Margin::symmetric(6, 4))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x = 6.0;
+                                        if ui.add(egui::Button::new(egui::RichText::new("🗑 Delete").font(theme::medium(11.0)).color(Color32::from_rgb(0xEF, 0x44, 0x44)))).on_hover_text("Delete barcode and whiteout region").clicked() {
+                                            delete_code = Some(active.clone());
+                                        }
+                                        if ui.add(egui::Button::new(egui::RichText::new("⬇ Download").font(theme::medium(11.0)).color(Color32::from_rgb(0x60, 0xA5, 0xFA)))).on_hover_text("Export barcode PNG to Downloads folder").clicked() {
+                                            download_code = Some(active.clone());
+                                        }
+                                    });
+                                });
+                        });
+                }
+            }
+        }
 
         // Sandeep PDF Studio v3 Modern Dark Aesthetics
         let card_bg = Color32::from_rgb(0x13, 0x14, 0x1A);
@@ -224,7 +290,8 @@ impl BarcodeScannerHud {
         let hud_w = 330.0;
         let hud_pos = Pos2::new((viewport.right() - hud_w - 18.0).max(viewport.left() + 18.0), viewport.top() + 18.0);
 
-        egui::Area::new(egui::Id::new(("barcode-scanner-hud-v3", view_id))).order(egui::Order::Foreground).fixed_pos(hud_pos).show(ui.ctx(), |ui| {
+        if state.panel_open {
+            egui::Area::new(egui::Id::new(("barcode-scanner-hud-v3", view_id))).order(egui::Order::Foreground).fixed_pos(hud_pos).show(ui.ctx(), |ui| {
             egui::Frame::NONE
                 .fill(card_bg)
                 .stroke(border_stroke)
@@ -408,7 +475,8 @@ impl BarcodeScannerHud {
                         ui.label(egui::RichText::new(msg).font(theme::medium(11.0)).color(emerald_green));
                     }
                 });
-        });
+            });
+        }
 
         if trigger_rescan {
             state.target_rect = state.active_code().map(|c| c.rect);
@@ -426,19 +494,7 @@ impl BarcodeScannerHud {
             state.edit_buffer = Some(active.text.clone());
         }
         if let Some((active, buf)) = apply_code {
-            let rect = active.rect;
-            let orig_w = (rect[2] - rect[0]).abs();
-            let orig_h = (rect[3] - rect[1]).abs();
-            let rect_w = orig_w.round().max(1.0) as u32;
-            let rect_h = orig_h.round().max(1.0) as u32;
-            let pw = if active.pixel_size[0] > 0 { active.pixel_size[0] } else { rect_w };
-            let ph = if active.pixel_size[1] > 0 { active.pixel_size[1] } else { rect_h };
-            let (pw, ph) = if active.kind == pdfcraft_engine::barcode_scan::CodeKind::QrCode {
-                let side = pw.max(ph);
-                (side, side)
-            } else {
-                (pw, ph)
-            };
+            let (safe_rect, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
 
             match Document::generate_replacement_code(active.kind, &buf, pw, ph) {
                 Ok(png_bytes) => {
@@ -448,13 +504,13 @@ impl BarcodeScannerHud {
                         vec![
                             Edit::AddImage {
                                 page: current_page,
-                                rect: Some(rect),
+                                rect: Some(safe_rect),
                                 name: "Whiteout.png".into(),
                                 bytes: Arc::new(whiteout_bytes),
                             },
                             Edit::AddImage {
                                 page: current_page,
-                                rect: Some(rect),
+                                rect: Some(safe_rect),
                                 name: "UpdatedCode.png".into(),
                                 bytes: Arc::new(png_bytes),
                             },
@@ -462,7 +518,7 @@ impl BarcodeScannerHud {
                     } else {
                         vec![Edit::AddImage {
                             page: current_page,
-                            rect: Some(rect),
+                            rect: Some(safe_rect),
                             name: "UpdatedCode.png".into(),
                             bytes: Arc::new(png_bytes),
                         }]
@@ -472,7 +528,7 @@ impl BarcodeScannerHud {
                         label: "Replace code".into(),
                         edits,
                     });
-                    state.target_rect = Some(rect);
+                    state.target_rect = Some(safe_rect);
                     state.last_scanned_page = None;
                     state.edit_buffer = None;
                     state.show_toast(format!("Replaced at 100% dimensions ({}×{}px)!", pw, ph), now);
@@ -483,16 +539,12 @@ impl BarcodeScannerHud {
             }
         }
         if let Some(active) = delete_code {
-            let rect = active.rect;
-            let orig_w = (rect[2] - rect[0]).abs();
-            let orig_h = (rect[3] - rect[1]).abs();
-            let pw = orig_w.round().max(16.0) as u32;
-            let ph = orig_h.round().max(16.0) as u32;
+            let (safe_rect, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
             match Document::generate_whiteout(pw, ph) {
                 Ok(whiteout_png) => {
                     pending_edit = Some(Edit::AddImage {
                         page: current_page,
-                        rect: Some(rect),
+                        rect: Some(safe_rect),
                         name: "Whiteout.png".into(),
                         bytes: Arc::new(whiteout_png),
                     });
@@ -503,6 +555,33 @@ impl BarcodeScannerHud {
                 }
                 Err(e) => {
                     state.show_toast(format!("Delete failed: {e}"), now);
+                }
+            }
+        }
+        if let Some(active) = download_code {
+            let (_, pw, ph) = safe_rect_and_pixels(active.rect, active.pixel_size, active.kind);
+            let pw = pw.max(128);
+            let ph = if active.kind == pdfcraft_engine::barcode_scan::CodeKind::QrCode { pw } else { ph.max(48) };
+            match Document::generate_replacement_code(active.kind, &active.text, pw, ph) {
+                Ok(png_bytes) => {
+                    let kind_name = format!("{:?}", active.kind).to_ascii_lowercase();
+                    let filename = format!("barcode_{}_{}.png", kind_name, (now as u64) % 10000);
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        let _ = crate::editing::download(&filename, &png_bytes);
+                        state.show_toast(format!("Downloaded {filename}!"), now);
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        let dest = get_downloads_dir().join(&filename);
+                        match std::fs::write(&dest, &png_bytes) {
+                            Ok(()) => state.show_toast(format!("Saved to Downloads: {filename}"), now),
+                            Err(e) => state.show_toast(format!("Download failed: {e}"), now),
+                        }
+                    }
+                }
+                Err(e) => {
+                    state.show_toast(format!("Download failed: {e}"), now);
                 }
             }
         }
@@ -517,7 +596,6 @@ impl BarcodeScannerHud {
             state.next_code();
         }
         if close_hud {
-            state.open = false;
             state.panel_open = false;
         }
 

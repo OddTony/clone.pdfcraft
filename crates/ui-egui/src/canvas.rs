@@ -459,6 +459,14 @@ pub struct DocView {
     single_edges: Option<(usize, bool, bool)>,
     /// Viewport reading background preference to reduce eye strain (Light, Default, Dark). Strictly non-destructive UI setting.
     pub page_background: PageBackground,
+    /// Custom page background color for reading mode tint overlay.
+    pub page_background_color: Color32,
+    /// Whether the background color picker / tint modal is open.
+    pub background_picker_open: bool,
+    /// Tint strength for reading mode overlay (0.0 to 1.0, default 0.5).
+    pub background_tint_strength: f32,
+    /// Last rendered page whose texture is ready, used to avoid white flashes when navigating.
+    pub last_ready_page: Option<usize>,
     /// Pinned scroll offset in single-page mode while a new page's texture is generating.
     pub single_page_target_y: Option<f32>,
     /// Briefly outline an annotation after navigating to it from a panel.
@@ -769,6 +777,10 @@ impl DocView {
             key_scroll: 0.0,
             single_edges: None,
             page_background: PageBackground::Default,
+            page_background_color: Color32::from_rgb(0x1E, 0x1E, 0x1E),
+            background_picker_open: false,
+            background_tint_strength: 0.5,
+            last_ready_page: None,
             single_page_target_y: None,
             flash: None,
             compare_marks: Vec::new(),
@@ -902,6 +914,10 @@ impl DocView {
         fresh.current = self.current;
         fresh.organize = self.organize;
         fresh.page_background = self.page_background;
+        fresh.page_background_color = self.page_background_color;
+        fresh.background_picker_open = self.background_picker_open;
+        fresh.background_tint_strength = self.background_tint_strength;
+        fresh.last_ready_page = self.last_ready_page;
         fresh.grid_zoom = self.grid_zoom;
         // Same document id, so the scroll offset egui keeps for it is still this document's.
         fresh.shown = self.shown;
@@ -2956,7 +2972,10 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 PageBackground::Light => Color32::from_rgb(0xF5, 0xF2, 0xEB),
                 PageBackground::Default => Color32::WHITE,
             };
-            painter.rect_filled(r, CornerRadius::ZERO, paper_color);
+            let has_tex = view.pages.contains_key(&i) || view.thumbs.contains_key(&i);
+            if has_tex {
+                painter.rect_filled(r, CornerRadius::ZERO, paper_color);
+            }
             if let Some(err) = view.errors.get(&i) {
                 painter.rect_filled(r, CornerRadius::ZERO, Color32::from_rgb(0xFB, 0xF4, 0xF4));
                 icons::paint(
@@ -2989,25 +3008,26 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     Some(p) => wanted.push((i, tag_scale(p.tag), p.tag, None)),
                     None => wanted.push((i, want_scale, want_tag, None)),
                 }
-                match view.pages.get(&i) {
-                    Some(p) => {
-                        if !tiled && p.tag == want_tag {
-                            xf.texel_aligned(p.tex.size(), ppp).paint_image(painter, p.tex.id(), 0.0, 0.0, 1.0, 1.0);
-                        } else {
-                            // A backdrop, or a raster at an older scale until the new one arrives.
-                            xf.paint_image(painter, p.tex.id(), 0.0, 0.0, 1.0, 1.0);
-                        }
+                if let Some(p) = view.pages.get(&i) {
+                    view.last_ready_page = Some(i);
+                    if !tiled && p.tag == want_tag {
+                        xf.texel_aligned(p.tex.size(), ppp).paint_image(painter, p.tex.id(), 0.0, 0.0, 1.0, 1.0);
+                    } else {
+                        // A backdrop, or a raster at an older scale until the new one arrives.
+                        xf.paint_image(painter, p.tex.id(), 0.0, 0.0, 1.0, 1.0);
                     }
-                    None => {
-                        if let Some(thumb) = view.thumbs.get(&i) {
-                            xf.paint_image(painter, thumb.tex.id(), 0.0, 0.0, 1.0, 1.0);
-                        } else {
-                            let now = ui.input(|inp| inp.time);
-                            let since = *view.waiting_since.entry(i).or_insert(now);
-                            let msg = if now - since > 6.0 { "Still rendering — this page is unusually complex…" } else { "Rendering…" };
-                            painter.text(r.center(), Align2::CENTER_CENTER, tl!(msg), theme::regular(12.0), t.text_faint);
-                        }
-                    }
+                } else if let Some(thumb) = view.thumbs.get(&i) {
+                    xf.paint_image(painter, thumb.tex.id(), 0.0, 0.0, 1.0, 1.0);
+                } else if let Some(prev) = view.last_ready_page.and_then(|prev_idx| view.pages.get(&prev_idx)) {
+                    // Prevent white flash: continue rendering previous page's ready texture over new page's area
+                    xf.paint_image(painter, prev.tex.id(), 0.0, 0.0, 1.0, 1.0);
+                } else {
+                    // Solid neutral grey box
+                    painter.rect_filled(r, CornerRadius::ZERO, Color32::from_rgb(0xE2, 0xE8, 0xF0));
+                    let now = ui.input(|inp| inp.time);
+                    let since = *view.waiting_since.entry(i).or_insert(now);
+                    let msg = if now - since > 6.0 { "Still rendering — this page is unusually complex…" } else { "Rendering…" };
+                    painter.text(r.center(), Align2::CENTER_CENTER, tl!(msg), theme::regular(12.0), t.text_faint);
                 }
                 if tiled && r.intersects(visible) {
                     // Device-pixel geometry of the scaled page, and the visible part of it
@@ -3080,12 +3100,10 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 let page_tex = view.pages.get(&i).map(|p| p.tex.id());
                 view.move_background.paint(ui, painter, &xf, i, info, &view.content, page_tex);
             }
-            if let Some(tint) = match view.page_background {
-                PageBackground::Dark => Some(Color32::from_black_alpha(20)),
-                PageBackground::Light => Some(Color32::from_rgba_unmultiplied(250, 240, 215, 20)),
-                PageBackground::Default => None,
-            } {
-                painter.rect_filled(r, CornerRadius::ZERO, tint);
+            if view.page_background != PageBackground::Default && view.background_tint_strength > 0.0 {
+                let [cr, cg, cb, _] = view.page_background_color.to_array();
+                let a = ((255.0 * view.background_tint_strength).clamp(0.0, 255.0)) as u8;
+                painter.rect_filled(r, CornerRadius::ZERO, Color32::from_rgba_unmultiplied(cr, cg, cb, a));
             }
             painter.rect_stroke(r, CornerRadius::ZERO, Stroke::new(0.5, t.border.gamma_multiply(0.8)), egui::StrokeKind::Outside);
 
@@ -4158,6 +4176,52 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // Barcode & QR Code Scanner HUD (Unified Single HUD)
     let now = ui.input(|i| i.time);
     crate::barcode_hud::BarcodeScannerHud::auto_scan_on_page_change(view, doc, now);
+
+    if view.barcode_hud.open {
+        let current_page = view.current;
+        if let Some(xf) = view.page_xform(current_page) {
+            let mut clicked_code = None;
+            for (i, c) in view.barcode_hud.scanned_codes.iter().enumerate() {
+                if c.page == current_page {
+                    let code_rect = xf.user_rect(info, current_page, c.rect.map(|v| v as f32));
+                    let is_active = i == view.barcode_hud.active_index;
+                    let resp = ui.interact(code_rect, ui.id().with(("barcode-box", current_page, i)), egui::Sense::click());
+                    if resp.clicked() {
+                        clicked_code = Some((i, c.rect));
+                    }
+                    if is_active {
+                        ui.painter().rect(
+                            code_rect,
+                            CornerRadius::ZERO,
+                            Color32::from_rgba_unmultiplied(0x3B, 0x82, 0xF6, 35),
+                            Stroke::new(1.0, Color32::from_rgb(0x3B, 0x82, 0xF6)),
+                            egui::StrokeKind::Outside,
+                        );
+                    } else {
+                        ui.painter().rect_stroke(
+                            code_rect,
+                            CornerRadius::ZERO,
+                            Stroke::new(0.5, Color32::from_rgba_unmultiplied(0x3B, 0x82, 0xF6, 65)),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
+                }
+            }
+            if let Some((idx, target_rect)) = clicked_code {
+                if idx == view.barcode_hud.active_index && view.barcode_hud.panel_open {
+                    // Clicking the same focused barcode again toggles the HUD closed
+                    view.barcode_hud.panel_open = false;
+                } else {
+                    // Clicking a barcode focuses it, rescans with tight bounds, and opens HUD
+                    view.barcode_hud.target_rect = Some(target_rect);
+                    let codes = doc.scan_page_codes(current_page);
+                    view.barcode_hud.update_codes_conditional(codes, true);
+                    view.barcode_hud.panel_open = true;
+                    view.barcode_hud.edit_buffer = None;
+                }
+            }
+        }
+    }
 
     if let Some(hud_edit) = crate::barcode_hud::BarcodeScannerHud::show(ui, view, doc, info, can_modify) {
         view.pending_edit = Some(hud_edit);

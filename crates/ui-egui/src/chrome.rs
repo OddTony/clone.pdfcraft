@@ -697,7 +697,18 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 let bg_active = view.page_background != PageBackground::Default;
                 if icons::button(ui, view.page_background.icon(), 32.0, bg_active, &bg_tip).clicked() {
                     view.page_background = view.page_background.next();
+                    match view.page_background {
+                        PageBackground::Light => view.page_background_color = Color32::from_rgb(250, 240, 215),
+                        PageBackground::Dark => view.page_background_color = Color32::from_rgb(0x1E, 0x1E, 0x1E),
+                        _ => {}
+                    }
                     ui.ctx().request_repaint();
+                }
+                if bg_active {
+                    let swatch_tip = tl!("Background color & tint settings");
+                    if icons::button(ui, "palette", 30.0, view.background_picker_open, swatch_tip).clicked() {
+                        view.background_picker_open = !view.background_picker_open;
+                    }
                 }
                 let zoom = format!("{:.0}%", view.zoom * 100.0);
                 ui.allocate_ui_with_layout(vec2(40.0, 16.0), Layout::top_down(Align::Center), |ui| {
@@ -758,6 +769,64 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             });
             if let Some(id) = page_display {
                 app.execute(id);
+            }
+
+            let view = &mut app.views[index];
+            if view.background_picker_open {
+                let mut open = view.background_picker_open;
+                egui::Window::new(tl!("Page Background & Tint"))
+                    .open(&mut open)
+                    .resizable(false)
+                    .collapsible(false)
+                    .default_width(260.0)
+                    .show(ui.ctx(), |ui| {
+                        ui.label(egui::RichText::new(tl!("Tint Strength")).font(theme::semibold(12.0)));
+                        let mut percent = (view.background_tint_strength * 100.0).round();
+                        if ui.add(egui::Slider::new(&mut percent, 0.0..=100.0).suffix("%").step_by(1.0)).changed() {
+                            view.background_tint_strength = (percent / 100.0).clamp(0.0, 1.0);
+                            if view.page_background == PageBackground::Default {
+                                view.page_background = PageBackground::Dark;
+                            }
+                            ui.ctx().request_repaint();
+                        }
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new(tl!("Preset Swatches")).font(theme::semibold(12.0)));
+                        let presets = [
+                            ("White", Color32::WHITE),
+                            ("Warm Sepia", Color32::from_rgb(250, 240, 215)),
+                            ("Grey", Color32::from_rgb(160, 160, 160)),
+                            ("Dark Grey", Color32::from_rgb(0x1E, 0x1E, 0x1E)),
+                            ("Pure Black", Color32::BLACK),
+                        ];
+                        ui.horizontal(|ui| {
+                            for (name, color) in presets {
+                                let (rect, resp) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+                                let is_selected = view.page_background_color == color;
+                                let stroke = if is_selected {
+                                    Stroke::new(2.0, Color32::from_rgb(0x3B, 0x82, 0xF6))
+                                } else {
+                                    Stroke::new(1.0, Color32::from_gray(100))
+                                };
+                                ui.painter().rect(rect, CornerRadius::same(4), color, stroke, egui::StrokeKind::Inside);
+                                if resp.on_hover_text(name).clicked() {
+                                    view.page_background_color = color;
+                                    if view.page_background == PageBackground::Default {
+                                        view.page_background = PageBackground::Dark;
+                                    }
+                                    ui.ctx().request_repaint();
+                                }
+                            }
+                        });
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new(tl!("Custom Color")).font(theme::semibold(12.0)));
+                        if egui::color_picker::color_picker_color32(ui, &mut view.page_background_color, egui::color_picker::Alpha::Opaque) {
+                            if view.page_background == PageBackground::Default {
+                                view.page_background = PageBackground::Dark;
+                            }
+                            ui.ctx().request_repaint();
+                        }
+                    });
+                view.background_picker_open = open;
             }
         });
 }
