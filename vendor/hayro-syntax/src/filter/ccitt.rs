@@ -17,7 +17,7 @@ pub(crate) fn decode(
 
     // PdfCraft patch: `/Rows 0` means the height is not predetermined (ISO 32000-2 Table 11, and
     // the default), not zero rows. Scanners write it on Group 4 pages, which rendered blank.
-    // PdfCraft patch (18): fewer `/Rows` than the image's `/Height` doesn't cut the image short: a
+    // PdfCraft patch (19): fewer `/Rows` than the image's `/Height` doesn't cut the image short: a
     // plotter driver wrote `/Rows` equal to `/Columns`, and the rows after it were drawn black
     // (#3308). The decoder still stops where the data ends.
     let rows = params
