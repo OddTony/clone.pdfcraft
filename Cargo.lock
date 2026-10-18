@@ -4283,6 +4283,7 @@ dependencies = [
 name = "pdfcraft-redact"
 version = "0.9.0"
 dependencies = [
+ "image",
  "pdfcraft-annot",
  "pdfcraft-content",
  "pdfcraft-cos",
