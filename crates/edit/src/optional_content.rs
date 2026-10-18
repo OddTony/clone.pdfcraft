@@ -9,6 +9,7 @@ const MAX_MARKED_DEPTH: usize = 256;
 const MAX_EXPRESSION_DEPTH: usize = 32;
 const MAX_EXPRESSION_WORK: usize = 4096;
 
+/// Shared default group configuration plus one bounded marked-content visibility stack.
 #[derive(Clone)]
 pub(crate) struct Visibility {
     // None means the configuration exceeded the budget: omit optional content rather than
@@ -19,11 +20,13 @@ pub(crate) struct Visibility {
 }
 
 impl Visibility {
+    /// Read the default configuration once; form scopes share its immutable group state.
     pub(crate) fn new(doc: &Document) -> Self {
         let inactive = Self::inactive(doc);
         Self { inactive: Rc::new(inactive), stack: Vec::new(), overflow: 0 }
     }
 
+    /// Apply BaseState, ON and OFF in order; None marks configuration-budget exhaustion.
     fn inactive(doc: &Document) -> Option<HashSet<ObjRef>> {
         let mut off = HashSet::new();
         let Some(root) = doc.trailer().get(b"Root").map(|o| doc.resolve(o)) else { return Some(off) };
@@ -61,14 +64,17 @@ impl Visibility {
         Self { inactive: self.inactive.clone(), stack: Vec::new(), overflow: 0 }
     }
 
+    /// Report cumulative scope visibility; excess nesting stays hidden until it unwinds.
     pub(crate) fn visible(&self) -> bool {
         self.overflow == 0 && self.stack.last().copied().unwrap_or(true)
     }
 
+    /// Tell the text reader whether this close belongs to an untracked excess scope.
     pub(crate) fn overflowing(&self) -> bool {
         self.overflow != 0
     }
 
+    /// Update BMC/BDC/EMC scopes, resolving named OC properties in the current resources.
     pub(crate) fn apply(&mut self, doc: &Document, resources: &Dict, op: &Op) {
         match op.op.as_slice() {
             b"BMC" | b"BDC" => {
@@ -104,6 +110,7 @@ impl Visibility {
         }
     }
 
+    /// Evaluate an XObject's own OC membership without entering or decoding its stream.
     pub(crate) fn xobject_visible(&self, doc: &Document, resources: &Dict, name: &[u8]) -> bool {
         resources
             .get(b"XObject")
@@ -117,6 +124,7 @@ impl Visibility {
             .unwrap_or(true)
     }
 
+    /// Evaluate an OCG or OCMD; a valid VE overrides membership policy.
     pub(crate) fn object_visible(&self, doc: &Document, value: &Object) -> bool {
         let Some(inactive) = self.inactive.as_ref() else { return false };
         let resolved = doc.resolve(value);
@@ -148,6 +156,7 @@ impl Visibility {
         }
     }
 
+    /// Evaluate boolean VE nodes within depth/work limits; invalid input requests policy fallback.
     fn expression(&self, doc: &Document, value: &Object, depth: usize, work: &mut usize) -> Option<bool> {
         if depth > MAX_EXPRESSION_DEPTH || *work == 0 {
             return None;

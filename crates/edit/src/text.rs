@@ -713,6 +713,7 @@ struct Carry {
 }
 
 impl Carry {
+    /// Initialize page text state and the document's default optional-content visibility.
     fn new(doc: &Document) -> Self {
         let ts = Ts {
             ctm: Matrix::IDENTITY,
@@ -734,6 +735,8 @@ impl Carry {
 /// A `Do` met while interpreting: its operator index, XObject name and the state there.
 type Invocation = (usize, Vec<u8>, Ts);
 
+/// Read visible glyph runs while advancing all text operators; optionally collect visible Do
+/// calls for form traversal. `logical_text` enables ActualText replacements for reading.
 fn interpret(
     doc: &Document,
     ops: &[Op],
@@ -758,9 +761,13 @@ fn interpret(
         carry.visibility.apply(doc, resources, op);
         let visible =
             carry.visibility.visible() && (!op.is("Do") || op.name(0).is_none_or(|name| carry.visibility.xobject_visible(doc, resources, name)));
-        if !visible && matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"" | b"Do") {
+        if actual.iter().any(Option::is_some)
+            && ((!visible && matches!(op.op.as_slice(), b"Tj" | b"TJ" | b"'" | b"\"" | b"Do"))
+                || (op.is("Do") && op.name(0).is_some_and(|name| is_form_xobject(doc, resources, name))))
+        {
             // A replacement spanning visible and hidden content could disclose the hidden
-            // text. Read the remaining visible glyphs instead of that replacement string.
+            // text. A visible form can hide content internally, beyond this interpreter's
+            // scope. Conservatively read glyph text around forms, preserving image replacements.
             actual.iter_mut().for_each(|a| *a = None);
         }
         match op.op.as_slice() {
@@ -1220,6 +1227,14 @@ pub(crate) struct FormCall {
     pub(crate) data: Vec<u8>,
     pub(crate) resources: Dict,
     pub(crate) ctm: Matrix,
+}
+
+/// Identify an actual Form stream without decoding it or consuming a form visit. Images,
+/// missing resources and dictionaries merely labelled /Form keep their replacement text.
+fn is_form_xobject(doc: &Document, resources: &Dict, name: &[u8]) -> bool {
+    let Some(xobjects) = resources.get(b"XObject").map(|o| doc.resolve(o)) else { return false };
+    let Some(object) = xobjects.as_dict().and_then(|d| d.get(name)).map(|o| doc.resolve(o)) else { return false };
+    matches!(&*object, Object::Stream(stream) if stream.dict.name(b"Subtype") == Some(b"Form"))
 }
 
 /// The form XObject `name` in `resources`, drawn with `ctm`. `None` for images, missing names

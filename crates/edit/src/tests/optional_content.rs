@@ -1,6 +1,7 @@
 //! Synthetic regression fixtures for #3211; no external PDF or font assets.
 use super::*;
 
+/// Build one original synthetic page with hidden/shown groups, an OCMD and a form.
 fn fixture(content: &str, form_oc: &str, config: &str) -> Document {
     let page = stream("", content);
     let form = stream(&format!("/Type /XObject /Subtype /Form /BBox [0 0 600 800] {form_oc}"), "BT /F1 12 Tf 40 500 Td (FORM_SECRET) Tj ET");
@@ -17,6 +18,7 @@ fn fixture(content: &str, form_oc: &str, config: &str) -> Document {
     ])
 }
 
+/// Read paragraph text through the same reader Office export uses.
 fn texts(doc: &Document) -> Vec<String> {
     text::reading_blocks(doc, 0).unwrap().into_iter().map(|b| b.text).collect()
 }
@@ -279,4 +281,69 @@ fn indirect_properties_membership_arrays_and_nested_form_visibility() {
     doc.set(ObjRef::new(8, 0), Object::Stream(Stream::from_raw(parent, b"/Child Do BT /F1 12 Tf 40 500 Td (PARENT_PUBLIC) Tj ET".to_vec())));
     doc.set(ObjRef::new(4, 0), Object::Stream(Stream::from_raw(Dict::new(), b"/Fm Do".to_vec())));
     assert_eq!(texts(&doc), ["PARENT_PUBLIC"]);
+}
+
+/// An outer replacement must not disclose hidden text discovered only inside a visible form.
+#[test]
+fn actual_text_around_visible_forms_cannot_reintroduce_their_hidden_text() {
+    use pdfcraft_cos::{ObjRef, Object, Stream};
+    let mut doc = fixture("/Span <</ActualText (PUBLIC NESTED_SECRET)>> BDC BT /F1 12 Tf 40 700 Td (PUBLIC) Tj ET /Fm Do EMC", "", OFF);
+    let mut form = Dict::new();
+    form.set(b"Subtype".to_vec(), Object::Name(b"Form".to_vec()));
+    form.set(b"BBox".to_vec(), Object::Array(vec![0.into(), 0.into(), 600.into(), 800.into()]));
+    doc.set(
+        ObjRef::new(8, 0),
+        Object::Stream(Stream::from_raw(
+            form,
+            b"/OC /Hidden BDC BT /F1 12 Tf 40 600 Td (NESTED_SECRET) Tj ET EMC BT /F1 12 Tf 40 500 Td (FORM_PUBLIC) Tj ET".to_vec(),
+        )),
+    );
+    assert_eq!(texts(&doc), ["PUBLIC", "FORM_PUBLIC"]);
+    assert_eq!(text::text_lines(&doc, 0).unwrap().iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["PUBLIC"]);
+}
+
+/// Visible images, missing resources and non-stream dictionaries do not invalidate replacement text.
+#[test]
+fn actual_text_around_non_form_xobjects_is_preserved() {
+    use pdfcraft_cos::{ObjRef, Object, Stream};
+    for kind in ["image", "dictionary", "missing"] {
+        let mut doc = fixture("/Span <</ActualText (ACCESSIBLE)>> BDC BT /F1 12 Tf 40 700 Td (GLYPHS) Tj ET /Fm Do EMC", "", OFF);
+        let mut dict = Dict::new();
+        dict.set(b"Subtype".to_vec(), Object::Name(if kind == "image" { b"Image".to_vec() } else { b"Form".to_vec() }));
+        let object = match kind {
+            "image" => Object::Stream(Stream::from_raw(dict, vec![0])),
+            "dictionary" => Object::Dict(dict),
+            _ => Object::Null,
+        };
+        doc.set(ObjRef::new(8, 0), object);
+        assert_eq!(texts(&doc), ["ACCESSIBLE"], "{kind}");
+        assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, "ACCESSIBLE", "{kind}");
+    }
+}
+
+/// Named replacement properties share the form boundary, while visible images retain semantics.
+#[test]
+fn named_actual_text_around_forms_is_invalidated_but_images_keep_it() {
+    use pdfcraft_cos::{ObjRef, Object, PdfString, Stream};
+    let mut doc = fixture("/Span /Replacement BDC BT /F1 12 Tf 40 700 Td (PUBLIC) Tj ET /Fm Do EMC", "", OFF);
+    let mut resources = doc.dict(pdfcraft_model::pages(&doc)[0].dict.get(b"Resources").unwrap()).unwrap();
+    let mut properties = doc.dict(resources.get(b"Properties").unwrap()).unwrap();
+    let mut replacement = Dict::new();
+    replacement.set(b"ActualText".to_vec(), Object::String(PdfString::text("PUBLIC NESTED_SECRET")));
+    let replacement = doc.add(Object::Dict(replacement));
+    properties.set(b"Replacement".to_vec(), Object::Ref(replacement));
+    resources.set(b"Properties".to_vec(), Object::Dict(properties));
+    doc.update_dict(ObjRef::new(3, 0), |d| {
+        d.set(b"Resources".to_vec(), Object::Dict(resources));
+    })
+    .unwrap();
+    let form = doc.dict(&Object::Ref(ObjRef::new(8, 0))).unwrap();
+    doc.set(ObjRef::new(8, 0), Object::Stream(Stream::from_raw(form, b"/OC /Hidden BDC BT /F1 12 Tf 40 500 Td (NESTED_SECRET) Tj ET EMC".to_vec())));
+    assert_eq!(texts(&doc), ["PUBLIC"]);
+    assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, "PUBLIC");
+    let mut image = Dict::new();
+    image.set(b"Subtype".to_vec(), Object::Name(b"Image".to_vec()));
+    doc.set(ObjRef::new(8, 0), Object::Stream(Stream::from_raw(image, vec![0])));
+    assert_eq!(texts(&doc), ["PUBLIC NESTED_SECRET"]);
+    assert_eq!(text::text_lines(&doc, 0).unwrap()[0].text, "PUBLIC NESTED_SECRET");
 }
