@@ -2190,6 +2190,19 @@ fn reversing_pages_through_tools() {
 }
 
 #[test]
+fn page_duplicate_at_inserts_the_copies_there() {
+    let dir = workdir("duplicate-at");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let r = ok(&mut a, "page_duplicate", json!({ "doc": doc, "pages": [2], "at": 1 }));
+    assert_eq!(r["pages"], 4);
+    assert_eq!(page_text(&mut a, doc), ["Page 2", "Page 1", "Page 2", "Page 3"]);
+    // `at` is 1-based and within 1..=pages+1, as for the other page inserts.
+    assert!(matches!(a.call("page_duplicate", &json!({ "doc": doc, "pages": [1], "at": 0 })), Err(ToolError::InvalidArgs(_))), "1-based");
+    assert!(matches!(a.call("page_duplicate", &json!({ "doc": doc, "pages": [1], "at": 6 })), Err(ToolError::InvalidArgs(_))), "past the end");
+}
+
+#[test]
 fn duplicating_and_cropping_through_tools() {
     let dir = workdir("boxes");
     let mut a = auto(&dir);
@@ -3929,6 +3942,35 @@ fn bookmark_split_with_equal_titles_keeps_every_part() {
     for f in &files {
         assert!(dir.join("parts").join(f).exists(), "{f} missing");
     }
+}
+
+#[test]
+fn bookmark_split_with_long_titles_shortens_the_file_names() {
+    let dir = workdir("organize_long_titles");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    // Two equal titles far over the 255-byte name limit, then a multibyte one (3 bytes a character).
+    let long = format!("Chapter {}", "x".repeat(300));
+    ok(&mut a, "bookmark_add", json!({ "doc": doc, "title": long, "page": 1 }));
+    ok(&mut a, "bookmark_add", json!({ "doc": doc, "title": long, "page": 2 }));
+    ok(&mut a, "bookmark_add", json!({ "doc": doc, "title": "章".repeat(100), "page": 3 }));
+    let s = ok(&mut a, "doc_split", json!({ "doc": doc, "bookmarks": true, "out_dir": "parts" }));
+    let files: Vec<String> = s["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| std::path::Path::new(f["path"].as_str().unwrap()).file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(files.len(), 3, "{files:?}");
+    let distinct: std::collections::HashSet<_> = files.iter().map(|f| f.to_lowercase()).collect();
+    assert_eq!(distinct.len(), 3, "{files:?}");
+    for f in &files {
+        assert!(f.len() <= 255, "{f} is {} bytes", f.len());
+        assert!(f.ends_with(".pdf"), "{f}");
+        assert!(dir.join("parts").join(f).exists(), "{f} missing");
+    }
+    assert!(files[0].starts_with("a-Chapter x"), "{files:?}");
+    assert!(files[2].starts_with("a-章"), "{files:?}");
 }
 
 #[test]
