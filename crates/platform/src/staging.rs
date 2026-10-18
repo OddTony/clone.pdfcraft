@@ -99,7 +99,8 @@ pub fn staging_suffixes() -> impl Iterator<Item = u64> {
 /// a folder at the target is refused by the rename. Flushing is the staging file's own
 /// (`sync_all`); parent-directory durability after a power loss is not promised. On Unix a file
 /// that is replaced keeps its permissions, so a private file stays private; a new file gets the
-/// usual mode for a new file.
+/// usual mode for a new file. On Windows and macOS a replaced file keeps its creation date, where
+/// the volume stores one.
 pub fn write_atomically(path: &Path, bytes: &[u8], form: StagingName) -> std::io::Result<()> {
     write_atomically_with(path, bytes, form, staging_suffixes(), std::fs::File::sync_all)
 }
@@ -129,6 +130,7 @@ pub fn write_atomically_with(
     #[cfg(not(unix))]
     let keep = None;
     // A saved file is the same document: it keeps its creation date (#2658).
+    #[cfg(any(windows, target_os = "macos"))]
     let created = std::fs::metadata(path).ok().filter(|m| m.is_file()).and_then(|m| m.created().ok());
     let (tmp, file) = create_staging_as(dir, name, form, suffixes, keep.as_ref())?;
     let result = (|| {
@@ -136,6 +138,7 @@ pub fn write_atomically_with(
         {
             let mut file = file;
             file.write_all(bytes)?;
+            #[cfg(any(windows, target_os = "macos"))]
             keep_created(&file, created);
             sync_staged(&file, sync_all)?;
         }
@@ -150,9 +153,8 @@ pub fn write_atomically_with(
 /// Give the staging file the creation date of the file it replaces, where the system keeps one
 /// that a program can set (Windows, macOS). Best effort: a volume that can't store it leaves the
 /// new file's own date, as before.
-#[cfg_attr(not(any(windows, target_os = "macos")), allow(unused_variables))]
+#[cfg(any(windows, target_os = "macos"))]
 fn keep_created(file: &std::fs::File, created: Option<std::time::SystemTime>) {
-    #[cfg(any(windows, target_os = "macos"))]
     if let Some(created) = created {
         #[cfg(target_os = "macos")]
         use std::os::macos::fs::FileTimesExt as _;
