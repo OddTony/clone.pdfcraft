@@ -553,6 +553,29 @@ fn a_repaired_file_is_rewritten_by_save_even_without_edits() {
     }
 }
 
+/// A damaged file that is signed keeps its bytes on a Save without edits: rewriting it in full
+/// to put the repair on disk would invalidate its signatures without a word.
+#[test]
+fn a_signed_repaired_file_keeps_its_bytes_when_saved_without_edits() {
+    let p12 = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../sign/tests/data/ec-p256.p12")).unwrap();
+    let digital_id = sign::pkcs12::open(&p12, "test").unwrap();
+    // After the test certificate's start date (2026-10-02).
+    let mut s = Session::new().with_clock(|| 1_800_000_000);
+    let id = s.open("fixture.pdf", None, Arc::new(fixture(1)), None).unwrap();
+    let opts = SignOptions { page: 0, rect: Some([20.0, 20.0, 180.0, 60.0]), ..SignOptions::default() };
+    let signed = s.sign(id, &digital_id, opts).unwrap();
+    // A trailing `startxref` that points nowhere: the signed revision's bytes are untouched, but
+    // the file's cross-reference data has to be rebuilt.
+    let mut damaged = signed.to_vec();
+    damaged.extend_from_slice(b"\nstartxref\n999999\n%%EOF\n");
+    let mut t = Session::new().with_clock(|| 1_800_000_000);
+    let tid = t.open("damaged.pdf", Some("/tmp/damaged.pdf".into()), Arc::new(damaged.clone()), None).unwrap();
+    let doc = t.get(tid).unwrap();
+    assert!(doc.repair_log().iter().any(|l| l.contains("rebuilt cross-reference index")), "{:?}", doc.repair_log());
+    assert!(doc.is_signed());
+    assert_eq!(&t.save_bytes(tid).unwrap()[..], &damaged[..], "a signed file is not rewritten without edits");
+}
+
 #[test]
 fn undo_still_works_after_save() {
     let (mut s, id) = session_with(2);
