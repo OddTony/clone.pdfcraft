@@ -27,7 +27,7 @@ const TEXT_TAG: u64 = 1 << 62;
 const GRID_TAG: u64 = 1 << 61;
 /// Preview rasters tagged with this bit are converted to luminance on receipt, matching the
 /// monochrome print requested by Print ▸ Print in grayscale.
-const GRAYSCALE_TAG: u64 = 1 << 60;
+const GRAYSCALE_TAG: u64 = 1 << 59;
 /// The tag of a raster that is out of date (shown until its replacement arrives).
 const STALE_TAG: u64 = u64::MAX;
 /// Pages whose raster would exceed this many device pixels on a side are drawn in tiles.
@@ -5859,6 +5859,32 @@ trailer << /Root 1 0 R >>
         assert!(view.waiting_since.is_empty(), "waiting bookkeeping is cleared");
         assert!(view.last_queue.is_empty() && !view.render_pending(), "queued demand is retired");
         assert!(view.frame_queue.is_empty() && view.frame_visible.is_empty() && view.thumb_demand.is_empty());
+    }
+
+    #[test]
+    fn print_preview_grayscale_tag_does_not_collide_with_print_tag() {
+        assert_eq!(
+            PRINT_TAG & GRAYSCALE_TAG,
+            0,
+            "PRINT_TAG and GRAYSCALE_TAG must use distinct bit masks to prevent color previews being forced to grayscale"
+        );
+    }
+
+    #[test]
+    fn print_preview_requests_distinguish_color_and_grayscale() {
+        let mut v_color = view(1, PageLayout::Single, true);
+        v_color.set_print_grayscale(false);
+        v_color.queue_print_previews(&[(0, 1.0)]);
+        let color_req = v_color.frame_queue.iter().find(|r| r.page == 0).expect("preview queued");
+        assert_eq!(color_req.tag & PRINT_TAG, PRINT_TAG, "must be tagged as print preview");
+        assert_eq!(color_req.tag & GRAYSCALE_TAG, 0, "color preview must not carry GRAYSCALE_TAG");
+
+        let mut v_gray = view(1, PageLayout::Single, true);
+        v_gray.set_print_grayscale(true);
+        v_gray.queue_print_previews(&[(0, 1.0)]);
+        let gray_req = v_gray.frame_queue.iter().find(|r| r.page == 0).expect("preview queued");
+        assert_eq!(gray_req.tag & PRINT_TAG, PRINT_TAG, "must be tagged as print preview");
+        assert_eq!(gray_req.tag & GRAYSCALE_TAG, GRAYSCALE_TAG, "grayscale preview must carry GRAYSCALE_TAG");
     }
 
     /// Edit text & images keeps its boxes while page input is blocked (the window unfocused, a
