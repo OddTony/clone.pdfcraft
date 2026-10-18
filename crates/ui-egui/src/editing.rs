@@ -125,12 +125,17 @@ impl PdfCraftApp {
                         view.comments.selected = newest.map(|n| (a.page, n));
                         view.comments.reveal = true;
                         // A new highlight opens its note for typing straight away, as in Acrobat,
-                        // unless a note typed into another card is still unsaved.
+                        // unless a note typed into another card is still unsaved. A note whose
+                        // comment is gone, or was replaced at its index, can't be saved: the new
+                        // highlight's note takes its place.
                         if let (pdfcraft_engine::Shape::TextMarkup { kind: pdfcraft_engine::Markup::Highlight, .. }, Some(n)) = (&a.shape, newest)
                             && a.contents.is_empty()
-                            && view.comments.editing.as_ref().is_none_or(|(_, _, text)| text.is_empty())
+                            && (view.comments.editing.as_ref().is_none_or(|(_, _, text)| text.is_empty())
+                                || matches!(comment_draft(view, info), Some(CommentDraft::Orphaned)))
                         {
                             view.comments.editing = Some((a.page, n, String::new()));
+                            view.comments.editing_target =
+                                info.annotations.iter().find(|x| x.page == a.page && x.index == n).map(crate::comments::DraftTarget::of);
                         }
                     }
                     Edit::DeleteAnnotation { .. } => view.comments.selected = None,
@@ -483,17 +488,52 @@ impl PdfCraftApp {
             self.notify(crate::content_ui::undrawable_message(c));
             return false;
         }
-        let typing = self
-            .views
-            .get(i)
-            .is_some_and(|v| v.pending_edit.is_some() || v.forms.focus.is_some() || v.fill_text.as_ref().is_some_and(|t| !t.text.trim().is_empty()));
+        let typing = self.views.get(i).is_some_and(|v| {
+            v.pending_edit.is_some()
+                || v.forms.focus.is_some()
+                || v.fill_text.as_ref().is_some_and(|t| !t.text.trim().is_empty())
+                || self.session.get(id).is_some_and(|d| comment_draft(v, &d.info).is_some())
+        });
         if self.active != Some(i) {
             if !typing {
                 return true;
             }
             self.active = Some(i);
         }
-        self.commit_form_typing() && self.commit_open_fill_text(id)
+        self.commit_form_typing() && self.commit_open_fill_text(id) && self.commit_comment_draft(id)
+    }
+
+    /// Write the note typed into a comment card (Comments panel) into document `id`, as the card's
+    /// Save button does, so that saving keeps it. The note leaves the card before the edit runs, so
+    /// it is written once. When the document refuses it, it goes back in the card, the Comments
+    /// panel shows it, and this returns false so the caller writes nothing without it. A note whose
+    /// comment is gone is dropped, and the user told.
+    fn commit_comment_draft(&mut self, id: pdfcraft_engine::DocId) -> bool {
+        let Some(i) = self.views.iter().position(|v| v.id == id) else { return true };
+        let draft = match (self.views.get(i), self.session.get(id)) {
+            (Some(v), Some(doc)) => comment_draft(v, &doc.info),
+            _ => None,
+        };
+        let Some(draft) = draft else { return true };
+        let note = self.views.get_mut(i).and_then(|v| v.comments.editing.take());
+        match draft {
+            CommentDraft::Orphaned => {
+                self.notify_tr("The comment being edited no longer exists, so its text was not saved.");
+                true
+            }
+            CommentDraft::Changes(edit) => {
+                // `apply_edit` changes the active document.
+                self.active = Some(i);
+                if self.apply_edit(*edit) {
+                    return true;
+                }
+                if let Some(v) = self.views.get_mut(i) {
+                    v.comments.editing = note;
+                }
+                self.right = Some(crate::RightPanel::Comments);
+                false
+            }
+        }
     }
 
     /// The Fill & Sign type box commits on click-away. Save does that first, so the text is in
@@ -551,6 +591,7 @@ impl PdfCraftApp {
             || v.forms.focus.as_ref().is_some_and(|f| crate::forms_ui::draft_edit(f, &doc.form).is_some())
             || v.fill_text.as_ref().is_some_and(|t| !t.text.trim().is_empty())
             || v.line_editor.as_ref().map_or_else(|| false, |ed| ed.has_unsaved_text())
+            || matches!(comment_draft(v, &doc.info), Some(CommentDraft::Changes(_)))
     }
 
     /// Save the active document. Returns `true` if it was written.
@@ -737,6 +778,8 @@ impl PdfCraftApp {
                     view.forms.committed = None;
                     view.forms.unbaked.clear();
                     view.pending_edit = None;
+                    // So is a note being typed into a comment card, which Save would now write.
+                    view.comments.editing = None;
                 }
                 self.notify_tr("Reverted to the last saved version");
             }
@@ -897,6 +940,33 @@ fn is_form_edit(edit: &Edit) -> bool {
             | Edit::SetFieldScript { .. }
             | Edit::ApplyScriptChanges { .. }
     )
+}
+
+/// What the note typed into a comment card in the Comments panel (`CommentView::editing`) would
+/// do to the document.
+enum CommentDraft {
+    /// Set the comment's text to the note.
+    Changes(Box<Edit>),
+    /// The comment it was typed for is gone, or another now has its place in `/Annots` (a deleted
+    /// or undone comment shifts the ones after it): there is nowhere safe to keep it.
+    Orphaned,
+}
+
+/// `view`'s comment-card note, unless there is none or it is already the comment's text. The note
+/// goes only to the comment it was typed for (`CommentView::editing_target`), never to another
+/// that has since taken its index.
+fn comment_draft(view: &crate::canvas::DocView, info: &pdfcraft_render::DocInfo) -> Option<CommentDraft> {
+    let (page, index, text) = view.comments.editing.as_ref()?;
+    let target = view.comments.editing_target.as_ref();
+    match info.annotations.iter().find(|a| a.page == *page && a.index == *index) {
+        Some(a) if target.is_some_and(|t| t.is(a)) => {
+            if a.contents.as_deref().unwrap_or_default() == text.as_str() {
+                return None;
+            }
+            Some(CommentDraft::Changes(Box::new(Edit::SetAnnotationContents { page: *page, index: *index, text: text.clone() })))
+        }
+        _ => Some(CommentDraft::Orphaned),
+    }
 }
 
 /// Whether `path` is the temporary copy an email client opened an attachment from, so that Save
