@@ -314,12 +314,12 @@ impl PdfCraftApp {
             }
             "form.fields" => self.choose_right_panel(Some(RightPanel::Fields)),
             "comment.flatten" => {
-                self.apply_edit(Edit::Flatten { comments: true, fields: false });
+                self.apply_edit(Edit::Flatten { comments: true, fields: false, keep_signature_fields: false });
             }
             "form.flatten" => {
                 // Flatten what's typed in a field too (#166); a refused value flattens nothing.
                 if self.commit_form_typing() {
-                    self.apply_edit(Edit::Flatten { comments: false, fields: true });
+                    self.apply_edit(Edit::Flatten { comments: false, fields: true, keep_signature_fields: false });
                 }
             }
             "form.clear" => {
