@@ -326,7 +326,9 @@ fn edit_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static 
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 6.0;
             for i in EDIT_PAGE_BUTTONS.iter().filter_map(|c| item(c)) {
-                let resp = ui.add_enabled_ui(i.availability == Availability::Ready, |ui| icons::button(ui, i.icon, 34.0, false, tl!(i.label))).inner;
+                // Enabled as the command itself is: a document that forbids page assembly refuses these.
+                let enabled = pdfcraft_engine::commands::command(i.command).is_some_and(|spec| app.command_enabled(spec));
+                let resp = ui.add_enabled_ui(enabled, |ui| icons::button(ui, i.icon, 34.0, false, tl!(i.label))).inner;
                 if resp.clicked() {
                     run = Some(i.command);
                 }
@@ -337,7 +339,12 @@ fn edit_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static 
         if let Some(i) = item("page.organize")
             && edit_row(ui, t, i.icon, tl!(i.label), i.availability).clicked()
         {
-            tool = Some("organize");
+            // With no document there is no grid to open: the command asks for a file first.
+            if app.active.is_some() {
+                tool = Some("organize");
+            } else {
+                run = Some("page.organize");
+            }
         }
 
         widgets::section_title(ui, tl!("Add content"));
