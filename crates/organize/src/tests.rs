@@ -245,6 +245,25 @@ fn move_pages_reorders() {
 }
 
 #[test]
+fn reverse_pages_reorders() {
+    let mut doc = open(fixture());
+    reverse_pages(&mut doc, &[0, 1, 2]).unwrap();
+    assert_eq!(labels(&doc), ["Page 3", "Page 2", "Page 1"]);
+    // Unsorted, repeated indices name the same slots; page 1's slot stays put.
+    reverse_pages(&mut doc, &[2, 1, 2]).unwrap();
+    let doc = save_and_reopen(&doc);
+    assert_eq!(labels(&doc), ["Page 3", "Page 1", "Page 2"]);
+}
+
+#[test]
+fn cannot_reverse_missing_or_fewer_than_two_pages() {
+    let mut doc = open(fixture());
+    assert_eq!(reverse_pages(&mut doc, &[0, 3]), Err(OrganizeError::NoSuchPage(3)));
+    assert!(matches!(reverse_pages(&mut doc, &[1, 1]), Err(OrganizeError::Invalid(_))));
+    assert!(!doc.is_modified(), "failed operations leave the document untouched");
+}
+
+#[test]
 fn inserts_blank_page() {
     let mut doc = open(fixture());
     insert_blank_page(&mut doc, 1, 612.0, 792.0).unwrap();
@@ -315,6 +334,59 @@ fn page_transitions_are_set_removed_and_checked() {
     let doc = save_and_reopen(&doc);
     // (A whole number of seconds may come back as an integer: the writer's choice.)
     assert_eq!(page_dict(&doc, 2).get(b"Dur").and_then(Object::as_f64), Some(5.0));
+}
+
+/// Custom document properties (Document Properties ▸ Custom): any `/Info` key the spec does not
+/// name, set and cleared like the standard ones, listed apart from them, and with the names
+/// Acrobat refuses refused here too.
+#[test]
+fn custom_document_properties_are_listed_set_removed_and_their_names_checked() {
+    let mut doc = open(fixture());
+    assert!(custom_info(&doc).is_empty());
+    set_info(&mut doc, "Title", "Report").unwrap();
+    set_info(&mut doc, "Project", "Apollo").unwrap();
+    set_info(&mut doc, "Revision", "7").unwrap();
+    let mut listed = custom_info(&doc);
+    listed.sort();
+    assert_eq!(listed, [("Project".to_string(), "Apollo".to_string()), ("Revision".to_string(), "7".to_string())], "standard keys are not custom");
+    assert_eq!(info(&doc, "Project").as_deref(), Some("Apollo"));
+    set_info(&mut doc, "Project", "").unwrap();
+    let doc = save_and_reopen(&doc);
+    assert_eq!(custom_info(&doc), [("Revision".to_string(), "7".to_string())], "cleared, and the rest survives a save");
+    assert_eq!(info(&doc, "Title").as_deref(), Some("Report"));
+
+    for bad in ["", "Title", "ModDate", "Bad Name", "a/b", "tab\tbed", "hash#tag", "(x)"] {
+        assert!(check_custom_key(bad).is_err(), "{bad:?} must be refused");
+    }
+    let long = "x".repeat(MAX_CUSTOM_KEY_LEN + 1);
+    assert!(check_custom_key(&long).is_err());
+    for good in ["Project", "Révision", "部門", "key-2.0", &"y".repeat(MAX_CUSTOM_KEY_LEN)] {
+        assert!(check_custom_key(good).is_ok(), "{good:?} is a usable name");
+    }
+    let mut doc = open(fixture());
+    assert!(set_info(&mut doc, "Bad Name", "x").is_err(), "set_info checks custom names");
+    assert!(custom_info(&doc).is_empty());
+}
+
+/// Padding is not part of a custom value, in any mix of NULs and whitespace, a value that is only
+/// padding is not listed, and such entries don't count towards the 256 listed: a real property
+/// after 300 blank ones is still there.
+#[test]
+fn custom_document_properties_drop_padding_before_the_cap() {
+    let mut doc = open(fixture());
+    set_info(&mut doc, "Title", "Report").unwrap();
+    let Some(Object::Ref(info_ref)) = doc.trailer().get(b"Info").cloned() else { panic!("an /Info reference") };
+    let text = |s: &str| Object::String(pdfcraft_cos::PdfString { bytes: s.as_bytes().to_vec(), hex: false });
+    doc.update_dict(info_ref, |d| {
+        d.set(b"Mixed".to_vec(), text(" \0Lab\0 "));
+        d.set(b"Pad".to_vec(), text(" \0 \0"));
+        for i in 0..300 {
+            d.set(format!("Blank{i}").into_bytes(), text("  "));
+        }
+        d.set(b"Keep".to_vec(), text("yes"));
+    })
+    .unwrap();
+    assert_eq!(custom_info(&doc), [("Mixed".to_string(), "Lab".to_string()), ("Keep".to_string(), "yes".to_string())]);
 }
 
 /// A one-page document whose catalog has `xmp` as its (Flate-compressed) XMP packet, and the
