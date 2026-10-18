@@ -1103,6 +1103,18 @@ fn organize_overview_is_reachable_through_the_control_channel() {
 }
 
 #[test]
+fn fill_sign_panel_turns_flatten_on_save_on() {
+    // #2149, #3339: the setting sat only in Preferences, so people filling a form never saw it.
+    let (mut h, c) = harness();
+    h.state_mut().set_option("tool", "fill_sign").unwrap();
+    h.run_steps(3);
+    assert!(!h.state().flatten_fill_sign_on_save);
+    ok(&mut h, &c, "ui.click", json!({ "label": "Flatten Fill & Sign when saving" }));
+    h.run_steps(3);
+    assert!(h.state().flatten_fill_sign_on_save);
+}
+
+#[test]
 fn saved_signature_can_be_changed_through_the_control_channel() {
     let (mut h, c) = harness();
     h.state_mut().signature = Some(pdfcraft_ui_egui::fill_sign::SavedSig::Typed("Ada Lovelace".into()));

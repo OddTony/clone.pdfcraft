@@ -271,6 +271,14 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
             if let Some(cmd) = crate::fill_sign::signature_entries(ui, app, t) {
                 run = Some(cmd);
             }
+            // The Preferences setting, where people filling a form see it (#2149, #3339).
+            ui.add_space(8.0);
+            ui.add(widgets::checkbox(&mut app.flatten_fill_sign_on_save, tl!("Flatten Fill & Sign when saving")));
+            ui.label(
+                egui::RichText::new(tl!("Text, marks and signatures become part of the page. Other comments stay editable."))
+                    .small()
+                    .color(t.text_muted),
+            );
         }
     });
     if footer {
