@@ -2407,7 +2407,6 @@ animation effects	Off	Desativados
 	Found {n} untagged content problems.	Foram encontrados {n} problemas de conteúdo sem marcação.
 	Tag form fields	Marcar campos de formulário
 	Mark as artifact	Marcar como artefato
-	Remove this leaf tag from reading order and mark its direct content as an artifact	Remova esta tag folha da ordem de leitura e marque seu conteúdo direto como artefato
 	Mark content as artifact	Marcar conteúdo como artefato
 	Word count	Contagem de palavras
 	Current page only	Somente a página atual
@@ -2447,3 +2446,15 @@ animation effects	Off	Desativados
 	Make properties default	Tornar propriedades padrão
 	Pages selected	Páginas selecionadas
 	Page properties	Propriedades da página
+	Highlight content	Realçar conteúdo
+	Mark everything in this tag as an artifact and remove the tag from reading order	Marcar todo o conteúdo desta tag como artefato e remover a tag da ordem de leitura
+	Move into previous tag	Mover para dentro da tag anterior
+	Move out of parent tag	Mover para fora da tag superior
+	New tag	Nova tag
+	Delete tag	Excluir tag
+	Remove tag, keep its contents	Remover tag, mantendo seu conteúdo
+	Draw a rectangle on the page or click content, then choose its tag.	Desenhe um retângulo na página ou clique no conteúdo e escolha a tag dele.
+	Tag annotation	Marcar anotação com tag
+	Untagged content	Conteúdo sem marcação
+	Annotation	Anotação
+	Tag content as {type}	Marcar conteúdo como {type}
