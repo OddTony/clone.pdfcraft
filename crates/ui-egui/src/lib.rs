@@ -3085,6 +3085,8 @@ impl eframe::App for PdfCraftApp {
         for view in &mut self.views {
             view.begin_render_frame();
         }
+        // How the floating chrome fades and hides this frame.
+        widgets::set_idle_chrome(&ctx, widgets::IdleChrome::default());
         // The window shows the active document's name (or title, if it asks for that).
         let title = self
             .active

@@ -165,6 +165,32 @@ fn reading_the_pages_scroll_on_under_the_tab_strip() {
     assert!(page_area.top() >= strip, "{page_area:?}");
 }
 
+/// The workspace button on the left bar labelled `label`.
+fn on_left_bar(h: &Harness<'static, PdfCraftApp>, label: &str) -> egui::Rect {
+    // All tools also names its panel of tools; the bar's button is the narrow one.
+    h.query_all_by_label(label).map(|n| n.rect()).find(|r| r.width() < 50.0).expect("on the left bar")
+}
+
+/// Idle, the left bar slides out of the window to the left after eight seconds (kittest steps a
+/// quarter second a frame); the pointer at the window's edge beside it brings it back.
+#[test]
+fn the_left_bar_slides_away_when_idle_and_comes_back_at_the_edge() {
+    let mut h = with_document();
+    h.get_by_label("Read").click();
+    h.run_steps(2);
+    let home = on_left_bar(&h, "Read");
+    assert!(home.left() > 0.0, "in place at first: {home:?}");
+    let page = h.state().views[0].viewport_rect().center();
+    h.hover_at(page);
+    h.run_steps(40);
+    let away = on_left_bar(&h, "Read");
+    assert!(away.right() < 0.0, "slid out of the window: {away:?}");
+    h.hover_at(egui::pos2(2.0, home.center().y));
+    h.run_steps(4);
+    let back = on_left_bar(&h, "Read");
+    assert!((back.left() - home.left()).abs() < 0.5, "back in place: {back:?}, was {home:?}");
+}
+
 /// The search button opens Find tools and commands and closes it again; so does the palette's
 /// own close button.
 #[test]

@@ -4482,14 +4482,19 @@ const MODES: [(crate::Mode, &str, &str); 5] = [
 ];
 
 /// The floating bar at the left edge of the document area: the workspaces, then the quick tools.
-/// It fades after a few seconds without use, and comes back on hover.
+/// It fades after a few seconds without use and, while auto-hide is on, slides out to the left a
+/// little later; the pointer coming near where it belongs brings it back.
 fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
-    let pos = area.left_top() + vec2(14.0, 14.0);
     let id = egui::Id::new("quick-bar");
-    let opacity = crate::widgets::idle_opacity(ui.ctx(), id, false);
-    let shown = egui::Area::new(id).order(egui::Order::Middle).fixed_pos(pos).show(ui.ctx(), |ui| {
-        ui.multiply_opacity(opacity);
+    let idle = crate::widgets::idle(ui.ctx(), id, false, true);
+    // Far enough to take the card and its shadow out of the window.
+    let reach = ui.ctx().data(|d| d.get_temp::<Rect>(id.with("idle-rect"))).map_or(80.0, |r| r.right() - area.left()) + 24.0;
+    let slide = vec2(reach.max(0.0) * idle.hidden, 0.0);
+    let pos = area.left_top() + vec2(14.0, 14.0) - slide;
+    // Unconstrained, or the window's edge would stop it sliding away.
+    let shown = egui::Area::new(id).order(egui::Order::Middle).fixed_pos(pos).constrain(false).show(ui.ctx(), |ui| {
+        ui.multiply_opacity(idle.opacity);
         crate::widgets::floating_frame(&t).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
             ui.vertical(|ui| {
@@ -4675,7 +4680,7 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
             });
         });
     });
-    crate::widgets::note_idle_rect(ui.ctx(), id, shown.response.rect);
+    crate::widgets::note_idle_rect(ui.ctx(), id, shown.response.rect.translate(slide));
 }
 
 /// Where a page of `page` size (points, as shown: after its rotation) is drawn in the grid cell
