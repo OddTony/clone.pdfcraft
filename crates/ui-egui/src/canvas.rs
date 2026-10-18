@@ -498,6 +498,8 @@ pub struct DocView {
     pub(crate) pending_text_open: Option<(usize, usize)>,
     pub(crate) text_background: crate::edit_text_ui::TextBackground,
     pub(crate) move_background: crate::content_ui::MoveBackground,
+    /// Print production ▸ Output preview: separated pages and the panel's choices.
+    pub(crate) output_preview: crate::output_preview_ui::OutputPreview,
     /// Edit text & images: the images per page (by document generation), and the selected one.
     pub(crate) edit_images: HashMap<usize, (u64, Vec<pdfcraft_engine::PageImage>)>,
     pub(crate) objects: crate::object_ui::ObjectSelection,
@@ -760,6 +762,7 @@ impl DocView {
             pending_text_open: None,
             text_background: Default::default(),
             move_background: Default::default(),
+            output_preview: Default::default(),
             edit_images: HashMap::new(),
             objects: Default::default(),
             image_selection: None,
@@ -928,7 +931,7 @@ impl DocView {
     }
 
     pub fn render_pending(&self) -> bool {
-        !self.last_queue.is_empty() || self.text_background.pending() || self.move_background.pending()
+        !self.last_queue.is_empty() || self.text_background.pending() || self.move_background.pending() || self.output_preview.pending()
     }
 
     /// The cached tile keys of a page, as (scale tag, tile x, tile y) (diagnostics and tests).
@@ -1562,6 +1565,7 @@ impl DocView {
         self.signature_drag = Default::default();
         self.text_background = Default::default();
         self.move_background = Default::default();
+        self.output_preview.release();
         if !self.last_queue.is_empty() {
             pool.set_queue(Vec::new());
             self.last_queue.clear();
@@ -2341,6 +2345,8 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let editing_content =
         (app.left_open && app.left == crate::LeftPanel::Tool("edit")) || matches!(app.quick_tool, QuickTool::AddText | QuickTool::EditText);
     let text_style = app.text_style.clone();
+    let output_preview = app.right == Some(crate::RightPanel::OutputPreview);
+    let run_inline = app.run_inline;
     let view = &mut app.views[index];
     // Opened without the owner password and something is restricted.
     let secured = doc.security_summary().is_some_and(|s| !(s.owner || (s.permissions.modify() && s.permissions.assemble())));
@@ -2714,6 +2720,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         view.content.selected = None;
     }
     view.move_background.prepare(ui.ctx(), doc, &view.content, scale);
+    // Output preview separates the pages that were on screen last frame, the current one first.
+    let on_screen: Vec<usize> = view.screen_rects.iter().map(|(page, _)| *page).collect();
+    view.output_preview.prepare(ui.ctx(), doc, output_preview, view.current, &on_screen, run_inline);
 
     // A destination's position (bookmarks, links) refines `goto`: its point at the window's
     // top-left, or the centre of a /FitR rectangle at the window's centre.
@@ -2927,6 +2936,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 }
             }
             view.text_background.paint(painter, &xf, i, view.line_editor.as_ref(), view.content.draft.as_ref());
+            view.output_preview.paint(ui.ctx(), painter, &xf, i, pointer);
             if editing_content {
                 let page_tex = view.pages.get(&i).map(|p| p.tex.id());
                 view.move_background.paint(ui, painter, &xf, i, info, &view.content, page_tex);

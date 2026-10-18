@@ -154,7 +154,13 @@ impl<'a> SoftMask<'a> {
             transfer_function,
             bbox: context.bbox(),
             interpreter_cache: context.interpreter_cache.clone(),
-            settings: context.settings.clone(),
+            // PdfCraft patch (35): a mask's luminosity comes from its group's colours, never
+            // from a plate, and the inks it uses are never printed.
+            settings: InterpreterSettings {
+                plate: None,
+                ink_sink: None,
+                ..context.settings.clone()
+            },
             xref: context.xref,
             background,
             parent_resources,

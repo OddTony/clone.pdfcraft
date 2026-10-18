@@ -517,6 +517,7 @@ impl PdfCraftApp {
                 self.choose_right_panel(Some(RightPanel::Signatures));
             }
             "sign.panel" => self.choose_right_panel(Some(RightPanel::Signatures)),
+            "prepress.output_preview" => self.choose_right_panel(Some(RightPanel::OutputPreview)),
             "optimize.advanced" => self.dialog = Some(Dialog::Optimize),
             "view.fit_visible" => {
                 if let Some(i) = self.active

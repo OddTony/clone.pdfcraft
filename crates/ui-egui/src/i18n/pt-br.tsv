@@ -2447,3 +2447,15 @@ animation effects	Off	Desativados
 	Make properties default	Tornar propriedades padrão
 	Pages selected	Páginas selecionadas
 	Page properties	Propriedades da página
+	Simulate overprinting	Simular sobreimpressão
+	Separating page {n}…	Separando a página {n}…
+	The page could not be separated: {error}	Não foi possível separar a página: {error}
+	Inks	Tintas
+	Too many spot inks to separate: {names}	Tintas especiais demais para separar: {names}
+	Total area coverage	Cobertura total de área
+	Page maximum: {n}%	Máximo da página: {n}%
+	Point at the page to read its ink coverage.	Aponte para a página para ver a cobertura de tinta.
+	Highlight coverage above	Destacar cobertura acima de
+	Simulation: {profile}	Simulação: {profile}
+	Simulation: device formulas	Simulação: fórmulas do dispositivo
+	No usable CMYK output intent: RGB and CIE-based colours separate by the ISO 32000 device formulas.	Nenhuma intenção de saída CMYK utilizável: as cores RGB e baseadas em CIE são separadas pelas fórmulas de dispositivo da ISO 32000.
