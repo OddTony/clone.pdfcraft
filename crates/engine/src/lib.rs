@@ -49,7 +49,6 @@ pub mod signature_image;
 pub mod signature_scan;
 pub mod text_fonts;
 mod text_preview;
-mod upright_image;
 pub mod word_count;
 pub mod xfa;
 
@@ -995,6 +994,27 @@ fn shown_under_redactions(
 
 fn render_threads() -> usize {
     std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(2, 8) - 1
+}
+
+/// Write `layers`' visibility into the default optional-content configuration of `cos` (a copy
+/// made for printing): `/BaseState /ON`, `/ON` the visible layers, `/OFF` the hidden ones. Its
+/// other entries (`/Order`, `/RBGroups`, `/AS`…) are kept. A document without `/OCProperties`
+/// is left alone.
+fn set_default_layer_state(cos: &mut pdfcraft_cos::Document, layers: &[Layer]) {
+    use pdfcraft_cos::{Dict, ObjRef, Object};
+    let Some(root_ref) = cos.trailer().get(b"Root").and_then(Object::as_ref) else { return };
+    let Some(mut root) = cos.get(root_ref).as_dict().cloned() else { return };
+    let Some(properties) = root.get(b"OCProperties").cloned() else { return };
+    let Some(mut properties) = cos.resolve(&properties).as_dict().cloned() else { return };
+    let mut config = properties.get(b"D").and_then(|d| cos.resolve(d).as_dict().cloned()).unwrap_or_else(Dict::new);
+    let refs =
+        |visible: bool| Object::Array(layers.iter().filter(|l| l.visible == visible).map(|l| Object::Ref(ObjRef::new(l.id.0, l.id.1))).collect());
+    config.set(b"BaseState".to_vec(), Object::name("ON"));
+    config.set(b"ON".to_vec(), refs(true));
+    config.set(b"OFF".to_vec(), refs(false));
+    properties.set(b"D".to_vec(), Object::Dict(config));
+    root.set(b"OCProperties".to_vec(), Object::Dict(properties));
+    cos.set(root_ref, Object::Dict(root));
 }
 
 /// Render `doc` with the layer visibility in its `info.layers`.
@@ -4369,12 +4389,18 @@ impl Session {
             };
             return pdfcraft_print::impose(&pictures, &remapped).map_err(|e| EditError::Print(e.to_string()));
         }
-        let cos = match doc.editor.as_ref() {
+        let mut cos = match doc.editor.as_ref() {
             Some(e) => e.cos.clone(),
             None => {
                 pdfcraft_cos::Document::open_with_password(doc.bytes.clone(), doc.password.as_deref()).map_err(|e| EditError::Write(e.to_string()))?
             }
         };
+        // #3046: the layers print as they are shown. Once the Layers panel (or a set-layer
+        // action) has changed one, the print copy's default configuration says which are on, so a
+        // hidden layer stays off on paper too; untouched, the document's own configuration prints.
+        if !doc.config.layers.is_empty() {
+            set_default_layer_state(&mut cos, &doc.info.layers);
+        }
         pdfcraft_print::impose(&cos, settings).map_err(|e| EditError::Print(e.to_string()))
     }
 
@@ -4943,7 +4969,7 @@ fn embed_image(
     name: &str,
     bytes: &[u8],
 ) -> Result<(pdfcraft_cos::ObjRef, (f64, f64)), pdfcraft_create::CreateError> {
-    pdfcraft_create::image_xobject(doc, name, &upright_image::upright(bytes))
+    pdfcraft_create::image_xobject(doc, name, bytes)
 }
 
 /// Bring a mark's picture into `doc`: a PDF page as a form XObject, or an image.

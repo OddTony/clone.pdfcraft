@@ -423,6 +423,8 @@ pub struct DocView {
     /// This frame's consumers, with visible cells ahead of prefetch.
     thumb_demand: HashMap<usize, bool>,
     frame_queue: Vec<RenderRequest>,
+    /// A page-list edit after layout invalidates this frame's scales and page indexes.
+    frame_geometry_changed: bool,
     /// Pages on screen this frame. Their rasters and tiles are always admitted: the viewport
     /// bounds them, and the byte and count limits apply to prefetch only.
     frame_visible: HashSet<usize>,
@@ -580,6 +582,8 @@ pub struct DocView {
     pub(crate) last_scroll: Vec2,
     /// Side-by-side compare: scroll to here this frame, following the other half.
     pub(crate) sync_scroll: Option<Vec2>,
+    /// The page widget's id, by which the Hand tool finds its drag before the pages are laid out.
+    page_widget: Option<egui::Id>,
     pan_hold_until: f64,
     /// Pages whose raster proved slow (see `SLOW_MILLIS`): only these get the zoom/pan
     /// settle holds. Fast pages render straight through, with no added latency.
@@ -716,6 +720,7 @@ impl DocView {
             thumbs: HashMap::new(),
             thumb_demand: HashMap::new(),
             frame_queue: Vec::new(),
+            frame_geometry_changed: false,
             frame_visible: HashSet::new(),
             stale_thumbs: HashSet::new(),
             stale_tiles: HashSet::new(),
@@ -774,6 +779,7 @@ impl DocView {
             sharp_hold_until: 0.0,
             last_scroll: Vec2::ZERO,
             sync_scroll: None,
+            page_widget: None,
             pan_hold_until: 0.0,
             slow_pages: HashSet::new(),
             comments: Default::default(),
@@ -802,6 +808,7 @@ impl DocView {
     /// adopt the new page geometry, keeping the reader's place where possible.
     pub fn document_changed(&mut self, info: &DocInfo) {
         self.invalidate_content();
+        self.frame_geometry_changed = true;
         self.page_count = info.pages.len();
         self.page_heights = info.pages.iter().map(|p| p.height).collect();
         let last = self.page_count.saturating_sub(1);
@@ -1517,6 +1524,7 @@ impl DocView {
 
     /// Start collecting demand from every consumer before scheduling or uploading results.
     pub(crate) fn begin_render_frame(&mut self) {
+        self.frame_geometry_changed = false;
         self.pages_panel = None;
         self.panel_gap = None;
         self.thumb_demand.clear();
@@ -1732,6 +1740,15 @@ impl DocView {
     }
 
     pub(crate) fn finish_render_frame(&mut self, ctx: &egui::Context, info: &DocInfo, pool: &RenderPool) {
+        if self.frame_geometry_changed {
+            // Dialogs and edits can replace pages after the canvas collected demand. Its
+            // scales and indexes belong to the old pages, not to the new renderer (#3149).
+            self.begin_render_frame();
+            self.last_queue.clear();
+            pool.set_queue(Vec::new());
+            ctx.request_repaint();
+            return;
+        }
         let queue = self.prepare_render_queue(info, ctx.pixels_per_point());
         if queue != self.last_queue {
             pool.set_queue(queue.clone());
@@ -1798,19 +1815,18 @@ impl DocView {
             self.errors.insert(r.request.page, e);
             return 0;
         }
+        // Even current demand may have been sized with obsolete geometry or a different
+        // device limit. Check before cache eviction, conversion and every upload path.
+        let max_side = ctx.input(|i| i.max_texture_side);
+        if r.width == 0 || r.height == 0 || r.width as usize > max_side || r.height as usize > max_side {
+            return 0;
+        }
         // Remember heavy pages: only these get the zoom/pan settle holds, so fast pages
         // never pay added latency. Stale entries die with the tiles on edits.
         if r.millis >= SLOW_MILLIS {
             self.slow_pages.insert(r.request.page);
         }
         let page = r.request.page;
-        // A raster asked for before the page changed size (a replace, a crop) can come back
-        // larger than the GPU takes, and uploading it aborts. Drop it: the page's current
-        // size is asked for again, within the limit.
-        let max_side = ctx.input(|i| i.max_texture_side);
-        if r.width as usize > max_side || r.height as usize > max_side {
-            return 0;
-        }
         let bytes = rgba_bytes(r.width as usize, r.height as usize);
         if bytes != r.rgba.len() || !self.admit_texture(r.request, bytes) {
             return 0;
@@ -2565,6 +2581,25 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if !std::mem::replace(&mut view.shown, true) {
         scroll = scroll.scroll_offset(Vec2::ZERO);
     }
+    // The Hand tool pans here, before the pages are laid out, so the page moves with the pointer
+    // in the frame the pointer moves (#924). Scrolling by the drag from inside the area moved the
+    // page only after that frame was drawn, a frame behind. The frame egui tells the drag from a
+    // click, the page catches up with all the pointer has moved since the press. A jump asked for
+    // below still wins.
+    if app.quick_tool == QuickTool::Hand
+        && !middle_gesture
+        && let Some(id) = view.page_widget.filter(|id| ui.ctx().is_being_dragged(*id))
+    {
+        let moved = if ui.ctx().drag_started_id() == Some(id) {
+            ui.input(|i| i.pointer.total_drag_delta()).unwrap_or(Vec2::ZERO)
+        } else {
+            ui.input(|i| i.pointer.delta())
+        };
+        // Within the content, as egui keeps it: past an end the page would show there for a
+        // frame and spring back. `max` is never NaN or below zero, so the clamp can't panic.
+        let max = vec2((content_w - avail.width()).max(0.0), (content_h - avail.height()).max(0.0));
+        scroll = scroll.scroll_offset((view.last_scroll - moved).clamp(Vec2::ZERO, max));
+    }
     if let Some(v) = view.sync_scroll.take() {
         scroll = scroll.scroll_offset(v);
     }
@@ -2710,14 +2745,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             ui.scroll_with_delta_animation(delta, egui::style::ScrollAnimation::none());
         }
         let (resp_rect, resp) = ui.allocate_exact_size(vec2(content_w, content_h), Sense::click_and_drag());
+        view.page_widget = Some(resp.id);
         // A drag lasts only while egui reports it, so the mark can't outlive one.
         if !resp.dragged_by(egui::PointerButton::Primary) {
             view.selection_drag = false;
         }
-        // The Hand tool pans: the content widget takes every drag, so scroll by its delta.
+        // The Hand tool pans by this widget's drag, before the pages are laid out (above).
         if hand {
             if resp.dragged() {
-                ui.scroll_with_delta(resp.drag_delta());
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             } else if resp.hovered() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
@@ -5532,6 +5567,81 @@ trailer << /Root 1 0 R >>
         }
     }
 
+    /// #3149: the replacement dialog commits after the canvas collected this frame's demand.
+    #[test]
+    fn replacing_a_page_after_layout_never_uploads_an_oversized_texture() {
+        let ctx = egui::Context::default();
+        ctx.input_mut(|i| i.max_texture_side = 2048);
+        let mut app = PdfCraftApp::new();
+        let original = app.session.create_blank(200.0, 300.0, 1).unwrap();
+        let replacement = app.session.create_blank(400.0, 500.0, 1).unwrap();
+        app.open_bytes("original.pdf", None, original.as_ref().clone()).unwrap();
+        let request = RenderRequest { scale: 4.7, tag: scale_tag(4.7), ..Default::default() };
+        app.views[0].frame_queue = vec![request];
+        app.views[0].frame_visible.insert(0);
+        assert!(app.apply_edit(Edit::ReplacePages { pages: vec![0], name: "replacement.pdf".into(), bytes: replacement, src_pages: vec![0] }));
+        let doc = app.session.get(app.views[0].id).unwrap();
+        assert_eq!((doc.info.pages[0].width, doc.info.pages[0].height), (400.0, 500.0));
+        let edited_bytes = doc.bytes.clone();
+        let pool = RenderPool::new_inline(doc.display.clone(), Default::default());
+        app.views[0].finish_render_frame(&ctx, &doc.info, &pool);
+        assert!(app.views[0].last_queue.is_empty(), "old geometry must not reach the replacement renderer");
+
+        // The next layout can render a bounded backdrop and sharp tiles at the same zoom.
+        let backdrop = RenderRequest { scale: 2048.0 / 500.0, tag: scale_tag(2048.0 / 500.0), ..request };
+        let tile = RenderRequest { tile: Some(Tile { x: 0, y: 0, w: 1024, h: 1024 }), ..request };
+        for _ in 0..2 {
+            let view = &mut app.views[0];
+            view.begin_render_frame();
+            view.frame_visible.insert(0);
+            view.frame_queue = vec![backdrop, tile];
+            view.finish_render_frame(&ctx, &doc.info, &pool);
+        }
+        let view = &app.views[0];
+        assert_eq!(view.pages.get(&0).unwrap().tex.size(), [1639, 2048]);
+        assert_eq!(view.tiles.get(&(0, tile.tag, 0, 0)).unwrap().size(), [1024, 1024]);
+        assert!(view.errors.is_empty());
+        assert_eq!(doc.bytes, edited_bytes, "rendering preserves the unsaved edit");
+        assert!(doc.dirty);
+        assert_eq!(doc.can_undo(), Some("Replace page"));
+    }
+
+    #[test]
+    fn oversized_raster_results_do_not_replace_cached_textures() {
+        let ctx = egui::Context::default();
+        ctx.input_mut(|i| i.max_texture_side = 64);
+        for request in [
+            RenderRequest::default(),
+            RenderRequest { tag: THUMB_TAG, ..Default::default() },
+            RenderRequest { tag: GRID_TAG, ..Default::default() },
+            RenderRequest { tag: PRINT_TAG, ..Default::default() },
+            RenderRequest { tile: Some(Tile { x: 0, y: 0, w: 64, h: 32 }), ..Default::default() },
+        ] {
+            let mut view = DocView::new(DocId(1), &thumbnail_info(1), ViewDefaults::default());
+            view.last_queue = vec![request];
+            let texture = |v: &DocView| {
+                v.pages
+                    .values()
+                    .map(|p| &p.tex)
+                    .chain(v.thumbs.values().map(|p| &p.tex))
+                    .chain(v.grid_pages.values().map(|(_, t)| t))
+                    .chain(v.print_pages.values().map(|(_, t)| t))
+                    .chain(v.tiles.values())
+                    .map(|t| (t.id(), t.size()))
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(view.receive_result(&ctx, solid_result(request, 64, 32)), 64 * 32 * 4);
+            let cached = texture(&view);
+            assert_eq!(cached.len(), 1);
+            for (w, h) in [(65, 32), (32, 65), (65, 65), (0, 32), (32, 0)] {
+                assert_eq!(view.receive_result(&ctx, solid_result(request, w, h)), 0, "{request:?}: {w}x{h}");
+                assert_eq!(texture(&view), cached, "an invalid result must keep the previous raster");
+            }
+            assert_eq!(view.receive_result(&ctx, solid_result(request, 32, 64)), 32 * 64 * 4);
+            assert_eq!(texture(&view)[0].1, [32, 64], "valid results still make progress");
+        }
+    }
+
     #[test]
     fn thumbnails_release_on_scroll_panel_close_and_request_again_after_eviction() {
         let ctx = egui::Context::default();
@@ -5577,21 +5687,6 @@ trailer << /Root 1 0 R >>
         v.suspend_rendering(&pool);
         assert_eq!(v.receive_result(&ctx, obsolete()), 0);
         assert!(v.thumbs.is_empty(), "nor after the tab was suspended");
-    }
-
-    /// FreeBSD CI: a page raster asked for before Replace Pages made the page larger came back
-    /// at 1880 x 2350, past the 2048-pixel texture limit, and egui aborted the upload.
-    #[test]
-    fn a_raster_larger_than_the_gpu_takes_is_dropped_not_uploaded() {
-        let ctx = egui::Context::default();
-        let info = thumbnail_info(1);
-        let mut v = DocView::new(DocId(1), &info, ViewDefaults::default());
-        let req = RenderRequest { scale: 4.7, tag: 1000, ..Default::default() };
-        v.last_queue = vec![req];
-        let max_side = ctx.input(|i| i.max_texture_side) as u32;
-        assert_eq!(v.receive_result(&ctx, solid_result(req, max_side - 168, max_side + 302)), 0);
-        assert!(v.pages.is_empty(), "the oversized raster is not kept");
-        assert!(v.receive_result(&ctx, solid_result(req, 100, 130)) > 0, "a raster within the limit still uploads");
     }
 
     #[test]
