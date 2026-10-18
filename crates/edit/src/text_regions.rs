@@ -489,6 +489,11 @@ pub(super) fn rewrite_styled_block(
     };
     // A source run may carry TJ kerning/justification that is absent from its text state.
     // Keep its measured advance when rebuilding the run instead of making it wrap on entry.
+    // Each font's space width, worked out once: when a font can't show a space, finding one
+    // reads every font on the page, and doing that for every character of a paragraph made each
+    // keystroke in a long paragraph take half a second (#2616).
+    let spaces: HashMap<String, f64> = metrics.iter().map(|(name, m)| (name.clone(), source_space(doc, &fonts, m))).collect();
+    let space_of = |name: &str, m: &Metrics| spaces.get(name).copied().unwrap_or_else(|| source_space(doc, &fonts, m));
     let mut calibration = HashMap::new();
     for (index, source) in lines.iter().enumerate() {
         if let Some(m) = metrics.get(&source.font) {
@@ -496,7 +501,7 @@ pub(super) fn rewrite_styled_block(
                 m,
                 &source.text,
                 source.origin.state.font.as_ref().map_or(1.0, |(_, s)| *s),
-                source_space(doc, &fonts, m),
+                space_of(&source.font, m),
                 source.origin.state.char_spacing,
                 source.origin.state.word_spacing,
             ) * source.origin.state.scale
@@ -513,7 +518,7 @@ pub(super) fn rewrite_styled_block(
             m,
             &item.0.to_string(),
             size_of(source, item.1),
-            source_space(doc, &fonts, m),
+            space_of(&item.2, m),
             overrides
                 .get(&item.1)
                 .and_then(|r| r.char_spacing)
@@ -778,7 +783,7 @@ pub(super) fn rewrite_styled_block(
                     m,
                     &string,
                     size_of(source, item.1),
-                    source_space(doc, &fonts, m),
+                    spaces.get(&item.2).copied().unwrap_or_else(|| source_space(doc, &fonts, m)),
                     state.char_spacing,
                     state.word_spacing,
                 )?);
