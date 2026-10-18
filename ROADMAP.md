@@ -172,6 +172,10 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-18 (M6, PR #3105 refresh):** Rebased onto upstream `932bf9c6`. Resolved roadmap conflicts while preserving both sets of entries. Every non-roadmap added and removed line in the PR is unchanged, including the latest download, browser-draft and licence fixes. Estimates unchanged.
+
+- **2026-10-18 (M6, PR #3105 review):** Model downloads keep the 30-minute transfer budget and limit response-header waits to 20 seconds. Browser detection commits pending form edits before proceeding. Model packaging verifies the local licence hash before writing release files; its regression failed before the fix. The licence pin now names the exact packaged text. Estimates unchanged.
+
 - **2026-10-18 (M6, PR #3105 refresh):** Rebased onto upstream `98cbd38a`. Preserved upstream comb detection documentation and evidence, FFDetr integration, and both sets of roadmap entries. Recomputed translation asset hashes after combining catalog updates. Estimates unchanged.
 - **2026-10-15 (M7, Edit text caret):** In a text region that mixes sizes (a 24 pt title over 12 pt lines), the inline editor's caret on a small row was as tall as the region's first size and reached into the row below: egui draws the caret at least one row of the text field's font tall, and that font had the paragraph's first size. The field's font is now half the region's smallest size, so each row's own height decides. Kittest regression; checked in the app on a real document. Estimates unchanged.
 - **2026-10-16 (M3, #2781):** The Pages panel follows the current page, as Acrobat's page thumbnails do: going to a page whose thumbnail is out of sight (scrolling, Page Down, Go to page, a bookmark) scrolls the panel just enough to show it. A thumbnail already in view, or clicked, leaves the panel where it is, and a page change while the user scrolls the panel or drags thumbnails does not move it. Estimates unchanged.
