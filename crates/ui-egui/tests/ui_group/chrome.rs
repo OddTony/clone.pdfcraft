@@ -104,6 +104,67 @@ fn the_right_bars_float_over_the_page() {
     }
 }
 
+/// `n` pages of 600 × 800, for a document that scrolls.
+fn pages(n: usize) -> Vec<u8> {
+    let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", i + 3)).collect();
+    let mut objects = vec!["<< /Type /Catalog /Pages 2 0 R >>".to_string(), format!("<< /Type /Pages /Kids [{}] /Count {n} >>", kids.join(" "))];
+    objects.extend((0..n).map(|_| "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] >>".to_string()));
+    let mut pdf = String::from("%PDF-1.7\n");
+    let mut offsets = Vec::new();
+    for (i, body) in objects.iter().enumerate() {
+        offsets.push(pdf.len());
+        pdf.push_str(&format!("{} 0 obj {body} endobj\n", i + 1));
+    }
+    let xref = pdf.len();
+    pdf.push_str(&format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1));
+    for offset in offsets {
+        pdf.push_str(&format!("{offset:010} 00000 n \n"));
+    }
+    pdf.push_str(&format!("trailer << /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objects.len() + 1));
+    pdf.into_bytes()
+}
+
+/// Reading, the tab strip floats over the page: the pages start below it, scroll on up under it,
+/// and the page being read is the one below it. Elsewhere it keeps a band of its own.
+#[test]
+fn reading_the_pages_scroll_on_under_the_tab_strip() {
+    let mut h = harness(|app| {
+        app.open_bytes("long.pdf", None, pages(4)).unwrap();
+    });
+    h.get_by_label("Read").click();
+    h.run_steps(4);
+    let strip = h.get_by_label("Home").rect().bottom();
+    let first = |h: &Harness<'static, PdfCraftApp>| h.state().views[0].page_screen_rect(0).expect("page 1 is drawn");
+    assert!(first(&h).top() > strip, "page 1 {:?} starts below the strip ({strip})", first(&h));
+    let read_from = h.state().views[0].viewport_rect().top();
+    assert!(read_from >= strip && read_from - strip < 8.0, "the page is read from below the strip: {read_from}");
+    // Scroll until page 1 has gone up under the strip but for its last strip of paper: below
+    // the strip, a page that far up is past the view and not drawn at all.
+    let centre = h.state().views[0].viewport_rect().center();
+    h.hover_at(centre);
+    for _ in 0..400 {
+        if first(&h).bottom() < strip - 6.0 {
+            break;
+        }
+        h.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Point,
+            delta: egui::vec2(0.0, -20.0),
+            phase: egui::TouchPhase::Move,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(1);
+    }
+    h.run_steps(2);
+    let under = first(&h);
+    assert!(under.bottom() < strip && under.bottom() > 0.0, "page 1 {under:?} is drawn under the strip ({strip})");
+    assert_eq!(h.state().views[0].current, 1, "the page read is the one below the strip");
+    // In the tools workspaces the strip keeps its band: nothing is drawn under it.
+    h.get_by_label("All tools").click();
+    h.run_steps(6);
+    let page_area = h.state().views[0].viewport_rect();
+    assert!(page_area.top() >= strip, "{page_area:?}");
+}
+
 /// The search button opens Find tools and commands and closes it again; so does the palette's
 /// own close button.
 #[test]

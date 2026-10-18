@@ -23,6 +23,12 @@ pub const IDLE_OPACITY: f32 = 0.3;
 /// [`note_idle_rect`] is what counts as hovering it. `busy` keeps it opaque while something of its
 /// own is in use (a focused field, a dragged tab); an open menu or popup anywhere does too.
 pub fn idle_opacity(ctx: &egui::Context, id: egui::Id, busy: bool) -> f32 {
+    IDLE_OPACITY + (1.0 - IDLE_OPACITY) * idle_shown(ctx, id, busy)
+}
+
+/// How far the idle chrome `id` is shown, from 0 (faded) to 1 (in use), easing between them; the
+/// fill of a bar that turns clear when idle follows it. See [`idle_opacity`].
+pub fn idle_shown(ctx: &egui::Context, id: egui::Id, busy: bool) -> f32 {
     let now = ctx.input(|i| i.time);
     let rect = ctx.data(|d| d.get_temp::<Rect>(id.with("idle-rect")));
     let pointer = ctx.input(|i| i.pointer.hover_pos());
@@ -40,8 +46,7 @@ pub fn idle_opacity(ctx: &egui::Context, id: egui::Id, busy: bool) -> f32 {
         // Wake once more when the bar is due to fade, even if nothing else repaints.
         ctx.request_repaint_after(std::time::Duration::from_secs_f64((IDLE_AFTER - elapsed).clamp(0.0, IDLE_AFTER) + 0.05));
     }
-    let shown = ctx.animate_bool_with_time(id.with("idle-fade"), awake, 0.4);
-    IDLE_OPACITY + (1.0 - IDLE_OPACITY) * shown
+    ctx.animate_bool_with_time(id.with("idle-fade"), awake, 0.4)
 }
 
 /// Where the bar `id` was drawn this frame, for [`idle_opacity`] to tell when it is hovered.

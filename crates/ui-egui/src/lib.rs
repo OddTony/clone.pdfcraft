@@ -3097,6 +3097,7 @@ impl eframe::App for PdfCraftApp {
         }
         if self.full_screen && self.active.is_some() {
             // Full screen: the page, nothing else (Esc or ⌘L to leave).
+            chrome::no_strip(&ctx);
             let t = theme::Tokens::get(&ctx);
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(if t.dark() { t.pasteboard } else { egui::Color32::from_gray(32) })).show(
                 ui,
@@ -3128,12 +3129,14 @@ impl eframe::App for PdfCraftApp {
             // there, so its buttons (Bookmarks, Page thumbnails, ...) must open their panels.
             // Outside Read mode the docking workspace draws the inspector.
             if self.mode == Mode::Read && self.right.is_some() {
-                egui::Panel::right("read_right_panel")
-                    .resizable(true)
-                    .default_size(330.0)
-                    .size_range(260.0..=520.0)
-                    .frame(egui::Frame::NONE)
-                    .show(ui, |ui| panels::right_panel(self, ui));
+                egui::Panel::right("read_right_panel").resizable(true).default_size(330.0).size_range(260.0..=520.0).frame(egui::Frame::NONE).show(
+                    ui,
+                    |ui| {
+                        // Below the tab strip, which floats over the top of the window here.
+                        ui.add_space(chrome::strip_cover(ui.ctx(), ui.max_rect()));
+                        panels::right_panel(self, ui);
+                    },
+                );
             }
         }
         let t = theme::Tokens::get(&ctx);

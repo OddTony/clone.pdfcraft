@@ -2333,6 +2333,12 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // Opened without the owner password and something is restricted.
     let secured = doc.security_summary().is_some_and(|s| !(s.owner || (s.permissions.modify() && s.permissions.assemble())));
     let repaired = !doc.repair_log().is_empty();
+    // The tab strip floats over the top of the window while reading: the notices and the page
+    // grid start below it, and only the pages run on under it.
+    let page_top = ui.available_rect_before_wrap().top();
+    let covered = crate::chrome::strip_cover(ui.ctx(), ui.available_rect_before_wrap());
+    ui.add_space(covered);
+    let notices_top = ui.cursor().top();
     match notices(view, doc, secured, repaired, crate::sign_ui::banner(&doc.signatures), ui, &t) {
         #[cfg(not(target_arch = "wasm32"))]
         Some(Notice::Reload) => app.watch.reload_request = Some(view.id),
@@ -2368,8 +2374,21 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         ui.advance_cursor_after_rect(full);
         return;
     }
-
-    let avail = ui.available_rect_before_wrap();
+    // With no notice between them, the pages scroll on up under the strip: their view reaches
+    // the window's top, and `avail`, the part of it they are read in, starts below the strip.
+    let under = if covered > 0.0 && (ui.cursor().top() - notices_top).abs() < 0.5 { covered } else { 0.0 };
+    let mut under_strip;
+    let ui: &mut egui::Ui = if under > 0.0 {
+        let full = ui.available_rect_before_wrap().with_min_y(page_top);
+        under_strip = ui.new_child(egui::UiBuilder::new().max_rect(full));
+        under_strip.set_clip_rect(full.intersect(ui.clip_rect()));
+        ui.advance_cursor_after_rect(full);
+        &mut under_strip
+    } else {
+        ui
+    };
+    let full = ui.available_rect_before_wrap();
+    let avail = full.with_min_y((full.top() + under).min(full.bottom()));
     view.viewport_w = avail.width();
     view.viewport_h = avail.height();
     let old_zoom = view.zoom;
@@ -2721,7 +2740,8 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         if delta != Vec2::ZERO {
             ui.scroll_with_delta_animation(delta, egui::style::ScrollAnimation::none());
         }
-        let (resp_rect, resp) = ui.allocate_exact_size(vec2(content_w, content_h), Sense::click_and_drag());
+        // The pages start below the strip they scroll on under.
+        let (resp_rect, resp) = ui.allocate_exact_size(vec2(content_w, content_h + under), Sense::click_and_drag());
         // A drag lasts only while egui reports it, so the mark can't outlive one.
         if !resp.dragged_by(egui::PointerButton::Primary) {
             view.selection_drag = false;
@@ -2735,9 +2755,11 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
             }
         }
-        let origin = resp_rect.min - vec2(0.0, y_shift);
+        let origin = resp_rect.min - vec2(0.0, y_shift - under);
         let painter = ui.painter();
         let visible = viewport.translate(resp_rect.min.to_vec2());
+        // What is read: the view below the strip (pages under it are drawn, but not current).
+        let seen = visible.with_min_y((visible.top() + under).min(visible.bottom()));
         let mut wanted = Vec::new();
         let mut visible_now = Vec::new();
         view.screen_rects.clear();
@@ -2774,7 +2796,7 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 view.screen_xforms
                     .push((i, PageXform { rect: r, rot: view.rotation, pw: info.pages[i].width.max(1.0), ph: info.pages[i].height.max(1.0) }));
             }
-            let overlap = r.intersect(visible).height();
+            let overlap = r.intersect(seen).height();
             if i == view.current {
                 current_overlap = overlap;
                 current_height = r.height();
@@ -3608,7 +3630,7 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         (page, out.state.offset.y <= MARGIN - GAP + 1.0, out.state.offset.y >= max_y - 1.0)
     });
 
-    view.viewport_screen = out.inner_rect;
+    view.viewport_screen = out.inner_rect.with_min_y((out.inner_rect.top() + under).min(out.inner_rect.bottom()));
     view.auto_scroll.paint(ui, avail);
     if unobstructed && matches!(tool, QuickTool::Select | QuickTool::ColumnSelect) {
         copy_selected |= selection_actions(ui, avail, view, info, prefs, allowed && !comments_hidden, can_copy);
