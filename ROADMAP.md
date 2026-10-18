@@ -163,6 +163,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-18 (M1, #2670 item 11):** Nested compressed stream-Length lookups share the eager reader diagnostic budget; metadata-only reads keep compressed fields without independent warning batches. Synthetic regressions cover small/large strict and lenient reads and unchanged stream bytes. Estimates unchanged.
+
 - **2026-10-17 (M1, #2670 item 11):** the eager compatibility reader shares eight log details across object errors, deferred Length errors, object-stream warnings and encrypted skips, then reports category totals at the highest observed severity. Recovery and strict refusal are unchanged; a deterministic regression requires the summary before a strict error returns. Concurrent reads keep independent budgets; unrelated parser diagnostics remain outside the limit. Estimates unchanged.
 - **2026-10-18 (M3, #3149):** Page replacement cancels render demand collected for the previous geometry; all viewer raster upload paths reject empty or oversized textures before cache eviction. Synthetic regressions reproduce the reported 1880×2350 upload at a 2048 limit, retain cached images and unsaved edits, and resume bounded backdrops and tiles. Estimates unchanged.
 - **2026-10-18 (M8, #1350):** Integrated current main while preserving content-stream comment boundaries. Hidden-text cleanup retires unused named replacement descriptions on rewritten pages and forms, including inherited/shared resource holders, without removing descriptions still used by surviving content. Synthetic saved-byte and preservation regressions cover the cleanup. Estimates unchanged.

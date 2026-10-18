@@ -295,3 +295,86 @@ fn direct_object_stream_parsing_also_has_a_bounded_budget() {
     assert!(messages.last().unwrap().1.contains("993 additional messages suppressed"));
     assert!(messages.iter().all(|(level, _)| *level == Level::Warn));
 }
+
+/// A valid compressed Length/Info pair in a stream whose N header is deliberately wrong.
+/// Every content-stream lookup reparses that same container before eager collection completes.
+fn compressed_lengths_fixture(count: usize) -> Vec<u8> {
+    let info = "<< /Title (Captured) >>";
+    let index = format!("5 0 6 {} ", info.len() + 1);
+    let members = format!("{index}{info} 3");
+    let mut objects = vec![
+        (1usize, b"<< /Type /Catalog /Pages 2 0 R >>".to_vec()),
+        (2, b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_vec()),
+        (3, b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << >> /Contents 7 0 R >>".to_vec()),
+        (4, format!("<< /Type /ObjStm /N 3 /First {} /Length {} >>\nstream\n{members}\nendstream", index.len(), members.len()).into_bytes()),
+    ];
+    objects.extend((0..count).map(|i| (7 + i, b"<< /Length 6 0 R >>\nstream\nq Q\nendstream".to_vec())));
+    let xref_id = 7 + count;
+    let mut offsets = vec![0u32; xref_id + 1];
+    let mut pdf = b"%PDF-1.7\n".to_vec();
+    for (id, object) in objects {
+        offsets[id] = u32::try_from(pdf.len()).unwrap();
+        pdf.extend_from_slice(format!("{id} 0 obj\n").as_bytes());
+        pdf.extend_from_slice(&object);
+        pdf.extend_from_slice(b"\nendobj\n");
+    }
+    let xref = pdf.len();
+    offsets[xref_id] = u32::try_from(xref).unwrap();
+    let mut entries = Vec::new();
+    for (id, offset) in offsets.into_iter().enumerate() {
+        let (kind, first, second): (u8, u32, u16) = match id {
+            0 => (0, 0, 65535),
+            5 => (2, 4, 0),
+            6 => (2, 4, 1),
+            _ => (1, offset, 0),
+        };
+        entries.push(kind);
+        entries.extend_from_slice(&first.to_be_bytes());
+        entries.extend_from_slice(&second.to_be_bytes());
+    }
+    pdf.extend_from_slice(
+        format!("{xref_id} 0 obj\n<< /Type /XRef /Size {} /Root 1 0 R /Info 5 0 R /W [1 4 2] /Length {} >>\nstream\n", xref_id + 1, entries.len())
+            .as_bytes(),
+    );
+    pdf.extend_from_slice(&entries);
+    pdf.extend_from_slice(format!("\nendstream\nendobj\nstartxref\n{xref}\n%%EOF\n").as_bytes());
+    pdf
+}
+
+/// Indirect compressed Length lookups share the eager budget, including strict reads.
+#[test]
+fn compressed_lengths_share_the_eager_load_budget() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    for strict in [false, true] {
+        for count in [1, 32] {
+            start_capture();
+            let doc = Document::load_mem_with_options(&compressed_lengths_fixture(count), LoadOptions { strict, ..Default::default() }).unwrap();
+            assert_eq!(doc.get_pages().len(), 1);
+            assert_eq!(doc.get_object((5, 0)).unwrap().as_dict().unwrap().get(b"Title").unwrap().as_str().unwrap(), b"Captured");
+            for i in 0..count {
+                assert_eq!(doc.get_object((u32::try_from(7 + i).unwrap(), 0)).unwrap().as_stream().unwrap().content, b"q Q");
+            }
+            let messages = records();
+            let total = count + 1; // One header warning per lookup plus the eager container read.
+            assert_eq!(messages.len(), if total <= 8 { total } else { 9 }, "strict={strict}, count={count}: {messages:?}");
+            assert!(messages.iter().all(|(level, _)| *level == Level::Warn));
+            if total > 8 {
+                let summary = &messages.last().unwrap().1;
+                assert!(summary.starts_with("Object loading:"), "{summary}");
+                assert!(summary.contains(&format!("{total} object stream warnings")), "{summary}");
+                assert!(summary.contains(&format!("{} additional messages suppressed", total - 8)), "{summary}");
+            }
+        }
+    }
+}
+
+/// Lightweight metadata keeps compressed fields without creating standalone log batches.
+#[test]
+fn compressed_lengths_metadata_does_not_start_diagnostic_batches() {
+    let _guard = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    start_capture();
+    let metadata = Document::load_metadata_mem(&compressed_lengths_fixture(1)).unwrap();
+    assert_eq!(metadata.title.as_deref(), Some("Captured"));
+    assert_eq!(metadata.page_count, 1);
+    assert!(records().is_empty(), "metadata lookups have no eager-load logging context: {:?}", records());
+}

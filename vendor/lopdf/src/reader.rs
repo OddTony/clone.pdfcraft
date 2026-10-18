@@ -34,6 +34,7 @@ const MAX_OBJECT_LOAD_MESSAGES: usize = 8;
 
 #[derive(Default)]
 pub(crate) struct ObjectLoadLog {
+    silent: bool,
     messages: AtomicUsize,
     failures: AtomicUsize,
     streams: AtomicUsize,
@@ -43,6 +44,14 @@ pub(crate) struct ObjectLoadLog {
 }
 
 impl ObjectLoadLog {
+    /// Lookups outside an eager read must not start independent diagnostic batches.
+    pub(crate) fn silent() -> Self {
+        Self {
+            silent: true,
+            ..Self::default()
+        }
+    }
+
     fn increment(counter: &AtomicUsize) -> usize {
         // Member diagnostics can exceed the xref count. Saturate even if a
         // hostile graph revisits a stream, rather than wrapping the budget.
@@ -52,6 +61,9 @@ impl ObjectLoadLog {
     }
 
     fn message(&self, counter: &AtomicUsize) -> bool {
+        if self.silent {
+            return false;
+        }
         Self::increment(counter);
         Self::increment(&self.messages) < MAX_OBJECT_LOAD_MESSAGES
     }
@@ -1072,7 +1084,7 @@ impl Reader<'_> {
                 let next_index = normal_offsets.partition_point(|&next| next <= offset);
                 let next_object = normal_offsets.get(next_index).copied();
                 let end = self.object_end(offset, next_object);
-                let result = self.read_object_to(offset, end, None, &mut HashSet::new());
+                let result = self.read_object_to(offset, end, None, &mut HashSet::new(), load_log);
                 let (object_id, mut object) = match result {
                     Ok(obj) => obj,
                     Err(e) => {
@@ -1240,7 +1252,9 @@ impl Reader<'_> {
     }
 
     /// Load a compressed object from an object stream (for lightweight metadata extraction)
-    fn get_compressed_object(&self, id: ObjectId, already_seen: &mut HashSet<ObjectId>) -> Result<Object> {
+    fn get_compressed_object(
+        &self, id: ObjectId, already_seen: &mut HashSet<ObjectId>, load_log: &ObjectLoadLog,
+    ) -> Result<Object> {
         let entry = self.document.reference_table.get(id.0).ok_or(Error::MissingXrefEntry)?;
 
         let container_id = match entry {
@@ -1259,13 +1273,20 @@ impl Reader<'_> {
             ));
         }
         let container_id = (container_id, 0);
-        let container_obj = self.get_object(container_id, already_seen)?;
+        let container_obj = self.get_object_with_log(container_id, already_seen, load_log)?;
         let container_stream = container_obj.as_stream()?;
-        let object_stream = ObjectStream::new_with_limit(container_stream, self.max_decompressed_size)?;
+        let object_stream = ObjectStream::new_with_log(container_stream, self.max_decompressed_size, load_log)?;
         object_stream.objects.get(&id).cloned().ok_or(Error::MissingXrefEntry)
     }
 
     pub fn get_object(&self, id: ObjectId, already_seen: &mut HashSet<ObjectId>) -> Result<Object> {
+        self.get_object_with_log(id, already_seen, &ObjectLoadLog::silent())
+    }
+
+    /// Retain one read's budget through nested container and indirect-Length lookups.
+    pub(crate) fn get_object_with_log(
+        &self, id: ObjectId, already_seen: &mut HashSet<ObjectId>, load_log: &ObjectLoadLog,
+    ) -> Result<Object> {
         // PdfCraft patch: each top-level lookup starts with an empty set and every nested lookup adds one object, so
         // the set's size is the depth of the lookup chain.
         if already_seen.len() >= MAX_LOOKUP_DEPTH {
@@ -1284,11 +1305,11 @@ impl Reader<'_> {
         if let Some(entry) = self.document.reference_table.get(id.0)
             && matches!(entry, XrefEntry::Compressed { .. })
         {
-            return self.get_compressed_object(id, already_seen);
+            return self.get_compressed_object(id, already_seen, load_log);
         }
 
         let offset = self.get_offset(id)?;
-        let (_, mut obj) = self.read_object(offset as usize, Some(id), already_seen)?;
+        let (_, mut obj) = self.read_object(offset as usize, Some(id), already_seen, load_log)?;
 
         if let Some(ref state) = self.encryption_state {
             let encrypt_ref = self
@@ -1311,7 +1332,12 @@ impl Reader<'_> {
         if let Ok(encrypt_ref) = self.document.trailer.get(b"Encrypt").and_then(|o| o.as_reference()) {
             if self.raw_objects.is_empty() {
                 let offset = self.get_offset(encrypt_ref)?;
-                let (_, encrypt_obj) = self.read_object(offset as usize, Some(encrypt_ref), &mut HashSet::new())?;
+                let (_, encrypt_obj) = self.read_object(
+                    offset as usize,
+                    Some(encrypt_ref),
+                    &mut HashSet::new(),
+                    &ObjectLoadLog::silent(),
+                )?;
                 self.document.objects.insert(encrypt_ref, encrypt_obj);
             } else if let Some(raw_bytes) = self.raw_objects.get(&encrypt_ref)
                 && let Ok((_, obj)) = self.parse_raw_object(raw_bytes)
@@ -1428,10 +1454,11 @@ impl Reader<'_> {
 
     fn read_object(
         &self, offset: usize, expected_id: Option<ObjectId>, already_seen: &mut HashSet<ObjectId>,
+        load_log: &ObjectLoadLog,
     ) -> Result<(ObjectId, Object)> {
         let next_index = self.normal_offsets.partition_point(|&next| next <= offset);
         let end = self.object_end(offset, self.normal_offsets.get(next_index).copied());
-        self.read_object_to(offset, end, expected_id, already_seen)
+        self.read_object_to(offset, end, expected_id, already_seen, load_log)
     }
 
     fn object_end(&self, offset: usize, next_object: Option<usize>) -> usize {
@@ -1446,6 +1473,7 @@ impl Reader<'_> {
 
     fn read_object_to(
         &self, offset: usize, end: usize, expected_id: Option<ObjectId>, already_seen: &mut HashSet<ObjectId>,
+        load_log: &ObjectLoadLog,
     ) -> Result<(ObjectId, Object)> {
         if offset > end || end > self.buffer.len() {
             return Err(Error::InvalidOffset(offset));
@@ -1454,7 +1482,15 @@ impl Reader<'_> {
         // Objects are parsed against the full buffer so a wrong *neighbor*
         // xref offset cannot truncate a well-formed object; `end` only limits
         // how far malformed-stream length recovery may scan.
-        parser::indirect_object(self.buffer, offset, expected_id, self, already_seen, Some(end))
+        parser::indirect_object_with_log(
+            self.buffer,
+            offset,
+            expected_id,
+            self,
+            already_seen,
+            Some(end),
+            load_log,
+        )
     }
 
     /// Parse the cross-reference section recorded at `offset`, first correcting

@@ -13,8 +13,10 @@ uses ERROR if an object/Length error occurred, otherwise WARN; each detail retai
 its original level. It is emitted after deferred lookups, or before a strict error
 returns. Counters saturate, recovery and small-file diagnostics are unchanged, and
 concurrent reads have independent budgets. Direct `ObjectStream` parsing gets a fresh
-budget per call. Other parser diagnostics (including stream-boundary recovery and
-reference-cycle warnings) are outside this scope. Covered by the twelve tests in
+budget per call. Indirect `/Length` lookups retain the eager load's budget while
+reading compressed containers; lightweight metadata lookups use a silent context
+instead of starting independent batches. Other parser diagnostics (including
+stream-boundary recovery and reference-cycle warnings) are outside this scope. Covered by the fourteen tests in
 `crates/render/tests/object_load_logging.rs`, including all `lopdf::*` targets and a
 one-worker strict-summary regression, plus the reader's `encrypted_load_logging`
 unit test for the normally unused eager encrypted-skip branch.
