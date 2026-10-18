@@ -181,12 +181,21 @@ fn credit_card(s: &[char], i: usize) -> Option<usize> {
     if !s[i].is_ascii_digit() || digit(i.checked_sub(1).and_then(|p| s.get(p))) {
         return None;
     }
-    let (end, n) = digit_run(s, i, &[' ', '-'], 23);
+    // Room for the longest card (19 digits in groups, 23 characters) and a tail of up to four digits.
+    let (end, n) = digit_run(s, i, &[' ', '-'], 29);
+    // A run longer than that is some other, longer number.
+    if end == i || run_continues(s, end - 1, 1, &[' ', '-']) {
+        return None;
+    }
     // The longest run may carry a trailing number (an expiry, a year, a CVV), so try it and then
-    // each shorter run ending at a group boundary, longest first.
+    // each shorter run ending at a group boundary, longest first. The dropped tail is at most four
+    // digits, so a longer number (an IBAN's digits) doesn't match on a prefix.
     let mut count = n;
     for e in (i + 1..=end).rev() {
-        if !s[e - 1].is_ascii_digit() {
+        if n - count > 4 {
+            break;
+        }
+        if !s.get(e - 1).is_some_and(char::is_ascii_digit) {
             continue;
         }
         let boundary = if e == end { !digit(s.get(end)) } else { matches!(s.get(e), Some(' ' | '-')) };
@@ -196,7 +205,7 @@ fn credit_card(s: &[char], i: usize) -> Option<usize> {
                 return Some(e - i);
             }
         }
-        count -= 1;
+        count = count.saturating_sub(1);
     }
     None
 }
@@ -441,6 +450,8 @@ mod tests {
         assert_eq!(found(Pattern::CreditCard, "Card 3782-822463-10005 123"), ["3782-822463-10005"]);
         // A run that is not a card at any group boundary still matches nothing.
         assert_eq!(found(Pattern::CreditCard, "Card 4111 1111 1111 1112 12/26"), Vec::<String>::new());
+        // A longer grouped number doesn't match on a card-shaped prefix.
+        assert_eq!(found(Pattern::CreditCard, "IBAN 4111 1111 1111 1111 0000 0000"), Vec::<String>::new());
     }
 
     #[test]
