@@ -139,9 +139,11 @@ when the picture is made.
 
 Print offers a "Network printer (WS-Print)" destination. The person types the printer address
 (a numeric local address, the same policy as above), presses "Query printer", and the dialog shows
-what the printer reports and offers only the copies, sides, orientation and quality it lists; the
-paper is the dialog's own paper, mapped to the media size the printer lists (A3, A4, A5, Letter,
-Legal, Tabloid) when it lists it. A job needs its own confirmation tick ("I confirm sending this
+what the printer reports. Each setting (copies, sides, orientation, quality) follows one of three
+rules: a setting the printer lists is offered; a setting the printer explicitly marks unavailable is
+disabled, with the reason; a setting the printer does not state either way stays enabled with a
+"Not confirmed by the printer" hint. The paper is the dialog's own paper, mapped to the media size
+the printer lists (A3, A4, A5, Letter, Legal, Tabloid) when it lists it. A job needs its own confirmation tick ("I confirm sending this
 document to this printer"); it is cleared after every job and never stored. The Print button is
 disabled until the address was queried, the printer takes PDF or PWG raster, and the box is ticked.
 
