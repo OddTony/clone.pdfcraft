@@ -3,6 +3,19 @@ use serde_json::Value;
 #[cfg(not(target_arch = "wasm32"))]
 use serde_json::json;
 
+/// The environment variable a tool may read an FTP password from. Only the dedicated prefix is
+/// readable, so a caller cannot send other process secrets (GITHUB_TOKEN, cloud keys) to an
+/// FTP host it chose.
+#[cfg(not(target_arch = "wasm32"))]
+fn password_variable(variable: &str) -> Result<&str> {
+    const PREFIX: &str = "PDFCRAFT_HOT_FOLDER_";
+    let valid = variable.len() > PREFIX.len()
+        && variable.len() <= 128
+        && variable.starts_with(PREFIX)
+        && variable.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
+    if valid { Ok(variable) } else { Err(failed("password_env must name a PDFCRAFT_HOT_FOLDER_* environment variable")) }
+}
+
 impl Automation {
     #[cfg(not(target_arch = "wasm32"))]
     fn check_hot_folder_roots(&self) -> Result<()> {
@@ -65,10 +78,7 @@ impl Automation {
                     return Err(failed("passwords apply only to FTP tasks"));
                 }
                 // Tools accept a variable name, never a secret in replayable task arguments.
-                let variable = args.str("password_env")?;
-                if variable.is_empty() || variable.len() > 128 || !variable.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-                    return Err(failed("password_env must name an environment variable"));
-                }
+                let variable = password_variable(args.str("password_env")?)?;
                 let password =
                     zeroize::Zeroizing::new(std::env::var(variable).map_err(|_| failed("the named password environment variable is unavailable"))?);
                 source::save_ftp_password(&store, id, &password).map_err(failed)?;
@@ -159,5 +169,18 @@ impl Automation {
     #[cfg(target_arch = "wasm32")]
     pub(crate) fn hot_folder(&self, _action: &str, _args: &Args) -> Result<Value> {
         Err(failed("Hot Folder requires the desktop application or native CLI"))
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ftp_passwords_come_only_from_the_dedicated_variables() {
+        assert!(password_variable("PDFCRAFT_HOT_FOLDER_FTP_PASSWORD").is_ok());
+        for other in ["GITHUB_TOKEN", "AWS_SECRET_ACCESS_KEY", "PDFCRAFT_HOT_FOLDER_", "PDFCRAFT_HOT_FOLDER_A-B", "", "pdfcraft_hot_folder_x"] {
+            assert!(password_variable(other).is_err(), "{other}");
+        }
     }
 }

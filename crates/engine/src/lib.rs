@@ -1577,12 +1577,14 @@ pub enum Edit {
         som: String,
         activity: String,
     },
-    /// Scan & OCR ▸ Recognize text: put recognised words on `page` as invisible text over the
-    /// image (from [`ocr::OcrJob::run`]).
+    /// Scan & OCR ▸ Enhance scanned file: rotate `page`'s scan by `degrees` (at most 12 either
+    /// way) to straighten it, keeping the original image stream.
     DeskewPage {
         page: usize,
         degrees: f64,
     },
+    /// Scan & OCR ▸ Recognize text: put recognised words on `page` as invisible text over the
+    /// image (from [`ocr::OcrJob::run`]).
     AddOcrText {
         page: usize,
         words: Vec<pdfcraft_ocr::PlacedWord>,

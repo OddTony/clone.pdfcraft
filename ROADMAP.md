@@ -548,7 +548,6 @@ Newest first: the date, what moved, and the new overall estimate.
 | 2026-10-13 | minor | M9: separate page validation overlays preserve signature artwork, and snapshot tabs reuse instead of multiplying; baked captions remain unchanged (#79 open); estimates unchanged |
 | 2026-10-11 | minor | Additional Latin OCR languages and system-language default with English fallback; estimates unchanged |
 | 2026-10-11 | minor | Italian OCR selection and accented-text save/reopen coverage; estimates unchanged |
-
 | 2026-10-12 | minor | M6: valid AcroForm XML element names with original PDF field names preserved; saved-PDF collision and Unicode regressions. Estimates unchanged. |
 | 2026-10-12 | minor | M6: preserve carriage returns in exported CSV field names and values; saved-PDF round-trip coverage. Estimates unchanged. |
 | 2026-10-13 | minor | M4: Insert-from-file preserves source bookmarks; integration tests retained with current main. Estimates unchanged. |

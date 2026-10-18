@@ -164,8 +164,9 @@ fn hot_folder_analysis_only_preserves_pages_and_skips_processing_options() {
 
 #[test]
 fn hot_folder_project_sources_preserve_order_and_ack_only_after_all_outputs() {
-    let root = std::env::temp_dir().join(format!("pdfcraft-hot-folder-project-tools-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    // Removed when the test ends, pass or fail.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
     for folder in ["sources", "stage", "out"] {
         std::fs::create_dir_all(root.join(folder)).unwrap();
     }
@@ -204,8 +205,9 @@ fn hot_folder_project_sources_preserve_order_and_ack_only_after_all_outputs() {
 
 #[test]
 fn hot_folder_tools_configure_poll_stop_and_confine_all_nested_paths() {
-    let root = std::env::temp_dir().join(format!("pdfcraft-hot-folder-tools-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    // Removed when the test ends, pass or fail.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
     std::fs::create_dir_all(root.join("in")).unwrap();
     std::fs::create_dir_all(root.join("out")).unwrap();
     let mut a = Automation::new().with_root(&root).unwrap();
@@ -234,8 +236,9 @@ fn hot_folder_tools_produce_searchable_output_and_preserve_source() {
     if !pdfcraft_engine::ocr::available() {
         return;
     }
-    let root = std::env::temp_dir().join(format!("pdfcraft-hot-folder-ocr-tools-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    // Removed when the test ends, pass or fail.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
     std::fs::create_dir_all(root.join("in")).unwrap();
     std::fs::create_dir_all(root.join("out")).unwrap();
     let mut a = Automation::new().with_root(&root).unwrap();
@@ -257,8 +260,9 @@ fn hot_folder_tools_produce_searchable_output_and_preserve_source() {
 
 #[test]
 fn hot_folder_tools_apply_page_templates_blank_archives_and_multiple_outputs() {
-    let root = std::env::temp_dir().join(format!("pdfcraft-hot-folder-pipeline-tools-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    // Removed when the test ends, pass or fail.
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
     for folder in ["in", "out", "blank"] {
         std::fs::create_dir_all(root.join(folder)).unwrap();
     }

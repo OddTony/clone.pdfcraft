@@ -150,7 +150,8 @@ update the numbers.
 
 ### 7. OCR still has language and scan-cleanup gaps
 
-- **Now available:** English, German, French, Spanish and horizontal Japanese, Unicode search/copy,
+- **Now available:** English, German, French, Spanish, Italian, Dutch, Danish, Norwegian Bokmål,
+  Swedish, Finnish, Portuguese and horizontal Japanese, Unicode search/copy,
   automatic quarter-turn correction and deskew up to 12 degrees, including correction without OCR.
   Clear paper edges can now define an automatic crop with safety padding; ambiguous white borders
   stay unchanged, and original image pixels remain in the PDF.
@@ -385,7 +386,6 @@ update the numbers.
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-14 | minor | M1: raw-deflate fallback preserves decoding-limit errors in strict and tolerant decoding; synthetic filter and COS stream regressions. Estimates unchanged. |
 | 2026-10-11 | minor | M10: multilingual OCR, orientation/deskew, and conservative scanner-border crop with padding. Ambiguous edges and camera cleanup remain open. |
-
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |
 | 2026-10-13 | minor | Gap 6: Organize Pages selects and reveals the current page on open, including after an earlier grid selection elsewhere (#1910). Estimates unchanged. |
 | 2026-10-12 | minor | Gap 6: rubber stamps, explicit image rectangles and PDF-page stamps read upright on rotated pages (#1398). Estimates unchanged. |

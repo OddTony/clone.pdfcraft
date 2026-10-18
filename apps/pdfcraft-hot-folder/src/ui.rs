@@ -27,6 +27,9 @@ pub struct HotFolderApp {
     start_text: String,
     language: Language,
     error: Option<String>,
+    /// The background worker's last diagnostic, kept apart from `error` so a refresh never
+    /// hides why the user's own action failed, and cleared when the worker recovers.
+    worker_error: Option<String>,
     saved: bool,
     last_refresh: std::time::Instant,
     errors_only: bool,
@@ -62,6 +65,7 @@ impl HotFolderApp {
             language: Language::system(sys_locale::get_locale().as_deref()),
             load_error: error.clone(),
             error: initial_error,
+            worker_error: None,
             saved: false,
             saved_snapshot,
             disk_snapshot,
@@ -219,10 +223,10 @@ impl HotFolderApp {
             Ok(state) => self.state = state,
             Err(e) => self.error = Some(e),
         }
-        match hf::read_worker_error(&self.path) {
-            Ok(Some(error)) | Err(error) => self.error = Some(error),
-            Ok(None) => {}
-        }
+        self.worker_error = match hf::read_worker_error(&self.path) {
+            Ok(error) => error,
+            Err(error) => Some(error),
+        };
     }
 
     fn import_tasks(&mut self) -> Result<(), String> {
@@ -291,11 +295,13 @@ impl HotFolderApp {
             ui.label(t("Processing continues when this window or PdfCraft is closed. Stop tasks here to pause it."));
             ui.add_space(8.0);
         });
-        if let Some(error) = &self.error {
+        if self.error.is_some() || self.worker_error.is_some() {
             egui::Panel::top("error").show(root, |ui| {
                 ui.colored_label(egui::Color32::DARK_RED, t("Error details"));
                 egui::ScrollArea::vertical().id_salt("error-details").max_height(80.0).show(ui, |ui| {
-                    ui.label(error);
+                    for error in self.error.iter().chain(&self.worker_error) {
+                        ui.label(error);
+                    }
                 });
             });
         }

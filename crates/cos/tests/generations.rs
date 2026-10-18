@@ -120,3 +120,24 @@ fn indirect_stream_lengths_require_the_referenced_generation() {
         assert_eq!(&stream.raw[..], if generation == 1 { b"A\nendstream\nB".as_slice() } else { b"A".as_slice() });
     }
 }
+
+/// Copying edits onto a saved document reads each object at its live generation. Asking for
+/// generation 0 read a generation-1 object as Null on both sides, so an edit was skipped, and a
+/// reused number was copied over as Null.
+#[test]
+fn overlaying_edits_keeps_objects_whose_generation_is_not_zero() {
+    let reused = ObjRef::new(3, 1);
+    let mut saved = Document::open(reused_object()).unwrap();
+    let mut current = saved.clone();
+    current.set(reused, Object::Int(7));
+    saved.overlay_changes_from(&current).unwrap();
+    assert_eq!(*saved.get(reused), Object::Int(7), "an edit at generation 1 is copied");
+
+    let mut saved = Document::open(reused_object()).unwrap();
+    let mut current = saved.clone();
+    let next = ObjRef::new(3, 2);
+    current.free(reused);
+    current.set(next, Object::Int(99));
+    saved.overlay_changes_from(&current).unwrap();
+    assert_eq!(*saved.get(next), Object::Int(99), "a reused number keeps its value, not Null");
+}

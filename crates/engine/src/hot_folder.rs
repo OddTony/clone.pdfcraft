@@ -265,8 +265,8 @@ pub fn initialize_config(path: &Path) -> Result<(), String> {
 
 pub fn save_config(path: &Path, config: &Config, root: Option<&Path>) -> Result<(), String> {
     validate(config, root)?;
-    confined(path, root)?;
-    save_json(path, config)
+    let path = confined(path, root)?;
+    save_json(&path, config)
 }
 
 pub fn state_path(config: &Path) -> PathBuf {
@@ -1543,6 +1543,17 @@ mod tests {
         let path = dir.path().join("tasks.json");
         save_config(&path, &Config { tasks: vec![task.clone()] }, None).unwrap();
         (dir, path, task)
+    }
+
+    /// A relative configuration path under `--root` is written inside the root, not next to
+    /// the process's working directory.
+    #[test]
+    fn a_confined_configuration_is_saved_inside_its_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let name = Path::new("pdfcraft-confined-save-test.json");
+        save_config(name, &Config::default(), Some(dir.path())).unwrap();
+        assert!(dir.path().join(name).is_file(), "written under the root");
+        assert!(!name.exists(), "nothing written relative to the working directory");
     }
 
     fn text_pdf() -> Arc<Vec<u8>> {

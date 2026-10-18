@@ -107,7 +107,10 @@ jobs:
           cargo test -p pdfcraft-engine --lib --no-run --message-format=json > "$RUNNER_TEMP/engine-tests.json"
           test_binary="$(jq -rs '[.[] | select(.reason == "compiler-artifact" and .profile.test == true and .target.name == "pdfcraft_engine") | .executable | select(. != null)] | last // empty' "$RUNNER_TEMP/engine-tests.json")"
           test -n "$test_binary"
-          sudo "$test_binary" --exact hot_folder_sources::credentials::tests::unix_admin_provisioning_preserves_service_uid_gid_and_private_modes --ignored
+          # --exact matches nothing once the test is renamed and still exits 0: require one pass.
+          name=hot_folder_sources::credentials::tests::unix_admin_provisioning_preserves_service_uid_gid_and_private_modes
+          sudo "$test_binary" --exact "$name" --ignored | tee "$RUNNER_TEMP/provisioning.txt"
+          grep -q "^test result: ok. 1 passed;" "$RUNNER_TEMP/provisioning.txt"
 
       - name: Assets (licences and attribution)
         if: runner.os == 'Linux'

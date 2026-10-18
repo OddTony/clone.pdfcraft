@@ -398,6 +398,8 @@ impl PdfCraftApp {
             "a11y.find_untagged" => self.find_untagged_content(),
             "ocr.recognize" => {
                 self.ocr_draft.recognize = true;
+                // Plain recognition never crops; only Enhance scanned file turns it on.
+                self.ocr_draft.auto_crop = false;
                 self.dialog = Some(Dialog::RecognizeText);
             }
             "ocr.enhance" => {
