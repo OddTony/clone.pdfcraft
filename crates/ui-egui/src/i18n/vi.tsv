@@ -2686,3 +2686,12 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+
+# Fast Web View (linearized saving)
+	Saving	Lưu tệp
+	Save As optimizes for Fast Web View	Lưu thành sẽ tối ưu hóa để xem nhanh trên web
+	Save As writes a linearized file whose first page shows before the rest has downloaded. Save adds changes to the end of the file, which turns Fast Web View off.	Lưu thành ghi một tệp đã tuyến tính hóa, có trang đầu hiện ra trước khi phần còn lại tải xong. Lưu thêm các thay đổi vào cuối tệp, khiến tính năng xem nhanh trên web bị tắt.
+	Fast Web View	Xem nhanh trên web
+	Saved {name}, optimized for Fast Web View	Đã lưu {name}, đã tối ưu hóa để xem nhanh trên web
+	Saved {name} without Fast Web View: {e}	Đã lưu {name} nhưng không có xem nhanh trên web: {e}
+	Saved {name}. Fast Web View is off: Save adds the changes to the end of the file.	Đã lưu {name}. Xem nhanh trên web đã tắt: Lưu thêm các thay đổi vào cuối tệp.
