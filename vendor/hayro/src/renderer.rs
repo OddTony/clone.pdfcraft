@@ -526,14 +526,7 @@ impl Renderer {
             },
         };
 
-        // A miter limit that isn't finite leaves miters unbounded: never skipped.
-        let miter = stroke.miter_limit.abs();
-        let reach = stroke.width / 2.0
-            * if miter.is_finite() {
-                miter.max(std::f64::consts::SQRT_2)
-            } else {
-                f64::INFINITY
-            };
+        let reach = stroke_reach(&stroke);
         self.ctx.set_stroke(stroke);
         reach
     }
@@ -1147,11 +1140,11 @@ impl Renderer {
                         // 2147480100` for a picture fill drawn once, #3349): the cell's `/BBox` is
                         // drawn at full scale with a transparent border and padded, not tiled.
                         // Shrinking the cell to fit the step left a picture under one pixel.
-                        // A stroke reaches half its width past the path (the miter can reach
-                        // further, so the whole width is allowed for), in device pixels.
+                        // How far a stroke's paint reaches past the path, miters included, in
+                        // device pixels.
                         let reach = if is_stroke {
                             let (a1, a2) = x_y_advances(path_transform);
-                            a1.length().max(a2.length()) * f64::from(self.ctx.stroke().width)
+                            a1.length().max(a2.length()) * stroke_reach(self.ctx.stroke())
                         } else {
                             0.0
                         };
@@ -1951,6 +1944,19 @@ fn convert_blend_mode(blend_mode: BlendMode) -> peniko::BlendMode {
     };
 
     peniko::BlendMode::new(mix, Compose::SrcOver)
+}
+
+/// PdfCraft patch: how far a stroke's paint reaches past its path, in user units: half the width
+/// times the larger of the miter limit and √2 (a miter join or a square cap). A miter limit that
+/// isn't finite leaves miters unbounded, so the reach is too.
+fn stroke_reach(stroke: &kurbo::Stroke) -> f64 {
+    let miter = stroke.miter_limit.abs();
+    stroke.width / 2.0
+        * if miter.is_finite() {
+            miter.max(std::f64::consts::SQRT_2)
+        } else {
+            f64::INFINITY
+        }
 }
 
 /// PdfCraft patch (20): whether a cell's scale can draw it at full size: finite and positive. A

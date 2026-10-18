@@ -3570,6 +3570,13 @@ trailer << /Root 1 0 R >>
         // 3100, but its square cap reaches 3110.
         let stroked = tiling_page(3200, 20, "/Pattern CS /P1 SCN 60 w 2 J 0 10 m 3080 10 l S", "3100", "1 0 0 1 0 0");
         assert_eq!(at(&stroked, 3200, 3104, 15), blue, "the next cell, under the stroke's cap");
+        // A miter reaches further than the line width (review on #3356): this join's vertex is
+        // at x 3085, 15 short of the next cell with a 10-wide line, but its miter tip, 45 long
+        // under the default limit of 10, reaches 3130.
+        let mitered = tiling_page(3200, 20, "/Pattern CS /P1 SCN 10 w 0 j 3000 0 m 3085 10 l 3000 20 l S", "3100", "1 0 0 1 0 0");
+        // The tip narrows to a point, so this pixel is partly covered: blue, not white.
+        let tip = at(&mitered, 3200, 3104, 10);
+        assert!(tip[0] < 160 && tip[1] < 160 && tip[2] > 200, "the next cell, under the miter's tip: {tip:?}");
     }
 
     /// Contributor-original JPEG 2000: one unsigned 8-bit pixel per component, one tile,
