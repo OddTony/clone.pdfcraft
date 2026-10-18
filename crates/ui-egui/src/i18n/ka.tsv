@@ -1572,6 +1572,7 @@
 	Couldn't use {name}: {e}	{name}-ის გამოყენება ვერ მოხერხდა: {e}
 	Couldn't extract pages: {e}	გვერდების ამოღება ვერ მოხერხდა: {e}
 	Couldn't write {name}: {e}	{name}-ის ჩაწერა ვერ მოხერხდა: {e}
+	the name is not a plain file name	სახელი ჩვეულებრივი ფაილის სახელი არ არის
 	Wrote 1 file to {dir}	1 ფაილი ჩაიწერა საქაღალდეში {dir}
 	Wrote {n} files to {dir}	ჩაწერილი ფაილები: {n}, საქაღალდეში {dir}
 	No pages match those choices	ამ არჩევანს არცერთი გვერდი არ შეესაბამება
