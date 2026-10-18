@@ -595,7 +595,10 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             crate::commands::registry_menu(app, ui, "View");
             ui.menu_button(tl!("Display theme"), |ui| theme_menu(app, ui));
             ui.menu_button(tl!("Show/Hide"), |ui| {
-                ui.add(widgets::checkbox(&mut app.cursor_coordinates, tl!("Cursor coordinates")));
+                let mut on = app.cursor_coordinates;
+                if ui.add(widgets::checkbox(&mut on, tl!("Cursor coordinates"))).changed() {
+                    app.execute("view.cursor_coordinates");
+                }
             });
             ui.menu_button(tl!("Side panels"), |ui| {
                 for (p, label) in [
