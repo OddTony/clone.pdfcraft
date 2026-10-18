@@ -450,8 +450,10 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
             let mut style = text.clone();
             added_text_format(ui, t, &mut style);
             if style != text {
-                app.text_style = pdfcraft_engine::AddedText { text: String::new(), rect: [0.0; 4], ..style.clone() };
-                app.apply_edit(pdfcraft_engine::Edit::UpdateContent { page, index, content: pdfcraft_engine::AddedContent::Text(style) });
+                // The reusable style follows the selection only when the edit took, so a refused one adds nothing odd later.
+                if app.apply_edit(pdfcraft_engine::Edit::UpdateContent { page, index, content: pdfcraft_engine::AddedContent::Text(style.clone()) }) {
+                    app.text_style = pdfcraft_engine::AddedText { text: String::new(), rect: [0.0; 4], ..style };
+                }
             }
         }
         None if app.quick_tool == crate::QuickTool::AddText => {
