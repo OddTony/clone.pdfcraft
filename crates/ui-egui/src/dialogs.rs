@@ -82,7 +82,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let modal = widgets::show_modal(ctx, "dialog", |ui| {
         ui.set_width(match dialog {
             Dialog::Properties(_) => 640.0,
-            Dialog::Print => 820.0,
+            Dialog::Print => crate::print_ui::DIALOG_W,
             Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
             Dialog::About => 780.0,
             _ => 520.0,
@@ -851,7 +851,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 let view = &mut app.views[i];
                 view.set_print_grayscale(app.print_draft.grayscale);
                 view.queue_print_previews(&rasters);
-                let (go, cancel) = crate::print_ui::body(ui, &mut app.print_draft, &t, &sizes, &labels, &mut |p| {
+                let name = doc.name.clone();
+                let (go, cancel) = crate::print_ui::body(ui, &mut app.print_draft, &t, &name, &sizes, &labels, &mut |p| {
                     view.need_thumbnail(p, true);
                     view.page_preview(p)
                 });

@@ -2564,6 +2564,12 @@ impl PdfCraftApp {
                         self.execute("page.number");
                         Some(Dialog::NumberPages)
                     }
+                    // Through File ▸ Print, so the printers and pages are read; nothing without a
+                    // document.
+                    "print" => {
+                        self.open_print();
+                        self.dialog
+                    }
                     "none" => None,
                     _ => Some(Dialog::About),
                 }

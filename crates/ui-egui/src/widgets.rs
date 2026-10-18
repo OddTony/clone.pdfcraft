@@ -365,13 +365,50 @@ fn toggle<'a>(widget: impl egui::Widget + 'a, radius: Option<u8>) -> impl egui::
 /// A tool panel's section heading, in small capitals like [`section_title`], with `trailing` (a
 /// link to an action) at the right of the same line.
 pub fn section_header(ui: &mut egui::Ui, text: &str, trailing: impl FnOnce(&mut egui::Ui)) {
-    let t = Tokens::get(ui.ctx());
     ui.add_space(12.0);
+    heading_row(ui, tl!(text), trailing);
+    ui.add_space(4.0);
+}
+
+/// The line of a [`section_header`] alone, for a heading already in the interface language.
+pub fn heading_row(ui: &mut egui::Ui, translated: &str, trailing: impl FnOnce(&mut egui::Ui)) {
+    let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(tl!(text).to_uppercase()).font(theme::semibold(10.5)).color(t.text_faint).extra_letter_spacing(0.6));
+        ui.label(egui::RichText::new(translated.to_uppercase()).font(theme::semibold(10.5)).color(t.text_faint).extra_letter_spacing(0.6));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), trailing);
     });
-    ui.add_space(4.0);
+}
+
+/// Choices side by side as one row of equal buttons, `width` wide in all, the chosen one outlined
+/// in the accent colour (Pages to Print, Page Sizing). Each is its label and whether it is
+/// chosen; returns the index clicked.
+pub fn choice_row(ui: &mut egui::Ui, choices: &[(&str, bool)], width: f32) -> Option<usize> {
+    let t = Tokens::get(ui.ctx());
+    let gap = 6.0;
+    let n = choices.len().max(1) as f32;
+    let w = ((width - gap * (n - 1.0)) / n).max(40.0);
+    let font = theme::medium(12.5);
+    let mut clicked = None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+        for (i, (label, on)) in choices.iter().enumerate() {
+            let (rect, resp) = ui.allocate_exact_size(vec2(w, 32.0), Sense::click());
+            let press = theme::Press::track(ui, &resp);
+            let (fill, stroke) = if *on { (t.accent_soft, t.accent) } else { (press.fill(t.field, t.hover, t.pressed), t.border) };
+            ui.painter().rect(rect, CornerRadius::same(7), fill, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
+            let shown = fit_line(label, (w - 12.0).max(0.0), |s| text_width(ui, s, &font));
+            let cut = shown != *label;
+            ui.painter().text(rect.center() + press.offset(), Align2::CENTER_CENTER, shown, font.clone(), if *on { t.accent_text } else { t.text });
+            let name = (*label).to_owned();
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), *on, name.clone()));
+            // The whole label on hover, when it had to be cut to fit.
+            let resp = if cut { resp.on_hover_text(name.as_str()) } else { resp };
+            if theme::hand(resp).clicked() {
+                clicked = Some(i);
+            }
+        }
+    });
+    clicked
 }
 
 /// A link-styled action at the end of a [`section_header`] line.

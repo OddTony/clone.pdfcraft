@@ -179,7 +179,7 @@ fn cut_stack_dialog_previews_saves_and_refuses_duplex() {
     h.run_steps(2);
     h.get_by_label("Sheet 1 of 3");
     h.get_by_label_contains("Keep the sheets in order");
-    h.get_by_label("›").click();
+    h.get_by_label("Next sheet").click();
     h.run_steps(2);
     h.get_by_label("Sheet 2 of 3");
     h.state_mut().print_draft.duplex = Duplex::LongEdge;
@@ -328,7 +328,8 @@ fn architectural_page_can_be_matched_at_100_percent() {
     });
     h.run_steps(4);
     assert!(h.state_mut().execute("print.dialog"));
-    h.run_steps(3);
+    // The dialog takes a few frames to centre itself.
+    h.run_steps(5);
     h.get_by_label("PDF page: 36.00 × 24.00 in");
     h.get_by_label("Match page at 100%").click();
     h.run_steps(3);
@@ -388,9 +389,14 @@ fn a_printer_without_two_sided_printing_points_to_its_properties() {
 fn print_as_image_is_an_advanced_choice_that_saves_pictures() {
     let mut h = harness();
     assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(5);
+    // At the end of the settings, which scroll.
+    h.get_by_label("Advanced".to_uppercase().as_str()).scroll_to_me();
     h.run_steps(3);
     h.get_by_label("Advanced".to_uppercase().as_str()).click();
     h.run_steps(2);
+    h.get_by_label("Print as image").scroll_to_me();
+    h.run_steps(3);
     h.get_by_label("Print as image").click();
     h.run_steps(2);
     assert!(h.state().print_draft.as_image);
@@ -425,4 +431,31 @@ fn an_empty_printer_list_says_none_were_found() {
     h.run_steps(2);
     h.get_by_label_contains("No printers were found");
     assert!(!h.get_by_role_and_label(Role::Button, "Save as PDF").accesskit_node().is_disabled());
+}
+
+/// The dialog fits the window, its settings and the preview side by side, at a laptop's size too:
+/// the settings scroll rather than push the buttons off the screen.
+#[test]
+fn the_print_dialog_fits_the_window_with_the_preview_beside_the_settings() {
+    for size in [egui::vec2(1400.0, 900.0), egui::vec2(1280.0, 720.0)] {
+        let mut h = Harness::builder().with_size(size).build_eframe(|_cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", "en").unwrap();
+            app.open_bytes("form.pdf", None, include_bytes!("data/form.pdf").to_vec()).unwrap();
+            app
+        });
+        h.run_steps(4);
+        assert!(h.state_mut().execute("print.dialog"));
+        h.run_steps(5);
+        let window = egui::Rect::from_min_size(egui::Pos2::ZERO, size);
+        for label in ["Close", "Preview", "Next sheet"] {
+            let r = h.get_by_label(label).rect();
+            assert!(window.contains_rect(r), "{label} at {r:?} is in the {size:?} window");
+        }
+        let cancel = h.get_by_role_and_label(Role::Button, "Cancel").rect();
+        assert!(window.contains_rect(cancel), "Cancel at {cancel:?} is in the {size:?} window");
+        let settings = h.get_by_label("Pages to Print".to_uppercase().as_str()).rect();
+        let preview = h.get_by_label("Preview").rect();
+        assert!(preview.left() > settings.right(), "the preview {preview:?} is beside the settings {settings:?}");
+    }
 }
