@@ -440,7 +440,7 @@ fn resource_ops(doc: &Document, res: &Dict, content: &[Vec<u8>]) -> Result<Vec<O
             && seen.insert(r)
             && let Object::Stream(s) = &*doc.get(r)
             && s.dict.name(b"Subtype") == Some(b"Form")
-            && !s.dict.get(b"Resources").is_some_and(|r| doc.resolve(r).as_dict().is_some())
+            && s.dict.get(b"Resources").is_none_or(|r| doc.resolve(r).as_dict().is_none())
         {
             let parsed = pdfcraft_content::parse(&s.decoded()?);
             if seen.len() > 2_000_000 || ops.len().saturating_add(parsed.ops.len()) > 2_000_000 || parsed.skipped > 0 {
