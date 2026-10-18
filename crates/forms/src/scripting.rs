@@ -105,6 +105,7 @@ pub(crate) fn apply_changes(doc: &mut Document, changes: &[FieldChange], except:
     if changes.is_empty() {
         return Ok(());
     }
+    let _profile = crate::profile::Span::new("script_side_effects");
     let all = fields(doc);
     for c in changes {
         let Some(f) = all.iter().find(|f| f.name == c.name) else { continue };
