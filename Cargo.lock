@@ -3985,6 +3985,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdfcraft-arlington"
+version = "0.9.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
 name = "pdfcraft-audit"
 version = "0.9.0"
 dependencies = [
@@ -4111,6 +4118,7 @@ dependencies = [
  "image",
  "pdfcraft-a11y",
  "pdfcraft-annot",
+ "pdfcraft-arlington",
  "pdfcraft-audit",
  "pdfcraft-compare",
  "pdfcraft-cos",
