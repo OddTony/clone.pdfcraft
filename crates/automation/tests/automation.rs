@@ -711,11 +711,10 @@ fn an_in_place_save_reports_a_required_rewrite_as_not_incremental() {
     }
 }
 
-/// Issue #1698: a save whose bytes don't reopen is refused before it touches the file. The
-/// catalog's `/Pages` is not a page tree, so the reader finds the page by scanning, while a
-/// full rewrite keeps only what the catalog reaches and drops it.
+/// #1664 repairs the missing page tree on open. The former #1698 failure fixture now
+/// saves successfully, keeping its page and pixels through a full rewrite.
 #[test]
-fn a_save_that_does_not_reopen_leaves_the_file_as_it_was() {
+fn a_recovered_page_tree_survives_a_full_save() {
     let dir = workdir("save-verify-before-write");
     let objs: [&[u8]; 4] = [
         b"<< /Type /Catalog /Pages 3 0 R >>",
@@ -743,10 +742,19 @@ fn a_save_that_does_not_reopen_leaves_the_file_as_it_was() {
     let opened = ok(&mut a, "doc_open", json!({ "path": "damaged.pdf" }));
     assert_eq!(opened["pages"], 1, "{opened}");
     let doc = opened["doc"].as_u64().unwrap();
-    let e = err(&mut a, "doc_save", json!({ "doc": doc, "full": true }));
-    assert!(e.to_string().contains("could not be reopened"), "{e}");
+    let (width, height, pixels) = a.render_pixels(doc, 1, 1.0).unwrap();
+    assert!(pixels.as_ref().as_chunks::<4>().0.iter().any(|p| p[..3] != [255, 255, 255]), "the original page is not blank");
+    let saved = ok(&mut a, "doc_save", json!({ "doc": doc, "full": true }));
+    assert_eq!(saved["document"]["dirty"], false);
     let on_disk = std::fs::read(dir.join("damaged.pdf")).unwrap();
-    assert!(on_disk == original, "the file was replaced by {} bytes that don't reopen", on_disk.len());
+    assert_ne!(on_disk, original, "a full save writes the repaired page tree");
+    let mut reopened = auto(&dir);
+    let opened = ok(&mut reopened, "doc_open", json!({ "path": "damaged.pdf" }));
+    assert_eq!(opened["pages"], 1);
+    let again = opened["doc"].as_u64().unwrap();
+    let (new_width, new_height, new_pixels) = reopened.render_pixels(again, 1, 1.0).unwrap();
+    assert_eq!((new_width, new_height), (width, height));
+    assert_eq!(new_pixels.as_ref(), pixels.as_ref(), "saving must preserve the recovered page's drawing");
 }
 
 /// organize.field-name-conflicts: combining files whose forms share a field name keeps the
@@ -2072,6 +2080,21 @@ fn orphan_form_fields_through_tools() {
     let reset = ok(&mut a, "form_fields", json!({ "doc": doc }));
     let v = reset["fields"].as_array().unwrap().iter().find(|f| f["name"] == "alpha").unwrap()["value"].clone();
     assert_ne!(v, "Filled by an agent");
+}
+
+#[test]
+fn reversing_pages_through_tools() {
+    let dir = workdir("reverse");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "page_reverse", json!({ "doc": doc }));
+    assert_eq!(page_text(&mut a, doc), ["Page 3", "Page 2", "Page 1"], "no pages reverses the whole document");
+    ok(&mut a, "page_reverse", json!({ "doc": doc, "pages": [1, 2] }));
+    assert_eq!(page_text(&mut a, doc), ["Page 2", "Page 3", "Page 1"], "only the listed pages swap");
+    ok(&mut a, "edit_undo", json!({ "doc": doc }));
+    assert_eq!(page_text(&mut a, doc), ["Page 3", "Page 2", "Page 1"]);
+    assert!(matches!(a.call("page_reverse", &json!({ "doc": doc, "pages": [4] })), Err(ToolError::InvalidArgs(_))));
+    assert!(matches!(a.call("page_reverse", &json!({ "doc": doc, "pages": [2] })), Err(ToolError::Failed(_))), "one page has nothing to reverse");
 }
 
 #[test]
@@ -3574,6 +3597,24 @@ fn adding_content_through_tools() {
     assert!(matches!(a.call("content_delete", &json!({ "doc": doc, "page": 1, "index": 5 })), Err(ToolError::Failed(_))));
 }
 
+/// An out-of-range `index` (including `i64::MIN`, which overflowed `index - 1`) is a readable
+/// failure for `content_update` and `content_delete`, not a panic.
+#[test]
+fn content_index_out_of_range_is_an_error_not_a_panic() {
+    let dir = workdir("content-index-range");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "page_add_text", json!({ "doc": doc, "page": 1, "text": "hi", "at": [10, 10] }));
+    for index in [i64::MIN, i64::MIN + 1, -1, 0, i64::MAX] {
+        for tool in ["content_delete", "content_update"] {
+            let args = json!({ "doc": doc, "page": 1, "index": index, "text": "x" });
+            let args = if tool == "content_delete" { json!({ "doc": doc, "page": 1, "index": index }) } else { args };
+            assert!(matches!(a.call(tool, &args), Err(ToolError::Failed(_))), "{tool} index {index}");
+        }
+    }
+    assert_eq!(ok(&mut a, "content_list", json!({ "doc": doc }))["count"], 1);
+}
+
 /// Text styling on an added image is refused (#1331), as image transforms are on text, and the
 /// refusal leaves the content, the dirty flag and the undo and redo steps as they were.
 #[test]
@@ -4527,11 +4568,11 @@ fn signature_appearances(path: &Path) -> String {
 fn signing_with_translated_labels_through_tools() {
     let dir = workdir("signing-labels");
     let mut a = auto(&dir);
-    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret1", "path": "ada.p12" }));
+    ok(&mut a, "sign_id_create", json!({ "name": "Ada Lovelace", "key": "p256", "password": "secret12", "path": "ada.p12" }));
     let open = |a: &mut Automation| ok(a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
     let doc = open(&mut a);
     let args = |doc: u64, extra: Value, out: &str| {
-        let mut args = json!({ "doc": doc, "id": "ada.p12", "password": "secret1", "page": 1, "rect": [10, 150, 190, 290], "reason": "Genehmigt", "location": "Berlin", "out": out });
+        let mut args = json!({ "doc": doc, "id": "ada.p12", "password": "secret12", "page": 1, "rect": [10, 150, 190, 290], "reason": "Genehmigt", "location": "Berlin", "out": out });
         for (k, v) in extra.as_object().unwrap() {
             args[k] = v.clone();
         }

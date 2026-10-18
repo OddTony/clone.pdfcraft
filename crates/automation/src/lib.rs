@@ -283,6 +283,13 @@ impl Automation {
                 let to = self.position(&a, "to")?;
                 self.apply(&a, Edit::MovePages { pages, to })?
             }
+            "page_reverse" => {
+                let pages = match a.opt_ints("pages")? {
+                    Some(_) => self.pages(&a, "pages")?,
+                    None => (0..self.doc(&a)?.info.pages.len()).collect(),
+                };
+                self.apply(&a, Edit::ReversePages { pages })?
+            }
             "page_insert_blank" => self.insert_blank(&a)?,
             "page_insert_file" => self.insert_file(&a)?,
             "page_extract" => self.page_extract(&a)?,
@@ -932,11 +939,24 @@ impl Automation {
         // A save that adds or removes encryption, or must not keep the old revision (Sanitize,
         // redaction), is rewritten in full even when an incremental save was asked for.
         let incremental = !full && bytes.starts_with(&self.doc(a)?.saved_bytes());
+        self.publish_save(id, &target, bytes, incremental, write)
+    }
+
+    /// Validate the prepared bytes before publishing them or marking the document saved.
+    fn publish_save(
+        &mut self,
+        id: DocId,
+        target: &Path,
+        bytes: Arc<Vec<u8>>,
+        incremental: bool,
+        write: impl FnOnce(&Path, &[u8]) -> Result<()>,
+    ) -> Result<Value> {
         self.session.check_save(id, &bytes).map_err(failed)?;
-        write(&target, &bytes)?;
+        write(target, &bytes)?;
         let path = target.to_string_lossy().into_owned();
         self.session.mark_saved(id, bytes.clone(), Some(path.clone())).map_err(failed)?;
-        Ok(json!({ "path": path, "bytes": bytes.len(), "incremental": incremental, "document": summary(self.doc(a)?) }))
+        let doc = self.session.get(id).ok_or_else(|| failed("the saved document is no longer open"))?;
+        Ok(json!({ "path": path, "bytes": bytes.len(), "incremental": incremental, "document": summary(doc) }))
     }
 
     fn doc_revisions(&mut self, a: &Args) -> Result<Value> {
@@ -2959,6 +2979,37 @@ mod tests {
     }
 
     #[test]
+    fn invalid_save_bytes_never_reach_publication_or_mark_saved() {
+        let dir = staging_dir("invalid-save-bytes");
+        let target = dir.join("out.pdf");
+        let mut a = Automation::new().with_root(&dir).unwrap();
+        let id = search_document(&mut a, 2);
+        json(&mut a, "doc_save", json!({"doc": id.0, "path": "out.pdf"}));
+        let old = std::fs::read(&target).unwrap();
+        json(&mut a, "page_rotate", json!({"doc": id.0, "pages": [1], "degrees": 90}));
+        let before = summary(a.session.get(id).unwrap());
+        // Exercise both parse failure and a valid PDF that loses a page. This does not
+        // depend on a malformed input remaining unrepaired by future reader improvements.
+        for bytes in [b"not a PDF".to_vec(), numbered_pages(1)] {
+            let mut published = false;
+            let result = a.publish_save(id, &target, Arc::new(bytes), false, |_, _| {
+                published = true;
+                Ok(())
+            });
+            assert!(result.is_err(), "invalid output must be refused");
+            assert!(result.unwrap_err().to_string().contains("could not be reopened"));
+            assert!(!published, "validation must precede the writer");
+            assert_eq!(summary(a.session.get(id).unwrap()), before, "failed validation must preserve document state");
+            assert_eq!(std::fs::read(&target).unwrap(), old);
+            assert_eq!(listing(&dir), ["out.pdf"]);
+        }
+        json(&mut a, "doc_save", json!({"doc": id.0}));
+        assert!(!a.session.get(id).unwrap().dirty);
+        assert_ne!(std::fs::read(&target).unwrap(), old);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn a_failed_save_sync_keeps_the_document_dirty_and_can_be_retried() {
         let dir = staging_dir("sync-dirty");
         let target = dir.join("out.pdf");
@@ -3056,5 +3107,24 @@ mod tests {
         perms.set_readonly(false);
         std::fs::set_permissions(&target, perms).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A recovered document, or a new one, rotated and then undone still has never been saved:
+    /// `doc_close` refuses it unless told to discard it (#2346 review).
+    #[test]
+    fn closing_a_recovered_or_new_document_after_undo_is_refused() {
+        let mut a = Automation::new();
+        let recovered = a.session.open("Report.pdf", None, Arc::new(numbered_pages(2)), None).unwrap();
+        a.session.mark_recovered(recovered, Some("Report.pdf".into()));
+        let new = a.session.open_new("Combined.pdf", Arc::new(numbered_pages(2))).unwrap();
+        for id in [recovered, new] {
+            json(&mut a, "page_rotate", json!({"doc": id.0, "pages": [1], "degrees": 90}));
+            json(&mut a, "edit_undo", json!({"doc": id.0}));
+            let refused = a.call("doc_close", &json!({"doc": id.0}));
+            assert!(matches!(&refused, Err(e) if e.to_string().contains("unsaved changes")), "{id:?}: {refused:?}");
+            assert!(a.session.get(id).is_some(), "still open");
+            json(&mut a, "doc_close", json!({"doc": id.0, "discard_changes": true}));
+            assert!(a.session.get(id).is_none());
+        }
     }
 }
