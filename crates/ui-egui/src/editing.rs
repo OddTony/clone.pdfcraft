@@ -24,6 +24,7 @@ pub enum CloseRequest {
 pub struct PendingOverwrite {
     pub id: pdfcraft_engine::DocId,
     pub dest: String,
+    target: SaveTarget,
     /// Save As with "Save As optimizes for Fast Web View" on: write it linearized.
     fast_web_view: bool,
     /// What was to run once the document is written (close its tab, quit).
@@ -54,7 +55,10 @@ impl PdfCraftApp {
                 let Some(doc) = self.session.get(id) else { return true };
                 let info = &doc.info;
                 let view = &mut self.views[i];
-                if !matches!(edit, Edit::AddAnnotation(_)) {
+                if matches!(edit, Edit::AddAnnotation(_)) {
+                    // A released drawing's raster can come now: it will have the annotation.
+                    view.comments.drawings_committed();
+                } else {
                     // Only a new drawing waits on its raster; any other edit may remove or move it.
                     view.comments.settling.clear();
                 }
@@ -165,6 +169,10 @@ impl PdfCraftApp {
                 true
             }
             Err(e) => {
+                if let Some(view) = self.views.get_mut(i) {
+                    // A drawing whose annotation wasn't added must not stay painted.
+                    view.comments.drawings_refused();
+                }
                 let message = if matches!(edit, Edit::MoveObjects { .. }) { crate::object_ui::move_error(&e) } else { e.to_string() };
                 self.notify_fmt("{label} failed: {e}", &[("label", &crate::i18n::edit_label(&label)), ("e", &message)]);
                 false
@@ -618,12 +626,12 @@ impl PdfCraftApp {
                     let dialog = rfd::AsyncFileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(name);
                     // The bytes are taken once the user has chosen, so edits made meanwhile are saved too.
                     self.ask_one(crate::pickers::Ask::Save(dialog), None, move |app, dest| {
-                        app.save_doc_to_then(id, &dest.to_string_lossy(), fast_web_view, Box::new(after));
+                        app.save_doc_to_then(id, &dest.to_string_lossy(), target, fast_web_view, Box::new(after));
                     });
                     return false;
                 }
             };
-            self.save_doc_to_then(id, &destination, fast_web_view, Box::new(after))
+            self.save_doc_to_then(id, &destination, target, fast_web_view, Box::new(after))
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -631,7 +639,8 @@ impl PdfCraftApp {
             if !self.flatten_fill_sign_for_save(id) {
                 return false;
             }
-            let (bytes, not_optimized) = self.bytes_to_save(id, fast_web_view);
+            // The web build downloads what Save writes, as on `main`, or the linearized file.
+            let (bytes, not_optimized) = self.bytes_to_save(id, fast_web_view, false);
             let bytes = match bytes {
                 Ok(b) => b,
                 Err(e) => {
@@ -682,14 +691,21 @@ impl PdfCraftApp {
     /// `pending_overwrite` behind [`Dialog::OverwriteChanged`](crate::Dialog::OverwriteChanged).
     /// Returns `true` if written now.
     #[cfg(not(target_arch = "wasm32"))]
-    fn save_doc_to_then(&mut self, id: pdfcraft_engine::DocId, dest: &str, fast_web_view: bool, after: Box<dyn FnOnce(&mut Self) + Send>) -> bool {
+    fn save_doc_to_then(
+        &mut self,
+        id: pdfcraft_engine::DocId,
+        dest: &str,
+        target: SaveTarget,
+        fast_web_view: bool,
+        after: Box<dyn FnOnce(&mut Self) + Send>,
+    ) -> bool {
         let own = self.session.get(id).and_then(|d| d.path.as_deref()).is_some_and(|p| crate::same_file(p, dest));
         if own && self.watch.disk_differs(id, dest) {
-            self.pending_overwrite = Some(PendingOverwrite { id, dest: dest.to_string(), fast_web_view, after });
+            self.pending_overwrite = Some(PendingOverwrite { id, dest: dest.to_string(), target, fast_web_view, after });
             self.dialog = Some(crate::Dialog::OverwriteChanged);
             return false;
         }
-        let saved = self.save_doc_to(id, dest, fast_web_view);
+        let saved = self.save_doc_to(id, dest, target, fast_web_view);
         if saved {
             after(self);
         }
@@ -700,7 +716,7 @@ impl PdfCraftApp {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn overwrite_changed_file(&mut self) {
         let Some(p) = self.pending_overwrite.take() else { return };
-        if self.save_doc_to(p.id, &p.dest, p.fast_web_view) {
+        if self.save_doc_to(p.id, &p.dest, p.target, p.fast_web_view) {
             (p.after)(self);
         }
     }
@@ -715,38 +731,50 @@ impl PdfCraftApp {
     }
 
     /// The bytes a save of document `id` writes: linearized for Fast Web View when asked (Save As
-    /// with the preference on), otherwise what Save writes. A document that can't be linearized
-    /// (a signed one, whose signatures a rewrite would break, or one without pages) is saved as
-    /// Save writes it rather than not at all, and the reason comes back for the notice.
+    /// with the preference on), otherwise a clean full copy when `full` (Save As to another file,
+    /// #2165) or what Save writes. A document that can't be linearized (a signed one, whose
+    /// signatures a rewrite would break, or one without pages) is saved the other way rather than
+    /// not at all, and the reason comes back for the notice.
     pub(crate) fn bytes_to_save(
         &self,
         id: pdfcraft_engine::DocId,
         fast_web_view: bool,
+        full: bool,
     ) -> (Result<std::sync::Arc<Vec<u8>>, pdfcraft_engine::EditError>, Option<String>) {
+        let plain = || if full { self.session.save_full_bytes(id) } else { self.session.save_bytes(id) };
         if fast_web_view {
             match self.session.save_linearized_bytes(id) {
                 Ok(linearized) => return (Ok(std::sync::Arc::new(linearized.bytes)), None),
-                Err(e) => return (self.session.save_bytes(id), Some(e.to_string())),
+                Err(e) => return (plain(), Some(e.to_string())),
             }
         }
-        (self.session.save_bytes(id), None)
+        (plain(), None)
     }
 
     /// Write document `id` to `dest` and make it the document's file, linearized for Fast Web
     /// View when `fast_web_view` (see [`Self::bytes_to_save`]). Returns `true` if written.
     #[cfg(not(target_arch = "wasm32"))]
-    fn save_doc_to(&mut self, id: pdfcraft_engine::DocId, dest: &str, fast_web_view: bool) -> bool {
+    fn save_doc_to(&mut self, id: pdfcraft_engine::DocId, dest: &str, target: SaveTarget, fast_web_view: bool) -> bool {
         // Save As answers on a later frame: commit what was typed meanwhile, too (#166), even
         // if another tab is active by then.
         if !self.commit_typing_in(id) || !self.flatten_fill_sign_for_save(id) {
             return false;
         }
-        let Some(name) = self.session.get(id).map(|d| d.name.clone()) else {
+        let Some((name, full)) = self.session.get(id).map(|d| {
+            // Save As to another file is a clean copy, without the earlier revisions that still
+            // hold deleted pages or replaced text (#2165). A signed document stays incremental so
+            // its signatures keep covering the file.
+            let full = target == SaveTarget::As
+                && !d.path.as_deref().is_some_and(|p| crate::same_file(p, dest))
+                && d.read_only_reason.is_none()
+                && !d.is_signed();
+            (d.name.clone(), full)
+        }) else {
             self.notify_tr("The document was closed before it could be saved.");
             return false;
         };
         let was_fast = self.session.get(id).and_then(|d| d.linearization()).is_some_and(|l| l.is_fast_web_view());
-        let (bytes, not_optimized) = self.bytes_to_save(id, fast_web_view);
+        let (bytes, not_optimized) = self.bytes_to_save(id, fast_web_view, full);
         let bytes = match bytes.and_then(|b| self.session.check_save(id, &b).map(|()| b)) {
             Ok(b) => b,
             Err(e) => {
