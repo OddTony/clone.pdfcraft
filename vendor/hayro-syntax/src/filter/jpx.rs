@@ -119,8 +119,9 @@ pub(crate) fn without_refused_enumerated_colour(data: &[u8]) -> Option<Vec<u8>> 
         4 => 12,
         _ => return None,
     };
-    let mut out = data.to_vec();
-    let mut changed = false;
+    // Where each refused enum is, found before anything is copied: a stream the decoder refused
+    // for another reason isn't copied for nothing.
+    let mut refused = Vec::new();
     for (kind, body, body_end) in boxes(inner) {
         if kind != *b"colr" {
             continue;
@@ -134,11 +135,16 @@ pub(crate) fn without_refused_enumerated_colour(data: &[u8]) -> Option<Vec<u8>> 
         if DECODED_ENUMERATED.contains(&enumerated) {
             continue;
         }
-        let at = start.checked_add(body)?.checked_add(3)?;
-        out.get_mut(at..at.checked_add(4)?)?.copy_from_slice(&replacement.to_be_bytes());
-        changed = true;
+        refused.push(start.checked_add(body)?.checked_add(3)?);
     }
-    changed.then_some(out)
+    if refused.is_empty() {
+        return None;
+    }
+    let mut out = data.to_vec();
+    for at in refused {
+        out.get_mut(at..at.checked_add(4)?)?.copy_from_slice(&replacement.to_be_bytes());
+    }
+    Some(out)
 }
 
 /// The boxes in `data` (ISO 15444-1 I.4): each one's type and the start and end of its contents.
