@@ -2433,3 +2433,5 @@ animation effects	Off	オフ
 	Make properties default	プロパティをデフォルトに設定
 	Pages selected	選択したページ
 	Page properties	ページのプロパティ
+	Auto hide side panels	サイドパネルを自動的に隠す
+	Slide the floating bars beside the page out of the way when they are not in use. Move the pointer to the window's edge to bring them back.	ページ横のフローティングバーを、使っていないときは画面外へスライドさせます。ポインターをウィンドウの端に移動すると元に戻ります。

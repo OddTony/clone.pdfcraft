@@ -216,6 +216,37 @@ fn the_right_bars_slide_away_when_idle_and_come_back_at_the_edge() {
     assert!((h.get_by_label("Save (Ctrl+S)").rect().left() - save.left()).abs() < 0.5);
 }
 
+/// View ▸ Auto hide side panels turns the sliding off: the bars only fade. It is kept with the
+/// settings, and the automation option sets it.
+#[test]
+fn auto_hide_side_panels_can_be_turned_off_from_the_view_menu() {
+    let mut h = with_document();
+    h.get_by_label("Read").click();
+    h.run_steps(2);
+    assert!(h.state().auto_hide_bars, "on by default");
+    h.get_by_label("Menu").click();
+    h.run_steps(2);
+    h.get_by_label("View ⏵").click();
+    h.run_steps(2);
+    h.get_by_role_and_label(Role::CheckBox, "Auto hide side panels").click();
+    h.run_steps(2);
+    assert!(!h.state().auto_hide_bars);
+    h.key_press(egui::Key::Escape);
+    let home = on_left_bar(&h, "Read");
+    h.hover_at(h.state().views[0].viewport_rect().center());
+    h.run_steps(40);
+    let stays = on_left_bar(&h, "Read");
+    assert!((stays.left() - home.left()).abs() < 0.5, "the left bar stays in place: {stays:?}");
+    assert!(h.get_by_label("Save (Ctrl+S)").rect().right() < WIDTH, "and so do the right bars");
+    let saved = h.state().persist();
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&saved);
+    assert!(!restored.auto_hide_bars, "kept with the settings");
+    restored.set_option("auto-hide-bars", "true").unwrap();
+    assert!(restored.auto_hide_bars);
+    assert!(restored.set_option("auto-hide-bars", "sometimes").is_err());
+}
+
 /// The search button opens Find tools and commands and closes it again; so does the palette's
 /// own close button.
 #[test]

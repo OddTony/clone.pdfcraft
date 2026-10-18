@@ -598,6 +598,9 @@ pub struct PdfCraftApp {
     /// Preferences ▸ Use system title bar: where `window_controls` is set, give the window back
     /// winit's frame instead of drawing the header bar (#1001).
     pub system_title_bar: bool,
+    /// View ▸ Auto hide side panels: the floating bars at the document's sides slide out of the
+    /// window when idle, and come back when the pointer comes near them.
+    pub auto_hide_bars: bool,
     /// Whether the window currently has the app's header bar (`None` until the first frame).
     app_frame_shown: Option<bool>,
     pub password_prompt: Option<PasswordPrompt>,
@@ -951,6 +954,7 @@ impl PdfCraftApp {
             integrated_titlebar: false,
             window_controls: None,
             system_title_bar: false,
+            auto_hide_bars: true,
             app_frame_shown: None,
             password_prompt: None,
             unlock_prompt: None,
@@ -2280,6 +2284,7 @@ impl PdfCraftApp {
         });
         // Set apart: one more key inside the macro above passes serde_json's recursion limit.
         v["redact_prefs"] = self.redact_defaults.to_json();
+        v["auto_hide_bars"] = serde_json::Value::Bool(self.auto_hide_bars);
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
         v.to_string()
@@ -2314,6 +2319,9 @@ impl PdfCraftApp {
             self.reopen_last_session = on;
         }
         self.last_session = last_session::LastSession::from_json(&v["last_session"]);
+        if let Some(on) = v["auto_hide_bars"].as_bool() {
+            self.auto_hide_bars = on;
+        }
         if let Some(on) = v["system_title_bar"].as_bool() {
             self.system_title_bar = on;
         }
@@ -2703,6 +2711,13 @@ impl PdfCraftApp {
                 };
             }
             ("ui-scale", _) => self.ui_scale = ui_scale::parse(value)?,
+            ("auto-hide-bars", _) => {
+                self.auto_hide_bars = match value {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err("auto-hide-bars must be true or false".into()),
+                };
+            }
             ("system-title-bar", _) => {
                 self.system_title_bar = match value {
                     "true" => true,
@@ -3086,7 +3101,7 @@ impl eframe::App for PdfCraftApp {
             view.begin_render_frame();
         }
         // How the floating chrome fades and hides this frame.
-        widgets::set_idle_chrome(&ctx, widgets::IdleChrome::default());
+        widgets::set_idle_chrome(&ctx, widgets::IdleChrome { auto_hide: self.auto_hide_bars, ..Default::default() });
         // The window shows the active document's name (or title, if it asks for that).
         let title = self
             .active

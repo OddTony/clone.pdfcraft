@@ -374,6 +374,14 @@ fn theme_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     }
 }
 
+/// View ▸ Auto hide side panels (and its twin in Preferences): whether the floating bars at the
+/// document's sides slide away when idle.
+pub(crate) fn auto_hide_toggle(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    ui.add(widgets::checkbox(&mut app.auto_hide_bars, tl!("Auto hide side panels"))).on_hover_text(tl!(
+        "Slide the floating bars beside the page out of the way when they are not in use. Move the pointer to the window's edge to bring them back."
+    ));
+}
+
 /// The right-click menu on the title bar's theme button.
 fn appearance_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if ui.button(tl!("Appearance settings…")).clicked() {
@@ -597,6 +605,7 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui, size: f32) {
             }
             crate::commands::registry_menu(app, ui, "View");
             ui.menu_button(tl!("Display theme"), |ui| theme_menu(app, ui));
+            auto_hide_toggle(app, ui);
             ui.menu_button(tl!("Side panels"), |ui| {
                 for (p, label) in [
                     (RightPanel::Comments, tl!("Comments")),
