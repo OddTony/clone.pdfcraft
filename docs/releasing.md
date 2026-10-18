@@ -111,36 +111,40 @@ neither the MSI nor the portable zip needs the Visual C++ redistributable.
 - Before packaging, it reads both executables' PE headers: the machine type must match `-Arch`, and
   `pdfcraft.exe` must be a GUI-subsystem program (no console window, #57) while `pdfcraft-cli.exe`
   stays a console program.
-- `pdfcraft.wxs` (WiX v5) supports dual-purpose installation: per-user into `LocalAppData\Programs`
-  without administrator privileges, or per-machine into `Program Files` with administrator privileges.
-  Both scopes create a Start Menu shortcut, an optional desktop shortcut (on by default) and an
-  App Paths entry. Both shortcuts are plain links to `pdfcraft.exe`, not advertised MSI shortcuts
-  (#107, #143). Registry entries use `HKMU` to register file handlers and context menus in `HKCU` or
-  `HKLM` dynamically according to the installation scope. The MSI version is the numeric `X.Y.Z`
+- `pdfcraft.wxs` (WiX v5) installs per machine into Program Files with a Start Menu shortcut, a
+  desktop shortcut (on by default) and an App Paths entry. Both shortcuts are plain links to
+  `pdfcraft.exe`, not advertised MSI shortcuts (#107, #143). The MSI version is the numeric `X.Y.Z`
   (MSI has no pre-release field), and same-version upgrades are allowed so release candidates replace
   each other. Icon ids end in `.ico` or `.exe` (Windows Installer requires it); packaging-lint checks
   this.
-- `installer-ui.wxs` supplies native welcome (with per-user vs all-users scope selection, desktop-shortcut
-  and PDF context-menu checkboxes), maintenance, progress, files-in-use and outcome dialogs. Full UI confirms
-  success with Finish; failures and cancellations have distinct messages. The welcome dialog lets the
-  user choose between "Install for current user only" (no administrator elevation required) and
-  "Install for all users (requires administrator privileges)", and has a "Create a desktop shortcut" checkbox
-  and an "Edit with PdfCraft" right-click menu checkbox, both ticked by default. `/qn` and `/qb` stay unattended,
-  default to per-user unless overridden via `ALLUSERS=1` or `INSTALLSCOPE=PerMachine`, and create both
-  unless `INSTALLDESKTOPSHORTCUT=0` or `INSTALLPDFCONTEXTMENU=0` is passed. An update keeps the desktop
-  shortcut only if `PdfCraft.lnk` is still on the desktop (#1058); a value given on the command line wins.
+- `installer-ui.wxs` supplies native welcome, maintenance, progress, files-in-use and outcome
+  dialogs. Full UI confirms success with Finish; failures and cancellations have distinct messages.
+  The welcome dialog has a "Create a desktop shortcut" checkbox and an "Edit with PdfCraft"
+  right-click menu checkbox, both ticked by default. `/qn` and `/qb` stay unattended and create
+  both unless `INSTALLDESKTOPSHORTCUT=0` or `INSTALLPDFCONTEXTMENU=0` is passed;
+  `INSTALLIMAGECONTEXTMENU=0` (no checkbox) leaves out the image menu. An update (the launcher runs
+  `msiexec /passive` with no properties) keeps the desktop shortcut only if `PdfCraft.lnk` is still
+  on the all-users desktop, so deleting it once keeps it away (#1058), and keeps each menu only if
+  its key path is still in HKLM (#305). Both are AppSearch results read before the old version is
+  removed. An update from a release that didn't have a menu yet (before 0.7.1 for the PDF menu,
+  before 0.4.0 for the image menu, found by `OnlyDetect` Upgrade rows) adds it like a first install.
+  A value given on the command line wins.
 - The PDF right-click entry (#682) is a classic verb under
-  `HKMU\Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Edit`, so it shows whichever app
+  `HKLM\Software\Classes\SystemFileAssociations\.pdf\shell\PdfCraft.Edit`, so it shows whichever app
   is the default for `.pdf` and never changes that default. Several selected PDFs (up to 15, the
   limit for a `Document` verb) start one `pdfcraft.exe "<file>"` each, and the single-instance
   hand-off opens them as tabs. On Windows 11 it is under "Show more options"; a first-level entry
   needs an `IExplorerCommand` handler and package identity (a sparse MSIX package), which the MSI
   doesn't have.
-- `test-msi.ps1 <file.msi>` checks the compiled install scope, shortcut, context-menu and dialog tables, and
-  evaluates the desktop shortcut's first-install and update conditions. Packaging
+- The image right-click entry (#190) is the same kind of verb, `PdfCraft.CreatePdf`, for ten image
+  types, in its own component (`PdfcraftImageContextMenu`) since it became optional. Its rows moved
+  out of `PdfcraftApp`; that's safe because `MajorUpgrade` removes the old version before installing
+  the new one (`afterInstallValidate`), which `test-msi.ps1` checks.
+- `test-msi.ps1 <file.msi>` checks the compiled shortcut, context-menu and dialog tables, and
+  evaluates the first-install and update conditions of the desktop shortcut and both menus. Packaging
   runs it in a child process before signing, so the MSI isn't held open when signtool runs. The ARM64 install
-  smoke test verifies per-user installation without elevation, per-user uninstallation,
-  per-machine installation, shortcuts, and that `INSTALLDESKTOPSHORTCUT=0` skips the desktop shortcut.
+  smoke test checks that both all-users shortcuts point at the installed `pdfcraft.exe` and are
+  removed on uninstall, and that `INSTALLDESKTOPSHORTCUT=0` skips the desktop one.
 - The portable zip holds both executables, the README, the licences, the OFL licence of each
   embedded craft-fonts family, and `portable.txt`. That marker beside `pdfcraft.exe` keeps the
   settings, logs, crash recovery and new digital IDs in `PdfCraftData\` next to the exe instead of
