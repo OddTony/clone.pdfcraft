@@ -137,6 +137,14 @@ preserved. eframe uses a private temporary working copy, so its compact backgrou
 overwrite the readable file. The working directory uses tempfile's temporary-directory permissions (0700 on Unix). It may
 remain in the OS's temporary folder when termination bypasses Rust destructors.
 
+An unchanged autosave skips formatting, staging and replacement only when the in-memory
+storage map and the exact contents of the validated writable target match the last successful
+publication. The comparison uses fixed-size read buffers, not just size or modification time.
+External edits, removal and read errors invalidate the cache; the active session's preferences
+are then published as usual. A failed save retains the previous cache so the next save can retry.
+The cache retains at most 16 MiB of target bytes; larger snapshots save without caching.
+This is a best-effort check, not a lock between applications: close PdfCraft before manual edits.
+
 Formatting is bounded to 16 MiB of input and 64 MiB of indented output. If a new snapshot exceeds
 the budget, it is still saved in the existing compact format, with a warning. If initial
 formatting or preparation fails (including malformed files, symlinks and read-only files), the

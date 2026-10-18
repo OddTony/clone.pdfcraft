@@ -21,7 +21,7 @@ pdfcraft-engine = { workspace = true }
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "glow", "accesskit", "wayland", "x11", "persistence", "links"] }
 egui = { workspace = true }
 serde_json = { workspace = true }
-# Format the existing eframe string map after its last writer finishes. Both crates are
+# Format the existing eframe string map in the native save callback. Both crates are
 # already locked dependencies; NamedTempFile publishes a complete file atomically.
 ron = "0.12"
 tempfile = "3.27"

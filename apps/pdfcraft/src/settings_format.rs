@@ -3,8 +3,9 @@
 //! Keep eframe's string map and our JSON schema: old installations and older binaries read the
 //! same values. This is presentation, not a preference migration.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::io::{Read as _, Write as _};
+use std::io::{BufRead as _, Read as _, Write as _};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -13,14 +14,23 @@ use std::rc::Rc;
 const MAX_INPUT: u64 = 16 * 1024 * 1024;
 const MAX_OUTPUT: usize = 64 * 1024 * 1024;
 
+/// Publishes native saves while eframe writes only to its private working copy.
 pub struct Store {
     path: std::path::PathBuf,
     keys: Vec<String>,
     working: std::path::PathBuf,
     _directory: tempfile::TempDir,
+    published: RefCell<Option<Published>>,
+}
+
+/// The input map and exact target bytes from a successful, bounded publication.
+struct Published {
+    values: BTreeMap<String, String>,
+    bytes: Vec<u8>,
 }
 
 impl Store {
+    /// Preserve the existing storage map and seed eframe's isolated working file.
     pub fn prepare(path: &Path) -> std::io::Result<Self> {
         make_readable(path)?;
         let bytes = match read_bounded(path) {
@@ -36,22 +46,30 @@ impl Store {
         let directory = tempfile::Builder::new().prefix("pdfcraft-preferences-").tempdir()?;
         let working = directory.path().join("app.ron");
         std::fs::write(&working, bytes)?;
-        Ok(Self { path: path.to_path_buf(), keys: keys.into_iter().collect(), working, _directory: directory })
+        Ok(Self { path: path.to_path_buf(), keys: keys.into_iter().collect(), working, _directory: directory, published: RefCell::new(None) })
     }
 
+    /// The compact persistence target passed to eframe instead of the user's app.ron.
     pub fn working_path(&self) -> &Path {
         &self.working
     }
 
+    /// Skip an idle save only if the validated target still contains our last publication.
     fn save(&self, storage: &dyn eframe::Storage) -> std::io::Result<()> {
         let values: BTreeMap<String, String> = self.keys.iter().filter_map(|key| storage.get_string(key).map(|value| (key.clone(), value))).collect();
+        let before = target_metadata(&self.path)?;
+        let mut published = self.published.try_borrow_mut().map_err(std::io::Error::other)?;
+        if before.is_some()
+            && published.as_ref().is_some_and(|saved| saved.values == values && target_matches(&self.path, &saved.bytes).unwrap_or(false))
+        {
+            return Ok(());
+        }
         let formatted = formatting_budget(&values).and_then(|()| readable_values(values.clone()));
         if let Err(e) = &formatted {
             // A newly saved large signature must still persist, even if it exceeds the
             // prettification budget. The compact representation is the existing format.
             log::warn!("saving compact preferences because formatting failed: {e}");
         }
-        let before = target_metadata(&self.path)?;
         let parent = self.path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
         let mut builder = std::fs::DirBuilder::new();
         builder.recursive(true);
@@ -82,10 +100,30 @@ impl Store {
                 }
                 Ok(())
             },
-        )
+        )?;
+        // Retain at most 16 MiB of target bytes. Large snapshots still save normally, but
+        // bypass this optimization so their compact fallback cannot grow the cache.
+        *published = formatted.ok().filter(|bytes| bytes.len() as u64 <= MAX_INPUT).map(|bytes| Published { values, bytes });
+        Ok(())
     }
 }
 
+/// Compare bytes in fixed-size buffers; missing or unreadable files are cache misses.
+fn target_matches(path: &Path, mut expected: &[u8]) -> std::io::Result<bool> {
+    let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
+    loop {
+        let bytes = reader.fill_buf()?;
+        if bytes.is_empty() {
+            return Ok(expected.is_empty());
+        }
+        let Some(rest) = expected.strip_prefix(bytes) else { return Ok(false) };
+        expected = rest;
+        let read = bytes.len();
+        reader.consume(read);
+    }
+}
+
+/// Delegate the native application callbacks and publish preferences during App::save.
 pub fn wrap(app: pdfcraft_ui_egui::PdfCraftApp, store: Rc<Store>) -> Box<dyn eframe::App> {
     Box::new(NativeApp { app, store })
 }
@@ -307,6 +345,133 @@ mod tests {
             use std::os::unix::fs::PermissionsExt as _;
             assert_eq!(std::fs::metadata(path).unwrap().permissions().mode() & 0o777, 0o600);
         }
+    }
+
+    /// An idle save must leave the file alone; changed application settings still publish.
+    #[test]
+    fn unchanged_autosaves_leave_the_target_untouched() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("app.ron");
+        let store = Store::prepare(&path).unwrap();
+        let mut memory = Memory(BTreeMap::from([("pdfcraft".to_string(), r#"{"theme":"Dark"}"#.to_string())]));
+        store.save(&memory).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let stamp = mark_saved_file(&path);
+        for _ in 0..3 {
+            store.save(&memory).unwrap();
+            assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), stamp, "idle autosave replaced the file");
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+        }
+        memory.0.insert("pdfcraft".to_string(), r#"{"theme":"Light"}"#.to_string());
+        store.save(&memory).unwrap();
+        assert_ne!(std::fs::read(&path).unwrap(), original);
+        let loaded: BTreeMap<String, String> = ron::de::from_bytes(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&loaded["pdfcraft"]).unwrap()["theme"], "Light");
+    }
+
+    /// Matching size and modification time do not hide a same-length external edit.
+    #[test]
+    fn externally_edited_preferences_invalidate_the_autosave_cache() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("app.ron");
+        let store = Store::prepare(&path).unwrap();
+        let memory = Memory(BTreeMap::from([("pdfcraft".to_string(), r#"{"theme":"Dark"}"#.to_string())]));
+        store.save(&memory).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let stamp = mark_saved_file(&path);
+        let external = String::from_utf8(original.clone()).unwrap().replace("Dark", "Lite");
+        assert_ne!(external.as_bytes(), original);
+        assert_eq!(external.len(), original.len());
+        std::fs::write(&path, external).unwrap();
+        assert_eq!(mark_saved_file(&path), stamp);
+        store.save(&memory).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), original, "the active session's values must still be saved");
+        let stamp = mark_saved_file(&path);
+        store.save(&memory).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), stamp, "the successful repair should be cached");
+    }
+
+    /// A missing target must be recreated even when the application snapshot is unchanged.
+    #[test]
+    fn deleted_preferences_are_recreated_before_autosave_can_be_skipped() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("app.ron");
+        let store = Store::prepare(&path).unwrap();
+        let memory = Memory(BTreeMap::from([("pdfcraft".to_string(), r#"{"author":"Synthetic contributor"}"#.to_string())]));
+        store.save(&memory).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        store.save(&memory).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        let stamp = mark_saved_file(&path);
+        store.save(&memory).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), stamp);
+    }
+
+    /// A cache hit must still reject a substituted symlink or a newly read-only file.
+    #[cfg(unix)]
+    #[test]
+    fn cached_preferences_still_validate_the_target() {
+        use std::os::unix::{fs::PermissionsExt as _, fs::symlink};
+        let fixture = Fixture::new();
+        let path = fixture.0.join("app.ron");
+        let store = Store::prepare(&path).unwrap();
+        let memory = Memory(BTreeMap::from([("pdfcraft".to_string(), "{}".to_string())]));
+        store.save(&memory).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
+        assert!(store.save(&memory).is_err());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let other = fixture.0.join("other.ron");
+        std::fs::rename(&path, &other).unwrap();
+        symlink(&other, &path).unwrap();
+        assert!(store.save(&memory).is_err());
+        assert!(std::fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
+        assert_eq!(std::fs::read(&other).unwrap(), original);
+        std::fs::remove_file(&path).unwrap();
+        std::fs::rename(other, &path).unwrap();
+        let stamp = mark_saved_file(&path);
+        store.save(&memory).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), stamp);
+    }
+
+    /// A failed save cannot cache an unpublished value or prevent retrying that value.
+    #[test]
+    fn failed_publication_is_retried_with_the_same_preferences() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("app.ron");
+        let backup = fixture.0.join("saved.ron");
+        let store = Store::prepare(&path).unwrap();
+        let mut memory = Memory(BTreeMap::from([("pdfcraft".to_string(), r#"{"theme":"Dark"}"#.to_string())]));
+        store.save(&memory).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        std::fs::rename(&path, &backup).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        memory.0.insert("pdfcraft".to_string(), r#"{"theme":"Light"}"#.to_string());
+        assert!(store.save(&memory).is_err());
+        assert_eq!(std::fs::read(&backup).unwrap(), original);
+        std::fs::remove_dir(&path).unwrap();
+        std::fs::rename(&backup, &path).unwrap();
+        // The failed value must not evict the previous successful publication either.
+        memory.0.insert("pdfcraft".to_string(), r#"{"theme":"Dark"}"#.to_string());
+        let stamp = mark_saved_file(&path);
+        store.save(&memory).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), stamp);
+        memory.0.insert("pdfcraft".to_string(), r#"{"theme":"Light"}"#.to_string());
+        store.save(&memory).unwrap();
+        let loaded: BTreeMap<String, String> = ron::de::from_bytes(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&loaded["pdfcraft"]).unwrap()["theme"], "Light");
+        let stamp = mark_saved_file(&path);
+        store.save(&memory).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), stamp);
+        assert_eq!(std::fs::read_dir(&fixture.0).unwrap().count(), 1, "no failed staging files may remain");
+    }
+
+    /// Set an old, deterministic timestamp so tests detect replacements without sleeps.
+    fn mark_saved_file(path: &Path) -> std::time::SystemTime {
+        let stamp = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_234_567_890);
+        std::fs::OpenOptions::new().write(true).open(path).unwrap().set_modified(stamp).unwrap();
+        std::fs::metadata(path).unwrap().modified().unwrap()
     }
 
     #[test]
