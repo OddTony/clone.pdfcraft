@@ -643,10 +643,20 @@ fn read_json<T: for<'a> Deserialize<'a>>(path: &Path) -> Result<T, String> {
     if file.metadata().map_err(|e| e.to_string())?.len() > MAX_JSON {
         return Err("hot folder JSON exceeds 16 MiB".into());
     }
-    serde_json::from_reader(file.take(MAX_JSON)).map_err(|e| format!("{}: {e}", path.display()))
+    // Buffered: serde_json reads a byte at a time, one system call each on a bare File.
+    serde_json::from_reader(std::io::BufReader::new(file.take(MAX_JSON))).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    let bytes = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > MAX_JSON {
+        return Err("hot folder journal is full; archive the completed task and its configuration".into());
+    }
+    save_bytes(path, &bytes)
+}
+
+/// Replace `path` with `bytes` atomically, keeping a service-owned file's owner and mode.
+fn save_bytes(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let previous = match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
             return Err("configuration and journal targets must be regular files".into());
@@ -655,10 +665,6 @@ fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(e.to_string()),
     };
-    let bytes = serde_json::to_vec_pretty(value).map_err(|e| e.to_string())?;
-    if bytes.len() as u64 > MAX_JSON {
-        return Err("hot folder journal is full; archive the completed task and its configuration".into());
-    }
     let parent = path.parent().ok_or("missing parent folder")?;
     let mut temp = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
     #[cfg(unix)]
@@ -677,7 +683,7 @@ fn save_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     }
     #[cfg(not(unix))]
     let _ = previous;
-    temp.write_all(&bytes).and_then(|_| temp.as_file().sync_all()).map_err(|e| e.to_string())?;
+    temp.write_all(bytes).and_then(|_| temp.as_file().sync_all()).map_err(|e| e.to_string())?;
     temp.persist(path).map_err(|e| e.to_string())?;
     sync_parent(path)
 }

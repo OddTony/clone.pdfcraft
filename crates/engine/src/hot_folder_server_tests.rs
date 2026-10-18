@@ -513,3 +513,71 @@ fn windows_selected_local_task_progresses_with_an_unrelated_offline_unc_task() {
     assert_eq!(fs::read(source).unwrap(), *original);
     assert!(local.output.join("source.pdf").is_file());
 }
+
+/// `count` receipts that each carry a grouped batch's full list of `pages` outputs, as `step`
+/// writes them. A few large receipts keep the test fast; together they exceed one journal file.
+fn oversized_state(count: usize, pages: usize) -> State {
+    let mut state = State::default();
+    let folder = "x".repeat(280);
+    let outputs: Vec<PathBuf> = (0..pages).map(|page| PathBuf::from(format!("{folder}/{page:05}.tif"))).collect();
+    for index in 0..count {
+        let receipt =
+            Receipt { outputs: outputs.clone(), source_hash: "hash".into(), source_stamp: String::new(), output_proofs: vec![], cleanup: None };
+        state.receipts.insert(format!("grouped:{index:03}:hash"), receipt);
+    }
+    state
+}
+
+fn snapshot_files(dir: &Path) -> usize {
+    fs::read_dir(dir).unwrap().filter(|entry| entry.as_ref().unwrap().file_name().to_string_lossy().contains(".pending.")).count()
+}
+
+/// CodeRabbit: the write-ahead snapshot of a large grouped batch exceeded the 16 MiB journal
+/// file limit, so the batch republished its outputs on every retry and never finished.
+#[test]
+fn a_grouped_batch_larger_than_one_journal_file_is_saved_and_spilled() {
+    let base = tempfile::tempdir().unwrap();
+    let config = base.path().join("tasks.json");
+    let mut state = oversized_state(6, 12_800);
+    assert!(serde_json::to_vec(&state).unwrap().len() as u64 > MAX_JSON, "the snapshot needs several files");
+    journal::save(&config, &mut state).unwrap();
+    assert_eq!(snapshot_files(base.path()), 0, "the snapshot is removed once history holds it");
+    let restored = read_state(&config).unwrap();
+    for index in 0..6 {
+        let receipt = journal::receipt(&config, &restored, &format!("grouped:{index:03}:hash")).unwrap();
+        assert_eq!(receipt.map(|r| r.outputs.len()), Some(12_800), "receipt {index}");
+    }
+}
+
+#[test]
+fn an_interrupted_spill_of_a_large_batch_recovers_every_receipt() {
+    let base = tempfile::tempdir().unwrap();
+    let config = base.path().join("tasks.json");
+    let mut state = oversized_state(6, 12_800);
+    assert!(
+        journal::save_with(&config, &mut state, &|count| if count == 1 { Err("simulated crash after one spill".into()) } else { Ok(()) }).is_err()
+    );
+    assert_eq!(read_state(&config).unwrap().receipts.len(), 6, "the whole group is visible together");
+    // A damaged part is refused, never read as a shorter state.
+    let part = fs::read_dir(base.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            name.contains(".pending.") && !name.ends_with(".json")
+        })
+        .unwrap();
+    let mut bytes = fs::read(&part).unwrap();
+    bytes[0] ^= 1;
+    fs::write(&part, bytes).unwrap();
+    assert!(read_state(&config).is_err());
+}
+
+/// The spill loop's running size is exactly the serialized cache's size.
+#[test]
+fn the_journal_measures_a_map_exactly_as_serde_writes_it() {
+    let state = oversized_state(3, 10);
+    let sizes = journal::entry_sizes(&state.receipts).unwrap();
+    assert_eq!(journal::map_len(sizes.values().sum(), sizes.len()), serde_json::to_vec(&state.receipts).unwrap().len());
+    assert_eq!(journal::map_len(0, 0), serde_json::to_vec(&BTreeMap::<String, Receipt>::new()).unwrap().len());
+}
