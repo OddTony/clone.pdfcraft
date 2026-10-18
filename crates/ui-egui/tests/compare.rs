@@ -99,13 +99,16 @@ fn pdfa_dialog_verifies_and_converts() {
     h.get_by_label("Verify").click();
     h.run_steps(3);
     h.get_by_label("The document has no XMP metadata");
+    // Its text is drawn in a font that isn't embedded: Save as PDF/A says so and changes nothing,
+    // rather than leaving a document that claims PDF/A-2b and fails it.
     h.get_by_label("Save as PDF/A").click();
     h.run_steps(3);
-    h.get_by_label("Declared conformance: PDF/A-2b");
-    let issues = h.state().pdfa.issues.clone().unwrap();
-    assert!(issues.iter().all(|i| !i.fixable), "{issues:?}");
+    h.get_by_label("Can't save as PDF/A-2b; nothing was changed:");
+    h.get_by_label("Declared conformance: none");
+    let refusal = h.state().pdfa.refusal.clone().unwrap();
+    assert!(refusal.blockers.iter().any(|b| b.message.ends_with("isn't embedded")), "{refusal:?}");
     let id = h.state().active_ids().unwrap().1;
-    assert_eq!(h.state().session.get(id).unwrap().can_undo(), Some("Save as PDF/A-2b"));
+    assert_eq!(h.state().session.get(id).unwrap().can_undo(), None);
 }
 
 /// A one-page PDF whose XMP declares the given `pdfaid`/`pdfuaid` attributes.

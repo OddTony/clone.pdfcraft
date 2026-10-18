@@ -5102,9 +5102,12 @@ fn pdfa_through_tools() {
     let r = ok(&mut a, "pdfa_verify", json!({ "doc": doc }));
     assert_eq!(r["compliant"], false);
     assert!(r["issues"].as_array().unwrap().iter().any(|i| i["clause"] == "6.6.2.1"), "{r}");
+    // Its text is drawn in a font that isn't embedded: the conversion says so and changes nothing,
+    // rather than leaving a file that claims PDF/A and fails it.
     let r = ok(&mut a, "pdfa_convert", json!({ "doc": doc, "level": "3b" }));
-    assert_eq!(r["declared"]["pdfa"], "PDF/A-3b", "{r}");
-    assert!(r["issues"].as_array().unwrap().iter().all(|i| i["fixable"] == false), "{r}");
+    assert_eq!(r["converted"], false, "{r}");
+    assert!(r["blockers"].as_array().unwrap().iter().any(|b| b["message"].as_str().unwrap().ends_with("isn't embedded")), "{r}");
+    assert!(r["declared"]["pdfa"].is_null(), "{r}");
     assert!(a.call("pdfa_verify", &json!({ "doc": doc, "level": "9z" })).is_err());
 }
 
