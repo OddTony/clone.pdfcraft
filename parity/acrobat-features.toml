@@ -2074,6 +2074,18 @@ evidence = ["crates/ui-egui/tests/content.rs::typing_moving_styling_and_deleting
 notes = "PNG, JPEG, TIFF, GIF, BMP; centred at natural size or in a rect"
 
 [[feature]]
+id = "edit.paste-image"
+title = "Paste an image from the clipboard"
+area = "C"
+tier = "P1"
+milestone = "M10"
+status = "shipped"
+commands = ["edit.paste_image"]
+tools = []
+evidence = ["crates/ui-egui/tests/content.rs::paste_image_puts_the_clipboard_picture_on_the_page"]
+notes = "Edit ▸ Paste image: the picture on the system clipboard goes to the middle of the current page at its natural size (one point per pixel), selected, one undo step. Text on the clipboard stays with Create PDF from clipboard; ⌘V stays with focused text inputs and Organize page pasting. Tests inject the clipboard (paste_clip); headless callers read files instead (page_add_image). Web build: no image clipboard yet."
+
+[[feature]]
 id = "edit.image-replace"
 title = "Replace an image (keep position and size)"
 area = "C"

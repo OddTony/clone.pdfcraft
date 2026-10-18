@@ -46,8 +46,9 @@ fn harness() -> Harness<'static, PdfCraftApp> {
     h
 }
 
-/// Commands that open a native file picker can't run headless.
-/// (Create ▸ Clipboard reads the system clipboard: tests use `create_from_clip`.)
+/// Commands that open a native file picker or read the system clipboard can't run headless.
+/// (Create ▸ Clipboard and Edit ▸ Paste image read the system clipboard: tests use
+/// `create_from_clip` and `paste_clip`.)
 const PICKERS: &[&str] = &[
     "file.open",
     "page.combine",
@@ -58,6 +59,7 @@ const PICKERS: &[&str] = &[
     "create.multiple",
     "page.replace",
     "create.clipboard",
+    "edit.paste_image",
     "a11y.report",
     "ocr.recognize_batch",
     "form.merge_data",

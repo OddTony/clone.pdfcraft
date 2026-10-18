@@ -275,6 +275,33 @@ fn typing_moving_styling_and_deleting_added_content() {
     assert!(img.flip_h);
 }
 
+/// Edit ▸ Paste image: the picture on the system clipboard lands in the middle of the current
+/// page (like Add image), selected, one undo step, and text on the clipboard is refused — it is
+/// Create ▸ Clipboard's business. The real clipboard is read in `paste_image`; tests inject its
+/// content with `paste_clip`, as they do for Create ▸ Clipboard.
+#[test]
+fn paste_image_puts_the_clipboard_picture_on_the_page() {
+    use pdfcraft_ui_egui::Clip;
+    let mut h = harness();
+    // A clipboard holding text pastes nothing.
+    assert!(h.state_mut().paste_clip(Clip::Text("Some words".into())).is_err());
+    h.run_steps(2);
+    assert!(added(&h).is_empty(), "text on the clipboard adds nothing to the page");
+    // Its picture lands in the middle of the page at its natural size (one point per pixel).
+    h.state_mut().paste_clip(Clip::Image { width: 30, height: 20, rgba: [10u8, 20, 30, 255].repeat(30 * 20) }).unwrap();
+    h.run_steps(3);
+    let a = added(&h);
+    assert_eq!(a.len(), 1, "the picture was added to the page");
+    assert_eq!(a[0].content.rect(), [135.0, 190.0, 165.0, 210.0], "30 × 20 pixels, centred");
+    assert_eq!(h.state().views[0].content.selected, Some((0, 0)), "the pasted picture is selected");
+    {
+        let s = h.state();
+        assert_eq!(s.session.get(s.views[0].id).unwrap().can_undo(), Some("Add image"));
+    }
+    // The Edit image panel is offered for it, as it is for a picture added from a file.
+    h.get_by_label("Rotate clockwise");
+}
+
 /// #125: text the standard fonts can't draw stays in the editor with a warning instead of being
 /// written to the page as `?` (or lost).
 #[test]

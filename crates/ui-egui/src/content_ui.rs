@@ -8,6 +8,7 @@ use pdfcraft_engine::{Added, AddedContent, AddedText, Edit, FontFamily, TextAlig
 use pdfcraft_render::DocInfo;
 
 use crate::canvas::{DocView, PageXform};
+use crate::create_ui::Clip;
 use crate::theme::Tokens;
 use crate::widgets;
 
@@ -772,6 +773,39 @@ impl crate::PdfCraftApp {
     pub(crate) fn cut_page_image(&mut self, page: usize, index: usize) {
         if self.copy_page_image(page, index) {
             self.apply_edit(Edit::EditPageImage { page, index, change: pdfcraft_engine::ImageEdit::Delete });
+        }
+    }
+
+    /// Edit ▸ Paste image: the picture on the system clipboard goes in the middle of the current
+    /// page (Add image's flow: at its natural size, selected, one undo step to undo). Text on the
+    /// clipboard is Create ▸ Clipboard's business, so this refuses it rather than paste it twice.
+    pub fn paste_clip(&mut self, clip: Clip) -> Result<(), String> {
+        match clip {
+            Clip::Image { width, height, rgba } => {
+                let png = crate::create_ui::png_from_rgba(width, height, &rgba)?;
+                self.add_image("Clipboard.png".into(), png);
+                Ok(())
+            }
+            Clip::Text(_) => Err("the clipboard has text, not an image".into()),
+        }
+    }
+
+    /// Edit ▸ Paste image: read the system clipboard now (tests use [`Self::paste_clip`]).
+    pub(crate) fn paste_image(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        let clip: Option<Clip> = crate::create_ui::read_clipboard();
+        #[cfg(target_arch = "wasm32")]
+        let clip: Option<Clip> = None;
+        match clip {
+            Some(clip) => {
+                if let Err(e) = self.paste_clip(clip) {
+                    self.notify_fmt("Couldn't paste the image: {e}", &[("e", &e.to_string())]);
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            None => self.notify_tr("Pasting images arrives on the web with clipboard access"),
+            #[cfg(not(target_arch = "wasm32"))]
+            None => self.notify_tr("The clipboard has no image to paste"),
         }
     }
 

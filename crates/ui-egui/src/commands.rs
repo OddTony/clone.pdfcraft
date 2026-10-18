@@ -540,6 +540,7 @@ impl PdfCraftApp {
             "page.copy" => self.copy_pages(false),
             "page.cut" => self.copy_pages(true),
             "page.paste" => self.paste_pages(),
+            "edit.paste_image" => self.paste_image(),
             "comment.hide_all" => {
                 if let Some(i) = active {
                     let id = self.views[i].id;

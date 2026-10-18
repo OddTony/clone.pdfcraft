@@ -215,6 +215,9 @@ pub const COMMANDS: &[CommandSpec] = &[
     // Alt-drag for moving windows (several Linux window managers).
     // Copy events stay with the frontend so focused text inputs and page clipboard routing keep ownership.
     c("edit.copy", "Copy", EDIT, None, Copying, "copy"),
+    // Paste events stay with the frontend too: focused text inputs and Organize's page clipboard
+    // keep ⌘V, so Paste image has no shortcut of its own (Edit menu, ⌘K and the palette reach it).
+    c("edit.paste_image", "Paste image", EDIT, None, Modification, "clipboard-paste"),
     c("edit.column_select", "Column select", EDIT, None, Document, "text-select"),
     c("edit.snapshot", "Take a snapshot", EDIT, None, Copying, "camera"),
     c("view.full_screen", "Full screen mode", VIEW, Some(Shortcut::cmd("L")), Document, "maximize"),
