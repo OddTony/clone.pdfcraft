@@ -153,46 +153,8 @@ fn reset_targets(fields: &[Field], names: &[String]) -> Option<Vec<String>> {
         .then(|| fields.iter().map(|f| &f.name).filter(|n| names.iter().any(|x| *n == x || n.starts_with(&format!("{x}.")))).cloned().collect())
 }
 
-/// Run a form's document-open JavaScripts (`/Names /JavaScript`, catalog `/OpenAction`, and the
-/// opening page's `/AA /O`) on opening, applying field changes or resets and recalculating.
-pub(crate) fn on_open(cos: &mut pdfcraft_cos::Document, file_name: &str, out: &mut JsOutput) -> Result<(), String> {
-    let mut runner = JsRunner::new(cos, file_name);
-    let mut scripts = runner.doc_scripts.clone();
-    scripts.extend(pdfcraft_forms::open_scripts(cos));
-    let Some((last, prefix)) = scripts.split_last() else { return Ok(()) };
-    let fields = pdfcraft_forms::fields(cos);
-    if fields.is_empty() {
-        return Ok(());
-    }
-    let states: Vec<_> = fields.iter().map(|f| field_state(cos, f)).collect();
-    let limits = Limits { loop_iterations: 100_000, recursion: 64 };
-    let mut o = pdfcraft_js::run(last, &pdfcraft_js::Event::doc("Open"), &runner.doc, &states, prefix, limits);
-    let resets: Vec<Vec<String>> = o
-        .requests
-        .iter()
-        .filter_map(|r| match r {
-            Request::Reset(n) => Some(n.clone()),
-            _ => None,
-        })
-        .collect();
-    o.requests.retain(|r| !matches!(r, Request::Reset(_)));
-    runner.output.absorb(&o);
-    if o.error.is_none() {
-        for names in &resets {
-            let target = reset_targets(&fields, names);
-            pdfcraft_forms::reset(cos, target.as_deref()).map_err(|e| e.to_string())?;
-        }
-        runner.cos = cos.clone();
-        let baseline: Vec<_> = pdfcraft_forms::fields(cos).iter().map(|f| field_state(cos, f)).collect();
-        let after: Vec<_> = baseline.iter().map(|s| o.changed.iter().find(|c| c.name == s.name).unwrap_or(s).clone()).collect();
-        let changed = changes(&baseline, &after);
-        if !changed.is_empty() || !resets.is_empty() {
-            pdfcraft_forms::apply_script_changes(cos, &changed, &mut runner).map_err(|e| e.to_string())?;
-        }
-    }
-    out.append(runner.output);
-    Ok(())
-}
+/// The opening policy notice shared with frontends; it must remain visible beside a form banner.
+pub const OPEN_SCRIPTS_SKIPPED: &str = "Automatic AcroForm scripts are disabled until safe execution isolation is available; saved field values were preserved. Explicit button and console scripts are still available.";
 
 /// A document-level JavaScript: its name and source.
 pub fn document_scripts(cos: &pdfcraft_cos::Document) -> Vec<(String, String)> {

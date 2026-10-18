@@ -4355,7 +4355,13 @@ fn notices(
     } else {
         None
     };
-    let (icon, text, fields) = msg?;
+    let (icon, mut text, fields) = msg?;
+    // A form banner must not hide the warning that its opening scripts were skipped.
+    let policy = pdfcraft_engine::js::OPEN_SCRIPTS_SKIPPED;
+    if info.warnings.iter().any(|warning| warning == policy) && !text.contains(policy) {
+        text.push(' ');
+        text.push_str(policy);
+    }
     notice_bar(ui, t, icon, t.accent_text, text, |ui| {
         if icons::button(ui, "x", 22.0, false, tl!("Dismiss")).clicked() {
             view.notice_dismissed = true;

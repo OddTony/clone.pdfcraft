@@ -30,6 +30,27 @@ fn form() -> Vec<u8> {
     out
 }
 
+#[test]
+fn opening_form_script_policy_notice_is_visible() {
+    use pdfcraft_engine::{Edit, Session};
+    use std::sync::Arc;
+    let mut maker = Session::new();
+    maker.set_javascript(false);
+    let id = maker.open("source.pdf", None, Arc::new(form()), None).unwrap();
+    maker.apply(id, Edit::SetFieldValue { name: "greeting".into(), value: pdfcraft_engine::FieldValue::Text("saved".into()) }).unwrap();
+    maker.apply(id, Edit::SetDocumentScript { name: "open".into(), script: Some("getField('greeting').value = 'initialized';".into()) }).unwrap();
+    let bytes = maker.save_bytes(id).unwrap();
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("source.pdf", None, (*bytes).clone()).unwrap();
+        app
+    });
+    h.run_steps(4);
+    assert_eq!(value(&h, "greeting"), ["saved"]);
+    h.get_by_label_contains("Automatic AcroForm scripts are disabled");
+}
+
 fn harness() -> Harness<'static, PdfCraftApp> {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
