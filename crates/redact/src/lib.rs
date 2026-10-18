@@ -695,7 +695,7 @@ fn clear_marked_metadata(doc: &mut Document, fragments: &[String], kerned: &[Ker
         .unwrap_or_default();
     let mut catalog_charged = false;
     for (raw_key, val) in entries {
-        let matches = val.as_deref().is_some_and(&hit);
+        let matches = val.as_deref().is_some_and(hit);
         if work.exhausted.get() {
             return clear_metadata_on_limit(doc, report);
         }
