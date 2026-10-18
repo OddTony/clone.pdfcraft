@@ -918,7 +918,7 @@ fn settings_column(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens, sizes: &[(
     let half = (full - gap) / 2.0;
     // The browser's print dialog sets copies, two-sided printing and colour itself.
     let browser = d.printer.as_deref() == Some(crate::web_print::BROWSER_PRINTER);
-    widgets::heading_row(ui, &heading(tl!("Printer:")), |ui| {
+    widgets::heading_row(ui, &heading(&crate::i18n::upper_label("Printer:")), |ui| {
         let tip = if spool::HAS_PRINTER_PREFERENCES {
             tl!(
                 "Opens the printer driver's preferences. They are saved for every print from this computer; the copies, two-sided, grayscale and paper chosen here still apply."
@@ -1037,7 +1037,7 @@ fn settings_column(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens, sizes: &[(
         ui.vertical(|ui| {
             ui.set_width(half);
             let paper = PAPERS.get(d.paper).copied();
-            widgets::heading_row(ui, &heading(tl!("Paper:")), |ui| {
+            widgets::heading_row(ui, &heading(&crate::i18n::upper_label("Paper:")), |ui| {
                 if let Some((_, (w, h))) = paper {
                     ui.label(egui::RichText::new(d.units.size(w, h)).font(egui::FontId::monospace(10.5)).color(t.text_faint));
                 }
@@ -1058,7 +1058,7 @@ fn settings_column(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens, sizes: &[(
         });
         ui.vertical(|ui| {
             ui.set_width(half);
-            widgets::heading_row(ui, &heading(tl!("Two-sided:")), |_| {});
+            widgets::heading_row(ui, &heading(&crate::i18n::upper_label("Two-sided:")), |_| {});
             ui.add_space(4.0);
             ui.add_enabled_ui(!browser, |ui| {
                 combo(
@@ -1096,7 +1096,7 @@ fn settings_column(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens, sizes: &[(
 
     // The pages.
     ui.add_space(14.0);
-    widgets::heading_row(ui, tl!("Pages to Print"), |_| {});
+    widgets::heading_row(ui, &crate::i18n::upper_label("Pages to Print"), |_| {});
     ui.add_space(4.0);
     let mut which: Vec<(String, Which)> =
         vec![(tl!("All").to_string(), Which::All), (tl!("Current page").to_string(), Which::Current), (tl!("Pages").to_string(), Which::Range)];
@@ -1127,7 +1127,7 @@ fn settings_column(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens, sizes: &[(
 
     // Sizing and handling.
     ui.add_space(14.0);
-    widgets::heading_row(ui, tl!("Page Sizing & Handling"), |_| {});
+    widgets::heading_row(ui, &crate::i18n::upper_label("Page Sizing & Handling"), |_| {});
     ui.add_space(4.0);
     let handlings = [
         (Handling::Size, tl!("Size")),
@@ -1241,7 +1241,7 @@ fn settings_column(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens, sizes: &[(
         ui.spacing_mut().item_spacing.x = gap;
         ui.vertical(|ui| {
             ui.set_width(half);
-            widgets::heading_row(ui, &heading(tl!("Orientation:")), |_| {});
+            widgets::heading_row(ui, &heading(&crate::i18n::upper_label("Orientation:")), |_| {});
             ui.add_space(4.0);
             let orientations =
                 [(Orientation::Auto, tl!("Auto")), (Orientation::Portrait, tl!("Portrait")), (Orientation::Landscape, tl!("Landscape"))];
@@ -1252,7 +1252,7 @@ fn settings_column(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens, sizes: &[(
         });
         ui.vertical(|ui| {
             ui.set_width(half);
-            widgets::heading_row(ui, tl!("Comments & Forms"), |_| {});
+            widgets::heading_row(ui, &crate::i18n::upper_label("Comments & Forms"), |_| {});
             ui.add_space(4.0);
             combo(
                 ui,
@@ -1270,7 +1270,7 @@ fn settings_column(ui: &mut egui::Ui, d: &mut PrintDraft, t: &Tokens, sizes: &[(
     });
     // Advanced (Acrobat's Advanced Print Setup): print as image. Folded unless it is on.
     ui.add_space(10.0);
-    egui::CollapsingHeader::new(egui::RichText::new(tl!("Advanced").to_uppercase()).font(theme::semibold(10.5)).color(t.text_faint))
+    egui::CollapsingHeader::new(egui::RichText::new(crate::i18n::upper_label("Advanced")).font(theme::semibold(10.5)).color(t.text_faint))
         .id_salt("print-advanced")
         .default_open(d.as_image)
         .show(ui, |ui| {

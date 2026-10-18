@@ -361,15 +361,16 @@ fn toggle<'a>(widget: impl egui::Widget + 'a, radius: Option<u8>) -> impl egui::
 /// link to an action) at the right of the same line.
 pub fn section_header(ui: &mut egui::Ui, text: &str, trailing: impl FnOnce(&mut egui::Ui)) {
     ui.add_space(12.0);
-    heading_row(ui, tl!(text), trailing);
+    heading_row(ui, &crate::i18n::upper_label(text), trailing);
     ui.add_space(4.0);
 }
 
-/// The line of a [`section_header`] alone, for a heading already in the interface language.
-pub fn heading_row(ui: &mut egui::Ui, translated: &str, trailing: impl FnOnce(&mut egui::Ui)) {
+/// The line of a [`section_header`] alone, for a heading already in the interface language and
+/// in capitals ([`crate::i18n::upper_label`]).
+pub fn heading_row(ui: &mut egui::Ui, upper: &str, trailing: impl FnOnce(&mut egui::Ui)) {
     let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(translated.to_uppercase()).font(theme::semibold(10.5)).color(t.text_faint).extra_letter_spacing(0.6));
+        ui.label(egui::RichText::new(upper).font(theme::semibold(10.5)).color(t.text_faint).extra_letter_spacing(0.6));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), trailing);
     });
 }
@@ -536,7 +537,7 @@ pub fn section_title(ui: &mut egui::Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
     ui.add_space(10.0);
     // Section titles across every panel go through here, so one translation point covers them.
-    ui.label(egui::RichText::new(tl!(text).to_uppercase()).font(theme::semibold(10.5)).color(t.text_faint).extra_letter_spacing(0.6));
+    ui.label(egui::RichText::new(crate::i18n::upper_label(text)).font(theme::semibold(10.5)).color(t.text_faint).extra_letter_spacing(0.6));
     ui.add_space(2.0);
 }
 
