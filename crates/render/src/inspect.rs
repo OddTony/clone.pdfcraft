@@ -621,11 +621,21 @@ impl<'a> Inspector<'a> {
             info.producer = self.text(d, b"Producer");
             const STANDARD: [&[u8]; 9] =
                 [b"Title", b"Author", b"Subject", b"Keywords", b"Creator", b"Producer", b"CreationDate", b"ModDate", b"Trapped"];
-            for (k, _) in d.iter().filter(|(k, _)| !STANDARD.contains(&k.as_slice())).take(256) {
-                if let Some(v) = self.text(d, k) {
-                    info.custom.push((String::from_utf8_lossy(k).into_owned(), v));
-                }
-            }
+            // The same rule as the engine's list after an edit (`pdfcraft_organize::custom_info`,
+            // trimmed and without empty values): text strings only, so a name value is not a
+            // custom property, and the cap counts listed entries.
+            info.custom = d
+                .iter()
+                .filter(|(k, _)| !STANDARD.contains(&k.as_slice()))
+                .filter_map(|(k, v)| match self.resolve(v) {
+                    Object::String(bytes, _) => {
+                        let v = text_string(bytes).trim_matches('\0').trim().to_string();
+                        (!v.is_empty()).then(|| (String::from_utf8_lossy(k).into_owned(), v))
+                    }
+                    _ => None,
+                })
+                .take(256)
+                .collect();
         }
         let Ok(catalog) = self.doc.catalog() else { return };
         info.tagged = catalog
