@@ -2684,3 +2684,11 @@ key	Space	Tarpas
 	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neįrašyti pakeitimai bus prarasti.
 theme	Appearance	Išvaizda
+# Fast Web View (linearized saving)
+	Saving	Įrašymas
+	Save As optimizes for Fast Web View	„Įrašyti kaip“ optimizuoja greitam peržiūrėjimui internete
+	Save As writes a linearized file whose first page shows before the rest has downloaded. Save adds changes to the end of the file, which turns Fast Web View off.	„Įrašyti kaip“ įrašo linearizuotą failą, kurio pirmasis puslapis parodomas dar neatsisiuntus likusios dalies. „Įrašyti“ prideda pakeitimus failo gale, todėl greitas peržiūrėjimas internete išjungiamas.
+	Fast Web View	Greitas peržiūrėjimas internete
+	Saved {name}, optimized for Fast Web View	Įrašyta: {name}, optimizuota greitam peržiūrėjimui internete
+	Saved {name} without Fast Web View: {e}	Įrašyta be greito peržiūrėjimo internete: {name} ({e})
+	Saved {name}. Fast Web View is off: Save adds the changes to the end of the file.	Įrašyta: {name}. Greitas peržiūrėjimas internete išjungtas: „Įrašyti“ prideda pakeitimus failo gale.
