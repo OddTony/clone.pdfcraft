@@ -1772,7 +1772,10 @@ pub fn swatch_grid(ui: &mut egui::Ui, current: Option<Rgb>) -> Option<Rgb> {
     let open_id = base.with("other-colour");
     let value_id = open_id.with("value");
     let mut open = ui.data(|d| d.get_temp::<bool>(open_id)).unwrap_or(false);
-    egui::Grid::new(base.with("swatches")).spacing(vec2(6.0, 6.0)).show(ui, |ui| {
+    // Six columns (five swatches and "+") spread over the width there is, within a narrow panel
+    // too: egui's default column width alone would make the grid wider than the panel.
+    let gap = ((ui.available_width() - 6.0 * 22.0) / 5.0).clamp(6.0, 22.0);
+    egui::Grid::new(base.with("swatches")).min_col_width(22.0).spacing(vec2(gap, 8.0)).show(ui, |ui| {
         for (i, (name, c)) in SWATCHES.iter().enumerate() {
             if swatch(ui, *c, on(c), tl!(name)).clicked() {
                 picked = Some(*c);

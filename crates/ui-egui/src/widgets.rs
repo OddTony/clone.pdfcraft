@@ -362,6 +362,144 @@ fn toggle<'a>(widget: impl egui::Widget + 'a, radius: Option<u8>) -> impl egui::
     }
 }
 
+/// A tool panel's section heading, in small capitals like [`section_title`], with `trailing` (a
+/// link to an action) at the right of the same line.
+pub fn section_header(ui: &mut egui::Ui, text: &str, trailing: impl FnOnce(&mut egui::Ui)) {
+    let t = Tokens::get(ui.ctx());
+    ui.add_space(12.0);
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(tl!(text).to_uppercase()).font(theme::semibold(10.5)).color(t.text_faint).extra_letter_spacing(0.6));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), trailing);
+    });
+    ui.add_space(4.0);
+}
+
+/// A link-styled action at the end of a [`section_header`] line.
+pub fn header_link(ui: &mut egui::Ui, text: &str) -> Response {
+    let t = Tokens::get(ui.ctx());
+    let resp =
+        ui.add(egui::Label::new(egui::RichText::new(text).font(theme::medium(12.0)).color(t.accent_text)).selectable(false).sense(Sense::click()));
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, text));
+    theme::hand(resp)
+}
+
+/// A notice at the top of a tool panel: `icon` on a tinted tile, a `title` line and `body`.
+pub fn callout(ui: &mut egui::Ui, icon: &str, title: &str, body: impl Into<egui::WidgetText>) {
+    let t = Tokens::get(ui.ctx());
+    egui::Frame::NONE
+        .fill(t.accent_soft.gamma_multiply(if t.dark() { 0.7 } else { 0.8 }))
+        .stroke(Stroke::new(1.0, t.accent.gamma_multiply(0.35)))
+        .corner_radius(CornerRadius::same(10))
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_top(|ui| {
+                let (tile, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
+                ui.painter().rect_filled(tile, CornerRadius::same(7), t.accent.gamma_multiply(0.22));
+                icons::paint(ui, Rect::from_center_size(tile.center(), vec2(16.0, 16.0)), icon, 15.0, t.accent_text);
+                ui.add_space(4.0);
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    ui.label(egui::RichText::new(title).font(theme::semibold(13.0)).color(t.text));
+                    ui.add(egui::Label::new(body).wrap());
+                });
+            });
+        });
+}
+
+/// A quiet how-to line in a bordered box with an info icon.
+pub fn hint_box(ui: &mut egui::Ui, text: &str) {
+    let t = Tokens::get(ui.ctx());
+    egui::Frame::NONE.stroke(Stroke::new(1.0, t.border)).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::symmetric(10, 8)).show(
+        ui,
+        |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal_top(|ui| {
+                let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+                icons::paint(ui, r, "info", 14.0, t.text_faint);
+                ui.add(egui::Label::new(egui::RichText::new(text).font(theme::regular(12.0)).color(t.text_muted)).wrap());
+            });
+        },
+    );
+}
+
+/// Icon toggles joined in one rounded group (Bold, Italic, Underline; the alignments). Each item
+/// is its icon, its name and whether it is on; returns the index clicked. An `accent` group fills
+/// the buttons that are on with the accent colour; otherwise they get a quiet wash.
+pub fn toggle_group(ui: &mut egui::Ui, items: &[(&str, &str, bool)], accent: bool) -> Option<usize> {
+    let t = Tokens::get(ui.ctx());
+    let mut clicked = None;
+    egui::Frame::NONE.fill(t.field).stroke(Stroke::new(1.0, t.border)).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(3)).show(
+        ui,
+        |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                for (i, (icon, name, on)) in items.iter().enumerate() {
+                    let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 26.0), Sense::click());
+                    let press = theme::Press::track(ui, &resp);
+                    let fill = match (*on, accent) {
+                        (true, true) => {
+                            press.fill(t.accent, t.accent.lerp_to_gamma(Color32::WHITE, 0.1), t.accent.lerp_to_gamma(Color32::BLACK, 0.1))
+                        }
+                        (true, false) => press.fill(t.pressed, t.pressed, t.selected),
+                        (false, _) => press.fill(Color32::TRANSPARENT, t.hover, t.pressed),
+                    };
+                    if fill.a() > 0 {
+                        ui.painter().rect_filled(rect, CornerRadius::same(6), fill);
+                    }
+                    let ink = if *on && accent {
+                        Color32::WHITE
+                    } else if *on {
+                        t.text
+                    } else {
+                        t.icon
+                    };
+                    icons::paint(ui, Rect::from_center_size(rect.center() + press.offset(), vec2(16.0, 16.0)), icon, 15.0, ink);
+                    let name = (*name).to_owned();
+                    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, *on, name.clone()));
+                    if theme::hand(resp).on_hover_text(name.as_str()).clicked() {
+                        clicked = Some(i);
+                    }
+                }
+            });
+        },
+    );
+    clicked
+}
+
+/// A labelled value on a card the colour of a field: `icon` and `label` at the left, the control
+/// `value` adds at the right (it is handed the label's id, for `labelled_by`).
+pub fn value_card(ui: &mut egui::Ui, icon: Option<&str>, label: &str, value: impl FnOnce(&mut egui::Ui, egui::Id)) {
+    let t = Tokens::get(ui.ctx());
+    egui::Frame::NONE
+        .fill(t.field)
+        .stroke(Stroke::new(1.0, t.border))
+        .corner_radius(CornerRadius::same(8))
+        .inner_margin(egui::Margin::symmetric(10, 5))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.set_min_height(24.0);
+                if let Some(icon) = icon {
+                    let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+                    icons::paint(ui, r, icon, 14.0, t.text_faint);
+                }
+                let l = ui.add(egui::Label::new(egui::RichText::new(label).font(theme::regular(12.5)).color(t.text_muted)).truncate());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| value(ui, l.id));
+            });
+        });
+}
+
+/// A small status pill (a tool's Ready): `text` in `ink` on `fill`.
+pub fn pill(ui: &egui::Ui, right_center: egui::Pos2, text: &str, ink: Color32, fill: Color32) -> Rect {
+    let font = theme::semibold(10.0);
+    let w = text_width(ui, text, &font);
+    let r = Rect::from_center_size(right_center - vec2(w / 2.0 + 8.0, 0.0), vec2(w + 14.0, 18.0));
+    ui.painter().rect(r, CornerRadius::same(5), fill, Stroke::new(1.0, ink.gamma_multiply(0.35)), egui::StrokeKind::Inside);
+    ui.painter().text(r.center(), Align2::CENTER_CENTER, text, font, ink);
+    r
+}
+
 pub fn section_title(ui: &mut egui::Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
     ui.add_space(10.0);

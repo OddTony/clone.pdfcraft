@@ -182,31 +182,36 @@ impl Default for Extras {
     }
 }
 
-/// Underline, line spacing, character spacing and horizontal scale for the paragraph being
-/// edited (under Format text). Returns `true` when something changed.
+/// Line spacing, character spacing and horizontal scale for the paragraph being edited (under
+/// Format text, which has its Underline), each on a card of its own. Returns `true` when
+/// something changed.
 pub(crate) fn extras_panel(ui: &mut egui::Ui, e: &mut Extras) -> bool {
     let before = *e;
-    ui.horizontal(|ui| {
-        if crate::icons::button(ui, "underline", 26.0, e.underline, tl!("Underline")).clicked() {
-            e.underline = !e.underline;
-        }
-        let zero = tl!("Line spacing").to_string();
-        let label = |v: f64| if v == 0.0 { zero.clone() } else { format!("{v:.2}×") };
-        egui::ComboBox::from_id_salt("line-spacing").selected_text(label(e.line_spacing)).width(110.0).show_ui(ui, |ui| {
+    ui.add_space(8.0);
+    ui.scope(|ui| {
+        ui.spacing_mut().item_spacing.y = 6.0;
+        spacing_cards(ui, e);
+    });
+    *e != before
+}
+
+fn spacing_cards(ui: &mut egui::Ui, e: &mut Extras) {
+    // 0 is the paragraph's own spacing.
+    let auto = tl!("Auto").to_string();
+    let label = |v: f64| if v == 0.0 { auto.clone() } else { format!("{v:.2}×") };
+    crate::widgets::value_card(ui, Some("arrow-up-down"), tl!("Line spacing"), |ui, _| {
+        egui::ComboBox::from_id_salt("line-spacing").selected_text(label(e.line_spacing)).width(76.0).show_ui(ui, |ui| {
             for v in [1.0, 1.15, 1.5, 2.0] {
                 ui.selectable_value(&mut e.line_spacing, v, label(v));
             }
         });
     });
-    ui.horizontal(|ui| {
-        let l = ui.label(tl!("Character spacing"));
-        ui.add(egui::DragValue::new(&mut e.char_spacing).range(-5.0..=50.0).speed(0.1).suffix(" pt")).labelled_by(l.id);
+    crate::widgets::value_card(ui, None, tl!("Character spacing"), |ui, l| {
+        ui.add(egui::DragValue::new(&mut e.char_spacing).range(-5.0..=50.0).speed(0.1).suffix(" pt")).labelled_by(l);
     });
-    ui.horizontal(|ui| {
-        let l = ui.label(tl!("Horizontal scale"));
-        ui.add(egui::DragValue::new(&mut e.scale).range(10.0..=400.0).speed(1.0).suffix(" %")).labelled_by(l.id);
+    crate::widgets::value_card(ui, None, tl!("Horizontal scale"), |ui, l| {
+        ui.add(egui::DragValue::new(&mut e.scale).range(10.0..=400.0).speed(1.0).suffix(" %")).labelled_by(l);
     });
-    *e != before
 }
 
 impl LineEditor {

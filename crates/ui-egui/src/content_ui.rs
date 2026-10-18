@@ -605,59 +605,82 @@ fn finish(cv: &mut ContentView, d: TextDraft, added: &[Added]) -> Option<Edit> {
     }
 }
 
-/// Format text (shown in the Edit panel while a text item is selected, or for new text).
-/// Returns the changed style; for a selected item the caller turns it into an update.
-pub(crate) fn format_panel(ui: &mut egui::Ui, t: &Tokens, style: &AddedText) -> Option<AddedText> {
+/// Format text (shown in the Edit panel while a text item is selected, or for new text): the
+/// font and size, Bold, Italic (and Underline, for a paragraph being edited: `extras`), the
+/// alignment and the colour. Returns the changed style; for a selected item the caller turns it
+/// into an update. A change to `extras` is the caller's to notice.
+pub(crate) fn format_panel(ui: &mut egui::Ui, t: &Tokens, style: &AddedText, extras: Option<&mut crate::edit_text_ui::Extras>) -> Option<AddedText> {
     let mut s = style.clone();
-    widgets::section_title(ui, tl!("Format text"));
+    widgets::section_header(ui, "Format text", |_| {});
+    // The font takes what the size leaves of the row.
+    let size_w = 76.0;
+    let family_w = (ui.available_width() - size_w - ui.spacing().item_spacing.x - 2.0).max(60.0);
     ui.horizontal(|ui| {
-        egui::ComboBox::from_id_salt("font-family").selected_text(s.family.label()).width(110.0).show_ui(ui, |ui| {
+        egui::ComboBox::from_id_salt("font-family").selected_text(s.family.label()).width(family_w).truncate().show_ui(ui, |ui| {
             for f in [FontFamily::Helvetica, FontFamily::Times, FontFamily::Courier] {
                 ui.selectable_value(&mut s.family, f, f.label());
             }
         });
         // A list rather than a drag value: every change is an undo step.
-        egui::ComboBox::from_id_salt("font-size").selected_text(format!("{} pt", s.size)).width(70.0).show_ui(ui, |ui| {
+        egui::ComboBox::from_id_salt("font-size").selected_text(format!("{} pt", s.size)).width(size_w).show_ui(ui, |ui| {
             for size in [8.0, 9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 36.0, 48.0, 72.0] {
                 ui.selectable_value(&mut s.size, size, format!("{size} pt"));
             }
         });
     });
-    ui.horizontal(|ui| {
-        if ui.selectable_label(s.bold, egui::RichText::new("B").strong()).on_hover_text(tl!("Bold")).clicked() {
-            s.bold = !s.bold;
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        let mut looks = vec![("bold", tl!("Bold"), s.bold), ("italic", tl!("Italic"), s.italic)];
+        if let Some(e) = extras.as_deref() {
+            looks.push(("underline", tl!("Underline"), e.underline));
         }
-        if ui.selectable_label(s.italic, egui::RichText::new("I").italics()).on_hover_text(tl!("Italic")).clicked() {
-            s.italic = !s.italic;
+        match widgets::toggle_group(ui, &looks, true) {
+            Some(0) => s.bold = !s.bold,
+            Some(1) => s.italic = !s.italic,
+            Some(2) => {
+                if let Some(e) = extras {
+                    e.underline = !e.underline;
+                }
+            }
+            _ => {}
         }
-        ui.separator();
-        for (a, icon, tip) in [
+        ui.add_space(4.0);
+        let aligns = [
             (TextAlign::Left, "align-left", tl!("Align left")),
             (TextAlign::Center, "align-center", tl!("Centre")),
             (TextAlign::Right, "align-right", tl!("Align right")),
             (TextAlign::Justify, "align-justify", tl!("Justify")),
-        ] {
-            if crate::icons::button(ui, icon, 26.0, s.align == a, tip).clicked() {
-                s.align = a;
-            }
+        ];
+        let items: Vec<(&str, &str, bool)> = aligns.iter().map(|(a, icon, name)| (*icon, *name, s.align == *a)).collect();
+        if let Some((a, _, _)) = widgets::toggle_group(ui, &items, false).and_then(|i| aligns.get(i)) {
+            s.align = *a;
         }
     });
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(tl!("Colour")).font(crate::theme::regular(12.0)).color(t.text_muted));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let [r, g, b] = s.color.map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
+            ui.label(egui::RichText::new(format!("#{r:02X}{g:02X}{b:02X}")).font(egui::FontId::monospace(11.0)).color(t.text_faint));
+        });
+    });
+    ui.add_space(2.0);
     let c = s.color;
     if let Some(picked) = crate::comments::swatch_grid(ui, Some(c)) {
         s.color = picked;
     }
-    ui.label(egui::RichText::new(tl!("Thai and Arabic use regular fallback fonts when available.")).small().color(t.text_faint));
+    ui.add_space(2.0);
+    ui.label(egui::RichText::new(tl!("Thai and Arabic use regular fallback fonts when available.")).small().italics().color(t.text_faint));
     (s != *style).then_some(s)
 }
 
 /// How to use the tools, under the Add content list.
-pub(crate) fn hint(ui: &mut egui::Ui, t: &Tokens) {
-    ui.label(
-        egui::RichText::new(
-            tl!("Click on the page to add text; each click starts a new box, and ✓ finishes. Drag items to move them, drag a corner to resize, double-click text to edit it."),
-        )
-            .small()
-            .color(t.text_faint),
+pub(crate) fn hint(ui: &mut egui::Ui) {
+    widgets::hint_box(
+        ui,
+        tl!(
+            "Click on the page to add text; each click starts a new box, and ✓ finishes. Drag items to move them, drag a corner to resize, double-click text to edit it."
+        ),
     );
     ui.add_space(4.0);
 }

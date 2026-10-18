@@ -153,14 +153,13 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
         app.left_open = false;
     }
     if let Availability::Planned(m) = g.availability {
-        egui::Frame::NONE.fill(t.accent_soft).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.label(
-                egui::RichText::new(format!("{} {m}. {}", tl!("Coming in milestone"), tl!("Items marked Ready work today.")))
-                    .color(t.text)
-                    .font(theme::regular(12.0)),
-            );
-        });
+        widgets::callout(
+            ui,
+            "sparkles",
+            &format!("{} {m}", tl!("Coming in milestone")),
+            egui::RichText::new(tl!("Items marked Ready work today.")).font(theme::regular(12.0)).color(t.text_muted),
+        );
+        ui.add_space(4.0);
     }
     if g.id == "measure" {
         crate::measure_ui::panel(app, ui, t);
@@ -190,12 +189,15 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
         if app.quick_tool == crate::QuickTool::EditText {
             let count = app.active_ids().map_or(0, |(i, _)| app.views[i].objects.count());
             if count > 0 {
-                ui.label(crate::i18n::trn(crate::i18n::current(), count as u64, "{n} object selected", "{n} objects selected"));
-                ui.label(tl!("Drag the selection to move it. Esc clears the selection."));
+                ui.label(
+                    egui::RichText::new(crate::i18n::trn(crate::i18n::current(), count as u64, "{n} object selected", "{n} objects selected"))
+                        .font(theme::semibold(13.0)),
+                );
+                widgets::hint_box(ui, tl!("Drag the selection to move it. Esc clears the selection."));
             } else {
-                ui.label(tl!("Shift-click to select several objects. Drag empty space to select an area."));
+                widgets::hint_box(ui, tl!("Shift-click to select several objects. Drag empty space to select an area."));
             }
-            ui.add_space(6.0);
+            ui.add_space(2.0);
         }
         format_section(app, ui, t);
     }
@@ -205,38 +207,46 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
     let marks = if footer { app.active_ids().and_then(|(_, id)| app.session.get(id)).map_or(0, |d| d.redaction_marks()) } else { 0 };
     let list_h = if footer { (ui.available_height() - 52.0).max(80.0) } else { ui.available_height() };
     egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(list_h).show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 6.0;
         for s in g.sections {
-            widgets::section_title(ui, tl!(s.title));
+            widgets::section_header(ui, s.title, |_| {});
             for item in s.items {
                 if g.id == "fill_sign" && (item.command.starts_with("sign.fill.signature") || item.command.starts_with("sign.fill.initials")) {
                     continue;
                 }
-                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 34.0), Sense::click());
+                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 40.0), Sense::click());
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tl!(item.label)));
                 let ready = item.availability == Availability::Ready;
                 let press = theme::Press::track(ui, &resp);
-                press.wash(ui, rect, 6, false);
+                ui.painter().rect(
+                    rect,
+                    CornerRadius::same(8),
+                    press.fill(t.field, t.hover, t.pressed),
+                    Stroke::new(1.0, t.border),
+                    egui::StrokeKind::Inside,
+                );
                 let body = rect.translate(press.offset());
                 let fg = if ready { t.text } else { t.text_muted };
-                icons::paint(
-                    ui,
-                    Rect::from_min_size(body.min + vec2(6.0, 8.0), vec2(18.0, 18.0)),
-                    item.icon,
-                    17.0,
-                    if ready { hue(g) } else { t.text_faint },
-                );
-                let (chip, fill, cfg) = match item.availability {
-                    Availability::Ready => (tl!("Ready"), Color32::from_rgb(0xDD, 0xF3, 0xE4), Color32::from_rgb(0x1E, 0x7B, 0x43)),
-                    Availability::Planned(m) => (m, t.pressed, t.text_muted),
-                    Availability::Provider => ("AI", t.pressed, t.text_muted),
+                // The tool's icon on a tile tinted with its group's colour.
+                let tile = Rect::from_min_size(body.left_center() + vec2(7.0, -13.0), vec2(26.0, 26.0));
+                ui.painter().rect_filled(tile, CornerRadius::same(6), hue(g).gamma_multiply(if ready { 0.18 } else { 0.08 }));
+                icons::paint(ui, Rect::from_center_size(tile.center(), vec2(16.0, 16.0)), item.icon, 15.0, if ready { hue(g) } else { t.text_faint });
+                let chip_label = match item.availability {
+                    Availability::Ready => tl!("Ready").to_string(),
+                    Availability::Planned(m) => tl!(m).to_string(),
+                    Availability::Provider => "AI".to_string(),
                 };
-                let font = theme::semibold(9.5);
-                let chip_label = tl!(chip).to_string();
-                let w = crate::widgets::text_width(ui, &chip_label, &font);
-                let r = Rect::from_center_size(body.right_center() - vec2(w / 2.0 + 10.0, 0.0), vec2(w + 10.0, 16.0));
-                row_label(ui, tl!(item.label), theme::regular(13.0), fg, body.left_center() + vec2(34.0, 0.0), r.left() - body.left() - 42.0);
-                ui.painter().rect_filled(r, CornerRadius::same(4), fill);
-                ui.painter().text(r.center(), Align2::CENTER_CENTER, chip_label, font, cfg);
+                let (ink, fill) = if ready { (t.success, t.success_soft) } else { (t.text_muted, t.pressed) };
+                let r = widgets::pill(ui, body.right_center() - vec2(8.0, 0.0), &chip_label, ink, fill);
+                let caret = if item.actions.is_empty() { 0.0 } else { 14.0 };
+                row_label(
+                    ui,
+                    tl!(item.label),
+                    theme::medium(13.0),
+                    fg,
+                    egui::pos2(tile.right() + 10.0, body.center().y),
+                    r.left() - tile.right() - 18.0 - caret,
+                );
                 let resp = theme::hand(resp).on_hover_text(format!("{} — {}", tl!(item.label), item.command));
                 if item.actions.is_empty() {
                     if resp.clicked() {
@@ -381,41 +391,53 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         let mut ed = ed;
         let mut changed = false;
         let font_choices = app.session.get(app.views[i].id).map(|d| d.text_editor_fonts(ed.page)).unwrap_or_default();
-        egui::ComboBox::from_id_salt("document-font-resource")
-            .selected_text(
-                ed.font_resource
-                    .as_ref()
-                    .and_then(|r| font_choices.iter().find(|f| &f.resource == r))
-                    .map_or(tl!("Keep source fonts"), |f| f.face.as_str()),
-            )
-            .show_ui(ui, |ui| {
-                changed |= ui.selectable_value(&mut ed.font_resource, None, tl!("Keep source fonts")).changed();
-                for font in font_choices.iter().filter(|f| !f.resource.starts_with("PCApproved")) {
-                    changed |= ui.selectable_value(&mut ed.font_resource, Some(font.resource.clone()), &font.face).changed();
-                }
-            });
-        if ui.button(tl!("Load font…")).clicked() {
+        let mut load_font = false;
+        widgets::section_header(ui, "Font source", |ui| load_font = widgets::header_link(ui, tl!("Load font…")).clicked());
+        if load_font {
             app.pick_files(crate::files::FilePurpose::TextFont { page: ed.page }, false);
         }
-        #[cfg(not(target_arch = "wasm32"))]
-        egui::ComboBox::from_id_salt("installed-document-font").selected_text(tl!("Installed fonts…")).show_ui(ui, |ui| {
-            if let Some(fonts) = crate::files::installed_font_files(ui.ctx()) {
-                if fonts.is_empty() {
-                    ui.label(tl!("No openly licensed document fonts found. Load a font file."));
-                }
-                for font in fonts {
-                    if ui.selectable_label(false, &font.face).clicked() {
-                        app.use_paths(crate::files::FilePurpose::TextFont { page: ed.page }, &[font.path]);
+        // The document's fonts and the installed ones side by side, half the row each.
+        let halves = if cfg!(target_arch = "wasm32") { 1.0 } else { 2.0 };
+        let gap = ui.spacing().item_spacing.x;
+        let half = ((ui.available_width() - gap * (halves - 1.0)) / halves - 2.0).max(60.0);
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("document-font-resource")
+                .selected_text(
+                    ed.font_resource
+                        .as_ref()
+                        .and_then(|r| font_choices.iter().find(|f| &f.resource == r))
+                        .map_or(tl!("Keep source fonts"), |f| f.face.as_str()),
+                )
+                .width(half)
+                .truncate()
+                .show_ui(ui, |ui| {
+                    changed |= ui.selectable_value(&mut ed.font_resource, None, tl!("Keep source fonts")).changed();
+                    for font in font_choices.iter().filter(|f| !f.resource.starts_with("PCApproved")) {
+                        changed |= ui.selectable_value(&mut ed.font_resource, Some(font.resource.clone()), &font.face).changed();
                     }
+                });
+            #[cfg(not(target_arch = "wasm32"))]
+            egui::ComboBox::from_id_salt("installed-document-font").selected_text(tl!("Installed fonts…")).width(half).truncate().show_ui(ui, |ui| {
+                if let Some(fonts) = crate::files::installed_font_files(ui.ctx()) {
+                    if fonts.is_empty() {
+                        ui.label(tl!("No openly licensed document fonts found. Load a font file."));
+                    }
+                    for font in fonts {
+                        if ui.selectable_label(false, &font.face).clicked() {
+                            app.use_paths(crate::files::FilePurpose::TextFont { page: ed.page }, &[font.path]);
+                        }
+                    }
+                } else {
+                    ui.label(tl!("Finding document fonts…"));
                 }
-            } else {
-                ui.label(tl!("Finding document fonts…"));
-            }
+            });
         });
-        if let Some(look) = crate::content_ui::format_panel(ui, t, &ed.look) {
+        let extras = ed.extras;
+        if let Some(look) = crate::content_ui::format_panel(ui, t, &ed.look, Some(&mut ed.extras)) {
             ed.look = look;
             changed = true;
         }
+        changed |= ed.extras != extras;
         changed |= crate::edit_text_ui::extras_panel(ui, &mut ed.extras);
         if changed {
             let edit = pdfcraft_engine::Edit::EditTextBlock { page: ed.page, block: ed.block, text: ed.text.clone(), style: ed.style() };
@@ -465,14 +487,14 @@ fn format_section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
     });
     match selected {
         Some((page, index, text)) => {
-            if let Some(style) = crate::content_ui::format_panel(ui, t, &text) {
+            if let Some(style) = crate::content_ui::format_panel(ui, t, &text, None) {
                 app.text_style = pdfcraft_engine::AddedText { text: String::new(), rect: [0.0; 4], ..style.clone() };
                 app.apply_edit(pdfcraft_engine::Edit::UpdateContent { page, index, content: pdfcraft_engine::AddedContent::Text(style) });
             }
         }
         None if app.quick_tool == crate::QuickTool::AddText => {
-            crate::content_ui::hint(ui, t);
-            if let Some(style) = crate::content_ui::format_panel(ui, t, &app.text_style) {
+            crate::content_ui::hint(ui);
+            if let Some(style) = crate::content_ui::format_panel(ui, t, &app.text_style, None) {
                 app.text_style = style;
             }
         }

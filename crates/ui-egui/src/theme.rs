@@ -63,6 +63,9 @@ pub struct Tokens {
     pub accent_soft: Color32,
     pub field: Color32,
     pub badge_new: Color32,
+    /// Something that works today (a tool's Ready badge): its text, and the fill behind it.
+    pub success: Color32,
+    pub success_soft: Color32,
     pub page_shadow: Color32,
     pub radius: u8,
 }
@@ -91,6 +94,8 @@ impl Tokens {
                 accent_soft: Color32::from_rgb(0xE3, 0xEC, 0xFD),
                 field: Color32::from_rgb(0xFF, 0xFF, 0xFF),
                 badge_new: Color32::from_rgb(0x1B, 0x63, 0xE0),
+                success: Color32::from_rgb(0x1E, 0x7B, 0x43),
+                success_soft: Color32::from_rgb(0xDD, 0xF3, 0xE4),
                 page_shadow: Color32::from_black_alpha(34),
                 radius: 6,
             },
@@ -115,6 +120,8 @@ impl Tokens {
                 accent_soft: Color32::from_rgb(0x24, 0x36, 0x57),
                 field: Color32::from_rgb(0x1E, 0x1E, 0x22),
                 badge_new: Color32::from_rgb(0x3D, 0x7D, 0xEE),
+                success: Color32::from_rgb(0x5C, 0xD0, 0x8B),
+                success_soft: Color32::from_rgb(0x1A, 0x36, 0x27),
                 page_shadow: Color32::from_black_alpha(120),
                 radius: 6,
             },

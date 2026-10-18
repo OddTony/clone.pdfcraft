@@ -236,7 +236,7 @@ fn typing_moving_styling_and_deleting_added_content() {
     h.run_steps(2);
     assert_eq!(h.state().views[0].content.selected, Some((0, 0)), "the new text is selected");
     // Bold from the Format panel: one undoable change.
-    h.get_by_label("B").click();
+    h.get_by_label("Bold").click();
     h.run_steps(3);
 
     let pdfcraft_engine::AddedContent::Text(t) = &added(&h)[0].content else { panic!() };

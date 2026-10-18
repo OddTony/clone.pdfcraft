@@ -2860,7 +2860,7 @@ fn the_format_panel_restyles_the_paragraph_being_edited() {
     assert!(h.state().views[0].line_editor.is_some());
     // The Format text panel shows the paragraph's look; making it bold applies at once.
     h.get_by_label("FORMAT TEXT");
-    h.get_by_label("B").click();
+    h.get_by_label("Bold").click();
     h.run_steps(4);
     let s = h.state();
     let doc = s.session.get(s.views[0].id).unwrap();
@@ -2894,7 +2894,7 @@ fn selected_text_formatting_keeps_the_rest_of_the_paragraph_and_reopens() {
     h.key_press_modifiers(Modifiers::SHIFT, Key::ArrowLeft);
     h.run_steps(2);
     assert_eq!(h.state().views[0].line_editor.as_ref().unwrap().selection, Some(5..6));
-    h.get_by_label("B").click();
+    h.get_by_label("Bold").click();
     h.run_steps(5);
     let id = h.state().views[0].id;
     let doc = h.state().session.get(id).unwrap();

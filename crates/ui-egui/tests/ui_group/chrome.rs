@@ -289,6 +289,21 @@ fn the_fade_timer_is_chosen_in_preferences() {
     assert_eq!(restored.chrome_fade_after, 2, "a timer not on offer is ignored");
 }
 
+/// Edit a PDF with Format text showing: its colour swatches fit the tools panel, so the tool rows
+/// below keep its width and their Ready badges aren't cut off at the panel's edge.
+#[test]
+fn the_edit_panel_fits_its_width_with_format_text_showing() {
+    let mut h = with_document();
+    h.state_mut().set_option("tool", "edit").unwrap();
+    h.state_mut().set_option("quick", "add-text").unwrap();
+    h.run_steps(6);
+    let edge = h.get_by_label("Close panel").rect().right();
+    for label in ["Bold", "Align left", "Rotate pages", "Insert pages"] {
+        let r = h.get_by_label(label).rect();
+        assert!(r.right() <= edge + 1.0, "{label} at {r:?} stays inside the panel (its edge at {edge})");
+    }
+}
+
 /// The search button opens Find tools and commands and closes it again; so does the palette's
 /// own close button.
 #[test]
