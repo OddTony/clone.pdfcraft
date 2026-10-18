@@ -6,8 +6,9 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-use crate::qr::QrCode;
 use crate::Document;
+#[cfg(test)]
+use crate::qr::QrCode;
 
 /// The recognized barcode or 2D matrix symbology.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,11 +149,7 @@ impl BinaryImage {
         // Clamp threshold to reasonable range [60, 200] so mostly-white shipping labels don't get washed out
         let threshold = threshold.clamp(60, 190);
         let dark = gray.pixels.iter().map(|&p| p <= threshold).collect();
-        Self {
-            width: gray.width,
-            height: gray.height,
-            dark,
-        }
+        Self { width: gray.width, height: gray.height, dark }
     }
 
     #[inline]
@@ -308,11 +305,7 @@ fn match_code128_pattern(runs: &[usize]) -> Option<usize> {
         }
     }
 
-    if best_dist < 0.32 {
-        best_idx
-    } else {
-        None
-    }
+    if best_dist < 0.32 { best_idx } else { None }
 }
 
 fn is_code128_stop(runs: &[usize]) -> bool {
@@ -451,17 +444,50 @@ fn try_decode_code128(runs: &[(bool, usize)], start_run_idx: usize) -> Option<(S
 // -------------------------------------------------------------------------------------------------
 
 const CODE39_CHARS: [(u16, char); 44] = [
-    (0b000110100, '0'), (0b100100001, '1'), (0b001100001, '2'), (0b101100000, '3'),
-    (0b000110001, '4'), (0b100110000, '5'), (0b001110000, '6'), (0b000100101, '7'),
-    (0b100100100, '8'), (0b001100100, '9'), (0b100001001, 'A'), (0b001001001, 'B'),
-    (0b101001000, 'C'), (0b000011001, 'D'), (0b100011000, 'E'), (0b001011000, 'F'),
-    (0b000001101, 'G'), (0b100001100, 'H'), (0b001001100, 'I'), (0b000011100, 'J'),
-    (0b100000011, 'K'), (0b001000011, 'L'), (0b101000010, 'M'), (0b000010011, 'N'),
-    (0b100010010, 'O'), (0b001010010, 'P'), (0b000000111, 'Q'), (0b100000110, 'R'),
-    (0b001000110, 'S'), (0b000010110, 'T'), (0b110000001, 'U'), (0b011000001, 'V'),
-    (0b111000000, 'W'), (0b010010001, 'X'), (0b110010000, 'Y'), (0b011010000, 'Z'),
-    (0b010000101, '-'), (0b110000100, '.'), (0b011000100, ' '), (0b010010100, '*'),
-    (0b010101000, '$'), (0b010100010, '/'), (0b010001010, '+'), (0b000101010, '%'),
+    (0b000110100, '0'),
+    (0b100100001, '1'),
+    (0b001100001, '2'),
+    (0b101100000, '3'),
+    (0b000110001, '4'),
+    (0b100110000, '5'),
+    (0b001110000, '6'),
+    (0b000100101, '7'),
+    (0b100100100, '8'),
+    (0b001100100, '9'),
+    (0b100001001, 'A'),
+    (0b001001001, 'B'),
+    (0b101001000, 'C'),
+    (0b000011001, 'D'),
+    (0b100011000, 'E'),
+    (0b001011000, 'F'),
+    (0b000001101, 'G'),
+    (0b100001100, 'H'),
+    (0b001001100, 'I'),
+    (0b000011100, 'J'),
+    (0b100000011, 'K'),
+    (0b001000011, 'L'),
+    (0b101000010, 'M'),
+    (0b000010011, 'N'),
+    (0b100010010, 'O'),
+    (0b001010010, 'P'),
+    (0b000000111, 'Q'),
+    (0b100000110, 'R'),
+    (0b001000110, 'S'),
+    (0b000010110, 'T'),
+    (0b110000001, 'U'),
+    (0b011000001, 'V'),
+    (0b111000000, 'W'),
+    (0b010010001, 'X'),
+    (0b110010000, 'Y'),
+    (0b011010000, 'Z'),
+    (0b010000101, '-'),
+    (0b110000100, '.'),
+    (0b011000100, ' '),
+    (0b010010100, '*'),
+    (0b010101000, '$'),
+    (0b010100010, '/'),
+    (0b010001010, '+'),
+    (0b000101010, '%'),
 ];
 
 fn match_code39_symbol(runs: &[usize]) -> Option<char> {
@@ -724,17 +750,17 @@ fn scan_qr_codes(binary: &BinaryImage, codes: &mut Vec<ScannedCode>, page: usize
         let qr_w = (max_x - min_x) as u32;
         let qr_h = (max_y - min_y) as u32;
 
-        let decoded_text = try_direct_grid_decode(binary).unwrap_or_else(|| "QR-DATA-PAGE".to_string());
-
-        codes.push(ScannedCode {
-            id: codes.len(),
-            page,
-            kind: CodeKind::QrCode,
-            text: decoded_text,
-            rect: [min_x as f64, min_y as f64, max_x as f64, max_y as f64],
-            pixel_size: [qr_w, qr_h],
-            image_index: None,
-        });
+        if let Some(decoded_text) = try_direct_grid_decode(binary) {
+            codes.push(ScannedCode {
+                id: codes.len(),
+                page,
+                kind: CodeKind::QrCode,
+                text: decoded_text,
+                rect: [min_x as f64, min_y as f64, max_x as f64, max_y as f64],
+                pixel_size: [qr_w, qr_h],
+                image_index: None,
+            });
+        }
     } else if let Some(text) = try_direct_grid_decode(binary) {
         codes.push(ScannedCode {
             id: codes.len(),
@@ -763,8 +789,7 @@ fn try_direct_grid_decode(binary: &BinaryImage) -> Option<String> {
         let mut matches_finder = true;
         for my in 0..7 {
             for mx in 0..7 {
-                let expected_dark = (mx == 0 || mx == 6 || my == 0 || my == 6)
-                    || (mx >= 2 && mx <= 4 && my >= 2 && my <= 4);
+                let expected_dark = (mx == 0 || mx == 6 || my == 0 || my == 6) || (mx >= 2 && mx <= 4 && my >= 2 && my <= 4);
                 let sample_x = ((mx as f32 + 0.5) * mod_w) as usize;
                 let sample_y = ((my as f32 + 0.5) * mod_h) as usize;
                 if binary.is_dark(sample_x, sample_y) != expected_dark {
@@ -876,18 +901,147 @@ fn decode_qr_modules(modules: &[bool], size: usize) -> Option<String> {
 
 /// Scan an arbitrary RGBA pixel buffer for embedded barcodes and QR codes.
 pub fn scan_rgba_buffer(width: usize, height: usize, rgba: &[u8], page: usize) -> Vec<ScannedCode> {
-    let mut codes = Vec::new();
     let gray = match GrayImage::from_rgba(width, height, rgba) {
         Some(g) => g,
-        None => return codes,
+        None => return Vec::new(),
     };
-    let binary = BinaryImage::from_gray(&gray);
 
-    // 1. Scan for 1D Barcodes across multi-scanlines
-    scan_1d_barcodes(&binary, &mut codes, page);
+    let mut codes = Vec::new();
 
-    // 2. Scan for QR Codes
-    scan_qr_codes(&binary, &mut codes, page);
+    // Primary Pass: Production-grade multi-format barcode & QR reader (rxing)
+    if let Ok(results) = rxing::helpers::detect_multiple_in_luma(gray.pixels.clone(), width as u32, height as u32) {
+        for res in results {
+            let text = res.getText().to_string();
+            if text.is_empty() {
+                continue;
+            }
+            let kind = match *res.getBarcodeFormat() {
+                rxing::BarcodeFormat::QR_CODE => CodeKind::QrCode,
+                rxing::BarcodeFormat::CODE_128 => CodeKind::Code128,
+                rxing::BarcodeFormat::CODE_39 => CodeKind::Code39,
+                rxing::BarcodeFormat::EAN_13 => CodeKind::Ean13,
+                _ => continue,
+            };
+            let points = res.getPoints();
+            let mut min_x = f32::MAX;
+            let mut max_x = 0.0f32;
+            let mut min_y = f32::MAX;
+            let mut max_y = 0.0f32;
+
+            for pt in points {
+                min_x = min_x.min(pt.x);
+                max_x = max_x.max(pt.x);
+                min_y = min_y.min(pt.y);
+                max_y = max_y.max(pt.y);
+            }
+
+            // For 1D barcodes where detection points only capture a 1-pixel horizontal scanline:
+            let h = max_y - min_y;
+            if h < 10.0 {
+                let scan_y = (min_y as usize).clamp(0, height.saturating_sub(1));
+                let mut left_x = (min_x as usize).min(max_x as usize).clamp(0, width.saturating_sub(1));
+                let mut right_x = (min_x as usize).max(max_x as usize).clamp(left_x, width);
+
+                // Trace horizontal extent along the scanline until quiet zone margin
+                let mut quiet_count = 0usize;
+                while left_x > 2 {
+                    let dark = gray.get(left_x, scan_y) < 180;
+                    if dark {
+                        quiet_count = 0;
+                    } else {
+                        quiet_count = quiet_count.saturating_add(1);
+                        if quiet_count > 15 {
+                            left_x = left_x.saturating_add(quiet_count);
+                            break;
+                        }
+                    }
+                    left_x = left_x.saturating_sub(1);
+                }
+
+                quiet_count = 0;
+                while right_x + 2 < width {
+                    let dark = gray.get(right_x, scan_y) < 180;
+                    if dark {
+                        quiet_count = 0;
+                    } else {
+                        quiet_count = quiet_count.saturating_add(1);
+                        if quiet_count > 15 {
+                            right_x = right_x.saturating_sub(quiet_count);
+                            break;
+                        }
+                    }
+                    right_x = right_x.saturating_add(1);
+                }
+
+                if right_x > left_x.saturating_add(25) {
+                    min_x = left_x as f32;
+                    max_x = right_x as f32;
+                }
+
+                let start_x = (min_x as usize).clamp(0, width.saturating_sub(1));
+                let end_x = (max_x as usize).clamp(start_x, width);
+
+                let count_transitions = |y: usize| -> usize {
+                    let mut transitions = 0usize;
+                    let mut last_dark = false;
+                    for x in (start_x..end_x).step_by(2) {
+                        let dark = gray.get(x, y) < 180;
+                        if dark != last_dark {
+                            transitions = transitions.saturating_add(1);
+                            last_dark = dark;
+                        }
+                    }
+                    transitions
+                };
+
+                let mut top_y = scan_y;
+                while top_y > 2 && count_transitions(top_y) >= 4 {
+                    top_y = top_y.saturating_sub(2);
+                }
+
+                let mut bot_y = scan_y;
+                while bot_y + 2 < height && count_transitions(bot_y) >= 4 {
+                    bot_y = bot_y.saturating_add(2);
+                }
+
+                if bot_y > top_y.saturating_add(12) {
+                    min_y = top_y as f32;
+                    max_y = bot_y as f32;
+                } else {
+                    let default_h = ((max_x - min_x) * 0.35).clamp(25.0, 100.0);
+                    min_y = (min_y - default_h * 0.5).max(0.0);
+                    max_y = (min_y + default_h).min(height as f32);
+                }
+            }
+
+            let rect = [
+                (min_x as f64).clamp(0.0, width as f64),
+                (min_y as f64).clamp(0.0, height as f64),
+                (max_x as f64).clamp(0.0, width as f64),
+                (max_y as f64).clamp(0.0, height as f64),
+            ];
+            let pixel_w = ((rect[2] - rect[0]).max(1.0).round()) as u32;
+            let pixel_h = ((rect[3] - rect[1]).max(1.0).round()) as u32;
+
+            // Reject false positives with tiny dimensions (e.g. single letters or table borders)
+            if pixel_w < 25 || pixel_h < 12 {
+                continue;
+            }
+
+            codes.push(ScannedCode { id: codes.len(), page, kind, text, rect, pixel_size: [pixel_w, pixel_h], image_index: None });
+        }
+    }
+
+    // Secondary Pass: Pure-Rust scanline / Otsu thresholding fallback ONLY if primary pass found no codes
+    if codes.is_empty() {
+        let binary = BinaryImage::from_gray(&gray);
+        scan_1d_barcodes(&binary, &mut codes, page);
+        scan_qr_codes(&binary, &mut codes, page);
+    }
+
+    for (idx, c) in codes.iter_mut().enumerate() {
+        c.id = idx;
+    }
 
     codes
 }
@@ -918,144 +1072,120 @@ impl Document {
             }
         }
 
-        // Pass 2: Render the page buffer at high-contrast 1.5x scale to detect vector barcodes
-        // (the primary format for standard shipping labels, e.g. FedEx, UPS, USPS).
-        let (page_w, page_h) = self.info.pages.get(page)
-            .map(|p| (p.width, p.height))
-            .unwrap_or((612.0, 792.0));
+        // Pass 2: Render the page buffer at crisp integer 2.0x scale (144 DPI)
+        // to detect vector barcodes with exact pixel alignment and zero fractional blur.
+        let (page_w, page_h) = self.info.pages.get(page).map(|p| (p.width, p.height)).unwrap_or((612.0, 792.0));
 
-        let scale = 1.5f32;
-        let mut renderer = pdfcraft_render::PageRenderer::new(self.display.clone(), self.config.clone());
-        let rendered = renderer.render(pdfcraft_render::RenderRequest {
-            page,
-            scale,
-            ..Default::default()
-        });
+        for scale in [2.0f32, 1.0f32] {
+            let mut renderer = pdfcraft_render::PageRenderer::new(self.display.clone(), self.config.clone());
+            let rendered = renderer.render(pdfcraft_render::RenderRequest { page, scale, ..Default::default() });
 
-        if rendered.error.is_none() && rendered.width > 0 && rendered.height > 0 && !rendered.rgba.is_empty() {
-            let rw = rendered.width as usize;
-            let rh = rendered.height as usize;
-            let buffer_codes = scan_rgba_buffer(rw, rh, &rendered.rgba, page);
+            if rendered.error.is_none() && rendered.width > 0 && rendered.height > 0 && !rendered.rgba.is_empty() {
+                let rw = rendered.width as usize;
+                let rh = rendered.height as usize;
+                let buffer_codes = scan_rgba_buffer(rw, rh, &rendered.rgba, page);
 
-            for mut code in buffer_codes {
-                // Avoid duplicating codes that were already found in embedded images
-                let already_found = scanned.iter().any(|c| c.text == code.text);
-                if already_found {
-                    continue;
+                let mut found_any = false;
+                for mut code in buffer_codes {
+                    // Avoid duplicating codes that were already found in embedded images
+                    let already_found = scanned.iter().any(|c| {
+                        c.text == code.text && {
+                            let overlap_x = (c.rect[0].max(code.rect[0])) <= (c.rect[2].min(code.rect[2]) + 20.0);
+                            let overlap_y = (c.rect[1].max(code.rect[1])) <= (c.rect[3].min(code.rect[3]) + 20.0);
+                            overlap_x && overlap_y
+                        }
+                    });
+                    if already_found {
+                        continue;
+                    }
+
+                    code.id = scanned.len();
+                    code.image_index = None;
+
+                    // Map rendered pixel coordinates (Y=0 at top) to PDF user-space points (Y=0 at bottom)
+                    let min_x = (code.rect[0] / (scale as f64)).clamp(0.0, page_w as f64);
+                    let max_x = (code.rect[2] / (scale as f64)).clamp(0.0, page_w as f64);
+                    let top_y = code.rect[1] / (scale as f64);
+                    let bot_y = code.rect[3] / (scale as f64);
+
+                    let pdf_min_y = ((page_h as f64) - bot_y).clamp(0.0, page_h as f64);
+                    let pdf_max_y = ((page_h as f64) - top_y).clamp(0.0, page_h as f64);
+
+                    code.rect = [min_x, pdf_min_y, max_x, pdf_max_y];
+                    scanned.push(code);
+                    found_any = true;
                 }
 
-                code.id = scanned.len();
-                code.image_index = None;
-
-                // Map rendered pixel coordinates (Y=0 at top) to PDF user-space points (Y=0 at bottom)
-                let min_x = (code.rect[0] / (scale as f64)).clamp(0.0, page_w as f64);
-                let max_x = (code.rect[2] / (scale as f64)).clamp(0.0, page_w as f64);
-                let top_y = code.rect[1] / (scale as f64);
-                let bot_y = code.rect[3] / (scale as f64);
-
-                let pdf_min_y = ((page_h as f64) - bot_y).clamp(0.0, page_h as f64);
-                let pdf_max_y = ((page_h as f64) - top_y).clamp(0.0, page_h as f64);
-
-                code.rect = [min_x, pdf_min_y, max_x, pdf_max_y];
-                scanned.push(code);
+                if found_any {
+                    break;
+                }
             }
         }
 
-        scanned
+        // Deduplicate any overlapping detections with identical payload
+        let mut unique: Vec<ScannedCode> = Vec::new();
+        for c in scanned {
+            let is_dup = unique.iter().any(|u| {
+                if u.text == c.text {
+                    let overlap_x = (u.rect[0].max(c.rect[0])) <= (u.rect[2].min(c.rect[2]) + 20.0);
+                    let overlap_y = (u.rect[1].max(c.rect[1])) <= (u.rect[3].min(c.rect[3]) + 20.0);
+                    overlap_x && overlap_y
+                } else {
+                    false
+                }
+            });
+            if !is_dup {
+                unique.push(c);
+            }
+        }
+        for (idx, c) in unique.iter_mut().enumerate() {
+            c.id = idx;
+        }
+
+        unique
     }
 
     /// Generate an updated QR code or barcode raster at **exactly 100% of the original pixel dimensions**.
     ///
     /// This strictly enforces the pixel-perfect replacement constraint: the generated PNG byte stream
     /// matches `[width, height]` down to the exact pixel.
-    pub fn generate_replacement_code(
-        kind: CodeKind,
-        text: &str,
-        target_width: u32,
-        target_height: u32,
-    ) -> Result<Vec<u8>, String> {
+    pub fn generate_replacement_code(kind: CodeKind, text: &str, target_width: u32, target_height: u32) -> Result<Vec<u8>, String> {
         if target_width == 0 || target_height == 0 {
             return Err("Target dimensions must be non-zero".into());
         }
 
-        match kind {
-            CodeKind::QrCode => {
-                let qr = QrCode::encode_text(text).map_err(|e| e.to_string())?;
-                let size = qr.size;
-                let scale = (target_width as f32 / size as f32).floor().max(1.0) as usize;
-                let qr_w = size * scale;
-                let pad_x = (target_width as usize).saturating_sub(qr_w) / 2;
-                let pad_y = (target_height as usize).saturating_sub(qr_w) / 2;
+        use rxing::Writer;
+        let format = match kind {
+            CodeKind::QrCode => rxing::BarcodeFormat::QR_CODE,
+            CodeKind::Code128 => rxing::BarcodeFormat::CODE_128,
+            CodeKind::Code39 => rxing::BarcodeFormat::CODE_39,
+            CodeKind::Ean13 => rxing::BarcodeFormat::EAN_13,
+            CodeKind::GenericBarcode => rxing::BarcodeFormat::CODE_128,
+        };
 
-                // Render exact pixel buffer
-                let mut rgba = vec![255u8; (target_width as usize).saturating_mul(target_height as usize).saturating_mul(4)];
-                for qy in 0..size {
-                    for qx in 0..size {
-                        let is_dark = qr.is_dark(qy, qx);
-                        let fill_color = if is_dark { 0u8 } else { 255u8 };
+        let writer = rxing::MultiFormatWriter::default();
+        let matrix = writer.encode(text, &format, target_width as i32, target_height as i32).map_err(|e| e.to_string())?;
 
-                        for sy in 0..scale {
-                            let py = pad_y + qy * scale + sy;
-                            if py >= target_height as usize {
-                                continue;
-                            }
-                            for sx in 0..scale {
-                                let px = pad_x + qx * scale + sx;
-                                if px >= target_width as usize {
-                                    continue;
-                                }
-                                let base = (py * target_width as usize + px) * 4;
-                                if let Some(slice) = rgba.get_mut(base..base + 4) {
-                                    slice[0] = fill_color;
-                                    slice[1] = fill_color;
-                                    slice[2] = fill_color;
-                                    slice[3] = 255;
-                                }
-                            }
-                        }
+        let w = matrix.getWidth() as usize;
+        let h = matrix.getHeight() as usize;
+
+        // Render high-contrast RGBA buffer
+        let mut rgba = vec![255u8; w.saturating_mul(h).saturating_mul(4)];
+        for y in 0..h {
+            for x in 0..w {
+                if matrix.get(x as u32, y as u32) {
+                    let idx = (y.saturating_mul(w).saturating_add(x)).saturating_mul(4);
+                    if let Some(slice) = rgba.get_mut(idx..idx + 4) {
+                        slice[0] = 0;
+                        slice[1] = 0;
+                        slice[2] = 0;
+                        slice[3] = 255;
                     }
                 }
-
-                encode_png_exact(target_width, target_height, &rgba)
-            }
-            _ => {
-                // 1D Barcode replacement at exact pixel dimensions
-                let mut rgba = vec![255u8; (target_width as usize).saturating_mul(target_height as usize).saturating_mul(4)];
-                let bar_h = (target_height as f32 * 0.85) as usize;
-                let pad_y = (target_height as usize).saturating_sub(bar_h) / 2;
-                let text_bytes = text.as_bytes();
-
-                // High-contrast barcode bar encoding across target width
-                let num_modules = (text_bytes.len().saturating_mul(11) + 35).max(50);
-                let mod_w = (target_width as f32 / num_modules as f32).max(1.0);
-
-                for (idx, &byte) in text_bytes.iter().enumerate() {
-                    let base_x = ((idx * 11 + 10) as f32 * mod_w) as usize;
-                    for bit in 0..8 {
-                        let is_dark = (byte & (1 << bit)) != 0;
-                        if is_dark {
-                            let start_x = base_x + (bit as f32 * mod_w) as usize;
-                            let end_x = (start_x + mod_w as usize).min(target_width as usize);
-                            for px in start_x..end_x {
-                                for py in pad_y..pad_y + bar_h {
-                                    if py < target_height as usize {
-                                        let offset = (py * target_width as usize + px) * 4;
-                                        if let Some(slice) = rgba.get_mut(offset..offset + 4) {
-                                            slice[0] = 0;
-                                            slice[1] = 0;
-                                            slice[2] = 0;
-                                            slice[3] = 255;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                encode_png_exact(target_width, target_height, &rgba)
             }
         }
+
+        encode_png_exact(w as u32, h as u32, &rgba)
     }
 }
 
@@ -1069,4 +1199,65 @@ fn encode_png_exact(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, Str
     writer.write_image_data(rgba).map_err(|e| e.to_string())?;
     writer.finish().map_err(|e| e.to_string())?;
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_barcode_generation_and_scan_roundtrip() {
+        let text = "ES26270317";
+        let png_bytes = Document::generate_replacement_code(CodeKind::Code39, text, 300, 100).expect("generate replacement code");
+
+        let decoder = png::Decoder::new(std::io::Cursor::new(&png_bytes));
+        let mut reader = decoder.read_info().expect("read png");
+        let mut buf = vec![0u8; reader.output_buffer_size().unwrap_or(500 * 500 * 4)];
+        let info = reader.next_frame(&mut buf).expect("read frame");
+        let rgba = &buf[..info.buffer_size()];
+
+        let codes = scan_rgba_buffer(info.width as usize, info.height as usize, rgba, 0);
+        assert!(!codes.is_empty(), "must scan generated code");
+        assert_eq!(codes[0].text, text);
+        assert_eq!(codes[0].kind, CodeKind::Code39);
+    }
+
+    #[test]
+    fn test_qr_code_generation_and_scan_roundtrip() {
+        let payload = "HELLO WORLD";
+        let matrix = QrCode::encode_text(payload).expect("encode qr");
+        let png_bytes = matrix.to_png_bytes(6, 4).expect("to png");
+        println!("Generated PNG: {} bytes", png_bytes.len());
+
+        let decoder = png::Decoder::new(std::io::Cursor::new(&png_bytes));
+        let mut reader = decoder.read_info().expect("read png header");
+        let mut buf = vec![0u8; reader.output_buffer_size().unwrap_or(500 * 500 * 4)];
+        let info = reader.next_frame(&mut buf).expect("read png frame");
+        println!("PNG frame: {}x{}", info.width, info.height);
+        let rgba = &buf[..info.buffer_size()];
+
+        let scanned = scan_rgba_buffer(info.width as usize, info.height as usize, rgba, 0);
+        println!("Scanned codes: {:?}", scanned.iter().map(|c| (&c.text, c.kind)).collect::<Vec<_>>());
+        assert!(!scanned.is_empty(), "must detect generated QR code");
+        assert_eq!(scanned[0].kind, CodeKind::QrCode);
+        assert_eq!(scanned[0].text, payload);
+    }
+
+    #[test]
+    fn test_scan_user_sample() {
+        let path = r"C:\Users\sande\Desktop\sticker ES26270317.pdf";
+        if let Ok(bytes) = std::fs::read(path) {
+            let mut session = crate::Session::new();
+            if let Ok(id) = session.open("sample.pdf", None, std::sync::Arc::new(bytes), None) {
+                let doc = session.get(id).unwrap();
+                for page in [0, 11] {
+                    let codes = doc.scan_page_codes(page);
+                    println!("Page {}: found {} codes:", page, codes.len());
+                    for c in &codes {
+                        println!("  - {:?}: '{}' rect: {:?}", c.kind, c.text, c.rect);
+                    }
+                }
+            }
+        }
+    }
 }

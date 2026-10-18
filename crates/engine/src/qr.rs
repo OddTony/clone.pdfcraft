@@ -5,6 +5,7 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+use rxing::Writer;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -26,10 +27,7 @@ pub struct QrMatrix {
 
 impl QrMatrix {
     pub fn new(size: usize) -> Self {
-        Self {
-            size,
-            modules: vec![false; size.saturating_mul(size)],
-        }
+        Self { size, modules: vec![false; size.saturating_mul(size)] }
     }
 
     pub fn is_dark(&self, row: usize, col: usize) -> bool {
@@ -118,308 +116,72 @@ impl QrMatrix {
     }
 }
 
-// Galois Field GF(256) with primitive polynomial 0x11D for Reed-Solomon ECC
-const GF_POLY: u16 = 0x11D;
-const GF_EXP: [u8; 512] = {
-    let mut exp = [0u8; 512];
-    let mut x = 1u16;
-    let mut i = 0;
-    while i < 255 {
-        exp[i] = x as u8;
-        exp[i + 255] = x as u8;
-        x <<= 1;
-        if (x & 0x100) != 0 {
-            x ^= GF_POLY;
-        }
-        i += 1;
-    }
-    exp[510] = exp[0];
-    exp[511] = exp[1];
-    exp
-};
-
-const GF_LOG: [u8; 256] = {
-    let mut log = [0u8; 256];
-    let mut i = 0;
-    while i < 255 {
-        log[GF_EXP[i] as usize] = i as u8;
-        i += 1;
-    }
-    log
-};
-
-fn gf_mul(a: u8, b: u8) -> u8 {
-    if a == 0 || b == 0 {
-        0
-    } else {
-        GF_EXP[(GF_LOG[a as usize] as usize).saturating_add(GF_LOG[b as usize] as usize)]
-    }
-}
-
-fn rs_compute_ecc(data: &[u8], num_ecc: usize) -> Vec<u8> {
-    let mut generator = vec![1u8];
-    for i in 0..num_ecc {
-        let mut next = vec![0u8; generator.len() + 1];
-        let factor = GF_EXP[i];
-        for (j, &coef) in generator.iter().enumerate() {
-            next[j] ^= coef;
-            next[j + 1] ^= gf_mul(coef, factor);
-        }
-        generator = next;
-    }
-
-    let mut remainder = vec![0u8; num_ecc];
-    for &byte in data {
-        let lead = byte ^ remainder.get(0).copied().unwrap_or(0);
-        for j in 0..num_ecc.saturating_sub(1) {
-            let next = remainder.get(j + 1).copied().unwrap_or(0);
-            let g = generator.get(j + 1).copied().unwrap_or(0);
-            if let Some(r) = remainder.get_mut(j) {
-                *r = next ^ gf_mul(lead, g);
-            }
-        }
-        if let Some(r) = remainder.get_mut(num_ecc.saturating_sub(1)) {
-            let g = generator.get(num_ecc).copied().unwrap_or(0);
-            *r = gf_mul(lead, g);
-        }
-    }
-    remainder
-}
-
-/// Version specs for Medium (M) error correction.
-struct VersionSpec {
-    version: usize,
-    size: usize,
-    total_data_bytes: usize,
-    ecc_bytes: usize,
-    align_pos: &'static [usize],
-}
-
-static VERSION_SPECS: &[VersionSpec] = &[
-    VersionSpec { version: 1, size: 21, total_data_bytes: 16, ecc_bytes: 10, align_pos: &[] },
-    VersionSpec { version: 2, size: 25, total_data_bytes: 28, ecc_bytes: 16, align_pos: &[6, 18] },
-    VersionSpec { version: 3, size: 29, total_data_bytes: 44, ecc_bytes: 26, align_pos: &[6, 22] },
-    VersionSpec { version: 4, size: 33, total_data_bytes: 64, ecc_bytes: 36, align_pos: &[6, 26] },
-    VersionSpec { version: 5, size: 37, total_data_bytes: 86, ecc_bytes: 48, align_pos: &[6, 30] },
-    VersionSpec { version: 6, size: 41, total_data_bytes: 108, ecc_bytes: 64, align_pos: &[6, 34] },
-];
-
 pub struct QrCode;
 
 impl QrCode {
-    /// Encode a text or URL payload into a `QrMatrix` using Medium error correction.
+    /// Encode a text or URL payload into a `QrMatrix` using standard QR code encoding.
     pub fn encode_text(text: &str) -> Result<QrMatrix, QrError> {
-        let bytes = text.as_bytes();
-        let payload_len = bytes.len();
+        let writer = rxing::qrcode::QRCodeWriter::default();
+        let matrix = writer.encode(text, &rxing::BarcodeFormat::QR_CODE, 0, 0).map_err(|e| QrError::PngEncoding(e.to_string()))?;
 
-        // Find smallest version that fits payload in Byte mode:
-        // Overhead: 4 bits mode + 8 bits char count = 12 bits = 1.5 bytes.
-        let required_bytes = payload_len.saturating_add(2);
-        let spec = VERSION_SPECS
-            .iter()
-            .find(|s| s.total_data_bytes >= required_bytes)
-            .ok_or(QrError::PayloadTooLarge)?;
-
-        // Build bitstream
-        let mut bit_buf = Vec::new();
-        // 1. Byte mode indicator: 0100
-        push_bits(&mut bit_buf, 0b0100, 4);
-        // 2. Character count indicator: 8 bits for versions 1-9
-        push_bits(&mut bit_buf, payload_len as u32, 8);
-        // 3. Payload bytes
-        for &b in bytes {
-            push_bits(&mut bit_buf, b as u32, 8);
-        }
-        // 4. Terminator (up to 4 zeroes)
-        let max_data_bits = spec.total_data_bytes.saturating_mul(8);
-        let term_len = 4.min(max_data_bits.saturating_sub(bit_buf.len()));
-        push_bits(&mut bit_buf, 0, term_len);
-        // 5. Pad to multiple of 8
-        let rem = bit_buf.len() % 8;
-        if rem != 0 {
-            push_bits(&mut bit_buf, 0, 8 - rem);
-        }
-        // 6. Pad bytes 0xEC and 0x11
-        let mut data_bytes = bits_to_bytes(&bit_buf);
-        let mut pad = 0xECu8;
-        while data_bytes.len() < spec.total_data_bytes {
-            data_bytes.push(pad);
-            pad = if pad == 0xEC { 0x11 } else { 0xEC };
+        let total_w = matrix.getWidth() as usize;
+        // rxing adds a default 4-module quiet zone margin on each side (total 8 modules).
+        // Extract the core matrix so `QrMatrix` has standard module dimensions.
+        let core_size = total_w.saturating_sub(8);
+        if core_size == 0 {
+            return Err(QrError::PngEncoding("Failed to generate valid QR matrix".into()));
         }
 
-        // 7. Compute Reed-Solomon ECC
-        let ecc_bytes = rs_compute_ecc(&data_bytes, spec.ecc_bytes);
-        let mut codeword_bytes = data_bytes;
-        codeword_bytes.extend_from_slice(&ecc_bytes);
-
-        // 8. Place patterns and modules
-        let mut matrix = QrMatrix::new(spec.size);
-        let mut is_function = vec![false; spec.size.saturating_mul(spec.size)];
-
-        // Finder patterns (top-left, top-right, bottom-left)
-        place_finder_pattern(&mut matrix, &mut is_function, 0, 0);
-        place_finder_pattern(&mut matrix, &mut is_function, 0, spec.size - 7);
-        place_finder_pattern(&mut matrix, &mut is_function, spec.size - 7, 0);
-
-        // Alignment patterns for version >= 2
-        for &r in spec.align_pos {
-            for &c in spec.align_pos {
-                if !((r <= 8 && c <= 8) || (r <= 8 && c >= spec.size - 8) || (r >= spec.size - 8 && c <= 8)) {
-                    place_alignment_pattern(&mut matrix, &mut is_function, r - 2, c - 2);
-                }
+        let mut qr_matrix = QrMatrix::new(core_size);
+        for r in 0..core_size {
+            for c in 0..core_size {
+                let dark = matrix.get((c + 4) as u32, (r + 4) as u32);
+                qr_matrix.set(r, c, dark);
             }
         }
 
-        // Timing patterns
-        for i in 8..spec.size - 8 {
-            let dark = i % 2 == 0;
-            set_function(&mut matrix, &mut is_function, 6, i, dark);
-            set_function(&mut matrix, &mut is_function, i, 6, dark);
-        }
-
-        // Dark module
-        set_function(&mut matrix, &mut is_function, (4 * spec.version).saturating_add(9), 8, true);
-
-        // Reserve format info areas
-        reserve_format_info(&mut is_function, spec.size);
-
-        // Data placement in 2-module wide zigzag columns
-        let mut bit_idx = 0;
-        let total_bits = codeword_bytes.len().saturating_mul(8);
-        let mut right = spec.size as i32 - 1;
-        let mut upwards = true;
-
-        while right > 0 {
-            if right == 6 {
-                right -= 1; // Skip vertical timing column
-            }
-            for row_offset in 0..spec.size {
-                let r = if upwards { spec.size - 1 - row_offset } else { row_offset };
-                for col_offset in 0..2 {
-                    let c = (right - col_offset) as usize;
-                    let idx = r * spec.size + c;
-                    if !is_function.get(idx).copied().unwrap_or(true) {
-                        let bit = if bit_idx < total_bits {
-                            let byte = codeword_bytes.get(bit_idx / 8).copied().unwrap_or(0);
-                            let shift = 7 - (bit_idx % 8);
-                            (byte >> shift) & 1 == 1
-                        } else {
-                            false
-                        };
-                        bit_idx += 1;
-                        // Apply Mask 0: (row + col) % 2 == 0
-                        let masked_bit = bit ^ ((r + c) % 2 == 0);
-                        matrix.set(r, c, masked_bit);
-                    }
-                }
-            }
-            right -= 2;
-            upwards = !upwards;
-        }
-
-        // Write Format Information (ECC level M = 00, Mask 0 = 000 -> 0b00000 -> with BCH = 0x5412)
-        write_format_info(&mut matrix, spec.size, 0b101010000010010 ^ 0b101010000010010);
-
-        Ok(matrix)
+        Ok(qr_matrix)
     }
 }
 
-fn push_bits(buf: &mut Vec<bool>, val: u32, count: usize) {
-    for i in (0..count).rev() {
-        buf.push(((val >> i) & 1) == 1);
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity((bits.len() + 7) / 8);
-    for chunk in bits.chunks(8) {
-        let mut b = 0u8;
-        for (i, &bit) in chunk.iter().enumerate() {
-            if bit {
-                b |= 1 << (7 - i);
-            }
-        }
-        bytes.push(b);
+    #[test]
+    fn test_qr_encode_and_render_png() {
+        let qr = QrCode::encode_text("https://example.com/craft").expect("encode QR");
+        assert!(qr.size >= 21);
+        let png = qr.to_png_bytes(4, 4).expect("to PNG");
+        assert!(!png.is_empty());
+        assert_eq!(&png[0..8], b"\x89PNG\r\n\x1a\n");
     }
-    bytes
-}
 
-fn set_function(matrix: &mut QrMatrix, is_func: &mut [bool], r: usize, c: usize, dark: bool) {
-    matrix.set(r, c, dark);
-    let idx = r * matrix.size + c;
-    if let Some(f) = is_func.get_mut(idx) {
-        *f = true;
+    #[test]
+    fn test_qr_pdf_vector_ops() {
+        let qr = QrCode::encode_text("PDF-TEST").expect("encode QR");
+        let ops = qr.to_pdf_vector_ops([50.0, 50.0, 150.0, 150.0], 4);
+        assert!(ops.starts_with("0 0 0 rg\n"));
+        assert!(ops.ends_with("f\n"));
+        assert!(ops.contains("re\n"));
     }
-}
 
-fn place_finder_pattern(matrix: &mut QrMatrix, is_func: &mut [bool], start_r: usize, start_c: usize) {
-    for r in 0..7 {
-        for c in 0..7 {
-            let dark = r == 0 || r == 6 || c == 0 || c == 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4);
-            set_function(matrix, is_func, start_r + r, start_c + c, dark);
-        }
-    }
-    // White separators around finder
-    let size = matrix.size;
-    for i in 0..8 {
-        if start_r + 7 < size && start_c + i < size {
-            set_function(matrix, is_func, start_r + 7, start_c + i, false);
-        }
-        if start_r + i < size && start_c + 7 < size {
-            set_function(matrix, is_func, start_r + i, start_c + 7, false);
-        }
-        if start_r >= 1 && start_c + i < size {
-            set_function(matrix, is_func, start_r - 1, start_c + i, false);
-        }
-        if start_r + i < size && start_c >= 1 {
-            set_function(matrix, is_func, start_r + i, start_c - 1, false);
-        }
-    }
-}
+    #[test]
+    fn test_qr_decode_roundtrip() {
+        let payload = "PDF-CRAFT-VERIFIED-QR-2026";
+        let qr = QrCode::encode_text(payload).expect("encode QR");
+        let png_bytes = qr.to_png_bytes(6, 4).expect("to png");
 
-fn place_alignment_pattern(matrix: &mut QrMatrix, is_func: &mut [bool], start_r: usize, start_c: usize) {
-    for r in 0..5 {
-        for c in 0..5 {
-            let dark = r == 0 || r == 4 || c == 0 || c == 4 || (r == 2 && c == 2);
-            set_function(matrix, is_func, start_r + r, start_c + c, dark);
-        }
-    }
-}
+        let decoder = png::Decoder::new(std::io::Cursor::new(&png_bytes));
+        let mut reader = decoder.read_info().expect("read png header");
+        let mut buf = vec![0u8; reader.output_buffer_size().unwrap_or(500 * 500 * 4)];
+        let info = reader.next_frame(&mut buf).expect("read png frame");
+        let rgba = &buf[..info.buffer_size()];
 
-fn reserve_format_info(is_func: &mut [bool], size: usize) {
-    for i in 0..9 {
-        if let Some(f) = is_func.get_mut(8 * size + i) { *f = true; }
-        if let Some(f) = is_func.get_mut(i * size + 8) { *f = true; }
-    }
-    for i in (size.saturating_sub(8))..size {
-        if let Some(f) = is_func.get_mut(8 * size + i) { *f = true; }
-        if let Some(f) = is_func.get_mut(i * size + 8) { *f = true; }
-    }
-}
-
-fn write_format_info(matrix: &mut QrMatrix, size: usize, bits: u16) {
-    // 15 format bits (masked with 0x5412)
-    let format = bits ^ 0x5412;
-    for i in 0..15 {
-        let bit = ((format >> i) & 1) == 1;
-        // Around top-left finder
-        if i <= 5 {
-            matrix.set(8, i, bit);
-        } else if i == 6 {
-            matrix.set(8, 7, bit);
-        } else if i == 7 {
-            matrix.set(8, 8, bit);
-        } else if i == 8 {
-            matrix.set(7, 8, bit);
-        } else {
-            matrix.set(14 - i, 8, bit);
-        }
-
-        // Around right & bottom finders
-        if i < 7 {
-            matrix.set(size - 1 - i, 8, bit);
-        } else {
-            matrix.set(8, size - 15 + i, bit);
-        }
+        let gray = crate::barcode_scan::GrayImage::from_rgba(info.width as usize, info.height as usize, rgba).expect("gray");
+        let results = rxing::helpers::detect_multiple_in_luma(gray.pixels, info.width, info.height).expect("detect");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].getText(), payload);
+        assert_eq!(*results[0].getBarcodeFormat(), rxing::BarcodeFormat::QR_CODE);
     }
 }
