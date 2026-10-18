@@ -354,7 +354,7 @@ fn removed_uninspectable_form_xobject_clears_metadata_on_limit() {
     fdict.set(b"Subtype".to_vec(), Object::Name(b"Form".to_vec()));
     fdict.set(b"BBox".to_vec(), Object::Array(vec![Object::Int(0), Object::Int(0), Object::Int(100), Object::Int(100)]));
     fdict.set(b"Filter".to_vec(), Object::Name(b"FlateDecode".to_vec()));
-    let form_ref = doc.add(Object::Stream(Stream { dict: fdict, raw: b"not valid zlib".to_vec() }));
+    let form_ref = doc.add(Object::Stream(Stream { dict: fdict, raw: b"not valid zlib".to_vec().into() }));
     let page = pdfcraft_model::pages(&doc).swap_remove(0);
     let mut res = page.dict.get(b"Resources").and_then(|r| doc.resolve(r).as_dict().cloned()).unwrap_or_default();
     let mut xo = Dict::new();
