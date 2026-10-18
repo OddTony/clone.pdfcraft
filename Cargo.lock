@@ -3940,7 +3940,6 @@ dependencies = [
 name = "pdfcraft"
 version = "0.9.0"
 dependencies = [
- "toml",
  "craft-quit",
  "eframe",
  "egui",
@@ -3952,6 +3951,7 @@ dependencies = [
  "raw-window-handle",
  "rustls-native-certs",
  "serde_json",
+ "toml",
  "uds_windows",
  "ureq",
  "wayland-client",
