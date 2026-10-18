@@ -329,6 +329,7 @@ key	Space	Mezerník
 	Import form data…	Importovat data formuláře…
 	Export form data…	Exportovat data formuláře…
 	PDF/A…	PDF/A…
+	PDF/X…	PDF/X…
 	Action Wizard…	Průvodce akcemi…
 	Prepare for distribution…	Připravit k distribuci…
 	Optimize scanned documents…	Optimalizovat skenované dokumenty…
@@ -546,6 +547,18 @@ key	Space	Mezerník
 	Standards	Standardy
 	Save as PDF/A	Uložit jako PDF/A
 	Save as PDF/X	Uložit jako PDF/X
+	Verify PDF/X	Ověřit PDF/X
+	Choose ICC profile…	Vybrat profil ICC…
+	ICC profile: {name}	Profil ICC: {name}
+	Can't save as {level}; nothing was changed:	Nelze uložit jako {level}; nic nebylo změněno:
+	Saved {name} and verified it: it conforms to {level}.	Soubor {name} byl uložen a ověřen: vyhovuje standardu {level}.
+	Saved {name}, but verifying it found {n} problems.	Soubor {name} byl uložen, ale ověření našlo problémy: {n}.
+	Converted to {level} ({n} changes)	Převedeno na {level} (změny: {n})
+	Output intent profile:	Profil výstupního záměru:
+	None: sRGB for RGB and gray documents	Žádný: sRGB pro dokumenty RGB a ve stupních šedi
+	Printing condition:	Tiskové podmínky:
+	Flatten comments and form fields	Sloučit komentáře a pole formulářů se stránkou
+	Couldn't read the ICC profile {name}: {e}	Profil ICC {name} nelze přečíst: {e}
 	Save as PDF/UA	Uložit jako PDF/UA
 	Add search index	Přidat vyhledávací index
 	Index	Index
