@@ -2836,6 +2836,14 @@ pub fn source_page_count(bytes: &Arc<Vec<u8>>, password: Option<&str>) -> Option
     pdfcraft_organize::page_count(&doc).ok()
 }
 
+/// Rotate `pages` (0-based) of `bytes` by `degrees` (±90, ±180), opened with `password` if given,
+/// and return the updated PDF bytes (Combine Files).
+pub fn rotate_source_pages(bytes: &Arc<Vec<u8>>, password: Option<&str>, pages: &[usize], degrees: i32) -> Result<Arc<Vec<u8>>, EditError> {
+    let mut doc = source_document(bytes, password).map_err(|p| EditError::Source(p.to_string()))?;
+    pdfcraft_organize::rotate_pages(&mut doc, pages, i64::from(degrees))?;
+    guard(|| write_incremental(&doc, &SaveOptions::default())).map_err(EditError::Write)?.map(Arc::new).map_err(|e| EditError::Write(e.to_string()))
+}
+
 /// The singular or the plural wording, by count. Both are written out: a language forms its plural
 /// its own way, and `one` and `many` may differ in more than an "s".
 fn plural(one: &'static str, many: &'static str, n: usize) -> Label {

@@ -606,6 +606,10 @@ pub(crate) enum RowAction {
     },
     /// One page's trash (`Some`), or the selected pages: out of the list.
     RemovePages(Option<(u64, usize)>),
+    /// Rotate every page a file card adds by `degrees` (-90 or 90).
+    RotateFile(u64, i32),
+    /// Rotate one page of an expanded file (entry id and place among its pages) by `degrees`.
+    RotatePage(u64, usize, i32),
     /// Row `from` (and the rest of the selection, if it is selected) dropped on row `to`.
     Drop {
         from: usize,
@@ -2104,8 +2108,45 @@ impl PdfCraftApp {
         self.combine_tab.sort = None;
     }
 
+    /// Rotate one page (`Some(nth)`) or every page an entry takes (`None`) by `degrees`.
+    fn combine_rotate(&mut self, id: u64, page: Option<usize>, degrees: i32) {
+        let Some(f) = self.combine_draft.iter().find(|f| f.id == id && f.lock.is_none() && f.problem.is_none()) else { return };
+        let Ok(taken) = f.pages_taken() else { return };
+        let pages: Vec<usize> = match page {
+            Some(nth) => match taken.get(nth) {
+                Some(&p) => vec![p],
+                None => return,
+            },
+            None => taken.into_iter().collect::<BTreeSet<usize>>().into_iter().collect(),
+        };
+        if pages.is_empty() {
+            return;
+        }
+        let Ok(bytes) = pdfcraft_engine::rotate_source_pages(&f.bytes, f.password(), &pages, degrees) else { return };
+        let group = f.group;
+        let old_auth = f.auth;
+        let swap = degrees.rem_euclid(180) != 0;
+        let sizes: Arc<[(f32, f32)]> =
+            f.sizes.iter().enumerate().map(|(i, &(w, h))| if swap && pages.binary_search(&i).is_ok() { (h, w) } else { (w, h) }).collect();
+        self.combine_record();
+        let auth = next_auth();
+        self.combine_thumbs.keep_unrotated(group, old_auth, Arc::as_ptr(&bytes) as usize, auth, &pages);
+        for entry in self.combine_draft.iter_mut().filter(|e| e.group == group) {
+            entry.bytes = bytes.clone();
+            entry.sizes = sizes.clone();
+            entry.auth = auth;
+        }
+    }
+
     pub(crate) fn combine_apply(&mut self, action: RowAction) {
-        let page_edit = matches!(action, RowAction::ClickPage(..) | RowAction::MovePages { .. } | RowAction::RemovePages(_));
+        let page_edit = matches!(
+            action,
+            RowAction::ClickPage(..)
+                | RowAction::MovePages { .. }
+                | RowAction::RemovePages(_)
+                | RowAction::RotateFile(..)
+                | RowAction::RotatePage(..)
+        );
         self.combine_apply_once(action);
         // One kind of selection at a time: files picked (by a click, the keys, a drop, Unlock…)
         // let go of the pages picked, so the trash never takes pages the user no longer means.
@@ -2131,6 +2172,8 @@ impl PdfCraftApp {
         // Page edits work on the list as parts.
         match action {
             RowAction::ClickPage(id, nth, m) => return self.combine_click_page(id, nth, m),
+            RowAction::RotateFile(id, degrees) => return self.combine_rotate(id, None, degrees),
+            RowAction::RotatePage(id, nth, degrees) => return self.combine_rotate(id, Some(nth), degrees),
             RowAction::MovePages { page, revision, gap } => {
                 if revision != self.combine_tab.revision {
                     return;
@@ -2329,7 +2372,11 @@ impl PdfCraftApp {
                 }
             }
             // (Page edits were done above.)
-            RowAction::ClickPage(..) | RowAction::MovePages { .. } | RowAction::RemovePages(_) => {}
+            RowAction::ClickPage(..)
+            | RowAction::MovePages { .. }
+            | RowAction::RemovePages(_)
+            | RowAction::RotateFile(..)
+            | RowAction::RotatePage(..) => {}
             RowAction::Drop { from, to } => {
                 let (Some(&dragged), Some(&target)) = (ids.get(from), ids.get(to)) else { return };
                 // Dragging a selected file takes the whole selection along.

@@ -1841,3 +1841,46 @@ fn open_documents_already_in_the_list_are_not_added_again() {
     add_all(&mut h);
     assert_eq!(names(&h), ["a.pdf", "report.pdf", "report.pdf", "b.pdf"]);
 }
+
+#[test]
+fn rotating_a_file_card_or_an_expanded_page_card_updates_thumbnails_and_the_combined_pdf() {
+    let mut h =
+        grid_of(vec![("portrait.pdf", fixture_sized(1, 200.0, 300.0)), ("landscape.pdf", fixture_sized(2, 300.0, 200.0))], vec2(1400.0, 900.0));
+    assert!(settle(&mut h, |app| app.combine_thumbnails().iter().all(ready)));
+    assert!(matches!(h.state().combine_thumbnails()[1], CombineThumb::Ready { width, height, .. } if width > height));
+
+    // Rotate the whole landscape file clockwise from its collapsed card: both pages become portrait.
+    hover_card(&mut h, "landscape.pdf");
+    h.get_by_label("Rotate clockwise").click();
+    assert!(settle(&mut h, |app| matches!(app.combine_thumbnails()[1], CombineThumb::Ready { width, height, .. } if height > width)));
+
+    // Undo and redo restore the orientation.
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    assert!(settle(&mut h, |app| matches!(app.combine_thumbnails()[1], CombineThumb::Ready { width, height, .. } if width > height)));
+    h.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    assert!(settle(&mut h, |app| matches!(app.combine_thumbnails()[1], CombineThumb::Ready { width, height, .. } if height > width)));
+
+    // Expand the file and rotate only Page 2 counterclockwise back to landscape.
+    expand(&mut h, "landscape.pdf");
+    assert!(settle(&mut h, |app| app
+        .combine_page_thumbnails(1)
+        .iter()
+        .all(|(_, t)| matches!(t, CombineThumb::Ready { width, height, .. } if height > width))));
+    hover_card(&mut h, &page_card(2, "landscape.pdf"));
+    h.get_by_label("Rotate counterclockwise").click();
+    assert!(settle(&mut h, |app| {
+        let pages = app.combine_page_thumbnails(1);
+        matches!(pages.first(), Some((_, CombineThumb::Ready { width, height, .. })) if height > width)
+            && matches!(pages.get(1), Some((_, CombineThumb::Ready { width, height, .. })) if width > height)
+    }));
+
+    // Combining produces the final document with each page's chosen orientation.
+    h.hover_at(egui::pos2(5.0, 890.0));
+    h.run_steps(2);
+    h.get_by_label("Combine").click();
+    h.run_steps(3);
+    let app = h.state();
+    let doc = app.session.get(app.views[0].id).unwrap();
+    let pages: Vec<(f32, f32, u16)> = doc.info.pages.iter().map(|p| (p.width, p.height, p.rotation)).collect();
+    assert_eq!(pages, [(200.0, 300.0, 0), (200.0, 300.0, 90), (300.0, 200.0, 0)]);
+}
