@@ -619,13 +619,14 @@ fn brand_preferences(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             if ui.button(tl!("Choose…")).on_hover_text(tl!("A PNG or SVG file. It is read from this place each time PdfCraft starts.")).clicked() {
                 let dialog = rfd::AsyncFileDialog::new().set_title(tl!("Choose a logo")).add_filter("PNG or SVG", &["png", "svg"]);
                 app.ask_one(crate::pickers::Ask::File(dialog), None, |app, path| {
-                    app.brand.logo = Some(path);
-                    app.brand.reload_logo();
+                    if let Err(e) = app.brand.set_logo(Some(path)) {
+                        app.notify(e);
+                    }
                 });
             }
+            // Infallible for None; the result is for a user's path.
             if app.brand.logo.is_some() && ui.button(tl!("Reset")).clicked() {
-                app.brand.logo = None;
-                app.brand.reload_logo();
+                let _ = app.brand.set_logo(None);
             }
         });
     }

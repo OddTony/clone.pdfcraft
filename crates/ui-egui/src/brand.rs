@@ -108,13 +108,29 @@ impl Brand {
         self.loaded = None;
     }
 
-    /// The preference as saved in the settings file: `{"show", "name", "logo"}`.
+    /// Takes a logo file of the user's own (`None`: back to the app's own), and forgets the one
+    /// loaded so the next frame reads the new file. A path that is not valid UTF-8 is refused: the
+    /// settings file is JSON, which cannot carry it, so it could never come back after a restart.
+    pub fn set_logo(&mut self, path: Option<PathBuf>) -> Result<(), String> {
+        if let Some(p) = &path
+            && p.to_str().is_none()
+        {
+            return Err(tl!("This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.").to_owned());
+        }
+        self.logo = path;
+        self.reload_logo();
+        Ok(())
+    }
+
+    /// The preference as saved in the settings file: `{"show", "name", "logo"}`. The path goes in
+    /// as text (`to_str`), never through serde's `Path` support, which `json!` would unwrap into a
+    /// panic on a non-UTF-8 path; such a path is saved as null (`set_logo` refuses it anyway).
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "show": self.show.token(),
             "name": self.name,
             // Null: the app's own logo.
-            "logo": self.logo,
+            "logo": self.logo.as_deref().and_then(Path::to_str),
         })
     }
 
@@ -317,6 +333,27 @@ mod tests {
         // A name longer than the strip could ever show is cut, at a character boundary.
         brand.restore(&serde_json::json!({"name": "é".repeat(500)}));
         assert_eq!(brand.name.chars().count(), super::MAX_NAME_CHARS);
+    }
+
+    /// `json!` unwraps serde's `Path` serialisation, which fails on a path that is not UTF-8:
+    /// saving the settings would have panicked. The path now goes in as text or null.
+    #[cfg(unix)]
+    #[test]
+    fn a_non_utf8_logo_path_never_panics_the_settings_save_and_is_refused() {
+        use std::os::unix::ffi::OsStrExt;
+        let bad = std::path::PathBuf::from(std::ffi::OsStr::from_bytes(b"/tmp/logo-\xff.png"));
+        let mut brand = Brand::default();
+        assert!(brand.set_logo(Some(bad.clone())).is_err(), "refused at the door");
+        assert_eq!(brand.logo, None);
+        // Even if one got in (an old settings file, a future caller), saving must not panic.
+        brand.logo = Some(bad);
+        let json = brand.to_json();
+        assert!(json["logo"].is_null());
+        // A normal path round-trips, and None clears.
+        assert!(brand.set_logo(Some("/tmp/logo.png".into())).is_ok());
+        assert_eq!(brand.to_json()["logo"], "/tmp/logo.png");
+        assert!(brand.set_logo(None).is_ok());
+        assert_eq!(brand.logo, None);
     }
 
     #[test]

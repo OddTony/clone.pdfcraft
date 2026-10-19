@@ -2743,10 +2743,7 @@ impl PdfCraftApp {
             }
             ("brand-name", _) => self.brand.name = value.chars().take(brand::MAX_NAME_CHARS).collect(),
             // Empty: back to the app's own logo.
-            ("brand-logo", _) => {
-                self.brand.logo = (!value.is_empty()).then(|| std::path::PathBuf::from(value));
-                self.brand.reload_logo();
-            }
+            ("brand-logo", _) => self.brand.set_logo((!value.is_empty()).then(|| std::path::PathBuf::from(value)))?,
             ("system-title-bar", _) => {
                 self.system_title_bar = match value {
                     "true" => true,
