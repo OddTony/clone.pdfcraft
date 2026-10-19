@@ -1918,44 +1918,11 @@ impl DocView {
 
     /// Width required to display the document's pages with side margins.
     pub(crate) fn needed_content_width(&self, info: &DocInfo) -> f32 {
-        let s = self.zoom * PT;
         let single = (self.layout == PageLayout::Single && !self.continuous).then(|| self.current.min(info.pages.len().saturating_sub(1)));
-        match self.layout {
-            PageLayout::Single => {
-                let shown = info.pages.iter().enumerate().filter(|&(i, _)| single.is_none_or(|c| c == i));
-                let max_w = shown.map(|(_, p)| self.display_size(p).0).fold(0.0, f32::max);
-                max_w * s + 2.0 * SIDE
-            }
-            PageLayout::TwoUp => {
-                let rows: Vec<&[pdfcraft_render::PageInfo]> = if self.cover && !info.pages.is_empty() {
-                    std::iter::once(&info.pages[..1]).chain(info.pages[1..].chunks(2)).collect()
-                } else {
-                    info.pages.chunks(2).collect()
-                };
-                let row_indices = if self.continuous {
-                    None
-                } else {
-                    let cur = self.current.min(info.pages.len().saturating_sub(1));
-                    let r_idx = if self.cover { cur.div_ceil(2) } else { cur / 2 };
-                    Some(r_idx)
-                };
-                let mut max_row_w = 0.0f32;
-                for (ri, pair) in rows.into_iter().enumerate() {
-                    if let Some(target) = row_indices
-                        && ri != target
-                    {
-                        continue;
-                    }
-                    let w: f32 = if self.cover && ri == 0 {
-                        pair.first().map(|p| self.display_size(p).0 * s * 2.0 + GAP).unwrap_or(0.0)
-                    } else {
-                        pair.iter().map(|p| self.display_size(p).0 * s).sum::<f32>() + GAP * (pair.len().saturating_sub(1) as f32)
-                    };
-                    max_row_w = max_row_w.max(w);
-                }
-                max_row_w + 2.0 * SIDE
-            }
-        }
+        let shown = info.pages.iter().enumerate().filter(|&(i, _)| single.is_none_or(|c| c == i));
+        let max_w = shown.map(|(_, p)| self.display_size(p).0).fold(0.0, f32::max);
+        let per_row = if self.layout == PageLayout::TwoUp { 2.0 } else { 1.0 };
+        max_w * self.zoom * PT * per_row + 2.0 * SIDE
     }
 
     /// Width of the scroll content. Single-page view sizes it to the page it shows, so a
@@ -2454,17 +2421,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         ui.ctx().request_repaint();
     }
 
-    let needed_w = view.needed_content_width(info);
-    let hscroll = needed_w > avail.width() + 1.0;
-    let content_w = view.content_width(info, avail.width());
-    let rects = view.layout(info, content_w);
     // When not scrolling continuously, only one row is shown at a time: the current page, or the
     // current two-page spread (with the cover rule). These indices drive paging, which pages are
     // drawn, and the content height (#752). Empty for a document with no pages.
-    let row: Vec<usize> = if rects.is_empty() {
+    let row: Vec<usize> = if info.pages.is_empty() {
         Vec::new()
     } else {
-        let last = rects.len() - 1;
+        let last = info.pages.len() - 1;
         let cur = view.current.min(last);
         match view.layout {
             PageLayout::Single => vec![cur],
@@ -2475,6 +2438,23 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             }
         }
     };
+    let needed_w = view.needed_content_width(info);
+    let mut avail_w = avail.width();
+    let scrollbar_w = ui.spacing().scroll.allocated_width();
+    if scrollbar_w > 0.0 {
+        let test_rects = view.layout(info, needed_w.max(avail_w));
+        let content_h = if view.continuous {
+            test_rects.iter().map(|r| r.bottom()).reduce(f32::max).map(|b| b + MARGIN).unwrap_or(0.0)
+        } else {
+            row.iter().filter_map(|&i| test_rects.get(i)).copied().reduce(Rect::union).map(|r| r.height() + 2.0 * MARGIN).unwrap_or(0.0)
+        };
+        if content_h > avail.height() {
+            avail_w = (avail_w - scrollbar_w).max(0.0);
+        }
+    }
+    let hscroll = needed_w > avail_w + 1.0;
+    let content_w = view.content_width(info, avail_w);
+    let rects = view.layout(info, content_w);
     let middle_gesture = view.auto_scroll.blocks_input();
     // Not scrolling: when the whole page or spread fits, the wheel would do nothing, so it turns
     // pages instead; zoomed in far enough to pan, it pans, and at the edge it turns the page on

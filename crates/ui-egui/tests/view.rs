@@ -350,6 +350,7 @@ fn horizontal_scroll_turned_off_when_content_fits() {
     // When the document fits horizontally within the window, horizontal scrolling is turned
     // off so the centered page cannot drift off-center (#2803).
     let mut h = harness_stepping(1.0 / 60.0, &[("layout", "continuous"), ("zoom", "100")]);
+    h.ctx.global_style_mut(|s| s.spacing.scroll.floating = false);
     let at = h.state().views[0].viewport_rect().center();
     h.hover_at(at);
     h.run_steps(2);
@@ -385,10 +386,10 @@ fn horizontal_scroll_turned_off_during_vertical_scroll() {
     h.hover_at(at);
     h.run_steps(2);
     let before = rect(&h, 0).expect("page 1 on screen");
-    // Send a primarily vertical swipe with horizontal jitter (15 px sideways, -200 px vertical).
+    // Send a primarily vertical swipe with horizontal jitter (-15 px sideways, -200 px vertical).
     h.event(egui::Event::MouseWheel {
         unit: MouseWheelUnit::Point,
-        delta: egui::vec2(15.0, -200.0),
+        delta: egui::vec2(-15.0, -200.0),
         phase: TouchPhase::Move,
         modifiers: Modifiers::NONE,
     });
@@ -398,6 +399,33 @@ fn horizontal_scroll_turned_off_during_vertical_scroll() {
     let moved_x = (after.min.x - before.min.x).abs();
     assert!(moved_y > 190.0, "vertical scroll moved 1:1: {moved_y}");
     assert!(moved_x < 1.0, "horizontal jitter was ignored during vertical scroll: moved_x {moved_x}");
+}
+
+#[test]
+fn horizontal_scroll_enabled_when_scrollbar_narrows_viewport() {
+    // When content width is narrower than the full window but wider than the viewport minus
+    // the vertical scrollbar, horizontal scroll must remain enabled so content isn't clipped
+    // under the scrollbar (#2803).
+    let mut h = harness_stepping(1.0 / 60.0, &[("layout", "continuous")]);
+    h.ctx.global_style_mut(|s| s.spacing.scroll.floating = false);
+    // Window width is 1400. Scrollbar takes 8 px, so inner width is 1392 px.
+    // Page is 300 pt wide. SIDE margin is 24 px each (48 px total).
+    // For needed_w = 1396: 300 * zoom * (96/72) + 48 = 1396 => zoom = 3.37 = 337%.
+    h.state_mut().set_option("zoom", "337").unwrap();
+    let at = h.state().views[0].viewport_rect().center();
+    h.hover_at(at);
+    h.run_steps(2);
+    let before = rect(&h, 0).expect("page 1 on screen");
+    h.event(egui::Event::MouseWheel {
+        unit: MouseWheelUnit::Point,
+        delta: egui::vec2(-100.0, 0.0),
+        phase: TouchPhase::Move,
+        modifiers: Modifiers::NONE,
+    });
+    h.run_steps(4);
+    let after = rect(&h, 0).expect("page 1 on screen");
+    let moved_x = before.min.x - after.min.x;
+    assert!(moved_x > 1.0, "horizontal scroll is enabled when content overflows inner viewport: moved_x {moved_x}");
 }
 
 #[test]
