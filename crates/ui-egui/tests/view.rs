@@ -810,7 +810,7 @@ fn rail_page_display_button_switches_layouts() {
     use egui_kittest::kittest::Queryable;
     let mut h = harness(&[]);
     h.run_steps(4);
-    h.get_by_label_contains("Page display").click();
+    h.get_by_label_contains("Page display:").click();
     h.run_steps(3);
     h.get_by_label("Single page").click();
     h.run_steps(4);
@@ -1565,4 +1565,48 @@ fn two_up_scroll_end_reaches_an_unpaired_final_page() {
 #[test]
 fn two_up_scroll_end_with_cover_reaches_a_taller_left_page() {
     assert_final_spread_bottom_reachable(&[400, 400, 400, 400, 100], true);
+}
+
+#[test]
+fn rail_switches_page_layout_in_one_click_without_changing_scroll_or_zoom() {
+    use egui_kittest::kittest::Queryable;
+    use pdfcraft_ui_egui::canvas::{Fit, PageLayout};
+    for options in [&[("layout", "continuous"), ("zoom", "50")][..], &[("layout", "single"), ("zoom", "50")][..]] {
+        let mut h = harness(options);
+        h.state_mut().views[0].go_to_page(1);
+        h.run_steps(4);
+        let before = (h.state().views[0].current, h.state().views[0].continuous(), h.state().views[0].fit, h.state().views[0].zoom);
+        h.get_by_label("Page display · Two-page view").click();
+        h.run_steps(4);
+        let view = &h.state().views[0];
+        assert_eq!(view.layout, PageLayout::TwoUp);
+        assert_eq!((view.current, view.continuous(), view.fit, view.zoom), before);
+        assert_eq!(view.fit, Fit::None);
+        h.get_by_label("Page display · Single page").click();
+        h.run_steps(4);
+        let view = &h.state().views[0];
+        assert_eq!(view.layout, PageLayout::Single);
+        assert_eq!((view.current, view.continuous(), view.fit, view.zoom), before);
+    }
+}
+
+#[test]
+fn compact_rail_scrolls_without_overlapping_controls() {
+    use egui_kittest::kittest::Queryable;
+    use pdfcraft_ui_egui::canvas::PageLayout;
+    let mut h = harness(&[]);
+    h.set_size(egui::vec2(1200.0, 600.0));
+    h.run_steps(4);
+    let comments = h.get_by_label("Comments").rect();
+    let page = h.get_by_label("Previous page").rect();
+    assert!(!comments.intersects(page), "panel buttons and page navigation must not overlap");
+    h.hover_at(egui::pos2(1180.0, 450.0));
+    h.run_steps(1);
+    h.event(wheel(MouseWheelUnit::Point, -600.0, TouchPhase::Move));
+    h.run_steps(8);
+    let button = h.get_by_label("Page display · Two-page view");
+    assert!(button.rect().center().y < 600.0, "scrolling reveals the layout buttons");
+    button.click();
+    h.run_steps(4);
+    assert_eq!(h.state().views[0].layout, PageLayout::TwoUp);
 }
