@@ -3,32 +3,53 @@
 
 use pdfcraft_cos::Document;
 
-/// Namespace URIs of the PDF/A and PDF/UA identification schemas.
+/// The largest XMP packet read; a larger one is treated as missing.
 pub(crate) const MAX_XMP_BYTES: usize = 8 * 1024 * 1024;
+/// Namespace URIs of the PDF/A and PDF/UA identification schemas.
 pub(crate) const PDFA_ID: &str = "http://www.aiim.org/pdfa/ns/id/";
 pub(crate) const PDFUA_ID: &str = "http://www.aiim.org/pdfua/ns/id/";
 
-/// Read an identification property by its expanded XML name, not its arbitrary prefix.
-/// Refuse deeply nested or excessively large XML trees before parsing untrusted metadata.
+/// Read an identification property by its expanded XML name, not its arbitrary prefix. A packet
+/// that is not well-formed XML (an undeclared prefix, an illegal character) or is too deep or wide
+/// to parse safely is read by the conventional prefix (`pdfaid:`, `pdfuaid:`) instead, as before.
 pub(crate) fn identifier(xmp: &str, namespace: &str, local: &str) -> Option<String> {
-    if xmp.len() > MAX_XMP_BYTES || !xml_limits_ok(xmp) {
+    if xmp.len() > MAX_XMP_BYTES {
         return None;
     }
-    let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: 100_000 };
-    let doc = roxmltree::Document::parse_with_options(xmp, options).ok()?;
-    for node in doc.descendants().filter(roxmltree::Node::is_element) {
-        if let Some(value) = node.attribute((namespace, local)) {
-            return Some(value.trim().to_owned());
-        }
-        if node.tag_name().namespace() == Some(namespace) && node.tag_name().name() == local {
-            return node.text().map(|value| value.trim().to_owned());
+    match parsed_identifier(xmp, namespace, local) {
+        Ok(found) => found,
+        Err(()) => {
+            let prefix = match namespace {
+                PDFA_ID => "pdfaid",
+                PDFUA_ID => "pdfuaid",
+                _ => return None,
+            };
+            value(xmp, &format!("{prefix}:{local}"))
         }
     }
-    None
+}
+
+/// [`identifier`] through an XML parser; `Err` when the packet can't be parsed within the limits.
+fn parsed_identifier(xmp: &str, namespace: &str, local: &str) -> Result<Option<String>, ()> {
+    if !xml_limits_ok(xmp) {
+        return Err(());
+    }
+    let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: 100_000 };
+    let doc = roxmltree::Document::parse_with_options(xmp, options).map_err(|_| ())?;
+    for node in doc.descendants().filter(roxmltree::Node::is_element) {
+        if let Some(value) = node.attribute((namespace, local)) {
+            return Ok(Some(value.trim().to_owned()));
+        }
+        if node.tag_name().namespace() == Some(namespace) && node.tag_name().name() == local {
+            return Ok(node.text().map(|value| value.trim().to_owned()));
+        }
+    }
+    Ok(None)
 }
 
 /// Reject deep XML and start tags with too many attributes before roxmltree checks duplicates.
 /// Each unquoted `=` in a valid start tag introduces an attribute, including namespace bindings.
+/// Every `b[i]` and `hay[p..]` below is guarded by `i < b.len()` / `p < hay.len()`.
 fn xml_limits_ok(text: &str) -> bool {
     fn find(hay: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
         (from..hay.len()).find(|&p| hay[p..].starts_with(needle))
@@ -239,6 +260,10 @@ mod limit_tests {
         assert_eq!(identifier(&format!("<root {namespaces}/>"), PDFA_ID, "part"), None);
         let many_elements = format!("<root>{}</root>", r#"<n a="v"/>"#.repeat(4097));
         assert!(!xml_limits_ok(&many_elements));
+        // Not well-formed (the prefix is never declared): read by the conventional prefix, as before.
+        let undeclared = r#"<rdf:Description pdfaid:part="3" pdfaid:conformance="u"/>"#;
+        assert_eq!(identifier(undeclared, PDFA_ID, "part").as_deref(), Some("3"));
+        assert_eq!(identifier(undeclared, PDFA_ID, "conformance").as_deref(), Some("u"));
         let over_bytes = format!("<root>{}</root>", " ".repeat(8 * 1024 * 1024));
         assert_eq!(identifier(&over_bytes, PDFA_ID, "part"), None);
     }
