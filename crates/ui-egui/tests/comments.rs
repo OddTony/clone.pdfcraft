@@ -1571,3 +1571,36 @@ fn text_box_properties_change_the_font_size() {
     assert_eq!(doc.comment_props(0, 0).unwrap().font_size, Some(30.0));
     assert_eq!(doc.can_undo(), Some("Change comment properties"));
 }
+
+/// A nearby stamp's hit tolerance must not cover the actual area of its neighbour.
+#[test]
+fn closely_spaced_custom_stamps_select_the_one_under_the_pointer() {
+    use pdfcraft_engine::{Edit, MarkFile};
+    use std::sync::Arc;
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(20, 20, image::Rgb([10, 100, 200])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let file = MarkFile { name: "stamp.png".into(), bytes: Arc::new(png), page: 0 };
+    let mut h = harness(|_| {});
+    for (name, rect) in [("first", [40.0, 60.0, 80.0, 100.0]), ("second", [80.5, 60.0, 120.5, 100.0])] {
+        h.state_mut().apply_edit(Edit::AddCustomStamp { page: 0, rect, name: name.into(), file: file.clone(), author: "Tester".into() });
+    }
+    h.run_steps(3);
+    click_pt(&mut h, (79.8, 90.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 0)), "the point is inside the first stamp");
+    click_pt(&mut h, (100.0, 90.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 1)), "the second stamp is independently selectable");
+    click_pt(&mut h, (200.0, 120.0));
+    click_pt(&mut h, (120.8, 90.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 1)), "the small outside hit tolerance still works");
+    click_pt(&mut h, (200.0, 120.0));
+    h.state_mut().apply_edit(Edit::AddCustomStamp {
+        page: 0,
+        rect: [60.0, 60.0, 100.0, 100.0],
+        name: "overlapping".into(),
+        file,
+        author: "Tester".into(),
+    });
+    h.run_steps(3);
+    click_pt(&mut h, (70.0, 90.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 2)), "truly overlapping stamps retain paint order");
+}

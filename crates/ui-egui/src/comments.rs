@@ -617,9 +617,19 @@ impl PageCx<'_> {
             .collect()
     }
 
-    /// The topmost comment under `p`.
+    /// Prefer the topmost comment containing `p`, then use a small tolerance for thin marks.
     fn hit(&self, p: Pos2) -> Option<&Annotation> {
-        self.comments().filter(|a| self.screen_rects(a).iter().any(|r| r.expand(3.0).contains(p))).last()
+        let mut exact = None;
+        let mut nearby = None;
+        for a in self.comments() {
+            let rects = self.screen_rects(a);
+            if rects.iter().any(|r| r.contains(p)) {
+                exact = Some(a);
+            } else if rects.iter().any(|r| r.expand(3.0).contains(p)) {
+                nearby = Some(a);
+            }
+        }
+        exact.or(nearby)
     }
 
     pub(crate) fn get(&self, index: usize) -> Option<&Annotation> {
