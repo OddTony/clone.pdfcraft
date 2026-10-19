@@ -9,7 +9,7 @@ use pdfcraft_engine::{Edit, NoteIcon, ReviewState, Shape};
 use pdfcraft_render::{Annotation, DocInfo};
 
 use crate::canvas::DocView;
-use crate::comments::{CommentPrefs, CommentTool, SortBy, color32, status_badge};
+use crate::comments::{CommentPrefs, CommentTool, DraftTarget, SortBy, color32, status_badge};
 use crate::panels::Nav;
 use crate::theme::{self, Tokens};
 use crate::{icons, widgets};
@@ -281,7 +281,9 @@ fn card(
     let status = thread.iter().rev().filter(|r| !r.is_mark()).find_map(|r| r.state.as_deref());
     let marked = is_marked(thread);
     let replies: Vec<&&Annotation> = thread.iter().filter(|r| r.state.is_none()).collect();
-    let editing = view.comments.editing.as_ref().is_some_and(|(p, i, _)| (*p, *i) == key);
+    // Only the comment the note was typed for shows it (and can save it), not another that took its index.
+    let editing =
+        view.comments.editing.as_ref().is_some_and(|(p, i, _)| (*p, *i) == key) && view.comments.editing_target.as_ref().is_some_and(|t| t.is(a));
     let fill = if selected { t.hover.gamma_multiply(0.7) } else { Color32::TRANSPARENT };
     let mut open_menu = false;
     let mut more_rect = None;
@@ -435,6 +437,7 @@ fn card(
     }
     if click.double_clicked() && allowed {
         view.comments.editing = Some((a.page, a.index, a.contents.clone().unwrap_or_default()));
+        view.comments.editing_target = Some(DraftTarget::of(a));
     }
     let menu_id = ui.id().with(("card-menu", key));
     if open_menu {
@@ -451,6 +454,7 @@ fn card(
             crate::comments::attachment_items(ui, view, info, a);
             if ui.button(tl_ctx!("comment menu", "Edit")).clicked() {
                 view.comments.editing = Some((a.page, a.index, a.contents.clone().unwrap_or_default()));
+                view.comments.editing_target = Some(DraftTarget::of(a));
                 ui.close();
             }
             ui.menu_button(tl!("Set status"), |ui| {
