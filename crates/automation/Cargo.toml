@@ -27,6 +27,8 @@ default = ["mcp"]
 mcp = ["dep:base64"]
 
 [dev-dependencies]
+# EPUB books built in tests (doc_create from epub).
+pdfcraft-export = { workspace = true }
 pdfcraft-fonts = { workspace = true }
 flate2.workspace = true
 pdfcraft-model = { workspace = true }
