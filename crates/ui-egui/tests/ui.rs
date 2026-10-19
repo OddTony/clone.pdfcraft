@@ -400,6 +400,24 @@ fn a_new_link_prompt_does_not_resolve_the_save_prompt() {
 }
 
 #[test]
+fn a_new_link_prompt_blocks_a_focused_discard_button() {
+    let mut h = harness(|app| {
+        app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
+        app.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+        app.close_request = Some(pdfcraft_ui_egui::CloseRequest::Tab(app.views[0].id));
+    });
+    h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Don't save").focus();
+    h.run_steps(1);
+    h.state_mut().pending_link =
+        Some(pdfcraft_ui_egui::PendingLink { url: "https://example.org".to_owned(), origin: pdfcraft_ui_egui::LinkOrigin::Link });
+    h.key_press(egui::Key::Space);
+    h.run_steps(1);
+    assert!(h.state().close_request.is_some(), "the covered discard button must not activate");
+    assert_eq!(h.state().views.len(), 1);
+}
+
+#[test]
 fn overflowing_tabs_can_be_reached_by_scrolling() {
     let mut h = harness(|app| {
         for i in 0..20 {
