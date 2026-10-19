@@ -269,6 +269,86 @@ fn custom_document_properties_are_set_listed_and_cleared_through_the_tools() {
     assert_eq!(info["custom"][0]["value"], "7", "{}", info["custom"]);
 }
 
+#[test]
+fn additional_metadata_is_read_changed_imported_and_exported_through_the_tools() {
+    let dir = workdir("xmp");
+    std::fs::write(dir.join("a.pdf"), fixture(1)).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let x = ok(&mut a, "doc_xmp", json!({ "doc": doc }))["xmp"].clone();
+    assert_eq!((x["has_xmp"].clone(), x["copyright_status"].clone(), x["rating"].clone()), (json!(false), json!("unknown"), Value::Null), "{x}");
+    assert!(a.call("doc_xmp_export", &json!({ "doc": doc, "path": "none.xmp" })).is_err(), "nothing to export");
+    ok(&mut a, "doc_set_info", json!({ "doc": doc, "key": "Title", "value": "Report" }));
+    let out = ok(
+        &mut a,
+        "doc_xmp",
+        json!({ "doc": doc, "copyright_status": "copyrighted", "copyright_notice": "© 2026 Demo", "copyright_url": "https://example.com/terms",
+                "author_title": "Editor", "description_writer": "Pat", "rating": 4, "packet": true }),
+    );
+    let x = &out["xmp"];
+    assert_eq!(x["copyright_status"], "copyrighted", "{x}");
+    assert_eq!((x["copyright_notice"].clone(), x["author_title"].clone(), x["rating"].clone()), (json!("© 2026 Demo"), json!("Editor"), json!(4)));
+    let packet = x["packet"].as_str().unwrap();
+    assert!(packet.contains("<xmpRights:Marked>True</xmpRights:Marked>") && packet.contains(">Report</rdf:li>"), "{packet}");
+    // The same, by schema.
+    let schemas = ok(&mut a, "doc_xmp", json!({ "doc": doc, "schemas": true }))["xmp"]["schemas"].clone();
+    let dc = schemas.as_array().unwrap().iter().find(|s| s["prefix"] == "dc").unwrap();
+    assert_eq!(dc["namespace"], "http://purl.org/dc/elements/1.1/");
+    let title = dc["properties"].as_array().unwrap().iter().find(|p| p["name"] == "dc:title").unwrap();
+    assert_eq!(title["children"][0], json!({ "name": "[1] x-default", "value": "Report", "children": [] }), "{title}");
+    // One undo step for all six; asking for what is already there adds none.
+    ok(&mut a, "doc_xmp", json!({ "doc": doc, "rating": 4, "copyright_status": "copyrighted" }));
+    ok(&mut a, "edit_undo", json!({ "doc": doc }));
+    assert_eq!(ok(&mut a, "doc_xmp", json!({ "doc": doc }))["xmp"]["copyright_notice"], Value::Null);
+    ok(&mut a, "edit_redo", json!({ "doc": doc }));
+    // Bad values are refused without a change.
+    for bad in [
+        json!({ "rating": 6 }),
+        json!({ "rating": 2.5 }),
+        json!({ "rating": true }),
+        json!({ "copyright_status": "mine" }),
+        json!({ "copyright_notice": 7 }),
+    ] {
+        let mut args = bad.clone();
+        args["doc"] = json!(doc);
+        assert!(a.call("doc_xmp", &args).is_err(), "{bad}");
+    }
+    // Removed with an empty string.
+    let x = ok(&mut a, "doc_xmp", json!({ "doc": doc, "rating": "", "copyright_status": "unknown" }))["xmp"].clone();
+    assert_eq!((x["rating"].clone(), x["copyright_status"].clone(), x["author_title"].clone()), (Value::Null, json!("unknown"), json!("Editor")));
+
+    // Export, then import into another document.
+    let out = ok(&mut a, "doc_xmp_export", json!({ "doc": doc, "path": "out/meta.xmp" }));
+    let written = std::fs::read_to_string(dir.join("out/meta.xmp")).unwrap();
+    assert_eq!(out["bytes"].as_u64().unwrap() as usize, written.len());
+    assert!(written.contains("© 2026 Demo"), "{written}");
+    std::fs::write(dir.join("b.pdf"), fixture(1)).unwrap();
+    let other = ok(&mut a, "doc_open", json!({ "path": "b.pdf" }))["doc"].as_u64().unwrap();
+    ok(&mut a, "doc_xmp_replace", json!({ "doc": other, "path": "out/meta.xmp" }));
+    assert_eq!(ok(&mut a, "doc_xmp", json!({ "doc": other }))["xmp"]["copyright_url"], "https://example.com/terms");
+    // Text that isn't XMP, a non-UTF-8 file, and both or neither source are refused.
+    std::fs::write(dir.join("latin1.xmp"), b"<x/>\xE9").unwrap();
+    for args in [
+        json!({ "doc": other, "packet": "<not xmp/>" }),
+        json!({ "doc": other, "path": "latin1.xmp" }),
+        json!({ "doc": other, "path": "missing.xmp" }),
+        json!({ "doc": other, "path": "out/meta.xmp", "packet": "" }),
+        json!({ "doc": other }),
+    ] {
+        assert!(a.call("doc_xmp_replace", &args).is_err(), "{args}");
+    }
+    assert_eq!(ok(&mut a, "doc_xmp", json!({ "doc": other }))["xmp"]["author_title"], "Editor");
+    // Removed, then saved: the saved file has none.
+    ok(&mut a, "doc_xmp_replace", json!({ "doc": other, "packet": "" }));
+    ok(&mut a, "doc_save", json!({ "doc": other, "path": "out/plain.pdf" }));
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "out/rights.pdf" }));
+    let mut b = auto(&dir);
+    let plain = ok(&mut b, "doc_open", json!({ "path": "out/plain.pdf" }))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut b, "doc_xmp", json!({ "doc": plain }))["xmp"]["has_xmp"], false);
+    let rights = ok(&mut b, "doc_open", json!({ "path": "out/rights.pdf" }))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut b, "doc_xmp", json!({ "doc": rights }))["xmp"]["copyright_notice"], "© 2026 Demo");
+}
+
 /// The custom list `doc_info` shows when a file opens is the one it shows after an unrelated
 /// edit: a name value, a blank or NUL-padded string and a number are judged the same way by the
 /// open-time reader and by the engine's refresh.
