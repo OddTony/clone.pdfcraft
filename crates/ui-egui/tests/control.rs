@@ -1296,7 +1296,7 @@ fn measurement_tools_draw_live_calibrate_save_and_export() {
 fn choosing_a_plan_scale_applies_it_at_once() {
     let (mut h, c) = harness_pages(1);
     let doc = h.state().views[0].id;
-    ok(&mut h, &c, "ui.command", json!({"id":"measure.distance"}));
+    ok(&mut h, &c, "ui.command", json!({"id":"measure.scale"}));
     h.run_steps(3);
     // No scale yet: paper size.
     assert!(h.state().session.get(doc).unwrap().measurement_viewport_scale(0, [100.0, 150.0]).unwrap().is_none());
@@ -1305,7 +1305,10 @@ fn choosing_a_plan_scale_applies_it_at_once() {
         h.get_by(|n| n.role() == egui::accesskit::Role::ComboBox && n.value().is_some_and(|v| v == value)).click();
         h.run_steps(2);
     };
-    combo(&mut h, "—");
+    // The panel opens with Distance in hand.
+    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["quick_tool"], "measure-distance");
+    h.get_by_label("Common scales").click();
+    h.run_steps(2);
     h.get_by_label("1:200").click();
     h.run_steps(3);
     let d = h.state().session.get(doc).unwrap();
@@ -1317,8 +1320,9 @@ fn choosing_a_plan_scale_applies_it_at_once() {
     assert_eq!(reading.label, "12.90 m");
     // Choosing the same scale again adds nothing; another unit keeps the ratio.
     let n = d.edit_generation();
-    combo(&mut h, "1:200");
-    h.get_by(|n| n.role() != egui::accesskit::Role::ComboBox && n.label().is_some_and(|l| l == "1:200")).click();
+    h.get_by_label("Common scales").click();
+    h.run_steps(2);
+    h.get_by_label("1:200").click();
     h.run_steps(3);
     assert_eq!(h.state().session.get(doc).unwrap().edit_generation(), n);
     combo(&mut h, "m");
@@ -1333,6 +1337,39 @@ fn choosing_a_plan_scale_applies_it_at_once() {
     h.run_steps(3);
     let scale = h.state().session.get(doc).unwrap().measurement_viewport_scale(0, [100.0, 150.0]).unwrap().unwrap();
     assert_eq!((scale.unit.as_str(), scale.ratio.as_str(), scale.precision), ("cm", "1:200", 3));
+}
+
+#[test]
+fn measurement_colour_is_written_to_new_and_selected_annotations() {
+    let (mut h, c) = harness_pages(1);
+    let doc = h.state().views[0].id;
+    h.state_mut().set_option("zoom", "100").unwrap();
+    ok(&mut h, &c, "ui.command", json!({"id":"measure.distance"}));
+    h.run_steps(3);
+    h.state_mut().views[0].measure.snap_enabled = false;
+    h.get_by_label("Red").click();
+    h.run_steps(2);
+    for (x, y) in [(20.0, 30.0), (120.0, 30.0)] {
+        let r = h.state().views[0].page_screen_rect(0).unwrap();
+        ok(&mut h, &c, "ui.click", json!({"x":r.left()+x*r.width()/200.0,"y":r.top()+y*r.height()/300.0}));
+        h.run_steps(2);
+    }
+    h.run_steps(2);
+    let colour = |h: &Harness<'static, PdfCraftApp>| {
+        let d = h.state().session.get(doc).unwrap();
+        let a = d.info.annotations.iter().find(|a| a.subtype == "Line").expect("the measurement");
+        (a.page, a.index, a.color.expect("/C"))
+    };
+    let (_, _, red) = colour(&h);
+    assert!((red[0] - 0.89).abs() < 0.01 && (red[1] - 0.13).abs() < 0.01 && (red[2] - 0.13).abs() < 0.01, "{red:?}");
+    // Picking it in the list selects it; a new colour restyles it, caption included.
+    h.get_by(|n| n.label().is_some_and(|l| l.starts_with("Page 1 · "))).click();
+    h.run_steps(3);
+    h.get_by_label("Green").click();
+    h.run_steps(3);
+    let (_, _, green) = colour(&h);
+    assert!((green[0] - 0.18).abs() < 0.01 && (green[1] - 0.62).abs() < 0.01, "{green:?}");
+    assert_eq!(h.state().comment_prefs.measure_style.color, [0.18, 0.62, 0.36]);
 }
 
 #[test]
