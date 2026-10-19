@@ -171,6 +171,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-13 (M6, reset buttons):** ResetForm actions resolve fully qualified field/group references and indirect string names, matching imported names with leading empty ancestors. Parser and button regression coverage includes include/exclude selection, repeated leaf names, similarly prefixed groups and save/reopen. Estimates unchanged.
 - **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
 
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
