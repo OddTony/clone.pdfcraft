@@ -34,6 +34,10 @@ fmv-macos-events = "=0.1.0"
 craft-quit = { workspace = true, features = ["menu"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# GNOME/Wayland has no server-side frame. Enable winit's Adwaita vector controls and
+# vector-drawn window buttons; eframe/wayland alone does not enable decorations.
+winit = { version = "0.30", default-features = false, features = ["wayland-csd-adwaita-notitle"] }
+
 # Asks the Wayland compositor which GPU it draws with (linux-dmabuf feedback), so the window is
 # drawn on that one (src/compositor_gpu.rs). Both are already in the tree through winit.
 wayland-client = "0.31"
@@ -45,6 +49,8 @@ wayland-protocols = { version = "0.32", features = ["client"] }
 raw-window-handle = "0.6"
 
 [dev-dependencies]
+# Regression tests parse Cargo metadata.
+toml = "1.1"
 # Waits for wgpu's adapter, device and error-scope futures in tests (already in the tree through wgpu).
 pollster = "1.0"
 
