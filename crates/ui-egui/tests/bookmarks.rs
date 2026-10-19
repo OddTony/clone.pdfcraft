@@ -2,7 +2,7 @@
 
 use egui::{Key, Modifiers};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use pdfcraft_ui_egui::PdfCraftApp;
 
 const PAGES: &[u8] = b"%PDF-1.7
@@ -271,4 +271,65 @@ fn expanding_and_collapsing_all_bookmarks() {
     h.get_by_label("Expand top-level bookmarks").click();
     h.run_steps(3);
     assert!(shown(&h, "Chapter") && !shown(&h, "Section"));
+}
+
+/// Intro (page 1), Book (page 2) holding Part (page 3) holding Detail (page 3).
+fn chapters() -> Harness<'static, PdfCraftApp> {
+    use pdfcraft_engine::Edit;
+    let mut h = harness();
+    for (parent, index, title, page) in [(vec![], 0, "Intro", 0), (vec![], 1, "Book", 1), (vec![1], 0, "Part", 2), (vec![1, 0], 0, "Detail", 2)] {
+        h.state_mut().apply_edit(Edit::AddBookmark { parent, index, title: title.into(), page });
+    }
+    h.run_steps(3);
+    h
+}
+
+fn go_to_page(h: &mut Harness<'static, PdfCraftApp>, page: &str) {
+    h.state_mut().set_option("page", page).unwrap();
+    h.run_steps(3);
+}
+
+/// Whether the row of `title` is shown as the current bookmark.
+fn highlighted(h: &Harness<'static, PdfCraftApp>, title: &str) -> bool {
+    h.get_by_label(title).accesskit_node().toggled() == Some(egui::accesskit::Toggled::True)
+}
+
+#[test]
+fn the_current_bookmark_follows_the_page() {
+    let mut h = chapters();
+    h.get_by_label("Bookmark options").click();
+    h.run_steps(2);
+    h.get_by_label("Expand all bookmarks").click();
+    h.run_steps(3);
+    go_to_page(&mut h, "1");
+    assert!(highlighted(&h, "Intro"));
+    assert!(!highlighted(&h, "Book"));
+    go_to_page(&mut h, "2");
+    assert!(highlighted(&h, "Book"), "page 2 moves the highlight");
+    assert!(!highlighted(&h, "Intro"), "only one bookmark is current");
+}
+
+#[test]
+fn a_collapsed_bookmark_stands_for_the_current_one_inside_it() {
+    let mut h = chapters();
+    h.get_by_label("Bookmark options").click();
+    h.run_steps(2);
+    h.get_by_label("Collapse all bookmarks").click();
+    h.run_steps(3);
+    go_to_page(&mut h, "3");
+    // Detail is current but hidden: Book, the row it is folded into, shows it.
+    assert!(h.query_by_label("Detail").is_none(), "the highlight doesn't expand anything");
+    assert!(highlighted(&h, "Book"));
+    assert!(!highlighted(&h, "Intro"));
+    if let Ok(dir) = std::env::var("PDFCRAFT_BOOKMARK_SHOTS") {
+        h.hover_at(egui::pos2(500.0, 500.0)); // no hover wash over the highlight
+        h.run_steps(2);
+        h.render().unwrap().save(std::path::Path::new(&dir).join("current-bookmark.png")).unwrap();
+    }
+    h.get_by_label("Bookmark options").click();
+    h.run_steps(2);
+    h.get_by_label("Expand all bookmarks").click();
+    h.run_steps(3);
+    assert!(highlighted(&h, "Detail"));
+    assert!(!highlighted(&h, "Book") && !highlighted(&h, "Part"), "once Detail shows, it carries the highlight itself");
 }
