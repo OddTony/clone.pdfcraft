@@ -47,6 +47,7 @@ pub mod comments;
 mod comments_panel;
 mod compare_ui;
 pub mod control;
+mod convert_colours_ui;
 mod create_multiple_ui;
 mod create_ui;
 mod credits;
@@ -283,6 +284,8 @@ pub enum Dialog {
     Split,
     /// Pages ▸ Number pages… (page labels).
     NumberPages,
+    /// Print production ▸ Convert colours.
+    ConvertColours,
     /// Protect Using Password.
     Protect,
     /// Set Page Boxes (crop, trim, bleed, art, media).
@@ -763,6 +766,7 @@ pub struct PdfCraftApp {
     /// Number pages dialog settings (1-based pages).
     pub number_draft: NumberDraft,
     pub(crate) word_count_draft: word_count_ui::Draft,
+    pub convert_colours_draft: convert_colours_ui::ConvertColoursDraft,
     /// Protect Using Password dialog state.
     pub protect_draft: protect::ProtectDraft,
     /// Set Page Boxes dialog state.
@@ -1080,6 +1084,7 @@ impl PdfCraftApp {
             replace_draft: None,
             number_draft: NumberDraft { from: 1, to: 1, style: pdfcraft_engine::LabelStyle::Decimal, prefix: String::new(), start: 1 },
             word_count_draft: word_count_ui::Draft::default(),
+            convert_colours_draft: Default::default(),
         }
     }
 
@@ -2575,6 +2580,7 @@ impl PdfCraftApp {
                         self.execute("page.number");
                         Some(Dialog::NumberPages)
                     }
+                    "convert-colours" => Some(Dialog::ConvertColours),
                     "none" => None,
                     _ => Some(Dialog::About),
                 }
