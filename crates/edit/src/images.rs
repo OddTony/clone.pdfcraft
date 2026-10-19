@@ -108,6 +108,67 @@ fn xobjects(doc: &Document, page: &Dict) -> Dict {
         .unwrap_or_default()
 }
 
+/// Whether a page resource name is used by the page or by a reachable Form that inherits the
+/// page's resources. A Form with its own `/Resources` has an independent namespace; forms without
+/// one inherit the caller's. On an unreadable or over-budget Form, preserve the resource.
+fn resource_used_by_inheriting_forms(doc: &Document, ops: &[Op], resources: &Dict, name: &[u8], budget: &mut usize) -> bool {
+    fn walk(
+        doc: &Document,
+        ops: &[Op],
+        resources: &Dict,
+        name: &[u8],
+        depth: usize,
+        budget: &mut usize,
+        path: &mut std::collections::HashSet<ObjRef>,
+    ) -> bool {
+        if depth > 32 || *budget == 0 {
+            return true;
+        }
+        let xo = resources.get(b"XObject").map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned()).unwrap_or_default();
+        for op in ops.iter().filter(|op| op.is("Do")) {
+            let Some(call_name) = op.name(0) else {
+                continue;
+            };
+            if call_name == name {
+                return true;
+            }
+            let Some(resource) = xo.get(call_name) else {
+                continue;
+            };
+            let resolved = doc.resolve(resource);
+            let Object::Stream(stream) = &*resolved else {
+                continue;
+            };
+            let Some(reference) = resource.as_ref() else {
+                if stream.dict.name(b"Subtype") == Some(b"Form") && !stream.dict.contains(b"Resources") {
+                    return true;
+                }
+                continue;
+            };
+            if stream.dict.name(b"Subtype") != Some(b"Form") || stream.dict.contains(b"Resources") {
+                continue;
+            }
+            if !path.insert(reference) {
+                return true;
+            }
+            *budget -= 1;
+            let decoded = match stream.decoded() {
+                Ok(decoded) => decoded,
+                Err(_) => return true,
+            };
+            let nested_ops = parse(&decoded).ops;
+            let used = walk(doc, &nested_ops, resources, name, depth + 1, budget, path);
+            path.remove(&reference);
+            if used {
+                return true;
+            }
+        }
+        false
+    }
+
+    walk(doc, ops, resources, name, 0, budget, &mut std::collections::HashSet::new())
+}
+
 fn intersection(a: [f64; 4], b: [f64; 4]) -> Option<[f64; 4]> {
     let r = [a[0].max(b[0]), a[1].max(b[1]), a[2].min(b[2]), a[3].min(b[3])];
     (r.iter().all(|v| v.is_finite()) && r[2] > r[0] && r[3] > r[1]).then_some(r)
@@ -461,6 +522,8 @@ pub fn change_image(doc: &mut Document, page: usize, index: usize, change: &Imag
     if !ops.get(img.op).is_some_and(|op| op.is("Do")) {
         return Err(EditError::Invalid("the image operation is missing".into()));
     }
+    let old_name = ops.get(img.op).and_then(|op| op.name(0)).map(<[u8]>::to_vec);
+    let old_object = img.object;
     let mut resources = None;
     let replacement: Vec<Op> = match change {
         ImageChange::Delete => Vec::new(),
@@ -486,6 +549,47 @@ pub fn change_image(doc: &mut Document, page: usize, index: usize, change: &Imag
         }
     };
     let changed = crate::text::splice(&pieces, &ops, |index| if index == img.op { (replacement.clone(), false) } else { (Vec::new(), true) });
+    if let Some(old_name) = old_name.as_deref() {
+        let rewritten = Pieces::join(&changed.iter().map(Vec::as_slice).collect::<Vec<_>>());
+        let rewritten_ops = rewritten.parse().ops;
+        let current_resources = resources
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| p.dict.get(b"Resources").map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned()).unwrap_or_default());
+        let xo = current_resources.get(b"XObject").map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned()).unwrap_or_default();
+        let mut aliases = Vec::new();
+        for (resource_name, value) in xo.iter() {
+            let matches_object = old_object.is_some() && value.as_ref() == old_object;
+            if matches_object || resource_name.as_slice() == old_name {
+                if aliases.len() >= 256 {
+                    return Err(EditError::Invalid("the image has too many resource aliases to update safely".into()));
+                }
+                aliases.push(resource_name.clone());
+            }
+        }
+        if aliases.is_empty() {
+            aliases.push(old_name.to_vec());
+        }
+        let mut unused = Vec::new();
+        let mut form_scan_budget = 4096;
+        for resource_name in aliases {
+            let used_on_page = rewritten_ops.iter().any(|op| op.is("Do") && op.name(0) == Some(resource_name.as_slice()));
+            let used_in_form =
+                !used_on_page && resource_used_by_inheriting_forms(doc, &rewritten_ops, &current_resources, &resource_name, &mut form_scan_budget);
+            if !used_on_page && !used_in_form {
+                unused.push(resource_name);
+            }
+        }
+        if !unused.is_empty() {
+            let mut res = resources.take().unwrap_or(current_resources);
+            let mut xo = res.get(b"XObject").map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned()).unwrap_or_default();
+            for resource_name in &unused {
+                xo.remove(resource_name);
+            }
+            res.set(b"XObject".to_vec(), Object::Dict(xo));
+            resources = Some(res);
+        }
+    }
     let contents = crate::text::rewritten_contents(doc, &all, changed);
     doc.update_dict(p.obj, |d| {
         d.set(b"Contents".to_vec(), contents);

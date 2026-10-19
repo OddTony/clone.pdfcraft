@@ -2133,6 +2133,170 @@ fn page_images_move_turn_replace_and_delete() {
     assert!(images::change_image(&mut doc, 0, 0, &images::ImageChange::Delete).is_err());
 }
 
+fn identifiable_test_image(bytes: &[u8]) -> Stream {
+    let mut d = Dict::new();
+    for (k, v) in [
+        (&b"Type"[..], Object::name("XObject")),
+        (b"Subtype", Object::name("Image")),
+        (b"Width", Object::Int(4)),
+        (b"Height", Object::Int(2)),
+        (b"ColorSpace", Object::name("DeviceGray")),
+        (b"BitsPerComponent", Object::Int(8)),
+    ] {
+        d.set(k.to_vec(), v);
+    }
+    Stream::from_raw(d, bytes.to_vec())
+}
+
+#[test]
+fn deleting_or_replacing_an_image_unlinks_its_unreferenced_resource_on_full_save() {
+    const OLD: &[u8] = b"PRIVATE_IMAGE_BYTES_3499";
+    const NEW: &[u8] = b"PUBLIC_IMAGE_BYTES_3511";
+
+    let mut deleted = image_page();
+    let old = images::page_images(&deleted, 0).unwrap()[0].object.unwrap();
+    deleted.set(old, Object::Stream(identifiable_test_image(OLD)));
+    images::change_image(&mut deleted, 0, 0, &images::ImageChange::Delete).unwrap();
+    let bytes = write_full(&deleted, &SaveOptions::default()).unwrap();
+    assert!(!bytes.windows(OLD.len()).any(|w| w == OLD), "deleted image data survived the full save");
+    let saved = Document::open(Arc::new(bytes)).unwrap();
+    assert_eq!(xobject(&saved, 0, b"Im0"), None, "deleted resource remains reachable from the page");
+
+    let mut replaced = image_page();
+    let old = images::page_images(&replaced, 0).unwrap()[0].object.unwrap();
+    replaced.set(old, Object::Stream(identifiable_test_image(OLD)));
+    let new = replaced.add(Object::Stream(identifiable_test_image(NEW)));
+    images::change_image(&mut replaced, 0, 0, &images::ImageChange::Replace(new)).unwrap();
+    let bytes = write_full(&replaced, &SaveOptions::default()).unwrap();
+    assert!(!bytes.windows(OLD.len()).any(|w| w == OLD), "replaced image data survived the full save");
+    assert!(bytes.windows(NEW.len()).any(|w| w == NEW), "replacement image data is missing");
+    let saved = Document::open(Arc::new(bytes)).unwrap();
+    let images = images::page_images(&saved, 0).unwrap();
+    assert_eq!(images.len(), 1);
+    assert_eq!(images[0].name, format!("PCImg{}", new.num));
+    assert!(images[0].object.is_some());
+}
+
+#[test]
+fn deleting_one_of_two_placements_keeps_the_resource_still_in_use() {
+    let mut doc = image_page_with("q 200 0 0 100 100 100 cm /Im0 Do Q q 200 0 0 100 300 100 cm /Im0 Do Q");
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Delete).unwrap();
+    let saved = Document::open(Arc::new(write_full(&doc, &SaveOptions::default()).unwrap())).unwrap();
+    assert_eq!(images::page_images(&saved, 0).unwrap().len(), 1);
+    assert!(xobject(&saved, 0, b"Im0").is_some());
+}
+
+#[test]
+fn deleting_a_page_image_keeps_it_when_a_nested_resource_less_form_inherits_it() {
+    const PRIVATE: &[u8] = b"PRIVATE_NESTED_FORM_IMAGE";
+    let mut doc = image_page_with("q 200 0 0 100 100 100 cm /Im0 Do Q /Bare Do");
+    let image = images::page_images(&doc, 0).unwrap()[0].object.unwrap();
+    doc.set(image, Object::Stream(identifiable_test_image(PRIVATE)));
+
+    let mut form = Dict::new();
+    form.set(b"Subtype".to_vec(), Object::name("Form"));
+    form.set(b"BBox".to_vec(), Object::Array([0, 0, 300, 300].map(Object::Int).to_vec()));
+    let inner = doc.add(Object::Stream(Stream::flate(form.clone(), b"/Im0 Do")));
+    let outer = doc.add(Object::Stream(Stream::flate(form, b"/Inner Do")));
+    let page = pdfcraft_model::pages(&doc)[0].obj;
+    let mut resources = doc.get(page).as_dict().unwrap().get(b"Resources").and_then(Object::as_dict).cloned().unwrap();
+    let mut xobjects = resources.get(b"XObject").and_then(Object::as_dict).cloned().unwrap();
+    xobjects.set(b"Inner".to_vec(), Object::Ref(inner));
+    xobjects.set(b"Bare".to_vec(), Object::Ref(outer));
+    resources.set(b"XObject".to_vec(), Object::Dict(xobjects));
+    let contents = doc.add(Object::Stream(Stream::flate(Dict::new(), b"q 200 0 0 100 100 100 cm /Im0 Do Q /Bare Do")));
+    doc.update_dict(page, |d| {
+        d.set(b"Resources".to_vec(), Object::Dict(resources));
+        d.set(b"Contents".to_vec(), Object::Ref(contents));
+    })
+    .unwrap();
+
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Delete).unwrap();
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(bytes.windows(PRIVATE.len()).any(|w| w == PRIVATE), "the nested form's image was lost");
+    let saved = Document::open(Arc::new(bytes)).unwrap();
+    assert!(xobject(&saved, 0, b"Im0").is_some(), "the page resource inherited by the Form was removed");
+    assert_eq!(images::reading_images(&saved, 0).unwrap().len(), 1);
+}
+
+#[test]
+fn deleting_one_page_image_detaches_inherited_resources_without_changing_sibling_pages() {
+    const SHARED: &[u8] = b"SHARED_INHERITED_IMAGE";
+    let mut doc = fixture();
+    let image = doc.add(Object::Stream(identifiable_test_image(SHARED)));
+    doc.update_dict(pdfcraft_cos::ObjRef::new(6, 0), |d| {
+        let mut xobjects = Dict::new();
+        xobjects.set(b"Im0".to_vec(), Object::Ref(image));
+        d.set(b"XObject".to_vec(), Object::Dict(xobjects));
+    })
+    .unwrap();
+    doc.set(pdfcraft_cos::ObjRef::new(7, 0), Object::Stream(Stream::flate(Dict::new(), b"/Im0 Do")));
+    assert_eq!(images::page_images(&doc, 0).unwrap().len(), 1);
+    assert_eq!(images::page_images(&doc, 1).unwrap().len(), 1);
+
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Delete).unwrap();
+    let saved = Document::open(Arc::new(write_full(&doc, &SaveOptions::default()).unwrap())).unwrap();
+    assert!(images::page_images(&saved, 0).unwrap().is_empty());
+    assert_eq!(images::page_images(&saved, 1).unwrap().len(), 1);
+    assert!(xobject(&saved, 0, b"Im0").is_none());
+    assert!(xobject(&saved, 1, b"Im0").is_some());
+}
+
+#[test]
+fn replacing_an_image_with_the_same_object_keeps_the_replacement_reachable() {
+    const SAME: &[u8] = b"SAME_IMAGE_OBJECT";
+    let mut doc = image_page();
+    let image = images::page_images(&doc, 0).unwrap()[0].object.unwrap();
+    doc.set(image, Object::Stream(identifiable_test_image(SAME)));
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Replace(image)).unwrap();
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(bytes.windows(SAME.len()).any(|w| w == SAME));
+    let saved = Document::open(Arc::new(bytes)).unwrap();
+    assert_eq!(images::page_images(&saved, 0).unwrap().len(), 1);
+    assert_eq!(images::page_images(&saved, 0).unwrap()[0].name, format!("PCImg{}", image.num));
+}
+
+#[test]
+fn deleting_an_image_prunes_unused_aliases_but_keeps_aliases_still_drawn() {
+    const ALIASED: &[u8] = b"ALIASED_IMAGE_BYTES";
+    let mut doc = image_page();
+    let image = images::page_images(&doc, 0).unwrap()[0].object.unwrap();
+    doc.set(image, Object::Stream(identifiable_test_image(ALIASED)));
+    let page = pdfcraft_model::pages(&doc)[0].obj;
+    doc.update_dict(page, |d| {
+        let mut resources = d.get(b"Resources").and_then(Object::as_dict).cloned().unwrap();
+        let mut xobjects = resources.get(b"XObject").and_then(Object::as_dict).cloned().unwrap();
+        xobjects.set(b"UnusedAlias".to_vec(), Object::Ref(image));
+        resources.set(b"XObject".to_vec(), Object::Dict(xobjects));
+        d.set(b"Resources".to_vec(), Object::Dict(resources));
+    })
+    .unwrap();
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Delete).unwrap();
+    let bytes = write_full(&doc, &SaveOptions::default()).unwrap();
+    assert!(!bytes.windows(ALIASED.len()).any(|w| w == ALIASED), "an unused alias kept the deleted image reachable");
+    let saved = Document::open(Arc::new(bytes)).unwrap();
+    assert!(xobject(&saved, 0, b"Im0").is_none());
+    assert!(xobject(&saved, 0, b"UnusedAlias").is_none());
+
+    let mut doc = image_page_with("q 200 0 0 100 100 100 cm /Im0 Do Q /Alias Do");
+    let image = images::page_images(&doc, 0).unwrap()[0].object.unwrap();
+    doc.set(image, Object::Stream(identifiable_test_image(ALIASED)));
+    let page = pdfcraft_model::pages(&doc)[0].obj;
+    doc.update_dict(page, |d| {
+        let mut resources = d.get(b"Resources").and_then(Object::as_dict).cloned().unwrap();
+        let mut xobjects = resources.get(b"XObject").and_then(Object::as_dict).cloned().unwrap();
+        xobjects.set(b"Alias".to_vec(), Object::Ref(image));
+        resources.set(b"XObject".to_vec(), Object::Dict(xobjects));
+        d.set(b"Resources".to_vec(), Object::Dict(resources));
+    })
+    .unwrap();
+    images::change_image(&mut doc, 0, 0, &images::ImageChange::Delete).unwrap();
+    let saved = Document::open(Arc::new(write_full(&doc, &SaveOptions::default()).unwrap())).unwrap();
+    assert_eq!(images::page_images(&saved, 0).unwrap().len(), 1);
+    assert!(xobject(&saved, 0, b"Im0").is_none());
+    assert!(xobject(&saved, 0, b"Alias").is_some());
+}
+
 #[test]
 fn form_artwork_edits_only_the_selected_placement() {
     let mut doc = fixture(); // three pages share resources; pages 0 and 1 also share contents
