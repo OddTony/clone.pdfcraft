@@ -24,9 +24,22 @@ pub mod compare;
 mod copy_image;
 pub mod dates;
 pub mod export;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod hot_folder;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod hot_folder_analysis;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod hot_folder_output;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod hot_folder_preprocess;
+#[cfg(not(target_arch = "wasm32"))]
+mod hot_folder_schedule;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod hot_folder_sources;
 pub mod js;
 pub mod links;
 pub mod ocr;
+mod ocr_pdf;
 pub mod optimizer;
 pub mod print_raster;
 pub mod printcheck;
@@ -1571,6 +1584,12 @@ pub enum Edit {
         som: String,
         activity: String,
     },
+    /// Scan & OCR ▸ Enhance scanned file: rotate `page`'s scan by `degrees` (at most 12 either
+    /// way) to straighten it, keeping the original image stream.
+    DeskewPage {
+        page: usize,
+        degrees: f64,
+    },
     /// Scan & OCR ▸ Recognize text: put recognised words on `page` as invisible text over the
     /// image (from [`ocr::OcrJob::run`]).
     AddOcrText {
@@ -2018,6 +2037,7 @@ impl Edit {
             Edit::SetTagProperty { .. } => Label::of("Change tag properties"),
             Edit::MoveTag { .. } => Label::of("Move object"),
             Edit::MarkDecorative { .. } => Label::of("Mark figure as decorative"),
+            Edit::DeskewPage { .. } => Label::of("Straighten scanned page"),
             Edit::MarkTagArtifact { .. } => Label::of("Mark content as artifact"),
             Edit::AddOcrText { .. } => Label::of("Recognize text"),
             Edit::ApplyScriptChanges { .. } => Label::of("Run JavaScript"),
@@ -2215,6 +2235,7 @@ fn check_permission(edit: &Edit, p: &pdfcraft_cos::Permissions) -> Result<(), Ed
         | Edit::SetTagProperty { .. }
         | Edit::MoveTag { .. }
         | Edit::MarkDecorative { .. }
+        | Edit::DeskewPage { .. }
         | Edit::MarkTagArtifact { .. }
         | Edit::AddOcrText { .. }
         | Edit::SetDocumentScript { .. }
@@ -2527,8 +2548,9 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             pdfcraft_preflight::convert(doc, *level).map_err(|e| EditError::Invalid(e.to_string()))?;
         }
         Edit::SetDocumentScript { name, script } => pdfcraft_forms::set_document_script(doc, name, script.as_deref())?,
+        Edit::DeskewPage { page, degrees } => ocr_pdf::deskew(doc, *page, *degrees)?,
         Edit::AddOcrText { page, words } => {
-            pdfcraft_edit::stamp(doc, *page, "OCR", pdfcraft_ocr::text_layer(words))?;
+            ocr_pdf::add_text(doc, *page, words)?;
         }
         Edit::EditPageImage { page, index, change } => {
             let img = pdfcraft_edit::page_images(doc, *page)?
@@ -2922,6 +2944,8 @@ pub struct Session {
     next_id: u64,
     /// Seconds since the Unix epoch, injected so saves are deterministic in tests.
     clock: Option<fn() -> i64>,
+    /// Stable transaction time for replayable unattended exports.
+    fixed_timestamp: Option<i64>,
     /// Seconds to add to UTC for local time, read from whoever knows the zone (a browser, say).
     /// Separate from `clock` on purpose: `clock` alone is the test shortcut that takes the
     /// injected time AS local time and zeroes the zone, so injecting only it leaves either the
@@ -3262,6 +3286,17 @@ impl Session {
     /// Use a fixed clock (tests) instead of the system time.
     pub fn with_clock(mut self, clock: fn() -> i64) -> Self {
         self.clock = Some(clock);
+        self.fixed_timestamp = None;
+        self.utc_offset = None;
+        self
+    }
+
+    /// Keep newly written PDF metadata identical when a Hot Folder transaction is replayed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn with_timestamp(mut self, timestamp: i64) -> Self {
+        self.fixed_timestamp = Some(timestamp);
+        self.clock = None;
+        self.utc_offset = None;
         self
     }
 
@@ -3274,6 +3309,7 @@ impl Session {
     pub fn with_wall_clock(mut self, clock: fn() -> i64, utc_offset: fn() -> i64) -> Self {
         self.clock = Some(clock);
         self.utc_offset = Some(utc_offset);
+        self.fixed_timestamp = None;
         self
     }
 
@@ -3293,6 +3329,9 @@ impl Session {
     }
 
     fn now(&self) -> Option<i64> {
+        if let Some(timestamp) = self.fixed_timestamp {
+            return Some(timestamp);
+        }
         if let Some(c) = self.clock {
             return Some(c());
         }
