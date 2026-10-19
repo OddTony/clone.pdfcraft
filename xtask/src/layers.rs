@@ -83,15 +83,15 @@ pub const TABLE: &[(&str, Class)] = &[
     ("automation", Class::Layer(7)),
     ("sdk", Class::Layer(7)),
     ("rest", Class::Layer(7)),
-    ("pyo3", Class::Layer(7)),
     // test support
     ("testkit", Class::Testkit),
     ("oracle", Class::Testkit),
-    // L8 apps + tooling
+    // L8 apps + tooling + foreign language bindings
     ("pdfcraft", Class::Exempt),
     ("cli", Class::Exempt),
     ("web", Class::Exempt),
     ("xtask", Class::Exempt),
+    ("pyo3", Class::Exempt),
 ];
 
 /// Workspace crates a standalone crate may use (architecture §3 rule 3: `cos → filters, crypt, geom`).
@@ -110,7 +110,6 @@ pub const SIDEWAYS: &[(&str, &str)] = &[
     ("automation", "platform"),
     ("sdk", "automation"),
     ("rest", "sdk"),
-    ("pyo3", "sdk"),
     ("rest", "automation"),
 ];
 

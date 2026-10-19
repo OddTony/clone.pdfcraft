@@ -1282,7 +1282,9 @@ impl OperationExecutor for AutomationEngineAdapter {
                 "rect": rect.to_array(),
             });
             automation.call("redact_mark", &mark_args).map_err(|e| SdkError::EngineError(format!("redact_mark failed: {e}")))?;
-            automation.call("redact_apply", &json!({ "doc": doc_id, "pages": [page] })).map_err(|e| SdkError::EngineError(format!("redact_apply failed: {e}")))?;
+            automation
+                .call("redact_apply", &json!({ "doc": doc_id, "pages": [page] }))
+                .map_err(|e| SdkError::EngineError(format!("redact_apply failed: {e}")))?;
             self.save_and_read(automation, &sandbox, doc_id, &out_name)
         })
     }

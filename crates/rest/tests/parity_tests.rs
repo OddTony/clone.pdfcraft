@@ -130,11 +130,7 @@ fn test_local_vs_rest_over_http_loopback_parity() {
     let repository = Arc::new(InMemoryJobRepository::new());
     let service = Arc::new(RestService::new(executor, repository, Some("test-token".into())));
 
-    let server = HttpServer::start(
-        service,
-        ServerConfig { bind_addr: "127.0.0.1:0".parse().unwrap(), allow_public_bind: false },
-    )
-    .unwrap();
+    let server = HttpServer::start(service, ServerConfig { bind_addr: "127.0.0.1:0".parse().unwrap(), allow_public_bind: false }).unwrap();
 
     let server_url = format!("http://127.0.0.1:{}", server.port());
     let rest_client = RestClient::remote(server_url, Some("test-token".into()));
