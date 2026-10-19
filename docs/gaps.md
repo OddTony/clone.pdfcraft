@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (gap 6: #3424 a stated link border stays visible outside the Link tool; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M1: raw-deflate fallback preserves decoding-limit errors; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -136,7 +137,8 @@ update the numbers.
   batch keeps a cloudy comment flatten cannot draw (#1317), leaves a refused text-box restyle or
   resize unchanged (#1327), keeps arrow defaults off plain lines (#1302), stops a custom text
   match on the separator instead of the next glyph (#1315), and states the vertical-text
-  redaction refusal without claiming an overlap (#1340). Organize Pages opens on the page being
+  redaction refusal without claiming an overlap (#1340). A link with an explicit positive border
+  stays visible with Hand and Select (#3424). Organize Pages opens on the page being
   read, selected and scrolled into view (#1910). Stamps placed on a rotated page read upright
   (#1398). Another batch keeps a spaced XFA radio value in the datasets (#1319), replaces only the
   selected pages when they are not adjacent (#1305), and leaves unrelated page streams in place
@@ -382,6 +384,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-19 | minor | Gap 6: a link with an explicit positive border stays visible with Hand and Select (#3424). Estimates unchanged. |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-14 | minor | M1: raw-deflate fallback preserves decoding-limit errors in strict and tolerant decoding; synthetic filter and COS stream regressions. Estimates unchanged. |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |

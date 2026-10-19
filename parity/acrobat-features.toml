@@ -2226,8 +2226,8 @@ milestone = "M7"
 status = "shipped"
 commands = ["edit.link"]
 tools = ["link_edit"]
-evidence = ["crates/ui-egui/tests/ui_group/pdf_links.rs::drawing_editing_and_deleting_links", "crates/automation/tests/automation.rs::links_through_tools", "crates/annot/src/tests.rs::links_are_added_edited_listed_and_removed"]
-notes = "visible/invisible rectangle, highlight, thickness, solid/dashed/underline and colour; supported page/URI action editing. Appearance-only edits preserve unsupported actions, including GoToR."
+evidence = ["crates/ui-egui/tests/ui_group/pdf_links.rs::drawing_editing_and_deleting_links", "crates/automation/tests/automation.rs::links_through_tools", "crates/annot/src/tests.rs::links_are_added_edited_listed_and_removed", "crates/annot/src/tests.rs::visible_link_borders_are_drawn_outside_the_link_tool"]
+notes = "visible/invisible rectangle, highlight, thickness, solid/dashed/underline and colour; a stated positive border is drawn with Hand and Select, not only while the Link tool is active (#3424). Supported page/URI action editing. Appearance-only edits preserve unsupported actions, including GoToR."
 
 [[feature]]
 id = "edit.links-from-urls"

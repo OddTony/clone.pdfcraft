@@ -917,13 +917,15 @@ fn comments_without_appearances_get_one_for_display_only() {
     let display = with_missing_appearances(&doc).expect("three comments need an appearance");
     let has_ap = |doc: &Document| list(doc, 0).iter().map(|d| d.get(b"AP").is_some()).collect::<Vec<_>>();
     assert_eq!(has_ap(&doc), [false, false, false, true, false, false, false], "the document itself is untouched");
-    assert_eq!(has_ap(&display), [true, true, true, true, false, false, false], "FreeText, Ink and Text get one; the rest don't");
+    assert_eq!(has_ap(&display), [true, true, true, true, true, false, false], "FreeText, Ink, Text and a bordered link get one");
     let shown = list(&display, 0);
     let free_text = ap_content(&display, &shown[0]);
     assert!(free_text.contains("re f") && free_text.contains("Tj"), "background box and text: {free_text}");
+    let link = ap_content(&display, &shown[4]);
+    assert!(link.contains("0 0 1 RG") && link.contains("re S"), "the link's blue border is drawn: {link}");
     assert_eq!(shown[3].get(b"AP"), list(&doc, 0)[3].get(b"AP"), "an existing appearance is kept");
     // The display copy survives a save and reopen (what the renderer reads).
-    assert_eq!(has_ap(&reopen(&display)), [true, true, true, true, false, false, false]);
+    assert_eq!(has_ap(&reopen(&display)), [true, true, true, true, true, false, false]);
     // Nothing to add: no copy.
     let complete = document_of(&[
         b"<< /Type /Catalog /Pages 2 0 R >>",
@@ -934,6 +936,49 @@ fn comments_without_appearances_get_one_for_display_only() {
         b"<< /Type /XObject /Subtype /Form /BBox [10 10 50 50] /Length 0 >>\nstream\n\nendstream",
     ]);
     assert!(with_missing_appearances(&complete).is_none());
+}
+
+/// #3424: a link whose border is explicit stays drawn after the Link tool is left. The border
+/// is only on the display copy; a zero-width border and a link with no border entry stay blank.
+#[test]
+fn visible_link_borders_are_drawn_outside_the_link_tool() {
+    let doc = document_of(&[
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R 6 0 R 7 0 R] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [40 700 200 730] /BS << /W 2 /S /S >> /C [0 0 1] /Border [0 0 1] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [40 660 200 690] /BS << /W 1.5 /S /D /D [4 2] >> /C [1 0 0] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [40 620 240 628] /BS << /W 2 /S /U >> /C [0 0.5 0] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [40 580 200 610] /BS << /W 0 /S /S >> /C [0 0 1] >>",
+    ]);
+    assert!(list(&doc, 0).iter().all(|d| d.get(b"AP").is_none()), "saving does not invent an appearance");
+    let display = with_missing_appearances(&doc).expect("the bordered links need a display appearance");
+    let shown = list(&display, 0);
+    assert!(shown[3].get(b"AP").is_none(), "a zero-width border stays invisible");
+    let solid = ap_content(&display, &shown[0]);
+    assert!(solid.contains("0 0 1 RG") && solid.contains("2 w") && solid.contains("re S"), "{solid}");
+    let dashed = ap_content(&display, &shown[1]);
+    assert!(dashed.contains("1 0 0 RG") && dashed.contains("[4 2] 0 d") && dashed.contains("re S"), "{dashed}");
+    let underline = ap_content(&display, &shown[2]);
+    assert!(underline.contains("0 0.5 0 RG") && underline.contains(" l S") && !underline.contains("re"), "{underline}");
+}
+
+/// A link that states its dash only as the fourth `/Border` entry, with no `/BS`.
+#[test]
+fn a_link_dash_in_the_border_array_is_drawn() {
+    let doc = document_of(&[
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [40 700 200 730] /Border [0 0 1 [3 1]] /C [0 0 1] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [40 660 200 690] /Border [0 0 1 [-1 2]] /C [0 0 1] >>",
+    ]);
+    let display = with_missing_appearances(&doc).expect("the bordered links need a display appearance");
+    let shown = list(&display, 0);
+    let dashed = ap_content(&display, &shown[0]);
+    assert!(dashed.contains("[3 1] 0 d") && dashed.contains("re S"), "{dashed}");
+    let rejected = ap_content(&display, &shown[1]);
+    assert!(rejected.contains("re S") && !rejected.contains(" d"), "a negative dash entry is not emitted: {rejected}");
 }
 
 fn line_dict(coords: [f64; 4], ending: &str) -> pdfcraft_cos::Dict {

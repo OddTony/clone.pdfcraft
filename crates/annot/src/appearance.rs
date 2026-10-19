@@ -174,24 +174,59 @@ fn interior_color(d: &Dict, fallback: Option<Rgb>) -> Option<Rgb> {
     color(d, b"IC").flatten().or(fallback)
 }
 
+/// The leading numbers of `/Border`. A dash array in the fourth entry stops the scan, so the
+/// width (the third number) is still read.
+fn border_numbers(d: &Dict) -> Option<Vec<f64>> {
+    let mut values = Vec::new();
+    for item in d.get(b"Border").and_then(Object::as_array)? {
+        let Some(n) = item.as_f64() else { break };
+        values.push(n);
+    }
+    Some(values)
+}
+
 pub(crate) fn border_width(d: &Dict) -> f64 {
     if let Some(w) = d.get(b"BS").and_then(|b| b.as_dict()).and_then(|b| b.get(b"W")).and_then(|w| w.as_f64()) {
         return w.max(0.0);
     }
-    match nums(d, b"Border") {
-        Some(b) if b.len() >= 3 => b[2].max(0.0),
-        _ => 1.0,
-    }
+    border_numbers(d).filter(|b| b.len() >= 3).map_or(1.0, |b| b[2].max(0.0))
 }
 
-/// Dash pattern operator for a dashed border, if any.
+/// A link's border width when the file states one (`/BS` or `/Border`). `None` when it states
+/// none: a missing entry is not treated as the one-point default, so ordinary links stay blank.
+fn explicit_link_border(d: &Dict) -> Option<f64> {
+    let w = if let Some(bs) = d.get(b"BS").and_then(|b| b.as_dict()) {
+        bs.get(b"W").and_then(|w| w.as_f64()).unwrap_or(1.0)
+    } else {
+        *border_numbers(d)?.get(2)?
+    };
+    (w.is_finite() && w > 0.0).then_some(w)
+}
+
+fn dash_operator(values: &[f64]) -> String {
+    format!("[{}] 0 d\n", values.iter().map(|x| n(*x)).collect::<Vec<_>>().join(" "))
+}
+
+/// Dash pattern operator for a dashed border, if any. `/BS` wins over `/Border`. A `/Border`
+/// dash is the fourth entry and is used only when every value is a finite, non-negative number.
 fn dash(d: &Dict) -> String {
-    let Some(bs) = d.get(b"BS").and_then(|b| b.as_dict()) else { return String::new() };
-    if bs.name(b"S") != Some(b"D") {
+    if let Some(bs) = d.get(b"BS").and_then(|b| b.as_dict()) {
+        if bs.name(b"S") != Some(b"D") {
+            return String::new();
+        }
+        let arr = nums(bs, b"D").filter(|a| !a.is_empty() && a.iter().all(|x| *x >= 0.0)).unwrap_or_else(|| vec![3.0]);
+        return dash_operator(&arr);
+    }
+    let Some(pattern) = d.get(b"Border").and_then(Object::as_array).and_then(|border| border.get(3)).and_then(Object::as_array) else {
+        return String::new();
+    };
+    let Some(values) = pattern.iter().map(Object::as_f64).collect::<Option<Vec<_>>>() else {
+        return String::new();
+    };
+    if values.is_empty() || values.iter().any(|x| !x.is_finite() || *x < 0.0) {
         return String::new();
     }
-    let arr = nums(bs, b"D").filter(|a| !a.is_empty() && a.iter().all(|x| *x >= 0.0)).unwrap_or_else(|| vec![3.0]);
-    format!("[{}] 0 d\n", arr.iter().map(|x| n(*x)).collect::<Vec<_>>().join(" "))
+    dash_operator(&values)
 }
 
 fn rg(c: Rgb) -> String {
@@ -400,6 +435,31 @@ pub fn build(d: &Dict) -> Option<Stream> {
                     n(quad[7]),
                     n(quad[4]),
                     n(quad[5])
+                ));
+            }
+        }
+        b"Link" => {
+            // The page draws only `/AP`. A stated positive border is drawn here so it stays
+            // visible with the Hand and Select tools, not only while the Link tool outlines it.
+            let w = explicit_link_border(d)?;
+            let col = stroke.unwrap_or([0.0, 0.0, 0.0]);
+            let (rw, rh) = (rect[2] - rect[0], rect[3] - rect[1]);
+            if !rw.is_finite() || !rh.is_finite() || rw <= 0.0 || rh <= 0.0 {
+                return None;
+            }
+            let underline = d.get(b"BS").and_then(|b| b.as_dict()).is_some_and(|b| b.name(b"S") == Some(b"U"));
+            c.push_str(&format!("{}{} w\n{}", rg_stroke(col), n(w), dash(d)));
+            if underline {
+                let y = rect[1] + (w / 2.0).min(rh / 2.0);
+                c.push_str(&format!("{} {} m {} {} l S\n", n(rect[0]), n(y), n(rect[2]), n(y)));
+            } else {
+                let inset = (w / 2.0).min(rw / 2.0).min(rh / 2.0);
+                c.push_str(&format!(
+                    "{} {} {} {} re S\n",
+                    n(rect[0] + inset),
+                    n(rect[1] + inset),
+                    n((rw - 2.0 * inset).max(0.0)),
+                    n((rh - 2.0 * inset).max(0.0))
                 ));
             }
         }
