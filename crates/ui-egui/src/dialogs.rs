@@ -1475,7 +1475,11 @@ fn save_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     // the prompt taller than the window (#236); 80 characters wrap to a few lines.
     let shown = shorten_middle(&name, 80);
     let mut choice: Option<Option<bool>> = None;
+    let covered = app.save_prompt_covered();
     let modal = widgets::show_modal(ctx, "save_prompt", |ui| {
+        if covered {
+            ui.disable();
+        }
         ui.set_width(420.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("save", 22.0, t.accent));
@@ -1506,7 +1510,7 @@ fn save_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
             }
         });
     });
-    if choice.is_none() && modal.should_close() {
+    if !covered && choice.is_none() && modal.should_close() {
         choice = Some(None);
     }
     if let Some(c) = choice {

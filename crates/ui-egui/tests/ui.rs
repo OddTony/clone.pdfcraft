@@ -355,6 +355,51 @@ fn a_middle_click_closes_the_tab() {
 }
 
 #[test]
+fn a_link_prompt_above_a_save_prompt_owns_its_keys() {
+    for key in [egui::Key::Escape, egui::Key::Enter] {
+        let mut h = harness(|app| {
+            app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
+            app.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+            app.close_request = Some(pdfcraft_ui_egui::CloseRequest::Tab(app.views[0].id));
+        });
+        h.run_steps(3);
+        h.state_mut().pending_link =
+            Some(pdfcraft_ui_egui::PendingLink { url: "https://example.org".to_owned(), origin: pdfcraft_ui_egui::LinkOrigin::Link });
+        h.run_steps(3);
+        h.key_press(key);
+        h.run_steps(3);
+        assert!(h.state().pending_link.is_none(), "{key:?} cancels the top link prompt");
+        assert!(h.state().close_request.is_some(), "the save prompt stays open after {key:?}");
+        assert_eq!(h.state().views.len(), 1, "the edited document remains open");
+        assert!(h.state().last_opened_url.is_none());
+    }
+}
+
+#[test]
+fn a_new_link_prompt_does_not_resolve_the_save_prompt() {
+    for (modifiers, key) in [
+        (egui::Modifiers::NONE, egui::Key::Escape),
+        (egui::Modifiers::NONE, egui::Key::Enter),
+        (egui::Modifiers::COMMAND, egui::Key::D),
+        (egui::Modifiers::ALT, egui::Key::D),
+        (egui::Modifiers::ALT, egui::Key::N),
+    ] {
+        let mut h = harness(|app| {
+            app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
+            app.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+            app.close_request = Some(pdfcraft_ui_egui::CloseRequest::Tab(app.views[0].id));
+        });
+        h.run_steps(3);
+        h.state_mut().pending_link =
+            Some(pdfcraft_ui_egui::PendingLink { url: "https://example.org".to_owned(), origin: pdfcraft_ui_egui::LinkOrigin::Link });
+        h.key_press_modifiers(modifiers, key);
+        h.run_steps(1);
+        assert!(h.state().close_request.is_some(), "{modifiers:?} {key:?} must not resolve the underlying save prompt");
+        assert_eq!(h.state().views.len(), 1);
+    }
+}
+
+#[test]
 fn overflowing_tabs_can_be_reached_by_scrolling() {
     let mut h = harness(|app| {
         for i in 0..20 {
