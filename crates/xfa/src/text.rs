@@ -188,14 +188,21 @@ pub fn layout(rich: &RichText, rect: Rect, para: &Para, base: &Face, embed: &dyn
         size: f64,
         first: bool,
     }
-    let avail = (rect.w - para.margin_left - para.margin_right).max(1.0);
+    // A negative textIndent is a hanging indent: the first line starts left of the others. It
+    // never starts left of the box, so the others move in to make room, as other viewers lay
+    // such labels out; never past the box's right edge, however wide the hang.
+    let hang = (-para.text_indent).min((rect.w - para.margin_right - 1.0).max(0.0));
+    let margin_left = para.margin_left.max(hang);
+    // Where the first line starts, from the others.
+    let first_indent = para.text_indent.max(-margin_left);
+    let avail = (rect.w - margin_left - para.margin_right).max(1.0);
     let mut lines: Vec<(Line, Option<HAlign>)> = Vec::new();
     let mut total = 0.0;
     for (pi, p) in rich.paragraphs.iter().enumerate() {
         let ws = words(&p.runs, base, embed);
         let mut line = Line { words: Vec::new(), width: 0.0, size: base.size, first: true };
         let mut first_in_para = true;
-        let indent = |first: bool| if first { para.text_indent.max(0.0) } else { 0.0 };
+        let indent = |first: bool| if first { first_indent } else { 0.0 };
         for w in ws {
             let fits = line.width + w.width <= avail - indent(line.first) || line.words.is_empty() && w.width <= avail - indent(line.first);
             if !fits && !line.words.is_empty() {
@@ -247,11 +254,11 @@ pub fn layout(rich: &RichText, rect: Rect, para: &Para, base: &Face, embed: &dyn
     let mut spans = Vec::new();
     let mut y = start_y + para.space_above;
     for ((line, align), lh) in lines.into_iter().zip(heights) {
-        let indent = if line.first { para.text_indent.max(0.0) } else { 0.0 };
+        let indent = if line.first { first_indent } else { 0.0 };
         // Trailing spaces don't count for alignment.
         let trailing = line.words.last().map_or(0.0, |w| if w.text.ends_with(' ') { w.face.width(" ") } else { 0.0 });
         let used = (line.width - trailing).max(0.0);
-        let mut x = rect.x + para.margin_left + indent;
+        let mut x = rect.x + margin_left + indent;
         x += match align.unwrap_or(para.h_align) {
             HAlign::Left | HAlign::Justify => 0.0,
             HAlign::Center => ((avail - indent - used) / 2.0).max(0.0),

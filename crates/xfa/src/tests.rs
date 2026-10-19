@@ -139,6 +139,66 @@ fn layout_places_captions_fields_and_sizes_containers_to_their_content() {
     );
 }
 
+/// The left edges of the lines of a draw `w` points wide holding `text` in Arial 8 pt, with
+/// `para` attributes, from the content area's left edge (0.5in).
+fn line_starts(text: &str, w: f64, para: &str) -> Vec<f64> {
+    let xdp = format!(
+        r##"<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"><template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">
+<subform name="form" layout="tb">
+ <pageSet><pageArea name="front"><contentArea x="0.5in" y="0.5in" w="7.5in" h="10in"/><medium short="8.5in" long="11in"/></pageArea></pageSet>
+ <draw name="label" w="{w}pt" h="1in"><value><text>{text}</text></value><font typeface="Arial" size="8pt"/><para {para} lineHeight="8pt"/></draw>
+</subform>
+</template></xdp:xdp>"##
+    );
+    let form = layout_xml(&xdp).unwrap();
+    let mut lines: Vec<(i64, f64)> = Vec::new();
+    for item in &form.pages[0].items {
+        let Item::Text(s) = item else { continue };
+        let key = (s.baseline * 100.0).round() as i64;
+        match lines.iter_mut().find(|(b, _)| *b == key) {
+            Some((_, x)) => *x = x.min(s.x),
+            None => lines.push((key, s.x)),
+        }
+    }
+    lines.sort_by_key(|(b, _)| *b);
+    lines.into_iter().map(|(_, x)| x - 36.0).collect()
+}
+
+#[test]
+fn a_negative_text_indent_hangs_the_first_line_and_indents_the_rest() {
+    let text = "11. SERVICE MEMBER BALANCE (TOTAL)";
+    // No left margin: the first line starts at the box's edge and the others 18pt in.
+    let starts = line_starts(text, 58.0, r#"textIndent="-18pt""#);
+    assert!(starts.len() >= 3, "{starts:?}");
+    assert!(starts[0].abs() < 1e-6, "first line at the edge: {starts:?}");
+    assert!(starts[1..].iter().all(|x| (x - 18.0).abs() < 1e-6), "the rest hang 18pt in: {starts:?}");
+    // With a left margin wider than the hang, the first line starts at the margin less the hang.
+    let starts = line_starts(text, 90.0, r#"marginLeft="30pt" textIndent="-18pt""#);
+    assert!(starts.len() >= 2, "{starts:?}");
+    assert!((starts[0] - 12.0).abs() < 1e-6 && starts[1..].iter().all(|x| (x - 30.0).abs() < 1e-6), "{starts:?}");
+    // A positive indent still moves only the first line in.
+    let starts = line_starts(text, 58.0, r#"textIndent="10pt""#);
+    assert!((starts[0] - 10.0).abs() < 1e-6 && starts[1..].iter().all(|x| x.abs() < 1e-6), "{starts:?}");
+}
+
+#[test]
+fn a_hang_wider_than_the_box_keeps_every_line_inside_it() {
+    // A 58pt box hanging its first line by 100pt, right-aligned: every line still starts and
+    // ends inside the box.
+    let xdp = r##"<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"><template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">
+<subform name="form" layout="tb">
+ <pageSet><pageArea name="front"><contentArea x="0.5in" y="0.5in" w="7.5in" h="10in"/><medium short="8.5in" long="11in"/></pageArea></pageSet>
+ <draw name="label" w="58pt" h="2in"><value><text>AB CD EF</text></value><font typeface="Arial" size="8pt"/><para hAlign="right" textIndent="-100pt" lineHeight="8pt"/></draw>
+</subform>
+</template></xdp:xdp>"##;
+    let form = layout_xml(xdp).unwrap();
+    for item in &form.pages[0].items {
+        let Item::Text(s) = item else { continue };
+        let right = s.x + s.face.width(s.text.trim_end());
+        assert!(s.x >= 36.0 - 1e-6 && right <= 36.0 + 58.0 + 1e-6, "{:?} runs from {} to {right}", s.text, s.x);
+    }
+}
+
 #[test]
 fn tables_break_across_pages_and_repeat_their_header_row() {
     let form = layout_xml(&template(40)).unwrap();
