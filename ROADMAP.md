@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M5, PR #1971: bounded nested FDF export excludes source page/page-tree dictionaries; refreshed against upstream 4db6ac4a; estimates unchanged)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7: the Edit text caret is as tall as the row it is on; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M6: CSV tab-containing headers; estimates unchanged)
 > **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M3, #3149: discard render demand after page geometry changes and check the GPU texture limit before upload; estimates unchanged)
@@ -176,6 +177,11 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 - **2026-10-19 (M3, #3387):** Save-prompt shortcuts yield to later consent and utility dialogs; a synthetic UI regression checks that an edited document stays open. Estimates unchanged.
 
 - **2026-10-18 (M10, #3120):** Export to Word, PowerPoint, HTML and RTF reads text from form XObjects nested as deep as the renderer draws them (50 levels), and up to 50 000 forms a page (the renderer's budget for nested ones); it stopped at 12 levels and 4 096 forms and left the rest out silently. A page past those limits is listed in `doc_export_office`'s `truncated_pages`, with a warning. Estimates unchanged.
+
+- **2026-10-18 (M5, PR #1971 review):** Nested FDF annotation values that identify a source `/Page` or `/Pages` dictionary become null at every copy depth. A synthetic three-page PDF saved and reopened before export verifies that destination actions cannot pull source page content into the FDF, while unrelated nested metadata and shared references remain intact. FDF import semantics, copied-graph limits and estimates are unchanged.
+- **2026-10-15 (M5, PR #1971 refresh):** Nested FDF annotation values retain shared or cyclic copied graphs. Discovery borrows direct values and records annotation positions with lazy array owners; retained entries are budgeted before cloning. Synthetic stress fixtures include repeated aliases and saved-PDF cache eviction. Limits cover the copied graph; source parsing and page discovery retain their existing limits, with no total source-memory bound. FDF import semantics and estimates are unchanged.
+- **2026-10-13 (M5, nested FDF values):** Comment export copies and renumbers nested indirect values, retaining geometry, colours, borders and shared graphs. Graph/data limits return an error before the destination is written; synthetic saved-PDF and automation exchange regressions. Estimates unchanged.
+
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
 
 - **2026-10-18 (M7, #3212):** Headers, Bates numbers, watermarks and added text stay visible after unfinished marked content, with original content preserved.
@@ -548,6 +554,8 @@ Newest first: the date, what moved, and the new overall estimate.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | M5, PR #1971: nested source `/Page` and `/Pages` dictionaries export as null without traversing page content or the page tree. Synthetic saved/reopened three-page regression retains unrelated metadata and aliases. FDF import semantics, copied-graph limits and estimates unchanged. |
+| 2026-10-15 | minor | M5: budget retained FDF entries before cloning; discovery keeps lazy array owners and annotation positions, with alias/cache-eviction stress fixtures. Limits cover the copied graph; source parsing/page discovery retain existing COS/parser limits, with no total source-memory bound. FDF import semantics and estimates unchanged. |
 | 2026-10-16 | minor | M9 #79: named-layer signature appearances show the signature's real state in the display copy, exports and both print modes, never in saves; captions follow the interface language. Estimates unchanged. |
 | 2026-10-16 | minor | M9: the page validation overlay moves to the widget's top-right corner and stops growing past 48 screen points, so it annotates the signer's artwork from a corner instead of covering the middle of it; a field under 32 screen points keeps its outline. Estimates unchanged. |
 | 2026-10-15 | minor | M7: the Edit text caret is as tall as the row it is on in a region with several sizes; estimates unchanged. |
