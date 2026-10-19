@@ -15,6 +15,11 @@ Currently, `pdfcraft-sdk` and `pdfcraft-rest` provide high-level execution for 3
 
 While data types exist across 15 domains in `crates/sdk/src/lib.rs`, the underlying execution wiring currently uses only ~3 of the 149 tools available in `pdfcraft-automation`.
 
+### Strategic Rationale: Token Economics & Determinism
+- **Zero LLM Token / Credit Burn**: Calling document tools via an LLM agent consumes schema and prompt tokens on every turn. In contrast, the SDK and REST service execute in pure, compiled code with **zero AI token costs**, zero credit consumption, and zero third-party API rate limits.
+- **100% Deterministic Execution**: Legal, archival, and financial document operations require absolute mathematical repeatability. Probabilistic LLMs can hallucinate parameters or drop fields; pure code execution guarantees identical, spec-conformant PDF object graphs every single run.
+- **"AI Only Where Necessary"**: Most enterprise workflows (invoice generation, PDF watermarking, form filling, digital signing) do not require AI. Expanding the SDK and REST service gives developers the deterministic tools for 95% of tasks, allowing AI and MCP to be reserved exclusively for genuine cognitive workloads.
+
 ### Two-Track Expansion Strategy:
 1. **Immediate Universal Parity (Phase 1 Escape Hatch)**:  
    Implement a generic tool execution method (`client.call_tool(tool_name, params)` / `POST /v1/operations/{tool_name}`) executing through `ExecutionSandbox`. This unlocks **100% of the 149 automation tools immediately** for SDK and REST consumers.

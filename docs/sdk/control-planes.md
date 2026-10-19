@@ -125,8 +125,28 @@ Layer 7 (Façades & Services)
 
 ---
 
+---
+
+## Deterministic Code vs. AI-Agentic Execution: Token Economics & Predictability
+
+A critical architectural distinction between the **Application Planes (`pdfcraft-sdk`, `pdfcraft-rest`)** and the **Agent Plane (`pdfcraft-cli mcp`)** is the separation of **deterministic code execution** from **probabilistic AI reasoning**:
+
+### 1. Zero LLM Token & Credit Overhead
+* **The Cost of Overusing AI**: Driving document operations through an LLM via MCP consumes prompt tokens, tool definition schemas, reasoning tokens, and API credits on every single interaction. For high-volume automated workflows (e.g. merging thousands of monthly invoices, rendering preview thumbnails, or batch-filling tax forms), using an LLM introduces unsustainable recurring costs and rate limits.
+* **Deterministic Code is Free**: Calling `pdfcraft-sdk` or `pdfcraft-rest` directly executes compiled Rust logic in-process or over HTTP with **zero AI tokens, zero credit consumption, and zero third-party cloud billing**.
+
+### 2. Strict Determinism & Enterprise Compliance
+* **Mission-Critical Predictability**: Legal agreements, financial disclosures, and government archival documents require 100% bit-exact repeatability and formal verification. Probabilistic LLMs can hallucinate parameters, misinterpret rigid field mappings, or exhibit subtle behavioral shifts between model checkpoints.
+* **Pure Code Invariants**: The SDK and REST pipelines guarantee mathematical determinism: identical inputs, options, and fonts will always generate identical, spec-conformant PDF object graphs (ISO 32000-2 / PDF/A) with `#![forbid(unsafe_code)]` memory safety and zero non-deterministic drift.
+
+### 3. Pragmatic Architecture: "AI Only Where Necessary"
+* **Not every application needs AI or MCP**: Standard business software, CI/CD document generators, web app backends, and report formatters should default to the fast, deterministic SDK or REST API.
+* **The Hybrid Synergy**: Use the deterministic SDK/REST foundation for 95% of standard pipeline operations (merge, split, optimize, watermark, sign, form-fill). Reserve LLMs and the MCP server strictly for tasks that genuinely require human-like cognitive intelligence—such as summarizing complex multi-page contracts, classifying scanned documents, or semantic cross-document question answering.
+
+---
+
 ## Decision Guide: Which Should You Use?
 
-* **Choose MCP (`pdfcraft-cli mcp`)** when configuring an AI agent or coding assistant (like Claude Desktop or Antigravity) to let the model inspect, read, review, or edit PDFs on your local drive during an interactive session.
-* **Choose the SDK (`pdfcraft-sdk`)** when writing an application in Python, TypeScript, or Rust that needs fast, memory-safe, in-process PDF manipulation with zero network latency, zero HTTP daemons, and full APDFL object models.
-* **Choose the REST Service (`pdfcraft-rest`)** when deploying a self-hosted microservice or Docker container to handle document conversion, OCR, signing, and transformation jobs across multiple web servers or non-supported languages (C#, Go, PHP, Java).
+* **Choose the SDK (`pdfcraft-sdk`)** when writing an application in Python, TypeScript, or Rust that needs fast, deterministic, in-process PDF manipulation with zero token costs, zero network latency, zero daemons, and full APDFL object models.
+* **Choose the REST Service (`pdfcraft-rest`)** when deploying a self-hosted microservice or Docker container to handle automated, high-throughput document conversion, OCR, signing, and transformation jobs across multiple web servers or non-supported languages (C#, Go, PHP, Java) without LLM overhead.
+* **Choose MCP (`pdfcraft-cli mcp`)** when configuring an AI agent or coding assistant (like Claude Desktop or Antigravity) to let the model inspect, read, review, or edit PDFs interactively on your local drive during an agentic session.
