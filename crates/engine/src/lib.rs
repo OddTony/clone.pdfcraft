@@ -1281,9 +1281,11 @@ pub enum Edit {
         width: f64,
         height: f64,
     },
-    /// Copies of `pages` inserted after the last of them.
+    /// Copies of `pages` inserted at `at` (an index in the page order as it is now), or after
+    /// the last of them when `at` is `None`.
     DuplicatePages {
         pages: Vec<usize>,
+        at: Option<usize>,
     },
     /// Replace Pages: the content of `pages` is replaced by `src_pages` of another PDF; the
     /// pages' links, comments and bookmarks stay.
@@ -1948,7 +1950,7 @@ impl Edit {
             Edit::MovePages { pages, .. } => plural("Move page", "Move pages", pages.len()),
             Edit::ReversePages { .. } => Label::of("Reverse pages"),
             Edit::InsertBlankPage { .. } => Label::of("Insert blank page"),
-            Edit::DuplicatePages { pages } => plural("Duplicate page", "Duplicate pages", pages.len()),
+            Edit::DuplicatePages { pages, .. } => plural("Duplicate page", "Duplicate pages", pages.len()),
             Edit::ReplacePages { pages, .. } => plural("Replace page", "Replace pages", pages.len()),
             Edit::SetPageBox { pages, which: PageBox::Crop, .. } => plural("Crop page", "Crop pages", pages.len()),
             Edit::SetPageBox { .. } => Label::of("Set page boxes"),
@@ -2335,7 +2337,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             pdfcraft_organize::insert_blank_page(doc, *at, *width, *height)?;
         }
         Edit::SetInfo { key, value } => pdfcraft_organize::set_info(doc, key, value)?,
-        Edit::DuplicatePages { pages } => pdfcraft_organize::duplicate_pages(doc, pages)?,
+        Edit::DuplicatePages { pages, at } => pdfcraft_organize::duplicate_pages(doc, pages, *at)?,
         Edit::ReplacePages { pages, name, bytes, src_pages } => {
             let src = open_source(name, bytes)?;
             pdfcraft_organize::replace_pages(doc, pages, &src, src_pages)?;
@@ -2407,7 +2409,10 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
             pdfcraft_annot::erase_ink(doc, *page, *index, path, *radius, &cx.meta())?;
         }
         Edit::ReplaceText { page, quads, text, author, strike, caret } => {
-            pdfcraft_annot::add_text_replacement(doc, *page, quads, text, author, strike, caret, &cx.meta())?;
+            // One `/NM` each: the caret replies to the strikeout, and XFDF names that reply by
+            // the strikeout's `/NM` (#2666).
+            let (strike_meta, caret_meta) = (cx.meta(), cx.meta());
+            pdfcraft_annot::add_text_replacement(doc, *page, quads, text, author, strike, caret, &strike_meta, &caret_meta)?;
         }
         Edit::MarkAnnotation { page, index, marked, author } => {
             pdfcraft_annot::set_marked(doc, *page, *index, *marked, author, &cx.meta())?;

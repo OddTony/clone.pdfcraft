@@ -242,6 +242,79 @@ fn unsupported_membership_keeps_annotations_replies_and_field_links() {
     assert_eq!(saved(&doc), before);
 }
 
+/// Preserve a malformed reply that targets a retained popup instead of a markup annotation.
+#[test]
+fn unsupported_membership_keeps_popup_replies_after_save_and_reopen() {
+    let mut doc = fixture("/OC null", 4, "");
+    let root = ObjRef::new(8, 0);
+    let popup = doc.add(Object::Dict({
+        let mut d = pdfcraft_cos::Dict::new();
+        d.set(b"Subtype".to_vec(), Object::Name(b"Popup".to_vec()));
+        d.set(b"Parent".to_vec(), Object::Ref(root));
+        d.set(b"Private".to_vec(), pdfcraft_cos::PdfString::text("keep popup"));
+        d
+    }));
+    let mut reply = doc.get(root).as_dict().unwrap().clone();
+    reply.remove(b"OC");
+    reply.set(b"IRT".to_vec(), Object::Ref(popup));
+    let reply = doc.add(Object::Dict(reply));
+    let mut drawable = doc.get(root).as_dict().unwrap().clone();
+    drawable.remove(b"OC");
+    let drawable = doc.add(Object::Dict(drawable));
+    doc.update_dict(ObjRef::new(3, 0), |d| {
+        d.set(b"Annots".to_vec(), Object::Array([root, popup, reply, drawable].map(Object::Ref).to_vec()));
+    })
+    .unwrap();
+    let originals = [root, popup, reply].map(|r| (*doc.get(r)).clone());
+    assert_eq!(pdfcraft_edit::flatten(&mut doc, &[0], true, false).unwrap(), 1, "only the unrelated annotation can flatten");
+    let doc = Document::open(Arc::new(saved(&doc))).unwrap();
+    for (reference, original) in [root, popup, reply].into_iter().zip(originals) {
+        assert_eq!(*doc.get(reference), original, "the retained popup graph stays unchanged");
+    }
+    let page = pdfcraft_model::pages(&doc).remove(0);
+    assert_eq!(doc.resolve(page.dict.get(b"Annots").unwrap()).as_array().unwrap(), &[root, popup, reply].map(Object::Ref));
+    assert_eq!(paint_memberships(&doc), vec![(ObjRef::new(7, 0), None)]);
+}
+
+/// Undrawable text in a retained reply must not block an unrelated drawable annotation.
+#[test]
+fn unsupported_membership_keeps_undrawable_reply_without_refusing_flatten() {
+    for marked_appearance in [false, true] {
+        let mut doc = fixture("/OC null", 4, "");
+        let root = ObjRef::new(8, 0);
+        let mut reply = doc.get(root).as_dict().unwrap().clone();
+        reply.remove(b"OC");
+        reply.set(b"Subtype".to_vec(), Object::Name(b"FreeText".to_vec()));
+        reply.set(b"IRT".to_vec(), Object::Ref(root));
+        reply.set(b"Contents".to_vec(), pdfcraft_cos::PdfString::text("漢"));
+        if marked_appearance {
+            pdfcraft_fonts::set_undrawn_mark(&mut reply, Some('漢'));
+        } else {
+            reply.remove(b"AP");
+        }
+        assert_eq!(pdfcraft_annot::appearance::undrawable_text(&reply).map(|(_, c)| c), Some('漢'));
+        let reply = doc.add(Object::Dict(reply));
+        let mut drawable = doc.get(root).as_dict().unwrap().clone();
+        drawable.remove(b"OC");
+        let drawable = doc.add(Object::Dict(drawable));
+        doc.update_dict(ObjRef::new(3, 0), |d| {
+            d.set(b"Annots".to_vec(), Object::Array([root, reply, drawable].map(Object::Ref).to_vec()));
+        })
+        .unwrap();
+        // Compare serialized dictionaries before and after flatten, including PDF string syntax.
+        let mut doc = Document::open(Arc::new(saved(&doc))).unwrap();
+        let originals = [root, reply].map(|r| (*doc.get(r)).clone());
+        assert_eq!(pdfcraft_edit::flatten(&mut doc, &[0], true, false).unwrap(), 1, "retained text is not baked into page content");
+        let doc = Document::open(Arc::new(saved(&doc))).unwrap();
+        for (reference, original) in [root, reply].into_iter().zip(originals) {
+            assert_eq!(*doc.get(reference), original);
+        }
+        let page = pdfcraft_model::pages(&doc).remove(0);
+        assert_eq!(doc.resolve(page.dict.get(b"Annots").unwrap()).as_array().unwrap(), &[root, reply].map(Object::Ref));
+        assert_eq!(paint_memberships(&doc), vec![(ObjRef::new(7, 0), None)]);
+    }
+}
+
 #[test]
 fn flatten_preserves_shared_resources_and_uses_new_names_on_each_call() {
     for inherited in [false, true] {
