@@ -1446,4 +1446,12 @@ mod tests {
         let mut reader = Reader::new(data);
         assert!(read_xref_table_trailer(&mut reader, &ReaderContext::dummy()).is_none());
     }
+
+    /// PdfCraft patch: (hayro-syntax (22)) an object's offset past `usize` is malformed: a plain
+    /// `+` there panics in a debug build and wraps in a release one.
+    #[test]
+    fn an_object_stream_offset_past_usize_is_malformed_not_a_panic() {
+        assert_eq!(read_object_stream_index(1, usize::MAX, b"5 1"), None);
+        assert_eq!(read_object_stream_index(1, 10, b"5 1"), Some(vec![(5, 11)]));
+    }
 }
