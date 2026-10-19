@@ -1,5 +1,6 @@
 # PdfCraft roadmap
 
+> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (M5/M14 #2664: migrate legacy default date settings to automatic; preserve custom and new explicit patterns; estimates unchanged)
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7: the Edit text caret is as tall as the row it is on; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -170,6 +171,10 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+- **2026-10-19 (M5/M14, #2664):** A separate date override setting migrates the old US default to automatic while preserving custom patterns and newly explicit US choices. Upgrade, restart, precedence and malformed-settings regressions cover the migration; estimates unchanged.
+- **2026-10-19 (M5/M14, #2664 refresh):** Integrated upstream `4db6ac4a`, retaining both roadmap histories and existing contributor credits. The locale implementation and regression changes are unchanged relative to upstream; estimates unchanged.
+- **2026-10-18 (M5/M14, #2664 refresh):** Integrated upstream `d8b27058` and preserved both roadmap histories. Locale code and regression coverage remain intact; resolution changes only documentation. Rust 1.95 format, scoped clippy, 1,931 tests (9 existing ignored), layers, assets, parity and 31-crate wasm checks pass. Estimates unchanged.
+- **2026-10-16 (M5/M14, #2664):** pt-BR Fill & Sign defaults and dynamic stamp by-lines; automatic and explicit date choices persist separately. Other locales retain the existing fallback; legacy pattern strings remain explicit. Engine, automation and UI regressions pass; estimates unchanged.
 
 - **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
 
