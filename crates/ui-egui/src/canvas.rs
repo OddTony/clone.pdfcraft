@@ -319,16 +319,17 @@ pub struct Snapshot {
     pub from: String,
 }
 
-/// A validation badge drawn over a signature widget: the widget rectangle (user space), the verdict it shows, and its hover text.
+/// A signed signature widget on a page: the widget rectangle (user space), the verdict, and its hover text.
 pub(crate) struct SignatureBadge {
     pub rect: [f64; 4],
+    #[allow(dead_code)]
     pub status: pdfcraft_engine::SignatureStatus,
     pub summary: &'static str,
 }
 
-/// The validation badges drawn over one page's signature widgets: signed, visible widgets
-/// on this page with coordinates that survive the cast to screen space. Hostile files can
-/// carry NaN, infinite or gigantic rectangles, which must never reach the painter.
+/// Signed, visible signature widgets on `page` with coordinates that survive the cast to
+/// screen space. Hostile files can carry NaN, infinite or gigantic rectangles, which must
+/// never reach screen-space hit-testing.
 pub(crate) fn signature_badges(signatures: &[pdfcraft_engine::SignatureInfo], page: usize) -> Vec<SignatureBadge> {
     signatures
         .iter()
@@ -341,39 +342,6 @@ pub(crate) fn signature_badges(signatures: &[pdfcraft_engine::SignatureInfo], pa
             })
         })
         .collect()
-}
-
-/// Screen-space layout for the native-looking verified state. This replaces the small
-/// verdict badge only when there is room for both a readable caption and a large check;
-/// compact widgets keep the ordinary badge instead.
-struct VerifiedSignatureOverlay {
-    caption: Rect,
-    caption_font_size: f32,
-    check: [Pos2; 3],
-    check_width: f32,
-    shadow: Vec2,
-    mark: Rect,
-}
-
-fn verified_signature_overlay(rect: Rect) -> Option<VerifiedSignatureOverlay> {
-    let (width, height) = (rect.width(), rect.height());
-    if ![rect.min.x, rect.min.y, rect.max.x, rect.max.y, width, height].iter().all(|v| v.is_finite()) || width < 120.0 || height < 64.0 {
-        return None;
-    }
-    let caption = Rect::from_min_max(rect.min + vec2(width * 0.035, height * 0.025), rect.min + vec2(width * 0.97, height * 0.22));
-    let check =
-        [rect.min + vec2(width * 0.19, height * 0.44), rect.min + vec2(width * 0.42, height * 0.72), rect.min + vec2(width * 0.83, height * 0.12)];
-    let check_width = (height * 0.105).clamp(3.0, 48.0);
-    let shadow_side = (width.min(height) * 0.014).clamp(3.0, 12.0);
-    let mark = Rect::from_two_pos(check[0], check[2]).expand(check_width * 0.8);
-    Some(VerifiedSignatureOverlay {
-        caption,
-        caption_font_size: (height * 0.18).min(width * 0.105).clamp(10.0, 128.0),
-        check,
-        check_width,
-        shadow: vec2(shadow_side, shadow_side),
-        mark,
-    })
 }
 
 /// The name shown for a document tab, the window title and the Combine picker.
@@ -3583,51 +3551,17 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     view.flash = None;
                 }
             }
-            // Validation is viewer chrome; nothing here is written into the signed PDF or
-            // passed to image/text exports or printing. A large valid signature gets the
-            // complete updated caption/check treatment; compact widgets and other verdicts
-            // retain the small status badge.
+            // Signature widgets are rendered from the document's display copy at every zoom
+            // level without a canvas badge overlay; hovering a signed widget shows its summary.
             for badge in signature_badges(&doc.signatures, i) {
                 let [x0, y0, x1, y1] = badge.rect;
                 let sr = xf.user_rect(info, i, [x0 as f32, y0 as f32, x1 as f32, y1 as f32]);
-                let (icon, color) = crate::sign_ui::signature_status_style(badge.status);
-                if badge.status == pdfcraft_engine::SignatureStatus::Valid
-                    && let Some(layout) = verified_signature_overlay(sr)
-                {
-                    let overlay = painter.with_clip_rect(sr);
-                    overlay.rect_filled(layout.caption, CornerRadius::ZERO, Color32::WHITE);
-                    overlay.text(
-                        layout.caption.min,
-                        Align2::LEFT_TOP,
-                        "Signature Valid",
-                        egui::FontId::proportional(layout.caption_font_size),
-                        Color32::BLACK,
-                    );
-                    let shifted: Vec<Pos2> = layout.check.iter().map(|point| *point + layout.shadow).collect();
-                    overlay.add(egui::Shape::line(shifted, Stroke::new(layout.check_width + 8.0, Color32::BLACK)));
-                    overlay.add(egui::Shape::line(layout.check.to_vec(), Stroke::new(layout.check_width + 5.0, Color32::BLACK)));
-                    overlay.add(egui::Shape::line(layout.check.to_vec(), Stroke::new(layout.check_width, Color32::from_rgb(0x00, 0xC5, 0x28))));
-                    if let Some(pointer) = pointer.filter(|p| layout.mark.union(layout.caption).contains(*p)) {
-                        badge_hover = Some((pointer, badge.summary.to_string()));
-                    }
-                    continue;
-                }
-                painter.rect_stroke(sr, CornerRadius::same(2), Stroke::new(1.5, color), egui::StrokeKind::Outside);
-                // A widget too small for the mark keeps its outline: the verdict still shows.
-                if sr.width() < 4.0 || sr.height() < 4.0 {
-                    continue;
-                }
-                // Big enough to read at a glance, small enough to leave the signer's own
-                // text visible around it.
-                let side = (sr.width().min(sr.height()) * 0.8).clamp(24.0, 192.0);
-                let mark = Rect::from_center_size(sr.center(), vec2(side, side));
-                icons::paint(ui, mark, icon, side * 0.64, color);
-                if let Some(p) = pointer.filter(|p| mark.expand(2.0).contains(*p)) {
+                if let Some(p) = pointer.filter(|p| sr.contains(*p)) {
                     badge_hover = Some((p, badge.summary.to_string()));
                 }
             }
-            // Overlapping widgets paint in order, so the topmost badge owns the hover; an
-            // earlier link or annotation hover still wins over any badge.
+            // Overlapping widgets run in order, so the topmost widget owns the hover; an
+            // earlier link or annotation hover still wins.
             if hover_text.is_none() {
                 hover_text = badge_hover.take();
             }
@@ -5512,26 +5446,7 @@ mod tests {
         assert_eq!(badges.len(), 1);
     }
 
-    #[test]
-    fn verified_signature_overlay_scales_inside_a_large_widget() {
-        let rect = Rect::from_min_max(pos2(0.0, 0.0), pos2(1000.0, 600.0));
-        let layout = verified_signature_overlay(rect).expect("large signature widget has room for the caption and check");
-        assert_eq!(layout.caption.min, pos2(35.0, 15.0));
-        assert_eq!(layout.caption_font_size, 105.0);
-        for (actual, expected) in layout.check.into_iter().zip([pos2(190.0, 264.0), pos2(420.0, 432.0), pos2(830.0, 72.0)]) {
-            assert!((actual.x - expected.x).abs() < 0.001 && (actual.y - expected.y).abs() < 0.001);
-        }
-        assert!(layout.mark.contains(layout.check[0]));
-        assert!(layout.mark.contains(layout.check[2]));
-        assert!(layout.check_width.is_finite() && layout.shadow.x.is_finite());
-    }
 
-    #[test]
-    fn verified_signature_overlay_falls_back_for_compact_or_hostile_rectangles() {
-        assert!(verified_signature_overlay(Rect::from_min_max(pos2(0.0, 0.0), pos2(119.0, 200.0))).is_none());
-        assert!(verified_signature_overlay(Rect::from_min_max(pos2(0.0, 0.0), pos2(200.0, 63.0))).is_none());
-        assert!(verified_signature_overlay(Rect::from_min_max(pos2(f32::NAN, 0.0), pos2(200.0, 100.0))).is_none());
-    }
 
     #[test]
     fn snapshot_tabs_read_like_their_source_plus_the_suffix() {
