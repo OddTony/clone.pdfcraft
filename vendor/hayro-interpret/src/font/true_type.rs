@@ -2,8 +2,7 @@ use crate::font::blob::{CffFontBlob, OpenTypeFontBlob};
 use crate::font::generated::{glyph_names, mac_os_roman, mac_roman, standard, win_ansi};
 use crate::font::standard_font::StandardKind;
 use crate::font::{
-    Encoding, FallbackFontQuery, FontFlags, glyph_name_to_unicode, read_to_unicode,
-    strip_subset_prefix, unicode_from_name,
+    Encoding, FallbackFontQuery, FontFlags, glyph_name_to_unicode, normalized_glyph_name, read_to_unicode, strip_subset_prefix, unicode_from_name,
 };
 use crate::util::OptionLog;
 use crate::{CMapResolverFn, CacheKey, FontResolverFn};
@@ -38,20 +37,12 @@ enum Kind {
 }
 
 impl TrueTypeFont {
-    pub(crate) fn new(
-        dict: &Dict<'_>,
-        font_resolver: &FontResolverFn,
-        cmap_resolver: &CMapResolverFn,
-    ) -> Option<Self> {
+    pub(crate) fn new(dict: &Dict<'_>, font_resolver: &FontResolverFn, cmap_resolver: &CMapResolverFn) -> Option<Self> {
         let cache_key = dict.cache_key();
         let to_unicode = read_to_unicode(dict, cmap_resolver);
 
         if let Some(embedded) = EmbeddedKind::new(dict) {
-            return Some(Self {
-                cache_key,
-                kind: Kind::Embedded(embedded),
-                to_unicode,
-            });
+            return Some(Self { cache_key, kind: Kind::Embedded(embedded), to_unicode });
         }
 
         let fallback = || {
@@ -60,30 +51,19 @@ impl TrueTypeFont {
 
             warn!(
                 "unable to load TrueType font {}, falling back to {}",
-                fallback_query
-                    .post_script_name
-                    .unwrap_or("(no name)".to_string()),
+                fallback_query.post_script_name.unwrap_or("(no name)".to_string()),
                 standard_font.as_str()
             );
 
             Some(Self {
                 cache_key,
-                kind: Kind::Standard(StandardKind::new_with_standard(
-                    dict,
-                    standard_font,
-                    true,
-                    font_resolver,
-                )?),
+                kind: Kind::Standard(StandardKind::new_with_standard(dict, standard_font, true, font_resolver)?),
                 to_unicode: to_unicode.clone(),
             })
         };
 
         if let Some(standard) = StandardKind::new(dict, font_resolver) {
-            Some(Self {
-                cache_key,
-                kind: Kind::Standard(standard),
-                to_unicode,
-            })
+            Some(Self { cache_key, kind: Kind::Standard(standard), to_unicode })
         } else {
             fallback()
         }
@@ -138,10 +118,7 @@ impl TrueTypeFont {
 
     pub(crate) fn is_serif(&self) -> bool {
         match &self.kind {
-            Kind::Embedded(e) => e
-                .font_flags
-                .as_ref()
-                .is_some_and(|f| f.contains(FontFlags::SERIF)),
+            Kind::Embedded(e) => e.font_flags.as_ref().is_some_and(|f| f.contains(FontFlags::SERIF)),
             Kind::Standard(s) => s.is_serif(),
         }
     }
@@ -156,13 +133,7 @@ impl TrueTypeFont {
                     return true;
                 }
                 // Check skrifa font metrics
-                e.base_font
-                    .font_ref()
-                    .metrics(
-                        skrifa::instance::Size::unscaled(),
-                        skrifa::instance::LocationRef::default(),
-                    )
-                    .is_monospace
+                e.base_font.font_ref().metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default()).is_monospace
             }
             Kind::Standard(s) => s.is_monospace(),
         }
@@ -190,10 +161,7 @@ impl TrueTypeFont {
         }
 
         match &self.kind {
-            Kind::Embedded(e) => e
-                .code_to_unicode_name(code as u8)
-                .and_then(glyph_name_to_unicode)
-                .map(BfString::Char),
+            Kind::Embedded(e) => e.code_to_unicode_name(code as u8).and_then(glyph_name_to_unicode).map(BfString::Char),
             Kind::Standard(s) => s.char_code_to_unicode(code as u8).map(BfString::Char),
         }
 
@@ -225,26 +193,18 @@ impl EmbeddedKind {
     fn new(dict: &Dict<'_>) -> Option<Self> {
         let descriptor = dict.get::<Dict<'_>>(FONT_DESC).unwrap_or_default();
 
-        let font_flags = descriptor.get::<u32>(FLAGS).and_then(FontFlags::from_bits);
+        let font_flags = descriptor.get::<u32>(FLAGS).map(FontFlags::from_bits_truncate);
 
         let (widths, missing_width) = read_widths(dict, &descriptor)?;
         let (encoding, differences) = read_encoding(dict);
-        let base_font = descriptor
-            .get::<Stream<'_>>(FONT_FILE2)
-            .and_then(|s| s.decoded().ok())
-            .and_then(|d| OpenTypeFontBlob::new(Arc::new(d.to_vec()), 0))?;
+        let base_font =
+            descriptor.get::<Stream<'_>>(FONT_FILE2).and_then(|s| s.decoded().ok()).and_then(|d| OpenTypeFontBlob::new(Arc::new(d.to_vec()), 0))?;
 
         let glyph_names = base_font.glyph_names();
 
-        let cff_font_blob = base_font
-            .font_ref()
-            .cff()
-            .ok()
-            .and_then(|cff| CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec())));
+        let cff_font_blob = base_font.font_ref().cff().ok().and_then(|cff| CffFontBlob::new(Arc::new(cff.offset_data().as_ref().to_vec())));
 
-        let postscript_name = dict
-            .get::<Name<'_>>(BASE_FONT)
-            .map(|n| strip_subset_prefix(n.as_str()).to_string());
+        let postscript_name = dict.get::<Name<'_>>(BASE_FONT).map(|n| strip_subset_prefix(n.as_str()).to_string());
 
         Some(Self {
             base_font,
@@ -261,10 +221,7 @@ impl EmbeddedKind {
     }
 
     fn is_non_symbolic(&self) -> bool {
-        self.font_flags
-            .as_ref()
-            .map(|f| f.contains(FontFlags::NON_SYMBOLIC))
-            .unwrap_or(false)
+        self.font_flags.as_ref().map(|f| f.contains(FontFlags::NON_SYMBOLIC)).unwrap_or(false)
     }
 
     fn code_to_name(&self, code: u8) -> Option<&str> {
@@ -300,85 +257,130 @@ impl EmbeddedKind {
         self.base_font.outline_glyph(glyph)
     }
 
+    fn map_unicode_in_cmap(&self, c: char) -> Option<GlyphId> {
+        let cmap = self.base_font.font_ref().cmap().ok()?;
+        let mut glyph = None;
+
+        for record in cmap.encoding_records() {
+            if record.platform_id() == PlatformId::Windows
+                && matches!(record.encoding_id(), 1 | 10)
+                && let Ok(subtable) = record.subtable(cmap.offset_data())
+            {
+                glyph = glyph.or_else(|| subtable.map_codepoint(c)).filter(|g| *g != GlyphId::NOTDEF);
+            }
+        }
+
+        if glyph.is_none() {
+            for record in cmap.encoding_records() {
+                if record.platform_id() == PlatformId::Unicode
+                    && let Ok(subtable) = record.subtable(cmap.offset_data())
+                {
+                    glyph = glyph.or_else(|| subtable.map_codepoint(c)).filter(|g| *g != GlyphId::NOTDEF);
+                }
+            }
+        }
+
+        glyph
+    }
+
+    fn map_macintosh_cmap(&self, name: &str, unicode_char: Option<char>) -> Option<GlyphId> {
+        let cmap = self.base_font.font_ref().cmap().ok()?;
+        let mut glyph = None;
+        for record in cmap.encoding_records() {
+            if record.platform_id() == PlatformId::Macintosh
+                && record.encoding_id() == 0
+                && let Ok(subtable) = record.subtable(cmap.offset_data())
+            {
+                glyph = glyph.or_else(|| {
+                    mac_os_roman::get_inverse(name)
+                        .or_else(|| mac_roman::get_inverse(name))
+                        .or_else(|| {
+                            unicode_char
+                                .and_then(glyph_names::get_reverse)
+                                .and_then(|agl| mac_os_roman::get_inverse(agl).or_else(|| mac_roman::get_inverse(agl)))
+                        })
+                        .and_then(|c| subtable.map_codepoint(c))
+                        .filter(|g| *g != GlyphId::NOTDEF)
+                });
+            }
+        }
+        glyph
+    }
+
+    fn map_name(&self, lookup: &str) -> Option<GlyphId> {
+        let exact_name = self.glyph_names.get(lookup).copied().filter(|g| *g != GlyphId::NOTDEF);
+        let exact_unicode = glyph_names::get(lookup).and_then(|n| n.chars().next()).or_else(|| unicode_from_name(lookup));
+
+        let mut glyph = if glyph_names::get(lookup).is_some_and(|name| name.chars().nth(1).is_some()) {
+            exact_name.or_else(|| exact_unicode.and_then(|c| self.map_unicode_in_cmap(c))).or_else(|| self.map_macintosh_cmap(lookup, exact_unicode))
+        } else {
+            exact_unicode.and_then(|c| self.map_unicode_in_cmap(c)).or_else(|| self.map_macintosh_cmap(lookup, exact_unicode)).or_else(|| exact_name)
+        };
+
+        if glyph.is_none() {
+            let base_lookup = if !lookup.starts_with('.') { lookup.split('.').next().unwrap_or(lookup) } else { lookup };
+            let unicode_char =
+                exact_unicode.or_else(|| glyph_names::get(base_lookup).and_then(|n| n.chars().next()).or_else(|| unicode_from_name(base_lookup)));
+            if base_lookup != lookup {
+                glyph = unicode_char.and_then(|c| self.map_unicode_in_cmap(c)).or_else(|| self.map_macintosh_cmap(base_lookup, unicode_char));
+            }
+            if glyph.is_none() {
+                glyph = self
+                    .glyph_names
+                    .get(base_lookup)
+                    .copied()
+                    .or_else(|| self.glyph_names.get(normalized_glyph_name(base_lookup)).copied())
+                    .or_else(|| unicode_char.and_then(glyph_names::get_reverse).and_then(|agl| self.glyph_names.get(agl).copied()))
+                    .or_else(|| {
+                        unicode_char.and_then(|c| {
+                            let cp = c as u32;
+                            self.glyph_names.get(&format!("uni{cp:04X}")).or_else(|| self.glyph_names.get(&format!("u{cp:04X}"))).copied()
+                        })
+                    })
+                    .or_else(|| glyph_num_string(base_lookup).map(GlyphId::new))
+                    .filter(|g| *g != GlyphId::NOTDEF);
+            }
+        }
+
+        glyph
+    }
+
     fn map_code(&self, code: u8) -> GlyphId {
         if let Some(glyph) = self.cached_mappings.borrow().get(&code) {
             return *glyph;
         }
 
         if let Some(blob) = self.cff_blob.as_ref() {
-            return self
-                .code_to_name(code)
-                .and_then(|name| blob.glyph_index_by_name(name))
-                .unwrap_or(GlyphId::NOTDEF);
+            return self.code_to_name(code).and_then(|name| blob.glyph_index_by_name(name)).unwrap_or(GlyphId::NOTDEF);
         }
 
+        // PdfCraft patch: keep glyph selection separate from text extraction. Symbolic
+        // TrueType fonts ignore Encoding (ISO 32000-1 9.6.6.4); ToUnicode supplies text
+        // semantics (9.10), not an alternate glyph. Extend only the existing name lookup
+        // with Unicode cmap records and post-name aliases. Keep the raw symbolic fallback
+        // and the CFF path unchanged until affected source files justify a different policy.
         let mut glyph = None;
-
         if self.is_non_symbolic() {
             let Some(lookup) = self.code_to_name(code) else {
                 return GlyphId::NOTDEF;
             };
-
-            if let Ok(cmap) = self.base_font.font_ref().cmap() {
-                for record in cmap.encoding_records() {
-                    if record.platform_id() == PlatformId::Windows
-                        && record.encoding_id() == 1
-                        && let Ok(subtable) = record.subtable(cmap.offset_data())
-                    {
-                        glyph = glyph.or_else(|| {
-                            glyph_names::get(lookup)
-                                .map(|n| n.to_string())
-                                .or_else(|| unicode_from_name(lookup).map(|n| n.to_string()))
-                                .and_then(|n| n.chars().next())
-                                .and_then(|c| subtable.map_codepoint(c))
-                                .filter(|g| *g != GlyphId::NOTDEF)
-                        });
-                    }
-                }
-
-                for record in cmap.encoding_records() {
-                    if record.platform_id() == PlatformId::Macintosh
-                        && record.encoding_id() == 0
-                        && let Ok(subtable) = record.subtable(cmap.offset_data())
-                    {
-                        glyph = glyph.or_else(|| {
-                            mac_os_roman::get_inverse(lookup)
-                                .or_else(|| mac_roman::get_inverse(lookup))
-                                .and_then(|c| subtable.map_codepoint(c))
-                                .filter(|g| *g != GlyphId::NOTDEF)
-                        });
-                    }
-                }
-            }
-
-            if glyph.is_none() {
-                if let Some(gid) = self.glyph_names.get(lookup) {
-                    glyph = Some(*gid);
-                } else if let Some(gid) = glyph_num_string(lookup) {
-                    glyph = Some(GlyphId::new(gid));
-                }
+            // An explicit .notdef is a mapping, not permission to draw the raw code.
+            if lookup != ".notdef" {
+                glyph = self.map_name(lookup);
             }
         } else if let Ok(cmap) = self.base_font.font_ref().cmap() {
             for record in cmap.encoding_records() {
-                if record.platform_id() == PlatformId::Windows
-                    && matches!(record.encoding_id(), 0 | 1)
-                {
+                if record.platform_id() == PlatformId::Windows && matches!(record.encoding_id(), 0 | 1) {
                     if let Ok(subtable) = record.subtable(cmap.offset_data()) {
                         for offset in [0x0000_u32, 0xF000, 0xF100, 0xF200] {
-                            glyph = glyph
-                                .or_else(|| subtable.map_codepoint(code as u32 + offset))
-                                .filter(|g| *g != GlyphId::NOTDEF);
+                            glyph = glyph.or_else(|| subtable.map_codepoint(code as u32 + offset)).filter(|g| *g != GlyphId::NOTDEF);
                         }
                     }
-                } else if matches!(
-                    record.platform_id(),
-                    PlatformId::Macintosh | PlatformId::Unicode
-                ) && record.encoding_id() == 0
+                } else if matches!(record.platform_id(), PlatformId::Macintosh | PlatformId::Unicode)
+                    && record.encoding_id() == 0
                     && let Ok(subtable) = record.subtable(cmap.offset_data())
                 {
-                    glyph = glyph
-                        .or_else(|| subtable.map_codepoint(code))
-                        .filter(|g| *g != GlyphId::NOTDEF);
+                    glyph = glyph.or_else(|| subtable.map_codepoint(code)).filter(|g| *g != GlyphId::NOTDEF);
                 }
             }
         }
@@ -482,21 +484,15 @@ pub(crate) fn read_encoding(dict: &Dict<'_>) -> (Encoding, HashMap<u8, String>) 
                         if let Ok(code) = code.try_into() {
                             map.insert(code, name.as_str().to_string());
                         }
-                        code += 1;
+                        code = code.saturating_add(1);
                     }
                     _ => {}
                 }
             }
         }
 
-        (
-            get_encoding_base(&encoding_dict, Name::new_unescaped(BASE_ENCODING)),
-            map,
-        )
+        (get_encoding_base(&encoding_dict, Name::new_unescaped(BASE_ENCODING)), map)
     } else {
-        (
-            get_encoding_base(dict, Name::new_unescaped(ENCODING)),
-            HashMap::new(),
-        )
+        (get_encoding_base(dict, Name::new_unescaped(ENCODING)), HashMap::new())
     }
 }
