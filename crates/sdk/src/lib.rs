@@ -59,9 +59,9 @@ pub use types::{DocumentResult, DocumentSource, ImageFormat, MergeOptions, Rende
 /// Re-exported canonical domain models matching Datalogics APDFL taxonomy.
 pub use annotation::{
     Action, Annotation, AnnotationFlags, AnnotationSubtype, CircleAnnotation, CommentInfo, CommentRequest, FreeTextAnnotation, GoToAction,
-    HighlightAnnotation, HighlightRequest, InkAnnotation, LaunchAction, LineAnnotation, LineEnding, LinkAnnotation, MarkupTarget,
-    PolyLineAnnotation, PolygonAnnotation, Redaction, RedactionStatus, RemoteGoToAction, SquareAnnotation, StampKind, StampRequest, URIAction,
-    UnderlineAnnotation, UnderlineRequest,
+    HighlightAnnotation, HighlightRequest, InkAnnotation, LaunchAction, LineAnnotation, LineEnding, LinkAnnotation, MarkupTarget, PolyLineAnnotation,
+    PolygonAnnotation, Redaction, RedactionStatus, RemoteGoToAction, SquareAnnotation, StampKind, StampRequest, URIAction, UnderlineAnnotation,
+    UnderlineRequest,
 };
 pub use content::{Clip, Container, Content, Element, Form, Group, Path, Segment};
 pub use document::{

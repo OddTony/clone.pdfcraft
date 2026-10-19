@@ -32,7 +32,9 @@
 
 use crate::PdfCraftClient;
 use crate::annotation::{CommentInfo, CommentRequest, HighlightRequest, StampRequest, UnderlineRequest};
-use crate::document::{Bookmark, BookmarkAddRequest, BookmarkRemoveRequest, DeletePagesOptions, ExtractPagesOptions, InsertPagesOptions, RotatePagesOptions};
+use crate::document::{
+    Bookmark, BookmarkAddRequest, BookmarkRemoveRequest, DeletePagesOptions, ExtractPagesOptions, InsertPagesOptions, RotatePagesOptions,
+};
 use crate::error::SdkError;
 use crate::ports::OperationExecutor;
 use crate::types::{DocumentResult, DocumentSource, MergeOptions, RenderOptions, ResourceLimits, SplitMode, SplitResult};
@@ -113,7 +115,12 @@ impl LocalClient {
     }
 
     /// Inserts pages from one PDF into another.
-    pub fn insert_pages(&self, file: &DocumentSource, insert_source: &DocumentSource, options: &InsertPagesOptions) -> Result<DocumentResult, SdkError> {
+    pub fn insert_pages(
+        &self,
+        file: &DocumentSource,
+        insert_source: &DocumentSource,
+        options: &InsertPagesOptions,
+    ) -> Result<DocumentResult, SdkError> {
         self.check_source(file)?;
         self.check_source(insert_source)?;
         self.executor.execute_insert_pages(file, insert_source, options)
@@ -217,7 +224,13 @@ impl LocalClient {
     }
 
     /// Encrypts document with passwords and permissions.
-    pub fn encrypt(&self, file: &DocumentSource, user_pw: Option<&str>, owner_pw: Option<&str>, perms: Option<u32>) -> Result<DocumentResult, SdkError> {
+    pub fn encrypt(
+        &self,
+        file: &DocumentSource,
+        user_pw: Option<&str>,
+        owner_pw: Option<&str>,
+        perms: Option<u32>,
+    ) -> Result<DocumentResult, SdkError> {
         self.check_source(file)?;
         self.executor.execute_encrypt(file, user_pw, owner_pw, perms)
     }
@@ -252,10 +265,7 @@ impl Default for LocalClient {
     fn default() -> Self {
         let limits = ResourceLimits::default();
         Self {
-            executor: Arc::new(crate::engine_adapter::AutomationEngineAdapter::with_limits(
-                limits.max_memory_bytes,
-                limits.max_request_bytes as u64,
-            )),
+            executor: Arc::new(crate::engine_adapter::AutomationEngineAdapter::with_limits(limits.max_memory_bytes, limits.max_request_bytes as u64)),
             limits,
         }
     }

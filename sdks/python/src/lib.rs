@@ -10,9 +10,7 @@ use pyo3::exceptions::{PyIOError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
-use pdfcraft_sdk::{
-    DocumentResult, DocumentSource, LocalClient, MergeOptions, PdfCraftClient, RenderOptions, SdkError, SplitMode,
-};
+use pdfcraft_sdk::{DocumentResult, DocumentSource, LocalClient, MergeOptions, PdfCraftClient, RenderOptions, SdkError, SplitMode};
 
 fn map_sdk_err(err: SdkError) -> PyErr {
     match err {
@@ -34,9 +32,7 @@ struct NativeLocalClient {
 impl NativeLocalClient {
     #[new]
     fn new() -> Self {
-        Self {
-            client: LocalClient::default(),
-        }
+        Self { client: LocalClient::default() }
     }
 
     /// Merges a list of file paths or raw byte buffers.
@@ -57,21 +53,13 @@ impl NativeLocalClient {
             } else if let Ok(s) = item.extract::<String>() {
                 rust_sources.push(DocumentSource::from_path(s));
             } else {
-                return Err(PyValueError::new_err(
-                    "Each source must be either a file path string or bytes buffer",
-                ));
+                return Err(PyValueError::new_err("Each source must be either a file path string or bytes buffer"));
             }
         }
 
-        let options = MergeOptions {
-            output_filename,
-            pages,
-            passwords,
-        };
+        let options = MergeOptions { output_filename, pages, passwords };
 
-        let result = py
-            .allow_threads(|| self.client.merge(&rust_sources, options))
-            .map_err(map_sdk_err)?;
+        let result = py.allow_threads(|| self.client.merge(&rust_sources, options)).map_err(map_sdk_err)?;
 
         let dict = PyDict::new(py);
         match result {
@@ -102,15 +90,10 @@ impl NativeLocalClient {
         at_bookmarks: Option<bool>,
         max_file_size_mb: Option<f64>,
     ) -> PyResult<Vec<String>> {
-        let selected = [
-            every_n_pages.is_some(),
-            before_pages.is_some(),
-            at_bookmarks == Some(true),
-            max_file_size_mb.is_some(),
-        ]
-        .into_iter()
-        .filter(|&selected| selected)
-        .count();
+        let selected = [every_n_pages.is_some(), before_pages.is_some(), at_bookmarks == Some(true), max_file_size_mb.is_some()]
+            .into_iter()
+            .filter(|&selected| selected)
+            .count();
         if selected > 1 {
             return Err(PyValueError::new_err("Specify only one split mode"));
         }
@@ -134,9 +117,7 @@ impl NativeLocalClient {
         } else {
             SplitMode::EveryNPages(1)
         };
-        let res = py
-            .allow_threads(|| self.client.split(&rust_source, mode))
-            .map_err(map_sdk_err)?;
+        let res = py.allow_threads(|| self.client.split(&rust_source, mode)).map_err(map_sdk_err)?;
 
         Ok(res.files.into_iter().map(|p| p.to_string_lossy().to_string()).collect())
     }
@@ -167,14 +148,9 @@ impl NativeLocalClient {
             other => return Err(PyValueError::new_err(format!("Unsupported image format: {other}"))),
         };
 
-        let options = RenderOptions {
-            dpi,
-            format,
-        };
+        let options = RenderOptions { dpi, format };
 
-        let result = py
-            .allow_threads(|| self.client.render_page(&rust_source, page, options))
-            .map_err(map_sdk_err)?;
+        let result = py.allow_threads(|| self.client.render_page(&rust_source, page, options)).map_err(map_sdk_err)?;
 
         let dict = PyDict::new(py);
         match result {
@@ -195,18 +171,10 @@ impl NativeLocalClient {
     }
 
     /// Invokes any named pdfcraft-automation tool with JSON arguments string or dict.
-    fn call_tool<'py>(
-        &self,
-        py: Python<'py>,
-        name: &str,
-        args_json: &str,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let parsed_args: serde_json::Value = serde_json::from_str(args_json)
-            .map_err(|e| PyValueError::new_err(format!("Invalid JSON args: {e}")))?;
+    fn call_tool<'py>(&self, py: Python<'py>, name: &str, args_json: &str) -> PyResult<Bound<'py, PyAny>> {
+        let parsed_args: serde_json::Value = serde_json::from_str(args_json).map_err(|e| PyValueError::new_err(format!("Invalid JSON args: {e}")))?;
 
-        let content_items = py
-            .allow_threads(|| self.client.call_tool(name, parsed_args))
-            .map_err(map_sdk_err)?;
+        let content_items = py.allow_threads(|| self.client.call_tool(name, parsed_args)).map_err(map_sdk_err)?;
 
         let py_list = pyo3::types::PyList::empty(py);
         for item in content_items {
@@ -231,19 +199,12 @@ impl NativeLocalClient {
 
     /// Executes a sequential batch of automation tools sharing a single engine instance.
     #[pyo3(signature = (steps_json))]
-    fn execute_batch<'py>(
-        &self,
-        py: Python<'py>,
-        steps_json: &str,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let steps: Vec<pdfcraft_sdk::ports::BatchStep> = serde_json::from_str(steps_json)
-            .map_err(|e| PyValueError::new_err(format!("Invalid batch JSON: {e}")))?;
+    fn execute_batch<'py>(&self, py: Python<'py>, steps_json: &str) -> PyResult<Bound<'py, PyAny>> {
+        let steps: Vec<pdfcraft_sdk::ports::BatchStep> =
+            serde_json::from_str(steps_json).map_err(|e| PyValueError::new_err(format!("Invalid batch JSON: {e}")))?;
 
-        let report = py
-            .allow_threads(|| self.client.execute_batch(&steps))
-            .map_err(map_sdk_err)?;
-        let json_str = serde_json::to_string(&report)
-            .map_err(|e| PyValueError::new_err(format!("Serialization error: {e}")))?;
+        let report = py.allow_threads(|| self.client.execute_batch(&steps)).map_err(map_sdk_err)?;
+        let json_str = serde_json::to_string(&report).map_err(|e| PyValueError::new_err(format!("Serialization error: {e}")))?;
 
         let py_json = py.import("json")?;
         let dict = py_json.call_method1("loads", (json_str,))?;

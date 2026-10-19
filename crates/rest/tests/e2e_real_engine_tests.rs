@@ -60,8 +60,7 @@ fn start_server() -> HttpServer {
     let engine: Arc<dyn OperationExecutor> = Arc::new(AutomationEngineAdapter::default());
     let executor = Arc::new(BlockingExecutor::new(engine, ExecutorConfig::default()));
     let service = Arc::new(RestService::new(executor, Arc::new(InMemoryJobRepository::new()), Some(TOKEN.into())));
-    HttpServer::start(service, ServerConfig { bind_addr: "127.0.0.1:0".parse().unwrap(), allow_public_bind: false })
-        .unwrap()
+    HttpServer::start(service, ServerConfig { bind_addr: "127.0.0.1:0".parse().unwrap(), allow_public_bind: false }).unwrap()
 }
 
 fn client_for(server: &HttpServer, token: Option<&str>) -> RestClient {

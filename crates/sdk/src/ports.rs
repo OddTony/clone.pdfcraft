@@ -23,7 +23,9 @@
 //!     - OperationExecutor: Abstract engine executor trait (execute_merge, execute_split, execute_render, execute_call_tool)
 
 use crate::annotation::{CommentInfo, CommentRequest, HighlightRequest, StampRequest, UnderlineRequest};
-use crate::document::{Bookmark, BookmarkAddRequest, BookmarkRemoveRequest, DeletePagesOptions, ExtractPagesOptions, InsertPagesOptions, RotatePagesOptions};
+use crate::document::{
+    Bookmark, BookmarkAddRequest, BookmarkRemoveRequest, DeletePagesOptions, ExtractPagesOptions, InsertPagesOptions, RotatePagesOptions,
+};
 use crate::error::SdkError;
 use crate::types::{DocumentResult, DocumentSource, MergeOptions, RenderOptions, SplitMode, SplitResult};
 
@@ -189,7 +191,13 @@ pub trait OperationExecutor: Send + Sync {
     }
 
     /// Encrypts document with user/owner password and permissions.
-    fn execute_encrypt(&self, source: &DocumentSource, user_pw: Option<&str>, owner_pw: Option<&str>, perms: Option<u32>) -> Result<DocumentResult, SdkError> {
+    fn execute_encrypt(
+        &self,
+        source: &DocumentSource,
+        user_pw: Option<&str>,
+        owner_pw: Option<&str>,
+        perms: Option<u32>,
+    ) -> Result<DocumentResult, SdkError> {
         let _ = (source, user_pw, owner_pw, perms);
         Err(unsupported("execute_encrypt"))
     }
@@ -256,4 +264,3 @@ pub enum ToolContent {
     Json(serde_json::Value),
     Png { data: Vec<u8>, width: u32, height: u32 },
 }
-

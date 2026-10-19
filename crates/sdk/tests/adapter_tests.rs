@@ -40,9 +40,7 @@ fn test_merge_valid_in_memory_sources() {
     let doc1 = DocumentSource::from_bytes(minimal_valid_pdf(), Some("doc1.pdf".into()));
     let doc2 = DocumentSource::from_bytes(minimal_valid_pdf(), Some("doc2.pdf".into()));
 
-    let result = adapter
-        .execute_merge(&[doc1, doc2], &MergeOptions::default())
-        .expect("merge must succeed");
+    let result = adapter.execute_merge(&[doc1, doc2], &MergeOptions::default()).expect("merge must succeed");
     assert_eq!(result.mime_type(), "application/pdf");
     assert!(result.byte_len() > 0);
 }
@@ -69,9 +67,7 @@ fn test_large_output_spills_to_file_backed_result() {
     let doc1 = DocumentSource::from_bytes(minimal_valid_pdf(), Some("doc1.pdf".into()));
     let doc2 = DocumentSource::from_bytes(minimal_valid_pdf(), Some("doc2.pdf".into()));
 
-    let result = adapter
-        .execute_merge(&[doc1, doc2], &MergeOptions::default())
-        .expect("real merge must succeed before spillover is verified");
+    let result = adapter.execute_merge(&[doc1, doc2], &MergeOptions::default()).expect("real merge must succeed before spillover is verified");
     match result {
         DocumentResult::File { path, mime_type, size_bytes } => {
             assert_eq!(mime_type, "application/pdf");
@@ -146,9 +142,7 @@ fn test_split_parts_outlive_the_call() {
     // Regression: the sandbox directory was deleted on return, leaving dangling split paths.
     let adapter = AutomationEngineAdapter::default();
     let src = DocumentSource::from_bytes(minimal_valid_pdf(), Some("doc.pdf".into()));
-    let res = adapter
-        .execute_split(&src, &SplitMode::EveryNPages(1))
-        .expect("real split must succeed");
+    let res = adapter.execute_split(&src, &SplitMode::EveryNPages(1)).expect("real split must succeed");
     assert!(!res.files.is_empty(), "split reported no files");
     for f in &res.files {
         assert!(f.exists(), "split part {} should still exist", f.display());
@@ -158,12 +152,7 @@ fn test_split_parts_outlive_the_call() {
 #[test]
 fn test_batch_execution_success() {
     let adapter = AutomationEngineAdapter::default();
-    let steps = vec![
-        pdfcraft_sdk::ports::BatchStep {
-            tool: "command_list".into(),
-            args: serde_json::json!({}),
-        },
-    ];
+    let steps = vec![pdfcraft_sdk::ports::BatchStep { tool: "command_list".into(), args: serde_json::json!({}) }];
 
     let report = adapter.execute_batch(&steps).expect("batch execution should succeed");
     assert!(report.ok);
@@ -176,14 +165,8 @@ fn test_batch_execution_success() {
 fn test_batch_execution_halts_on_failure_and_skips_remaining() {
     let adapter = AutomationEngineAdapter::default();
     let steps = vec![
-        pdfcraft_sdk::ports::BatchStep {
-            tool: "nonexistent_tool_123".into(),
-            args: serde_json::json!({}),
-        },
-        pdfcraft_sdk::ports::BatchStep {
-            tool: "command_list".into(),
-            args: serde_json::json!({}),
-        },
+        pdfcraft_sdk::ports::BatchStep { tool: "nonexistent_tool_123".into(), args: serde_json::json!({}) },
+        pdfcraft_sdk::ports::BatchStep { tool: "command_list".into(), args: serde_json::json!({}) },
     ];
 
     let report = adapter.execute_batch(&steps).expect("batch execution returns report even on step error");
