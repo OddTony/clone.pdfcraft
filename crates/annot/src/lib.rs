@@ -1423,7 +1423,8 @@ impl AppearanceCache {
 /// [`appearance::build`] draws from its dictionary, for displaying the document (`None` when no
 /// annotation needs one). Many files carry comments without appearances (FreeText, Ink, notes,
 /// stamps, …) that viewers draw from the dictionary. `doc` is not changed: saving writes the file
-/// as it was. Links, form fields and pop-ups keep their own handling.
+/// as it was. A link with an explicit positive border is drawn the same way, so the rectangle
+/// stays visible outside the Link tool. Widgets and pop-ups keep their own handling.
 pub fn with_missing_appearances(doc: &Document) -> Option<Document> {
     with_missing_appearances_cached(doc, &mut AppearanceCache::default())
 }
@@ -1436,7 +1437,7 @@ pub fn with_missing_appearances_cached(doc: &Document, cache: &mut AppearanceCac
     for page in page_refs(doc).ok()? {
         for r in annots(doc, page).iter().filter_map(Object::as_ref) {
             let d = annot_dict(doc, r);
-            if matches!(d.name(b"Subtype"), None | Some(b"Link" | b"Widget" | b"Popup")) {
+            if matches!(d.name(b"Subtype"), None | Some(b"Widget" | b"Popup")) {
                 continue;
             }
             let has_normal = d.get(b"AP").is_some_and(|ap| doc.resolve(ap).as_dict().is_some_and(|ap| ap.contains(b"N")));

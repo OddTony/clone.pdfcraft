@@ -184,6 +184,17 @@ fn border_width(d: &Dict) -> f64 {
     }
 }
 
+/// A link's border width when the file states one (`/BS` or `/Border`). `None` when it states
+/// none: a missing entry is not treated as the one-point default, so ordinary links stay blank.
+fn explicit_link_border(d: &Dict) -> Option<f64> {
+    let w = if let Some(bs) = d.get(b"BS").and_then(|b| b.as_dict()) {
+        bs.get(b"W").and_then(|w| w.as_f64()).unwrap_or(1.0)
+    } else {
+        *nums(d, b"Border")?.get(2)?
+    };
+    (w.is_finite() && w > 0.0).then_some(w)
+}
+
 /// Dash pattern operator for a dashed border, if any.
 fn dash(d: &Dict) -> String {
     let Some(bs) = d.get(b"BS").and_then(|b| b.as_dict()) else { return String::new() };
@@ -400,6 +411,31 @@ pub fn build(d: &Dict) -> Option<Stream> {
                     n(quad[7]),
                     n(quad[4]),
                     n(quad[5])
+                ));
+            }
+        }
+        b"Link" => {
+            // The page draws only `/AP`. A stated positive border is drawn here so it stays
+            // visible with the Hand and Select tools, not only while the Link tool outlines it.
+            let w = explicit_link_border(d)?;
+            let col = stroke.unwrap_or([0.0, 0.0, 0.0]);
+            let (rw, rh) = (rect[2] - rect[0], rect[3] - rect[1]);
+            if !rw.is_finite() || !rh.is_finite() || rw <= 0.0 || rh <= 0.0 {
+                return None;
+            }
+            let underline = d.get(b"BS").and_then(|b| b.as_dict()).is_some_and(|b| b.name(b"S") == Some(b"U"));
+            c.push_str(&format!("{}{} w\n{}", rg_stroke(col), n(w), dash(d)));
+            if underline {
+                let y = rect[1] + (w / 2.0).min(rh / 2.0);
+                c.push_str(&format!("{} {} m {} {} l S\n", n(rect[0]), n(y), n(rect[2]), n(y)));
+            } else {
+                let inset = (w / 2.0).min(rw / 2.0).min(rh / 2.0);
+                c.push_str(&format!(
+                    "{} {} {} {} re S\n",
+                    n(rect[0] + inset),
+                    n(rect[1] + inset),
+                    n((rw - 2.0 * inset).max(0.0)),
+                    n((rh - 2.0 * inset).max(0.0))
                 ));
             }
         }
