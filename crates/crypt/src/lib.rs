@@ -205,13 +205,27 @@ impl SecurityHandler {
         self.recovered_user.clone()
     }
 
+    /// R2 maps its legacy permission bits to the effective modern flags.
+    /// For R5/R6, `/P` is stored in clear and again in `/Perms`, encrypted with the file key
+    /// (Algorithm 13). Where the two differ, a permission counts only when both grant it, so an
+    /// edited `/P` grants nothing extra. Without a readable `/Perms`, `/P` applies as before.
     pub fn permissions(&self) -> Permissions {
-        let mut bits = self.dict.p;
+        let mut bits = self.perms_p().map_or(self.dict.p, |p| self.dict.p & p);
         if self.dict.r == 2 {
             // R2 reserves bits 9-12. Their effective rights follow bits 6, 5, 4, 3.
             bits = (bits & !0xF00) | ((bits & 0x20) << 3) | ((bits & 0x10) << 5) | ((bits & 0x08) << 7) | ((bits & 0x04) << 9);
         }
         Permissions { bits, owner: self.auth == Auth::Owner }
+    }
+
+    /// `/P` as `/Perms` holds it: AES-256 ECB of one block (= CBC with a zero IV), marked `adb`.
+    fn perms_p(&self) -> Option<i32> {
+        if !matches!(self.dict.r, 5 | 6) {
+            return None;
+        }
+        let plain = aes_cbc_decrypt(&self.key, &[0; 16], self.dict.perms.first_chunk::<16>()?, false);
+        let p = i32::from_le_bytes(*plain.first_chunk::<4>()?);
+        (plain.get(9..12) == Some(&b"adb"[..])).then_some(p)
     }
 
     pub fn dict(&self) -> &EncryptDict {
