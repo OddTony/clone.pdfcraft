@@ -2693,17 +2693,9 @@ mod tests {
         let settings = InterpreterSettings::default();
         let filter = || TextFilter { images: true, ..TextFilter::default() };
         let clip = extract_page_filtered(&tr_mode_page(7, "Hello World"), 0, &settings, filter()).unwrap();
-        assert!(
-            clip.plain_text().contains("Hello World"),
-            "7 Tr kept with images filter: {:?}",
-            clip.plain_text()
-        );
+        assert!(clip.plain_text().contains("Hello World"), "7 Tr kept with images filter: {:?}", clip.plain_text());
         assert!(!clip.find("Hello").is_empty(), "7 Tr findable with images filter");
         let ocr = extract_page_filtered(&tr_mode_page(3, "Hello World"), 0, &settings, filter()).unwrap();
-        assert!(
-            !ocr.plain_text().contains("Hello World"),
-            "3 Tr still dropped with images filter: {:?}",
-            ocr.plain_text()
-        );
+        assert!(!ocr.plain_text().contains("Hello World"), "3 Tr still dropped with images filter: {:?}", ocr.plain_text());
     }
 }
