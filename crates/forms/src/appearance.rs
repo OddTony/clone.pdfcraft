@@ -191,6 +191,12 @@ impl FontText {
 
     fn width(&self, s: &str, size: f64) -> f64 {
         match self {
+            // A simple font's own widths (its /Widths, or a standard font's published ones: a
+            // bold face is wider than Helvetica), one byte per code.
+            Self::Simple(m) if !m.composite => match m.encode(&s.replace('\t', " ")) {
+                Some(codes) => codes.iter().map(|&c| m.width(u32::from(c))).sum::<f64>() * size,
+                None => helvetica_width(s, size),
+            },
             Self::WinAnsi | Self::Simple(_) => helvetica_width(s, size),
             Self::Unicode(_) => cjk_width(s, size),
         }
@@ -218,6 +224,26 @@ fn dr_font(doc: &Document, name: &str) -> Option<(Object, FontText)> {
         return None;
     }
     Some((entry, FontText::Simple(Box::new(Metrics::from_dict(doc, fd)))))
+}
+
+/// A push button's caption, centered in a `width` × `height` box, in the font, size and color its
+/// `/DA` asks for: the font from the form's `/DR`, else Helvetica, and the size `auto` when the
+/// `/DA` leaves it to the viewer (0). Returns the content operators, the font resource (name and
+/// object), and the first character drawn as `?` because the font can't show it.
+pub(crate) fn button_caption(doc: &Document, da: &str, caption: &str, width: f64, height: f64, auto: f64) -> (Vec<u8>, String, Object, Option<char>) {
+    let da = parse_da(da);
+    let (name, font, enc) = match dr_font(doc, &da.font).filter(|(_, enc)| enc.can_encode(caption)) {
+        Some((o, enc)) => (da.font.clone(), o, enc),
+        None => ("Helv".to_string(), helvetica(), FontText::WinAnsi),
+    };
+    let missing = if enc == FontText::WinAnsi { pdfcraft_fonts::first_undrawable(caption) } else { None };
+    let size = if da.size > 0.0 { da.size } else { auto };
+    let tw = enc.width(caption, size);
+    let mut out =
+        format!("BT /{name} {size:.2} Tf {} 1 0 0 1 {:.3} {:.3} Tm ", da.color, (width - tw) / 2.0, (height - size * 0.7) / 2.0).into_bytes();
+    out.extend(literal(&enc.encode(caption)));
+    out.extend_from_slice(b" Tj ET\n");
+    (out, name, font, missing)
 }
 
 fn helvetica() -> Object {
