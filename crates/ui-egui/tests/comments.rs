@@ -1602,6 +1602,7 @@ fn callout_properties_font_size_survives_save() {
     let state = h.state();
     let id = state.views[0].id;
     assert_eq!(state.session.get(id).unwrap().comment_props(0, 0).unwrap().font_size, Some(30.0));
+    assert_eq!(state.comment_prefs.font_size(pdfcraft_ui_egui::comments::CommentTool::Callout), Some(10.0));
     let saved = state.session.save_bytes(id).unwrap();
     let mut reopened = pdfcraft_engine::Session::new();
     let id = reopened.open("saved.pdf", None, saved, None).unwrap();
@@ -1650,8 +1651,21 @@ fn callout_default_font_size_survives_restart_and_applies_to_new_callouts() {
     let doc = app.session.get(app.views[0].id).unwrap();
     assert_eq!(doc.comment_props(0, 0).unwrap().font_size, Some(30.0));
 
-    // A separate text-box default survives the same settings path and does not affect callouts.
-    fresh.state_mut().comment_prefs.set_font_size(CommentTool::TextBox, 24.0);
+    // Set the text-box default through its own Properties dialog; callouts stay at 30 pt.
+    fresh.state_mut().apply_edit(Edit::AddAnnotation(NewAnnotation {
+        page: 0,
+        shape: Shape::TextBox { rect: [40.0, 40.0, 200.0, 80.0], font_size: 12.0 },
+        style: Default::default(),
+        contents: "Text box".into(),
+        author: "Tester".into(),
+    }));
+    fresh.run_steps(2);
+    fresh.state_mut().open_comment_props(0, 1);
+    fresh.run_steps(2);
+    fresh.state_mut().comment_props.as_mut().unwrap().edited.font_size = Some(24.0);
+    fresh.get_by_label("Make Properties Default").click();
+    fresh.get_by_label("OK").click();
+    fresh.run_steps(3);
     let settings = fresh.state().persist();
     let mut again = harness(move |app| {
         app.restore(&settings);
