@@ -584,10 +584,16 @@ impl PdfCraftApp {
 
     /// Whether tab `index` has work that isn't saved: edits, or form typing not committed yet.
     pub(crate) fn has_unsaved_work(&self, index: usize) -> bool {
+        self.views.get(index).and_then(|v| self.session.get(v.id)).is_some_and(|doc| doc.dirty) || self.has_unsaved_typing(index)
+    }
+
+    /// Whether tab `index` holds work of its own that isn't in its document yet: form typing not
+    /// committed, an edit waiting, text being typed. (The document's own edits are shared with
+    /// any other tab of it, in split view.)
+    pub(crate) fn has_unsaved_typing(&self, index: usize) -> bool {
         let Some(v) = self.views.get(index) else { return false };
         let Some(doc) = self.session.get(v.id) else { return false };
-        doc.dirty
-            || v.pending_edit.is_some()
+        v.pending_edit.is_some()
             || v.content.blocked().is_some()
             || v.forms.focus.as_ref().is_some_and(|f| crate::forms_ui::draft_edit(f, &doc.form).is_some())
             || v.fill_text.as_ref().is_some_and(|t| !t.text.trim().is_empty())
@@ -782,10 +788,15 @@ impl PdfCraftApp {
 
     /// Close a tab, asking first if it has unsaved changes.
     pub fn request_close_tab(&mut self, index: usize) {
-        // Text typed into a field counts as an unsaved change.
-        if self.has_unsaved_work(index)
+        // Text typed into a field counts as an unsaved change. Another tab of the document (split
+        // view) keeps the document's changes open, so closing this one asks only about its own.
+        if self.asks_before_closing(index)
             && let Some(id) = self.views.get(index).map(|v| v.id)
         {
+            if self.has_twin(index) {
+                // The question is about this tab of the document (`asking_tab`).
+                self.active = Some(index);
+            }
             self.close_request = Some(CloseRequest::Tab(id));
         } else {
             self.close_tab(index);
@@ -836,7 +847,7 @@ impl PdfCraftApp {
     pub fn resolve_close(&mut self, ctx: &egui::Context, choice: Option<bool>) {
         let Some(req) = self.close_request.take() else { return };
         let index = match req {
-            CloseRequest::Tab(id) => match self.views.iter().position(|v| v.id == id) {
+            CloseRequest::Tab(id) => match self.asking_tab(id) {
                 Some(i) => i,
                 None => return, // already closed
             },
@@ -871,12 +882,18 @@ impl PdfCraftApp {
                 // document open.
                 let ctx = ctx.clone();
                 self.save_then(index, SaveTarget::InPlace, move |app| {
-                    if let Some(i) = app.views.iter().position(|v| v.id == id) {
+                    if let Some(i) = app.asking_tab(id) {
                         app.close_and_continue(&ctx, i, req);
                     }
                 });
             }
         }
+    }
+
+    /// The tab a close question about document `id` is about: the active one when it shows `id`
+    /// (in split view two tabs can), else the document's first.
+    pub(crate) fn asking_tab(&self, id: pdfcraft_engine::DocId) -> Option<usize> {
+        self.active.filter(|&a| self.views.get(a).is_some_and(|v| v.id == id)).or_else(|| self.views.iter().position(|v| v.id == id))
     }
 
     /// Close tab `index` for a close request, then ask about the next dirty document, or quit.

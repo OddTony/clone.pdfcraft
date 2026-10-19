@@ -17,6 +17,7 @@ mod pageboxes;
 mod pdf_links;
 mod protect;
 mod redact;
+mod split_view;
 mod text_select;
 mod theme;
 mod updates;
