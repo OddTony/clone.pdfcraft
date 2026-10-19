@@ -2285,6 +2285,63 @@ fn hiding_one_instance_of_a_repeating_subform_hides_only_that_one() {
     assert_eq!(shown, ["form[0].page1[0].table[0].row[0].amount[0]", "form[0].page1[0].table[0].row[2].amount[0]"]);
 }
 
+/// A repeating subform that is not split across pages (positioned, or with a fixed height) is
+/// laid out once per shown instance like a splittable one: the template's `hidden` hides every
+/// instance until a script shows one, every data instance of a visible one is drawn, and an
+/// invisible instance keeps its space.
+#[test]
+fn repeating_subforms_laid_out_as_blocks_are_shown_instance_by_instance() {
+    let xml = scripted_template()
+        .replace(
+            r#"<subform name="details" layout="tb" presence="hidden">"#,
+            r#"<subform name="opt" layout="position" presence="hidden" w="4in" h="0.5in"><occur min="1" max="-1"/>
+   <field name="f" x="0in" y="0in" w="2in" h="0.3in"><ui><textEdit/></ui></field>
+  </subform>
+  <subform name="fixed" layout="tb" h="0.5in"><occur min="1" max="-1"/>
+   <field name="g" w="2in" h="0.3in"><ui><textEdit/></ui></field>
+  </subform>
+  <subform name="details" layout="tb" presence="hidden">"#,
+        )
+        .replace(
+            "</template>",
+            r#"</template><xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/"><xfa:data><form><page1><opt/><opt/><fixed/><fixed/></page1></form></xfa:data></xfa:datasets>"#,
+        );
+    assert!(xml.contains(r#"name="opt""#) && xml.contains("<opt/><opt/>"), "the fixture was reshaped");
+    let (tpl, _) = parse(&xml).unwrap();
+    let data = parse_datasets(&xml).unwrap();
+    let soms = |ov: &Overrides, field: &str| -> Vec<String> {
+        let form = crate::layout::layout_with(&tpl, Some(&data), ov).unwrap();
+        widgets(&form.pages[0]).into_iter().filter(|w| w.som.ends_with(field)).map(|w| w.som.clone()).collect()
+    };
+    let y_of = |ov: &Overrides, field: &str| -> f64 {
+        let form = crate::layout::layout_with(&tpl, Some(&data), ov).unwrap();
+        widgets(&form.pages[0]).into_iter().find(|w| w.som.ends_with(field)).map(|w| w.rect.y).unwrap()
+    };
+    let none = Overrides::default();
+    // The template hides `opt`: none of its instances is drawn, nor takes space.
+    assert_eq!(soms(&none, ".f[0]"), Vec::<String>::new());
+    // Both data instances of `fixed` are drawn, one below the other.
+    assert_eq!(soms(&none, ".g[0]"), ["form[0].page1[0].fixed[0].g[0]", "form[0].page1[0].fixed[1].g[0]"]);
+    let g0 = y_of(&none, "fixed[0].g[0]");
+    assert!((y_of(&none, "fixed[1].g[0]") - g0 - 0.5 * 72.0).abs() < 0.5);
+    // What follows sits right after the two instances: the flow agrees with the measure.
+    let grand = y_of(&none, ".grand[0]");
+    // A script shows one instance of the hidden subform; the others stay hidden.
+    let mut ov = Overrides::default();
+    ov.presence.insert("form[0].page1[0].opt[1]".into(), "visible".into());
+    assert_eq!(soms(&ov, ".f[0]"), ["form[0].page1[0].opt[1].f[0]"]);
+    assert!((y_of(&ov, ".grand[0]") - grand - 0.5 * 72.0).abs() < 0.5, "the shown instance pushes what follows down");
+    // Hiding one instance of the visible subform removes that one; making it invisible keeps its space.
+    ov.presence.clear();
+    ov.presence.insert("form[0].page1[0].fixed[0]".into(), "hidden".into());
+    assert_eq!(soms(&ov, ".g[0]"), ["form[0].page1[0].fixed[1].g[0]"]);
+    assert!((y_of(&ov, ".grand[0]") - grand + 0.5 * 72.0).abs() < 0.5);
+    ov.presence.insert("form[0].page1[0].fixed[0]".into(), "invisible".into());
+    assert_eq!(soms(&ov, ".g[0]"), ["form[0].page1[0].fixed[1].g[0]"]);
+    assert!((y_of(&ov, "fixed[1].g[0]") - g0 - 0.5 * 72.0).abs() < 0.5, "the invisible instance's space stays");
+    assert!((y_of(&ov, ".grand[0]") - grand).abs() < 0.5);
+}
+
 #[test]
 fn global_bindings_do_not_walk_the_data_once_per_field() {
     // 1500 fields bound globally over 20000 data nodes: one index of the data, not a walk per

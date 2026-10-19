@@ -812,8 +812,7 @@ impl Layouter<'_> {
                             self.flow_subform(child, Some((inner_x, inner_w)), &ctx, depth + 1, csib)?;
                             continue;
                         }
-                        let (cw, ch) = self.size_of(child, inner_w, &ctx, depth + 1);
-                        self.flow_block(child, inner_x, (cw, ch), &ctx, depth + 1, csib)?;
+                        self.flow_blocks(child, inner_x, inner_w, &ctx, depth, csib)?;
                     }
                 }
             }
@@ -879,8 +878,28 @@ impl Layouter<'_> {
                 self.flow_subform(child, Some((x, inner_w)), ctx, depth + 1, csib)?;
                 continue;
             }
-            let (cw, ch) = self.size_of(child, inner_w, ctx, depth + 1);
-            self.flow_block(child, x, (cw, ch), ctx, depth + 1, csib)?;
+            self.flow_blocks(child, x, inner_w, ctx, depth, csib)?;
+        }
+        Ok(())
+    }
+
+    /// Flows `child` (at SOM index `sib` under `ctx`) as a block that is not split across
+    /// pages, once per instance [`Self::shown_instances`] gives: every data instance of a
+    /// repeating subform that is positioned or has a fixed height, less the ones hidden by the
+    /// template or a script. An invisible instance takes its space and shows nothing.
+    fn flow_blocks(&mut self, child: &Node, x: f64, inner_w: f64, ctx: &Ctx, depth: usize, sib: usize) -> Result<(), XfaError> {
+        if let Node::Subform(_) = child {
+            let instances = self.instances(child, &ctx.som);
+            self.warn_truncated(child, &ctx.som, instances);
+        }
+        let (cw, ch) = self.size_of(child, inner_w, ctx, depth + 1);
+        for (i, shown) in self.shown_instances(child, &ctx.som, sib) {
+            if !shown {
+                self.make_room(ch)?;
+                self.place(ch);
+                continue;
+            }
+            self.flow_block(child, x, (cw, ch), ctx, depth + 1, sib + i)?;
         }
         Ok(())
     }
