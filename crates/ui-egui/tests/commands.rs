@@ -48,6 +48,9 @@ fn harness() -> Harness<'static, PdfCraftApp> {
 
 /// Commands that open a native file picker can't run headless.
 /// (Create ▸ Clipboard reads the system clipboard: tests use `create_from_clip`.)
+/// CollabCraft cloud commands need a connected service; see `cloud_tests`.
+const CLOUD_SERVICE: &[&str] = &["file.open_cloud", "file.save_as_cloud"];
+
 const PICKERS: &[&str] = &[
     "file.open",
     "page.combine",
@@ -71,6 +74,7 @@ const PICKERS: &[&str] = &[
 #[test]
 fn every_registered_command_is_implemented() {
     for spec in COMMANDS {
+        if PICKERS.contains(&spec.id) || CLOUD_SERVICE.contains(&spec.id) {
         // Page-text Copy needs a loaded view and egui context, covered by ui_group::text_select.
         if PICKERS.contains(&spec.id) || spec.id == "edit.copy" {
             continue;
@@ -191,6 +195,7 @@ fn a_tool_chosen_with_no_document_asks_for_one_and_runs_on_it() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
+        app.run_inline = true;
         app.pick_override = Some(vec![pick]);
         app
     });
@@ -291,6 +296,7 @@ fn the_open_recent_menu_lists_files_and_opens_one() {
         move |_cc| {
             let mut app = PdfCraftApp::new();
             app.set_option("language", "en").unwrap();
+            app.run_inline = true;
             app.open_bytes("doc.pdf", None, fixture(3)).unwrap();
             app.recent.push(pdfcraft_ui_egui::RecentFile { name: "recent.pdf".into(), path, pages: 2, size: 0 });
             app
