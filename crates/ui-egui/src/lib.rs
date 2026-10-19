@@ -529,6 +529,8 @@ pub struct PdfCraftApp {
     /// The reading-colours preference (Preferences ▸ Reading colours): applied to every open
     /// document, and documents open with it (Acrobat's Replace Document Colors).
     pub reading_colors: pdfcraft_render::ReadingColors,
+    /// App-wide page decoration only; never part of a PDF edit or render request.
+    pub show_page_edge_shadows: bool,
     /// The Linux portal is enabled only by the native host, and starts on the first System choice.
     #[cfg(target_os = "linux")]
     desktop_theme: Option<pdfcraft_platform::desktop_theme::DesktopTheme>,
@@ -914,6 +916,7 @@ impl PdfCraftApp {
             theme: ThemeKind::Light,
             theme_preference: ThemePreference::Light,
             reading_colors: Default::default(),
+            show_page_edge_shadows: true,
             #[cfg(target_os = "linux")]
             desktop_theme: None,
             #[cfg(target_os = "linux")]
@@ -2309,6 +2312,7 @@ impl PdfCraftApp {
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
+        v["show_page_edge_shadows"] = self.show_page_edge_shadows.into();
         v.to_string()
     }
 
@@ -2386,6 +2390,9 @@ impl PdfCraftApp {
         }
         if let Some(size) = v["fill_text_size"].as_f64().and_then(fill_sign::valid_text_size) {
             self.fill_text_size = size;
+        }
+        if let Some(show) = v["show_page_edge_shadows"].as_bool() {
+            self.show_page_edge_shadows = show;
         }
         if let Some(prefs) = RedactPrefs::from_json(&v["redact_prefs"]) {
             self.redact_prefs = prefs.clone();
@@ -2497,6 +2504,9 @@ impl PdfCraftApp {
                     _ => return Err("theme must be light, dark, or system".into()),
                 };
                 self.set_theme_preference(preference);
+            }
+            ("show_page_edge_shadows", _) => {
+                self.show_page_edge_shadows = value.parse::<bool>().map_err(|_| "show_page_edge_shadows must be true or false")?;
             }
             ("scroll_speed", _) => {
                 self.scroll_speed = scroll_speed::ScrollSpeed::parse(value).ok_or("scroll_speed must be slow, normal, or fast")?;

@@ -1,5 +1,7 @@
 # PdfCraft roadmap
 
+> **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M3 #1577 branch refresh: upstream integrated, Vietnamese label added, scoped checks and visual comparison pass; estimates unchanged)
+
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7: the Edit text caret is as tall as the row it is on; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -170,6 +172,10 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+
+- **2026-10-18 (M3, #1577 refresh):** Integrated upstream `4db6ac4` while preserving selection scrolling, Organize page duplication and persistent redaction preferences. Added the shadow-setting label to the newer Vietnamese catalog; translation hashes refreshed. 181 scoped tests, strict UI all-target Clippy, UI WASM, formatting, assets, layering and parity pass; enabled/disabled renders inspected. Hosted CI must verify the updated PR head.
+
+- 2026-10-13 — M3, #1577: optional app-wide page-edge shadows and viewport-edge fades in the viewer and Organize grid; enabled by default, persisted and controllable through the UI channel. PDF rendering and edits are unchanged.
 
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
 
