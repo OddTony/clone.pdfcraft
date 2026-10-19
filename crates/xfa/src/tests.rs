@@ -7,7 +7,9 @@ use crate::data::{
     DatasetsWrite, FieldData, FieldDatum, build_data, iso_to_pattern, parse_datasets, pattern_to_iso, read_values, som_to_path, write_datasets,
 };
 use crate::data::{add_data_instances, remove_data_instance, write_data_value};
-use crate::fixtures::{TINY_GIF, fields_template, scripted_template, shell, static_shell, template, template_with_data, tiny_png};
+use crate::fixtures::{
+    TINY_GIF, bound_date_template, fields_template, scripted_template, shell, static_shell, template, template_with_data, tiny_png,
+};
 use crate::layout::Item;
 use crate::layout::WidgetKind;
 use crate::model::*;
@@ -334,6 +336,78 @@ fn dates_convert_between_iso_and_acrobat_patterns() {
     assert_eq!(pattern_to_iso("2001-02-03", "yyyy-mm-dd").as_deref(), Some("2001-02-03"));
     assert_eq!(pattern_to_iso("13/40/2001", "mm/dd/yyyy"), None);
     assert_eq!(pattern_to_iso("hello", "mm/dd/yyyy"), None);
+}
+
+/// A date field's data picture (`<bind><picture>`) is how its value is written in the data:
+/// `due` keeps `20261018` there and shows `10/18/2026`. The stored text used to be shown as it
+/// was, because the data was taken to hold ISO dates only.
+#[test]
+fn a_date_is_read_from_the_data_in_its_data_picture() {
+    let form = layout_xml(&bound_date_template("<form><page><due>20261018</due><when>2026-10-18</when></page></form>")).unwrap();
+    let all: Vec<&Widget> = form.pages.iter().flat_map(widgets).collect();
+    let by = |n: &str| all.iter().find(|w| w.name == n).unwrap_or_else(|| panic!("no widget {n}"));
+    assert_eq!(by("due").value.as_deref(), Some("10/18/2026"));
+    assert_eq!(by("when").value.as_deref(), Some("10/18/2026"), "no data picture: the data holds ISO");
+}
+
+#[test]
+fn som_paths_name_the_template_field_their_numbers_count_to() {
+    let xml = r#"<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"><template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">
+<subform name="form">
+ <field name="x"><bind><picture>first</picture></bind></field>
+ <subform name="row"><occur min="1" max="-1"/><field name="d"><bind><picture>row</picture></bind></field></subform>
+ <field name="x"><bind><picture>second</picture></bind></field>
+ <subform><field name="u"><bind><picture>inner</picture></bind></field></subform>
+</subform>
+</template></xdp:xdp>"#;
+    let (tpl, _) = parse(xml).unwrap();
+    let picture = |som: &str| crate::data::template_field(&tpl, som).and_then(|f| f.data_picture.clone());
+    // Same-named siblings count up; each SOM number is its own field.
+    assert_eq!(picture("form[0].x[0]").as_deref(), Some("first"));
+    assert_eq!(picture("form[0].x[1]").as_deref(), Some("second"));
+    assert_eq!(picture("form[0].x[2]"), None, "no third x");
+    // The instances of a repeating subform follow its number: all are the one template node.
+    assert_eq!(picture("form[0].row[0].d[0]").as_deref(), Some("row"));
+    assert_eq!(picture("form[0].row[3].d[0]").as_deref(), Some("row"));
+    // An unnamed subform is looked through, as data paths do.
+    assert_eq!(picture("form[0].u[0]").as_deref(), Some("inner"));
+}
+
+#[test]
+fn a_refreshed_field_takes_its_value_from_its_own_template_field() {
+    // Two text fields named `x` with different defaults; the data holds only the first.
+    let xml = r#"<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"><template xmlns="http://www.xfa.org/schema/xfa-template/3.3/">
+<subform name="form">
+ <field name="x"><ui><textEdit/></ui><value><text>first</text></value></field>
+ <field name="x"><ui><textEdit/></ui><value><text>second</text></value></field>
+</subform>
+</template><xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/"><xfa:data><form><x>a</x></form></xfa:data></xfa:datasets></xdp:xdp>"#;
+    let (tpl, _) = parse(xml).unwrap();
+    let data = parse_datasets(xml).unwrap();
+    let mut live = form_tree(&tpl, Some(&data), &Overrides::default()).root;
+    let value = |live: &crate::script::FormNode, som: &str| node_at(live, som).map(|n| n.value.clone());
+    assert_eq!(value(&live, "form[0].x[1]").as_deref(), Some("second"));
+    assert_eq!(crate::script::refresh_value(&mut live, &tpl, Some(&data), "form[0].x[1]"), Some(false), "nothing to change");
+    assert_eq!(value(&live, "form[0].x[1]").as_deref(), Some("second"), "not the first x's default");
+}
+
+/// The node of `live` at `som`.
+fn node_at<'a>(live: &'a crate::script::FormNode, som: &str) -> Option<&'a crate::script::FormNode> {
+    if live.som == som {
+        return Some(live);
+    }
+    live.children.iter().find_map(|c| node_at(c, som))
+}
+
+#[test]
+fn a_date_its_data_picture_cant_hold_is_written_as_iso() {
+    use crate::data::{data_to_iso, iso_to_data};
+    assert_eq!(iso_to_data("2026-01-02".into(), Some("yymmdd")), "260102");
+    // A two-digit year reads back as 1950 to 2049: 2050 and 1949 keep ISO, and read back as written.
+    for iso in ["2050-01-02", "1949-12-31"] {
+        assert_eq!(iso_to_data(iso.into(), Some("yymmdd")), iso);
+        assert_eq!(data_to_iso(iso, Some("yymmdd")), iso);
+    }
 }
 
 #[test]
