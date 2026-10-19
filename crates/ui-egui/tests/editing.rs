@@ -5093,3 +5093,27 @@ fn read_mode_shortcut_applies_the_open_paragraph() {
     assert!(s.views[0].line_editor.is_none(), "no editor stays open in Read mode");
     assert_eq!(s.session.get(s.views[0].id).unwrap().text_lines(0)[0].text, "Chapter One", "the edit is applied");
 }
+
+#[test]
+fn inserted_image_remains_added_after_watermark() {
+    use pdfcraft_engine::{Edit, Watermark};
+    let h = harness(1, |app| {
+        let mut png = Vec::new();
+        image::RgbImage::from_pixel(10, 10, image::Rgb([0, 0, 255])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        assert!(app.apply_edit(Edit::AddImage {
+            page: 0,
+            rect: Some([30.0, 170.0, 130.0, 250.0]),
+            name: "synthetic.png".into(),
+            bytes: std::sync::Arc::new(png)
+        }));
+        assert!(app.apply_edit(Edit::AddWatermark {
+            pages: vec![0],
+            settings: Watermark { text: "DRAFT".into(), ..Watermark::default() },
+            file: None,
+            replace: false
+        }));
+    });
+    let id = h.state().views[0].id;
+    let doc = h.state().session.get(id).unwrap();
+    assert_eq!(doc.added().len(), 1, "watermark must not hide the inserted image from the added-content gesture");
+}
