@@ -1618,3 +1618,30 @@ fn text_box_and_callout_properties_include_fill_and_thickness() {
         assert_eq!(h.state().comment_prefs.style(tool).width, 3.0);
     }
 }
+
+#[test]
+fn text_comments_can_save_a_zero_width_default() {
+    use pdfcraft_engine::{Edit, NewAnnotation, Shape};
+    use pdfcraft_ui_egui::comments::CommentTool;
+    let mut h = harness(|_| {});
+    let shape = Shape::TextBox { rect: [40.0, 600.0, 240.0, 640.0], font_size: 12.0 };
+    let mut style = pdfcraft_engine::Style::default_for(&shape);
+    style.width = 0.0;
+    h.state_mut().apply_edit(Edit::AddAnnotation(NewAnnotation { page: 0, shape, style, contents: "Hello".into(), author: "Ada".into() }));
+    h.run_steps(2);
+    h.state_mut().open_comment_props(0, 0);
+    h.run_steps(2);
+    assert_eq!(h.state().comment_props.as_ref().unwrap().edited.width, Some(0.0));
+    h.get_by_label("OK").click();
+    h.run_steps(2);
+    h.state_mut().make_comment_default(0, 0);
+    assert_eq!(h.state().comment_prefs.style(CommentTool::TextBox).width, 0.0);
+    h.state_mut().comment_prefs.set_width(CommentTool::Callout, 0.0);
+    h.state_mut().comment_prefs.set_width(CommentTool::Rectangle, 0.0);
+    assert_eq!(h.state().comment_prefs.style(CommentTool::Callout).width, 0.0);
+    assert_eq!(h.state().comment_prefs.style(CommentTool::Rectangle).width, 0.5);
+    let mut restored = PdfCraftApp::new();
+    restored.restore(&h.state().persist());
+    assert_eq!(restored.comment_prefs.style(CommentTool::TextBox).width, 0.0);
+    assert_eq!(restored.comment_prefs.style(CommentTool::Callout).width, 0.0);
+}
