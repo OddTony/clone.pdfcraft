@@ -1738,7 +1738,7 @@ fn missing_glyphs_substitute_helvetica_and_impossible_text_is_refused() {
     let r = text::replace_line(&mut doc, 0, 0, "abc").unwrap();
     assert_eq!(r.substituted.as_deref(), Some("Helvetica"));
     let doc2 = reopen(&doc);
-    // #2378: only "c" falls back; "ab" keeps the source subset.
+    // The line path still falls back for the whole line; #2378 remains open.
     let lines = text::text_lines(&doc2, 0).unwrap();
     assert!(lines[0].text.as_str().starts_with("ab"), "{}", lines[0].text.as_str());
     assert_eq!(lines[0].base_font.as_str(), "Helvetica");
