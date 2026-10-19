@@ -6,19 +6,19 @@ import { PdfCraftLocalClient } from "../dist/local.js";
 import { PdfCraftRestClient } from "../dist/rest.js";
 import { InvalidArgumentError, PdfCraftError } from "../dist/errors.js";
 
-test("LocalClient merges documents in memory", async () => {
+test("LocalClient merge throws PdfCraftError when native addon is unavailable", async () => {
   const local = new PdfCraftLocalClient();
   const doc1 = new TextEncoder().encode("%PDF-1.4 sample 1");
   const doc2 = new TextEncoder().encode("%PDF-1.4 sample 2");
 
-  const res = await local.merge([doc1, doc2]);
-  assert.equal(res.type, "memory");
-  assert.equal(res.mimeType, "application/pdf");
-
-  const text = new TextDecoder().decode(res.data);
-  assert.ok(text.startsWith("%PDF-1.7"));
-  assert.ok(text.includes("%PDF-1.4 sample 1"));
-  assert.ok(text.includes("%PDF-1.4 sample 2"));
+  await assert.rejects(async () => {
+    await local.merge([doc1, doc2]);
+  }, (err) => {
+    assert.equal(err instanceof PdfCraftError, true);
+    assert.equal(err.errorCode, "NATIVE_UNAVAILABLE");
+    assert.equal(err.statusCode, 501);
+    return true;
+  });
 });
 
 test("LocalClient empty sources throws InvalidArgumentError", async () => {
@@ -28,24 +28,30 @@ test("LocalClient empty sources throws InvalidArgumentError", async () => {
   }, InvalidArgumentError);
 });
 
-test("LocalClient split operation", async () => {
+test("LocalClient split throws PdfCraftError when native addon is unavailable", async () => {
   const local = new PdfCraftLocalClient();
-  const res = await local.split("doc.pdf");
-  assert.equal(res.files.length, 2);
-  assert.equal(res.files[0], "split_part_1.pdf");
+  await assert.rejects(async () => {
+    await local.split("doc.pdf");
+  }, (err) => {
+    assert.equal(err instanceof PdfCraftError, true);
+    assert.equal(err.errorCode, "NATIVE_UNAVAILABLE");
+    return true;
+  });
 });
 
-test("LocalClient renderPage validates page >= 1", async () => {
+test("LocalClient renderPage validates page >= 1 and checks native availability", async () => {
   const local = new PdfCraftLocalClient();
   await assert.rejects(async () => {
     await local.renderPage("doc.pdf", 0);
   }, InvalidArgumentError);
 
-  const res = await local.renderPage("doc.pdf", 1, { dpi: 300 });
-  assert.equal(res.type, "memory");
-  assert.equal(res.mimeType, "image/png");
-  const text = new TextDecoder().decode(res.data);
-  assert.ok(text.includes("DPI_300"));
+  await assert.rejects(async () => {
+    await local.renderPage("doc.pdf", 1, { dpi: 300 });
+  }, (err) => {
+    assert.equal(err instanceof PdfCraftError, true);
+    assert.equal(err.errorCode, "NATIVE_UNAVAILABLE");
+    return true;
+  });
 });
 
 test("RestClient maps RFC 7807 error details", async () => {
