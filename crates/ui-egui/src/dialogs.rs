@@ -1334,8 +1334,10 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
         && let Some(i) = app.active
     {
         // Keep the (possibly renamed) field selected.
-        let prefix = d.field.rsplit_once('.').map(|(p, _)| format!("{p}.")).unwrap_or_default();
-        app.views[i].prepare.selected = Some((format!("{prefix}{}", d.name.trim()), d.widget));
+        // A dotted name is the full name; a plain one renames the field within its parent.
+        let name = d.name.trim();
+        let prefix = d.field.rsplit_once('.').filter(|_| !name.contains('.')).map(|(p, _)| format!("{p}.")).unwrap_or_default();
+        app.views[i].prepare.selected = Some((format!("{prefix}{name}"), d.widget));
     }
     if props_now && let Some(d) = app.comment_props.take() {
         let mut edits = crate::comment_props::edits(&d);
