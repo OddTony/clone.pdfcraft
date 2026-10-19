@@ -372,7 +372,7 @@ pub(crate) fn body(ui: &mut egui::Ui, d: &mut Draft, t: &theme::Tokens) -> (bool
     ui.separator();
     let (mut apply, mut cancel) = (false, false);
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        apply = widgets::pill_button(ui, tl!("OK"), true).clicked();
+        apply = widgets::default_button(ui, tl!("OK"));
         cancel = widgets::pill_button(ui, tl!("Cancel"), false).clicked();
     });
     (apply, cancel)

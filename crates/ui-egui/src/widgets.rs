@@ -28,10 +28,24 @@ pub fn modal(ctx: &egui::Context, id: impl std::hash::Hash + std::fmt::Debug) ->
     egui::Modal::new(egui::Id::new(id)).frame(dialog_frame(ctx))
 }
 
+/// Show a modal with Return handling for its explicit default action.
+pub fn show_modal_with_default<R>(ctx: &egui::Context, modal: egui::Modal, content: impl FnOnce(&mut egui::Ui) -> R) -> egui::ModalResponse<R> {
+    modal.show(ctx, |ui| {
+        // A field may release focus when handling Return; do not submit the dialog as well.
+        let default_key = default_key_id(ui);
+        let eligible =
+            ui.ctx().memory(|m| m.focused().is_none() && m.top_modal_layer() == Some(ui.layer_id())) && !egui::Popup::is_any_open(ui.ctx());
+        ui.ctx().data_mut(|d| d.insert_temp(default_key, eligible));
+        let inner = content(ui);
+        ui.ctx().data_mut(|d| d.remove::<bool>(default_key));
+        inner
+    })
+}
+
 /// Show [`modal`], outline its controls, and remember the card rect for layout checks.
 pub fn show_modal<R>(ctx: &egui::Context, id: &str, content: impl FnOnce(&mut egui::Ui) -> R) -> egui::ModalResponse<R> {
     let stored = egui::Id::new(id);
-    modal(ctx, id).show(ctx, |ui| {
+    show_modal_with_default(ctx, modal(ctx, id), |ui| {
         begin_dialog(ui);
         let inner = content(ui);
         // The frame's stroke sits outside this content rect; the stored card is the fill.
@@ -144,6 +158,25 @@ pub fn pill_button(ui: &mut egui::Ui, label: &str, primary: bool) -> Response {
     ui.painter().rect(rect, CornerRadius::same(14), fill, stroke, egui::StrokeKind::Inside);
     ui.painter().text(rect.translate(press.offset()).center(), Align2::CENTER_CENTER, label, font, text);
     theme::hand(resp)
+}
+
+/// Activate a modal's default action on Return when no other control owns keyboard focus.
+/// Focused buttons keep egui's normal Return/Space behavior; text fields and popups keep Return.
+pub fn default_button(ui: &mut egui::Ui, label: &str) -> bool {
+    let response = pill_button(ui, label, true);
+    if response.clicked() {
+        return true;
+    }
+    let eligible = ui.ctx().data(|d| d.get_temp::<bool>(default_key_id(ui))).unwrap_or(false);
+    response.enabled()
+        && eligible
+        && ui.ctx().memory(|m| m.focused().is_none())
+        && !egui::Popup::is_any_open(ui.ctx())
+        && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter))
+}
+
+fn default_key_id(ui: &egui::Ui) -> egui::Id {
+    egui::Id::new("modal-default-key").with(ui.layer_id())
 }
 
 /// Icon + label, transparent until hovered.
@@ -592,6 +625,27 @@ pub fn icon_pill(ui: &mut egui::Ui, icon: &str, label: &str, primary: bool) -> R
 mod tests {
     use super::*;
     use egui::Pos2;
+
+    #[test]
+    fn return_only_activates_the_topmost_modal() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(theme::font_definitions());
+        let mut bottom = false;
+        let mut top = false;
+        let draw = |ctx: &egui::Context, bottom: &mut bool, top: &mut bool| {
+            show_modal(ctx, "bottom", |ui| *bottom |= default_button(ui, "Bottom"));
+            show_modal(ctx, "top", |ui| *top |= default_button(ui, "Top"));
+        };
+        for _ in 0..3 {
+            let mut out = ctx.run_ui(egui::RawInput::default(), |_| draw(&ctx, &mut bottom, &mut top));
+            out.textures_delta.clear();
+        }
+        let key = egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE };
+        let mut out = ctx.run_ui(egui::RawInput { events: vec![key], ..Default::default() }, |_| draw(&ctx, &mut bottom, &mut top));
+        out.textures_delta.clear();
+        assert!(!bottom, "the obscured dialog must not react to Return");
+        assert!(top, "Return activates the top dialog's default");
+    }
 
     #[test]
     fn search_placeholder_never_overlaps_the_shortcut() {

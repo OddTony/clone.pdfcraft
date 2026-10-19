@@ -1944,6 +1944,16 @@ impl PdfCraftApp {
             || self.updates.open
     }
 
+    /// Dialogs drawn after the save prompt own its keyboard and pointer input.
+    pub(crate) fn save_prompt_covered(&self) -> bool {
+        self.pending_link.is_some()
+            || self.pending_remote_link.is_some()
+            || self.pending_full_screen.is_some()
+            || self.updates.open
+            || self.dialog.is_some()
+            || self.unlock_prompt.is_some()
+    }
+
     /// Enable the UI control channel on `ctx` (opt-in; see [`control`]). Returns a client that
     /// sends requests to this app; [`control::serve`] exposes it on loopback.
     pub fn attach_control(&mut self, ctx: &egui::Context) -> control::ControlClient {
@@ -2801,7 +2811,11 @@ impl PdfCraftApp {
         // properties; Escape cancels it rather than clearing a selection), and nothing may run
         // underneath it. They are read here, before the canvas can consume them.
         if self.close_request.is_some() {
-            if let Some(choice) = dialogs::save_prompt_key(ctx) {
+            // These dialogs are drawn after the save prompt and own the keyboard while open.
+            // In particular, don't let Escape or Return resolve unsaved work underneath one.
+            if !self.save_prompt_covered()
+                && let Some(choice) = dialogs::save_prompt_key(ctx)
+            {
                 self.resolve_close(ctx, choice);
             }
             return;

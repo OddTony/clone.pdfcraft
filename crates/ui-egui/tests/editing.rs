@@ -1428,7 +1428,7 @@ fn files_that_cannot_be_read_are_listed_and_left_out_once_the_user_agrees() {
     // Asked again: Combine the rest.
     h.get_by_label("Combine").click();
     h.run_steps(3);
-    h.get_by_label("Combine the rest").click();
+    h.key_press(Key::Enter);
     h.run_steps(3);
     assert_eq!(texts_of(h.state(), 1), ["Page 1", "Page 2", "Page 1"]);
 }

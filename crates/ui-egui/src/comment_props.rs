@@ -296,7 +296,7 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (boo
     });
     let (mut apply, mut cancel) = (false, false);
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        if widgets::pill_button(ui, tl!("OK"), true).clicked() {
+        if widgets::default_button(ui, tl!("OK")) {
             apply = true;
         }
         if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {

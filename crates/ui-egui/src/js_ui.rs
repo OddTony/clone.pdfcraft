@@ -146,7 +146,7 @@ fn buttons(ui: &mut egui::Ui, primary: &str, others: &[&str]) -> Option<String> 
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             // Stable ids: the console's output above changes how many widgets come first.
             // Labels are translated for display; the returned id stays English.
-            if ui.push_id(primary, |ui| widgets::pill_button(ui, tl!(primary), true)).inner.clicked() {
+            if ui.push_id(primary, |ui| widgets::default_button(ui, tl!(primary))).inner {
                 clicked = Some(primary.to_string());
             }
             for o in others {

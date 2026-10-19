@@ -921,7 +921,7 @@ fn skip_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
         left_out.push((f.name.as_str(), f.problem.as_deref().unwrap_or_default()));
     }
     let mut choice: Option<bool> = None;
-    let modal = egui::Modal::new(egui::Id::new("combine-skip")).show(ctx, |ui| {
+    let modal = widgets::show_modal_with_default(ctx, egui::Modal::new(egui::Id::new("combine-skip")), |ui| {
         ui.set_width(460.0);
         ui.horizontal(|ui| {
             ui.add(icons::image("triangle-alert", 22.0, ERROR));
@@ -942,7 +942,7 @@ fn skip_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
         }
         ui.add_space(14.0);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, tl!("Combine the rest"), true).clicked() {
+            if widgets::default_button(ui, tl!("Combine the rest")) {
                 choice = Some(true);
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {

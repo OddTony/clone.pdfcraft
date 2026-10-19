@@ -201,7 +201,7 @@ fn a_document_asking_for_full_screen_is_asked_about_first() {
     h.run_steps(3);
     assert!(!h.state().full_screen, "nothing happens before the answer");
     h.get_by_label("Open in Full Screen mode?");
-    h.get_by_label("Not now").click();
+    h.key_press(egui::Key::Enter);
     h.run_steps(3);
     assert!(!h.state().full_screen);
     assert!(h.query_by_label("Open in Full Screen mode?").is_none() && h.state().pending_full_screen.is_none());
@@ -352,6 +352,101 @@ fn a_middle_click_closes_the_tab() {
     h.run_steps(3);
     assert_eq!(h.state().views.len(), 1, "unsaved changes ask first");
     assert!(h.state().close_request.is_some());
+}
+
+#[test]
+fn a_link_prompt_above_a_save_prompt_owns_its_keys() {
+    for key in [egui::Key::Escape, egui::Key::Enter] {
+        let mut h = harness(|app| {
+            app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
+            app.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+            app.close_request = Some(pdfcraft_ui_egui::CloseRequest::Tab(app.views[0].id));
+        });
+        h.run_steps(3);
+        h.state_mut().pending_link =
+            Some(pdfcraft_ui_egui::PendingLink { url: "https://example.org".to_owned(), origin: pdfcraft_ui_egui::LinkOrigin::Link });
+        h.run_steps(3);
+        h.key_press(key);
+        h.run_steps(3);
+        assert!(h.state().pending_link.is_none(), "{key:?} cancels the top link prompt");
+        assert!(h.state().close_request.is_some(), "the save prompt stays open after {key:?}");
+        assert_eq!(h.state().views.len(), 1, "the edited document remains open");
+        assert!(h.state().last_opened_url.is_none());
+    }
+}
+
+#[test]
+fn a_new_link_prompt_does_not_resolve_the_save_prompt() {
+    for (modifiers, key) in [
+        (egui::Modifiers::NONE, egui::Key::Escape),
+        (egui::Modifiers::NONE, egui::Key::Enter),
+        (egui::Modifiers::COMMAND, egui::Key::D),
+        (egui::Modifiers::ALT, egui::Key::D),
+        (egui::Modifiers::ALT, egui::Key::N),
+    ] {
+        let mut h = harness(|app| {
+            app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
+            app.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+            app.close_request = Some(pdfcraft_ui_egui::CloseRequest::Tab(app.views[0].id));
+        });
+        h.run_steps(3);
+        h.state_mut().pending_link =
+            Some(pdfcraft_ui_egui::PendingLink { url: "https://example.org".to_owned(), origin: pdfcraft_ui_egui::LinkOrigin::Link });
+        h.key_press_modifiers(modifiers, key);
+        h.run_steps(1);
+        assert!(h.state().close_request.is_some(), "{modifiers:?} {key:?} must not resolve the underlying save prompt");
+        assert_eq!(h.state().views.len(), 1);
+    }
+}
+
+#[test]
+fn a_new_link_prompt_blocks_a_focused_discard_button() {
+    let mut h = harness(|app| {
+        app.open_bytes("first.pdf", None, FIXTURE.to_vec()).unwrap();
+        app.apply_edit(pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 });
+        app.close_request = Some(pdfcraft_ui_egui::CloseRequest::Tab(app.views[0].id));
+    });
+    h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Don't save").focus();
+    h.run_steps(1);
+    h.state_mut().pending_link =
+        Some(pdfcraft_ui_egui::PendingLink { url: "https://example.org".to_owned(), origin: pdfcraft_ui_egui::LinkOrigin::Link });
+    h.key_press(egui::Key::Space);
+    h.run_steps(1);
+    assert!(h.state().close_request.is_some(), "the covered discard button must not activate");
+    assert_eq!(h.state().views.len(), 1);
+}
+
+#[test]
+fn a_new_link_prompt_does_not_submit_a_covered_password() {
+    use pdfcraft_engine::{Edit, Protection, Session};
+    use std::sync::Arc;
+
+    let mut session = Session::new();
+    let id = session.open("secret.pdf", None, Arc::new(FIXTURE.to_vec()), None).unwrap();
+    session.apply(id, Edit::Protect(Protection { open_password: Some("secret".into()), ..Default::default() })).unwrap();
+    let encrypted = session.save_bytes(id).unwrap().as_ref().clone();
+    for key in [egui::Key::Enter, egui::Key::Escape] {
+        let bytes = encrypted.clone();
+        let mut h = harness(move |app| {
+            app.run_inline = true;
+            app.open_bytes("secret.pdf", None, bytes).unwrap();
+        });
+        assert!(h.state().password_prompt.is_some());
+        h.state_mut().password_prompt.as_mut().unwrap().input = "secret".into();
+        h.state_mut().pending_link =
+            Some(pdfcraft_ui_egui::PendingLink { url: "https://example.org".into(), origin: pdfcraft_ui_egui::LinkOrigin::Link });
+        h.key_press(key);
+        h.run_steps(1);
+        assert!(h.state().password_prompt.is_some(), "{key:?} must not submit or cancel the covered password prompt");
+        assert!(h.state().views.is_empty(), "the protected document must remain unopened");
+        h.state_mut().resolve_pending_link(false);
+        h.run_steps(3);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(2);
+        assert!(h.state().password_prompt.is_none(), "the password prompt works again after the link prompt closes");
+        assert_eq!(h.state().views.len(), 1, "the correct password opens the intended document");
+    }
 }
 
 #[test]
