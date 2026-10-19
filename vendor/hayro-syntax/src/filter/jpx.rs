@@ -26,7 +26,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
         target_resolution: params.target_dimension,
     };
 
-    // PdfCraft patch (20): a JP2 colour specification naming an enumerated colour space the
+    // PdfCraft patch (21): a JP2 colour specification naming an enumerated colour space the
     // decoder refuses (CIEJab, enum 19, in a veraPDF fixture; YCbCr, PhotoYCC, …) made the whole
     // image fail, so the page drew blank (#3306). Then it is decoded as if it had no colour
     // specification, as MuPDF and Poppler draw it: grey, RGB or CMYK by its component count.
@@ -102,7 +102,7 @@ pub(crate) fn decode(data: &[u8], params: &ImageDecodeParams) -> Option<FilterRe
 /// handles: CMYK, CIELab, sRGB, greyscale, sYCC, e-sRGB and ROMM-RGB.
 const DECODED_ENUMERATED: [u32; 7] = [12, 14, 16, 17, 18, 20, 21];
 
-/// PdfCraft patch (20): a copy of JP2 file `data` whose colour specification boxes (`colr`, in
+/// PdfCraft patch (21): a copy of JP2 file `data` whose colour specification boxes (`colr`, in
 /// the `jp2h` header box) that name an enumerated colour space outside [`DECODED_ENUMERATED`]
 /// name the space the decoder assumes without one instead: greyscale, sRGB or CMYK for 1, 3 or
 /// 4 components (`ihdr`). `None` when there is nothing to change or the boxes can't be read.
