@@ -2687,3 +2687,15 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+
+# AI-assisted additions for the lock-signatures prompt (#2149) (2026-10-16); not reviewed by a native speaker.
+	A placed signature is a comment until it is locked: anyone with a PDF editor can move or remove it. Locking makes your Fill & Sign text, marks and signatures part of the page.	Chữ ký đã đặt chỉ là một bình luận cho đến khi được khóa: bất kỳ ai có trình chỉnh sửa PDF đều có thể di chuyển hoặc xóa nó. Khóa sẽ biến văn bản, dấu và chữ ký Điền & Ký của bạn thành một phần của trang.
+	Don't ask again	Không hỏi lại
+	Keep editable	Giữ để chỉnh sửa được
+	Lock and save	Khóa và lưu
+	Lock into the page when saving	Khóa vào trang khi lưu
+	Lock your signature into the page?	Khóa chữ ký của bạn vào trang?
+	Otherwise, ask on the first save after a signature is placed	Nếu không, hỏi ở lần lưu đầu tiên sau khi đặt chữ ký
+	Signature added. Others can move it until it's locked.	Đã thêm chữ ký. Người khác có thể di chuyển nó cho đến khi được khóa.
+	Lock now	Khóa ngay
+	Signature locked into the page.	Đã khóa chữ ký vào trang.
