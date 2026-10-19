@@ -4026,6 +4026,7 @@ dependencies = [
  "pdfcraft-cos",
  "pdfcraft-engine",
  "pdfcraft-platform",
+ "pdfcraft-preflight",
  "pdfcraft-render",
  "rustix 1.1.5",
  "serde_json",
@@ -4137,6 +4138,7 @@ dependencies = [
  "pdfcraft-xfdf",
  "png 0.18.1",
  "thiserror 2.0.21",
+ "tiff",
  "unicode-segmentation",
  "url",
 ]
