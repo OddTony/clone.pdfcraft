@@ -493,13 +493,15 @@ Every error emitted by the SDK is strongly typed and maps directly to RFC 7807 P
 
 | SDK Error Variant | HTTP Status | RFC 7807 `type` | Meaning & Recovery Rule |
 |---|---|---|---|
-| `InvalidArgument(msg)` | 400 Bad Request | `urn:pdfcraft:error:invalid-argument` | Missing parameter, empty file array, or page index 0. |
-| `FileNotFound(msg)` | 404 Not Found | `urn:pdfcraft:error:file-not-found` | Specified file path does not exist on disk. |
-| `Encrypted(msg)` | 422 Unprocessable | `urn:pdfcraft:error:encrypted` | PDF requires user or owner password for opening. |
-| `CorruptedPdf(msg)` | 422 Unprocessable | `urn:pdfcraft:error:corrupted-pdf` | File lacks valid PDF headers or cross-reference structure. |
-| `QuotaExceeded(msg)` | 413 Payload Too Large | `urn:pdfcraft:error:quota-exceeded` | Input file exceeds `max_request_bytes` threshold. |
-| `Timeout(msg)` | 504 Gateway Timeout | `urn:pdfcraft:error:timeout` | Execution deadline exceeded on long-running task. |
-| `EnginePanic(msg)` | 500 Internal Error | `urn:pdfcraft:error:engine-panic` | Contained engine panic. Process remains healthy. |
+| `InvalidArgument(msg)` | 400 Bad Request | `https://pdfcraft.storytold.org/errors/invalid-argument` | Missing parameter, empty file array, or invalid value. |
+| `PageOutOfBounds { page, total }` | 400 Bad Request | `https://pdfcraft.storytold.org/errors/page-out-of-bounds` | Page index out of document bounds. |
+| `Unauthorized(msg)` | 401 Unauthorized | `https://pdfcraft.storytold.org/errors/unauthorized` | Missing or invalid authentication token. |
+| `FileNotFound { path }` | 404 Not Found | `https://pdfcraft.storytold.org/errors/file-not-found` | Specified file path does not exist on disk. |
+| `QuotaExceeded(msg)` | 413 Payload Too Large | `https://pdfcraft.storytold.org/errors/quota-exceeded` | Input file or memory exceeds configured quota thresholds. |
+| `UnsupportedOperation(msg)` | 501 Not Implemented | `https://pdfcraft.storytold.org/errors/unsupported-operation` | Feature or format not supported by engine. |
+| `Io(err)` | 500 Internal Error | `https://pdfcraft.storytold.org/errors/io-error` | File system or network I/O failure. |
+| `EngineError(msg)` | 500 Internal Error | `https://pdfcraft.storytold.org/errors/engine-error` | Engine operation execution failure. |
+| `EnginePanic(msg)` | 500 Internal Error | `https://pdfcraft.storytold.org/errors/engine-panic-contained` | Contained engine panic. Process remains healthy. |
 
 ---
 

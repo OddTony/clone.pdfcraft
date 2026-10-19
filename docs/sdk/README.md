@@ -166,12 +166,17 @@ pdfcraft-rest = { version = "0.5.0", path = "crates/rest" }
 
 ### 3.1 In-Process Execution (`LocalClient`)
 ```rust
-use pdfcraft_sdk::prelude::*;
+use std::fs;
+use pdfcraft_sdk::{
+    DocumentResult, DocumentSource, LocalClient, MergeOptions, PdfCraftClient, RenderOptions,
+    ResourceLimits, SdkError,
+};
 
 fn main() -> Result<(), SdkError> {
-    let client = LocalClient::builder()
-        .max_memory_bytes(64 * 1024 * 1024) // 64 MB before disk spill
-        .build()?;
+    let client = LocalClient::default().with_limits(ResourceLimits {
+        max_memory_bytes: 64 * 1024 * 1024, // 64 MB before disk spill
+        ..ResourceLimits::default()
+    });
 
     // 1. Merge documents from disk or memory buffers
     let doc1 = DocumentSource::from_path("cover.pdf");
@@ -179,7 +184,12 @@ fn main() -> Result<(), SdkError> {
     let merged = client.merge(&[doc1, doc2], MergeOptions::default())?;
     
     println!("Merged: {} bytes (MIME: {})", merged.byte_len(), merged.mime_type());
-    merged.save_to_path("final.pdf")?;
+    match merged {
+        DocumentResult::Memory { data, .. } => fs::write("final.pdf", data)?,
+        DocumentResult::File { path, .. } => {
+            fs::copy(path, "final.pdf")?;
+        }
+    }
 
     // 2. High-DPI page rendering
     let render = client.render_page(
@@ -196,28 +206,37 @@ fn main() -> Result<(), SdkError> {
 ### 3.2 Production REST Daemon Deployment
 ```rust
 use std::sync::Arc;
-use pdfcraft_rest::server::{RestServer, ServerConfig};
-use pdfcraft_rest::storage::FileJobRepository;
-use pdfcraft_sdk::local::LocalClient;
+use pdfcraft_rest::executor::{BlockingExecutor, ExecutorConfig};
+use pdfcraft_rest::routes::RestService;
+use pdfcraft_rest::server::{HttpServer, ServerConfig};
+use pdfcraft_rest::storage::DurableFileJobRepository;
+use pdfcraft_sdk::engine_adapter::AutomationEngineAdapter;
+use pdfcraft_sdk::local::OperationExecutor;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let engine = Arc::new(LocalClient::default());
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let engine: Arc<dyn OperationExecutor> = Arc::new(AutomationEngineAdapter::default());
+    let executor = Arc::new(BlockingExecutor::new(engine, ExecutorConfig::default()));
     
     // Durable disk journal with crash recovery
-    let repo = Arc::new(FileJobRepository::new("./data/job-journal")?);
+    let repo = Arc::new(DurableFileJobRepository::new("./data/job-journal")?);
+
+    let service = Arc::new(RestService::new(
+        executor,
+        repo,
+        Some("production-secret-token".into()),
+    ));
 
     let config = ServerConfig {
         bind_addr: "127.0.0.1:8080".parse()?,
-        bearer_token: Some("production-secret-token".into()),
-        max_concurrent_workers: 8,
-        storage_dir: "./data/job-storage".into(),
-        job_retention_secs: 86400, // Retain completed jobs for 24 hours
+        allow_public_bind: false,
     };
 
-    let server = RestServer::with_repository(config, engine, repo)?;
+    let server = HttpServer::start(service, config)?;
     println!("PdfCraft REST Daemon listening on http://127.0.0.1:8080");
-    server.run().await?;
+    
+    // Keep running until shutdown signal
+    std::thread::park();
+    server.stop();
     Ok(())
 }
 ```
@@ -239,25 +258,32 @@ pip install ./sdks/python
 ```python
 from pathlib import Path
 from pdfcraft.local import LocalClient
-from pdfcraft.types import DocumentSource, MergeOptions, RenderOptions
+from pdfcraft.types import DocumentResult, DocumentSource, MergeOptions, RenderOptions
 
-client = LocalClient(max_memory_bytes=64 * 1024 * 1024)
+client = LocalClient()
+
+def save_result(result: DocumentResult, destination: str) -> None:
+    if result.data is not None:
+        Path(destination).write_bytes(result.data)
+    elif result.path is not None:
+        Path(destination).write_bytes(result.path.read_bytes())
+    else:
+        raise RuntimeError("DocumentResult has no data or path")
 
 # 1. Merge documents
 merged = client.merge([
     DocumentSource.from_path("section1.pdf"),
     DocumentSource.from_path("section2.pdf"),
 ], options=MergeOptions(output_filename="complete.pdf"))
-merged.save_to_path("complete.pdf")
+save_result(merged, "complete.pdf")
 
 # 2. Split document
 split = client.split("complete.pdf", every_n_pages=2)
 print(f"Split generated {len(split.files)} files")
 
 # 3. High-DPI Page Rendering
-preview = client.render_page("complete.pdf", page_number=1, options=RenderOptions(dpi=300.0))
-with open("page1_300dpi.png", "wb") as f:
-    f.write(preview.png_bytes)
+preview = client.render_page("complete.pdf", page=1, options=RenderOptions(dpi=300.0))
+save_result(preview, "page1_300dpi.png")
 
 # 4. Universal Tool Bridge (Any of the 149 engine tools)
 tool_res = client.call_tool("form_fields", {"doc": 1})
@@ -299,25 +325,25 @@ npm install ./sdks/typescript
 
 ### 5.1 In-Process Execution (`PdfCraftLocalClient`)
 ```typescript
-import { PdfCraftLocalClient, DocumentSource } from "@pdfcraft/sdk";
+import { writeFile } from "node:fs/promises";
+import { PdfCraftLocalClient } from "@pdfcraft/sdk";
+import type { DocumentResult } from "@pdfcraft/sdk";
 
-const client = new PdfCraftLocalClient({ maxMemoryBytes: 64 * 1024 * 1024 });
+const client = new PdfCraftLocalClient();
+
+async function saveResult(result: DocumentResult, path: string) {
+  if (result.type !== "memory") throw new Error("Expected an in-memory result");
+  await writeFile(path, result.data);
+}
 
 async function run() {
   // 1. Merge files
-  const merged = await client.mergeDocuments([
-    DocumentSource.fromPath("chapter1.pdf"),
-    DocumentSource.fromPath("chapter2.pdf"),
-  ]);
-  await merged.saveToPath("book.pdf");
+  const merged = await client.merge(["chapter1.pdf", "chapter2.pdf"]);
+  await saveResult(merged, "book.pdf");
 
   // 2. High-DPI page preview
-  const preview = await client.renderPagePreview(
-    DocumentSource.fromPath("book.pdf"),
-    1,   // Page 1
-    1024 // Max side length (px)
-  );
-  await preview.saveToPath("preview.png");
+  const preview = await client.renderPage("book.pdf", 1, { dpi: 300 });
+  await saveResult(preview, "preview.png");
 }
 
 run().catch(console.error);
@@ -325,29 +351,33 @@ run().catch(console.error);
 
 ### 5.2 Remote REST Client (`PdfCraftRestClient`)
 ```typescript
-import { PdfCraftRestClient, DocumentSource, InvalidArgumentError } from "@pdfcraft/sdk";
+import { writeFile } from "node:fs/promises";
+import { PdfCraftRestClient, InvalidArgumentError } from "@pdfcraft/sdk";
+import type { DocumentResult } from "@pdfcraft/sdk";
 
 const client = new PdfCraftRestClient({
   baseUrl: "http://127.0.0.1:8080",
   authToken: "production-secret-token",
 });
 
+async function saveResult(result: DocumentResult, path: string) {
+  if (result.type !== "memory") throw new Error("Expected an in-memory result");
+  await writeFile(path, result.data);
+}
+
 async function run() {
   try {
     // 1. Synchronous execution
-    const merged = await client.mergeDocuments([
-      DocumentSource.fromPath("doc1.pdf"),
-      DocumentSource.fromPath("doc2.pdf"),
-    ]);
-    await merged.saveToPath("out.pdf");
+    const merged = await client.merge(["doc1.pdf", "doc2.pdf"]);
+    await saveResult(merged, "out.pdf");
 
-    // 2. Asynchronous background execution
-    const job = await client.submitMergeJob([
-      DocumentSource.fromPath("large1.pdf"),
-      DocumentSource.fromPath("large2.pdf"),
-    ]);
-    const result = await job.waitForCompletion(60000);
-    await result.saveToPath("async_out.pdf");
+    // 2. Asynchronous background execution (asyncJob = true)
+    const asyncResult = await client.merge(
+      ["large1.pdf", "large2.pdf"],
+      undefined,
+      true
+    );
+    await saveResult(asyncResult, "async_out.pdf");
   } catch (err) {
     if (err instanceof InvalidArgumentError) {
       console.error("Validation rejected:", err.message);

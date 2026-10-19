@@ -73,14 +73,16 @@ The matrix below documents the end-to-end alignment between the 149 MCP tools an
 
 | Functional Domain | MCP Tools | SDK Methods (`LocalClient` / Python / TS) | REST Endpoints (`pdfcraft-rest`) | Parity Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **Universal Bridge** | All 149 tools | `call_tool(name, args)` | `POST /v1/operations/{name}` | **100% Shipped** |
-| **Pipeline Core** | `doc_combine`, `doc_split`, `page_render` | `merge()`, `split()`, `render_page()` | `POST /v1/merged-pdf`<br>`POST /v1/split-pdf`<br>`POST /v1/page-preview` | **100% Shipped** |
-| **Document Layer** | `pages_rotate`, `pages_extract`, `pages_delete`, `pages_insert`, `bookmark_*` | `rotate_pages()`, `extract_pages()`, `delete_pages()`, `insert_pages()`, `add_bookmark()`, `list_bookmarks()` | `POST /v1/documents/rotate`<br>`POST /v1/documents/pages/extract`<br>`POST /v1/documents/pages/delete` | **100% Shipped** |
-| **Annotations & Notes** | `comment_list`, `comment_add`, `stamp_add`, `comments_summarize` | `add_highlight()`, `add_underline()`, `add_stamp()`, `add_comment()`, `list_comments()` | `POST /v1/annotations/create`<br>`POST /v1/annotations/list` | **100% Shipped** |
-| **Forms & Data XFDF** | `form_fields`, `form_fill`, `doc_flatten`, `doc_export_data`, `doc_import_data` | `get_form_fields()`, `fill_form()`, `flatten_form()`, `export_form_data()`, `import_form_data()` | `POST /v1/forms/inspect`<br>`POST /v1/forms/fill`<br>`POST /v1/forms/flatten`<br>`POST /v1/forms/export` | **100% Shipped** |
-| **Security & Redact** | `doc_encrypt`, `doc_decrypt`, `redact_apply`, `sign_document`, `sign_verify` | `encrypt()`, `decrypt()`, `redact()`, `sign()` | `POST /v1/security/encrypt`<br>`POST /v1/security/decrypt`<br>`POST /v1/security/redact`<br>`POST /v1/security/sign` | **100% Shipped** |
-| **Optimization** | `doc_optimize`, `doc_reduce` | `optimize()`, `reduce_size()` | `POST /v1/optimized-pdf`<br>`POST /v1/reduced-pdf` | **100% Shipped** |
-| **Text, Search & OCR** | `text_extract`, `text_find`, `ocr_recognize` | `extract_text()`, `find_text()`, `recognize_text()` | `POST /v1/text/extract`<br>`POST /v1/text/find`<br>`POST /v1/ocr/recognize` | **100% Shipped** |
+| **Pipeline Core** | `doc_combine`, `doc_split`, `page_render` | `merge()`, `split()`, `render_page()` | `POST /v1/merged-pdf`<br>`POST /v1/split-pdf`<br>`POST /v1/page-preview` | **100% Shipped** (Typed REST) |
+| **Batch Processing** | Batch workflow | `batch()` | `POST /v1/batch` | **100% Shipped** (Typed REST) |
+| **Universal Bridge** | All 149 tools | `call_tool(name, args)` | `POST /v1/operations/{name}` | **100% Shipped** (Dynamic Bridge) |
+| **Async Jobs** | Async status & results | `get_job()`, `cancel_job()` | `GET /v1/jobs/{id}`<br>`GET /v1/jobs/{id}/result`<br>`DELETE /v1/jobs/{id}` | **100% Shipped** (Typed REST) |
+| **Document Layer** | `pages_rotate`, `pages_extract`, `pages_delete`, `pages_insert`, `bookmark_*` | `rotate_pages()`, `extract_pages()`, `delete_pages()`, `insert_pages()`, `add_bookmark()`, `list_bookmarks()` | `POST /v1/operations/pages_rotate` etc. (Typed routes planned) | **SDK Shipped** (Universal REST) |
+| **Annotations & Notes** | `comment_list`, `comment_add`, `stamp_add`, `comments_summarize` | `add_highlight()`, `add_underline()`, `add_stamp()`, `add_comment()`, `list_comments()` | `POST /v1/operations/comment_add` etc. (Typed routes planned) | **SDK Shipped** (Universal REST) |
+| **Forms & Data XFDF** | `form_fields`, `form_fill`, `doc_flatten`, `doc_export_data`, `doc_import_data` | `get_form_fields()`, `fill_form()`, `flatten_form()`, `export_form_data()`, `import_form_data()` | `POST /v1/operations/form_fill` etc. (Typed routes planned) | **SDK Shipped** (Universal REST) |
+| **Security & Redact** | `doc_encrypt`, `doc_decrypt`, `redact_apply`, `sign_document`, `sign_verify` | `encrypt()`, `decrypt()`, `redact()`, `sign()` | `POST /v1/operations/doc_encrypt` etc. (Typed routes planned) | **SDK Shipped** (Universal REST) |
+| **Optimization** | `doc_optimize`, `doc_reduce` | `optimize()`, `reduce_size()` | `POST /v1/operations/doc_optimize` etc. (Typed routes planned) | **SDK Shipped** (Universal REST) |
+| **Text, Search & OCR** | `text_extract`, `text_find`, `ocr_recognize` | `extract_text()`, `find_text()`, `recognize_text()` | `POST /v1/operations/text_extract` etc. (Typed routes planned) | **SDK Shipped** (Universal REST) |
 
 ---
 

@@ -83,6 +83,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("automation", Class::Layer(7)),
     ("sdk", Class::Layer(7)),
     ("rest", Class::Layer(7)),
+    ("pyo3", Class::Layer(7)),
     // test support
     ("testkit", Class::Testkit),
     ("oracle", Class::Testkit),
@@ -109,6 +110,7 @@ pub const SIDEWAYS: &[(&str, &str)] = &[
     ("automation", "platform"),
     ("sdk", "automation"),
     ("rest", "sdk"),
+    ("pyo3", "sdk"),
     ("rest", "automation"),
 ];
 

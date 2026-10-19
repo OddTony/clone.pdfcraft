@@ -157,6 +157,9 @@ fn charge_bookmark_nodes(rows: &[Value], remaining: &mut usize) -> Result<(), Sd
     let mut stack = vec![rows.iter()];
     while let Some(iter) = stack.last_mut() {
         if let Some(row) = iter.next() {
+            if stack.len() > MAX_PARSE_DEPTH as usize + 1 {
+                return Err(SdkError::QuotaExceeded("Bookmark depth exceeds 64".into()));
+            }
             *remaining = remaining.checked_sub(1).ok_or_else(|| SdkError::QuotaExceeded("Bookmark listing exceeds 5,000 total nodes".into()))?;
             if let Some(children) = row.get("children").and_then(Value::as_array) {
                 stack.push(children.iter());
@@ -166,6 +169,36 @@ fn charge_bookmark_nodes(rows: &[Value], remaining: &mut usize) -> Result<(), Sd
         }
     }
     Ok(())
+}
+
+/// Counts serialized output without allocating another copy; all additions fail closed.
+struct OutputBudget {
+    remaining: u64,
+}
+impl OutputBudget {
+    fn charge(&mut self, bytes: u64) -> Result<(), SdkError> {
+        self.remaining =
+            self.remaining.checked_sub(bytes).ok_or_else(|| SdkError::QuotaExceeded("Aggregate output exceeds configured byte budget".into()))?;
+        Ok(())
+    }
+    fn json(&mut self, value: &impl serde::Serialize) -> Result<(), SdkError> {
+        serde_json::to_writer(self, value).map_err(|_| SdkError::QuotaExceeded("Serialized output exceeds configured byte budget".into()))
+    }
+    fn files(&mut self, files: &[PathBuf]) -> Result<(), SdkError> {
+        for path in files {
+            self.charge(fs::metadata(path)?.len())?;
+        }
+        Ok(())
+    }
+}
+impl std::io::Write for OutputBudget {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.charge(bytes.len() as u64).map_err(std::io::Error::other)?;
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 /// Accepts only a complete list of existing regular files owned by this sandbox.
@@ -305,23 +338,51 @@ impl ExecutionSandbox {
 
     /// Checks if a proposed output path matches any registered input path to prevent namespace collisions.
     pub fn is_input_path(&self, name_or_path: &str) -> bool {
-        let p = if Path::new(name_or_path).is_absolute() { PathBuf::from(name_or_path) } else { self.root.join(name_or_path) };
-        self.inputs.try_borrow().map(|inps| inps.contains(&p)).unwrap_or(false)
+        let path = self.root.join(name_or_path);
+        let resolved = match fs::canonicalize(&path) {
+            Ok(path) => path,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                match path.parent().and_then(|parent| fs::canonicalize(parent).ok()).zip(path.file_name()) {
+                    Some((parent, name)) => parent.join(name),
+                    None => return true,
+                }
+            }
+            Err(_) => return true,
+        };
+        let Ok(inputs) = self.inputs.try_borrow() else {
+            return true;
+        };
+        inputs.iter().any(|input| match fs::canonicalize(input) {
+            Ok(input) => input == resolved,
+            Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+        })
     }
 
     /// Returns true if the sandbox contains any output files (excluding registered inputs).
     pub fn has_output_files(&self) -> bool {
-        let known_inputs: std::collections::HashSet<PathBuf> =
-            self.inputs.try_borrow().map(|inps| inps.iter().cloned().collect()).unwrap_or_default();
-        if let Ok(entries) = fs::read_dir(&self.root) {
-            for entry in entries.flatten() {
+        self.output_files().map(|files| !files.is_empty()).unwrap_or(false)
+    }
+
+    /// Enumerates regular output files recursively, rejecting symlinks and special files.
+    fn output_files(&self) -> Result<Vec<PathBuf>, SdkError> {
+        let mut dirs = vec![fs::canonicalize(&self.root)?];
+        let mut files = Vec::new();
+        while let Some(dir) = dirs.pop() {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let kind = entry.file_type()?;
+                if kind.is_symlink() || (!kind.is_dir() && !kind.is_file()) {
+                    return Err(SdkError::EngineError("Invalid sandbox output file type".into()));
+                }
                 let path = entry.path();
-                if !known_inputs.contains(&path) {
-                    return true;
+                if kind.is_dir() {
+                    dirs.push(path);
+                } else if !self.is_input_path(&path.to_string_lossy()) {
+                    files.push(path);
                 }
             }
         }
-        false
+        Ok(files)
     }
 
     /// Copies an input through a stream bounded by the remaining aggregate budget.
@@ -686,12 +747,16 @@ impl OperationExecutor for AutomationEngineAdapter {
                 ToolError::Failed(m) => SdkError::EngineError(m),
             })?;
 
-            // Only persist sandbox if the tool actually generated output files; otherwise drop it.
-            if sandbox.has_output_files() {
+            let result: Vec<crate::ports::ToolContent> = result.into_iter().map(Into::into).collect();
+            let files = sandbox.output_files()?;
+            let mut budget = OutputBudget { remaining: self.max_request_bytes };
+            budget.json(&result)?;
+            budget.files(&files)?;
+            if !files.is_empty() {
                 sandbox.purge_inputs()?;
                 sandbox.persist();
             }
-            Ok(result.into_iter().map(crate::ports::ToolContent::from).collect())
+            Ok(result)
         })
     }
 
@@ -793,6 +858,9 @@ impl OperationExecutor for AutomationEngineAdapter {
                     .map_err(|e| SdkError::EngineError(format!("List bookmarks failed: {e}")))?;
                 let obj =
                     res.first().and_then(json_of).ok_or_else(|| SdkError::EngineError("Invalid bookmark_list response: empty payload".into()))?;
+                if obj.get("truncated").and_then(Value::as_bool) == Some(true) {
+                    return Err(SdkError::QuotaExceeded("Engine bookmark traversal exceeded its limits".into()));
+                }
                 let rows = obj
                     .get("bookmarks")
                     .and_then(Value::as_array)
@@ -1068,7 +1136,7 @@ impl OperationExecutor for AutomationEngineAdapter {
             let doc_id = open_doc(automation, &file_name)?;
             let args = json!({
                 "doc": doc_id,
-                "out": export_filename,
+                "path": export_filename,
                 "what": "fields",
             });
             automation.call("doc_export_data", &args).map_err(|e| SdkError::EngineError(format!("doc_export_data failed: {e}")))?;
@@ -1208,12 +1276,13 @@ impl OperationExecutor for AutomationEngineAdapter {
 
         self.with_automation(&sandbox, |automation| {
             let doc_id = open_doc(automation, &file_name)?;
-            let args = json!({
+            let mark_args = json!({
                 "doc": doc_id,
                 "page": page,
-                "rect": [rect.x, rect.y, rect.width, rect.height],
+                "rect": rect.to_array(),
             });
-            automation.call("redact_apply", &args).map_err(|e| SdkError::EngineError(format!("redact_apply failed: {e}")))?;
+            automation.call("redact_mark", &mark_args).map_err(|e| SdkError::EngineError(format!("redact_mark failed: {e}")))?;
+            automation.call("redact_apply", &json!({ "doc": doc_id, "pages": [page] })).map_err(|e| SdkError::EngineError(format!("redact_apply failed: {e}")))?;
             self.save_and_read(automation, &sandbox, doc_id, &out_name)
         })
     }
@@ -1342,21 +1411,17 @@ impl OperationExecutor for AutomationEngineAdapter {
                 }
             }
 
-            let mut output_files = Vec::new();
-            if !failure && sandbox.has_output_files() {
-                sandbox.purge_inputs()?;
-                if let Ok(entries) = fs::read_dir(sandbox.root()) {
-                    for entry in entries.flatten() {
-                        output_files.push(entry.path());
-                    }
-                }
-                if !output_files.is_empty() {
-                    sandbox.persist();
-                }
-            }
-
+            let output_files = if failure { Vec::new() } else { sandbox.output_files()? };
+            let mut budget = OutputBudget { remaining: self.max_request_bytes };
+            budget.files(&output_files)?;
             let outputs = if output_files.is_empty() { None } else { Some(output_files) };
-            Ok(crate::ports::BatchReport { ok: !failure, steps: report, output_files: outputs })
+            let report = crate::ports::BatchReport { ok: !failure, steps: report, output_files: outputs };
+            budget.json(&report)?;
+            if report.output_files.is_some() {
+                sandbox.purge_inputs()?;
+                sandbox.persist();
+            }
+            Ok(report)
         })
     }
 }
@@ -1373,6 +1438,57 @@ impl From<pdfcraft_automation::Content> for crate::ports::ToolContent {
 #[cfg(test)]
 mod revision12_tests {
     use super::*;
+
+    #[test]
+    fn architecture_bookmark_depth_is_fail_closed() {
+        let mut row = json!({"title": "leaf"});
+        for _ in 0..MAX_PARSE_DEPTH {
+            row = json!({"children": [row]});
+        }
+        charge_bookmark_nodes(&[row.clone()], &mut 5_000).unwrap();
+        row = json!({"children": [row]});
+        assert!(matches!(charge_bookmark_nodes(&[row], &mut 5_000), Err(SdkError::QuotaExceeded(_))));
+    }
+
+    #[test]
+    fn architecture_canonical_input_alias_is_rejected() {
+        let sandbox = ExecutionSandbox::new(1024).unwrap();
+        sandbox.materialize_auxiliary("input.pdf", b"pdf").unwrap();
+        fs::create_dir(sandbox.root().join("sub")).unwrap();
+        let alias = "sub/../input.pdf";
+        assert!(validate_split_files(Some(&json!({"files": [alias]})), &sandbox).is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(sandbox.root().join("input.pdf"), sandbox.root().join("alias.pdf")).unwrap();
+            assert!(validate_split_files(Some(&json!({"files": ["alias.pdf"]})), &sandbox).is_err());
+        }
+    }
+
+    #[test]
+    fn architecture_generic_and_batch_output_limits() {
+        let adapter = AutomationEngineAdapter::with_limits(1024, 1);
+        assert!(matches!(adapter.execute_call_tool("doc_list", &json!({})), Err(SdkError::QuotaExceeded(_))));
+        let steps = [crate::ports::BatchStep { tool: "unknown".into(), args: json!({}) }];
+        assert!(matches!(adapter.execute_batch(&steps), Err(SdkError::QuotaExceeded(_))));
+    }
+
+    #[test]
+    fn architecture_aggregate_output_boundary() {
+        let adapter = AutomationEngineAdapter::default();
+        let steps = vec![crate::ports::BatchStep { tool: "doc_list".into(), args: json!({}) }; 2];
+        let report = adapter.execute_batch(&steps).unwrap();
+        let size = serde_json::to_vec(&report).unwrap().len() as u64;
+        assert!(AutomationEngineAdapter::with_limits(1024, size).execute_batch(&steps).is_ok());
+        assert!(matches!(AutomationEngineAdapter::with_limits(1024, size - 1).execute_batch(&steps), Err(SdkError::QuotaExceeded(_))));
+        let sandbox = ExecutionSandbox::new(1024).unwrap();
+        fs::create_dir(sandbox.root().join("nested")).unwrap();
+        fs::write(sandbox.root().join("nested/out.bin"), [0; 10]).unwrap();
+        let files = sandbox.output_files().unwrap();
+        let mut budget = OutputBudget { remaining: 12 };
+        budget.json(&json!([])).unwrap();
+        budget.files(&files).unwrap();
+        assert!(matches!(budget.charge(1), Err(SdkError::QuotaExceeded(_))));
+    }
 
     #[test]
     fn bookmark_budget_counts_children_across_pages() {

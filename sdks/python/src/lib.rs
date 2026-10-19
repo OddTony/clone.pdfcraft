@@ -16,10 +16,11 @@ use pdfcraft_sdk::{
 
 fn map_sdk_err(err: SdkError) -> PyErr {
     match err {
-        SdkError::InvalidArgument(msg) => PyValueError::new_err(msg),
-        SdkError::FileNotFound { path } => PyIOError::new_err(format!("File not found: {path}")),
-        SdkError::Io(e) => PyIOError::new_err(e.to_string()),
-        other => PyValueError::new_err(other.to_string()),
+        SdkError::InvalidArgument(msg) => PyValueError::new_err(("INVALID_ARGUMENT", msg)),
+        SdkError::QuotaExceeded(msg) => PyValueError::new_err(("QUOTA_EXCEEDED", msg)),
+        SdkError::FileNotFound { path } => PyIOError::new_err(("NOT_FOUND", format!("File not found: {path}"))),
+        SdkError::Io(e) => PyIOError::new_err(("IO_ERROR", e.to_string())),
+        other => PyValueError::new_err(("ENGINE_ERROR", other.to_string())),
     }
 }
 

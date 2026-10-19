@@ -45,10 +45,7 @@ pub struct ServerConfig {
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        Self {
-            bind_addr: "127.0.0.1:0".parse().unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], 0))),
-            allow_public_bind: false,
-        }
+        Self { bind_addr: "127.0.0.1:0".parse().unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], 0))), allow_public_bind: false }
     }
 }
 
@@ -89,9 +86,11 @@ impl HttpServer {
             while is_running.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
+                        let _ = stream.set_nonblocking(false);
                         if active_conns.load(Ordering::Relaxed) >= MAX_CONCURRENT_CONNECTIONS {
                             let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
-                            let _ = stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                            let _ = stream
+                                .write_all(b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
                             continue;
                         }
                         active_conns.fetch_add(1, Ordering::Relaxed);
@@ -152,6 +151,11 @@ fn write_error(writer: &mut TcpStream, response: &[u8]) {
 }
 
 fn handle_connection(stream: TcpStream, service: &RestService) {
+    // BSD accepted sockets can inherit the listener's nonblocking mode. Workers
+    // use blocking I/O with deadlines, so an idle peer must not become WouldBlock.
+    if stream.set_nonblocking(false).is_err() {
+        return;
+    }
     let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
     let Ok(stream_clone) = stream.try_clone() else { return };
@@ -227,12 +231,7 @@ fn handle_connection(stream: TcpStream, service: &RestService) {
             let valid_field_name = !k.is_empty()
                 && k.bytes().all(|b| {
                     b.is_ascii_alphanumeric()
-                        || matches!(
-                            b,
-                            b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*'
-                                | b'+' | b'-' | b'.' | b'^' | b'_' | b'`'
-                                | b'|' | b'~'
-                        )
+                        || matches!(b, b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~')
                 });
             if !valid_field_name {
                 write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");

@@ -120,6 +120,19 @@ class TestPdfCraftPythonSdk(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.local.split(MINIMAL_VALID_PDF, at_bookmarks=True, max_file_size_mb=5.0)
 
+    def test_local_error_mapping_to_pdfcraft_error_hierarchy(self):
+        # Local client errors must be catchable as PdfCraftError and have error_code
+        with self.assertRaises(PdfCraftError) as ctx:
+            self.local.split(MINIMAL_VALID_PDF, at_bookmarks=True)
+        self.assertEqual(ctx.exception.error_code, "ENGINE_ERROR")
+        self.assertIsInstance(ctx.exception, ValueError)
+
+        with self.assertRaises(InvalidArgumentError) as ctx2:
+            self.local.merge([])
+        self.assertEqual(ctx2.exception.error_code, "INVALID_ARGUMENT")
+        self.assertIsInstance(ctx2.exception, PdfCraftError)
+        self.assertIsInstance(ctx2.exception, ValueError)
+
 
 if __name__ == "__main__":
     unittest.main()
