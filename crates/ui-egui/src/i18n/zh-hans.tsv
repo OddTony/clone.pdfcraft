@@ -2409,3 +2409,4 @@ animation effects	Off	关
 	Choose a logo	选择徽标
 	Reset	重置
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	此文件不能用作徽标：其路径不是有效的 UTF-8，因此无法随设置一起保存。
+	This file can't be used as the logo: it's larger than {max} MB.	此文件不能用作徽标：它大于 {max} MB。

@@ -2695,3 +2695,4 @@ theme	Appearance	Išvaizda
 	Choose a logo	Pasirinkite logotipą
 	Reset	Atstatyti
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Šio failo negalima naudoti kaip logotipo: jo kelias nėra tinkamas UTF-8, todėl jo nepavyktų išsaugoti su nustatymais.
+	This file can't be used as the logo: it's larger than {max} MB.	Šio failo negalima naudoti kaip logotipo: jis didesnis nei {max} MB.

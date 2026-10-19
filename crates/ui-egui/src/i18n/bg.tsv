@@ -2408,3 +2408,4 @@ animation effects	Off	Изключени
 	Choose a logo	Изберете лого
 	Reset	Нулиране
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Този файл не може да се използва като лого: пътят му не е валиден UTF-8, затова не би могъл да се запази с настройките.
+	This file can't be used as the logo: it's larger than {max} MB.	Този файл не може да се използва като лого: по-голям е от {max} MB.

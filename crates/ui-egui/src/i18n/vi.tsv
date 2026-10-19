@@ -2697,3 +2697,4 @@ key	Space	Space
 	Choose a logo	Chọn một logo
 	Reset	Đặt lại
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Không thể dùng tệp này làm logo: đường dẫn của nó không phải UTF-8 hợp lệ, nên không thể lưu cùng với cài đặt.
+	This file can't be used as the logo: it's larger than {max} MB.	Không thể dùng tệp này làm logo: tệp lớn hơn {max} MB.

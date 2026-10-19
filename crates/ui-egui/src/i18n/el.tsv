@@ -2451,3 +2451,4 @@ animation effects	Off	Ανενεργά
 	Choose a logo	Επιλογή λογότυπου
 	Reset	Επαναφορά
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Αυτό το αρχείο δεν μπορεί να χρησιμοποιηθεί ως λογότυπο: η διαδρομή του δεν είναι έγκυρο UTF-8, οπότε δεν θα μπορούσε να αποθηκευτεί με τις ρυθμίσεις.
+	This file can't be used as the logo: it's larger than {max} MB.	Αυτό το αρχείο δεν μπορεί να χρησιμοποιηθεί ως λογότυπο: είναι μεγαλύτερο από {max} MB.

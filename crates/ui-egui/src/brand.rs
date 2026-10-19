@@ -74,6 +74,11 @@ const APP_LOGO_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/128
 /// settings file is untrusted input, and a huge PNG would take a texture to match.
 const MAX_LOGO_PIXELS: u32 = 2048;
 
+/// A logo file larger than this is refused before it is read: room for a PNG of
+/// [`MAX_LOGO_PIXELS`] on a side or any sensible SVG, and a bound on what a wrong path (a video, a
+/// disk image) or a saved path pointing at one costs the interface.
+const MAX_LOGO_BYTES: u64 = 8 * 1024 * 1024;
+
 /// A decoded logo, ready to draw.
 enum Loaded {
     /// A texture egui owns while the handle lives.
@@ -111,11 +116,20 @@ impl Brand {
     /// Takes a logo file of the user's own (`None`: back to the app's own), and forgets the one
     /// loaded so the next frame reads the new file. A path that is not valid UTF-8 is refused: the
     /// settings file is JSON, which cannot carry it, so it could never come back after a restart.
+    /// So is a file over [`MAX_LOGO_BYTES`], which the load would refuse every frame anyway.
     pub fn set_logo(&mut self, path: Option<PathBuf>) -> Result<(), String> {
-        if let Some(p) = &path
-            && p.to_str().is_none()
-        {
-            return Err(tl!("This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.").to_owned());
+        if let Some(p) = &path {
+            if p.to_str().is_none() {
+                return Err(
+                    tl!("This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.").to_owned()
+                );
+            }
+            if file_too_large(p) {
+                return Err(crate::i18n::fmt(
+                    tl!("This file can't be used as the logo: it's larger than {max} MB."),
+                    &[("max", &(MAX_LOGO_BYTES / (1024 * 1024)).to_string())],
+                ));
+            }
         }
         self.logo = path;
         self.reload_logo();
@@ -214,15 +228,37 @@ fn fit(image: Vec2, height: f32) -> Vec2 {
     Vec2::new(width, height)
 }
 
+/// Reads a logo file of up to [`MAX_LOGO_BYTES`]. The read itself is bounded, not only its
+/// metadata, which a special file may lack and a file may outgrow after it was chosen.
 #[cfg(not(target_arch = "wasm32"))]
 fn load_file(path: &Path) -> Result<Vec<u8>, String> {
-    std::fs::read(path).map_err(|e| e.to_string())
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    // One byte past the cap tells a file that is too large from one that just fits.
+    file.take(MAX_LOGO_BYTES.saturating_add(1)).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > MAX_LOGO_BYTES {
+        return Err(format!("larger than {} MB", MAX_LOGO_BYTES / (1024 * 1024)));
+    }
+    Ok(bytes)
+}
+
+/// Whether a logo file is known to be over [`MAX_LOGO_BYTES`] from its metadata alone; a file
+/// that cannot be measured is not, and is judged when it is read.
+#[cfg(not(target_arch = "wasm32"))]
+fn file_too_large(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| m.len() > MAX_LOGO_BYTES)
 }
 
 /// The web build has no files on disk; a saved path means the app's own logo there.
 #[cfg(target_arch = "wasm32")]
 fn load_file(_path: &Path) -> Result<Vec<u8>, String> {
     Err("no files on the web".into())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn file_too_large(_path: &Path) -> bool {
+    false
 }
 
 /// PNG through the `png` crate, SVG through egui's loader (which rasterises it on demand);
@@ -379,6 +415,29 @@ mod tests {
     fn the_apps_own_logo_decodes() {
         let image = decode_png(super::APP_LOGO_PNG).expect("the embedded icon decodes");
         assert_eq!(image.size, [128, 128]);
+    }
+
+    /// A logo file over [`super::MAX_LOGO_BYTES`] is refused when chosen and, should a saved path
+    /// point at one, when read: the read stops one byte past the cap rather than taking the file.
+    #[test]
+    fn an_oversized_logo_file_is_refused_before_it_is_read() {
+        let dir = std::env::temp_dir().join(format!("pdfcraft-brand-logo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let big = dir.join("big.png");
+        // Sparse: a length, not 8 MB written.
+        std::fs::File::create(&big).expect("create").set_len(super::MAX_LOGO_BYTES + 1).expect("set_len");
+        let mut brand = Brand::default();
+        let refused = brand.set_logo(Some(big.clone())).expect_err("refused at the door");
+        assert!(refused.contains("8 MB"), "{refused}");
+        assert_eq!(brand.logo, None);
+        assert_eq!(super::load_file(&big).expect_err("refused when read"), "larger than 8 MB");
+        // A file that just fits is read whole.
+        let fits = dir.join("fits.png");
+        std::fs::write(&fits, png(2, 2, png::ColorType::Rgba)).expect("write");
+        assert!(brand.set_logo(Some(fits.clone())).is_ok());
+        assert_eq!(super::load_file(&fits).expect("read"), png(2, 2, png::ColorType::Rgba));
+        assert!(super::load_file(&dir.join("missing.png")).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

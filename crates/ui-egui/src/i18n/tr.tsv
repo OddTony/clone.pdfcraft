@@ -2441,3 +2441,4 @@ animation effects	Off	Kapalı
 	Choose a logo	Bir logo seçin
 	Reset	Sıfırla
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Bu dosya logo olarak kullanılamaz: yolu geçerli UTF-8 değil, bu yüzden ayarlarla birlikte kaydedilemez.
+	This file can't be used as the logo: it's larger than {max} MB.	Bu dosya logo olarak kullanılamaz: boyutu {max} MB'tan büyük.

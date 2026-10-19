@@ -2354,3 +2354,4 @@ animation effects	Off	ఆఫ్
 	Choose a logo	లోగోను ఎంచుకోండి
 	Reset	రీసెట్ చేయి
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	ఈ ఫైల్‌ను లోగోగా ఉపయోగించలేము: దాని మార్గం చెల్లుబాటు అయ్యే UTF-8 కాదు, కాబట్టి దాన్ని సెట్టింగ్‌లతో సేవ్ చేయలేము.
+	This file can't be used as the logo: it's larger than {max} MB.	ఈ ఫైల్‌ను లోగోగా ఉపయోగించలేము: ఇది {max} MB కంటే పెద్దది.

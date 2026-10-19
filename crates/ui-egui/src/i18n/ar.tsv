@@ -2721,3 +2721,4 @@ certificate	Version	الإصدار
 	Choose a logo	اختر شعارًا
 	Reset	إعادة ضبط
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	لا يمكن استخدام هذا الملف كشعار: مساره ليس بترميز UTF-8 صالح، لذا تعذّر حفظه مع الإعدادات.
+	This file can't be used as the logo: it's larger than {max} MB.	لا يمكن استخدام هذا الملف كشعار: حجمه أكبر من {max} ميغابايت.

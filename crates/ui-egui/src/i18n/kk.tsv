@@ -2443,3 +2443,4 @@ animation effects	Off	Өшірулі
 	Choose a logo	Логотипті таңдаңыз
 	Reset	Бастапқы күйге келтіру
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Бұл файлды логотип ретінде пайдалану мүмкін емес: оның жолы жарамды UTF-8 емес, сондықтан параметрлермен бірге сақталмайды.
+	This file can't be used as the logo: it's larger than {max} MB.	Бұл файлды логотип ретінде пайдалану мүмкін емес: көлемі {max} МБ-тан асады.

@@ -2446,3 +2446,4 @@ animation effects	Off	Aus
 	Choose a logo	Logo auswählen
 	Reset	Zurücksetzen
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Diese Datei kann nicht als Logo verwendet werden: Ihr Pfad ist kein gültiges UTF-8 und ließe sich daher nicht mit den Einstellungen speichern.
+	This file can't be used as the logo: it's larger than {max} MB.	Diese Datei kann nicht als Logo verwendet werden: Sie ist größer als {max} MB.

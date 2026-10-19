@@ -2519,3 +2519,4 @@ animation effects	Off	Vypnuto
 	Choose a logo	Vyberte logo
 	Reset	Resetovat
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Tento soubor nelze použít jako logo: jeho cesta není platné UTF-8, takže by se nedala uložit s nastavením.
+	This file can't be used as the logo: it's larger than {max} MB.	Tento soubor nelze použít jako logo: je větší než {max} MB.

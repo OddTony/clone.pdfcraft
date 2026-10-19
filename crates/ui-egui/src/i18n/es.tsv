@@ -2585,3 +2585,4 @@ animation effects	Off	Desactivados
 	Choose a logo	Elige un logotipo
 	Reset	Restablecer
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Este archivo no puede usarse como logotipo: su ruta no es UTF-8 válido, así que no podría guardarse con los ajustes.
+	This file can't be used as the logo: it's larger than {max} MB.	Este archivo no puede usarse como logotipo: ocupa más de {max} MB.

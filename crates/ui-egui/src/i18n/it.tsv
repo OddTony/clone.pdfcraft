@@ -2657,3 +2657,4 @@ certificate	SHA-256 digest	Impronta SHA-256
 	Choose a logo	Scegli un logo
 	Reset	Reimposta
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Questo file non può essere usato come logo: il suo percorso non è UTF-8 valido, quindi non potrebbe essere salvato con le impostazioni.
+	This file can't be used as the logo: it's larger than {max} MB.	Questo file non può essere usato come logo: supera i {max} MB.

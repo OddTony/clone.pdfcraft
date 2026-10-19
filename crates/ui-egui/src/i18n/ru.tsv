@@ -2358,3 +2358,4 @@ animation effects	Off	Выкл
 	Choose a logo	Выберите логотип
 	Reset	Сбросить
 	This file can't be used as the logo: its path isn't valid UTF-8, so it couldn't be saved with the settings.	Этот файл нельзя использовать как логотип: его путь не является корректным UTF-8, поэтому его не удастся сохранить вместе с настройками.
+	This file can't be used as the logo: it's larger than {max} MB.	Этот файл нельзя использовать как логотип: его размер больше {max} МБ.
