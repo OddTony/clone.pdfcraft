@@ -2687,3 +2687,7 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+	Repeat on pages…	Lặp lại trên các trang…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Nhập số trang hoặc phạm vi, ví dụ 1, 3-5. Để trống để chọn tất cả các trang.
+	Review the marks before applying redactions.	Kiểm tra các dấu trước khi áp dụng che nội dung.
+	Invalid page range	Phạm vi trang không hợp lệ

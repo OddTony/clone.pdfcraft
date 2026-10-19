@@ -2397,3 +2397,7 @@ animation effects	Off	Изключени
 	Make properties default	Задаване като свойства по подразбиране
 	Pages selected	Избрани страници
 	Page properties	Свойства на страницата
+	Repeat on pages…	Повтаряне на страниците…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Въведете номера или диапазони, например 1, 3-5. Оставете празно за всички страници.
+	Review the marks before applying redactions.	Прегледайте маркировките преди заличаване.
+	Invalid page range	Невалиден диапазон от страници

@@ -2384,3 +2384,7 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+	Repeat on pages…	在頁面上重複…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	輸入頁碼或範圍，例如 1, 3-5。留空表示所有頁面。
+	Review the marks before applying redactions.	套用密文處理前請檢查標記。
+	Invalid page range	頁碼範圍無效

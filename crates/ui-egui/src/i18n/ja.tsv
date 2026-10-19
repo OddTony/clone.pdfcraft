@@ -2434,3 +2434,7 @@ animation effects	Off	オフ
 	Make properties default	プロパティをデフォルトに設定
 	Pages selected	選択したページ
 	Page properties	ページのプロパティ
+	Repeat on pages…	ページに繰り返す…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	ページ番号または範囲を入力します（例：1, 3-5）。すべてのページには空欄にします。
+	Review the marks before applying redactions.	墨消しを適用する前にマークを確認してください。
+	Invalid page range	ページ範囲が無効です

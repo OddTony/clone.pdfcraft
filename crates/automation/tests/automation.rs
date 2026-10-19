@@ -6730,6 +6730,10 @@ fn redaction_rectangle_can_mark_selected_pages() {
             assert!((value.as_f64().unwrap() - expected).abs() < 0.01, "{mark}");
         }
     }
+    ok(&mut a, "comment_delete", json!({ "doc": doc, "page": 3, "index": 0 }));
+    assert_eq!(ok(&mut a, "comment_list", json!({ "doc": doc }))["comments"].as_array().unwrap().len(), 1);
+    ok(&mut a, "edit_undo", json!({ "doc": doc }));
+    assert_eq!(ok(&mut a, "comment_list", json!({ "doc": doc }))["comments"].as_array().unwrap().len(), 2);
     ok(&mut a, "edit_undo", json!({ "doc": doc }));
     assert!(matches!(a.call("redact_apply", &json!({ "doc": doc })), Err(ToolError::Failed(_))));
     ok(&mut a, "edit_redo", json!({ "doc": doc }));

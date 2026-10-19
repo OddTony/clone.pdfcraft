@@ -2433,3 +2433,7 @@ animation effects	Off	Ki
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
 	Pages selected	Kijelölt oldalak
 	Page properties	Oldaltulajdonságok
+	Repeat on pages…	Ismétlés az oldalakon…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Adjon meg oldalszámokat vagy tartományokat, például 1, 3-5. Az összes oldalhoz hagyja üresen.
+	Review the marks before applying redactions.	A kitakarás alkalmazása előtt ellenőrizze a jelöléseket.
+	Invalid page range	Érvénytelen oldaltartomány
