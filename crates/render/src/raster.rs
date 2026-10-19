@@ -3577,6 +3577,24 @@ trailer << /Root 1 0 R >>
         // The tip narrows to a point, so this pixel is partly covered: blue, not white.
         let tip = at(&mitered, 3200, 3104, 10);
         assert!(tip[0] < 160 && tip[1] < 160 && tip[2] > 200, "the next cell, under the miter's tip: {tip:?}");
+        // Under a skew, a direction between the axes stretches more than either axis (review on
+        // #3356). This join's vertex is at device x 2980 and its miter tip, along that direction,
+        // at 3107: the larger axis stretch (1.118) put the reach at 3092, short of the next cell;
+        // the most any direction stretches (1.461) puts it at 3126.
+        let skewed = tiling_page(
+            3200,
+            20,
+            "/Pattern CS /P1 SCN 1 0 1 0.5 0 0 cm 20 w 0 j 2783.936 -366.118 m 3033.6 -53.6 l 2721.082 -303.264 l S",
+            "3100",
+            "1 0 0 1 0 0",
+        );
+        // The tip narrows to a point, so its pixels are partly covered.
+        let under_tip = (3100..3108).flat_map(|x| (10..20).map(move |y| (x, y))).map(|(x, y)| at(&skewed, 3200, x, y));
+        assert!(
+            under_tip.clone().any(|px| px[0] < 200 && px[1] < 200 && px[2] > 240),
+            "the next cell, under the skewed miter's tip: {:?}",
+            under_tip.collect::<Vec<_>>()
+        );
     }
 
     /// Contributor-original JPEG 2000: one unsigned 8-bit pixel per component, one tile,

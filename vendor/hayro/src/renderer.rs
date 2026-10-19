@@ -1141,10 +1141,10 @@ impl Renderer {
                         // drawn at full scale with a transparent border and padded, not tiled.
                         // Shrinking the cell to fit the step left a picture under one pixel.
                         // How far a stroke's paint reaches past the path, miters included, in
-                        // device pixels.
+                        // device pixels: the most the transform stretches any direction (a skew
+                        // stretches some further than either axis), times the reach.
                         let reach = if is_stroke {
-                            let (a1, a2) = x_y_advances(path_transform);
-                            a1.length().max(a2.length()) * stroke_reach(self.ctx.stroke())
+                            path_transform.spectral_norm() * stroke_reach(self.ctx.stroke())
                         } else {
                             0.0
                         };
