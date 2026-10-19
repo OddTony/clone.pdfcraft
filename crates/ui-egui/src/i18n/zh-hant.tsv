@@ -2384,3 +2384,7 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+
+# Optional Hungarian OCR installation notices.
+	Checking Hungarian OCR installation…	正在檢查匈牙利語 OCR 的安裝…
+	Hungarian OCR requires the desktop app with Tesseract 5 and the hun language model. Restart PdfCraft after installation.	匈牙利語 OCR 需要桌面應用程式、Tesseract 5 和 hun 語言模型。安裝後請重新啟動 PdfCraft。

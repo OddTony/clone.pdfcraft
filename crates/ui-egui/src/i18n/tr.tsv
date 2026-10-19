@@ -2430,3 +2430,7 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+
+# Optional Hungarian OCR installation notices.
+	Checking Hungarian OCR installation…	Macarca OCR kurulumu denetleniyor…
+	Hungarian OCR requires the desktop app with Tesseract 5 and the hun language model. Restart PdfCraft after installation.	Macarca OCR için Tesseract 5 ve hun dil modeli içeren masaüstü uygulaması gerekir. Kurulumdan sonra PdfCraft uygulamasını yeniden başlatın.

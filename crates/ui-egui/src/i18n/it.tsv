@@ -2646,3 +2646,7 @@ certificate	Key usage	Utilizzo chiave
 certificate	Self-signed	Autofirmato
 certificate	SHA-1 digest	Impronta SHA-1
 certificate	SHA-256 digest	Impronta SHA-256
+
+# Optional Hungarian OCR installation notices.
+	Checking Hungarian OCR installation…	Verifica dell’installazione dell’OCR ungherese…
+	Hungarian OCR requires the desktop app with Tesseract 5 and the hun language model. Restart PdfCraft after installation.	L’OCR ungherese richiede l’app desktop con Tesseract 5 e il modello linguistico hun. Riavvia PdfCraft dopo l’installazione.
