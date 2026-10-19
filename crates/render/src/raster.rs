@@ -3395,9 +3395,15 @@ trailer << /Root 1 0 R >>
     /// A shaded Type 3 glyph must use bounds in device coordinates at every position.
     #[test]
     fn shaded_type3_glyph_draws_at_multiple_positions() {
-        let content = "BT /F 30 Tf 1 0 0 1 50 70 Tm (A) Tj 1 0 0 1 220 70 Tm (A) Tj ET";
         let glyph = "100 0 d0 0 0 100 100 re W n /S sh";
-        let pdf = format!(
+        for bbox in ["/FontBBox [0 0 100 100]", "/FontBBox [0 0 0 0]", ""] {
+            for clipped in [false, true] {
+                let content = if clipped {
+                    "40 60 50 50 re W n BT /F 30 Tf 1 0 0 1 50 70 Tm (A) Tj 1 0 0 1 220 70 Tm (A) Tj ET"
+                } else {
+                    "BT /F 30 Tf 1 0 0 1 50 70 Tm (A) Tj 1 0 0 1 220 70 Tm (A) Tj ET"
+                };
+                let pdf = format!(
             "%PDF-1.7
 1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
 2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
@@ -3405,7 +3411,7 @@ trailer << /Root 1 0 R >>
 4 0 obj << /Length {} >> stream
 {content}
 endstream endobj
-5 0 obj << /Type /Font /Subtype /Type3 /FontBBox [0 0 100 100] /FontMatrix [0.01 0 0 0.01 0 0] /CharProcs << /A 6 0 R >> /Encoding << /Differences [65 /A] >> /FirstChar 65 /LastChar 65 /Widths [100] /Resources << /Shading << /S 7 0 R >> >> >> endobj
+5 0 obj << /Type /Font /Subtype /Type3 {bbox} /FontMatrix [0.01 0 0 0.01 0 0] /CharProcs << /A 6 0 R >> /Encoding << /Differences [65 /A] >> /FirstChar 65 /LastChar 65 /Widths [100] /Resources << /Shading << /S 7 0 R >> >> >> endobj
 6 0 obj << /Length {} >> stream
 {glyph}
 endstream endobj
@@ -3413,12 +3419,19 @@ endstream endobj
 trailer << /Root 1 0 R >>
 %%EOF", content.len(), glyph.len()
         );
-        let mut renderer = PageRenderer::new(Arc::new(pdf.into_bytes()), RenderConfig::default());
-        let page = renderer.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() });
-        assert!(page.error.is_none(), "{:?}", page.error);
-        for x in [65usize, 235] {
-            let pixel = &page.rgba[(65 * 300 + x) * 4..][..4];
-            assert!(pixel[0] < 240 && pixel[2] < 240 && pixel[1] < 10, "glyph at {x}: {pixel:?}");
+                let mut renderer = PageRenderer::new(Arc::new(pdf.into_bytes()), RenderConfig::default());
+                let page =
+                    renderer.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+                assert!(page.error.is_none(), "{:?}", page.error);
+                for x in [65usize, 235] {
+                    let pixel = &page.rgba[(65 * 300 + x) * 4..][..4];
+                    if clipped && x == 235 {
+                        assert_eq!(pixel, &[255, 255, 255, 255], "{bbox}: parent clip");
+                    } else {
+                        assert!(pixel[0] < 240 && pixel[2] < 240 && pixel[1] < 10, "{bbox}, glyph at {x}: {pixel:?}");
+                    }
+                }
+            }
         }
     }
 
