@@ -255,6 +255,10 @@ pip install ./sdks/python
 ```
 
 ### 4.1 In-Process Execution (`LocalClient`)
+
+> [!NOTE]
+> **Native Extension Prerequisite**: `LocalClient` executes directly against the compiled in-process native engine (`pdfcraft._native`). When running from a source checkout, compile the native extension via `maturin develop` inside `sdks/python` or `cargo build -p pdfcraft-pyo3 --release`. If `pdfcraft._native` is unavailable, `LocalClient()` raises `ImportError`. For environments without a native Rust toolchain, use `RestClient` (Section 4.2) pointing to a running `pdfcraft-rest` daemon instead.
+
 ```python
 from pathlib import Path
 from pdfcraft.local import LocalClient
@@ -324,6 +328,10 @@ npm install ./sdks/typescript
 ```
 
 ### 5.1 In-Process Execution (`PdfCraftLocalClient`)
+
+> [!NOTE]
+> **Native Addon Prerequisite**: `PdfCraftLocalClient` requires the compiled Node.js native addon (`pdfcraft_napi`). If the native addon is not available in the environment, client methods reject with `PdfCraftError` carrying error code `NATIVE_UNAVAILABLE` (HTTP 501). For environments without native compilation toolchains, use `PdfCraftRestClient` (Section 5.2) connecting to an on-premise or containerized `pdfcraft-rest` daemon instead.
+
 ```typescript
 import { writeFile } from "node:fs/promises";
 import { PdfCraftLocalClient } from "@pdfcraft/sdk";
