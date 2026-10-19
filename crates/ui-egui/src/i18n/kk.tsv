@@ -2432,3 +2432,7 @@ animation effects	Off	Өшірулі
 	Make properties default	Қасиеттерді әдепкі ету
 	Pages selected	Таңдалған беттер
 	Page properties	Бет қасиеттері
+
+	Select text on one page to use this action	Бұл әрекетті қолдану үшін бір беттегі мәтінді таңдаңыз
+	Could not mark the selection because text could not be read on every page	Барлық беттегі мәтін оқылмағандықтан, таңдалған мәтінді белгілеу мүмкін болмады
+	Could not copy the selection because text could not be read on every page	Барлық беттегі мәтін оқылмағандықтан, таңдалған мәтінді көшіру мүмкін болмады

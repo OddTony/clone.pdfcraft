@@ -2397,3 +2397,7 @@ animation effects	Off	Изключени
 	Make properties default	Задаване като свойства по подразбиране
 	Pages selected	Избрани страници
 	Page properties	Свойства на страницата
+
+	Select text on one page to use this action	Изберете текст на една страница, за да използвате това действие
+	Could not mark the selection because text could not be read on every page	Избраният текст не може да бъде маркиран, защото текстът не можа да бъде прочетен на всички страници
+	Could not copy the selection because text could not be read on every page	Изборът не може да бъде копиран, защото текстът не можа да бъде прочетен на всички страници

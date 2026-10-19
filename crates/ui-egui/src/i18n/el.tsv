@@ -2440,3 +2440,7 @@ animation effects	Off	Ανενεργά
 	Make properties default	Ορισμός ιδιοτήτων ως προεπιλογή
 	Pages selected	Επιλεγμένες σελίδες
 	Page properties	Ιδιότητες σελίδας
+
+	Select text on one page to use this action	Επιλέξτε κείμενο σε μία σελίδα για αυτήν την ενέργεια
+	Could not mark the selection because text could not be read on every page	Δεν ήταν δυνατή η επισήμανση της επιλογής επειδή δεν ήταν δυνατή η ανάγνωση κειμένου σε όλες τις σελίδες
+	Could not copy the selection because text could not be read on every page	Δεν ήταν δυνατή η αντιγραφή της επιλογής επειδή δεν ήταν δυνατή η ανάγνωση κειμένου σε όλες τις σελίδες

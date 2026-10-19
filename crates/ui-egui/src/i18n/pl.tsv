@@ -2410,3 +2410,7 @@ animation effects	Off	Wyłączone
 	Make properties default	Ustaw właściwości jako domyślne
 	Pages selected	Zaznaczone strony
 	Page properties	Właściwości strony
+
+	Select text on one page to use this action	Aby użyć tej akcji, zaznacz tekst na jednej stronie
+	Could not mark the selection because text could not be read on every page	Nie można oznaczyć zaznaczenia, ponieważ nie udało się odczytać tekstu na wszystkich stronach
+	Could not copy the selection because text could not be read on every page	Nie można skopiować zaznaczenia, ponieważ nie udało się odczytać tekstu na wszystkich stronach

@@ -363,10 +363,11 @@ fn bottom_lines(n: usize) -> Vec<u8> {
 
 /// Press at `from` and move to `to`, keeping the button down.
 fn press_and_move(h: &mut Harness<'static, PdfCraftApp>, from: Pos2, to: Pos2) {
+    h.event(Event::PointerMoved(from));
     h.event(Event::PointerButton { pos: from, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
-    h.run_steps(1);
-    for k in 1..=4 {
-        h.hover_at(from + (to - from) * (k as f32 / 4.0));
+    h.run_steps(2);
+    for k in 1..=8 {
+        h.event(Event::PointerMoved(from + (to - from) * (k as f32 / 8.0)));
         h.run_steps(1);
     }
 }
@@ -382,20 +383,20 @@ fn page_top(h: &Harness<'static, PdfCraftApp>, page: usize) -> f32 {
     h.state().views[0].page_screen_rect(page).expect("page on screen").min.y
 }
 
-/// Issue #721: selecting near the bottom of a page with the button held, the wheel keeps
-/// scrolling while the pointer crosses the gap onto the next page. The selection stays on its
-/// own page (a selection can't span pages yet).
+/// Issues #721 and #2110: selecting near the bottom of a page with the button held, the wheel
+/// keeps scrolling while the pointer crosses the gap onto the next page. The drag extends the
+/// selection onto the page the pointer reaches.
 #[test]
 fn a_selection_drag_keeps_scrolling_over_the_gap_and_the_next_page() {
     let (mut h, _) = harness_with(bottom_lines(3), |app| {
         app.set_option("layout", "continuous").unwrap();
-        app.set_option("zoom", "200").unwrap();
+        app.set_option("zoom", "100").unwrap();
     });
     let glyph = |h: &Harness<'static, PdfCraftApp>, g: usize| h.state().views[0].glyph_screen_pos(0, g).expect("glyph on screen");
     // "ends" (glyphs 7..=10) in "Page 1 ends with this line".
     let (from, to) = (glyph(&h, 7), glyph(&h, 10));
     press_and_move(&mut h, from, to);
-    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends"));
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends"), "the drag starts on page 1");
     let (mut over_gap, mut over_next) = (false, false);
     for _ in 0..100 {
         let before = page_top(&h, 0);
@@ -403,7 +404,7 @@ fn a_selection_drag_keeps_scrolling_over_the_gap_and_the_next_page() {
         assert!(page_top(&h, 0) < before - 0.5, "the wheel scrolls during the drag (over the gap yet: {over_gap})");
         let view = &h.state().views[0];
         let on = |page| view.page_screen_rect(page).is_some_and(|r| r.contains(to));
-        over_gap |= !on(0) && !on(1);
+        over_gap |= !on(0);
         over_next = on(1);
         if over_next {
             break;
@@ -411,7 +412,7 @@ fn a_selection_drag_keeps_scrolling_over_the_gap_and_the_next_page() {
     }
     assert!(over_gap && over_next, "the pointer crossed the gap ({over_gap}) onto the next page ({over_next})");
     let held = h.state().views[0].selected_text().expect("still selected");
-    assert!(held.starts_with("ends") && "Page 1 ends with this line".contains(held.as_str()), "the selection stays on page 1: {held:?}");
+    assert_eq!(held, "ends with this line\nPage 2 ends", "the drag carries the selection onto page 2");
     h.event(Event::PointerButton { pos: to, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
     h.run_steps(2);
     assert_eq!(h.state().views[0].selected_text(), Some(held), "releasing keeps the selection");
@@ -543,4 +544,178 @@ fn coalesced_primary_clicks_select_line_then_spaced_click_clears() {
         assert_eq!((doc.can_undo(), doc.can_redo()), (None, None));
         assert_eq!(doc.saved_bytes(), saved);
     }
+}
+
+/// Dragging in either direction selects the full interval, not just the two endpoints.
+#[test]
+fn selection_drag_crosses_pages_in_both_directions() {
+    let (mut h, _) = harness_with(bottom_lines(3), |app| {
+        app.set_option("layout", "continuous").unwrap();
+        app.set_option("zoom", "100").unwrap();
+    });
+    crate::support::wait_until(&mut h, "second page text", |app| app.views[0].glyph_screen_pos(1, 10).is_some());
+    let first = h.state().views[0].glyph_screen_pos(0, 7).unwrap();
+    let second = h.state().views[0].glyph_screen_pos(1, 10).unwrap();
+    assert!(
+        h.state().views[0].viewport_rect().contains(first) && h.state().views[0].viewport_rect().contains(second),
+        "points {first:?} {second:?} viewport {:?}",
+        h.state().views[0].viewport_rect()
+    );
+    press_and_move(&mut h, first, first + egui::vec2(6.0, 0.0));
+    for k in 1..=20 {
+        h.hover_at(first + (second - first) * (k as f32 / 20.0));
+        h.run_steps(1);
+    }
+    h.event(Event::PointerButton { pos: second, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+    h.run_steps(2);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends"));
+    h.run_steps(60);
+    drag(&mut h, second, first);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends"));
+}
+
+#[test]
+fn selection_crosses_three_pages_and_retracts_when_dragged_back() {
+    let (mut h, _) = harness_with(bottom_lines(3), |app| {
+        app.set_option("layout", "continuous").unwrap();
+        app.set_option("zoom", "60").unwrap();
+    });
+    crate::support::wait_until(&mut h, "all three text layers", |app| app.views[0].glyph_screen_pos(2, 10).is_some());
+    let point = |h: &Harness<'static, PdfCraftApp>, page: usize, glyph: usize| h.state().views[0].glyph_screen_pos(page, glyph).unwrap();
+    let first = point(&h, 0, 7);
+    let third = point(&h, 2, 10);
+    assert!(h.state().views[0].viewport_rect().contains(third));
+    press_and_move(&mut h, first, first + egui::vec2(6.0, 0.0));
+    for k in 1..=40 {
+        h.hover_at(first + (third - first) * (k as f32 / 40.0));
+        h.run_steps(1);
+    }
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends with this line\nPage 3 ends"));
+    let back = point(&h, 1, 10);
+    for k in 1..=20 {
+        h.hover_at(third + (back - third) * (k as f32 / 20.0));
+        h.run_steps(1);
+    }
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends"));
+    let same_page = point(&h, 0, 10);
+    for k in 1..=20 {
+        h.hover_at(back + (same_page - back) * (k as f32 / 20.0));
+        h.run_steps(1);
+    }
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends"));
+    for k in 1..=20 {
+        h.hover_at(same_page + (back - same_page) * (k as f32 / 20.0));
+        h.run_steps(1);
+    }
+    h.event(Event::PointerButton { pos: back, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+    h.run_steps(2);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends"));
+    assert!(h.state_mut().execute("edit.copy"));
+    h.step();
+    assert!(copied(&h, "ends with this line\nPage 2 ends"));
+}
+
+#[test]
+fn selected_text_commands_mark_every_page_and_undo_together() {
+    for (command, subtype) in [("comment.highlight", "Highlight"), ("redact.mark", "Redact")] {
+        let (mut h, _) = harness_with(bottom_lines(3), |app| {
+            app.set_option("layout", "continuous").unwrap();
+            app.set_option("zoom", "60").unwrap();
+        });
+        crate::support::wait_until(&mut h, "all three text layers", |app| app.views[0].glyph_screen_pos(2, 10).is_some());
+        let first = h.state().views[0].glyph_screen_pos(0, 7).unwrap();
+        let last = h.state().views[0].glyph_screen_pos(2, 10).unwrap();
+        press_and_move(&mut h, first, first + egui::vec2(6.0, 0.0));
+        for k in 1..=40 {
+            h.hover_at(first + (last - first) * (k as f32 / 40.0));
+            h.run_steps(1);
+        }
+        h.event(Event::PointerButton { pos: last, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+        h.run_steps(2);
+        assert!(h.state_mut().execute(command));
+        h.run_steps(3);
+        let annotations = &h.state().session.get(h.state().views[0].id).unwrap().info.annotations;
+        let pages: Vec<_> = annotations.iter().filter(|a| a.subtype == subtype).map(|a| a.page).collect();
+        assert_eq!(pages, [0, 1, 2], "{command} must mark each selected page");
+        assert!(h.state_mut().execute("edit.undo"));
+        h.run_steps(3);
+        assert!(h.state().session.get(h.state().views[0].id).unwrap().info.annotations.is_empty(), "one undo removes every mark");
+    }
+}
+
+#[test]
+fn direct_markup_and_redaction_drag_across_pages_and_undo_together() {
+    for (command, subtype) in [("comment.highlight", "Highlight"), ("redact.mark", "Redact")] {
+        let (mut h, _) = harness_with(bottom_lines(3), move |app| {
+            app.set_option("layout", "continuous").unwrap();
+            app.set_option("zoom", "60").unwrap();
+            assert!(app.execute(command));
+        });
+        crate::support::wait_until(&mut h, "all three text layers", |app| app.views[0].glyph_screen_pos(2, 10).is_some());
+        let first = h.state().views[0].glyph_screen_pos(0, 7).unwrap();
+        let last = h.state().views[0].glyph_screen_pos(2, 10).unwrap();
+        press_and_move(&mut h, first, first + egui::vec2(6.0, 0.0));
+        for k in 1..=40 {
+            h.hover_at(first + (last - first) * (k as f32 / 40.0));
+            h.run_steps(1);
+        }
+        h.event(Event::PointerButton { pos: last, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+        h.run_steps(3);
+        let annotations = &h.state().session.get(h.state().views[0].id).unwrap().info.annotations;
+        let pages: Vec<_> = annotations.iter().filter(|a| a.subtype == subtype).map(|a| a.page).collect();
+        assert_eq!(pages, [0, 1, 2], "{command} must mark each selected page");
+        assert!(h.state_mut().execute("edit.undo"));
+        h.run_steps(3);
+        assert!(h.state().session.get(h.state().views[0].id).unwrap().info.annotations.is_empty(), "one undo removes every mark");
+    }
+}
+
+#[test]
+fn shift_click_extends_and_retracts_across_pages_from_the_original_anchor() {
+    let (mut h, _) = harness_with(bottom_lines(3), |app| {
+        app.set_option("layout", "continuous").unwrap();
+        app.set_option("zoom", "60").unwrap();
+    });
+    crate::support::wait_until(&mut h, "all three text layers", |app| app.views[0].glyph_screen_pos(2, 10).is_some());
+    let point = |h: &Harness<'static, PdfCraftApp>, page, glyph| h.state().views[0].glyph_screen_pos(page, glyph).unwrap();
+    let first = point(&h, 0, 7);
+    let first_end = point(&h, 0, 10);
+    drag(&mut h, first, first_end);
+    h.run_steps(60);
+    let third = point(&h, 2, 10);
+    shift_click(&mut h, third);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends with this line\nPage 3 ends"));
+    h.run_steps(60);
+    let second = point(&h, 1, 10);
+    shift_click(&mut h, second);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends"));
+    h.run_steps(60);
+    shift_click(&mut h, first_end);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends"));
+    h.run_steps(60);
+    let last_anchor = point(&h, 2, 10);
+    let last_end = point(&h, 2, 13);
+    drag(&mut h, last_anchor, last_end);
+    h.run_steps(60);
+    shift_click(&mut h, first);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends with this line\nPage 3 ends"));
+}
+
+#[test]
+fn fast_drag_can_start_on_another_page() {
+    let (mut h, _) = harness_with(bottom_lines(3), |app| {
+        app.set_option("layout", "continuous").unwrap();
+        app.set_option("zoom", "60").unwrap();
+    });
+    crate::support::wait_until(&mut h, "all three text layers", |app| app.views[0].glyph_screen_pos(2, 10).is_some());
+    let first = h.state().views[0].glyph_screen_pos(0, 7).unwrap();
+    let last = h.state().views[0].glyph_screen_pos(2, 10).unwrap();
+    h.event(Event::PointerMoved(first));
+    h.event(Event::PointerButton { pos: first, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
+    h.run_steps(1);
+    h.event(Event::PointerMoved(last));
+    h.run_steps(1);
+    h.event(Event::PointerButton { pos: last, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+    h.run_steps(2);
+    assert_eq!(h.state().views[0].selected_text().as_deref(), Some("ends with this line\nPage 2 ends with this line\nPage 3 ends"));
 }

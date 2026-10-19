@@ -2880,14 +2880,19 @@ impl PdfCraftApp {
 
     /// Shared permission gate for copying selected page text from menus and keyboard events.
     pub(crate) fn copy_selected_text(&mut self, i: usize, ctx: &egui::Context) -> bool {
-        let Some((id, text)) = self.views.get(i).and_then(|v| Some((v.id, v.selected_text()?))).filter(|(_, text)| !text.is_empty()) else {
-            return false;
-        };
+        let Some(view) = self.views.get(i).filter(|view| view.has_copyable_selection()) else { return false };
+        let id = view.id;
         if !self.may_copy(id) {
             return false;
         }
-        ctx.copy_text(text);
-        true
+        let Some(view) = self.views.get_mut(i) else { return false };
+        if let Some(text) = view.selected_text() {
+            view.cancel_deferred_copy();
+            ctx.copy_text(text);
+            true
+        } else {
+            view.defer_copy()
+        }
     }
 
     /// The quick tools' keys, as in Acrobat: V selects, H pans, and holding Space pans until it
@@ -3117,7 +3122,10 @@ impl eframe::App for PdfCraftApp {
             ctx.request_repaint();
             return;
         }
-        for view in &mut self.views {
+        for (index, view) in self.views.iter_mut().enumerate() {
+            if self.active != Some(index) {
+                view.cancel_deferred_copy();
+            }
             view.begin_render_frame();
         }
         // The window shows the active document's name (or title, if it asks for that).

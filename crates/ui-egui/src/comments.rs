@@ -1179,11 +1179,24 @@ pub(crate) fn page_after_text(resp: &egui::Response, cx: &PageCx<'_>, view: &mut
         return;
     }
     if let Some(kind) = tool.markup()
-        && let Some((page, quads)) = view.selection_quads(cx.info).filter(|(p, _)| *p == cx.page)
+        && let Some(pages) = view.selection_all_quads(cx.info).filter(|pages| pages.iter().any(|(page, _)| *page == cx.page))
     {
+        let mut edits: Vec<_> = pages
+            .into_iter()
+            .map(|(page, quads)| {
+                Edit::AddAnnotation(NewAnnotation {
+                    page,
+                    shape: Shape::TextMarkup { kind, quads },
+                    style: cx.prefs.style(tool),
+                    contents: String::new(),
+                    author: cx.prefs.author.clone(),
+                })
+            })
+            .collect();
         view.clear_selection();
-        view.pending_edit = Some(new_comment(cx, tool, Shape::TextMarkup { kind, quads }, String::new()));
-        let _ = page;
+        view.pending_edit = Some(if edits.len() == 1 { edits.remove(0) } else { Edit::Batch { label: "Text markup".into(), edits } });
+    } else {
+        view.defer_mark(cx.page, crate::canvas::DeferredMark::Comment(tool, cx.prefs.clone()));
     }
 }
 

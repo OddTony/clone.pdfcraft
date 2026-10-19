@@ -2384,3 +2384,7 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+
+	Select text on one page to use this action	請在一頁內選取文字以使用此操作
+	Could not mark the selection because text could not be read on every page	無法標記選取範圍，因為無法讀取所有頁面的文字
+	Could not copy the selection because text could not be read on every page	無法複製選取範圍，因為無法讀取所有頁面的文字

@@ -2435,3 +2435,7 @@ animation effects	Off	Aus
 	Make properties default	Eigenschaften als Standard festlegen
 	Pages selected	Ausgewählte Seiten
 	Page properties	Seiteneigenschaften
+
+	Select text on one page to use this action	Wähle Text auf einer Seite für diese Aktion
+	Could not mark the selection because text could not be read on every page	Die Auswahl konnte nicht markiert werden, weil der Text nicht auf allen Seiten gelesen werden konnte
+	Could not copy the selection because text could not be read on every page	Die Auswahl konnte nicht kopiert werden, weil der Text nicht auf allen Seiten gelesen werden konnte

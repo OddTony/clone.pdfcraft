@@ -2433,3 +2433,7 @@ animation effects	Off	Ki
 	Make properties default	Tulajdonságok beállítása alapértelmezettként
 	Pages selected	Kijelölt oldalak
 	Page properties	Oldaltulajdonságok
+
+	Select text on one page to use this action	A művelethez jelöljön ki szöveget egy oldalon
+	Could not mark the selection because text could not be read on every page	A kijelölés nem jelölhető meg, mert nem sikerült minden oldalon beolvasni a szöveget
+	Could not copy the selection because text could not be read on every page	A kijelölés nem másolható, mert nem sikerült minden oldalon beolvasni a szöveget

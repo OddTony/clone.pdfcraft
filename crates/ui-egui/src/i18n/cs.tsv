@@ -2508,3 +2508,7 @@ animation effects	Off	Vypnuto
 	Make properties default	Nastavit vlastnosti jako výchozí
 	Pages selected	Vybrané stránky
 	Page properties	Vlastnosti stránky
+
+	Select text on one page to use this action	Pro tuto akci vyberte text na jedné stránce
+	Could not mark the selection because text could not be read on every page	Výběr nelze označit, protože text nebylo možné přečíst na všech stránkách
+	Could not copy the selection because text could not be read on every page	Výběr nelze zkopírovat, protože text nebylo možné přečíst na všech stránkách
