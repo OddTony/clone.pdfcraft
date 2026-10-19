@@ -171,8 +171,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
-2026-10-15: Linux desktop builds enable the Adwaita Wayland frame and vector window
-controls. See README → Linux window controls; full GTK theme parity is not claimed.
+- **2026-10-15 (Linux, #2644):** Linux desktop builds enable the Adwaita Wayland frame and vector window controls. See README → Linux window controls; full GTK theme parity is not claimed.
 
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
 
