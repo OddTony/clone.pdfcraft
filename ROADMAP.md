@@ -171,6 +171,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-19 (M3, #3377):** Return activates the enabled default action in Print and the shared modal workflows when no control owns keyboard focus; focused controls, text fields and open popups keep their own keyboard behavior. Print and document-properties regressions cover the interaction. Estimates unchanged.
+
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
 
 - **2026-10-18 (M7, #3212):** Headers, Bates numbers, watermarks and added text stay visible after unfinished marked content, with original content preserved.

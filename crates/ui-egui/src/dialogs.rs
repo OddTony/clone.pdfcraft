@@ -519,7 +519,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 );
                 ui.add_space(10.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui.add_enabled_ui(fits, |ui| widgets::pill_button(ui, tl!("OK"), true)).inner.clicked() {
+                    if ui.add_enabled_ui(fits, |ui| widgets::default_button(ui, tl!("OK"))).inner {
                         replace_now = true;
                         close = true;
                     }
@@ -605,7 +605,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 ui.add(widgets::checkbox(&mut app.extract_draft.separate, tl!("Extract pages as separate files")));
                 ui.add_space(12.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::pill_button(ui, tl!("Extract"), true).clicked() {
+                    if widgets::default_button(ui, tl!("Extract")) {
                         extract_now = true;
                         close = true;
                     }
@@ -678,7 +678,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 d.to = d.to.max(d.from);
                 ui.add_space(12.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::pill_button(ui, tl!("OK"), true).clicked() {
+                    if widgets::default_button(ui, tl!("OK")) {
                         rotate_now = true;
                         close = true;
                     }
@@ -708,7 +708,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 d.to = d.to.max(d.from);
                 ui.add_space(12.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::pill_button(ui, tl!("OK"), true).clicked() {
+                    if widgets::default_button(ui, tl!("OK")) {
                         let pages: Vec<usize> = if d.all { (0..n).collect() } else { (d.from - 1..d.to.min(n)).collect() };
                         duplicate_now = Some(Edit::DuplicateField { name: d.name.clone(), pages });
                         close = true;
@@ -776,7 +776,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 });
                 ui.add_space(12.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::pill_button(ui, tl!("Create PDF Comment Summary"), true).clicked() {
+                    if widgets::default_button(ui, tl!("Create PDF Comment Summary")) {
                         summarize_now = true;
                         close = true;
                     }
@@ -796,7 +796,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 ));
                 ui.add_space(12.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::pill_button(ui, tl!("Revert"), true).clicked() {
+                    if widgets::default_button(ui, tl!("Revert")) {
                         revert_now = true;
                         close = true;
                     }
@@ -819,7 +819,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 ));
                 ui.add_space(12.0);
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if widgets::pill_button(ui, tl!("Save anyway"), true).clicked() {
+                    if widgets::default_button(ui, tl!("Save anyway")) {
                         overwrite_now = true;
                         close = true;
                     }
@@ -1187,7 +1187,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
         let changed = draft_changes(app).is_some_and(|c| !c.is_empty());
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if dialog == Dialog::Recovery {
-                if widgets::pill_button(ui, tl!("Recover"), true).clicked() {
+                if widgets::default_button(ui, tl!("Recover")) {
                     recover = Some(true);
                     close = true;
                 }
@@ -1196,7 +1196,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     close = true;
                 }
             } else if dialog == Dialog::NumberPages {
-                if widgets::pill_button(ui, tl!("OK"), true).clicked() {
+                if widgets::default_button(ui, tl!("OK")) {
                     apply_number = true;
                     close = true;
                 }
@@ -1204,7 +1204,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     close = true;
                 }
             } else if dialog == Dialog::Split {
-                if ui.add_enabled_ui(split_ready.is_some(), |ui| widgets::pill_button(ui, tl!("Split"), true)).inner.clicked() {
+                if ui.add_enabled_ui(split_ready.is_some(), |ui| widgets::default_button(ui, tl!("Split"))).inner {
                     split_now = split_ready.clone();
                     close = true;
                 }
@@ -1212,14 +1212,14 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                     close = true;
                 }
             } else if changed {
-                if widgets::pill_button(ui, tl!("OK"), true).clicked() {
+                if widgets::default_button(ui, tl!("OK")) {
                     apply = true;
                     close = true;
                 }
                 if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
                     close = true;
                 }
-            } else if widgets::pill_button(ui, tl!("Close"), true).clicked() {
+            } else if widgets::default_button(ui, tl!("Close")) {
                 close = true;
             }
         });

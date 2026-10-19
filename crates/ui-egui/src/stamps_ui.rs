@@ -85,7 +85,7 @@ pub(crate) fn create_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) 
     let ok = !d.category.trim().is_empty() && !d.name.trim().is_empty();
     let (mut save, mut cancel) = (false, false);
     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        if ui.add_enabled_ui(ok, |ui| widgets::pill_button(ui, tl!("OK"), true)).inner.clicked() {
+        if ui.add_enabled_ui(ok, |ui| widgets::default_button(ui, tl!("OK"))).inner {
             save = true;
         }
         if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {

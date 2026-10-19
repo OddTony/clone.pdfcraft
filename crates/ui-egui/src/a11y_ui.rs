@@ -136,7 +136,7 @@ pub(crate) fn options_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens)
     let (mut start, mut cancel) = (false, false);
     ui.horizontal(|ui| {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, tl!("Start Checking"), true).clicked() {
+            if widgets::default_button(ui, tl!("Start Checking")) {
                 start = true;
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
@@ -169,7 +169,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, t: &Tokens, state: &mut A11yState, doc: D
             ui.add_space(6.0);
             ui.label(egui::RichText::new(tl!("This document hasn't been checked yet.")).color(t.text_muted));
             ui.add_space(6.0);
-            if widgets::pill_button(ui, tl!("Check for accessibility"), true).clicked() {
+            if widgets::default_button(ui, tl!("Check for accessibility")) {
                 action = Some(PanelAction::Options);
             }
         });
@@ -569,9 +569,7 @@ pub(crate) fn alt_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> 
     if n == 0 {
         ui.label(egui::RichText::new(tl!("This document has no tagged figures.")).color(t.text_muted));
         let mut cancel = false;
-        ui.horizontal(|ui| {
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| cancel = widgets::pill_button(ui, tl!("Close"), true).clicked())
-        });
+        ui.horizontal(|ui| ui.with_layout(Layout::right_to_left(Align::Center), |ui| cancel = widgets::default_button(ui, tl!("Close"))));
         return (false, cancel);
     }
     d.index = d.index.min(n - 1);
@@ -617,7 +615,7 @@ pub(crate) fn alt_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> 
             d.index += 1;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, tl!("Save & Close"), true).clicked() {
+            if widgets::default_button(ui, tl!("Save & Close")) {
                 save = true;
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {

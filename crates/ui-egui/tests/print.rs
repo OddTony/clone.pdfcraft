@@ -426,3 +426,47 @@ fn an_empty_printer_list_says_none_were_found() {
     h.get_by_label_contains("No printers were found");
     assert!(!h.get_by_role_and_label(Role::Button, "Save as PDF").accesskit_node().is_disabled());
 }
+
+#[test]
+fn return_activates_the_print_dialog_default_action() {
+    let mut h = harness();
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+    let out = std::env::temp_dir().join(format!("pdfcraft-print-enter-{}.pdf", std::process::id()));
+    let _ = std::fs::remove_file(&out);
+    h.state_mut().save_override = Some(out.to_string_lossy().into_owned());
+    h.state_mut().print_draft.printer = None;
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, None, "Return should activate the highlighted default action");
+    assert!(out.exists(), "the default action should save the printed PDF");
+    let _ = std::fs::remove_file(out);
+}
+
+#[test]
+fn return_respects_a_focused_cancel_button_and_disabled_default() {
+    let mut h = harness();
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+    h.state_mut().print_draft.printer = None;
+    let out = std::env::temp_dir().join(format!("pdfcraft-print-enter-disabled-{}.pdf", std::process::id()));
+    let _ = std::fs::remove_file(&out);
+    h.state_mut().save_override = Some(out.to_string_lossy().into_owned());
+    h.state_mut().print_draft.which = pdfcraft_ui_egui::PrintWhich::Range;
+    h.state_mut().print_draft.range = "999".into();
+    h.run_steps(3);
+    assert!(h.get_by_role_and_label(Role::Button, "Save as PDF").accesskit_node().is_disabled());
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert_eq!(h.state().dialog, Some(Dialog::Print));
+    assert!(!out.exists());
+    h.state_mut().print_draft.which = pdfcraft_ui_egui::PrintWhich::All;
+    h.run_steps(2);
+    h.get_by_role_and_label(Role::Button, "Cancel").focus();
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, None);
+    assert!(!out.exists(), "Return must activate Cancel, not Save as PDF");
+}

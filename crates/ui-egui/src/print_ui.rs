@@ -1230,7 +1230,7 @@ pub(crate) fn body(
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         let looking = still_looking(d);
         let label = if d.printer.is_some() || looking { tl!("Print") } else { tl!("Save as PDF") };
-        if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty() && !looking, |ui| widgets::pill_button(ui, label, true)).inner.clicked() {
+        if ui.add_enabled_ui(settings.is_ok() && !sheets.is_empty() && !looking, |ui| widgets::default_button(ui, label)).inner {
             go = true;
         }
         if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {

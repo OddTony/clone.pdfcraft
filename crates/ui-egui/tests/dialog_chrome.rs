@@ -96,3 +96,23 @@ fn document_properties_long_filename_does_not_overflow_card() {
     let card = card(&h, "dialog");
     assert!(card.width() <= 700.0, "dialog card should not blow out horizontally on long filename, width was: {}", card.width());
 }
+
+#[test]
+fn return_in_a_properties_field_does_not_close_the_dialog() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("form.pdf", None, fixture()).unwrap();
+        app.set_option("dialog", "properties").unwrap();
+        app
+    });
+    h.run_steps(4);
+    h.get_by_role_and_label(Role::TextInput, "Title").click();
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert!(h.state().dialog.is_some(), "Return used by a field must not close the dialog");
+    h.key_press(egui::Key::Enter);
+    h.run_steps(2);
+    assert!(h.state().dialog.is_none(), "Return with no focused control should close the dialog");
+}
