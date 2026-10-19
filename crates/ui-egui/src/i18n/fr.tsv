@@ -2434,3 +2434,7 @@ animation effects	Off	Désactivés
 	Make properties default	Définir comme propriétés par défaut
 	Pages selected	Pages sélectionnées
 	Page properties	Propriétés de la page
+
+	Select text on one page to use this action	Sélectionnez du texte sur une seule page pour utiliser cette action
+	Could not mark the selection because text could not be read on every page	Impossible de marquer la sélection, car le texte de toutes les pages n’a pas pu être lu
+	Could not copy the selection because text could not be read on every page	Impossible de copier la sélection, car le texte de toutes les pages n’a pas pu être lu

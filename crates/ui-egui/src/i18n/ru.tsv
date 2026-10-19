@@ -2347,3 +2347,7 @@ animation effects	Off	Выкл
 	Make properties default	Сделать свойства стандартными
 	Pages selected	Выделенные страницы
 	Page properties	Свойства страницы
+
+	Select text on one page to use this action	Чтобы выполнить это действие, выделите текст на одной странице
+	Could not mark the selection because text could not be read on every page	Не удалось пометить выделение, поскольку текст не удалось прочитать на всех страницах
+	Could not copy the selection because text could not be read on every page	Не удалось скопировать выделение, поскольку текст не удалось прочитать на всех страницах

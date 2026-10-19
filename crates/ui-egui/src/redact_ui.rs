@@ -253,7 +253,7 @@ pub(crate) fn page_input(
             let r = Rect::from_two_pos(start, end).intersect(xf.rect);
             if r.width() >= 3.0 && r.height() >= 3.0 {
                 let (a, b) = (to_user(xf, info, page, r.min), to_user(xf, info, page, r.max));
-                view.pending_redaction = Some((page, vec![rect_quad([a[0], a[1], b[0], b[1]])]));
+                view.pending_redaction = Some(vec![(page, vec![rect_quad([a[0], a[1], b[0], b[1]])])]);
             }
         }
         return true;
@@ -273,13 +273,15 @@ pub(crate) fn page_input(
 }
 
 /// A finished text selection with the Redact tool becomes a mark.
-pub(crate) fn after_text(resp: &egui::Response, page: usize, info: &DocInfo, view: &mut DocView) {
+pub(crate) fn after_text(resp: &egui::Response, page: usize, info: &DocInfo, view: &mut DocView, prefs: &RedactPrefs, author: &str) {
     if !(resp.drag_stopped() || resp.double_clicked()) || view.redact_drag.is_some() {
         return;
     }
-    if let Some((p, quads)) = view.selection_quads(info).filter(|(p, _)| *p == page) {
+    if let Some(pages) = view.selection_all_quads(info).filter(|pages| pages.iter().any(|(p, _)| *p == page)) {
         view.clear_selection();
-        view.pending_redaction = Some((p, quads));
+        view.pending_redaction = Some(pages);
+    } else {
+        view.defer_mark(page, crate::canvas::DeferredMark::Redact(prefs.clone(), author.to_owned()));
     }
 }
 

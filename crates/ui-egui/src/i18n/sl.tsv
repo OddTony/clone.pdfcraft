@@ -2439,3 +2439,7 @@ animation effects	Off	Izklopljeni
 	Make properties default	Nastavi lastnosti kot privzete
 	Pages selected	Izbrane strani
 	Page properties	Lastnosti strani
+
+	Select text on one page to use this action	Za to dejanje izberite besedilo na eni strani
+	Could not mark the selection because text could not be read on every page	Izbire ni bilo mogoče označiti, ker besedila ni bilo mogoče prebrati na vseh straneh
+	Could not copy the selection because text could not be read on every page	Izbire ni bilo mogoče kopirati, ker besedila ni bilo mogoče prebrati na vseh straneh

@@ -85,8 +85,7 @@ impl PdfCraftApp {
             return self.combine_can_undo(spec.needs == commands::Needs::Undo);
         }
         commands::is_enabled(spec, &self.session, self.active_ids().map(|(_, id)| id))
-            && (spec.id != "edit.copy"
-                || self.active.and_then(|i| self.views.get(i)).is_some_and(|v| !v.organize && v.selected_text().is_some_and(|t| !t.is_empty())))
+            && (spec.id != "edit.copy" || self.active.and_then(|i| self.views.get(i)).is_some_and(|v| !v.organize && v.has_copyable_selection()))
             && (spec.needs != commands::Needs::TwoPageView || self.active.and_then(|i| self.views.get(i)).is_some_and(crate::DocView::cover_applies))
             && match spec.id {
                 "view.previous_view" => self.active.and_then(|i| self.views.get(i)).is_some_and(|v| !v.back.is_empty()),
@@ -303,12 +302,21 @@ impl PdfCraftApp {
                     && let Some(doc) = self.session.get(self.views[i].id)
                 {
                     let info = &doc.info;
-                    if let Some((page, quads)) = self.views[i].selection_quads(info) {
+                    if let Some(pages) = self.views[i].selection_all_quads(info) {
                         self.views[i].clear_selection();
-                        let style = self.comment_prefs.style(tool);
-                        let author = self.comment_prefs.author.clone();
-                        let shape = pdfcraft_engine::Shape::TextMarkup { kind, quads };
-                        self.apply_edit(Edit::AddAnnotation(pdfcraft_engine::NewAnnotation { page, shape, style, contents: String::new(), author }));
+                        let mut edits: Vec<_> = pages
+                            .into_iter()
+                            .map(|(page, quads)| {
+                                Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
+                                    page,
+                                    shape: pdfcraft_engine::Shape::TextMarkup { kind, quads },
+                                    style: self.comment_prefs.style(tool),
+                                    contents: String::new(),
+                                    author: self.comment_prefs.author.clone(),
+                                })
+                            })
+                            .collect();
+                        self.apply_edit(if edits.len() == 1 { edits.remove(0) } else { Edit::Batch { label: "Text markup".into(), edits } });
                     }
                 }
             }
@@ -450,10 +458,11 @@ impl PdfCraftApp {
                     && let Some(doc) = self.session.get(self.views[i].id)
                 {
                     let info = &doc.info;
-                    if let Some((page, quads)) = self.views[i].selection_quads(info) {
+                    if let Some(pages) = self.views[i].selection_all_quads(info) {
                         self.views[i].clear_selection();
                         let author = self.comment_prefs.author.clone();
-                        self.apply_edit(self.redact_prefs.mark(page, quads, &author));
+                        let mut edits: Vec<_> = pages.into_iter().map(|(page, quads)| self.redact_prefs.mark(page, quads, &author)).collect();
+                        self.apply_edit(if edits.len() == 1 { edits.remove(0) } else { Edit::Batch { label: "Mark for redaction".into(), edits } });
                     }
                 }
             }

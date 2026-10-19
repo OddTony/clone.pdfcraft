@@ -2448,3 +2448,7 @@ animation effects	Off	Desativados
 	Make properties default	Tornar propriedades padrão
 	Pages selected	Páginas selecionadas
 	Page properties	Propriedades da página
+
+	Select text on one page to use this action	Selecione texto em uma página para usar esta ação
+	Could not mark the selection because text could not be read on every page	Não foi possível marcar a seleção porque o texto não pôde ser lido em todas as páginas
+	Could not copy the selection because text could not be read on every page	Não foi possível copiar a seleção porque o texto não pôde ser lido em todas as páginas

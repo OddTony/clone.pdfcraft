@@ -227,45 +227,104 @@ pub struct Find {
     pub in_panel: bool,
 }
 
-/// A text selection on one page.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// A text selection, held as one or more `(page, range)` pieces in document order. An ordinary
+/// drag, multi-click or single-page selection covers one page; a drag or Shift-click that crosses
+/// into another page includes every page between the endpoints. A column drag selects glyphs
+/// inside its rectangle on the starting page.
+#[derive(Clone, Debug, PartialEq)]
 struct Selection {
-    page: usize,
-    span: Span,
+    pieces: Vec<PageSelection>,
+    /// The original reading-order endpoint, retained when the selection crosses pages.
+    anchor: Option<(usize, usize)>,
+}
+
+/// A completed gesture waiting for all selected text layers.
+#[derive(Clone)]
+pub(crate) enum DeferredMark {
+    Comment(comments::CommentTool, comments::CommentPrefs),
+    Redact(crate::redact_ui::RedactPrefs, String),
+}
+
+/// Selected glyphs on one page: reading order between two glyph indices, or the glyphs inside a
+/// rectangle in page-view space, drawn from the corner the drag started at (`rect[0..2]`) to the
+/// pointer (`rect[2..4]`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Piece {
+    Run {
+        anchor: usize,
+        head: usize,
+    },
+    /// Every glyph from `start` to the end of a page.
+    Tail {
+        start: usize,
+    },
+    /// An entire intervening page, including when its text is still loading.
+    Whole,
+    Column {
+        rect: [f32; 4],
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Span {
-    /// Reading order, between two glyph indices.
-    Run { anchor: usize, head: usize },
-    /// Column select (#740): the glyphs inside a rectangle in page view space, drawn from the
-    /// corner the drag started at (`rect[0..2]`) to the pointer (`rect[2..4]`).
-    Column { rect: [f32; 4] },
+struct PageSelection {
+    page: usize,
+    piece: Piece,
+}
+
+impl PageSelection {
+    fn range(anchor: usize, head: usize) -> std::ops::Range<usize> {
+        anchor.min(head)..anchor.max(head).saturating_add(1)
+    }
+
+    fn rects(&self, text: &PageText) -> Vec<[f32; 4]> {
+        match self.piece {
+            Piece::Run { anchor, head } => text.line_rects(Self::range(anchor, head)),
+            Piece::Tail { start } => text.line_rects(start..text.glyphs.len()),
+            Piece::Whole => text.line_rects(0..text.glyphs.len()),
+            Piece::Column { rect } => text.glyph_rects(&text.glyphs_in(rect)),
+        }
+    }
+
+    fn text(&self, text: &PageText) -> String {
+        match self.piece {
+            Piece::Run { anchor, head } => text.text_of(Self::range(anchor, head)),
+            Piece::Tail { start } => text.text_of(start..text.glyphs.len()),
+            Piece::Whole => text.plain_text(),
+            Piece::Column { rect } => text.column_text(&text.glyphs_in(rect)),
+        }
+    }
 }
 
 impl Selection {
     fn run(page: usize, anchor: usize, head: usize) -> Self {
-        Self { page, span: Span::Run { anchor, head } }
+        Self { pieces: vec![PageSelection { page, piece: Piece::Run { anchor, head } }], anchor: Some((page, anchor)) }
     }
 
-    fn range(anchor: usize, head: usize) -> Range<usize> {
-        anchor.min(head)..anchor.max(head).saturating_add(1)
-    }
-
-    /// One rectangle per selected piece of a line, in view space (highlighting, markup quads).
-    fn rects(&self, text: &PageText) -> Vec<[f32; 4]> {
-        match self.span {
-            Span::Run { anchor, head } => text.line_rects(Self::range(anchor, head)),
-            Span::Column { rect } => text.glyph_rects(&text.glyphs_in(rect)),
+    /// Select the reading-order interval between the original anchor and the new endpoint.
+    fn between(start_page: usize, start_glyph: usize, end_page: usize, head: usize) -> Self {
+        let mut pieces = Vec::new();
+        for page in start_page.min(end_page)..=start_page.max(end_page) {
+            let piece = if start_page == end_page {
+                Piece::Run { anchor: start_glyph, head }
+            } else if start_page < end_page && page == start_page {
+                Piece::Tail { start: start_glyph }
+            } else if start_page < end_page && page == end_page {
+                Piece::Run { anchor: 0, head }
+            } else if start_page > end_page && page == end_page {
+                Piece::Tail { start: head }
+            } else if start_page > end_page && page == start_page {
+                Piece::Run { anchor: 0, head: start_glyph }
+            } else {
+                Piece::Whole
+            };
+            pieces.push(PageSelection { page, piece });
         }
+        Self { pieces, anchor: Some((start_page, start_glyph)) }
     }
 
-    /// The selected text, as Copy puts it on the clipboard.
-    fn text(&self, text: &PageText) -> String {
-        match self.span {
-            Span::Run { anchor, head } => text.text_of(Self::range(anchor, head)),
-            Span::Column { rect } => text.column_text(&text.glyphs_in(rect)),
-        }
+    /// Whether any piece targets `page`.
+    fn on(&self, page: usize) -> bool {
+        self.pieces.iter().any(|p| p.page == page)
     }
 }
 
@@ -446,12 +505,16 @@ pub struct DocView {
     pub(crate) text_failed: HashSet<usize>,
     pub find: Option<Find>,
     selection: Option<Selection>,
+    deferred_mark: Option<(Selection, DeferredMark)>,
+    deferred_copy: Option<Selection>,
     /// The selection whose action bar was closed by its Copy button: the bar stays hidden
     /// until the selection changes, as it does once a markup button consumes the selection.
     actions_dismissed: Option<Selection>,
     /// The drag in progress started a text selection: the wheel scrolls the page during it
     /// (#721), which egui's scroll area refuses while anything is dragged.
     selection_drag: bool,
+    /// Original page and glyph of a reading-order drag.
+    selection_drag_anchor: Option<(usize, usize)>,
     /// Clicks in the current run on the text layer: two select a word, three the line, four the page.
     clicks: u32,
     last_press_time: f64,
@@ -525,7 +588,7 @@ pub struct DocView {
     pub links: crate::link_ui::LinkView,
     /// Redact tool: the box being drawn, and a mark to add (page, quads) for the app to style.
     pub redact_drag: crate::redact_ui::AreaDrag,
-    pub pending_redaction: Option<(usize, Vec<[f64; 8]>)>,
+    pub pending_redaction: Option<Vec<(usize, Vec<[f64; 8]>)>>,
     /// A crop rectangle being dragged (Crop tool).
     pub crop_drag: crate::crop::CropDrag,
     /// Enhance ▸ Camera image: the quadrilateral being placed.
@@ -741,8 +804,11 @@ impl DocView {
             text_failed: HashSet::new(),
             find: None,
             selection: None,
+            deferred_mark: None,
+            deferred_copy: None,
             actions_dismissed: None,
             selection_drag: false,
+            selection_drag_anchor: None,
             clicks: 0,
             last_press_time: 0.0,
             last_press_pos: None,
@@ -1012,7 +1078,7 @@ impl DocView {
         self.text_failed.remove(&page);
         self.errors.remove(&page);
         self.last_queue.clear();
-        if self.selection.is_some_and(|s| s.page == page) {
+        if self.has_selection_on(page) {
             self.selection = None;
         }
     }
@@ -1027,13 +1093,74 @@ impl DocView {
         self.screen_xforms.iter().find(|(p, _)| *p == page).map(|(_, xf)| *xf)
     }
 
-    /// The text selection as markup quadrilaterals in user space: (page, quads).
+    /// The selected quadrilaterals grouped by page, once every text layer is available.
+    pub(crate) fn selection_all_quads(&self, info: &DocInfo) -> Option<Vec<(usize, Vec<[f64; 8]>)>> {
+        let selection = self.selection.as_ref()?;
+        let mut result = Vec::new();
+        for piece in &selection.pieces {
+            let text = self.texts.get(&piece.page)?;
+            let page = info.pages.get(piece.page)?;
+            let quads: Vec<_> = piece.rects(text).into_iter().map(|r| page.view_rect_to_quad(r)).collect();
+            if !quads.is_empty() {
+                result.push((piece.page, quads));
+            }
+        }
+        (!result.is_empty()).then_some(result)
+    }
+
+    /// Single-page actions cannot safely use only part of a multi-page selection.
     pub(crate) fn selection_quads(&self, info: &DocInfo) -> Option<(usize, Vec<[f64; 8]>)> {
-        let s = self.selection?;
-        let text = self.texts.get(&s.page)?;
-        let page = info.pages.get(s.page)?;
-        let quads: Vec<[f64; 8]> = s.rects(text).into_iter().map(|r| page.view_rect_to_quad(r)).collect();
-        (!quads.is_empty()).then_some((s.page, quads))
+        let mut pages = self.selection_all_quads(info)?;
+        (pages.len() == 1).then(|| pages.remove(0))
+    }
+
+    /// Remember a finished gesture only when some selected text is still being extracted.
+    pub(crate) fn defer_mark(&mut self, page: usize, mark: DeferredMark) {
+        if let Some(selection) = self.selection.as_ref()
+            && selection.on(page)
+            && selection.pieces.iter().any(|piece| !self.texts.contains_key(&piece.page))
+        {
+            self.deferred_mark = Some((selection.clone(), mark));
+        }
+    }
+
+    /// Finish a deferred gesture after extraction, or report a failed page without partial marks.
+    fn finish_deferred_mark(&mut self, info: &DocInfo) -> bool {
+        let Some((selection, mark)) = self.deferred_mark.clone() else { return false };
+        if self.selection.as_ref() != Some(&selection) {
+            self.deferred_mark = None;
+            return false;
+        }
+        if selection.pieces.iter().any(|piece| self.text_failed.contains(&piece.page)) {
+            self.deferred_mark = None;
+            return true;
+        }
+        if self.pending_edit.is_some() || selection.pieces.iter().any(|piece| !self.texts.contains_key(&piece.page)) {
+            return false;
+        }
+        self.deferred_mark = None;
+        let Some(pages) = self.selection_all_quads(info) else { return true };
+        let mut edits: Vec<_> = pages
+            .into_iter()
+            .filter_map(|(page, quads)| match &mark {
+                DeferredMark::Comment(tool, prefs) => tool.markup().map(|kind| {
+                    Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
+                        page,
+                        shape: pdfcraft_engine::Shape::TextMarkup { kind, quads },
+                        style: prefs.style(*tool),
+                        contents: String::new(),
+                        author: prefs.author.clone(),
+                    })
+                }),
+                DeferredMark::Redact(prefs, author) => Some(prefs.mark(page, quads, author)),
+            })
+            .collect();
+        if edits.is_empty() {
+            return true;
+        }
+        self.clear_selection();
+        self.pending_edit = Some(if edits.len() == 1 { edits.remove(0) } else { Edit::Batch { label: "Mark selection".into(), edits } });
+        false
     }
 
     /// A page's thumbnail texture, when rendered.
@@ -1054,6 +1181,11 @@ impl DocView {
 
     pub(crate) fn page_text(&self, page: usize) -> Option<Arc<PageText>> {
         self.texts.get(&page).cloned()
+    }
+
+    /// Whether `page` has selected text.
+    fn has_selection_on(&self, page: usize) -> bool {
+        self.selection.as_ref().is_some_and(|s| s.pieces.iter().any(|piece| piece.page == page))
     }
 
     pub(crate) fn clear_selection(&mut self) {
@@ -1170,11 +1302,72 @@ impl DocView {
         Some(xf.view_rect(g.rect).center())
     }
 
-    /// Selected text, if any (⌘C).
+    /// Selected pages whose text still needs extraction; failed pages are not retried every frame.
+    fn missing_selected_text(&self) -> Vec<usize> {
+        self.selection
+            .as_ref()
+            .into_iter()
+            .flat_map(|s| s.pieces.iter())
+            .map(|piece| piece.page)
+            .filter(|page| !self.texts.contains_key(page) && !self.text_failed.contains(page))
+            .collect()
+    }
+
+    /// Copy is available for a nonempty selection, including one still loading.
+    pub(crate) fn has_copyable_selection(&self) -> bool {
+        self.selected_text().is_some()
+            || self.selection.as_ref().is_some_and(|selection| {
+                selection.pieces.iter().any(|piece| !self.texts.contains_key(&piece.page))
+                    && selection.pieces.iter().any(|piece| self.texts.get(&piece.page).is_some_and(|text| !piece.text(text).is_empty()))
+            })
+    }
+
+    pub(crate) fn defer_copy(&mut self) -> bool {
+        if !self.has_copyable_selection() {
+            return false;
+        }
+        self.deferred_copy = self.selection.clone();
+        true
+    }
+
+    pub(crate) fn cancel_deferred_copy(&mut self) {
+        self.deferred_copy = None;
+    }
+
+    /// A pending Copy is cancelled if its selection changes or another input takes focus.
+    fn finish_deferred_copy(&mut self, keyboard_focused: bool) -> Result<Option<String>, ()> {
+        let Some(selection) = self.deferred_copy.as_ref() else { return Ok(None) };
+        if keyboard_focused || self.selection.as_ref() != Some(selection) {
+            self.deferred_copy = None;
+            return Ok(None);
+        }
+        if selection.pieces.iter().any(|piece| self.text_failed.contains(&piece.page)) {
+            self.deferred_copy = None;
+            return Err(());
+        }
+        if selection.pieces.iter().any(|piece| !self.texts.contains_key(&piece.page)) {
+            return Ok(None);
+        }
+        self.deferred_copy = None;
+        Ok(self.selected_text())
+    }
+
+    /// Selected text, if any (⌘C): every piece's text, joined with page breaks between pages.
     pub fn selected_text(&self) -> Option<String> {
-        let s = self.selection?;
-        let t = self.texts.get(&s.page)?;
-        Some(s.text(t)).filter(|x| !x.is_empty())
+        let s = self.selection.as_ref()?;
+        // A partial copy would silently lose text from a page still being extracted or that
+        // failed extraction. Wait until every selected page has a text layer.
+        if s.pieces.iter().any(|piece| !self.texts.contains_key(&piece.page)) {
+            return None;
+        }
+        let text = s
+            .pieces
+            .iter()
+            .filter_map(|piece| self.texts.get(&piece.page).map(|t| piece.text(t)))
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        (!text.is_empty()).then_some(text)
     }
 
     pub fn thumb(&self, page: usize) -> Option<&TextureHandle> {
@@ -1764,8 +1957,8 @@ impl DocView {
             return;
         }
         let mut keep: HashSet<usize> = self.frame_visible.clone();
-        if let Some(s) = self.selection {
-            keep.insert(s.page);
+        if let Some(s) = self.selection.as_ref() {
+            keep.extend(s.pieces.iter().map(|piece| piece.page));
         }
         if let Some(f) = self.find.as_ref() {
             keep.extend(f.matches.iter().map(|(p, _)| *p));
@@ -2836,6 +3029,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
         // A drag lasts only while egui reports it, so the mark can't outlive one.
         if !resp.dragged_by(egui::PointerButton::Primary) {
             view.selection_drag = false;
+            view.selection_drag_anchor = None;
         }
         // The Hand tool pans by this widget's drag, before the pages are laid out (above).
         if hand {
@@ -3259,12 +3453,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                         }
                     }
                 }
-                if let Some(sel) = view.selection.filter(|s| s.page == i) {
+                if let Some(sel) = view.selection.as_ref().and_then(|s| s.pieces.iter().find(|p| p.page == i)).copied() {
                     for lr in sel.rects(&text) {
                         painter.rect_filled(to_screen(lr), CornerRadius::same(1), Color32::from_rgba_unmultiplied(0x3A, 0x7B, 0xF0, 70));
                     }
                     // The rectangle being drawn, as Acrobat shows it while column-selecting.
-                    if let Span::Column { rect } = sel.span
+                    if let Piece::Column { rect } = sel.piece
                         && resp.dragged()
                     {
                         let outline = Stroke::new(1.0, Color32::from_rgb(0x3A, 0x7B, 0xF0));
@@ -3307,6 +3501,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                         .is_some_and(|o| r.contains(o));
                     let pressed = ui.input(|inp| inp.pointer.primary_pressed());
                     if pressed && press_here && !over_link {
+                        // Capture the origin before drag detection: the next pointer event may
+                        // already be on another page.
+                        view.selection_drag_anchor = if column { None } else { text.nearest(vx, vy).map(|glyph| (i, glyph)) };
                         let now = ui.input(|inp| inp.time);
                         // The same limits egui uses to count clicks on release.
                         let (max_delay, max_dist) = ui.ctx().options(|o| (o.input_options.max_double_click_delay, o.input_options.max_click_dist));
@@ -3332,9 +3529,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                         view.selection_drag = true;
                         let origin = ui.input(|inp| inp.pointer.press_origin()).unwrap_or(p);
                         let (ox, oy) = xf.screen_to_view(origin);
+                        view.selection_drag_anchor = if column { None } else { text.nearest(ox, oy).map(|a| (i, a)) };
                         if view.clicks < 2 {
                             view.selection = if column {
-                                Some(Selection { page: i, span: Span::Column { rect: [ox, oy, vx, vy] } })
+                                Some(Selection {
+                                    pieces: vec![PageSelection { page: i, piece: Piece::Column { rect: [ox, oy, vx, vy] } }],
+                                    anchor: None,
+                                })
                             } else {
                                 text.nearest(ox, oy).map(|a| Selection::run(i, a, a))
                             };
@@ -3342,13 +3543,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     }
                     let clicks = if view.clicks > 2 && tool != QuickTool::Select { 1 } else { view.clicks };
                     if resp.dragged()
-                        && let Some(sel) = view.selection.as_mut().filter(|s| s.page == i)
+                        && r.contains(p)
+                        && view.selection.as_ref().is_some_and(|s| s.on(i))
+                        && let Some(index) = view.selection.as_mut().and_then(|s| s.pieces.iter_mut().find(|piece| piece.page == i))
                     {
-                        match &mut sel.span {
-                            // After a multi-click the drag extends by its unit (#1685), as in
-                            // Acrobat and browsers: whole words or lines, always keeping the one
-                            // clicked, which holds the anchor whichever way the drag went.
-                            Span::Run { anchor, head } if clicks >= 2 => {
+                        match &mut index.piece {
+                            // A multi-click drag extends by whole words or lines.
+                            Piece::Run { anchor, head } if clicks >= 2 => {
                                 if let Some(h) = text.nearest(vx, vy)
                                     && let Some((first, last)) = click_unit(&text, clicks, *anchor)
                                 {
@@ -3356,20 +3557,38 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                                     (*anchor, *head) = if to_first < first { (last, to_first) } else { (first, to_last.max(last)) };
                                 }
                             }
-                            Span::Run { head, .. } => {
+                            Piece::Run { head, .. } => {
                                 if let Some(h) = text.nearest(vx, vy) {
                                     *head = h;
                                 }
                             }
-                            Span::Column { rect } => {
+                            Piece::Column { rect } => {
                                 rect[2] = vx;
                                 rect[3] = vy;
                             }
+                            Piece::Tail { .. } | Piece::Whole => {}
                         }
+                    }
+                    // A reading-order drag spanning pages always covers the full interval from
+                    // its original glyph to the current one, in either direction. Rebuild it
+                    // when the pointer changes pages so returning retracts the selection too.
+                    if resp.dragged()
+                        && let Some((start_page, start_glyph)) = view.selection_drag_anchor
+                        && let Some(head) = text.nearest(vx, vy)
+                        && (i != start_page || view.selection.as_ref().is_some_and(|s| s.pieces.len() > 1))
+                    {
+                        view.selection_drag = true;
+                        view.actions_dismissed = None;
+                        view.selection = Some(Selection::between(start_page, start_glyph, i, head));
                     }
                     // A rectangle around no text selects nothing.
                     if resp.drag_stopped()
-                        && view.selection.is_some_and(|s| s.page == i && matches!(s.span, Span::Column { .. }) && s.text(&text).is_empty())
+                        && view.selection.as_ref().is_some_and(|s| {
+                            s.pieces
+                                .iter()
+                                .find(|piece| piece.page == i)
+                                .is_some_and(|piece| matches!(piece.piece, Piece::Column { .. }) && piece.text(&text).is_empty())
+                        })
                     {
                         view.selection = None;
                     }
@@ -3397,15 +3616,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                             }
                         }
                     } else if resp.clicked() && view.clicks < 2 && !over_link {
-                        // ⇧-click extends a selection on this page to the click, keeping its
-                        // anchor (#527). Otherwise (no shift, no selection on this page, or a
-                        // column selection, which has no anchor glyph; a selection cannot yet
-                        // span pages) a click clears the selection.
-                        let shift = ui.input(|inp| inp.modifiers.shift);
-                        match (view.selection.as_mut().filter(|s| shift && s.page == i).map(|s| &mut s.span), text.nearest(vx, vy)) {
-                            (Some(Span::Run { head, .. }), Some(h)) => *head = h,
-                            _ => view.selection = None,
-                        }
+                        // Keep the original endpoint when extending, crossing, or retracting pages.
+                        let anchor = ui.input(|inp| inp.modifiers.shift).then(|| view.selection.as_ref().and_then(|s| s.anchor)).flatten();
+                        view.selection = match (anchor, text.nearest(vx, vy)) {
+                            (Some((page, glyph)), Some(head)) => Some(Selection::between(page, glyph, i, head)),
+                            _ => None,
+                        };
                     }
                 }
             }
@@ -3417,7 +3633,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             crate::image_pick::paint(painter, &xf, i, info, view);
             comments::page_after_text(&resp, &pcx, view);
             if tool == QuickTool::Redact && can_modify {
-                crate::redact_ui::after_text(&resp, i, info, view);
+                crate::redact_ui::after_text(&resp, i, info, view, &app.redact_prefs, &author);
             }
             if area_tool {
                 crate::redact_ui::paint(ui, painter, i, view);
@@ -3670,7 +3886,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 return;
             }
             if view.comments.selected.is_none() {
-                let selected = view.selected_text().is_some_and(|t| !t.is_empty());
+                let selected = view.has_copyable_selection();
                 let key = crate::commands::shortcut_label(ui.ctx(), crate::commands::COPY);
                 if ui.add_enabled(can_copy && selected, egui::Button::new(tl!("Copy")).shortcut_text(key)).clicked() {
                     copy_selected = true;
@@ -3843,6 +4059,13 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     // Text layers: visible pages for selection, every page while a search is active.
     let need_text = |p: &usize| !view.texts.contains_key(p) && !view.text_failed.contains(p);
     let mut text_pages: Vec<usize> = if hand { Vec::new() } else { visible_now.iter().copied().filter(need_text).collect() };
+    // A fast drag can skip pages whose text has not been extracted yet. Keep those pages in
+    // the selection and request their text even after the pointer is released or off screen.
+    for page in view.missing_selected_text() {
+        if !text_pages.contains(&page) {
+            text_pages.push(page);
+        }
+    }
     if view.find.as_ref().is_some_and(|f| !f.case_query.trim().is_empty()) {
         let n = info.pages.len();
         let rest: Vec<usize> = (0..n).map(|k| (cur + k) % n).filter(need_text).filter(|p| !text_pages.contains(p)).collect();
@@ -3858,6 +4081,14 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }));
     view.frame_queue = queue;
     view.frame_visible = visible_now.iter().copied().collect();
+    if view.finish_deferred_mark(info) {
+        refused = Some(tl!("Could not mark the selection because text could not be read on every page").to_string());
+    }
+    match view.finish_deferred_copy(ui.ctx().egui_wants_keyboard_input()) {
+        Ok(Some(text)) if can_copy => ui.ctx().copy_text(text),
+        Err(()) => refused = Some(tl!("Could not copy the selection because text could not be read on every page").to_string()),
+        _ => {}
+    }
 
     if let Some((pos, text)) = hover_text {
         egui::Area::new(egui::Id::new("canvas-hover")).order(egui::Order::Tooltip).fixed_pos(pos + vec2(14.0, 16.0)).show(ui.ctx(), |ui| {
@@ -3995,21 +4226,26 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if let Some((page, i)) = app.views[index].links.open_existing.take() {
         app.open_link_props(page, None, Some(i));
     }
-    if let Some((page, quads)) = app.views[index].pending_redaction.take() {
+    if let Some(pages) = app.views[index].pending_redaction.take() {
         let author = app.comment_prefs.author.clone();
-        app.views[index].pending_edit = Some(if app.quick_tool == QuickTool::Comment(comments::CommentTool::Highlight) {
-            // An area highlight: a highlight over the box.
-            let style = app.comment_prefs.style(comments::CommentTool::Highlight);
-            pdfcraft_engine::Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
-                page,
-                shape: pdfcraft_engine::Shape::TextMarkup { kind: pdfcraft_engine::Markup::Highlight, quads },
-                style,
-                contents: String::new(),
-                author,
+        let mut edits: Vec<_> = pages
+            .into_iter()
+            .map(|(page, quads)| {
+                if app.quick_tool == QuickTool::Comment(comments::CommentTool::Highlight) {
+                    let style = app.comment_prefs.style(comments::CommentTool::Highlight);
+                    Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
+                        page,
+                        shape: pdfcraft_engine::Shape::TextMarkup { kind: pdfcraft_engine::Markup::Highlight, quads },
+                        style,
+                        contents: String::new(),
+                        author: author.clone(),
+                    })
+                } else {
+                    app.redact_prefs.mark(page, quads, &author)
+                }
             })
-        } else {
-            app.redact_prefs.mark(page, quads, &author)
-        });
+            .collect();
+        app.views[index].pending_edit = Some(if edits.len() == 1 { edits.remove(0) } else { Edit::Batch { label: "Mark selection".into(), edits } });
     }
     match image_action {
         Some(crate::edit_text_ui::ImageAction::Replace(page, index)) => app.replace_page_image_dialog(page, index),
@@ -4082,20 +4318,21 @@ fn selection_actions(
     if ui.input(|input| input.pointer.is_decidedly_dragging()) {
         return false;
     }
-    let Some(selection) = view.selection else {
+    let Some(selection) = view.selection.as_ref() else {
         view.actions_dismissed = None;
         return false;
     };
-    if view.actions_dismissed == Some(selection) {
+    if view.actions_dismissed.as_ref() == Some(selection) {
         return false;
     }
-    let Some(text) = view.texts.get(&selection.page) else { return false };
-    let Some(xf) = view.page_xform(selection.page) else { return false };
-    let Some(last) = selection.rects(text).last().copied() else { return false };
-    let selected = selection.text(text);
-    if selected.is_empty() {
+    let Some((piece, text)) = selection.pieces.iter().rev().find_map(|piece| {
+        let text = view.texts.get(&piece.page)?;
+        (!piece.text(text).is_empty()).then_some((piece, text))
+    }) else {
         return false;
-    }
+    };
+    let Some(xf) = view.page_xform(piece.page) else { return false };
+    let Some(last) = piece.rects(text).last().copied() else { return false };
     let rect = xf.view_rect(last);
     if !viewport.intersects(rect) {
         return false;
@@ -4113,7 +4350,13 @@ fn selection_actions(
                     (tl!("Strikethrough"), SelectionAction::Markup(comments::CommentTool::StrikeOut)),
                     (tl!("Replace text"), SelectionAction::Replace),
                 ] {
-                    if ui.add_enabled(can_comment, egui::Button::new(label)).clicked() {
+                    let single_page = selection.pieces.len() == 1;
+                    let enabled = can_comment && (single_page || matches!(action, SelectionAction::Markup(_)));
+                    let response = ui.add_enabled(enabled, egui::Button::new(label));
+                    if !single_page && matches!(action, SelectionAction::Note | SelectionAction::Replace) {
+                        response.clone().on_disabled_hover_text(tl!("Select text on one page to use this action"));
+                    }
+                    if response.clicked() {
                         chosen = Some(action);
                     }
                 }
@@ -4126,10 +4369,32 @@ fn selection_actions(
     let Some(action) = chosen else { return false };
     if let SelectionAction::Copy = action {
         // Copying closes the bar but keeps the words selected, for ⌘C or a second action.
-        view.actions_dismissed = Some(selection);
+        view.actions_dismissed = Some(selection.clone());
         return true;
     }
-    let Some((page, quads)) = view.selection_quads(info) else { return false };
+    let Some(mut pages) = view.selection_all_quads(info) else { return false };
+    if let SelectionAction::Markup(tool) = action {
+        let Some(kind) = tool.markup() else { return false };
+        let mut edits: Vec<_> = pages
+            .into_iter()
+            .map(|(page, quads)| {
+                Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
+                    page,
+                    shape: pdfcraft_engine::Shape::TextMarkup { kind, quads },
+                    style: prefs.style(tool),
+                    contents: String::new(),
+                    author: prefs.author.clone(),
+                })
+            })
+            .collect();
+        view.clear_selection();
+        view.pending_edit = Some(if edits.len() == 1 { edits.remove(0) } else { Edit::Batch { label: "Text markup".into(), edits } });
+        return false;
+    }
+    if pages.len() != 1 {
+        return false;
+    }
+    let (page, quads) = pages.remove(0);
     let last = quads.last().copied().unwrap_or_default();
     let at = [last[2].max(last[6]), last[1].max(last[3])];
     view.clear_selection();
@@ -4146,17 +4411,7 @@ fn selection_actions(
                 focus: true,
             });
         }
-        SelectionAction::Markup(tool) => {
-            // Every markup button carries a markup tool; anything else adds nothing.
-            let Some(kind) = tool.markup() else { return false };
-            view.pending_edit = Some(Edit::AddAnnotation(pdfcraft_engine::NewAnnotation {
-                page,
-                shape: pdfcraft_engine::Shape::TextMarkup { kind, quads },
-                style: prefs.style(tool),
-                contents: String::new(),
-                author: prefs.author.clone(),
-            }));
-        }
+        SelectionAction::Markup(_) => {}
         // Copy is dispatched through the app after the view borrow ends.
         SelectionAction::Copy => {}
     }
@@ -5611,6 +5866,183 @@ trailer << /Root 1 0 R >>
         assert!(!v.texts.contains_key(&99), "far pages go");
         assert_eq!(v.texts.len(), 2 + 1 + MAX_CACHED_TEXT_PAGES, "visible + matched + prefetch window");
         assert!(v.text_failed.contains(&0) && v.text_failed.contains(&99), "failures are bytes-free: never evict");
+    }
+
+    #[test]
+    fn cross_page_copy_waits_for_every_selected_text_layer() {
+        let info = thumbnail_info(3);
+        let mut view = DocView::new(DocId(1), &info, ViewDefaults::default());
+        let text = |value: &str| {
+            Arc::new(PageText {
+                glyphs: vec![pdfcraft_render::TextGlyph {
+                    text: value.into(),
+                    rect: [0.0, 0.0, 10.0, 10.0],
+                    quad: [[0.0, 0.0]; 4],
+                    direction: [1.0, 0.0],
+                }],
+                line_of: vec![0],
+                space_before: vec![false],
+            })
+        };
+        view.texts.insert(0, text("first"));
+        view.texts.insert(2, text("last"));
+        view.selection = Some(Selection {
+            anchor: Some((0, 0)),
+            pieces: vec![
+                PageSelection { page: 0, piece: Piece::Tail { start: 0 } },
+                PageSelection { page: 1, piece: Piece::Whole },
+                PageSelection { page: 2, piece: Piece::Run { anchor: 0, head: 0 } },
+            ],
+        });
+        assert_eq!(view.missing_selected_text(), vec![1], "the missing page is queued for extraction");
+        assert!(view.defer_copy());
+        assert_eq!(view.finish_deferred_copy(false), Ok(None), "copy remains pending while text loads");
+        view.text_failed.insert(1);
+        assert_eq!(view.finish_deferred_copy(false), Err(()), "copy reports failed text extraction");
+        assert!(view.deferred_copy.is_none());
+        view.text_failed.remove(&1);
+        assert!(view.defer_copy());
+        assert_eq!(view.finish_deferred_copy(true), Ok(None), "another input cancels the queued copy");
+        assert!(view.deferred_copy.is_none());
+        assert_eq!(view.selected_text(), None, "missing middle text must not produce a partial copy");
+        assert!(view.selection_quads(&info).is_none(), "missing text must not create partial markup");
+        view.text_failed.insert(1);
+        assert!(view.missing_selected_text().is_empty(), "failed text is not requested repeatedly");
+        assert_eq!(view.selected_text(), None, "a failed page must not be silently skipped");
+        view.text_failed.remove(&1);
+        view.defer_mark(0, DeferredMark::Comment(comments::CommentTool::Highlight, comments::CommentPrefs::default()));
+        assert!(!view.finish_deferred_mark(&info));
+        assert!(view.pending_edit.is_none(), "missing text must not create partial annotations");
+        view.text_failed.insert(1);
+        assert!(view.finish_deferred_mark(&info), "failed extraction is reported");
+        assert!(view.pending_edit.is_none() && view.selection.is_some());
+        view.text_failed.remove(&1);
+        view.defer_mark(0, DeferredMark::Redact(crate::redact_ui::RedactPrefs::default(), "Tester".into()));
+        view.texts.insert(1, text("middle"));
+        assert_eq!(view.selected_text().as_deref(), Some("first\nmiddle\nlast"));
+        assert!(!view.finish_deferred_mark(&info));
+        match view.pending_edit.take() {
+            Some(Edit::Batch { edits, .. }) => assert_eq!(edits.len(), 3, "every page is marked together"),
+            _ => panic!("completed redaction should create a batch"),
+        }
+        assert!(view.selection.is_none());
+    }
+
+    #[test]
+    fn direct_marks_wait_for_asynchronous_text_and_cancel_when_selection_changes() {
+        fn fixture() -> Vec<u8> {
+            let mut objects = String::new();
+            let mut kids = Vec::new();
+            for k in 0..3 {
+                let (page, contents) = (4 + 2 * k, 5 + 2 * k);
+                kids.push(format!("{page} 0 R"));
+                let content = format!("BT /F1 14 Tf 20 20 Td (Page {} ends with this line) Tj ET", k + 1);
+                objects.push_str(&format!("{page} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents {contents} 0 R /Resources << /Font << /F1 3 0 R >> >> >> endobj\n{contents} 0 obj << /Length {} >> stream\n{content}\nendstream endobj\n", content.len()));
+            }
+            format!("%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [{}] /Count 3 >> endobj\n3 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n{objects}trailer << /Root 1 0 R >>\n%%EOF", kids.join(" ")).into_bytes()
+        }
+        for (command, subtype, cancel) in
+            [("comment.highlight", "Highlight", false), ("redact.mark", "Redact", false), ("comment.highlight", "Highlight", true)]
+        {
+            let mut h = egui_kittest::Harness::builder().with_size(vec2(1400.0, 900.0)).with_step_dt(1.0 / 60.0).build_eframe(move |_cc| {
+                let mut app = PdfCraftApp::new();
+                app.open_bytes("selection.pdf", None, fixture()).unwrap();
+                app.set_option("left", "closed").unwrap();
+                app.set_option("layout", "continuous").unwrap();
+                app.set_option("zoom", "60").unwrap();
+                assert!(app.execute(command));
+                app
+            });
+            for _ in 0..300 {
+                if h.state().views[0].glyph_screen_pos(0, 7).is_some() && h.state().views[0].glyph_screen_pos(2, 10).is_some() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                h.run_steps(1);
+            }
+            let first = h.state().views[0].glyph_screen_pos(0, 7).expect("first page text");
+            let last = h.state().views[0].glyph_screen_pos(2, 10).expect("last page text");
+            let view = &mut h.state_mut().views[0];
+            view.hold_rasters = true;
+            view.texts.remove(&1);
+            h.event(egui::Event::PointerMoved(first));
+            h.event(egui::Event::PointerButton { pos: first, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+            h.run_steps(2);
+            for k in 1..=8 {
+                h.event(egui::Event::PointerMoved(first + vec2(6.0, 0.0) * (k as f32 / 8.0)));
+                h.run_steps(1);
+            }
+            for k in 1..=40 {
+                h.event(egui::Event::PointerMoved(first + (last - first) * (k as f32 / 40.0)));
+                h.run_steps(1);
+            }
+            h.event(egui::Event::PointerButton { pos: last, button: egui::PointerButton::Primary, pressed: false, modifiers: egui::Modifiers::NONE });
+            h.run_steps(2);
+            assert!(h.state().views[0].deferred_mark.is_some(), "{command} must wait for page two");
+            assert!(h.state().session.get(h.state().views[0].id).unwrap().info.annotations.is_empty());
+            if cancel {
+                h.state_mut().views[0].clear_selection();
+            }
+            h.state_mut().views[0].hold_rasters = false;
+            for _ in 0..300 {
+                h.run_steps(1);
+                if h.state().views[0].texts.contains_key(&1) && h.state().views[0].deferred_mark.is_none() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            assert!(h.state().views[0].texts.contains_key(&1), "actual page extraction completes");
+            assert!(h.state().views[0].deferred_mark.is_none());
+            let doc = h.state().session.get(h.state().views[0].id).unwrap();
+            let pages: Vec<_> = doc.info.annotations.iter().filter(|a| a.subtype == subtype).map(|a| a.page).collect();
+            assert_eq!(pages, if cancel { vec![] } else { vec![0, 1, 2] });
+        }
+        for (keyboard, cancel) in [(false, false), (true, false), (false, true)] {
+            let mut h = egui_kittest::Harness::builder().with_size(vec2(1400.0, 900.0)).with_step_dt(1.0 / 60.0).build_eframe(move |_cc| {
+                let mut app = PdfCraftApp::new();
+                app.open_bytes("selection.pdf", None, fixture()).unwrap();
+                app.set_option("left", "closed").unwrap();
+                app.set_option("layout", "continuous").unwrap();
+                app.set_option("zoom", "60").unwrap();
+                app
+            });
+            for _ in 0..300 {
+                if h.state().views[0].texts.contains_key(&0) && h.state().views[0].texts.contains_key(&2) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                h.run_steps(1);
+            }
+            let view = &mut h.state_mut().views[0];
+            view.hold_rasters = true;
+            view.texts.remove(&1);
+            view.selection = Some(Selection::between(0, 7, 2, 10));
+            h.run_steps(1);
+            if keyboard {
+                h.event(egui::Event::Copy);
+                h.run_steps(1);
+            } else {
+                assert!(h.state_mut().execute("edit.copy"));
+            }
+            assert!(h.state().views[0].deferred_copy.is_some(), "copy must wait for page two: keyboard={keyboard}, cancel={cancel}");
+            if cancel {
+                h.state_mut().views[0].clear_selection();
+            }
+            h.state_mut().views[0].hold_rasters = false;
+            let mut copied = false;
+            for _ in 0..300 {
+                h.run_steps(1);
+                copied |= h.output().platform_output.commands.iter().any(
+                    |c| matches!(c, egui::OutputCommand::CopyText(text) if text == "ends with this line\nPage 2 ends with this line\nPage 3 ends"),
+                );
+                if h.state().views[0].texts.contains_key(&1) && h.state().views[0].deferred_copy.is_none() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            assert!(h.state().views[0].texts.contains_key(&1), "actual extraction completes");
+            assert_eq!(copied, !cancel, "only the unchanged selection reaches the clipboard");
+        }
     }
 
     #[test]

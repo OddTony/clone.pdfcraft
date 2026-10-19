@@ -2398,3 +2398,7 @@ animation effects	Off	关
 	Make properties default	将属性设为默认
 	Pages selected	选定的页面
 	Page properties	页面属性
+
+	Select text on one page to use this action	请在一页内选择文本以使用此操作
+	Could not mark the selection because text could not be read on every page	无法标记选区，因为无法读取所有页面上的文本
+	Could not copy the selection because text could not be read on every page	无法复制选区，因为无法读取所有页面上的文本

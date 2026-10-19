@@ -2646,3 +2646,7 @@ certificate	Key usage	Utilizzo chiave
 certificate	Self-signed	Autofirmato
 certificate	SHA-1 digest	Impronta SHA-1
 certificate	SHA-256 digest	Impronta SHA-256
+
+	Select text on one page to use this action	Seleziona testo su una pagina per usare questa azione
+	Could not mark the selection because text could not be read on every page	Impossibile contrassegnare la selezione perché non è stato possibile leggere il testo su tutte le pagine
+	Could not copy the selection because text could not be read on every page	Impossibile copiare la selezione perché non è stato possibile leggere il testo su tutte le pagine

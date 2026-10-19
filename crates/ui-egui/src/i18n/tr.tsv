@@ -2430,3 +2430,7 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+
+	Select text on one page to use this action	Bu işlemi kullanmak için tek bir sayfada metin seçin
+	Could not mark the selection because text could not be read on every page	Tüm sayfalardaki metin okunamadığı için seçim işaretlenemedi
+	Could not copy the selection because text could not be read on every page	Tüm sayfalardaki metin okunamadığı için seçim kopyalanamadı

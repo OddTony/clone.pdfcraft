@@ -2687,3 +2687,7 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+
+	Select text on one page to use this action	Chọn văn bản trên một trang để dùng thao tác này
+	Could not mark the selection because text could not be read on every page	Không thể đánh dấu vùng chọn vì không đọc được văn bản trên tất cả các trang
+	Could not copy the selection because text could not be read on every page	Không thể sao chép vùng chọn vì không đọc được văn bản trên tất cả các trang

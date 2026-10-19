@@ -2343,3 +2343,7 @@ animation effects	Off	ఆఫ్
 	Make properties default	లక్షణాలను డిఫాల్ట్‌గా చేయి
 	Pages selected	ఎంచుకున్న పేజీలు
 	Page properties	పేజీ లక్షణాలు
+
+	Select text on one page to use this action	ఈ చర్యను ఉపయోగించడానికి ఒక పేజీలోని వచనాన్ని ఎంచుకోండి
+	Could not mark the selection because text could not be read on every page	అన్ని పేజీలలో వచనాన్ని చదవలేకపోయినందున ఎంపికను గుర్తించలేకపోయాం
+	Could not copy the selection because text could not be read on every page	అన్ని పేజీలలో వచనాన్ని చదవలేకపోయినందున ఎంపికను కాపీ చేయలేకపోయాం
