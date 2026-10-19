@@ -55,6 +55,42 @@ fn edited_pdf_preview_matches_apply_save_render() {
     assert_eq!(image.rgba, applied.rgba, "live preview and saved PDF must render identically");
 }
 
+#[test]
+fn vowelized_hebrew_pdf_edit_matches_preview_and_survives_reopen() {
+    // Optional craft-fonts are supplied by the Hebrew CI workflow and release
+    // builder. Other workspace builds without the asset deliberately skip.
+    if pdfcraft_fonts::document_hebrew_font(false).is_none() {
+        return;
+    }
+    let phrase = "אַנדערער דונאַ, אין דער שטאָט פּעסט";
+    let (mut session, id) = session_with(1);
+    let original = session.get(id).unwrap().bytes.clone();
+    let preview = session.get(id).unwrap().text_edit_draft_preview(
+        0, 0, phrase, &pdfcraft_edit::BlockStyle::default(),
+    ).expect("shaped Hebrew edit should create a PDF draft");
+    let image = preview.render_background(1.0).expect("shaped PDF draft should render");
+    assert_eq!(session.get(id).unwrap().bytes, original, "draft preview must be read-only");
+
+    session.apply(id, Edit::EditTextBlock {
+        page: 0, block: 0, text: phrase.into(),
+        style: pdfcraft_edit::BlockStyle::default(),
+    }).expect("Apply should use the same shaping path as Preview");
+    let document = session.get(id).unwrap();
+    let mut renderer = pdfcraft_render::PageRenderer::new(document.bytes.clone(), document.config.clone());
+    let applied = renderer.render(pdfcraft_render::RenderRequest { page: 0, scale: 1.0, ..Default::default() });
+    assert!(applied.error.is_none(), "{:?}", applied.error);
+    assert_eq!(image.rgba, applied.rgba, "draft preview must equal applied PDF pixels");
+
+    let mut reopened = Session::new();
+    let reloaded = reopened.open("hebrew-edited.pdf", None, document.bytes.clone(), None)
+        .expect("saved Hebrew PDF reopens");
+    let decoded: String = reopened.get(reloaded).unwrap().text_lines(0).iter()
+        .map(|line| line.text.as_str()).collect::<Vec<_>>().join(" ");
+    for word in ["אַנדערער", "דונאַ", "שטאָט"] {
+        assert!(decoded.contains(word), "reopened text lost Hebrew marks or order: {decoded:?}");
+    }
+}
+
 fn session_with(n: usize) -> (Session, DocId) {
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let id = s.open("fixture.pdf", None, Arc::new(fixture(n)), None).expect("opens");
