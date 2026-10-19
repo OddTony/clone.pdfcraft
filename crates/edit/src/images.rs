@@ -33,7 +33,7 @@ pub struct PageImage {
     /// The content stream its `Do` (its first token) is in, and the `Do`'s index among the
     /// operators of the page's streams joined ([`Pieces`]).
     stream: usize,
-    op: usize,
+    pub(crate) op: usize,
     /// CTM before `Do`, excluding a Form's own Matrix.
     draw_matrix: [f64; 6],
     clips: Vec<ClipPath>,
@@ -73,7 +73,7 @@ struct ClipPath {
     even_odd: bool,
 }
 
-fn streams(doc: &Document, page: &Dict) -> Vec<(Object, Vec<u8>)> {
+pub(crate) fn content_streams(doc: &Document, page: &Dict) -> Vec<(Object, Vec<u8>)> {
     let list: Vec<Object> = match page.get(b"Contents") {
         None => Vec::new(),
         Some(c) => match &*doc.resolve(c) {
@@ -223,7 +223,7 @@ pub fn page_images(doc: &Document, page: usize) -> Result<Vec<PageImage>, EditEr
     let mut out = Vec::new();
     // The streams are one stream in pieces, so the graphics state and operators carry over.
     let mut state = ImageState::new(Matrix::IDENTITY, p.crop(doc), Vec::new());
-    let pieces = joined(&streams(doc, &p.dict));
+    let pieces = joined(&content_streams(doc, &p.dict));
     for (i, op) in pieces.parse().ops.iter().enumerate() {
         state.apply(op)?;
         let ctm = state.placement.matrix;
@@ -368,7 +368,7 @@ pub fn reading_images(doc: &Document, page: usize) -> Result<Vec<PageImage>, Edi
     let mut out = Vec::new();
     let mut st = ImageState::new(Matrix::IDENTITY, p.crop(doc), Vec::new());
     let mut forms = Forms { path: Vec::new(), budget: crate::text::FormBudget::default() };
-    let pieces = joined(&streams(doc, &p.dict));
+    let pieces = joined(&content_streams(doc, &p.dict));
     walk(doc, &pieces.parse().ops, &res, &mut st, &|op| pieces.piece_of(op.span.start), &mut forms, &mut out)?;
     Ok(out)
 }
@@ -455,7 +455,7 @@ pub fn change_image(doc: &mut Document, page: usize, index: usize, change: &Imag
     let images = page_images(doc, page)?;
     let img = images.get(index).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no image {}", page + 1, index + 1)))?;
     let p = page_of(doc, page)?;
-    let all = streams(doc, &p.dict);
+    let all = content_streams(doc, &p.dict);
     let pieces = joined(&all);
     let ops = pieces.parse().ops;
     if !ops.get(img.op).is_some_and(|op| op.is("Do")) {
@@ -503,7 +503,7 @@ pub(crate) fn selectable_images(
     excluded: &std::collections::BTreeSet<ObjRef>,
 ) -> Result<Vec<(usize, PageImage)>, EditError> {
     let p = page_of(doc, page)?;
-    let all = streams(doc, &p.dict);
+    let all = content_streams(doc, &p.dict);
     Ok(page_images(doc, page)?
         .into_iter()
         .enumerate()
@@ -727,7 +727,7 @@ pub(crate) fn translate_images(doc: &mut Document, page: usize, indexes: &[usize
     }
     let images = page_images(doc, page)?;
     let p = page_of(doc, page)?;
-    let all = streams(doc, &p.dict);
+    let all = content_streams(doc, &p.dict);
     let mut plans = std::collections::BTreeMap::new();
     for index in indexes {
         let image = images.get(*index).ok_or_else(|| EditError::Invalid("a selected image no longer exists".into()))?;
