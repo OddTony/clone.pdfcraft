@@ -174,14 +174,22 @@ fn interior_color(d: &Dict, fallback: Option<Rgb>) -> Option<Rgb> {
     color(d, b"IC").flatten().or(fallback)
 }
 
+/// The leading numbers of `/Border`. A dash array in the fourth entry stops the scan, so the
+/// width (the third number) is still read.
+fn border_numbers(d: &Dict) -> Option<Vec<f64>> {
+    let mut values = Vec::new();
+    for item in d.get(b"Border").and_then(Object::as_array)? {
+        let Some(n) = item.as_f64() else { break };
+        values.push(n);
+    }
+    Some(values)
+}
+
 fn border_width(d: &Dict) -> f64 {
     if let Some(w) = d.get(b"BS").and_then(|b| b.as_dict()).and_then(|b| b.get(b"W")).and_then(|w| w.as_f64()) {
         return w.max(0.0);
     }
-    match nums(d, b"Border") {
-        Some(b) if b.len() >= 3 => b[2].max(0.0),
-        _ => 1.0,
-    }
+    border_numbers(d).filter(|b| b.len() >= 3).map_or(1.0, |b| b[2].max(0.0))
 }
 
 /// A link's border width when the file states one (`/BS` or `/Border`). `None` when it states
@@ -190,19 +198,35 @@ fn explicit_link_border(d: &Dict) -> Option<f64> {
     let w = if let Some(bs) = d.get(b"BS").and_then(|b| b.as_dict()) {
         bs.get(b"W").and_then(|w| w.as_f64()).unwrap_or(1.0)
     } else {
-        *nums(d, b"Border")?.get(2)?
+        *border_numbers(d)?.get(2)?
     };
     (w.is_finite() && w > 0.0).then_some(w)
 }
 
-/// Dash pattern operator for a dashed border, if any.
+fn dash_operator(values: &[f64]) -> String {
+    format!("[{}] 0 d\n", values.iter().map(|x| n(*x)).collect::<Vec<_>>().join(" "))
+}
+
+/// Dash pattern operator for a dashed border, if any. `/BS` wins over `/Border`. A `/Border`
+/// dash is the fourth entry and is used only when every value is a finite, non-negative number.
 fn dash(d: &Dict) -> String {
-    let Some(bs) = d.get(b"BS").and_then(|b| b.as_dict()) else { return String::new() };
-    if bs.name(b"S") != Some(b"D") {
+    if let Some(bs) = d.get(b"BS").and_then(|b| b.as_dict()) {
+        if bs.name(b"S") != Some(b"D") {
+            return String::new();
+        }
+        let arr = nums(bs, b"D").filter(|a| !a.is_empty() && a.iter().all(|x| *x >= 0.0)).unwrap_or_else(|| vec![3.0]);
+        return dash_operator(&arr);
+    }
+    let Some(pattern) = d.get(b"Border").and_then(Object::as_array).and_then(|border| border.get(3)).and_then(Object::as_array) else {
+        return String::new();
+    };
+    let Some(values) = pattern.iter().map(Object::as_f64).collect::<Option<Vec<_>>>() else {
+        return String::new();
+    };
+    if values.is_empty() || values.iter().any(|x| !x.is_finite() || *x < 0.0) {
         return String::new();
     }
-    let arr = nums(bs, b"D").filter(|a| !a.is_empty() && a.iter().all(|x| *x >= 0.0)).unwrap_or_else(|| vec![3.0]);
-    format!("[{}] 0 d\n", arr.iter().map(|x| n(*x)).collect::<Vec<_>>().join(" "))
+    dash_operator(&values)
 }
 
 fn rg(c: Rgb) -> String {

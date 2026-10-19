@@ -963,6 +963,24 @@ fn visible_link_borders_are_drawn_outside_the_link_tool() {
     assert!(underline.contains("0 0.5 0 RG") && underline.contains(" l S") && !underline.contains("re"), "{underline}");
 }
 
+/// A link that states its dash only as the fourth `/Border` entry, with no `/BS`.
+#[test]
+fn a_link_dash_in_the_border_array_is_drawn() {
+    let doc = document_of(&[
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [40 700 200 730] /Border [0 0 1 [3 1]] /C [0 0 1] >>",
+        b"<< /Type /Annot /Subtype /Link /Rect [40 660 200 690] /Border [0 0 1 [-1 2]] /C [0 0 1] >>",
+    ]);
+    let display = with_missing_appearances(&doc).expect("the bordered links need a display appearance");
+    let shown = list(&display, 0);
+    let dashed = ap_content(&display, &shown[0]);
+    assert!(dashed.contains("[3 1] 0 d") && dashed.contains("re S"), "{dashed}");
+    let rejected = ap_content(&display, &shown[1]);
+    assert!(rejected.contains("re S") && !rejected.contains(" d"), "a negative dash entry is not emitted: {rejected}");
+}
+
 fn line_dict(coords: [f64; 4], ending: &str) -> pdfcraft_cos::Dict {
     let mut d = pdfcraft_cos::Dict::new();
     d.set(b"Subtype".to_vec(), Object::name("Line"));
