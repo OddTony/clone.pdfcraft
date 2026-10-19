@@ -990,6 +990,12 @@ pub(crate) fn body(
                     (Handling::Label, tl!("Label")),
                 ] {
                     if widgets::mode_tab(ui, label, d.handling == h).clicked() {
+                        // A booklet printed on both sides is folded across the sheet's short edge
+                        // (#2707): turning to it while Two-sided is Off chooses that flip, as the
+                        // sheets would otherwise come out one-sided.
+                        if h == Handling::Booklet && d.handling != h && d.booklet_subset == BookletSubset::BothSides && d.duplex == spool::Duplex::Off {
+                            d.duplex = spool::Duplex::ShortEdge;
+                        }
                         d.handling = h;
                         d.sheet = 0;
                         // A label goes on label stock.

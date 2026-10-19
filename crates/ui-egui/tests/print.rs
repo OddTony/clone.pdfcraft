@@ -426,3 +426,34 @@ fn an_empty_printer_list_says_none_were_found() {
     h.get_by_label_contains("No printers were found");
     assert!(!h.get_by_role_and_label(Role::Button, "Save as PDF").accesskit_node().is_disabled());
 }
+
+/// #2707: choosing Booklet with Two-sided Off turns on flip on the short edge; a two-sided choice
+/// already made, or a one-sided booklet subset, is kept.
+#[test]
+fn booklet_turns_on_two_sided_printing() {
+    use pdfcraft_engine::print::{BookletSubset, spool::Duplex};
+    let mut h = harness();
+    assert!(h.state_mut().execute("print.dialog"));
+    h.run_steps(3);
+    assert_eq!(h.state().print_draft.duplex, Duplex::Off);
+    h.get_by_label("Booklet").click();
+    h.run_steps(2);
+    assert_eq!(h.state().print_draft.duplex, Duplex::ShortEdge);
+
+    // Long edge chosen before: kept.
+    h.get_by_label("Size").click();
+    h.run_steps(1);
+    h.state_mut().print_draft.duplex = Duplex::LongEdge;
+    h.get_by_label("Booklet").click();
+    h.run_steps(2);
+    assert_eq!(h.state().print_draft.duplex, Duplex::LongEdge);
+
+    // Front side only is printed one-sided by design: Off stays Off.
+    h.get_by_label("Size").click();
+    h.run_steps(1);
+    h.state_mut().print_draft.duplex = Duplex::Off;
+    h.state_mut().print_draft.booklet_subset = BookletSubset::FrontOnly;
+    h.get_by_label("Booklet").click();
+    h.run_steps(2);
+    assert_eq!(h.state().print_draft.duplex, Duplex::Off);
+}
