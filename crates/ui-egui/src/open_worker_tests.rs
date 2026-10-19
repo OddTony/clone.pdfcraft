@@ -696,6 +696,41 @@ fn a_later_valid_open_can_finish_before_a_stalled_open() {
 
 #[test]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
+fn a_delayed_protected_open_preserves_focus_through_password_retries() {
+    let (mut h, _) = harness();
+    let older = tool_open_file("3414-protected", "pdf", &encrypted_tool_fixture());
+    let newer = tool_open_file("3414-protected-newer", "pdf", &fixture(2));
+    let (gate, started, release, finished) = open_worker::first_prepare_gate();
+    h.state_mut().open_prepare_gate = Some(gate);
+    h.state_mut().open_path(&older.0.to_string_lossy());
+    started.recv_timeout(Duration::from_secs(5)).expect("protected preparation starts");
+    h.state_mut().open_path(&newer.0.to_string_lossy());
+    started.recv_timeout(Duration::from_secs(5)).expect("newer preparation starts");
+    finished.recv_timeout(Duration::from_secs(5)).expect("newer preparation finishes");
+    h.step();
+    let active_id = h.state().views[h.state().active.expect("newer document is active")].id;
+    release.send(()).expect("release protected preparation");
+    finished.recv_timeout(Duration::from_secs(5)).expect("protected preparation finishes");
+    h.step();
+    assert!(h.state().password_prompt.is_some());
+    h.state_mut().submit_password(Some("wrong-password".into()));
+    started.recv_timeout(Duration::from_secs(5)).expect("wrong password retry starts");
+    finished.recv_timeout(Duration::from_secs(5)).expect("wrong password retry finishes");
+    h.step();
+    assert!(h.state().password_prompt.as_ref().expect("wrong-password prompt").error.is_some());
+    h.state_mut().submit_password(Some("tool-password".into()));
+    started.recv_timeout(Duration::from_secs(5)).expect("correct password retry starts");
+    finished.recv_timeout(Duration::from_secs(5)).expect("correct password retry finishes");
+    h.step();
+    assert!(h.state().password_prompt.is_none());
+    assert_eq!(h.state().views.len(), 3);
+    assert_eq!(h.state().views[h.state().active.expect("active tab")].id, active_id, "older unlock must not steal focus");
+    let unlocked = h.state().session.get(h.state().views[2].id).expect("unlocked document");
+    assert_eq!(unlocked.path.as_deref(), older.0.to_str());
+}
+
+#[test]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 fn a_failed_later_open_does_not_prevent_the_first_from_becoming_active() {
     let (mut h, _) = harness();
     let first = tool_open_file("3414-older", "pdf", &fixture(2));
