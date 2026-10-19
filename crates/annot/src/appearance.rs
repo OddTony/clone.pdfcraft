@@ -185,7 +185,7 @@ fn border_numbers(d: &Dict) -> Option<Vec<f64>> {
     Some(values)
 }
 
-fn border_width(d: &Dict) -> f64 {
+pub(crate) fn border_width(d: &Dict) -> f64 {
     if let Some(w) = d.get(b"BS").and_then(|b| b.as_dict()).and_then(|b| b.get(b"W")).and_then(|w| w.as_f64()) {
         return w.max(0.0);
     }
