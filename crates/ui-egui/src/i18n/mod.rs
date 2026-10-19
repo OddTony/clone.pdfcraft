@@ -11,6 +11,8 @@
 //! 1. Add `xx.tsv` next to `ja.tsv` (copy its header; translate from the *meaning* of the English
 //!    text, clean-room, see `ja.tsv`).
 //! 2. Add one row to [`LANGUAGES`] (code, native name, catalog, plural rule).
+//! 3. Add the matching month/weekday row to `pdfcraft_engine::dates::DATE_LANGUAGES`, in the same order.
+//! 4. Attribute the catalog in `ATTRIBUTION.toml` and regenerate `ATTRIBUTION.md` with `cargo xtask assets --write`.
 //!
 //! That is all: the Preferences dropdown, the system-locale match and the catalog tests (parse,
 //! placeholders, plural forms) pick it up from the registry.
@@ -147,9 +149,10 @@ fn plural_sl(n: u64) -> usize {
 }
 
 /// The registry. English first: it is the fallback and the source language.
-pub static LANGUAGES: [LangInfo; 23] = [
+pub static LANGUAGES: [LangInfo; 24] = [
     LangInfo { code: "en", name: "English", source: "", plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
     LangInfo { code: "ja", name: "日本語", source: include_str!("ja.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new() },
+    LangInfo { code: "ko", name: "한국어", source: include_str!("ko.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new() },
     // Simplified Chinese; `zh`, `zh-CN`, `zh-SG` and `zh-Hans-*` locales resolve here (see `candidates`).
     LangInfo {
         code: "zh-hans", name: "简体中文", source: include_str!("zh-hans.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new()
@@ -677,6 +680,15 @@ mod tests {
         assert_eq!(first_supported_tag(Vec::<String>::new()), None);
         let long = std::iter::repeat_n("xx", 10_000).chain(["fr"]);
         assert_eq!(first_supported_tag(long), None, "only the first tags are read");
+    }
+
+    #[test]
+    fn browser_language_list_selects_korean_in_preference_order() {
+        let ko = Lang::from_code("ko").expect("Korean registered");
+        assert_eq!(first_supported_tag(["xx-YY", " ko-KR ", "en-US"]), Some(ko));
+        assert_eq!(first_supported_tag(["en-US", "ko-KR"]), Some(Lang::EN));
+        assert_eq!(first_supported_tag(std::iter::repeat_n("xx", 31).chain(["ko-KR"])), Some(ko));
+        assert_eq!(first_supported_tag(std::iter::repeat_n("xx", 32).chain(["ko-KR"])), None, "only the first 32 tags are read");
     }
 
     #[test]
@@ -2170,6 +2182,200 @@ mod tests {
         assert_eq!(fmt(t("{n} pages selected"), &[("n", "3")]), "Выбрано 3 страницы");
         assert_eq!(tr(ru, "CheckBox"), "Флажок");
         set_current(Lang::EN);
+    }
+
+    #[test]
+    fn korean_is_registered_detected_and_persists() {
+        let ko = Lang::from_code("ko").expect("Korean registered");
+        assert_eq!(ko.name(), "한국어");
+        assert_eq!(normalize_pref("KO"), Some("ko"));
+        for tag in ["ko", "ko-KR", "ko_KR.UTF-8", "KO-kr"] {
+            assert_eq!(lang_from_tag(tag), Some(ko), "{tag}");
+        }
+        assert_eq!(tr(ko, "File"), "파일");
+        assert_eq!(tr(ko, "Edit"), "편집");
+        assert_eq!(tr(ko, "Save"), "저장");
+        assert_eq!(tr(ko, "Open…"), "열기…");
+        assert_eq!(tr(ko, "Interface language"), "인터페이스 언어");
+        let calendar = pdfcraft_engine::dates::date_language("ko").expect("Korean date names registered");
+        for (index, month) in
+            ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+                .iter()
+                .enumerate()
+        {
+            assert_eq!(tr(ko, month), calendar.months[index]);
+            assert_eq!(tr_ctx(ko, "calendar date", month), calendar.months[index]);
+        }
+        for n in [0, 1, 2, 11, 21, 100, u64::MAX] {
+            assert_eq!((ko.0.plural)(n), 0);
+            let text = trn(ko, n, "{n} page", "{n} pages");
+            assert!(text.contains(&n.to_string()) && text.contains("페이지"), "{text}");
+        }
+        let mut app = crate::PdfCraftApp::default();
+        app.set_option("language", "KO").unwrap();
+        let mut restored = crate::PdfCraftApp::default();
+        restored.restore(&app.persist());
+        assert_eq!(restored.language, "ko");
+        assert!(restored.set_option("language", "unknown").is_err());
+        assert_eq!(restored.language, "ko");
+        let user = "한글 보고서{n}.pdf: 오류 {key}";
+        let notice = fmt(tr(ko, "This page couldn't be displayed.\n{e}"), &[("e", user)]);
+        assert!(notice.ends_with(user), "a user's braces and Hangul must remain literal: {notice}");
+        assert_ne!(tr(ko, "This page couldn't be displayed.\n{e}"), "This page couldn't be displayed.\n{e}");
+    }
+
+    #[test]
+    fn korean_covers_ui_commands_engine_wordings_and_all_catalog_keys() {
+        let ko = Lang::from_code("ko").expect("Korean registered");
+        let literals = scan_ui_literals(true);
+        assert!(literals.len() > 900);
+        for label in literals {
+            assert!(has(ko, &label), "Korean UI literal missing: {label}");
+        }
+        for command in pdfcraft_engine::commands::COMMANDS {
+            assert!(ko.catalog().id(command.id).is_some() || has(ko, command.label), "Korean command missing: {}", command.id);
+            if let Some(menu) = command.menu {
+                assert!(has(ko, menu), "Korean menu missing: {menu}");
+            }
+        }
+        for group in pdfcraft_engine::catalog::TOOL_GROUPS {
+            assert!(has(ko, group.label), "Korean tool group missing: {}", group.label);
+            for section in group.sections {
+                assert!(has(ko, section.title));
+                for item in section.items {
+                    assert!(has(ko, item.label), "Korean tool missing: {}", item.label);
+                }
+            }
+        }
+        for list in [
+            pdfcraft_engine::a11y::WORDINGS,
+            pdfcraft_engine::a11y::REPORT_WORDS,
+            pdfcraft_engine::pdfa::WORDINGS,
+            pdfcraft_engine::sign::pdf::WORDINGS,
+            pdfcraft_engine::sign::pdf::kind::ALL,
+            pdfcraft_engine::print::WORDINGS,
+            pdfcraft_engine::EDIT_LABELS,
+            pdfcraft_engine::BATCH_LABELS,
+        ] {
+            for wording in list {
+                assert!(has(ko, wording), "Korean engine wording missing: {wording}");
+            }
+        }
+        for reference in LANGUAGES.iter().filter(|language| language.code != "ko") {
+            let (entries, errors) = catalog::parse_entries(reference.source, reference.plural_forms());
+            assert!(errors.is_empty());
+            for entry in entries {
+                let translated = match entry.context.as_str() {
+                    "" => ko.catalog().plain(&entry.source),
+                    "@id" => ko.catalog().id(&entry.source),
+                    "@plural" => entry.source.split_once('|').and_then(|(one, other)| ko.catalog().plural(one, other, 0)),
+                    context => ko.catalog().contextual(context, &entry.source),
+                };
+                assert!(translated.is_some(), "Korean catalog key missing: {:?} / {:?}", entry.context, entry.source);
+            }
+        }
+    }
+
+    #[test]
+    fn korean_wording_preserves_ui_distinctions() {
+        let ko = Lang::from_code("ko").expect("Korean registered");
+        // Measurement precision counts decimal places; the booklet selector chooses
+        // front/back sides, and extracted image names contain a page number.
+        assert!(tr(ko, "Decimals").contains("자릿수"));
+        assert!(tr(ko, "Booklet subset:").contains("면"));
+        assert!(
+            tr(ko, "Each image once, named after the document and page. JPEG images are saved unchanged; others as PNG.").contains("페이지 번호")
+        );
+        // Replacement comments and accessibility descriptions are different inputs.
+        assert_ne!(tr(ko, "Replacement text"), tr(ko, "Alternate text"));
+        assert!(tr(ko, "Try the form as people filling it in will see it").contains("입력하는 사용자"));
+        // Remove Hidden Information offers category selection; Sanitize applies all
+        // categories. Both remove hidden information, not the visible document body.
+        assert_ne!(tr(ko, "Sanitize"), tr(ko, "Remove hidden information"));
+        for label in ["Sanitize", "Sanitize Documents", "Sanitize document", "Sanitize document…"] {
+            let translated = tr(ko, label);
+            assert!(translated.contains("숨겨진 정보") && translated.contains("일괄"), "{label}: {translated}");
+        }
+    }
+
+    #[test]
+    fn korean_ocr_results_read_as_recognition_on_pages() {
+        let ko = Lang::from_code("ko").expect("Korean registered");
+        // ocr_ui::poll_ocr composes these separately translated count messages.
+        for (page_count, word_count, expected) in [
+            (1, 1, "단어 1개를 인식했습니다(페이지 1개)"),
+            (1, 9, "단어 9개를 인식했습니다(페이지 1개)"),
+            (3, 1, "단어 1개를 인식했습니다(3페이지)"),
+            (3, 42, "단어 42개를 인식했습니다(3페이지)"),
+            (3, 0, "단어 0개를 인식했습니다(3페이지)"),
+        ] {
+            let pages = if page_count == 1 { tr(ko, "1 page").to_owned() } else { fmt(tr(ko, "{n} pages"), &[("n", &page_count.to_string())]) };
+            let words = if word_count == 1 {
+                tr(ko, "Recognized 1 word").to_owned()
+            } else {
+                fmt(tr(ko, "Recognized {n} words"), &[("n", &word_count.to_string())])
+            };
+            let result = fmt(tr(ko, "{words} on {pages}"), &[("pages", &pages), ("words", &words)]);
+            assert_eq!(result, expected);
+            // poll_ocr appends a separate clause when pages already contain text.
+            assert_eq!(format!("{result}{}", tr(ko, "; 1 page already had text")), format!("{expected}; 페이지 1개에 이미 텍스트가 있음"));
+        }
+    }
+
+    #[test]
+    fn korean_annotation_actions_and_certificate_trust_keep_their_meaning() {
+        let ko = Lang::from_code("ko").expect("Korean registered");
+        // A caret is an annotation about insertion, not an edit to the page's text.
+        assert!(tr(ko, "Add inserted text").contains("주석"));
+        for label in ["Flatten", "Flatten comments", "Flatten form fields", "Flatten Fill & Sign", "Flatten Fill & Sign when saving"] {
+            assert!(tr(ko, label).contains("고정"), "{label}: flattening must communicate making appearances static");
+        }
+        assert!(!tr(ko, "Combine files").contains("고정"), "combining PDFs remains a separate operation");
+        assert!(tr(ko, "Files are combined from top to bottom. Leave Pages empty to take every page.").contains("입력란"));
+        for pattern in pdfcraft_engine::sign::pdf::WORDINGS.iter().copied().filter(|wording| wording.contains("not used to vouch for")) {
+            let detail = pdfcraft_engine::sign::pdf::Detail {
+                message: String::new(),
+                pattern,
+                fill: pdfcraft_engine::sign::pdf::Fill::Names("발급 기관 {}".into(), "서명자 {name}".into()),
+            };
+            let translated = detail.said(&|wording| tr(ko, wording).to_owned());
+            assert!(translated.contains("신뢰 근거"), "chain validation must refer to trust, not authentication: {translated}");
+            assert!(translated.contains("발급 기관 {}") && translated.contains("서명자 {name}"), "certificate names remain literal: {translated}");
+        }
+    }
+
+    #[test]
+    fn korean_builtin_watermark_description_preserves_the_inserted_literal() {
+        use pdfcraft_engine::actions::{Step, builtin};
+        let ko = Lang::from_code("ko").expect("Korean registered");
+        let action = builtin().into_iter().find(|action| action.name == "Mark as Confidential").expect("built-in watermark action");
+        let watermark = action
+            .steps
+            .iter()
+            .find_map(|step| match step {
+                Step::AddWatermark(text) => Some(text),
+                _ => None,
+            })
+            .expect("built-in watermark text");
+        assert!(!watermark.is_empty());
+        assert!(tr(ko, &action.description).contains(watermark.as_str()), "the translated description must name the text the action inserts");
+    }
+
+    #[test]
+    fn korean_user_names_remain_literal_without_fixed_particles() {
+        let ko = Lang::from_code("ko").expect("Korean registered");
+        // Vowel and consonant endings need different Korean particles. Neutral labels
+        // also keep braces in a user-provided name from becoming template arguments.
+        for name in ["문서", "파일", "이름 {rev} {name}"] {
+            let pinned = fmt(tr(ko, "Pinned {folder} to Home"), &[("folder", name)]);
+            assert_eq!(pinned.strip_prefix("홈에 고정했습니다: "), Some(name));
+            let removed = fmt(tr(ko, "Remove \"{name}\" from this list? The file itself is not deleted."), &[("name", name)]);
+            assert!(removed.starts_with(&format!("\"{name}\": ")));
+            let certified = fmt(tr(ko, "Rev. {rev}: Certified by {name}"), &[("rev", "3"), ("name", name)]);
+            assert_eq!(certified, format!("개정 3: 인증자 {name}"));
+            let signed = fmt(tr(ko, "Rev. {rev}: Signed by {name}"), &[("rev", "3"), ("name", name)]);
+            assert_eq!(signed, format!("개정 3: 서명자 {name}"));
+        }
     }
 
     #[test]

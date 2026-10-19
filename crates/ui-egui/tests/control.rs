@@ -333,7 +333,7 @@ fn language_switch_preserves_document_and_command_ids() {
     let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
     assert_eq!(documents[0]["dirty"], true);
     let commands = ok(&mut h, &c, "ui.commands", json!({}));
-    for code in ["ja", "zh-hans", "fr", "de", "uk", "lt", "en"] {
+    for code in ["ja", "zh-hans", "fr", "de", "uk", "lt", "ko", "en"] {
         ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": code }));
         h.run_steps(2);
         let state = ok(&mut h, &c, "ui.state", json!({}));
@@ -355,6 +355,145 @@ fn language_switch_preserves_document_and_command_ids() {
     let codes = std::iter::once(i18n::AUTO).chain(i18n::Lang::all().map(i18n::Lang::code)).collect::<Vec<_>>().join(", ");
     assert_eq!(error, format!("language must be one of {codes}"));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "en");
+}
+
+struct TemporaryDirectory(std::path::PathBuf);
+
+impl TemporaryDirectory {
+    fn new() -> Self {
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("pdfcraft-korean-open-{}-{unique}", std::process::id()));
+        std::fs::create_dir(&path).unwrap();
+        Self(path)
+    }
+}
+
+impl Drop for TemporaryDirectory {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+#[test]
+fn korean_open_temporary_directory_is_removed_during_unwinding() {
+    let directory = TemporaryDirectory::new();
+    let path = directory.0.clone();
+    let result = std::panic::catch_unwind(move || {
+        let temporary = directory;
+        let file = temporary.0.join("fixture.pdf");
+        std::fs::write(&file, fixture(2)).unwrap();
+        assert!(!file.is_file(), "synthetic assertion failure after writing the fixture");
+    });
+    let payload = result.expect_err("the synthetic assertion must fail");
+    let message = payload.downcast_ref::<String>().map(String::as_str).or_else(|| payload.downcast_ref::<&str>().copied());
+    assert!(message.is_some_and(|value| value.contains("synthetic assertion failure after writing the fixture")));
+    assert!(!path.try_exists().unwrap(), "temporary directory survived assertion failure: {}", path.display());
+}
+
+#[test]
+fn korean_switch_preserves_filename_path_document_and_command_ids() {
+    // Locals drop in reverse order: release the harness before removing its input directory.
+    let dir = TemporaryDirectory::new();
+    let (mut h, c) = harness();
+    let name = "한글 보고서{n}.pdf";
+    let file = dir.0.join(name);
+    std::fs::write(&file, fixture(2)).unwrap();
+    let path = file.to_string_lossy().into_owned();
+    let count = h.state().views.len();
+    let reply = ok(&mut h, &c, "ui.open", json!({ "path": path }));
+    assert_eq!(reply["pending"], true, "the real file must go through the native open worker");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while h.state().views.len() == count && std::time::Instant::now() < deadline {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    assert_eq!(h.state().views.len(), count + 1, "Korean path open did not commit");
+    h.run_steps(3);
+    let doc = h.state().views.last().unwrap().id;
+    assert_eq!(h.state().session.get(doc).unwrap().path.as_deref(), Some(path.as_str()));
+    h.state_mut().session.apply(doc, pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 }).unwrap();
+    let before = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
+    let commands = ok(&mut h, &c, "ui.commands", json!({}));
+    for code in ["ko", "en", "ko"] {
+        ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": code }));
+        h.run_steps(3);
+        assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"], before);
+        assert_eq!(ok(&mut h, &c, "ui.commands", json!({})), commands);
+        assert_eq!(h.state().session.get(doc).unwrap().name, name);
+        assert_eq!(h.state().recent[0].name, name);
+        assert_eq!(h.state().recent[0].path, path);
+        let installed =
+            std::env::var_os("WINDIR").map_or_else(|| std::path::PathBuf::from(r"C:\Windows"), std::path::PathBuf::from).join("Fonts/malgun.ttf");
+        let disabled = std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0");
+        if cfg!(windows) && installed.is_file() && !disabled {
+            h.ctx.fonts_mut(|fonts| {
+                for id in [egui::FontId::proportional(13.0), pdfcraft_ui_egui::theme::medium(13.0), pdfcraft_ui_egui::theme::semibold(17.0)] {
+                    assert!(fonts.has_glyphs(&id, name), "actual app fonts lack Korean filename glyphs: {code} {id:?}");
+                }
+            });
+        }
+    }
+    ok(&mut h, &c, "ui.set", json!({ "key": "panel", "value": "comments" }));
+    h.run_steps(3);
+    let ko = pdfcraft_ui_egui::i18n::Lang::from_code("ko").unwrap();
+    h.get_by_role_and_label(egui::accesskit::Role::Tab, pdfcraft_ui_egui::i18n::tr(ko, "Inspector"));
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Tab, "Inspector").is_none());
+}
+
+#[test]
+fn korean_zoom_field_shows_localized_guidance_and_accepts_percentages() {
+    let (mut h, c) = harness();
+    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ko" }));
+    h.run_steps(3);
+    let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
+    h.ctx.all_styles_mut(|style| {
+        style.interaction.tooltip_delay = 0.0;
+        style.interaction.show_tooltips_only_when_still = false;
+    });
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "확대/축소").hover();
+    h.run_steps(3);
+    h.get_by_label("확대/축소 — 백분율을 입력하고 Enter를 누르세요.");
+    assert!(h.query_by_label("Zoom — type a percentage and press Enter").is_none());
+    if let Ok(dir) = std::env::var("PDFCRAFT_PRIVATE_KOREAN_QA") {
+        h.render().unwrap().save(format!("{dir}/korean-zoom-guidance.png")).unwrap();
+    }
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "확대/축소").click();
+    h.run_steps(2);
+    h.event(egui::Event::Text("62.5 %".into()));
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert_eq!(h.state().views[0].fit, pdfcraft_ui_egui::canvas::Fit::None);
+    assert_eq!(h.state().views[0].zoom, 0.625);
+    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"], documents, "zoom changes only the view");
+}
+
+#[test]
+fn korean_hidden_information_dialogs_distinguish_selection_from_sanitize() {
+    let (mut h, c) = harness();
+    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ko" }));
+    let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
+    let commands = ok(&mut h, &c, "ui.commands", json!({}));
+
+    ok(&mut h, &c, "ui.command", json!({ "id": "protect.remove_hidden" }));
+    h.run_steps(3);
+    h.get_by_label("숨겨진 정보 제거");
+    assert!(h.query_by_label("문서의 숨겨진 정보 일괄 제거").is_none());
+    if let Ok(dir) = std::env::var("PDFCRAFT_PRIVATE_KOREAN_QA") {
+        h.render().unwrap().save(format!("{dir}/selected-hidden-information.png")).unwrap();
+    }
+    ok(&mut h, &c, "ui.click", json!({ "label": "취소" }));
+
+    ok(&mut h, &c, "ui.command", json!({ "id": "redact.sanitize" }));
+    h.run_steps(3);
+    h.get_by_label("문서의 숨겨진 정보 일괄 제거");
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "숨겨진 정보 일괄 제거");
+    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"], documents, "opening the confirmation must not remove content");
+    if let Ok(dir) = std::env::var("PDFCRAFT_PRIVATE_KOREAN_QA") {
+        h.render().unwrap().save(format!("{dir}/sanitize-confirmation.png")).unwrap();
+    }
+    ok(&mut h, &c, "ui.click", json!({ "label": "취소" }));
+    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"], documents);
+    assert_eq!(ok(&mut h, &c, "ui.commands", json!({})), commands);
 }
 
 #[cfg(target_os = "linux")]

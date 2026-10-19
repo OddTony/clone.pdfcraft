@@ -8,9 +8,66 @@ const JAPANESE: &str = "日本語の文字";
 const CHINESE: &str = "简体中文欢迎";
 const ARABIC: &str = "واحد اثنين";
 const TELUGU: &str = "తెలుగు ఫైల్";
+const KOREAN: &str = "한국어 환경 설정 한글 보고서{n}.pdf";
 
 fn families() -> Vec<FontId> {
     vec![FontId::proportional(13.0), FontId::monospace(13.0), theme::medium(13.0), theme::semibold(17.0)]
+}
+
+/// A Korean filename must render even when the interface is English or Chinese. Installed
+/// faces remain interface-only and obey the same screenshot opt-out as the other fallbacks.
+#[test]
+fn korean_ui_and_filenames_have_glyphs_in_every_interface_family() {
+    const NAME: &str = "system-korean-fallback";
+    assert!(!theme::font_definitions().font_data.contains_key(NAME));
+    let disabled = std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0");
+    let windows_font = std::env::var_os("WINDIR").map_or_else(|| std::path::PathBuf::from(r"C:\Windows"), std::path::PathBuf::from).join("Fonts");
+    let required = cfg!(windows) && ["malgun.ttf", "gulim.ttc", "batang.ttc", "malgunsl.ttf"].iter().any(|f| windows_font.join(f).is_file())
+        || cfg!(target_os = "macos")
+            && [
+                "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+                "/System/Library/Fonts/Supplemental/AppleGothic.ttf",
+                "/Library/Fonts/Arial Unicode.ttf",
+            ]
+            .iter()
+            .any(|path| std::path::Path::new(path).is_file());
+    for language in ["en", "ko", "zh-hans", "zh-hant"] {
+        let defs = theme::installed_font_definitions(theme::CjkPreference::for_language(language));
+        if disabled {
+            assert!(!defs.font_data.contains_key(NAME));
+            assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == NAME)));
+            continue;
+        }
+        if required {
+            assert!(defs.font_data.contains_key(NAME), "{language}: an installed Korean face was not registered");
+        }
+        if !defs.font_data.contains_key(NAME) {
+            eprintln!("skipping Korean glyph check: no supported installed face");
+            continue;
+        }
+        for (family, stack) in &defs.families {
+            assert_eq!(stack.iter().filter(|n| *n == NAME).count(), 1, "{language} {family:?}");
+            if (language == "en" || language == "ko")
+                && let Some(general) = stack.iter().position(|n| n == theme::SYSTEM_FALLBACK)
+            {
+                assert!(stack.iter().position(|n| n == NAME).unwrap() < general, "the general fallback remains last outside Chinese");
+            }
+        }
+        use skrifa::MetadataProvider as _;
+        let data = &defs.font_data[NAME];
+        let face = skrifa::FontRef::from_index(data.font.as_ref(), data.index).unwrap();
+        let hangul = include_str!("../src/i18n/ko.tsv")
+            .chars()
+            .filter(|c| matches!(*c, '\u{1100}'..='\u{11FF}' | '\u{3130}'..='\u{318F}' | '\u{AC00}'..='\u{D7A3}'));
+        for c in hangul {
+            assert!(face.charmap().map(c).is_some(), "{language}: installed face lacks Korean catalog character {c}");
+        }
+        let mut fonts = Fonts::new(TextOptions::default(), defs);
+        for id in families() {
+            assert!(fonts.has_glyphs(&id, KOREAN), "{language} {id:?}: missing Hangul filename glyphs");
+        }
+        assert!(layout_widths(&mut fonts, KOREAN).iter().all(|w| w.is_finite() && *w > 0.0));
+    }
 }
 
 /// Lays `text` out in every interface family and returns each galley's width.
@@ -198,16 +255,29 @@ fn system_fallback_covers_telugu() {
 /// always ships Sinhala Sangam MN and Tamil Sangam MN, so there the test never skips.
 #[test]
 fn system_fallback_covers_sinhala_and_tamil() {
-    for (name, text) in [(theme::SYSTEM_SINHALA_FALLBACK, "ශ්‍රී ලංකා ගොනුව"), (theme::SYSTEM_TAMIL_FALLBACK, "தமிழ் கோப்பு")]
-    {
+    let windows_fonts = std::env::var_os("WINDIR")
+        .or_else(|| std::env::var_os("SystemRoot"))
+        .map_or_else(|| std::path::PathBuf::from(r"C:\Windows"), std::path::PathBuf::from)
+        .join("Fonts");
+    for (name, text, windows_candidates) in [
+        (theme::SYSTEM_SINHALA_FALLBACK, "ශ්‍රී ලංකා ගොනුව", ["Nirmala.ttc", "Nirmala.ttf", "iskpota.ttf"]),
+        (theme::SYSTEM_TAMIL_FALLBACK, "தமிழ் கோப்பு", ["Nirmala.ttc", "Nirmala.ttf", "latha.ttf"]),
+    ] {
         assert!(!theme::font_definitions().font_data.contains_key(name));
         let defs = theme::installed_font_definitions(theme::CjkPreference::Default);
         let off = std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0");
-        if !defs.font_data.contains_key(name) && (off || !cfg!(target_os = "macos")) {
-            eprintln!("skipping {name}: no installed fallback font (or PDFCRAFT_SYSTEM_FONTS=0)");
+        if off {
+            assert!(!defs.font_data.contains_key(name), "{name}: installed faces are disabled");
             assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == name)));
             continue;
         }
+        let required = cfg!(target_os = "macos") || cfg!(windows) && windows_candidates.iter().any(|f| windows_fonts.join(f).is_file());
+        if !defs.font_data.contains_key(name) && !required {
+            eprintln!("skipping {name}: no installed fallback font");
+            assert!(defs.families.values().all(|stack| !stack.iter().any(|n| n == name)));
+            continue;
+        }
+        assert!(defs.font_data.contains_key(name), "{name}: an installed face was not registered");
         for (family, stack) in &defs.families {
             assert_eq!(stack.iter().filter(|n| *n == name).count(), 1, "{family:?}: {stack:?}");
         }
@@ -259,6 +329,16 @@ fn chinese_ui_uses_an_installed_chinese_face() {
             if let Some(first_ja) = stack.iter().position(|n| n.starts_with("BIZ UDPGothic")) {
                 assert!(system < first_ja, "{family:?}: {stack:?}");
             }
+            if let Some(korean) = stack.iter().position(|n| n == theme::SYSTEM_KOREAN_FALLBACK) {
+                assert!(system < korean, "Chinese keeps its own face before shared Han glyphs in Korean: {family:?}: {stack:?}");
+            }
+            for script in
+                [theme::SYSTEM_DEVANAGARI_FALLBACK, theme::SYSTEM_TELUGU_FALLBACK, theme::SYSTEM_SINHALA_FALLBACK, theme::SYSTEM_TAMIL_FALLBACK]
+            {
+                if let Some(index) = stack.iter().position(|n| n == script) {
+                    assert!(system < index, "Chinese keeps its own face before installed script fallbacks: {family:?}: {stack:?}");
+                }
+            }
         }
         let han = catalog_han(catalog);
         assert!(han.contains('欢') || han.contains('說'), "{cjk:?}");
@@ -290,17 +370,15 @@ fn ui_fonts_work_without_craft_fonts() {
     theme::install_fonts(&ctx);
 }
 
-/// Latin- and Cyrillic-script catalogs (Czech, Brazilian Portuguese, German, Spanish, French, Russian, Bulgarian, Hungarian, Ukrainian, Italian, Slovene) are drawn entirely by the app's own faces
-/// (Inter, JetBrains Mono with Inter fallback): no letter falls through to egui's defaults or a CJK fallback. (egui's
-/// `has_glyphs` can't answer this: with only the primary face it is also the replacement face.)
+/// Latin- and Cyrillic-script catalogs are covered by each Inter UI face and the bundled
+/// monospace stack, with JetBrains Mono followed by Inter. The complete stack's cmap
+/// entries are checked too; installed system fonts are not involved.
+/// `has_glyphs` on a lone face can count its replacement glyph.
 #[test]
 fn primary_ui_fonts_cover_latin_and_cyrillic_catalogs() {
     use skrifa::MetadataProvider as _;
     let defs = theme::font_definitions();
     assert_eq!(&defs.families[&FontFamily::Monospace][..2], ["JetBrainsMono", "Inter"]);
-    let fallback = &defs.font_data["Inter"];
-    let fallback_font = skrifa::FontRef::from_index(&fallback.font, fallback.index).unwrap();
-    let fallback_charmap = fallback_font.charmap();
     for (code, catalog) in [
         ("cs", include_str!("../src/i18n/cs.tsv")),
         ("el", include_str!("../src/i18n/el.tsv")),
@@ -325,15 +403,27 @@ fn primary_ui_fonts_cover_latin_and_cyrillic_catalogs() {
                 text.extend(translation.chars().filter(|c| !c.is_whitespace()));
             }
         }
-        for name in ["Inter", "Inter-Medium", "Inter-SemiBold", "JetBrainsMono"] {
+        for name in ["Inter", "Inter-Medium", "Inter-SemiBold"] {
             let data = &defs.font_data[name];
             let font = skrifa::FontRef::from_index(&data.font, data.index).unwrap();
             let charmap = font.charmap();
-            let mut missing: Vec<char> =
-                text.chars().filter(|c| charmap.map(*c).is_none() && (name != "JetBrainsMono" || fallback_charmap.map(*c).is_none())).collect();
+            let mut missing: Vec<char> = text.chars().filter(|c| charmap.map(*c).is_none()).collect();
             missing.sort_unstable();
             missing.dedup();
             assert!(missing.is_empty(), "{code}: {name} lacks {missing:?}");
         }
+        let mono = &defs.families[&FontFamily::Monospace];
+        assert_eq!(mono.first().map(String::as_str), Some("JetBrainsMono"), "the app's monospace face remains first");
+        let mono_faces: Vec<_> = mono
+            .iter()
+            .map(|name| {
+                let data = &defs.font_data[name];
+                skrifa::FontRef::from_index(&data.font, data.index).unwrap()
+            })
+            .collect();
+        let mut missing: Vec<char> = text.chars().filter(|c| !mono_faces.iter().any(|font| font.charmap().map(*c).is_some())).collect();
+        missing.sort_unstable();
+        missing.dedup();
+        assert!(missing.is_empty(), "{code}: bundled Monospace stack {mono:?} lacks {missing:?}");
     }
 }

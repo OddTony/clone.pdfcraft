@@ -2,10 +2,9 @@
 //!
 //! The embedded faces (Inter, egui's defaults, craft-fonts) come first in every family; this one
 //! only draws characters none of them has, such as an Arabic file name in a build without
-//! craft-fonts, or the Simplified Chinese interface in a build without a `Hans` face (#826). A
-//! few more installed faces, [`devanagari_fallback`], [`telugu_fallback`], [`sinhala_fallback`]
-//! and [`tamil_fallback`], draw Hindi, Telugu, Sinhala and Tamil when one is installed. It is
-//! read at runtime and never embedded or shipped (AGENTS.md §1.4), and `PDFCRAFT_SYSTEM_FONTS=0`
+//! craft-fonts, or the Simplified Chinese interface in a build without a `Hans` face (#826).
+//! Additional installed faces draw Hindi, Telugu, Korean, Sinhala and Tamil when available.
+//! They are read at runtime and never embedded or shipped (AGENTS.md §1.4), and `PDFCRAFT_SYSTEM_FONTS=0`
 //! turns it off (published screenshots do).
 
 use std::path::{Path, PathBuf};
@@ -18,7 +17,7 @@ mod fontconfig;
 
 /// Larger files are not read: a font path is still untrusted input.
 const MAX_BYTES: u64 = 32 << 20;
-/// Chinese system faces are big collections (PingFang, STHeiti), so they get a higher cap.
+/// Chinese and Korean system faces can be big collections, so they get a higher cap.
 const MAX_HAN_BYTES: u64 = 96 << 20;
 /// Faces tried in a collection (`.ttc`).
 const MAX_FACES: u32 = 16;
@@ -28,6 +27,8 @@ const PROBE: char = '\u{0627}';
 const DEVANAGARI_PROBE: char = '\u{0915}';
 /// Telugu letter ka: the face must have it to cover Telugu.
 const TELUGU_PROBE: char = '\u{0C15}';
+/// Hangul syllable ga: a Korean face must actually map Hangul, not just Latin characters.
+const KOREAN_PROBE: char = '\u{AC00}';
 /// Sinhala letter ka (ක): the face must have it to cover Sinhala.
 const SINHALA_PROBE: char = '\u{0D9A}';
 /// Tamil letter ka (க): the face must have it to cover Tamil.
@@ -79,35 +80,86 @@ fn load(need: Need) -> Option<Arc<FontData>> {
 /// or no candidate is installed; the interface then draws what the embedded faces can.
 pub fn devanagari_fallback() -> Option<Arc<FontData>> {
     static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
-    CACHE.get_or_init(|| script_fallback(&devanagari_candidates(), DEVANAGARI_PROBE)).clone()
+    CACHE.get_or_init(|| script_fallback(&devanagari_candidates(), DEVANAGARI_PROBE, MAX_BYTES)).clone()
 }
 
 /// The installed fallback face for Telugu, read once. `None` when it is turned off or no
 /// candidate is installed; the interface then draws what the embedded faces can.
 pub fn telugu_fallback() -> Option<Arc<FontData>> {
     static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
-    CACHE.get_or_init(|| script_fallback(&telugu_candidates(), TELUGU_PROBE)).clone()
+    CACHE.get_or_init(|| script_fallback(&telugu_candidates(), TELUGU_PROBE, MAX_BYTES)).clone()
+}
+
+/// The installed Hangul face, read once, for Korean labels and file names in any UI language.
+/// It remains interface-only; the bytes never enter a PDF or a distributed package.
+pub fn korean_fallback() -> Option<Arc<FontData>> {
+    static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
+    CACHE.get_or_init(|| korean_fallback_from(&korean_candidates(), KOREAN_PROBE)).clone()
+}
+
+fn korean_fallback_from(candidates: &[PathBuf], probe: char) -> Option<Arc<FontData>> {
+    script_fallback(candidates, probe, MAX_HAN_BYTES)
 }
 
 /// The installed fallback face for Sinhala, read once. `None` when it is turned off or no
 /// candidate is installed; the interface then draws what the embedded faces can.
 pub fn sinhala_fallback() -> Option<Arc<FontData>> {
     static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
-    CACHE.get_or_init(|| script_fallback(&sinhala_candidates(), SINHALA_PROBE)).clone()
+    CACHE.get_or_init(|| script_fallback(&sinhala_candidates(), SINHALA_PROBE, MAX_BYTES)).clone()
 }
 
 /// The installed fallback face for Tamil, read once. `None` when it is turned off or no
 /// candidate is installed; the interface then draws what the embedded faces can.
 pub fn tamil_fallback() -> Option<Arc<FontData>> {
     static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
-    CACHE.get_or_init(|| script_fallback(&tamil_candidates(), TAMIL_PROBE)).clone()
+    CACHE.get_or_init(|| script_fallback(&tamil_candidates(), TAMIL_PROBE, MAX_BYTES)).clone()
 }
 
-fn script_fallback(candidates: &[PathBuf], probe: char) -> Option<Arc<FontData>> {
+fn script_fallback(candidates: &[PathBuf], probe: char, max: u64) -> Option<Arc<FontData>> {
     if std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0") {
         return None;
     }
-    candidates.iter().find_map(|path| read(path, probe, MAX_BYTES))
+    candidates.iter().find_map(|path| read(path, probe, max))
+}
+
+/// PhotoCraft's platform preference: Malgun Gothic then Gulim on Windows, Apple SD Gothic Neo
+/// on macOS, then other installed faces with Hangul. Adobe-derived CJK faces stay excluded.
+fn korean_candidates() -> Vec<PathBuf> {
+    if cfg!(windows) {
+        korean_font_files(KoreanPlatform::Windows).iter().map(|f| windows_fonts().join(f)).collect()
+    } else if cfg!(target_os = "macos") {
+        korean_font_files(KoreanPlatform::MacOs).iter().map(PathBuf::from).collect()
+    } else {
+        unix_fonts(korean_font_files(KoreanPlatform::Unix))
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum KoreanPlatform {
+    Windows,
+    MacOs,
+    Unix,
+}
+
+/// Keep all platform lists testable on any host, without reading another platform's fonts.
+fn korean_font_files(platform: KoreanPlatform) -> &'static [&'static str] {
+    match platform {
+        KoreanPlatform::Windows => &["malgun.ttf", "gulim.ttc", "batang.ttc", "malgunsl.ttf"],
+        KoreanPlatform::MacOs => {
+            &["/System/Library/Fonts/AppleSDGothicNeo.ttc", "/System/Library/Fonts/Supplemental/AppleGothic.ttf", "/Library/Fonts/Arial Unicode.ttf"]
+        }
+        KoreanPlatform::Unix => &[
+            "truetype/nanum/NanumGothic.ttf",
+            "nanum/NanumGothic.ttf",
+            "naver-nanum/NanumGothic.ttf",
+            "truetype/unfonts-core/UnDotum.ttf",
+            "unfonts-core/UnDotum.ttf",
+            "baekmuk-ttf/gulim.ttf",
+            "truetype/baekmuk/gulim.ttf",
+            "truetype/droid/DroidSansFallbackFull.ttf",
+            "google-droid-sans-fonts/DroidSansFallbackFull.ttf",
+        ],
+    }
 }
 
 /// Well-known locations of Devanagari (Hindi) faces, best first.
@@ -379,6 +431,7 @@ mod tests {
         assert_eq!(face_with(inter, PROBE), None);
         assert_eq!(face_with(inter, HANS_PROBE), None);
         assert_eq!(face_with(inter, HANT_PROBE), None);
+        assert_eq!(face_with(inter, KOREAN_PROBE), None);
         assert_eq!(face_with(inter, 'A'), Some(0));
     }
 
@@ -387,6 +440,84 @@ mod tests {
         let inter = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/fonts/Inter-Regular.ttf"));
         assert!(read(inter, 'A', MAX_BYTES).is_some());
         assert!(read(inter, 'A', 1024).is_none());
+    }
+
+    #[test]
+    fn installed_faces_apply_the_interface_baseline() {
+        // This allowed fixture has the different vertical metrics exercised by theme's
+        // layout regression. Reading an installed face must preserve that correction too.
+        let path = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/fonts/DancingScript.ttf"));
+        let data = read(path, 'Ǆ', MAX_BYTES).expect("the fixture maps the non-Inter probe");
+        let expected = crate::theme::on_interface_baseline(FontData::from_static(include_bytes!("../../../assets/fonts/DancingScript.ttf")));
+        assert!(expected.tweak.y_offset_factor.abs() > 0.03, "the fixture needs a visible baseline correction");
+        assert_eq!(data.tweak, expected.tweak, "installed faces use the same baseline policy as embedded fallbacks");
+    }
+
+    #[test]
+    fn korean_fallback_reads_large_fonts_but_keeps_size_and_glyph_guards() {
+        use std::io::Write as _;
+
+        let inter = include_bytes!("../../../assets/fonts/Inter-Regular.ttf");
+        if std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0") {
+            let path = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/fonts/Inter-Regular.ttf"));
+            assert!(korean_fallback_from(&[path], 'A').is_none());
+            return;
+        }
+
+        // Trailing padding leaves the allowed Inter fixture's font tables intact. The Latin
+        // probe exercises the Korean loader's size policy without installing a font or
+        // committing a large fixture; the real Korean probe must still reject this face.
+        struct TemporaryFont(PathBuf);
+        impl Drop for TemporaryFont {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let temporary = TemporaryFont(std::env::temp_dir().join(format!("pdfcraft-korean-font-{}-{unique}.ttf", std::process::id())));
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary.0).unwrap();
+        file.write_all(inter).unwrap();
+        file.set_len(MAX_BYTES + 1).unwrap();
+        drop(file);
+
+        let candidates = [temporary.0.clone()];
+        assert!(script_fallback(&candidates, 'A', MAX_BYTES).is_none(), "other scripts retain the smaller cap");
+        let data = korean_fallback_from(&candidates, 'A').expect("Korean collections can exceed the smaller script cap");
+        assert_eq!(data.index, 0);
+        assert_eq!(data.font.as_ref().len(), usize::try_from(MAX_BYTES + 1).unwrap());
+        drop(data);
+        assert!(korean_fallback_from(&candidates, KOREAN_PROBE).is_none(), "a large Latin face is still not a Korean face");
+
+        // This remains a valid Latin font if read: only the metadata size guard can reject it.
+        // Removing that guard must make this assertion fail, instead of passing on bad bytes.
+        let file = std::fs::OpenOptions::new().write(true).open(&temporary.0).unwrap();
+        file.set_len(MAX_HAN_BYTES + 1).unwrap();
+        drop(file);
+        assert!(korean_fallback_from(&candidates, 'A').is_none(), "Korean collections still have a size cap");
+    }
+
+    #[test]
+    fn korean_fallback_reads_an_installed_collection_face() {
+        use skrifa::MetadataProvider as _;
+
+        if !cfg!(windows) {
+            return;
+        }
+        let collection = windows_fonts().join("gulim.ttc");
+        if !collection.is_file() {
+            eprintln!("skipping installed Korean collection check: Gulim is not installed");
+            return;
+        }
+        let data = korean_fallback_from(&[collection], KOREAN_PROBE);
+        if std::env::var_os("PDFCRAFT_SYSTEM_FONTS").is_some_and(|v| v == "0") {
+            assert!(data.is_none());
+            return;
+        }
+        let data = data.expect("installed Gulim collection has a Korean face");
+        assert_eq!(data.font.as_ref().get(..4), Some(&b"ttcf"[..]));
+        let face = skrifa::FontRef::from_index(data.font.as_ref(), data.index).unwrap();
+        assert!(face.charmap().map(KOREAN_PROBE).is_some());
+        assert!(face.charmap().map('한').is_some());
     }
 
     #[test]
@@ -402,19 +533,54 @@ mod tests {
     fn a_script_fallback_is_the_first_candidate_with_the_probe() {
         let inter = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/fonts/Inter-Regular.ttf"));
         let candidates = [PathBuf::from("definitely/not/here.ttf"), inter];
-        assert!(script_fallback(&candidates, 'A').is_some());
-        assert!(script_fallback(&candidates, TELUGU_PROBE).is_none());
-        assert!(script_fallback(&candidates, DEVANAGARI_PROBE).is_none());
-        assert!(script_fallback(&candidates, SINHALA_PROBE).is_none());
-        assert!(script_fallback(&candidates, TAMIL_PROBE).is_none());
+        assert!(script_fallback(&candidates, 'A', MAX_BYTES).is_some());
+        assert!(script_fallback(&candidates, TELUGU_PROBE, MAX_BYTES).is_none());
+        assert!(script_fallback(&candidates, DEVANAGARI_PROBE, MAX_BYTES).is_none());
+        assert!(script_fallback(&candidates, SINHALA_PROBE, MAX_BYTES).is_none());
+        assert!(script_fallback(&candidates, TAMIL_PROBE, MAX_BYTES).is_none());
     }
 
     #[test]
     fn script_candidates_are_absolute_font_files() {
-        for list in [devanagari_candidates(), telugu_candidates(), sinhala_candidates(), tamil_candidates()] {
+        for list in [devanagari_candidates(), telugu_candidates(), korean_candidates(), sinhala_candidates(), tamil_candidates()] {
             assert!(!list.is_empty());
             assert!(list.iter().all(|p| p.is_absolute() || cfg!(windows)), "{list:?}");
             assert!(list.iter().all(|p| p.extension().is_some_and(|e| e == "ttf" || e == "ttc")), "{list:?}");
+        }
+    }
+
+    #[test]
+    fn korean_candidates_follow_the_platform_preference() {
+        let candidates = korean_candidates();
+        assert!(!candidates.is_empty());
+        if cfg!(windows) {
+            let names: Vec<_> = candidates.iter().filter_map(|p| p.file_name().and_then(|n| n.to_str())).collect();
+            assert_eq!(names, ["malgun.ttf", "gulim.ttc", "batang.ttc", "malgunsl.ttf"]);
+        }
+        let macos = korean_font_files(KoreanPlatform::MacOs);
+        assert_eq!(macos.first().copied(), Some("/System/Library/Fonts/AppleSDGothicNeo.ttc"));
+        assert!(macos.contains(&"/System/Library/Fonts/Supplemental/AppleGothic.ttf"));
+        assert!(macos.contains(&"/Library/Fonts/Arial Unicode.ttf"));
+        let unix = korean_font_files(KoreanPlatform::Unix);
+        assert_eq!(unix.first().copied(), Some("truetype/nanum/NanumGothic.ttf"));
+        for alternative in [
+            "nanum/NanumGothic.ttf",
+            "naver-nanum/NanumGothic.ttf",
+            "truetype/unfonts-core/UnDotum.ttf",
+            "unfonts-core/UnDotum.ttf",
+            "baekmuk-ttf/gulim.ttf",
+            "truetype/baekmuk/gulim.ttf",
+            "truetype/droid/DroidSansFallbackFull.ttf",
+            "google-droid-sans-fonts/DroidSansFallbackFull.ttf",
+        ] {
+            assert!(unix.contains(&alternative), "missing Korean alternative: {alternative}");
+        }
+        for platform in [KoreanPlatform::Windows, KoreanPlatform::MacOs, KoreanPlatform::Unix] {
+            for file in korean_font_files(platform) {
+                assert!(Path::new(file).extension().is_some_and(|e| e == "ttf" || e == "ttc"), "{platform:?}: {file}");
+                let name = file.to_ascii_lowercase();
+                assert!(!["notosanscjk", "notoserifcjk", "sourcehan", "source-han"].iter().any(|b| name.contains(b)), "{platform:?}: {file}");
+            }
         }
     }
 

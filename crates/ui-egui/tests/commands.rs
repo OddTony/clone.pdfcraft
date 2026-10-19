@@ -615,6 +615,47 @@ fn palette_ime_chinese_preedit_commit_and_cancel_remain_uninterrupted() {
 }
 
 #[test]
+fn korean_palette_composition_and_search_preserve_commands_and_shortcuts() {
+    use pdfcraft_ui_egui::i18n::{Lang, tr};
+    let mut h = harness();
+    h.state_mut().set_option("language", "ko").unwrap();
+    h.run_steps(3);
+    let ko = Lang::from_code("ko").unwrap();
+    // Compose a Korean command name through the UI event path rather than ui.type,
+    // which bypasses the IME. This exercises egui; native OS callbacks need separate QA.
+    h.key_press_modifiers(Modifiers::COMMAND, Key::K);
+    h.run_steps(3);
+    for text in ["ㅎ", "회", "회전"] {
+        h.event(egui::Event::Ime(egui::ImeEvent::Preedit { text: text.into(), active_range_chars: Some(0..text.chars().count()) }));
+        h.step();
+        palette_ime_output_is_uninterrupted(&h, text);
+    }
+    h.event(egui::Event::Ime(egui::ImeEvent::Commit("회전".into())));
+    h.step();
+    assert_eq!(h.state().palette_query, "회전");
+    h.get_by_label(tr(ko, "Rotate pages clockwise"));
+    palette_ime_output_is_uninterrupted(&h, "Korean commit");
+    h.event(egui::Event::Ime(egui::ImeEvent::Preedit { text: "ㅎ".into(), active_range_chars: Some(0..1) }));
+    h.step();
+    h.event(egui::Event::Ime(egui::ImeEvent::Preedit { text: String::new(), active_range_chars: None }));
+    h.step();
+    assert_eq!(h.state().palette_query, "회전", "cancelling composition preserves committed text");
+    palette_ime_output_is_uninterrupted(&h, "Korean cancel");
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    for query in ["Rotate pages clockwise", "page.rotate"] {
+        h.state_mut().set_option("palette", query).unwrap();
+        h.run_steps(3);
+        h.get_by_label(tr(ko, "Rotate pages clockwise"));
+        h.key_press(Key::Escape);
+        h.run_steps(2);
+    }
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, Some(Dialog::Preferences), "the Preferences shortcut stays unchanged in Korean");
+}
+
+#[test]
 fn palette_ime_outside_click_closes_without_running_a_command() {
     let mut h = harness();
     h.state_mut().set_option("palette", "rotate pages clockwise").unwrap();

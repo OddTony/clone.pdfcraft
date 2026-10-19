@@ -1099,6 +1099,57 @@ mod stem_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn korean_file_name_refusal_preserves_names_and_accepts_hangul() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+
+        struct RestoreLanguage(crate::i18n::Lang);
+        impl Drop for RestoreLanguage {
+            fn drop(&mut self) {
+                crate::i18n::set_current(self.0);
+            }
+        }
+        struct TemporaryDirectory(std::path::PathBuf);
+        impl Drop for TemporaryDirectory {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let dir = TemporaryDirectory(std::env::temp_dir().join(format!("pdfcraft-korean-file-name-{}-{unique}", std::process::id())));
+        std::fs::create_dir(&dir.0).unwrap();
+        let _language = RestoreLanguage(crate::i18n::current());
+        let mut app = crate::PdfCraftApp::new();
+        app.set_option("language", "ko").unwrap();
+        crate::i18n::set_current(crate::i18n::Lang::from_pref(&app.language));
+        app.export_dir_override = Some(dir.0.to_string_lossy().into_owned());
+        let name = "한글 보고서{e}{name}.pdf";
+        let bytes = Arc::new(b"%PDF-synthetic".to_vec());
+        let called = Arc::new(AtomicBool::new(false));
+        for bad in [format!("../{name}"), format!("sub\\{name}"), format!("C:{name}")] {
+            let after = called.clone();
+            app.write_files_then(vec![(name.into(), bytes.clone()), (bad.clone(), bytes.clone())], "test", move |_| {
+                after.store(true, Ordering::SeqCst)
+            });
+            let expected = format!("{bad}에 쓸 수 없음: 경로 없이 파일 이름만 지정해야 합니다");
+            assert_eq!(
+                app.toast.as_ref().map(|t| t.0.as_str()),
+                Some(expected.as_str()),
+                "the nested reason is Korean and the file name stays literal"
+            );
+            assert!(walk(&dir.0).is_empty(), "a refused batch writes nothing, including the valid first name");
+            assert!(!called.load(Ordering::SeqCst), "the completion action must not run after refusal");
+        }
+        let after = called.clone();
+        app.write_files_then(vec![(name.into(), bytes.clone())], "test", move |_| after.store(true, Ordering::SeqCst));
+        assert!(called.load(Ordering::SeqCst));
+        assert_eq!(walk(&dir.0), vec![dir.0.join(name)], "a plain Hangul name is accepted unchanged");
+        assert_eq!(std::fs::read(dir.0.join(name)).unwrap().as_slice(), bytes.as_slice());
+    }
+
     fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
         let mut out = Vec::new();
         for entry in std::fs::read_dir(dir).unwrap() {

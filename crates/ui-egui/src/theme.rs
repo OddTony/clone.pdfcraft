@@ -220,6 +220,8 @@ pub const SYSTEM_FALLBACK: &str = "system-fallback";
 pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
 /// The name of the installed Telugu face [`installed_font_definitions`] may add.
 pub const SYSTEM_TELUGU_FALLBACK: &str = "system-telugu-fallback";
+/// The name of the installed Hangul face, shared by Korean labels and file names in any locale.
+pub const SYSTEM_KOREAN_FALLBACK: &str = "system-korean-fallback";
 /// The name of the installed Sinhala face [`installed_font_definitions`] may add.
 pub const SYSTEM_SINHALA_FALLBACK: &str = "system-sinhala-fallback";
 /// The name of the installed Tamil face [`installed_font_definitions`] may add.
@@ -236,9 +238,9 @@ pub const SYSTEM_TAMIL_FALLBACK: &str = "system-tamil-fallback";
 /// - Otherwise it is the last fallback of every family (an Arabic file name in a build without
 ///   craft-fonts).
 ///
-/// Installed Devanagari, Telugu, Sinhala and Tamil faces, when there are, end every family just
-/// before that one, so Hindi, Telugu (#1531), Sinhala and Tamil (#1688) text, such as a file
-/// name, draws in a build without such faces.
+/// Installed Devanagari, Telugu, Korean, Sinhala and Tamil faces, when available, end every
+/// family just before the general fallback. Chinese puts its own system face before Japanese
+/// and installed script faces, including when built without craft-fonts.
 ///
 /// `PDFCRAFT_SYSTEM_FONTS=0` leaves them out.
 pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
@@ -251,6 +253,7 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
         for (name, data) in [
             (SYSTEM_DEVANAGARI_FALLBACK, crate::system_fonts::devanagari_fallback()),
             (SYSTEM_TELUGU_FALLBACK, crate::system_fonts::telugu_fallback()),
+            (SYSTEM_KOREAN_FALLBACK, crate::system_fonts::korean_fallback()),
             (SYSTEM_SINHALA_FALLBACK, crate::system_fonts::sinhala_fallback()),
             (SYSTEM_TAMIL_FALLBACK, crate::system_fonts::tamil_fallback()),
         ] {
@@ -272,7 +275,17 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
             for stack in fonts.families.values_mut() {
                 let at = match need {
                     Need::Other => None,
-                    Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
+                    Need::Hans | Need::Hant => stack.iter().position(|n| {
+                        japanese.contains(n)
+                            || matches!(
+                                n.as_str(),
+                                SYSTEM_DEVANAGARI_FALLBACK
+                                    | SYSTEM_TELUGU_FALLBACK
+                                    | SYSTEM_KOREAN_FALLBACK
+                                    | SYSTEM_SINHALA_FALLBACK
+                                    | SYSTEM_TAMIL_FALLBACK
+                            )
+                    }),
                 };
                 stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
             }
