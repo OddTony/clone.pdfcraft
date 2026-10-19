@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 use pdfcraft_js::xfa::{XfaDoc, XfaEffect, XfaEvent, XfaKind, XfaNode};
 use pdfcraft_js::xfa_session::{Script, XfaSession};
-use pdfcraft_xfa::model::Template;
+use pdfcraft_xfa::data::DataNode;
+use pdfcraft_xfa::model::{Node, Template};
 use pdfcraft_xfa::{FormNode, LiveForm, NodeKind, ScriptEvent};
 
 use crate::js::JsOutput;
@@ -167,13 +168,32 @@ fn count_instances(root: &FormNode, parent_som: &str, name: &str) -> usize {
     parent.map_or(0, |p| p.children.iter().filter(|c| c.name == name).count())
 }
 
-/// An instance SOM (`…table[0].row[2]`) split into its parent's data path (areas left out,
-/// see [`pdfcraft_xfa::data_path`]) and SOM, its name and its index.
-fn split_instance(tpl: &Template, som: &str) -> Option<(pdfcraft_xfa::DataPath, String, String, usize)> {
-    let mut path = pdfcraft_xfa::data_path(tpl, som);
-    let (name, index) = path.pop()?;
-    let parent_som = som.rsplit_once('.').map(|(p, _)| p).unwrap_or("").to_string();
-    Some((path, parent_som, name, index))
+/// An instance SOM (`…table[0].row[2]`) as the data and the live form see it.
+struct Instance {
+    /// The data path of the node the instances repeat under (areas left out, bindings
+    /// followed, see [`pdfcraft_xfa::data_path`]) and the instances' element name there,
+    /// which a binding may make differ from the subform's.
+    parent: pdfcraft_xfa::DataPath,
+    data_name: String,
+    /// The parent's SOM and the subform's name, as the live form knows them.
+    parent_som: String,
+    name: String,
+    index: usize,
+}
+
+/// `None`: the subform's instances are not kept in the data (bound to nothing, or to one
+/// node), so a script can't add or remove them.
+fn split_instance(tpl: &Template, data: Option<&DataNode>, som: &str) -> Option<Instance> {
+    if let Some(Node::Subform(sf)) = pdfcraft_xfa::template_node(tpl, som)
+        && !pdfcraft_xfa::repeats_on_data(sf)
+    {
+        return None;
+    }
+    let mut path = pdfcraft_xfa::data_path(tpl, data, som)?;
+    let (data_name, index) = path.pop()?;
+    let (parent_som, last) = som.rsplit_once('.').map(|(p, l)| (p.to_string(), l)).unwrap_or((String::new(), som));
+    let name = last.split('[').next().unwrap_or(last).to_string();
+    Some(Instance { parent: path, data_name, parent_som, name, index })
 }
 
 /// A SOM path without its indexes (`form.page1.qty`), for matching names scripts pass.
@@ -347,7 +367,9 @@ impl<'a, 'b> Runner<'a, 'b> {
             let by_som = pdfcraft_xfa::fields_by_som(self.doc);
             let mut by_path: HashMap<pdfcraft_xfa::DataPath, Vec<String>> = HashMap::new();
             for (som, name) in &by_som {
-                by_path.entry(pdfcraft_xfa::data_path(self.tpl, som)).or_default().push(name.clone());
+                if let Some(path) = pdfcraft_xfa::data_path(self.tpl, self.data.as_ref(), som) {
+                    by_path.entry(path).or_default().push(name.clone());
+                }
             }
             for names in by_path.values_mut() {
                 names.sort();
@@ -410,8 +432,12 @@ impl<'a, 'b> Runner<'a, 'b> {
     /// lines). Returns whether anything changed.
     fn set_value(&mut self, som: &str, value: &str) -> bool {
         use pdfcraft_forms::FieldKind as K;
-        let path = pdfcraft_xfa::data_path(self.tpl, som);
-        let names = self.widgets_at(&path);
+        // A field bound to no data node (`bind match="none"`) is the only widget its value goes to.
+        let path = pdfcraft_xfa::data_path(self.tpl, self.data.as_ref(), som);
+        let names = match &path {
+            Some(path) => self.widgets_at(path),
+            None => self.by_som().get(som).cloned().into_iter().collect(),
+        };
         // The data text: the widget at `som` says how its kind writes the value; without one,
         // the first widget bound to the node, else the value itself.
         let primary = self.by_som().get(som).cloned().or_else(|| names.first().cloned());
@@ -454,9 +480,30 @@ impl<'a, 'b> Runner<'a, 'b> {
             self.field_changes.insert(name.clone(), new_value);
             changed = true;
         }
-        if self.data.as_ref().and_then(|d| d.text_at(&path)).unwrap_or("") != text {
-            self.value_op(som, path, text);
-            changed = true;
+        match path {
+            Some(path) => {
+                if self.data.as_ref().and_then(|d| d.text_at(&path)).unwrap_or("") != text {
+                    self.value_op(som, path, text);
+                    changed = true;
+                }
+            }
+            None => {
+                // No data node: the overrides keep the value, so scripts read it back and it
+                // survives save and reopen; the live form takes it in place.
+                let text = pdfcraft_xfa::clip_value(&text);
+                if self.ov.values.get(som) != Some(&text) {
+                    self.ov.values.insert(som.to_string(), text.clone());
+                    self.ov_dirty = true;
+                    let refreshed = match self.cached.as_mut() {
+                        Some(live) => pdfcraft_xfa::set_unbound_value(&mut live.root, self.tpl, som, &text).is_some(),
+                        None => true,
+                    };
+                    if !refreshed {
+                        self.invalidate();
+                    }
+                    changed = true;
+                }
+            }
         }
         if changed {
             self.changes.values += 1;
@@ -544,7 +591,7 @@ impl<'a, 'b> Runner<'a, 'b> {
             if matches!(info.kind, pdfcraft_forms::FieldKind::PushButton | pdfcraft_forms::FieldKind::Signature) {
                 continue;
             }
-            let path = pdfcraft_xfa::data_path(self.tpl, som);
+            let Some(path) = pdfcraft_xfa::data_path(self.tpl, self.data.as_ref(), som) else { continue };
             let text = data_text(info);
             if self.data.as_ref().and_then(|d| d.text_at(&path)).unwrap_or("") != text {
                 self.data_op(pdfcraft_xfa::DataOp::Value { path, text });
@@ -561,16 +608,20 @@ impl<'a, 'b> Runner<'a, 'b> {
         // Instances of each repeating subform before the script ran, as the effects leave them.
         let mut counts: HashMap<(String, String), usize> = HashMap::new();
         {
-            // A copy of the shared reference: `live()` borrows `self` mutably.
-            let tpl = self.tpl;
+            // Split first: `live()` borrows `self` mutably.
+            let splits: Vec<(String, String)> = effects
+                .iter()
+                .filter_map(|e| match e {
+                    XfaEffect::AddInstance { som } | XfaEffect::RemoveInstance { som } => {
+                        split_instance(self.tpl, self.data.as_ref(), som).map(|i| (i.parent_som, i.name))
+                    }
+                    _ => None,
+                })
+                .collect();
             let live = self.live();
-            for e in effects {
-                if let XfaEffect::AddInstance { som } | XfaEffect::RemoveInstance { som } = e
-                    && let Some((_, parent_som, name, _)) = split_instance(tpl, som)
-                {
-                    let have = count_instances(&live.root, &parent_som, &name);
-                    counts.entry((parent_som, name)).or_insert(have);
-                }
+            for (parent_som, name) in splits {
+                let have = count_instances(&live.root, &parent_som, &name);
+                counts.entry((parent_som, name)).or_insert(have);
             }
         }
         for e in effects {
@@ -604,18 +655,23 @@ impl<'a, 'b> Runner<'a, 'b> {
                     }
                 }
                 XfaEffect::AddInstance { som } | XfaEffect::RemoveInstance { som } => {
-                    let Some((parent, parent_som, name, index)) = split_instance(self.tpl, som) else { continue };
-                    let key = (parent_som, name.clone());
+                    let Some(Instance { parent, data_name, parent_som, name, index }) = split_instance(self.tpl, self.data.as_ref(), som) else {
+                        self.error(format!(
+                            "{som}: its instances are not kept in the form's data (the subform is bound to no data node, or to one node), so the script's change is not applied"
+                        ));
+                        continue;
+                    };
+                    let key = (parent_som, name);
                     let have = counts.get(&key).copied().unwrap_or(0);
                     if matches!(e, XfaEffect::AddInstance { .. }) {
                         counts.insert(key, have + 1);
-                        self.data_op(pdfcraft_xfa::DataOp::Instances { parent, name, count: (index + 1).max(have + 1) });
+                        self.data_op(pdfcraft_xfa::DataOp::Instances { parent, name: data_name, count: (index + 1).max(have + 1) });
                     } else {
                         // The data holds every shown instance before one is taken out.
                         counts.insert(key, have.saturating_sub(1));
-                        self.data_op(pdfcraft_xfa::DataOp::Instances { parent: parent.clone(), name: name.clone(), count: have });
+                        self.data_op(pdfcraft_xfa::DataOp::Instances { parent: parent.clone(), name: data_name.clone(), count: have });
                         let mut path = parent;
-                        path.push((name, index));
+                        path.push((data_name, index));
                         self.data_op(pdfcraft_xfa::DataOp::Remove(path));
                     }
                     self.changes.rows += 1;
@@ -785,6 +841,9 @@ pub(crate) fn on_changes(doc: &mut pdfcraft_cos::Document, tpl: &Template, names
         let som = r.by_som().iter().find(|(_, f)| *f == name).map(|(s, _)| s.clone());
         let Some(som) = som else { continue };
         let value = r.fields().get(name).map(|f| f.value.join("\n")).unwrap_or_default();
+        // The typed value reaches every widget bound to the same data node (two fields on one
+        // node: the datasets sync kept the first's value), and the overrides when it has none.
+        r.set_value(&som, &value);
         for ev in r.events_of(&som, "change").into_iter().chain(r.events_of(&som, "exit")) {
             r.run(&ev, &value)?;
         }
@@ -868,7 +927,7 @@ mod tests {
         assert!(!som_matches("form[0].page1[0].qty[0]", "qt"));
         assert!(!som_matches("form[0].page1[0].price[0]", "qty"));
         assert_eq!(
-            split_instance(&Template::default(), "form[0].table[0].row[2]").map(|(p, ps, n, i)| (p.len(), ps, n, i)),
+            split_instance(&Template::default(), None, "form[0].table[0].row[2]").map(|i| (i.parent.len(), i.parent_som, i.name, i.index)),
             Some((2, "form[0].table[0]".into(), "row".into(), 2))
         );
     }
