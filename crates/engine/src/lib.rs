@@ -3362,8 +3362,11 @@ impl Session {
         if !Arc::ptr_eq(&document.trust, &self.trust) {
             document.trust = self.trust.clone();
             if let Some(editor) = document.editor.as_mut() {
-                let signatures =
-                    if document.signatures.is_empty() { Vec::new() } else { signatures_of(&editor.cos, &document.bytes, &document.trust, &document.sig_cache) };
+                let signatures = if document.signatures.is_empty() {
+                    Vec::new()
+                } else {
+                    signatures_of(&editor.cos, &document.bytes, &document.trust, &document.sig_cache)
+                };
                 document.display = display_bytes(Some(editor), &document.bytes, &signatures);
                 document.signatures = Arc::new(signatures);
                 document.renderer = RenderPool::new(document.display.clone(), render_threads(), document.config.clone());

@@ -2300,11 +2300,7 @@ fn plan_validated_widget(doc: &Document, widget_ref: ObjRef, wd: &Dict) -> Optio
             LayerRole::Words
         } else if !lscan.path_points.is_empty() {
             let lbbox = form_bbox(doc, &layer_stream.dict)?;
-            if lscan.has_curves || !is_perimeter_border(&lscan.path_points, lbbox) {
-                LayerRole::Glyph
-            } else {
-                LayerRole::Other
-            }
+            if lscan.has_curves || !is_perimeter_border(&lscan.path_points, lbbox) { LayerRole::Glyph } else { LayerRole::Other }
         } else {
             LayerRole::Other
         };
@@ -2416,11 +2412,7 @@ fn apply_validated_widget(doc: &mut Document, patch: ValidatedWidgetPatch) {
         })
         .collect::<Dict>();
     let mut frame_dict = patch.frame_dict;
-    let mut resources = frame_dict
-        .get(b"Resources")
-        .map(|r| doc.resolve(r))
-        .and_then(|r| r.as_dict().cloned())
-        .unwrap_or_default();
+    let mut resources = frame_dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned()).unwrap_or_default();
     resources.set(b"XObject".to_vec(), Object::Dict(frame_xobjects));
     let resources_ref = doc.add(Object::Dict(resources));
     frame_dict.set(b"Resources".to_vec(), Object::Ref(resources_ref));
@@ -2525,14 +2517,7 @@ fn valid_glyph_ops(bbox: [f64; 4]) -> Vec<u8> {
     let oy = by0 + (bh - s) * 0.5;
     let d = s * 0.03;
     let lw = (s * 0.012).max(0.5);
-    const PTS: [(f64, f64); 6] = [
-        (0.15, 0.42),
-        (0.23, 0.53),
-        (0.40, 0.34),
-        (0.74, 0.86),
-        (0.85, 0.78),
-        (0.42, 0.16),
-    ];
+    const PTS: [(f64, f64); 6] = [(0.15, 0.42), (0.23, 0.53), (0.40, 0.34), (0.74, 0.86), (0.85, 0.78), (0.42, 0.16)];
     let mut out = String::from("q\n0 g\n");
     for (i, &(px, py)) in PTS.iter().enumerate() {
         let x = ox + px * s + d;
@@ -2555,11 +2540,7 @@ fn valid_caption_ops(cap_bbox: [f64; 4], frame_bbox: [f64; 4]) -> Vec<u8> {
     let frame_bh = (frame_bbox[3] - frame_bbox[1]).abs();
     // When a caption layer shares the full widget BBox instead of a dedicated top strip,
     // place the caption in the top 30% strip where standard layered captions sit.
-    let (strip_y, strip_h) = if frame_bh > 0.0 && (bh - frame_bh).abs() < 1.0 && bh > bw * 0.45 {
-        (by0 + bh * 0.70, bh * 0.30)
-    } else {
-        (by0, bh)
-    };
+    let (strip_y, strip_h) = if frame_bh > 0.0 && (bh - frame_bh).abs() < 1.0 && bh > bw * 0.45 { (by0 + bh * 0.70, bh * 0.30) } else { (by0, bh) };
     let label = "Signature valid";
     let pad = (bw * 0.015).clamp(0.5, 4.0);
     let unit_w = pdfcraft_fonts::helvetica_width(label, 1.0).max(1.0);
@@ -2771,12 +2752,7 @@ fn concat_matrix(a: [f64; 6], b: [f64; 6]) -> [f64; 6] {
 }
 
 fn is_identity_matrix(m: [f64; 6]) -> bool {
-    (m[0] - 1.0).abs() < 1e-4
-        && m[1].abs() < 1e-4
-        && m[2].abs() < 1e-4
-        && (m[3] - 1.0).abs() < 1e-4
-        && m[4].abs() < 1e-4
-        && m[5].abs() < 1e-4
+    (m[0] - 1.0).abs() < 1e-4 && m[1].abs() < 1e-4 && m[2].abs() < 1e-4 && (m[3] - 1.0).abs() < 1e-4 && m[4].abs() < 1e-4 && m[5].abs() < 1e-4
 }
 
 fn scan_form_stream(bytes: &[u8]) -> FormScan {
@@ -2847,10 +2823,7 @@ fn scan_form_stream(bytes: &[u8]) -> FormScan {
                         }
                         if let Some(StreamToken::Name(name)) = args.last() {
                             let ctm = ctm_stack.last().copied().unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
-                            scan.do_calls.push(DoCall {
-                                name: name.clone(),
-                                matrix: (!is_identity_matrix(ctm)).then_some(ctm),
-                            });
+                            scan.do_calls.push(DoCall { name: name.clone(), matrix: (!is_identity_matrix(ctm)).then_some(ctm) });
                         }
                     }
                     b"BT" => {
@@ -2934,11 +2907,9 @@ fn scan_form_stream(bytes: &[u8]) -> FormScan {
                             scan.path_points.push((*x3, *y3));
                         }
                     }
-                    b"re" => {
-                        if last_n_numbers(&args, 4).is_some() {
-                            scan.has_re = true;
-                        }
-                    }
+                    b"re" => if last_n_numbers(&args, 4).is_some() {
+                        scan.has_re = true;
+                    },
                     _ => {}
                 }
                 args.clear();

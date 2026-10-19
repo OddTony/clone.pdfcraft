@@ -5458,8 +5458,6 @@ mod tests {
         assert_eq!(badges.len(), 1);
     }
 
-
-
     #[test]
     fn snapshot_tabs_read_like_their_source_plus_the_suffix() {
         let snap = Snapshot { kind: SnapshotKind::SignedVersion, revision: 1, from: "report.pdf".into() };

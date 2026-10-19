@@ -3230,12 +3230,7 @@ fn check_layered_round_trip(signed: Arc<Vec<u8>>, password: Option<&str>, anchor
     let mut renderer = pdfcraft_render::PageRenderer::new(doc.display.clone(), doc.config.clone());
     let rendered = renderer.render(pdfcraft_render::RenderRequest { page: 0, scale: 1.0, ..Default::default() });
     assert!(rendered.error.is_none(), "{:?}", rendered.error);
-    let text_res = renderer.render(pdfcraft_render::RenderRequest {
-        page: 0,
-        kind: pdfcraft_render::RequestKind::Text,
-        scale: 1.0,
-        ..Default::default()
-    });
+    let text_res = renderer.render(pdfcraft_render::RenderRequest { page: 0, kind: pdfcraft_render::RequestKind::Text, scale: 1.0, ..Default::default() });
     let page_text = text_res.text.expect("page text").plain_text();
     assert!(page_text.contains("Signature valid"), "{page_text:?}");
     assert!(page_text.contains("Signed by Test"), "{page_text:?}");
