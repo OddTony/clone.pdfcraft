@@ -116,6 +116,22 @@ pub fn write_atomically_with(
     sync_all: impl FnOnce(&std::fs::File) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
     use std::io::Write as _;
+    write_atomically_streamed(path, form, suffixes, sync_all, |file| file.write_all(bytes))
+}
+
+/// [`write_atomically_with`] for a file written as it is produced (an archive of rendered pages),
+/// so it never has to be held in memory whole: `write` writes the whole file into the staging
+/// file, and what it returns is returned. A failure in `write`, as at any other step, removes the
+/// staging file and leaves the target as it was. As with [`write_atomically`], a read-only target
+/// is refused before anything is written, on Unix a replaced file keeps its permissions, and on
+/// Windows and macOS it keeps its creation date.
+pub fn write_atomically_streamed<T>(
+    path: &Path,
+    form: StagingName,
+    suffixes: impl IntoIterator<Item = u64>,
+    sync_all: impl FnOnce(&std::fs::File) -> std::io::Result<()>,
+    write: impl FnOnce(&mut std::fs::File) -> std::io::Result<T>,
+) -> std::io::Result<T> {
     // A read-only file is not replaced. Windows refuses the rename anyway, but on Unix a rename
     // ignores the target's permissions: the file would be overwritten without a word, and come
     // out writable (#2658).
@@ -135,14 +151,16 @@ pub fn write_atomically_with(
     let (tmp, file) = create_staging_as(dir, name, form, suffixes, keep.as_ref())?;
     let result = (|| {
         // Closed at the end of the block, before the rename (required on Windows).
-        {
+        let value = {
             let mut file = file;
-            file.write_all(bytes)?;
+            let value = write(&mut file)?;
             #[cfg(any(windows, target_os = "macos"))]
             keep_created(&file, created);
             sync_staged(&file, sync_all)?;
-        }
-        std::fs::rename(&tmp, path)
+            value
+        };
+        std::fs::rename(&tmp, path)?;
+        Ok(value)
     })();
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
