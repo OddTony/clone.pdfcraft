@@ -148,3 +148,6 @@ sync_github_name = false
 
 [people.Linn39403]
 display_name = "Linn39403"
+
+[people.MortenHusted]
+sync_github_name = true
