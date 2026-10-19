@@ -862,6 +862,8 @@ impl DocView {
         fresh.continuous = self.continuous;
         fresh.rotation = self.rotation;
         fresh.current = self.current;
+        // Where on the page, for a tab not drawn again before the session is saved (#2310).
+        fresh.top_in_page = self.position_in_page();
         fresh.organize = self.organize;
         fresh.grid_zoom = self.grid_zoom;
         // Same document id, so the scroll offset egui keeps for it is still this document's.
@@ -879,9 +881,14 @@ impl DocView {
         fresh.viewport_w = self.viewport_w;
         fresh.viewport_h = self.viewport_h;
         fresh.viewport_screen = self.viewport_screen;
+        let page = self.current;
         *self = fresh;
         // Marks the kept images out of date and clamps the page to the new page count.
         self.document_changed(info);
+        if self.current != page {
+            // The page is gone, and the place on it with it: the last page shows from its top.
+            self.top_in_page = 0.0;
+        }
         self.page_input = self.current_page_label(info.pages.get(self.current).map(|page| page.label.as_str()));
         self.page_input_reselect = true;
     }
