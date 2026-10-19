@@ -905,8 +905,11 @@ fn is_complex(c: char) -> bool {
     matches!(c as u32, 0x0300..=0x036F | 0x0900..=0x0DFF | 0x0E00..=0x0EFF | 0x1000..=0x109F | 0x1780..=0x17FF)
 }
 
+/// Han, kana, bopomofo and their compatibility and fullwidth forms: scripts written without word spaces, so a
+/// small gap between two of their characters isn't a word gap. Not Hangul: Korean is written with word spaces,
+/// which producers often draw by position alone (no space glyph), so its gaps are judged like Latin ones.
 fn is_cjk(c: char) -> bool {
-    matches!(c as u32, 0x2E80..=0x9FFF | 0xAC00..=0xD7AF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF | 0x20000..=0x3134F | 0x1100..=0x11FF)
+    matches!(c as u32, 0x2E80..=0x312F | 0x3190..=0x9FFF | 0xF900..=0xFAFF | 0xFF00..=0xFF9F | 0xFFE0..=0xFFEF | 0x20000..=0x3134F)
 }
 
 /// Glyphs `start..end` of the glyph list [`arrange`] lays out, drawn one after another.
@@ -2204,6 +2207,20 @@ mod tests {
         let mut v = Vec::new();
         word(&mut v, "每个字", 10.0, 10.0, 9.0);
         assert_eq!(layout(v).plain_text(), "每个字");
+    }
+
+    /// Korean is written with word spaces, which producers often draw by position alone: a quarter-em gap
+    /// between Hangul words is a space, while the same gap between Han characters (written without spaces) isn't.
+    #[test]
+    fn hangul_word_gaps_are_spaces_and_han_gaps_are_not() {
+        let mut v = Vec::new();
+        word(&mut v, "복합문화", 10.0, 10.0, 6.0);
+        word(&mut v, "센터", 36.5, 10.0, 6.0);
+        assert_eq!(layout(v).plain_text(), "복합문화 센터");
+        let mut v = Vec::new();
+        word(&mut v, "建築", 10.0, 10.0, 6.0);
+        word(&mut v, "設計", 24.5, 10.0, 6.0);
+        assert_eq!(layout(v).plain_text(), "建築設計");
     }
 
     /// #1062: the word gap stays between the runs when the right-hand run is drawn first, and
