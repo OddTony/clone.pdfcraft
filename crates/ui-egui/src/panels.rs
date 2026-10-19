@@ -35,11 +35,14 @@ pub fn left_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     );
 }
 
+/// Returns whether the leading button (Back, or Expand on All tools) and Close were clicked.
 fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool) -> (bool, bool) {
     let mut go_back = false;
     let mut close = false;
     ui.horizontal(|ui| {
-        if back && icons::button(ui, "chevron-left", 26.0, false, tl!("Back to all tools")).clicked() {
+        // Labels distinct from the Combine grid's Expand and Collapse, which can show beside them.
+        let (icon, tip) = if back { ("chevron-left", tl!("Back to all tools")) } else { ("maximize-2", tl!("Expand all tools")) };
+        if icons::button(ui, icon, 26.0, false, tip).clicked() {
             go_back = true;
         }
         // Reserve space for Close before laying out the translated title. Long tool names
@@ -58,7 +61,11 @@ fn panel_header(ui: &mut egui::Ui, t: &Tokens, title: &str, back: bool) -> (bool
 }
 
 fn all_tools(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
-    let (_, close) = panel_header(ui, t, "All tools", false);
+    let (expand, close) = panel_header(ui, t, "All tools", false);
+    if expand {
+        app.all_tools_full = true;
+        app.mode = crate::Mode::AllTools;
+    }
     if close {
         app.left_open = false;
     }
