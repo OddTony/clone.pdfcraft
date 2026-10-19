@@ -5097,7 +5097,7 @@ fn read_mode_shortcut_applies_the_open_paragraph() {
 #[test]
 fn inserted_image_remains_added_after_watermark() {
     use pdfcraft_engine::{Edit, Watermark};
-    let h = harness(1, |app| {
+    let mut h = harness(1, |app| {
         let mut png = Vec::new();
         image::RgbImage::from_pixel(10, 10, image::Rgb([0, 0, 255])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
         assert!(app.apply_edit(Edit::AddImage {
@@ -5116,4 +5116,28 @@ fn inserted_image_remains_added_after_watermark() {
     let id = h.state().views[0].id;
     let doc = h.state().session.get(id).unwrap();
     assert_eq!(doc.added().len(), 1, "watermark must not hide the inserted image from the added-content gesture");
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.state_mut().views[0].fit = pdfcraft_ui_egui::canvas::Fit::Page;
+    h.run_steps(4);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let at = |x: f32, y: f32| egui::pos2(page.left() + x / 200.0 * page.width(), page.top() + (300.0 - y) / 300.0 * page.height());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while h.state().render_pending() {
+        assert!(std::time::Instant::now() < deadline);
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let start = at(90.0, 180.0);
+    h.hover_at(start);
+    h.run_steps(1);
+    h.drag_at(start);
+    h.run_steps(1);
+    h.hover_at(start + egui::vec2(100.0, 0.0));
+    h.run_steps(3);
+    let old = h.state().session.get(id).unwrap().added()[0].content.rect();
+    assert_eq!(old, [30.0, 170.0, 130.0, 250.0], "the gesture must not edit the document until release");
+    h.drop_at(start + egui::vec2(100.0, 0.0));
+    h.run_steps(5);
+    let moved = h.state().session.get(id).unwrap().added()[0].content.rect();
+    assert!(moved[0] > old[0], "the inserted image should move when released: {moved:?}");
 }
