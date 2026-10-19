@@ -2907,9 +2907,11 @@ fn scan_form_stream(bytes: &[u8]) -> FormScan {
                             scan.path_points.push((*x3, *y3));
                         }
                     }
-                    b"re" => if last_n_numbers(&args, 4).is_some() {
-                        scan.has_re = true;
-                    },
+                    b"re" => {
+                        if last_n_numbers(&args, 4).is_some() {
+                            scan.has_re = true;
+                        }
+                    }
                     _ => {}
                 }
                 args.clear();
