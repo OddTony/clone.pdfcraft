@@ -13,9 +13,8 @@
 //! subpaths whose four corners form an axis-aligned rectangle in user space (#1510) are
 //! considered when closed by a fill operator — other filled paths, shadings and patterns are
 //! not; a rectangle drawn with a translucent ExtGState (`/ca < 1`) is not flagged; annotation
-//! rectangles are compared in unrotated user space, so pages with `/Rotate` may misalign;
-//! covers inside form XObjects are found, but only text drawn directly in the page content
-//! is checked under them, so text inside a form XObject is not audited.
+//! rectangles are compared in unrotated user space, so pages with `/Rotate` may misalign.
+//! Covers and text are both followed into form XObjects (#3218).
 //!
 //! The audit fails closed: any content that cannot be read (an undecodable content stream,
 //! malformed annotations, form XObjects nested deeper than 32 or in a cycle) is an error, never
@@ -98,12 +97,24 @@ const COVER_CONTRAST: f64 = 3.0;
 pub fn audit_redactions(doc: &Document) -> Result<Vec<AuditFinding>, AuditError> {
     let mut out = Vec::new();
     for (n, page) in pdfcraft_model::pages(doc).iter().enumerate() {
-        let lines = pdfcraft_edit::text_lines(doc, n).map_err(|e| AuditError::Text(n, e.to_string()))?;
+        // Covers first: a form walk they can't finish (too deep, a cycle) is the clearer error.
+        let rects = cover::filled_rects(doc, &page.dict)?;
+        let text_err = |e: pdfcraft_edit::EditError| AuditError::Text(n, e.to_string());
+        // The page's own text, then the text its form XObjects draw, each with its paint position.
+        let mut lines: Vec<(TextLine, Vec<usize>)> = pdfcraft_edit::text_lines(doc, n)
+            .map_err(text_err)?
+            .into_iter()
+            .map(|l| {
+                let (stream, op) = l.paint_pos();
+                (l, vec![stream, op])
+            })
+            .collect();
+        lines.extend(pdfcraft_edit::form_text_lines(doc, n, cover::MAX_DEPTH).map_err(text_err)?);
         // 1. Opaque filled rectangles over extractable text.
-        for r in cover::filled_rects(doc, &page.dict)? {
+        for r in rects {
             let mut covered = String::new();
-            for line in &lines {
-                if is_cover(&r, line) {
+            for (line, pos) in &lines {
+                if is_cover(&r, line, pos) {
                     if !covered.is_empty() {
                         covered.push(' ');
                     }
@@ -117,7 +128,7 @@ pub fn audit_redactions(doc: &Document) -> Result<Vec<AuditFinding>, AuditError>
         // 2. Redact annotations that were never applied.
         for annot in annots(doc, &page.dict)? {
             let mut covered = String::new();
-            for line in &lines {
+            for (line, _) in &lines {
                 if covers(&annot, line) {
                     if !covered.is_empty() {
                         covered.push(' ');
@@ -134,11 +145,11 @@ pub fn audit_redactions(doc: &Document) -> Result<Vec<AuditFinding>, AuditError>
 }
 
 /// A filled rectangle is a faux-redaction cover for a text line iff it was painted strictly
-/// after the line, overlaps it substantially, and is dark enough against the line's color to
+/// after the line (`pos`, its paint position), overlaps it substantially, and is dark enough against the line's color to
 /// make the text unreadable. Light covers (table shading, highlights) over dark text fail the
 /// contrast check and are not flagged.
-fn is_cover(rect: &cover::FilledRect, line: &TextLine) -> bool {
-    rect.pos > line.paint_pos() && covers(&rect.rect, line) && contrast(line.color, rect.rgb) < COVER_CONTRAST
+fn is_cover(rect: &cover::FilledRect, line: &TextLine, pos: &[usize]) -> bool {
+    rect.pos.as_slice() > pos && covers(&rect.rect, line) && contrast(line.color, rect.rgb) < COVER_CONTRAST
 }
 
 /// Does `cover` hide a substantial part of what `line` draws? Three ways, any is enough:
