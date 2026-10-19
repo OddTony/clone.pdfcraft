@@ -2449,6 +2449,12 @@ fn find_frame_form(doc: &Document, start: ObjRef) -> Option<(ObjRef, Stream, [f6
         let xobjects = res.get(b"XObject").map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned())?;
         if scan.do_calls.len() == 1 && !scan.has_other_ops && !scan.has_unwrapped_do {
             let call = scan.do_calls.first()?;
+            let wrapper_transformed = nums(doc, &s.dict, b"Matrix")
+                .and_then(|m| <[f64; 6]>::try_from(m.as_slice()).ok())
+                .is_some_and(|m| !is_identity_matrix(m));
+            if wrapper_transformed || call.matrix.is_some() {
+                return None;
+            }
             curr = xobjects.reference(&call.name)?;
             continue;
         }
@@ -2907,10 +2913,8 @@ fn scan_form_stream(bytes: &[u8]) -> FormScan {
                             scan.path_points.push((*x3, *y3));
                         }
                     }
-                    b"re" => {
-                        if last_n_numbers(&args, 4).is_some() {
-                            scan.has_re = true;
-                        }
+                    b"re" if last_n_numbers(&args, 4).is_some() => {
+                        scan.has_re = true;
                     }
                     _ => {}
                 }

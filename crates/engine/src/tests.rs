@@ -3243,6 +3243,24 @@ fn check_layered_round_trip(signed: Arc<Vec<u8>>, password: Option<&str>, anchor
         assert!(bytes_has(&saved, b"Not Verified"), "saved bytes keep the baked appearance");
     }
     assert!(!bytes_has(&saved, b"Signature valid"));
+    if password.is_some() {
+        let mut u = Session::new().with_clock(|| 1_800_000_000);
+        let uid = u.open("layered-saved.pdf", None, saved.clone(), password).unwrap();
+        let reopened = u.get(uid).unwrap();
+        let mut reopened_renderer = pdfcraft_render::PageRenderer::new(reopened.display.clone(), reopened.config.clone());
+        let reopened_text = reopened_renderer
+            .render(pdfcraft_render::RenderRequest {
+                page: 0,
+                kind: pdfcraft_render::RequestKind::Text,
+                scale: 1.0,
+                ..Default::default()
+            })
+            .text
+            .expect("page text")
+            .plain_text();
+        assert!(reopened_text.contains("Not Verified"), "{reopened_text:?}");
+        assert!(!reopened_text.contains("Signature valid"), "{reopened_text:?}");
+    }
     let mut t = Session::new().with_clock(|| 1_800_000_000);
     t.set_trusted_certificates(vec![anchor.clone()]);
     let tid = t.open("layered-saved.pdf", None, saved.clone(), password).unwrap();
