@@ -42,6 +42,10 @@ pub(crate) struct Type0Font {
     /// Whether the `to_unicode` map is a UCS2 `CMap` (CID-indexed) rather than
     /// a `ToUnicode` `CMap` (code-indexed).
     to_unicode_is_cid_indexed: bool,
+    /// PdfCraft patch: the collection's UCS2 map, for codes a partial `/ToUnicode` does not
+    /// cover. Only a substitute font has one, and only when `/ToUnicode` parsed. An embedded
+    /// CID-keyed font leaves those codes unmapped.
+    ucs2: Option<CMap>,
     /// PdfCraft patch: whether the CIDs belong to an Adobe character collection (Japan1, GB1,
     /// CNS1, Korea1), whose glyph numbering no substitute other than a CID-keyed CFF font shares.
     adobe_collection: bool,
@@ -118,18 +122,23 @@ impl Type0Font {
 
         let mut to_unicode = read_to_unicode(dict, cmap_resolver);
         let mut to_unicode_is_cid_indexed = false;
-
-        // If there is no ToUnicode map, try to get the UCS2 CMap.
+        // A substitute font reads the collection's UCS2 map. With no `/ToUnicode`, that map
+        // is the whole mapping. With a partial one (an entry that did not parse, #3177), it
+        // covers only the codes `/ToUnicode` does not. An embedded font does not get it.
+        let mut ucs2 = None;
         if fallback
-            && to_unicode.is_none()
             && let Some(cc) = character_collection.as_ref()
             && let Some(ucs2_name) = cc.family.ucs2_cmap()
             && let Some(data) = (cmap_resolver)(ucs2_name)
         {
             let resolver = cmap_resolver.clone();
-            if let Some(ucs2_cmap) = CMap::parse(data, move |n| (resolver)(n)) {
-                to_unicode = Some(ucs2_cmap);
-                to_unicode_is_cid_indexed = true;
+            if let Some(parsed) = CMap::parse(data, move |n| (resolver)(n)) {
+                if to_unicode.is_none() {
+                    to_unicode = Some(parsed);
+                    to_unicode_is_cid_indexed = true;
+                } else {
+                    ucs2 = Some(parsed);
+                }
             }
         }
 
@@ -162,6 +171,7 @@ impl Type0Font {
             fallback,
             to_unicode_is_cid_indexed,
             adobe_collection,
+            ucs2,
         })
     }
 
@@ -170,16 +180,9 @@ impl Type0Font {
             return GlyphId::NOTDEF;
         };
 
-        // UCS2 maps are indexed by CIDs, while embededd `ToUnicode` maps are
-        // indexed by character code.
-        let to_unicode_key = if self.to_unicode_is_cid_indexed {
-            cid
-        } else {
-            code
-        };
-
         if self.fallback
-            && let Some(glyph) = self.map_via_unicode(to_unicode_key)
+            && let Some(text) = self.unicode_of(code)
+            && let Some(glyph) = self.glyph_for_unicode(text)
         {
             // Yay, Unicode worked!
             return glyph;
@@ -223,35 +226,20 @@ impl Type0Font {
     /// Map a character code (or CID) to a glyph ID
     /// by first getting its Unicode and then looking up the codepoint in the
     /// font's cmap.
-    fn map_via_unicode(&self, key: u32) -> Option<GlyphId> {
-        let to_unicode = self.to_unicode.as_ref()?;
-
-        let (character, selector) = to_unicode
-            .lookup_bf_string(key)
-            .or_else(|| {
-                for len in 0..4 {
-                    if let Some(code) = to_unicode.lookup_cid_code(key, len)
-                        && let Some(code) = char::from_u32(code.to_u32())
-                    {
-                        return Some(BfString::Char(code));
-                    }
-                }
-
-                None
-            })
-            .and_then(|bf| match bf {
-                BfString::Char(c) => Some((c, None)),
-                // PdfCraft patch: a character and a variation selector is that character in a
-                // given form, as Adobe-Japan1 maps the JIS X 0208 forms of the kanji that
-                // JIS X 0213:2004 redrew (噂 is U+5642 U+E0100). Other strings (ligatures) still
-                // have no glyph.
-                BfString::String(s) => {
-                    let mut chars = s.chars();
-                    let character = chars.next()?;
-                    let selector = chars.next().filter(|c| is_variation_selector(*c))?;
-                    chars.next().is_none().then_some((character, Some(selector)))
-                }
-            })?;
+    fn glyph_for_unicode(&self, text: BfString) -> Option<GlyphId> {
+        let (character, selector) = match text {
+            BfString::Char(c) => (c, None),
+            // PdfCraft patch: a character and a variation selector is that character in a
+            // given form, as Adobe-Japan1 maps the JIS X 0208 forms of the kanji that
+            // JIS X 0213:2004 redrew (噂 is U+5642 U+E0100). Other strings (ligatures) still
+            // have no glyph.
+            BfString::String(s) => {
+                let mut chars = s.chars();
+                let character = chars.next()?;
+                let selector = chars.next().filter(|c| is_variation_selector(*c))?;
+                chars.next().is_none().then_some((character, Some(selector)))?
+            }
+        };
 
         match &self.font_type {
             FontType::OpenType(t) => {
@@ -431,17 +419,40 @@ impl Type0Font {
     }
 
     pub(crate) fn char_code_to_unicode(&self, code: u32) -> Option<BfString> {
-        if let Some(to_unicode) = &self.to_unicode {
+        self.unicode_of(code)
+    }
+
+    /// Unicode for a character code. A `/ToUnicode` entry wins. A substitute font then reads
+    /// the collection's UCS2 map by CID. An embedded CID-keyed font has no such map, so a code
+    /// `/ToUnicode` does not cover stays unmapped.
+    fn unicode_of(&self, code: u32) -> Option<BfString> {
+        if let Some(map) = &self.to_unicode {
             let key = if self.to_unicode_is_cid_indexed {
                 self.code_to_cid(code).unwrap_or(0)
             } else {
                 code
             };
-            return to_unicode.lookup_bf_string(key);
+            if let Some(text) = bf_or_cid_char(map, key) {
+                return Some(text);
+            }
         }
-
-        None
+        if !self.fallback || self.to_unicode_is_cid_indexed {
+            return None;
+        }
+        let cid = self.code_to_cid(code)?;
+        self.ucs2.as_ref().and_then(|map| bf_or_cid_char(map, cid))
     }
+}
+
+/// A bf mapping, or a CID mapping whose value is one Unicode scalar. The second is how a
+/// collection map that stores its rows as CID ranges is read when it has no bf entry.
+fn bf_or_cid_char(map: &CMap, key: u32) -> Option<BfString> {
+    map.lookup_bf_string(key).or_else(|| {
+        (0..4).find_map(|len| {
+            let code = map.lookup_cid_code(key, len)?;
+            Some(BfString::Char(char::from_u32(code.to_u32())?))
+        })
+    })
 }
 
 impl CacheKey for Type0Font {

@@ -1783,6 +1783,48 @@ mod tests {
         assert_eq!(read("/C7 usecmap 1 beginbfchar <41> <0058> endbfchar"), "XB");
     }
 
+    /// A non-embedded Adobe-Japan1 font. `<0022>` is CID 34 (UCS2 "A") and `<0465>` is CID 1125
+    /// (UCS2 "亜"). `body` is the `/ToUnicode` bf section; `None` leaves the collection map in charge.
+    fn japan1_substitute(body: Option<&str>) -> String {
+        let (extra, reference) = match body {
+            Some(body) => {
+                let cmap = format!(
+                    "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /T def /CMapType 2 def 1 begincodespacerange <0000> <FFFF> endcodespacerange {body} endcmap CMapName currentdict /CMap defineresource pop end end\n"
+                );
+                (format!("8 0 obj << /Length {} >> stream\n{cmap}endstream endobj\n", cmap.len()), " /ToUnicode 8 0 R")
+            }
+            None => (String::new(), ""),
+        };
+        let content = "BT /F1 12 Tf 72 700 Td <00220465> Tj ET";
+        let pdf = format!(
+            "%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length {} >> stream
+{content}
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type0 /BaseFont /HeiseiMin-W3 /Encoding /Identity-H /DescendantFonts [6 0 R]{reference} >> endobj
+6 0 obj << /Type /Font /Subtype /CIDFontType0 /BaseFont /HeiseiMin-W3 /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 6 >> /FontDescriptor 7 0 R /DW 1000 >> endobj
+7 0 obj << /Type /FontDescriptor /FontName /HeiseiMin-W3 /Flags 6 /FontBBox [0 -141 1000 859] /ItalicAngle 0 /Ascent 859 /Descent -141 /CapHeight 700 /StemV 80 >> endobj
+{extra}trailer << /Root 1 0 R >>
+%%EOF",
+            content.len()
+        );
+        extract_page(&Pdf::new(std::sync::Arc::new(pdf.into_bytes())).unwrap(), 0, &InterpreterSettings::default()).unwrap().plain_text()
+    }
+
+    /// A partial `/ToUnicode` on a substitute CID font used to hide the collection map, so codes
+    /// it does not cover had no Unicode. Those codes still read the UCS2 map. An entry that does
+    /// parse wins over it.
+    #[test]
+    fn a_partial_tounicode_on_a_substitute_cid_font_keeps_the_collection_map() {
+        let collection = japan1_substitute(None);
+        assert_eq!(collection, "A亜");
+        assert_eq!(japan1_substitute(Some("1 beginbfchar <0022> <ZZZZ> endbfchar")), collection, "a bad entry does not hide the collection");
+        assert_eq!(japan1_substitute(Some("2 beginbfchar <0022> <0042> <0465> <ZZZZ> endbfchar")), "B亜");
+    }
+
     /// One page per content stream, in Helvetica (`/F1`), with `/P1` in the resources'
     /// `/Properties` naming the `/ActualText` "fi".
     fn marked_pages(contents: &[&str]) -> Pdf {
