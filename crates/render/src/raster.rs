@@ -1539,7 +1539,10 @@ mod tests {
         let shared_bad = render_gate(0, true);
         let shared_healthy = render_gate(1, true);
         let private_bad = render_gate(0, false);
-        *lock(&pool.shared.render_gates) = vec![shared_bad.clone(), shared_healthy.clone(), private_bad.clone()];
+        // The healthy private retry would otherwise finish before `try_recv` reads the
+        // channel: that call runs the watchdog, which starts the retry immediately.
+        let private_healthy = render_gate(1, false);
+        *lock(&pool.shared.render_gates) = vec![shared_bad.clone(), shared_healthy.clone(), private_bad.clone(), private_healthy.clone()];
         pool.set_queue(vec![
             RenderRequest { page: 0, scale: 1.0, tag: 40, ..Default::default() },
             RenderRequest { page: 1, scale: 1.0, tag: 41, ..Default::default() },
@@ -1552,6 +1555,8 @@ mod tests {
         shared_bad.finished.wait();
         shared_healthy.finished.wait();
         private_bad.entered.wait();
+        private_healthy.entered.wait();
+        private_healthy.release.wait();
         let healthy = pool.results.recv_timeout(Duration::from_secs(30)).expect("healthy private retry");
         assert!(healthy.error.is_none(), "{:?}", healthy.error);
         assert_eq!((healthy.request.page, healthy.width, healthy.height, healthy.request.tag), (1, 100, 50, 41));
