@@ -410,7 +410,7 @@ update the numbers.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-18 | minor | Gaps 3/14: native logical bidi text input and display, shaped Arabic annotation/form appearances, bounded upright uniform-style source fallback. Global UI mirroring and general Arabic editing remain partial; estimates unchanged. |
+| 2026-10-18 | minor | Gaps 3/14: native logical bidi text input and display, shaped Arabic annotation/form appearances, a bounded upright source fallback that keeps each run's size, colour and weight. Global UI mirroring and general Arabic editing remain partial; estimates unchanged. |
 | 2026-10-15 | minor | Gap 12: the text oracle scores reading order as well as word F1, which is a bag of words and cannot see order; the first measurement separated 18 improvements from 6 regressions in a change F1 called unchanged on 26 of 29 files. Estimates unchanged. |
 | 2026-10-14 | minor | M1: raw-deflate fallback preserves decoding-limit errors in strict and tolerant decoding; synthetic filter and COS stream regressions. Estimates unchanged. |
 | 2026-10-15 | patch | Gap 24: record localization and installers as partial (unusable Chinese, Telugu and Arabic; unsigned Linux packages) |

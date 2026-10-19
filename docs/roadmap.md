@@ -200,7 +200,7 @@ M2 (renderer), M7 (content editing), M10 (OCR and Office), M11 (Preflight and st
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-18 | minor | M14/M7: logical Arabic catalogs, native bidi wrapping/caret/selection/clipboard/IME/accessibility; shaped Arabic annotation/form save/reopen and bounded upright uniform-style existing-text fallback. Bold/italic fallback, shaped style ranges and mirrored UI remain open. Native release acceptance is separate; estimates unchanged. |
+| 2026-10-18 | minor | M14/M7: logical Arabic catalogs, native bidi wrapping/caret/selection/clipboard/IME/accessibility; shaped Arabic annotation/form save/reopen and a bounded upright existing-text fallback that keeps each run's size, colour and weight (bold from the variable face's weight instance) and reads browser-printed right-to-left rows in typing order. Shaped style ranges, re-edited rows that mix styles, rotated text and the mirrored UI remain open. Native release acceptance is separate; estimates unchanged. |
 | 2026-10-15 | minor | M7: Edit text caret height follows its row, with a kittest regression; estimates unchanged |
 | 2026-10-19 | minor | M3 #3360: retain each document’s scroll position when switching Read and the docking workspace at fixed zoom. Estimates unchanged. |
 | 2026-10-18 | minor | M4, PR #1919 review: repeated page indices apply each rotation to the latest page-local value, preserving indirect/inherited angles. Synthetic adjacent/interleaved duplicates retain siblings and page contents through incremental and full saves. Estimates unchanged. |
