@@ -1232,3 +1232,173 @@ fn tabular_import_keeps_tsv_quotes_literal_and_csv_value_tabs() {
     import(&mut doc, b"Name,Other\r\n\"Ada\tLovelace\",other field\r\n").unwrap();
     assert_eq!(fields(&doc).into_iter().find(|f| f.name == "Name").unwrap().value, vec!["Ada\tLovelace"]);
 }
+
+/// Copy: the chosen comments travel with their replies and nothing else.
+#[test]
+fn exporting_selected_comments_takes_them_and_their_replies() {
+    let src = filled();
+    let note = summaries(&src).into_iter().find(|s| s.subtype == "Text").unwrap();
+    let xfdf = export_xfdf_comments(&src, &[(note.page, note.index)], "form.pdf");
+    assert!(xfdf.contains("<text page=\"0\""), "{xfdf}");
+    assert!(xfdf.contains("inreplyto=\"n1\""), "the reply comes along: {xfdf}");
+    assert!(!xfdf.contains("<highlight") && !xfdf.contains("<ink"), "other comments stay: {xfdf}");
+    assert!(!xfdf.contains("<fields>"), "no field values");
+    assert!(is_xfdf_comments(&xfdf));
+    assert!(!is_xfdf_comments("<xfdf xmlns=\"x\"><fields/></xfdf>") && !is_xfdf_comments("just text"));
+    // A position that is no comment exports nothing but a valid, empty file.
+    let empty = export_xfdf_comments(&src, &[(7, 7)], "form.pdf");
+    assert!(empty.contains("<annots>\n</annots>"), "{empty}");
+}
+
+/// Paste: the copies land on the asked-for page under names of their own, so nothing is
+/// replaced and a second paste gives a second set; the reply keeps its copied parent.
+#[test]
+fn importing_comments_as_copies_adds_them_on_the_page_with_fresh_names() {
+    let src = filled();
+    let note = summaries(&src).into_iter().find(|s| s.subtype == "Text").unwrap();
+    let xfdf = export_xfdf_comments(&src, &[(note.page, note.index)], "form.pdf");
+    let mut dst = blank();
+    let r = import_comments(&mut dst, &xfdf, Some(1), Some("paste1"), None).unwrap();
+    assert_eq!((r.comments, r.fields), (2, 0), "{r:?}");
+    let first: Vec<_> = summaries(&dst);
+    assert!(first.iter().all(|s| s.page == 1), "every copy is on page 2: {first:?}");
+    let parent = first.iter().find(|s| s.subtype == "Text").unwrap();
+    let reply = first.iter().find(|s| s.in_reply_to.is_some()).expect("the reply came along");
+    assert_eq!(reply.in_reply_to.as_deref(), Some("paste1-1"), "and replies to the copied note, by its new name ({parent:?})");
+    // Again: two sets, not one replaced set.
+    import_comments(&mut dst, &xfdf, Some(0), Some("paste2"), None).unwrap();
+    let second = summaries(&dst);
+    assert_eq!(second.len(), 4, "{second:?}");
+    assert_eq!(second.iter().filter(|s| s.page == 0).count(), 2);
+    // The copies' names are their own, not the originals'.
+    let xfdf2 = export_xfdf(&dst, true, false, "dst.pdf");
+    assert!(!xfdf2.contains("name=\"n1\"") && !xfdf2.contains("name=\"r1\""), "{xfdf2}");
+    assert!(xfdf2.contains("name=\"paste1-1\"") && xfdf2.contains("inreplyto=\"paste1-1\""), "{xfdf2}");
+    // A page the document doesn't have is refused, and nothing changes.
+    assert!(import_comments(&mut dst, &xfdf, Some(9), Some("paste3"), None).is_err());
+    assert_eq!(summaries(&dst).len(), 4);
+    // Without a target page the copies keep their own pages; without a prefix the import is
+    // the usual one (same names replace).
+    let mut other = blank();
+    import_comments(&mut other, &xfdf, None, Some("p"), None).unwrap();
+    assert!(summaries(&other).iter().all(|s| s.page == 0));
+    import_comments(&mut other, &xfdf, None, None, None).unwrap();
+    import_comments(&mut other, &xfdf, None, None, None).unwrap();
+    assert_eq!(summaries(&other).len(), 4, "the named import replaced its own earlier copy");
+}
+
+/// Other tools write comments straight into the page's `/Annots` array, without an object of
+/// their own: they copy like any other, and two source comments sharing a name give two copies.
+#[test]
+fn comments_written_directly_into_the_page_array_copy_and_shared_names_give_two_copies() {
+    let mut doc = blank();
+    let page = pdfcraft_model::pages(&doc)[0].obj;
+    let mut direct = Dict::new();
+    direct.set(b"Type".to_vec(), Object::name("Annot"));
+    direct.set(b"Subtype".to_vec(), Object::name("Square"));
+    direct.set(b"Rect".to_vec(), arr(&[10.0, 10.0, 60.0, 40.0]));
+    direct.set(b"Contents".to_vec(), PdfString::text("drawn elsewhere"));
+    let mut twin = direct.clone();
+    twin.set(b"NM".to_vec(), PdfString::text("shared"));
+    let mut other_twin = twin.clone();
+    other_twin.set(b"Rect".to_vec(), arr(&[100.0, 10.0, 150.0, 40.0]));
+    doc.update_dict(page, |p| p.set(b"Annots".to_vec(), Object::Array(vec![Object::Dict(direct), Object::Dict(twin), Object::Dict(other_twin)])))
+        .unwrap();
+    assert_eq!(summaries(&doc).len(), 3);
+    let xfdf = export_xfdf_comments(&doc, &[(0, 0)], "x.pdf");
+    assert!(xfdf.contains("<square") && xfdf.contains("drawn elsewhere"), "a direct annotation copies: {xfdf}");
+    assert_eq!(comment_count(&xfdf), 1);
+    let both = export_xfdf_comments(&doc, &[(0, 1), (0, 2)], "x.pdf");
+    assert_eq!(comment_count(&both), 2);
+    let mut dst = blank();
+    import_comments(&mut dst, &both, Some(0), Some("p"), None).unwrap();
+    let copies = summaries(&dst);
+    assert_eq!(copies.len(), 2, "two copies, not one replacing the other: {copies:?}");
+    assert_ne!(copies[0].name, copies[1].name);
+    assert!(export_xfdf_comments(&doc, &[(0, 9)], "x.pdf").contains("<annots>\n</annots>"), "a position that is no annotation copies nothing");
+}
+
+/// A selected comment without a name of its own (other tools leave /NM out) gets one for the
+/// export, so its replies still find it when the copies are pasted.
+#[test]
+fn replies_to_a_selected_comment_without_a_name_follow_it_into_the_copy() {
+    let meta = |id: &str| Meta { date: None, id: id.into() };
+    let mut doc = blank();
+    let shape = Shape::Rectangle { rect: [10.0, 10.0, 60.0, 40.0] };
+    add_annotation(
+        &mut doc,
+        &NewAnnotation { page: 0, style: Style::default_for(&shape), shape, contents: "nameless".into(), author: "Ada".into() },
+        &meta("gone"),
+    )
+    .unwrap();
+    let index = summaries(&doc)[0].index;
+    add_reply(&mut doc, 0, index, "Agreed", "Bob", &meta("r1")).unwrap();
+    // The parent loses its /NM, as another tool may have left it.
+    let annots = pdfcraft_model::pages(&doc)[0].dict.get(b"Annots").map(|a| doc.resolve(a)).and_then(|a| a.as_array().cloned()).unwrap();
+    let parent = annots[index].as_ref().unwrap();
+    doc.update_dict(parent, |d| {
+        d.remove(b"NM");
+    })
+    .unwrap();
+    assert_eq!(threads(&doc)[0].0, None, "{:?}", threads(&doc));
+    let xfdf = export_xfdf_comments(&doc, &[(0, index)], "x.pdf");
+    let given = format!("pdfcraft-0-{index}");
+    assert!(xfdf.contains(&format!("name=\"{given}\"")) && xfdf.contains(&format!("inreplyto=\"{given}\"")), "{xfdf}");
+    let mut dst = blank();
+    import_comments(&mut dst, &xfdf, Some(0), Some("p"), None).unwrap();
+    let copies = threads(&dst);
+    assert_eq!(copies.len(), 2, "{copies:?}");
+    let parent_name = copies.iter().find(|(_, irt, _)| irt.is_none()).and_then(|(n, _, _)| n.clone());
+    assert!(parent_name.is_some(), "{copies:?}");
+    let reply_to = copies.iter().find(|(_, irt, _)| irt.is_some()).and_then(|(_, irt, _)| irt.clone());
+    assert_eq!(reply_to, parent_name, "the reply follows its copied parent: {copies:?}");
+}
+
+/// A paste placed elsewhere: every copy moves by the offset, rect, quads, ink and vertices
+/// alike; the bounds and count of a clipboard text say what hangs on the pointer.
+#[test]
+fn copies_placed_with_an_offset_move_whole_and_the_text_reports_its_bounds() {
+    let src = filled();
+    let all: Vec<(usize, usize)> = summaries(&src).iter().filter(|s| s.in_reply_to.is_none()).map(|s| (s.page, s.index)).collect();
+    let xfdf = export_xfdf_comments(&src, &all, "form.pdf");
+    assert_eq!(comment_count(&xfdf), 3, "note, highlight, ink (the reply is not counted)");
+    let bounds = comments_bounds(&xfdf).unwrap();
+    assert!(bounds[0] <= 10.0 && bounds[1] <= 10.0 && bounds[2] >= 100.0 && bounds[3] >= 500.0, "{bounds:?}");
+    assert_eq!(comment_count("just text"), 0);
+    assert_eq!(comments_bounds("<xfdf><annots></annots></xfdf>"), None);
+    let mut dst = blank();
+    import_comments(&mut dst, &xfdf, Some(0), Some("p"), Some([100.0, -50.0])).unwrap();
+    let moved = summaries(&dst);
+    let note = moved.iter().find(|s| s.subtype == "Text").unwrap();
+    let original = summaries(&src).into_iter().find(|s| s.subtype == "Text").unwrap();
+    let (a, b) = (note.rect, original.rect);
+    assert!((a[0] - b[0] - 100.0).abs() < 0.01 && (a[1] - b[1] + 50.0).abs() < 0.01, "{a:?} from {b:?}");
+    let again = export_xfdf(&dst, true, false, "dst.pdf");
+    assert!(again.contains("coords=\"110,60,190,60,110,50,190,50\""), "quads moved too: {again}");
+    assert!(again.contains("<gesture>110,-40;120,-20;140,-30</gesture>"), "ink moved too: {again}");
+    // The outlines say what hangs on the pointer: a box for the note, quads for the highlight,
+    // strokes for the ink, each in its colour; the reply draws nothing of its own.
+    let outlines = comment_outlines(&xfdf);
+    assert_eq!(outlines.len(), 3, "{outlines:?}");
+    assert!(outlines.iter().any(|o| matches!(o, Outline::Rect { round: false, .. })));
+    assert!(outlines.iter().any(|o| matches!(o, Outline::Quads { quads, .. } if quads.len() == 1 && quads[0][0] == 10.0)));
+    assert!(outlines.iter().any(|o| matches!(o, Outline::Ink { strokes, .. } if strokes == &vec![vec![[10.0, 10.0], [20.0, 30.0], [40.0, 20.0]]])));
+    assert!(comment_outlines("no xfdf").is_empty());
+    let drawn = "<?xml version=\"1.0\"?><xfdf xmlns=\"http://ns.adobe.com/xfdf/\"><annots>\
+        <line page=\"0\" rect=\"0,0,50,50\" start=\"1,2\" end=\"3,4\" color=\"#FF0000\"/>\
+        <polyline page=\"0\" rect=\"0,0,9,9\"><vertices>1,1;5,5;9,1</vertices></polyline>\
+        <polygon page=\"0\" rect=\"0,0,9,9\"><vertices>1,1;5,5;9,1</vertices></polygon>\
+        <circle page=\"0\" rect=\"10,10,30,20\"/>\
+        <freetext page=\"0\" rect=\"40,40,80,60\" callout=\"20,20,40,50\"/>\
+        <text page=\"0\" rect=\"1,1,2,2\" inreplyto=\"x\"/></annots></xfdf>";
+    let outlines = comment_outlines(drawn);
+    assert_eq!(outlines.len(), 6, "{outlines:?}");
+    assert_eq!(outlines[0], Outline::Line { points: vec![[1.0, 2.0], [3.0, 4.0]], color: Some([1.0, 0.0, 0.0]) });
+    assert!(matches!(&outlines[1], Outline::Poly { closed: false, points, .. } if points.len() == 3));
+    assert!(matches!(&outlines[2], Outline::Poly { closed: true, .. }));
+    assert!(matches!(&outlines[3], Outline::Rect { round: true, .. }));
+    assert!(matches!(&outlines[5], Outline::Line { points, .. } if points == &vec![[20.0, 20.0], [40.0, 50.0]]));
+    // A non-finite offset is ignored rather than written into the document.
+    import_comments(&mut dst, &xfdf, Some(1), Some("q"), Some([f64::NAN, 0.0])).unwrap();
+    assert_eq!(summaries(&dst).iter().filter(|s| s.page == 1 && s.subtype == "Text").map(|s| s.rect[0]).next(), Some(b[0]));
+}

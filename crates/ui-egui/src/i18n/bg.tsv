@@ -2397,3 +2397,17 @@ animation effects	Off	Изключени
 	Make properties default	Задаване като свойства по подразбиране
 	Pages selected	Избрани страници
 	Page properties	Свойства на страницата
+# Comments copied between documents and selected several at once; finishing connected lines from the menu (M14).
+	Copy comment	Копиране на коментара
+	Copy comments	Копиране на коментарите
+	Paste comments	Поставяне на коментарите
+	Delete comments	Изтриване на коментарите
+	Move comments	Преместване на коментарите
+	Complete	Завършване
+	Undo last point	Отмяна на последната точка
+	Cancel drawing	Отказ от рисуването
+	Copy comments first	Първо копирайте коментари
+	Click where the copied comments go; Escape lets them go	Щракнете там, където да отидат копираните коментари; Escape ги пуска
+	The copied comments are larger than this page; they were placed as they are	Копираните коментари са по-големи от тази страница; поставени са както са
+	The clipboard holds no comments	Клипбордът не съдържа коментари
+	Comments: {n}	Коментари: {n}

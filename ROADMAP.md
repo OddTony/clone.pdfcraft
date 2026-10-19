@@ -170,6 +170,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+- **2026-10-19 (M5, comments between documents):** Comments copy and paste, within and between documents: ⌘C with comments selected copies them as XFDF (each with its replies) to the app's and the system clipboard, ⌘V / Edit ▸ Paste comments / the page menu pastes them onto the current page as new comments under names of their own (`Edit::PasteComments`, `pdfcraft_xfdf::import_comments` with a target page and fresh names, so nothing is replaced and pasting twice gives two sets; `export_xfdf_comments` writes a selection with its replies). Several comments select at once (⌘-click, ⇧-click, on the page and in the panel); Delete removes them as one step and a drag moves them together. Connected lines, polygons and clouds finish from the right-click menu's Complete (Undo last point, Cancel drawing beside it), as other editors do. Tools `comments_copy` / `comments_paste`. Estimates unchanged.
 
 - **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
 

@@ -2760,7 +2760,12 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     let units = app.units;
     let allowed = doc.allows_annotation();
     let can_copy = doc.allows_copying();
+    let can_paste = app.comment_clipboard.is_some();
     let mut copy_selected = false;
+    // Copy comments / Paste comments from the page's menu or a Comments panel card.
+    let mut copy_comments = false;
+    let mut paste_comments_at = None;
+    let mut comment_notice = None;
     let comments_hidden = doc.comments_hidden();
     let form = doc.form.clone();
     let can_fill = doc.allows_form_filling();
@@ -3725,8 +3730,11 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     ui.separator();
                 }
             }
-            canvas_action = comments::context_menu(ui, view, info, prefs, allowed).or(copy_image);
+            canvas_action = comments::context_menu(ui, view, info, prefs, allowed, can_paste).or(copy_image);
         });
+        copy_comments = std::mem::take(&mut view.comments.copy_request);
+        paste_comments_at = view.comments.paste_request.take();
+        comment_notice = view.comments.notice.take();
         (wanted, visible_now)
     });
     view.single_edges = visible_pages.first().copied().filter(|_| !view.continuous).map(|page| {
@@ -4070,6 +4078,15 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     if copy_selected {
         app.execute("edit.copy");
+    }
+    if copy_comments {
+        app.execute("comment.copy");
+    }
+    if let Some(at) = paste_comments_at {
+        app.paste_comments(index, None, Some(at));
+    }
+    if let Some(notice) = comment_notice {
+        app.notify_tr(notice);
     }
     // Read mode hides the tools (#2646).
     if app.mode != crate::Mode::Read {

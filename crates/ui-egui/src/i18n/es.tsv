@@ -2574,3 +2574,17 @@ animation effects	Off	Desactivados
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Estás viendo la versión firmada de «{from}» (revisión {rev}). Es una instantánea: los cambios aquí no afectarán al original.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Estás viendo la revisión {rev} de «{from}». Es una instantánea: los cambios aquí no afectarán al original.
+# Comments copied between documents and selected several at once; finishing connected lines from the menu (M14).
+	Copy comment	Copiar comentario
+	Copy comments	Copiar comentarios
+	Paste comments	Pegar comentarios
+	Delete comments	Eliminar comentarios
+	Move comments	Mover comentarios
+	Complete	Completar
+	Undo last point	Deshacer el último punto
+	Cancel drawing	Cancelar el dibujo
+	Copy comments first	Copie comentarios primero
+	Click where the copied comments go; Escape lets them go	Haga clic donde deban ir los comentarios copiados; Escape los suelta
+	The copied comments are larger than this page; they were placed as they are	Los comentarios copiados son más grandes que esta página; se colocaron tal cual
+	The clipboard holds no comments	El portapapeles no contiene comentarios
+	Comments: {n}	Comentarios: {n}

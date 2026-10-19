@@ -2685,3 +2685,17 @@ key	Space	Tarpas
 	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neįrašyti pakeitimai bus prarasti.
 theme	Appearance	Išvaizda
+# Comments copied between documents and selected several at once; finishing connected lines from the menu (M14).
+	Copy comment	Kopijuoti komentarą
+	Copy comments	Kopijuoti komentarus
+	Paste comments	Įklijuoti komentarus
+	Delete comments	Šalinti komentarus
+	Move comments	Perkelti komentarus
+	Complete	Užbaigti
+	Undo last point	Atšaukti paskutinį tašką
+	Cancel drawing	Atšaukti piešimą
+	Copy comments first	Pirmiausia nukopijuokite komentarus
+	Click where the copied comments go; Escape lets them go	Spustelėkite ten, kur turi atsidurti nukopijuoti komentarai; Escape juos paleidžia
+	The copied comments are larger than this page; they were placed as they are	Nukopijuoti komentarai didesni už šį puslapį; jie įdėti tokie, kokie yra
+	The clipboard holds no comments	Iškarpinėje komentarų nėra
+	Comments: {n}	Komentarai: {n}

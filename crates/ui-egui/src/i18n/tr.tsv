@@ -2430,3 +2430,17 @@ animation effects	Off	Kapalı
 	Make properties default	Özellikleri varsayılan yap
 	Pages selected	Seçilen sayfalar
 	Page properties	Sayfa özellikleri
+# Comments copied between documents and selected several at once; finishing connected lines from the menu (M14).
+	Copy comment	Yorumu kopyala
+	Copy comments	Yorumları kopyala
+	Paste comments	Yorumları yapıştır
+	Delete comments	Yorumları sil
+	Move comments	Yorumları taşı
+	Complete	Tamamla
+	Undo last point	Son noktayı geri al
+	Cancel drawing	Çizimi iptal et
+	Copy comments first	Önce yorumları kopyalayın
+	Click where the copied comments go; Escape lets them go	Kopyalanan yorumların gideceği yere tıklayın; Escape bırakır
+	The copied comments are larger than this page; they were placed as they are	Kopyalanan yorumlar bu sayfadan büyük; oldukları gibi yerleştirildi
+	The clipboard holds no comments	Panoda yorum yok
+	Comments: {n}	Yorumlar: {n}

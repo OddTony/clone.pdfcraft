@@ -2687,3 +2687,17 @@ key	Space	Space
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Bạn đang xem phiên bản đã ký của “{from}” (bản sửa đổi {rev}). Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Bạn đang xem bản sửa đổi {rev} của “{from}”. Đây là ảnh nhanh: các thay đổi ở đây không được áp dụng đến bản gốc.
+# Comments copied between documents and selected several at once; finishing connected lines from the menu (M14).
+	Copy comment	Sao chép nhận xét
+	Copy comments	Sao chép các nhận xét
+	Paste comments	Dán các nhận xét
+	Delete comments	Xóa các nhận xét
+	Move comments	Di chuyển các nhận xét
+	Complete	Hoàn tất
+	Undo last point	Hủy điểm cuối
+	Cancel drawing	Hủy vẽ
+	Copy comments first	Hãy sao chép nhận xét trước
+	Click where the copied comments go; Escape lets them go	Nhấp vào nơi đặt các nhận xét đã sao chép; Escape để bỏ
+	The copied comments are larger than this page; they were placed as they are	Các nhận xét đã sao chép lớn hơn trang này; đã đặt nguyên trạng
+	The clipboard holds no comments	Bảng tạm không có nhận xét nào
+	Comments: {n}	Nhận xét: {n}
