@@ -418,6 +418,32 @@ fn a_new_link_prompt_blocks_a_focused_discard_button() {
 }
 
 #[test]
+fn a_new_link_prompt_does_not_submit_a_covered_password() {
+    use pdfcraft_engine::{Edit, Protection, Session};
+    use std::sync::Arc;
+
+    let mut session = Session::new();
+    let id = session.open("secret.pdf", None, Arc::new(FIXTURE.to_vec()), None).unwrap();
+    session.apply(id, Edit::Protect(Protection { open_password: Some("secret".into()), ..Default::default() })).unwrap();
+    let encrypted = session.save_bytes(id).unwrap().as_ref().clone();
+    for key in [egui::Key::Enter, egui::Key::Escape] {
+        let bytes = encrypted.clone();
+        let mut h = harness(move |app| {
+            app.run_inline = true;
+            app.open_bytes("secret.pdf", None, bytes).unwrap();
+        });
+        assert!(h.state().password_prompt.is_some());
+        h.state_mut().password_prompt.as_mut().unwrap().input = "secret".into();
+        h.state_mut().pending_link =
+            Some(pdfcraft_ui_egui::PendingLink { url: "https://example.org".into(), origin: pdfcraft_ui_egui::LinkOrigin::Link });
+        h.key_press(key);
+        h.run_steps(1);
+        assert!(h.state().password_prompt.is_some(), "{key:?} must not submit or cancel the covered password prompt");
+        assert!(h.state().views.is_empty(), "the protected document must remain unopened");
+    }
+}
+
+#[test]
 fn overflowing_tabs_can_be_reached_by_scrolling() {
     let mut h = harness(|app| {
         for i in 0..20 {

@@ -1684,15 +1684,19 @@ enum PasswordAnswer {
 fn password_modal(
     ctx: &egui::Context,
     id: &str,
-    title: &str,
+    labels: (&str, &str),
     message: String,
     input: &mut String,
     error: Option<&str>,
-    ok: &str,
+    covered: bool,
 ) -> Option<PasswordAnswer> {
+    let (title, ok) = labels;
     let t = Tokens::get(ctx);
     let mut answer = None;
     let modal = widgets::show_modal(ctx, id, |ui| {
+        if covered {
+            ui.disable();
+        }
         ui.set_width(400.0);
         ui.horizontal(|ui| {
             ui.add(crate::icons::image("lock", 22.0, t.accent));
@@ -1704,10 +1708,12 @@ fn password_modal(
         let r = ui.add(widgets::line(input).password(true).hint_text(tl!("Password")).desired_width(f32::INFINITY));
         // Enter submits. The field keeps focus (we request it every frame), so check the key
         // while it is focused as well as on the frame focus is lost.
-        if (r.has_focus() || r.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+        if !covered && (r.has_focus() || r.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
             answer = Some(PasswordAnswer::Submit);
         }
-        r.request_focus();
+        if !covered {
+            r.request_focus();
+        }
         if let Some(e) = error {
             ui.add_space(4.0);
             // Known error text is translated; anything else passes through.
@@ -1723,14 +1729,15 @@ fn password_modal(
             }
         });
     });
-    answer.or(modal.should_close().then_some(PasswordAnswer::Cancel))
+    answer.or((!covered && modal.should_close()).then_some(PasswordAnswer::Cancel))
 }
 
 /// Password prompt for encrypted documents (Acrobat: "Password" dialog on open).
 fn password(app: &mut PdfCraftApp, ctx: &egui::Context) {
+    let covered = app.close_request.is_some() || app.save_prompt_covered();
     let Some(prompt) = app.password_prompt.as_mut() else { return };
     let message = crate::i18n::fmt(tl!("“{name}” is protected. Enter a password to open it."), &[("name", &prompt.name)]);
-    match password_modal(ctx, "password", tl!("Password required"), message, &mut prompt.input, prompt.error.as_deref(), tl!("Open")) {
+    match password_modal(ctx, "password", (tl!("Password required"), tl!("Open")), message, &mut prompt.input, prompt.error.as_deref(), covered) {
         Some(PasswordAnswer::Submit) => {
             let pw = prompt.input.clone();
             app.submit_password(Some(pw));
@@ -1745,7 +1752,7 @@ fn unlock(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let Some(prompt) = app.unlock_prompt.as_mut() else { return };
     let message =
         crate::i18n::fmt(tl!("“{name}” has security restrictions. Enter its permissions password to lift them."), &[("name", &prompt.name)]);
-    match password_modal(ctx, "unlock", tl!("Permissions password"), message, &mut prompt.input, prompt.error.as_deref(), tl!("Unlock")) {
+    match password_modal(ctx, "unlock", (tl!("Permissions password"), tl!("Unlock")), message, &mut prompt.input, prompt.error.as_deref(), false) {
         Some(PasswordAnswer::Submit) => {
             let pw = prompt.input.clone();
             app.submit_unlock(Some(pw));
