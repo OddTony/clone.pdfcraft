@@ -30,6 +30,8 @@ macro_rules! tl_ctx {
 
 mod a11y_ui;
 mod actions_ui;
+#[cfg(not(target_arch = "wasm32"))]
+mod ai_studio;
 mod appearance;
 pub mod canvas;
 mod chrome;
@@ -484,6 +486,8 @@ pub struct RecentFile {
 }
 
 pub struct PdfCraftApp {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub ai_studio: ai_studio::Studio,
     pub docking: docking::Workspace,
     pub(crate) pending_panel_reveals: Vec<docking::Panel>,
     pub session: Session,
@@ -890,6 +894,8 @@ fn rgb_triple(v: &serde_json::Value) -> Option<[f64; 3]> {
 impl PdfCraftApp {
     pub fn new() -> Self {
         Self {
+            #[cfg(not(target_arch = "wasm32"))]
+            ai_studio: Default::default(),
             session: Session::new(),
             views: Vec::new(),
             closed_tabs: Vec::new(),
@@ -3117,6 +3123,8 @@ impl eframe::App for PdfCraftApp {
             ctx.request_repaint();
             return;
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        ai_studio::show(self, ui);
         for view in &mut self.views {
             view.begin_render_frame();
         }
