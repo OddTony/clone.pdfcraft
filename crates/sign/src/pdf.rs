@@ -2219,8 +2219,9 @@ pub fn with_validated_appearances(doc: &Document, signatures: &[SignatureInfo]) 
         if !signatures.iter().any(|s| s.signed && s.visible && s.status == Status::Valid && s.field == f.name) {
             continue;
         }
-        for (_, wd) in &f.widgets {
-            let Some(patch) = plan_validated_widget(doc, wd) else { continue };
+        for (widget_ref, wd) in &f.widgets {
+            let Some(widget_ref) = *widget_ref else { continue };
+            let Some(patch) = plan_validated_widget(doc, widget_ref, wd) else { continue };
             apply_validated_widget(copy.get_or_insert_with(|| doc.clone()), patch);
         }
     }
@@ -2228,8 +2229,12 @@ pub fn with_validated_appearances(doc: &Document, signatures: &[SignatureInfo]) 
 }
 
 struct ValidatedWidgetPatch {
-    frame_ref: ObjRef,
+    widget_ref: ObjRef,
+    widget_dict: Dict,
+    ap_ref: Option<ObjRef>,
+    ap_dict: Dict,
     frame_dict: Dict,
+    frame_xobjects: Dict,
     frame_ops: Vec<u8>,
     glyph_ref: ObjRef,
     glyph_dict: Dict,
@@ -2261,12 +2266,15 @@ struct FormScan {
     has_curves: bool,
     has_re: bool,
     has_inline_image: bool,
+    has_other_ops: bool,
+    has_unwrapped_do: bool,
 }
 
-fn plan_validated_widget(doc: &Document, wd: &Dict) -> Option<ValidatedWidgetPatch> {
+fn plan_validated_widget(doc: &Document, widget_ref: ObjRef, wd: &Dict) -> Option<ValidatedWidgetPatch> {
     let ap = doc.resolve(wd.get(b"AP")?).as_dict().cloned()?;
+    let ap_ref = wd.get(b"AP").and_then(Object::as_ref);
     let ap_n = ap.reference(b"N")?;
-    let (frame_ref, frame_stream, frame_bbox, xobjects, frame_scan) = find_frame_form(doc, ap_n)?;
+    let (_frame_ref, frame_stream, frame_bbox, xobjects, frame_scan) = find_frame_form(doc, ap_n)?;
     let mut roles: Vec<(DoCall, ObjRef, LayerRole)> = Vec::with_capacity(frame_scan.do_calls.len());
     for call in &frame_scan.do_calls {
         let layer_ref = xobjects.reference(&call.name)?;
@@ -2376,8 +2384,12 @@ fn plan_validated_widget(doc: &Document, wd: &Dict) -> Option<ValidatedWidgetPat
     frame_dict.remove(b"DecodeParms");
 
     Some(ValidatedWidgetPatch {
-        frame_ref,
+        widget_ref,
+        widget_dict: wd.clone(),
+        ap_ref,
+        ap_dict: ap,
         frame_dict,
+        frame_xobjects: xobjects,
         frame_ops: frame_ops.into_bytes(),
         glyph_ref: *glyph_ref,
         glyph_dict,
@@ -2389,9 +2401,40 @@ fn plan_validated_widget(doc: &Document, wd: &Dict) -> Option<ValidatedWidgetPat
 }
 
 fn apply_validated_widget(doc: &mut Document, patch: ValidatedWidgetPatch) {
-    doc.set(patch.frame_ref, Object::Stream(Stream::from_raw(patch.frame_dict, patch.frame_ops)));
-    doc.set(patch.glyph_ref, Object::Stream(Stream::from_raw(patch.glyph_dict, patch.glyph_ops)));
-    doc.set(patch.caption_ref, Object::Stream(Stream::from_raw(patch.caption_dict, patch.caption_ops)));
+    let glyph_ref = doc.add(Object::Stream(Stream::from_raw(patch.glyph_dict, patch.glyph_ops)));
+    let caption_ref = doc.add(Object::Stream(Stream::from_raw(patch.caption_dict, patch.caption_ops)));
+    let frame_xobjects = patch
+        .frame_xobjects
+        .iter()
+        .map(|(name, object)| {
+            let object = match object.as_ref() {
+                Some(reference) if reference == patch.glyph_ref => Object::Ref(glyph_ref),
+                Some(reference) if reference == patch.caption_ref => Object::Ref(caption_ref),
+                _ => object.clone(),
+            };
+            (name.clone(), object)
+        })
+        .collect::<Dict>();
+    let mut frame_dict = patch.frame_dict;
+    let mut resources = frame_dict
+        .get(b"Resources")
+        .map(|r| doc.resolve(r))
+        .and_then(|r| r.as_dict().cloned())
+        .unwrap_or_default();
+    resources.set(b"XObject".to_vec(), Object::Dict(frame_xobjects));
+    let resources_ref = doc.add(Object::Dict(resources));
+    frame_dict.set(b"Resources".to_vec(), Object::Ref(resources_ref));
+    let frame_ref = doc.add(Object::Stream(Stream::from_raw(frame_dict, patch.frame_ops)));
+    let mut ap_dict = patch.ap_dict;
+    ap_dict.set(b"N".to_vec(), Object::Ref(frame_ref));
+    let mut widget_dict = patch.widget_dict;
+    if patch.ap_ref.is_some() {
+        let ap_ref = doc.add(Object::Dict(ap_dict));
+        widget_dict.set(b"AP".to_vec(), Object::Ref(ap_ref));
+    } else {
+        widget_dict.set(b"AP".to_vec(), Object::Dict(ap_dict));
+    }
+    doc.set(patch.widget_ref, Object::Dict(widget_dict));
 }
 
 fn find_frame_form(doc: &Document, start: ObjRef) -> Option<(ObjRef, Stream, [f64; 4], Dict, FormScan)> {
@@ -2412,12 +2455,12 @@ fn find_frame_form(doc: &Document, start: ObjRef) -> Option<(ObjRef, Stream, [f6
         }
         let res = s.dict.get(b"Resources").map(|r| doc.resolve(r)).and_then(|r| r.as_dict().cloned())?;
         let xobjects = res.get(b"XObject").map(|x| doc.resolve(x)).and_then(|x| x.as_dict().cloned())?;
-        if scan.do_calls.len() == 1 && !scan.has_text_ops && scan.path_points.is_empty() && !scan.has_re {
+        if scan.do_calls.len() == 1 && !scan.has_other_ops && !scan.has_unwrapped_do {
             let call = scan.do_calls.first()?;
             curr = xobjects.reference(&call.name)?;
             continue;
         }
-        if scan.do_calls.len() >= 2 {
+        if scan.do_calls.len() >= 2 && !scan.has_other_ops && !scan.has_unwrapped_do {
             let bbox = form_bbox(doc, &s.dict)?;
             return Some((curr, s.clone(), bbox, xobjects, scan));
         }
@@ -2745,6 +2788,8 @@ fn scan_form_stream(bytes: &[u8]) -> FormScan {
         has_curves: false,
         has_re: false,
         has_inline_image: false,
+        has_other_ops: false,
+        has_unwrapped_do: false,
     };
     let mut pos = 0usize;
     let mut args: Vec<StreamToken> = Vec::new();
@@ -2766,6 +2811,9 @@ fn scan_form_stream(bytes: &[u8]) -> FormScan {
         }
         match tok {
             StreamToken::Op(op) => {
+                if !matches!(op.as_slice(), b"q" | b"Q" | b"cm" | b"Do") {
+                    scan.has_other_ops = true;
+                }
                 match op.as_slice() {
                     b"BI" => {
                         scan.has_inline_image = true;
@@ -2794,6 +2842,9 @@ fn scan_form_stream(bytes: &[u8]) -> FormScan {
                         }
                     }
                     b"Do" => {
+                        if ctm_stack.len() == 1 {
+                            scan.has_unwrapped_do = true;
+                        }
                         if let Some(StreamToken::Name(name)) = args.last() {
                             let ctm = ctm_stack.last().copied().unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
                             scan.do_calls.push(DoCall {
