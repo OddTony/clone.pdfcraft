@@ -25,18 +25,23 @@ export interface MergeOptions {
 }
 
 export type SplitMode =
+  | { EveryNPages: number }
+  | { BeforePages: number[] }
+  | "AtBookmarks"
+  | { MaxFileSizeMb: number }
   | { everyNPages: number }
   | { beforePages: number[] }
-  | { atBookmarks: number };
+  | { atBookmarks: number | boolean };
 
 export interface SplitResult {
   files: string[];
 }
 
-export type ImageFormat = "png" | "jpeg" | "webp" | "tiff";
+export type ImageFormat = "Png" | "Jpeg" | "Webp" | "Tiff" | "png" | "jpeg" | "webp" | "tiff";
 
 export interface RenderOptions {
   dpi?: number;
+  format?: ImageFormat;
   imageFormat?: ImageFormat;
 }
 
@@ -273,8 +278,11 @@ export interface JobResponse {
   progress: number;
   createdAt: number;
   updatedAt: number;
+  created_at?: number;
+  updated_at?: number;
   error?: string;
   resultUrl?: string;
+  result_url?: string;
 }
 
 export interface ProblemDetails {
@@ -285,6 +293,7 @@ export interface ProblemDetails {
   code: string;
   instance?: string;
   invalidParams?: { name: string; reason: string }[];
+  invalid_params?: { name: string; reason: string }[];
 }
 
 export interface DocumentSession {

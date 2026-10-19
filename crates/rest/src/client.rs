@@ -250,6 +250,9 @@ fn send_http_request(base_url: &str, auth_token: Option<&str>, req: HttpRequest)
     request_bytes.extend_from_slice(b"Connection: close\r\n\r\n");
     request_bytes.extend_from_slice(&req.body);
 
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(30)));
+    let _ = stream.set_write_timeout(Some(std::time::Duration::from_secs(30)));
+
     stream.write_all(&request_bytes).map_err(SdkError::Io)?;
     stream.flush().map_err(SdkError::Io)?;
 
@@ -259,16 +262,16 @@ fn send_http_request(base_url: &str, auth_token: Option<&str>, req: HttpRequest)
     let mut reader = BufReader::new(stream_clone);
 
     let mut status_line = String::new();
-    reader.read_line(&mut status_line).map_err(SdkError::Io)?;
+    reader.by_ref().take(8192).read_line(&mut status_line).map_err(SdkError::Io)?;
     let parts: Vec<&str> = status_line.split_whitespace().collect();
     let status = parts.get(1).and_then(|s| s.parse::<u16>().ok()).unwrap_or(500);
 
     let mut headers = std::collections::HashMap::new();
     let mut content_length = 0usize;
 
-    loop {
+    for _ in 0..100 {
         let mut line = String::new();
-        reader.read_line(&mut line).map_err(SdkError::Io)?;
+        reader.by_ref().take(8192).read_line(&mut line).map_err(SdkError::Io)?;
         if line.trim().is_empty() {
             break;
         }
@@ -284,9 +287,19 @@ fn send_http_request(base_url: &str, auth_token: Option<&str>, req: HttpRequest)
         }
     }
 
-    let mut body = vec![0u8; content_length];
+    const MAX_CLIENT_BODY_BYTES: usize = 100 * 1024 * 1024;
+    if content_length > MAX_CLIENT_BODY_BYTES {
+        return Err(SdkError::EngineError(format!(
+            "Response Content-Length ({content_length} bytes) exceeds safety maximum ({MAX_CLIENT_BODY_BYTES} bytes)"
+        )));
+    }
+
+    let mut body = Vec::with_capacity(content_length.min(64 * 1024));
     if content_length > 0 {
-        reader.read_exact(&mut body).map_err(SdkError::Io)?;
+        reader.take(content_length as u64).read_to_end(&mut body).map_err(SdkError::Io)?;
+        if body.len() != content_length {
+            return Err(SdkError::Io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Incomplete response body")));
+        }
     }
 
     Ok(HttpResponse { status, headers, body })

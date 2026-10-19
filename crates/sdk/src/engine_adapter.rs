@@ -63,6 +63,18 @@ fn png_of(c: &Content) -> Option<Vec<u8>> {
 
 static COUNTER: AtomicU64 = AtomicU64::new(1);
 
+/// Strips any directory components or traversal segments from a user-supplied filename.
+fn sanitize_sandbox_filename(raw: &str, fallback: &str) -> Result<String, SdkError> {
+    let path = Path::new(raw);
+    if path.components().count() != 1 {
+        return Err(SdkError::InvalidArgument(format!("Filename must not contain path separators or traversal segments: {raw}")));
+    }
+    match path.file_name().and_then(|n| n.to_str()) {
+        Some(name) if !name.is_empty() && name != "." && name != ".." => Ok(name.to_string()),
+        _ => Ok(fallback.to_string()),
+    }
+}
+
 /// Execution sandbox managing ephemeral disk isolation and cleanup.
 ///
 /// The directory is deleted on drop unless [`ExecutionSandbox::persist`] is called, which is
@@ -106,7 +118,11 @@ impl ExecutionSandbox {
                 Ok(file_name)
             }
             DocumentSource::Bytes { data, name } => {
-                let file_name = name.clone().unwrap_or_else(|| format!("input_{index}.pdf"));
+                let default_name = format!("input_{index}.pdf");
+                let file_name = match name {
+                    Some(n) => sanitize_sandbox_filename(n, &default_name)?,
+                    None => default_name,
+                };
                 let dest = self.root.join(&file_name);
                 fs::write(dest, data).map_err(SdkError::Io)?;
                 Ok(file_name)
@@ -171,10 +187,11 @@ impl OperationExecutor for AutomationEngineAdapter {
             materialized_paths.push(sandbox.materialize_source(src, i)?);
         }
 
-        let out_name = options.output_filename.clone().unwrap_or_else(|| {
-            let id = COUNTER.fetch_add(1, Ordering::Relaxed);
-            format!("merged_{id}.pdf")
-        });
+        let default_out = format!("merged_{}.pdf", COUNTER.fetch_add(1, Ordering::Relaxed));
+        let out_name = match &options.output_filename {
+            Some(custom) => sanitize_sandbox_filename(custom, &default_out)?,
+            None => default_out,
+        };
 
         self.with_automation(&sandbox, |automation| {
             let args = json!({

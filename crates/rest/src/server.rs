@@ -125,12 +125,14 @@ const MAX_BODY_BYTES: usize = 100 * 1024 * 1024;
 const MAX_HEADERS: usize = 100;
 
 fn handle_connection(stream: TcpStream, service: &RestService) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
     let Ok(stream_clone) = stream.try_clone() else { return };
     let mut reader = BufReader::new(stream_clone);
     let mut writer = stream;
 
     let mut line = String::new();
-    if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
+    if reader.by_ref().take(8192).read_line(&mut line).is_err() || line.trim().is_empty() {
         return;
     }
 
@@ -153,7 +155,7 @@ fn handle_connection(stream: TcpStream, service: &RestService) {
             return;
         }
         line.clear();
-        if reader.read_line(&mut line).is_err() || line.trim().is_empty() {
+        if reader.by_ref().take(8192).read_line(&mut line).is_err() || line.trim().is_empty() {
             break;
         }
         if let Some((k, v)) = line.split_once(':') {
@@ -173,8 +175,8 @@ fn handle_connection(stream: TcpStream, service: &RestService) {
         let _ = writer.write_all(b"HTTP/1.1 413 Content Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         return;
     }
-    let mut body = vec![0u8; content_length];
-    if content_length > 0 && reader.read_exact(&mut body).is_err() {
+    let mut body = Vec::with_capacity(content_length.min(64 * 1024));
+    if content_length > 0 && (reader.take(content_length as u64).read_to_end(&mut body).is_err() || body.len() != content_length) {
         return;
     }
 

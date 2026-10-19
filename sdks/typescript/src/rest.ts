@@ -215,7 +215,7 @@ export class PdfCraftRestClient {
       page,
       options: {
         dpi: options?.dpi ?? 150.0,
-        format: options?.imageFormat ?? "png",
+        format: options?.format ?? options?.imageFormat ?? "Png",
       },
       async_job: false,
     };
@@ -233,7 +233,13 @@ export class PdfCraftRestClient {
     const deadline = Date.now() + this.timeoutMs;
     while (Date.now() < deadline) {
       const res = await this.request("GET", `/v1/jobs/${jobId}`);
-      const job: JobResponse = JSON.parse(new TextDecoder().decode(res.data));
+      const raw: any = JSON.parse(new TextDecoder().decode(res.data));
+      const job: JobResponse = {
+        ...raw,
+        createdAt: raw.created_at ?? raw.createdAt ?? 0,
+        updatedAt: raw.updated_at ?? raw.updatedAt ?? 0,
+        resultUrl: raw.result_url ?? raw.resultUrl,
+      };
 
       if (job.status === "succeeded") {
         const resultRes = await this.request("GET", `/v1/jobs/${jobId}/result`);

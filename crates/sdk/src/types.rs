@@ -126,9 +126,13 @@ pub struct MergeOptions {
 /// Partitioning strategies for document splitting.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SplitMode {
+    #[serde(alias = "every_n_pages", alias = "everyNPages")]
     EveryNPages(usize),
+    #[serde(alias = "before_pages", alias = "beforePages")]
     BeforePages(Vec<usize>),
+    #[serde(alias = "at_bookmarks", alias = "atBookmarks")]
     AtBookmarks,
+    #[serde(alias = "max_file_size_mb", alias = "maxFileSizeMb")]
     MaxFileSizeMb(f64),
 }
 
@@ -138,6 +142,7 @@ pub use crate::image::ImageFormat;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderOptions {
     pub dpi: f64,
+    #[serde(default, alias = "image_format", alias = "imageFormat")]
     pub format: ImageFormat,
 }
 

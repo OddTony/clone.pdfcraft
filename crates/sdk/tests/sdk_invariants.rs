@@ -103,3 +103,17 @@ fn test_invariant_in_memory_execution_produces_memory_result() {
         }
     }
 }
+
+#[test]
+fn test_invariant_path_traversal_filename_rejected() {
+    let client = LocalClient::default();
+    let src = DocumentSource::from_bytes(sample_minimal_pdf(), Some("../../etc/passwd".into()));
+    let res = client.merge(&[src], MergeOptions::default());
+    assert!(res.is_err(), "Path traversal filename must be rejected");
+    match res.expect_err("error expected") {
+        SdkError::InvalidArgument(msg) => {
+            assert!(msg.contains("traversal segments") || msg.contains("path separators"));
+        }
+        other => panic!("Expected InvalidArgument, got {other:?}"),
+    }
+}

@@ -23,9 +23,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ImageFormat {
     #[default]
+    #[serde(alias = "png", alias = "PNG")]
     Png,
+    #[serde(alias = "jpeg", alias = "jpg", alias = "JPEG", alias = "JPG")]
     Jpeg,
+    #[serde(alias = "webp", alias = "WEBP")]
     Webp,
+    #[serde(alias = "tiff", alias = "tif", alias = "TIFF", alias = "TIF")]
     Tiff,
 }
 

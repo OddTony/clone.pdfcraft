@@ -18,6 +18,7 @@ plan/
 
 # Local planning docs and review artifacts
 /docs/plans/
+/docs/reviews/
 
 # Local sample documents (gitignored per AGENTS.md §1)
 /sample-docs/

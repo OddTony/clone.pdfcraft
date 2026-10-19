@@ -175,7 +175,10 @@ class RestClient:
         payload = {
             "file": file_payload,
             "page": page,
-            "options": {"dpi": opts.dpi, "format": opts.image_format},
+            "options": {
+                "dpi": opts.dpi,
+                "format": opts.format.value if hasattr(opts.format, "value") else str(opts.format),
+            },
             "async_job": False,
         }
 

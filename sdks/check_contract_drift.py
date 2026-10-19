@@ -56,6 +56,9 @@ def check_openapi_spec(openapi_path: Path) -> dict:
     for schema_name in expected_schemas:
         assert schema_name in schemas, f"Missing schema in OpenAPI spec: {schema_name}"
 
+    render_opts = schemas.get("RenderOptions", {}).get("properties", {})
+    assert "format" in render_opts, "RenderOptions in OpenAPI spec must declare 'format'"
+
     print(f"✓ OpenAPI 3.1 specification valid ({len(paths)} routes, {len(schemas)} schemas)")
     return spec
 
@@ -76,6 +79,8 @@ def check_python_models(python_types_path: Path) -> None:
     ]
     for cls_name in expected_classes:
         assert f"class {cls_name}" in content, f"Missing Python dataclass: {cls_name}"
+
+    assert "format: ImageFormat" in content, "Python RenderOptions must have 'format: ImageFormat'"
 
     print(f"✓ Python SDK types aligned ({len(expected_classes)} domain models)")
 
@@ -100,6 +105,9 @@ def check_typescript_types(ts_types_path: Path) -> None:
     for t_name in expected_types:
         pattern = rf"(export type {t_name}|export interface {t_name})"
         assert re.search(pattern, content), f"Missing TypeScript type/interface: {t_name}"
+
+    assert "EveryNPages" in content, "TypeScript SplitMode must support 'EveryNPages'"
+    assert "format?:" in content or "imageFormat?:" in content, "TypeScript RenderOptions must define format"
 
     print(f"✓ TypeScript SDK types aligned ({len(expected_types)} type definitions)")
 

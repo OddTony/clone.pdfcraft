@@ -192,9 +192,18 @@ impl DurableFileJobRepository {
         Ok(Self { dir, in_memory })
     }
 
+    fn validate_job_id(id: &JobId) -> Result<&str, JobError> {
+        let s = id.as_str();
+        if s.is_empty() || !s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+            return Err(JobError::StorageFailure(format!("Invalid job id characters: {s}")));
+        }
+        Ok(s)
+    }
+
     fn persist_record(&self, record: &JobRecord) -> Result<(), JobError> {
-        let target_path = self.dir.join(format!("{}.json", record.id.0));
-        let temp_path = self.dir.join(format!("{}.tmp", record.id.0));
+        let safe_id = Self::validate_job_id(&record.id)?;
+        let target_path = self.dir.join(format!("{safe_id}.json"));
+        let temp_path = self.dir.join(format!("{safe_id}.tmp"));
 
         let json_data = serde_json::to_string_pretty(record).map_err(|e| JobError::StorageFailure(e.to_string()))?;
 
@@ -236,9 +245,10 @@ impl JobRepository for DurableFileJobRepository {
     }
 
     fn delete(&self, id: &JobId) -> Result<bool, JobError> {
+        let safe_id = Self::validate_job_id(id)?;
         let removed = self.in_memory.delete(id)?;
         if removed {
-            let file_path = self.dir.join(format!("{}.json", id.0));
+            let file_path = self.dir.join(format!("{safe_id}.json"));
             let _ = fs::remove_file(file_path);
         }
         Ok(removed)

@@ -367,11 +367,15 @@
             }
           },
           {
+            "type": "string",
+            "enum": ["AtBookmarks"]
+          },
+          {
             "type": "object",
-            "required": ["AtBookmarks"],
+            "required": ["MaxFileSizeMb"],
             "properties": {
-              "AtBookmarks": {
-                "type": "integer"
+              "MaxFileSizeMb": {
+                "type": "number"
               }
             }
           }
@@ -396,10 +400,10 @@
             "type": "number",
             "default": 150.0
           },
-          "image_format": {
+          "format": {
             "type": "string",
-            "enum": ["png", "jpeg"],
-            "default": "png"
+            "enum": ["Png", "Jpeg", "Webp", "Tiff", "png", "jpeg", "webp", "tiff"],
+            "default": "Png"
           }
         }
       },

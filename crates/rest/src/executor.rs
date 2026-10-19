@@ -82,14 +82,14 @@ impl Semaphore {
         Self { permits: Mutex::new(permits), cvar: Condvar::new(), max_permits: permits }
     }
 
-    fn acquire(&self, timeout: Duration) -> Result<Permit<'_>, ExecutionError> {
+    fn acquire(self: &Arc<Self>, timeout: Duration) -> Result<OwnedPermit, ExecutionError> {
         let deadline = Instant::now() + timeout;
         let mut permits = self.permits.lock().map_err(|e| ExecutionError::WorkerPanic(e.to_string()))?;
 
         loop {
             if *permits > 0 {
                 *permits -= 1;
-                return Ok(Permit { semaphore: self });
+                return Ok(OwnedPermit { semaphore: Arc::clone(self) });
             }
 
             let now = Instant::now();
@@ -122,11 +122,11 @@ impl Semaphore {
 }
 
 /// RAII guard releasing a semaphore permit on drop.
-struct Permit<'a> {
-    semaphore: &'a Semaphore,
+struct OwnedPermit {
+    semaphore: Arc<Semaphore>,
 }
 
-impl<'a> Drop for Permit<'a> {
+impl Drop for OwnedPermit {
     fn drop(&mut self) {
         self.semaphore.release();
     }
@@ -149,7 +149,7 @@ impl Default for ExecutorConfig {
 /// Bounded worker executor for background document processing.
 pub struct BlockingExecutor {
     engine: Arc<dyn OperationExecutor>,
-    semaphore: Semaphore,
+    semaphore: Arc<Semaphore>,
     config: ExecutorConfig,
 }
 
@@ -157,7 +157,7 @@ impl BlockingExecutor {
     /// Creates a new blocking executor wrapping an engine port.
     pub fn new(engine: Arc<dyn OperationExecutor>, config: ExecutorConfig) -> Self {
         let permits = config.max_concurrency.max(1);
-        Self { engine, semaphore: Semaphore::new(permits), config }
+        Self { engine, semaphore: Arc::new(Semaphore::new(permits)), config }
     }
 
     /// Number of currently idle worker execution slots.
@@ -167,7 +167,7 @@ impl BlockingExecutor {
 
     /// Executes a merge operation within bounded worker capacity.
     pub fn execute_merge(&self, sources: &[DocumentSource], options: &MergeOptions) -> Result<DocumentResult, ExecutionError> {
-        let _permit = self.semaphore.acquire(self.config.queue_timeout)?;
+        let permit = self.semaphore.acquire(self.config.queue_timeout)?;
 
         let engine = Arc::clone(&self.engine);
         let src_vec = sources.to_vec();
@@ -177,6 +177,7 @@ impl BlockingExecutor {
         let handle = std::thread::Builder::new()
             .name("pdfcraft-worker-merge".into())
             .spawn(move || {
+                let _permit = permit;
                 let res = engine.execute_merge(&src_vec, &opt);
                 let _ = tx.send(res);
             })
@@ -206,7 +207,7 @@ impl BlockingExecutor {
 
     /// Executes a split operation within bounded worker capacity.
     pub fn execute_split(&self, source: &DocumentSource, mode: &SplitMode) -> Result<SplitResult, ExecutionError> {
-        let _permit = self.semaphore.acquire(self.config.queue_timeout)?;
+        let permit = self.semaphore.acquire(self.config.queue_timeout)?;
 
         let engine = Arc::clone(&self.engine);
         let src = source.clone();
@@ -216,6 +217,7 @@ impl BlockingExecutor {
         let handle = std::thread::Builder::new()
             .name("pdfcraft-worker-split".into())
             .spawn(move || {
+                let _permit = permit;
                 let res = engine.execute_split(&src, &m);
                 let _ = tx.send(res);
             })
@@ -245,7 +247,7 @@ impl BlockingExecutor {
 
     /// Executes a high-DPI page render operation within bounded worker capacity.
     pub fn execute_render(&self, source: &DocumentSource, page: usize, options: &RenderOptions) -> Result<DocumentResult, ExecutionError> {
-        let _permit = self.semaphore.acquire(self.config.queue_timeout)?;
+        let permit = self.semaphore.acquire(self.config.queue_timeout)?;
 
         let engine = Arc::clone(&self.engine);
         let src = source.clone();
@@ -255,6 +257,7 @@ impl BlockingExecutor {
         let handle = std::thread::Builder::new()
             .name("pdfcraft-worker-render".into())
             .spawn(move || {
+                let _permit = permit;
                 let res = engine.execute_render(&src, page, &opt);
                 let _ = tx.send(res);
             })
