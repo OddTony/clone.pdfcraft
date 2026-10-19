@@ -141,6 +141,121 @@ impl Page {
     }
 }
 
+/// Page subset filter mirroring the engine's `page_rotate` `subset` argument.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum PageSubset {
+    #[default]
+    All,
+    Even,
+    Odd,
+}
+
+/// Page orientation filter mirroring the engine's `page_rotate` `orientation` argument.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum PageOrientation {
+    #[default]
+    All,
+    Landscape,
+    Portrait,
+}
+
+/// Options for rotating pages (Acrobat: Organize Pages ▸ Rotate).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RotatePagesOptions {
+    /// 1-based pages to rotate (default: all).
+    pub pages: Option<Vec<usize>>,
+    /// A multiple of 90 degrees; positive is clockwise.
+    pub degrees: i32,
+    pub subset: PageSubset,
+    pub orientation: PageOrientation,
+    pub output_filename: Option<String>,
+}
+
+impl Default for RotatePagesOptions {
+    fn default() -> Self {
+        Self { pages: None, degrees: 90, subset: PageSubset::default(), orientation: PageOrientation::default(), output_filename: None }
+    }
+}
+
+/// Options for extracting pages into a new document (Acrobat: Organize Pages ▸ Extract).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractPagesOptions {
+    /// 1-based pages to extract.
+    pub pages: Vec<usize>,
+    /// Remove the extracted pages from the source document afterward.
+    pub delete_after: bool,
+    pub output_filename: Option<String>,
+}
+
+impl ExtractPagesOptions {
+    pub fn new(pages: Vec<usize>) -> Self {
+        Self { pages, delete_after: false, output_filename: None }
+    }
+}
+
+/// Options for deleting pages from a document (Acrobat: Organize Pages ▸ Delete).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeletePagesOptions {
+    /// 1-based pages to delete.
+    pub pages: Vec<usize>,
+    pub output_filename: Option<String>,
+}
+
+impl DeletePagesOptions {
+    pub fn new(pages: Vec<usize>) -> Self {
+        Self { pages, output_filename: None }
+    }
+}
+
+/// Options for inserting pages of another PDF into a document (Acrobat: Organize Pages ▸ Insert).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsertPagesOptions {
+    /// 1-based position the first inserted page lands at.
+    pub at: usize,
+    /// 1-based pages of the source file to insert (default: all).
+    pub pages: Option<Vec<usize>>,
+    pub output_filename: Option<String>,
+}
+
+impl InsertPagesOptions {
+    pub fn new(at: usize) -> Self {
+        Self { at, pages: None, output_filename: None }
+    }
+}
+
+/// Request to add a bookmark under an optional parent bookmark, at an optional 1-based position.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BookmarkAddRequest {
+    pub title: String,
+    /// 1-based target page.
+    pub page: usize,
+    /// 1-based positions from the top level identifying the parent bookmark (omit for top level).
+    pub parent: Option<Vec<usize>>,
+    /// 1-based position among the parent's children (default: last).
+    pub position: Option<usize>,
+    pub output_filename: Option<String>,
+}
+
+impl BookmarkAddRequest {
+    pub fn new(title: impl Into<String>, page: usize) -> Self {
+        Self { title: title.into(), page, parent: None, position: None, output_filename: None }
+    }
+}
+
+/// Request to remove a bookmark (and the bookmarks under it) by its path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BookmarkRemoveRequest {
+    /// 1-based positions from the top level identifying the bookmark.
+    pub path: Vec<usize>,
+    pub output_filename: Option<String>,
+}
+
+impl BookmarkRemoveRequest {
+    pub fn new(path: Vec<usize>) -> Self {
+        Self { path, output_filename: None }
+    }
+}
+
 /// Document Layer root model representing an opened or newly created PDF.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Document {

@@ -39,6 +39,12 @@ impl OperationExecutor for SlowMockExecutor {
         std::thread::sleep(self.delay);
         Ok(DocumentResult::memory(b"mock-png".to_vec(), "image/png"))
     }
+
+    fn execute_call_tool(&self, name: &str, _args: &serde_json::Value) -> Result<Vec<pdfcraft_sdk::ToolContent>, SdkError> {
+        self.call_count.fetch_add(1, Ordering::SeqCst);
+        std::thread::sleep(self.delay);
+        Ok(vec![pdfcraft_sdk::ToolContent::Json(serde_json::json!({ "tool": name }))])
+    }
 }
 
 #[test]

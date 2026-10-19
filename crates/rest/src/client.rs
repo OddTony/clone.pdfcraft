@@ -32,7 +32,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::models::{JobResponse, JobState, MergePayload, RenderPayload, SourcePayload, SplitPayload};
+use crate::models::{JobResponse, JobState, MergePayload, RenderPayload, SourcePayload, SplitPayload, SplitResponseDto, decode_base64};
 use crate::problem::ProblemDetails;
 use crate::routes::{HttpRequest, HttpResponse, RestService};
 use pdfcraft_sdk::{DocumentResult, DocumentSource, MergeOptions, PdfCraftClient, RenderOptions, SdkError, SplitMode, SplitResult};
@@ -72,7 +72,7 @@ impl PdfCraftClient for RestClient {
 
         let mut sources = Vec::new();
         for file in files {
-            sources.push(source_to_payload(file));
+            sources.push(source_to_payload(file)?);
         }
 
         let payload = MergePayload { files: sources, options, async_job: false };
@@ -85,31 +85,34 @@ impl PdfCraftClient for RestClient {
 
         if resp.status == 200 {
             let mime = resp.headers.get("content-type").cloned().unwrap_or_else(|| "application/pdf".into());
-            Ok(DocumentResult::memory(resp.body, mime))
-        } else if resp.status == 202 {
-            // Asynchronous job returned: poll until completion
-            let job: JobResponse = serde_json::from_slice(&resp.body).map_err(|e| SdkError::EngineError(e.to_string()))?;
-            self.poll_job_result(&job.id)
+            let data = resp.body.try_to_bytes().map_err(SdkError::Io)?;
+            Ok(DocumentResult::memory(data, mime))
         } else {
-            Err(parse_problem_error(&resp.body, resp.status))
+            let body = resp.body.try_to_bytes().map_err(SdkError::Io)?;
+            if resp.status == 202 {
+                let job: JobResponse = serde_json::from_slice(&body).map_err(|e| SdkError::EngineError(e.to_string()))?;
+                self.poll_job_result(&job.id)
+            } else {
+                Err(parse_problem_error(&body, resp.status))
+            }
         }
     }
 
     fn split(&self, file: &DocumentSource, mode: SplitMode) -> Result<SplitResult, SdkError> {
-        let payload = SplitPayload { file: source_to_payload(file), mode, async_job: false };
-
+        let payload = SplitPayload { file: source_to_payload(file)?, mode, async_job: false };
         let body = serde_json::to_vec(&payload).map_err(|e| SdkError::InvalidArgument(e.to_string()))?;
-
         let req = HttpRequest::new("POST", "/v1/split-pdf").with_header("content-type", "application/json").with_body(body);
 
         let resp = self.execute_request(req)?;
+        let body = resp.body.try_to_bytes().map_err(SdkError::Io)?;
 
-        if resp.status == 200 {
-            let res: SplitResult = serde_json::from_slice(&resp.body).map_err(|e| SdkError::EngineError(e.to_string()))?;
-            Ok(res)
-        } else {
-            Err(parse_problem_error(&resp.body, resp.status))
+        if resp.status != 200 {
+            return Err(parse_problem_error(&body, resp.status));
         }
+
+        let dto: SplitResponseDto = serde_json::from_slice(&body).map_err(|e| SdkError::EngineError(format!("Invalid split response: {e}")))?;
+
+        materialize_split_parts(dto)
     }
 
     fn render_page(&self, file: &DocumentSource, page: usize, options: RenderOptions) -> Result<DocumentResult, SdkError> {
@@ -117,21 +120,80 @@ impl PdfCraftClient for RestClient {
             return Err(SdkError::InvalidArgument("Page index must be >= 1".into()));
         }
 
-        let payload = RenderPayload { file: source_to_payload(file), page, options, async_job: false };
+        let payload = RenderPayload { file: source_to_payload(file)?, page, options, async_job: false };
 
         let body = serde_json::to_vec(&payload).map_err(|e| SdkError::InvalidArgument(e.to_string()))?;
 
         let req = HttpRequest::new("POST", "/v1/page-preview").with_header("content-type", "application/json").with_body(body);
 
         let resp = self.execute_request(req)?;
+        let body = resp.body.try_to_bytes().map_err(SdkError::Io)?;
 
         if resp.status == 200 {
             let mime = resp.headers.get("content-type").cloned().unwrap_or_else(|| "image/png".into());
-            Ok(DocumentResult::memory(resp.body, mime))
+            Ok(DocumentResult::memory(body, mime))
         } else {
-            Err(parse_problem_error(&resp.body, resp.status))
+            Err(parse_problem_error(&body, resp.status))
         }
     }
+}
+
+/// Materializes a split response into an exclusively owned directory.
+///
+/// The directory remains RAII-owned until every part has been validated and
+/// written successfully. Any error drops the directory and its partial files.
+fn materialize_split_parts(dto: SplitResponseDto) -> Result<SplitResult, SdkError> {
+    use std::collections::HashSet;
+    use std::io::Write;
+    use std::path::{Component, Path};
+
+    let mut names = HashSet::new();
+
+    // Validate the entire namespace before creating any output.
+    for part in &dto.parts {
+        let name = &part.filename;
+        let mut components = Path::new(name).components();
+        let single_normal_component = matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none();
+
+        if !single_normal_component || name.contains(['/', '\\', ':', '\0']) || name.ends_with(['.', ' ']) {
+            return Err(SdkError::EngineError(format!("Invalid split filename: {name:?}; expected a single normal filename")));
+        }
+
+        if !names.insert(name.as_str()) {
+            return Err(SdkError::EngineError(format!("Duplicate split filename: {name:?}")));
+        }
+    }
+
+    let directory = tempfile::Builder::new().prefix("pdfcraft-client-split-").tempdir().map_err(SdkError::Io)?;
+    let mut files = Vec::with_capacity(dto.parts.len());
+
+    for part in dto.parts {
+        let bytes =
+            decode_base64(&part.data_base64).map_err(|e| SdkError::EngineError(format!("Invalid base64 for split part {:?}: {e}", part.filename)))?;
+
+        if bytes.len() != part.size_bytes {
+            return Err(SdkError::EngineError(format!(
+                "Split part {:?} declares {} bytes but contains {} bytes",
+                part.filename,
+                part.size_bytes,
+                bytes.len()
+            )));
+        }
+
+        let path = directory.path().join(&part.filename);
+
+        {
+            let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(&path).map_err(SdkError::Io)?;
+            output.write_all(&bytes).map_err(SdkError::Io)?;
+            output.flush().map_err(SdkError::Io)?;
+        }
+
+        files.push(path);
+    }
+
+    // Ownership transfers to the caller only after the whole response succeeds.
+    let _ = directory.keep();
+    Ok(SplitResult { files })
 }
 
 impl RestClient {
@@ -141,21 +203,23 @@ impl RestClient {
         while std::time::Instant::now() < deadline {
             let req = HttpRequest::new("GET", format!("/v1/jobs/{job_id}"));
             let resp = self.execute_request(req)?;
+            let body = resp.body.try_to_bytes().map_err(SdkError::Io)?;
             if resp.status != 200 {
-                return Err(parse_problem_error(&resp.body, resp.status));
+                return Err(parse_problem_error(&body, resp.status));
             }
 
-            let job: JobResponse = serde_json::from_slice(&resp.body).map_err(|e| SdkError::EngineError(e.to_string()))?;
+            let job: JobResponse = serde_json::from_slice(&body).map_err(|e| SdkError::EngineError(e.to_string()))?;
 
             match job.status {
                 JobState::Succeeded => {
                     let res_req = HttpRequest::new("GET", format!("/v1/jobs/{job_id}/result"));
                     let res_resp = self.execute_request(res_req)?;
+                    let res_body = res_resp.body.try_to_bytes().map_err(SdkError::Io)?;
                     if res_resp.status == 200 {
                         let mime = res_resp.headers.get("content-type").cloned().unwrap_or_else(|| "application/pdf".into());
-                        return Ok(DocumentResult::memory(res_resp.body, mime));
+                        return Ok(DocumentResult::memory(res_body, mime));
                     } else {
-                        return Err(parse_problem_error(&res_resp.body, res_resp.status));
+                        return Err(parse_problem_error(&res_body, res_resp.status));
                     }
                 }
                 JobState::Failed => {
@@ -174,11 +238,15 @@ impl RestClient {
     }
 }
 
-fn source_to_payload(source: &DocumentSource) -> SourcePayload {
-    match source {
-        DocumentSource::Path(p) => SourcePayload::Path { path: p.clone() },
+fn source_to_payload(source: &DocumentSource) -> Result<SourcePayload, SdkError> {
+    Ok(match source {
+        DocumentSource::Path(p) => {
+            let data = std::fs::read(p).map_err(SdkError::Io)?;
+            let name = p.file_name().and_then(|n| n.to_str()).map(str::to_string);
+            SourcePayload::Bytes { data_base64: encode_base64(&data), name }
+        }
         DocumentSource::Bytes { data, name } => SourcePayload::Bytes { data_base64: encode_base64(data), name: name.clone() },
-    }
+    })
 }
 
 fn parse_problem_error(body: &[u8], status: u16) -> SdkError {
@@ -264,27 +332,40 @@ fn send_http_request(base_url: &str, auth_token: Option<&str>, req: HttpRequest)
     let mut status_line = String::new();
     reader.by_ref().take(8192).read_line(&mut status_line).map_err(SdkError::Io)?;
     let parts: Vec<&str> = status_line.split_whitespace().collect();
-    let status = parts.get(1).and_then(|s| s.parse::<u16>().ok()).unwrap_or(500);
+    let status =
+        parts.get(1).and_then(|s| s.parse::<u16>().ok()).ok_or_else(|| SdkError::EngineError(format!("Malformed status line: {status_line}")))?;
 
     let mut headers = std::collections::HashMap::new();
     let mut content_length = 0usize;
+    let mut seen_content_length = false;
+    let mut headers_terminated = false;
 
     for _ in 0..100 {
         let mut line = String::new();
         reader.by_ref().take(8192).read_line(&mut line).map_err(SdkError::Io)?;
-        if line.trim().is_empty() {
+        if line == "\r\n" || line == "\n" {
+            headers_terminated = true;
             break;
         }
         if let Some((k, v)) = line.split_once(':') {
             let key = k.trim().to_lowercase();
             let val = v.trim().to_string();
-            if key == "content-length"
-                && let Ok(len) = val.parse::<usize>()
-            {
-                content_length = len;
+            if key == "transfer-encoding" {
+                return Err(SdkError::UnsupportedOperation("Transfer-Encoding in response is not supported".into()));
+            }
+            if key == "content-length" {
+                if seen_content_length {
+                    return Err(SdkError::EngineError("Duplicate Content-Length header in response".into()));
+                }
+                seen_content_length = true;
+                content_length = val.parse::<usize>().map_err(|e| SdkError::EngineError(format!("Invalid Content-Length: {e}")))?;
             }
             headers.insert(key, val);
         }
+    }
+
+    if !headers_terminated {
+        return Err(SdkError::EngineError("Unterminated HTTP response headers".into()));
     }
 
     const MAX_CLIENT_BODY_BYTES: usize = 100 * 1024 * 1024;
@@ -302,5 +383,50 @@ fn send_http_request(base_url: &str, auth_token: Option<&str>, req: HttpRequest)
         }
     }
 
-    Ok(HttpResponse { status, headers, body })
+    Ok(HttpResponse { status, headers, body: crate::routes::HttpBody::Bytes(body) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{SplitPartDto, SplitResponseDto};
+
+    #[test]
+    fn local_path_is_uploaded_as_bytes() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), b"local PDF bytes").unwrap();
+        let payload = source_to_payload(&DocumentSource::Path(file.path().into())).unwrap();
+        assert!(matches!(payload, SourcePayload::Bytes { .. }));
+        let DocumentSource::Bytes { data, .. } = payload.into_source().unwrap() else { panic!("expected uploaded bytes") };
+        assert_eq!(data, b"local PDF bytes");
+    }
+
+    #[test]
+    fn test_materialize_split_parts_path_traversal_rejected() {
+        let dto = SplitResponseDto {
+            parts: vec![SplitPartDto { filename: "../../../etc/passwd".into(), size_bytes: 4, data_base64: encode_base64(b"test") }],
+        };
+        let err = materialize_split_parts(dto).unwrap_err();
+        assert!(matches!(err, SdkError::EngineError(_)));
+    }
+
+    #[test]
+    fn test_materialize_split_parts_duplicate_filename_rejected() {
+        let dto = SplitResponseDto {
+            parts: vec![
+                SplitPartDto { filename: "part1.pdf".into(), size_bytes: 4, data_base64: encode_base64(b"test") },
+                SplitPartDto { filename: "part1.pdf".into(), size_bytes: 4, data_base64: encode_base64(b"test") },
+            ],
+        };
+        let err = materialize_split_parts(dto).unwrap_err();
+        assert!(matches!(err, SdkError::EngineError(_)));
+    }
+
+    #[test]
+    fn test_materialize_split_parts_size_mismatch_rejected() {
+        let dto =
+            SplitResponseDto { parts: vec![SplitPartDto { filename: "part1.pdf".into(), size_bytes: 100, data_base64: encode_base64(b"test") }] };
+        let err = materialize_split_parts(dto).unwrap_err();
+        assert!(matches!(err, SdkError::EngineError(_)));
+    }
 }

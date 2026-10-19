@@ -36,6 +36,13 @@ impl OperationExecutor for FakeExecutor {
         }
         Ok(DocumentResult::memory(b"PNG_BYTES".to_vec(), "image/png"))
     }
+
+    fn execute_call_tool(&self, name: &str, args: &serde_json::Value) -> Result<Vec<pdfcraft_sdk::ToolContent>, SdkError> {
+        if name == "unknown_tool" {
+            return Err(SdkError::UnsupportedOperation(format!("Unknown tool: {name}")));
+        }
+        Ok(vec![pdfcraft_sdk::ToolContent::Json(serde_json::json!({ "tool": name, "args": args }))])
+    }
 }
 
 #[test]
@@ -92,6 +99,32 @@ fn test_local_client_delegates_to_executor() {
     assert!(client.render_page(&DocumentSource::from("a.pdf"), 0, RenderOptions::default()).is_err());
     let render_res = client.render_page(&DocumentSource::from("a.pdf"), 1, RenderOptions::default()).expect("render ok");
     assert_eq!(render_res.mime_type(), "image/png");
+}
+
+#[test]
+fn test_local_client_call_tool_delegates_to_executor() {
+    let executor = Arc::new(FakeExecutor);
+    let client = LocalClient::new(executor);
+
+    // Empty tool name is rejected before reaching the executor.
+    let empty_name_err = client.call_tool("", serde_json::json!({})).unwrap_err();
+    assert_eq!(empty_name_err.error_code(), "INVALID_ARGUMENT");
+
+    // Unknown tool is surfaced as a structured, non-fatal error.
+    let unknown_err = client.call_tool("unknown_tool", serde_json::json!({})).unwrap_err();
+    assert_eq!(unknown_err.error_code(), "UNSUPPORTED_OPERATION");
+
+    // A known tool name delegates through to the executor and returns its content.
+    let args = serde_json::json!({ "page": 1 });
+    let content = client.call_tool("doc_info", args.clone()).expect("call_tool ok");
+    assert_eq!(content.len(), 1);
+    match &content[0] {
+        pdfcraft_sdk::ToolContent::Json(v) => {
+            assert_eq!(v["tool"], "doc_info");
+            assert_eq!(v["args"], args);
+        }
+        pdfcraft_sdk::ToolContent::Png { .. } => panic!("expected Json content"),
+    }
 }
 
 #[test]

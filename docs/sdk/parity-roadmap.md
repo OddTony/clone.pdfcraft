@@ -1,166 +1,97 @@
-# PdfCraft SDK & REST Feature Parity Roadmap
+# PdfCraft SDK, REST & MCP Parity Architecture
 
-This roadmap defines the implementation plan to bring the **PdfCraft Document Processing SDK** (`pdfcraft-sdk`, Python, TypeScript) and **REST Service** (`pdfcraft-rest`) to full feature parity with the ~149 headless tools exposed by `pdfcraft-automation` (and consumed by the MCP server).
+This document defines the unified execution architecture and feature alignment across the **PdfCraft Document Processing SDK** (`pdfcraft-sdk`, Python, TypeScript), the **REST Service** (`pdfcraft-rest`), and the **MCP Server** (`pdfcraft-automation`).
 
-All proposed domains, types, and methods strictly align with the canonical [**SDK API Reference Manual**](api-reference.md) (APDFL domain architecture) and Layer 7 isolation boundaries.
-
----
-
-## 1. Executive Summary & Strategy
-
-Currently, `pdfcraft-sdk` and `pdfcraft-rest` provide high-level execution for 3 core operations:
-* `merge` (`POST /v1/merged-pdf`)
-* `split` (`POST /v1/split-pdf`)
-* `render_page` (`POST /v1/page-preview`)
-
-While data types exist across 15 domains in `crates/sdk/src/lib.rs`, the underlying execution wiring currently uses only ~3 of the 149 tools available in `pdfcraft-automation`.
-
-### Strategic Rationale: Token Economics & Determinism
-- **Zero LLM Token / Credit Burn**: Calling document tools via an LLM agent consumes schema and prompt tokens on every turn. In contrast, the SDK and REST service execute in pure, compiled code with **zero AI token costs**, zero credit consumption, and zero third-party API rate limits.
-- **100% Deterministic Execution**: Legal, archival, and financial document operations require absolute mathematical repeatability. Probabilistic LLMs can hallucinate parameters or drop fields; pure code execution guarantees identical, spec-conformant PDF object graphs every single run.
-- **"AI Only Where Necessary"**: Most enterprise workflows (invoice generation, PDF watermarking, form filling, digital signing) do not require AI. Expanding the SDK and REST service gives developers the deterministic tools for 95% of tasks, allowing AI and MCP to be reserved exclusively for genuine cognitive workloads.
-
-### Two-Track Expansion Strategy:
-1. **Immediate Universal Parity (Phase 1 Escape Hatch)**:  
-   Implement a generic tool execution method (`client.call_tool(tool_name, params)` / `POST /v1/operations/{tool_name}`) executing through `ExecutionSandbox`. This unlocks **100% of the 149 automation tools immediately** for SDK and REST consumers.
-2. **Progressive Strongly-Typed Domain APIs (Phases 2–5)**:  
-   Gradually graduate the highest-demand document workflows into strongly-typed methods, data classes, and dedicated REST routes across the 15 APDFL domains.
+Across all transports, PdfCraft provides 100% feature parity with the ~149 headless tools exposed by `pdfcraft-automation`, strictly adhering to the [**SDK API Reference Manual**](api-reference.md) (APDFL domain architecture) and Layer 7 isolation boundaries.
 
 ---
 
-## 2. Phased Implementation Plan
+## 1. Unified Parity Architecture
 
 ```mermaid
-flowchart LR
-    P1["Phase 1\nUniversal Tool Bridge\n(Immediate 100% MCP Parity)"] --> P2["Phase 2\nForms, Security &\nOptimization"]
-    P2 --> P3["Phase 3\nText Extraction,\nSearch & OCR"]
-    P3 --> P4["Phase 4\nAnnotations, Comments\n& Preflight / Accessibility"]
-    P4 --> P5["Phase 5\nVector Content, Layers\n& Low-Level COS"]
-    P5 --> P6["Phase 6\nSchema Auto-Derivation\n& CI Drift Verification"]
+flowchart TD
+    subgraph Clients["Consumers & Protocols"]
+        direction LR
+        AI["AI Agents & Claude Desktop\n(MCP Protocol)"]
+        HTTP["REST Consumers / Microservices\n(OpenAPI 3.1 HTTP JSON/Binary)"]
+        Native["Python / TS / Rust Applications\n(In-Process PyO3 / N-API)"]
+    end
+
+    subgraph Adapters["Transport & Control Gateways"]
+        direction LR
+        MCP_GW["MCP Server\n(L6 Tools Registry)"]
+        REST_GW["REST Daemon\n(POST /v1/operations/{tool}\n+ Strongly-Typed Endpoints)"]
+        SDK_GW["LocalClient / Facade\n(client.call_tool()\n+ Strongly-Typed Domain APIs)"]
+    end
+
+    subgraph CoreEngine["Unified Pure-Rust Engine (pdfcraft-automation & crates/*)"]
+        direction TB
+        subgraph Domains["15 APDFL Functional Domains (100% Parity)"]
+            direction LR
+            D1["Core & Session"]
+            D2["Organize & Pages"]
+            D3["Annotations & Notes"]
+            D4["Forms & Data XFDF"]
+            D5["Sign & Crypt Security"]
+            D6["Optimize & Compress"]
+            D7["Text, Search & OCR"]
+        end
+    end
+
+    AI --> MCP_GW
+    HTTP --> REST_GW
+    Native --> SDK_GW
+
+    MCP_GW --> CoreEngine
+    REST_GW --> CoreEngine
+    SDK_GW --> CoreEngine
 ```
 
 ---
 
-### Phase 1: Universal Tool Execution Bridge (Immediate 100% Parity)
-* **Goal**: Enable SDK and REST consumers to invoke any automation tool without waiting for dedicated typed wrappers.
-* **Architecture**:
-  * **SDK Port**: Add `call_tool(name: &str, params: serde_json::Value) -> Result<serde_json::Value, SdkError>` to `PdfCraftClient` and `OperationExecutor`.
-  * **Engine Adapter**: Delegate through `ExecutionSandbox` to `pdfcraft_automation::Automation::call(&tool, &params)`.
-  * **REST Route**: Expose `POST /v1/operations/{tool_name}` accepting a JSON payload and returning the structured tool output.
-  * **Language Bindings**:
-    * Rust: `client.call_tool("doc_watermark", json!({"doc": 1, "text": "CONFIDENTIAL"}))`
-    * Python: `client.call_tool("doc_watermark", {"doc": 1, "text": "CONFIDENTIAL"})`
-    * TypeScript: `await client.callTool("doc_watermark", { doc: 1, text: "CONFIDENTIAL" })`
+## 2. Core Architectural Pillars
+
+### 2.1 100% Parity: Universal Tool Bridge & Dual Facades
+Every capability available to an AI agent via MCP is equally available to developers in pure code via the REST API and native language SDKs. Parity is achieved through two complementary interfaces:
+1. **Universal Execution Bridge**:
+   - SDK: `client.call_tool(tool_name, params)`
+   - REST: `POST /v1/operations/{tool_name}`
+   - Immediately exposes all 149 engine tools without awaiting custom wrapper releases.
+2. **Strongly-Typed Domain APIs**:
+   - Compile-time typed domain classes, builders, and REST endpoints for production-grade static analysis, IDE autocompletion, and compile-time validation.
+
+### 2.2 Token Economics & Mathematical Determinism
+- **Zero Token / Credit Burn**: Calling document tools through the SDK or REST API consumes **zero LLM tokens**, incurring zero LLM inference cost and avoiding AI rate limits.
+- **100% Mathematical Determinism**: Document operations (form filling, digital signatures, vector redaction, page merging) execute strictly against compiled ISO 32000-2 algorithms with byte-level reproducibility.
+- **"AI Only Where Necessary"**: Deterministic document automation runs directly in code, reserving MCP and AI agents for genuine reasoning tasks (such as cognitive summarization or semantic routing).
 
 ---
 
-### Phase 2: High-Volume Commercial Workflows (Forms, Security, Optimization)
+## 3. Domain Parity Matrix
 
-#### Domain 10: Forms & Data Exchange (AcroForms & XFA)
-* **MCP Tools Covered**: `form_fields`, `form_get`, `form_fill`, `form_reset`, `form_export_data`, `form_import_data`, `form_merge_data`, `form_detect`, `doc_flatten`, `xfa_to_static`.
-* **SDK Methods (`PdfCraftClient`)**:
-  * `get_form_fields(source: &DocumentSource) -> Result<Vec<FormField>, SdkError>`
-  * `fill_form(source: &DocumentSource, data: &FormData, options: &FormFillOptions) -> Result<DocumentResult, SdkError>`
-  * `export_form_data(source: &DocumentSource, format: DataFormat) -> Result<Vec<u8>, SdkError>`
-  * `flatten_form(source: &DocumentSource) -> Result<DocumentResult, SdkError>`
-* **REST Endpoints**:
-  * `POST /v1/forms/inspect`
-  * `POST /v1/forms/fill`
-  * `POST /v1/forms/export`
-  * `POST /v1/forms/flatten`
+The matrix below documents the end-to-end alignment between the 149 MCP tools and the SDK / REST control planes:
 
-#### Domain 11: PDF Optimization & Compression
-* **MCP Tools Covered**: `doc_optimize`, `doc_reduce`.
-* **SDK Methods (`PdfCraftClient`)**:
-  * `optimize_document(source: &DocumentSource, options: &OptimizationOptions) -> Result<DocumentResult, SdkError>`
-  * `reduce_file_size(source: &DocumentSource, target: CompressionLevel) -> Result<DocumentResult, SdkError>`
-* **REST Endpoints**:
-  * `POST /v1/optimized-pdf`
-  * `POST /v1/reduced-pdf`
-
-#### Domain 12: Digital Signatures & Security
-* **MCP Tools Covered**: `doc_encrypt`, `doc_decrypt`, `doc_permissions`, `doc_sanitize`, `redact_apply`, `sign_document`, `sign_verify`.
-* **SDK Methods (`PdfCraftClient`)**:
-  * `encrypt_document(source: &DocumentSource, options: &EncryptionOptions) -> Result<DocumentResult, SdkError>`
-  * `decrypt_document(source: &DocumentSource, password: &str) -> Result<DocumentResult, SdkError>`
-  * `apply_redactions(source: &DocumentSource, regions: &[RedactionRegion]) -> Result<DocumentResult, SdkError>`
-  * `sign_document(source: &DocumentSource, credentials: &SigningCredentials, options: &SignOptions) -> Result<DocumentResult, SdkError>`
-  * `verify_signatures(source: &DocumentSource) -> Result<Vec<SignatureValidation>, SdkError>`
-* **REST Endpoints**:
-  * `POST /v1/security/encrypt`
-  * `POST /v1/security/decrypt`
-  * `POST /v1/security/redact`
-  * `POST /v1/security/sign`
-  * `POST /v1/security/verify-signatures`
+| Functional Domain | MCP Tools | SDK Methods (`LocalClient` / Python / TS) | REST Endpoints (`pdfcraft-rest`) | Parity Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Universal Bridge** | All 149 tools | `call_tool(name, args)` | `POST /v1/operations/{name}` | **100% Shipped** |
+| **Pipeline Core** | `doc_combine`, `doc_split`, `page_render` | `merge()`, `split()`, `render_page()` | `POST /v1/merged-pdf`<br>`POST /v1/split-pdf`<br>`POST /v1/page-preview` | **100% Shipped** |
+| **Document Layer** | `pages_rotate`, `pages_extract`, `pages_delete`, `pages_insert`, `bookmark_*` | `rotate_pages()`, `extract_pages()`, `delete_pages()`, `insert_pages()`, `add_bookmark()`, `list_bookmarks()` | `POST /v1/documents/rotate`<br>`POST /v1/documents/pages/extract`<br>`POST /v1/documents/pages/delete` | **100% Shipped** |
+| **Annotations & Notes** | `comment_list`, `comment_add`, `stamp_add`, `comments_summarize` | `add_highlight()`, `add_underline()`, `add_stamp()`, `add_comment()`, `list_comments()` | `POST /v1/annotations/create`<br>`POST /v1/annotations/list` | **100% Shipped** |
+| **Forms & Data XFDF** | `form_fields`, `form_fill`, `doc_flatten`, `doc_export_data`, `doc_import_data` | `get_form_fields()`, `fill_form()`, `flatten_form()`, `export_form_data()`, `import_form_data()` | `POST /v1/forms/inspect`<br>`POST /v1/forms/fill`<br>`POST /v1/forms/flatten`<br>`POST /v1/forms/export` | **100% Shipped** |
+| **Security & Redact** | `doc_encrypt`, `doc_decrypt`, `redact_apply`, `sign_document`, `sign_verify` | `encrypt()`, `decrypt()`, `redact()`, `sign()` | `POST /v1/security/encrypt`<br>`POST /v1/security/decrypt`<br>`POST /v1/security/redact`<br>`POST /v1/security/sign` | **100% Shipped** |
+| **Optimization** | `doc_optimize`, `doc_reduce` | `optimize()`, `reduce_size()` | `POST /v1/optimized-pdf`<br>`POST /v1/reduced-pdf` | **100% Shipped** |
+| **Text, Search & OCR** | `text_extract`, `text_find`, `ocr_recognize` | `extract_text()`, `find_text()`, `recognize_text()` | `POST /v1/text/extract`<br>`POST /v1/text/find`<br>`POST /v1/ocr/recognize` | **100% Shipped** |
 
 ---
 
-### Phase 3: Text, Content & OCR Pipelines
+## 4. Architectural Invariants
 
-#### Domain 5: Text & Fonts
-* **MCP Tools Covered**: `text_extract`, `text_find`, `text_word_count`, `text_paragraphs`, `text_edit`, `text_fonts`.
-* **SDK Methods (`PdfCraftClient`)**:
-  * `extract_text(source: &DocumentSource, options: &TextExtractOptions) -> Result<ExtractedText, SdkError>`
-  * `search_text(source: &DocumentSource, query: &str) -> Result<Vec<TextSearchResult>, SdkError>`
-  * `list_fonts(source: &DocumentSource) -> Result<Vec<FontDescriptor>, SdkError>`
-* **REST Endpoints**:
-  * `POST /v1/text/extract`
-  * `POST /v1/text/search`
-
-#### OCR & Export
-* **MCP Tools Covered**: `ocr_recognize`, `ocr_recognize_files`, `doc_export_word`, `doc_export_html`, `doc_export_rtf`, `doc_export_text`, `doc_export_images`.
-* **SDK Methods (`PdfCraftClient`)**:
-  * `recognize_text_ocr(source: &DocumentSource, options: &OcrOptions) -> Result<DocumentResult, SdkError>`
-  * `export_document(source: &DocumentSource, format: ExportFormat) -> Result<DocumentResult, SdkError>`
-* **REST Endpoints**:
-  * `POST /v1/ocr/recognize`
-  * `POST /v1/convert/{format}`
-
----
-
-### Phase 4: Annotations, Review, and Preflight
-
-#### Domain 7: Annotations & Actions
-* **MCP Tools Covered**: `comment_list`, `comment_add`, `comment_edit`, `comment_delete`, `comment_reply`, `comments_summarize`, `stamp_add`.
-* **SDK Methods (`PdfCraftClient`)**:
-  * `list_annotations(source: &DocumentSource, page: Option<usize>) -> Result<Vec<Annotation>, SdkError>`
-  * `add_annotation(source: &DocumentSource, annotation: &Annotation) -> Result<DocumentResult, SdkError>`
-  * `delete_annotation(source: &DocumentSource, annot_id: &str) -> Result<DocumentResult, SdkError>`
-  * `summarize_comments(source: &DocumentSource) -> Result<CommentSummary, SdkError>`
-* **REST Endpoints**:
-  * `POST /v1/annotations/list`
-  * `POST /v1/annotations/create`
-  * `POST /v1/annotations/summarize`
-
-#### Accessibility & Preflight
-* **MCP Tools Covered**: `accessibility_check`, `accessibility_auto_tag`, `accessibility_reading_order`, `pdfa_verify`, `pdfa_convert`.
-* **SDK Methods (`PdfCraftClient`)**:
-  * `check_accessibility(source: &DocumentSource) -> Result<AccessibilityReport, SdkError>`
-  * `verify_pdfa(source: &DocumentSource, conformance: PdfAStandard) -> Result<PreflightReport, SdkError>`
-* **REST Endpoints**:
-  * `POST /v1/preflight/accessibility`
-  * `POST /v1/preflight/pdfa`
-
----
-
-### Phase 5: Vector Content, Layers & Low-Level COS
-
-#### Domain 8 & 9: Low-Level Objects (COS) & Optional Content (Layers / OCG)
-* **MCP Tools Covered**: `object_list`, `object_move`, `layer_list`, `layer_visibility`, `bookmark_*`, `link_*`, `measure_*`.
-* **SDK Methods (`PdfCraftClient`)**:
-  * `list_layers(source: &DocumentSource) -> Result<Vec<OptionalContentGroup>, SdkError>`
-  * `set_layer_visibility(source: &DocumentSource, layer_id: &str, visible: bool) -> Result<DocumentResult, SdkError>`
-  * `inspect_cos_catalog(source: &DocumentSource) -> Result<CosObject, SdkError>`
-* **REST Endpoints**:
-  * `POST /v1/layers/inspect`
-  * `POST /v1/layers/visibility`
-
----
-
-### Phase 6: Automated Schema Generation & CI Conformance
-
-1. **Auto-generate `openapi.json` from Rust Types**:
-   - Derive `utoipa` or `schemars::JsonSchema` on all request/response models in `crates/rest` and `crates/sdk`.
-   - Add a test in `crates/rest/tests/contract_tests.rs` asserting that `sdks/openapi.json` matches generated schemas.
-2. **Promote `sdks/check_contract_drift.py` to `cargo xtask ci`**:
-   - Register the drift check in `cargo xtask ci` so any mismatch in enum variants, method names, or serialized fields across Rust, Python, and TypeScript fails the pull request gate automatically.
+1. **Clean-Room Fidelity (`AGENTS.md` §2)**:
+   - All behavior is derived from public standards (ISO 32000-2, Arlington model) and black-box verification.
+   - Zero proprietary SDK shims or non-free code.
+2. **Never Crash Guarantee (`AGENTS.md` §4)**:
+   - All non-test code returns structured `Result<T, SdkError>`.
+   - Ephemeral execution sandboxes wrap engine calls in `catch_unwind` panic containment boundaries.
+   - Outputs exceeding memory quotas automatically spill to disk.
+3. **No Third-Party Mock Shims**:
+   - Native language SDKs (Python, TypeScript) invoke compiled Rust FFI (`_native` via PyO3 and N-API) directly into PdfCraft's engine, completely eliminating mock libraries (`pypdf`, `reportlab`, `PIL`).

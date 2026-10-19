@@ -40,7 +40,7 @@ pub mod storage;
 
 pub use client::RestClient;
 pub use executor::{BlockingExecutor, ExecutionError, ExecutorConfig};
-pub use models::{JobId, JobRecord, JobResponse, JobState, MergePayload, RenderPayload, SourcePayload, SplitPayload};
+pub use models::{ContentDto, JobId, JobRecord, JobResponse, JobState, MergePayload, RenderPayload, SourcePayload, SplitPayload};
 pub use problem::{InvalidParam, ProblemDetails};
 pub use routes::{HttpRequest, HttpResponse, RestService};
 pub use server::{HttpServer, ServerConfig};

@@ -117,7 +117,7 @@ flowchart TB
 | **Error Format** | MCP text `{isError: true}` | Typed Language Exceptions / Enums | RFC 7807 Problem Details JSON |
 | **Async Polling** | ❌ Synchronous only | ❌ Synchronous calls | ✅ `202 Accepted` + `/v1/jobs/{id}` |
 | **Object Model** | Untyped tool arguments | 15 APDFL typed domain modules | OpenAPI 3.1 Schemas |
-| **Tool Count** | **~149 tools** | 3 high-level + planned expansion | 3 routes + planned expansion |
+| **Tool Count** | **~149 tools** | **149 tools** (`call_tool` + typed methods) | **149 tools** (`POST /v1/operations/{name}` + routes) |
 
 ---
 

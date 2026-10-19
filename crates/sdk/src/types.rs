@@ -49,11 +49,11 @@ impl DocumentSource {
         Self::Path(path.into())
     }
 
-    /// Returns the byte length if known without disk I/O.
+    /// Returns the byte length if known in memory or readable from disk metadata.
     pub fn byte_len(&self) -> Option<usize> {
         match self {
             Self::Bytes { data, .. } => Some(data.len()),
-            Self::Path(_) => None,
+            Self::Path(p) => std::fs::metadata(p).ok().and_then(|m| usize::try_from(m.len()).ok()),
         }
     }
 }
@@ -168,4 +168,36 @@ impl Default for ResourceLimits {
             max_memory_bytes: 10 * 1024 * 1024,   // 10 MB memory buffer before spilling to disk
         }
     }
+}
+
+/// Simple RFC 4648 standard base64 encoder without unsafe code.
+pub fn encode_base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        match chunk.len() {
+            3 => {
+                let n = ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | (chunk[2] as u32);
+                out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 6) & 0x3F) as usize] as char);
+                out.push(ALPHABET[(n & 0x3F) as usize] as char);
+            }
+            1 => {
+                let n = (chunk[0] as u32) << 16;
+                out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+                out.push_str("==");
+            }
+            2 => {
+                let n = ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8);
+                out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+                out.push(ALPHABET[((n >> 6) & 0x3F) as usize] as char);
+                out.push('=');
+            }
+            _ => {}
+        }
+    }
+    out
 }

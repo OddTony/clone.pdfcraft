@@ -49,11 +49,17 @@ PdfCraft enforces a strict 7-layer architecture. The SDK and REST service operat
 PdfCraft exposes the **same operation vocabulary** across two transports. Operation semantics are shared, while result delivery, lifecycle, errors, authentication, and cancellation are transport-specific:
 
 ```text
-                        ┌──────────────────────────────┐
-                        │ Unified Operation Vocabulary │
-                        │ merge, split, render_page    │
-                        └──────────────┬───────────────┘
-                                       │
+                        ┌──────────────────────────────────────────────┐
+                        │         Unified Operation Vocabulary         │
+                        │ • call_tool (Universal 149-tool Bridge)      │
+                        │ • merge, split, render_page                  │
+                        │ • document (rotate, extract, delete, insert) │
+                        │ • annot (highlight, stamp, comments)         │
+                        │ • forms (fill, flatten, export, import)      │
+                        │ • security (encrypt, decrypt, redact, sign)  │
+                        │ • optimization (optimize, reduce_size)       │
+                        └──────────────────────┬───────────────────────┘
+                                               │
                 ┌──────────────────────┴──────────────────────┐
                 │                                             │
  ┌──────────────▼──────────────┐               ┌──────────────▼──────────────┐
@@ -252,6 +258,10 @@ print(f"Split generated {len(split.files)} files")
 preview = client.render_page("complete.pdf", page_number=1, options=RenderOptions(dpi=300.0))
 with open("page1_300dpi.png", "wb") as f:
     f.write(preview.png_bytes)
+
+# 4. Universal Tool Bridge (Any of the 149 engine tools)
+tool_res = client.call_tool("form_fields", {"doc": 1})
+print(f"Extracted fields natively: {tool_res}")
 ```
 
 ### 4.2 Remote REST Client (`RestClient`)

@@ -28,6 +28,7 @@
 //!     - SplitPayload: Inbound payload for splitting documents
 //!     - RenderPayload: Inbound payload for rendering page previews
 //!     - SourcePayload: Inbound document source (Path or base64 Bytes)
+//!     - ContentDto: Serializable view of a generic automation tool result block
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -35,7 +36,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use pdfcraft_sdk::{DocumentResult, DocumentSource, MergeOptions, RenderOptions, SplitMode, SplitResult};
+use pdfcraft_sdk::{DocumentResult, DocumentSource, MergeOptions, RenderOptions, SplitMode, SplitResult, ToolContent};
 
 static JOB_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -176,6 +177,20 @@ pub struct SplitPayload {
     pub async_job: bool,
 }
 
+/// Individual split artifact part sent over the wire without exposing server-local paths.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SplitPartDto {
+    pub filename: String,
+    pub size_bytes: usize,
+    pub data_base64: String,
+}
+
+/// Wire DTO for split operation results containing partitioned document parts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SplitResponseDto {
+    pub parts: Vec<SplitPartDto>,
+}
+
 /// Payload for previewing / rendering a PDF page.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderPayload {
@@ -199,7 +214,7 @@ impl SourcePayload {
     /// Converts this payload into an engine `DocumentSource`.
     pub fn into_source(self) -> Result<DocumentSource, String> {
         match self {
-            Self::Path { path } => Ok(DocumentSource::Path(path)),
+            Self::Path { .. } => Err("Server-local paths are not accepted over REST; send document bytes via base64".into()),
             Self::Bytes { data_base64, name } => {
                 // Decode base64 bytes
                 let data = decode_base64(&data_base64)?;
@@ -209,8 +224,59 @@ impl SourcePayload {
     }
 }
 
+/// Serializable view of a single result block from a generic automation tool call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentDto {
+    /// Structured JSON data returned by the tool.
+    Json { data: serde_json::Value },
+    /// A PNG image returned by the tool, base64-encoded.
+    Png { data_base64: String, width: u32, height: u32 },
+}
+
+impl From<&ToolContent> for ContentDto {
+    fn from(content: &ToolContent) -> Self {
+        match content {
+            ToolContent::Json(v) => Self::Json { data: v.clone() },
+            ToolContent::Png { data, width, height } => Self::Png { data_base64: encode_base64(data), width: *width, height: *height },
+        }
+    }
+}
+
+/// Simple RFC 4648 standard base64 encoder without unsafe code.
+pub fn encode_base64(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    let (chunks, remainder) = data.as_chunks::<3>();
+    for chunk in chunks {
+        let n = ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | (chunk[2] as u32);
+        out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+        out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+        out.push(ALPHABET[((n >> 6) & 0x3F) as usize] as char);
+        out.push(ALPHABET[(n & 0x3F) as usize] as char);
+    }
+
+    match remainder.len() {
+        1 => {
+            let n = (remainder[0] as u32) << 16;
+            out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+            out.push_str("==");
+        }
+        2 => {
+            let n = ((remainder[0] as u32) << 16) | ((remainder[1] as u32) << 8);
+            out.push(ALPHABET[((n >> 18) & 0x3F) as usize] as char);
+            out.push(ALPHABET[((n >> 12) & 0x3F) as usize] as char);
+            out.push(ALPHABET[((n >> 6) & 0x3F) as usize] as char);
+            out.push('=');
+        }
+        _ => {}
+    }
+    out
+}
+
 /// Simple RFC 4648 standard base64 decoder without unsafe code.
-fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
+pub fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
     let clean: String = input.chars().filter(|c| !c.is_whitespace()).collect();
     let bytes = clean.as_bytes();
     if !bytes.len().is_multiple_of(4) {
