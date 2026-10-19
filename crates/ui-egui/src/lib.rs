@@ -2285,6 +2285,7 @@ impl PdfCraftApp {
                     "opacity": s.opacity,
                     "width": s.width,
                     "fill": s.fill,
+                    "font_size": self.comment_prefs.font_size(t),
                 }))
                 .collect::<Vec<_>>(),
             // Drawn signatures keep their original form (older settings read the same).
@@ -2423,6 +2424,9 @@ impl PdfCraftApp {
                 }
                 if let Some(o) = e["opacity"].as_f64() {
                     self.comment_prefs.set_opacity(tool, o);
+                }
+                if let Some(size) = e["font_size"].as_f64() {
+                    self.comment_prefs.set_font_size(tool, size);
                 }
                 if let Some(w) = e["width"].as_f64() {
                     self.comment_prefs.set_width(tool, w);

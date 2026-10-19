@@ -671,6 +671,24 @@ fn comment_style_settings_clamp_and_refuse_hostile_values() {
     assert_eq!(note.color, [1.0, 0.82, 0.0], "the default colour stays");
 }
 
+/// Missing, malformed and out-of-range saved text sizes keep the tool's usable default.
+#[test]
+fn comment_font_size_settings_reject_invalid_values() {
+    use pdfcraft_ui_egui::comments::CommentTool;
+    let mut app = PdfCraftApp::new();
+    app.restore(
+        r#"{"comment_styles":[
+        {"tool":"comment.callout","font_size":0},
+        {"tool":"comment.freetext","font_size":401},
+        {"tool":"comment.callout","font_size":"large"},
+        {"tool":"comment.note","font_size":30}
+    ]}"#,
+    );
+    assert_eq!(app.comment_prefs.font_size(CommentTool::Callout), Some(10.0));
+    assert_eq!(app.comment_prefs.font_size(CommentTool::TextBox), Some(12.0));
+    assert_eq!(app.comment_prefs.font_size(CommentTool::Note), None);
+}
+
 #[test]
 fn zoom_keeps_the_point_under_the_cursor_still() {
     let mut h = harness(|app| {

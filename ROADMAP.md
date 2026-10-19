@@ -1,4 +1,5 @@
 # PdfCraft roadmap
+> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (M5: text-box and callout font-size defaults persist and apply to new comments; #3399; estimates unchanged)
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
