@@ -35,9 +35,25 @@ macro_rules! link {
 }
 
 /// Defines an external function to import.
+///
+/// PdfCraft patch (Windows 7, `x86_64-win7-windows-msvc`): the same `ole32.dll` redirect as on
+/// x86. On x64 no linker collision hides windows-core's binding, but `windows-sys` 0.61 and
+/// `windows` 0.62 would each import combase.dll, which Windows 7 lacks.
 #[cfg(all(windows, not(target_arch = "x86")))]
 #[macro_export]
 macro_rules! link {
+    ("combase.dll" $abi:literal $($link_name:literal)? fn CoTaskMemAlloc $($rest:tt)*) => (
+        $crate::link!("ole32.dll" $abi $($link_name)? fn CoTaskMemAlloc $($rest)*);
+    );
+    ("combase.dll" $abi:literal $($link_name:literal)? fn CoTaskMemFree $($rest:tt)*) => (
+        $crate::link!("ole32.dll" $abi $($link_name)? fn CoTaskMemFree $($rest)*);
+    );
+    ("combase.dll" $abi:literal $($link_name:literal)? fn CoTaskMemRealloc $($rest:tt)*) => (
+        $crate::link!("ole32.dll" $abi $($link_name)? fn CoTaskMemRealloc $($rest)*);
+    );
+    ("combase.dll" $abi:literal $($link_name:literal)? fn CoCreateFreeThreadedMarshaler $($rest:tt)*) => (
+        $crate::link!("ole32.dll" $abi $($link_name)? fn CoCreateFreeThreadedMarshaler $($rest)*);
+    );
     ($library:literal $abi:literal $($link_name:literal)? fn $($function:tt)*) => (
         #[link(name = $library, kind = "raw-dylib", modifiers = "+verbatim")]
         extern $abi {
