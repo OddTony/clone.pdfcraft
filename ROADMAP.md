@@ -2,6 +2,7 @@
 
 **Stage: alpha** · next: beta, ~25% (ready for real work 50% → 75%) and ~400–700 h away
 
+> **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M2 #2660: refresh array recovery on main `98cbd38`; reviewed code and regressions unchanged; estimates unchanged)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M7: the Edit text caret is as tall as the row it is on; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (M6: CSV tab-containing headers; estimates unchanged)
 > **Last reviewed:** 2026-10-18 · **Last updated:** 2026-10-18 · **Change:** minor (M3, #3149: discard render demand after page geometry changes and check the GPU texture limit before upload; estimates unchanged)
@@ -188,6 +189,14 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 - **2026-10-15 (M1, #2267 refresh):** Integrated upstream `99941daa` while retaining the raw-deflate fallback correction and all upstream progress. Only independent documentation conflicts required resolution; focused production and test files are unchanged from the previously green CI head. Estimates unchanged.
 - **2026-10-16 (M10, #1201 partial):** Lossless image export applies each component's Decode pair. Indexed values round and clip before palette lookup. Color-key masks keep raw samples. The existing 16-bit precision limit remains. JPEG and mask Decode, ICC transforms, and calibrated colors remain outside this fix. Estimates unchanged.
 - **2026-10-16 (M3, #2739):** Wrapped revision buttons stay above Binding in Document Properties. A synthetic regression checks control bounds and opens a saved revision at two viewport widths. Estimates unchanged.
+
+- **2026-10-18 (M2, #2660 refresh):** Rebased PR #2683 onto main `98cbd38`, retaining upstream roadmap entries and combining the repair/save evidence with the damaged-array regressions. The recovering iterator, page/content readers and nine regressions are unchanged from `266fb97`; upstream custom-property and OpenAction inspection is retained. Recovery scope and estimates are unchanged.
+
+- **2026-10-16 (M2, #2660 review):** Resolved structural-array entries now advance over a complete syntactic slot before parsing it. A bare `+` accepted by validation is recorded and skipped without the raw-iterator panic, and partially parsed overflowing references cannot split into extra entries. Regressions cover both content readers, inspection, exact pixels, slot counts, valid signed numbers and first/middle/last positions. Positional arrays remain strict. Estimates unchanged.
+
+- **2026-10-16 (M2, #2660):** Refreshed PR #2683 on current main, retaining upstream renderer and signature updates. Rechecked scoped Rust/WebAssembly gates and the headless damaged-array replay. Recovery scope and estimates are unchanged.
+
+- **2026-10-15 (M2, #2660):** Page-tree children and page-content arrays retain readable entries after dangling references or wrong-type slots, preserving order. Inspection reports skipped entries through the existing repair warnings. Synthetic reader and pixel regressions cover first, middle, last and consecutive damaged slots; positional arrays remain strict. Annotation arrays and other typed arrays are unchanged. Estimates unchanged.
 - **2026-10-15 (M2, gap 12):** `cargo xtask text-oracle` scores reading order as well as word F1: the longest common subsequence of the two word sequences over the longer one. F1 is a bag of words and cannot see order at all -- measuring #2431, a change that moves text and nothing else, it called 26 of the 29 files whose output changed identical, where the order score separated 18 improvements from 6 regressions. Reports, does not gate; a disagreement with Poppler, not a verdict. Estimates unchanged.
 - **2026-10-15 (M2, #2305 follow-up):** WinAnsiEncoding 0xA0 and 0xAD and MacRomanEncoding 0xCA extract as the ordinary space and hyphen Annex D.2 names them, in the vendored hayro tables (patch 30) as well as `crates/fonts`, so search, copy and redaction see characters that were hidden behind U+00A0 and U+00AD. Across the pdf.js corpus the soft hyphens we extract fall 117 to 13 and the non-breaking spaces 30 to 26; the rest come from `/ToUnicode`. An explicit `/Differences` name keeps its glyph list value, as pdftotext does. Estimates unchanged.
 - **2026-10-15 (M12, XFA, #2574):** A `pageArea` with no `<occur>` repeats without limit instead of taking a subform's default of one use, so a later page area with `occur max="1"` is no longer drawn (with a copy of its fields) over every body page. A page area's `occur min` is honoured too: one the body never reached gets the pages it still needs after the body (the once-only closing page of the public ISCIII form, with its button, is page 7 of 7). Acrobat Pro shows the form as 7 pages with that page last, as here; when printing, Acrobat keeps that page but leaves it blank (`relevant="-print"` on the page area), which PdfCraft does not do yet. Synthetic regression tests. Estimates unchanged.
@@ -538,12 +547,16 @@ Newest first: the date, what moved, and the new overall estimate.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-18 | minor | M2 #2660: rebase PR #2683 onto main `98cbd38`, retain upstream progress, and preserve the reviewed recovery code and nine synthetic regressions. Scope and estimates unchanged. |
 | 2026-10-15 | minor | M7: the Edit text caret is as tall as the row it is on in a region with several sizes; estimates unchanged. |
 | 2026-10-18 | minor | M4, PR #1919 review: repeated page indices apply each rotation to the latest page-local value, preserving indirect/inherited angles. Synthetic adjacent/interleaved duplicates retain siblings and page contents through incremental and full saves. Estimates unchanged. |
 | 2026-10-18 | minor | M3, #3149: page replacement cancels render demand collected for the previous geometry; all viewer raster upload paths reject empty or oversized textures before cache eviction. Synthetic regressions reproduce the reported 1880×2350 upload at a 2048 limit, retain cached images and unsaved edits, and resume bounded backdrops and tiles. Estimates unchanged. |
 | 2026-10-15 | minor | M6: Plain AcroForm XML imports retain all direct text around comments and processing instructions, including CDATA and character references. Estimates unchanged. |
 | 2026-10-13 | minor | M6: XML/XFDF attribute whitespace survives form and comment export/import; estimates unchanged |
 | 2026-10-14 | minor | M1: raw-deflate fallback preserves decoding-limit errors in strict and tolerant decoding; synthetic filter and COS stream regressions. Estimates unchanged. |
+| 2026-10-16 | minor | M2 #2660 review: consume and parse each structural-array slot within its own bounds; bare plus signs no longer reach the raw iterator panic. Direct-reader, inspection and pixel regressions. Estimates unchanged. |
+| 2026-10-16 | minor | M2 #2660: refresh array recovery on current main, preserve upstream renderer/signature changes, and rerun scoped tests, wasm and headless replay. Estimates unchanged. |
+| 2026-10-15 | minor | M2 #2660: recover later readable pages/content and report skipped array slots; synthetic parser/render regressions. Estimates unchanged. |
 | 2026-10-13 | minor | M9: separate page validation overlays preserve signature artwork, and snapshot tabs reuse instead of multiplying; baked captions remain unchanged (#79 open); estimates unchanged |
 | 2026-10-16 | minor | M10 #1201 partial: lossless image export applies component Decode pairs and Indexed mapping. Estimates unchanged. |
 | 2026-10-15 | minor | M6: CSV export and spreadsheet merging quote tabs, and import distinguishes quoted tabs from TSV delimiters without changing field identities. Estimates unchanged. |

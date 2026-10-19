@@ -46,8 +46,8 @@ milestone = "M1"
 status = "shipped"
 commands = ["file.open"]
 tools = ["doc_open"]
-evidence = ["crates/cos/src/document.rs::damaged_xref_is_reconstructed", "crates/cos/src/parser.rs::indirect_stream_with_wrong_length_recovers", "crates/cos/src/document.rs::self_referential_length_does_not_overflow", "crates/engine/src/tests.rs::a_repaired_file_is_rewritten_by_save_even_without_edits", "crates/automation/tests/automation.rs::saving_a_repaired_file_puts_the_repair_on_disk", "crates/engine/src/tests.rs::a_signed_repaired_file_keeps_its_bytes_when_saved_without_edits", "crates/cos/src/document.rs::a_table_numbered_from_1_that_begins_with_object_0_is_read_from_0"]
-notes = "Save and doc_save write a reconstructed file in full even when nothing was edited, so the repair reaches the disk and the saved file opens without one (#1937); a signed one keeps its bytes, so its signatures stay valid. A repair does not mark the document as having unsaved changes, so closing it does not offer to save the repaired file. A classic table numbered 1 n that begins with object 0's free entry is read from 0 (#2676) and logged."
+evidence = ["crates/render/tests/damaged_arrays.rs::page_tree_retains_readable_siblings_in_order", "crates/render/tests/damaged_arrays.rs::streaming_render_retains_content_after_unreadable_slots", "crates/cos/src/document.rs::damaged_xref_is_reconstructed", "crates/cos/src/parser.rs::indirect_stream_with_wrong_length_recovers", "crates/cos/src/document.rs::self_referential_length_does_not_overflow", "crates/engine/src/tests.rs::a_repaired_file_is_rewritten_by_save_even_without_edits", "crates/automation/tests/automation.rs::saving_a_repaired_file_puts_the_repair_on_disk", "crates/engine/src/tests.rs::a_signed_repaired_file_keeps_its_bytes_when_saved_without_edits", "crates/cos/src/document.rs::a_table_numbered_from_1_that_begins_with_object_0_is_read_from_0"]
+notes = "Save and doc_save write a reconstructed file in full even when nothing was edited, so the repair reaches the disk and the saved file opens without one (#1937); a signed one keeps its bytes, so its signatures stay valid. A repair does not mark the document as having unsaved changes, so closing it does not offer to save the repaired file. A classic table numbered 1 n that begins with object 0's free entry is read from 0 (#2676) and logged. Unreadable page-tree and page-content array slots are skipped without hiding later readable entries (#2660); inspection reports the skipped counts. Annotation arrays and other typed arrays retain their existing behavior."
 
 [[feature]]
 id = "core.malformed-input-safety"
@@ -58,8 +58,8 @@ milestone = "M1"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/ui-egui/tests/ui.rs::garbage_input_is_rejected_without_panicking", "crates/cos/src/parser.rs::garbage_never_panics", "crates/render/src/raster.rs::missing_page_and_garbage_input_fail_gracefully"]
-notes = "fuzzed nightly (M1.10)"
+evidence = ["crates/render/tests/damaged_arrays.rs::streaming_content_reader_retains_streams_after_unparseable_slots", "crates/render/tests/damaged_arrays.rs::resolved_entries_do_not_split_overflowing_references_into_numbers", "crates/ui-egui/tests/ui.rs::garbage_input_is_rejected_without_panicking", "crates/cos/src/parser.rs::garbage_never_panics", "crates/render/src/raster.rs::missing_page_and_garbage_input_fail_gracefully"]
+notes = "fuzzed nightly (M1.10); lexically accepted but unparseable page-tree/content array slots are recorded and skipped without the raw-iterator panic (#2660). Strict positional arrays and other consumers retain their existing behavior."
 
 [[feature]]
 id = "core.repair-log"
@@ -70,7 +70,7 @@ milestone = "M1"
 status = "shipped"
 commands = []
 tools = ["doc_info"]
-evidence = ["crates/ui-egui/tests/viewer.rs::damaged_files_say_they_were_repaired"]
+evidence = ["crates/render/tests/damaged_arrays.rs::page_tree_counts_consecutive_unreadable_slots", "crates/ui-egui/tests/viewer.rs::damaged_files_say_they_were_repaired"]
 notes = "a notice says the file was repaired; Document Properties ▸ Advanced lists the repairs; doc_info reports them"
 
 [[feature]]

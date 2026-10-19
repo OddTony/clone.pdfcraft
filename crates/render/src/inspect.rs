@@ -508,7 +508,9 @@ pub fn inspect(bytes: Arc<Vec<u8>>, password: Option<&str>) -> Result<DocInfo, O
     let mut info = DocInfo { file_size: bytes.len(), pdf_version: version_label(&format!("{:?}", pdf.version())), ..Default::default() };
     let pages = catch_unwind(AssertUnwindSafe(|| {
         let mut out = Vec::new();
+        let mut unreadable_contents = 0usize;
         for (i, page) in pdf.pages().iter().enumerate() {
+            unreadable_contents = unreadable_contents.saturating_add(page.unreadable_content_entries());
             let (w, h) = page.render_dimensions();
             let c = page.intersected_crop_box();
             let rotation = match page.rotation() {
@@ -522,12 +524,15 @@ pub fn inspect(bytes: Arc<Vec<u8>>, password: Option<&str>) -> Result<DocInfo, O
             let (w, h) = if w.is_finite() && h.is_finite() && w >= 1.0 && h >= 1.0 { (w, h) } else { (612.0, 792.0) };
             out.push(PageInfo { width: w, height: h, label: (i + 1).to_string(), crop, rotation });
         }
-        out
+        (out, pdf.pages().unreadable_entries(), unreadable_contents)
     }));
-    match pages {
-        Ok(p) => info.pages = p,
+    let (unreadable_kids, unreadable_contents) = match pages {
+        Ok((p, kids, contents)) => {
+            info.pages = p;
+            (kids, contents)
+        }
         Err(p) => return Err(OpenError::Invalid(format!("the page tree could not be read: {}", crate::raster::panic_message(&p)))),
-    }
+    };
     let options = load_options(password);
     // Geometry no longer needs the renderer parser. Do not overlap its allocations with
     // structural inspection, including the compatibility fallback for damaged files.
@@ -555,6 +560,14 @@ pub fn inspect(bytes: Arc<Vec<u8>>, password: Option<&str>) -> Result<DocInfo, O
         Inspector::new(&doc).fill(tmp);
         Ok(())
     });
+    // Structural inspection replaces auxiliary metadata on success. Append renderer repairs
+    // afterwards so neither that success nor its compatibility fallback can erase them.
+    if unreadable_kids != 0 {
+        info.warnings.push(format!("Skipped {unreadable_kids} unreadable page-tree array entries; readable pages were retained."));
+    }
+    if unreadable_contents != 0 {
+        info.warnings.push(format!("Skipped {unreadable_contents} unreadable page-content array entries; readable streams were retained."));
+    }
     if info.pages.is_empty() {
         return Err(OpenError::Invalid("the document has no pages".into()));
     }

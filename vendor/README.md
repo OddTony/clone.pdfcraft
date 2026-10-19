@@ -5,6 +5,18 @@ licence files unchanged. Every patch is marked `PdfCraft patch:` in the source, 
 PdfCraft test, and should be proposed upstream. Remove the vendored copy once upstream releases
 the fix. Vendoring copyleft code is never allowed (plan/adr/0001).
 
+PdfCraft patches in `hayro-syntax` add `Array::resolved_entries`, which consumes every raw
+slot and exposes unresolved or wrong-type entries as `None`. Only page-tree children and
+page-content arrays opt into skipping those slots; positional and key/value arrays remain
+strict. Page-tree and content counters feed the existing document repair warnings.
+`crates/render/tests/damaged_arrays.rs` covers order, first/middle/last and consecutive bad
+slots, both content-reading paths, rendered pixels, clean controls and strict coordinates
+(#2660). Annotation arrays and other typed arrays are unchanged.
+The iterator uses the same lexical skipper as validation, then parses only that slot.
+A bare `+` accepted by validation can fail object parsing: it produces `None`, never the
+raw iterator's panic. Partially parsed overflowing references remain one failed slot.
+Direct streaming-reader and numeric-slot regressions complement the inspector/pixel cases.
+
 A PdfCraft patch in `hayro-syntax::Page::base_dimensions` expresses the existing one-point floor as a raw reciprocal of `/UserUnit`, rounded upward only when f32 multiplication would fall below one point. Five `pdfcraft-render` regressions with prefix `raster::tests::raw_crop_` cover the observed dimensions, origins and rotations, units 41/47, bounded vector rasters and unchanged nearly-zero A4 fallback. Accepted page-unit policy and licences are unchanged.
 
 | Crate | Version | Licence | Patches | Test |

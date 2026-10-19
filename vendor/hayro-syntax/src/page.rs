@@ -45,6 +45,8 @@ impl PagesContext {
 pub struct Pages<'a> {
     pages: Vec<Page<'a>>,
     xref: &'a XRef,
+    // PdfCraft patch: expose skipped page-tree slots to the document repair log.
+    unreadable_entries: usize,
 }
 
 impl<'a> Pages<'a> {
@@ -59,6 +61,7 @@ impl<'a> Pages<'a> {
         // PdfCraft patch: guard against page-tree cycles (a `/Kids` entry pointing back up
         // the tree), which otherwise recurse until the stack overflows.
         let mut visited = BTreeSet::new();
+        let mut unreadable_entries = 0;
         resolve_pages(
             pages_dict,
             &mut pages,
@@ -66,9 +69,14 @@ impl<'a> Pages<'a> {
             Resources::new(Dict::empty(), None, ctx),
             &mut visited,
             0,
+            &mut unreadable_entries,
         )?;
 
-        Some(Self { pages, xref })
+        Some(Self {
+            pages,
+            xref,
+            unreadable_entries,
+        })
     }
 
     /// Create a new `Pages` object by bruteforce-searching.
@@ -95,12 +103,22 @@ impl<'a> Pages<'a> {
             return None;
         }
 
-        Some(Self { pages, xref })
+        Some(Self {
+            pages,
+            xref,
+            unreadable_entries: 0,
+        })
     }
 
     /// Return the xref table (of the document the pages belong to).   
     pub fn xref(&self) -> &'a XRef {
         self.xref
+    }
+
+    /// PdfCraft patch: the number of unresolved or wrong-type `/Kids` slots skipped
+    /// while retaining the readable page-tree entries that follow them.
+    pub fn unreadable_entries(&self) -> usize {
+        self.unreadable_entries
     }
 }
 
@@ -126,6 +144,7 @@ fn resolve_pages<'a>(
     resources: Resources<'a>,
     visited: &mut BTreeSet<ObjectIdentifier>,
     depth: usize,
+    unreadable_entries: &mut usize,
 ) -> Option<()> {
     // PdfCraft patch: skip nodes already visited and absurdly deep trees.
     if depth > MAX_PAGE_TREE_DEPTH {
@@ -155,10 +174,23 @@ fn resolve_pages<'a>(
 
     let kids = pages_dict.get::<Array<'a>>(KIDS)?;
 
-    for dict in kids.iter::<Dict<'_>>() {
+    // PdfCraft patch: one bad child must not hide all its readable siblings.
+    for entry in kids.resolved_entries::<Dict<'_>>() {
+        let Some(dict) = entry else {
+            *unreadable_entries = unreadable_entries.saturating_add(1);
+            continue;
+        };
         match dict.get::<Name<'_>>(TYPE).as_deref() {
             Some(PAGES) => {
-                resolve_pages(&dict, entries, ctx.clone(), resources.clone(), visited, depth + 1);
+                resolve_pages(
+                    &dict,
+                    entries,
+                    ctx.clone(),
+                    resources.clone(),
+                    visited,
+                    depth + 1,
+                    unreadable_entries,
+                );
             }
             // Let's be lenient and assume it's a `Page` in case it's `None` or something else
             // (see corpus test case 0083781).
@@ -461,12 +493,31 @@ impl<'a> Page<'a> {
         self.content_reader_within(MAX_DECODED_STREAM)
     }
 
+    /// PdfCraft patch: unresolved or wrong-type `/Contents` array slots skipped by
+    /// both content-reading paths, for the document repair log. This does not decode
+    /// streams or count stream-decoding errors.
+    pub fn unreadable_content_entries(&self) -> usize {
+        self.inner
+            .get::<Array<'a>>(CONTENTS)
+            .map_or(0, |array| {
+                array
+                    .resolved_entries::<Stream<'a>>()
+                    .filter(Option::is_none)
+                    .count()
+            })
+    }
+
     /// PdfCraft patch: [`Page::content_reader`], with `cap` in place of `MAX_DECODED_STREAM`.
     fn content_reader_within(&self, cap: usize) -> ContentReader<'a> {
         if let Some(stream) = self.inner.get::<Stream<'a>>(CONTENTS) {
             ContentReader::new(vec![stream], false, cap)
         } else if let Some(array) = self.inner.get::<Array<'a>>(CONTENTS) {
-            ContentReader::new(array.iter::<Stream<'a>>().collect(), true, cap)
+            // PdfCraft patch: keep streams after unreadable array slots (#2660).
+            ContentReader::new(
+                array.resolved_entries::<Stream<'a>>().flatten().collect(),
+                true,
+                cap,
+            )
         } else {
             warn!("contents entry of page was neither stream nor array of streams");
 
@@ -490,7 +541,8 @@ impl<'a> Page<'a> {
                 } else if let Some(array) = self.inner.get::<Array<'_>>(CONTENTS) {
                     let mut collected = vec![];
 
-                    for stream in array.iter::<Stream<'_>>() {
+                    // PdfCraft patch: match the streaming reader's recovery (#2660).
+                    for stream in array.resolved_entries::<Stream<'_>>().flatten() {
                         // PdfCraft patch: the streams share one `MAX_DECODED_STREAM` (an array
                         // naming one inflating stream twenty times decoded 5 GB).
                         let left = MAX_DECODED_STREAM.saturating_sub(collected.len());
