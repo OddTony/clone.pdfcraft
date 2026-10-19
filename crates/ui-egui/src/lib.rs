@@ -912,7 +912,8 @@ impl PdfCraftApp {
             space_hand: None,
             comment_prefs: Default::default(),
             theme: ThemeKind::Light,
-            theme_preference: ThemePreference::Light,
+            // A fresh install follows the desktop's appearance (#1248); saved settings override.
+            theme_preference: ThemePreference::System,
             reading_colors: Default::default(),
             #[cfg(target_os = "linux")]
             desktop_theme: None,
