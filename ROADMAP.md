@@ -537,6 +537,8 @@ Newest first: the date, what moved, and the new overall estimate.
 
 ## Revision history
 
+**2026-10-19 · minor:** M6/#3390 candidate: compatible text widgets can share a field name and value; selected widgets can be deleted individually. Synthetic form and UI regressions cover save/reopen, selection and undo. Other field types, incompatible properties and some tagged or complex structures remain open. Estimates unchanged.
+
 **2026-10-15 · minor:** M14/#2383 candidate: GPU device requests clamp unsupported limits while retaining the adapter texture extent. Synthetic V3D/downlevel regressions and Windows GPU-required tests pass; Raspberry Pi hardware remains unverified. Estimates unchanged.
 
 | Date | Change | Summary |

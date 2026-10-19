@@ -616,3 +616,81 @@ fn actions_tab_adds_and_removes_actions() {
         ]
     );
 }
+
+#[test]
+fn renaming_text_field_to_existing_name_keeps_selected_widget() {
+    let mut h = harness();
+    assert!(h.state_mut().execute("form.add.text"));
+    h.run_steps(2);
+    let (a, b) = (at(&h, 40.0, 300.0), at(&h, 200.0, 322.0));
+    drag(&mut h, a, b);
+    assert!(h.state_mut().execute("form.add.text"));
+    h.run_steps(2);
+    let (a, b) = (at(&h, 40.0, 345.0), at(&h, 200.0, 367.0));
+    drag(&mut h, a, b);
+    assert_eq!(h.state().views[0].prepare.selected.as_ref().map(|s| s.0.as_str()), Some("Text2"));
+    assert!(h.state_mut().execute("form.field.properties"));
+    h.run_steps(2);
+    h.state_mut().field_props.as_mut().expect("properties open").name = "Text1".into();
+    h.get_by_label("OK").click();
+    h.run_steps(4);
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    let shared: Vec<_> = doc.form.iter().filter(|f| f.name == "Text1").collect();
+    assert_eq!(shared.len(), 1);
+    assert_eq!(shared[0].widgets.len(), 2);
+    assert_eq!(s.views[0].prepare.selected, Some(("Text1".into(), 1)));
+    h.key_press(egui::Key::Delete);
+    h.run_steps(4);
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    let remaining = doc.form.iter().find(|f| f.name == "Text1").expect("the other widget must remain");
+    assert_eq!(remaining.widgets.len(), 1);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    h.run_steps(3);
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    assert_eq!(doc.form.iter().find(|f| f.name == "Text1").unwrap().widgets.len(), 2, "undo restores the removed widget");
+    h.state_mut().views[0].prepare.selected = Some(("Text1".into(), 0));
+    h.state_mut().views[0].prepare.also = vec![("Text1".into(), 1)];
+    h.key_press(egui::Key::Delete);
+    h.run_steps(3);
+    assert!(!names(&h).contains(&"Text1".into()), "deleting both widgets removes the field");
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    h.run_steps(3);
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    assert_eq!(doc.form.iter().find(|f| f.name == "Text1").unwrap().widgets.len(), 2, "one undo restores both widgets");
+}
+
+#[test]
+fn deleting_multiple_selected_radio_widgets_keeps_field_level_behavior() {
+    use pdfcraft_engine::{Edit, NewField};
+    let mut h = harness();
+    assert!(h.state_mut().execute("form.add.text"));
+    let first = Edit::AddField {
+        page: 0,
+        rect: [30.0, 30.0, 44.0, 44.0],
+        kind: NewField::Radio { group: Some("UiRadio".into()), export: "One".into() },
+        name: None,
+    };
+    let second = Edit::AddField {
+        page: 0,
+        rect: [60.0, 30.0, 74.0, 44.0],
+        kind: NewField::Radio { group: Some("UiRadio".into()), export: "Two".into() },
+        name: None,
+    };
+    assert!(h.state_mut().apply_edit(first));
+    assert!(h.state_mut().apply_edit(second));
+    h.run_steps(3);
+    h.state_mut().views[0].prepare.selected = Some(("UiRadio".into(), 0));
+    h.state_mut().views[0].prepare.also = vec![("UiRadio".into(), 1)];
+    h.key_press(egui::Key::Delete);
+    h.run_steps(3);
+    assert!(!names(&h).contains(&"UiRadio".into()));
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+    h.run_steps(3);
+    let s = h.state();
+    let doc = s.session.get(s.views[0].id).unwrap();
+    assert_eq!(doc.form.iter().find(|f| f.name == "UiRadio").unwrap().widgets.len(), 2);
+}

@@ -537,7 +537,23 @@ pub fn add_field(doc: &mut Document, page: usize, rect: [f64; 4], kind: &NewFiel
         NewField::Radio { group, .. } => existing.iter().find(|f| f.kind == FieldKind::Radio && Some(&f.name) == group.as_ref()).cloned(),
         _ => None,
     };
-    if radio_group.is_none() && existing.iter().any(|f| f.name == name) {
+    if radio_group.is_none()
+        && let Some(existing_field) = existing.iter().find(|f| f.name == name)
+    {
+        if let NewField::Text { multiline } = kind
+            && existing_field.kind == FieldKind::Text
+        {
+            if existing_field.locked() {
+                return invalid(format!("{} is locked: unlock it first", existing_field.name));
+            }
+            if existing_field.has(flags::MULTILINE) != *multiline {
+                return invalid(format!("a field named {name:?} already exists with incompatible properties"));
+            }
+            let model = existing_field.widgets.first().cloned().ok_or_else(|| FormError::Invalid(format!("{name} has no widget")))?;
+            ensure_safe_widget_split(doc, existing_field, &model)?;
+            append_shared_widgets(doc, existing_field, &model, &pages, &[(page, Some(rect))])?;
+            return Ok(name);
+        }
         return invalid(format!("a field named {name:?} already exists"));
     }
     let af = ensure_form(doc)?;
@@ -902,6 +918,39 @@ pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<S
     if f.locked() && props.locked != Some(false) && *props != (FieldProps { locked: props.locked, ..FieldProps::default() }) {
         return invalid(format!("{name} is locked: unlock it first"));
     }
+    // Identically named text fields are one logical field. Merge their widgets under the
+    // existing field rather than creating two dictionaries with ambiguous widget indices.
+    if let Some(n) = props.name.as_deref().map(str::trim).filter(|n| !n.is_empty() && !n.contains('.')) {
+        let prefix = f.name.rsplit_once('.').map(|(p, _)| format!("{p}.")).unwrap_or_default();
+        let full = format!("{prefix}{n}");
+        if let Some(target) = all.iter().find(|x| x.name == full && x.obj != f.obj) {
+            if target.locked() {
+                return invalid(format!("{} is locked: unlock it first", target.name));
+            }
+            if *props != (FieldProps { name: props.name.clone(), ..FieldProps::default() }) {
+                return invalid("rename the field before changing its other properties");
+            }
+            if all.iter().filter(|x| x.name == f.name).count() != 1
+                || all.iter().filter(|x| x.name == full).count() != 1
+                || f.kind != FieldKind::Text
+                || target.kind != FieldKind::Text
+                || f.flags != target.flags
+                || f.max_len != target.max_len
+                || f.default != target.default
+                || f.da != target.da
+                || f.quadding != target.quadding
+                || f.tooltip != target.tooltip
+                || f.actions != target.actions
+            {
+                return invalid(format!("a field named {full:?} already exists with incompatible properties"));
+            }
+            // Keep the public form operation atomic if a malformed PDF fails during the merge.
+            let mut staged = doc.clone();
+            merge_text_field_widgets(&mut staged, &f, target)?;
+            *doc = staged;
+            return Ok(full);
+        }
+    }
     if let Some(lock) = props.locked {
         for w in &f.widgets {
             let flags = doc.get(w.obj).as_dict().and_then(|d| d.get(b"F").and_then(|v| doc.resolve(v).as_int())).unwrap_or(0);
@@ -920,12 +969,11 @@ pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<S
         if n.is_empty() || n.contains('.') {
             return invalid("field names can't be empty or contain a period");
         }
-        if all.iter().any(|x| x.name == n) {
-            return invalid(format!("a field named {n:?} already exists"));
-        }
-        // Rename the terminal part (the field's own /T).
         let prefix = f.name.rsplit_once('.').map(|(p, _)| format!("{p}.")).unwrap_or_default();
         new_name = format!("{prefix}{n}");
+        if all.iter().any(|x| x.name == new_name && x.obj != f.obj) {
+            return invalid(format!("a field named {new_name:?} already exists"));
+        }
         doc.update_dict(f.obj, |d| d.set(b"T".to_vec(), PdfString::text(n)))?;
     }
     // The new default appearance when the size or the look changes.
@@ -1216,6 +1264,44 @@ pub fn set_props(doc: &mut Document, name: &str, props: &FieldProps) -> Result<S
     Ok(new_name)
 }
 
+/// Delete one widget while retaining the field and its other widgets.
+pub fn delete_widget(doc: &mut Document, name: &str, index: usize) -> Result<(), FormError> {
+    let f = fields(doc).into_iter().find(|f| f.name == name).ok_or_else(|| FormError::NoSuchField(name.into()))?;
+    let w = f.widgets.get(index).ok_or_else(|| FormError::Invalid(format!("{name} has no widget {}", index.saturating_add(1))))?;
+    if f.kind != FieldKind::Text {
+        return invalid("separate widget removal currently supports text fields only");
+    }
+    if f.widgets.len() == 1 {
+        return delete_field(doc, name);
+    }
+    if doc.get(w.obj).as_dict().is_some_and(|d| d.contains(b"StructParent")) {
+        return invalid("a tagged widget cannot be removed separately");
+    }
+    let parent = doc.get(w.obj).as_dict().and_then(|d| d.reference(b"Parent"));
+    if parent != Some(f.obj) {
+        return invalid("the widget is not a direct child of its field");
+    }
+    let children =
+        doc.get(f.obj).as_dict().and_then(|d| d.get(b"Kids")).map(|k| doc.resolve(k)).and_then(|k| k.as_array().cloned()).unwrap_or_default();
+    if !children.iter().any(|o| o.as_ref() == Some(w.obj)) {
+        return invalid("the field does not contain this widget");
+    }
+    for page in page_refs(doc) {
+        let Some(a) = doc.get(page).as_dict().and_then(|d| d.get(b"Annots").cloned()) else { continue };
+        let list = doc.resolve(&a).as_array().cloned().unwrap_or_default();
+        let kept: Vec<Object> = list.iter().filter(|o| o.as_ref() != Some(w.obj)).cloned().collect();
+        if kept.len() != list.len() {
+            match a.as_ref() {
+                Some(r) if doc.get(r).as_array().is_some() => doc.set(r, Object::Array(kept)),
+                _ => doc.update_dict(page, |d| d.set(b"Annots".to_vec(), Object::Array(kept)))?,
+            }
+        }
+    }
+    let kept = children.into_iter().filter(|o| o.as_ref() != Some(w.obj)).collect();
+    doc.update_dict(f.obj, |d| d.set(b"Kids".to_vec(), Object::Array(kept)))?;
+    Ok(())
+}
+
 /// Delete a field: its widgets leave their pages and the field leaves the form.
 pub fn delete_field(doc: &mut Document, name: &str) -> Result<(), FormError> {
     let all = fields(doc);
@@ -1283,6 +1369,53 @@ pub fn duplicate_field(doc: &mut Document, name: &str, pages: &[usize]) -> Resul
     if targets.is_empty() {
         return Ok(0);
     }
+    let targets: Vec<_> = targets.into_iter().map(|page| (page, None)).collect();
+    append_shared_widgets(doc, &f, &model, &refs, &targets)
+}
+
+fn ensure_safe_widget_split(doc: &Document, field: &Field, model: &Widget) -> Result<(), FormError> {
+    if model.obj == field.obj
+        && (model.page.is_none()
+            || doc.get(model.obj).as_dict().is_none_or(|d| {
+                d.iter().any(|(key, _)| {
+                    !matches!(
+                        key.as_slice(),
+                        b"Type"
+                            | b"Subtype"
+                            | b"Rect"
+                            | b"P"
+                            | b"F"
+                            | b"MK"
+                            | b"BS"
+                            | b"Border"
+                            | b"H"
+                            | b"AP"
+                            | b"AS"
+                            | b"FT"
+                            | b"T"
+                            | b"V"
+                            | b"DV"
+                            | b"Ff"
+                            | b"DA"
+                            | b"Q"
+                            | b"MaxLen"
+                            | b"TU"
+                            | b"TM"
+                            | b"DS"
+                            | b"RV"
+                            | b"AA"
+                            | b"DR"
+                            | b"Parent"
+                    )
+                })
+            }))
+    {
+        return invalid("this field cannot be safely split into widgets");
+    }
+    Ok(())
+}
+
+fn split_merged_widget(doc: &mut Document, f: &Field, model: &Widget, refs: &[ObjRef]) -> Result<ObjRef, FormError> {
     // A merged field/widget becomes a field with one widget kid.
     let mut model_ref = model.obj;
     if model.obj == f.obj {
@@ -1318,11 +1451,110 @@ pub fn duplicate_field(doc: &mut Document, name: &str, pages: &[usize]) -> Resul
         }
         model_ref = kr;
     }
+    Ok(model_ref)
+}
+
+/// Move a compatible text field's widgets under the existing field, keeping their page references.
+fn merge_text_field_widgets(doc: &mut Document, source: &Field, target: &Field) -> Result<(), FormError> {
+    let model = target.widgets.first().ok_or_else(|| FormError::Invalid(format!("{} has no widget", target.name)))?;
+    if source.widgets.is_empty() || target.widgets.is_empty() {
+        return invalid("both fields need widgets");
+    }
+    let source_dict = doc.get(source.obj).as_dict().cloned().ok_or_else(|| FormError::Invalid("field is not a dictionary".into()))?;
+    let source_is_widget = source.widgets.len() == 1 && source.widgets[0].obj == source.obj;
+    if source_dict.contains(b"AA") {
+        return invalid("a field with additional actions cannot be merged");
+    }
+    if !source_is_widget
+        && source_dict.iter().any(|(key, _)| {
+            !matches!(
+                key.as_slice(),
+                b"FT" | b"T" | b"V" | b"DV" | b"Ff" | b"DA" | b"Q" | b"MaxLen" | b"TU" | b"TM" | b"DS" | b"RV" | b"Parent" | b"Kids"
+            )
+        })
+    {
+        return invalid("a field with extra properties cannot be merged safely");
+    }
+    if !source_is_widget {
+        let kids = source_dict.get(b"Kids").map(|k| doc.resolve(k)).and_then(|k| k.as_array().cloned()).unwrap_or_default();
+        if kids.len() != source.widgets.len() || kids.iter().zip(&source.widgets).any(|(k, w)| k.as_ref() != Some(w.obj)) {
+            return invalid("a nested field cannot be merged");
+        }
+    }
+    ensure_safe_widget_split(doc, target, model)?;
+    let refs = page_refs(doc);
+    split_merged_widget(doc, target, model, &refs)?;
+    // Remove only the source field from its parent; its widgets stay in page /Annots.
+    let parent = source_dict.reference(b"Parent");
+    let remove_from = |doc: &mut Document, holder: ObjRef, key: &[u8]| -> Result<(), FormError> {
+        let mut d = doc.get(holder).as_dict().cloned().ok_or_else(|| FormError::Invalid("field parent is not a dictionary".into()))?;
+        let list = d
+            .get(key)
+            .map(|o| doc.resolve(o))
+            .and_then(|o| o.as_array().cloned())
+            .ok_or_else(|| FormError::Invalid("field parent has no field list".into()))?;
+        if list.iter().filter(|o| o.as_ref() == Some(source.obj)).count() != 1 {
+            return invalid("field parent does not uniquely contain the source field");
+        }
+        d.set(key.to_vec(), Object::Array(list.into_iter().filter(|o| o.as_ref() != Some(source.obj)).collect()));
+        doc.set(holder, Object::Dict(d));
+        Ok(())
+    };
+    if let Some(parent) = parent {
+        remove_from(doc, parent, b"Kids")?;
+    } else {
+        let root = doc.root().ok_or(FormError::NoForm)?;
+        match doc.get(root).as_dict().and_then(|d| d.get(b"AcroForm").cloned()) {
+            Some(Object::Ref(af)) => remove_from(doc, af, b"Fields")?,
+            Some(Object::Dict(mut af)) => {
+                let list = af
+                    .get(b"Fields")
+                    .map(|o| doc.resolve(o))
+                    .and_then(|o| o.as_array().cloned())
+                    .ok_or_else(|| FormError::Invalid("AcroForm has no field list".into()))?;
+                if list.iter().filter(|o| o.as_ref() == Some(source.obj)).count() != 1 {
+                    return invalid("AcroForm does not uniquely contain the source field");
+                }
+                af.set(b"Fields".to_vec(), Object::Array(list.into_iter().filter(|o| o.as_ref() != Some(source.obj)).collect()));
+                doc.update_dict(root, |d| d.set(b"AcroForm".to_vec(), Object::Dict(af)))?;
+            }
+            _ => return Err(FormError::NoForm),
+        }
+    }
+    let mut kids =
+        doc.get(target.obj).as_dict().and_then(|d| d.get(b"Kids")).map(|k| doc.resolve(k)).and_then(|k| k.as_array().cloned()).unwrap_or_default();
+    for w in &source.widgets {
+        doc.update_dict(w.obj, |d| {
+            if source_is_widget {
+                for k in [&b"FT"[..], b"T", b"V", b"DV", b"Ff", b"DA", b"Q", b"MaxLen", b"TU", b"TM", b"DS", b"RV"] {
+                    d.remove(k);
+                }
+            }
+            d.set(b"Parent".to_vec(), Object::Ref(target.obj));
+        })?;
+        kids.push(Object::Ref(w.obj));
+    }
+    doc.update_dict(target.obj, |d| d.set(b"Kids".to_vec(), Object::Array(kids)))?;
+    redraw_field(doc, &target.name)
+}
+
+fn append_shared_widgets(
+    doc: &mut Document,
+    f: &Field,
+    model: &Widget,
+    refs: &[ObjRef],
+    targets: &[(usize, Option<[f64; 4]>)],
+) -> Result<usize, FormError> {
+    let name = &f.name;
+    let model_ref = split_merged_widget(doc, f, model, refs)?;
     let template = doc.get(model_ref).as_dict().cloned().unwrap_or_default();
     let mut added = Vec::new();
-    for p in &targets {
-        let pr = refs[*p];
+    for (page, rect) in targets {
+        let pr = refs[*page];
         let mut w = template.clone();
+        if let Some(rect) = rect {
+            w.set(b"Rect".to_vec(), Object::Array(rect.iter().map(|v| Object::Real(*v)).collect()));
+        }
         w.set(b"P".to_vec(), Object::Ref(pr));
         w.set(b"Parent".to_vec(), Object::Ref(f.obj));
         w.remove(b"StructParent");
@@ -1342,11 +1574,10 @@ pub fn duplicate_field(doc: &mut Document, name: &str, pages: &[usize]) -> Resul
         }
         added.push(wr);
     }
-    doc.update_dict(f.obj, |d| {
-        let mut kids = d.get(b"Kids").and_then(|k| k.as_array().cloned()).unwrap_or_default();
-        kids.extend(added.iter().map(|r| Object::Ref(*r)));
-        d.set(b"Kids".to_vec(), Object::Array(kids));
-    })?;
+    let mut kids =
+        doc.get(f.obj).as_dict().and_then(|d| d.get(b"Kids")).map(|k| doc.resolve(k)).and_then(|k| k.as_array().cloned()).unwrap_or_default();
+    kids.extend(added.iter().map(|r| Object::Ref(*r)));
+    doc.update_dict(f.obj, |d| d.set(b"Kids".to_vec(), Object::Array(kids)))?;
     redraw_field(doc, name)?;
     Ok(added.len())
 }
