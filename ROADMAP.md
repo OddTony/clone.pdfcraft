@@ -170,13 +170,12 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+
+- **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
+
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
 
 - **2026-10-18 (M7, #3212):** Headers, Bates numbers, watermarks and added text stay visible after unfinished marked content, with original content preserved.
-
-- **2026-10-18 (M2, #2980 refresh):** Merged upstream `4db6ac4a`, preserving independent roadmap updates and the existing TrueType glyph-selection code and regression tests. Estimates unchanged.
-- **2026-10-17 (M2, #2980 review):** TrueType glyph selection keeps Symbolic mapping and extraction-only ToUnicode behavior; name-derived Unicode cmap and post-name aliases remain supported. Synthetic tests cover the distinction. The unavailable original PDFs from #2159/#2426 remain unverified. Estimates unchanged.
-
 - **2026-10-15 (M7, Edit text caret):** In a text region that mixes sizes (a 24 pt title over 12 pt lines), the inline editor's caret on a small row was as tall as the region's first size and reached into the row below: egui draws the caret at least one row of the text field's font tall, and that font had the paragraph's first size. The field's font is now half the region's smallest size, so each row's own height decides. Kittest regression; checked in the app on a real document. Estimates unchanged.
 - **2026-10-16 (M3, #2781):** The Pages panel follows the current page, as Acrobat's page thumbnails do: going to a page whose thumbnail is out of sight (scrolling, Page Down, Go to page, a bookmark) scrolls the panel just enough to show it. A thumbnail already in view, or clicked, leaves the panel where it is, and a page change while the user scrolls the panel or drags thumbnails does not move it. Estimates unchanged.
 - **2026-10-16 (M12, #1645):** CLI info, text and render use the engine's dynamic XFA layout rather than placeholder pages. Synthetic two-page and encrypted-form regressions cover counts, text, pixels, copy permissions and unchanged input bytes. Estimates unchanged.
@@ -184,6 +183,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 - **2026-10-18 (M4, PR #1919 review):** repeated page indices apply each rotation to the latest page-local value, preserving indirect/inherited angles. Synthetic adjacent/interleaved duplicates retain siblings and page contents through incremental and full saves. Estimates unchanged.
 - **2026-10-15 (M4, #1919 refresh):** Integrated upstream `99941daa` while retaining the indirect page rotation correction and all upstream progress. Only independent documentation conflicts required resolution; focused production and test files are unchanged from the previously green CI head. Estimates unchanged.
 - **2026-10-18 (M3, #3149):** Page replacement cancels render demand collected for the previous geometry; all viewer raster upload paths reject empty or oversized textures before cache eviction. Synthetic regressions reproduce the reported 1880×2350 upload at a 2048 limit, retain cached images and unsaved edits, and resume bounded backdrops and tiles. Estimates unchanged.
+- **2026-10-19 (M3, #3360):** Switching between Read and the docking workspace retains the current document’s scroll position at fixed zoom, including within-page position; separate tabs retain their own offsets. Estimates unchanged.
 - **2026-10-18 (M8, #1350):** Integrated current main while preserving content-stream comment boundaries. Hidden-text cleanup retires unused named replacement descriptions on rewritten pages and forms, including inherited/shared resource holders, without removing descriptions still used by surviving content. Synthetic saved-byte and preservation regressions cover the cleanup. Estimates unchanged.
 - **2026-10-17 (M4, #2997):** Dragging page thumbnails in the Organize grid with Ctrl held (Option on macOS) drops copies at the gap instead of moving the pages: a "+" badge sits by the pointer, the copies land at the gap selected, and one undo step ("Duplicate pages") takes them out again. `page_duplicate` takes `at` (1-based, where the first copy goes; left out, after the last of them) so agents can drive the same thing, and the UI control channel's `ui.drag` modifiers now reach gestures that read the input state. Estimates unchanged.
 - **2026-10-15 (M6, AcroForm XML text):** Plain AcroForm XML imports retain all direct text around comments and processing instructions, including CDATA and character references. Synthetic regressions verify exact values and unknown catalog data after incremental and full save/reopen. Nested-element and XFA interpretation are unchanged. Estimates unchanged.
@@ -578,5 +578,3 @@ Newest first: the date, what moved, and the new overall estimate.
 - **2026-10-13 (M7):** Edit a PDF ▸ Add content: Header and footer, Watermark and Background open an Add / Update / Remove menu (Update and Remove enabled only when the document has that mark), as Acrobat's Watermark control does. The catalogue gains `ToolItem::actions`, so any tool can list more commands (#1192).
 
 - **2026-10-18 (M8, #1350):** Published the history-preserving integration; simplified the inherited-form resource guard for Rust 1.96 Clippy. Formatting, 64 redaction tests, scoped Clippy, layering, assets and the scoped wasm check pass locally. CI remains pending; estimates unchanged.
-
-- **2026-10-18 (PR #2980 integration):** M2: integrate upstream b0e5c6eb while retaining accented glyph mapping and exact suffixed post-name precedence; original issue PDFs remain unverified. Scope and estimates unchanged.
