@@ -41,7 +41,7 @@ impl Default for OcrDraft {
 impl OcrDraft {
     /// The recognition settings these choices make.
     pub fn settings(&self) -> OcrSettings {
-        OcrSettings { dpi: self.dpi as f32, language: self.language.clone(), skip_text_pages: !self.text_pages }
+        OcrSettings { dpi: self.dpi as f32, language: self.language.clone(), skip_text_pages: !self.text_pages, ..Default::default() }
     }
 }
 
@@ -65,6 +65,9 @@ pub struct BatchProgress {
 pub struct OcrRun {
     pub doc: DocId,
     pub progress: Arc<Mutex<OcrProgress>>,
+    /// Started by Edit on a scanned page, not asked for: it shows no progress, and says nothing when
+    /// it found no words (a page with text of its own is skipped, and Edit must not make noise).
+    pub automatic: bool,
 }
 
 pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
@@ -165,7 +168,63 @@ impl PdfCraftApp {
             OcrPages::Range => (d.from.saturating_sub(1)..d.to).collect(),
         };
         let settings = d.settings();
-        let Some(job) = self.session.ocr_job(id, &pages, settings) else { return };
+        self.start_ocr_pages(id, &pages, settings, false);
+    }
+
+    /// Edit on a scanned page: like Acrobat's "Converting scanned page to Editable Text and
+    /// Images", the page's words are recognized first, so that they open for editing (Edit text &
+    /// images groups the recognised words into phrases). Runs once per page, for the page in view
+    /// while Edit is on (its tab, or the Edit text & images or Add text tool). The page must be a
+    /// picture (an image covering at least half of it) with no text of its own: comments and text
+    /// boxes over it do not count as text, but real page text does, and such a page (a flyer with a
+    /// background picture) is left alone, and is judged again only when the document changes. It
+    /// is one undoable step, "Recognize text", and is not run again for that page after Undo.
+    pub(crate) fn auto_ocr_scanned_page(&mut self) {
+        // Edit is on when its panel is open (the Edit tab) or Edit text & images or Add text is picked,
+        // the same test the page view uses for editing content.
+        let editing = (self.left_open && self.left == crate::LeftPanel::Tool("edit"))
+            || matches!(self.quick_tool, crate::QuickTool::EditText | crate::QuickTool::AddText);
+        if !editing || self.ocr_run.is_some() || self.ocr_batch.is_some() {
+            return;
+        }
+        let Some((vi, id)) = self.active_ids() else { return };
+        let page = self.views[vi].current;
+        if self.views[vi].auto_ocr_tried.contains(&page) {
+            return;
+        }
+        let Some(doc) = self.session.get(id) else { return };
+        if doc.read_only_reason.is_some() || !doc.allows_modification() {
+            return;
+        }
+        // A page found not to be a scan is judged again only once the document has changed, not
+        // every frame (listing its images parses the page).
+        let generation = doc.edit_generation();
+        if self.views[vi].auto_ocr_skipped.get(&page) == Some(&generation) {
+            return;
+        }
+        let Some(info) = doc.info.pages.get(page) else { return };
+        let page_area = f64::from(info.width) * f64::from(info.height);
+        let covered = doc.page_images(page).iter().any(|i| {
+            let [x0, y0, x1, y1] = i.visible_rect.unwrap_or(i.rect);
+            page_area > 0.0 && ((x1 - x0) * (y1 - y0)).abs() >= 0.5 * page_area
+        });
+        if !covered || !pdfcraft_engine::ocr::available() {
+            self.views[vi].auto_ocr_skipped.insert(page, generation);
+            return;
+        }
+        self.views[vi].auto_ocr_tried.insert(page);
+        // Only a page with no text of its own is read. Comments and text boxes over the picture do
+        // not count as its text (a scan with a few comments is still a scan, as in Acrobat), but
+        // a page with real text and a background picture is left alone.
+        let mut settings = self.ocr_draft.settings();
+        settings.skip_text_pages = true;
+        settings.native_text_only = true;
+        self.start_ocr_pages(id, &[page], settings, true);
+    }
+
+    /// Recognize `pages` (0-based; empty = all) of document `id` in the background.
+    fn start_ocr_pages(&mut self, id: DocId, pages: &[usize], settings: OcrSettings, automatic: bool) {
+        let Some(job) = self.session.ocr_job(id, pages, settings) else { return };
         let progress = Arc::new(Mutex::new(OcrProgress { total: job.pages.len(), ..Default::default() }));
         let p = progress.clone();
         let work = move || {
@@ -189,7 +248,7 @@ impl PdfCraftApp {
         }
         #[cfg(target_arch = "wasm32")]
         work();
-        self.ocr_run = Some(OcrRun { doc: id, progress });
+        self.ocr_run = Some(OcrRun { doc: id, progress, automatic });
         self.poll_ocr();
     }
 
@@ -313,7 +372,7 @@ impl PdfCraftApp {
             }
         }
         let Some(run) = self.ocr_run.as_ref() else { return };
-        let (doc, progress) = (run.doc, run.progress.clone());
+        let (doc, progress, automatic) = (run.doc, run.progress.clone(), run.automatic);
         let Ok(mut s) = progress.lock() else { return };
         let Some(result) = s.result.take() else {
             let msg = crate::i18n::fmt(
@@ -321,7 +380,7 @@ impl PdfCraftApp {
                 &[("d", &(s.done + 1).min(s.total.max(1)).to_string()), ("t", &s.total.max(1).to_string())],
             );
             drop(s);
-            if self.toast.as_ref().is_none_or(|t| t.0 != msg) {
+            if !automatic && self.toast.as_ref().is_none_or(|t| t.0 != msg) {
                 self.notify(msg);
             }
             if let Some(ctx) = &self.ctx {
@@ -346,6 +405,10 @@ impl PdfCraftApp {
                     && let Some(view) = self.views.iter_mut().find(|v| v.id == doc)
                 {
                     view.document_changed(&info);
+                }
+                // An automatic run that found nothing (a page that has text of its own) says nothing.
+                if automatic && words == 0 {
+                    return;
                 }
                 let words_part = if words == 1 {
                     crate::i18n::fmt(tl!("Recognized 1 word"), &[])
