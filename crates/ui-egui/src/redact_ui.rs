@@ -679,3 +679,88 @@ pub(crate) fn sanitize_body(ui: &mut egui::Ui, t: &Tokens) -> (bool, bool) {
     ui.add_space(12.0);
     buttons(ui, "Sanitize", true)
 }
+
+/// The selected mark and a list of destination pages (blank means every other page).
+pub(crate) struct RepeatDraft {
+    pub document: pdfcraft_engine::DocId,
+    pub page: usize,
+    pub annotation: usize,
+    pub pages: String,
+}
+
+pub(crate) fn repeat_body(ui: &mut egui::Ui, draft: &mut RepeatDraft, count: usize) -> (bool, bool) {
+    ui.label(egui::RichText::new(tl!("Repeat on pages…")).font(crate::theme::semibold(18.0)));
+    ui.add_space(8.0);
+    ui.label(tl!("Selected pages"));
+    ui.label(tl!("Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages."));
+    let field = ui.add(egui::TextEdit::singleline(&mut draft.pages).hint_text(tl!("All pages")).char_limit(16_384));
+    field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, ui.is_enabled(), tl!("Selected pages")));
+    let valid = draft.pages.trim().is_empty() || crate::page_selection_ui::parse(&draft.pages, count).is_ok();
+    if !valid {
+        ui.label(tl!("Invalid page range"));
+    }
+    ui.label(tl!("Review the marks before applying redactions."));
+    ui.add_space(12.0);
+    let (mut ok, mut cancel) = (false, false);
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ok = ui.add_enabled_ui(valid, |ui| widgets::pill_button(ui, tl!("OK"), true)).inner.clicked();
+        cancel = widgets::pill_button(ui, tl!("Cancel"), false).clicked();
+    });
+    (ok, cancel)
+}
+
+impl PdfCraftApp {
+    /// Repeat a selected redaction in displayed-page coordinates, without applying it.
+    pub(crate) fn repeat_redaction(&mut self) {
+        let Some(draft) = self.repeat_redaction_draft.take() else { return };
+        let prepare = || -> Result<Vec<Edit>, String> {
+            let (_, active) = self.active_ids().ok_or("No document")?;
+            if active != draft.document {
+                return Err("The active document changed".into());
+            }
+            let doc = self.session.get(active).ok_or("No document")?;
+            let source = doc.info.pages.get(draft.page).ok_or("The source page no longer exists")?;
+            let mark = doc.redaction_mark(draft.page, draft.annotation).ok_or("The selected redaction mark is no longer available")?;
+            let props = doc.comment_props(draft.page, draft.annotation).ok_or("The selected redaction mark is no longer available")?;
+            let pages = if draft.pages.trim().is_empty() {
+                (0..doc.info.pages.len()).collect()
+            } else {
+                crate::page_selection_ui::parse(&draft.pages, doc.info.pages.len()).map_err(|e| e.to_string())?
+            };
+            let mut rects = Vec::new();
+            for r in mark.rects {
+                let a = source.user_to_view(r[0] as f32, r[1] as f32);
+                let b = source.user_to_view(r[2] as f32, r[3] as f32);
+                let rect = [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])];
+                if !rect.iter().all(|v| v.is_finite()) || rect[0] < 0.0 || rect[1] < 0.0 || rect[0] >= rect[2] || rect[1] >= rect[3] {
+                    return Err("The selected redaction has invalid geometry".into());
+                }
+                rects.push(rect);
+            }
+            let mut edits = Vec::new();
+            for page in pages.into_iter().filter(|&p| p != draft.page) {
+                let info = doc.info.pages.get(page).ok_or("A selected page no longer exists")?;
+                if rects.iter().any(|r| r[2] > info.width || r[3] > info.height) {
+                    return Err(format!("The redaction does not fit page {}; no pages were marked", page + 1));
+                }
+                let quads = rects.iter().map(|&r| info.view_rect_to_quad(r)).collect();
+                let shape = Shape::Redact { quads, overlay: mark.overlay.clone(), look: mark.look };
+                let mut style = Style::default_for(&shape);
+                style.fill = mark.fill;
+                style.color = props.color.unwrap_or(style.color);
+                style.opacity = props.opacity;
+                edits.push(Edit::AddAnnotation(NewAnnotation { page, shape, style, contents: String::new(), author: props.author.clone() }));
+            }
+            if edits.is_empty() {
+                return Err("Select at least one other page".into());
+            }
+            Ok(edits)
+        };
+        match prepare() {
+            Ok(edits) => {
+                self.apply_edit(Edit::Batch { label: "Repeat redaction marks".into(), edits });
+            }
+            Err(error) => self.notify_error(error),
+        }
+    }
+}

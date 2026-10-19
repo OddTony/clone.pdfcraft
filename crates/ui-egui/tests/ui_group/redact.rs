@@ -271,3 +271,53 @@ fn removing_hidden_information_and_sanitizing() {
     let s = h.state();
     assert_eq!(s.session.get(s.views[0].id).unwrap().can_undo(), Some("Sanitize document"));
 }
+
+#[test]
+fn a_redaction_mark_offers_repeat_on_pages() {
+    let mut h = harness();
+    h.state_mut().apply_edit(pdfcraft_engine::Edit::InsertBlankPage { at: 1, width: 300.0, height: 400.0 });
+    h.state_mut().redact_prefs.fill = Some([0.2, 0.4, 0.6]);
+    h.state_mut().redact_prefs.use_overlay = true;
+    h.state_mut().redact_prefs.overlay = "PRIVATE".into();
+    let edit = h.state().redact_prefs.mark(0, vec![pdfcraft_engine::rect_quad([40.0, 80.0, 200.0, 120.0])], "Tester");
+    h.state_mut().apply_edit(edit);
+    h.run_steps(5);
+    let index =
+        h.state().session.get(h.state().views[0].id).unwrap().info.annotations.iter().find(|a| a.page == 0 && a.subtype == "Redact").unwrap().index;
+    h.state_mut().views[0].comments.selected = Some((0, index));
+    let pos = at(&h, 100.0, 300.0);
+    h.hover_at(pos);
+    h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: true, modifiers: Default::default() });
+    h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: false, modifiers: Default::default() });
+    h.run_steps(4);
+    h.get_by_label("Repeat on pages…").click();
+    h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Selected pages").type_text("2");
+    h.run_steps(2);
+    h.get_by_label("OK").click();
+    h.run_steps(4);
+    assert_eq!(marks(&h), 2);
+    let doc = h.state().session.get(h.state().views[0].id).unwrap();
+    let copy_index = doc.info.annotations.iter().find(|a| a.page == 1 && a.subtype == "Redact").unwrap().index;
+    let copy = doc.redaction_mark(1, copy_index).unwrap();
+    assert_eq!(copy.fill, Some([0.2, 0.4, 0.6]));
+    assert_eq!(copy.overlay, "PRIVATE");
+    h.state_mut().execute("edit.undo");
+    h.run_steps(3);
+    assert_eq!(marks(&h), 1);
+    h.state_mut().execute("edit.redo");
+    h.run_steps(3);
+    assert_eq!(marks(&h), 2);
+    h.state_mut().views[0].comments.selected = Some((0, index));
+    h.hover_at(pos);
+    h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: true, modifiers: Default::default() });
+    h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: false, modifiers: Default::default() });
+    h.run_steps(4);
+    h.get_by_label("Repeat on pages…").click();
+    h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Selected pages").type_text("not a page");
+    h.run_steps(2);
+    h.get_by_label("Cancel").click();
+    h.run_steps(3);
+    assert_eq!(marks(&h), 2);
+}

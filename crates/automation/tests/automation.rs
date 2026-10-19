@@ -6697,3 +6697,49 @@ fn a_root_less_write_output_is_atomic_too() {
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn redaction_rectangle_can_mark_selected_pages() {
+    let dir = workdir("redaction-rectangle-pages");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_create", json!({ "from": "blank", "pages": 3, "width": 300, "height": 400 }))["doc"].as_u64().unwrap();
+    ok(&mut a, "page_rotate", json!({ "doc": doc, "pages": [3], "degrees": 90 }));
+    for page in 1..=3 {
+        ok(&mut a, "page_add_text", json!({ "doc": doc, "page": page, "text": "SECRET", "at": [20, 25], "size": 12 }));
+    }
+    assert!(page_text(&mut a, doc).iter().all(|text| text.contains("SECRET")));
+    for args in [
+        json!({ "doc": doc, "rect": [10, 20, 100, 50], "page": 1, "pages": [1, 3] }),
+        json!({ "doc": doc, "rect": [10, 20, 301, 50], "pages": [1, 3] }),
+        json!({ "doc": doc, "rect": [10, 20, 10, 50], "pages": [1, 3] }),
+        json!({ "doc": doc, "rect": [10, "bad", 20, 100, 50], "pages": [1, 3] }),
+    ] {
+        assert!(matches!(a.call("redact_mark", &args), Err(ToolError::InvalidArgs(_))), "{args}");
+    }
+    assert!(matches!(a.call("redact_apply", &json!({ "doc": doc })), Err(ToolError::Failed(_))));
+    let marked = ok(&mut a, "redact_mark", json!({ "doc": doc, "rect": [10, 20, 100, 50], "pages": [3, 1, 3] }));
+    assert_eq!(marked["marked"], 2);
+    assert_eq!(marked["pages_marked"], json!([1, 3]));
+    assert_eq!(marked["marks_pending"], 2);
+    let list = ok(&mut a, "comment_list", json!({ "doc": doc }));
+    let marks = list["comments"].as_array().unwrap();
+    assert_eq!(marks.len(), 2);
+    for mark in marks {
+        let actual = mark["rect"].as_array().unwrap();
+        for (value, expected) in actual.iter().zip([10.0, 20.0, 100.0, 50.0]) {
+            assert!((value.as_f64().unwrap() - expected).abs() < 0.01, "{mark}");
+        }
+    }
+    ok(&mut a, "edit_undo", json!({ "doc": doc }));
+    assert!(matches!(a.call("redact_apply", &json!({ "doc": doc })), Err(ToolError::Failed(_))));
+    ok(&mut a, "edit_redo", json!({ "doc": doc }));
+    let applied = ok(&mut a, "redact_apply", json!({ "doc": doc }));
+    assert_eq!(applied["applied"], 2);
+    assert_eq!(applied["marks_pending"], 0);
+    let text = page_text(&mut a, doc);
+    assert!(!text[0].contains("SECRET") && text[1].contains("SECRET") && !text[2].contains("SECRET"), "{text:?}");
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "redacted.pdf" }));
+    let reopened = ok(&mut a, "doc_open", json!({ "path": "redacted.pdf" }))["doc"].as_u64().unwrap();
+    let text = page_text(&mut a, reopened);
+    assert!(!text[0].contains("SECRET") && text[1].contains("SECRET") && !text[2].contains("SECRET"), "{text:?}");
+}

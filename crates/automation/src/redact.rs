@@ -52,7 +52,7 @@ impl Automation {
             a.opt_bool("whole_pages")?.unwrap_or(false),
         ];
         if chosen.iter().filter(|c| **c).count() != 1 {
-            return Err(ToolError::InvalidArgs("pass exactly one of rect (with page), find, words, pattern or whole_pages: true".into()));
+            return Err(ToolError::InvalidArgs("pass exactly one of rect (with page or pages), find, words, pattern or whole_pages: true".into()));
         }
         let case_sensitive = a.opt_bool("case_sensitive")?.unwrap_or(false);
         let whole_words = a.opt_bool("whole_words")?.unwrap_or(false);
@@ -62,12 +62,31 @@ impl Automation {
         // Per searched word or phrase: how many marks it made.
         let mut matched_words: Vec<(String, usize)> = Vec::new();
         if a.get("rect").is_some() {
-            let page = self.page(a)?;
-            let info = &self.doc(a)?.info.pages[page];
-            let r: Vec<f64> = a.get("rect").and_then(Value::as_array).map(|x| x.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+            if a.get("page").is_some() && a.get("pages").is_some() {
+                return Err(ToolError::InvalidArgs("pass page or pages with rect, not both".into()));
+            }
+            let selected = if a.get("pages").is_some() {
+                pages.iter().copied().collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>()
+            } else {
+                vec![self.page(a)?]
+            };
+            let values = a.get("rect").and_then(Value::as_array).ok_or_else(|| ToolError::InvalidArgs("rect must be 4 numbers".into()))?;
+            let r: Vec<f64> =
+                values.iter().map(Value::as_f64).collect::<Option<_>>().ok_or_else(|| ToolError::InvalidArgs("rect must be 4 numbers".into()))?;
             let r = <[f64; 4]>::try_from(r).map_err(|_| ToolError::InvalidArgs("rect must be 4 numbers".into()))?;
-            let q = info.view_rect_to_quad([r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32]);
-            marks.push((page, vec![q]));
+            let rect = r.map(|n| n as f32);
+            let info = &self.doc(a)?.info;
+            if a.get("pages").is_some() {
+                if !rect.iter().all(|v| v.is_finite()) || rect[0] < 0.0 || rect[1] < 0.0 || rect[0] >= rect[2] || rect[1] >= rect[3] {
+                    return Err(ToolError::InvalidArgs("rect must be a finite, nonempty rectangle in displayed page coordinates".into()));
+                }
+                if let Some(&page) = selected.iter().find(|&&page| rect[2] > info.pages[page].width || rect[3] > info.pages[page].height) {
+                    return Err(ToolError::InvalidArgs(format!("rect does not fit page {}; no pages were marked", page + 1)));
+                }
+            }
+            for page in selected {
+                marks.push((page, vec![info.pages[page].view_rect_to_quad(rect)]));
+            }
         } else if a.opt_bool("whole_pages")?.unwrap_or(false) {
             let info = &self.doc(a)?.info;
             for &p in &pages {

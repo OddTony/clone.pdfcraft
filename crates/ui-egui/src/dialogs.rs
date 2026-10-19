@@ -538,6 +538,19 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 close = ok || cancel;
                 return;
             }
+            Dialog::RepeatRedaction => {
+                let n = app.active_ids().and_then(|(_, id)| app.session.get(id)).map_or(0, |d| d.info.pages.len());
+                if let Some(draft) = app.repeat_redaction_draft.as_mut() {
+                    let (ok, cancel) = crate::redact_ui::repeat_body(ui, draft, n);
+                    if ok {
+                        redact_now = Some(dialog);
+                    }
+                    close = ok || cancel;
+                } else {
+                    close = true;
+                }
+                return;
+            }
             Dialog::RedactSearch => {
                 let (go, cancel, import) = crate::redact_ui::search_body(ui, &mut app.redact_search, &t);
                 if go {
@@ -1294,6 +1307,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     }
     match redact_now {
         Some(Dialog::RedactPages) => app.redact_pages(),
+        Some(Dialog::RepeatRedaction) => app.repeat_redaction(),
         Some(Dialog::RedactSearch) => {
             let n = app.redact_search();
             app.redact_search.found = Some(n);
