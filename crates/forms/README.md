@@ -42,6 +42,11 @@ delete_field(&mut doc, "email")?;
   that have them. Not in a document that declares PDF/A, which forbids that flag (`declares_pdfa`).
   `undrawn_fields` lists the marked fields; the engine reports each edit that draws one, and
   flattening refuses to make that `?` permanent.
+  Arabic/Hebrew/Thai text and choice labels use the optional craft-fonts shaped fallback with
+  embedded Type 3 outlines, ToUnicode and ActualText. The same measured layout drives multiline
+  wrapping and auto-size; comb fields keep combining marks in their letter's cell and place
+  mixed RTL/LTR runs in visual cell order. Password values are masked before any shaping or
+  ActualText is generated. Widget rotation, quadding, frame and selection colours remain in use.
 - Check boxes and radio buttons switch `/V` and each widget's `/AS`. Widgets with no appearances
   get PdfCraft's own (a drawn check mark or dot; no symbol font needed).
 - Values are validated (options, `MaxLen`, single vs multi-select, NoToggleToOff, read-only) and a
