@@ -139,3 +139,65 @@ fn creating_placing_and_keeping_custom_stamps() {
     assert_eq!((again.custom_stamps[0].category.as_str(), again.custom_stamps[0].name.as_str()), ("Company", "logo"));
     assert_eq!(again.custom_stamps[0].data, s.custom_stamps[0].data);
 }
+
+#[test]
+fn keep_tool_selected_repeats_custom_and_standard_stamps() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("form.pdf", None, include_bytes!("data/form.pdf").to_vec()).unwrap();
+        app.set_option("zoom", "150").unwrap();
+        app
+    });
+    h.run_steps(6);
+    assert!(h.state_mut().execute("comment.stamp"));
+    h.run_steps(2);
+    h.get_by_label("Keep tool selected").click();
+    h.run_steps(2);
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(60, 20, image::Rgb([20, 120, 220])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    h.state_mut().start_custom_stamp("logo.png".into(), png);
+    h.run_steps(2);
+    h.get_by_label("OK").click();
+    h.run_steps(2);
+    assert_eq!(h.state().quick_tool, QuickTool::CustomStamp(0));
+    for (n, tool) in
+        [QuickTool::CustomStamp(0), QuickTool::CustomStamp(0), QuickTool::Stamp(pdfcraft_engine::StampKind::DynApproved)].into_iter().enumerate()
+    {
+        if n == 2 {
+            h.get_all_by_label("APPROVED").next().unwrap().click();
+            h.run_steps(2);
+        }
+        let page = h.state().views[0].page_screen_rect(0).unwrap();
+        let p = page.min + egui::vec2(page.width() * (0.3 + n as f32 * 0.15), page.height() * 0.75);
+        h.hover_at(p);
+        h.run_steps(1);
+        h.drag_at(p);
+        h.run_steps(1);
+        h.drop_at(p);
+        h.run_steps(4);
+        assert_eq!(h.state().quick_tool, tool, "tool remains selected after placement {n}");
+    }
+    let app = h.state();
+    let doc = app.session.get(app.views[0].id).unwrap();
+    assert_eq!(doc.info.annotations.iter().filter(|a| a.subtype == "Stamp").count(), 3);
+    // The first Escape deselects the just-placed stamp; the second puts down its tool.
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(h.state().quick_tool, QuickTool::Select, "Escape puts down the pinned stamp");
+    h.get_all_by_label("APPROVED").next().unwrap().click();
+    h.run_steps(2);
+    h.get_by_label("Keep tool selected").click();
+    h.run_steps(2);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let p = page.min + egui::vec2(page.width() * 0.8, page.height() * 0.75);
+    h.hover_at(p);
+    h.run_steps(1);
+    h.drag_at(p);
+    h.run_steps(1);
+    h.drop_at(p);
+    h.run_steps(4);
+    assert_eq!(h.state().quick_tool, QuickTool::Select, "unpin returns to selecting");
+}

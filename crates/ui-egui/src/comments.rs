@@ -1585,7 +1585,7 @@ pub(crate) fn keys(ctx: &egui::Context, view: &mut DocView, tool: &mut QuickTool
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         // One step back per press: cancel the gesture, then deselect, then drop the tool.
         let cancelled = cv.gesture.take().is_some() || cv.selected.take().is_some();
-        if !cancelled && matches!(tool, QuickTool::Comment(_)) {
+        if !cancelled && matches!(tool, QuickTool::Comment(_) | QuickTool::Stamp(_) | QuickTool::CustomStamp(_)) {
             *tool = QuickTool::Select;
         }
     }
