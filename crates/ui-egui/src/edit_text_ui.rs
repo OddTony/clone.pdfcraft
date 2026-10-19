@@ -1363,6 +1363,9 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     let smallest =
         ed.source.as_ref().and_then(|(block, lines)| block.lines.iter().filter_map(|i| lines.get(*i)).map(|l| l.size as f32).reduce(f32::min));
     let font = editor_font(&ed.look, smallest.map_or(ed.size, |s| (s * scale * 0.5).clamp(1.0, 300.0).min(ed.size)));
+    // The smaller native font bounds egui's caret only. The mapped RTL editor paints
+    // and measures at the paragraph's visible size, independently of that caret bound.
+    let bidi_font = FontId::proportional(ed.size);
     let text_color = color32(ed.look.color);
     let bidi_field = crate::bidi::has_rtl(&ed.text) || crate::bidi::has_rtl(&ed.original);
     let rtl_field =
@@ -1374,9 +1377,8 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
     let growing_bidi = bidi_field && ed.grows_as_single_row();
     let source_screen_rect = ed.rect;
     let grow_width = |text: &str, rtl: bool| {
-        let natural = ctx.fonts_mut(|fonts| {
-            fonts.layout_no_wrap(crate::bidi::visual_auto(text).into_owned(), FontId::proportional(font.size), text_color).size().x
-        });
+        let natural =
+            ctx.fonts_mut(|fonts| fonts.layout_no_wrap(crate::bidi::visual_auto(text).into_owned(), bidi_font.clone(), text_color).size().x);
         let available = if rtl { source_screen_rect.right() - xf.rect.left() } else { xf.rect.right() - source_screen_rect.left() };
         (natural.ceil() + 1.0).max(source_screen_rect.width()).min(available.max(source_screen_rect.width()))
     };
@@ -1399,7 +1401,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
         };
         ui.set_width(width);
         let measured = if bidi_field {
-            ui.fonts_mut(|fonts| fonts.layout(crate::bidi::visual_auto(&ed.text).into_owned(), FontId::proportional(font.size), text_color, width))
+            ui.fonts_mut(|fonts| fonts.layout(crate::bidi::visual_auto(&ed.text).into_owned(), bidi_font.clone(), text_color, width))
         } else {
             editor_galley(ui, ed, &ed.text, scale, width)
         };
@@ -1442,7 +1444,7 @@ pub(crate) fn overlay(ctx: &egui::Context, view: &mut DocView, info: &DocInfo) -
             let output = if bidi_field {
                 let mut options = crate::bidi_edit::Options::new(ui, "edit-text-line-input");
                 options.id = egui::Id::new("edit-text-line-input");
-                options.font = FontId::proportional(font.size);
+                options.font = bidi_font.clone();
                 options.width = width;
                 options.rows = rows;
                 options.margin = egui::Margin::ZERO;
