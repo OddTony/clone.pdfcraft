@@ -550,19 +550,31 @@ pub(crate) fn paint_page(ui: &egui::Ui, painter: &egui::Painter, xf: &PageXform,
 
 /// Delete the selected field and every field selected with it (#95), as one undoable step, and
 /// clear the selection.
-pub(crate) fn delete_selected(view: &mut DocView) -> Option<Edit> {
-    let (first, _) = view.prepare.selected.take()?;
-    let mut names = vec![first];
-    for (name, _) in std::mem::take(&mut view.prepare.also) {
-        if !names.contains(&name) {
-            names.push(name);
+pub(crate) fn delete_selected(view: &mut DocView, form: &[FormField]) -> Option<Edit> {
+    let first = view.prepare.selected.take()?;
+    let mut widgets = vec![first];
+    for item in std::mem::take(&mut view.prepare.also) {
+        if !widgets.contains(&item) {
+            widgets.push(item);
         }
     }
-    if names.len() == 1 {
-        return names.pop().map(|name| Edit::DeleteField { name });
+    // Removing a widget changes the following indices in its field.
+    widgets.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| b.1.cmp(&a.1)));
+    let mut edits = Vec::new();
+    let mut whole_fields = Vec::new();
+    for (name, index) in widgets {
+        if form.iter().find(|f| f.name == name).is_some_and(|f| f.kind == pdfcraft_engine::FormFieldKind::Text) {
+            edits.push(Edit::DeleteFieldWidget { name, index });
+        } else if !whole_fields.contains(&name) {
+            whole_fields.push(name.clone());
+            edits.push(Edit::DeleteField { name });
+        }
     }
-    let label = format!("Delete {} fields", names.len());
-    Some(Edit::Batch { label, edits: names.into_iter().map(|name| Edit::DeleteField { name }).collect() })
+    if edits.len() == 1 {
+        return edits.pop();
+    }
+    let label = format!("Delete {} fields", edits.len());
+    Some(Edit::Batch { label, edits })
 }
 
 /// Delete removes the selected fields; Escape clears the selection.
@@ -583,7 +595,7 @@ fn cancel_marquee(prep: &mut PrepareView) {
     }
 }
 
-pub(crate) fn keys(ctx: &egui::Context, view: &mut DocView) {
+pub(crate) fn keys(ctx: &egui::Context, view: &mut DocView, form: &[FormField]) {
     if ctx.egui_wants_keyboard_input() {
         return;
     }
@@ -596,7 +608,7 @@ pub(crate) fn keys(ctx: &egui::Context, view: &mut DocView) {
     }
     let (del, esc) = ctx.input(|i| (i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace), i.key_pressed(egui::Key::Escape)));
     if del {
-        view.pending_edit = delete_selected(view);
+        view.pending_edit = delete_selected(view, form);
     } else if esc {
         view.prepare.selected = None;
         view.prepare.also.clear();

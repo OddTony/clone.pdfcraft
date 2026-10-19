@@ -2277,3 +2277,139 @@ fn document_scripts_read_each_name_tree_node_once() {
     ]);
     assert_eq!(document_scripts_named(&doc), [("init".to_string(), "var ready = true;".to_string())]);
 }
+
+#[test]
+fn adding_a_text_field_with_an_existing_name_shares_its_value() {
+    let mut doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+    ]);
+    add_field(&mut doc, 0, [50.0, 700.0, 200.0, 720.0], &NewField::Text { multiline: false }, Some("Client")).unwrap();
+    set_value(&mut doc, "Client", &FieldValue::Text("Ada".into())).unwrap();
+    add_field(&mut doc, 0, [50.0, 650.0, 200.0, 670.0], &NewField::Text { multiline: false }, Some("Client")).unwrap();
+    let doc = reopen(&doc);
+    let named: Vec<_> = fields(&doc).into_iter().filter(|f| f.name == "Client").collect();
+    assert_eq!(named.iter().map(|f| f.widgets.len()).sum::<usize>(), 2);
+    assert!(named.iter().all(|f| f.value == ["Ada"]));
+    for widget in named.iter().flat_map(|f| &f.widgets) {
+        assert!(ap(&doc, widget).contains("Ada"));
+    }
+    let mut doc = doc;
+    set_value(&mut doc, "Client", &FieldValue::Text("Grace".into())).unwrap();
+    let doc = reopen(&doc);
+    let named: Vec<_> = fields(&doc).into_iter().filter(|f| f.name == "Client").collect();
+    assert!(named.iter().all(|f| f.value == ["Grace"]));
+    for widget in named.iter().flat_map(|f| &f.widgets) {
+        assert!(ap(&doc, widget).contains("Grace"));
+    }
+}
+
+#[test]
+fn renaming_a_text_field_to_an_existing_name_shares_its_value() {
+    let mut doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+    ]);
+    add_field(&mut doc, 0, [50.0, 700.0, 200.0, 720.0], &NewField::Text { multiline: false }, Some("Client")).unwrap();
+    add_field(&mut doc, 0, [50.0, 650.0, 200.0, 670.0], &NewField::Text { multiline: false }, Some("Other")).unwrap();
+    set_value(&mut doc, "Client", &FieldValue::Text("Ada".into())).unwrap();
+    assert_eq!(set_props(&mut doc, "Other", &FieldProps { name: Some("Client".into()), ..Default::default() }).unwrap(), "Client");
+    let doc = reopen(&doc);
+    let named: Vec<_> = fields(&doc).into_iter().filter(|f| f.name == "Client").collect();
+    assert_eq!(named.len(), 1, "renaming joins the widgets under one field");
+    assert_eq!(named.iter().map(|f| f.widgets.len()).sum::<usize>(), 2);
+    assert!(named.iter().all(|f| f.value == ["Ada"]));
+    for widget in named.iter().flat_map(|f| &f.widgets) {
+        assert!(ap(&doc, widget).contains("Ada"));
+    }
+    let mut doc = doc;
+    set_value(&mut doc, "Client", &FieldValue::Text("Grace".into())).unwrap();
+    let doc = reopen(&doc);
+    let named: Vec<_> = fields(&doc).into_iter().filter(|f| f.name == "Client").collect();
+    assert!(named.iter().all(|f| f.value == ["Grace"]));
+    for widget in named.iter().flat_map(|f| &f.widgets) {
+        assert!(ap(&doc, widget).contains("Grace"));
+    }
+}
+
+#[test]
+fn merging_incompatible_fields_is_refused_without_changing_the_document() {
+    let mut doc = fixture();
+    let before = write_incremental(&doc, &SaveOptions::default()).unwrap();
+    let result = set_props(&mut doc, "zip", &FieldProps { name: Some("pin".into()), ..Default::default() });
+    assert!(result.is_err());
+    assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+}
+
+#[test]
+fn merging_a_text_field_with_multiple_widgets_keeps_each_placement() {
+    let mut doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+    ]);
+    let kind = NewField::Text { multiline: false };
+    let rects = [[50.0, 700.0, 200.0, 720.0], [50.0, 650.0, 200.0, 670.0], [50.0, 600.0, 200.0, 620.0]];
+    add_field(&mut doc, 0, rects[0], &kind, Some("Client")).unwrap();
+    add_field(&mut doc, 0, rects[1], &kind, Some("Other")).unwrap();
+    add_field(&mut doc, 0, rects[2], &kind, Some("Other")).unwrap();
+    set_props(&mut doc, "Other", &FieldProps { name: Some("Client".into()), ..Default::default() }).unwrap();
+    let doc = reopen(&doc);
+    let all = fields(&doc);
+    let f = field(&all, "Client");
+    assert_eq!(f.widgets.iter().map(|w| w.rect).collect::<Vec<_>>(), rects);
+    assert!(!all.iter().any(|f| f.name == "Other"));
+}
+
+#[test]
+fn adding_to_a_tagged_merged_widget_refuses_without_changes() {
+    let mut doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+    ]);
+    let kind = NewField::Text { multiline: false };
+    add_field(&mut doc, 0, [50.0, 700.0, 200.0, 720.0], &kind, Some("Client")).unwrap();
+    let obj = field(&fields(&doc), "Client").obj;
+    doc.update_dict(obj, |d| d.set(b"StructParent".to_vec(), Object::Int(3))).unwrap();
+    let before = write_incremental(&doc, &SaveOptions::default()).unwrap();
+    assert!(add_field(&mut doc, 0, [50.0, 650.0, 200.0, 670.0], &kind, Some("Client")).is_err());
+    assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+}
+
+#[test]
+fn a_locked_text_field_cannot_gain_widgets_by_add_or_rename() {
+    let mut doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+    ]);
+    let kind = NewField::Text { multiline: false };
+    add_field(&mut doc, 0, [50.0, 700.0, 200.0, 720.0], &kind, Some("Client")).unwrap();
+    add_field(&mut doc, 0, [50.0, 650.0, 200.0, 670.0], &kind, Some("Other")).unwrap();
+    set_props(&mut doc, "Client", &FieldProps { locked: Some(true), ..Default::default() }).unwrap();
+    let before = write_incremental(&doc, &SaveOptions::default()).unwrap();
+    assert!(add_field(&mut doc, 0, [50.0, 600.0, 200.0, 620.0], &kind, Some("Client")).is_err());
+    assert!(set_props(&mut doc, "Other", &FieldProps { name: Some("Client".into()), ..Default::default() }).is_err());
+    assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+}
+
+#[test]
+fn merging_with_a_malformed_source_parent_is_atomic() {
+    let mut doc = document(&[
+        "<< /Type /Catalog /Pages 2 0 R >>".into(),
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 600 800] >>".into(),
+        "<< /Type /Page /Parent 2 0 R >>".into(),
+    ]);
+    let kind = NewField::Text { multiline: false };
+    add_field(&mut doc, 0, [50.0, 700.0, 200.0, 720.0], &kind, Some("Client")).unwrap();
+    add_field(&mut doc, 0, [50.0, 650.0, 200.0, 670.0], &kind, Some("Other")).unwrap();
+    let source = field(&fields(&doc), "Other").obj;
+    let broken_parent = doc.add(Object::Dict(Default::default()));
+    doc.update_dict(source, |d| d.set(b"Parent".to_vec(), Object::Ref(broken_parent))).unwrap();
+    let before = write_incremental(&doc, &SaveOptions::default()).unwrap();
+    assert!(set_props(&mut doc, "Other", &FieldProps { name: Some("Client".into()), ..Default::default() }).is_err());
+    assert_eq!(write_incremental(&doc, &SaveOptions::default()).unwrap(), before);
+}

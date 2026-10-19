@@ -1330,12 +1330,29 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     if field_props_now
         && let Some(d) = app.field_props.take()
         && let Some(props) = d.props()
-        && app.apply_edit(Edit::SetFieldProps { name: d.field.clone(), props: Box::new(props) })
-        && let Some(i) = app.active
     {
-        // Keep the (possibly renamed) field selected.
-        let prefix = d.field.rsplit_once('.').map(|(p, _)| format!("{p}.")).unwrap_or_default();
-        app.views[i].prepare.selected = Some((format!("{prefix}{}", d.name.trim()), d.widget));
+        // The widget index can change if a rename joins an existing field. Remember the
+        // widget itself so the dialog keeps the item the user actually edited selected.
+        let widget = app
+            .active
+            .and_then(|i| app.views.get(i))
+            .and_then(|v| app.session.get(v.id))
+            .and_then(|doc| doc.form.iter().find(|f| f.name == d.field))
+            .and_then(|f| f.widgets.get(d.widget))
+            .map(|w| w.obj);
+        if app.apply_edit(Edit::SetFieldProps { name: d.field.clone(), props: Box::new(props) })
+            && let Some(i) = app.active
+        {
+            let prefix = d.field.rsplit_once('.').map(|(p, _)| format!("{p}.")).unwrap_or_default();
+            let name = format!("{prefix}{}", d.name.trim());
+            let index = app
+                .session
+                .get(app.views[i].id)
+                .and_then(|doc| doc.form.iter().find(|f| f.name == name))
+                .and_then(|f| widget.and_then(|obj| f.widgets.iter().position(|w| w.obj == obj)))
+                .unwrap_or(d.widget);
+            app.views[i].prepare.selected = Some((name, index));
+        }
     }
     if props_now && let Some(d) = app.comment_props.take() {
         let mut edits = crate::comment_props::edits(&d);
