@@ -122,9 +122,11 @@ impl Automation {
         };
         // The printer's own paper sizes (its PPD's, on CUPS): a paper may be one of them, by
         // keyword or label, and a job on a size the printer has names it as the job's media.
+        // "default" is the default queue's (the job itself still goes to the spooler's default).
         let own = match a.opt_str("printer")? {
-            Some(printer) if printer != "default" => spool::printer_papers(printer),
-            _ => Vec::new(),
+            Some("default") => spool::printers().into_iter().find(|p| p.default).map(|p| spool::printer_papers(&p.name)).unwrap_or_default(),
+            Some(printer) => spool::printer_papers(printer),
+            None => Vec::new(),
         };
         // The sheet, and the index of the standard size or of the printer's own it was named by.
         let (paper, standard, chosen) = match a.opt_str("paper")? {

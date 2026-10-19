@@ -251,7 +251,8 @@ impl PrintDraft {
         self.default_own_paper().or_else(|| self.paper_index(size)).unwrap_or(0)
     }
 
-    /// The chosen paper's size (points, portrait); a stale index reads as the first size.
+    /// The chosen paper's size in points: a standard size portrait, one of the printer's own as
+    /// its driver feeds it (a label's width is across the feed); a stale index reads as the first size.
     pub fn paper_size(&self) -> (f64, f64) {
         match self.paper.checked_sub(PAPERS.len()) {
             None => PAPERS.get(self.paper).map_or(PAPERS[0].1, |p| p.1),

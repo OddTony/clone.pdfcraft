@@ -484,7 +484,7 @@ pub fn tools() -> Vec<ToolDef> {
         t("printer_options", "List printer options", "A printer driver's own job options (CUPS: from its PPD), such as the paper tray, paper type or finishing: key, label, group, default and choices. Pass chosen values to doc_print as options. Empty on Windows, where the driver's preferences window holds them.")
             .ro()
             .with(schema(json!({ "printer": { "type": "string" } }), &["printer"])),
-        t("printer_papers", "List printer paper sizes", "The paper sizes a printer's driver offers (CUPS: its PPD's, such as a label printer's 4 x 6 in or an office printer's envelopes): key, label, width and height in points (portrait), and default (true on the driver's current default size, which doc_print uses when no paper is named). Pass a key or label to doc_print as paper. Empty on Windows and for a printer without a PPD.")
+        t("printer_papers", "List printer paper sizes", "The paper sizes a printer's driver offers (CUPS: its PPD's, such as a label printer's 4 x 6 in or an office printer's envelopes): key, label, width and height in points as the driver feeds the paper (a label's width is across the feed, so 2.25 x 1.25 in and 1.25 x 2.25 in are different stock), and default (true on the driver's current default size, which doc_print uses when no paper is named). Pass a key or label to doc_print as paper. Empty on Windows and for a printer without a PPD.")
             .ro()
             .with(schema(json!({ "printer": { "type": "string" } }), &["printer"])),
         t(
