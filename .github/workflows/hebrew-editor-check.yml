@@ -20,6 +20,8 @@ jobs:
     env:
       # Save compiled crates even when an experimental regression fails.
       CACHE_ON_FAILURE: "true"
+      CRAFT_FONTS_REQUIRED: "1"
+      CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
     steps:
       - uses: actions/checkout@v5
         with:
@@ -30,6 +32,48 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # Node.js 24
         with:
           shared-key: pdfcraft-hebrew-editor-check
+
+      - name: Check out the optional font collection
+        uses: actions/checkout@v5
+        with:
+          repository: storytold/craft-fonts
+          ref: 3d9ab3a132ed0eff457e424226a435a901da30d3
+          path: craft-fonts
+          persist-credentials: false
+
+      - name: Add openly licensed static Hebrew fonts to beta build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/hebrew-font-tools"
+          "$RUNNER_TEMP/hebrew-font-tools/bin/python" -m pip install --disable-pip-version-check "fonttools==4.60.1"
+          mkdir -p craft-fonts/fonts/noto-sans-hebrew
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/google/fonts/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notosanshebrew/NotoSansHebrew%5Bwdth%2Cwght%5D.ttf' \
+            -o "$RUNNER_TEMP/NotoSansHebrew-VF.ttf"
+          curl --fail --location --retry 3 \
+            'https://raw.githubusercontent.com/google/fonts/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notosanshebrew/OFL.txt' \
+            -o craft-fonts/fonts/noto-sans-hebrew/OFL.txt
+          "$RUNNER_TEMP/hebrew-font-tools/bin/python" - <<'PY'
+          from fontTools.ttLib import TTFont
+          from fontTools.varLib.instancer import instantiateVariableFont
+          from pathlib import Path
+          source = Path(__import__('os').environ['RUNNER_TEMP']) / 'NotoSansHebrew-VF.ttf'
+          for style, weight in [('Regular', 400), ('Bold', 700)]:
+              font = TTFont(source)
+              axes = {a.axisTag: a.defaultValue for a in font['fvar'].axes}
+              axes['wght'] = weight
+              static = instantiateVariableFont(font, axes, inplace=True)
+              static.save(f'craft-fonts/fonts/noto-sans-hebrew/NotoSansHebrew-{style}.ttf')
+              static.close()
+          PY
+          for style in Regular Bold; do
+            font="craft-fonts/fonts/noto-sans-hebrew/NotoSansHebrew-${style}.ttf"
+            test -s "$font"
+            hash="$(shasum -a 256 "$font" | awk '{print $1}')"
+            printf 'Noto Sans Hebrew | %s | fonts/noto-sans-hebrew/NotoSansHebrew-%s.ttf | Hebr,Latn | OFL-1.1 | fonts/noto-sans-hebrew/OFL.txt | %s | https://github.com/google/fonts/tree/9710da1eacb3be272583c3224dcb70f9da6eadbb/ofl/notosanshebrew\n' "$style" "$style" "$hash" >> craft-fonts/fonts/manifest.txt
+          done
+          grep -q 'Noto Sans Hebrew | Regular' craft-fonts/fonts/manifest.txt
 
       - name: Install Linux GUI development libraries
         run: |
@@ -52,4 +96,5 @@ jobs:
           run_check cargo test --locked --lib -p pdfcraft-fonts unicode_grapheme_sequences_reuse_one_embedded_pdf_glyph
           run_check cargo test --locked --lib -p pdfcraft-edit vowelized_hebrew_uses_the_shaping_writer_not_the_type3_fallback
           run_check cargo test --locked --lib -p pdfcraft-engine edited_pdf_preview_matches_apply_save_render
+          run_check cargo test --locked --lib -p pdfcraft-engine vowelized_hebrew_pdf_edit_matches_preview_and_survives_reopen
           exit "$failed"
