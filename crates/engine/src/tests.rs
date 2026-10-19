@@ -3249,12 +3249,7 @@ fn check_layered_round_trip(signed: Arc<Vec<u8>>, password: Option<&str>, anchor
         let reopened = u.get(uid).unwrap();
         let mut reopened_renderer = pdfcraft_render::PageRenderer::new(reopened.display.clone(), reopened.config.clone());
         let reopened_text = reopened_renderer
-            .render(pdfcraft_render::RenderRequest {
-                page: 0,
-                kind: pdfcraft_render::RequestKind::Text,
-                scale: 1.0,
-                ..Default::default()
-            })
+            .render(pdfcraft_render::RenderRequest { page: 0, kind: pdfcraft_render::RequestKind::Text, scale: 1.0, ..Default::default() })
             .text
             .expect("page text")
             .plain_text();
