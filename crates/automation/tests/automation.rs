@@ -6398,7 +6398,13 @@ fn reading_colors_fixture() -> Vec<u8> {
 
 /// A fresh directory whose `a.pdf` is `reading_colors_fixture()`.
 fn reading_colors_workdir() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("pdfcraft-automation-reading-colors-{}", std::process::id()));
+    reading_colors_workdir_named("reading-colors")
+}
+
+/// The fixture in a directory of its own: tests run in parallel threads of one process, and each
+/// call deletes and recreates its directory, so two tests must not share one.
+fn reading_colors_workdir_named(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("pdfcraft-automation-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("a.pdf"), reading_colors_fixture()).unwrap();
@@ -6480,7 +6486,7 @@ fn reading_colors_through_tools() {
 /// without changing the PDF, and toggles cleanly via commands.
 #[test]
 fn invert_colors_through_tools() {
-    let dir = reading_colors_workdir();
+    let dir = reading_colors_workdir_named("invert-colors");
     let mut a = auto(&dir);
     let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
     let render = |a: &mut Automation, page: u64| png_pixels(&a.call("page_render", &json!({ "doc": doc, "page": page, "dpi": 72 })).unwrap()[0]);
