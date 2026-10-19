@@ -139,8 +139,10 @@ impl PdfCraftApp {
                     && let Some(view) = self.views.last_mut()
                 {
                     view.go_to_page(f.page);
-                    // `go_to_page` clamped the page to the document; the place on it follows.
-                    view.goto = Some((view.current, f.top));
+                    // `go_to_page` clamped the page to the document. If the page is gone, so is the
+                    // place on it, as when a tab is reloaded: the last page shows from its top.
+                    let top = if view.current == f.page { f.top } else { 0.0 };
+                    view.goto = Some((view.current, top));
                     if last.active.as_ref() == Some(&f.path) {
                         active = Some(self.views.len() - 1);
                     }

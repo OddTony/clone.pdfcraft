@@ -802,6 +802,12 @@ fn the_last_session_comes_back_to_the_place_on_the_page() {
     let (again, back) = reopen(old.to_string());
     assert_eq!(again, 2);
     assert!(back.abs() < 0.05, "at the top of the page: {back}");
+
+    // The file lost pages since: its last page opens, from the top, not at the old page's place.
+    std::fs::write(&file, fixture(2)).unwrap();
+    let (again, back) = reopen(settings);
+    assert_eq!(again, 1);
+    assert!(back.abs() < 0.05, "at the top of the last page: {back}");
 }
 
 #[test]
