@@ -1,5 +1,6 @@
 # Where PdfCraft falls short of Acrobat Pro
 
+> **Last reviewed:** 2026-10-19 · **Last updated:** 2026-10-19 · **Change:** minor (gap 6: #3177 a partly broken ToUnicode map keeps the entries that parse; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-15 · **Last updated:** 2026-10-15 · **Change:** minor (gap 12: reading order is scored, not just word F1) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-14 · **Last updated:** 2026-10-14 · **Change:** minor (M1: raw-deflate fallback preserves decoding-limit errors; estimates unchanged) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 > **Last reviewed:** 2026-10-12 · **Last updated:** 2026-10-13 · **Change:** minor (gap 14: Vietnamese catalog shipped; Hindi/Indonesian/Korean and Arabic RTL remain) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
@@ -137,7 +138,7 @@ update the numbers.
   resize unchanged (#1327), keeps arrow defaults off plain lines (#1302), stops a custom text
   match on the separator instead of the next glyph (#1315), and states the vertical-text
   redaction refusal without claiming an overlap (#1340). Organize Pages opens on the page being
-  read, selected and scrolled into view (#1910). Stamps placed on a rotated page read upright
+  read, selected and scrolled into view (#1910). A `/ToUnicode` map with one bad `bfchar` destination, or a `usecmap` that does not resolve, keeps the entries that parse, so Find and search-redaction see them (#3177). Stamps placed on a rotated page read upright
   (#1398). Another batch keeps a spaced XFA radio value in the datasets (#1319), replaces only the
   selected pages when they are not adjacent (#1305), and leaves unrelated page streams in place
   when a figure is marked decorative (#1324). The rest of the backlog is untriaged.

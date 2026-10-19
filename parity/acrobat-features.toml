@@ -7196,8 +7196,8 @@ milestone = "M2"
 status = "shipped"
 commands = []
 tools = ["text_extract"]
-evidence = ["crates/render/src/text.rs::rtl_runs_come_out_in_logical_order_and_cjk_has_no_spaces", "crates/render/src/text.rs::lines_words_and_search", "crates/automation/tests/automation.rs::parallel_text_extraction_keeps_page_order_and_follows_edits"]
-notes = ""
+evidence = ["crates/render/src/text.rs::rtl_runs_come_out_in_logical_order_and_cjk_has_no_spaces", "crates/render/src/text.rs::lines_words_and_search", "crates/automation/tests/automation.rs::parallel_text_extraction_keeps_page_order_and_follows_edits", "crates/render/src/text.rs::a_partly_broken_tounicode_keeps_the_entries_that_parse"]
+notes = "A /ToUnicode map with one malformed bfchar destination, or a usecmap the resolver cannot load, keeps the entries that parse (#3177). Find uses those entries. Codes the broken entry covered fall back to the font encoding."
 
 [[feature]]
 id = "create.translate"

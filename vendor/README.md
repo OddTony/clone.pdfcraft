@@ -5,6 +5,8 @@ licence files unchanged. Every patch is marked `PdfCraft patch:` in the source, 
 PdfCraft test, and should be proposed upstream. Remove the vendored copy once upstream releases
 the fix. Vendoring copyleft code is never allowed (plan/adr/0001).
 
+`hayro-cmap` 0.1.0 is vendored so a `/ToUnicode` CMap keeps the entries it can read when one `bfchar` destination does not decode, or a `usecmap` names a CMap the resolver does not have (#3177). A map that parses today is unchanged, including a `usecmap` that does resolve. The predefined CMap blob is the same file `ATTRIBUTION.toml` already attests.
+
 A PdfCraft patch in `hayro-syntax::Page::base_dimensions` expresses the existing one-point floor as a raw reciprocal of `/UserUnit`, rounded upward only when f32 multiplication would fall below one point. Five `pdfcraft-render` regressions with prefix `raster::tests::raw_crop_` cover the observed dimensions, origins and rotations, units 41/47, bounded vector rasters and unchanged nearly-zero A4 fallback. Accepted page-unit policy and licences are unchanged.
 
 | Crate | Version | Licence | Patches | Test |

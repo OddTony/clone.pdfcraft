@@ -110,6 +110,7 @@ codegen-units = 1
 # Vendored, patched third-party crates (see vendor/README.md). Each patch is meant to go upstream.
 [patch.crates-io]
 hayro-interpret = { path = "vendor/hayro-interpret" }
+hayro-cmap = { path = "vendor/hayro-cmap" }
 hayro = { path = "vendor/hayro" }
 hayro-syntax = { path = "vendor/hayro-syntax" }
 hayro-jbig2 = { path = "vendor/hayro-jbig2" }

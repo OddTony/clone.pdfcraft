@@ -1749,6 +1749,40 @@ mod tests {
         }
     }
 
+    /// Helvetica drawing "AB", with `body` as the only `bfchar`/`usecmap` content of `/ToUnicode`.
+    fn helvetica_tounicode(body: &str) -> PageText {
+        use lopdf::{Document, Object, Stream, dictionary};
+        let mut doc = Document::with_version("1.7");
+        let cmap = format!(
+            "/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /Adobe-Identity-UCS def /CMapType 2 def 1 begincodespacerange <00> <FF> endcodespacerange {body} endcmap CMapName currentdict /CMap defineresource pop end end"
+        );
+        let to_unicode = doc.add_object(Stream::new(dictionary! {}, cmap.into_bytes()));
+        let font = doc.add_object(dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica", "Encoding" => "WinAnsiEncoding", "ToUnicode" => to_unicode });
+        let content = doc.add_object(Stream::new(dictionary! {}, b"BT /F1 24 Tf 72 700 Td (AB) Tj ET".to_vec()));
+        let pages = doc.new_object_id();
+        let page = doc.add_object(dictionary! { "Type" => "Page", "Parent" => pages, "MediaBox" => vec![Object::Integer(0), Object::Integer(0), Object::Integer(612), Object::Integer(792)], "Resources" => dictionary! {"Font" => dictionary! {"F1" => font}}, "Contents" => content });
+        doc.objects.insert(pages, dictionary! {"Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1}.into());
+        let catalog = doc.add_object(dictionary! {"Type" => "Catalog", "Pages" => pages});
+        doc.trailer.set("Root", catalog);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        extract_page(&Pdf::new(std::sync::Arc::new(bytes)).unwrap(), 0, &InterpreterSettings::default()).unwrap()
+    }
+
+    /// #3177: one malformed `bfchar` destination, or a `usecmap` that does not resolve, used to
+    /// drop the whole map, so Find and search-redaction read the encoding ("AB") instead of the
+    /// entries that do parse.
+    #[test]
+    fn a_partly_broken_tounicode_keeps_the_entries_that_parse() {
+        let read = |body: &str| helvetica_tounicode(body).plain_text();
+        assert_eq!(read("2 beginbfchar <41> <0058> <42> <0059> endbfchar"), "XY");
+        let broken = helvetica_tounicode("2 beginbfchar <41> <ZZZZ> <42> <0059> endbfchar");
+        assert_eq!(broken.plain_text(), "AY");
+        assert_eq!(broken.find("AY"), vec![0..2], "Find uses the entries that parsed");
+        assert_eq!(read("/Adobe-Identity-UCS usecmap\n1 beginbfchar <41> <0058> endbfchar"), "XB");
+        assert_eq!(read("/C7 usecmap 1 beginbfchar <41> <0058> endbfchar"), "XB");
+    }
+
     /// One page per content stream, in Helvetica (`/F1`), with `/P1` in the resources'
     /// `/Properties` naming the `/ActualText` "fi".
     fn marked_pages(contents: &[&str]) -> Pdf {
