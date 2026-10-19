@@ -6106,3 +6106,25 @@ fn undo_never_makes_an_unsaved_document_clean() {
     s.undo(new).unwrap();
     assert!(!s.get(new).unwrap().dirty, "once saved, undo back to the saved state is clean");
 }
+
+#[test]
+fn repeating_a_redaction_rejects_incomplete_quad_points() {
+    let (mut s, id) = session_with(1);
+    let shape = Shape::Redact { quads: vec![pdfcraft_annot::rect_quad([20.0, 30.0, 80.0, 50.0])], overlay: String::new(), look: Default::default() };
+    s.apply(
+        id,
+        Edit::AddAnnotation(NewAnnotation { page: 0, style: Style::default_for(&shape), shape, contents: String::new(), author: "Ada".into() }),
+    )
+    .unwrap();
+    let reference = s.get(id).unwrap().redaction_mark(0, 0).unwrap().obj;
+    let editor = s.docs.iter_mut().find(|d| d.id == id).unwrap().editor.as_mut().unwrap();
+    editor
+        .cos
+        .update_dict(reference, |d| {
+            let mut values = d.get(b"QuadPoints").unwrap().as_array().unwrap().to_vec();
+            values.push(pdfcraft_cos::Object::Int(1));
+            d.set(b"QuadPoints".to_vec(), pdfcraft_cos::Object::Array(values));
+        })
+        .unwrap();
+    assert!(s.get(id).unwrap().redaction_mark(0, 0).is_none(), "an incomplete quad must not be silently dropped");
+}

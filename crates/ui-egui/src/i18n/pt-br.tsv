@@ -2448,3 +2448,10 @@ animation effects	Off	Desativados
 	Make properties default	Tornar propriedades padrão
 	Pages selected	Páginas selecionadas
 	Page properties	Propriedades da página
+	Repeat on pages…	Repetir nas páginas…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Digite números ou intervalos de páginas, como 1, 3-5. Deixe vazio para todas as páginas.
+	Review the marks before applying redactions.	Revise as marcas antes de aplicar as ocultações.
+	Invalid page range	Intervalo de páginas inválido
+	The selected redaction is unavailable or invalid.	A ocultação selecionada está indisponível ou é inválida.
+	The redaction does not fit page {page}; no pages were marked.	A ocultação não cabe na página {page}; nenhuma página foi marcada.
+	Select at least one other page.	Selecione pelo menos outra página.

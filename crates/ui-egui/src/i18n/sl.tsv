@@ -2439,3 +2439,10 @@ animation effects	Off	Izklopljeni
 	Make properties default	Nastavi lastnosti kot privzete
 	Pages selected	Izbrane strani
 	Page properties	Lastnosti strani
+	Repeat on pages…	Ponovi na straneh…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Vnesite številke ali obsege strani, na primer 1, 3-5. Za vse strani pustite prazno.
+	Review the marks before applying redactions.	Pred uporabo prekritja preverite oznake.
+	Invalid page range	Neveljaven obseg strani
+	The selected redaction is unavailable or invalid.	Izbrano prekritje ni na voljo ali ni veljavno.
+	The redaction does not fit page {page}; no pages were marked.	Prekritje ne ustreza strani {page}; nobena stran ni bila označena.
+	Select at least one other page.	Izberite vsaj še eno stran.

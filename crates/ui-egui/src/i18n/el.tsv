@@ -2440,3 +2440,10 @@ animation effects	Off	Ανενεργά
 	Make properties default	Ορισμός ιδιοτήτων ως προεπιλογή
 	Pages selected	Επιλεγμένες σελίδες
 	Page properties	Ιδιότητες σελίδας
+	Repeat on pages…	Επανάληψη σε σελίδες…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Εισαγάγετε αριθμούς ή εύρη σελίδων, π.χ. 1, 3-5. Αφήστε κενό για όλες τις σελίδες.
+	Review the marks before applying redactions.	Ελέγξτε τις σημάνσεις πριν από την απόκρυψη.
+	Invalid page range	Μη έγκυρο εύρος σελίδων
+	The selected redaction is unavailable or invalid.	Η επιλεγμένη απόκρυψη δεν είναι διαθέσιμη ή δεν είναι έγκυρη.
+	The redaction does not fit page {page}; no pages were marked.	Η απόκρυψη δεν χωρά στη σελίδα {page}· δεν σημάνθηκε καμία σελίδα.
+	Select at least one other page.	Επιλέξτε τουλάχιστον μία άλλη σελίδα.

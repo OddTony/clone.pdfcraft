@@ -303,6 +303,7 @@ pub enum Dialog {
     BulkFieldProps,
     /// Redact a PDF ▸ Redact pages, Find text and redact, Set properties, apply confirmation.
     RedactPages,
+    RepeatRedaction,
     RedactSearch,
     RedactProps,
     RedactApply,
@@ -797,6 +798,7 @@ pub struct PdfCraftApp {
     pub redact_defaults: RedactPrefs,
     pub redact_before: Option<RedactPrefs>,
     pub redact_pages_draft: RedactPagesDraft,
+    pub(crate) repeat_redaction_draft: Option<redact_ui::RepeatDraft>,
     pub redact_search: RedactSearchDraft,
     pub hidden_draft: HiddenDraft,
     pub print_draft: PrintDraft,
@@ -1072,6 +1074,7 @@ impl PdfCraftApp {
             redact_defaults: RedactPrefs::default(),
             redact_before: None,
             redact_pages_draft: RedactPagesDraft::default(),
+            repeat_redaction_draft: None,
             redact_search: RedactSearchDraft::default(),
             hidden_draft: HiddenDraft::default(),
             print_draft: PrintDraft::default(),

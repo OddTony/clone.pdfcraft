@@ -2711,3 +2711,10 @@ certificate	Version	الإصدار
 	Make properties default	جعل الخصائص افتراضية
 	Pages selected	الصفحات المحددة
 	Page properties	خصائص الصفحة
+	Repeat on pages…	تكرار على الصفحات…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	أدخل أرقام الصفحات أو نطاقاتها، مثل 1، 3-5. اترك الحقل فارغًا لكل الصفحات.
+	Review the marks before applying redactions.	راجع العلامات قبل تطبيق التنقيح.
+	Invalid page range	نطاق الصفحات غير صالح
+	The selected redaction is unavailable or invalid.	التنقيح المحدد غير متاح أو غير صالح.
+	The redaction does not fit page {page}; no pages were marked.	لا يلائم التنقيح الصفحة {page}؛ لم تُعلَّم أي صفحات.
+	Select at least one other page.	حدد صفحة أخرى واحدة على الأقل.

@@ -794,6 +794,31 @@ impl Document {
         self.editor.as_ref().and_then(|e| pdfcraft_annot::props(&e.cos, page, index))
     }
 
+    /// Read an indirect redaction annotation by its page and annotation index.
+    pub fn redaction_mark(&self, page: usize, index: usize) -> Option<pdfcraft_redact::Mark> {
+        let cos = &self.editor.as_ref()?.cos;
+        let pages = pdfcraft_model::pages(cos);
+        let array = cos.resolve(pages.get(page)?.dict.get(b"Annots")?);
+        let reference = array.as_array()?.get(index)?.as_ref()?;
+        let object = cos.get(reference);
+        let dict = object.as_dict()?;
+        let quad_count = if let Some(raw) = dict.get(b"QuadPoints") {
+            let resolved = cos.resolve(raw);
+            let values = resolved.as_array()?;
+            if !values.len().is_multiple_of(8) || !values.iter().all(|value| value.as_f64().is_some_and(f64::is_finite)) {
+                return None;
+            }
+            values.len() / 8
+        } else {
+            0
+        };
+        let mark = pdfcraft_redact::marks(cos).into_iter().find(|mark| mark.page == page && mark.obj == reference)?;
+        if quad_count != 0 && mark.rects.len() != quad_count {
+            return None;
+        }
+        Some(mark)
+    }
+
     /// A form field's Appearance-tab look (borders, colours, font).
     pub fn field_look(&self, name: &str) -> Option<pdfcraft_forms::Look> {
         let e = self.editor.as_ref()?;

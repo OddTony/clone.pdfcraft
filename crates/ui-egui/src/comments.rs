@@ -1678,6 +1678,10 @@ pub(crate) fn context_menu(ui: &mut egui::Ui, view: &mut DocView, info: &DocInfo
                 action = Some(CanvasAction::Edit(Box::new(Edit::DeleteAnnotation { page, index })));
                 ui.close();
             }
+            if a.subtype == "Redact" && ui.add_enabled(allowed, egui::Button::new(tl!("Repeat on pages…"))).clicked() {
+                action = Some(CanvasAction::RepeatRedaction(page, index));
+                ui.close();
+            }
             if ui.add_enabled(allowed, egui::Button::new(tl!("Properties…"))).clicked() {
                 action = Some(CanvasAction::Properties(page, index));
                 ui.close();
@@ -1710,6 +1714,7 @@ pub enum CanvasAction {
     OpenComments,
     /// Comment Properties for (page, index).
     Properties(usize, usize),
+    RepeatRedaction(usize, usize),
     /// Copy Image: image (page, index in `page_images`) to the clipboard.
     CopyImage(usize, usize),
     /// Copy Image in Original Format: the same image as a file (JPEG as stored, else PNG).

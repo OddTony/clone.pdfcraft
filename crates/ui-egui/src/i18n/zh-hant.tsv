@@ -2384,3 +2384,10 @@ animation effects	Off	關
 	Make properties default	將內容設為預設
 	Pages selected	選取的頁面
 	Page properties	頁面屬性
+	Repeat on pages…	在頁面上重複…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	輸入頁碼或範圍，例如 1, 3-5。留空表示所有頁面。
+	Review the marks before applying redactions.	套用密文處理前請檢查標記。
+	Invalid page range	頁碼範圍無效
+	The selected redaction is unavailable or invalid.	所選密文標記無法使用或無效。
+	The redaction does not fit page {page}; no pages were marked.	密文標記不適合第 {page} 頁；未標記任何頁面。
+	Select at least one other page.	請至少選取另一個頁面。

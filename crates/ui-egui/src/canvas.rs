@@ -3930,6 +3930,10 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             app.comments_panel_closed = false;
         }
         Some(comments::CanvasAction::Properties(p, i)) => open_props = Some((p, i)),
+        Some(comments::CanvasAction::RepeatRedaction(page, annotation)) => {
+            app.repeat_redaction_draft = Some(crate::redact_ui::RepeatDraft { document: view.id, page, annotation, pages: String::new() });
+            app.dialog = Some(crate::Dialog::RepeatRedaction);
+        }
         Some(comments::CanvasAction::CopyImage(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::Copy(p, i)),
         Some(comments::CanvasAction::CopyImageFile(p, i)) => image_action = Some(crate::edit_text_ui::ImageAction::CopyFile(p, i)),
         None => {}

@@ -2574,3 +2574,10 @@ animation effects	Off	Desactivados
 # Historical snapshot notice bar (View signed version / View revision).
 	You are viewing the signed version of “{from}” (revision {rev}). It is a snapshot: changes here won't affect the original.	Estás viendo la versión firmada de «{from}» (revisión {rev}). Es una instantánea: los cambios aquí no afectarán al original.
 	You are viewing revision {rev} of “{from}”. It is a snapshot: changes here won't affect the original.	Estás viendo la revisión {rev} de «{from}». Es una instantánea: los cambios aquí no afectarán al original.
+	Repeat on pages…	Repetir en páginas…
+	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Introduce números o intervalos de páginas, por ejemplo 1, 3-5. Déjalo vacío para todas las páginas.
+	Review the marks before applying redactions.	Revisa las marcas antes de aplicar las redacciones.
+	Invalid page range	Intervalo de páginas no válido
+	The selected redaction is unavailable or invalid.	La redacción seleccionada no está disponible o no es válida.
+	The redaction does not fit page {page}; no pages were marked.	La redacción no cabe en la página {page}; no se ha marcado ninguna página.
+	Select at least one other page.	Selecciona al menos otra página.
