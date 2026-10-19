@@ -2432,3 +2432,17 @@ animation effects	Off	Өшірулі
 	Make properties default	Қасиеттерді әдепкі ету
 	Pages selected	Таңдалған беттер
 	Page properties	Бет қасиеттері
+# Comments copied between documents and selected several at once; finishing connected lines from the menu (M14).
+	Copy comment	Пікірді көшіру
+	Copy comments	Пікірлерді көшіру
+	Paste comments	Пікірлерді қою
+	Delete comments	Пікірлерді жою
+	Move comments	Пікірлерді жылжыту
+	Complete	Аяқтау
+	Undo last point	Соңғы нүктені қайтару
+	Cancel drawing	Сызуды тоқтату
+	Copy comments first	Алдымен пікірлерді көшіріңіз
+	Click where the copied comments go; Escape lets them go	Көшірілген пікірлер орналасатын жерді басыңыз; Escape оларды босатады
+	The copied comments are larger than this page; they were placed as they are	Көшірілген пікірлер бұл беттен үлкен; олар сол күйінде орналастырылды
+	The clipboard holds no comments	Алмасу буферінде пікірлер жоқ
+	Comments: {n}	Пікірлер: {n}
