@@ -4009,6 +4009,7 @@ dependencies = [
  "pdfcraft-organize",
  "pdfcraft-platform",
  "pdfcraft-render",
+ "pdfcraft-tsa-http",
  "pdfcraft-xfa",
  "png 0.18.1",
  "serde_json",
@@ -4355,6 +4356,17 @@ name = "pdfcraft-testkit"
 version = "0.9.0"
 
 [[package]]
+name = "pdfcraft-tsa-http"
+version = "0.9.0"
+dependencies = [
+ "pdfcraft-cos",
+ "pdfcraft-sign",
+ "pdfcraft-tsa-http",
+ "rustls-native-certs",
+ "ureq",
+]
+
+[[package]]
 name = "pdfcraft-ui-egui"
 version = "0.9.0"
 dependencies = [
@@ -4381,6 +4393,7 @@ dependencies = [
  "pdfcraft-model",
  "pdfcraft-platform",
  "pdfcraft-render",
+ "pdfcraft-tsa-http",
  "pdfcraft-xfa",
  "png 0.18.1",
  "pollster 1.0.1",
