@@ -1571,3 +1571,98 @@ fn text_box_properties_change_the_font_size() {
     assert_eq!(doc.comment_props(0, 0).unwrap().font_size, Some(30.0));
     assert_eq!(doc.can_undo(), Some("Change comment properties"));
 }
+
+/// A callout's font size can be changed in Properties and survives saving and reopening.
+#[test]
+fn callout_properties_font_size_survives_save() {
+    use pdfcraft_engine::{Edit, LineEnding, NewAnnotation, Shape};
+    let mut h = harness(|_| {});
+    h.state_mut().apply_edit(Edit::AddAnnotation(NewAnnotation {
+        page: 0,
+        shape: Shape::Callout {
+            rect: [80.0, 100.0, 220.0, 140.0],
+            knee: [60.0, 120.0],
+            point: [30.0, 70.0],
+            font_size: 10.0,
+            ending: LineEnding::OpenArrow,
+        },
+        style: Default::default(),
+        contents: "Drawing note".into(),
+        author: "Tester".into(),
+    }));
+    h.run_steps(2);
+    h.state_mut().open_comment_props(0, 0);
+    h.run_steps(2);
+    h.get_by_label("Font size");
+    let draft = h.state_mut().comment_props.as_mut().unwrap();
+    assert_eq!(draft.original.font_size, Some(10.0));
+    draft.edited.font_size = Some(30.0);
+    h.get_by_label("OK").click();
+    h.run_steps(3);
+    let state = h.state();
+    let id = state.views[0].id;
+    assert_eq!(state.session.get(id).unwrap().comment_props(0, 0).unwrap().font_size, Some(30.0));
+    let saved = state.session.save_bytes(id).unwrap();
+    let mut reopened = pdfcraft_engine::Session::new();
+    let id = reopened.open("saved.pdf", None, saved, None).unwrap();
+    assert_eq!(reopened.get(id).unwrap().comment_props(0, 0).unwrap().font_size, Some(30.0));
+}
+
+/// Making a callout's edited size the default applies to callouts after restarting the app.
+#[test]
+fn callout_default_font_size_survives_restart_and_applies_to_new_callouts() {
+    use pdfcraft_engine::{Edit, LineEnding, NewAnnotation, Shape};
+    use pdfcraft_ui_egui::comments::CommentTool;
+    let mut h = harness(|_| {});
+    h.state_mut().apply_edit(Edit::AddAnnotation(NewAnnotation {
+        page: 0,
+        shape: Shape::Callout {
+            rect: [80.0, 100.0, 220.0, 140.0],
+            knee: [60.0, 120.0],
+            point: [30.0, 70.0],
+            font_size: 10.0,
+            ending: LineEnding::OpenArrow,
+        },
+        style: Default::default(),
+        contents: "Drawing note".into(),
+        author: "Tester".into(),
+    }));
+    h.run_steps(2);
+    h.state_mut().open_comment_props(0, 0);
+    h.run_steps(2);
+    h.state_mut().comment_props.as_mut().unwrap().edited.font_size = Some(30.0);
+    h.get_by_label("Make Properties Default").click();
+    h.get_by_label("OK").click();
+    h.run_steps(3);
+    assert_eq!(h.state().comment_prefs.font_size(CommentTool::Callout), Some(30.0));
+    assert_eq!(h.state().comment_prefs.font_size(CommentTool::TextBox), Some(12.0));
+    let settings = h.state().persist();
+    let mut fresh = harness(move |app| {
+        app.restore(&settings);
+        app.set_option("quick", "callout").unwrap();
+    });
+    drag_pt(&mut fresh, (30.0, 100.0), (90.0, 150.0));
+    field(&fresh, "Type text").type_text("Note");
+    fresh.run_steps(2);
+    fresh.get_by_label("Post").click();
+    fresh.run_steps(3);
+    let app = fresh.state();
+    let doc = app.session.get(app.views[0].id).unwrap();
+    assert_eq!(doc.comment_props(0, 0).unwrap().font_size, Some(30.0));
+
+    // A separate text-box default survives the same settings path and does not affect callouts.
+    fresh.state_mut().comment_prefs.set_font_size(CommentTool::TextBox, 24.0);
+    let settings = fresh.state().persist();
+    let mut again = harness(move |app| {
+        app.restore(&settings);
+        app.set_option("quick", "freetext").unwrap();
+    });
+    click_pt(&mut again, (50.0, 100.0));
+    field(&again, "Type text").type_text("Text box");
+    again.run_steps(2);
+    again.get_by_label("Post").click();
+    again.run_steps(3);
+    let app = again.state();
+    assert_eq!(app.comment_prefs.font_size(CommentTool::Callout), Some(30.0));
+    assert_eq!(app.session.get(app.views[0].id).unwrap().comment_props(0, 0).unwrap().font_size, Some(24.0));
+}

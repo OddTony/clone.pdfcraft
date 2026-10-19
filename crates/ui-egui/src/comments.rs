@@ -246,6 +246,7 @@ pub struct CommentPrefs {
     /// `/T` of new comments (Acrobat: Preferences ▸ Identity, default the login name).
     pub author: String,
     styles: Vec<(CommentTool, Style)>,
+    text_sizes: [f64; 2],
     /// Keep the tool selected after use (the pin).
     pub pinned: bool,
     /// The tool each flyout group shows (the last one used).
@@ -259,6 +260,7 @@ impl Default for CommentPrefs {
         Self {
             author: login_name(),
             styles: ALL.iter().map(|t| (*t, Style::default_for(&t.sample()))).collect(),
+            text_sizes: [12.0, 10.0],
             pinned: false,
             group_tool: [CommentTool::Note, CommentTool::Highlight, CommentTool::Ink],
             hide_empty_highlight_hover: false,
@@ -267,6 +269,26 @@ impl Default for CommentPrefs {
 }
 
 impl CommentPrefs {
+    /// Default font size for text boxes and callouts.
+    pub fn font_size(&self, tool: CommentTool) -> Option<f64> {
+        match tool {
+            CommentTool::TextBox => Some(self.text_sizes[0]),
+            CommentTool::Callout => Some(self.text_sizes[1]),
+            _ => None,
+        }
+    }
+
+    pub fn set_font_size(&mut self, tool: CommentTool, size: f64) {
+        if !size.is_finite() || !(1.0..=400.0).contains(&size) {
+            return;
+        }
+        match tool {
+            CommentTool::TextBox => self.text_sizes[0] = size,
+            CommentTool::Callout => self.text_sizes[1] = size,
+            _ => {}
+        }
+    }
+
     pub fn style(&self, tool: CommentTool) -> Style {
         self.styles.iter().find(|(t, _)| *t == tool).map(|(_, s)| s.clone()).unwrap_or_default()
     }
@@ -1441,17 +1463,19 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
         }
         ComposerKind::TextBox => {
             view.comments.tool_done = true;
+            let font_size = prefs.font_size(CommentTool::TextBox).unwrap_or(12.0);
             Some(new_comment(
                 &cx,
                 CommentTool::TextBox,
-                Shape::TextBox { rect: text_box_rect(c.at, &text, 12.0, page_rotation(info, page)), font_size: 12.0 },
+                Shape::TextBox { rect: text_box_rect(c.at, &text, font_size, page_rotation(info, page)), font_size },
                 text,
             ))
         }
         ComposerKind::Callout { point } => {
             view.comments.tool_done = true;
             // A callout's leader and box stay in user-space axes (its appearance isn't turned).
-            let rect = text_box_rect(c.at, &text, 10.0, 0);
+            let font_size = prefs.font_size(CommentTool::Callout).unwrap_or(10.0);
+            let rect = text_box_rect(c.at, &text, font_size, 0);
             let side = if point[0] < rect[0] {
                 rect[0]
             } else if point[0] > rect[2] {
@@ -1460,7 +1484,7 @@ pub(crate) fn composer(ctx: &egui::Context, view: &mut DocView, info: &DocInfo, 
                 (rect[0] + rect[2]) / 2.0
             };
             let knee = [(point[0] + side) / 2.0, (rect[1] + rect[3]) / 2.0];
-            Some(new_comment(&cx, CommentTool::Callout, Shape::Callout { rect, knee, point, font_size: 10.0, ending: LineEnding::OpenArrow }, text))
+            Some(new_comment(&cx, CommentTool::Callout, Shape::Callout { rect, knee, point, font_size, ending: LineEnding::OpenArrow }, text))
         }
         ComposerKind::Replace => {
             view.comments.tool_done = true;

@@ -109,8 +109,10 @@ impl PdfCraftApp {
             style.fill = p.fill;
         }
         self.comment_prefs.set_style(tool, style);
-        // Opacity and width go through the clamping setters: the dialog allows 0% opacity, and a
-        // default that draws invisible comments can't be found again.
+        if let Some(size) = p.font_size {
+            self.comment_prefs.set_font_size(tool, size);
+        }
+        // Avoid a default that draws invisible comments.
         self.comment_prefs.set_opacity(tool, p.opacity);
         if let Some(w) = p.width {
             self.comment_prefs.set_width(tool, w);
