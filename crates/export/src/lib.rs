@@ -8,9 +8,11 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+mod epub;
 mod pptx;
 mod zip;
 
+pub use epub::{FixedPage, Meta as EpubMeta, Tags as EpubTags, TocEntry, epub, epub_fixed, iso_utc, urn_uuid};
 pub use pptx::pptx;
 pub use zip::Zip;
 
