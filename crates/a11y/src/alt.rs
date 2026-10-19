@@ -25,7 +25,7 @@ pub enum AltError {
     NotAFigure(u32),
     #[error("the tag has child structure elements; mark a leaf tag instead")]
     HasChildren,
-    #[error("this action does not support form streams, other pages or invalid content references")]
+    #[error("this action does not support form streams, annotation or object references, other pages or invalid content references")]
     UnsupportedContent,
     #[error("{0}")]
     Cos(#[from] pdfcraft_cos::CosError),
@@ -42,7 +42,7 @@ pub enum ArtifactError {
     HasChildren,
     #[error("the tag has no direct marked content")]
     NoMarkedContent,
-    #[error("this action does not support form streams, other pages or invalid content references")]
+    #[error("this action does not support form streams, annotation or object references, other pages or invalid content references")]
     UnsupportedContent,
     #[error("the tag has no page")]
     NoPage,

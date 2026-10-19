@@ -116,6 +116,8 @@ fn unsupported_owned_references_refuse_without_changing_document_or_saved_data()
             "[0 << /Type /MCR /MCID 0 /Pg 11 0 R >>]",
             vec!["<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 12 0 R >>", &other_page_stream],
         ),
+        ("[0 << /MCID 0 /Pg 3 0 R >>]", vec![]),
+        ("[0 << /Type /MCR /Pg 3 0 R >>]", vec![]),
         ("[0 99 0 R]", vec![]),
         ("[0 11 1 R]", vec!["<< /Type /MCR /MCID 0 /Pg 3 0 R >>"]),
         ("[0 11 0 R]", vec!["[11 0 R]"]),
@@ -252,5 +254,50 @@ fn decorative_refuses_matching_invalid_element_and_content_pages() {
             assert!(!doc.is_modified());
             assert_eq!(pdfcraft_cos::write_full(&doc, &Default::default()).unwrap(), before);
         }
+    }
+}
+
+#[test]
+fn annotation_reference_refusal_names_the_unsupported_content_and_preserves_its_links() {
+    for decorative in [true, false] {
+        let mut doc = collision_with(
+            "[0 << /Type /OBJR /Obj 11 0 R /Pg 3 0 R >>]",
+            &["<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /P 3 0 R /StructParent 2 >>"],
+        );
+        doc.update_dict(ObjRef::new(3, 0), |d| d.set(b"Annots".to_vec(), Object::Array(vec![Object::Ref(ObjRef::new(11, 0))]))).unwrap();
+        doc.update_dict(ObjRef::new(9, 0), |d| {
+            d.set(
+                b"Nums".to_vec(),
+                Object::Array(vec![
+                    Object::Int(0),
+                    Object::Array(vec![Object::Ref(ObjRef::new(7, 0))]),
+                    Object::Int(1),
+                    Object::Ref(ObjRef::new(8, 0)),
+                    Object::Int(2),
+                    Object::Ref(ObjRef::new(8, 0)),
+                ]),
+            )
+        })
+        .unwrap();
+        let mut doc = Document::open(Arc::new(pdfcraft_cos::write_incremental(&doc, &Default::default()).unwrap())).unwrap();
+        let before = pdfcraft_cos::write_full(&doc, &Default::default()).unwrap();
+        let original_objects: Vec<_> = (1..=11).map(|i| doc.get(ObjRef::new(i, 0))).collect();
+        let error = mutate(&mut doc, decorative, 8).unwrap_err();
+        assert!(error.contains("annotation or object references"), "useful OBJR refusal: {error}");
+        assert!(!doc.is_modified());
+        assert_eq!((1..=11).map(|i| doc.get(ObjRef::new(i, 0))).collect::<Vec<_>>(), original_objects);
+        let saved = pdfcraft_cos::write_full(&doc, &Default::default()).unwrap();
+        assert_eq!(saved, before);
+        let reopened = Document::open(Arc::new(saved)).unwrap();
+        let page = &pdfcraft_model::pages(&reopened)[0];
+        let annotation = reopened.resolve(&page.dict.get(b"Annots").unwrap().as_array().unwrap()[0]);
+        assert_eq!(annotation.as_dict().unwrap().get(b"StructParent"), Some(&Object::Int(2)));
+        let catalog = reopened.get(reopened.root().unwrap());
+        let root = reopened.dict(catalog.as_dict().unwrap().get(b"StructTreeRoot").unwrap()).unwrap();
+        let tree = reopened.dict(root.get(b"ParentTree").unwrap()).unwrap();
+        let nums = tree.get(b"Nums").unwrap().as_array().unwrap();
+        let tag = reopened.resolve(&nums[5]);
+        assert_eq!(tag.as_dict().unwrap().get(b"K").unwrap().as_array().unwrap()[0], Object::Int(0));
+        assert_eq!(nums[4], Object::Int(2));
     }
 }

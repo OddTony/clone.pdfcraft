@@ -2190,6 +2190,19 @@ fn reversing_pages_through_tools() {
 }
 
 #[test]
+fn page_duplicate_at_inserts_the_copies_there() {
+    let dir = workdir("duplicate-at");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    let r = ok(&mut a, "page_duplicate", json!({ "doc": doc, "pages": [2], "at": 1 }));
+    assert_eq!(r["pages"], 4);
+    assert_eq!(page_text(&mut a, doc), ["Page 2", "Page 1", "Page 2", "Page 3"]);
+    // `at` is 1-based and within 1..=pages+1, as for the other page inserts.
+    assert!(matches!(a.call("page_duplicate", &json!({ "doc": doc, "pages": [1], "at": 0 })), Err(ToolError::InvalidArgs(_))), "1-based");
+    assert!(matches!(a.call("page_duplicate", &json!({ "doc": doc, "pages": [1], "at": 6 })), Err(ToolError::InvalidArgs(_))), "past the end");
+}
+
+#[test]
 fn duplicating_and_cropping_through_tools() {
     let dir = workdir("boxes");
     let mut a = auto(&dir);
@@ -2460,72 +2473,116 @@ trailer << /Root 1 0 R >>\n%%EOF",
         page.len(),
         form.len()
     );
-    let synthetic = CosDocument::open(Arc::new(source.into_bytes())).unwrap();
-    let source = pdfcraft_cos::write_full(&synthetic, &SaveOptions::default()).unwrap();
-    std::fs::write(dir.join("stm.pdf"), source).unwrap();
+    for annotation_owned in [false, true] {
+        let mut synthetic = CosDocument::open(Arc::new(source.clone().into_bytes())).unwrap();
+        if annotation_owned {
+            use pdfcraft_cos::{Dict, ObjRef};
+            let annotation = synthetic.add(Object::Dict(Dict::from_iter([
+                (b"Type".to_vec(), Object::Name(b"Annot".to_vec())),
+                (b"Subtype".to_vec(), Object::Name(b"Link".to_vec())),
+                (b"Rect".to_vec(), Object::Array(vec![Object::Int(0), Object::Int(0), Object::Int(10), Object::Int(10)])),
+                (b"P".to_vec(), Object::Ref(ObjRef::new(3, 0))),
+                (b"StructParent".to_vec(), Object::Int(2)),
+            ])));
+            synthetic.update_dict(ObjRef::new(3, 0), |d| d.set(b"Annots".to_vec(), Object::Array(vec![Object::Ref(annotation)]))).unwrap();
+            synthetic
+                .update_dict(ObjRef::new(8, 0), |d| {
+                    d.set(
+                        b"K".to_vec(),
+                        Object::Array(vec![
+                            Object::Int(0),
+                            Object::Dict(Dict::from_iter([
+                                (b"Type".to_vec(), Object::Name(b"OBJR".to_vec())),
+                                (b"Obj".to_vec(), Object::Ref(annotation)),
+                            ])),
+                        ]),
+                    )
+                })
+                .unwrap();
+            synthetic
+                .update_dict(ObjRef::new(9, 0), |d| {
+                    d.set(
+                        b"Nums".to_vec(),
+                        Object::Array(vec![
+                            Object::Int(0),
+                            Object::Array(vec![Object::Ref(ObjRef::new(7, 0))]),
+                            Object::Int(1),
+                            Object::Ref(ObjRef::new(8, 0)),
+                            Object::Int(2),
+                            Object::Ref(ObjRef::new(8, 0)),
+                        ]),
+                    )
+                })
+                .unwrap();
+        }
+        let source = pdfcraft_cos::write_full(&synthetic, &SaveOptions::default()).unwrap();
+        std::fs::write(dir.join("stm.pdf"), source).unwrap();
 
-    for dirty in [false, true] {
-        let mut a = auto(&dir);
-        let doc = ok(&mut a, "doc_open", json!({"path":"stm.pdf"}))["doc"].as_u64().unwrap();
-        let figures = ok(&mut a, "accessibility_figures", json!({"doc":doc}));
-        let figure = figures["figures"].as_array().unwrap().iter().find(|f| f["alt"] == "Form figure").unwrap()["figure"].as_u64().unwrap();
-        if dirty {
-            ok(&mut a, "accessibility_set_alt", json!({"doc":doc,"figure":figure,"alt":"First"}));
-            ok(&mut a, "accessibility_set_alt", json!({"doc":doc,"figure":figure,"alt":"Second"}));
-            ok(&mut a, "edit_undo", json!({"doc":doc}));
+        for dirty in [false, true] {
+            let mut a = auto(&dir);
+            let doc = ok(&mut a, "doc_open", json!({"path":"stm.pdf"}))["doc"].as_u64().unwrap();
+            let figures = ok(&mut a, "accessibility_figures", json!({"doc":doc}));
+            let figure = figures["figures"].as_array().unwrap().iter().find(|f| f["alt"] == "Form figure").unwrap()["figure"].as_u64().unwrap();
+            if dirty {
+                ok(&mut a, "accessibility_set_alt", json!({"doc":doc,"figure":figure,"alt":"First"}));
+                ok(&mut a, "accessibility_set_alt", json!({"doc":doc,"figure":figure,"alt":"Second"}));
+                ok(&mut a, "edit_undo", json!({"doc":doc}));
+            }
+            let before = ok(&mut a, "doc_info", json!({"doc":doc}))["document"].clone();
+            assert_eq!(before["dirty"], dirty);
+            assert_eq!(before["undo"].is_string(), dirty);
+            assert_eq!(before["redo"].is_string(), dirty);
+            let tags = ok(&mut a, "accessibility_tags", json!({"doc":doc}));
+            let figures = ok(&mut a, "accessibility_figures", json!({"doc":doc}));
+            for (tool, args) in [
+                ("accessibility_set_alt", json!({"doc":doc,"figure":figure,"decorative":true})),
+                ("accessibility_mark_tag_artifact", json!({"doc":doc,"object":figure,"generation":0})),
+            ] {
+                let Err(ToolError::Failed(message)) = a.call(tool, &args) else { panic!("{tool} must refuse unsupported ownership") };
+                let reason = if annotation_owned { "annotation or object references" } else { "form streams" };
+                assert!(message.contains(reason), "useful unsupported-content reason: {message}");
+                assert_eq!(ok(&mut a, "doc_info", json!({"doc":doc}))["document"], before);
+                assert_eq!(ok(&mut a, "accessibility_tags", json!({"doc":doc})), tags);
+                assert_eq!(ok(&mut a, "accessibility_figures", json!({"doc":doc})), figures);
+            }
+            if dirty {
+                ok(&mut a, "edit_redo", json!({"doc":doc}));
+                let figs = ok(&mut a, "accessibility_figures", json!({"doc":doc}));
+                assert_eq!(figs["figures"][1]["alt"], "Second");
+                ok(&mut a, "edit_undo", json!({"doc":doc}));
+                assert_eq!(ok(&mut a, "accessibility_figures", json!({"doc":doc})), figures);
+            }
+            let name = if dirty { "dirty.pdf" } else { "clean.pdf" };
+            ok(&mut a, "doc_save", json!({"doc":doc,"path":name,"full":true}));
+            let saved = CosDocument::open(Arc::new(std::fs::read(dir.join(name)).unwrap())).unwrap();
+            let saved_figures = pdfcraft_engine::a11y::figures(&saved);
+            assert_eq!(saved_figures.len(), 2);
+            assert_eq!(saved_figures[0].alt.as_deref(), Some("Page figure"));
+            assert_eq!(saved_figures[1].alt.as_deref(), Some(if dirty { "First" } else { "Form figure" }));
+            assert_eq!(pdfcraft_engine::a11y::tags(&saved).len(), 3);
+            let catalog = saved.get(saved.root().unwrap());
+            let root = saved.dict(catalog.as_dict().unwrap().get(b"StructTreeRoot").unwrap()).unwrap();
+            let tree = saved.dict(root.get(b"ParentTree").unwrap()).unwrap();
+            let mut expected_nums =
+                vec![Object::Int(0), Object::Array(vec![Object::Ref(saved_figures[0].obj)]), Object::Int(1), Object::Ref(saved_figures[1].obj)];
+            if annotation_owned {
+                expected_nums.extend([Object::Int(2), Object::Ref(saved_figures[1].obj)]);
+            }
+            assert_eq!(tree.get(b"Nums"), Some(&Object::Array(expected_nums)));
+            let page_dict = saved.get(saved_figures[0].obj);
+            let page_ref = page_dict.as_dict().unwrap().get(b"Pg").unwrap();
+            let page_dict = saved.dict(page_ref).unwrap();
+            if annotation_owned {
+                let annotation = saved.resolve(&page_dict.get(b"Annots").unwrap().as_array().unwrap()[0]);
+                assert_eq!(annotation.as_dict().unwrap().get(b"StructParent"), Some(&Object::Int(2)));
+            }
+            let Object::Stream(page_stream) = &*saved.resolve(page_dict.get(b"Contents").unwrap()) else { panic!("page content") };
+            assert_eq!(page_stream.decoded().unwrap(), page.as_bytes());
+            let resources = saved.dict(page_dict.get(b"Resources").unwrap()).unwrap();
+            let xobjects = saved.dict(resources.get(b"XObject").unwrap()).unwrap();
+            let Object::Stream(form_stream) = &*saved.resolve(xobjects.get(b"Fm").unwrap()) else { panic!("form content") };
+            assert_eq!(form_stream.decoded().unwrap(), form.as_bytes());
         }
-        let before = ok(&mut a, "doc_info", json!({"doc":doc}))["document"].clone();
-        assert_eq!(before["dirty"], dirty);
-        assert_eq!(before["undo"].is_string(), dirty);
-        assert_eq!(before["redo"].is_string(), dirty);
-        let tags = ok(&mut a, "accessibility_tags", json!({"doc":doc}));
-        let figures = ok(&mut a, "accessibility_figures", json!({"doc":doc}));
-        for (tool, args) in [
-            ("accessibility_set_alt", json!({"doc":doc,"figure":figure,"decorative":true})),
-            ("accessibility_mark_tag_artifact", json!({"doc":doc,"object":figure,"generation":0})),
-        ] {
-            let Err(ToolError::Failed(message)) = a.call(tool, &args) else { panic!("{tool} must refuse form-owned content") };
-            assert!(message.contains("form"), "useful unsupported-content reason: {message}");
-            assert_eq!(ok(&mut a, "doc_info", json!({"doc":doc}))["document"], before);
-            assert_eq!(ok(&mut a, "accessibility_tags", json!({"doc":doc})), tags);
-            assert_eq!(ok(&mut a, "accessibility_figures", json!({"doc":doc})), figures);
-        }
-        if dirty {
-            ok(&mut a, "edit_redo", json!({"doc":doc}));
-            let figs = ok(&mut a, "accessibility_figures", json!({"doc":doc}));
-            assert_eq!(figs["figures"][1]["alt"], "Second");
-            ok(&mut a, "edit_undo", json!({"doc":doc}));
-            assert_eq!(ok(&mut a, "accessibility_figures", json!({"doc":doc})), figures);
-        }
-        let name = if dirty { "dirty.pdf" } else { "clean.pdf" };
-        ok(&mut a, "doc_save", json!({"doc":doc,"path":name,"full":true}));
-        let saved = CosDocument::open(Arc::new(std::fs::read(dir.join(name)).unwrap())).unwrap();
-        let saved_figures = pdfcraft_engine::a11y::figures(&saved);
-        assert_eq!(saved_figures.len(), 2);
-        assert_eq!(saved_figures[0].alt.as_deref(), Some("Page figure"));
-        assert_eq!(saved_figures[1].alt.as_deref(), Some(if dirty { "First" } else { "Form figure" }));
-        assert_eq!(pdfcraft_engine::a11y::tags(&saved).len(), 3);
-        let catalog = saved.get(saved.root().unwrap());
-        let root = saved.dict(catalog.as_dict().unwrap().get(b"StructTreeRoot").unwrap()).unwrap();
-        let tree = saved.dict(root.get(b"ParentTree").unwrap()).unwrap();
-        assert_eq!(
-            tree.get(b"Nums"),
-            Some(&Object::Array(vec![
-                Object::Int(0),
-                Object::Array(vec![Object::Ref(saved_figures[0].obj)]),
-                Object::Int(1),
-                Object::Ref(saved_figures[1].obj)
-            ]))
-        );
-        let page_dict = saved.get(saved_figures[0].obj);
-        let page_ref = page_dict.as_dict().unwrap().get(b"Pg").unwrap();
-        let page_dict = saved.dict(page_ref).unwrap();
-        let Object::Stream(page_stream) = &*saved.resolve(page_dict.get(b"Contents").unwrap()) else { panic!("page content") };
-        assert_eq!(page_stream.decoded().unwrap(), page.as_bytes());
-        let resources = saved.dict(page_dict.get(b"Resources").unwrap()).unwrap();
-        let xobjects = saved.dict(resources.get(b"XObject").unwrap()).unwrap();
-        let Object::Stream(form_stream) = &*saved.resolve(xobjects.get(b"Fm").unwrap()) else { panic!("form content") };
-        assert_eq!(form_stream.decoded().unwrap(), form.as_bytes());
     }
     std::fs::remove_dir_all(dir).unwrap();
 }
@@ -5364,6 +5421,74 @@ fn exporting_to_word_html_and_rtf() {
     assert!(a.call("doc_export_office", &json!({ "doc": doc, "path": "a.xyz" })).is_err());
 }
 
+/// #3120: a PDF whose pages draw "Head", then a chain of `depths[page]` nested forms whose
+/// innermost writes "TAIL".
+fn nested_forms_pdf(depths: &[usize]) -> Vec<u8> {
+    let mut objs: Vec<String> =
+        vec!["<< /Type /Catalog /Pages 2 0 R >>".into(), String::new(), "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".into()];
+    let mut kids = Vec::new();
+    for &depth in depths {
+        // The object number of D1, D2 and so on.
+        let first = objs.len() + 1;
+        let xobjects: String = (1..=depth).map(|i| format!("/D{i} {} 0 R ", first + i - 1)).collect();
+        let resources = format!("<< /Font << /F1 3 0 R >> /XObject << {xobjects}>> >>");
+        for i in 1..=depth {
+            let body = if i == depth { "BT /F1 24 Tf 20 150 Td (TAIL) Tj ET".to_string() } else { format!("/D{} Do", i + 1) };
+            objs.push(format!(
+                "<< /Type /XObject /Subtype /Form /BBox [0 0 200 300] /Resources {resources} /Length {} >>\nstream\n{body}\nendstream",
+                body.len()
+            ));
+        }
+        let body = "BT /F1 24 Tf 20 250 Td (Head) Tj ET /D1 Do";
+        objs.push(format!("<< /Length {} >>\nstream\n{body}\nendstream", body.len()));
+        objs.push(format!("<< /Type /Page /Parent 2 0 R /Contents {} 0 R /Resources {resources} >>", objs.len()));
+        kids.push(format!("{} 0 R", objs.len()));
+    }
+    objs[1] = format!("<< /Type /Pages /Kids [{}] /Count {} /MediaBox [0 0 200 300] >>", kids.join(" "), kids.len());
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+    for (i, o) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n{o}\nendobj\n", i + 1).as_bytes());
+    }
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+    for o in offsets {
+        out.extend_from_slice(format!("{o:010} 00000 n \n").as_bytes());
+    }
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+    out
+}
+
+/// #3120: export reads forms as deeply nested as the renderer draws them (13 used to lose their
+/// text), and its result says which pages draw forms past that, whose text is missing.
+#[test]
+fn exporting_office_files_says_which_pages_left_form_text_out() {
+    use pdfcraft_engine::compare::{MAX_FORM_DEPTH, MAX_FORM_VISITS};
+    let dir = workdir("office-forms");
+    std::fs::write(dir.join("deep.pdf"), nested_forms_pdf(&[13, MAX_FORM_DEPTH + 1, MAX_FORM_DEPTH])).unwrap();
+    std::fs::write(dir.join("fine.pdf"), nested_forms_pdf(&[13])).unwrap();
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "deep.pdf" }))["doc"].as_u64().unwrap();
+    for ext in ["html", "docx"] {
+        let r = ok(&mut a, "doc_export_office", json!({ "doc": doc, "path": format!("deep.{ext}") }));
+        assert_eq!((&r["truncated"], &r["truncated_pages"]), (&json!(true), &json!([2])), "{r}");
+        let warning = r["warnings"][0].as_str().unwrap();
+        assert!(warning.contains(&format!("{MAX_FORM_DEPTH} deep")) && warning.contains(&MAX_FORM_VISITS.to_string()), "{warning}");
+        assert!(warning.contains("truncated_pages"), "{warning}");
+    }
+    let html = std::fs::read_to_string(dir.join("deep.html")).unwrap();
+    let tails: Vec<usize> = html.split("<hr>").map(|page| page.matches("TAIL").count()).collect();
+    assert_eq!(tails, [1, 0, 1], "{html}");
+    assert_eq!(html.matches("Head").count(), 3, "{html}");
+
+    let fine = ok(&mut a, "doc_open", json!({ "path": "fine.pdf" }))["doc"].as_u64().unwrap();
+    let r = ok(&mut a, "doc_export_office", json!({ "doc": fine, "path": "fine.html" }));
+    assert_eq!((&r["truncated"], &r["truncated_pages"]), (&json!(false), &json!([])), "{r}");
+    assert!(r.get("warnings").is_none(), "{r}");
+    assert!(std::fs::read_to_string(dir.join("fine.html")).unwrap().contains("TAIL"));
+}
+
 /// #773: a diagonal watermark must not enter the body flow or move invoice fields.
 #[test]
 fn exporting_an_invoice_to_word_keeps_the_watermark_out_of_flow() {
@@ -6778,4 +6903,35 @@ fn a_root_less_write_output_is_atomic_too() {
     let e = free.write_output(&dir.join("new").to_string_lossy(), &[4]).unwrap_err();
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn text_box_and_callout_fill_and_border_through_tools() {
+    let dir = workdir("textbox-fill");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_open", json!({ "path": "a.pdf" }))["doc"].as_u64().unwrap();
+    for kind in ["textbox", "callout"] {
+        let mut args = json!({ "doc": doc, "page": 1, "type": kind, "rect": [80, 40, 180, 100], "contents": "Example" });
+        if kind == "callout" {
+            args["to"] = json!([20, 120]);
+        }
+        let added = ok(&mut a, "comment_add", args);
+        let comment = &added["comment"];
+        ok(&mut a, "comment_edit", json!({ "doc": doc, "page": 1, "index": comment["index"], "fill": "white", "width": 3 }));
+    }
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "filled.pdf" }));
+    let mut session = pdfcraft_engine::Session::new();
+    let bytes = std::sync::Arc::new(std::fs::read(dir.join("filled.pdf")).unwrap());
+    let saved = session.open("filled.pdf", None, bytes, None).unwrap();
+    for index in 0..2 {
+        let props = session.get(saved).unwrap().comment_props(0, index).unwrap();
+        assert_eq!((props.fill, props.width), (Some([1.0; 3]), Some(3.0)));
+        ok(&mut a, "comment_edit", json!({ "doc": doc, "page": 1, "index": index + 1, "fill": "none" }));
+    }
+    ok(&mut a, "doc_save", json!({ "doc": doc, "path": "transparent.pdf" }));
+    let bytes = std::sync::Arc::new(std::fs::read(dir.join("transparent.pdf")).unwrap());
+    let saved = session.open("transparent.pdf", None, bytes, None).unwrap();
+    for index in 0..2 {
+        assert_eq!(session.get(saved).unwrap().comment_props(0, index).unwrap().fill, None);
+    }
 }
