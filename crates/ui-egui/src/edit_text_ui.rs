@@ -21,7 +21,7 @@ type ImagePreviewRequest = (u64, Arc<pdfcraft_engine::ImageMovePreviewSource>, [
 /// A single worker per view; pointer updates replace the pending request.
 #[derive(Default)]
 pub(crate) struct ImageDragPreview {
-    key: Option<(u64, usize, usize)>,
+    key: Option<(u64, usize, usize, bool)>,
     source: Option<Arc<pdfcraft_engine::ImageMovePreviewSource>>,
     wanted: Option<([f64; 4], f32)>,
     serial: u64,
@@ -88,12 +88,14 @@ impl ImageDragPreview {
         }
     }
 
-    fn paint(&mut self, ui: &egui::Ui, doc: &pdfcraft_engine::Document, xf: &PageXform, page: usize, index: usize, target: [f64; 4]) {
-        let key = (doc.edit_generation(), page, index);
+    pub(crate) fn paint(&mut self, ui: &egui::Ui, doc: &pdfcraft_engine::Document, xf: &PageXform, item: (usize, usize, bool), target: [f64; 4]) {
+        let (page, index, added) = item;
+        let key = (doc.edit_generation(), page, index, added);
         if self.key != Some(key) {
             self.clear();
             self.key = Some(key);
-            self.source = doc.image_move_preview_source(page, index).ok().map(Arc::new);
+            self.source =
+                if added { doc.added_image_move_preview_source(page, index) } else { doc.image_move_preview_source(page, index) }.ok().map(Arc::new);
         }
         let Some(source) = self.source.as_ref() else { return };
         let Some(info) = doc.info.pages.get(page) else { return };
@@ -201,7 +203,9 @@ impl ImageDragPreview {
 
     pub fn committed(&mut self, edit: &Edit) {
         if matches!(edit, Edit::EditPageImage { page, index, change: pdfcraft_engine::ImageEdit::Move(_) }
-            if self.key.is_some_and(|(_, p, i)| (p, i) == (*page, *index)))
+            if self.key.is_some_and(|(_, p, i, added)| !added && (p, i) == (*page, *index)))
+            || matches!(edit, Edit::UpdateContent { page, index, content: pdfcraft_engine::AddedContent::Image(_) }
+                if self.key.is_some_and(|(_, p, i, added)| added && (p, i) == (*page, *index)))
         {
             self.settling = true;
         } else {
@@ -210,7 +214,7 @@ impl ImageDragPreview {
     }
 
     pub fn page_received(&mut self, page: usize) {
-        if self.settling && self.key.is_some_and(|(_, p, _)| p == page) {
+        if self.settling && self.key.is_some_and(|(_, p, _, _)| p == page) {
             // Shapes from this frame still reference the preview texture. Retire it on the
             // next frame, after the newly received page can actually be painted.
             self.retire = true;
@@ -218,7 +222,7 @@ impl ImageDragPreview {
     }
 
     pub fn paint_settling(&mut self, ui: &egui::Ui, xf: &PageXform, page: usize) {
-        if !self.settling || !self.key.is_some_and(|(_, p, _)| p == page) {
+        if !self.settling || !self.key.is_some_and(|(_, p, _, _)| p == page) {
             return;
         }
         if self.retire {
@@ -870,7 +874,11 @@ pub(crate) fn image_input(
     };
     let selected = view.image_selection.as_ref().filter(|s| s.page == page).map(|s| s.index).filter(|i| *i < boxes.len());
     let dragging = view.image_selection.as_ref().is_some_and(|s| s.drag.is_some());
-    if !dragging && !view.image_drag_preview.settling {
+    if !dragging
+        && !view.image_drag_preview.settling
+        && !view.content.moving_added_image(doc.added())
+        && !matches!(view.pending_edit, Some(Edit::UpdateContent { content: pdfcraft_engine::AddedContent::Image(_), .. }))
+    {
         view.image_drag_preview.clear();
     }
     // Few images: faint outlines for all of them, as before. Many: only the selected and
@@ -971,7 +979,7 @@ pub(crate) fn image_input(
             let visible = preview.intersect(xf.rect);
             if visible.is_positive() {
                 if preview != b {
-                    view.image_drag_preview.paint(ui, doc, xf, page, i, user_box(xf, info, page, target));
+                    view.image_drag_preview.paint(ui, doc, xf, (page, i, false), user_box(xf, info, page, target));
                 }
                 painter.rect_filled(visible, CornerRadius::ZERO, ACCENT.gamma_multiply(0.04));
                 painter.rect_stroke(visible, CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);

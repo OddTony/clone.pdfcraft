@@ -5108,7 +5108,15 @@ fn inserted_image_remains_added_after_watermark() {
         }));
         assert!(app.apply_edit(Edit::AddWatermark {
             pages: vec![0],
-            settings: Watermark { text: "DRAFT".into(), ..Watermark::default() },
+            settings: Watermark {
+                text: "DRAFT".into(),
+                color: [1.0, 0.0, 0.0],
+                opacity: 1.0,
+                rotation: 0.0,
+                font_size: 35.0,
+                offset: [0.0, 55.0],
+                ..Watermark::default()
+            },
             file: None,
             replace: false
         }));
@@ -5127,6 +5135,19 @@ fn inserted_image_remains_added_after_watermark() {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
+    h.run_steps(3);
+    let before = h.render().unwrap();
+    let min = at(35.0, 245.0);
+    let max = at(125.0, 175.0);
+    let mark = (min.y as u32..max.y as u32)
+        .find_map(|y| {
+            (min.x as u32..max.x as u32).find_map(|x| {
+                let c = before.get_pixel(x, y).0;
+                let shifted = before.get_pixel(x + 100, y).0;
+                (c[0] > 220 && c[1] < 60 && c[2] < 60 && !(shifted[0] > 220 && shifted[1] < 60 && shifted[2] < 60)).then_some((x, y))
+            })
+        })
+        .expect("red watermark overlaps the inserted image");
     let start = at(90.0, 180.0);
     h.hover_at(start);
     h.run_steps(1);
@@ -5134,10 +5155,37 @@ fn inserted_image_remains_added_after_watermark() {
     h.run_steps(1);
     h.hover_at(start + egui::vec2(100.0, 0.0));
     h.run_steps(3);
+    let moved_sample = at(120.0, 230.0) + egui::vec2(100.0, 0.0);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        let shot = h.render().unwrap();
+        let blue = shot.get_pixel(moved_sample.x as u32, moved_sample.y as u32).0;
+        let red = shot.get_pixel(mark.0, mark.1).0;
+        let displaced = shot.get_pixel(mark.0 + 100, mark.1).0;
+        if blue[2] > 200 && blue[0] < 80 {
+            assert!(red[0] > 220 && red[1] < 60 && red[2] < 60, "watermark changed during image drag: {red:?}");
+            assert!(!(displaced[0] > 220 && displaced[1] < 60 && displaced[2] < 60), "watermark duplicated during image drag: {displaced:?}");
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "inserted image did not move in drag preview: {blue:?}");
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     let old = h.state().session.get(id).unwrap().added()[0].content.rect();
     assert_eq!(old, [30.0, 170.0, 130.0, 250.0], "the gesture must not edit the document until release");
     h.drop_at(start + egui::vec2(100.0, 0.0));
-    h.run_steps(5);
+    for frame in 0..12 {
+        h.run_steps(1);
+        let shot = h.render().unwrap();
+        let blue = shot.get_pixel(moved_sample.x as u32, moved_sample.y as u32).0;
+        let red = shot.get_pixel(mark.0, mark.1).0;
+        assert!(blue[2] > 200 && blue[0] < 80, "inserted image jumped back after release on frame {frame}: {blue:?}");
+        assert!(red[0] > 220 && red[1] < 60 && red[2] < 60, "watermark changed after release on frame {frame}: {red:?}");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
     let moved = h.state().session.get(id).unwrap().added()[0].content.rect();
     assert!(moved[0] > old[0], "the inserted image should move when released: {moved:?}");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.run_steps(2);
+    assert_eq!(h.state().session.get(id).unwrap().added()[0].content.rect(), old, "undo restores the inserted image");
 }

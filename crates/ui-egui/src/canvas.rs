@@ -3013,6 +3013,9 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
             }
             view.text_background.paint(painter, &xf, i, view.line_editor.as_ref(), view.content.draft.as_ref());
             view.image_drag_preview.paint_settling(ui, &xf, i);
+            if editing_content && let Some((index, target)) = view.content.image_preview_target(ui, &xf, i, info, &added) {
+                view.image_drag_preview.paint(ui, doc, &xf, (i, index, true), target);
+            }
             if editing_content {
                 let page_tex = view.pages.get(&i).map(|p| p.tex.id());
                 view.move_background.paint(ui, painter, &xf, i, info, &view.content, page_tex);
