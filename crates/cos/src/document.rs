@@ -2122,6 +2122,35 @@ mod tests {
         assert!(Arc::ptr_eq(&doc.fallback_headers, &doc.clone().fallback_headers));
     }
 
+    proptest::proptest! {
+        #[test]
+        fn candidate_index_matches_original_recovery_scan(parts in proptest::collection::vec(0u8..12, 0..60)) {
+            let fragments: [&[u8]; 12] = [
+                b"1 0 obj 1 endobj\n", b"1 4 obj 2 endobj\n", b"1 8 obj [\n",
+                b"2 0 obj (text) endobj\n", b"0 65535 obj null endobj\n", b"01 0 obj 4 endobj\n",
+                b"1 0 obj << /Length 3 >> stream\nabc\nendstream endobj\n", b"1 0 notobj\n",
+                b" 4294967295 0 obj 9 endobj\n", b"\x00\xff 2 ", b"(1 0 obj 7 endobj)\n", b"1 %x\n0 obj 5 endobj\n",
+            ];
+            let mut doc = Document::new_empty();
+            let mut bytes = b"%PDF-1.7\n".to_vec();
+            for part in parts { bytes.extend_from_slice(fragments[usize::from(part)]); }
+            doc.data = Arc::new(bytes);
+            for num in [0, 1, 2, 3, u32::MAX] {
+                let needle = format!("{num} ");
+                let mut expected = None;
+                let mut pos = 0;
+                while let Some(p) = find(&doc.data, needle.as_bytes(), pos, doc.data.len()) {
+                    pos = p + 1;
+                    if p > 0 && !is_whitespace(doc.data[p - 1]) { continue; }
+                    if let Ok((id, object)) = parse_indirect_shared(&doc.data, p, &|_| None) && id.num == num {
+                        expected = Some((id, object));
+                    }
+                }
+                proptest::prop_assert_eq!(doc.scan_for(num), expected);
+            }
+        }
+    }
+
     #[test]
     fn stale_incremental_xref_recovers_objects_without_reviving_freed_entries() {
         let mut bytes = b"%PDF-1.7\n".to_vec();
