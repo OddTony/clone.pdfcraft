@@ -353,7 +353,7 @@ impl FilterResult<'_> {
     }
 }
 
-/// PdfCraft patch: the end-of-line after the `stream` keyword. Microsoft Reporting Services
+/// PdfCraft patch (20): the end-of-line after the `stream` keyword. Microsoft Reporting Services
 /// writes `stream \r\n`, a space before the line break, which the specification does not allow.
 /// Without this the content stream was taken to start at the space, failed to inflate, and the
 /// page rendered blank (bank statements, invoices) while other viewers showed it. Only spaces and
