@@ -28,19 +28,26 @@ pub fn modal(ctx: &egui::Context, id: impl std::hash::Hash + std::fmt::Debug) ->
     egui::Modal::new(egui::Id::new(id)).frame(dialog_frame(ctx))
 }
 
-/// Show [`modal`], outline its controls, and remember the card rect for layout checks.
-pub fn show_modal<R>(ctx: &egui::Context, id: &str, content: impl FnOnce(&mut egui::Ui) -> R) -> egui::ModalResponse<R> {
-    let stored = egui::Id::new(id);
-    modal(ctx, id).show(ctx, |ui| {
-        begin_dialog(ui);
-        // Remember focus at the start of the frame: a text field can release focus when it
-        // handles Return, but that must not also submit the dialog.
+/// Show a modal with Return handling for its explicit default action.
+pub fn show_modal_with_default<R>(ctx: &egui::Context, modal: egui::Modal, content: impl FnOnce(&mut egui::Ui) -> R) -> egui::ModalResponse<R> {
+    modal.show(ctx, |ui| {
+        // A field may release focus when handling Return; do not submit the dialog as well.
         let default_key = default_key_id(ui);
         let eligible =
             ui.ctx().memory(|m| m.focused().is_none() && m.top_modal_layer() == Some(ui.layer_id())) && !egui::Popup::is_any_open(ui.ctx());
         ui.ctx().data_mut(|d| d.insert_temp(default_key, eligible));
         let inner = content(ui);
         ui.ctx().data_mut(|d| d.remove::<bool>(default_key));
+        inner
+    })
+}
+
+/// Show [`modal`], outline its controls, and remember the card rect for layout checks.
+pub fn show_modal<R>(ctx: &egui::Context, id: &str, content: impl FnOnce(&mut egui::Ui) -> R) -> egui::ModalResponse<R> {
+    let stored = egui::Id::new(id);
+    show_modal_with_default(ctx, modal(ctx, id), |ui| {
+        begin_dialog(ui);
+        let inner = content(ui);
         // The frame's stroke sits outside this content rect; the stored card is the fill.
         let card = ui.min_rect().expand2(egui::vec2(f32::from(DIALOG_PAD_X), f32::from(DIALOG_PAD_Y)));
         ui.ctx().data_mut(|d| d.insert_temp(stored.with("card"), card));

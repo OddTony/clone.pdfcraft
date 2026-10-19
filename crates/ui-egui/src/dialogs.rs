@@ -1576,7 +1576,7 @@ fn link_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
         );
         ui.add_space(14.0);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, tl!("Cancel"), true).clicked() {
+            if widgets::default_button(ui, tl!("Cancel")) {
                 choice = Some(false);
             }
             if widgets::pill_button(ui, open, false).clicked() {
@@ -1618,7 +1618,7 @@ fn full_screen_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
         );
         ui.add_space(14.0);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, tl!("Not now"), true).clicked() {
+            if widgets::default_button(ui, tl!("Not now")) {
                 choice = Some(false);
             }
             if widgets::pill_button(ui, tl!("Full Screen"), false).clicked() {
@@ -1650,7 +1650,7 @@ fn remote_link_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
         ui.label(tl!("Only allow this if you trust the source document."));
         ui.add_space(14.0);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, tl!("Cancel"), true).clicked() {
+            if widgets::default_button(ui, tl!("Cancel")) {
                 choice = Some(false);
             }
             if widgets::pill_button(ui, tl!("Allow"), false).clicked() {

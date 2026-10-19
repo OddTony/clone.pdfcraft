@@ -735,7 +735,7 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     if let Some(e) = d.confirm_remove.and_then(|i| ids.get(i)) {
         ui.label(crate::i18n::fmt(tl!("Remove \"{name}\" from this list? The file itself is not deleted."), &[("name", &e.name)]));
         ui.horizontal(|ui| {
-            if widgets::pill_button(ui, tl!("Remove"), true).clicked() {
+            if widgets::default_button(ui, tl!("Remove")) {
                 remove = d.confirm_remove;
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
@@ -754,7 +754,7 @@ fn choose(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             d.confirm_remove = removable;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if ui.add_enabled_ui(d.selected.is_some(), |ui| widgets::pill_button(ui, tl!("Continue"), true)).inner.clicked() {
+            if ui.add_enabled_ui(d.selected.is_some(), |ui| widgets::default_button(ui, tl!("Continue"))).inner {
                 d.step = SignStep::SignAs;
                 d.error = None;
             }
@@ -839,7 +839,7 @@ fn configure(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             d.error = None;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, if d.new_id.create { tl!("Save") } else { tl!("Continue") }, true).clicked() {
+            if widgets::default_button(ui, if d.new_id.create { tl!("Save") } else { tl!("Continue") }) {
                 go = true;
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
@@ -1091,7 +1091,7 @@ fn sign_as(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
             d.error = None;
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if widgets::pill_button(ui, tl!("Sign"), true).clicked() {
+            if widgets::default_button(ui, tl!("Sign")) {
                 go = true;
             }
             if widgets::pill_button(ui, tl!("Cancel"), false).clicked() {
@@ -1464,7 +1464,7 @@ pub(crate) fn cert_viewer(ui: &mut egui::Ui, v: &mut CertViewer, trusted: &[Cert
     });
     ui.add_space(10.0);
     let mut close = false;
-    ui.horizontal(|ui| ui.with_layout(Layout::right_to_left(Align::Center), |ui| close = widgets::pill_button(ui, tl!("OK"), true).clicked()));
+    ui.horizontal(|ui| ui.with_layout(Layout::right_to_left(Align::Center), |ui| close = widgets::default_button(ui, tl!("OK"))));
     (close, action)
 }
 

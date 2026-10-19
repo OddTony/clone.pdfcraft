@@ -653,7 +653,7 @@ fn an_imported_digital_id_can_be_removed() {
 
     h.get_by_label("Remove").click();
     h.run_steps(4);
-    h.get_by_label("Remove").click();
+    h.key_press(egui::Key::Enter);
     h.run_steps(3);
     assert!(h.state().digital_ids.is_empty());
     assert!(p12.exists(), "the file itself is not deleted");

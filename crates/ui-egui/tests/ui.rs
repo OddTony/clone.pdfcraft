@@ -201,7 +201,7 @@ fn a_document_asking_for_full_screen_is_asked_about_first() {
     h.run_steps(3);
     assert!(!h.state().full_screen, "nothing happens before the answer");
     h.get_by_label("Open in Full Screen mode?");
-    h.get_by_label("Not now").click();
+    h.key_press(egui::Key::Enter);
     h.run_steps(3);
     assert!(!h.state().full_screen);
     assert!(h.query_by_label("Open in Full Screen mode?").is_none() && h.state().pending_full_screen.is_none());

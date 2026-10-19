@@ -169,11 +169,11 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
         ui.add_space(12.0);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if let Some(url) = download.take() {
-                let get = widgets::pill_button(ui, tl!("Download"), true).clicked();
+                let get = widgets::default_button(ui, tl!("Download"));
                 let later = widgets::pill_button(ui, tl!("Later"), false).clicked();
                 close = get || later;
                 download = get.then_some(url);
-            } else if widgets::pill_button(ui, tl!("Close"), true).clicked() {
+            } else if widgets::default_button(ui, tl!("Close")) {
                 close = true;
             }
         });

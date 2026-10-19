@@ -69,6 +69,9 @@ fn an_up_to_date_or_failed_check_says_so() {
     settle(&mut h);
     h.get_by_label_contains("is up to date");
     assert!(h.query_by_label("Download").is_none());
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert!(h.query_by_label_contains("is up to date").is_none());
 
     let mut h = harness(Err("couldn't reach GitHub"));
     h.state_mut().execute("help.check_updates");

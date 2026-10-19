@@ -168,6 +168,18 @@ fn a_link_asks_first_and_opens_when_allowed() {
     assert_eq!(h.state().pending_link, None);
 }
 
+#[test]
+fn return_on_link_consent_chooses_cancel() {
+    let _gpu = gpu();
+    let mut h = harness();
+    click_link(&mut h);
+    assert!(h.state().pending_link.is_some());
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    assert!(h.state().pending_link.is_none());
+    assert!(h.state().last_opened_url.is_none(), "the default must not open a document-controlled URL");
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_local_gotor_link_opens_in_a_tab_and_applies_its_destination() {
