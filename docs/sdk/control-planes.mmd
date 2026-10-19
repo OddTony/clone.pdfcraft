@@ -1,0 +1,40 @@
+flowchart TD
+    subgraph Clients["Consumers & Runtimes"]
+        A["🤖 AI Assistants & Agents\n(Claude, Antigravity, Cursor)"]
+        B["💻 Application Developers\n(Python, TypeScript, Rust)"]
+        C["🌐 Microservices & Pipelines\n(Docker, Kubernetes, Web Backends)"]
+    end
+
+    subgraph EntryPoints["Entry Points & Protocols"]
+        direction TB
+        MCP["<b>pdfcraft-cli mcp</b>\n• Protocol: stdio JSON-RPC 2.0\n• Confinement: --root / --automation-*-root\n• Persona: Interactive Agent Control Plane"]
+        SDK["<b>pdfcraft-sdk</b>\n• Bindings: Rust / PyO3 / N-API\n• APDFL Domain Object Hierarchy\n• Persona: In-Process Application Data Plane"]
+        REST["<b>pdfcraft-rest</b>\n• Protocol: HTTP REST / OpenAPI 3.1\n• Bearer Token Auth / RFC 7807\n• Persona: Microservice Deployment Plane"]
+    end
+
+    subgraph ExecutionLayer["Layer 7 Execution & Isolation"]
+        direction TB
+        AUTO["<b>pdfcraft-automation</b>\n(149 Headless Tools Registry)"]
+        SANDBOX["<b>ExecutionSandbox & Adapter</b>\n• Ephemeral TempDir Isolation\n• Panic Containment (catch_unwind)\n• Automatic 10MB Memory Spillover"]
+        QUEUE["<b>RestService & JobRepository</b>\n• Bounded Worker Pool Semaphore\n• Async Job Journaling (/v1/jobs)\n• Socket Read/Write Timeouts"]
+    end
+
+    subgraph CoreEngine["Layer 6 Engine & Lower Domain Crates"]
+        ENGINE["<b>pdfcraft-engine</b>\n(Document Session & Command Bus)"]
+        CRATES["<b>Specialized Feature Crates</b>\n• cos • render • forms • sign • redact\n• annot • optimize • ocr • a11y • export"]
+    end
+
+    %% Client connections
+    A -->|"stdio (JSON lines)"| MCP
+    B -->|"In-Process Import\n(C-ABI / PyO3 / N-API)"| SDK
+    B -.->|"Remote Client Driver\n(HTTP / REST)"| REST
+    C -->|"HTTP / REST\n(JSON / Multipart)"| REST
+
+    %% Internal routing
+    MCP -->|"Direct Tool Invocation\n(Stateful doc_id Handles)"| AUTO
+    REST -->|"Enqueue / Worker Pool"| QUEUE
+    QUEUE -->|"Execute via Port"| SDK
+    SDK -->|"Run Operation"| SANDBOX
+    SANDBOX -->|"Headless Tool Call"| AUTO
+    AUTO -->|"Dispatch Commands"| ENGINE
+    ENGINE --> CRATES

@@ -3,7 +3,8 @@
 The **PdfCraft Document Processing SDK** provides a high-performance, `#![forbid(unsafe_code)]`, memory-safe document processing engine. It serves as an open-source alternative to the proprietary Adobe PDF Library (PDFL) for in-process execution, and pdfRest / Adobe PDF Services for containerized on-premise REST deployments.
 
 > [!TIP]
-> For the complete function-by-function reference organized by domain with exhaustive parameters, return types, and code snippets, see the [**SDK API Reference Manual**](sdk-api-reference.md).
+> - For the complete function-by-function reference organized by domain with exhaustive parameters, return types, and code snippets, see the [**SDK API Reference Manual**](api-reference.md).
+> - To understand how the SDK, REST service, and MCP server relate, see the [**Control Planes Architecture Guide**](control-planes.md).
 
 ---
 
