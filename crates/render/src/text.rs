@@ -1923,6 +1923,54 @@ mod tests {
         assert_eq!(texts(2), ["a", "\u{ad}", "b", "\u{a0}", "c"], "a named glyph keeps its glyph list value");
     }
 
+    /// #3169, #3170: glyph names outside the Adobe Glyph List still read as text. Ligature
+    /// (`f_i`) and suffixed (`hyphen.case`) names go by the glyph list specification's full
+    /// mapping; a name that only numbers the glyph (`c251` small caps, `C39`, `C174`) reads as
+    /// the code in StandardEncoding, where 39 is a right quote and 174 the fi ligature. A
+    /// ZapfDingbats name (`a12`) and a name with no meaning left (`foo`) still read as nothing.
+    #[test]
+    fn glyph_names_outside_the_glyph_list_still_read_as_text() {
+        use lopdf::{Object, dictionary};
+        let name = |n: &str| Object::Name(n.as_bytes().to_vec());
+        let differences = Object::Dictionary(dictionary! {
+            "Type" => "Encoding",
+            "Differences" => vec![
+                Object::Integer(30), name("f_i"), name("f_l"), Object::Integer(2), name("hyphen.case"),
+                Object::Integer(39), name("C39"), Object::Integer(97), name("c251"), Object::Integer(174), name("C174"),
+                Object::Integer(88), name("a12"), name("foo"), name("uni00660069"),
+                // #3239 review: a numbered name keeps its meaning under a suffix.
+                Object::Integer(61), name("C39.sc"),
+            ],
+        });
+        let pdf = encoded_pages(&[(differences, &b"BT /F1 20 Tf 1 0 0 1 20 150 Tm (\x1e\x1f\x02'a\xaeXYZ=) Tj ET"[..])]);
+        let texts = extract_page(&pdf, 0, &InterpreterSettings::default()).unwrap().glyphs.iter().map(|g| g.text.clone()).collect::<Vec<_>>();
+        assert_eq!(texts, ["fi", "fl", "-", "\u{2019}", "a", "\u{fb01}", "fi", "="]);
+    }
+
+    /// Review on #3239: the glyph list specification's `uni` and `u` forms take uppercase hex
+    /// digits only, and map a name with lowercase ones to nothing ("uni20ac" in its examples).
+    /// Names upstream's own lookup can't read (several groups, a suffix) show it: lowercase reads
+    /// as nothing, uppercase as its characters. A bare `uni20ac` or `u1040c` is still read by
+    /// upstream's lenient `unicode_from_name`, outside this mapping.
+    #[test]
+    fn glyph_names_with_lowercase_hex_read_as_nothing() {
+        use lopdf::{Object, dictionary};
+        let name = |n: &str| Object::Name(n.as_bytes().to_vec());
+        let differences = Object::Dictionary(dictionary! {
+            "Type" => "Encoding",
+            "Differences" => vec![Object::Integer(65), name("uni20ac0308"), name("uni20AC0308"), name("u1040c.alt"), name("u1040C.alt"), name("f_uni20ac"), name("f_uni20AC")],
+        });
+        let pdf = encoded_pages(&[(
+            differences,
+            &b"BT /F1 20 Tf 20 180 Td (A) Tj 0 -25 Td (B) Tj 0 -25 Td (C) Tj 0 -25 Td (D) Tj 0 -25 Td (E) Tj 0 -25 Td (F) Tj ET"[..],
+        )]);
+        // One glyph per line, so each name's text stays its own (and a name read as nothing
+        // leaves no line).
+        let text = extract_page(&pdf, 0, &InterpreterSettings::default()).unwrap().plain_text();
+        let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+        assert_eq!(lines, ["\u{20ac}\u{308}", "\u{1040c}", "f", "f\u{20ac}"], "{text:?}");
+    }
+
     #[test]
     fn narrow_ligatures_keep_every_letter() {
         // Split evenly, this "ffi" put its two "f"s so close that the second was dropped as a
