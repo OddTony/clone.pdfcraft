@@ -440,6 +440,12 @@ fn a_new_link_prompt_does_not_submit_a_covered_password() {
         h.run_steps(1);
         assert!(h.state().password_prompt.is_some(), "{key:?} must not submit or cancel the covered password prompt");
         assert!(h.state().views.is_empty(), "the protected document must remain unopened");
+        h.state_mut().resolve_pending_link(false);
+        h.run_steps(3);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(2);
+        assert!(h.state().password_prompt.is_none(), "the password prompt works again after the link prompt closes");
+        assert_eq!(h.state().views.len(), 1, "the correct password opens the intended document");
     }
 }
 
