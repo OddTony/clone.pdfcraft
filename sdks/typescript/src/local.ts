@@ -9,7 +9,7 @@
  */
 
 declare const process: any;
-import { InvalidArgumentError } from "./errors.js";
+import { InvalidArgumentError, PdfCraftError } from "./errors.js";
 import { DocumentResult, DocumentSource, MergeOptions, RenderOptions, SplitMode, SplitResult } from "./types.js";
 
 export class PdfCraftLocalClient {
@@ -24,6 +24,17 @@ export class PdfCraftLocalClient {
     }
   }
 
+  private requireBinding(): any {
+    if (!this.nativeBinding) {
+      throw new PdfCraftError(
+        "pdfcraft native addon is not available; local processing is unsupported in this runtime (build N-API addon or use PdfCraftRestClient)",
+        501,
+        "NATIVE_UNAVAILABLE"
+      );
+    }
+    return this.nativeBinding;
+  }
+
   /**
    * Merges multiple PDF documents into a single document in-process.
    */
@@ -35,38 +46,7 @@ export class PdfCraftLocalClient {
       throw new InvalidArgumentError("Cannot merge zero files");
     }
 
-    if (this.nativeBinding) {
-      return this.nativeBinding.merge(sources, options);
-    }
-
-    // Fallback pure in-process simulation
-    const chunks: Uint8Array[] = [new TextEncoder().encode("%PDF-1.7\n")];
-    for (const s of sources) {
-      if (typeof s === "string") {
-        chunks.push(new TextEncoder().encode(`FILE:${s}\n`));
-      } else if (s instanceof Uint8Array) {
-        chunks.push(s);
-      } else if ("data" in s) {
-        chunks.push(s.data);
-      } else if ("path" in s) {
-        chunks.push(new TextEncoder().encode(`FILE:${s.path}\n`));
-      }
-    }
-    chunks.push(new TextEncoder().encode("\n%%EOF"));
-
-    const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
-    const merged = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const c of chunks) {
-      merged.set(c, offset);
-      offset += c.length;
-    }
-
-    return {
-      type: "memory",
-      data: merged,
-      mimeType: "application/pdf",
-    };
+    return this.requireBinding().merge(sources, options);
   }
 
   /**
@@ -76,13 +56,7 @@ export class PdfCraftLocalClient {
     source: DocumentSource | string | Uint8Array,
     mode?: SplitMode
   ): Promise<SplitResult> {
-    if (this.nativeBinding) {
-      return this.nativeBinding.split(source, mode);
-    }
-
-    return {
-      files: ["split_part_1.pdf", "split_part_2.pdf"],
-    };
+    return this.requireBinding().split(source, mode);
   }
 
   /**
@@ -97,16 +71,6 @@ export class PdfCraftLocalClient {
       throw new InvalidArgumentError("Page index must be >= 1 (1-based index)");
     }
 
-    const dpi = options?.dpi ?? 150.0;
-    if (this.nativeBinding) {
-      return this.nativeBinding.renderPage(source, page, options);
-    }
-
-    const pixelBytes = new TextEncoder().encode(`RENDER_PAGE_${page}_DPI_${dpi}`);
-    return {
-      type: "memory",
-      data: pixelBytes,
-      mimeType: "image/png",
-    };
+    return this.requireBinding().renderPage(source, page, options);
   }
 }
