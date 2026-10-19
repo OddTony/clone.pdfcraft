@@ -221,7 +221,10 @@ pub struct HttpResponse {
 
 impl HttpResponse {
     pub fn ok_json<T: serde::Serialize>(data: &T) -> Self {
-        let body = serde_json::to_vec(data).unwrap_or_default();
+        let body = match serde_json::to_vec(data) {
+            Ok(body) => body,
+            Err(error) => return Self::problem(ProblemDetails::internal_error(format!("Failed to serialize response: {error}"))),
+        };
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), "application/json".into());
         headers.insert("content-length".into(), body.len().to_string());
@@ -229,7 +232,10 @@ impl HttpResponse {
     }
 
     pub fn accepted_json<T: serde::Serialize>(location: &str, data: &T) -> Self {
-        let body = serde_json::to_vec(data).unwrap_or_default();
+        let body = match serde_json::to_vec(data) {
+            Ok(body) => body,
+            Err(error) => return Self::problem(ProblemDetails::internal_error(format!("Failed to serialize response: {error}"))),
+        };
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), "application/json".into());
         headers.insert("location".into(), location.into());
@@ -290,7 +296,9 @@ fn read_split_response(split: &pdfcraft_sdk::SplitResult) -> Result<SplitRespons
 fn read_split_response_with_limit(split: &pdfcraft_sdk::SplitResult, limit: u64) -> Result<SplitResponseDto, std::io::Error> {
     use std::io::Read;
     let mut parts = Vec::new();
-    let mut remaining = limit;
+    let exceeded = || std::io::Error::new(std::io::ErrorKind::InvalidData, "Aggregate split output exceeds response limit");
+    // {"parts":[]} plus commas between parts. Count JSON-escaped names and decimal sizes exactly.
+    let mut remaining = limit.checked_sub(12).ok_or_else(exceeded)?;
 
     for path in &split.files {
         let filename = path
@@ -300,13 +308,18 @@ fn read_split_response_with_limit(split: &pdfcraft_sdk::SplitResult, limit: u64)
             .to_string();
 
         let file = std::fs::File::open(path)?;
+        let size = file.metadata()?.len();
+        let size_bytes = usize::try_from(size).map_err(|_| exceeded())?;
+        let shell = SplitPartDto { filename, size_bytes, data_base64: String::new() };
+        let overhead = (serde_json::to_vec(&shell)?.len() as u64).checked_add(u64::from(!parts.is_empty())).ok_or_else(exceeded)?;
+        let encoded = size.checked_add(2).and_then(|n| (n / 3).checked_mul(4)).ok_or_else(exceeded)?;
+        remaining = remaining.checked_sub(overhead).and_then(|n| n.checked_sub(encoded)).ok_or_else(exceeded)?;
         let mut data = Vec::new();
-        file.take(remaining.saturating_add(1)).read_to_end(&mut data)?;
-        remaining = remaining
-            .checked_sub(data.len() as u64)
-            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Aggregate split output exceeds response limit"))?;
-
-        parts.push(SplitPartDto { filename, size_bytes: data.len(), data_base64: encode_base64(&data) });
+        file.take(size.saturating_add(1)).read_to_end(&mut data)?;
+        if data.len() != size_bytes {
+            return Err(exceeded());
+        }
+        parts.push(SplitPartDto { data_base64: encode_base64(&data), ..shell });
     }
 
     Ok(SplitResponseDto { parts })
@@ -761,13 +774,31 @@ mod revision12_tests {
     #[test]
     fn split_response_budget_is_aggregate_and_inclusive() {
         let dir = tempfile::tempdir().unwrap();
-        let files: Vec<_> = ["a.pdf", "b.pdf"].iter().map(|name| dir.path().join(name)).collect();
+        let second_name = if cfg!(windows) { "b.pdf" } else { "b\"\n.pdf" };
+        let files: Vec<_> = ["a.pdf", second_name].iter().map(|name| dir.path().join(name)).collect();
         for path in &files {
             std::fs::write(path, b"12345").unwrap();
         }
         let split = pdfcraft_sdk::SplitResult { files };
-        assert_eq!(read_split_response_with_limit(&split, 10).unwrap().parts.len(), 2);
-        assert_eq!(read_split_response_with_limit(&split, 9).unwrap_err().kind(), std::io::ErrorKind::InvalidData);
+        let dto = read_split_response_with_limit(&split, 1024).unwrap();
+        let wire_len = serde_json::to_vec(&dto).unwrap().len() as u64;
+        assert_eq!(read_split_response_with_limit(&split, wire_len).unwrap().parts.len(), 2);
+        assert_eq!(read_split_response_with_limit(&split, wire_len - 1).unwrap_err().kind(), std::io::ErrorKind::InvalidData);
+        assert!(read_split_response_with_limit(&split, 10).is_err());
+    }
+
+    #[test]
+    fn architecture_json_serialization_failure_is_500() {
+        struct Fails;
+        impl serde::Serialize for Fails {
+            fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+                Err(serde::ser::Error::custom("intentional failure"))
+            }
+        }
+        let response = HttpResponse::ok_json(&Fails);
+        assert_eq!(response.status, 500);
+        assert_eq!(response.headers.get("content-type").unwrap(), "application/problem+json");
+        assert_eq!(HttpResponse::accepted_json("/job", &Fails).status, 500);
     }
 
     #[test]

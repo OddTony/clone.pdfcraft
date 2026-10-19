@@ -26,7 +26,7 @@ class ProblemDetails:
     invalid_params: Optional[List[Dict[str, Any]]] = None
 
 
-class PdfCraftError(Exception):
+class PdfCraftError(ValueError):
     """Base exception for all PdfCraft SDK operations."""
 
     def __init__(self, message: str, status_code: int = 500, error_code: str = "ENGINE_ERROR"):

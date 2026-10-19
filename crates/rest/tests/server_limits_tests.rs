@@ -105,5 +105,16 @@ fn unsupported_http_version_is_rejected() {
     assert!(resp.starts_with("HTTP/1.1 505"), "got: {resp}");
 }
 
-
-
+#[test]
+fn accepted_connection_waits_for_request_bytes() {
+    let server = start();
+    let mut stream = TcpStream::connect(("127.0.0.1", server.port())).unwrap();
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+    // On BSD systems accepted sockets inherit the listener's nonblocking mode.
+    // Delay the request until the server has accepted the idle connection.
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    stream.write_all(b"GET /v1/health HTTP/1.1\r\nConnection: close\r\n\r\n").unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 404"), "got: {response}");
+}

@@ -22,6 +22,10 @@ classifiers = [
     "Topic :: Printing",
     "Topic :: Multimedia :: Graphics",
 ]
+dependencies = [
+    "pypdf>=4.0.0",
+    "pillow>=10.0.0",
+]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

@@ -277,8 +277,7 @@ pub fn encode_base64(data: &[u8]) -> String {
 
 /// Simple RFC 4648 standard base64 decoder without unsafe code.
 pub fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
-    let clean: String = input.chars().filter(|c| !c.is_whitespace()).collect();
-    let bytes = clean.as_bytes();
+    let bytes = input.as_bytes();
     if !bytes.len().is_multiple_of(4) {
         return Err("Invalid base64 payload length".into());
     }
@@ -311,6 +310,9 @@ pub fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
             None => return Err("Truncated base64".into()),
         };
 
+        if (pad2 && !pad3) || ((pad2 || pad3) && i + 4 != bytes.len()) || (pad2 && b1 & 0x0f != 0) || (pad3 && !pad2 && b2 & 0x03 != 0) {
+            return Err("Invalid base64 padding or nonzero pad bits".into());
+        }
         let chunk = ((b0 as u32) << 18) | ((b1 as u32) << 12) | ((b2 as u32) << 6) | (b3 as u32);
         out.push(((chunk >> 16) & 0xFF) as u8);
         if !pad2 {
@@ -332,5 +334,19 @@ fn decode_char(c: u8) -> Option<u8> {
         b'+' => Some(62),
         b'/' => Some(63),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod architecture_tests {
+    use super::*;
+    #[test]
+    fn strict_base64_padding() {
+        for invalid in ["Zg=A", "Zg==AAAA", "Zm8=AAAA", "Zh==", "Zm9=", " Zg==", "Zg==\n", "Zg", "====", "Zg==!", "Zm_="] {
+            assert!(decode_base64(invalid).is_err(), "accepted {invalid:?}");
+        }
+        for raw in [b"".as_slice(), b"f", b"fo", b"foo", b"foob"] {
+            assert_eq!(decode_base64(&encode_base64(raw)).unwrap(), raw);
+        }
     }
 }
