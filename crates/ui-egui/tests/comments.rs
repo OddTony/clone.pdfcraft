@@ -1587,8 +1587,17 @@ fn closely_spaced_custom_stamps_select_the_one_under_the_pointer() {
     h.run_steps(3);
     click_pt(&mut h, (79.8, 90.0));
     assert_eq!(h.state().views[0].comments.selected, Some((0, 0)), "the point is inside the first stamp");
-    click_pt(&mut h, (100.0, 90.0));
-    assert_eq!(h.state().views[0].comments.selected, Some((0, 1)), "the second stamp is independently selectable");
+    let first_before = comments(&h)[0].rect;
+    drag_pt(&mut h, (80.7, 80.0), (86.7, 80.0));
+    let after = comments(&h);
+    let first = after.iter().find(|a| a.contents.as_deref() == Some("first")).unwrap();
+    let second = after.iter().find(|a| a.contents.as_deref() == Some("second")).unwrap();
+    assert_eq!(first.rect, first_before, "dragging inside the second stamp must not resize its neighbour");
+    assert!(second.rect[0] > 85.0, "the second stamp moves: {:?}", second.rect);
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 1)));
+    // Put it back for the tolerance and overlap checks.
+    h.state_mut().apply_edit(Edit::MoveAnnotation { page: 0, index: 1, dx: -6.0, dy: 0.0 });
+    h.run_steps(2);
     click_pt(&mut h, (200.0, 120.0));
     click_pt(&mut h, (120.8, 90.0));
     assert_eq!(h.state().views[0].comments.selected, Some((0, 1)), "the small outside hit tolerance still works");
@@ -1602,5 +1611,12 @@ fn closely_spaced_custom_stamps_select_the_one_under_the_pointer() {
     });
     h.run_steps(3);
     click_pt(&mut h, (70.0, 90.0));
-    assert_eq!(h.state().views[0].comments.selected, Some((0, 2)), "truly overlapping stamps retain paint order");
+    let selected = h.state().views[0].comments.selected.expect("selected overlap").1;
+    let selected_comment = comments(&h).into_iter().find(|a| a.index == selected).unwrap();
+    assert_eq!(selected_comment.contents.as_deref(), Some("overlapping"), "truly overlapping stamps retain paint order");
+    click_pt(&mut h, (200.0, 120.0));
+    click_pt(&mut h, (45.0, 90.0));
+    drag_pt(&mut h, (79.8, 80.0), (75.0, 80.0));
+    let resized = comments(&h).into_iter().find(|a| a.contents.as_deref() == Some("first")).unwrap();
+    assert!(resized.rect[2] < 77.0, "the inside half of the resize handle still works: {:?}", resized.rect);
 }

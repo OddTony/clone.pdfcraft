@@ -1058,6 +1058,11 @@ fn select_input(
     let handle_at = |p: Pos2| -> Option<(i8, i8)> {
         let a = selected.filter(|a| cx.allowed && resizable(a))?;
         let r = cx.screen_rect(a);
+        // A handle extends past its box. Do not let that extension steal a drag that starts
+        // inside a different comment; the inside half of the handle remains usable.
+        if !r.contains(p) && cx.comments().any(|other| other.index != a.index && cx.screen_rects(other).iter().any(|r| r.contains(p))) {
+            return None;
+        }
         HANDLES.into_iter().find(|h| handle_pos(r, *h).distance(p) <= 7.0)
     };
     let mut consumed = false;
