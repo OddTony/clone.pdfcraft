@@ -8,6 +8,10 @@ on:
   schedule:
     - cron: "17 3 * * *" # nightly fuzzing
 
+# The token is only used to check out the code: no job writes to the repository.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -81,15 +85,15 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Test
         if: runner.os != 'Linux'
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
 
       - name: Test (with craft-fonts)
         if: runner.os == 'Linux'
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
 
       - name: Layering
         if: runner.os == 'Linux'
@@ -101,7 +105,7 @@ jobs:
 
       - name: CLI without the MCP server still builds
         if: runner.os == 'Linux'
-        run: cargo check -p pdfcraft-cli --no-default-features
+        run: cargo check --locked -p pdfcraft-cli --no-default-features
 
   wasm:
     name: wasm32 check
@@ -123,7 +127,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
 
