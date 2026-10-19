@@ -169,7 +169,10 @@ fn keep_tool_selected_repeats_custom_and_standard_stamps() {
             h.run_steps(2);
         }
         let page = h.state().views[0].page_screen_rect(0).unwrap();
-        let p = page.min + egui::vec2(page.width() * (0.3 + n as f32 * 0.15), page.height() * 0.75);
+        // The second custom stamp lands inside the first stamp's bounds: a pinned tool
+        // should still place a new stamp where the user clicked.
+        let fraction = [0.30, 0.31, 0.60][n];
+        let p = page.min + egui::vec2(page.width() * fraction, page.height() * 0.75);
         h.hover_at(p);
         h.run_steps(1);
         h.drag_at(p);
@@ -180,7 +183,16 @@ fn keep_tool_selected_repeats_custom_and_standard_stamps() {
     }
     let app = h.state();
     let doc = app.session.get(app.views[0].id).unwrap();
-    assert_eq!(doc.info.annotations.iter().filter(|a| a.subtype == "Stamp").count(), 3);
+    let stamps: Vec<_> = doc.info.annotations.iter().filter(|a| a.subtype == "Stamp").collect();
+    assert_eq!(stamps.len(), 3);
+    let custom: Vec<_> = stamps.iter().filter(|s| (s.rect[2] - s.rect[0] - 60.0).abs() < 0.1).collect();
+    assert_eq!(custom.len(), 2, "expected two custom stamps: {:?}", stamps.iter().map(|s| s.rect).collect::<Vec<_>>());
+    assert!(
+        custom[0].rect[0] < custom[1].rect[2] && custom[1].rect[0] < custom[0].rect[2] && custom[0].rect[0] != custom[1].rect[0],
+        "the custom stamps have different overlapping bounds: {:?}, {:?}",
+        custom[0].rect,
+        custom[1].rect
+    );
     // The first Escape deselects the just-placed stamp; the second puts down its tool.
     h.key_press(egui::Key::Escape);
     h.run_steps(2);
