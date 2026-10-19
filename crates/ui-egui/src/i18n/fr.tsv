@@ -1936,6 +1936,26 @@
 	Export measurements	Exporter les mesures
 	Open a PDF to measure it.	Ouvrez un PDF pour le mesurer.
 	Click vertices. Enter or double-click finishes a perimeter or area. Click the first point to close an area.	Cliquez sur les sommets. Entrée ou un double-clic termine un périmètre ou une aire. Cliquez sur le premier point pour fermer une aire.
+	Calibrate	Étalonner
+	Common scales	Échelles courantes
+	Real measurements at {ratio}	Mesures réelles au {ratio}
+	Paper size — choose the scale	Taille papier — choisissez l'échelle
+	Measurements	Mesures
+	metres	mètres
+	centimetres	centimètres
+	millimetres	millimètres
+	Plan scale	Échelle du plan
+	Measurements are in real {unit} at {ratio}.	Les mesures sont en {unit} réels au {ratio}.
+	No scale: measurements are paper size ({unit}). Choose the plan scale.	Aucune échelle : les mesures sont en taille papier ({unit}). Choisissez l'échelle du plan.
+	Type the real length of this dimension, then press Enter.	Saisissez la longueur réelle de cette cote, puis appuyez sur Entrée.
+	Real length	Longueur réelle
+	Calibrate on a known dimension	Étalonner sur une cote connue
+	Click both ends of a dimension you know, then type its real length.	Cliquez sur les deux extrémités d'une cote connue, puis saisissez sa longueur réelle.
+	1. Choose the plan scale. 2. Click two points.	1. Choisissez l'échelle du plan. 2. Cliquez deux points.
+	1. Choose the plan scale. 2. Click each corner, then press Enter or double-click.	1. Choisissez l'échelle du plan. 2. Cliquez chaque angle, puis Entrée ou double-clic.
+	1. Choose the plan scale. 2. Click each corner, then click the first point to close.	1. Choisissez l'échelle du plan. 2. Cliquez chaque angle, puis le premier point pour fermer.
+	1. Click both ends of a known dimension. 2. Type its real length and press Enter.	1. Cliquez les deux extrémités d'une cote connue. 2. Saisissez sa longueur réelle et appuyez sur Entrée.
+	1. Choose the plan scale. 2. Pick a tool and click on the plan.	1. Choisissez l'échelle du plan. 2. Prenez un outil et cliquez sur le plan.
 	Shift constrains to 45 degrees. Backspace removes a vertex. Escape cancels.	Maj contraint à 45 degrés. Retour arrière retire un sommet. Échap annule.
 	Angle	Angle
 	Click the first point to begin.	Cliquez sur le premier point pour commencer.
@@ -1952,6 +1972,8 @@
 	Viewport rectangle in page points (x, y, width, height)	Rectangle de la fenêtre d'affichage en points de page (x, y, largeur, hauteur)
 	Viewport	Fenêtre d'affichage
 	Apply scale	Appliquer l'échelle
+	Scale	Échelle
+	Type the real length between the two points, then Apply scale.	Saisissez la longueur réelle entre les deux points, puis Appliquer l'échelle.
 	Saved measurements	Mesures enregistrées
 	Saved measurements.	Mesures enregistrées.
 	Endpoint	Extrémité
