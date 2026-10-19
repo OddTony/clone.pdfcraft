@@ -87,6 +87,7 @@ pub struct FieldState {
 }
 
 impl FieldState {
+    /// Create a script-visible field with default flags and no calculation-order entry.
     pub fn new(name: impl Into<String>, kind: FieldType, value: Vec<String>) -> FieldState {
         FieldState {
             calc_order_index: None,
@@ -339,6 +340,7 @@ macro_rules! getter {
     }};
 }
 
+/// Build a field object whose accessors read and update the live script host state.
 fn field_object(ctx: &mut Context, name: &str) -> JsObject {
     let n = JsString::from(name);
     let calc_get = getter!(ctx, n, |f, _c| f.calc_order_index.map_or(JsValue::from(-1), |i| JsValue::from(i as f64)));
@@ -545,6 +547,7 @@ fn reset_form(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsVa
     Ok(JsValue::undefined())
 }
 
+/// Validate a zero-based page and ordering mode, then request an engine tab-order edit.
 fn set_page_tab_order(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let page = arg(args, 0).to_number(ctx)?;
     let pages = host(ctx)?.borrow().doc.num_pages;
@@ -957,6 +960,7 @@ fn color_object(ctx: &mut Context) -> JsObject {
     o.build()
 }
 
+/// Register the supported Acrobat document APIs and sandbox globals in this context.
 fn install(ctx: &mut Context) -> JsResult<()> {
     let globals: [(&str, usize, NativeFunction); 10] = [
         ("setPageTabOrder", 2, NativeFunction::from_fn_ptr(set_page_tab_order)),

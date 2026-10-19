@@ -11,6 +11,7 @@ pub use pdfcraft_js::{Limits, Outcome, PageTabOrder, Request};
 
 use crate::{DocId, Edit, EditError, Session};
 
+/// Translate a script ordering mode into the form engine's page ordering mode.
 fn tab_order(order: pdfcraft_js::PageTabOrder) -> pdfcraft_forms::TabOrder {
     match order {
         pdfcraft_js::PageTabOrder::Rows => pdfcraft_forms::TabOrder::Row,
@@ -104,6 +105,7 @@ pub fn field_state(doc: &pdfcraft_cos::Document, f: &Field) -> pdfcraft_js::Fiel
 }
 
 /// The changes a script made, against the fields as they were.
+/// Extract changed values, flags and calculation positions for the form transaction.
 fn changes(before: &[pdfcraft_js::FieldState], after: &[pdfcraft_js::FieldState]) -> Vec<FieldChange> {
     after
         .iter()

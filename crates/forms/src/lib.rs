@@ -970,7 +970,11 @@ pub fn recalculate_with(doc: &mut Document, scripts: &mut dyn Scripts) -> Result
             scripting::apply_changes(doc, &r.changes, &f.name)?;
             if !r.changes.is_empty() {
                 all = fields(doc);
-                pending.make_contiguous().sort_by_key(|n| all.iter().find(|f| &f.name == n).and_then(|f| f.calc_order_index).unwrap_or(usize::MAX));
+                let mut index_of = std::collections::HashMap::new();
+                for f in &all {
+                    index_of.entry(f.name.as_str()).or_insert(f.calc_order_index.unwrap_or(usize::MAX));
+                }
+                pending.make_contiguous().sort_by_key(|n| index_of.get(n.as_str()).copied().unwrap_or(usize::MAX));
             }
             if !r.rc {
                 continue;

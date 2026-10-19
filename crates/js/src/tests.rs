@@ -32,6 +32,7 @@ fn calculate_scripts_read_fields_and_set_the_value() {
 }
 
 #[test]
+/// A tab-order request must not interrupt a calculation that follows it.
 fn calculation_continues_after_setting_page_tab_order() {
     // An original minimal script: configuring keyboard navigation must not
     // prevent the calculation that follows it from running.
@@ -46,6 +47,7 @@ fn calculation_continues_after_setting_page_tab_order() {
 }
 
 #[test]
+/// Accept all supported tab modes and reject invalid pages or mode names.
 fn page_tab_order_modes_and_invalid_arguments() {
     for (name, order) in [("rows", PageTabOrder::Rows), ("columns", PageTabOrder::Columns), ("structure", PageTabOrder::Structure)] {
         let o = go(&format!("this.setPageTabOrder(2, '{name}');"), &Event::doc("Console"));
@@ -60,6 +62,7 @@ fn page_tab_order_modes_and_invalid_arguments() {
 }
 
 #[test]
+/// Moving a calculated field shifts its peers and rejects invalid indices without changes.
 fn calculation_order_index_moves_fields_and_shifts_other_indices() {
     let mut states = fields();
     for (name, index) in [("price", 0), ("qty", 1), ("total", 2)] {

@@ -5023,6 +5023,7 @@ fn ocr_recognize_files_writes_searchable_copies() {
 }
 
 #[test]
+/// Exercise form scripts, tab-order requests and validation through the automation API.
 fn javascript_through_tools() {
     let dir = workdir("js");
     let mut a = auto(&dir);

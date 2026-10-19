@@ -3591,6 +3591,43 @@ fn scripted_form() -> Vec<u8> {
 }
 
 #[test]
+/// Filling a protected form must not let its scripts modify page tab ordering.
+fn review_script_tab_order_respects_modify_permission() {
+    for (tab_order, owner) in [(true, false), (false, false), (true, true)] {
+        let mut cos = pdfcraft_cos::Document::open(Arc::new(scripted_form())).unwrap();
+        let script = if tab_order { "this.setPageTabOrder(0, 'rows'); event.value = 1;" } else { "event.value = 1;" };
+        pdfcraft_forms::set_field_script(&mut cos, "total", "calculate", Some(script)).unwrap();
+        cos.set_encryption(&pdfcraft_cos::NewEncryption {
+            algorithm: pdfcraft_cos::Algorithm::Aes256,
+            user_password: "",
+            owner_password: "owner",
+            permissions: !(1 << 3),
+            encrypt_metadata: true,
+            seed: [7; 32],
+        })
+        .unwrap();
+        let bytes = Arc::new(pdfcraft_cos::write_full(&cos, &Default::default()).unwrap());
+        let mut session = Session::new();
+        let id = session.open("fill-only.pdf", None, bytes, owner.then_some("owner")).unwrap();
+        let p = session.get(id).unwrap().permissions().unwrap();
+        assert!(p.fill_forms());
+        assert_eq!(p.modify(), owner);
+        let before = session.get(id).unwrap().form.clone();
+        let result = session.apply(id, Edit::SetFieldValue { name: "qty".into(), value: FieldValue::Text("2".into()) });
+        if tab_order && !owner {
+            assert_eq!(result, Err(EditError::NotPermitted("changes to the document")));
+            let doc = session.get(id).unwrap();
+            assert_eq!(doc.form, before);
+            assert!(!doc.dirty);
+            assert_eq!(doc.can_undo(), None);
+        } else {
+            result.unwrap();
+        }
+    }
+}
+
+#[test]
+/// Dependent totals use the new calculation order and survive persistence and history.
 fn form_calculation_order_updates_dependent_total_in_same_edit() {
     // Original synthetic form: the initial order is setup, funds, balance.
     // Its setup script puts balance before funds, as real forms do.

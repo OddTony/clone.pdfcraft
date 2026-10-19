@@ -646,6 +646,7 @@ impl Automation {
     }
 }
 
+/// Encode viewer requests for automation clients, converting page numbers to one-based.
 fn request_json(r: &pdfcraft_engine::js::Request) -> Value {
     use pdfcraft_engine::js::{PageTabOrder, Request as R};
     match r {
