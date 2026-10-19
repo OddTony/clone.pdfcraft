@@ -191,10 +191,9 @@ fn locale_default_and_explicit_us_dates_survive_restart_and_language_changes() {
     assert_eq!(text(&restored), "11/14/2023");
     app.restore(&restored.persist());
     assert_eq!(text(&app), "11/14/2023");
-    // Old settings did not distinguish automatic from explicit US patterns. Preserve
-    // them conservatively rather than silently replacing a user's possible choice.
+    // The old setter normalized the US pattern to the automatic default.
     app.restore(r#"{"date_format":"m/d/yyyy","language":"pt-br"}"#);
-    assert_eq!(text(&app), "11/14/2023");
+    assert_eq!(text(&app), "14/11/2023");
     app.set_option("date-format", "auto").unwrap();
     assert_eq!(text(&app), "14/11/2023");
     // Restoring null also resets an already configured instance, including its
@@ -228,4 +227,47 @@ fn default_picker_clears_an_explicit_pattern_and_invalid_draft() {
     assert_eq!(h.state().session.date_format(), "dd/mm/yyyy");
     assert_eq!(h.state().date_format_draft, None);
     assert!(shows(&h, "dd/mm/yyyy"));
+}
+
+#[test]
+fn legacy_date_settings_migrate_without_losing_custom_or_new_explicit_patterns() {
+    for (saved, expected_override, expected_text) in [
+        (r#"{"date_format":"m/d/yyyy"}"#, None, "14/11/2023"),
+        (r#"{"date_format":"  m/d/yyyy  "}"#, None, "14/11/2023"),
+        (r#"{"date_format":"yyyy-mm-dd"}"#, Some("yyyy-mm-dd"), "2023-11-14"),
+        (r#"{"date_format":null}"#, None, "14/11/2023"),
+        (r#"{"date_format_override":"m/d/yyyy"}"#, Some("m/d/yyyy"), "11/14/2023"),
+        (r#"{"date_format":"yyyy-mm-dd","date_format_override":null}"#, None, "14/11/2023"),
+        (r#"{"date_format":"yyyy-mm-dd","date_format_override":"m/d/yyyy"}"#, Some("m/d/yyyy"), "11/14/2023"),
+    ] {
+        let mut app = PdfCraftApp::new();
+        app.session = pdfcraft_engine::Session::new().with_clock(|| 1_700_000_000);
+        app.set_option("language", "pt-br").unwrap();
+        app.set_option("date-format", "dd.mm.yyyy").unwrap();
+        app.restore(saved);
+        pdfcraft_ui_egui::i18n::set_current(pdfcraft_ui_egui::i18n::Lang::from_pref(&app.language));
+        assert_eq!(app.session.date_format_override(), expected_override, "{saved}");
+        assert_eq!(app.date_text(None).unwrap(), expected_text, "{saved}");
+        let persisted: serde_json::Value = serde_json::from_str(&app.persist()).unwrap();
+        assert_eq!(persisted.get("date_format_override"), Some(&serde_json::json!(expected_override)));
+        let mut restored = PdfCraftApp::new();
+        restored.restore(&app.persist());
+        assert_eq!(restored.session.date_format_override(), expected_override, "restart: {saved}");
+    }
+}
+
+#[test]
+fn malformed_or_missing_date_settings_keep_the_current_valid_choice() {
+    for saved in [
+        r#"{}"#,
+        r#"{"date_format":"HH:MM"}"#,
+        r#"{"date_format_override":"HH:MM","date_format":"m/d/yyyy"}"#,
+        r#"{"date_format_override":false,"date_format":"m/d/yyyy"}"#,
+        r#"{"date_format_override":42}"#,
+    ] {
+        let mut app = PdfCraftApp::new();
+        app.set_option("date-format", "yyyy-mm-dd").unwrap();
+        app.restore(saved);
+        assert_eq!(app.session.date_format_override(), Some("yyyy-mm-dd"), "{saved}");
+    }
 }

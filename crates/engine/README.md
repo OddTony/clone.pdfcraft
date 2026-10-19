@@ -93,8 +93,10 @@ Portuguese (`pt-br`) defaults to `dd/mm/yyyy`; locales without an implemented de
 `m/d/yyyy`. GUI callers supply their effective interface language; headless callers can set the
 session date language. `set_date_format("auto")` restores automatic selection. Persist
 `date_format_override()` rather than the resolved pattern so automatic and explicit choices,
-including an explicit US pattern, remain distinct after restart. Legacy saved pattern strings
-remain explicit because they did not record whether the user chose them.
+including an explicit US pattern, remain distinct after restart. The UI saves this under
+`date_format_override`; the legacy `date_format` key migrates
+`m/d/yyyy` to automatic (the old setter normalized it to the default), preserving other
+custom patterns. A new explicit US choice remains explicit.
 
 Dynamic stamp by-lines follow the same effective date language, independently of the Fill &
 Sign pattern. Brazilian Portuguese uses `Por Ana às 15:45, 15/10/2026`; other languages retain
