@@ -1,40 +1,64 @@
-flowchart TD
-    subgraph Clients["Consumers & Runtimes"]
-        A["🤖 AI Assistants & Agents\n(Claude, Antigravity, Cursor)"]
-        B["💻 Application Developers\n(Python, TypeScript, Rust)"]
-        C["🌐 Microservices & Pipelines\n(Docker, Kubernetes, Web Backends)"]
+flowchart TB
+    %% ───────────── Layer: Consumers ─────────────
+    subgraph L1["① Consumers & Runtimes"]
+        direction LR
+        A["🤖 <b>AI Agents</b><br/><small>Claude · Antigravity · Cursor</small>"]
+        B["💻 <b>App Developers</b><br/><small>Python · TypeScript · Rust</small>"]
+        C["🌐 <b>Services & Pipelines</b><br/><small>Docker · Kubernetes · Web backends</small>"]
     end
 
-    subgraph EntryPoints["Entry Points & Protocols"]
+    %% ───────────── Layer: Entry Points ─────────────
+    subgraph L2["② Entry Points"]
+        direction LR
+        MCP["<b>pdfcraft-cli mcp</b><br/><i>Agent Control Plane</i><br/><small>stdio JSON-RPC 2.0<br/>--root / --automation-*-root</small>"]
+        SDK["<b>pdfcraft-sdk</b><br/><i>In-Process Data Plane</i><br/><small>Rust · PyO3 · N-API<br/>APDFL object hierarchy</small>"]
+        REST["<b>pdfcraft-rest</b><br/><i>Microservice Plane</i><br/><small>OpenAPI 3.1 · Bearer auth<br/>RFC 7807 errors</small>"]
+    end
+
+    %% ───────────── Layer 7: Execution ─────────────
+    subgraph L3["③ Layer 7 · Execution & Isolation"]
         direction TB
-        MCP["<b>pdfcraft-cli mcp</b>\n• Protocol: stdio JSON-RPC 2.0\n• Confinement: --root / --automation-*-root\n• Persona: Interactive Agent Control Plane"]
-        SDK["<b>pdfcraft-sdk</b>\n• Bindings: Rust / PyO3 / N-API\n• APDFL Domain Object Hierarchy\n• Persona: In-Process Application Data Plane"]
-        REST["<b>pdfcraft-rest</b>\n• Protocol: HTTP REST / OpenAPI 3.1\n• Bearer Token Auth / RFC 7807\n• Persona: Microservice Deployment Plane"]
+        subgraph L3a[" "]
+            direction LR
+            SANDBOX["<b>ExecutionSandbox</b><br/><small>Ephemeral TempDir<br/>catch_unwind panic containment<br/>10 MB memory spillover</small>"]
+            QUEUE["<b>RestService · JobRepository</b><br/><small>Bounded worker semaphore<br/>Async jobs (/v1/jobs)<br/>Socket R/W timeouts</small>"]
+        end
+        AUTO["<b>pdfcraft-automation</b><br/><small>149 headless tools registry</small>"]
     end
 
-    subgraph ExecutionLayer["Layer 7 Execution & Isolation"]
+    %% ───────────── Layer 6: Engine ─────────────
+    subgraph L4["④ Layer 6 · Engine & Domain Crates"]
         direction TB
-        AUTO["<b>pdfcraft-automation</b>\n(149 Headless Tools Registry)"]
-        SANDBOX["<b>ExecutionSandbox & Adapter</b>\n• Ephemeral TempDir Isolation\n• Panic Containment (catch_unwind)\n• Automatic 10MB Memory Spillover"]
-        QUEUE["<b>RestService & JobRepository</b>\n• Bounded Worker Pool Semaphore\n• Async Job Journaling (/v1/jobs)\n• Socket Read/Write Timeouts"]
+        ENGINE["<b>pdfcraft-engine</b><br/><small>Document session · Command bus</small>"]
+        CRATES["<b>Feature crates</b><br/><small>cos · render · forms · sign · redact<br/>annot · optimize · ocr · a11y · export</small>"]
     end
 
-    subgraph CoreEngine["Layer 6 Engine & Lower Domain Crates"]
-        ENGINE["<b>pdfcraft-engine</b>\n(Document Session & Command Bus)"]
-        CRATES["<b>Specialized Feature Crates</b>\n• cos • render • forms • sign • redact\n• annot • optimize • ocr • a11y • export"]
-    end
+    %% ───────────── Edges ─────────────
+    A  -->|"stdio · JSON lines"| MCP
+    B  -->|"in-process import"| SDK
+    B  -.->|"remote client"| REST
+    C  -->|"HTTP · JSON / multipart"| REST
 
-    %% Client connections
-    A -->|"stdio (JSON lines)"| MCP
-    B -->|"In-Process Import\n(C-ABI / PyO3 / N-API)"| SDK
-    B -.->|"Remote Client Driver\n(HTTP / REST)"| REST
-    C -->|"HTTP / REST\n(JSON / Multipart)"| REST
+    MCP     -->|"direct tool call<br/>stateful doc_id"| AUTO
+    SDK     -->|"run operation"| SANDBOX
+    REST    -->|"enqueue"| QUEUE
+    QUEUE   -.->|"execute via SDK port"| SANDBOX
+    SANDBOX -->|"headless tool call"| AUTO
 
-    %% Internal routing
-    MCP -->|"Direct Tool Invocation\n(Stateful doc_id Handles)"| AUTO
-    REST -->|"Enqueue / Worker Pool"| QUEUE
-    QUEUE -->|"Execute via Port"| SDK
-    SDK -->|"Run Operation"| SANDBOX
-    SANDBOX -->|"Headless Tool Call"| AUTO
-    AUTO -->|"Dispatch Commands"| ENGINE
+    AUTO   -->|"dispatch commands"| ENGINE
     ENGINE --> CRATES
+
+    %% ───────────── Styling ─────────────
+    classDef consumer fill:#f1f5f9,stroke:#64748b,color:#0f172a
+    classDef agent    fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    classDef sdk      fill:#dbeafe,stroke:#2563eb,color:#172554
+    classDef rest     fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef core     fill:#fef3c7,stroke:#d97706,color:#451a03
+
+    class A,B,C consumer
+    class MCP agent
+    class SDK,SANDBOX sdk
+    class REST,QUEUE rest
+    class AUTO,ENGINE,CRATES core
+
+    style L3a fill:none,stroke:none
