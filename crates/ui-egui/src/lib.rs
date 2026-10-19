@@ -6,6 +6,8 @@
 //! `pdfcraft-engine`.
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+// The settings `json!` object is one macro expansion deep per entry.
+#![recursion_limit = "256"]
 
 /// Whether `a` and `b` name the same file: equal, or equal once made absolute against the
 /// current directory (links are not resolved, as in `last_session`).
@@ -529,6 +531,10 @@ pub struct PdfCraftApp {
     /// The reading-colours preference (Preferences ▸ Reading colours): applied to every open
     /// document, and documents open with it (Acrobat's Replace Document Colors).
     pub reading_colors: pdfcraft_render::ReadingColors,
+    /// Invert page colours for night reading (View ▸ Invert colors). App-wide, like the above.
+    pub invert_colors: bool,
+    /// Paper and ink colours of the inverted page (Preferences ▸ Reading colours).
+    pub invert_palette: pdfcraft_render::InvertPalette,
     /// The Linux portal is enabled only by the native host, and starts on the first System choice.
     #[cfg(target_os = "linux")]
     desktop_theme: Option<pdfcraft_platform::desktop_theme::DesktopTheme>,
@@ -914,6 +920,8 @@ impl PdfCraftApp {
             theme: ThemeKind::Light,
             theme_preference: ThemePreference::Light,
             reading_colors: Default::default(),
+            invert_colors: false,
+            invert_palette: pdfcraft_render::InvertPalette::default(),
             #[cfg(target_os = "linux")]
             desktop_theme: None,
             #[cfg(target_os = "linux")]
@@ -1322,6 +1330,7 @@ impl PdfCraftApp {
         // The reading-colours preference is app-wide: a newly opened document starts with it.
         // Idempotent: the engine returns `false` when the document has the setting already.
         self.session.set_reading_colors(id, self.reading_colors);
+        self.apply_invert(id);
         let doc = self.session.get(id).ok_or("the document could not be opened")?;
         let pages = doc.info.pages.len();
         // Acrobat opens straight to the Comments panel when a document has comments.
@@ -2036,6 +2045,33 @@ impl PdfCraftApp {
         }
     }
 
+    /// Give document `id` the app-wide invert setting and palette.
+    pub(crate) fn apply_invert(&mut self, id: pdfcraft_engine::DocId) {
+        self.session.set_invert_colors(id, self.invert_colors);
+        self.session.set_invert_palette(id, self.invert_palette);
+    }
+
+    /// Set the paper and ink colours of the inverted page, for every open document.
+    pub fn set_invert_palette(&mut self, palette: pdfcraft_render::InvertPalette) {
+        self.invert_palette = palette;
+        for i in 0..self.views.len() {
+            if self.session.set_invert_palette(self.views[i].id, palette) {
+                self.views[i].invalidate_content();
+            }
+        }
+    }
+
+    /// Invert page colours (View ▸ Invert colors): sets the app-wide preference and applies it to
+    /// every open document, which re-renders. The files never change.
+    pub fn set_invert_colors(&mut self, invert: bool) {
+        self.invert_colors = invert;
+        for i in 0..self.views.len() {
+            if self.session.set_invert_colors(self.views[i].id, invert) {
+                self.views[i].invalidate_content();
+            }
+        }
+    }
+
     /// Enable the Linux desktop portal in a native window. Headless contexts keep
     /// their supplied input and never connect to the user's session bus.
     #[cfg(target_os = "linux")]
@@ -2266,6 +2302,8 @@ impl PdfCraftApp {
             "units": self.units,
             "language": self.language,
             "reading_colors": self.reading_colors,
+            "invert_colors": self.invert_colors,
+            "invert_palette": self.invert_palette,
             // Null follows the system's text scaling.
             "ui_scale": self.ui_scale,
             "flatten_fill_sign": self.flatten_fill_sign_on_save,
@@ -2396,6 +2434,13 @@ impl PdfCraftApp {
         if let Ok(colors) = serde_json::from_value::<pdfcraft_render::ReadingColors>(v["reading_colors"].clone()) {
             self.reading_colors = colors;
         }
+        if let Some(on) = v["invert_colors"].as_bool() {
+            self.invert_colors = on;
+        }
+        // Settings are untrusted: a palette that isn't two #rgb byte triples keeps the default.
+        if let Ok(palette) = serde_json::from_value::<pdfcraft_render::InvertPalette>(v["invert_palette"].clone()) {
+            self.invert_palette = palette;
+        }
         // Settings are untrusted: a size out of range follows the system instead.
         self.ui_scale = v["ui_scale"].as_f64().and_then(ui_scale::valid);
         // Settings are untrusted: an unusable pattern keeps the default.
@@ -2488,6 +2533,14 @@ impl PdfCraftApp {
                     format!("language must be one of {}", codes.join(", "))
                 })?;
                 self.language = language.to_string();
+            }
+            ("invert-colors" | "invert_colors", _) => {
+                let on = match value {
+                    "true" | "on" | "1" | "" => true,
+                    "false" | "off" | "0" => false,
+                    _ => return Err("invert-colors must be true or false".into()),
+                };
+                self.set_invert_colors(on);
             }
             ("theme", _) => {
                 let preference = match value {
@@ -3172,7 +3225,8 @@ impl eframe::App for PdfCraftApp {
             }
         }
         let t = theme::Tokens::get(&ctx);
-        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
+        let pasteboard = if self.invert_colors && !t.dark() { egui::Color32::from_gray(32) } else { t.pasteboard };
+        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(pasteboard)).show(ui, |ui| {
             if self.mode == Mode::Read {
                 match self.active {
                     None if self.combine_showing() => combine_ui::page(self, ui),
