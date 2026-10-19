@@ -171,6 +171,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+**M7/M14 candidate, PR #1851 (reviewed 2026-10-19):** Arabic comment/PDF fields keep logical text with mapped cursors and selections; direct selected-word editing, approved subset-font fallback, right-anchored single-row apply/save and theme-card selection are included. Integration retains upstream text-state, source-row and caret fixes. Validation and limitations are recorded in `docs/localization.md`; readiness estimates are unchanged.
+
 - **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
 
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
