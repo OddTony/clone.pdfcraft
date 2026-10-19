@@ -1595,5 +1595,10 @@ mod bcmap_tests {
             .expect("a resolvable usecmap still chains");
         assert_eq!(cmap.lookup_bf_string(0x41), Some(BfString::Char('X')));
         assert_eq!(cmap.lookup_bf_string(0x42), Some(BfString::Char('Y')));
+
+        let named = b"2 beginbfchar <41> /A <42> <0059> endbfchar";
+        let cmap = CMap::parse(named, |_| None).expect("a non-string destination is skipped");
+        assert_eq!(cmap.lookup_bf_string(0x41), None);
+        assert_eq!(cmap.lookup_bf_string(0x42), Some(BfString::Char('Y')));
     }
 }

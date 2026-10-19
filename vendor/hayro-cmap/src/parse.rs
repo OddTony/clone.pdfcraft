@@ -275,7 +275,12 @@ fn parse_bf_char<F>(
             let _ = scanner.parse_object().ok();
             continue;
         };
-        let dst = scanner.parse_string().ok()?;
+        // A destination that is not a string (a name, a number, an array) is one bad
+        // entry. Treating that as a parse failure would drop the rest of the map.
+        // A token the scanner cannot read still ends the map: the position may not advance.
+        let Object::String(dst) = scanner.parse_object().ok()? else {
+            continue;
+        };
         if dst.decode_into(&mut ctx.buf).is_err() {
             continue;
         }

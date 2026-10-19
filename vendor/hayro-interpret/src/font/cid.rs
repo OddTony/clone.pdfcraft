@@ -427,12 +427,15 @@ impl Type0Font {
     /// `/ToUnicode` does not cover stays unmapped.
     fn unicode_of(&self, code: u32) -> Option<BfString> {
         if let Some(map) = &self.to_unicode {
-            let key = if self.to_unicode_is_cid_indexed {
-                self.code_to_cid(code).unwrap_or(0)
+            // A code-indexed `/ToUnicode` map is bf entries only. A resolved `usecmap` base
+            // such as Identity-H stores CIDs, and those are not Unicode scalars: CID 1125
+            // would become U+0465 instead of falling through to the collection's "亜".
+            let text = if self.to_unicode_is_cid_indexed {
+                bf_or_cid_char(map, self.code_to_cid(code).unwrap_or(0))
             } else {
-                code
+                map.lookup_bf_string(code)
             };
-            if let Some(text) = bf_or_cid_char(map, key) {
+            if let Some(text) = text {
                 return Some(text);
             }
         }

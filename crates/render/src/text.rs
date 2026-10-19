@@ -1823,6 +1823,8 @@ endstream endobj
         assert_eq!(collection, "A亜");
         assert_eq!(japan1_substitute(Some("1 beginbfchar <0022> <ZZZZ> endbfchar")), collection, "a bad entry does not hide the collection");
         assert_eq!(japan1_substitute(Some("2 beginbfchar <0022> <0042> <0465> <ZZZZ> endbfchar")), "B亜");
+        // Identity-H as a usecmap base maps the code to a CID. That CID is not a Unicode scalar.
+        assert_eq!(japan1_substitute(Some("/Identity-H usecmap\n1 beginbfchar <0022> <0042> endbfchar")), "B亜");
     }
 
     /// One page per content stream, in Helvetica (`/F1`), with `/P1` in the resources'
