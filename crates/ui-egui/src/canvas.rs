@@ -3236,6 +3236,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     &xf,
                     i,
                     info,
+                    doc,
                     &images,
                     view,
                     &mut image_action,
