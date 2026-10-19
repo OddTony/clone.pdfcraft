@@ -36,6 +36,8 @@ impl FieldEvent {
 /// A change a script made to a field (`None`: unchanged).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FieldChange {
+    /// New position in the calculation order (none: unchanged).
+    pub calc_order_index: Option<usize>,
     pub name: String,
     pub value: Option<Vec<String>>,
     pub read_only: Option<bool>,
@@ -151,6 +153,27 @@ pub(crate) fn apply_changes(doc: &mut Document, changes: &[FieldChange], except:
                 }
             }
         }
+    }
+    let mut moves: Vec<_> = changes.iter().filter_map(|c| Some((c.calc_order_index?, all.iter().find(|f| f.name == c.name)?.obj))).collect();
+    if !moves.is_empty() {
+        let af = crate::author::ensure_form(doc)?;
+        let mut co = doc.get(af).as_dict().and_then(|d| d.get(b"CO").map(|v| doc.resolve(v))).and_then(|v| v.as_array().cloned()).unwrap_or_default();
+        moves.sort_by_key(|(index, _)| *index);
+        let mut moved_objects = HashSet::new();
+        if moves.iter().any(|(index, obj)| *index >= co.len() || !co.iter().any(|v| v.as_ref() == Some(*obj)))
+            || moves.iter().any(|(_, obj)| !moved_objects.insert(*obj))
+            || moves.windows(2).any(|pair| matches!(pair, [a, b] if a.0 == b.0))
+        {
+            return Err(FormError::Invalid("invalid calculation order change".into()));
+        }
+        co.retain(|v| !moves.iter().any(|(_, obj)| v.as_ref() == Some(*obj)));
+        for (index, obj) in moves {
+            if index > co.len() {
+                return Err(FormError::Invalid("invalid calculation order index".into()));
+            }
+            co.insert(index, Object::Ref(obj));
+        }
+        doc.update_dict(af, |d| d.set(b"CO".to_vec(), Object::Array(co)))?;
     }
     Ok(())
 }

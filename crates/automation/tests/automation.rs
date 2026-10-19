@@ -5055,9 +5055,11 @@ fn javascript_through_tools() {
     let r = ok(
         &mut a,
         "js_run",
-        json!({ "doc": doc, "script": "console.println(getField('Total').value); getField('Qty').value = 3; this.pageNum = 1; app.alert('ok');" }),
+        json!({ "doc": doc, "script": "this.setPageTabOrder(0, 'rows'); console.println(getField('Total').value); getField('Qty').value = 3; this.pageNum = 1; app.alert('ok');" }),
     );
     assert_eq!(r["console"][0], "2500");
+    assert_eq!(r["error"], Value::Null);
+    assert_eq!(r["requests"].as_array().unwrap().len(), 1, "the engine applies tab ordering rather than forwarding it to the caller");
     assert_eq!(r["alerts"][0], "ok");
     assert_eq!(r["requests"][0]["page"], 2);
     let f = ok(&mut a, "form_fields", json!({ "doc": doc }));

@@ -1898,6 +1898,7 @@ fn recalc_chain_where_script_changes_checkbox() {
                     rc: true,
                     value: "calc1".into(),
                     changes: vec![FieldChange {
+                        calc_order_index: None,
                         name: "agree".into(),
                         value: Some(vec!["Yes".into()]),
                         read_only: None,
