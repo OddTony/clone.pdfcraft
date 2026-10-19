@@ -4228,6 +4228,221 @@ fn clipped_artwork_with_labels_drawn(own_clip: bool) -> Vec<u8> {
     write_incremental(&doc, &Default::default()).unwrap()
 }
 
+/// A foreground red mark crosses an image, as an opaque watermark can do.
+fn image_with_foreground_mark() -> Vec<u8> {
+    image_with_foreground_mark_and_paths(0)
+}
+
+fn image_with_foreground_mark_and_paths(paths: usize) -> Vec<u8> {
+    use pdfcraft_cos::{Dict, Document, Object, Stream, write_incremental};
+    let mut doc = Document::open(std::sync::Arc::new(fixture(1))).unwrap();
+    let mut image = Dict::new();
+    image.set(b"Type".to_vec(), Object::name("XObject"));
+    image.set(b"Subtype".to_vec(), Object::name("Image"));
+    image.set(b"Width".to_vec(), Object::Int(1));
+    image.set(b"Height".to_vec(), Object::Int(1));
+    image.set(b"BitsPerComponent".to_vec(), Object::Int(8));
+    image.set(b"ColorSpace".to_vec(), Object::name("DeviceRGB"));
+    let image = doc.add(Object::Stream(Stream::flate(image, &[0, 0, 255])));
+    let page = pdfcraft_model::pages(&doc).remove(0);
+    let mut content = b"q 0.8 g ".to_vec();
+    for i in 0..paths {
+        content.extend_from_slice(format!("{} {} 0.5 0.5 re f\n", i % 200, (i / 200) % 100).as_bytes());
+    }
+    content.extend_from_slice(b"Q q 100 0 0 80 30 170 cm /Im0 Do Q q 1 0 0 rg 40 0 10 300 re f Q");
+    let contents = doc.add(Object::Stream(Stream::flate(Dict::new(), &content)));
+    let mut resources = doc.resolve(page.dict.get(b"Resources").unwrap()).as_dict().unwrap().clone();
+    let mut xo = Dict::new();
+    xo.set(b"Im0".to_vec(), Object::Ref(image));
+    resources.set(b"XObject".to_vec(), Object::Dict(xo));
+    doc.update_dict(page.obj, |d| {
+        d.set(b"Resources".to_vec(), Object::Dict(resources));
+        d.set(b"Contents".to_vec(), Object::Ref(contents));
+    })
+    .unwrap();
+    write_incremental(&doc, &Default::default()).unwrap()
+}
+
+#[test]
+fn moved_image_preview_preserves_paint_order_and_document() {
+    let mut session = pdfcraft_engine::Session::new();
+    let id = session.open("mark.pdf", None, image_with_foreground_mark().into(), None).unwrap();
+    let doc = session.get(id).unwrap();
+    let before = doc.bytes.clone();
+    let generation = doc.edit_generation();
+    let preview = doc.image_move_preview(0, 0, [70.0, 170.0, 170.0, 250.0]).unwrap();
+    let page = preview.render_background(1.0).unwrap();
+    let pixel = |x: usize, y: usize| {
+        let i = (y * page.width as usize + x) * 4;
+        &page.rgba[i..i + 4]
+    };
+    let red = pixel(45, 120);
+    let blue = pixel(85, 120);
+    assert!(red[0] > 200 && red[1] < 80 && red[2] < 80, "foreground mark stayed in place: {red:?}");
+    assert!(blue[2] > 200 && blue[0] < 80, "the moved image has no duplicate mark: {blue:?}");
+    assert_eq!(doc.bytes, before);
+    assert_eq!(doc.edit_generation(), generation);
+    assert!(!doc.dirty);
+    assert!(doc.image_move_preview(0, 0, [0.0, 0.0, f64::NAN, 10.0]).is_err());
+}
+
+#[test]
+fn moving_an_image_keeps_foreground_marks_in_place() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("mark.pdf", None, image_with_foreground_mark()).unwrap();
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.state_mut().views[0].fit = pdfcraft_ui_egui::canvas::Fit::Page;
+    h.run_steps(4);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let at = |x: f32, y: f32| egui::pos2(page.left() + x / 200.0 * page.width(), page.top() + (300.0 - y) / 300.0 * page.height());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while h.state().render_pending() {
+        assert!(std::time::Instant::now() < deadline);
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.run_steps(3);
+    let start = at(90.0, 180.0);
+    h.hover_at(start);
+    h.run_steps(1);
+    h.drag_at(start);
+    h.run_steps(1);
+    h.drop_at(start);
+    h.run_steps(3);
+    assert!(h.state().views[0].image_selection.is_some());
+    let sample = at(45.0, 180.0);
+    let before = h.render().unwrap().get_pixel(sample.x as u32, sample.y as u32).0;
+    assert!(before[0] > 200 && before[1] < 80 && before[2] < 80, "foreground mark should be red: {before:?}");
+    h.hover_at(start);
+    h.run_steps(1);
+    h.drag_at(start);
+    h.run_steps(1);
+    h.hover_at(start + egui::vec2(150.0, 0.0));
+    h.run_steps(2);
+    let moved = at(120.0, 180.0) + egui::vec2(150.0, 0.0);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let shot = h.render().unwrap();
+        let pixel = shot.get_pixel(moved.x as u32, moved.y as u32).0;
+        if pixel[2] > 200 && pixel[0] < 100 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "the image never reached the preview position: {pixel:?}");
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let shot = h.render().unwrap();
+    let during = shot.get_pixel(sample.x as u32, sample.y as u32).0;
+    let ghost = shot.get_pixel((sample.x + 150.0) as u32, sample.y as u32).0;
+    assert!(
+        during[0] > 200 && during[1] < 80 && during[2] < 80 && ghost[2] > 200 && ghost[0] < 80,
+        "foreground mark must stay in place without a moving duplicate: original {during:?}, displaced {ghost:?}"
+    );
+    h.drop_at(start + egui::vec2(150.0, 0.0));
+    for frame in 0..12 {
+        h.run_steps(1);
+        let shot = h.render().unwrap();
+        let pixel = shot.get_pixel(moved.x as u32, moved.y as u32).0;
+        assert!(pixel[2] > 200 && pixel[0] < 100, "image jumped back after release on frame {frame}: {pixel:?}");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.run_steps(2);
+    let original = at(110.0, 180.0);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let shot = h.render().unwrap();
+        let old = shot.get_pixel(original.x as u32, original.y as u32).0;
+        let moved_pixel = shot.get_pixel(moved.x as u32, moved.y as u32).0;
+        if old[2] > 200 && old[0] < 100 && moved_pixel[0] > 200 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "undo did not restore the original: {old:?}, {moved_pixel:?}");
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let id = h.state().views[0].id;
+    let original_rect = h.state().session.get(id).unwrap().page_images(0)[0].rect;
+    h.hover_at(start);
+    h.run_steps(1);
+    h.drag_at(start);
+    h.run_steps(1);
+    h.hover_at(start + egui::vec2(120.0, 0.0));
+    let next_moved = at(120.0, 180.0) + egui::vec2(120.0, 0.0);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        h.run_steps(1);
+        let pixel = h.render().unwrap().get_pixel(next_moved.x as u32, next_moved.y as u32).0;
+        if pixel[2] > 200 && pixel[0] < 100 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "second drag did not start: {pixel:?}");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(h.state_mut().execute("view.read_mode"));
+    h.run_steps(2);
+    h.drop_at(start + egui::vec2(120.0, 0.0));
+    h.run_steps(2);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.run_steps(4);
+    assert_eq!(h.state().session.get(id).unwrap().page_images(0)[0].rect, original_rect, "putting the tool down cancels its uncommitted drag");
+}
+
+#[test]
+fn image_drag_on_a_complex_page_keeps_up_with_latest_position() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("complex.pdf", None, image_with_foreground_mark_and_paths(10_000)).unwrap();
+        app
+    });
+    h.run_steps(4);
+    assert!(h.state_mut().execute("edit.edit_text"));
+    h.state_mut().views[0].fit = pdfcraft_ui_egui::canvas::Fit::Page;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while h.state().render_pending() {
+        assert!(std::time::Instant::now() < deadline, "initial page did not render");
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.run_steps(4);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let at = |x: f32, y: f32| egui::pos2(page.left() + x / 200.0 * page.width(), page.top() + (300.0 - y) / 300.0 * page.height());
+    let start = at(90.0, 180.0);
+    h.hover_at(start);
+    h.run_steps(1);
+    h.drag_at(start);
+    h.run_steps(1);
+    h.drop_at(start);
+    h.run_steps(3);
+    assert!(h.state().views[0].image_selection.is_some());
+    h.drag_at(start);
+    h.run_steps(1);
+    let began = std::time::Instant::now();
+    for step in 1..=30 {
+        h.hover_at(start + egui::vec2(step as f32 * 5.0, 0.0));
+        h.run_steps(1);
+    }
+    let elapsed = began.elapsed();
+    assert!(elapsed < std::time::Duration::from_secs(5), "pointer frames blocked on preview rendering: {elapsed:?}");
+    let moved = at(120.0, 180.0) + egui::vec2(150.0, 0.0);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        h.run_steps(1);
+        let pixel = h.render().unwrap().get_pixel(moved.x as u32, moved.y as u32).0;
+        if pixel[2] > 200 && pixel[0] < 100 {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "latest preview did not arrive: {pixel:?}");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
+
 #[test]
 fn cropped_images_do_not_intercept_text_and_stay_inside_each_page() {
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 1100.0)).build_eframe(|_cc| {
@@ -4376,20 +4591,7 @@ fn image_pixels_follow_the_frame_while_a_corner_is_dragged() {
             _ => None,
         })
     };
-    // Textured meshes smaller than the page: the page raster itself always covers the page.
-    let pictures = |h: &Harness<'static, PdfCraftApp>| -> Vec<egui::Rect> {
-        h.output()
-            .shapes
-            .iter()
-            .filter_map(|s| match &s.shape {
-                egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => Some(m.calc_bounds()),
-                _ => None,
-            })
-            .filter(|b| b.width() < page.width() - 1.0)
-            .collect()
-    };
-    // The dragged picture is cut from the page raster, which a render thread delivers after
-    // however many frames it takes (more on a slow runner): wait for it on screen, by state.
+    // Wait for the initial page raster before starting the drag.
     let raster_shown = |h: &Harness<'static, PdfCraftApp>| {
         h.output().shapes.iter().any(|s| {
             matches!(&s.shape, egui::Shape::Mesh(m) if m.texture_id != egui::TextureId::default() && m.calc_bounds().width() >= page.width() - 1.0)
@@ -4418,11 +4620,21 @@ fn image_pixels_follow_the_frame_while_a_corner_is_dragged() {
         }
         let live = frame(&h).expect("the drag shows its frame");
         assert!((live.width() - start.width() * factor).abs() < 1.0, "the frame follows the grip: {live:?} from {start:?}");
-        let drawn = pictures(&h);
-        assert!(
-            drawn.iter().any(|b| (b.min - live.min).length() < 0.5 && (b.max - live.max).length() < 0.5),
-            "the picture is drawn in the frame {live:?}, not only at {drawn:?}"
-        );
+        // Check the actual pixels, not the representation used to paint the preview. A
+        // shrink exposes white paper at the old corner; a grow paints the new corner blue.
+        let sample = if factor < 1.0 { start.right_top() + egui::vec2(-10.0, 10.0) } else { live.right_top() + egui::vec2(-10.0, 10.0) };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            let shot = h.render().unwrap();
+            let pixel = shot.get_pixel(sample.x as u32, sample.y as u32).0;
+            let correct = if factor < 1.0 { pixel[0] > 245 && pixel[1] > 245 && pixel[2] > 245 } else { pixel[0] < 240 && pixel[2] > pixel[0] + 5 };
+            if correct {
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline, "image pixels did not follow the resized frame at {sample:?}: {pixel:?}");
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
         h.drop_at(to);
         h.run_steps(4);
         h.key_press_modifiers(Modifiers::COMMAND, Key::Z);

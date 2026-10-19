@@ -503,6 +503,7 @@ pub struct DocView {
     /// queued edit has applied, so its index and geometry come from the document it now is (#2022).
     pub(crate) pending_text_open: Option<(usize, usize)>,
     pub(crate) text_background: crate::edit_text_ui::TextBackground,
+    pub(crate) image_drag_preview: crate::edit_text_ui::ImageDragPreview,
     pub(crate) move_background: crate::content_ui::MoveBackground,
     /// Edit text & images: the images per page (by document generation), and the selected one.
     pub(crate) edit_images: HashMap<usize, (u64, Vec<pdfcraft_engine::PageImage>)>,
@@ -771,6 +772,7 @@ impl DocView {
             line_editor: None,
             pending_text_open: None,
             text_background: Default::default(),
+            image_drag_preview: Default::default(),
             move_background: Default::default(),
             edit_images: HashMap::new(),
             objects: Default::default(),
@@ -1039,11 +1041,6 @@ impl DocView {
     /// A page's thumbnail texture, when rendered.
     pub(crate) fn thumb_id(&self, page: usize) -> Option<egui::TextureId> {
         self.thumbs.get(&page).map(|t| t.tex.id())
-    }
-
-    /// The whole-page raster on screen for `page` (the low-res backdrop of a tiled page), if any.
-    pub(crate) fn page_raster(&self, page: usize) -> Option<egui::TextureId> {
-        self.pages.get(&page).map(|p| p.tex.id())
     }
 
     /// The print preview's picture of `page`: the sheet raster when it has arrived, otherwise the
@@ -1898,6 +1895,7 @@ impl DocView {
             self.pages.insert(page, PageTex { tag: r.request.tag, tex });
             self.signature_drag.page_received(page);
             self.move_background.page_received(page);
+            self.image_drag_preview.page_received(page);
             self.comments.page_rendered(page);
             self.waiting_since.remove(&page);
             if !self.stale_tiles.iter().any(|k| k.0 == page) {
@@ -3014,6 +3012,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                 }
             }
             view.text_background.paint(painter, &xf, i, view.line_editor.as_ref(), view.content.draft.as_ref());
+            view.image_drag_preview.paint_settling(ui, &xf, i);
             if editing_content {
                 let page_tex = view.pages.get(&i).map(|p| p.tex.id());
                 view.move_background.paint(ui, painter, &xf, i, info, &view.content, page_tex);
@@ -3216,6 +3215,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
                     &resp,
                     &xf,
                     i,
+                    doc,
                     info,
                     &images,
                     view,

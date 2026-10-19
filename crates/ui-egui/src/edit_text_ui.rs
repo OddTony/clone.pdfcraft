@@ -15,6 +15,224 @@ use crate::canvas::{DocView, PageXform};
 
 const ACCENT: Color32 = Color32::from_rgb(0x14, 0x73, 0xE6);
 
+#[cfg(not(target_arch = "wasm32"))]
+type ImagePreviewRequest = (u64, Arc<pdfcraft_engine::ImageMovePreviewSource>, [f64; 4], f32);
+
+/// A single worker per view; pointer updates replace the pending request.
+#[derive(Default)]
+pub(crate) struct ImageDragPreview {
+    key: Option<(u64, usize, usize)>,
+    source: Option<Arc<pdfcraft_engine::ImageMovePreviewSource>>,
+    wanted: Option<([f64; 4], f32)>,
+    serial: u64,
+    epoch: u64,
+    texture: Option<egui::TextureHandle>,
+    settling: bool,
+    retire: bool,
+    #[cfg(not(target_arch = "wasm32"))]
+    worker: Option<ImagePreviewWorker>,
+    #[cfg(not(target_arch = "wasm32"))]
+    waiting_since: Option<std::time::Instant>,
+    #[cfg(not(target_arch = "wasm32"))]
+    replacements: u8,
+    #[cfg(not(target_arch = "wasm32"))]
+    exhausted: bool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct ImagePreviewWorker {
+    pending: Arc<std::sync::Mutex<Option<ImagePreviewRequest>>>,
+    wake: std::sync::mpsc::SyncSender<()>,
+    result: std::sync::mpsc::Receiver<(u64, Result<pdfcraft_render::RenderedPage, String>)>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ImagePreviewWorker {
+    fn new(ctx: egui::Context) -> Option<Self> {
+        let pending = Arc::new(std::sync::Mutex::new(None::<ImagePreviewRequest>));
+        let (wake, input) = std::sync::mpsc::sync_channel(1);
+        let (output, result) = std::sync::mpsc::channel();
+        let queue = pending.clone();
+        std::thread::Builder::new()
+            .name("pdfcraft-image-preview".into())
+            .spawn(move || {
+                while input.recv().is_ok() {
+                    let request = queue.lock().ok().and_then(|mut q| q.take());
+                    if let Some((serial, source, target, scale)) = request {
+                        let rendered = source.preview(target).and_then(|preview| preview.render_background(scale));
+                        if output.send((serial, rendered)).is_err() {
+                            break;
+                        }
+                        ctx.request_repaint();
+                    }
+                }
+            })
+            .ok()?;
+        Some(Self { pending, wake, result })
+    }
+}
+
+impl ImageDragPreview {
+    pub fn clear(&mut self) {
+        self.key = None;
+        self.source = None;
+        self.wanted = None;
+        self.texture = None;
+        self.settling = false;
+        self.retire = false;
+        self.serial = self.serial.wrapping_add(1);
+        self.epoch = self.serial;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.waiting_since = None;
+        }
+    }
+
+    fn paint(&mut self, ui: &egui::Ui, doc: &pdfcraft_engine::Document, xf: &PageXform, page: usize, index: usize, target: [f64; 4]) {
+        let key = (doc.edit_generation(), page, index);
+        if self.key != Some(key) {
+            self.clear();
+            self.key = Some(key);
+            self.source = doc.image_move_preview_source(page, index).ok().map(Arc::new);
+        }
+        let Some(source) = self.source.as_ref() else { return };
+        let Some(info) = doc.info.pages.get(page) else { return };
+        let scale = (xf.rect.width() / info.width.max(1.0) * ui.ctx().pixels_per_point()).min(2048.0 / info.width.max(info.height).max(1.0));
+        if self.wanted != Some((target, scale)) {
+            self.wanted = Some((target, scale));
+            self.serial = self.serial.wrapping_add(1);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if self.worker.is_none() && !self.exhausted {
+                    self.worker = ImagePreviewWorker::new(ui.ctx().clone());
+                }
+                let mut disconnected = self.worker.is_none() && !self.exhausted;
+                if let Some(worker) = &self.worker {
+                    if let Ok(mut pending) = worker.pending.lock() {
+                        *pending = Some((self.serial, source.clone(), target, scale));
+                    } else {
+                        disconnected = true;
+                    }
+                    if matches!(worker.wake.try_send(()), Err(std::sync::mpsc::TrySendError::Disconnected(()))) {
+                        disconnected = true;
+                    }
+                    self.waiting_since.get_or_insert_with(std::time::Instant::now);
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+                }
+                if disconnected {
+                    self.worker = None;
+                    self.wanted = None;
+                    self.waiting_since = None;
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            if let Ok(out) = source.preview(target).and_then(|p| p.render_background(scale)) {
+                self.texture = Some(ui.ctx().load_texture(
+                    "image-drag-preview",
+                    crate::canvas::texture_image([out.width as usize, out.height as usize], out.rgba),
+                    egui::TextureOptions::LINEAR,
+                ));
+            }
+        }
+        self.poll(ui.ctx());
+        if let Some(tex) = &self.texture {
+            let painter = ui.painter().with_clip_rect(ui.clip_rect().intersect(xf.rect));
+            xf.paint_image(&painter, tex.id(), 0.0, 0.0, 1.0, 1.0);
+        }
+    }
+
+    fn poll(&mut self, ctx: &egui::Context) {
+        #[cfg(not(target_arch = "wasm32"))]
+        let mut disconnected = false;
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(worker) = &self.worker {
+            loop {
+                let (serial, result) = match worker.result.try_recv() {
+                    Ok(result) => result,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        disconnected = true;
+                        break;
+                    }
+                };
+                if serial > self.epoch {
+                    self.waiting_since = (serial != self.serial).then(std::time::Instant::now);
+                    match result {
+                        Ok(out) => {
+                            self.texture = Some(ctx.load_texture(
+                                "image-drag-preview",
+                                crate::canvas::texture_image([out.width as usize, out.height as usize], out.rgba),
+                                egui::TextureOptions::LINEAR,
+                            ));
+                        }
+                        Err(e) => log::warn!("image drag preview failed: {e}"),
+                    }
+                }
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if disconnected {
+            self.worker = None;
+            self.wanted = None;
+            self.waiting_since = None;
+            ctx.request_repaint();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        // Match the page renderer's 20-second watchdog, with only one replacement for this view.
+        if self.waiting_since.is_some_and(|start| start.elapsed() >= std::time::Duration::from_secs(20)) {
+            self.worker = None;
+            self.waiting_since = None;
+            if self.replacements == 0 {
+                self.replacements = 1;
+                self.wanted = None;
+                log::warn!("image preview took too long; starting one replacement worker");
+                ctx.request_repaint();
+            } else {
+                self.exhausted = true;
+                log::warn!("image preview unavailable after repeated slow renders");
+            }
+        } else if self.waiting_since.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = ctx;
+    }
+
+    pub fn committed(&mut self, edit: &Edit) {
+        if matches!(edit, Edit::EditPageImage { page, index, change: pdfcraft_engine::ImageEdit::Move(_) }
+            if self.key.is_some_and(|(_, p, i)| (p, i) == (*page, *index)))
+        {
+            self.settling = true;
+        } else {
+            self.clear();
+        }
+    }
+
+    pub fn page_received(&mut self, page: usize) {
+        if self.settling && self.key.is_some_and(|(_, p, _)| p == page) {
+            // Shapes from this frame still reference the preview texture. Retire it on the
+            // next frame, after the newly received page can actually be painted.
+            self.retire = true;
+        }
+    }
+
+    pub fn paint_settling(&mut self, ui: &egui::Ui, xf: &PageXform, page: usize) {
+        if !self.settling || !self.key.is_some_and(|(_, p, _)| p == page) {
+            return;
+        }
+        if self.retire {
+            self.clear();
+            return;
+        }
+        self.poll(ui.ctx());
+        if let Some(tex) = &self.texture {
+            let painter = ui.painter().with_clip_rect(ui.clip_rect().intersect(xf.rect));
+            xf.paint_image(&painter, tex.id(), 0.0, 0.0, 1.0, 1.0);
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum TextTarget {
     Block(usize),
@@ -634,6 +852,7 @@ pub(crate) fn image_input(
     resp: &egui::Response,
     xf: &PageXform,
     page: usize,
+    doc: &pdfcraft_engine::Document,
     info: &DocInfo,
     images: &[pdfcraft_engine::PageImage],
     view: &mut DocView,
@@ -651,6 +870,9 @@ pub(crate) fn image_input(
     };
     let selected = view.image_selection.as_ref().filter(|s| s.page == page).map(|s| s.index).filter(|i| *i < boxes.len());
     let dragging = view.image_selection.as_ref().is_some_and(|s| s.drag.is_some());
+    if !dragging && !view.image_drag_preview.settling {
+        view.image_drag_preview.clear();
+    }
     // Few images: faint outlines for all of them, as before. Many: only the selected and
     // hovered boxes, so a ~1000-image CAD page stays interactive in Edit text & images.
     // Fully clipped placements (empty visible frames) get no outline.
@@ -748,27 +970,8 @@ pub(crate) fn image_input(
             let target = Rect::from_min_max(preview.min + (raw.min - b.min) * factor, preview.min + (raw.max - b.min) * factor);
             let visible = preview.intersect(xf.rect);
             if visible.is_positive() {
-                // The pixels follow the frame: the page raster's picture of the image, stretched
-                // into the preview over a blank where it was. Re-rendering every frame of a drag
-                // would lag; the edit renders it properly on release.
-                if preview != b
-                    && let Some(tex) = view.page_raster(page)
-                {
-                    let clipped = painter.with_clip_rect(painter.clip_rect().intersect(xf.rect));
-                    clipped.rect_filled(b, CornerRadius::ZERO, Color32::WHITE);
-                    let mut mesh = egui::Mesh::with_texture(tex);
-                    for (from, to) in [
-                        (b.left_top(), preview.left_top()),
-                        (b.right_top(), preview.right_top()),
-                        (b.right_bottom(), preview.right_bottom()),
-                        (b.left_bottom(), preview.left_bottom()),
-                    ] {
-                        let (u, v) = xf.screen_to_norm(from);
-                        mesh.vertices.push(egui::epaint::Vertex { pos: to, uv: Pos2::new(u, v), color: Color32::WHITE });
-                    }
-                    mesh.add_triangle(0, 1, 2);
-                    mesh.add_triangle(0, 2, 3);
-                    clipped.add(egui::Shape::mesh(mesh));
+                if preview != b {
+                    view.image_drag_preview.paint(ui, doc, xf, page, i, user_box(xf, info, page, target));
                 }
                 painter.rect_filled(visible, CornerRadius::ZERO, ACCENT.gamma_multiply(0.04));
                 painter.rect_stroke(visible, CornerRadius::ZERO, Stroke::new(1.5, ACCENT), egui::StrokeKind::Outside);
@@ -1448,6 +1651,44 @@ pub(crate) fn caret_color_on(fill: Color32) -> Color32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn disconnected_image_preview_worker_can_be_retried() {
+        let (wake, _input) = std::sync::mpsc::sync_channel(1);
+        let (output, result) = std::sync::mpsc::channel();
+        drop(output);
+        let mut preview = ImageDragPreview {
+            wanted: Some(([0.0, 0.0, 1.0, 1.0], 1.0)),
+            worker: Some(ImagePreviewWorker { pending: Arc::new(std::sync::Mutex::new(None)), wake, result }),
+            ..Default::default()
+        };
+        preview.poll(&egui::Context::default());
+        assert!(preview.worker.is_none());
+        assert!(preview.wanted.is_none(), "the current placement must be eligible for resubmission");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn stalled_image_preview_has_only_one_replacement() {
+        let ctx = egui::Context::default();
+        let mut preview = ImageDragPreview::default();
+        for attempt in 0..2 {
+            let (wake, input) = std::sync::mpsc::sync_channel(1);
+            let (output, result) = std::sync::mpsc::channel();
+            preview.worker = Some(ImagePreviewWorker { pending: Arc::new(std::sync::Mutex::new(None)), wake, result });
+            preview.wanted = Some(([0.0, 0.0, 1.0, 1.0], 1.0));
+            preview.waiting_since = Some(std::time::Instant::now() - std::time::Duration::from_secs(21));
+            preview.poll(&ctx);
+            assert!(preview.worker.is_none());
+            assert_eq!(preview.replacements, 1);
+            assert_eq!(preview.exhausted, attempt == 1);
+            if attempt == 0 {
+                assert!(preview.wanted.is_none(), "the replacement must receive the current placement");
+            }
+            drop((input, output));
+        }
+    }
 
     /// An app with one text document open, and an editor on its first paragraph.
     fn preview_app() -> (crate::PdfCraftApp, LineEditor) {
