@@ -556,7 +556,34 @@ fn stamps_draw_their_label_and_by_line() {
     .unwrap();
     assert!(ap_content(&doc, &list(&doc, 0)[j]).contains("(SIGN HERE) Tj"));
     assert_eq!(StampKind::from_name(b"Approved"), Some(StampKind::Approved), "standard names");
-    assert!(StampKind::ALL.iter().all(|k| k.size().0 >= 80.0));
+    assert!(StampKind::ALL.iter().filter(|k| k.group() != StampGroup::TickMarks).all(|k| k.size().0 >= 80.0));
+}
+
+#[test]
+fn coloured_tick_stamps_keep_vector_appearances_after_reopen() {
+    let mut doc = fixture();
+    for (i, kind) in [StampKind::RedTick, StampKind::BlueTick, StampKind::GreenTick].into_iter().enumerate() {
+        let x = 80.0 + i as f64 * 30.0;
+        let shape = Shape::Stamp { rect: [x, 100.0, x + 18.0, 118.0], stamp: kind, by: None };
+        let index = add_annotation(
+            &mut doc,
+            &NewAnnotation { page: 0, style: Style::default_for(&shape), shape, contents: String::new(), author: "Ada".into() },
+            &Meta::default(),
+        )
+        .unwrap();
+        let d = &list(&doc, 0)[index];
+        assert_eq!(d.name(b"Name"), Some(kind.name().as_bytes()));
+        assert_eq!(StampKind::from_name(kind.name().as_bytes()), Some(kind));
+    }
+    let doc = reopen(&doc);
+    let all = list(&doc, 0);
+    for (i, kind) in [StampKind::RedTick, StampKind::BlueTick, StampKind::GreenTick].into_iter().enumerate() {
+        let d = &all[i + 1];
+        let ap = ap_content(&doc, d);
+        assert_eq!(d.name(b"Name"), Some(kind.name().as_bytes()));
+        assert!(ap.contains(" l S") && !ap.contains(" Tj"), "{ap}");
+        assert_eq!(d.get(b"C").and_then(|v| v.as_array()).unwrap().len(), 3);
+    }
 }
 
 #[test]

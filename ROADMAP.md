@@ -171,7 +171,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
-- **2026-10-19 (M5, #3395 partial):** The stamp palette exposes the existing Keep tool selected setting for custom and built-in stamps. A UI regression covers repeated placements, Escape and returning to Select after unpinning. Coloured tick marks, stamp padding, and the linked calculator remain open; estimates unchanged.
+- **2026-10-19 (M5, #3395 partial):** The stamp palette exposes the existing Keep tool selected setting for custom and built-in stamps. The palette also offers a vector tick stamp in red, blue and green, available through comment_add; a save/reopen rendering regression checks the colours. UI tests cover repeated placements, Escape and unpinning. Stamp padding and the linked calculator remain open; estimates unchanged.
 
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
 

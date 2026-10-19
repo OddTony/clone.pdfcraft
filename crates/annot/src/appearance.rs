@@ -814,6 +814,21 @@ fn stamp(kind: crate::StampKind, rect: [f64; 4], col: Rgb, by: Option<&str>, opa
     if opacity < 1.0 {
         c.push_str("/GS0 gs\n");
     }
+    if kind.group() == crate::StampGroup::TickMarks {
+        let w = x1 - x0;
+        c.push_str(&format!(
+            "{}{} w 1 J 1 j {} {} m {} {} l {} {} l S\n",
+            rg_stroke(col),
+            n((w.min(h) * 0.13).max(0.5)),
+            n(x0 + w * 0.16),
+            n(y0 + h * 0.48),
+            n(x0 + w * 0.39),
+            n(y0 + h * 0.23),
+            n(x0 + w * 0.84),
+            n(y0 + h * 0.78),
+        ));
+        return form(rect, c.as_bytes(), res);
+    }
     let lw = (h * 0.07).clamp(1.0, 3.0);
     let inset = lw / 2.0 + 0.5;
     if kind.group() == crate::StampGroup::SignHere {

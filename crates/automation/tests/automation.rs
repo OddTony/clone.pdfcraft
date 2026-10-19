@@ -6697,3 +6697,38 @@ fn a_root_less_write_output_is_atomic_too() {
     assert!(matches!(&e, ToolError::Failed(m) if m.contains("is a folder")), "{e:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn coloured_tick_stamps_through_tools_survive_save_and_reopen() {
+    let dir = workdir("coloured-tick-stamps");
+    let mut a = auto(&dir);
+    let doc = ok(&mut a, "doc_create", json!({"from":"blank"}))["doc"].as_u64().unwrap();
+    for (name, x) in [("red tick", 100), ("blue tick", 200), ("green tick", 300)] {
+        ok(&mut a, "comment_add", json!({"doc":doc,"page":1,"type":"stamp","stamp":name,"at":[x,100]}));
+    }
+    ok(&mut a, "doc_save", json!({"doc":doc,"path":"ticks.pdf"}));
+    let reopened = ok(&mut a, "doc_open", json!({"path":"ticks.pdf"}))["doc"].as_u64().unwrap();
+    assert_eq!(ok(&mut a, "comment_list", json!({"doc":reopened}))["count"], 3);
+    let rendered = a.call("page_render", &json!({"doc":reopened,"page":1,"dpi":72})).unwrap();
+    let Content::Png { data, .. } = &rendered[0] else { panic!("expected PNG") };
+    let mut reader = png::Decoder::new(std::io::Cursor::new(data)).read_info().unwrap();
+    let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
+    let info = reader.next_frame(&mut pixels).unwrap();
+    assert_eq!(info.color_type, png::ColorType::Rgba);
+    for (index, x) in [100_u32, 200, 300].into_iter().enumerate() {
+        let mut coloured = 0;
+        for y in 91..109 {
+            for px in x - 9..x + 9 {
+                let offset = ((y * info.width + px) * 4) as usize;
+                let rgb = &pixels[offset..offset + 3];
+                let channel = [0, 2, 1][index];
+                if i16::from(rgb[channel]) > i16::from(rgb[(channel + 1) % 3]) + 30
+                    && i16::from(rgb[channel]) > i16::from(rgb[(channel + 2) % 3]) + 30
+                {
+                    coloured += 1;
+                }
+            }
+        }
+        assert!(coloured > 5, "tick {index} has too few coloured pixels: {coloured}");
+    }
+}

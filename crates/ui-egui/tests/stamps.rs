@@ -201,3 +201,45 @@ fn keep_tool_selected_repeats_custom_and_standard_stamps() {
     h.run_steps(4);
     assert_eq!(h.state().quick_tool, QuickTool::Select, "unpin returns to selecting");
 }
+
+#[test]
+fn coloured_tick_stamps_can_be_placed_from_the_palette() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("form.pdf", None, include_bytes!("data/form.pdf").to_vec()).unwrap();
+        app
+    });
+    h.run_steps(6);
+    assert!(h.state_mut().execute("comment.stamp"));
+    h.run_steps(2);
+    for (i, (label, kind)) in [
+        ("Red Checkmark", pdfcraft_engine::StampKind::RedTick),
+        ("Blue Checkmark", pdfcraft_engine::StampKind::BlueTick),
+        ("Green Checkmark", pdfcraft_engine::StampKind::GreenTick),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        h.get_by_label(label).click();
+        h.run_steps(2);
+        assert_eq!(h.state().quick_tool, QuickTool::Stamp(kind));
+        let page = h.state().views[0].page_screen_rect(0).unwrap();
+        let at = page.min + egui::vec2(page.width() * (0.35 + i as f32 * 0.12), page.height() * 0.4);
+        h.hover_at(at);
+        h.run_steps(1);
+        h.drag_at(at);
+        h.run_steps(1);
+        h.drop_at(at);
+        h.run_steps(4);
+    }
+    let app = h.state();
+    let doc = app.session.get(app.views[0].id).unwrap();
+    let stamps: Vec<_> = doc.info.annotations.iter().filter(|a| a.subtype == "Stamp").collect();
+    assert_eq!(stamps.len(), 3);
+    for (stamp, kind) in
+        stamps.iter().zip([pdfcraft_engine::StampKind::RedTick, pdfcraft_engine::StampKind::BlueTick, pdfcraft_engine::StampKind::GreenTick])
+    {
+        assert_eq!(stamp.color, Some(kind.color().map(|v| v as f32)));
+    }
+}

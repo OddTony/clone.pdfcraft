@@ -130,6 +130,10 @@ impl FillMark {
 /// The stamps of Acrobat's stamp palette (drawn in PdfCraft's own style).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StampKind {
+    // Tick marks.
+    RedTick,
+    BlueTick,
+    GreenTick,
     // Standard business.
     Approved,
     Completed,
@@ -160,13 +164,17 @@ pub enum StampKind {
 /// The palette's sections.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StampGroup {
+    TickMarks,
     Dynamic,
     SignHere,
     StandardBusiness,
 }
 
 impl StampKind {
-    pub const ALL: [StampKind; 22] = [
+    pub const ALL: [StampKind; 25] = [
+        StampKind::RedTick,
+        StampKind::BlueTick,
+        StampKind::GreenTick,
         StampKind::DynApproved,
         StampKind::DynConfidential,
         StampKind::DynReceived,
@@ -194,6 +202,7 @@ impl StampKind {
     pub fn group(self) -> StampGroup {
         use StampKind::*;
         match self {
+            RedTick | BlueTick | GreenTick => StampGroup::TickMarks,
             DynApproved | DynConfidential | DynReceived | DynReviewed | DynRevised => StampGroup::Dynamic,
             Accepted | InitialHere | Rejected | SignHere | Witness => StampGroup::SignHere,
             _ => StampGroup::StandardBusiness,
@@ -204,6 +213,9 @@ impl StampKind {
     pub fn label(self) -> &'static str {
         use StampKind::*;
         match self {
+            RedTick => "Red tick",
+            BlueTick => "Blue tick",
+            GreenTick => "Green tick",
             Approved | DynApproved => "APPROVED",
             Completed => "COMPLETED",
             Confidential | DynConfidential => "CONFIDENTIAL",
@@ -231,6 +243,9 @@ impl StampKind {
     pub fn name(self) -> &'static str {
         use StampKind::*;
         match self {
+            RedTick => "PCRedTick",
+            BlueTick => "PCBlueTick",
+            GreenTick => "PCGreenTick",
             Approved => "Approved",
             Confidential => "Confidential",
             Draft => "Draft",
@@ -264,8 +279,8 @@ impl StampKind {
     pub fn color(self) -> Rgb {
         use StampKind::*;
         match self {
-            Approved | Completed | Final | Accepted | DynApproved | DynReceived | DynReviewed => [0.13, 0.55, 0.13],
-            NotApproved | Rejected | Void | Confidential | NotForPublicRelease | DynConfidential => [0.80, 0.10, 0.10],
+            GreenTick | Approved | Completed | Final | Accepted | DynApproved | DynReceived | DynReviewed => [0.13, 0.55, 0.13],
+            RedTick | NotApproved | Rejected | Void | Confidential | NotForPublicRelease | DynConfidential => [0.80, 0.10, 0.10],
             SignHere | InitialHere | Witness => [0.85, 0.35, 0.05],
             _ => [0.10, 0.30, 0.70],
         }
@@ -273,6 +288,9 @@ impl StampKind {
 
     /// The stamp's size (points) for its label, as placed with a click.
     pub fn size(self) -> (f64, f64) {
+        if self.group() == StampGroup::TickMarks {
+            return (18.0, 18.0);
+        }
         let w = appearance::text_width(self.label(), 16.0) * 1.12 + 24.0;
         let h = if self.group() == StampGroup::Dynamic { 42.0 } else { 30.0 };
         let w = if self.group() == StampGroup::SignHere { w + 14.0 } else { w };
@@ -981,6 +999,7 @@ fn subject(shape: &Shape) -> &'static str {
         Shape::Signature { .. } => "Signature",
         Shape::Redact { .. } => "Redact",
         Shape::Stamp { stamp, .. } => match stamp.group() {
+            StampGroup::TickMarks => "Stamp",
             StampGroup::Dynamic => "Dynamic stamp",
             StampGroup::SignHere => "Sign Here",
             StampGroup::StandardBusiness => "Stamp",
