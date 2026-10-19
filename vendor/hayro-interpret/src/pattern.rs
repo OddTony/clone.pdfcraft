@@ -233,6 +233,7 @@ impl<'a> TilingPattern<'a> {
         // the nesting like XObjects do, tighter because every level rasterizes a tile.
         if self.nesting_depth > crate::context::MAX_PAINT_NESTING || !crate::context::take_nested_paint(self.nesting_depth) {
             warn!("tiling pattern nesting depth or paint budget exceeded");
+            crate::context::mark_content_truncated();
             return None;
         }
         let state = State::new(initial_transform);

@@ -38,7 +38,7 @@ use std::sync::Arc;
 
 use pdfcraft_engine::{CombineSource, DocId, Document, Edit, Session, commands};
 use pdfcraft_platform::staging::{StagingName, staging_suffixes};
-use pdfcraft_render::{PageRenderer, PageText, RenderConfig, RenderRequest, RequestKind};
+use pdfcraft_render::{PageRenderer, PageText, RenderConfig, RenderRequest, RenderWarning, RequestKind};
 use serde_json::{Value, json};
 
 pub use pdfcraft_render::Pixels;
@@ -1967,8 +1967,28 @@ impl Automation {
             Some(r) => t.column_text(&t.glyphs_in(r)),
             None => t.plain_text(),
         };
-        let out: Vec<Value> = pages.iter().zip(texts).map(|(p, t)| json!({ "page": p + 1, "text": text(&t) })).collect();
-        Ok(json!({ "pages": out }))
+        let mut any_truncated = false;
+        let out: Vec<Value> = pages
+            .iter()
+            .zip(texts)
+            .map(|(p, t)| {
+                if t.truncated {
+                    any_truncated = true;
+                    json!({ "page": p + 1, "text": text(&t), "truncated": true })
+                } else {
+                    json!({ "page": p + 1, "text": text(&t) })
+                }
+            })
+            .collect();
+        let mut res = json!({ "pages": out });
+        if let (true, Some(obj)) = (any_truncated, res.as_object_mut()) {
+            obj.insert("truncated".into(), json!(true));
+            obj.insert(
+                "warning".into(),
+                json!("Text extraction was truncated due to processing limits; extracted text may be incomplete"),
+            );
+        }
+        Ok(res)
     }
 
     /// Matches in document order, extracting page text in growing batches and stopping as soon as
@@ -2013,6 +2033,12 @@ impl Automation {
                         continue;
                     }
                 };
+                if text.truncated {
+                    warning_count += 1;
+                    if warnings.len() < FIND_MAX_WARNINGS {
+                        warnings.push(json!({ "page": p + 1, "error": "content was truncated by page safety budget", "error_truncated": false }));
+                    }
+                }
                 let skip_here = if p == start { skip } else { 0 };
                 // One extra match proves that the caller needs a continuation. Include skipped
                 // matches on the starting page when bounding the temporary per-page result.
@@ -2532,7 +2558,13 @@ fn extract_parallel(bytes: &Arc<Vec<u8>>, password: Option<Arc<str>>, pages: &[u
         let out = r.render(RenderRequest { page: p, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, preview: false });
         match out.error {
             Some(e) => Err(e),
-            None => Ok(out.text.unwrap_or_default()),
+            None => {
+                let mut text = out.text.unwrap_or_default();
+                if out.warnings.contains(&RenderWarning::ContentTruncated) {
+                    Arc::make_mut(&mut text).truncated = true;
+                }
+                Ok(text)
+            }
         }
     };
     let config = RenderConfig { password, ..Default::default() };

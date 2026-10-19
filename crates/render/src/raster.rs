@@ -4882,6 +4882,159 @@ trailer << /Root 1 0 R >>
         assert_eq!(&page.rgba[((8 * 40 + 32) * 4)..][..4], &[255, 0, 0, 255], "the 300th paint is drawn");
     }
 
+    #[test]
+    fn nested_paint_budget_truncation_and_below_limit_control() {
+        // Construct a shallow form hierarchy (depth <= 3 << 50) that executes nested paints.
+        // Depth 0: Page calls Form A.
+        // Depth 1: Form A calls Form B `calls_a` times.
+        // Depth 2: Form B calls Form C `calls_b` times.
+        // Depth 3: Form C is an empty form.
+        // Paints at depth >= 2 count toward MAX_NESTED_PAINTS (50,000):
+        // Each call to Form B counts 1 nested paint, and each invocation runs `calls_b` calls to Form C.
+        // Total nested paints = calls_a * (1 + calls_b).
+        let make_paint_pdf = |calls_a: usize, calls_b: usize| {
+            let mut out = "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 40 40] /Contents 4 0 R /Resources << /XObject << /FmA 5 0 R >> >> >> endobj\n4 0 obj << /Length 8 >> stream\n/FmA Do\nendstream endobj\n".as_bytes().to_vec();
+
+            let mut stream_a = String::new();
+            for _ in 0..calls_a {
+                stream_a.push_str("/FmB Do\n");
+            }
+            let mut stream_b = String::new();
+            for _ in 0..calls_b {
+                stream_b.push_str("/FmC Do\n");
+            }
+
+            out.extend_from_slice(
+                format!(
+                    "5 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 40 40] /Resources << /XObject << /FmB 6 0 R >> >> /Length {} >> stream\n{}endstream endobj\n",
+                    stream_a.len(),
+                    stream_a
+                )
+                .as_bytes(),
+            );
+            out.extend_from_slice(
+                format!(
+                    "6 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 40 40] /Resources << /XObject << /FmC 7 0 R >> >> /Length {} >> stream\n{}endstream endobj\n",
+                    stream_b.len(),
+                    stream_b
+                )
+                .as_bytes(),
+            );
+            out.extend_from_slice(
+                b"7 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 40 40] /Length 0 >> stream\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n",
+            );
+            out
+        };
+
+        // Over-limit: 250 calls to Form B, each calling Form C 250 times.
+        // Total nested paints = 250 * 251 = 62,750 (> 50,000 MAX_NESTED_PAINTS), with depth 3 (< 50).
+        let pdf_over = make_paint_pdf(250, 250);
+        let mut r_over = PageRenderer::new(Arc::new(pdf_over), RenderConfig::default());
+        let pixel_res = r_over.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(pixel_res.warnings.contains(&RenderWarning::ContentTruncated), "pixels render captures paint budget exhaustion");
+
+        let text_res = r_over.render(RenderRequest { page: 0, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(text_res.warnings.contains(&RenderWarning::ContentTruncated), "text render captures paint budget exhaustion");
+        assert!(text_res.text.as_ref().unwrap().truncated, "page text records truncation");
+
+        // Below-limit control: 200 calls to Form B, each calling Form C 200 times.
+        // Total nested paints = 200 * 201 = 40,200 (< 50,000 MAX_NESTED_PAINTS), with depth 3 (< 50).
+        let pdf_under = make_paint_pdf(200, 200);
+        let mut r_under = PageRenderer::new(Arc::new(pdf_under), RenderConfig::default());
+        let pixel_clean = r_under.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(!pixel_clean.warnings.contains(&RenderWarning::ContentTruncated), "clean render has no truncation warning");
+
+        let text_clean = r_under.render(RenderRequest { page: 0, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(!text_clean.warnings.contains(&RenderWarning::ContentTruncated), "clean text render has no truncation warning");
+        assert!(!text_clean.text.as_ref().unwrap().truncated, "clean page text is not marked truncated");
+    }
+
+    #[test]
+    fn nested_interpretation_depth_truncation_and_below_limit_control() {
+        // Helper to build a chain of nested forms.
+        let make_chain = |depth: usize| {
+            let mut out = "%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 40 40] /Contents 4 0 R /Resources << /XObject << /Fm1 5 0 R >> >> >> endobj\n4 0 obj << /Length 8 >> stream\n/Fm1 Do\nendstream endobj\n".as_bytes().to_vec();
+            for i in 1..=depth {
+                let obj_id = 4 + i;
+                let next_id = obj_id + 1;
+                if i < depth {
+                    let content = format!("/Fm{} Do", i + 1);
+                    out.extend_from_slice(format!("{obj_id} 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 40 40] /Resources << /XObject << /Fm{} {next_id} 0 R >> >> /Length {} >> stream\n{content}\nendstream endobj\n", i + 1, content.len()).as_bytes());
+                } else {
+                    out.extend_from_slice(
+                        format!("{obj_id} 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 40 40] /Length 0 >> stream\nendstream endobj\n")
+                            .as_bytes(),
+                    );
+                }
+            }
+            out.extend_from_slice(b"trailer << /Root 1 0 R >>\n%%EOF\n");
+            out
+        };
+
+        // Over-limit: depth = 55 (exceeds MAX_NESTED_INTERPRETATION_DEPTH = 50).
+        let pdf_over = make_chain(55);
+        let mut r_over = PageRenderer::new(Arc::new(pdf_over), RenderConfig::default());
+        let pixel_res = r_over.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(pixel_res.warnings.contains(&RenderWarning::ContentTruncated), "over depth limit emits warning on pixels");
+
+        let text_res = r_over.render(RenderRequest { page: 0, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(text_res.warnings.contains(&RenderWarning::ContentTruncated), "over depth limit emits warning on text");
+        assert!(text_res.text.as_ref().unwrap().truncated, "over depth limit sets text.truncated");
+
+        // Below-limit control: depth = 5 (< 50).
+        let pdf_under = make_chain(5);
+        let mut r_under = PageRenderer::new(Arc::new(pdf_under), RenderConfig::default());
+        let pixel_clean = r_under.render(RenderRequest { page: 0, kind: RequestKind::Pixels, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(!pixel_clean.warnings.contains(&RenderWarning::ContentTruncated), "clean depth has no warning on pixels");
+
+        let text_clean = r_under.render(RenderRequest { page: 0, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(!text_clean.warnings.contains(&RenderWarning::ContentTruncated), "clean depth has no warning on text");
+        assert!(!text_clean.text.as_ref().unwrap().truncated, "clean depth has truncated: false");
+    }
+
+    #[test]
+    fn page_truncation_isolation_multipage() {
+        // Page 0 has self-referential nested paints. Page 1 has clean text.
+        let mut pdf =
+            b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >> endobj\n".to_vec();
+        // Page 0 (obj 3): uses Fm0 (obj 5)
+        pdf.extend_from_slice(
+            b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R /Resources << /XObject << /Fm0 5 0 R >> >> >> endobj\n",
+        );
+        pdf.extend_from_slice(b"4 0 obj << /Length 8 >> stream\n/Fm0 Do\nendstream endobj\n");
+        pdf.extend_from_slice(b"5 0 obj << /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Resources << /XObject << /Fm0 5 0 R >> >> /Length 8 >> stream\n/Fm0 Do\nendstream endobj\n");
+        // Page 1 (obj 6): clean text
+        pdf.extend_from_slice(
+            b"6 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 7 0 R /Resources << /Font << /F1 8 0 R >> >> >> endobj\n",
+        );
+        pdf.extend_from_slice(b"7 0 obj << /Length 39 >> stream\nBT /F1 12 Tf 10 50 Td (Clean Page) Tj ET\nendstream endobj\n");
+        pdf.extend_from_slice(b"8 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n");
+        pdf.extend_from_slice(b"trailer << /Root 1 0 R >>\n%%EOF\n");
+
+        let mut r = PageRenderer::new(Arc::new(pdf), RenderConfig::default());
+
+        // Render Page 0 -> truncated
+        let p0 = r.render(RenderRequest { page: 0, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(p0.warnings.contains(&RenderWarning::ContentTruncated));
+        assert!(p0.text.as_ref().unwrap().truncated);
+
+        // Render Page 1 -> clean (no contamination from Page 0)
+        let p1 = r.render(RenderRequest { page: 1, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(!p1.warnings.contains(&RenderWarning::ContentTruncated));
+        assert!(!p1.text.as_ref().unwrap().truncated);
+        assert_eq!(p1.text.as_ref().unwrap().plain_text(), "Clean Page");
+
+        // Render Page 0 again -> still truncated
+        let p0_again = r.render(RenderRequest { page: 0, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(p0_again.warnings.contains(&RenderWarning::ContentTruncated));
+        assert!(p0_again.text.as_ref().unwrap().truncated);
+
+        // Render Page 1 again -> still clean
+        let p1_again = r.render(RenderRequest { page: 1, kind: RequestKind::Text, tile: None, scale: 1.0, tag: 0, ..Default::default() });
+        assert!(!p1_again.warnings.contains(&RenderWarning::ContentTruncated));
+        assert!(!p1_again.text.as_ref().unwrap().truncated);
+    }
+
     /// Review of the decompression-bomb fix: a Type 0 sampled function read every sample of its
     /// stream into a 4-byte value, then a table entry each, so 256 MiB of 1-bit samples asked for
     /// over 8 GB. Vendored hayro-interpret patch: at most `MAX_SAMPLE_VALUES` samples, read no

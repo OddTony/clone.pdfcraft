@@ -400,6 +400,13 @@ fn text(args: &[String]) -> Result<(), CliError> {
             failed.push(p + 1);
             continue;
         }
+        for warning in &out.warnings {
+            match warning {
+                pdfcraft_render::RenderWarning::ContentTruncated => {
+                    let _ = writeln!(std::io::stderr().lock(), "warning: page {}: content past the page's safety budget was skipped", p + 1);
+                }
+            }
+        }
         if n > 0 {
             stdout_line(format_args!("\u{c}"))?;
         }

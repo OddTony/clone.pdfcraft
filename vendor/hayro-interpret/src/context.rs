@@ -91,8 +91,13 @@ pub(crate) fn charge_content(len: usize) {
     CONTENT_LEFT.with(|c| c.set(c.get().saturating_sub(len)));
 }
 
+/// PdfCraft patch (18): mark that page content was skipped because a safety limit was reached.
+pub(crate) fn mark_content_truncated() {
+    CONTENT_TRUNCATED.with(|truncated| truncated.set(true));
+}
+
 /// PdfCraft patch (18): whether content was skipped because the page's budget ran out.
-pub(crate) fn content_was_truncated() -> bool {
+pub fn content_was_truncated() -> bool {
     CONTENT_TRUNCATED.with(core::cell::Cell::get)
 }
 
@@ -105,6 +110,7 @@ pub(crate) fn take_nested_paint(depth: u32) -> bool {
     NESTED_PAINTS.with(|n| {
         let used = n.get();
         if used >= MAX_NESTED_PAINTS {
+            mark_content_truncated();
             return false;
         }
         n.set(used + 1);
@@ -398,7 +404,7 @@ impl<'a> Context<'a> {
     pub(crate) fn begin_nested_interpretation(&mut self) -> bool {
         if self.nesting_depth >= MAX_NESTED_INTERPRETATION_DEPTH {
             warn!("interpreter nesting depth exceeded");
-
+            mark_content_truncated();
             return false;
         }
         if !take_nested_paint(self.nesting_depth + 1) {
