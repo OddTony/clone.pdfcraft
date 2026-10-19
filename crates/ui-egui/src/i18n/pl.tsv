@@ -2414,3 +2414,6 @@ animation effects	Off	Wyłączone
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Wpisz numery lub zakresy stron, np. 1, 3-5. Pozostaw puste dla wszystkich stron.
 	Review the marks before applying redactions.	Sprawdź oznaczenia przed zastosowaniem redakcji.
 	Invalid page range	Nieprawidłowy zakres stron
+	The selected redaction is unavailable or invalid.	Wybrana redakcja jest niedostępna lub nieprawidłowa.
+	The redaction does not fit page {page}; no pages were marked.	Redakcja nie mieści się na stronie {page}; nie oznaczono żadnej strony.
+	Select at least one other page.	Wybierz co najmniej jedną inną stronę.

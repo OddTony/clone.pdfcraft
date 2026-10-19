@@ -2512,3 +2512,6 @@ animation effects	Off	Vypnuto
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Zadejte čísla nebo rozsahy stránek, například 1, 3-5. Pro všechny stránky ponechte prázdné.
 	Review the marks before applying redactions.	Před začerněním zkontrolujte značky.
 	Invalid page range	Neplatný rozsah stránek
+	The selected redaction is unavailable or invalid.	Vybrané začernění není dostupné nebo je neplatné.
+	The redaction does not fit page {page}; no pages were marked.	Začernění se nevejde na stránku {page}; žádné stránky nebyly označeny.
+	Select at least one other page.	Vyberte alespoň jednu další stránku.

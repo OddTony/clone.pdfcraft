@@ -2347,3 +2347,6 @@ animation effects	Off	ఆఫ్
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	పేజీ సంఖ్యలు లేదా పరిధులను నమోదు చేయండి, ఉదా. 1, 3-5. అన్ని పేజీలకు ఖాళీగా ఉంచండి.
 	Review the marks before applying redactions.	రెడాక్షన్ వర్తించే ముందు గుర్తులను పరిశీలించండి.
 	Invalid page range	చెల్లని పేజీ పరిధి
+	The selected redaction is unavailable or invalid.	ఎంచుకున్న రెడాక్షన్ అందుబాటులో లేదు లేదా చెల్లదు.
+	The redaction does not fit page {page}; no pages were marked.	రెడాక్షన్ {page} పేజీలో సరిపోదు; ఏ పేజీని గుర్తించలేదు.
+	Select at least one other page.	కనీసం మరొక పేజీని ఎంచుకోండి.

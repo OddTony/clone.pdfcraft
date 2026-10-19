@@ -2401,3 +2401,6 @@ animation effects	Off	Изключени
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Въведете номера или диапазони, например 1, 3-5. Оставете празно за всички страници.
 	Review the marks before applying redactions.	Прегледайте маркировките преди заличаване.
 	Invalid page range	Невалиден диапазон от страници
+	The selected redaction is unavailable or invalid.	Избраното заличаване е недостъпно или невалидно.
+	The redaction does not fit page {page}; no pages were marked.	Заличаването не се побира на страница {page}; няма маркирани страници.
+	Select at least one other page.	Изберете поне една друга страница.

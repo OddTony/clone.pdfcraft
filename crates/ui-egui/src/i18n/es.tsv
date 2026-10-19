@@ -2578,3 +2578,6 @@ animation effects	Off	Desactivados
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Introduce números o intervalos de páginas, por ejemplo 1, 3-5. Déjalo vacío para todas las páginas.
 	Review the marks before applying redactions.	Revisa las marcas antes de aplicar las redacciones.
 	Invalid page range	Intervalo de páginas no válido
+	The selected redaction is unavailable or invalid.	La redacción seleccionada no está disponible o no es válida.
+	The redaction does not fit page {page}; no pages were marked.	La redacción no cabe en la página {page}; no se ha marcado ninguna página.
+	Select at least one other page.	Selecciona al menos otra página.

@@ -2650,3 +2650,6 @@ certificate	SHA-256 digest	Impronta SHA-256
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Inserisci numeri o intervalli di pagine, ad esempio 1, 3-5. Lascia vuoto per tutte le pagine.
 	Review the marks before applying redactions.	Controlla i contrassegni prima di applicare le redazioni.
 	Invalid page range	Intervallo di pagine non valido
+	The selected redaction is unavailable or invalid.	La redazione selezionata non è disponibile o non è valida.
+	The redaction does not fit page {page}; no pages were marked.	La redazione non rientra nella pagina {page}; nessuna pagina è stata contrassegnata.
+	Select at least one other page.	Seleziona almeno un’altra pagina.

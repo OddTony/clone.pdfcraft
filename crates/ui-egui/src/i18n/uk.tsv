@@ -2460,3 +2460,6 @@ animation effects	Off	Вимкнено
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Введіть номери або діапазони сторінок, наприклад 1, 3-5. Залиште порожнім для всіх сторінок.
 	Review the marks before applying redactions.	Перевірте позначки перед видаленням вмісту.
 	Invalid page range	Неприпустимий діапазон сторінок
+	The selected redaction is unavailable or invalid.	Вибрана область видалення недоступна або недійсна.
+	The redaction does not fit page {page}; no pages were marked.	Область видалення не вміщується на сторінці {page}; сторінки не позначено.
+	Select at least one other page.	Виберіть принаймні одну іншу сторінку.

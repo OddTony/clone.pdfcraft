@@ -2438,3 +2438,6 @@ animation effects	Off	Désactivés
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Saisissez des numéros ou plages de pages, par exemple 1, 3-5. Laissez vide pour toutes les pages.
 	Review the marks before applying redactions.	Vérifiez les marques avant de caviarder.
 	Invalid page range	Plage de pages non valide
+	The selected redaction is unavailable or invalid.	Le caviardage sélectionné est indisponible ou non valide.
+	The redaction does not fit page {page}; no pages were marked.	Le caviardage ne tient pas sur la page {page} ; aucune page n’a été marquée.
+	Select at least one other page.	Sélectionnez au moins une autre page.

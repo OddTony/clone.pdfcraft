@@ -2691,3 +2691,6 @@ key	Space	Space
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Nhập số trang hoặc phạm vi, ví dụ 1, 3-5. Để trống để chọn tất cả các trang.
 	Review the marks before applying redactions.	Kiểm tra các dấu trước khi áp dụng che nội dung.
 	Invalid page range	Phạm vi trang không hợp lệ
+	The selected redaction is unavailable or invalid.	Vùng che đã chọn không khả dụng hoặc không hợp lệ.
+	The redaction does not fit page {page}; no pages were marked.	Vùng che không vừa trang {page}; không trang nào được đánh dấu.
+	Select at least one other page.	Chọn ít nhất một trang khác.

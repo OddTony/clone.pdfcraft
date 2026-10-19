@@ -2436,3 +2436,6 @@ animation effects	Off	Өшірулі
 	Enter page numbers or ranges, such as 1, 3-5. Leave blank for all pages.	Бет нөмірлерін немесе ауқымдарын енгізіңіз, мысалы 1, 3-5. Барлық бет үшін бос қалдырыңыз.
 	Review the marks before applying redactions.	Өшіруді қолданбас бұрын белгілерді тексеріңіз.
 	Invalid page range	Бет ауқымы жарамсыз
+	The selected redaction is unavailable or invalid.	Таңдалған өшіру қолжетімсіз немесе жарамсыз.
+	The redaction does not fit page {page}; no pages were marked.	Өшіру {page} бетіне сыймайды; ешбір бет белгіленбеді.
+	Select at least one other page.	Кемінде бір басқа бетті таңдаңыз.

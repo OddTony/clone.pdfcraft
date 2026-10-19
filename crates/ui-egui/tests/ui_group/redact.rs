@@ -3,7 +3,7 @@
 
 use egui::Pos2;
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use pdfcraft_ui_egui::{Dialog, PdfCraftApp};
 
 fn harness() -> Harness<'static, PdfCraftApp> {
@@ -276,6 +276,7 @@ fn removing_hidden_information_and_sanitizing() {
 fn a_redaction_mark_offers_repeat_on_pages() {
     let mut h = harness();
     h.state_mut().apply_edit(pdfcraft_engine::Edit::InsertBlankPage { at: 1, width: 300.0, height: 400.0 });
+    h.state_mut().apply_edit(pdfcraft_engine::Edit::InsertBlankPage { at: 2, width: 300.0, height: 400.0 });
     h.state_mut().redact_prefs.fill = Some([0.2, 0.4, 0.6]);
     h.state_mut().redact_prefs.use_overlay = true;
     h.state_mut().redact_prefs.overlay = "PRIVATE".into();
@@ -292,12 +293,16 @@ fn a_redaction_mark_offers_repeat_on_pages() {
     h.run_steps(4);
     h.get_by_label("Repeat on pages…").click();
     h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Selected pages").click();
+    h.run_steps(1);
     h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Selected pages").type_text("2");
     h.run_steps(2);
+    assert_eq!(h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Selected pages").value().as_deref(), Some("2"));
     h.get_by_label("OK").click();
     h.run_steps(4);
     assert_eq!(marks(&h), 2);
     let doc = h.state().session.get(h.state().views[0].id).unwrap();
+    assert!(doc.info.annotations.iter().all(|a| a.page != 2 || a.subtype != "Redact"));
     let copy_index = doc.info.annotations.iter().find(|a| a.page == 1 && a.subtype == "Redact").unwrap().index;
     let copy = doc.redaction_mark(1, copy_index).unwrap();
     assert_eq!(copy.fill, Some([0.2, 0.4, 0.6]));
@@ -315,9 +320,61 @@ fn a_redaction_mark_offers_repeat_on_pages() {
     h.run_steps(4);
     h.get_by_label("Repeat on pages…").click();
     h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Selected pages").click();
+    h.run_steps(1);
     h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Selected pages").type_text("not a page");
     h.run_steps(2);
+    assert!(h.get_by_role_and_label(egui::accesskit::Role::Button, "OK").accesskit_node().is_disabled());
     h.get_by_label("Cancel").click();
     h.run_steps(3);
+    assert_eq!(marks(&h), 2);
+}
+
+#[test]
+fn repeat_redaction_notices_are_translated() {
+    let mut h = harness();
+    h.state_mut().set_option("language", "es").unwrap();
+    let edit = h.state().redact_prefs.mark(0, vec![pdfcraft_engine::rect_quad([40.0, 80.0, 200.0, 120.0])], "Tester");
+    h.state_mut().apply_edit(edit);
+    h.run_steps(5);
+    let index =
+        h.state().session.get(h.state().views[0].id).unwrap().info.annotations.iter().find(|a| a.page == 0 && a.subtype == "Redact").unwrap().index;
+    let pos = at(&h, 100.0, 300.0);
+    for (i, expected) in
+        ["Selecciona al menos otra página.", "La redacción no cabe en la página 2; no se ha marcado ninguna página."].into_iter().enumerate()
+    {
+        if i == 1 {
+            h.state_mut().apply_edit(pdfcraft_engine::Edit::InsertBlankPage { at: 1, width: 50.0, height: 50.0 });
+            h.run_steps(3);
+        }
+        h.state_mut().views[0].comments.selected = Some((0, index));
+        h.hover_at(pos);
+        h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: true, modifiers: Default::default() });
+        h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: false, modifiers: Default::default() });
+        h.run_steps(4);
+        h.get_by_label("Repetir en páginas…").click();
+        h.run_steps(3);
+        h.get_by_label("Aceptar").click();
+        h.run_steps(3);
+        assert_eq!(h.state().toast.as_ref().unwrap().0, expected);
+        assert_eq!(marks(&h), 1);
+    }
+    h.state_mut().apply_edit(pdfcraft_engine::Edit::InsertBlankPage { at: 2, width: 300.0, height: 400.0 });
+    h.run_steps(3);
+    h.state_mut().views[0].comments.selected = Some((0, index));
+    h.hover_at(pos);
+    h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: true, modifiers: Default::default() });
+    h.event(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: false, modifiers: Default::default() });
+    h.run_steps(4);
+    h.get_by_label("Repetir en páginas…").click();
+    h.run_steps(3);
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Páginas seleccionadas").click();
+    h.run_steps(1);
+    h.get_by_role_and_label(egui::accesskit::Role::TextInput, "Páginas seleccionadas").type_text("3");
+    h.run_steps(2);
+    h.get_by_label("Aceptar").click();
+    h.run_steps(3);
+    let doc = h.state().session.get(h.state().views[0].id).unwrap();
+    assert_eq!(doc.can_undo(), Some("Repetir en páginas…"));
     assert_eq!(marks(&h), 2);
 }
