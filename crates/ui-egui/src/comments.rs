@@ -617,9 +617,19 @@ impl PageCx<'_> {
             .collect()
     }
 
-    /// The topmost comment under `p`.
+    /// Prefer the topmost comment containing `p`, then use a small tolerance for thin marks.
     fn hit(&self, p: Pos2) -> Option<&Annotation> {
-        self.comments().filter(|a| self.screen_rects(a).iter().any(|r| r.expand(3.0).contains(p))).last()
+        let mut exact = None;
+        let mut nearby = None;
+        for a in self.comments() {
+            let rects = self.screen_rects(a);
+            if rects.iter().any(|r| r.contains(p)) {
+                exact = Some(a);
+            } else if rects.iter().any(|r| r.expand(3.0).contains(p)) {
+                nearby = Some(a);
+            }
+        }
+        exact.or(nearby)
     }
 
     pub(crate) fn get(&self, index: usize) -> Option<&Annotation> {
@@ -1048,6 +1058,11 @@ fn select_input(
     let handle_at = |p: Pos2| -> Option<(i8, i8)> {
         let a = selected.filter(|a| cx.allowed && resizable(a))?;
         let r = cx.screen_rect(a);
+        // A handle extends past its box. Do not let that extension steal a drag that starts
+        // inside a different comment; the inside half of the handle remains usable.
+        if !r.contains(p) && cx.comments().any(|other| other.index != a.index && cx.screen_rects(other).iter().any(|r| r.contains(p))) {
+            return None;
+        }
         HANDLES.into_iter().find(|h| handle_pos(r, *h).distance(p) <= 7.0)
     };
     let mut consumed = false;
@@ -1585,7 +1600,7 @@ pub(crate) fn keys(ctx: &egui::Context, view: &mut DocView, tool: &mut QuickTool
     if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         // One step back per press: cancel the gesture, then deselect, then drop the tool.
         let cancelled = cv.gesture.take().is_some() || cv.selected.take().is_some();
-        if !cancelled && matches!(tool, QuickTool::Comment(_)) {
+        if !cancelled && matches!(tool, QuickTool::Comment(_) | QuickTool::Stamp(_) | QuickTool::CustomStamp(_)) {
             *tool = QuickTool::Select;
         }
     }

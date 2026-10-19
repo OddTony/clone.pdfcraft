@@ -139,3 +139,119 @@ fn creating_placing_and_keeping_custom_stamps() {
     assert_eq!((again.custom_stamps[0].category.as_str(), again.custom_stamps[0].name.as_str()), ("Company", "logo"));
     assert_eq!(again.custom_stamps[0].data, s.custom_stamps[0].data);
 }
+
+#[test]
+fn keep_tool_selected_repeats_custom_and_standard_stamps() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("form.pdf", None, include_bytes!("data/form.pdf").to_vec()).unwrap();
+        app.set_option("zoom", "150").unwrap();
+        app
+    });
+    h.run_steps(6);
+    assert!(h.state_mut().execute("comment.stamp"));
+    h.run_steps(2);
+    h.get_by_label("Keep tool selected").click();
+    h.run_steps(2);
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(60, 20, image::Rgb([20, 120, 220])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    h.state_mut().start_custom_stamp("logo.png".into(), png);
+    h.run_steps(2);
+    h.get_by_label("OK").click();
+    h.run_steps(2);
+    assert_eq!(h.state().quick_tool, QuickTool::CustomStamp(0));
+    for (n, tool) in
+        [QuickTool::CustomStamp(0), QuickTool::CustomStamp(0), QuickTool::Stamp(pdfcraft_engine::StampKind::DynApproved)].into_iter().enumerate()
+    {
+        if n == 2 {
+            h.get_all_by_label("APPROVED").next().unwrap().click();
+            h.run_steps(2);
+        }
+        let page = h.state().views[0].page_screen_rect(0).unwrap();
+        // The second custom stamp lands inside the first stamp's bounds: a pinned tool
+        // should still place a new stamp where the user clicked.
+        let fraction = [0.30, 0.31, 0.60][n];
+        let p = page.min + egui::vec2(page.width() * fraction, page.height() * 0.75);
+        h.hover_at(p);
+        h.run_steps(1);
+        h.drag_at(p);
+        h.run_steps(1);
+        h.drop_at(p);
+        h.run_steps(4);
+        assert_eq!(h.state().quick_tool, tool, "tool remains selected after placement {n}");
+    }
+    let app = h.state();
+    let doc = app.session.get(app.views[0].id).unwrap();
+    let stamps: Vec<_> = doc.info.annotations.iter().filter(|a| a.subtype == "Stamp").collect();
+    assert_eq!(stamps.len(), 3);
+    let custom: Vec<_> = stamps.iter().filter(|s| (s.rect[2] - s.rect[0] - 60.0).abs() < 0.1).collect();
+    assert_eq!(custom.len(), 2, "expected two custom stamps: {:?}", stamps.iter().map(|s| s.rect).collect::<Vec<_>>());
+    assert!(
+        custom[0].rect[0] < custom[1].rect[2] && custom[1].rect[0] < custom[0].rect[2] && custom[0].rect[0] != custom[1].rect[0],
+        "the custom stamps have different overlapping bounds: {:?}, {:?}",
+        custom[0].rect,
+        custom[1].rect
+    );
+    // The first Escape deselects the just-placed stamp; the second puts down its tool.
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+    assert_eq!(h.state().quick_tool, QuickTool::Select, "Escape puts down the pinned stamp");
+    h.get_all_by_label("APPROVED").next().unwrap().click();
+    h.run_steps(2);
+    h.get_by_label("Keep tool selected").click();
+    h.run_steps(2);
+    let page = h.state().views[0].page_screen_rect(0).unwrap();
+    let p = page.min + egui::vec2(page.width() * 0.8, page.height() * 0.75);
+    h.hover_at(p);
+    h.run_steps(1);
+    h.drag_at(p);
+    h.run_steps(1);
+    h.drop_at(p);
+    h.run_steps(4);
+    assert_eq!(h.state().quick_tool, QuickTool::Select, "unpin returns to selecting");
+}
+
+#[test]
+fn coloured_tick_stamps_can_be_placed_from_the_palette() {
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("form.pdf", None, include_bytes!("data/form.pdf").to_vec()).unwrap();
+        app
+    });
+    h.run_steps(6);
+    assert!(h.state_mut().execute("comment.stamp"));
+    h.run_steps(2);
+    for (i, (label, kind)) in [
+        ("Red Checkmark", pdfcraft_engine::StampKind::RedTick),
+        ("Blue Checkmark", pdfcraft_engine::StampKind::BlueTick),
+        ("Green Checkmark", pdfcraft_engine::StampKind::GreenTick),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        h.get_by_label(label).click();
+        h.run_steps(2);
+        assert_eq!(h.state().quick_tool, QuickTool::Stamp(kind));
+        let page = h.state().views[0].page_screen_rect(0).unwrap();
+        let at = page.min + egui::vec2(page.width() * (0.35 + i as f32 * 0.12), page.height() * 0.4);
+        h.hover_at(at);
+        h.run_steps(1);
+        h.drag_at(at);
+        h.run_steps(1);
+        h.drop_at(at);
+        h.run_steps(4);
+    }
+    let app = h.state();
+    let doc = app.session.get(app.views[0].id).unwrap();
+    let stamps: Vec<_> = doc.info.annotations.iter().filter(|a| a.subtype == "Stamp").collect();
+    assert_eq!(stamps.len(), 3);
+    for (stamp, kind) in
+        stamps.iter().zip([pdfcraft_engine::StampKind::RedTick, pdfcraft_engine::StampKind::BlueTick, pdfcraft_engine::StampKind::GreenTick])
+    {
+        assert_eq!(stamp.color, Some(kind.color().map(|v| v as f32)));
+    }
+}

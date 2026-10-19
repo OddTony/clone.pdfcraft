@@ -306,8 +306,10 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
 fn stamp_palette(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
     use pdfcraft_engine::{StampGroup, StampKind};
     ui.label(egui::RichText::new(tl!("Choose a stamp, then click on the page to place it.")).small().color(t.text_faint));
+    ui.add(widgets::checkbox(&mut app.comment_prefs.pinned, tl!("Keep tool selected")));
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         for (group, title) in [
+            (StampGroup::TickMarks, tl!("Checkmark")),
             (StampGroup::Dynamic, tl!("Dynamic")),
             (StampGroup::SignHere, tl!("Sign Here")),
             (StampGroup::StandardBusiness, tl!("Standard Business")),
@@ -315,15 +317,30 @@ fn stamp_palette(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
             widgets::section_title(ui, title);
             for kind in StampKind::ALL.into_iter().filter(|k| k.group() == group) {
                 let active = app.quick_tool == crate::QuickTool::Stamp(kind);
+                let label = match kind {
+                    StampKind::RedTick => format!("{} {}", tl!("Red"), tl!("Checkmark")),
+                    StampKind::BlueTick => format!("{} {}", tl!("Blue"), tl!("Checkmark")),
+                    StampKind::GreenTick => format!("{} {}", tl!("Green"), tl!("Checkmark")),
+                    _ => kind.label().to_owned(),
+                };
                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 38.0), Sense::click());
-                resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, kind.label()));
+                resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, &label));
                 let press = theme::Press::track(ui, &resp);
                 press.wash(ui, rect, 6, active);
                 let body = rect.translate(press.offset());
                 let [r, g, b] = kind.color().map(|v| (v * 255.0) as u8);
                 let col = Color32::from_rgb(r, g, b);
                 let chip = Rect::from_min_size(body.min + vec2(8.0, 5.0), vec2((rect.width() - 16.0).min(200.0), 28.0));
-                if group == StampGroup::SignHere {
+                if group == StampGroup::TickMarks {
+                    let center = chip.left_center() + vec2(14.0, 0.0);
+                    ui.painter().add(egui::Shape::line(
+                        vec![center + vec2(-7.0, 0.0), center + vec2(-2.0, 5.0), center + vec2(8.0, -7.0)],
+                        Stroke::new(2.5, col),
+                    ));
+                    let font = theme::medium(12.0);
+                    let shown = widgets::fit_line(&label, (chip.width() - 32.0).max(0.0), |s| widgets::text_width(ui, s, &font));
+                    ui.painter().with_clip_rect(chip).text(chip.left_center() + vec2(30.0, 0.0), Align2::LEFT_CENTER, shown, font, t.text);
+                } else if group == StampGroup::SignHere {
                     let tip = chip.height() * 0.45;
                     let pts = vec![
                         chip.left_center(),

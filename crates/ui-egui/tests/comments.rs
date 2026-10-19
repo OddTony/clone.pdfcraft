@@ -1571,3 +1571,52 @@ fn text_box_properties_change_the_font_size() {
     assert_eq!(doc.comment_props(0, 0).unwrap().font_size, Some(30.0));
     assert_eq!(doc.can_undo(), Some("Change comment properties"));
 }
+
+/// A nearby stamp's hit tolerance must not cover the actual area of its neighbour.
+#[test]
+fn closely_spaced_custom_stamps_select_the_one_under_the_pointer() {
+    use pdfcraft_engine::{Edit, MarkFile};
+    use std::sync::Arc;
+    let mut png = Vec::new();
+    image::RgbImage::from_pixel(20, 20, image::Rgb([10, 100, 200])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let file = MarkFile { name: "stamp.png".into(), bytes: Arc::new(png), page: 0 };
+    let mut h = harness(|_| {});
+    for (name, rect) in [("first", [40.0, 60.0, 80.0, 100.0]), ("second", [80.5, 60.0, 120.5, 100.0])] {
+        h.state_mut().apply_edit(Edit::AddCustomStamp { page: 0, rect, name: name.into(), file: file.clone(), author: "Tester".into() });
+    }
+    h.run_steps(3);
+    click_pt(&mut h, (79.8, 90.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 0)), "the point is inside the first stamp");
+    let first_before = comments(&h)[0].rect;
+    drag_pt(&mut h, (80.7, 80.0), (86.7, 80.0));
+    let after = comments(&h);
+    let first = after.iter().find(|a| a.contents.as_deref() == Some("first")).unwrap();
+    let second = after.iter().find(|a| a.contents.as_deref() == Some("second")).unwrap();
+    assert_eq!(first.rect, first_before, "dragging inside the second stamp must not resize its neighbour");
+    assert!(second.rect[0] > 85.0, "the second stamp moves: {:?}", second.rect);
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 1)));
+    // Put it back for the tolerance and overlap checks.
+    h.state_mut().apply_edit(Edit::MoveAnnotation { page: 0, index: 1, dx: -6.0, dy: 0.0 });
+    h.run_steps(2);
+    click_pt(&mut h, (200.0, 120.0));
+    click_pt(&mut h, (120.8, 90.0));
+    assert_eq!(h.state().views[0].comments.selected, Some((0, 1)), "the small outside hit tolerance still works");
+    click_pt(&mut h, (200.0, 120.0));
+    h.state_mut().apply_edit(Edit::AddCustomStamp {
+        page: 0,
+        rect: [60.0, 60.0, 100.0, 100.0],
+        name: "overlapping".into(),
+        file,
+        author: "Tester".into(),
+    });
+    h.run_steps(3);
+    click_pt(&mut h, (70.0, 90.0));
+    let selected = h.state().views[0].comments.selected.expect("selected overlap").1;
+    let selected_comment = comments(&h).into_iter().find(|a| a.index == selected).unwrap();
+    assert_eq!(selected_comment.contents.as_deref(), Some("overlapping"), "truly overlapping stamps retain paint order");
+    click_pt(&mut h, (200.0, 120.0));
+    click_pt(&mut h, (45.0, 90.0));
+    drag_pt(&mut h, (79.8, 80.0), (75.0, 80.0));
+    let resized = comments(&h).into_iter().find(|a| a.contents.as_deref() == Some("first")).unwrap();
+    assert!(resized.rect[2] < 77.0, "the inside half of the resize handle still works: {:?}", resized.rect);
+}

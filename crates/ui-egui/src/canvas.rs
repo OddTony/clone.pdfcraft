@@ -3907,7 +3907,7 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     } else {
         view.links.selected = None;
     }
-    if stamp_placed {
+    if stamp_placed && !app.comment_prefs.pinned {
         tool = QuickTool::Select;
     }
     // Text: each click on the page starts a box (#74); Done in the editor goes back to selecting.
