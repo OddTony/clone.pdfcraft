@@ -122,6 +122,7 @@ windows-core = { path = "vendor/windows-core" }
 windows-link = { path = "vendor/windows-link" }
 # OpenGL 2.1 drivers (Windows 7 on first-generation Intel HD Graphics): legacy WGL context fallback.
 glutin = { path = "vendor/glutin" }
+egui_glow = { path = "vendor/egui_glow" }
 arboard = { path = "vendor/arboard" }
 
 [patch."https://github.com/storytold/winprint.rs"]

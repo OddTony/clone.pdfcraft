@@ -68,21 +68,26 @@ impl Display {
         // does when the extension is missing. egui_glow draws on OpenGL 2.1 (`#version 120`).
         // Without this, first-generation Intel HD Graphics could create no context at all.
         // See PdfCraft's vendor/README.md.
-        let (context, supports_surfaceless) =
-            if self.inner.client_extensions.contains("WGL_ARB_create_context") {
-                match self.create_context_arb(hdc, share_ctx, context_attributes) {
-                    Ok(created) => created,
-                    Err(err)
-                        if matches!(context_attributes.api, None | Some(ContextApi::OpenGl(_)))
-                            && !matches!(context_attributes.profile, Some(GlProfile::Core)) =>
-                    {
-                        legacy().map_err(|_| err)?
-                    },
-                    Err(err) => return Err(err),
-                }
-            } else {
-                legacy()?
-            };
+        // `PDFCRAFT_GL_LEGACY=1` (PdfCraft, for testing): always the legacy context, as on
+        // OpenGL 2.1 drivers.
+        let force_legacy = std::env::var_os("PDFCRAFT_GL_LEGACY").is_some_and(|v| v == "1")
+            && matches!(context_attributes.api, None | Some(ContextApi::OpenGl(_)));
+        let (context, supports_surfaceless) = if force_legacy {
+            legacy()?
+        } else if self.inner.client_extensions.contains("WGL_ARB_create_context") {
+            match self.create_context_arb(hdc, share_ctx, context_attributes) {
+                Ok(created) => created,
+                Err(err)
+                    if matches!(context_attributes.api, None | Some(ContextApi::OpenGl(_)))
+                        && !matches!(context_attributes.profile, Some(GlProfile::Core)) =>
+                {
+                    legacy().map_err(|_| err)?
+                },
+                Err(err) => return Err(err),
+            }
+        } else {
+            legacy()?
+        };
 
         let config = config.clone();
         let is_gles = matches!(context_attributes.api, Some(ContextApi::Gles(_)));
