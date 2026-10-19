@@ -40,7 +40,10 @@ impl RememberedViews {
         let mut history = Self::default();
         let mut seen = std::collections::HashSet::new();
         if let Some(entries) = value.as_array() {
-            for entry in entries.iter().take(MAX_VIEWS) {
+            for entry in entries {
+                if history.0.len() >= MAX_VIEWS {
+                    break;
+                }
                 let Some(path) = entry.get("path").and_then(serde_json::Value::as_str) else { continue };
                 if path.is_empty() || path.len() > MAX_PATH_BYTES {
                     continue;
@@ -150,6 +153,20 @@ mod tests {
         assert!(RememberedViews::from_json(&serde_json::json!(null)).0.is_empty());
         let entries: Vec<_> = (0..6_000).map(|i| serde_json::to_value(entry(format!("{i}.pdf"))).unwrap()).collect();
         assert_eq!(RememberedViews::from_json(&serde_json::json!(entries)).0.len(), 5_000);
+    }
+
+    #[test]
+    fn loading_counts_accepted_records_instead_of_input_entries() {
+        let good = serde_json::to_value(entry("book.pdf".into())).unwrap();
+        let mut entries = vec![serde_json::Value::Null; MAX_VIEWS];
+        entries.extend(std::iter::repeat_n(good, MAX_VIEWS));
+        entries.extend((0..MAX_VIEWS).map(|i| serde_json::to_value(entry(format!("{i}.pdf"))).unwrap()));
+
+        let history = RememberedViews::from_json(&serde_json::Value::Array(entries));
+        assert_eq!(history.0.len(), MAX_VIEWS);
+        assert!(history.contains("book.pdf"));
+        assert!(history.contains(&format!("{}.pdf", MAX_VIEWS - 2)));
+        assert!(!history.contains(&format!("{}.pdf", MAX_VIEWS - 1)));
     }
 
     #[test]
