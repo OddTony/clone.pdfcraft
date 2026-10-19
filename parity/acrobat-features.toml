@@ -1190,8 +1190,8 @@ milestone = "M3"
 status = "shipped"
 commands = []
 tools = []
-evidence = ["crates/ui-egui/tests/comments.rs::hovering_a_comment_shows_its_author_and_text"]
-notes = "a popup with the author and the comment text, as Acrobat shows"
+evidence = ["crates/ui-egui/tests/comments.rs::hovering_a_comment_shows_its_author_and_text", "crates/ui-egui/src/canvas.rs::arabic_comment_hover_reads_right_to_left", "crates/ui-egui/src/canvas.rs::a_latin_note_with_arabic_is_not_painted_as_stored"]
+notes = "a popup with the author and the comment text, as Acrobat shows. Arabic and Hebrew in the popup are drawn in reading order, including when a Latin label comes first."
 
 [[feature]]
 id = "view.page-size-hover"

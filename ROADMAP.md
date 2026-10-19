@@ -173,7 +173,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 - **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
 
-- **2026-10-19 (M3, #2339, #3220, #3224):** Two-page view can put the earlier page on the right. The page box shows that page, the left arrow turns to the next spread, and the setting stays on when the file is replaced. Bookmark titles and the comment hover popup draw Arabic and Hebrew in reading order. Estimates unchanged.
+- **2026-10-19 (M3, #2339, #3220, #3224):** Two-page view can put the earlier page on the right. The page box shows that page, the left arrow turns to the next spread, and the setting stays on when the file is replaced. Bookmark titles and the comment hover popup draw Arabic and Hebrew in reading order, including a Latin label in front of Arabic words. Estimates unchanged.
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
 
 - **2026-10-18 (M7, #3212):** Headers, Bates numbers, watermarks and added text stay visible after unfinished marked content, with original content preserved.
