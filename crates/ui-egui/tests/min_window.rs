@@ -120,9 +120,11 @@ fn a_short_window_does_not_overlap_the_rail_clusters() {
     // The history buttons are the cluster's topmost buttons (above the page box).
     let history = h.get_by_label_contains("Previous view").rect();
     assert!(history.top() >= tags.bottom(), "view history sits below the rail buttons: {tags:?} vs {history:?}");
-    // The topmost thing in the cluster is the page box; the lowest is the zoom-out button.
-    let page_box = h.get_by_role(Role::TextInput).rect();
-    assert!(page_box.top() >= tags.bottom(), "the page box sits below the rail buttons: {tags:?} vs {page_box:?}");
+    // The cluster holds two text fields, the zoom field and the page box; the page box is the topmost thing in it, the lowest is the zoom-out button.
+    for field in h.get_all_by_role(Role::TextInput) {
+        let r = field.rect();
+        assert!(r.top() >= tags.bottom(), "the rail's text fields sit below the rail buttons: {tags:?} vs {r:?}");
+    }
     let zoom_out = h.get_by_label_contains("Zoom out").rect();
     assert!(zoom_out.top() >= history.bottom(), "zoom sits below view history: {history:?} vs {zoom_out:?}");
 }
