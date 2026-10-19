@@ -171,6 +171,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-19 (M6, text field table):** Prepare a form ▸ Text field table drags out an area and adds rows and columns of named text fields as one undoable edit, laid out on the page as displayed, with a live preview, per-column name patterns and widths, and refusal before anything is added when a cell would be too small or a name taken; `form_add_field_table` does the same headlessly. `form.multiple-copies` is partial: copying an existing field into a grid is still missing. Estimates unchanged.
+
 - **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
 
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
