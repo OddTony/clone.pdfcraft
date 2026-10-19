@@ -219,6 +219,9 @@ impl Automation {
                     case_sensitive: a.opt_bool("case_sensitive")?.unwrap_or(false),
                     whole_words: a.opt_bool("whole_words")?.unwrap_or(false),
                     occurrence: match a.opt_int("occurrence")? {
+                        None if a.get("page").is_some() => {
+                            return Err(ToolError::InvalidArgs("page applies only with occurrence; omit page to replace every match".into()));
+                        }
                         None => None,
                         Some(n) if n >= 1 => Some((self.page(&a)?, usize::try_from(n - 1).unwrap_or(usize::MAX))),
                         Some(n) => return Err(ToolError::InvalidArgs(format!("occurrence {n} must be at least 1"))),

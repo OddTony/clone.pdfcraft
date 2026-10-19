@@ -2398,6 +2398,73 @@ fn replace_occurrences(
     Ok(out)
 }
 
+/// Replaces matches inside a row of separate runs (table cells, label and value) one run at a
+/// time, so each new text stays in its own cell: a rewritten paragraph is drawn at one run's
+/// position and clip, which would hide the text of the other runs. `None` when the block is not
+/// such a row or a match crosses runs; the caller then rewrites the whole paragraph.
+#[allow(clippy::too_many_arguments)]
+fn replace_in_cells(
+    doc: &mut pdfcraft_cos::Document,
+    page: usize,
+    block: &pdfcraft_edit::TextBlock,
+    query: &str,
+    replacement: &str,
+    case_sensitive: bool,
+    whole_words: bool,
+    only: Option<usize>,
+) -> Result<Option<bool>, EditError> {
+    if !block.rows.iter().any(|row| row.len() > 1) {
+        return Ok(None);
+    }
+    let matches: Vec<(usize, usize)> = match_ranges(&block.editor_text, query, case_sensitive, whole_words)
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| only.is_none_or(|n| n == *i))
+        .map(|(_, range)| range)
+        .collect();
+    // Each match with the one run that holds all of it.
+    type CellMatches = (usize, std::ops::Range<usize>, Vec<(usize, usize)>);
+    let mut per_line: Vec<CellMatches> = Vec::new();
+    for (start, end) in matches {
+        let mut holders = block.spans.iter().filter(|(range, _)| range.start <= start && end <= range.end);
+        let (Some((range, line)), None) = (holders.next(), holders.next()) else { return Ok(None) };
+        if block.spans.iter().filter(|(_, l)| l == line).count() != 1 {
+            return Ok(None);
+        }
+        match per_line.iter_mut().find(|(l, _, _)| l == line) {
+            Some((_, _, found)) => found.push((start, end)),
+            None => per_line.push((*line, range.clone(), vec![(start, end)])),
+        }
+    }
+    if per_line.is_empty() {
+        return Ok(Some(false));
+    }
+    let mut edits = Vec::new();
+    for (line, range, found) in &per_line {
+        let mut text = String::new();
+        let mut cursor = range.start;
+        for (start, end) in found {
+            text.push_str(block.editor_text.get(cursor..*start).unwrap_or_default());
+            text.push_str(replacement);
+            cursor = *end;
+        }
+        text.push_str(block.editor_text.get(cursor..range.end).unwrap_or_default());
+        if text.len() > 4_000_000 {
+            return Err(EditError::Invalid("replacement paragraph would exceed 4 MiB".into()));
+        }
+        edits.push((*line, text));
+    }
+    // Later lines first, as the page is read again after each rewrite.
+    edits.sort_by_key(|(line, _)| std::cmp::Reverse(*line));
+    for (line, text) in edits {
+        let result = pdfcraft_edit::replace_line(doc, page, line, &text)?;
+        if let Some(font) = result.substituted {
+            return Err(EditError::Invalid(format!("replacement text is not supported by the original font ({font}); nothing was changed")));
+        }
+    }
+    Ok(Some(true))
+}
+
 fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> Result<(), EditError> {
     match edit {
         Edit::RotatePages { pages, degrees } => pdfcraft_organize::rotate_pages(doc, pages, *degrees)?,
@@ -2668,6 +2735,10 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
                         Some(_) => continue,
                         None => None,
                     };
+                    if let Some(done) = replace_in_cells(doc, page, block, query, replacement, *case_sensitive, *whole_words, only)? {
+                        changed |= done;
+                        continue;
+                    }
                     let next = replace_occurrences(&block.editor_text, query, replacement, *case_sensitive, *whole_words, only)?;
                     if next != block.editor_text {
                         let result = pdfcraft_edit::rewrite_block(doc, page, block_index, Some(&next), &pdfcraft_edit::BlockStyle::default())?;
