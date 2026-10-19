@@ -563,7 +563,7 @@ impl Document {
     /// encrypted differently fails with `NeedsPassword`.
     pub fn open_with_same_credentials(&self, data: Arc<Vec<u8>>) -> Result<Self, CosError> {
         let credentials = match &self.security {
-            Some(handler) => Credentials::Handler { handler, id0: self.first_id() },
+            Some(handler) => Credentials::Handler { handler, id0: self.first_id().to_vec() },
             None => Credentials::Password(None),
         };
         Self::open_as(data, credentials, self.stream_limit)
@@ -671,15 +671,16 @@ impl Document {
             return Ok(());
         };
         let params = crate::security::encrypt_dict(self, &dict);
-        let id0 = self.first_id();
+        let id0 = self.first_id().to_vec();
         let handler = match credentials {
             Credentials::Password(password) => Arc::new(pdfcraft_crypt::SecurityHandler::open(params, &id0, *password).map_err(|e| match e {
                 pdfcraft_crypt::CryptError::WrongPassword if password.is_none() => CosError::NeedsPassword,
                 pdfcraft_crypt::CryptError::WrongPassword => CosError::WrongPassword,
                 other => CosError::Security(other.to_string()),
             })?),
-            // The same encryption as the document whose key this is: that key opens it.
-            Credentials::Handler { handler, id0: known } if *handler.dict() == params && *known == id0 => Arc::clone(handler),
+            // The same encryption as the document whose key this is: that key opens it. Below
+            // revision 5 the first /ID is part of the key; AES-256 keys don't depend on it.
+            Credentials::Handler { handler, id0: known } if *handler.dict() == params && (params.r >= 5 || *known == id0) => Arc::clone(handler),
             Credentials::Handler { .. } => return Err(CosError::NeedsPassword),
         };
         self.security = Some(handler);
@@ -690,11 +691,12 @@ impl Document {
         Ok(())
     }
 
-    /// The first file identifier, part of the encryption key (empty when there is none).
-    fn first_id(&self) -> Vec<u8> {
+    /// The first file identifier, part of the encryption key below revision 5 (empty when there
+    /// is none, as key derivation reads a missing one).
+    fn first_id(&self) -> &[u8] {
         match self.trailer.get(b"ID") {
-            Some(Object::Array(a)) => a.first().and_then(|s| s.as_string()).map(|s| s.bytes.clone()).unwrap_or_default(),
-            _ => Vec::new(),
+            Some(Object::Array(a)) => a.first().and_then(|s| s.as_string()).map_or(&[], |s| s.bytes.as_slice()),
+            _ => &[],
         }
     }
 
@@ -707,7 +709,7 @@ impl Document {
         if current.auth() == pdfcraft_crypt::Auth::Owner {
             return Ok(());
         }
-        let owner = current.authenticate_owner(&self.first_id(), password).map_err(|e| match e {
+        let owner = current.authenticate_owner(self.first_id(), password).map_err(|e| match e {
             pdfcraft_crypt::CryptError::WrongPassword => CosError::WrongPassword,
             other => CosError::Security(other.to_string()),
         })?;
@@ -751,6 +753,22 @@ impl Document {
     /// `remove_encryption`, otherwise the security the document was opened with.
     pub fn output_handler(&self) -> Option<&pdfcraft_crypt::SecurityHandler> {
         self.output_security().0
+    }
+
+    /// True when `self` and `other` are written with the same encryption: the same security
+    /// dictionary, and below revision 5, where the first file identifier is part of the key, the
+    /// same identifier. Together they determine the file key: revisions 2–4 derive it from the
+    /// password, `/O`, `/P` and `/ID`, and revisions 5–6 wrap it in `/UE` and `/OE`. Passwords
+    /// and authentication level are not an encryption identity: the same passwords can protect
+    /// a different key, algorithm or permissions, and user and owner openings share one. Where
+    /// the dictionary is stored (its object number, or inline) is not compared:
+    /// [`Document::overlay_changes_from`] takes that from the document it copies.
+    pub fn has_same_output_security(&self, other: &Document) -> bool {
+        match (self.output_handler(), other.output_handler()) {
+            (None, None) => true,
+            (Some(a), Some(b)) => a.dict() == b.dict() && (a.dict().r >= 5 || self.first_id() == other.first_id()),
+            _ => false,
+        }
     }
 
     /// Protect the document with a password (§7.6.4). Takes effect on the next save, which is
@@ -1273,10 +1291,20 @@ impl Document {
     /// Record `current`'s object graph as unsaved edits of this document.
     ///
     /// Used when the working snapshot was restored from an earlier revision and the next
-    /// incremental save must still append to this file (the last saved revision). Objects
-    /// that already match are left untouched. Reads go through private readers so neither
+    /// incremental save must still append to this file (the last saved revision), opened afresh:
+    /// which objects sit in object streams is read from the file. Objects that already match are
+    /// left untouched. Reads go through private readers so neither
     /// document's editing cache is filled.
-    pub fn overlay_changes_from(&mut self, current: &Document) -> Result<(), CosError> {
+    ///
+    /// Returns `false`, changing nothing, when output security differs
+    /// ([`Document::has_same_output_security`]): an update appended to this file would be read
+    /// under other security than the objects before it, so append `current` to its own source. Otherwise the `/Encrypt` dictionary
+    /// comes with `current`'s objects and trailer, and so does the number the writer leaves
+    /// unencrypted, even where a full save had moved the dictionary.
+    pub fn overlay_changes_from(&mut self, current: &Document) -> Result<bool, CosError> {
+        if !self.has_same_output_security(current) {
+            return Ok(false);
+        }
         let saved_nums = self.object_numbers();
         let current_nums = current.object_numbers();
         let mut freed = Vec::new();
@@ -1299,6 +1327,19 @@ impl Document {
                 }
             }
         }
+        // An unchanged object packed in an object stream that this update replaces or frees would
+        // be lost: the new section no longer has that stream. Write it as an object of its own.
+        // (A stream container is never itself in a stream, so one pass is enough.)
+        let gone = |stream: u32| changed.binary_search(&stream).is_ok() || freed.binary_search(&stream).is_ok();
+        let stranded: Vec<u32> = current_nums
+            .iter()
+            .copied()
+            .filter(|&num| {
+                changed.binary_search(&num).is_err() && matches!(self.xref_entry(num), Some(XrefEntry::InStream { stream, .. }) if gone(stream))
+            })
+            .collect();
+        changed.extend(stranded);
+        changed.sort_unstable();
         for num in freed {
             let generation = self.generation(num);
             self.free(ObjRef::new(num, generation));
@@ -1310,7 +1351,15 @@ impl Document {
             self.set(ObjRef::new(num, generation), (*object).clone());
         }
         *self.trailer_mut() = current.trailer().clone();
-        Ok(())
+        // Both numbers normally changed above (or the dictionary is inline), so nothing is read
+        // from this file under the other exemption.
+        let encrypt_num = current.output_security().1;
+        if self.encryption_changed {
+            self.out_encrypt_num = encrypt_num;
+        } else {
+            self.encrypt_num = encrypt_num;
+        }
+        Ok(true)
     }
 
     /// Edit a dictionary (or stream dictionary) object in place.

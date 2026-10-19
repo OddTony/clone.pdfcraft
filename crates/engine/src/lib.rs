@@ -4094,6 +4094,13 @@ impl Session {
     /// was edited: its bytes as opened are the damaged file, and this save is how the repair the
     /// user was told about reaches the disk (#1937). Not a signed one: a full rewrite would
     /// break its signatures, so with no edits it keeps its bytes, damage and all.
+    ///
+    /// Undo past a save that changed security restores a snapshot whose encryption differs from
+    /// the last saved file. An update appended to that file would be read with the wrong key and
+    /// keep the revision it was meant to replace, so the snapshot is appended to its own source
+    /// instead, whose encryption it shares (#3276). That keeps the source's revisions, object
+    /// numbers and signatures. Revisions saved after that source are dropped: undo went back
+    /// past all of them. An unedited snapshot is its source's bytes as they are.
     pub fn save_bytes(&self, id: DocId) -> Result<Arc<Vec<u8>>, EditError> {
         let doc = self.get(id).ok_or(EditError::NoDocument)?;
         let Some(editor) = doc.editor.as_ref() else { return Ok(doc.bytes.clone()) };
@@ -4103,20 +4110,26 @@ impl Session {
         }
         let opts = SaveOptions { mod_date: self.now().map(pdfcraft_cos::pdf_date), ..SaveOptions::default() };
         // A restored snapshot can be based on an earlier revision. Append to the last saved
-        // file so that revision stays in the chain. A full rewrite (redaction, new encryption,
-        // a reconstructed file) still writes the current graph on its own.
+        // file when it has the snapshot's security, so that revision stays in the chain. A full
+        // rewrite (redaction, new encryption, a reconstructed file) still writes the current
+        // graph on its own.
         let rewrite = editor.cos.full_save_required() || editor.cos.encryption_changed() || editor.cos.revisions().is_empty();
         guard(|| {
             if on_saved || rewrite {
-                write_incremental(&editor.cos, &opts)
+                return write_incremental(&editor.cos, &opts).map(Arc::new);
+            }
+            let mut base = pdfcraft_cos::Document::open_with_password(editor.saved.clone(), editor.saved_keys.reopen.as_deref())?;
+            if base.overlay_changes_from(&editor.cos)? {
+                write_incremental(&base, &opts).map(Arc::new)
+            } else if !editor.cos.is_modified() {
+                Ok(editor.cos.bytes().clone())
             } else {
-                let mut base = pdfcraft_cos::Document::open_with_password(editor.saved.clone(), editor.saved_keys.reopen.as_deref())?;
-                base.overlay_changes_from(&editor.cos)?;
-                write_incremental(&base, &opts)
+                // Undo restored security from before the last save: append the snapshot to its
+                // own source, which it hasn't changed security against.
+                write_incremental(&editor.cos, &opts).map(Arc::new)
             }
         })
         .map_err(EditError::Write)?
-        .map(Arc::new)
         .map_err(|e| EditError::Write(e.to_string()))
     }
 
