@@ -11,6 +11,15 @@ use crate::{PdfCraftApp, QuickTool};
 /// [x0, y0, x1, y1]); a plain click has an empty rectangle.
 pub type Marquee = (usize, Rect, [f32; 4]);
 
+/// What was chosen in the menu under a copied area.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AreaChoice {
+    /// Print only this area (Acrobat's "print selected area").
+    Print,
+    /// Save the copied picture as a PNG file.
+    Save,
+}
+
 /// Drag a rectangle on page `page` (Marquee Zoom, Snapshot).
 pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, page: usize, view: &mut DocView) {
     let pointer = ui.input(|i| i.pointer.hover_pos());
@@ -22,6 +31,30 @@ pub(crate) fn page_input(ui: &egui::Ui, resp: &egui::Response, xf: &PageXform, p
         && let Some(o) = origin.filter(|o| xf.rect.contains(*o))
     {
         view.marquee = Some((page, o));
+        view.area_pick = None;
+    }
+    // The area just copied stays outlined, with what can be done with it underneath.
+    if let Some((p, area)) = view.area_pick
+        && p == page
+        && view.marquee.is_none()
+    {
+        let r = xf.view_rect(area);
+        ui.painter().rect_stroke(r, CornerRadius::ZERO, Stroke::new(1.5, Color32::from_rgb(0x14, 0x73, 0xE6)), egui::StrokeKind::Middle);
+        egui::Area::new(egui::Id::new("snapshot-area-menu")).order(egui::Order::Foreground).fixed_pos(r.left_bottom() + egui::vec2(0.0, 6.0)).show(
+            ui.ctx(),
+            |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.button(tl!("Print area…")).clicked() {
+                            view.area_choice = Some(AreaChoice::Print);
+                        }
+                        if ui.button(tl!("Save as image…")).clicked() {
+                            view.area_choice = Some(AreaChoice::Save);
+                        }
+                    });
+                });
+            },
+        );
     }
     if let Some((p, start)) = view.marquee
         && p == page
@@ -69,6 +102,7 @@ impl PdfCraftApp {
                 }
                 match self.snapshot(index, page, view_rect) {
                     Ok((w, h)) => {
+                        self.views[index].area_pick = Some((page, view_rect));
                         self.notify_fmt("The selected area has been copied ({w} × {h} pixels)", &[("w", &w.to_string()), ("h", &h.to_string())])
                     }
                     Err(e) => self.notify_fmt("Couldn't take the snapshot: {e}", &[("e", &e.to_string())]),
@@ -113,6 +147,59 @@ impl PdfCraftApp {
             None => view.fit = crate::canvas::Fit::Width,
         }
         Ok(())
+    }
+
+    /// Print ▸ Selected area: the Print dialog for only `view_rect` (page view points, y down) of
+    /// `page`, sized like a page of its own (Fit to paper or Actual size).
+    pub(crate) fn open_print_area(&mut self, page: usize, view_rect: [f32; 4]) {
+        let Some((_, id)) = self.active_ids() else { return };
+        let Some(height) = self.session.get(id).and_then(|d| d.info.pages.get(page)).map(|p| f64::from(p.height)) else { return };
+        self.open_print();
+        if self.dialog == Some(crate::Dialog::Print) {
+            let [x0, y0, x1, y1] = view_rect.map(f64::from);
+            let d = &mut self.print_draft;
+            // The print crate takes the area in display space, y up.
+            d.area = Some((page, [x0.min(x1), height - y0.max(y1), x0.max(x1), height - y0.min(y1)]));
+            d.which = crate::print_ui::Which::Area;
+            d.handling = crate::print_ui::Handling::Size;
+            d.sheet = 0;
+        }
+    }
+
+    /// Save the last snapshot as a PNG file (asked where; `save_override` in tests).
+    pub(crate) fn save_snapshot_image(&mut self) {
+        let Some((w, h, pixels)) = self.last_snapshot.as_ref() else { return };
+        let png = match pdfcraft_engine::export::encode_png(*w, *h, pixels) {
+            Ok(png) => png,
+            Err(e) => {
+                self.notify_fmt("Couldn't save the image: {e}", &[("e", &e)]);
+                return;
+            }
+        };
+        let stem = self
+            .active_ids()
+            .and_then(|(_, id)| self.session.get(id))
+            .map_or_else(String::new, |d| d.name.trim_end_matches(".pdf").trim_end_matches(".PDF").to_string());
+        let name = format!("{stem} area.png");
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let write = move |app: &mut Self, path: std::path::PathBuf| match crate::editing::write_atomically(&path.to_string_lossy(), &png) {
+                Ok(()) => app.notify_fmt("Exported to {path}", &[("path", &path.display().to_string())]),
+                Err(e) => app.notify_fmt("Couldn't write {name}: {e}", &[("name", &path.display().to_string()), ("e", &e.to_string())]),
+            };
+            match self.save_override.clone() {
+                Some(p) => write(self, p.into()),
+                None => {
+                    let dialog =
+                        rfd::AsyncFileDialog::new().set_title(tl!("Save as image").to_string()).add_filter("PNG", &["png"]).set_file_name(name);
+                    self.ask_one(crate::pickers::Ask::Save(dialog), None, write);
+                }
+            }
+        }
+        #[cfg(target_arch = "wasm32")]
+        if let Err(e) = crate::editing::download(&name, &png) {
+            self.notify_error(e);
+        }
     }
 
     /// Render `view_rect` (page view points) of `page` at the current zoom and copy it to the

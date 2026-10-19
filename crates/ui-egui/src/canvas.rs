@@ -542,6 +542,10 @@ pub struct DocView {
     /// Marquee Zoom / Snapshot: the rectangle being dragged (page, start), and a finished one.
     pub marquee: Option<(usize, Pos2)>,
     pub marquee_done: Option<crate::zoom_snap::Marquee>,
+    /// Snapshot: the area just copied (page, view-space rect), kept with a small menu under it
+    /// (Print area…, Save as image…), and what was chosen there.
+    pub area_pick: Option<(usize, [f32; 4])>,
+    pub area_choice: Option<crate::zoom_snap::AreaChoice>,
     /// Fill & Sign text being typed.
     pub fill_text: Option<crate::fill_sign::TypeBox>,
     /// A queued Fill & Sign signature: select it after its edit succeeds, then leave placement.
@@ -811,6 +815,8 @@ impl DocView {
             panel_drag: None,
             marquee: None,
             marquee_done: None,
+            area_pick: None,
+            area_choice: None,
             fill_text: None,
             fill_signature_page: None,
             signature_drag: Default::default(),
@@ -3966,6 +3972,21 @@ pub fn document_area(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     }
     if let Some(done) = app.views[index].marquee_done.take() {
         app.finish_marquee(index, done);
+    }
+    // The copied area and its menu belong to Snapshot: another tool puts them away.
+    if tool != QuickTool::Snapshot {
+        app.views[index].area_pick = None;
+    }
+    if let Some(choice) = app.views[index].area_choice.take()
+        && let Some((page, area)) = app.views[index].area_pick
+    {
+        match choice {
+            crate::zoom_snap::AreaChoice::Print => {
+                app.views[index].area_pick = None;
+                app.open_print_area(page, area);
+            }
+            crate::zoom_snap::AreaChoice::Save => app.save_snapshot_image(),
+        }
     }
     // A signature rectangle was drawn, or an empty signature field clicked.
     let drawn = app.views[index].sign.drawn.take();
