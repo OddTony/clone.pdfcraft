@@ -2456,3 +2456,11 @@ animation effects	Off	Вимкнено
 	Make properties default	Зробити властивості типовими
 	Pages selected	Вибрані сторінки
 	Page properties	Властивості сторінки
+# Several windows (M14): the Window menu, the tab context menu, the limit notice.
+	Window	Вікно
+	Move tab to new window	Перемістити вкладку в нове вікно
+	Merge all windows	Об’єднати всі вікна
+	Close window	Закрити вікно
+	Move to new window	Перемістити в нове вікно
+	Move to window	Перемістити у вікно
+	Too many windows are open	Відкрито забагато вікон

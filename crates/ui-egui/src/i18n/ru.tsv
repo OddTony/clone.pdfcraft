@@ -2347,3 +2347,11 @@ animation effects	Off	Выкл
 	Make properties default	Сделать свойства стандартными
 	Pages selected	Выделенные страницы
 	Page properties	Свойства страницы
+# Several windows (M14): the Window menu, the tab context menu, the limit notice.
+	Window	Окно
+	Move tab to new window	Переместить вкладку в новое окно
+	Merge all windows	Объединить все окна
+	Close window	Закрыть окно
+	Move to new window	Переместить в новое окно
+	Move to window	Переместить в окно
+	Too many windows are open	Открыто слишком много окон

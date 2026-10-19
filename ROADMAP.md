@@ -170,6 +170,7 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 | 8 | 1.0 polish: performance, right-to-left, missing languages, keyboard-only (M14) | 55–95 |
 
 ## Progress log
+- **2026-10-19 (M14, #1683, #2848):** Several windows. A document tab dragged past the strip (40 pt above or below it, or past the window's sides) opens in a window of its own; dragged onto another PdfCraft window it joins that window's strip at the gap under the pointer (where the desktop tells the app where its windows are: X11, Windows, macOS; on Wayland the tab's context menu moves it); Escape cancels. The Window menu moves a tab out, merges every window into the main one and closes a window; the tab's context menu moves a tab to a new or a named window. One `PdfCraftApp` draws every window as an egui viewport inside the main window's pass, swapping a per-window state (tabs, mode, panels, dialogs and their drafts) in for each pass; documents stay the app's and show in one window at a time, so nothing is synchronised between windows. Closing a window closes its tabs through the save guard; quitting gathers every window's unsaved documents in the main window first, and the last session remembers them all. Not yet: a second view of one document (#596), remembered window places, the web build. Estimates unchanged.
 
 - **2026-10-19 (M14, #3373):** The main menu and its long submenus scroll in short windows, keeping their commands reachable. Estimates unchanged.
 

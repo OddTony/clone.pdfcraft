@@ -2711,3 +2711,11 @@ certificate	Version	الإصدار
 	Make properties default	جعل الخصائص افتراضية
 	Pages selected	الصفحات المحددة
 	Page properties	خصائص الصفحة
+# Several windows (M14): the Window menu, the tab context menu, the limit notice.
+	Window	نافذة
+	Move tab to new window	نقل علامة التبويب إلى نافذة جديدة
+	Merge all windows	دمج كل النوافذ
+	Close window	إغلاق النافذة
+	Move to new window	نقل إلى نافذة جديدة
+	Move to window	نقل إلى نافذة
+	Too many windows are open	هناك نوافذ مفتوحة أكثر من اللازم

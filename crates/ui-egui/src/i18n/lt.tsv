@@ -2685,3 +2685,11 @@ key	Space	Tarpas
 	The password must have at least 6 characters.	Slaptažodį turi sudaryti bent 6 simboliai.
 	This file changed on disk. Reload it to see the new version; your unsaved changes will be lost.	Šis failas diske pasikeitė. Įkelkite jį iš naujo, kad pamatytumėte naują versiją; neįrašyti pakeitimai bus prarasti.
 theme	Appearance	Išvaizda
+# Several windows (M14): the Window menu, the tab context menu, the limit notice.
+	Window	Langas
+	Move tab to new window	Perkelti kortelę į naują langą
+	Merge all windows	Sujungti visus langus
+	Close window	Užverti langą
+	Move to new window	Perkelti į naują langą
+	Move to window	Perkelti į langą
+	Too many windows are open	Atverta per daug langų

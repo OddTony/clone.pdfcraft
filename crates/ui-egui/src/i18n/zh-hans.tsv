@@ -2398,3 +2398,11 @@ animation effects	Off	关
 	Make properties default	将属性设为默认
 	Pages selected	选定的页面
 	Page properties	页面属性
+# Several windows (M14): the Window menu, the tab context menu, the limit notice.
+	Window	窗口
+	Move tab to new window	将标签页移到新窗口
+	Merge all windows	合并所有窗口
+	Close window	关闭窗口
+	Move to new window	移到新窗口
+	Move to window	移到窗口
+	Too many windows are open	打开的窗口过多

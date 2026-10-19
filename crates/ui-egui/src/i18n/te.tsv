@@ -2343,3 +2343,11 @@ animation effects	Off	ఆఫ్
 	Make properties default	లక్షణాలను డిఫాల్ట్‌గా చేయి
 	Pages selected	ఎంచుకున్న పేజీలు
 	Page properties	పేజీ లక్షణాలు
+# Several windows (M14): the Window menu, the tab context menu, the limit notice.
+	Window	విండో
+	Move tab to new window	ట్యాబ్‌ను కొత్త విండోకు తరలించు
+	Merge all windows	అన్ని విండోలను విలీనం చేయి
+	Close window	విండోను మూసివేయి
+	Move to new window	కొత్త విండోకు తరలించు
+	Move to window	విండోకు తరలించు
+	Too many windows are open	చాలా ఎక్కువ విండోలు తెరిచి ఉన్నాయి
