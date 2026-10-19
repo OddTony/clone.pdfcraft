@@ -955,7 +955,7 @@ impl PdfCraftApp {
             toast: None,
             integrated_titlebar: false,
             window_controls: None,
-            system_title_bar: cfg!(target_os = "windows"),
+            system_title_bar: window_controls::SYSTEM_TITLE_BAR_DEFAULT,
             app_frame_shown: None,
             password_prompt: None,
             unlock_prompt: None,
@@ -2264,7 +2264,7 @@ impl PdfCraftApp {
             // Kept only while the preference is on.
             "last_session": self.reopen_last_session.then(|| self.session_to_save()),
             "reload_changed_files": self.reload_changed_files,
-            "system_title_bar": self.system_title_bar,
+            "title_bar": if self.system_title_bar { "system" } else { "app" },
             "pinned_folders": self.pinned.folders,
             "theme": self.theme_preference,
             "scroll_speed": self.scroll_speed,
@@ -2351,7 +2351,7 @@ impl PdfCraftApp {
             self.reopen_last_session = on;
         }
         self.last_session = last_session::LastSession::from_json(&v["last_session"]);
-        if let Some(on) = v["system_title_bar"].as_bool() {
+        if let Some(on) = window_controls::saved_system_title_bar(&v) {
             self.system_title_bar = on;
         }
         if let Some(on) = v["reload_changed_files"].as_bool() {

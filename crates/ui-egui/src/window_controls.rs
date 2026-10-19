@@ -33,6 +33,24 @@ pub struct Layout {
     pub right: Vec<Button>,
 }
 
+/// Use system title bar when nothing is saved: on where Windows' own title bar is the norm, off
+/// on GNOME, whose frame winit only imitates.
+pub const SYSTEM_TITLE_BAR_DEFAULT: bool = cfg!(target_os = "windows");
+
+/// The saved Use system title bar preference in PdfCraft's settings JSON: `title_bar`, `"system"`
+/// or `"app"`. Settings from before Windows offered the preference hold the boolean
+/// `system_title_bar` instead, which every platform wrote as `false` while only GNOME showed the
+/// checkbox; it still counts there, but on Windows it was never a choice, so it is left alone and
+/// the default stands rather than every upgrade losing the title bar.
+pub fn saved_system_title_bar(settings: &serde_json::Value) -> Option<bool> {
+    match settings.get("title_bar").and_then(serde_json::Value::as_str) {
+        Some("system") => Some(true),
+        Some("app") => Some(false),
+        _ if cfg!(target_os = "windows") => None,
+        _ => settings.get("system_title_bar")?.as_bool(),
+    }
+}
+
 impl Default for Layout {
     /// What a desktop that names no layout gets: all three, on the right.
     fn default() -> Self {
@@ -375,6 +393,23 @@ mod tests {
         // Unknown names, spaces and repeats.
         assert_eq!(Layout::parse("icon,spacer: close , close,bogus"), close);
         assert_eq!(Layout::parse(""), Layout { left: vec![], right: vec![] });
+    }
+
+    #[test]
+    fn the_saved_preference_is_read_with_its_history() {
+        use super::saved_system_title_bar as saved;
+        use serde_json::json;
+        assert_eq!(saved(&json!({"title_bar": "system"})), Some(true));
+        assert_eq!(saved(&json!({"title_bar": "app", "system_title_bar": true})), Some(false));
+        assert_eq!(saved(&json!({"title_bar": "sideways"})), None);
+        assert_eq!(saved(&json!({"theme": "Dark"})), None);
+        assert_eq!(saved(&json!("not an object")), None);
+        // The boolean of older builds: a choice on GNOME, where the checkbox was, and on Windows
+        // only the default every save wrote.
+        let legacy = if cfg!(target_os = "windows") { None } else { Some(false) };
+        assert_eq!(saved(&json!({"system_title_bar": false})), legacy);
+        assert_eq!(saved(&json!({"system_title_bar": true})), legacy.map(|_| true));
+        assert_eq!(saved(&json!({"system_title_bar": "true"})), None);
     }
 
     #[test]

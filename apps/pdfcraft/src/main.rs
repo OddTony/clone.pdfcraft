@@ -220,8 +220,9 @@ fn main() -> eframe::Result {
     } else {
         decorations::app_drawn()
     };
-    let app_frame = decorations::app_frame_at_launch(window_controls.is_some(), decorations::saved_system_title_bar(settings_dir().as_deref()));
+    // The PrintCraft folders move first, so a preference saved under the old name is read.
     migrate_legacy_folders();
+    let app_frame = decorations::app_frame_at_launch(window_controls.is_some(), decorations::saved_system_title_bar(settings_dir().as_deref()));
     // The log file stays in the data folder; opened after the arguments (so `--version` leaves
     // no file behind) and after the PrintCraft migration (which a fresh folder would block).
     // Records logged until now are written to it first.

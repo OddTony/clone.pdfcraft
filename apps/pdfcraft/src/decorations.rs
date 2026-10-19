@@ -10,10 +10,11 @@
 //!
 //! Windows: the app may draw the frame too, with the caption buttons at the strip's right, but
 //! only when Preferences ▸ Use system title bar is turned off; Windows' own title bar is the
-//! default. The saved preference is read from `app.ron` before the window is created, so the
-//! window opens with the right frame instead of switching on its first frame.
+//! default, for upgrades too (older builds saved the preference on Windows without offering it).
+//! The saved preference is read from `app.ron` before the window is created, so the window opens
+//! with the right frame instead of switching on its first frame.
 
-use pdfcraft_ui_egui::window_controls::Layout;
+use pdfcraft_ui_egui::window_controls::{self, Layout};
 
 /// The window buttons to draw in the app, or `None` when the desktop draws the frame.
 pub(crate) fn app_drawn() -> Option<Layout> {
@@ -29,7 +30,7 @@ pub(crate) fn app_drawn() -> Option<Layout> {
 /// Use system title bar preference (or, unsaved, the platform's default) doesn't ask for the
 /// system's frame.
 pub(crate) fn app_frame_at_launch(window_controls: bool, saved_system_title_bar: Option<bool>) -> bool {
-    window_controls && !saved_system_title_bar.unwrap_or(cfg!(target_os = "windows"))
+    window_controls && !saved_system_title_bar.unwrap_or(window_controls::SYSTEM_TITLE_BAR_DEFAULT)
 }
 
 /// The saved Use system title bar preference, if `app.ron` in `settings_dir` holds one.
@@ -39,13 +40,14 @@ pub(crate) fn saved_system_title_bar(settings_dir: Option<&std::path::Path>) -> 
 }
 
 /// eframe's `app.ron` is a map of strings; PdfCraft's settings are the JSON under `pdfcraft`
-/// (or the app's former name). Anything unreadable means "not saved", never an error: the app
-/// reads the same file again through eframe and reports problems there.
+/// (or the app's former name), read the way the app reads them. Anything unreadable means "not
+/// saved", never an error: the app reads the same file again through eframe and reports problems
+/// there.
 fn system_title_bar_in(ron_text: &str) -> Option<bool> {
     let kv: std::collections::HashMap<String, String> = ron::from_str(ron_text).ok()?;
     let json = kv.get("pdfcraft").or_else(|| kv.get(crate::LEGACY_STORAGE_KEY))?;
     let value: serde_json::Value = serde_json::from_str(json).ok()?;
-    value.get("system_title_bar")?.as_bool()
+    window_controls::saved_system_title_bar(&value)
 }
 
 /// GNOME's button order, or minimize, maximize and close on the right when it names none.
@@ -103,13 +105,17 @@ mod tests {
 
     #[test]
     fn the_saved_preference_is_read_from_app_ron() {
-        let ron = r#"{"pdfcraft":"{\"system_title_bar\":false,\"theme\":\"Dark\"}","egui":"{}"}"#;
+        let ron = r#"{"pdfcraft":"{\"title_bar\":\"app\",\"theme\":\"Dark\"}","egui":"{}"}"#;
         assert_eq!(system_title_bar_in(ron), Some(false));
-        let ron = r#"{"pdfcraft":"{\"system_title_bar\":true}"}"#;
+        let ron = r#"{"pdfcraft":"{\"title_bar\":\"system\"}"}"#;
         assert_eq!(system_title_bar_in(ron), Some(true));
         // The app's former name still counts.
-        let ron = r#"{"printcraft":"{\"system_title_bar\":true}"}"#;
+        let ron = r#"{"printcraft":"{\"title_bar\":\"system\"}"}"#;
         assert_eq!(system_title_bar_in(ron), Some(true));
+        // The boolean older builds wrote: a choice where the checkbox was, not on Windows
+        // (`window_controls::saved_system_title_bar`).
+        let ron = r#"{"pdfcraft":"{\"system_title_bar\":false}"}"#;
+        assert_eq!(system_title_bar_in(ron), if cfg!(target_os = "windows") { None } else { Some(false) });
         // Not saved, not JSON, not RON: no preference, never an error.
         assert_eq!(system_title_bar_in(r#"{"pdfcraft":"{\"theme\":\"Dark\"}"}"#), None);
         assert_eq!(system_title_bar_in(r#"{"pdfcraft":"not json"}"#), None);
