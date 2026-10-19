@@ -75,6 +75,12 @@ pub fn document_thai_font() -> Option<&'static CraftFont> {
     ui_thai_fonts().into_iter().next()
 }
 
+/// The `Geor` craft-fonts faces for Georgian interface text, in manifest order. Empty when built
+/// without craft-fonts or when it has no Georgian face.
+pub fn ui_georgian_fonts() -> Vec<&'static CraftFont> {
+    CRAFT_FONTS.iter().filter(|f| f.covers("Geor")).collect()
+}
+
 /// The `Hebr` craft-fonts faces for Hebrew interface text (file names, document titles, text
 /// being edited), in manifest order. Empty when built without craft-fonts or when it has no
 /// Hebrew face.

@@ -1,7 +1,7 @@
 # Localization parity
 
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-13 · **Change:** minor (Vietnamese 100% of current key union; native-speaker community review; twelve-language mean ≈68%) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-14 · **Change:** minor (Italian count after completing its catalog) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-19 · **Change:** minor (Georgian interface catalog; Italian count after completing its catalog) · **Target:** Adobe Acrobat Pro (Acrobat DC, continuous track 26.002.21931, macOS)
 
 Per-language status of PdfCraft's interface against Acrobat Pro's. How translations work and how to
 add a language: [localization.md](localization.md). Summary in [ROADMAP.md](../ROADMAP.md).
@@ -70,13 +70,11 @@ none has translated help. Vietnamese's **To `full`** hours are therefore residua
 | Greek | `el` | 2,341 entries | partial | no |
 | Turkish | `tr` | 2,313 entries | partial | yes |
 | Lithuanian | `lt` | 2,585 entries | partial; community native-speaker review ([#1401](https://github.com/storytold/pdfcraft/pull/1401)) | no |
+| Georgian | `ka` | 2,672 entries (every key of the current catalogs, 2026-10-19) | partial; reviewed by a native speaker | no |
 
-**14 other languages** ship (22 catalogs plus English = **23** interface languages in Preferences).
-The entry counts without percentages were measured on 2026-10-12–13; they are not percentages of the older 2,143-key snapshot above. Their presence does not imply a detailed linguistic or runtime review.
-Acrobat languages PdfCraft lacks: Danish, Dutch, Finnish, Norwegian, Swedish, Hebrew. Vietnamese is shipped here but not by Acrobat.
-**14 other languages** ship (21 catalogs plus English, 22 interface languages in Preferences).
-The entry counts without percentages were measured on 2026-10-12 (Italian on 2026-10-14); they are not percentages of the older 2,143-key snapshot above. Their presence does not imply a detailed linguistic or runtime review.
-Acrobat languages PdfCraft lacks: Danish, Dutch, Finnish, Norwegian, Swedish, Hebrew.
+**15 other languages** ship (23 catalogs plus English = **24** interface languages in Preferences).
+The entry counts without percentages were measured on 2026-10-12–14 (Italian on 2026-10-14, Georgian on 2026-10-19); they are not percentages of the older 2,143-key snapshot above. Their presence does not imply a detailed linguistic or runtime review.
+Acrobat languages PdfCraft lacks: Danish, Dutch, Finnish, Norwegian, Swedish, Hebrew. Vietnamese and Georgian are shipped here but not by Acrobat.
 
 ## Revision history
 
@@ -84,5 +82,6 @@ Acrobat languages PdfCraft lacks: Danish, Dutch, Finnish, Norwegian, Swedish, He
 |---|---|---|
 | 2026-10-13 | minor | Vietnamese (`vi`) catalog: 2,591 entries (100% of current key union + `theme`/`Appearance`); twelve-language mean ≈ 68%; native-speaker community review; registered with `plural_none` |
 | 2026-10-14 | minor | Italian: 2,528 entries after adding the 201 keys the other catalogs had and the code looks up |
+| 2026-10-19 | minor | Georgian (`ka`) row added: 2,672 entries |
 | 2026-10-12 | minor | Added current counts for Kazakh, Polish, Slovenian, Greek, Turkish and Lithuanian; retained existing language assessments and the original percentage snapshot |
 | 2026-10-10 | major | Created. Catalog counts measured from `crates/ui-egui/src/i18n/*.tsv` against the 2,143-key union; Acrobat's localizations from its bundle's `.lproj` and Sequences folder names |
