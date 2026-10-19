@@ -189,6 +189,35 @@ pub fn image_resampling_size(
     Some(target)
 }
 
+/// PdfCraft patch: whether the interpolating resampler can take an image that did not ask for
+/// interpolation, shrunk by `x_scale` × `y_scale` (device pixels per source pixel). A matching soft
+/// mask is expanded to RGBA before the resize, so it is checked against the four-channel budget,
+/// not the image's own one or three. Exported for PdfCraft's metadata-only regression tests.
+#[doc(hidden)]
+pub fn smooth_shrink_fits(
+    source: (u32, u32),
+    channels: usize,
+    with_mask: bool,
+    x_scale: f32,
+    y_scale: f32,
+) -> bool {
+    let channels = if with_mask { 4 } else { channels };
+    let Some(len) = source_byte_len(source.0, source.1, channels, MAX_IMAGE_PIXELS) else {
+        return false;
+    };
+    image_resampling_size(
+        source.0,
+        source.1,
+        channels,
+        len,
+        x_scale,
+        y_scale,
+        MAX_IMAGE_PIXELS,
+        true,
+    )
+    .is_some()
+}
+
 /// PdfCraft patch: allocation failures in image conversion/resampling keep the renderer alive.
 fn image_buffer(len: usize) -> Option<Vec<u8>> {
     let mut out = Vec::new();
@@ -778,21 +807,23 @@ impl Renderer {
         let mut interpolate = requested_interpolation || x_scale.min(y_scale) < MIN_NEAREST_SCALE;
         // The smooth filter has size limits (a source over 2^20 pixels wide, a plan over budget).
         // An image that only gets it by this rule falls back to picking pixels instead of failing.
-        if interpolate
-            && !requested_interpolation
-            && image_resampling_size(
-                source_width,
-                source_height,
+        // A soft mask that matches the image is resized with it as RGBA, so it counts as four
+        // channels here.
+        if interpolate && !requested_interpolation {
+            let with_mask = alpha_data.as_ref().is_some_and(|a| {
+                a.width == source_width
+                    && a.height == source_height
+                    && a.interpolate == requested_interpolation
+            });
+            if !smooth_shrink_fits(
+                (source_width, source_height),
                 channels,
-                data_len,
+                with_mask,
                 x_scale,
                 y_scale,
-                MAX_IMAGE_PIXELS,
-                true,
-            )
-            .is_none()
-        {
-            interpolate = false;
+            ) {
+                interpolate = false;
+            }
         }
         if let Some(a) = &alpha_data {
             if source_byte_len(a.width, a.height, 1, MAX_IMAGE_PIXELS) != Some(a.data.len()) {
@@ -930,6 +961,9 @@ impl Renderer {
         } else {
             (data, source_width, source_height)
         };
+        // A resize that kept the original size (it failed) is not the snapped raster: draw it as
+        // before, scaled to the image's box, not translated to the snapped corner at full size.
+        let snapped = snapped.filter(|s| (img_width, img_height) == (s.0, s.1));
         if image_byte_len(img_width, img_height, 4, MAX_IMAGE_PIXELS).is_none() {
             log::warn!(
                 "Image resampling failed and the original resolution cannot fit the backend; image skipped"
