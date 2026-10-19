@@ -58,11 +58,17 @@ HTTPS enables WebGPU and browser clipboard APIs. If hosting under `/pdfcraft/`, 
 asset URLs then work without rebuilding. For example, in an existing HTTPS NGINX server:
 
 ```nginx
-location = /pdfcraft { return 301 /pdfcraft/; }
+location = /pdfcraft { return 301 /pdfcraft/$is_args$args; }
 location /pdfcraft/ {
     proxy_pass http://127.0.0.1:8080/;
 }
 ```
+
+The front proxy must also keep signed document URLs out of its own logs: log the normalized
+URI without the query string (or the path only) and log no referrers, or `?file=<signed URL>`
+is retained at the proxy even though the container's log is sanitized. The app's own documents
+stay in the browser; the only long-lived values are cache headers, which carry no document
+content.
 
 Reading and editing run on the visitor's device. Open uses the browser file picker; Save and
 Export download files. Preferences use browser localStorage. There is no server-side document
