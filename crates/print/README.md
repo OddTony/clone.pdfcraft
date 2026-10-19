@@ -27,6 +27,11 @@ spool::submit(&pdf, &spool::Job { printer: None, copies: 2, ..Default::default()
 - **Poster**: tile scale, overlap shared by neighbouring tiles, cut marks.
 - **Comments & forms**: document, + markups, + stamps, or form fields only; annotations print
   only with their Print flag, drawn from their appearance streams (Algorithm 8.1).
+- **Remembered choices** (#2001): the dialog keeps two-sided, grayscale, collate, page sizing
+  (with its custom percent) and Comments & forms across restarts, in the settings file under
+  `print` with the names `doc_print` takes (`names::duplex`, `names::content`,
+  `names::size_mode` and their `parse_*` counterparts are the one vocabulary). Copies, pages,
+  layout, orientation and the printer describe one job and start fresh.
 
 Each source page becomes a Form XObject (its content wrapped in q/Q, plus the printable
 annotations); sheets place them with a clip. The result is a fresh, unencrypted,

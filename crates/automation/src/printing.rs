@@ -1,7 +1,7 @@
 //! Printing tools: list printers, and print (or save the print-ready PDF) with Acrobat's Print
 //! dialog options.
 
-use pdfcraft_engine::print::{self, Binding, BookletSubset, Content, Layout, Orientation, PAPERS, PageOrder, SizeMode, Subset, spool};
+use pdfcraft_engine::print::{self, Binding, BookletSubset, Layout, Orientation, PAPERS, PageOrder, SizeMode, Subset, spool};
 use serde_json::{Value, json};
 
 use crate::{Args, Automation, Result, ToolError, failed, write_atomic};
@@ -50,9 +50,6 @@ impl Automation {
         let pages = print::select_pages(count, a.opt_str("pages")?, &labels, subset, a.opt_bool("reverse")?.unwrap_or(false))
             .map_err(|e| bad(e.to_string()))?;
         let layout = match a.opt_str("layout")?.unwrap_or("fit") {
-            "fit" => Layout::Size(SizeMode::Fit),
-            "actual" => Layout::Size(SizeMode::Actual),
-            "shrink" => Layout::Size(SizeMode::Shrink),
             "custom" => Layout::Size(SizeMode::Custom(a.opt_num("scale")?.ok_or_else(|| bad("custom needs scale (percent)"))?)),
             "multiple" => {
                 let per = a.opt_int("per_sheet")?.unwrap_or(2).clamp(1, 256) as usize;
@@ -90,7 +87,7 @@ impl Automation {
                 overlap: a.opt_num("overlap")?.unwrap_or(18.0),
                 cut_marks: a.opt_bool("cut_marks")?.unwrap_or(true),
             },
-            l => return Err(bad(format!("unknown layout {l:?}"))),
+            l => Layout::Size(print::names::parse_size_mode(l, 100.0).ok_or_else(|| bad(format!("unknown layout {l:?}")))?),
         };
         if matches!(layout, Layout::Multiple { order: PageOrder::CutStack, .. }) && a.opt_str("duplex")?.unwrap_or("off") != "off" {
             return Err(bad("cut-and-stack printing needs duplex off (single-sided sheets)"));
@@ -104,13 +101,8 @@ impl Automation {
             "landscape" => Orientation::Landscape,
             o => return Err(bad(format!("unknown orientation {o:?}"))),
         };
-        let content = match a.opt_str("comments_forms")?.unwrap_or("document-and-markups") {
-            "document" => Content::Document,
-            "document-and-markups" => Content::DocumentAndMarkups,
-            "document-and-stamps" => Content::DocumentAndStamps,
-            "form-fields-only" => Content::FormFieldsOnly,
-            c => return Err(bad(format!("unknown comments_forms {c:?}"))),
-        };
+        let content = a.opt_str("comments_forms")?.unwrap_or("document-and-markups");
+        let content = print::names::parse_content(content).ok_or_else(|| bad(format!("unknown comments_forms {content:?}")))?;
         let paper = match a.opt_str("paper")? {
             None => PAPERS[0].1,
             Some(p) => PAPERS
@@ -153,11 +145,9 @@ impl Automation {
                     printer: if printer == "default" { None } else { Some(printer.to_string()) },
                     copies: a.opt_int("copies")?.unwrap_or(1).clamp(1, 999) as u32,
                     collate: a.opt_bool("collate")?.unwrap_or(true),
-                    duplex: Some(match a.opt_str("duplex")?.unwrap_or("off") {
-                        "off" => spool::Duplex::Off,
-                        "long-edge" => spool::Duplex::LongEdge,
-                        "short-edge" => spool::Duplex::ShortEdge,
-                        d => return Err(bad(format!("unknown duplex {d:?}"))),
+                    duplex: Some({
+                        let duplex = a.opt_str("duplex")?.unwrap_or("off");
+                        print::names::parse_duplex(duplex).ok_or_else(|| bad(format!("unknown duplex {duplex:?}")))?
                     }),
                     scaling: spool::Scaling::Exact,
                     grayscale: a.opt_bool("grayscale")?.unwrap_or(false),
