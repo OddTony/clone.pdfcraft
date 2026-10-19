@@ -50,10 +50,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let strip_id = egui::Id::new("tab-strip");
     // A tab being dragged keeps the strip awake wherever the pointer goes.
     let dragging = ui.ctx().dragged_id().is_some()
-        && ui
-            .ctx()
-            .data(|d| d.get_temp::<Rect>(strip_id.with("idle-rect")))
-            .is_some_and(|r| ui.ctx().input(|i| i.pointer.press_origin()).is_some_and(|p| r.contains(p)));
+        && widgets::idle_rect(ui.ctx(), strip_id).is_some_and(|r| ui.ctx().input(|i| i.pointer.press_origin()).is_some_and(|p| r.contains(p)));
     let shown = widgets::idle_shown(ui.ctx(), strip_id, dragging);
     let opacity = widgets::IDLE_OPACITY + (1.0 - widgets::IDLE_OPACITY) * shown;
     let height = if mac { MAC_TITLE_BAR } else { TAB_STRIP };
@@ -94,12 +91,14 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             // Tabs shrink to share the strip (names end in "…") and scroll only once they reach
             // their narrowest; then arrows either side say so and step through them.
             let mut natural: Vec<f32> = Vec::with_capacity(app.views.len() + 1);
-            for i in 0..app.views.len() {
+            // This window's tabs; Combine has its tab in the main window only.
+            let combine_here = app.combine_tab.open && app.current_window == crate::windows::MAIN;
+            for i in app.window_tabs() {
                 if let Some(name) = crate::canvas::tab_label(app, i) {
                     natural.push(tab_natural_width(ui, &t, &name));
                 }
             }
-            if app.combine_tab.open {
+            if combine_here {
                 natural.push(tab_natural_width(ui, &t, tl!("Combine files")));
             }
             let gap = ui.spacing().item_spacing.x;
@@ -140,7 +139,8 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         // (with whether it was just released).
                         let mut slots = Vec::with_capacity(app.views.len());
                         let mut dragged = None;
-                        for i in 0..app.views.len() {
+                        let in_main = app.current_window == crate::windows::MAIN;
+                        for i in app.window_tabs() {
                             let Some(doc) = app.session.get(app.views[i].id) else { continue };
                             let Some(name) = crate::canvas::tab_label(app, i) else { continue };
                             let dirty = doc.dirty;
@@ -184,6 +184,18 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                                     action = Some(crate::tab_context::Action::Reveal(id));
                                     ui.close();
                                 }
+                                // Windows of their own: the desktop app's (a browser tab has one window).
+                                if cfg!(not(target_arch = "wasm32")) {
+                                    ui.separator();
+                                    if ui.button(tl!("Move to New Window")).clicked() {
+                                        action = Some(crate::tab_context::Action::NewWindow(id));
+                                        ui.close();
+                                    }
+                                    if !in_main && ui.button(tl!("Move to Main Window")).clicked() {
+                                        action = Some(crate::tab_context::Action::MainWindow(id));
+                                        ui.close();
+                                    }
+                                }
                             });
                             if response.clicked() {
                                 app.active = Some(i);
@@ -201,7 +213,10 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         {
                             let to = drop_index(&slots, from, x);
                             if released {
-                                if close.is_none() && action.is_none() {
+                                if close.is_none()
+                                    && action.is_none()
+                                    && let Some(to) = drop_target(&slots, from, to)
+                                {
                                     app.move_tab(from, to);
                                 }
                             } else {
@@ -225,7 +240,7 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         if let Some(action) = action {
                             app.tab_action(action);
                         }
-                        if app.combine_tab.open {
+                        if combine_here {
                             // After the document tabs; its index can't clash with theirs.
                             let mut close = None;
                             let response = tab(
@@ -417,6 +432,25 @@ const TAB_DRAG_STEP: f32 = 8.0;
 /// whose centre is left of the pointer. `slots` are the tabs' indices and rects, in order.
 fn drop_index(slots: &[(usize, Rect)], from: usize, x: f32) -> usize {
     slots.iter().filter(|(i, r)| *i != from && r.center().x < x).count()
+}
+
+/// Where in the app's list of views the tab at `from` lands when dropped at `to` (counted among
+/// the other tabs of the strip, as [`drop_index`] counts): before the tab it lands in front of,
+/// or just after the last. The strip shows one window's tabs, which needn't sit together in the
+/// list. `None` when nothing moves.
+fn drop_target(slots: &[(usize, Rect)], from: usize, to: usize) -> Option<usize> {
+    // Dropped where it is in the strip: nothing moves.
+    if slots.iter().position(|(i, _)| *i == from) == Some(to) {
+        return None;
+    }
+    let others: Vec<usize> = slots.iter().map(|(i, _)| *i).filter(|i| *i != from).collect();
+    // Where an index ends up once the dragged tab is out of the list.
+    let without = |i: usize| if i > from { i - 1 } else { i };
+    let target = match others.get(to) {
+        Some(&before) => without(before),
+        None => without(*others.last()?) + 1,
+    };
+    (target != from).then_some(target)
 }
 
 /// The x of the line marking where the tab at `from` drops at `to`: in the gap before the other
@@ -897,7 +931,7 @@ fn nav_bar(app: &mut PdfCraftApp, column: Rect, ctx: &egui::Context) -> Option<f
     let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
     let view = app.views.get_mut(index)?;
     let bar_id = egui::Id::new("nav-bar");
-    let editing = ctx.memory(|m| m.has_focus(view.page_input_id()));
+    let editing = ctx.memory(|m| m.has_focus(view.page_input_id()) || m.has_focus(egui::Id::new("zoom-input")));
     let (slide, opacity) = idle_slide(ctx, bar_id, column, editing);
     let mut page_display = None;
     let shown = egui::Area::new(bar_id)
@@ -967,8 +1001,7 @@ fn nav_bar(app: &mut PdfCraftApp, column: Rect, ctx: &egui::Context) -> Option<f
                     if icons::button(ui, "zoom-in", BAR_BUTTON, false, &tip).clicked() {
                         view.zoom_step(true);
                     }
-                    let zoom = format!("{:.0}%", view.zoom * 100.0);
-                    ui.label(egui::RichText::new(zoom).font(theme::medium(10.5)).color(t.text_muted));
+                    zoom_field(ui, &t, view);
                     let tip = crate::commands::key_tip(ui.ctx(), tl!("Zoom out ({key})"), crate::commands::ZOOM_OUT);
                     if icons::button(ui, "zoom-out", BAR_BUTTON, false, &tip).clicked() {
                         view.zoom_step(false);
@@ -1009,8 +1042,44 @@ fn nav_bar(app: &mut PdfCraftApp, column: Rect, ctx: &egui::Context) -> Option<f
 fn idle_slide(ctx: &egui::Context, id: egui::Id, column: Rect, busy: bool) -> (egui::Vec2, f32) {
     let idle = widgets::idle(ctx, id, busy, true);
     // Far enough to take the card and its shadow out of the window.
-    let reach = ctx.data(|d| d.get_temp::<Rect>(id.with("idle-rect"))).map_or(RIGHT_BAR_COLUMN, |r| column.right() - r.left()) + 24.0;
+    let reach = widgets::idle_rect(ctx, id).map_or(RIGHT_BAR_COLUMN, |r| column.right() - r.left()) + 24.0;
     (vec2(reach.max(0.0) * idle.hidden, 0.0), idle.opacity)
+}
+
+/// The zoom as a field (#1755): it shows the zoom, and Enter applies a percentage typed into it
+/// (150, 150%, 62.5 %); Escape, or what doesn't read as one, keeps the zoom as it is.
+fn zoom_field(ui: &mut egui::Ui, t: &Tokens, view: &mut DocView) {
+    let id = egui::Id::new("zoom-input");
+    let draft = id.with("draft");
+    let mut typed = ui.data(|d| d.get_temp::<String>(draft)).unwrap_or_else(|| format!("{:.0}%", view.zoom * 100.0));
+    let edit = egui::TextEdit::singleline(&mut typed)
+        .id(id)
+        .desired_width(BAR_BUTTON + 4.0)
+        .horizontal_align(Align::Center)
+        .font(theme::medium(10.5))
+        .text_color(t.text_muted)
+        .frame(egui::Frame::NONE)
+        .margin(vec2(2.0, 2.0));
+    let r = ui.add(edit).on_hover_text(tl!("Zoom — type a percentage and press Enter"));
+    ui.ctx().accesskit_node_builder(id, |node| node.set_label(tl!("Zoom")));
+    // Focused, the whole value is selected, to type over.
+    if r.gained_focus() {
+        let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
+        let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(typed.chars().count()));
+        state.cursor.set_char_range(Some(all));
+        state.store(ui.ctx(), id);
+    }
+    if r.has_focus() {
+        ui.data_mut(|d| d.insert_temp(draft, typed.clone()));
+    } else {
+        ui.data_mut(|d| d.remove::<String>(draft));
+        if r.lost_focus()
+            && ui.input(|i| i.key_pressed(egui::Key::Enter))
+            && let Some(zoom) = DocView::parse_zoom_percent(&typed)
+        {
+            view.set_zoom(zoom);
+        }
+    }
 }
 
 /// A short line between groups in a vertical floating bar.
@@ -1153,6 +1222,26 @@ mod tab_widths {
         // The last tab dropped at the start: before the first tab.
         assert_eq!(drop_marker(&slots, 2, 0, 4.0), Some(-2.0));
         assert_eq!(drop_marker(&[], 0, 1, 4.0), None);
+    }
+
+    /// Dropping a tab places it among the strip's tabs even when other windows' tabs sit
+    /// between them in the app's list.
+    #[test]
+    fn a_dropped_tab_lands_among_its_windows_tabs() {
+        use super::drop_target;
+        let at = |i: usize| (i, egui::Rect::from_min_size(egui::pos2(i as f32 * 100.0, 0.0), egui::vec2(90.0, 30.0)));
+        // The strip shows tabs 0, 1 and 3 of the list (2 is in another window).
+        let slots = [at(0), at(1), at(3)];
+        assert_eq!(drop_target(&slots, 0, 2), Some(3), "after the last: past list item 3 (at 2 once 0 is out)");
+        assert_eq!(drop_target(&slots, 3, 0), Some(0), "before the first");
+        assert_eq!(drop_target(&slots, 3, 1), Some(1), "before tab 1");
+        assert_eq!(drop_target(&slots, 0, 0), None, "where it is");
+        assert_eq!(drop_target(&slots, 3, 2), None, "where it is, at the end");
+        // All of the list in one strip: the index it is dropped at.
+        let all = [at(0), at(1), at(2)];
+        assert_eq!(drop_target(&all, 0, 2), Some(2));
+        assert_eq!(drop_target(&all, 2, 0), Some(0));
+        assert_eq!(drop_target(&[], 0, 0), None);
     }
 
     #[test]

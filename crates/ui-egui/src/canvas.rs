@@ -378,6 +378,9 @@ pub struct DocView {
     pub rotation: u16,
     pub current: usize,
     pub organize: bool,
+    /// The window the tab shows in ([`crate::windows`]; the main one is
+    /// [`crate::windows::MAIN`]).
+    pub window: u32,
     pub highlight_fields: bool,
     pub page_input: String,
     /// Select the replacement page label once if its editor remains focused.
@@ -706,6 +709,7 @@ impl DocView {
             rotation: 0,
             current: 0,
             organize: false,
+            window: crate::windows::MAIN,
             highlight_fields: defaults.highlight_fields,
             page_input: "1".into(),
             page_input_reselect: false,
@@ -4098,10 +4102,8 @@ fn document_page(app: &mut PdfCraftApp, index: usize, ui: &mut egui::Ui) {
     if copy_selected {
         app.execute("edit.copy");
     }
-    // Read mode hides the tools (#2646).
-    if app.mode != crate::Mode::Read {
-        quick_bar(app, avail, ui);
-    }
+    // Read mode hides the tools (#2646): its bar keeps only the workspaces, the way back out.
+    quick_bar(app, avail, ui);
     if let Some((source, file, destination)) = remote_open {
         app.open_remote_link(source, file, destination);
     }
@@ -4656,7 +4658,7 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
     let id = egui::Id::new("quick-bar");
     let idle = crate::widgets::idle(ui.ctx(), id, false, true);
     // Far enough to take the card and its shadow out of the window.
-    let reach = ui.ctx().data(|d| d.get_temp::<Rect>(id.with("idle-rect"))).map_or(80.0, |r| r.right() - area.left()) + 24.0;
+    let reach = crate::widgets::idle_rect(ui.ctx(), id).map_or(80.0, |r| r.right() - area.left()) + 24.0;
     let slide = vec2(reach.max(0.0) * idle.hidden, 0.0);
     let pos = area.left_top() + vec2(14.0, 14.0) - slide;
     // Unconstrained, or the window's edge would stop it sliding away.
@@ -4669,6 +4671,9 @@ fn quick_bar(app: &mut PdfCraftApp, area: Rect, ui: &mut egui::Ui) {
                     if icons::button(ui, icon, 32.0, app.mode == mode, tl!(label)).clicked() {
                         crate::chrome::defer_mode(ui.ctx(), mode);
                     }
+                }
+                if app.mode == crate::Mode::Read {
+                    return;
                 }
                 ui.add_space(3.0);
                 let x = ui.max_rect().x_range();

@@ -794,6 +794,7 @@ impl PdfCraftApp {
 
     /// File ▸ Close all: clean documents close at once; each one with unsaved changes asks.
     pub fn close_all(&mut self) {
+        self.merge_windows();
         for i in (0..self.views.len()).rev() {
             if !self.has_unsaved_work(i) {
                 self.close_tab(i);
@@ -895,6 +896,7 @@ impl PdfCraftApp {
     /// Request a normal application exit, preserving every unsaved document until answered.
     /// Returns false while the existing save/discard/cancel prompt needs a decision.
     pub(crate) fn request_quit(&mut self, ctx: &egui::Context) -> bool {
+        self.merge_windows();
         if self.first_dirty().is_some() {
             self.close_request = Some(CloseRequest::Quit);
             ctx.request_repaint();
@@ -935,6 +937,8 @@ impl PdfCraftApp {
         }
         // `first_dirty` counts text typed into a field as an unsaved change.
         if !self.allow_quit && self.first_dirty().is_some() {
+            // Every document is asked about in the main window.
+            self.merge_windows();
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.close_request = Some(CloseRequest::Quit);
         } else {

@@ -677,13 +677,15 @@ impl PdfCraftApp {
     /// end (#1542). The Combine files tab, when open, comes after the documents. From Home the
     /// next tab is the first and the previous one the last.
     fn step_tab(&mut self, forward: bool) {
-        let count = self.views.len() + usize::from(self.combine_tab.open);
-        let current = if self.combine_showing() { Some(self.views.len()) } else { self.active };
+        // This window's tabs, and Combine's in the main window.
+        let tabs = self.window_tabs();
+        let combine = self.combine_tab.open && self.current_window == crate::windows::MAIN;
+        let count = tabs.len() + usize::from(combine);
+        let current = if self.combine_showing() { Some(tabs.len()) } else { self.active.and_then(|a| tabs.iter().position(|&i| i == a)) };
         let Some(next) = tab_after(current, count, forward) else { return };
-        if next < self.views.len() {
-            self.active = Some(next);
-        } else {
-            self.open_combine_tab();
+        match tabs.get(next) {
+            Some(&i) => self.active = Some(i),
+            None => self.open_combine_tab(),
         }
     }
 

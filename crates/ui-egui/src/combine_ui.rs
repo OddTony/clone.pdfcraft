@@ -1889,7 +1889,8 @@ impl PdfCraftApp {
 
     /// Whether the Combine files tab is the one showing.
     pub fn combine_showing(&self) -> bool {
-        self.active.is_none() && self.combine_tab.open && self.combine_tab.focused
+        // Combine has its tab in the main window only.
+        self.active.is_none() && self.combine_tab.open && self.combine_tab.focused && self.current_window == crate::windows::MAIN
     }
 
     /// The selected rows, top to bottom (tests and automation).

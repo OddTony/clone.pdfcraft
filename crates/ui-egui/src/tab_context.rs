@@ -5,6 +5,10 @@ pub(crate) enum Action {
     Close(DocId),
     Reopen,
     Reveal(DocId),
+    /// Move to New Window.
+    NewWindow(DocId),
+    /// Move to Main Window (from a window beside it).
+    MainWindow(DocId),
 }
 
 impl crate::PdfCraftApp {
@@ -33,6 +37,8 @@ impl crate::PdfCraftApp {
                     }
                 }
             }
+            Action::NewWindow(id) => self.move_to_new_window(id),
+            Action::MainWindow(id) => self.move_to_main_window(id),
             Action::Reveal(id) => {
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Some(path) = self.session.get(id).and_then(|d| d.path.clone())

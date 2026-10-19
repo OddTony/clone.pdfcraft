@@ -85,6 +85,8 @@ pub struct Idle {
 /// A bar that `hides` also slides out of the window once idle for [`IdleChrome::hide_after`],
 /// while auto-hide is on, and the pointer coming near where it belongs brings it back.
 pub fn idle(ctx: &egui::Context, id: egui::Id, busy: bool, hides: bool) -> Idle {
+    // Each window's bars have their own clock.
+    let id = id.with(ctx.viewport_id());
     let chrome = idle_chrome(ctx);
     // A timer that is not a sensible number of seconds falls back to the default.
     let seconds = |v: f64, default: f64| if v.is_finite() { v.clamp(0.5, 600.0) } else { default };
@@ -117,7 +119,15 @@ pub fn idle(ctx: &egui::Context, id: egui::Id, busy: bool, hides: bool) -> Idle 
 /// Where the bar `id` belongs this frame (in place, even while slid away), for [`idle`] to tell
 /// when it is hovered.
 pub fn note_idle_rect(ctx: &egui::Context, id: egui::Id, rect: Rect) {
-    ctx.data_mut(|d| d.insert_temp(id.with("idle-rect"), rect));
+    // The window's id first: `viewport_id` must not be asked inside `data_mut`'s lock.
+    let key = id.with(ctx.viewport_id()).with("idle-rect");
+    ctx.data_mut(|d| d.insert_temp(key, rect));
+}
+
+/// Where the bar `id` belonged when this window last drew it ([`note_idle_rect`]).
+pub fn idle_rect(ctx: &egui::Context, id: egui::Id) -> Option<Rect> {
+    let key = id.with(ctx.viewport_id()).with("idle-rect");
+    ctx.data(|d| d.get_temp::<Rect>(key))
 }
 
 /// The card a floating bar sits on: the left tool bar and the right bar.

@@ -38,6 +38,7 @@ mod chrome;
 mod combine_grid;
 mod image_pick;
 mod tags_ui;
+mod windows;
 pub use combine_grid::ThumbState as CombineThumb;
 mod combine_ui;
 pub mod docking;
@@ -763,6 +764,13 @@ pub struct PdfCraftApp {
     /// The window's size and place kept across a minimized close (desktop).
     #[cfg(not(target_arch = "wasm32"))]
     pub window_state: window_state::WindowState,
+    /// The windows beside the main one, and which is being drawn ([`windows`]).
+    pub(crate) windows: Vec<windows::DocWindow>,
+    pub(crate) current_window: u32,
+    next_window: u32,
+    /// A document moved into the main window while another was drawn: the main window's
+    /// active tab once that one is swapped out again.
+    main_activation: Option<DocId>,
     styled: bool,
     fonts_ready: bool,
     /// The CJK fallback order the installed fonts follow (see `theme::installed_font_definitions`).
@@ -1058,6 +1066,10 @@ impl PdfCraftApp {
             ctx: None,
             #[cfg(not(target_arch = "wasm32"))]
             window_state: Default::default(),
+            windows: Vec::new(),
+            current_window: windows::MAIN,
+            next_window: windows::MAIN + 1,
+            main_activation: None,
             styled: false,
             fonts_ready: false,
             fonts_cjk: theme::CjkPreference::Default,
@@ -3153,9 +3165,13 @@ impl eframe::App for PdfCraftApp {
         // Scrolling and group-drag previews are transient: never resume after changing tabs,
         // opening a modal/palette, or returning to a window that lost focus.
         let blocked = self.modal_open() || self.palette_open || !ctx.input(|i| i.focused);
+        let shown = self.shown_documents();
         for (index, view) in self.views.iter_mut().enumerate() {
-            view.objects.set_input_blocked(blocked || self.active != Some(index));
-            if blocked || self.active != Some(index) {
+            // The main window's tabs follow its focus and prompts; another window's active tab
+            // takes input while it is drawn.
+            let hidden = if view.window == windows::MAIN { blocked || self.active != Some(index) } else { !shown.contains(&view.id) };
+            view.objects.set_input_blocked(hidden);
+            if hidden {
                 view.auto_scroll.cancel();
             }
         }
@@ -3179,6 +3195,17 @@ impl eframe::App for PdfCraftApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.draw(ui);
+        let ctx = ui.ctx().clone();
+        if self.fonts_ready {
+            self.draw_windows(&ctx);
+        }
+    }
+}
+
+impl PdfCraftApp {
+    /// Draw the window being drawn: the main one, or another with its slice swapped in.
+    pub(crate) fn draw(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         i18n::set_current(i18n::Lang::from_pref(&self.language));
         // Fonts registered via set_fonts only take effect next frame; named families would panic now.
@@ -3186,7 +3213,8 @@ impl eframe::App for PdfCraftApp {
             ctx.request_repaint();
             return;
         }
-        for view in &mut self.views {
+        let window = self.current_window;
+        for view in self.views.iter_mut().filter(|v| v.window == window) {
             view.begin_render_frame();
         }
         // How the floating chrome fades and hides this frame.
@@ -3236,7 +3264,10 @@ impl eframe::App for PdfCraftApp {
             self.finish_render_frame(&ctx);
             return;
         }
-        self.sync_window_frame(&ctx);
+        // The other windows open with the frame the main one has.
+        if self.current_window == windows::MAIN {
+            self.sync_window_frame(&ctx);
+        }
         if self.draws_window_frame() {
             window_controls::resize_edges(&ctx);
         }
@@ -3283,9 +3314,7 @@ impl eframe::App for PdfCraftApp {
         widgets::toast(self, &ctx);
         self.finish_render_frame(&ctx);
     }
-}
 
-impl PdfCraftApp {
     fn finish_render_frame(&mut self, ctx: &egui::Context) {
         // The Combine grid's thumbnails, whichever tab shows (renders under way still finish).
         self.combine_thumbs_frame(ctx);
@@ -3293,8 +3322,11 @@ impl PdfCraftApp {
         // three cache limits apply to the application, regardless of how many tabs are open.
         // Side by side: the comparison's old file renders alongside the active one.
         let partner = self.active.and_then(|i| compare_ui::side_by_side(self, i)).map(|(old, _)| old);
+        // This window's tabs: the others are drawn (and kept) by their own windows.
+        let window = self.current_window;
         for (i, view) in self.views.iter_mut().enumerate() {
-            if Some(i) != self.active
+            if view.window == window
+                && Some(i) != self.active
                 && Some(i) != partner
                 && let Some(doc) = self.session.get(view.id)
             {
