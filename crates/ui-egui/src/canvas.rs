@@ -73,7 +73,7 @@ pub(crate) fn thumbnail_rows(top: f32, bottom: f32, row_height: f32, rows: usize
     first.saturating_sub(1).min(rows)..end.saturating_add(1).min(rows)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Fit {
     Width,
     Page,
@@ -83,7 +83,7 @@ pub enum Fit {
 
 /// The base page display: one page across, or a two-page spread. Whether it scrolls continuously
 /// is a separate flag (`continuous`), as in Acrobat, so every combination is reachable (#752).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PageLayout {
     Single,
     TwoUp,

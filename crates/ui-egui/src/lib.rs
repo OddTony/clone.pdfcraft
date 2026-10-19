@@ -101,6 +101,7 @@ mod panels;
 mod pickers;
 pub mod prepare;
 mod print_ui;
+mod remembered_views;
 mod signature_drag;
 pub mod units;
 mod web_print;
@@ -572,6 +573,7 @@ pub struct PdfCraftApp {
     /// The files open when PdfCraft last closed, read from the settings for
     /// [`PdfCraftApp::reopen_last_files`].
     pub last_session: last_session::LastSession,
+    remembered_views: remembered_views::RememberedViews,
     /// Quitting closes unsaved tabs one by one: what was open when the quit began.
     quit_session: Option<last_session::LastSession>,
     /// Preferences: reload a document when its file changes on disk (#431).
@@ -938,6 +940,7 @@ impl PdfCraftApp {
             recent: Vec::new(),
             reopen_last_session: false,
             last_session: Default::default(),
+            remembered_views: Default::default(),
             quit_session: None,
             reload_changed_files: true,
             #[cfg(not(target_arch = "wasm32"))]
@@ -1343,6 +1346,7 @@ impl PdfCraftApp {
             self.active = Some(self.views.len() - 1);
         }
         self.apply_initial_view(self.views.len() - 1, &initial);
+        self.restore_remembered_view(self.views.len() - 1);
         // Full screen is asked for, never taken: a document can't put the app in full screen on
         // its own (the prompt is `dialogs::full_screen_prompt`).
         if activate && initial.full_screen {
@@ -1896,6 +1900,7 @@ impl PdfCraftApp {
         if index >= self.views.len() {
             return;
         }
+        self.remember_view(index);
         let id = self.views.remove(index).id;
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(path) = self.session.get(id).and_then(|d| d.path.clone()) {
@@ -2307,6 +2312,7 @@ impl PdfCraftApp {
         });
         // Set apart: one more key inside the macro above passes serde_json's recursion limit.
         v["redact_prefs"] = self.redact_defaults.to_json();
+        v["remembered_views"] = serde_json::json!(self.remembered_views_to_save());
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
         v.to_string()
@@ -2341,6 +2347,7 @@ impl PdfCraftApp {
             self.reopen_last_session = on;
         }
         self.last_session = last_session::LastSession::from_json(&v["last_session"]);
+        self.remembered_views = remembered_views::RememberedViews::from_json(&v["remembered_views"]);
         if let Some(on) = v["system_title_bar"].as_bool() {
             self.system_title_bar = on;
         }
@@ -2937,6 +2944,10 @@ impl eframe::App for PdfCraftApp {
             raw.events.push(egui::Event::PointerMoved(pos));
         }
         ctx.request_repaint();
+    }
+
+    fn auto_save_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(10)
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {

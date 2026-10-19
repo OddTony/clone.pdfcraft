@@ -1721,3 +1721,26 @@ fn routine_continuous_scrolling_does_not_add_navigation_history() {
     assert!(h.state().views[0].back.is_empty());
     assert!(h.state().views[0].forward.is_empty());
 }
+
+#[test]
+fn reading_history_uses_control_options_and_restores_after_rendering() {
+    let (mut h, c) = harness();
+    h.state_mut().open_bytes("remember.pdf", Some("remember.pdf".into()), fixture(8)).unwrap();
+    for (key, value) in [("layout", "two-page"), ("zoom", "137.5"), ("page", "5")] {
+        let reply = call(&mut h, &c, "ui.set", json!({"key": key, "value": value}));
+        assert!(reply.is_ok(), "{reply:?}");
+    }
+    let settings = h.state().persist();
+    let mut reopened = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.restore(&settings);
+        app.open_bytes("remember.pdf", Some("remember.pdf".into()), fixture(8)).unwrap();
+        app
+    });
+    reopened.run_steps(8);
+    let view = reopened.state().views.first().unwrap();
+    assert_eq!(view.current, 4);
+    assert_eq!(view.zoom, 1.375);
+    assert_eq!(view.layout, pdfcraft_ui_egui::canvas::PageLayout::TwoUp);
+    assert!(!view.continuous);
+}

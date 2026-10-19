@@ -52,7 +52,7 @@ impl LastSession {
 /// `path` made absolute against the current directory, without resolving links (and without
 /// Windows' `\\?\` prefix, which `canonicalize` adds).
 #[cfg(not(target_arch = "wasm32"))]
-fn absolute(path: &str) -> String {
+pub(crate) fn absolute(path: &str) -> String {
     std::path::absolute(path).map_or_else(|_| path.to_string(), |p| p.to_string_lossy().into_owned())
 }
 
@@ -122,7 +122,10 @@ impl PdfCraftApp {
                 if self.views.len() > before
                     && let Some(view) = self.views.last_mut()
                 {
-                    view.go_to_page(f.page);
+                    // Independent reading history takes priority over a stale session page.
+                    if !self.remembered_views.contains(&f.path) {
+                        view.go_to_page(f.page);
+                    }
                     if last.active.as_ref() == Some(&f.path) {
                         active = Some(self.views.len() - 1);
                     }

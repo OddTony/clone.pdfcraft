@@ -4881,3 +4881,91 @@ fn read_mode_shortcut_applies_the_open_paragraph() {
     assert!(s.views[0].line_editor.is_none(), "no editor stays open in Read mode");
     assert_eq!(s.session.get(s.views[0].id).unwrap().text_lines(0)[0].text, "Chapter One", "the edit is applied");
 }
+
+#[test]
+fn reading_history_survives_tab_close_and_restart() {
+    use pdfcraft_ui_egui::canvas::{Fit, PageLayout};
+    let mut app = PdfCraftApp::new();
+    app.open_bytes("book.pdf", Some("book.pdf".into()), fixture(8)).unwrap();
+    app.set_option("page", "6").unwrap();
+    app.set_option("zoom", "137.5").unwrap();
+    app.set_option("layout", "two-page").unwrap();
+    app.set_option("cover", "on").unwrap();
+    let autosaved = app.persist();
+    app.close_tab(0);
+    app.open_bytes("other.pdf", Some("other.pdf".into()), fixture(2)).unwrap();
+    app.close_tab(0);
+    for settings in [autosaved, app.persist()] {
+        let mut reopened = PdfCraftApp::new();
+        reopened.restore(&settings);
+        assert!(!reopened.reopen_last_session);
+        reopened.open_bytes("book.pdf", Some("book.pdf".into()), fixture(8)).unwrap();
+        let view = reopened.views.first().unwrap();
+        assert_eq!(view.current, 5);
+        assert_eq!(view.zoom, 1.375);
+        assert_eq!(view.fit, Fit::None);
+        assert_eq!(view.layout, PageLayout::TwoUp);
+        assert!(!view.continuous);
+        assert!(view.cover);
+        assert!(!reopened.session.get(view.id).unwrap().dirty);
+    }
+}
+
+#[test]
+fn reading_history_restores_fit_and_clamps_replaced_document() {
+    use pdfcraft_ui_egui::canvas::Fit;
+    let mut app = PdfCraftApp::new();
+    app.open_bytes("book.pdf", Some("book.pdf".into()), fixture(8)).unwrap();
+    let view = app.views.first_mut().unwrap();
+    view.go_to_page(7);
+    view.set_fit(Fit::Height);
+    app.close_tab(0);
+    app.open_bytes("book.pdf", Some("book.pdf".into()), fixture(2)).unwrap();
+    assert_eq!(app.views.first().unwrap().current, 1);
+    assert_eq!(app.views.first().unwrap().fit, Fit::Height);
+    app.set_option("page", "1").unwrap();
+    assert_eq!(app.views.first().unwrap().current, 0);
+}
+
+#[test]
+fn reading_history_takes_priority_over_old_session_pages() {
+    let dir = TempPdfs::new("reading-history");
+    let path = dir.file("book.pdf", 8);
+    let mut app = PdfCraftApp::new();
+    app.reopen_last_session = true;
+    app.open_path(&path);
+    app.set_option("page", "6").unwrap();
+    app.set_option("zoom", "125").unwrap();
+    let mut settings: serde_json::Value = serde_json::from_str(&app.persist()).unwrap();
+    settings["last_session"]["files"][0]["page"] = serde_json::json!(0);
+    let mut reopened = PdfCraftApp::new();
+    reopened.restore(&settings.to_string());
+    reopened.reopen_last_files(&[]);
+    assert_eq!(reopened.views.first().unwrap().current, 5);
+    assert_eq!(reopened.views.first().unwrap().zoom, 1.25);
+}
+
+#[test]
+fn reading_history_restores_after_background_open_finishes() {
+    use pdfcraft_ui_egui::canvas::PageLayout;
+    let dir = TempPdfs::new("reading-history-background");
+    let path = dir.file("book.pdf", 8);
+    let original = std::fs::read(&path).unwrap();
+    let mut app = PdfCraftApp::new();
+    app.open_path(&path);
+    app.set_option("layout", "two-page").unwrap();
+    app.set_option("zoom", "137.5").unwrap();
+    app.set_option("page", "5").unwrap();
+    let settings = app.persist();
+    let mut h = harness(1, move |app| app.restore(&settings));
+    h.state_mut().open_path(&path);
+    support::wait_until(&mut h, "remembered PDF opens in background", |app| app.views.len() == 2);
+    h.run_steps(4);
+    let view = h.state().views.last().unwrap();
+    assert_eq!(view.current, 4);
+    assert_eq!(view.zoom, 1.375);
+    assert_eq!(view.layout, PageLayout::TwoUp);
+    assert!(!view.continuous);
+    assert!(!h.state().session.get(view.id).unwrap().dirty);
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+}

@@ -171,6 +171,8 @@ Ranked; detail and the full milestone table in [docs/roadmap.md](docs/roadmap.md
 
 ## Progress log
 
+- **2026-10-19 (M3, per-file reading history):** Applied local reading history to the current fork, with a maximum of 5,000 records. Stores page, exact zoom, fit mode, single/two-page display, continuous scrolling and cover independently of session reopening. Captures tab close and 10-second autosaves; restores after inline/background preparation without changing the PDF. Seven new tests pass, including background opening, rendered control interaction, corrupt settings and 5,000-record roundtrip/eviction; three existing session regressions also pass. Scoped Clippy (all targets, warnings denied) and formatting checks pass.
+
 - **2026-10-18 (M6, #2892):** Push-button normal labels are editable per widget through Options and form_set_props, independently of field names; rendering, undo/redo and incremental/full save/reopen are covered. Estimates unchanged.
 
 - **2026-10-18 (M7, #3212):** Headers, Bates numbers, watermarks and added text stay visible after unfinished marked content, with original content preserved.
