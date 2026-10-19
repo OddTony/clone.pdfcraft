@@ -3,10 +3,17 @@
 //! On the desktop the export runs on a worker thread and reports progress in the notice bar;
 //! on the web it runs in place and downloads the files.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
 
 use egui::{Align, Layout};
-use pdfcraft_engine::export::{ExportSource, Exporter, ImageFormat};
+use pdfcraft_engine::{
+    DocId,
+    export::{ExportSource, Exporter, ImageFormat, SizeEstimate},
+};
 
 use crate::marks_ui::PageRange;
 use crate::theme::{self, Tokens};
@@ -38,8 +45,148 @@ impl Default for ExportDraft {
 /// Progress of a background export: (done, total, final message once finished).
 pub type ExportStatus = Arc<Mutex<Option<(usize, usize, Option<String>)>>>;
 
+/// What the size estimate was made for: a new document state, page range, resolution or format
+/// starts a new one.
+#[derive(Clone, PartialEq, Eq)]
+struct SizeKey {
+    doc: DocId,
+    generation: u64,
+    pages: Vec<usize>,
+    /// The resolution's bits, so the key compares exactly without a float.
+    dpi: u64,
+    format: ImageFormat,
+}
+
+struct SizeJob {
+    key: SizeKey,
+    receiver: mpsc::Receiver<Result<SizeEstimate, String>>,
+    cancel: Arc<AtomicBool>,
+}
+
+impl Drop for SizeJob {
+    fn drop(&mut self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+}
+
+/// The export dialog's size estimate: at most one worker, and no stale result after the settings,
+/// the document or the page range change.
+#[derive(Default)]
+pub(crate) struct SizeDraft {
+    key: Option<SizeKey>,
+    /// The key the previous frame had. A job starts only once the settings settle, so dragging the
+    /// quality slider does not start a worker per frame.
+    settled: Option<SizeKey>,
+    job: Option<SizeJob>,
+    result: Option<Result<SizeEstimate, String>>,
+}
+
+impl SizeDraft {
+    /// Stop measuring and forget the last estimate (the dialog closed, or another document is up).
+    pub(crate) fn cancel(&mut self) {
+        if let Some(job) = &self.job {
+            job.cancel.store(true, Ordering::Relaxed);
+        }
+        self.key = None;
+        self.settled = None;
+        self.job = None;
+        self.result = None;
+    }
+
+    fn update(&mut self, key: SizeKey, source: impl FnOnce() -> ExportSource, ctx: &egui::Context, inline: bool) {
+        if self.key.as_ref() != Some(&key) {
+            if let Some(job) = &self.job {
+                job.cancel.store(true, Ordering::Relaxed);
+            }
+            self.key = Some(key.clone());
+            self.settled = None;
+            self.result = None;
+        }
+        if let Some(job) = &self.job {
+            let received = match job.receiver.try_recv() {
+                Ok(result) => Some(result),
+                Err(mpsc::TryRecvError::Empty) => None,
+                Err(mpsc::TryRecvError::Disconnected) => Some(Err("the size estimate stopped unexpectedly".to_string())),
+            };
+            if let Some(result) = received {
+                if job.key == key && !job.cancel.load(Ordering::Relaxed) {
+                    self.result = Some(result);
+                }
+                self.job = None;
+            }
+        }
+        if self.job.is_some() || self.result.is_some() {
+            return;
+        }
+        if self.settled.as_ref() != Some(&key) {
+            self.settled = Some(key);
+            return;
+        }
+        let source = source();
+        let (sender, receiver) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (pages, dpi, format) = (key.pages.clone(), f64::from_bits(key.dpi), key.format);
+        self.job = Some(SizeJob { key, receiver, cancel: cancel.clone() });
+        let ctx = ctx.clone();
+        let work = move || {
+            let result = Exporter::from_source(source).estimate(&pages, dpi, format);
+            let _ = sender.send(result);
+            ctx.request_repaint();
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        if !inline {
+            if let Err(error) = std::thread::Builder::new().name("export-size".into()).spawn(work) {
+                self.job = None;
+                self.result = Some(Err(error.to_string()));
+            }
+            return;
+        }
+        let _ = inline;
+        work();
+    }
+}
+
+/// An estimated size in the unit that keeps it short: an estimate is approximate, so it keeps one
+/// decimal at most.
+fn approx_size(bytes: u64) -> String {
+    let (mb, kb) = (bytes as f64 / (1u64 << 20) as f64, bytes as f64 / (1u64 << 10) as f64);
+    if mb >= 10.0 {
+        format!("{mb:.0} MB")
+    } else if mb >= 1.0 {
+        format!("{mb:.1} MB")
+    } else if kb >= 10.0 {
+        format!("{kb:.0} KB")
+    } else if kb >= 1.0 {
+        format!("{kb:.1} KB")
+    } else {
+        crate::panels::byte_count(bytes as usize)
+    }
+}
+
+/// The size the files will take, that it is being measured, or why it is unknown.
+fn size_line(ui: &mut egui::Ui, size: &SizeDraft, t: &Tokens) {
+    match &size.result {
+        Some(Ok(estimate)) => {
+            let text = crate::i18n::fmt(tl!("Estimated size: about {size}"), &[("size", &approx_size(estimate.total()))]);
+            ui.label(egui::RichText::new(text).color(t.text_muted))
+                .on_hover_text(tl!("Measured on a sample of the pages at this resolution and format; the files may differ."));
+        }
+        Some(Err(error)) => {
+            let text = crate::i18n::fmt(tl!("No size estimate: {e}"), &[("e", error)]);
+            ui.label(egui::RichText::new(text).small().color(t.text_faint));
+        }
+        None => {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(egui::RichText::new(tl!("Estimating size…")).color(t.text_faint));
+            });
+        }
+    }
+}
+
 pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: ExportKind) -> (bool, bool) {
-    let count = app.active_ids().and_then(|(_, id)| app.session.get(id)).map(|d| d.info.pages.len()).unwrap_or(0);
+    let active = app.active_ids();
+    let count = active.and_then(|(_, id)| app.session.get(id)).map(|d| d.info.pages.len()).unwrap_or(0);
     let d = &mut app.export_draft;
     ui.label(
         egui::RichText::new(match kind {
@@ -87,6 +234,17 @@ pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens, kind: E
                 .small()
                 .color(t.text_faint),
         );
+        // What the files will take, measured on a sample of the pages by a worker (#2819).
+        let (pages, dpi, format) = (d.range.pages(count), d.dpi, d.format);
+        if !pages.is_empty()
+            && let Some((_, id)) = active
+            && let Some(doc) = app.session.get(id)
+        {
+            let key = SizeKey { doc: id, generation: doc.edit_generation(), pages, dpi: dpi.to_bits(), format };
+            let size = &mut app.export_size;
+            size.update(key, || doc.export_source(), ui.ctx(), app.run_inline);
+            size_line(ui, &app.export_size, t);
+        }
     } else if kind == ExportKind::AllImages {
         ui.horizontal(|ui| {
             ui.label(tl!("Exclude images smaller than"));
