@@ -1571,3 +1571,108 @@ fn text_box_properties_change_the_font_size() {
     assert_eq!(doc.comment_props(0, 0).unwrap().font_size, Some(30.0));
     assert_eq!(doc.can_undo(), Some("Change comment properties"));
 }
+
+/// #2137 review: a pop-up is edited under comment permission, not change permission: in a
+/// document whose security allows comments but not changes, an open pop-up still takes typing
+/// and closes.
+#[test]
+fn a_pop_up_is_editable_where_comments_are_allowed_but_changes_are_not() {
+    let plain = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Annots [4 0 R 5 0 R] >> endobj
+4 0 obj << /Type /Annot /Subtype /Text /Rect [20 150 40 170] /T (Ada) /Popup 5 0 R >> endobj
+5 0 obj << /Type /Annot /Subtype /Popup /Parent 4 0 R /Rect [60 60 260 160] /Open true >> endobj
+trailer << /Root 1 0 R >>
+%%EOF";
+    let mut doc = pdfcraft_cos::Document::open(std::sync::Arc::new(plain.to_vec())).unwrap();
+    doc.set_encryption(&pdfcraft_cos::NewEncryption {
+        algorithm: pdfcraft_cos::Algorithm::Aes256,
+        user_password: "",
+        owner_password: "owner",
+        // Everything but bit 4, modifying the document.
+        permissions: -1 ^ 8,
+        encrypt_metadata: true,
+        seed: [4; 32],
+    })
+    .unwrap();
+    let bytes = pdfcraft_cos::write_full(&doc, &Default::default()).unwrap();
+    let mut h = harness(move |app| {
+        app.open_bytes("restricted.pdf", None, bytes).expect("opens");
+        // Only the restricted document, so it is the first view.
+        app.close_tab(0);
+    });
+    h.run_steps(6);
+    let (_, window) = h.state().views[0].comments.popup_rects.first().copied().expect("the open pop-up shows");
+    field(&h, "Add a comment");
+    let close = h.query_all_by_label("Close").find(|n| window.contains(n.rect().center())).expect("the pop-up's ×");
+    close.click();
+    h.run_steps(4);
+    let note = comments(&h).into_iter().find(|a| a.subtype == "Text").expect("the note");
+    assert_eq!(note.popup.map(|p| p.open), Some(false), "closed");
+}
+
+/// A double-click on a sticky note opens its pop-up window on the page, where its text is read
+/// and edited; the title bar drags it (saved as the pop-up's place, one undo step); × closes it
+/// (comment.popups, comment.connector-lines).
+#[test]
+fn a_double_click_opens_a_notes_pop_up_which_drags_and_closes() {
+    // Frames a sixtieth apart, so two clicks land within egui's double-click time.
+    let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).with_step_dt(1.0 / 60.0).build_eframe(move |_cc| {
+        let mut app = PdfCraftApp::new();
+        app.set_option("language", "en").unwrap();
+        app.open_bytes("text.pdf", None, TEXT_FIXTURE.to_vec()).expect("opens");
+        app.set_option("left", "closed").unwrap();
+        app.set_option("author", "Tester").unwrap();
+        app.set_option("quick", "note").unwrap();
+        app
+    });
+    h.run_steps(4);
+    settle(&mut h);
+    click_pt(&mut h, (60.0, 160.0));
+    field(&h, "Add a comment").type_text("Please check");
+    h.run_steps(2);
+    h.get_by_label("Post").click();
+    h.run_steps(3);
+    let note = comments(&h).into_iter().find(|a| a.subtype == "Text").expect("the note");
+    assert_eq!(note.popup.map(|p| p.open), Some(false));
+    assert!(h.state().views[0].comments.popup_rects.is_empty(), "closed pop-ups are not shown");
+    // Well after the Post click, so egui does not count the next clicks with it.
+    h.run_steps(45);
+
+    // Double-click the icon.
+    let icon = at(&h, (note.rect[0] + note.rect[2]) / 2.0, (note.rect[1] + note.rect[3]) / 2.0);
+    h.hover_at(icon);
+    h.run_steps(1);
+    for _ in 0..2 {
+        h.drag_at(icon);
+        h.run_steps(1);
+        h.drop_at(icon);
+        h.run_steps(1);
+    }
+    h.run_steps(4);
+    let note = comments(&h).into_iter().find(|a| a.subtype == "Text").expect("the note");
+    assert_eq!(note.popup.map(|p| p.open), Some(true), "the pop-up opened");
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Open comment pop-up"));
+    let (_, window) = h.state().views[0].comments.popup_rects.first().copied().expect("the pop-up is on screen");
+    h.get_by_label("Tester");
+
+    // Drag the title bar 80 px right and 40 px down: the pop-up's place on the page moves.
+    let before = note.popup.unwrap().rect;
+    let bar = pos2(window.left() + 30.0, window.top() + 12.0);
+    drag(&mut h, bar, bar + egui::vec2(80.0, 40.0));
+    let note = comments(&h).into_iter().find(|a| a.subtype == "Text").expect("the note");
+    let after = note.popup.unwrap().rect;
+    // 80 × 40 screen pixels is about 20 × 10 pt at this zoom.
+    assert!(after[0] > before[0] + 10.0 && after[1] < before[1] - 5.0, "moved right and down on the page: {before:?} -> {after:?}");
+    assert!(((after[2] - after[0]) - (before[2] - before[0])).abs() < 0.5, "the same width");
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Move comment pop-up"));
+
+    // Close it.
+    h.get_by_label("Close").click();
+    h.run_steps(4);
+    let note = comments(&h).into_iter().find(|a| a.subtype == "Text").expect("the note");
+    assert_eq!(note.popup.map(|p| p.open), Some(false));
+    assert!(h.state().views[0].comments.popup_rects.is_empty());
+    assert_eq!(h.state().session.get(h.state().views[0].id).unwrap().can_undo(), Some("Close comment pop-up"));
+}
