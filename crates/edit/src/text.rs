@@ -1466,7 +1466,8 @@ fn fallback_face<'a>(faces: &[&'a CraftFont], chars: &[char], has_glyph: impl Fn
 /// This build has no Korean fallback face (NanumGothic).
 fn no_korean_font() -> EditError {
     EditError::Invalid(
-        "this text needs PdfCraft's Korean fallback font (NanumGothic), which this build doesn't include          (to build it in, set CRAFT_FONTS_DIR to a craft-fonts checkout that has a Kore face)"
+        "this text needs PdfCraft's Korean fallback font (NanumGothic), which this build doesn't include \
+         (to build it in, set CRAFT_FONTS_DIR to a craft-fonts checkout that has a Kore face)"
             .into(),
     )
 }

@@ -196,7 +196,17 @@ impl KoreanFont {
                 let w = f64::from(advances.advance_width(skrifa::GlyphId::new(u32::from(old))).unwrap_or(0.0)) / upem;
                 Some((c, (new_gid(&layout.base, old)?, if w.is_finite() { w.clamp(0.0, 16.0) } else { 0.0 })))
             })
-            .collect();
+            .collect::<BTreeMap<char, (u16, f64)>>();
+        // The program embedded in the document must agree with the CIDs recomputed from this build's face: a
+        // craft-fonts revision with another glyph order, or another producer's dictionary carrying the key, would
+        // otherwise get strings that pick the wrong glyphs (the subset's own cmap maps BMP characters to its glyph ids).
+        let program = crate::pdf::embedded_sfnt(doc, d)?;
+        let sub = FontRef::new(&program).ok()?;
+        let map = sub.charmap();
+        let agrees = |c: char, cid: u16| u32::from(c) > 0xFFFF || map.map(c).map(|g| g.to_u32()) == Some(u32::from(cid));
+        if !cids.iter().all(|(&c, &(cid, _))| agrees(c, cid)) {
+            return None;
+        }
         Some(Self { obj, cids })
     }
 
@@ -570,6 +580,14 @@ mod tests {
         assert!(outlines.get(skrifa::GlyphId::new(u32::from(cid_bak))).is_some());
         // Reading it again gives the same font.
         assert_eq!(KoreanFont::from_existing(&doc, k.obj), Some(k.clone()));
+        // A character list that disagrees with the embedded program isn't trusted (its CIDs would pick the wrong glyphs).
+        let mut other = doc.clone();
+        other
+            .update_dict(k.obj, |d| {
+                d.set(KOREAN_MARK.to_vec(), PdfString::text(&text.replace('박', "글")));
+            })
+            .unwrap();
+        assert_eq!(KoreanFont::from_existing(&other, k.obj), None);
         // Missing characters are drawn as `?`.
         assert_eq!(k.encode("힣"), k.encode("?"));
         assert!((korean_text_width("박검토 A-1", 10.0) - k.width("박검토 A-1", 10.0)).abs() < 1e-6);

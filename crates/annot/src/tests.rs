@@ -1343,6 +1343,16 @@ fn korean_comment_text_is_drawn_in_an_embedded_korean_font() {
         assert_eq!(m.decode(&k.encode(want)), want);
     };
     check(&doc, t, "한글 주석 (검토)");
+    // A display-only copy has no Korean font: its Hangul comes out as `?`, and the copy says so.
+    let r = annots(&doc, page_refs(&doc).unwrap()[0])[t].as_ref().unwrap();
+    let mut bare = doc.clone();
+    bare.update_dict(r, |d| {
+        d.remove(b"AP");
+    })
+    .unwrap();
+    let shown = with_missing_appearances(&bare).expect("a display copy");
+    assert_eq!(shown.get(r).as_dict().and_then(pdfcraft_fonts::undrawn_mark), Some('한'));
+    assert_eq!(mark(&doc, t), None, "the document's own appearance, in NanumGothic, is unmarked");
     let typed = Shape::Typewriter { rect: [100.0, 700.0, 200.0, 716.0], font_size: 11.0 };
     let f = add_annotation(
         &mut doc,

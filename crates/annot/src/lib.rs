@@ -1224,7 +1224,7 @@ pub fn add_annotation(doc: &mut Document, new: &NewAnnotation, meta: &Meta) -> R
     // for good: refused before anything is added. A comment's own text is stored as typed and
     // drawn with `?` for what the standard fonts can't draw (marked, see `draw_appearance`).
     if d.name(b"Subtype") == Some(b"Redact")
-        && let Some((what, c)) = appearance::undrawable_text(&d)
+        && let Some((what, c)) = appearance::undrawable_text(&d, true)
     {
         return Err(AnnotError::Undrawable(pdfcraft_fonts::undrawable_message(what, c)));
     }
@@ -1282,7 +1282,7 @@ pub fn orient_image_stamp(doc: &mut Document, page: usize, index: usize, rotatio
 fn refuse_foreign_text(doc: &Document, d: &Dict) -> Result<(), AnnotError> {
     let drawn_elsewhere =
         d.get(b"AP").is_some_and(|ap| doc.resolve(ap).as_dict().is_some_and(|ap| ap.contains(b"N"))) && pdfcraft_fonts::undrawn_mark(d).is_none();
-    if drawn_elsewhere && let Some((what, c)) = appearance::undrawable_text(d) {
+    if drawn_elsewhere && let Some((what, c)) = appearance::undrawable_text(d, true) {
         return Err(AnnotError::Undrawable(format!(
             "PdfCraft can't redraw this comment: the standard fonts can't draw \"{}\" (U+{:04X}) in {what}, which would then show as ? (the comment was left as it is)",
             c.escape_debug(),
@@ -1323,7 +1323,7 @@ fn draw_appearance(doc: &mut Document, r: ObjRef) -> Result<(), AnnotError> {
     let subtype = String::from_utf8_lossy(d.name(b"Subtype").unwrap_or_default()).into_owned();
     let korean = korean_font(doc, &d)?;
     let Some(stream) = build_appearance_with(doc, &d, korean.as_ref()) else { return Err(AnnotError::Unsupported(subtype)) };
-    apply_appearance(doc, r, &d, stream)
+    apply_appearance(doc, r, &d, stream, korean.is_some())
 }
 
 /// Put the NanumGothic subset for a text box with Hangul (FreeText, callout, Fill & Sign text) in the document.
@@ -1363,10 +1363,11 @@ fn build_appearance_with(doc: &Document, d: &Dict, korean: Option<&pdfcraft_font
     Some(stream)
 }
 
-/// Store a built appearance on the annotation: the cheap half of [`set_appearance`].
-fn apply_appearance(doc: &mut Document, r: ObjRef, d: &Dict, stream: Stream) -> Result<(), AnnotError> {
-    // Characters the standard fonts can't draw came out as `?`: mark the annotation with the first.
-    let missing = appearance::undrawable_text(d).map(|(_, c)| c);
+/// Store a built appearance on the annotation: the cheap half of [`set_appearance`]. `korean`: whether
+/// `stream` draws Hangul in NanumGothic (a display-only build doesn't, so its Hangul came out as `?`).
+fn apply_appearance(doc: &mut Document, r: ObjRef, d: &Dict, stream: Stream, korean: bool) -> Result<(), AnnotError> {
+    // Characters the fonts used can't draw came out as `?`: mark the annotation with the first.
+    let missing = appearance::undrawable_text(d, korean).map(|(_, c)| c);
     let ap = doc.add(Object::Stream(stream));
     // A copy (a shared /AP is left alone) that keeps unknown entries; the old down and rollover
     // appearances would show the previous look on press or hover, so they go with the old /N.
@@ -1464,13 +1465,13 @@ pub fn with_missing_appearances_cached(doc: &Document, cache: &mut AppearanceCac
             }
             if let Some(stream) = cache.get(r) {
                 // Fails only when `r` isn't a dictionary, which the cached build ruled out.
-                apply_appearance(copy.get_or_insert_with(|| doc.clone()), r, &d, stream).ok();
+                apply_appearance(copy.get_or_insert_with(|| doc.clone()), r, &d, stream, false).ok();
                 continue;
             }
             let Some(stream) = build_appearance(doc, &d) else { continue };
             cache.insert(r, &stream);
             // Fails only when `r` isn't a dictionary, which the build just ruled out.
-            apply_appearance(copy.get_or_insert_with(|| doc.clone()), r, &d, stream).ok();
+            apply_appearance(copy.get_or_insert_with(|| doc.clone()), r, &d, stream, false).ok();
         }
     }
     copy

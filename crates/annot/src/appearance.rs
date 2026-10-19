@@ -287,12 +287,16 @@ fn text_turn(d: &Dict) -> i64 {
 /// they can't, which would come out as `?`: what it is (for the message) and the character. The
 /// text of a text box, callout or Fill & Sign text, a measurement's label, a dynamic stamp's
 /// "By …" line, and a redaction mark's overlay text (drawn when it is applied). `None` when all of
-/// it can be drawn.
-pub fn undrawable_text(d: &Dict) -> Option<(&'static str, char)> {
+/// it can be drawn. `korean`: whether a text box's Hangul is drawn in NanumGothic (the font [`build_with`]
+/// was given, or the one a redraw embeds) rather than coming out as `?` in the standard fonts.
+pub fn undrawable_text(d: &Dict, korean: bool) -> Option<(&'static str, char)> {
     let text = |key: &[u8]| d.get(key).and_then(Object::as_string).map(PdfString::to_text);
     let (what, text) = match d.name(b"Subtype")? {
-        // A text box with Hangul is drawn in NanumGothic: only characters NanumGothic lacks are refused.
-        b"FreeText" => return text(b"Contents").and_then(|t| pdfcraft_fonts::first_undrawable_korean(&t)).map(|c| ("the comment's text", c)),
+        // A text box with Hangul drawn in NanumGothic: only characters NanumGothic lacks are refused.
+        b"FreeText" => {
+            let first = |t: &str| if korean { pdfcraft_fonts::first_undrawable_korean(t) } else { first_undrawable(t) };
+            return text(b"Contents").and_then(|t| first(&t)).map(|c| ("the comment's text", c));
+        }
         b"Line" | b"PolyLine" | b"Polygon" => ("the measurement label", text(b"PCMeasureValue")?),
         b"Stamp" if matches!(d.get(b"PCStamp"), Some(Object::Bool(true))) => ("the stamp's \"By\" line", text(b"PCByLine")?),
         // Drawn in Helvetica when the redaction is applied: refused when it is marked.
