@@ -68,6 +68,7 @@ impl PdfCraftApp {
                 }
                 view.signature_drag.committed(&edit, doc.edit_generation());
                 view.move_background.committed(&edit, doc.edit_generation());
+                view.image_drag_preview.committed(&edit);
                 if let Some(page) = comment_page(&edit).or_else(|| content_page(&edit)) {
                     // Comment and content edits change one page: keep every other raster.
                     view.page_changed(page);
@@ -181,6 +182,7 @@ impl PdfCraftApp {
                 if let Some(view) = self.views.get_mut(i) {
                     // A drawing whose annotation wasn't added must not stay painted.
                     view.comments.drawings_refused();
+                    view.image_drag_preview.clear();
                 }
                 let message = if matches!(edit, Edit::MoveObjects { .. }) { crate::object_ui::move_error(&e) } else { e.to_string() };
                 self.notify_fmt("{label} failed: {e}", &[("label", &crate::i18n::edit_label(&label)), ("e", &message)]);
@@ -218,6 +220,7 @@ impl PdfCraftApp {
         let result = if undo { self.session.undo(id) } else { self.session.redo(id) };
         match result {
             Ok(label) => {
+                self.views[i].image_drag_preview.clear();
                 if let Some(doc) = self.session.get(id) {
                     self.views[i].document_changed(&doc.info);
                 }

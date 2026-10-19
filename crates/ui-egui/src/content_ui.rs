@@ -90,6 +90,31 @@ pub struct ContentView {
 }
 
 impl ContentView {
+    pub(crate) fn moving_added_image(&self, added: &[Added]) -> bool {
+        matches!((self.grab, self.selected), (Some((gp, Grab::Move, _)), Some((sp, i))) if gp == sp
+            && on_page(added, sp).into_iter().any(|(index, a)| index == i && matches!(a.content, AddedContent::Image(_))))
+    }
+
+    pub(crate) fn image_preview_target(
+        &self,
+        ui: &egui::Ui,
+        xf: &PageXform,
+        page: usize,
+        info: &DocInfo,
+        added: &[Added],
+    ) -> Option<(usize, [f64; 4])> {
+        let (gp, Grab::Move, start) = self.grab? else { return None };
+        let (sp, index) = self.selected?;
+        if gp != page || sp != page {
+            return None;
+        }
+        let (_, a) = on_page(added, page).into_iter().find(|(i, a)| *i == index && matches!(a.content, AddedContent::Image(_)))?;
+        let p = ui.input(|i| i.pointer.hover_pos())?;
+        let r = screen_rect(xf, info, page, a.content.rect()).translate(p - start);
+        let (p0, p1) = (to_display(xf, info, page, r.left_bottom()), to_display(xf, info, page, r.right_top()));
+        Some((index, [p0[0], p0[1], p1[0], p1[1]]))
+    }
+
     pub(crate) fn finish_draft(&mut self, added: &[Added]) -> Option<Edit> {
         self.draft.take().and_then(|d| finish(self, d, added))
     }
@@ -109,8 +134,8 @@ impl ContentView {
     }
 }
 
-/// While an added item is moved, the page without it, rendered once per gesture: the item's own
-/// pixels follow the pointer over it instead of staying put until release (#1488).
+/// While added text is moved, the page without it, rendered once per gesture: its pixels
+/// follow the pointer over it instead of staying put until release (#1488).
 #[derive(Default)]
 pub(crate) struct MoveBackground {
     key: Option<(u64, usize, usize)>,
@@ -131,7 +156,7 @@ impl MoveBackground {
 
     pub fn prepare(&mut self, ctx: &egui::Context, doc: &pdfcraft_engine::Document, cv: &ContentView, scale: f32) {
         let key = match (cv.grab, cv.selected) {
-            (Some((gp, Grab::Move, _)), Some((sp, si))) if gp == sp => Some((doc.edit_generation(), sp, si)),
+            (Some((gp, Grab::Move, _)), Some((sp, si))) if gp == sp && !cv.moving_added_image(doc.added()) => Some((doc.edit_generation(), sp, si)),
             _ => None,
         };
         if !(key.is_none() && self.settling.is_some()) && self.key != key {

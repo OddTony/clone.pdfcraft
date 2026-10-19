@@ -41,7 +41,7 @@ pub mod xfa;
 
 pub use signature_image::{ImageSignaturePreview, SignatureImage};
 pub use signature_scan::{PhotoRect, ScanError, SignaturePhoto, Turn};
-pub use text_preview::TextEditPreview;
+pub use text_preview::{ImageMovePreviewSource, TextEditPreview};
 
 pub use pdfcraft_organize::{BoxSpec, FieldConflicts, PageBox, SplitBy, Transition, TransitionSpec, split_ranges};
 

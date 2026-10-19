@@ -537,6 +537,8 @@ Newest first: the date, what moved, and the new overall estimate.
 
 ## Revision history
 
+**2026-10-19 · minor:** M7/#3292 candidate: existing and inserted-image drag previews preserve page paint order using a rendered document clone. Synthetic engine and UI regressions cover watermarks, undo and complex pages; browser previews render synchronously. Estimates unchanged.
+
 **2026-10-15 · minor:** M14/#2383 candidate: GPU device requests clamp unsupported limits while retaining the adapter texture extent. Synthetic V3D/downlevel regressions and Windows GPU-required tests pass; Raspberry Pi hardware remains unverified. Estimates unchanged.
 
 | Date | Change | Summary |

@@ -12,6 +12,39 @@ pub struct TextEditPreview {
     config: RenderConfig,
 }
 
+/// A snapshot for rendering image moves without holding or editing the live document.
+pub struct ImageMovePreviewSource {
+    cos: pdfcraft_cos::Document,
+    config: RenderConfig,
+    page: usize,
+    index: usize,
+    added: Option<pdfcraft_edit::Content>,
+}
+
+impl ImageMovePreviewSource {
+    pub fn preview(&self, target: [f64; 4]) -> Result<TextEditPreview, String> {
+        guard(|| {
+            if !target.iter().all(|v| v.is_finite()) || target[0] >= target[2] || target[1] >= target[3] {
+                return Err("image preview bounds must be finite and non-empty".into());
+            }
+            let mut cos = self.cos.clone();
+            if let Some(content) = &self.added {
+                pdfcraft_edit::update_content(&mut cos, self.page, self.index, &content.with_rect(target)).map_err(|e| e.to_string())?;
+            } else {
+                let image =
+                    pdfcraft_edit::page_images(&cos, self.page).map_err(|e| e.to_string())?.into_iter().nth(self.index).ok_or("image not found")?;
+                let transform = pdfcraft_edit::rect_to_rect(image.rect, target);
+                pdfcraft_edit::change_image(&mut cos, self.page, self.index, &pdfcraft_edit::ImageChange::Transform(transform))
+                    .map_err(|e| e.to_string())?;
+            }
+            // Keep annotations without stored appearances visible, as in the normal viewer.
+            let cos = pdfcraft_annot::with_missing_appearances(&cos).unwrap_or(cos);
+            let bytes = Arc::new(pdfcraft_cos::write_incremental(&cos, &pdfcraft_cos::SaveOptions::default()).map_err(|e| e.to_string())?);
+            Ok(TextEditPreview { page: self.page, bytes, config: self.config.clone() })
+        })?
+    }
+}
+
 impl TextEditPreview {
     pub fn renderer(&self) -> RenderPool {
         RenderPool::new(self.bytes.clone(), 1, self.config.clone())
@@ -33,6 +66,28 @@ impl TextEditPreview {
 }
 
 impl Document {
+    /// Render a page with an existing image moved on a private copy, preserving paint order.
+    /// Preparing this preview never changes the document or its edit history.
+    pub fn image_move_preview(&self, page: usize, index: usize, target: [f64; 4]) -> Result<TextEditPreview, String> {
+        self.image_move_preview_source(page, index)?.preview(target)
+    }
+
+    /// Capture the source once so a drag worker can render successive placements.
+    pub fn image_move_preview_source(&self, page: usize, index: usize) -> Result<ImageMovePreviewSource, String> {
+        let editor = self.editor.as_ref().ok_or("the document can't be read")?;
+        Ok(ImageMovePreviewSource { cos: editor.cos.clone(), config: self.config.clone(), page, index, added: None })
+    }
+
+    /// Capture an inserted image for the same composited drag preview.
+    pub fn added_image_move_preview_source(&self, page: usize, index: usize) -> Result<ImageMovePreviewSource, String> {
+        let content = self.added().iter().filter(|a| a.page == page).nth(index).map(|a| a.content.clone()).ok_or("added image not found")?;
+        if !matches!(content, crate::AddedContent::Image(_)) {
+            return Err("the selected added item is not an image".into());
+        }
+        let editor = self.editor.as_ref().ok_or("the document can't be read")?;
+        Ok(ImageMovePreviewSource { cos: editor.cos.clone(), config: self.config.clone(), page, index, added: Some(content) })
+    }
+
     /// Background for retyping an added text item, without changing its saved content.
     pub fn added_text_preview(&self, page: usize, index: usize) -> Result<TextEditPreview, String> {
         guard(|| {
