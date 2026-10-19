@@ -58,9 +58,33 @@ All paths and endpoints are strictly environment-independent. Code examples use 
 - `new(executor: Arc<dyn OperationExecutor>) -> LocalClient`: Creates a client with an injected executor.
 - `default() -> LocalClient`: Creates a client backed by the production automation engine.
 - `with_limits(limits: ResourceLimits) -> LocalClient`: Configures request and memory thresholds.
+- `call_tool(name: &str, args: serde_json::Value) -> Result<Vec<Content>, SdkError>`: Universal execution bridge to all 149 engine tools.
 - `merge(sources: &[DocumentSource], options: MergeOptions) -> Result<DocumentResult, SdkError>`
 - `split(source: &DocumentSource, mode: SplitMode) -> Result<SplitResult, SdkError>`
 - `render_page(source: &DocumentSource, page: usize, options: RenderOptions) -> Result<DocumentResult, SdkError>`
+- `rotate_pages(file: &DocumentSource, options: &RotatePagesOptions) -> Result<DocumentResult, SdkError>`
+- `extract_pages(file: &DocumentSource, options: &ExtractPagesOptions) -> Result<DocumentResult, SdkError>`
+- `delete_pages(file: &DocumentSource, options: &DeletePagesOptions) -> Result<DocumentResult, SdkError>`
+- `insert_pages(file: &DocumentSource, insert_source: &DocumentSource, options: &InsertPagesOptions) -> Result<DocumentResult, SdkError>`
+- `add_bookmark(file: &DocumentSource, request: &BookmarkAddRequest) -> Result<DocumentResult, SdkError>`
+- `remove_bookmark(file: &DocumentSource, request: &BookmarkRemoveRequest) -> Result<DocumentResult, SdkError>`
+- `list_bookmarks(file: &DocumentSource) -> Result<Vec<Bookmark>, SdkError>`
+- `add_highlight(file: &DocumentSource, request: &HighlightRequest) -> Result<DocumentResult, SdkError>`
+- `add_underline(file: &DocumentSource, request: &UnderlineRequest) -> Result<DocumentResult, SdkError>`
+- `add_stamp(file: &DocumentSource, request: &StampRequest) -> Result<DocumentResult, SdkError>`
+- `add_comment(file: &DocumentSource, request: &CommentRequest) -> Result<DocumentResult, SdkError>`
+- `list_comments(file: &DocumentSource, page: Option<usize>) -> Result<Vec<CommentInfo>, SdkError>`
+- `get_form_fields(file: &DocumentSource) -> Result<Vec<FormField>, SdkError>`
+- `fill_form(file: &DocumentSource, data: &serde_json::Value) -> Result<DocumentResult, SdkError>`
+- `flatten_form(file: &DocumentSource) -> Result<DocumentResult, SdkError>`
+- `export_form_data(file: &DocumentSource, format: &str) -> Result<Vec<u8>, SdkError>`
+- `import_form_data(file: &DocumentSource, data_bytes: &[u8], format: &str) -> Result<DocumentResult, SdkError>`
+- `optimize(file: &DocumentSource, params: &OptimizationParams) -> Result<DocumentResult, SdkError>`
+- `reduce_size(file: &DocumentSource, max_mb: Option<f64>) -> Result<DocumentResult, SdkError>`
+- `encrypt(file: &DocumentSource, user_pw: Option<&str>, owner_pw: Option<&str>, perms: Option<u32>) -> Result<DocumentResult, SdkError>`
+- `decrypt(file: &DocumentSource, password: &str) -> Result<DocumentResult, SdkError>`
+- `redact(file: &DocumentSource, page: usize, rect: &Rect) -> Result<DocumentResult, SdkError>`
+- `sign(file: &DocumentSource, sign_doc: &SignDoc) -> Result<DocumentResult, SdkError>`
 
 ---
 

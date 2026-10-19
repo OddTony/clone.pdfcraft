@@ -27,6 +27,160 @@ use crate::document::ViewDestination;
 use crate::graphics::{Color, Point, Quad, Rect};
 use serde::{Deserialize, Serialize};
 
+/// What a markup annotation (highlight, underline) covers on a page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum MarkupTarget {
+    /// Case-insensitive text to find on the page; `all` marks every match instead of just the first.
+    Find { text: String, all: bool },
+    /// Explicit quads in page points (top-left origin, as `page_render` and `text_find` report).
+    Quads(Vec<Quad>),
+}
+
+impl MarkupTarget {
+    pub fn find(text: impl Into<String>) -> Self {
+        Self::Find { text: text.into(), all: false }
+    }
+
+    pub fn find_all(text: impl Into<String>) -> Self {
+        Self::Find { text: text.into(), all: true }
+    }
+}
+
+/// Request to add a highlight text-markup annotation (Acrobat: Highlight tool).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HighlightRequest {
+    /// 1-based target page.
+    pub page: usize,
+    pub target: MarkupTarget,
+    pub color: Option<Color>,
+    pub author: Option<String>,
+    pub opacity: Option<f64>,
+}
+
+impl HighlightRequest {
+    pub fn new(page: usize, target: MarkupTarget) -> Self {
+        Self { page, target, color: None, author: None, opacity: None }
+    }
+}
+
+/// Request to add an underline text-markup annotation (Acrobat: Underline tool).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnderlineRequest {
+    /// 1-based target page.
+    pub page: usize,
+    pub target: MarkupTarget,
+    pub color: Option<Color>,
+    pub author: Option<String>,
+    pub opacity: Option<f64>,
+}
+
+impl UnderlineRequest {
+    pub fn new(page: usize, target: MarkupTarget) -> Self {
+        Self { page, target, color: None, author: None, opacity: None }
+    }
+}
+
+/// Named Acrobat stamp faces (the engine's `comment_add` `stamp` values).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StampKind {
+    Approved,
+    Completed,
+    Confidential,
+    Draft,
+    Final,
+    ForComment,
+    ForPublicRelease,
+    InformationOnly,
+    NotApproved,
+    NotForPublicRelease,
+    PreliminaryResults,
+    Void,
+    Accepted,
+    InitialHere,
+    Rejected,
+    SignHere,
+    Witness,
+}
+
+impl StampKind {
+    /// The name the engine's `comment_add` tool expects as `stamp`.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Approved => "approved",
+            Self::Completed => "completed",
+            Self::Confidential => "confidential",
+            Self::Draft => "draft",
+            Self::Final => "final",
+            Self::ForComment => "for comment",
+            Self::ForPublicRelease => "for public release",
+            Self::InformationOnly => "information only",
+            Self::NotApproved => "not approved",
+            Self::NotForPublicRelease => "not for public release",
+            Self::PreliminaryResults => "preliminary results",
+            Self::Void => "void",
+            Self::Accepted => "accepted",
+            Self::InitialHere => "initial here",
+            Self::Rejected => "rejected",
+            Self::SignHere => "sign here",
+            Self::Witness => "witness",
+        }
+    }
+}
+
+/// Request to add a named stamp annotation (Acrobat: Stamp tool), optionally the dynamic
+/// (By … at …) variant for approved/confidential/received/reviewed/revised.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StampRequest {
+    /// 1-based target page.
+    pub page: usize,
+    /// Centre of the stamp, in page points (top-left origin).
+    pub at: Point,
+    pub stamp: StampKind,
+    pub dynamic: bool,
+    pub author: Option<String>,
+}
+
+impl StampRequest {
+    pub fn new(page: usize, at: Point, stamp: StampKind) -> Self {
+        Self { page, at, stamp, dynamic: false, author: None }
+    }
+}
+
+/// Request to add a sticky note (Acrobat: Add Sticky Note).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommentRequest {
+    /// 1-based target page.
+    pub page: usize,
+    /// Top-left of the note icon, in page points (top-left origin).
+    pub at: Point,
+    pub contents: String,
+    pub author: Option<String>,
+    pub color: Option<Color>,
+}
+
+impl CommentRequest {
+    pub fn new(page: usize, at: Point, contents: impl Into<String>) -> Self {
+        Self { page, at, contents: contents.into(), author: None, color: None }
+    }
+}
+
+/// One comment (any annotation other than links, form widgets and pop-ups) as reported by the
+/// engine's `comment_list` tool.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommentInfo {
+    pub id: Option<String>,
+    /// 1-based page.
+    pub page: usize,
+    /// 1-based position on the page.
+    pub index: usize,
+    pub kind: String,
+    pub author: Option<String>,
+    pub contents: Option<String>,
+    pub rect: Option<Rect>,
+    pub status: Option<String>,
+    pub replies: Vec<CommentInfo>,
+}
+
 /// Polymorphic Action types that can be triggered by bookmarks, links, or document events.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Action {

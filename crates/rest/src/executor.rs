@@ -27,6 +27,7 @@
 //!     - BlockingExecutor::execute_merge: Dispatches merge within bounded semaphore
 //!     - BlockingExecutor::execute_split: Dispatches split within bounded semaphore
 //!     - BlockingExecutor::execute_render: Dispatches render within bounded semaphore
+//!     - BlockingExecutor::execute_call_tool: Dispatches a named automation tool within bounded semaphore
 
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -259,6 +260,85 @@ impl BlockingExecutor {
             .spawn(move || {
                 let _permit = permit;
                 let res = engine.execute_render(&src, page, &opt);
+                let _ = tx.send(res);
+            })
+            .map_err(|e| ExecutionError::WorkerPanic(e.to_string()))?;
+
+        match rx.recv_timeout(self.config.exec_timeout) {
+            Ok(result) => result.map_err(ExecutionError::from),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(ExecutionError::ExecutionTimeout(self.config.exec_timeout)),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                let join_err = handle.join();
+                let panic_msg = match join_err {
+                    Err(p) => {
+                        if let Some(s) = p.downcast_ref::<&str>() {
+                            (*s).to_string()
+                        } else if let Some(s) = p.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "Unknown worker panic".to_string()
+                        }
+                    }
+                    Ok(_) => "Worker disconnected unexpectedly".to_string(),
+                };
+                Err(ExecutionError::WorkerPanic(panic_msg))
+            }
+        }
+    }
+
+    /// Executes any named automation tool within bounded worker capacity.
+    pub fn execute_call_tool(&self, name: &str, args: &serde_json::Value) -> Result<Vec<pdfcraft_sdk::ToolContent>, ExecutionError> {
+        let permit = self.semaphore.acquire(self.config.queue_timeout)?;
+
+        let engine = Arc::clone(&self.engine);
+        let name = name.to_string();
+        let args = args.clone();
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let handle = std::thread::Builder::new()
+            .name("pdfcraft-worker-call-tool".into())
+            .spawn(move || {
+                let _permit = permit;
+                let res = engine.execute_call_tool(&name, &args);
+                let _ = tx.send(res);
+            })
+            .map_err(|e| ExecutionError::WorkerPanic(e.to_string()))?;
+
+        match rx.recv_timeout(self.config.exec_timeout) {
+            Ok(result) => result.map_err(ExecutionError::from),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Err(ExecutionError::ExecutionTimeout(self.config.exec_timeout)),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                let join_err = handle.join();
+                let panic_msg = match join_err {
+                    Err(p) => {
+                        if let Some(s) = p.downcast_ref::<&str>() {
+                            (*s).to_string()
+                        } else if let Some(s) = p.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "Unknown worker panic".to_string()
+                        }
+                    }
+                    Ok(_) => "Worker disconnected unexpectedly".to_string(),
+                };
+                Err(ExecutionError::WorkerPanic(panic_msg))
+            }
+        }
+    }
+
+    /// Executes a sequential batch of automation tools within bounded worker capacity.
+    pub fn execute_batch(&self, steps: &[pdfcraft_sdk::ports::BatchStep]) -> Result<pdfcraft_sdk::ports::BatchReport, ExecutionError> {
+        let permit = self.semaphore.acquire(self.config.queue_timeout)?;
+
+        let engine = Arc::clone(&self.engine);
+        let steps = steps.to_vec();
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let handle = std::thread::Builder::new()
+            .name("pdfcraft-worker-batch".into())
+            .spawn(move || {
+                let _permit = permit;
+                let res = engine.execute_batch(&steps);
                 let _ = tx.send(res);
             })
             .map_err(|e| ExecutionError::WorkerPanic(e.to_string()))?;

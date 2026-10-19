@@ -28,19 +28,22 @@
 //!     - RestService::handle_merge: Handles POST /v1/merged-pdf (sync or async 202)
 //!     - RestService::handle_split: Handles POST /v1/split-pdf
 //!     - RestService::handle_page_preview: Handles POST /v1/page-preview
+//!     - RestService::handle_call_tool: Handles POST /v1/operations/{name}
 //!     - RestService::handle_get_job: Handles GET /v1/jobs/{id}
 //!     - RestService::handle_get_job_result: Handles GET /v1/jobs/{id}/result
 //!     - RestService::handle_cancel_job: Handles DELETE /v1/jobs/{id}
 
 use std::collections::HashMap;
-use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::executor::BlockingExecutor;
-use crate::models::{JobId, JobRecord, JobResponse, JobState, MergePayload, RenderPayload, SplitPayload};
+use crate::models::{
+    ContentDto, JobId, JobRecord, JobResponse, JobState, MergePayload, RenderPayload, SplitPartDto, SplitPayload, SplitResponseDto, encode_base64,
+};
 use crate::problem::ProblemDetails;
 use crate::storage::JobRepository;
-use pdfcraft_sdk::DocumentResult;
+use pdfcraft_sdk::{DocumentResult, ToolContent};
 
 /// In-memory representation of an HTTP request.
 #[derive(Debug, Clone)]
@@ -71,12 +74,149 @@ impl HttpRequest {
     }
 }
 
-/// In-memory representation of an HTTP response.
+/// RAII guard ensuring temporary output files and their empty parent directories are deleted
+/// when a file-backed response is dropped or fails before/during streaming.
+#[derive(Debug)]
+pub struct EphemeralFileGuard {
+    pub path: PathBuf,
+    pub deleted: std::sync::atomic::AtomicBool,
+}
+
+impl EphemeralFileGuard {
+    /// Removes the owned file. A failed removal leaves the guard retryable.
+    ///
+    /// Parent directory removal is best effort: another output may still own
+    /// files in either directory.
+    pub fn cleanup(&self) -> std::io::Result<()> {
+        use std::sync::atomic::Ordering;
+
+        if self.deleted.load(Ordering::Acquire) {
+            return Ok(());
+        }
+
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+
+        // Mark deletion only after the file is absent.
+        self.deleted.store(true, Ordering::Release);
+
+        if let Some(parent) = self.path.parent() {
+            let _ = std::fs::remove_dir(parent);
+            if let Some(root) = parent.parent() {
+                let _ = std::fs::remove_dir(root);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for EphemeralFileGuard {
+    fn drop(&mut self) {
+        let _ = self.cleanup();
+    }
+}
+
+fn cleanup_cancelled_result(res: &DocumentResult) {
+    if let DocumentResult::File { path, .. } = res {
+        let _ = std::fs::remove_file(path);
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::remove_dir(parent);
+            if let Some(root) = parent.parent() {
+                let _ = std::fs::remove_dir(root);
+            }
+        }
+    }
+}
+
+/// Body of an HTTP response, either in-memory bytes or a streamed file path.
+#[derive(Debug, Clone)]
+pub enum HttpBody {
+    Bytes(Vec<u8>),
+    File { file: Arc<std::sync::Mutex<std::fs::File>>, path: PathBuf, size: u64, guard: Option<Arc<EphemeralFileGuard>> },
+}
+
+impl HttpBody {
+    pub fn len(&self) -> u64 {
+        match self {
+            Self::Bytes(b) => b.len() as u64,
+            Self::File { size, .. } => *size,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn try_to_bytes(&self) -> Result<Vec<u8>, std::io::Error> {
+        match self {
+            Self::Bytes(bytes) => Ok(bytes.clone()),
+            Self::File { file, guard, .. } => {
+                use std::io::{Read, Seek};
+
+                let mut data = Vec::new();
+                {
+                    let mut reader = file.lock().map_err(|_| std::io::Error::other("File lock poisoned"))?;
+                    reader.rewind()?;
+                    reader.read_to_end(&mut data)?;
+                }
+
+                if let Some(guard) = guard {
+                    guard.cleanup()?;
+                }
+
+                Ok(data)
+            }
+        }
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, std::io::Error> {
+        self.try_to_bytes()
+    }
+}
+
+impl PartialEq<[u8]> for HttpBody {
+    fn eq(&self, other: &[u8]) -> bool {
+        self.eq(&other)
+    }
+}
+
+impl<const N: usize> PartialEq<&[u8; N]> for HttpBody {
+    fn eq(&self, other: &&[u8; N]) -> bool {
+        self.eq(other.as_slice())
+    }
+}
+
+impl PartialEq<&[u8]> for HttpBody {
+    fn eq(&self, other: &&[u8]) -> bool {
+        match self {
+            Self::Bytes(b) => b.as_slice() == *other,
+            Self::File { file, .. } => {
+                let mut data = Vec::new();
+                if let Ok(mut reader) = file.lock() {
+                    use std::io::{Read, Seek, SeekFrom};
+                    let initial_pos = reader.stream_position().ok();
+                    if let Some(pos) = initial_pos {
+                        let read_ok = reader.rewind().is_ok() && reader.read_to_end(&mut data).is_ok();
+                        let restored = reader.seek(SeekFrom::Start(pos)).is_ok();
+                        return read_ok && restored && data.as_slice() == *other;
+                    }
+                }
+                false
+            }
+        }
+    }
+}
+
+/// Representation of an HTTP response.
 #[derive(Debug, Clone)]
 pub struct HttpResponse {
     pub status: u16,
     pub headers: HashMap<String, String>,
-    pub body: Vec<u8>,
+    pub body: HttpBody,
 }
 
 impl HttpResponse {
@@ -85,7 +225,7 @@ impl HttpResponse {
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), "application/json".into());
         headers.insert("content-length".into(), body.len().to_string());
-        Self { status: 200, headers, body }
+        Self { status: 200, headers, body: HttpBody::Bytes(body) }
     }
 
     pub fn accepted_json<T: serde::Serialize>(location: &str, data: &T) -> Self {
@@ -94,14 +234,43 @@ impl HttpResponse {
         headers.insert("content-type".into(), "application/json".into());
         headers.insert("location".into(), location.into());
         headers.insert("content-length".into(), body.len().to_string());
-        Self { status: 202, headers, body }
+        Self { status: 202, headers, body: HttpBody::Bytes(body) }
     }
 
     pub fn ok_bytes(mime_type: &str, body: Vec<u8>) -> Self {
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), mime_type.into());
         headers.insert("content-length".into(), body.len().to_string());
-        Self { status: 200, headers, body }
+        Self { status: 200, headers, body: HttpBody::Bytes(body) }
+    }
+
+    pub fn ok_file(mime_type: &str, path: PathBuf) -> Self {
+        Self::ok_file_with_cleanup(mime_type, path, false)
+    }
+
+    pub fn ok_ephemeral_file(mime_type: &str, path: PathBuf) -> Self {
+        Self::ok_file_with_cleanup(mime_type, path, true)
+    }
+
+    pub fn ok_file_with_cleanup(mime_type: &str, path: PathBuf, delete_on_stream: bool) -> Self {
+        match std::fs::File::open(&path) {
+            Ok(file) => match file.metadata() {
+                Ok(m) => {
+                    let len = m.len();
+                    let mut headers = HashMap::new();
+                    headers.insert("content-type".into(), mime_type.into());
+                    headers.insert("content-length".into(), len.to_string());
+                    let guard = if delete_on_stream {
+                        Some(Arc::new(EphemeralFileGuard { path: path.clone(), deleted: std::sync::atomic::AtomicBool::new(false) }))
+                    } else {
+                        None
+                    };
+                    Self { status: 200, headers, body: HttpBody::File { file: Arc::new(std::sync::Mutex::new(file)), path, size: len, guard } }
+                }
+                Err(e) => Self::problem(ProblemDetails::internal_error(format!("Failed to inspect output file metadata: {e}"))),
+            },
+            Err(e) => Self::problem(ProblemDetails::internal_error(format!("Failed to open output file: {e}"))),
+        }
     }
 
     pub fn problem(problem: ProblemDetails) -> Self {
@@ -109,7 +278,48 @@ impl HttpResponse {
         let mut headers = HashMap::new();
         headers.insert("content-type".into(), "application/problem+json".into());
         headers.insert("content-length".into(), body.len().to_string());
-        Self { status: problem.status, headers, body }
+        Self { status: problem.status, headers, body: HttpBody::Bytes(body) }
+    }
+}
+
+/// Reads every split artifact or fails without returning a partial success.
+fn read_split_response(split: &pdfcraft_sdk::SplitResult) -> Result<SplitResponseDto, std::io::Error> {
+    read_split_response_with_limit(split, 100 * 1024 * 1024)
+}
+
+fn read_split_response_with_limit(split: &pdfcraft_sdk::SplitResult, limit: u64) -> Result<SplitResponseDto, std::io::Error> {
+    use std::io::Read;
+    let mut parts = Vec::new();
+    let mut remaining = limit;
+
+    for path in &split.files {
+        let filename = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Split output has no valid UTF-8 filename"))?
+            .to_string();
+
+        let file = std::fs::File::open(path)?;
+        let mut data = Vec::new();
+        file.take(remaining.saturating_add(1)).read_to_end(&mut data)?;
+        remaining = remaining
+            .checked_sub(data.len() as u64)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "Aggregate split output exceeds response limit"))?;
+
+        parts.push(SplitPartDto { filename, size_bytes: data.len(), data_base64: encode_base64(&data) });
+    }
+
+    Ok(SplitResponseDto { parts })
+}
+
+/// Owns synchronous split artifacts until they have been packaged or rejected.
+struct EphemeralSplitGuard<'a>(&'a pdfcraft_sdk::SplitResult);
+
+impl Drop for EphemeralSplitGuard<'_> {
+    fn drop(&mut self) {
+        for path in &self.0.files {
+            drop(EphemeralFileGuard { path: path.clone(), deleted: std::sync::atomic::AtomicBool::new(false) });
+        }
     }
 }
 
@@ -143,6 +353,15 @@ impl RestService {
             ("POST", "/v1/merged-pdf") => self.handle_merge(req),
             ("POST", "/v1/split-pdf") => self.handle_split(req),
             ("POST", "/v1/page-preview") => self.handle_page_preview(req),
+            ("POST", "/v1/batch") => self.handle_batch(req),
+            ("POST", p) if p.starts_with("/v1/operations/") => {
+                let name = &p["/v1/operations/".len()..];
+                if name.is_empty() || name.contains('/') {
+                    HttpResponse::problem(ProblemDetails::not_found(format!("Route not found: {} {}", req.method, req.path)))
+                } else {
+                    self.handle_call_tool(name, req)
+                }
+            }
             ("GET", p) if p.starts_with("/v1/jobs/") => {
                 let suffix = &p["/v1/jobs/".len()..];
                 if let Some((id_str, "result")) = suffix.split_once('/') {
@@ -189,20 +408,33 @@ impl RestService {
             let jid = job_id.clone();
             let opt = payload.options;
 
-            std::thread::Builder::new()
-                .name(format!("job-merge-{}", job_id.0))
-                .spawn(move || {
-                    let _ = repository.transition(&jid, JobState::Queued, JobState::Running, None, None, None);
-                    match executor.execute_merge(&sources, &opt) {
-                        Ok(res) => {
-                            let _ = repository.transition(&jid, JobState::Running, JobState::Succeeded, None, Some(res), None);
-                        }
-                        Err(e) => {
-                            let _ = repository.transition(&jid, JobState::Running, JobState::Failed, Some(e.to_string()), None, None);
+            let spawn_res = std::thread::Builder::new().name(format!("job-merge-{}", job_id.0)).spawn(move || {
+                if repository.transition(&jid, JobState::Queued, JobState::Running, None, None, None).is_err() {
+                    return;
+                }
+                match executor.execute_merge(&sources, &opt) {
+                    Ok(res) => {
+                        if repository.transition(&jid, JobState::Running, JobState::Succeeded, None, Some(res.clone()), None).is_err() {
+                            cleanup_cancelled_result(&res);
                         }
                     }
-                })
-                .ok();
+                    Err(e) => {
+                        let _ = repository.transition(&jid, JobState::Running, JobState::Failed, Some(e.to_string()), None, None);
+                    }
+                }
+            });
+
+            if let Err(e) = spawn_res {
+                let _ = self.repository.transition(
+                    &job_id,
+                    JobState::Queued,
+                    JobState::Failed,
+                    Some(format!("Failed to spawn worker thread: {e}")),
+                    None,
+                    None,
+                );
+                return HttpResponse::problem(ProblemDetails::service_unavailable(format!("Failed to spawn worker thread: {e}")));
+            }
 
             let response_body = JobResponse {
                 id: job_id.0.clone(),
@@ -218,10 +450,7 @@ impl RestService {
         } else {
             match self.executor.execute_merge(&sources, &payload.options) {
                 Ok(DocumentResult::Memory { data, mime_type }) => HttpResponse::ok_bytes(&mime_type, data),
-                Ok(DocumentResult::File { path, mime_type, .. }) => match fs::read(&path) {
-                    Ok(bytes) => HttpResponse::ok_bytes(&mime_type, bytes),
-                    Err(e) => HttpResponse::problem(ProblemDetails::internal_error(format!("Failed to read output: {e}"))),
-                },
+                Ok(DocumentResult::File { path, mime_type, .. }) => HttpResponse::ok_ephemeral_file(&mime_type, path),
                 Err(e) => HttpResponse::problem(ProblemDetails::new(e.http_status(), "Merge Failed", e.to_string(), e.error_code())),
             }
         }
@@ -250,20 +479,41 @@ impl RestService {
             let jid = job_id.clone();
             let mode = payload.mode;
 
-            std::thread::Builder::new()
-                .name(format!("job-split-{}", job_id.0))
-                .spawn(move || {
-                    let _ = repository.transition(&jid, JobState::Queued, JobState::Running, None, None, None);
-                    match executor.execute_split(&source, &mode) {
-                        Ok(res) => {
-                            let _ = repository.transition(&jid, JobState::Running, JobState::Succeeded, None, None, Some(res));
-                        }
-                        Err(e) => {
-                            let _ = repository.transition(&jid, JobState::Running, JobState::Failed, Some(e.to_string()), None, None);
+            let spawn_res = std::thread::Builder::new().name(format!("job-split-{}", job_id.0)).spawn(move || {
+                if repository.transition(&jid, JobState::Queued, JobState::Running, None, None, None).is_err() {
+                    return;
+                }
+                match executor.execute_split(&source, &mode) {
+                    Ok(res) => {
+                        if repository.transition(&jid, JobState::Running, JobState::Succeeded, None, None, Some(res.clone())).is_err() {
+                            for f in &res.files {
+                                let _ = std::fs::remove_file(f);
+                                if let Some(parent) = f.parent() {
+                                    let _ = std::fs::remove_dir(parent);
+                                    if let Some(root) = parent.parent() {
+                                        let _ = std::fs::remove_dir(root);
+                                    }
+                                }
+                            }
                         }
                     }
-                })
-                .ok();
+                    Err(e) => {
+                        let _ = repository.transition(&jid, JobState::Running, JobState::Failed, Some(e.to_string()), None, None);
+                    }
+                }
+            });
+
+            if let Err(e) = spawn_res {
+                let _ = self.repository.transition(
+                    &job_id,
+                    JobState::Queued,
+                    JobState::Failed,
+                    Some(format!("Failed to spawn worker thread: {e}")),
+                    None,
+                    None,
+                );
+                return HttpResponse::problem(ProblemDetails::service_unavailable(format!("Failed to spawn worker thread: {e}")));
+            }
 
             let response_body = JobResponse {
                 id: job_id.0.clone(),
@@ -278,7 +528,14 @@ impl RestService {
             HttpResponse::accepted_json(&format!("/v1/jobs/{}", job_id.0), &response_body)
         } else {
             match self.executor.execute_split(&source, &payload.mode) {
-                Ok(split_res) => HttpResponse::ok_json(&split_res),
+                Ok(split_res) => {
+                    let _cleanup = EphemeralSplitGuard(&split_res);
+
+                    match read_split_response(&split_res) {
+                        Ok(dto) => HttpResponse::ok_json(&dto),
+                        Err(error) => HttpResponse::problem(ProblemDetails::internal_error(format!("Failed to read split output: {error}"))),
+                    }
+                }
                 Err(e) => HttpResponse::problem(ProblemDetails::new(e.http_status(), "Split Failed", e.to_string(), e.error_code())),
             }
         }
@@ -312,20 +569,33 @@ impl RestService {
             let page = payload.page;
             let options = payload.options;
 
-            std::thread::Builder::new()
-                .name(format!("job-render-{}", job_id.0))
-                .spawn(move || {
-                    let _ = repository.transition(&jid, JobState::Queued, JobState::Running, None, None, None);
-                    match executor.execute_render(&source, page, &options) {
-                        Ok(res) => {
-                            let _ = repository.transition(&jid, JobState::Running, JobState::Succeeded, None, Some(res), None);
-                        }
-                        Err(e) => {
-                            let _ = repository.transition(&jid, JobState::Running, JobState::Failed, Some(e.to_string()), None, None);
+            let spawn_res = std::thread::Builder::new().name(format!("job-render-{}", job_id.0)).spawn(move || {
+                if repository.transition(&jid, JobState::Queued, JobState::Running, None, None, None).is_err() {
+                    return;
+                }
+                match executor.execute_render(&source, page, &options) {
+                    Ok(res) => {
+                        if repository.transition(&jid, JobState::Running, JobState::Succeeded, None, Some(res.clone()), None).is_err() {
+                            cleanup_cancelled_result(&res);
                         }
                     }
-                })
-                .ok();
+                    Err(e) => {
+                        let _ = repository.transition(&jid, JobState::Running, JobState::Failed, Some(e.to_string()), None, None);
+                    }
+                }
+            });
+
+            if let Err(e) = spawn_res {
+                let _ = self.repository.transition(
+                    &job_id,
+                    JobState::Queued,
+                    JobState::Failed,
+                    Some(format!("Failed to spawn worker thread: {e}")),
+                    None,
+                    None,
+                );
+                return HttpResponse::problem(ProblemDetails::service_unavailable(format!("Failed to spawn worker thread: {e}")));
+            }
 
             let response_body = JobResponse {
                 id: job_id.0.clone(),
@@ -341,12 +611,56 @@ impl RestService {
         } else {
             match self.executor.execute_render(&source, payload.page, &payload.options) {
                 Ok(DocumentResult::Memory { data, mime_type }) => HttpResponse::ok_bytes(&mime_type, data),
-                Ok(DocumentResult::File { path, mime_type, .. }) => match fs::read(&path) {
-                    Ok(bytes) => HttpResponse::ok_bytes(&mime_type, bytes),
-                    Err(e) => HttpResponse::problem(ProblemDetails::internal_error(format!("Failed to read output: {e}"))),
-                },
+                Ok(DocumentResult::File { path, mime_type, .. }) => HttpResponse::ok_ephemeral_file(&mime_type, path),
                 Err(e) => HttpResponse::problem(ProblemDetails::new(e.http_status(), "Render Failed", e.to_string(), e.error_code())),
             }
+        }
+    }
+
+    /// Executes any named automation tool with the request body as its JSON arguments.
+    ///
+    /// Each call runs in its own ephemeral sandbox (see `AutomationEngineAdapter`), so tool
+    /// sequences that depend on state from a prior call (e.g. reusing a `doc_open` document id)
+    /// are not supported through this route; this is a generic one-shot bridge, not a session.
+    fn handle_call_tool(&self, name: &str, req: &HttpRequest) -> HttpResponse {
+        let args: serde_json::Value = if req.body.is_empty() {
+            serde_json::Value::Object(serde_json::Map::new())
+        } else {
+            match serde_json::from_slice(&req.body) {
+                Ok(v) => v,
+                Err(e) => return HttpResponse::problem(ProblemDetails::bad_request(format!("Invalid JSON payload: {e}"))),
+            }
+        };
+
+        match self.executor.execute_call_tool(name, &args) {
+            Ok(content) => match content.as_slice() {
+                [ToolContent::Png { data, .. }] => HttpResponse::ok_bytes("image/png", data.clone()),
+                _ => {
+                    let dtos: Vec<ContentDto> = content.iter().map(ContentDto::from).collect();
+                    HttpResponse::ok_json(&dtos)
+                }
+            },
+            Err(e) => HttpResponse::problem(ProblemDetails::new(e.http_status(), "Operation Failed", e.to_string(), e.error_code())),
+        }
+    }
+
+    /// Executes a sequential batch of automation tools in a single engine instance.
+    ///
+    /// Enables stateful multi-step pipelines (e.g. `doc_open` -> `comment_add` -> `doc_save`)
+    /// without long-lived server sessions or memory leaks. Execution halts on first failure.
+    fn handle_batch(&self, req: &HttpRequest) -> HttpResponse {
+        let steps: Vec<pdfcraft_sdk::ports::BatchStep> = match serde_json::from_slice(&req.body) {
+            Ok(s) => s,
+            Err(e) => return HttpResponse::problem(ProblemDetails::bad_request(format!("Invalid JSON batch payload: {e}"))),
+        };
+
+        if steps.is_empty() {
+            return HttpResponse::problem(ProblemDetails::bad_request("Batch steps array cannot be empty"));
+        }
+
+        match self.executor.execute_batch(&steps) {
+            Ok(report) => HttpResponse::ok_json(&report),
+            Err(e) => HttpResponse::problem(ProblemDetails::new(e.http_status(), "Batch Execution Failed", e.to_string(), e.error_code())),
         }
     }
 
@@ -371,13 +685,13 @@ impl RestService {
                 if let Some(res) = record.result {
                     match res {
                         DocumentResult::Memory { data, mime_type } => HttpResponse::ok_bytes(&mime_type, data),
-                        DocumentResult::File { path, mime_type, .. } => match fs::read(&path) {
-                            Ok(bytes) => HttpResponse::ok_bytes(&mime_type, bytes),
-                            Err(e) => HttpResponse::problem(ProblemDetails::internal_error(format!("Failed to read file: {e}"))),
-                        },
+                        DocumentResult::File { path, mime_type, .. } => HttpResponse::ok_file(&mime_type, path),
                     }
                 } else if let Some(split) = record.split_result {
-                    HttpResponse::ok_json(&split)
+                    match read_split_response(&split) {
+                        Ok(dto) => HttpResponse::ok_json(&dto),
+                        Err(error) => HttpResponse::problem(ProblemDetails::internal_error(format!("Failed to read split job output: {error}"))),
+                    }
                 } else {
                     HttpResponse::problem(ProblemDetails::internal_error("Job succeeded but has no output result"))
                 }
@@ -392,6 +706,25 @@ impl RestService {
             Ok(Some(record)) => {
                 if record.state.is_terminal() {
                     return HttpResponse::problem(ProblemDetails::conflict(format!("Cannot cancel terminal job {} in state {:?}", id, record.state)));
+                }
+
+                // If the job already had a spilled file result, clean it up
+                if let Some(DocumentResult::File { path, .. }) = &record.result {
+                    let _ = std::fs::remove_file(path);
+                    if let Some(parent) = path.parent() {
+                        let _ = std::fs::remove_dir(parent);
+                    }
+                }
+                if let Some(split) = &record.split_result {
+                    for f in &split.files {
+                        let _ = std::fs::remove_file(f);
+                        if let Some(parent) = f.parent() {
+                            let _ = std::fs::remove_dir(parent);
+                            if let Some(root) = parent.parent() {
+                                let _ = std::fs::remove_dir(root);
+                            }
+                        }
+                    }
                 }
 
                 match self.repository.transition(id, record.state, JobState::Canceled, Some("Canceled by user".into()), None, None) {
@@ -416,6 +749,39 @@ impl RestService {
             }
             Ok(None) => HttpResponse::problem(ProblemDetails::not_found(format!("Job not found: {id}"))),
             Err(e) => HttpResponse::problem(ProblemDetails::internal_error(e.to_string())),
+        }
+    }
+}
+
+#[cfg(test)]
+mod revision12_tests {
+    use super::*;
+    use std::io::{Seek, SeekFrom};
+
+    #[test]
+    fn split_response_budget_is_aggregate_and_inclusive() {
+        let dir = tempfile::tempdir().unwrap();
+        let files: Vec<_> = ["a.pdf", "b.pdf"].iter().map(|name| dir.path().join(name)).collect();
+        for path in &files {
+            std::fs::write(path, b"12345").unwrap();
+        }
+        let split = pdfcraft_sdk::SplitResult { files };
+        assert_eq!(read_split_response_with_limit(&split, 10).unwrap().parts.len(), 2);
+        assert_eq!(read_split_response_with_limit(&split, 9).unwrap_err().kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn file_body_comparison_preserves_cursor_on_match_and_mismatch() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), b"abcdef").unwrap();
+        let response = HttpResponse::ok_file("application/pdf", file.path().into());
+        let HttpBody::File { file, .. } = &response.body else { panic!("expected file body") };
+        for position in [0, 3, 6] {
+            file.lock().unwrap().seek(SeekFrom::Start(position)).unwrap();
+            assert_eq!(response.body, b"abcdef");
+            assert_eq!(file.lock().unwrap().stream_position().unwrap(), position);
+            assert_ne!(response.body, b"different");
+            assert_eq!(file.lock().unwrap().stream_position().unwrap(), position);
         }
     }
 }

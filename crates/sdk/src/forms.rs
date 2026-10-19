@@ -11,6 +11,7 @@
 //! Key Types:
 //!     - AcroFormExportType / AcroFormImportType: Data formats (FDF, XFDF, XML, JSON)
 //!     - Field: Base interactive AcroForm field descriptor
+//!     - FormField: Alias for `Field` used by inspection ports (`execute_get_form_fields`)
 //!     - TextField: Text input widget (single/multiline/password)
 //!     - ButtonField: Pushbutton, checkbox, or radio button widget
 //!     - ChoiceField: Dropdown combo box or list selection widget
@@ -29,6 +30,32 @@ pub enum AcroFormExportType {
     JSON = 4,
 }
 
+impl AcroFormExportType {
+    /// File extension the engine's `doc_export_data` tool infers the format from.
+    pub fn extension(&self) -> &'static str {
+        match self {
+            Self::FDF => "fdf",
+            Self::XFDF => "xfdf",
+            Self::XML => "xml",
+            Self::JSON => "json",
+        }
+    }
+}
+
+impl std::str::FromStr for AcroFormExportType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "fdf" => Ok(Self::FDF),
+            "xfdf" => Ok(Self::XFDF),
+            "xml" => Ok(Self::XML),
+            "json" => Ok(Self::JSON),
+            _ => Err(()),
+        }
+    }
+}
+
 /// Form field import format types matching Datalogics AcroFormImportType.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AcroFormImportType {
@@ -37,6 +64,32 @@ pub enum AcroFormImportType {
     XFDF = 2,
     XML = 3,
     JSON = 4,
+}
+
+impl AcroFormImportType {
+    /// File extension the engine's `doc_import_data` tool infers the format from.
+    pub fn extension(&self) -> &'static str {
+        match self {
+            Self::FDF => "fdf",
+            Self::XFDF => "xfdf",
+            Self::XML => "xml",
+            Self::JSON => "json",
+        }
+    }
+}
+
+impl std::str::FromStr for AcroFormImportType {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "fdf" => Ok(Self::FDF),
+            "xfdf" => Ok(Self::XFDF),
+            "xml" => Ok(Self::XML),
+            "json" => Ok(Self::JSON),
+            _ => Err(()),
+        }
+    }
 }
 
 /// Text input field properties.
@@ -109,3 +162,9 @@ impl Field {
         }
     }
 }
+
+/// Inspection summary returned by `execute_get_form_fields`.
+///
+/// `Field` already carries name, type, value, page, rect and the read-only/required flags the
+/// port needs, so `FormField` is an alias rather than a second, overlapping struct.
+pub type FormField = Field;

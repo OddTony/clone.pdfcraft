@@ -9,6 +9,7 @@ Purpose:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import List, Optional, Union
 
@@ -25,11 +26,13 @@ class LocalClient:
     """In-process document processing client linking directly to the Rust engine."""
 
     def __init__(self) -> None:
-        """Initializes the LocalClient using PyO3 native bindings if compiled."""
-        if NativeLocalClient is not None:
-            self._native = NativeLocalClient()
-        else:
-            self._native = None
+        """Initializes the LocalClient using PyO3 native bindings."""
+        if NativeLocalClient is None:
+            raise ImportError(
+                "PdfCraft LocalClient requires the compiled pdfcraft._native extension. "
+                "Build it with `cargo build -p pdfcraft-pyo3` or `maturin develop`."
+            )
+        self._native = NativeLocalClient()
 
     def merge(
         self,
@@ -50,36 +53,31 @@ class LocalClient:
                 parsed_sources.append(DocumentSource.from_path(str(s)))
 
         opts = options or MergeOptions()
-
-        if self._native is not None:
-            native_items = []
-            for src in parsed_sources:
-                if src.data is not None:
-                    native_items.append(src.data)
-                elif src.path is not None:
-                    native_items.append(str(src.path))
-            res = self._native.merge(native_items, opts.output_filename)
-            if res.get("type") == "memory":
-                return DocumentResult(data=res.get("data"), mime_type=res.get("mime_type", "application/pdf"))
-            return DocumentResult(
-                path=Path(res["path"]), mime_type=res.get("mime_type", "application/pdf"), size_bytes=res.get("size_bytes", 0)
-            )
-
-        # Fallback pure-python in-process driver for environments without compiled cdylib
-        combined = b"%PDF-1.7\n"
+        native_items = []
         for src in parsed_sources:
             if src.data is not None:
-                combined += src.data
+                native_items.append(src.data)
             elif src.path is not None:
-                with open(src.path, "rb") as f:
-                    combined += f.read()
-        combined += b"\n%%EOF"
-        return DocumentResult(data=combined, mime_type="application/pdf", size_bytes=len(combined))
+                native_items.append(str(src.path))
+        res = self._native.merge(
+            native_items,
+            opts.output_filename,
+            getattr(opts, "pages", None),
+            getattr(opts, "passwords", None),
+        )
+        if res.get("type") == "memory":
+            return DocumentResult(data=res.get("data"), mime_type=res.get("mime_type", "application/pdf"))
+        return DocumentResult(
+            path=Path(res["path"]), mime_type=res.get("mime_type", "application/pdf"), size_bytes=res.get("size_bytes", 0)
+        )
 
     def split(
         self,
         source: Union[str, Path, bytes, DocumentSource],
-        every_n_pages: int = 1,
+        every_n_pages: Optional[int] = None,
+        before_pages: Optional[list] = None,
+        at_bookmarks: Optional[bool] = None,
+        max_file_size_mb: Optional[float] = None,
     ) -> SplitResult:
         """Splits a PDF document into multiple documents."""
         if isinstance(source, DocumentSource):
@@ -89,12 +87,9 @@ class LocalClient:
         else:
             src = DocumentSource.from_path(str(source))
 
-        if self._native is not None:
-            arg = src.data if src.data is not None else str(src.path)
-            paths = self._native.split(arg, every_n_pages)
-            return SplitResult(files=[Path(p) for p in paths])
-
-        return SplitResult(files=[Path("split_page_1.pdf"), Path("split_page_2.pdf")])
+        arg = src.data if src.data is not None else str(src.path)
+        paths = self._native.split(arg, every_n_pages, before_pages, at_bookmarks, max_file_size_mb)
+        return SplitResult(files=[Path(p) for p in paths])
 
     def render_page(
         self,
@@ -115,10 +110,24 @@ class LocalClient:
         else:
             src = DocumentSource.from_path(str(source))
 
-        if self._native is not None:
-            arg = src.data if src.data is not None else str(src.path)
-            res = self._native.render_page(arg, page, opts.dpi)
+        arg = src.data if src.data is not None else str(src.path)
+        fmt = getattr(opts, "image_format", None) or getattr(opts, "format", "png")
+        res = self._native.render_page(arg, page, opts.dpi, fmt)
+        if res.get("type") == "memory":
             return DocumentResult(data=res.get("data"), mime_type=res.get("mime_type", "image/png"))
+        return DocumentResult(
+            path=Path(res["path"]), mime_type=res.get("mime_type", "image/png"), size_bytes=res.get("size_bytes", 0)
+        )
 
-        pixels_data = f"RENDER_PAGE_{page}_DPI_{opts.dpi}".encode("utf-8")
-        return DocumentResult(data=pixels_data, mime_type="image/png", size_bytes=len(pixels_data))
+    def call_tool(self, name: str, args: Union[dict, str]) -> List[dict]:
+        """Invokes any of the 149 pdfcraft-automation tools headlessly."""
+        if not name or not name.strip():
+            raise InvalidArgumentError("Tool name cannot be empty")
+
+        args_str = args if isinstance(args, str) else json.dumps(args)
+        return self._native.call_tool(name, args_str)
+
+    def execute_batch(self, steps: Union[List[dict], str]) -> dict:
+        """Executes a sequential batch of automation tools sharing a single engine instance."""
+        steps_str = steps if isinstance(steps, str) else json.dumps(steps)
+        return self._native.execute_batch(steps_str)

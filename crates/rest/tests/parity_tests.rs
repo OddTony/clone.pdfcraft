@@ -36,7 +36,13 @@ impl OperationExecutor for DeterministicMockEngine {
     }
 
     fn execute_split(&self, _source: &DocumentSource, _mode: &SplitMode) -> Result<SplitResult, SdkError> {
-        Ok(SplitResult { files: vec!["chunk1.pdf".into(), "chunk2.pdf".into()] })
+        let temp_dir = tempfile::Builder::new().prefix("parity-split-mock-").tempdir().map_err(SdkError::Io)?;
+        let chunk1 = temp_dir.path().join("chunk1.pdf");
+        let chunk2 = temp_dir.path().join("chunk2.pdf");
+        std::fs::write(&chunk1, b"%PDF-1.7 chunk 1").map_err(SdkError::Io)?;
+        std::fs::write(&chunk2, b"%PDF-1.7 chunk 2").map_err(SdkError::Io)?;
+        let _ = temp_dir.keep();
+        Ok(SplitResult { files: vec![chunk1, chunk2] })
     }
 
     fn execute_render(&self, _source: &DocumentSource, page: usize, options: &RenderOptions) -> Result<DocumentResult, SdkError> {
@@ -45,6 +51,10 @@ impl OperationExecutor for DeterministicMockEngine {
         }
         let rendered = format!("RENDER_PAGE_{page}_DPI_{}", options.dpi).into_bytes();
         Ok(DocumentResult::memory(rendered, "image/png"))
+    }
+
+    fn execute_call_tool(&self, name: &str, args: &serde_json::Value) -> Result<Vec<pdfcraft_sdk::ToolContent>, SdkError> {
+        Ok(vec![pdfcraft_sdk::ToolContent::Json(serde_json::json!({ "tool": name, "args": args }))])
     }
 }
 
@@ -83,7 +93,19 @@ fn test_local_vs_rest_direct_semantic_parity() {
     let split_input = DocumentSource::from_bytes(b"%PDF-doc-split".to_vec(), None);
     let local_split = local_client.split(&split_input, SplitMode::EveryNPages(1)).unwrap();
     let rest_split = rest_client.split(&split_input, SplitMode::EveryNPages(1)).unwrap();
-    assert_eq!(local_split.files, rest_split.files);
+    let local_names: Vec<_> = local_split.files.iter().filter_map(|p| p.file_name()).collect();
+    let rest_names: Vec<_> = rest_split.files.iter().filter_map(|p| p.file_name()).collect();
+    assert_eq!(local_names, rest_names);
+
+    let local_b1 = std::fs::read(&local_split.files[0]).unwrap();
+    let rest_b1 = std::fs::read(&rest_split.files[0]).unwrap();
+    assert_eq!(local_b1, rest_b1);
+    assert_eq!(local_b1, b"%PDF-1.7 chunk 1");
+
+    let local_b2 = std::fs::read(&local_split.files[1]).unwrap();
+    let rest_b2 = std::fs::read(&rest_split.files[1]).unwrap();
+    assert_eq!(local_b2, rest_b2);
+    assert_eq!(local_b2, b"%PDF-1.7 chunk 2");
 
     // Render Page Parity Check
     let render_opt = RenderOptions { dpi: 300.0, ..Default::default() };
@@ -110,7 +132,7 @@ fn test_local_vs_rest_over_http_loopback_parity() {
 
     let server = HttpServer::start(
         service,
-        ServerConfig { bind_addr: "127.0.0.1:0".parse().unwrap(), allow_public_bind: false, auth_token: Some("test-token".into()) },
+        ServerConfig { bind_addr: "127.0.0.1:0".parse().unwrap(), allow_public_bind: false },
     )
     .unwrap();
 
@@ -133,4 +155,14 @@ fn test_local_vs_rest_over_http_loopback_parity() {
         }
         _ => panic!("Expected Memory results"),
     }
+
+    // Split Parity over HTTP
+    let split_input = DocumentSource::from_bytes(b"%PDF-doc-split-http".to_vec(), None);
+    let local_split = local_client.split(&split_input, SplitMode::EveryNPages(1)).unwrap();
+    let rest_split = rest_client.split(&split_input, SplitMode::EveryNPages(1)).unwrap();
+    assert_eq!(local_split.files.len(), rest_split.files.len());
+    let local_b1 = std::fs::read(&local_split.files[0]).unwrap();
+    let rest_b1 = std::fs::read(&rest_split.files[0]).unwrap();
+    assert_eq!(local_b1, rest_b1);
+    assert_eq!(local_b1, b"%PDF-1.7 chunk 1");
 }

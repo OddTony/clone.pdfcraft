@@ -20,7 +20,7 @@
 //!     ```
 //!
 //! Key Types & Functions Index:
-//!     - ServerConfig: Server configuration (bind_addr, allow_public_bind, auth_token)
+//!     - ServerConfig: Server configuration (bind_addr, allow_public_bind)
 //!     - HttpServer: Running HTTP server handle with background listener thread
 //!     - HttpServer::start: Starts server on background thread with loopback security check
 //!     - HttpServer::local_addr: Bound local socket address
@@ -41,7 +41,6 @@ use crate::routes::{HttpRequest, RestService};
 pub struct ServerConfig {
     pub bind_addr: SocketAddr,
     pub allow_public_bind: bool,
-    pub auth_token: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -49,7 +48,6 @@ impl Default for ServerConfig {
         Self {
             bind_addr: "127.0.0.1:0".parse().unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], 0))),
             allow_public_bind: false,
-            auth_token: None,
         }
     }
 }
@@ -58,6 +56,15 @@ impl Default for ServerConfig {
 pub struct HttpServer {
     listener_addr: SocketAddr,
     running: Arc<AtomicBool>,
+    join_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+struct ConnectionPermit(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for ConnectionPermit {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 impl HttpServer {
@@ -76,15 +83,24 @@ impl HttpServer {
         let listener_addr = listener.local_addr()?;
         let running = Arc::new(AtomicBool::new(true));
 
+        let active_conns = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let is_running = Arc::clone(&running);
-        std::thread::Builder::new().name("pdfcraft-rest-http".into()).spawn(move || {
+        let join_handle = std::thread::Builder::new().name("pdfcraft-rest-http".into()).spawn(move || {
             while is_running.load(Ordering::Relaxed) {
                 match listener.accept() {
-                    Ok((stream, _)) => {
+                    Ok((mut stream, _)) => {
+                        if active_conns.load(Ordering::Relaxed) >= MAX_CONCURRENT_CONNECTIONS {
+                            let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+                            let _ = stream.write_all(b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                            continue;
+                        }
+                        active_conns.fetch_add(1, Ordering::Relaxed);
+                        let permit = ConnectionPermit(Arc::clone(&active_conns));
                         let s = Arc::clone(&service);
                         std::thread::Builder::new()
                             .name("pdfcraft-http-conn".into())
                             .spawn(move || {
+                                let _permit = permit;
                                 handle_connection(stream, &s);
                             })
                             .ok();
@@ -97,7 +113,7 @@ impl HttpServer {
             }
         })?;
 
-        Ok(Self { listener_addr, running })
+        Ok(Self { listener_addr, running, join_handle: std::sync::Mutex::new(Some(join_handle)) })
     }
 
     pub fn local_addr(&self) -> SocketAddr {
@@ -110,6 +126,9 @@ impl HttpServer {
 
     pub fn stop(&self) {
         self.running.store(false, Ordering::Relaxed);
+        if let Some(handle) = self.join_handle.lock().ok().and_then(|mut lock| lock.take()) {
+            let _ = handle.join();
+        }
     }
 }
 
@@ -123,6 +142,14 @@ impl Drop for HttpServer {
 const MAX_BODY_BYTES: usize = 100 * 1024 * 1024;
 /// Most request headers accepted.
 const MAX_HEADERS: usize = 100;
+/// Maximum concurrent active HTTP connection threads.
+const MAX_CONCURRENT_CONNECTIONS: usize = 64;
+
+fn write_error(writer: &mut TcpStream, response: &[u8]) {
+    let _ = writer.write_all(response);
+    let _ = writer.flush();
+    let _ = writer.shutdown(std::net::Shutdown::Write);
+}
 
 fn handle_connection(stream: TcpStream, service: &RestService) {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
@@ -135,44 +162,116 @@ fn handle_connection(stream: TcpStream, service: &RestService) {
     if reader.by_ref().take(8192).read_line(&mut line).is_err() || line.trim().is_empty() {
         return;
     }
-
-    // Parse request line: METHOD URI HTTP/1.1
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    if parts.len() < 2 {
+    if !line.ends_with('\n') {
+        write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         return;
     }
-    let method = parts.first().copied().unwrap_or("GET").to_string();
-    let path = parts.get(1).copied().unwrap_or("/").to_string();
+
+    // Parse request line: METHOD URI HTTP/1.x (RFC 7230 §3.1.1)
+    let trimmed_line = line.strip_suffix("\r\n").or_else(|| line.strip_suffix('\n')).unwrap_or(&line);
+    let parts: Vec<&str> = trimmed_line.split(' ').collect();
+    if parts.len() != 3 || parts[0].is_empty() || parts[1].is_empty() {
+        write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        return;
+    }
+    let method = parts[0].to_string();
+    let path = parts[1].to_string();
+    let proto = parts[2];
+    if proto != "HTTP/1.1" && proto != "HTTP/1.0" {
+        write_error(&mut writer, b"HTTP/1.1 505 HTTP Version Not Supported\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        return;
+    }
 
     // Parse headers
     let mut headers = HashMap::new();
     let mut content_length = 0usize;
+    let mut seen_content_length = false;
+    let mut total_header_lines = 0usize;
+    let mut total_header_bytes = 0usize;
+    const MAX_HEADER_BYTES: usize = 64 * 1024;
 
     loop {
-        // Bound the header section: a peer must not be able to grow it without limit.
-        if headers.len() >= MAX_HEADERS {
-            let _ = writer.write_all(b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        total_header_lines = total_header_lines.saturating_add(1);
+        if total_header_lines > MAX_HEADERS || total_header_bytes > MAX_HEADER_BYTES {
+            write_error(&mut writer, b"HTTP/1.1 431 Request Header Fields Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             return;
         }
         line.clear();
-        if reader.by_ref().take(8192).read_line(&mut line).is_err() || line.trim().is_empty() {
+        match reader.by_ref().take(8192).read_line(&mut line) {
+            Ok(0) => {
+                // Unexpected EOF before end of headers (RFC 7230 framing violation)
+                write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                return;
+            }
+            Err(_) => {
+                write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                return;
+            }
+            Ok(_) => {}
+        }
+        if line == "\r\n" || line == "\n" {
             break;
         }
+        if line.trim().is_empty() {
+            // Whitespace-only line is invalid obs-fold / malformed header
+            write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            return;
+        }
+        if !line.ends_with('\n') {
+            write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            return;
+        }
+        total_header_bytes = total_header_bytes.saturating_add(line.len());
         if let Some((k, v)) = line.split_once(':') {
-            let key = k.trim().to_lowercase();
+            // RFC 7230 §3.2.4: field-name = token, no whitespace allowed around field name
+            let valid_field_name = !k.is_empty()
+                && k.bytes().all(|b| {
+                    b.is_ascii_alphanumeric()
+                        || matches!(
+                            b,
+                            b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*'
+                                | b'+' | b'-' | b'.' | b'^' | b'_' | b'`'
+                                | b'|' | b'~'
+                        )
+                });
+            if !valid_field_name {
+                write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                return;
+            }
+            let key = k.to_lowercase();
             let val = v.trim().to_string();
-            if key == "content-length"
-                && let Ok(len) = val.parse::<usize>()
-            {
-                content_length = len;
+
+            // Reject unsupported Transfer-Encoding (chunked not supported, preventing framing ambiguities)
+            if key == "transfer-encoding" {
+                write_error(&mut writer, b"HTTP/1.1 501 Not Implemented\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                return;
+            }
+
+            if key == "content-length" {
+                if seen_content_length {
+                    // Prevent HTTP Request Smuggling via duplicate Content-Length headers (RFC 7230 §3.3.2)
+                    write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    return;
+                }
+                seen_content_length = true;
+                match val.parse::<usize>() {
+                    Ok(len) => content_length = len,
+                    Err(_) => {
+                        write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                        return;
+                    }
+                }
             }
             headers.insert(key, val);
+        } else {
+            write_error(&mut writer, b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            return;
         }
     }
 
     // Read body. The length comes from the peer, so cap it before allocating.
     if content_length > MAX_BODY_BYTES {
-        let _ = writer.write_all(b"HTTP/1.1 413 Content Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        write_error(&mut writer, b"HTTP/1.1 413 Content Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         return;
     }
     let mut body = Vec::with_capacity(content_length.min(64 * 1024));
@@ -211,8 +310,26 @@ fn handle_connection(stream: TcpStream, service: &RestService) {
         response_bytes.extend_from_slice(format!("Content-Length: {}\r\n", resp.body.len()).as_bytes());
     }
     response_bytes.extend_from_slice(b"Connection: close\r\n\r\n");
-    response_bytes.extend_from_slice(&resp.body);
 
     let _ = writer.write_all(&response_bytes);
+
+    match &resp.body {
+        crate::routes::HttpBody::Bytes(bytes) => {
+            let _ = writer.write_all(bytes);
+        }
+        crate::routes::HttpBody::File { file, guard, .. } => {
+            use std::io::Seek;
+
+            if let Ok(mut reader) = file.lock()
+                && reader.rewind().is_ok()
+            {
+                let _ = std::io::copy(&mut *reader, &mut writer);
+            }
+
+            if let Some(guard) = guard {
+                let _ = guard.cleanup();
+            }
+        }
+    }
     let _ = writer.flush();
 }

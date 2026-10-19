@@ -53,18 +53,22 @@ pub mod types;
 pub use engine_adapter::AutomationEngineAdapter;
 pub use error::SdkError;
 pub use local::LocalClient;
-pub use ports::OperationExecutor;
+pub use ports::{BatchReport, BatchStep, BatchStepResult, OperationExecutor, ToolContent};
 pub use types::{DocumentResult, DocumentSource, ImageFormat, MergeOptions, RenderOptions, ResourceLimits, SplitMode, SplitResult};
 
 /// Re-exported canonical domain models matching Datalogics APDFL taxonomy.
 pub use annotation::{
-    Action, Annotation, AnnotationFlags, AnnotationSubtype, CircleAnnotation, FreeTextAnnotation, GoToAction, HighlightAnnotation, InkAnnotation,
-    LaunchAction, LineAnnotation, LineEnding, LinkAnnotation, PolyLineAnnotation, PolygonAnnotation, Redaction, RedactionStatus, RemoteGoToAction,
-    SquareAnnotation, URIAction, UnderlineAnnotation,
+    Action, Annotation, AnnotationFlags, AnnotationSubtype, CircleAnnotation, CommentInfo, CommentRequest, FreeTextAnnotation, GoToAction,
+    HighlightAnnotation, HighlightRequest, InkAnnotation, LaunchAction, LineAnnotation, LineEnding, LinkAnnotation, MarkupTarget,
+    PolyLineAnnotation, PolygonAnnotation, Redaction, RedactionStatus, RemoteGoToAction, SquareAnnotation, StampKind, StampRequest, URIAction,
+    UnderlineAnnotation, UnderlineRequest,
 };
 pub use content::{Clip, Container, Content, Element, Form, Group, Path, Segment};
-pub use document::{Bookmark, Document, FitMode, Page, PageLabel, PageLabelStyle, PageRange, ViewDestination};
-pub use forms::{AcroFormExportType, AcroFormImportType, ButtonField, ChoiceField, Field, FieldType, SignatureField, TextField};
+pub use document::{
+    Bookmark, BookmarkAddRequest, BookmarkRemoveRequest, DeletePagesOptions, Document, ExtractPagesOptions, FitMode, InsertPagesOptions, Page,
+    PageLabel, PageLabelStyle, PageOrientation, PageRange, PageSubset, RotatePagesOptions, ViewDestination,
+};
+pub use forms::{AcroFormExportType, AcroFormImportType, ButtonField, ChoiceField, Field, FieldType, FormField, SignatureField, TextField};
 pub use graphics::{BlendMode, Color, ColorSpace, ExtendedGraphicState, GraphicState, Matrix, Point, Quad, Rect};
 pub use image::{DrawParams, ImageData, ImageSaveParams, PageImageParams};
 pub use lowlevel::{NameTree, NumberTree, PDFObject, PDFReference};
